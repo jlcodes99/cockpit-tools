@@ -570,6 +570,9 @@
       "weeklyWindow": "Weekly"
     },
     "optional": " (optional)",
+    "done": "Done",
+    "saved": "Saved",
+    "edit": "Edit",
     "hide": "Hide",
     "show": "Show",
     "configSaveTimeout": "Operation timed out. Refresh to confirm the result before retrying.",
@@ -1530,6 +1533,12 @@
       "menuBarQuotaConfirmEnable": "Enable",
       "codexHideRelayQuota": "Hide relay quota",
       "codexHideRelayQuotaDesc": "When on, Codex account overview hides mid-relay / New API style balance panels to reduce clutter.",
+      "accountLevelRefreshTitle": "Per-account refresh settings",
+      "accountLevelRefreshDesc": "Set different auto-refresh intervals for individual accounts, overriding the platform default.",
+      "accountLevelRefreshSummaryActive": "{{count}} accounts configured",
+      "accountLevelRefreshSummary": "Expand settings",
+      "accountLevelRefreshInherit": "Inherit platform settings",
+      "accountLevelRefreshDisabled": "Disabled",
       "floatingCardStyle": "Floating style",
       "floatingCardStyleDesc": "Shared by all floating windows. You can also change it in the window.",
       "floatingCardFull": "Full card",
@@ -1902,7 +1911,8 @@
       "windowsApp": "Microsoft Store",
       "defaultOnly": "Default desktop only; choose the real Claude.exe for multi-instance profiles.",
       "claudeScanEmpty": "No Claude Desktop target was found. Choose Claude.exe manually or adjust the scan roots.",
-      "claudeTargetPlaceholder": "Claude.exe path or shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Claude.exe path or shell:AppsFolder\\...",
+      "scanEmptyGeneric": "No running {{app}} was found. Start the app and try again, or select the path manually."
     },
     "modal": {
       "desc": "The app path for {{app}} was not found. Please configure it now to continue."

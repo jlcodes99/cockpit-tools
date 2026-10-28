@@ -570,6 +570,9 @@
       "weeklyWindow": "Týden"
     },
     "optional": " (volitelné)",
+    "done": "Hotovo",
+    "saved": "Uloženo",
+    "edit": "Upravit",
     "hide": "Skrýt",
     "show": "Zobrazit",
     "configSaveTimeout": "Vypršel časový limit. Před opakováním obnovte a ověřte výsledek.",
@@ -1316,6 +1319,12 @@
       "menuBarQuotaConfirmEnable": "Zapnout",
       "codexHideRelayQuota": "Skrýt kvótu relay",
       "codexHideRelayQuotaDesc": "Skryje panely kvóty relay / New API v přehledu účtů Codex.",
+      "accountLevelRefreshTitle": "Nastavení obnovování pro jednotlivé účty",
+      "accountLevelRefreshDesc": "Nastavte pro každý účet jiný interval automatického obnovování a přepište výchozí hodnotu platformy.",
+      "accountLevelRefreshSummaryActive": "Nastaveno účtů: {{count}}",
+      "accountLevelRefreshSummary": "Rozbalit nastavení",
+      "accountLevelRefreshInherit": "Dědit nastavení platformy",
+      "accountLevelRefreshDisabled": "Zakázáno",
       "floatingCardStyle": "Plovoucí vzhled",
       "floatingCardStyleDesc": "Platí pro všechna plovoucí okna. Lze změnit i přímo v okně.",
       "floatingCardFull": "Celá karta",
@@ -1682,7 +1691,8 @@
       "windowsApp": "Aplikace Microsoft Store",
       "defaultOnly": "Pouze výchozí desktop; pro více instancí vyberte skutečný Claude.exe.",
       "claudeScanEmpty": "Nebyl nalezen žádný cíl Claude Desktop. Vyberte Claude.exe ručně nebo upravte rozsah skenování.",
-      "claudeTargetPlaceholder": "Cesta Claude.exe nebo shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Cesta Claude.exe nebo shell:AppsFolder\\...",
+      "scanEmptyGeneric": "Nebyla zjištěna žádná spuštěná aplikace {{app}}. Spusťte aplikaci a zkuste to znovu, nebo ručně vyberte cestu."
     },
     "modal": {
       "desc": "Cesta k aplikaci {{app}} nebyla nalezena. Nastavte ji nyní pro pokračování."
