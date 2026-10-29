@@ -45,11 +45,7 @@ async fn native_retry_cooldown_wait(
         &mut accounts,
     )
     .await;
-    let states = host
-        .cooldowns
-        .lock()
-        .map_err(|_| native_error(503, "service_unavailable", "Account state is unavailable"))?;
-    let mut closest = None;
+    let mut candidates = Vec::new();
     for account in accounts {
         if (caller.id != NATIVE_INTERNAL_CALLER && service_account_paused(&collection, &account.id))
             || !native_eligible(&account)
@@ -80,8 +76,7 @@ async fn native_retry_cooldown_wait(
         ) else {
             continue;
         };
-        if !native_model_quota_allows(&collection, &account, &upstream)
-            || native_excluded(&collection.excluded_models, &upstream)
+        if native_excluded(&collection.excluded_models, &upstream)
             || key.is_some_and(|key| native_excluded(&key.excluded_models, &upstream))
             || collection.account_model_rules.iter().any(|rule| {
                 rule.account_id == account.id
@@ -91,18 +86,33 @@ async fn native_retry_cooldown_wait(
         {
             continue;
         }
-        let wait = if native_is_chatgpt_plan_account(&account) {
+        let Some(quota_wait) = native_model_quota_retry_wait(&collection, &account, &upstream)
+        else {
+            continue;
+        };
+        let official = native_is_chatgpt_plan_account(&account);
+        candidates.push((account.id, upstream, quota_wait, official));
+    }
+    // Do not hold the cooldown mutex while reading quota reservation policy.
+    let states = host
+        .cooldowns
+        .lock()
+        .map_err(|_| native_error(503, "service_unavailable", "Account state is unavailable"))?;
+    let mut closest = None;
+    for (account_id, upstream, quota_wait, official) in candidates {
+        let wait = if official {
             Duration::ZERO
         } else {
             native_cooldown_wait(
                 &states,
-                &account.id,
+                &account_id,
                 &upstream,
                 collection.disable_cooling,
                 Instant::now(),
             )
             .unwrap_or(Duration::ZERO)
-        };
+        }
+        .max(quota_wait);
         closest = Some(closest.map_or(wait, |current: Duration| current.min(wait)));
     }
     Ok(closest.filter(|wait| *wait <= max_wait))

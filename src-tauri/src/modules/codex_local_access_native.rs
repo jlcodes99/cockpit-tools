@@ -1525,6 +1525,8 @@ mod native_host_tests {
     include!("codex_local_access_tests_native_cooldown.rs");
     include!("codex_local_access_tests_native_health.rs");
     include!("codex_local_access_tests_native_cooling_continuation.rs");
+    include!("codex_local_access_tests_native_quota_continuation.rs");
+    include!("codex_local_access_tests_native_quota_http.rs");
     include!("codex_local_access_tests_native_reserve.rs");
     include!("codex_local_access_tests_native_automatic.rs");
     include!("codex_local_access_tests_native_parity22.rs");

@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "classification": "sanitized metadata, not a failed-request payload capture",
+  "timezone": "UTC+08:00",
+  "sourceRevision": "2cfe5e51314bfc0bf70bdda1ba08aed82c7dc8bf",
+  "environment": {
+    "platform": "Windows x64",
+    "cockpitVersion": "1.3.75",
+    "gatewayMode": "native",
+    "routingStrategy": "auto",
+    "sessionAffinity": false,
+    "sessionIdentityMappingEnabled": true,
+    "responsesWebsocketsEnabled": false,
+    "disableCooling": false,
+    "requestPayloadLogging": false,
+    "requestedModel": "gpt-6-astra",
+    "servicePoolMembers": 18
+  },
+  "laterOwnerSnapshot": {
+    "label": "owner-A",
+    "inServicePool": true,
+    "inCallerScope": true,
+    "paused": false,
+    "modelExcluded": false,
+    "isBoundOauthAccount": false,
+    "displayedFiveHourRemainingPercent": 100,
+    "displayedWeeklyRemainingPercent": 53,
+    "provesAvailabilityAtFailureTime": false
+  },
+  "clientFailures": [
+    {"start": "2026-10-28T02:40:34+08:00", "end": "2026-10-28T02:40:57+08:00", "httpStatus": 409, "additionalDetailsPresent": false},
+    {"start": "2026-10-29T16:34:15+08:00", "end": "2026-10-29T16:34:37+08:00", "httpStatus": 409, "additionalDetailsPresent": false}
+  ],
+  "errorCodeFromMatchingSourceBranch": "account_binding_unavailable",
+  "errorMessage": "The connection's account is no longer available; reconnect with full input",
+  "boundedApiAndAppLogChecks": {
+    "dates": ["2026-10-28", "2026-10-29"],
+    "fileCount": 4,
+    "targetIdentifierMatches": 0,
+    "exactBindingErrorMatches": 0,
+    "rawLogsIncluded": false
+  },
+  "lastSuccessfulCheckpoint": {
+    "isFailedRequestCapture": false,
+    "items": 371,
+    "decodedBytes": 81660353,
+    "itemIntegrityChecksPassed": 371,
+    "duplicateCallIds": 0,
+    "additionalResultsForExistingCallIds": 28,
+    "unmatchedResults": 0,
+    "callsWithoutResult": 0,
+    "standaloneHostResults": 4,
+    "encryptedItems": 75,
+    "rawContentOrDigestsIncluded": false
+  },
+  "recovery": {
+    "userConfirmed": true,
+    "successfulRequestTimes": ["2026-10-29T18:15:30.737+08:00", "2026-10-29T18:15:36.978+08:00"],
+    "httpStatus": 200,
+    "attemptsPerRequest": 1,
+    "sameOwnerAsBeforeFailure": true,
+    "clientTurnContainedContextCompaction": true,
+    "productionSoftwareOrConfigChangedDuringDiagnosis": false,
+    "uniqueRecoveryCauseEstablished": false
+  }
+}

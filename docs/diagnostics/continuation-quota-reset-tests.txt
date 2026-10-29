@@ -1,0 +1,203 @@
+Functional quota-reset regression evidence
+Base: 2cfe5e51314bfc0bf70bdda1ba08aed82c7dc8bf (1.3.75)
+Windows x64 / Rust 1.99.1 / synthetic accounts and loopback only
+
+BEFORE: first 8 quota tests against unchanged routing + prior logging patch
+4 passed; 4 failed; 0 ignored.
+Failures: long_reset_is_retryable_without_selecting_another_owner;
+owner_naturally_recovers_within_wait_budget;
+wait_covers_both_quota_windows_and_memory_cooling;
+wait_is_cancelable_without_holding_selection_locks.
+Principal failure: 409 account_binding_unavailable, retry_after: None.
+Baseline artifact SHA256: CD823A1391C84992419EB45F21CABD7D7CAFEC40F88BAE60836ADF70E9FE3719
+
+AFTER: final functional code, logging-only changes removed
+
+Suite: native_quota_snapshot_
+running 12 tests
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_disable_cooling_does_not_disable_real_quota ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_does_not_bypass_bound_oauth_reservation ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_does_not_hide_static_owner_ineligibility ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_keeps_reserve_model_and_usable_credit_exceptions ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_long_reset_is_retryable_without_selecting_another_owner ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_owner_naturally_recovers_within_wait_budget ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_unknown_reset_does_not_invent_a_recovery_time ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_unknown_reset_is_not_replaced_by_finite_memory_cooling ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_unpinned_pool_wait_uses_earliest_eligible_account ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_wait_covers_both_quota_windows_and_memory_cooling ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_wait_is_cancelable_without_holding_selection_locks ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_wait_preserves_api_key_and_official_plan_exceptions ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 4078 filtered out; finished in 1.36s
+
+Suite: native_quota_http_
+running 1 test
+test modules::codex_local_access::native_host_tests::native_quota_http_multi_result_history_waits_for_original_owner_without_rewriting ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4089 filtered out; finished in 1.76s
+
+Suite: native_host_tests
+running 98 tests
+test modules::codex_local_access::native_host_tests::bearer_keys_are_exact_and_nonempty ... ok
+test modules::codex_local_access::native_host_tests::disabling_cooling_clears_errors_without_clearing_account_quota_data ... ok
+test modules::codex_local_access::native_host_tests::go_limits_host_ignores_legacy_total_timeout_and_wait_queue_releases_on_drop ... ok
+test modules::codex_local_access::native_host_tests::model_errors_cool_only_the_model_and_parameters_do_not_cool ... ok
+test modules::codex_local_access::native_host_tests::model_scopes_match_without_regex_or_substring_expansion ... ok
+test modules::codex_local_access::native_host_tests::native_account_routes_require_responses_and_preserve_full_upstream_models ... ok
+test modules::codex_local_access::native_host_tests::native_account_wait_budget_preserves_saved_duration_and_host_validation_bound ... ok
+test modules::codex_local_access::native_host_tests::native_account_wait_uses_first_freed_candidate_and_releases_losing_waiters ... ok
+test modules::codex_local_access::native_host_tests::native_actual_upstream_failures_keep_auth_quota_and_server_cooldowns ... ok
+test modules::codex_local_access::native_host_tests::native_aliases_cannot_bypass_global_or_key_canonical_model_denials ... ok
+test modules::codex_local_access::native_host_tests::native_automatic_catalog_hides_retired_gpt_names_but_keeps_request_routing ... ok
+test modules::codex_local_access::native_host_tests::native_automatic_catalog_resolves_declared_client_slots_without_requiring_upstream_in_catalog ... ok
+test modules::codex_local_access::native_host_tests::native_automatic_empty_responses_pool_does_not_claim_undeclared_provider_models ... ok
+test modules::codex_local_access::native_host_tests::native_automatic_third_party_names_skip_oauth_pool_and_preserve_native_fallback_models ... ok
+test modules::codex_local_access::native_host_tests::native_automatic_vision_routes_use_actual_upstream_model_and_fail_closed_on_ambiguity ... ok
+test modules::codex_local_access::native_host_tests::native_automatic_vision_selection_applies_target_acl_and_cooldown_before_credentials ... ok
+test modules::codex_local_access::native_host_tests::native_client_catalog_does_not_grant_chatgpt_credentials_provider_models ... ok
+test modules::codex_local_access::native_host_tests::native_cloudflare_challenge_cools_briefly_without_marking_credentials_invalid ... ok
+test modules::codex_local_access::native_host_tests::native_connection_failures_do_not_cool_accounts_or_shorten_existing_cooldown ... ok
+test modules::codex_local_access::native_host_tests::native_context_rebuild_ignores_old_false_true_and_missing_configuration ... ok
+test modules::codex_local_access::native_host_tests::native_context_rebuild_preserves_existing_retry_limits ... ok
+test modules::codex_local_access::native_host_tests::native_context_rebuild_stale_false_does_not_survive_collection_save ... ok
+test modules::codex_local_access::native_host_tests::native_cooldown_models_are_independent_but_confirmed_credentials_cover_all_models ... ok
+test modules::codex_local_access::native_host_tests::native_cooldown_wait_can_be_cancelled_without_holding_selection_or_state_locks ... ok
+test modules::codex_local_access::native_host_tests::native_cooldown_wait_is_scoped_and_initial_selection_waits_only_within_limit ... ok
+test modules::codex_local_access::native_host_tests::native_engine_selection_survives_stale_stats_writes_in_both_directions ... ok
+test modules::codex_local_access::native_host_tests::native_equal_priority_candidates_rotate_without_overriding_explicit_key_priority ... ok
+test modules::codex_local_access::native_host_tests::native_failed_route_preparation_does_not_publish_affinity_or_keep_permit ... ok
+test modules::codex_local_access::native_host_tests::native_free_agent_identity_keeps_pool_eligibility_without_bypassing_restrictions ... ok
+test modules::codex_local_access::native_host_tests::native_gateway_vision_uses_current_account_capabilities_without_overriding_explicit_model_values ... ok
+test modules::codex_local_access::native_host_tests::native_health_keeps_authoritative_quota_when_soft_cooling_is_disabled ... ok
+test modules::codex_local_access::native_host_tests::native_health_snapshot_does_not_wait_for_scheduler_or_claim_ready_on_contention ... ok
+test modules::codex_local_access::native_host_tests::native_health_snapshot_tracks_expiry_success_reset_and_cooling_disable ... ok
+test modules::codex_local_access::native_host_tests::native_health_snapshot_uses_live_model_and_credential_cooldowns ... ok
+test modules::codex_local_access::native_host_tests::native_host_identity_fixture_survives_environment_rotation_and_keeps_validation ... ok
+test modules::codex_local_access::native_host_tests::native_hosted_image_policy_obeys_service_and_account_controls ... ok
+test modules::codex_local_access::native_host_tests::native_image_first_source_uses_free_account_but_continuation_stays_pinned ... ok
+test modules::codex_local_access::native_host_tests::native_key_account_scopes_preserve_explicit_empty_and_legacy_fixed_pools ... ok
+test modules::codex_local_access::native_host_tests::native_known_remote_revocation_is_filtered_but_usable_credits_remain_eligible ... ok
+test modules::codex_local_access::native_host_tests::native_mode_patch_preserves_latest_unrelated_fields_and_rejects_nonobjects ... ok
+test modules::codex_local_access::native_host_tests::native_model_aliases_do_not_bypass_the_public_alias_allowlist ... ok
+test modules::codex_local_access::native_host_tests::native_model_namespace_is_exact_and_deny_rules_override_allow_rules ... ok
+test modules::codex_local_access::native_host_tests::native_new_sessions_use_free_accounts_but_bound_children_do_not_split ... ok
+test modules::codex_local_access::native_host_tests::native_official_quota_reset_reopens_elapsed_windows_but_keeps_other_windows_and_429 ... ok
+test modules::codex_local_access::native_host_tests::native_owned_http_and_sse_overload_automatically_retries_within_wait_budget ... ok
+test modules::codex_local_access::native_host_tests::native_owned_http_and_sse_overload_resumes_original_account_after_cooling ... ok
+test modules::codex_local_access::native_host_tests::native_owner_tracks_api_credentials_but_keeps_oauth_refresh_stable ... ok
+test modules::codex_local_access::native_host_tests::native_paused_member_is_not_selected_by_catalog_explicit_scope_or_continuation ... ok
+test modules::codex_local_access::native_host_tests::native_pinned_cooling_does_not_hide_unavailable_owner_or_override_disable_switch ... ok
+test modules::codex_local_access::native_host_tests::native_pinned_cooling_is_retryable_with_or_without_other_ready_accounts ... ok
+test modules::codex_local_access::native_host_tests::native_primary_key_compatibility_does_not_bypass_configured_key_policies ... ok
+test modules::codex_local_access::native_host_tests::native_provider_vision_omission_changes_only_content_and_preserves_opaque_and_tool_data ... ok
+test modules::codex_local_access::native_host_tests::native_public_keys_are_rechecked_for_revocation_disable_and_limits ... ok
+test modules::codex_local_access::native_host_tests::native_quota_backoff_escalates_once_per_window_and_hints_never_shorten_it ... ok
+test modules::codex_local_access::native_host_tests::native_quota_http_multi_result_history_waits_for_original_owner_without_rewriting ... ok
+test modules::codex_local_access::native_host_tests::native_quota_reservation_applies_only_to_bound_account_and_present_windows ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_disable_cooling_does_not_disable_real_quota ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_does_not_bypass_bound_oauth_reservation ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_does_not_hide_static_owner_ineligibility ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_keeps_reserve_model_and_usable_credit_exceptions ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_long_reset_is_retryable_without_selecting_another_owner ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_owner_naturally_recovers_within_wait_budget ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_unknown_reset_does_not_invent_a_recovery_time ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_unknown_reset_is_not_replaced_by_finite_memory_cooling ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_unpinned_pool_wait_uses_earliest_eligible_account ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_wait_covers_both_quota_windows_and_memory_cooling ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_wait_is_cancelable_without_holding_selection_locks ... ok
+test modules::codex_local_access::native_host_tests::native_quota_snapshot_wait_preserves_api_key_and_official_plan_exceptions ... ok
+test modules::codex_local_access::native_host_tests::native_reserve_catalog_and_aliases_keep_key_scope_prefix_and_model_acl ... ok
+test modules::codex_local_access::native_host_tests::native_reserve_catalog_lists_explicit_capability_independently_of_current_entitlement ... ok
+test modules::codex_local_access::native_host_tests::native_reserve_dispatch_requires_confirmed_entitlement_and_keeps_other_quota_guards ... ok
+test modules::codex_local_access::native_host_tests::native_reserve_unqualified_accounts_fail_before_credential_preparation ... ok
+test modules::codex_local_access::native_host_tests::native_reserved_quota_fails_closed_for_missing_stale_or_invalid_evidence ... ok
+test modules::codex_local_access::native_host_tests::native_route_order_matches_plan_quota_expiry_and_global_priority_controls ... ok
+test modules::codex_local_access::native_host_tests::native_route_wrapper_keeps_large_preparation_state_off_the_retry_stack ... ok
+test modules::codex_local_access::native_host_tests::native_same_session_selection_is_serialized_without_blocking_other_callers ... ok
+test modules::codex_local_access::native_host_tests::native_selection_gate_budget_uses_execution_remaining_without_shrinking_saved_fallbacks ... ok
+test modules::codex_local_access::native_host_tests::native_unrouted_and_successful_reports_do_not_cool_accounts ... ok
+test modules::codex_local_access::native_host_tests::native_websocket_routes_bridge_chat_and_keep_responses_model_mapping ... ok
+test modules::codex_local_access::native_host_tests::native_wildcards_are_anchored_and_other_metacharacters_stay_literal ... ok
+test modules::codex_local_access::native_host_tests::native_xai_suffix_is_route_scoped_and_checks_full_and_base_model_acl ... ok
+test modules::codex_local_access::native_host_tests::parity22_model_catalog_websocket_flags_match_go_configuration ... ok
+test modules::codex_local_access::native_host_tests::parity22_model_rules_match_go_and_keep_all_permission_layers ... ok
+test modules::codex_local_access::native_host_tests::parity22_token_estimate_http_matches_go_alias_preprocessing_without_generation ... ok
+test modules::codex_local_access::native_host_tests::quota_protection_adaptive_polling_uses_the_tighter_window ... ok
+test modules::codex_local_access::native_host_tests::quota_protection_completion_requires_a_later_confirmed_query ... ok
+test modules::codex_local_access::native_host_tests::quota_protection_critical_zone_stops_already_prepared_parallel_requests ... ok
+test modules::codex_local_access::native_host_tests::quota_protection_failure_backoff_respects_upstream_retry_after ... ok
+test modules::codex_local_access::native_host_tests::quota_protection_final_send_fence_rechecks_after_preparation ... ok
+test modules::codex_local_access::native_host_tests::quota_protection_is_atomic_across_native_hosts_and_prefers_another_account ... ok
+test modules::codex_local_access::native_host_tests::quota_protection_legacy_false_cold_start_requires_live_confirmation ... ok
+test modules::codex_local_access::native_host_tests::quota_protection_legacy_settings_always_apply_the_safety_margin ... ok
+test modules::codex_local_access::native_host_tests::quota_protection_missing_reset_cannot_restore_allowance ... ok
+test modules::codex_local_access::native_host_tests::quota_protection_partial_fractional_snapshots_and_old_replies_are_safe ... ok
+test modules::codex_local_access::native_host_tests::quota_protection_query_keeps_precision_beyond_the_display_integer ... ok
+test modules::codex_local_access::native_host_tests::quota_protection_rechecks_after_waiting_for_a_concurrency_slot ... ok
+test modules::codex_local_access::native_host_tests::quota_protection_status_uses_live_memory_without_requiring_an_account_file ... ok
+test modules::codex_local_access::native_host_tests::quota_protection_timeout_blocks_old_evidence_and_recovers_on_verification ... ok
+
+test result: ok. 98 passed; 0 failed; 0 ignored; 0 measured; 3992 filtered out; finished in 5.84s
+
+Suite: multi_result_history_tests
+running 2 tests
+test modules::codex_native_api::recovery::automatic_http_tests::multi_result_history_tests::multi_result_history_full_resend_survives_native_http_sse_and_service_restart ... ok
+test modules::codex_native_api::recovery::automatic_http_tests::multi_result_history_tests::multi_result_history_reproduces_the_previous_admission_error_after_reopening_storage ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 4088 filtered out; finished in 0.86s
+
+Suite: context_rebuild
+running 35 tests
+test modules::codex_app_enhancements::fast::tests::manual_context_rebuild_uses_existing_registration_without_another_reload ... ok
+test modules::codex_local_access::native_host_tests::native_context_rebuild_ignores_old_false_true_and_missing_configuration ... ok
+test modules::codex_local_access::native_host_tests::native_context_rebuild_preserves_existing_retry_limits ... ok
+test modules::codex_local_access::native_host_tests::native_context_rebuild_stale_false_does_not_survive_collection_save ... ok
+test modules::codex_native_api::context_rebuild_http_tests::codex_app_failover_tests::codex_app_host_record_oauth_exception_does_not_authorize_missing_real_tool_history ... ok
+test modules::codex_native_api::context_rebuild_http_tests::codex_app_failover_tests::codex_app_host_records_oauth_429_replays_complete_and_cached_history_exactly ... ok
+test modules::codex_native_api::context_rebuild_http_tests::codex_app_failover_tests::codex_app_host_records_oauth_failed_candidate_never_commits_portable_b ... ok
+test modules::codex_native_api::context_rebuild_http_tests::context_rebuild_a_b_a_uses_new_a_generation_and_does_not_reassign_old_checkpoints ... ok
+test modules::codex_native_api::context_rebuild_http_tests::context_rebuild_cache_miss_reasoning_and_agent_cipher_keep_original_a_payload ... ok
+test modules::codex_native_api::context_rebuild_http_tests::context_rebuild_candidate_failure_or_client_cancel_never_activates_b ... ok
+test modules::codex_native_api::context_rebuild_http_tests::context_rebuild_defaults_off_and_previous_response_is_still_hard_pinned ... ok
+test modules::codex_native_api::context_rebuild_http_tests::context_rebuild_http_and_sse_overload_replay_complete_plaintext_and_keep_client_input ... ok
+test modules::codex_native_api::context_rebuild_http_tests::context_rebuild_only_replays_tool_history_after_call_and_result_are_paired ... ok
+test modules::codex_native_api::context_rebuild_http_tests::context_rebuild_real_response_socket_delta_overload_bridges_with_fresh_full_history ... ok
+test modules::codex_native_api::context_rebuild_http_tests::context_rebuild_unknown_complete_history_automatically_retries_an_available_account ... ok
+test modules::codex_native_api::context_rebuild_http_tests::context_rebuild_upstream_websocket_overload_rebuilds_then_reuses_b_generation ... ok
+test modules::codex_native_api::context_rebuild_http_tests::host_results_tests::host_results_continue_after_quota_failure_and_restart_without_losing_history ... ok
+test modules::codex_native_api::context_rebuild_http_tests::host_results_tests::host_results_invalid_ids_reach_upstream_without_unlocking_cross_account_history ... ok
+test modules::codex_native_api::context_rebuild_http_tests::installation_tests::account_installation_http_and_sse_rebuild_keep_cipher_and_fresh_account_identity ... ok
+test modules::codex_native_api::context_rebuild_http_tests::installation_tests::account_installation_websocket_and_http_bridge_rebuild_use_selected_profiles ... ok
+test modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_default_removed_a_full_history_and_mixed_a_b_continue_b ... ok
+test modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_cancelled_b_candidate_keeps_active_and_cipher_provenance_a ... ok
+test modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_child_agent_parent_a_does_not_pin_child_b ... ok
+test modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_disabled_policy_keeps_removed_known_owner_pinned ... ok
+test modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_failed_b_keeps_active_a_and_original_cipher_history ... ok
+test modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_observed_a_sticky_token_never_relocks_completed_b_generation ... ok
+test modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_preexisting_uncached_history_replays_after_opt_in_without_previous ... ok
+test modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_same_socket_automatically_replays_observed_history_when_owner_is_removed ... ok
+test modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_same_socket_opt_in_joins_observed_uncached_history_with_delta ... ok
+test modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_unknown_self_contained_history_is_sent_unchanged_and_caller_scoped ... ok
+test modules::codex_native_api::context_rebuild_http_tests::output_evidence_tests::output_evidence_complete_done_can_activate_a_sparse_cross_account_candidate ... ok
+test modules::codex_native_api::context_rebuild_http_tests::output_evidence_tests::output_evidence_complete_terminal_still_rebuilds_after_restart_with_fresh_identity ... ok
+test modules::codex_native_api::context_rebuild_http_tests::output_evidence_tests::output_evidence_repair_does_not_adopt_unknown_input_or_invent_a_missing_checkpoint ... ok
+test modules::codex_native_api::context_rebuild_http_tests::output_evidence_tests::output_evidence_repaired_candidate_cannot_activate_a_new_generation ... ok
+test modules::codex_native_api::context_rebuild_http_tests::output_evidence_tests::output_evidence_repaired_root_cannot_become_portable_after_restart_or_reconnect ... ok
+
+test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 4055 filtered out; finished in 9.55s
+
+Suite: native_scheduler_tests
+running 4 tests
+test modules::codex_local_access::native_scheduler_tests::model_suffix_keeps_base_acl_denials_and_search_empty_model_no_fictional_fallback ... ok
+test modules::codex_local_access::native_scheduler_tests::rotation_is_scoped_by_caller_model_and_authorized_pool ... ok
+test modules::codex_local_access::native_scheduler_tests::single_account_uses_existing_rank_and_rotates_only_equal_candidates ... ok
+test modules::codex_local_access::native_scheduler_tests::soft_cache_has_ttl_eviction_and_settings_epoch_without_rejecting_new_history ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 4086 filtered out; finished in 0.13s
+
+152 successful executions / 136 distinct tests / 13 new distinct tests.
+The 13 new tests repeat inside native_host_tests; 3 existing host tests repeat in context_rebuild.
+Final test artifact SHA256: 9A4792A09D7C5B247743839BF06E3E72EAEE3ADF9FA0E696CE5A9E6857F75DB0
+Full library-test compilation succeeded with 346 existing warnings.
+New-test rustfmt checks and git diff --check passed.
+Not a full-repository, release, Go-sidecar or real-account acceptance run.
