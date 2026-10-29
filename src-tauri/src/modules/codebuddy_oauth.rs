@@ -569,8 +569,8 @@ pub async fn probe_deepseek_flash(
     let target_domain = domain.unwrap_or("www.codebuddy.ai");
     let url = format!("https://{}/v2/chat/completions", target_domain);
     let now_ms = chrono::Utc::now().timestamp_millis();
-    let conv_id = format!("probe-{}", now_ms);
-    let req_id = format!("req-{}", now_ms);
+    let conv_id = uuid::Uuid::new_v4().to_string();
+    let req_id = format!("{:032x}", rand::random::<u128>());
 
     let mut req = client
         .post(&url)
@@ -586,7 +586,10 @@ pub async fn probe_deepseek_flash(
         .header("X-Agent-Runtime", "other")
         .header("X-Private-Data", "false")
         .header("X-CodeBuddy-Request", "1")
-        .header("X-Request-ID", req_id)
+        .header("X-Request-ID", &req_id)
+        .header("X-Conversation-Message-ID", &req_id)
+        .header("X-Conversation-Request-ID", &req_id)
+        .header("X-Root-Request-ID", &req_id)
         .header("X-Agent-Type", "main")
         .header("X-Domain", target_domain)
         .header("X-Product", "SaaS")
