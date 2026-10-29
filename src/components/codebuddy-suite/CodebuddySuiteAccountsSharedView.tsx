@@ -594,6 +594,8 @@ export function CodebuddySuiteAccountsSharedView<
       const updatedAtText = updatedAtMs != null
         ? formatQuotaDateTime(updatedAtMs)
         : "";
+      const deepseekFlashStatus = (account.quota_raw as { deepseekFlashStatus?: { status?: string; message?: string } } | undefined)?.deepseekFlashStatus;
+
       return (
         <>
           {reauthorizationReason && (
@@ -622,6 +624,31 @@ export function CodebuddySuiteAccountsSharedView<
               {renderUsageInfo(account)}
             </div>
           </div>
+          {deepseekFlashStatus && (
+            <div className="quota-item">
+              <div className="quota-header">
+                <span className="quota-name" title="DeepSeek V4.1 Flash">
+                  DeepSeek 4.1 Flash
+                </span>
+                <span
+                  className={`quota-value ${
+                    deepseekFlashStatus.status === "available"
+                      ? "high"
+                      : deepseekFlashStatus.status === "rate_limited"
+                      ? "critical"
+                      : "low"
+                  }`}
+                  title={deepseekFlashStatus.message || undefined}
+                >
+                  {deepseekFlashStatus.status === "available"
+                    ? t("common.shared.status.available", "正常可用")
+                    : deepseekFlashStatus.status === "rate_limited"
+                    ? t("common.shared.status.rateLimited", "限额 429")
+                    : t("common.shared.status.error", "检测异常")}
+                </span>
+              </div>
+            </div>
+          )}
           <div
             className={`quota-item ${platformConfig.usagePrefix}-quota-item`}
           >

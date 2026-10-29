@@ -570,6 +570,111 @@ pub async fn refresh_token(
         .ok_or_else(|| "刷新响应缺少 data 字段".to_string())
 }
 
+pub async fn probe_deepseek_flash(
+    access_token: &str,
+    uid: Option<&str>,
+    domain: Option<&str>,
+) -> Value {
+    let client = match build_client() {
+        Ok(c) => c,
+        Err(e) => {
+            return json!({
+                "status": "error",
+                "message": e
+            });
+        }
+    };
+
+    let target_domain = domain.unwrap_or("copilot.tencent.com");
+    let url = format!("https://{}/v2/chat/completions", target_domain);
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let conv_id = format!("probe-{}", now_ms);
+    let req_id = format!("req-{}", now_ms);
+
+    let mut req = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("Content-Type", "application/json")
+        .header("X-Requested-With", "XMLHttpRequest")
+        .header("X-Conversation-ID", conv_id)
+        .header("X-Agent-Purpose", "conversation")
+        .header("X-IDE-Type", "CLI")
+        .header("X-IDE-Name", "CLI")
+        .header("X-IDE-Version", "2.178.1")
+        .header("X-Agent-Intent", "craft")
+        .header("X-Agent-Runtime", "other")
+        .header("X-Private-Data", "false")
+        .header("X-CodeBuddy-Request", "1")
+        .header("X-Request-ID", req_id)
+        .header("X-Agent-Type", "main")
+        .header("X-Domain", target_domain)
+        .header("X-Product", "SaaS")
+        .header("User-Agent", "CLI/2.178.1 CodeBuddy/2.178.1")
+        .header("Authorization", format!("Bearer {}", access_token));
+
+    if let Some(u) = uid {
+        req = req.header("X-User-Id", u);
+    }
+
+    let body = json!({
+        "model": "deepseek-v4.1-flash",
+        "stream": true,
+        "messages": [
+            { "role": "system", "content": "You are CodeBuddy Code." },
+            { "role": "user", "content": "ping" }
+        ],
+        "max_tokens": 1
+    });
+
+    match req.json(&body).send().await {
+        Ok(resp) => {
+            let status = resp.status().as_u16();
+            if status == 200 {
+                json!({
+                    "status": "available",
+                    "code": 200,
+                    "model": "deepseek-v4.1-flash",
+                    "checked_at": now_ms
+                })
+            } else {
+                let text = resp.text().await.unwrap_or_default();
+                let parsed: Option<Value> = serde_json::from_str(&text).ok();
+                let api_code = parsed.as_ref().and_then(|p| p.get("code")).and_then(|c| c.as_i64());
+                let msg = parsed
+                    .as_ref()
+                    .and_then(|p| p.get("displayMsg"))
+                    .and_then(|d| d.get("en").or_else(|| d.get("zh")))
+                    .and_then(|m| m.as_str())
+                    .or_else(|| parsed.as_ref().and_then(|p| p.get("msg")).and_then(|m| m.as_str()))
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| text.chars().take(120).collect());
+
+                let is_rate_limited = status == 429
+                    || api_code == Some(11119)
+                    || api_code == Some(11120)
+                    || api_code == Some(11113);
+
+                json!({
+                    "status": if is_rate_limited { "rate_limited" } else { "error" },
+                    "code": status,
+                    "api_code": api_code,
+                    "message": msg,
+                    "model": "deepseek-v4.1-flash",
+                    "checked_at": now_ms
+                })
+            }
+        }
+        Err(err) => {
+            json!({
+                "status": "error",
+                "message": err.to_string(),
+                "model": "deepseek-v4.1-flash",
+                "checked_at": now_ms
+            })
+        }
+    }
+}
+
 pub async fn fetch_dosage_notify(
     access_token: &str,
     uid: Option<&str>,
@@ -1111,6 +1216,14 @@ async fn refresh_payload_for_account_inner(
     if let Some(r) = &user_resource {
         combined_quota.insert("userResource".to_string(), r.clone());
     }
+
+    let deepseek_flash_probe = probe_deepseek_flash(
+        &new_access_token,
+        resolved_uid.as_deref().or(account.uid.as_deref()),
+        new_domain.as_deref(),
+    )
+    .await;
+    combined_quota.insert("deepseekFlashStatus".to_string(), deepseek_flash_probe);
 
     let quota_raw = if combined_quota.is_empty() {
         account.quota_raw.clone()
