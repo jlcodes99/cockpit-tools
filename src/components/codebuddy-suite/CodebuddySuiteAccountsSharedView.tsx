@@ -594,6 +594,9 @@ export function CodebuddySuiteAccountsSharedView<
       const updatedAtText = updatedAtMs != null
         ? formatQuotaDateTime(updatedAtMs)
         : "";
+      const deepseekFlashStatus = (account.quota_raw as { deepseekFlashStatus?: { status?: string; message?: string; reset_time?: string } } | undefined)?.deepseekFlashStatus;
+      const deepseekResetTime = deepseekFlashStatus?.reset_time || (deepseekFlashStatus?.message ? deepseekFlashStatus.message.match(/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?(?:\s*(?:UTC[+-]?\d*|\(UTC[+-]?\d*\)))?)/)?.[1] : undefined);
+
       return (
         <>
           {reauthorizationReason && (
@@ -622,6 +625,38 @@ export function CodebuddySuiteAccountsSharedView<
               {renderUsageInfo(account)}
             </div>
           </div>
+          {deepseekFlashStatus && (
+            <div className="quota-item">
+              <div className="quota-header">
+                <span className="quota-name" title="DeepSeek V4.1 Flash">
+                  DeepSeek 4.1 Flash
+                </span>
+                <span
+                  className={`quota-value ${
+                    deepseekFlashStatus.status === "available"
+                      ? "high"
+                      : deepseekFlashStatus.status === "rate_limited"
+                      ? "critical"
+                      : "low"
+                  }`}
+                  title={deepseekFlashStatus.message || undefined}
+                >
+                  {deepseekFlashStatus.status === "available"
+                    ? t("common.shared.status.available", "正常可用")
+                    : deepseekFlashStatus.status === "rate_limited"
+                    ? t("common.shared.status.rateLimited", "限额 429")
+                    : t("common.shared.status.error", "检测异常")}
+                </span>
+              </div>
+              {deepseekResetTime && (
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "2px", width: "100%" }}>
+                  <span style={{ color: "var(--color-token-text-tertiary, #9ca3af)", fontSize: "11px" }}>
+                    {t("common.shared.quota.resetAt", "重置时间：{{time}}", { time: deepseekResetTime })}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           <div
             className={`quota-item ${platformConfig.usagePrefix}-quota-item`}
           >
