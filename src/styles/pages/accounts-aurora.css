@@ -1260,33 +1260,6 @@
   color: rgba(226, 232, 240, 0.9);
 }
 
-html[data-reduced-motion="true"] .accounts-page .toolbar,
-html[data-reduced-motion="true"] .accounts-page .accounts-grid .account-card,
-html[data-reduced-motion="true"] .accounts-page .card-quota-grid {
-  background: var(--bg-surface);
-  backdrop-filter: none;
-  box-shadow: none;
-}
-
-html[data-reduced-motion="true"] .accounts-page .accounts-grid .account-card,
-html[data-reduced-motion="true"] .accounts-page .accounts-grid .account-card:hover:not(.current) {
-  transform: none;
-}
-
-html[data-reduced-motion="true"] .accounts-page .account-card.current,
-html[data-reduced-motion="true"] .accounts-page .account-card.current:hover {
-  box-shadow: 0 0 0 2px var(--primary-light);
-}
-
-html[data-reduced-motion="true"] .accounts-page .account-card.selected {
-  background: color-mix(in srgb, var(--bg-surface) 88%, var(--primary) 12%);
-}
-
-html[data-reduced-motion="true"] .accounts-page .account-card.disabled {
-  filter: none;
-  background: color-mix(in srgb, var(--bg-surface) 92%, var(--danger) 8%);
-}
-
 /* ============================================
    Account Group Tabs (Aurora Selection Toolbar)
    ============================================ */

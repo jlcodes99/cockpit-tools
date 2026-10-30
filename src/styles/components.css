@@ -708,11 +708,6 @@
   color: var(--primary);
 }
 
-html[data-reduced-motion="true"] .platform-group-switcher-trigger:hover,
-html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platform-group-switcher-trigger-caret {
-  transform: none;
-}
-
 .platform-group-switcher-dropdown {
   position: fixed;
   top: 0;

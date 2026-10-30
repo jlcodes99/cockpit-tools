@@ -2252,32 +2252,6 @@
   }
 }
 
-html[data-reduced-motion="true"] .codex-accounts-page .codex-accounts-grid .codex-account-card {
-  background: var(--bg-surface);
-  backdrop-filter: none;
-  box-shadow: none;
-  transform: none;
-}
-
-html[data-reduced-motion="true"] .codex-accounts-page .codex-accounts-grid .codex-account-card:hover {
-  box-shadow: none;
-  transform: none;
-}
-
-html[data-reduced-motion="true"] .codex-accounts-page .codex-accounts-grid .codex-account-card.current {
-  box-shadow: 0 0 0 2px var(--primary-light);
-}
-
-html[data-reduced-motion="true"] .codex-accounts-page .codex-accounts-grid .codex-account-card.selected {
-  background: color-mix(in srgb, var(--bg-surface) 88%, var(--primary) 12%);
-}
-
-html[data-reduced-motion="true"] .codex-accounts-page .codex-accounts-grid .codex-account-card.new-api-exclusive,
-html[data-reduced-motion="true"] .codex-accounts-page .codex-accounts-grid .codex-account-card.api-key-usage-account,
-html[data-reduced-motion="true"] .codex-accounts-page .codex-accounts-grid .codex-account-card.sponsor-api-account {
-  background: var(--bg-surface);
-}
-
 .deepseek-start-modal .deepseek-start-option-list {
   display: flex;
   flex-direction: column;
