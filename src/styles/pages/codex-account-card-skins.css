@@ -251,11 +251,6 @@
   animation: var(--apikey-fun-sparkle, codex-pro-500-sparkle 7s ease-in-out infinite);
 }
 
-html[data-reduced-motion="true"] .codex-accounts-page .codex-card-skin-apikey-fun {
-  --apikey-fun-sheen: none;
-  --apikey-fun-sparkle: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .codex-accounts-page .codex-card-skin-apikey-fun {
     --apikey-fun-sheen: none;
