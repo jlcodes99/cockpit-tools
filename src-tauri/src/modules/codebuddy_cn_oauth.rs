@@ -570,6 +570,11 @@ pub async fn refresh_token(
         .ok_or_else(|| "刷新响应缺少 data 字段".to_string())
 }
 
+fn extract_reset_time_from_msg(msg: &str) -> Option<String> {
+    let re = regex::Regex::new(r"(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?(?:\s*(?:UTC[+-]?\d*|\(UTC[+-]?\d*\)))?)").ok()?;
+    re.captures(msg).and_then(|c| c.get(1)).map(|m| m.as_str().trim().to_string())
+}
+
 pub async fn probe_deepseek_flash(
     access_token: &str,
     uid: Option<&str>,
@@ -657,11 +662,13 @@ pub async fn probe_deepseek_flash(
                     || api_code == Some(11120)
                     || api_code == Some(11113);
 
+                let reset_time = extract_reset_time_from_msg(&msg);
                 json!({
                     "status": if is_rate_limited { "rate_limited" } else { "error" },
                     "code": status,
                     "api_code": api_code,
                     "message": msg,
+                    "reset_time": reset_time,
                     "model": "deepseek-v4.1-flash",
                     "checked_at": now_ms
                 })

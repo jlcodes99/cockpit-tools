@@ -594,7 +594,8 @@ export function CodebuddySuiteAccountsSharedView<
       const updatedAtText = updatedAtMs != null
         ? formatQuotaDateTime(updatedAtMs)
         : "";
-      const deepseekFlashStatus = (account.quota_raw as { deepseekFlashStatus?: { status?: string; message?: string } } | undefined)?.deepseekFlashStatus;
+      const deepseekFlashStatus = (account.quota_raw as { deepseekFlashStatus?: { status?: string; message?: string; reset_time?: string } } | undefined)?.deepseekFlashStatus;
+      const deepseekResetTime = deepseekFlashStatus?.reset_time || (deepseekFlashStatus?.message ? deepseekFlashStatus.message.match(/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?(?:\s*(?:UTC[+-]?\d*|\(UTC[+-]?\d*\)))?)/)?.[1] : undefined);
 
       return (
         <>
@@ -647,6 +648,13 @@ export function CodebuddySuiteAccountsSharedView<
                     : t("common.shared.status.error", "检测异常")}
                 </span>
               </div>
+              {deepseekResetTime && (
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "2px", width: "100%" }}>
+                  <span style={{ color: "var(--color-token-text-tertiary, #9ca3af)", fontSize: "11px" }}>
+                    {t("common.shared.quota.resetAt", "重置时间：{{time}}", { time: deepseekResetTime })}
+                  </span>
+                </div>
+              )}
             </div>
           )}
           <div

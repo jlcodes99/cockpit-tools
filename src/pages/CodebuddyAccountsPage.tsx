@@ -467,7 +467,8 @@ export function CodebuddyAccountsPage() {
     const updatedAtText = model.updatedAt != null
       ? formatQuotaDateTime(model.updatedAt)
       : null;
-    const deepseekFlashStatus = (account.quota_raw as { deepseekFlashStatus?: { status?: string; message?: string } } | undefined)?.deepseekFlashStatus;
+    const deepseekFlashStatus = (account.quota_raw as { deepseekFlashStatus?: { status?: string; message?: string; reset_time?: string } } | undefined)?.deepseekFlashStatus;
+    const deepseekResetTime = deepseekFlashStatus?.reset_time || (deepseekFlashStatus?.message ? deepseekFlashStatus.message.match(/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?(?:\s*(?:UTC[+-]?\d*|\(UTC[+-]?\d*\)))?)/)?.[1] : undefined);
     return (
       <>
         <div className="quota-item">
@@ -499,6 +500,13 @@ export function CodebuddyAccountsPage() {
                   : t('common.shared.status.error', '检测异常')}
               </span>
             </div>
+            {deepseekResetTime && (
+              <div className="codebuddy-official-quota-meta-wrap" style={{ marginTop: '2px' }}>
+                <span className="codebuddy-official-quota-meta" style={{ color: 'var(--color-token-text-tertiary, #9ca3af)', fontSize: '11px' }}>
+                  {t('common.shared.quota.resetAt', '重置时间：{{time}}', { time: deepseekResetTime })}
+                </span>
+              </div>
+            )}
           </div>
         )}
         <div className="quota-item codebuddy-quota-item">
