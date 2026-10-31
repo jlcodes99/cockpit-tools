@@ -197,6 +197,7 @@ impl IdentityStore {
         {
             return Ok(None);
         }
+        self.adopt_client_continuation(caller, headers, body)?;
         let reader = self.checkpoint_reader()?;
         let connection = reader.unchecked_transaction().map_err(storage)?;
         type Row = (

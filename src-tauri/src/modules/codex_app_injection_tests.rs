@@ -280,6 +280,7 @@ fn rejects_missing_or_invalid_remote_debugging_port() {
 fn custom_script_renders_weekly_and_optional_five_hour_fields() {
     let script = api_service_script(
         &QuotaResponse {
+            remote: None,
             weekly_remaining_percent: Some(1387),
             five_hour_remaining_percent: Some(100),
             weekly_capacity_percent: Some(1400),

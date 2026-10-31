@@ -7,6 +7,13 @@ const test = require('node:test');
 const source = fs.readFileSync(path.join(__dirname, '../src-tauri/src/modules/codex_app_injection_dialog.js'), 'utf8');
 const labels = JSON.parse(fs.readFileSync(path.join(__dirname, '../src/locales/en.json'), 'utf8'));
 const usageLabels = { ...labels.common.codexUsage,
+  remoteGatewayName: labels.common.apiBudget.gatewayName,
+  remoteKeyScope: labels.common.apiBudget.keyScope,
+  remoteUpgradeRequired: labels.common.apiBudget.upgradeRequired,
+  remotePreparing: labels.common.apiBudget.preparing,
+  requestId: labels.common.requestId,
+  imageGeneration: labels.codex.localAccess.requestKind.imageGeneration,
+  imageEdit: labels.codex.localAccess.requestKind.imageEdit,
   requestTier: labels.codex.apiService.logs.requestedTier,
   responseTier: labels.codex.apiService.logs.responseTier,
   legacyTier: labels.codex.apiService.logs.legacyTier,
@@ -20,6 +27,48 @@ const row = (id, extra = {}) => ({ id, timestamp: 1792545981000, accountDisplayN
   model: 'gpt-6.1-sol', reasoningEffort: 'high', success: true, httpStatus: 200,
   inputTokens: 1000, outputTokens: 214, cachedTokens: 700, totalTokens: 1214,
   outputGenerationMs: 3240, latencyMs: 14140, firstResponseMs: 10910, ...extra });
+
+test('remote logs stay in the Key view, hide private route fields and page in place', () => {
+  const h = harness();
+  h.root.usageState.__remoteService = { product: 'cockpit-tools', keyLabel: 'B' };
+  h.action('tab', 'logs');
+  h.respond({ requests: { rows: [row(1, { requestId: 'public-request-1', upstreamModel: 'private-upstream' })], nextCursor: 'remote-cursor' } });
+  assert.ok(h.details.innerHTML.includes(usageLabels.requestId));
+  assert.ok(h.details.innerHTML.includes('public-request-1'));
+  assert.ok(!h.details.innerHTML.includes('user@example.com'));
+  assert.ok(!h.details.innerHTML.includes('private-upstream'));
+  h.action('more');
+  const query = h.api.query(h.root);
+  assert.equal(query.view, 'logs');
+  assert.equal(query.cursor, 'remote-cursor');
+  h.respond({ requests: { rows: [row(2, { requestId: 'public-request-2' })], nextCursor: null } });
+  assert.equal(h.root.dialogState.rows.length, 2);
+  h.action('scope', 'service');
+  assert.ok(h.details.innerHTML.includes(usageLabels.remoteKeyScope));
+});
+
+test('remote failures distinguish unsupported services, preparing data and network failures', () => {
+  for (const [reason, label] of [ ['remote_unsupported', 'remoteUpgradeRequired'], ['statistics_preparing', 'remotePreparing'], ['remote_unreachable', 'dataFailed'] ]) {
+    const h = harness();
+    h.root.usageState.__remoteService = { product: 'cockpit-tools' };
+    h.respond({ available: false, unavailableReason: reason });
+    assert.ok(h.details.innerHTML.includes(usageLabels[label]), reason);
+    const token = h.api.query(h.root).requestToken;
+    h.advance(2001);
+    assert.equal(h.api.query(h.root).requestToken !== token, reason !== 'remote_unsupported');
+  }
+});
+
+test('image requests have explicit operation labels without text reasoning or speed mode rows', () => {
+  for (const [kind,labelKey] of [['image_generation','imageGeneration'],['image_edit','imageEdit']]) {
+    const h=harness();h.root.usageState.__remoteService={product:'cockpit-tools'};
+    h.action('tab','logs');
+    h.respond({requests:{rows:[row(1,{model:'gpt-image-2.5',requestKind:kind,reasoningEffort:null})]}});
+    assert.ok(h.details.innerHTML.includes('gpt-image-2.5'));
+    assert.ok(h.details.innerHTML.includes(usageLabels[labelKey]));
+    assert.ok(!h.details.innerHTML.includes(usageLabels.requestTier.split('{{')[0]));
+  }
+});
 
 function harness() {
   let now = 1792546000000;
@@ -120,18 +169,24 @@ test('new thread discards rows and late results even when service binding did no
   assert.equal(h.root.dialogState.rows.length, 0);
 });
 
-test('pagination deduplicates rows and preserves the snapshot on retryable errors', () => {
+test('view more opens host logs with the selected scope even without another page', () => {
   const h = harness();
   h.action('tab', 'logs');
-  h.respond({ requests: { rows: [row(1)], nextCursor: 'page-2' } });
+  h.respond({ requests: { rows: [row(1)], nextCursor: null } });
   h.action('more');
-  assert.equal(h.api.query(h.root).cursor, 'page-2');
-  h.respond({ error: true });
-  assert.equal(h.root.dialogState.rows.length, 1);
-  h.action('retry');
-  assert.equal(h.api.query(h.root).cursor, 'page-2');
-  h.respond({ requests: { rows: [row(1), row(2)], nextCursor: null } });
-  assert.deepEqual(Array.from(h.root.dialogState.rows, (item) => item.id), [1, 2]);
+  let query = h.api.query(h.root);
+  assert.equal(query.view, 'openLogs');
+  assert.equal(query.scope, 'chat');
+  assert.equal(query.threadId, thread);
+  assert.equal(query.cursor, null);
+  h.respond({});
+  h.action('scope', 'service');
+  h.respond({ requests: { rows: [], nextCursor: null } });
+  h.action('more');
+  query = h.api.query(h.root);
+  assert.equal(query.view, 'openLogs');
+  assert.equal(query.scope, 'service');
+  assert.equal(query.cursor, null);
 });
 
 test('missing replies time out with retry feedback without replacing existing rows by empty data', () => {
@@ -197,23 +252,24 @@ test('automatic retries stop after three attempts and manual retry starts a new 
   assert.notEqual(h.api.query(h.root).requestToken, manual.requestToken);
 });
 
-test('a timed out pagination read retries the same cursor without replacing the verified snapshot', () => {
+test('navigation failures stay in the dialog and retry only on an explicit click', () => {
   const h = harness();
   h.action('tab', 'logs');
-  h.respond({ requests: { rows: [row(1)], nextCursor: 'page-2' } });
+  h.respond({ requests: { rows: [row(1)], nextCursor: null } });
   h.action('more');
   const failed = h.api.query(h.root);
   h.advance(10001);
   h.api.query(h.root);
-  h.advance(2000);
+  h.advance(60000);
+  assert.equal(h.api.query(h.root).requestToken, failed.requestToken);
+  assert.equal(h.root.dialogState.rows.length, 1);
+  assert.equal(h.root.dialogState.error, true);
+  h.action('retry');
   const retry = h.api.query(h.root);
   assert.notEqual(retry.requestToken, failed.requestToken);
-  assert.equal(retry.cursor, 'page-2');
-  assert.equal(h.root.dialogState.rows.length, 1);
-  h.respond({ requests: { rows: [row(1), row(2)], nextCursor: null } }, retry);
-  h.advance(60000);
-  assert.equal(h.api.query(h.root).requestToken, retry.requestToken, 'pagination does not restart automatically');
-  assert.deepEqual(Array.from(h.root.dialogState.rows, (item) => item.id), [1, 2]);
+  assert.equal(retry.view, 'openLogs');
+  h.respond({});
+  assert.equal(h.root.dialogState.error, false);
 });
 
 test('service outages retry finitely while unlinked sessions and invalid schemas wait for manual action', () => {

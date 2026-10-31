@@ -2395,7 +2395,7 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
 
 .codex-api-service-log-filters {
   display: grid;
-  grid-template-columns: repeat(7, minmax(120px, 1fr)) auto;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   align-items: end;
   gap: 8px;
   min-width: 0;

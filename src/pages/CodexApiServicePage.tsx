@@ -1,4 +1,7 @@
+import { CODEX_REQUEST_LOGS_NAVIGATION, takeCodexRequestLogsNavigation } from "../utils/codexRequestLogsNavigation";
 import { useRefreshSafeDraft, useRefreshSafeRecordDraft } from "../hooks/useRefreshSafeDraft";
+import { useSampledRevision } from "../hooks/useSampledRevision";
+import { budgetDraft, parseBudgetDraft } from '../utils/codexKeyBudget';
 import { codexServiceOriginalAccounts } from "../utils/chatgptPlanOverview";
 import { useChatGptPlanOverview } from "../hooks/useChatGptPlanOverview";
 import { codexServiceRelatedEndpointIds } from "../utils/chatgptPlanOverview";
@@ -81,7 +84,7 @@ import { filterCodexLocalAccessAccountIds } from "../utils/codexLocalAccessAccou
 import { requestCodexOpenAddAccount } from "../utils/codexAddAccountRequest";
 import { scrollElementTo } from "../utils/reducedMotion";
 import { useCodexAccountOverviewMemberView } from "../hooks/useCodexAccountOverviewMemberView";
-import { useCodexApiKeyInspection } from "../hooks/useCodexApiKeyInspection";
+import { useCodexApiKeyInspection, codexApiKeyInspectionCardId } from "../hooks/useCodexApiKeyInspection";
 import {
   type CodexStatsRangeKey,
   type CodexStatsTimeRange,
@@ -109,6 +112,7 @@ type BuiltinTimeoutPresetId = "long_wait" | "short_wait";
 type TimeoutPresetId = BuiltinTimeoutPresetId | string;
 
 interface ApiKeyPolicyDraft {
+  budget: import('../utils/codexKeyBudget').CodexKeyBudgetDraft;
   tokenLimit: string;
   modelPrefix: string;
   allowedModels: string;
@@ -418,6 +422,7 @@ function apiKeyPolicyDraftFromValue(
 ): ApiKeyPolicyDraft {
   return {
     tokenLimit: apiKey.tokenLimit ? String(apiKey.tokenLimit) : "",
+    budget: budgetDraft(apiKey.budget),
     modelPrefix: apiKey.modelPrefix ?? "",
     allowedModels: serializeModelRules(apiKey.allowedModels),
     excludedModels: serializeModelRules(apiKey.excludedModels),
@@ -440,6 +445,7 @@ function apiKeyPolicyDraftIsDirty(
   const persisted = apiKeyPolicyDraftFromValue(apiKey);
   return (
     draft.tokenLimit !== persisted.tokenLimit ||
+    JSON.stringify(draft.budget) !== JSON.stringify(persisted.budget) ||
     draft.modelPrefix !== persisted.modelPrefix ||
     draft.allowedModels !== persisted.allowedModels ||
     draft.excludedModels !== persisted.excludedModels ||
@@ -809,6 +815,7 @@ export function useCodexApiServicePageController() {
   const [requestLogStatusFilter, setRequestLogStatusFilter] =
     useState<RequestLogStatusFilter>("all");
   const [requestLogModelQuery, setRequestLogModelQuery] = useState("");
+  const [requestLogSessionQuery, setRequestLogSessionQuery] = useState("");
   const [requestLogAccountQuery, setRequestLogAccountQuery] = useState("");
   const [requestLogApiKeyQuery, setRequestLogApiKeyQuery] = useState("");
   const [requestLogInstanceQuery, setRequestLogInstanceQuery] = useState("all");
@@ -827,6 +834,7 @@ export function useCodexApiServicePageController() {
     setExpandedApiKeyPolicyIds,
   });
   const stats = state?.stats ?? null;
+  const sampledStatsRevision = useSampledRevision(stats?.updatedAt);
   const memberView = useCodexAccountOverviewMemberView({
     accounts,
     groups,
@@ -1364,6 +1372,7 @@ export function useCodexApiServicePageController() {
   useEffect(() => {
     const requestSeq = ++statsRequestSeqRef.current;
     setStatsRangeError("");
+    const timer = window.setTimeout(() => {
     void codexLocalAccessService
       .queryCodexLocalAccessStats(statsTimeRange.startAt, statsTimeRange.endAt)
       .then((window) => {
@@ -1374,7 +1383,9 @@ export function useCodexApiServicePageController() {
         if (!mountedRef.current || requestSeq !== statsRequestSeqRef.current) return;
         setStatsRangeError(String(err).replace(/^Error:\s*/, ""));
       });
-  }, [statsTimeRange.endAt, statsTimeRange.startAt, stats?.updatedAt]);
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [statsTimeRange.endAt, statsTimeRange.startAt, sampledStatsRevision]);
 
   const handleStatsPresetChange = (
     key: Exclude<CodexStatsRangeKey, "custom">,
@@ -1431,6 +1442,7 @@ export function useCodexApiServicePageController() {
     requestLogKindFilter,
     requestLogStatusFilter,
     requestLogModelQuery,
+    requestLogSessionQuery,
     requestLogAccountQuery,
     requestLogApiKeyQuery,
     requestLogInstanceQuery,
@@ -1448,6 +1460,7 @@ export function useCodexApiServicePageController() {
         : requestLogStatusFilter === "failed"
           ? false
           : null;
+    const timer = window.setTimeout(() => {
     void codexLocalAccessService
       .queryCodexLocalAccessRequestLogs({
         page: requestLogPage,
@@ -1459,6 +1472,7 @@ export function useCodexApiServicePageController() {
         startAt: statsTimeRange.startAt,
         endAt: statsTimeRange.endAt,
         modelQuery: requestLogModelQuery,
+        sessionQuery: requestLogSessionQuery,
         accountQuery: requestLogAccountQuery,
         apiKeyQuery: requestLogApiKeyQuery,
         instanceQuery:
@@ -1485,8 +1499,10 @@ export function useCodexApiServicePageController() {
           setRequestLogLoading(false);
         }
       });
+    }, 200);
     return () => {
       disposed = true;
+      window.clearTimeout(timer);
     };
   }, [
     activeTab,
@@ -1499,12 +1515,13 @@ export function useCodexApiServicePageController() {
     requestLogKindFilter,
     requestLogStatusFilter,
     requestLogModelQuery,
+    requestLogSessionQuery,
     requestLogAccountQuery,
     requestLogApiKeyQuery,
     requestLogInstanceQuery,
     requestLogErrorQuery,
     requestLogRefreshNonce,
-    stats?.updatedAt,
+    sampledStatsRevision,
   ]);
 
   useEffect(() => {
@@ -2161,11 +2178,18 @@ export function useCodexApiServicePageController() {
   };
 
   const handleSaveApiKeyPolicy = async (apiKeyId: string) => {
+    setError("");
     const draft = apiKeyPolicyDrafts[apiKeyId];
     if (!draft) return;
     const apiKey = collection?.apiKeys.find((item) => item.id === apiKeyId);
     if (!apiKey) return;
     const tokenLimit = parseTokenLimitDraft(draft.tokenLimit);
+    const budget = parseBudgetDraft(draft.budget);
+    if (!budget) {
+      const field = document.getElementById(codexApiKeyInspectionCardId(apiKeyId))?.querySelector<HTMLInputElement>('[aria-invalid="true"]');
+      field?.focus(); field?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
     if (!Number.isFinite(tokenLimit)) {
       setError(
         t(
@@ -2208,6 +2232,7 @@ export function useCodexApiServicePageController() {
           apiKeyId,
           {
             tokenLimit,
+            budget,
             modelPrefix: draft.modelPrefix.trim(),
             allowedModels: parseModelRuleText(draft.allowedModels),
             excludedModels: parseModelRuleText(draft.excludedModels),
@@ -3547,6 +3572,7 @@ export function useCodexApiServicePageController() {
     requestLogStatusFilter !== "all" ||
     requestLogInstanceQuery !== "all" ||
     requestLogModelQuery.trim() ||
+    requestLogSessionQuery.trim() ||
     requestLogAccountQuery.trim() ||
     requestLogApiKeyQuery.trim() ||
     requestLogErrorQuery.trim(),
@@ -3555,11 +3581,28 @@ export function useCodexApiServicePageController() {
     setRequestLogKindFilter("all");
     setRequestLogStatusFilter("all");
     setRequestLogModelQuery("");
+    setRequestLogSessionQuery("");
     setRequestLogAccountQuery("");
     setRequestLogApiKeyQuery("");
     setRequestLogInstanceQuery("all");
     setRequestLogErrorQuery("");
   };
+
+  useEffect(() => {
+    const apply = () => {
+      const navigation = takeCodexRequestLogsNavigation();
+      if (!navigation) return;
+      clearRequestLogFilters();
+      setRequestLogSessionQuery(navigation.sessionId);
+      setRequestLogPage(1);
+      setActiveTab("logs");
+      setStatsLogTab("logs");
+      setRequestLogRefreshNonce((value) => value + 1);
+    };
+    window.addEventListener(CODEX_REQUEST_LOGS_NAVIGATION, apply);
+    apply();
+    return () => window.removeEventListener(CODEX_REQUEST_LOGS_NAVIGATION, apply);
+  }, []);
 
   return {
     accessScope,
@@ -3721,6 +3764,7 @@ export function useCodexApiServicePageController() {
     requestLogLoading,
     statsDetailsRefreshing,
     requestLogModelQuery,
+    requestLogSessionQuery,
     requestLogPageSize,
     requestLogRangeEnd,
     requestLogRangeStart,
@@ -3773,6 +3817,7 @@ export function useCodexApiServicePageController() {
     setRequestLogInstanceQuery,
     setRequestLogKindFilter,
     setRequestLogModelQuery,
+    setRequestLogSessionQuery,
     setRequestLogPage,
     setRequestLogPageSize,
     setRequestLogStatusFilter,

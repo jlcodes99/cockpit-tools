@@ -191,6 +191,7 @@ fn native_prepare_provider_vision_body(
     account: &CodexAccount,
     mut body: Value,
 ) -> Value {
+    if crate::modules::codex_remote_service::is_known_account(account) {return body;}
     if codex_account::is_grok_upstream_provider(account) {
         return body;
     }

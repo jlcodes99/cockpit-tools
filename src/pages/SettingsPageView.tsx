@@ -8,7 +8,6 @@ import { Github, User, Rocket, Save, AlertCircle, RefreshCw, Heart, MessageSquar
 import type { PlatformId } from '../types/platform';
 import type { useSettingsPageController } from "./SettingsPage";
 import { SettingsGeneralPanel } from "./SettingsGeneralPanel";
-import { RemoteReleaseStatus } from '../components/RemoteReleaseStatus';
 
 
 export type SettingsPageViewProps = ReturnType<typeof useSettingsPageController>;
@@ -31,7 +30,6 @@ export function SettingsPageView(props: SettingsPageViewProps) {
     handleConfirmMenuBarQuotaModal,
     handleDownloadReleaseVersion,
     handleOpenReleaseHistory,
-    loadReleaseHistory,
     handleSaveNetworkConfig,
     menuBarQuotaDraftPlatform,
     menuBarQuotaDraftShowPrefix,
@@ -436,6 +434,7 @@ export function SettingsPageView(props: SettingsPageViewProps) {
                   <button
                     className="btn btn-sm btn-ghost"
                     onClick={handleOpenReleaseHistory}
+                    disabled={releaseHistoryLoading}
                     style={{
                       fontSize: '12px',
                       padding: '4px 10px',
@@ -597,12 +596,24 @@ export function SettingsPageView(props: SettingsPageViewProps) {
               </button>
             </div>
             <div className="modal-body settings-release-history-body">
-              <RemoteReleaseStatus
-                loading={releaseHistoryLoading}
-                error={releaseHistoryError}
-                empty={releaseHistoryItems.length === 0}
-                onRetry={loadReleaseHistory}
-              />
+              {releaseHistoryLoading && (
+                <div className="settings-release-history-state">
+                  <RefreshCw size={14} className="spin" />
+                  <span>{t('settings.about.releaseHistoryLoading', '加载中...')}</span>
+                </div>
+              )}
+              {!releaseHistoryLoading && releaseHistoryError && (
+                <div className="settings-release-history-state settings-release-history-state-error">
+                  {t('settings.about.releaseHistoryLoadFailed', '加载失败：{{error}}', {
+                    error: releaseHistoryError,
+                  })}
+                </div>
+              )}
+              {!releaseHistoryLoading && !releaseHistoryError && releaseHistoryItems.length === 0 && (
+                <div className="settings-release-history-state">
+                  {t('settings.about.releaseHistoryEmpty', '暂无更新记录')}
+                </div>
+              )}
               {!releaseHistoryLoading &&
                 !releaseHistoryError &&
                 releaseHistoryItems.map((item) => (

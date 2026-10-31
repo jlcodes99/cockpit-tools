@@ -1,4 +1,5 @@
 import { ModalErrorMessage } from "../components/ModalErrorMessage";
+import { CodexKeyBudgetEditor, CodexKeyBudgetSummary } from '../components/codex/CodexKeyBudgetEditor';
 import { requestCodexOfficialAuthorizationManagement } from "../utils/codexAccountServiceNavigation";
 import { useChatGptPlanOverview } from "../hooks/useChatGptPlanOverview";
 import { CodexServiceAccountDetails } from "../components/codex/CodexServiceAccountDetails";
@@ -1120,6 +1121,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                         </div>
                       </div>
                     </div>
+                    <CodexKeyBudgetSummary apiKey={apiKey} />
                     <button
                       type="button"
                       className="codex-api-service-key-advanced-toggle"
@@ -1152,6 +1154,8 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                     </button>
                     {policyExpanded && (
                       <div className="codex-api-service-key-policy">
+                        <CodexKeyBudgetEditor value={policyDraft.budget} disabled={busy}
+                          onChange={budget => setApiKeyPolicyDrafts(drafts => ({ ...drafts, [apiKey.id]: { ...(drafts[apiKey.id] ?? policyDraft), budget } }))} />
                         <div className="api-key-token-limit-editor">
                           <label>
                             <span>

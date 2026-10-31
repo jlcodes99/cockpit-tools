@@ -19,6 +19,7 @@ import { formatCodexLoginProvider, getCodexAuthMetadata, getCodexPlanFilterKey, 
 import { canAddCodexAccountToLocalAccess, filterCodexLocalAccessAccountIds } from "../utils/codexLocalAccessAccounts";
 import { extractCodexQuotaErrorCode, extractCodexQuotaErrorStatusCode, isVerboseCodexQuotaErrorMessage, summarizeCodexQuotaErrorMessage } from "../utils/codexQuotaError";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
+import { withCodexRemotePresentation } from '../utils/codexRemotePresentation';
 import { isCodexIdTokenReauthReason } from "../utils/codexSwitchAuthFailure";
 import { CODEX_PLAN_BADGE_STYLE_CHANGED_EVENT, getCodexPlanBadgeStyle, type CodexPlanBadgeStyle } from "../utils/codexPreferences";
 import { invoke } from "@tauri-apps/api/core";
@@ -46,6 +47,7 @@ import type { useCodexAccountsAccessController } from "./useCodexAccountsAccessC
 /** 封装 useCodexAccountsPageController 的 useCodexAccountsLocalAccessController 业务域状态与动作。 */
 export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<typeof useCodexAccountsBaseController> & ReturnType<typeof useCodexAccountsOAuthController> & ReturnType<typeof useCodexAccountsAccessController>,
   | "accounts"
+  | "apiKeyUsageMap"
   | "activeGroupId"
   | "addingLocalAccessAccountId"
   | "batchImportTargetGroupId"
@@ -124,6 +126,7 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
     accounts,
     activeGroupId,
     addingLocalAccessAccountId,
+    apiKeyUsageMap,
     batchImportTargetGroupId,
     clearGroupFilter,
     codexAccountsRef,
@@ -584,10 +587,11 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
     }, [accounts, t, planBadgeStyle]);
   
     const resolvePresentation = useCallback(
-      (account: CodexAccount) =>
-        accountPresentations.get(account.id) ??
-        buildCodexAccountPresentation(account, t),
-      [accountPresentations, t],
+      (account: CodexAccount) => {
+        const presentation = accountPresentations.get(account.id) ?? buildCodexAccountPresentation(account, t);
+        return withCodexRemotePresentation(account,presentation,apiKeyUsageMap[account.id]?.summary,t('common.apiBudget.gatewayName'));
+      },
+      [accountPresentations, apiKeyUsageMap, t],
     );
   
     const resolveSubscriptionPresentation = useCallback(

@@ -244,3 +244,18 @@ test('official speed adjustment is explicit and does not invent a downgrade for 
   assert.doesNotMatch(text(rows[1]), /speedAdjusted/);
   hook.unmount();
 });
+
+test('session filter shows the navigation value and forwards edits to the query controller', () => {
+  const hook = harness(storage());
+  const changes: string[] = [];
+  hook.render(() => hook.exports.CodexApiRequestLogs({ ...props(),
+    requestLogSessionQuery: 'chat-123', setRequestLogSessionQuery: (value: string) => changes.push(value),
+  }));
+  const input = nodes(hook.flush()).find((node) => node.type === 'input' && node.props.placeholder === 'codex.apiService.logs.sessionPlaceholder');
+  assert.ok(input);
+  assert.equal(input.props.value, 'chat-123');
+  input.props.onChange({ target: { value: '' } });
+  input.props.onChange({ target: { value: 'other-chat' } });
+  assert.deepEqual(changes, ['', 'other-chat']);
+  hook.unmount();
+});

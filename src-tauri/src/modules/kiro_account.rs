@@ -142,6 +142,11 @@ pub fn load_account(account_id: &str) -> Option<KiroAccount> {
 fn save_account_file(account: &KiroAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
     let content = crate::modules::secure_account_storage::serialize_account_file("kiro", account)?;
+    crate::modules::account_query_identity::invalidate_before_write(
+        &get_accounts_index_path()?,
+        &account.id,
+        &query_identity(account),
+    )?;
     crate::modules::atomic_write::write_string_atomic(&path, &content)
         .map_err(|e| format!("保存账号失败: {}", e))
 }
@@ -304,6 +309,15 @@ fn repair_account_index_from_details(reason: &str) -> Option<KiroAccountIndex> {
 }
 
 fn refresh_summary(index: &mut KiroAccountIndex, account: &KiroAccount) {
+    let next = account.summary();
+    if !index
+        .accounts
+        .iter()
+        .any(|s| s.id == account.id && s.query_identity == next.query_identity)
+    {
+        index.identity_revision = index.identity_revision.wrapping_add(1);
+        index.identity_maintenance_version = 0;
+    }
     if let Some(summary) = index.accounts.iter_mut().find(|item| item.id == account.id) {
         *summary = account.summary();
         return;
@@ -559,165 +573,27 @@ fn choose_primary_account_index(
         .unwrap_or(group[0])
 }
 
-fn normalize_account_index(index: &mut KiroAccountIndex) -> Vec<KiroAccount> {
-    let mut loaded_accounts = Vec::new();
-    let mut seen_summary_ids = HashSet::new();
-
-    for summary in &index.accounts {
-        if !seen_summary_ids.insert(summary.id.clone()) {
-            continue;
-        }
-        if let Some(account) = load_account(&summary.id) {
-            loaded_accounts.push(account);
-        }
-    }
-
-    if loaded_accounts.len() <= 1 {
-        index.accounts = loaded_accounts
-            .iter()
-            .map(|account| account.summary())
-            .collect();
-        return loaded_accounts;
-    }
-
-    let preferred_bound_id = crate::modules::kiro_instance::load_default_settings()
-        .ok()
-        .and_then(|settings| settings.bind_account_id);
-    let mut parents: Vec<usize> = (0..loaded_accounts.len()).collect();
-
-    fn find(parents: &mut [usize], idx: usize) -> usize {
-        let parent = parents[idx];
-        if parent == idx {
-            return idx;
-        }
-        let root = find(parents, parent);
-        parents[idx] = root;
-        root
-    }
-
-    fn union(parents: &mut [usize], left: usize, right: usize) {
-        let left_root = find(parents, left);
-        let right_root = find(parents, right);
-        if left_root != right_root {
-            parents[right_root] = left_root;
-        }
-    }
-
-    let total = loaded_accounts.len();
-    for left in 0..total {
-        for right in (left + 1)..total {
-            if accounts_are_duplicates(&loaded_accounts[left], &loaded_accounts[right]) {
-                union(&mut parents, left, right);
-            }
-        }
-    }
-
-    let mut grouped: HashMap<usize, Vec<usize>> = HashMap::new();
-    for idx in 0..total {
-        let root = find(&mut parents, idx);
-        grouped.entry(root).or_default().push(idx);
-    }
-
-    let mut processed_roots = HashSet::new();
-    let mut normalized_accounts = Vec::new();
-    let mut removed_ids = Vec::new();
-    for idx in 0..total {
-        let root = find(&mut parents, idx);
-        if !processed_roots.insert(root) {
-            continue;
-        }
-        let Some(group) = grouped.get(&root) else {
-            continue;
-        };
-
-        if group.len() == 1 {
-            normalized_accounts.push(loaded_accounts[group[0]].clone());
-            continue;
-        }
-
-        let primary_idx =
-            choose_primary_account_index(group, &loaded_accounts, preferred_bound_id.as_deref());
-        let mut primary = loaded_accounts[primary_idx].clone();
-        for member in group {
-            if *member == primary_idx {
-                continue;
-            }
-            merge_duplicate_account(&mut primary, &loaded_accounts[*member]);
-            removed_ids.push(loaded_accounts[*member].id.clone());
-        }
-
-        normalized_accounts.push(primary);
-    }
-
-    if !removed_ids.is_empty() {
-        for account in &normalized_accounts {
-            if let Err(err) = save_account_file(account) {
-                logger::log_warn(&format!(
-                    "[Kiro Account] 保存去重账号失败: id={}, error={}",
-                    account.id, err
-                ));
-            }
-        }
-        for account_id in &removed_ids {
-            if let Err(err) = delete_account_file(account_id) {
-                logger::log_warn(&format!(
-                    "[Kiro Account] 删除重复账号文件失败: id={}, error={}",
-                    account_id, err
-                ));
-            }
-        }
-        logger::log_warn(&format!(
-            "[Kiro Account] 检测到重复账号并已合并: removed_ids={}",
-            removed_ids.join(",")
-        ));
-    }
-
-    index.accounts = normalized_accounts
-        .iter()
-        .map(|account| account.summary())
-        .collect();
-    normalized_accounts
-}
+include!("kiro_account_identity.rs");
 
 pub fn list_accounts() -> Vec<KiroAccount> {
-    let mut index = load_account_index();
-    let had_index_accounts = !index.accounts.is_empty();
-    let index_before_normalize = serde_json::to_vec(&index).ok();
-    let accounts = normalize_account_index(&mut index);
-    if had_index_accounts && accounts.is_empty() {
-        logger::log_warn(
-            "[Kiro Account] 账号索引中存在账号，但详情文件均无法读取，已跳过空索引写回",
-        );
-        return accounts;
-    }
-    let index_changed = index_before_normalize
-        .as_ref()
-        .map(|before| Some(before.as_slice()) != serde_json::to_vec(&index).ok().as_deref())
-        .unwrap_or(true);
-    if index_changed {
-        if let Err(err) = save_account_index(&index) {
-            logger::log_warn(&format!("[Kiro Account] 保存账号索引失败: {}", err));
-        }
-    }
-    accounts
+    schedule_identity_maintenance();
+    load_account_index()
+        .accounts
+        .iter()
+        .filter_map(|summary| load_account(&summary.id))
+        .collect()
 }
 
 pub fn list_accounts_checked() -> Result<Vec<KiroAccount>, String> {
-    let mut index = load_account_index_checked()?;
-    let had_index_accounts = !index.accounts.is_empty();
-    let index_before_normalize = serde_json::to_vec(&index).ok();
-    let accounts = normalize_account_index(&mut index);
-    if had_index_accounts && accounts.is_empty() {
+    schedule_identity_maintenance();
+    let index = load_account_index_checked()?;
+    let accounts: Vec<_> = index
+        .accounts
+        .iter()
+        .filter_map(|summary| load_account(&summary.id))
+        .collect();
+    if !index.accounts.is_empty() && accounts.is_empty() {
         return Err("Kiro 账号索引中存在账号，但详情文件均无法读取；已保留前端缓存，请从账号备份或本地账号文件恢复。".to_string());
-    }
-    let index_changed = index_before_normalize
-        .as_ref()
-        .map(|before| Some(before.as_slice()) != serde_json::to_vec(&index).ok().as_deref())
-        .unwrap_or(true);
-    if index_changed {
-        if let Err(err) = save_account_index(&index) {
-            logger::log_warn(&format!("[Kiro Account] 保存账号索引失败: {}", err));
-        }
     }
     Ok(accounts)
 }
@@ -779,21 +655,15 @@ pub fn upsert_account(payload: KiroOAuthCompletePayload) -> Result<KiroAccount, 
     let account_id = index
         .accounts
         .iter()
-        .filter_map(|item| load_account(&item.id))
-        .find(|account| {
-            let existing_user = normalize_user_identity(account.user_id.as_deref());
-            let existing_email = normalize_email_identity(Some(account.email.as_str()));
-            let existing_refresh_token = normalize_token_identity(account.refresh_token.as_deref());
-            account_matches_payload_identity(
-                existing_user.as_ref(),
-                existing_email.as_ref(),
-                existing_refresh_token.as_ref(),
+        .find(|summary| {
+            summary_matches_payload(
+                summary,
                 incoming_user_id.as_ref(),
                 incoming_email.as_ref(),
                 incoming_refresh_token.as_ref(),
             )
         })
-        .map(|account| account.id)
+        .map(|summary| summary.id.clone())
         .unwrap_or(generated_id);
 
     let existing = load_account(&account_id);
@@ -952,6 +822,8 @@ pub fn remove_account(account_id: &str) -> Result<(), String> {
         .map_err(|_| "获取 Kiro 账号锁失败".to_string())?;
     let mut index = load_account_index();
     index.accounts.retain(|item| item.id != account_id);
+    index.identity_revision = index.identity_revision.wrapping_add(1);
+    index.identity_maintenance_version = 0;
     save_account_index(&index)?;
     delete_account_file(account_id)?;
     Ok(())

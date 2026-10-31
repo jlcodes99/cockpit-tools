@@ -5,8 +5,9 @@ fn native_public_model_entry(
     account: &CodexAccount,
     id: &str,
     upstream: &str,
+    public_template: Option<&Value>,
 ) -> Value {
-    let template = account_model_template(account, upstream)
+    let template = public_template.cloned().or_else(||account_model_template(account, upstream))
         .or_else(|| codex_protocol::known_codex_model_template(upstream));
     let window = account
         .api_model_context_windows

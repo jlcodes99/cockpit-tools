@@ -29,6 +29,9 @@ use super::{
 pub struct Options {
     /// Preserve client protocol IDs when disabled; continuity checks still apply.
     pub session_identity_mapping_enabled: bool,
+    /// Authenticated API keys may continue explicitly supplied response references.
+    /// This does not share identity namespaces, key permissions or usage accounting.
+    pub shared_continuation_references: bool,
     /// usize::MAX leaves conversation request sizes unrestricted by the gateway.
     pub max_body_bytes: usize,
     /// Per uploaded image file, rather than the sum of a multipart request.
@@ -51,6 +54,7 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             session_identity_mapping_enabled: true,
+            shared_continuation_references: false,
             max_body_bytes: usize::MAX,
             max_upload_bytes: 64 * 1024 * 1024,
             max_response_bytes: usize::MAX,
@@ -107,6 +111,10 @@ impl AppState {
     }
 
     pub async fn authorize(&self, headers: &HeaderMap) -> Result<Caller, ServiceError> {
+        self.authorize_for(headers, false).await
+    }
+
+    pub(super) async fn authorize_for(&self, headers: &HeaderMap, management: bool) -> Result<Caller, ServiceError> {
         let bearer = headers
             .get(header::AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
@@ -118,9 +126,10 @@ impl AppState {
                 ServiceError::new(401, "invalid_api_key", "A valid Bearer API key is required")
             })?;
         let mut stop = self.stop.clone();
+        let authorization = if management { self.host.authorize_management(bearer) } else { self.host.authorize(bearer) };
         tokio::select! {
             _ = stop.wait() => Err(stopping_error()),
-            result = tokio::time::timeout(self.options.request_timeout, self.host.authorize(bearer)) =>
+            result = tokio::time::timeout(self.options.request_timeout, authorization) =>
                 result.map_err(|_| ServiceError::new(504, "authorization_timeout", "API key validation timed out"))?,
         }
     }
@@ -247,6 +256,7 @@ pub async fn start(
     let addr = listener.local_addr().map_err(|error| error.to_string())?;
     let activity = Arc::new(Activity::default());
     identity.set_session_identity_mapping_enabled(options.session_identity_mapping_enabled);
+    identity.set_shared_continuation_references(options.shared_continuation_references);
     let identity = Arc::new(identity);
     let state = Arc::new(AppState {
         anthropic_search: Default::default(),
@@ -261,6 +271,11 @@ pub async fn start(
         .route("/v1/models", get(models))
         .route("/models", get(models))
         .route("/v1/cockpit/quota", get(super::diagnostics::management))
+        .route("/v1/cockpit/connection", get(super::diagnostics::management))
+        .route("/v1/cockpit/usage", get(super::diagnostics::management))
+        .route("/v1/cockpit/stats", get(super::diagnostics::management))
+        .route("/v1/cockpit/requests", get(super::diagnostics::management))
+        .route("/v1/cockpit/session", get(super::diagnostics::management))
         .route(
             "/v1/cockpit/diagnostics/config",
             post(super::diagnostics::management),
@@ -546,6 +561,16 @@ pub(super) fn outbound_headers(headers: &HeaderMap) -> HeaderMap {
         })
         .map(|(name, value)| (name.clone(), value.clone()))
         .collect()
+}
+
+pub(super) fn forward_remote_scope_headers(incoming:&HeaderMap,route:&super::contract::Route,outgoing:&mut HeaderMap) {
+    let Some(key)=route.headers.get(header::AUTHORIZATION).and_then(|h|h.to_str().ok()).and_then(|h|h.strip_prefix("Bearer ")) else {return;};
+    if !crate::modules::codex_remote_service::is_known(&route.base_url,key) {return;}
+    // Only explicit public correlation fields survive a recognized Cockpit hop.
+    // Routing/admin headers remain stripped by outbound_headers.
+    for name in ["x-cockpit-instance-id","x-codex-instance-id","x-client-instance-id","x-codex-installation-id"] {
+        if let Some(value)=incoming.get(name).filter(|v|v.as_bytes().len()<=128) {outgoing.insert(name,value.clone());}
+    }
 }
 
 pub(super) fn downstream_response(status: StatusCode, headers: &HeaderMap, body: Body) -> Response {

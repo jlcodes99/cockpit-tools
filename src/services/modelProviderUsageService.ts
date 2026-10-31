@@ -1,10 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
+import { codexRemoteBinding } from '../utils/codexRemoteBinding';
 
 export type ModelProviderUsageIntegrationType = 'sub2api' | 'new_api';
 export type ModelProviderUsageMode =
   | ModelProviderUsageIntegrationType
   | 'deepseek'
   | 'token_plan'
+  | 'cockpit'
   | 'openai_official';
 
 export interface ModelProviderModel {
@@ -18,6 +20,8 @@ export interface ModelProviderModelsResult {
 }
 
 export interface ModelProviderUsageSummary {
+  cockpit?: import('../types/codexRemoteService').CodexRemoteConnection | null;
+  sourceBinding?: string;
   mode?: string | null;
   isValid?: boolean | null;
   status?: string | null;
@@ -120,11 +124,13 @@ export async function queryModelProviderUsage(input: {
   let lastError: unknown = null;
   for (const baseUrl of candidates) {
     try {
-      return await invoke('codex_query_model_provider_usage', {
+      const summary = await invoke<ModelProviderUsageSummary>('codex_query_model_provider_usage', {
         baseUrl,
         apiKey: input.apiKey,
         integrationType: input.integrationType ?? null,
       });
+      if (summary.cockpit) summary.sourceBinding = await codexRemoteBinding(input.baseUrl, input.apiKey);
+      return summary;
     } catch (error) {
       lastError = error;
       if (!isModelProviderUsageUnavailableError(error)) {
@@ -162,6 +168,7 @@ export function resolveModelProviderUsageMode(
   summary?: ModelProviderUsageSummary,
 ): ModelProviderUsageMode | null {
   if (!summary) return null;
+  if (summary.cockpit) return 'cockpit';
   if (
     summary.mode === 'new_api' ||
     summary.mode === 'sub2api' ||

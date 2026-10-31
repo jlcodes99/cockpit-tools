@@ -396,8 +396,9 @@ export function getCockpitApiStatsRecord(
 
 export function resolveApiKeyUsageMode(
   summary?: CodexModelProviderUsageSummary,
-): "new_api" | "sub2api" | "deepseek" | "token_plan" | "openai_official" | null {
+): "new_api" | "sub2api" | "deepseek" | "token_plan" | "openai_official" | "cockpit" | null {
   if (!summary) return null;
+  if (summary.cockpit) return "cockpit";
   if (
     summary.mode === "new_api" ||
     summary.mode === "sub2api" ||

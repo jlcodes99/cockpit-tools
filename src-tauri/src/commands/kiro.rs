@@ -19,8 +19,10 @@ async fn refresh_kiro_account_after_login(account: KiroAccount) -> KiroAccount {
 }
 
 #[tauri::command]
-pub fn list_kiro_accounts() -> Result<Vec<KiroAccount>, String> {
-    kiro_account::list_accounts_checked()
+pub async fn list_kiro_accounts() -> Result<Vec<KiroAccount>, String> {
+    tauri::async_runtime::spawn_blocking(kiro_account::list_accounts_checked)
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

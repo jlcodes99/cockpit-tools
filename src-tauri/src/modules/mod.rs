@@ -1,5 +1,8 @@
 pub mod account;
 pub mod account_index_repair;
+pub(crate) mod account_query_identity;
+pub(crate) mod background_maintenance;
+pub(crate) mod usage_rollup;
 pub mod announcement;
 pub mod apikey_fun_links;
 pub mod antigravity_credential;
@@ -46,6 +49,7 @@ pub mod codex_config_format;
 pub mod codex_instance;
 pub mod codex_profile_copy;
 pub mod codex_local_access;
+pub(crate) mod codex_remote_service;
 pub(crate) mod codex_request_summary;
 pub mod codex_native_api;
 pub(crate) mod codex_continuity_worker;

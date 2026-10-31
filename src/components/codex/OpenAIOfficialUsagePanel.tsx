@@ -31,7 +31,7 @@ export function OpenAIOfficialUsagePanel({ summary, loading, error, variant = 'c
       <div className="codex-api-key-usage-grid codex-daily-usage-grid">
         {metrics.map(item => <div key={item.key}><span>{item.label}</span><strong>{item.value}</strong></div>)}
       </div>
-      <p className="openai-official-usage-note">{t('codex.openaiUsage.scope')}</p>
+      {detailed && <p className="openai-official-usage-note">{t('codex.openaiUsage.scope')}</p>}
     </>}
     {loading && <p className="openai-official-usage-note" role="status">{t('codex.openaiUsage.loading')}</p>}
     {error && <div className="openai-official-usage-feedback" role="status">

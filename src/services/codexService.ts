@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { discoverCodexRemoteServices } from './codexRemoteServiceDiscovery';
 import { codexPathRecoveryKey, withCodexPathRecovery } from '../stores/useCodexPathRecoveryStore';
 import { presentProxyEnginePrerequisite, withProxyEnginePrerequisite } from '../utils/codexProxyEnginePrerequisite';
 import {
@@ -37,7 +38,9 @@ export interface CodexDeviceAuthStartResponse {
 
 /** 列出所有 Codex 账号 */
 export async function listCodexAccounts(): Promise<CodexAccount[]> {
-  return await invoke('list_codex_accounts');
+  const accounts = await invoke<CodexAccount[]>('list_codex_accounts');
+  discoverCodexRemoteServices(accounts);
+  return accounts;
 }
 
 /** 获取当前激活的 Codex 账号 */

@@ -153,3 +153,15 @@ fn diagnostic_identity_fields_are_camel_case_and_old_records_remain_uncaptured()
     assert!(old.attempts[0].upstream_session_id.is_none());
     assert!(old.attempts[0].upstream_thread_id.is_none());
 }
+
+#[test]
+fn underscore_thread_header_is_captured_and_primary_header_keeps_precedence() {
+    let mut headers=HeaderMap::new();
+    headers.insert("thread_id","aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".parse().unwrap());
+    let captured=capture_header_identity(&headers);
+    assert_eq!(captured.thread.as_deref(),Some("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
+    headers.insert("thread-id","explicit-primary".parse().unwrap());
+    assert_eq!(capture_header_identity(&headers).thread.as_deref(),Some("explicit-primary"));
+    headers.insert("thread-id",HeaderValue::from_static("bad\tid"));
+    assert!(!capture_header_identity(&headers).captured);
+}

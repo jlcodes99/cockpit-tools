@@ -2801,7 +2801,10 @@ fn sync_api_key_model_catalog_to_dir(
         }
     }
 
-    let upstream_models = normalize_api_model_catalog(account.api_model_catalog.clone());
+    let remote_catalog=crate::modules::codex_local_access::remote_catalog_for_account(account);
+    let upstream_models = remote_catalog.as_ref().and_then(|c|c["models"].as_array()).map(|models|
+        models.iter().filter_map(|m|m["slug"].as_str().map(str::to_owned)).collect())
+        .unwrap_or_else(||normalize_api_model_catalog(account.api_model_catalog.clone()));
     // 直连上游 / CDP 注入用上游真实模型 ID；其余按官方壳位分配。
     let slots = crate::modules::codex_local_access::provider_model_slots_for_account(
         account,
@@ -2828,7 +2831,8 @@ fn sync_api_key_model_catalog_to_dir(
         }
     }
     let content = crate::modules::codex_local_access::decorate_account_catalog_context_windows(
-        &crate::modules::codex_local_access::build_provider_model_catalog_json(&slots)?,
+        &match remote_catalog {Some(catalog)=>serde_json::to_string(&catalog).map_err(|e|e.to_string())?,
+            None=>crate::modules::codex_local_access::build_provider_model_catalog_json(&slots)?},
         &slots,
         account,
         crate::modules::codex_local_access::read_toml_model_context_window(&doc),
@@ -3187,7 +3191,10 @@ fn api_key_account_supports_image_generation(account: &CodexAccount) -> bool {
         && account
             .api_model_catalog
             .iter()
-            .any(|model| model.trim().eq_ignore_ascii_case(CODEX_IMAGE_MODEL_ID))
+            .any(|model| {
+                let model = model.trim().rsplit('/').next().unwrap_or_default().to_ascii_lowercase();
+                model.starts_with("gpt-image-") && !model.contains("video")
+            })
 }
 
 /// 是否应写入 Codex 生图兼容 header（actor 等）。
@@ -3206,6 +3213,9 @@ fn api_key_provider_should_enable_imagegen(
         && is_loopback_http_base_url(Some(base_url));
     if is_local_access_loopback {
         return true;
+    }
+    if let Some(remote) = crate::modules::codex_remote_service::for_account(account) {
+        return remote.capabilities.images;
     }
     api_key_account_supports_image_generation(account)
 }
@@ -3543,6 +3553,7 @@ fn write_api_key_runtime_provider_to_config_toml(
     let api_key = normalize_api_key(account.openai_api_key.as_deref().unwrap_or_default())
         .ok_or_else(|| "API Key 账号缺少 OPENAI_API_KEY".to_string())?;
     let supports_image = api_key_provider_should_enable_imagegen(account, provider_config);
+    let remote = crate::modules::codex_remote_service::for_account(account);
     let wire_api = account
         .api_wire_api
         .as_deref()
@@ -3553,8 +3564,8 @@ fn write_api_key_runtime_provider_to_config_toml(
         base_dir,
         provider_config,
         &api_key,
-        account.api_provider_mode == CodexApiProviderMode::Custom
-            && account.api_supports_websockets,
+        remote.as_ref().map(|value| value.capabilities.websockets).unwrap_or(
+            account.api_provider_mode == CodexApiProviderMode::Custom && account.api_supports_websockets),
         supports_image,
         oauth_bound || !supports_image,
         wire_api,

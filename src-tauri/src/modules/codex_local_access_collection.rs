@@ -229,6 +229,17 @@ fn save_collection_to_path(
                     if let Some(updated_at) = current.get("updatedAt").and_then(Value::as_i64) {
                         next.updated_at = next.updated_at.max(updated_at);
                     }
+                    if let Some(keys) = current.get("apiKeys").and_then(Value::as_array) {
+                        for key in &mut next.api_keys {
+                            if let Some(previous) = keys.iter().find(|value| value["id"] == key.id) {
+                                let previous: CodexLocalAccessApiKey = serde_json::from_value(previous.clone())
+                                    .map_err(|error| format!("Cannot preserve API key accounting: {error}"))?;
+                                key.token_used = key.token_used.max(previous.token_used);
+                                merge_key_budget_usage(&mut key.budget_usage, &previous.budget_usage);
+                                if previous.updated_at > key.updated_at { key.budget = previous.budget; }
+                            }
+                        }
+                    }
                 }
                 Err(error) => {
                     // Keep the existing recovery path for damaged files. With no readable
@@ -586,6 +597,7 @@ fn replace_stats_window_if_more_complete(
 
 fn ensure_stats_maintenance_started() {
     ensure_request_log_error_maintenance_started();
+    ensure_remote_analytics_started();
     if GATEWAY_STATS_MAINTENANCE_COMPLETED.load(Ordering::SeqCst) {
         return;
     }

@@ -1,9 +1,10 @@
 //! Small, write-time projections for the injected request list.
 //!
-//! This module never walks historical logs. Live usage/diagnostic writers call
+//! Live usage/diagnostic writers call
 //! `refresh_request` after persisting one request, under their existing write
 //! lock. Detail and usage can arrive in either order. Raw bodies, credentials,
-//! error messages and diagnostic JSON never enter the projection table.
+//! error messages and diagnostic JSON never enter the projection table. A
+//! separate bounded repair updates existing session-only identity projections.
 
 use std::collections::HashSet;
 
@@ -12,6 +13,20 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::models::codex_local_access::CodexLocalAccessServiceTierAdaptation;
+
+#[path = "codex_request_summary_session.rs"]
+mod session_scope;
+pub(crate) use session_scope::repair_batch as repair_session_scope_batch;
+
+// Match the native protocol's explicit-thread precedence. Session-only image
+// requests use their own session UUID, never the last active conversation.
+fn effective_thread(thread: Option<String>, session: Option<String>) -> Option<String> {
+    thread
+        .filter(|value| !value.is_empty())
+        .or(session.filter(|value| !value.is_empty()))
+        .and_then(|value| uuid::Uuid::parse_str(&value).ok())
+        .map(|value| value.hyphenated().to_string())
+}
 
 const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
 const MAX_ATTEMPTS_BYTES: usize = 65_536;
@@ -232,6 +247,7 @@ pub(crate) fn display_row(row: &rusqlite::Row<'_>) -> Result<Value, String> {
             "plan": null,
             "model": text(row.get("model_id")?),
             "requestedModel": text(row.get("requested_model")?),
+            "requestKind": optional_text(row,"request_kind")?,
             "upstreamModel": text(row.get("upstream_model")?),
             "reasoningEffort": text(row.get("reasoning_effort")?),
             "requestedServiceTier": optional_text(row,"requested_service_tier")?,
@@ -350,6 +366,7 @@ fn pending_rows(conn: &Connection, request_id: &str) -> Result<Vec<Summary>, Str
         "email",
         "model_id",
         "requested_model",
+        "request_kind",
         "upstream_model",
         "reasoning_effort",
         "error_category",
@@ -372,7 +389,11 @@ fn pending_rows(conn: &Connection, request_id: &str) -> Result<Vec<Summary>, Str
     ] {
         selected.push(projection(&diagnostics, "d", name, false));
     }
-    for name in ["client_thread_id", "client_installation_id"] {
+    for name in [
+        "client_thread_id",
+        "client_session_id",
+        "client_installation_id",
+    ] {
         selected.push(projection(&diagnostics, "d", name, true));
     }
     let join = if diagnostics.is_empty() {
@@ -405,12 +426,12 @@ fn pending_rows(conn: &Connection, request_id: &str) -> Result<Vec<Summary>, Str
             return Err("request summary row limit exceeded".into());
         }
         let data = display_row(row)?;
-        let thread = text(
+        let thread = effective_thread(
             row.get("client_thread_id")
                 .map_err(|error| error.to_string())?,
-        )
-        .and_then(|value| uuid::Uuid::parse_str(&value).ok())
-        .map(|value| value.hyphenated().to_string());
+            row.get("client_session_id")
+                .map_err(|error| error.to_string())?,
+        );
         let identity = row
             .get::<_, Option<i64>>("client_identity_captured")
             .map_err(|error| error.to_string())?

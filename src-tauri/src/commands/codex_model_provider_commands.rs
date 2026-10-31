@@ -1,7 +1,20 @@
 use crate::modules::codex_provider_protocol::normalize_model_provider_wire_api;
+use serde_json::Value;
+
+#[tauri::command]
+pub async fn codex_discover_remote_service(base_url: String, api_key: String) -> Result<Option<crate::modules::codex_remote_service::Connection>, String> {
+    if api_key.trim().is_empty() { return Ok(None); }
+    crate::modules::codex_remote_service::discover(&base_url, &api_key, false).await
+}
 
 #[path = "codex_openai_usage.rs"]
 mod openai_usage;
+
+#[tauri::command]
+pub async fn codex_query_remote_key_data(base_url:String,api_key:String,resource:String,
+    query:crate::modules::codex_remote_service::KeyQuery) -> Result<Value,String> {
+    crate::modules::codex_remote_service::key_data(&base_url,&api_key,&resource,&query).await
+}
 
 // Codex 模型供应商命令实现。
 //
@@ -645,6 +658,7 @@ pub struct CodexModelProviderModelsResult {
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexModelProviderUsageSummary {
+    pub cockpit: Option<crate::modules::codex_remote_service::Connection>,
     pub mode: Option<String>,
     pub is_valid: Option<bool>,
     pub status: Option<String>,
@@ -779,6 +793,7 @@ fn summarize_model_provider_usage(
     );
 
     CodexModelProviderUsageSummary {
+        cockpit: None,
         mode: json_string_at(body, &["mode"]),
         is_valid: json_bool_at(body, &["is_active"]).or_else(|| json_bool_at(body, &["isValid"])),
         status: json_string_at(body, &["status"]),
@@ -874,6 +889,7 @@ fn summarize_deepseek_balance(
     }
 
     CodexModelProviderUsageSummary {
+        cockpit: None,
         mode: Some("deepseek".to_string()),
         is_valid: Some(is_available),
         status: Some(
@@ -1117,6 +1133,7 @@ fn summarize_minimax_token_plan_usage(
     );
 
     Ok(CodexModelProviderUsageSummary {
+        cockpit: None,
         mode: Some("token_plan".to_string()),
         is_valid: Some(remaining_percent > 0.0),
         status: Some(if remaining_percent > 0.0 {
@@ -1264,6 +1281,7 @@ fn summarize_zhipu_token_plan_usage(
     }
 
     Ok(CodexModelProviderUsageSummary {
+        cockpit: None,
         mode: Some("token_plan".to_string()),
         is_valid: Some(remaining_percent > 0.0),
         status: Some(if remaining_percent > 0.0 {
@@ -1446,6 +1464,7 @@ fn summarize_new_api_model_provider_usage(
     );
 
     CodexModelProviderUsageSummary {
+        cockpit: None,
         mode: Some("new_api".to_string()),
         is_valid: None,
         status: None,
@@ -1716,6 +1735,17 @@ pub fn codex_cancel_model_provider_chat_test(run_id: String) -> Result<bool, Str
 
 #[tauri::command]
 pub async fn codex_list_model_provider_models(base_url: String, api_key: String, wire_api: Option<String>, auth_scheme: Option<String>) -> Result<CodexModelProviderModelsResult, String> {
+    if let Ok(Some(remote)) = crate::modules::codex_remote_service::discover(&base_url, api_key.trim(), false).await {
+        let names:std::collections::HashMap<String,String>=remote.model_catalog.as_ref().and_then(|c|c["models"].as_array())
+            .into_iter().flatten().filter_map(|m|Some((m["slug"].as_str()?.into(),m["display_name"].as_str()?.into()))).collect();
+        let priorities:std::collections::HashMap<String,i64>=remote.model_catalog.as_ref().and_then(|c|c["models"].as_array())
+            .into_iter().flatten().filter_map(|m|Some((m["slug"].as_str()?.into(),m["priority"].as_i64().unwrap_or(i64::MAX)))).collect();
+        let mut ids=remote.models;
+        ids.sort_by_key(|id|priorities.get(id).copied().unwrap_or(i64::MAX));
+        return Ok(CodexModelProviderModelsResult { models: ids.into_iter().map(|id| {
+            let display_name=names.get(&id).cloned();CodexModelProviderModel { id, display_name }
+        }).collect(), latency_ms: 0 });
+    }
     if api_key.trim().is_empty() { return Err("MISSING_API_KEY".into()); }
     let client = reqwest::Client::builder().timeout(Duration::from_secs(20)).build().map_err(|_| "PROVIDER_MODELS_NETWORK_FAILED".to_string())?;
     let protocol = normalize_model_provider_wire_api(wire_api.as_deref(), &base_url);
@@ -1757,6 +1787,36 @@ pub async fn codex_query_model_provider_usage(
 
     if openai_usage::is_official_base_url(&base_url) {
         return openai_usage::query(&client, key).await;
+    }
+
+    if let Some(connection) = crate::modules::codex_remote_service::discover(&base_url, key, true).await? {
+        let now=chrono::Utc::now().timestamp_millis();
+        let today_query=crate::modules::codex_remote_service::KeyQuery {
+            start_at:Some(now/86_400_000*86_400_000),
+            end_at:Some((now/86_400_000+1)*86_400_000),
+            ..Default::default()
+        };
+        let (totals, today) = tokio::join!(
+            crate::modules::codex_remote_service::usage(&base_url, key, "all"),
+            crate::modules::codex_remote_service::key_data(&base_url,key,"stats",&today_query),
+        );
+        let totals=totals?;
+        // Older servers and background backfills leave daily fields unknown.
+        let today=today.ok().filter(|value|value["ready"]==true).unwrap_or_default();
+        let amount = |name: &str| connection.budget[name].as_u64().map(|value| value as f64 / 1_000_000.0);
+        return Ok(CodexModelProviderUsageSummary {
+            mode: Some("cockpit".into()), is_valid: Some(connection.status == "active"), status: Some(connection.status.clone()),
+            unit: Some("USD".into()), quota_unlimited: Some(connection.budget.pointer("/policy/limitMicrousd").and_then(Value::as_u64).is_none()),
+            quota_limit: connection.budget.pointer("/policy/limitMicrousd").and_then(Value::as_u64).map(|v| v as f64 / 1_000_000.0),
+            quota_used: amount("usedMicrousd"), quota_remaining: amount("remainingMicrousd"),
+            today_cost: today.pointer("/summary/estimatedCostUsd").and_then(Value::as_f64),
+            today_requests: today.pointer("/summary/requestCount").and_then(Value::as_i64),
+            today_total_tokens: today.pointer("/summary/totalTokens").and_then(Value::as_i64),
+            total_requests: totals.pointer("/usage/requestCount").and_then(Value::as_i64),
+            total_total_tokens: totals.pointer("/usage/totalTokens").and_then(Value::as_i64),
+            total_cost: totals.pointer("/usage/estimatedCostUsd").and_then(Value::as_f64),
+            cockpit: Some(connection), ..Default::default()
+        });
     }
 
     if let Some(provider) = codex_model_provider_token_plan_provider(&base_url)? {

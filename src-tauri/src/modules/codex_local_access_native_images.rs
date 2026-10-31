@@ -27,6 +27,7 @@ async fn native_image_route_once(
 ) -> Result<native_contract::ImageRoute, native_contract::ServiceError> {
     let collection = host.collection().await?;
     let key = native_caller_key(&collection, caller)?;
+    if let Some(key) = key { check_key_budget(key, now_ms(), true)?; }
     if collection.image_generation_mode == CodexLocalAccessImageGenerationMode::Disabled {
         return Err(native_error(
             403,
@@ -196,6 +197,7 @@ async fn native_image_route_once(
                 "The selected image model is unavailable",
             )
         })?;
+    check_budget_pricing(&collection, key, &image_model)?;
     let main_model = (!account.is_api_key_auth()).then(|| {
         native_image_main_model(&collection, responses_model.as_deref(), use_configured_main)
     });
@@ -649,6 +651,7 @@ fn native_image_source_allowed(
     }
     if account.is_api_key_auth()
         && policy != CodexLocalAccessImageGenerationPolicy::Enabled
+        && !crate::modules::codex_remote_service::for_routing_account(account).is_some_and(|remote| remote.capabilities.images)
         && !collection
             .image_generation_account_ids
             .contains(&account.id)

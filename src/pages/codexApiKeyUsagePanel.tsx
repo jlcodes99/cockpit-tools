@@ -1,4 +1,5 @@
 import { getCockpitApiStatsRecord, toCockpitApiRecord } from "./codexAccountsControllerModel";
+import { CodexRemoteServicePanel } from '../components/codex/CodexRemoteServicePanel';
 import { isOpenAIOfficialUsageAccount } from "../utils/openaiOfficialUsage";
 import { OpenAIOfficialUsagePanel } from "../components/codex/OpenAIOfficialUsagePanel";
 import type { ReactElement } from "react";
@@ -72,6 +73,7 @@ export function renderCodexApiKeyUsagePanel({
   formatApiKeyUsageDetailByKey,
   findApiKeyUsageDetail,
 }: CodexApiKeyUsagePanelOptions): ReactElement {
+  if (usageState?.summary?.cockpit) return <CodexRemoteServicePanel state={usageState} variant={variant} t={t} />;
   if (isOpenAIOfficialUsageAccount(account, provider?.baseUrl)) {
     return <OpenAIOfficialUsagePanel summary={resolveCodexAccountDailyUsage(account, usageState?.summary)} loading={usageState?.loading} error={usageState?.error} variant={variant} t={t} />;
   }

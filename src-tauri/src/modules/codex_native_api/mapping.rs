@@ -679,6 +679,7 @@ async fn finalize(
     let source_headers = logical_headers;
     let mut headers = outbound_headers(incoming);
     headers.extend(selected.headers.clone());
+    super::server::forward_remote_scope_headers(incoming,&selected,&mut headers);
     let identity = state.identity.clone();
     let account_id = selected.continuity_id().to_owned();
     let owner_id = selected.owner_id.clone();

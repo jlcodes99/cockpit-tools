@@ -7,10 +7,12 @@ const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEFAULT_CHECK_INTERVAL_HOURS: u64 = 1;
 const LEGACY_DEFAULT_CHECK_INTERVAL_HOURS: u64 = 24;
 const LEGACY_PREVIOUS_DEFAULT_CHECK_INTERVAL_HOURS: u64 = 6;
-const PENDING_UPDATE_NOTES_FILE: &str = "pending_update_notes.json";
-#[path = "update_checker_remote.rs"]
-mod remote;
-pub use remote::{get_release_history, get_release_notes, ReleaseNotes};
+#[path = "update_checker_local.rs"]
+mod local;
+pub use local::{
+    get_bundled_release_notes, get_local_release_history, get_pending_release_notes,
+    save_pending_update_notes, ReleaseNotes,
+};
 
 static UPDATE_SETTINGS_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
@@ -143,10 +145,6 @@ fn ensure_data_dir() -> Result<std::path::PathBuf, String> {
     Ok(data_dir)
 }
 
-fn pending_update_notes_path() -> Result<std::path::PathBuf, String> {
-    Ok(get_data_dir()?.join(PENDING_UPDATE_NOTES_FILE))
-}
-
 fn parse_release_header(line: &str) -> Option<(String, String)> {
     if !line.starts_with("## [") {
         return None;
@@ -244,25 +242,6 @@ fn parse_release_history_markdown(markdown: &str, limit: usize) -> Vec<ReleaseHi
     }
 
     releases
-}
-
-fn remove_pending_update_notes_file() {
-    match pending_update_notes_path() {
-        Ok(path) => {
-            if path.exists() {
-                if let Err(err) = std::fs::remove_file(&path) {
-                    logger::log_error(&format!(
-                        "删除待安装更新说明文件失败: path={}, error={}",
-                        path.display(),
-                        err
-                    ));
-                }
-            }
-        }
-        Err(err) => {
-            logger::log_error(&format!("解析待安装更新说明路径失败: {}", err));
-        }
-    }
 }
 
 /// Load update settings from config file
@@ -387,10 +366,6 @@ pub fn check_version_jump() -> Result<Option<VersionJumpInfo>, String> {
         save_update_settings_unlocked(&settings)?;
         return Ok(None);
     }
-
-    // Discard legacy installation-time notes; the dialog loads this version's
-    // current Release body without delaying startup or the version-state lock.
-    remove_pending_update_notes_file();
 
     // Update the stored version
     settings.last_run_version = current.clone();

@@ -1273,6 +1273,15 @@ pub async fn set_local_access_api_key_account_priority(
 }
 
 pub async fn update_local_access_api_key(
+    api_key_id: String, label: Option<String>, enabled: Option<bool>, model_prefix: Option<String>,
+    allowed_models: Option<Vec<String>>, excluded_models: Option<Vec<String>>, token_limit: Option<u64>,
+    account_ids: Option<Vec<String>>, inherit_account_pool: Option<bool>,
+) -> Result<CodexLocalAccessState, String> {
+    update_local_access_api_key_with_budget(api_key_id, label, enabled, model_prefix, allowed_models,
+        excluded_models, token_limit, account_ids, inherit_account_pool, None).await
+}
+
+pub async fn update_local_access_api_key_with_budget(
     api_key_id: String,
     label: Option<String>,
     enabled: Option<bool>,
@@ -1282,6 +1291,7 @@ pub async fn update_local_access_api_key(
     token_limit: Option<u64>,
     account_ids: Option<Vec<String>>,
     inherit_account_pool: Option<bool>,
+    budget: Option<CodexApiKeyBudget>,
 ) -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded_without_start().await?;
     let (maybe_collection, historical_token_used) = {
@@ -1316,6 +1326,10 @@ pub async fn update_local_access_api_key(
     )?;
     if let Some(label) = label {
         collection.api_keys[index].label = normalize_api_key_label(Some(label.as_str()), "API Key");
+    }
+    if let Some(budget) = budget {
+        validate_key_budget(&budget)?;
+        collection.api_keys[index].budget = budget;
     }
     if let Some(enabled) = enabled {
         collection.api_keys[index].enabled = enabled;

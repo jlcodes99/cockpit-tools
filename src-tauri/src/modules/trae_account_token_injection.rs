@@ -722,6 +722,7 @@ pub(crate) fn backfill_account_user_id_if_missing(
     account_id: &str,
     user_id: &str,
 ) -> Result<bool, String> {
+    let _guard = TRAE_ACCOUNT_INDEX_LOCK.lock().map_err(|_| "获取 Trae 账号锁失败".to_string())?;
     let Some(mut account) = load_account(account_id) else {
         return Ok(false);
     };
@@ -737,8 +738,7 @@ pub(crate) fn backfill_account_user_id_if_missing(
     // Keep index summary in sync for UI/debug.
     if let Ok(mut index) = load_account_index_checked() {
         if let Some(item) = index.accounts.iter_mut().find(|item| item.id == account.id) {
-            item.user_id = Some(uid.clone());
-            item.last_used = account.last_used;
+            *item = account.summary();
             let _ = save_account_index(&index);
         }
     }
@@ -943,7 +943,7 @@ pub fn inject_to_trae_at_path(storage_path: &Path, account_id: &str) -> Result<(
     if storage_path.exists()
         && sync_account_tokens_from_storage_path(&mut account, storage_path, "注入前本地", true)
     {
-        if let Err(err) = save_account_file(&account) {
+        if let Err(err) = upsert_account_record(account.clone()) {
             logger::log_warn(&format!(
                 "[Trae Account] 注入前同步 storage 后落盘失败: account_id={}, error={}",
                 account_id, err
@@ -2261,7 +2261,7 @@ fn prepare_account_tokens_before_exchange(account: &mut TraeAccount) -> bool {
     }
 
     if any_changed {
-        if let Err(err) = save_account_file(account) {
+        if let Err(err) = upsert_account_record(account.clone()) {
             logger::log_warn(&format!(
                 "[Trae Refresh] 同步 storage 后落盘失败: account_id={}, error={}",
                 account.id, err

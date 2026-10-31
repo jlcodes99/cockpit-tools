@@ -148,8 +148,11 @@ pub async fn codex_local_access_query_request_logs(
     end_at: Option<i64>,
     model_query: Option<String>,
     account_query: Option<String>,
+    account_id: Option<String>,
+    api_key_id: Option<String>,
     api_key_query: Option<String>,
     instance_query: Option<String>,
+    session_query: Option<String>,
     gateway_mode: Option<CodexLocalAccessGatewayMode>,
     request_kind: Option<CodexLocalAccessRequestKind>,
     success: Option<bool>,
@@ -163,8 +166,11 @@ pub async fn codex_local_access_query_request_logs(
         end_at,
         model_query,
         account_query,
+        account_id,
+        api_key_id,
         api_key_query,
         instance_query,
+        session_query,
         gateway_mode,
         request_kind,
         success,
@@ -396,8 +402,9 @@ pub async fn codex_local_access_update_api_key(
     token_limit: Option<u64>,
     account_ids: Option<Vec<String>>,
     inherit_account_pool: Option<bool>,
+    budget: Option<crate::models::codex_local_access::CodexApiKeyBudget>,
 ) -> Result<CodexLocalAccessState, String> {
-    codex_local_access::update_local_access_api_key(
+    codex_local_access::update_local_access_api_key_with_budget(
         api_key_id,
         label,
         enabled,
@@ -407,6 +414,7 @@ pub async fn codex_local_access_update_api_key(
         token_limit,
         account_ids,
         inherit_account_pool,
+        budget,
     )
     .await
 }

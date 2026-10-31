@@ -1,4 +1,4 @@
-//! Read-only data for the injected usage dialog. Call only on a blocking worker.
+//! Usage-dialog reads and explicit host-log navigation. Call only on a blocking worker.
 //! No payload, authorization or response body is read or sent to the renderer.
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -57,11 +57,14 @@ pub(super) fn parse_query(value: &Value) -> Option<DialogQuery> {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b':' | b'.'))
         || !matches!(query.scope.as_str(), "chat" | "service")
         || !matches!(query.period.as_str(), "today" | "week")
-        || !matches!(query.view.as_str(), "overview" | "logs")
+        || !matches!(query.view.as_str(), "overview" | "logs" | "openLogs")
         || query.binding.as_ref().is_some_and(|binding| {
             binding.len() != 64 || !binding.bytes().all(|b| b.is_ascii_hexdigit())
         })
     {
+        return None;
+    }
+    if query.view == "openLogs" && query.scope == "chat" && query.thread_id.is_none() {
         return None;
     }
     if let Some(thread) = &query.thread_id {
@@ -85,7 +88,7 @@ fn decode_cursor(raw: &str) -> Option<Cursor> {
     .then_some(cursor)
 }
 
-fn response(query: &DialogQuery, available: bool) -> Value {
+pub(super) fn response(query: &DialogQuery, available: bool) -> Value {
     json!({
         "requestToken": query.request_token, "threadId": query.thread_id,
         "scope": query.scope, "period": query.period, "cursor": query.cursor,
@@ -101,6 +104,13 @@ pub(super) fn read_dialog_data(profile: &Path, query: &DialogQuery) -> Result<Va
     if parse_query(&serde_json::to_value(query).map_err(|e| e.to_string())?).as_ref() != Some(query)
     {
         return Err("invalid dialog query".into());
+    }
+    if let Some(endpoint)=super::remote_view::endpoint(profile)? {
+        return super::remote_view::dialog(profile,&endpoint,query);
+    }
+    if query.view == "openLogs" {
+        open_request_logs(query)?;
+        return Ok(response(query, true));
     }
     let before = super::output_speed::binding_snapshot(profile)?;
     if query.binding.is_some() && before != query.binding {
@@ -126,6 +136,37 @@ pub(super) fn read_dialog_data(profile: &Path, query: &DialogQuery) -> Result<Va
         return Ok(unavailable(query, "binding_changed"));
     }
     Ok(output)
+}
+
+fn request_logs_target(query: &DialogQuery) -> String {
+    let mut target = "codex-api-service?view=logs".to_string();
+    if query.scope == "chat" {
+        if let Some(thread) = &query.thread_id {
+            // parse_query has already canonicalized this UUID.
+            target.push_str("&sessionId=");
+            target.push_str(thread);
+        }
+    }
+    target
+}
+
+fn open_request_logs(query: &DialogQuery) -> Result<(), String> {
+    let app = crate::get_app_handle()
+        .ok_or("application unavailable")?
+        .clone();
+    let target = request_logs_target(query);
+    let (send, receive) = std::sync::mpsc::sync_channel(1);
+    let main_app = app.clone();
+    app.run_on_main_thread(move || {
+        let result = crate::modules::floating_card_window::show_main_window_and_navigate(
+            &main_app, &target,
+        );
+        let _ = send.send(result);
+    })
+    .map_err(|error| error.to_string())?;
+    receive
+        .recv_timeout(Duration::from_secs(4))
+        .map_err(|error| error.to_string())?
 }
 
 fn unavailable(query: &DialogQuery, reason: &str) -> Value {
@@ -482,6 +523,7 @@ fn read_page(
         "email",
         "model_id",
         "requested_model",
+        "request_kind",
         "upstream_model",
         "reasoning_effort",
         "error_category",

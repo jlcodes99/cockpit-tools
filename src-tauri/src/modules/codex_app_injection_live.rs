@@ -1,4 +1,4 @@
-//! Bounded, read-only dialog transport. The regular injection poll remains a
+//! Bounded usage-dialog transport. The regular injection poll remains a
 //! fallback, but clicks and completed reads need not wait for its next tick.
 use super::*;
 use std::sync::Arc;

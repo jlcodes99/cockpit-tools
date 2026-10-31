@@ -17,7 +17,7 @@ test('the official panel renders spend rather than a remaining balance', () => {
   const html = renderToStaticMarkup(createElement(OpenAIOfficialUsagePanel, { summary, t }));
   assert.ok(html.includes('$1.00') && !html.includes('$2.00'));
   assert.ok(!html.includes('codex.openaiUsage.monthCost'));
-  assert.ok(html.includes('codex.openaiUsage.scope'));
+  assert.ok(!html.includes('codex.openaiUsage.scope'));
   assert.ok(!html.includes('accountBalance') && !html.includes('totalAvailable'));
 });
 
@@ -25,6 +25,7 @@ test('detail panels retain monthly spend while cards keep only the three daily f
   const detail = renderToStaticMarkup(createElement(OpenAIOfficialUsagePanel, { summary, t, detailed: true }));
   const card = renderToStaticMarkup(createElement(OpenAIOfficialUsagePanel, { summary, t }));
   assert.ok(detail.includes('codex.openaiUsage.monthCost') && detail.includes('$2.00'));
+  assert.ok(detail.includes('codex.openaiUsage.scope'));
   assert.equal((detail.match(/<strong>/g) ?? []).length, 4);
   assert.equal((card.match(/<strong>/g) ?? []).length, 3);
   assert.ok(!card.includes('codex.openaiUsage.monthCost'));

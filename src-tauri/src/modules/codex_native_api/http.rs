@@ -72,6 +72,7 @@ pub(super) async fn read_request(
     let result=async {
         let caller = state.authorize(&parts.headers).await?;
         tracker.authorized(&caller,"");
+        tracker.admit(&caller).await?;
         let mut stop = state.stop.clone();
         let bytes = tokio::select! {
             _ = stop.wait() => return Err(stopping_error()),

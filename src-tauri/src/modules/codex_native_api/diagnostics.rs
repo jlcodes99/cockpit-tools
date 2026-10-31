@@ -169,7 +169,7 @@ pub(super) fn capture_header_identity(headers: &axum::http::HeaderMap) -> Header
         .filter(|value| !value.as_bytes().is_empty())
         .or_else(|| headers.get("session_id"));
     let session = identity(session_header);
-    let thread = identity(headers.get("thread-id"));
+    let thread = identity(headers.get("thread-id").filter(|value|!value.as_bytes().is_empty()).or_else(||headers.get("thread_id")));
     let mut snapshot = match (session, thread) {
         (Ok(session), Ok(thread)) => HeaderIdentity {
             captured: true,
@@ -220,6 +220,11 @@ pub enum ManagementRequest {
         account_ids: Vec<String>,
     },
     Quota,
+    Connection,
+    Usage { range: String },
+    KeyStats { query: crate::modules::codex_remote_service::KeyQuery },
+    KeyRequests { query: crate::modules::codex_remote_service::KeyQuery },
+    KeySession { query: crate::modules::codex_remote_service::KeyQuery },
     ServiceTier {
         speed: String,
         revision: u64,
@@ -278,6 +283,11 @@ fn parse_management(
             Ok(ManagementRequest::DiagnosticsEvents)
         }
         "/v1/cockpit/quota" if *method == Method::GET => Ok(ManagementRequest::Quota),
+        "/v1/cockpit/connection" if *method == Method::GET => Ok(ManagementRequest::Connection),
+        "/v1/cockpit/usage" if *method == Method::GET => Ok(ManagementRequest::Usage { range: "week".into() }),
+        "/v1/cockpit/stats" if *method == Method::GET => Ok(ManagementRequest::KeyStats { query: Default::default() }),
+        "/v1/cockpit/requests" if *method == Method::GET => Ok(ManagementRequest::KeyRequests { query: Default::default() }),
+        "/v1/cockpit/session" if *method == Method::GET => Ok(ManagementRequest::KeySession { query: Default::default() }),
         "/v1/cockpit/auth/reset" | "/v1/cockpit/accounts/reset-scheduler" if post => {
             let input: ResetAccounts =
                 serde_json::from_slice(body).map_err(|_| invalid_request())?;
@@ -328,7 +338,10 @@ pub(super) async fn management(
     request: Request,
 ) -> Result<Json<Value>, ServiceError> {
     let _tracker = state.begin()?;
-    let caller = state.authorize(request.headers()).await?;
+    let readonly_self = matches!(request.uri().path(), "/v1/cockpit/connection" | "/v1/cockpit/usage" | "/v1/cockpit/stats" | "/v1/cockpit/requests" | "/v1/cockpit/session");
+    let caller = state.authorize_for(request.headers(), readonly_self).await?;
+    let range = request.uri().query().and_then(|query| url::form_urlencoded::parse(query.as_bytes())
+        .find(|(key, _)| key == "range").map(|(_, value)| value.into_owned())).unwrap_or_else(|| "week".into());
     let loopback = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
@@ -342,7 +355,19 @@ pub(super) async fn management(
                 .map_err(|_| ServiceError::new(413, "request_too_large", "Management request is too large"))?
         }
     };
-    let request = parse_management(&parts.method, parts.uri.path(), &body, loopback)?;
+    let mut request = parse_management(&parts.method, parts.uri.path(), &body, loopback)?;
+    if matches!(request,ManagementRequest::KeyStats{..}|ManagementRequest::KeyRequests{..}|ManagementRequest::KeySession{..}) {
+        let query: crate::modules::codex_remote_service::KeyQuery =
+            serde_urlencoded::from_str(parts.uri.query().unwrap_or_default()).map_err(|_|invalid_request())?;
+        request=if matches!(request,ManagementRequest::KeyStats{..}) {
+            ManagementRequest::KeyStats{query}
+        } else if matches!(request,ManagementRequest::KeySession{..}) {ManagementRequest::KeySession{query}}
+        else { ManagementRequest::KeyRequests{query} };
+    }
+    if matches!(request, ManagementRequest::Usage { .. }) {
+        if !matches!(range.as_str(), "day" | "week" | "month" | "all") { return Err(invalid_request()); }
+        request = ManagementRequest::Usage { range };
+    }
     tokio::select! {
         _ = stop.wait() => Err(super::lifecycle::stopping_error()),
         result = tokio::time::timeout(state.options.request_timeout, state.host.management(&caller, request)) =>

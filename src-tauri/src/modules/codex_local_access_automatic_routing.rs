@@ -353,6 +353,10 @@ const DEEPSEEK_DEFAULT_REASONING_EFFORT: &str = "max";
 /// 账号模型的官方模板（目前覆盖 DeepSeek 官方目录）。
 fn account_model_template(account: &CodexAccount, model: &str) -> Option<Value> {
     let model = model.trim();
+    if let Some(catalog) = remote_catalog_for_account(account) {
+        return catalog["models"].as_array()?.iter()
+            .find(|entry| entry["slug"].as_str() == Some(model)).cloned();
+    }
     if !is_official_deepseek_account(account) {
         if let Some(template) = codex_protocol::deepseek_model_template(model) {
             return Some(template);

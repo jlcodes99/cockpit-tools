@@ -1,4 +1,4 @@
-// Read-only dialog queries are independent of the CDP/render loop. In-flight
+// Dialog requests are independent of the CDP/render loop. In-flight
 // blocking reads keep their worker slots until they actually finish, including
 // after a tab closes; a UI timeout must not launch unbounded replacement reads.
 const INJECTION_DIALOG_ACTIVE_LIMIT: usize = 8;

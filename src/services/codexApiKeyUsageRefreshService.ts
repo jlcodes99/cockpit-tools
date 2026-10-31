@@ -92,7 +92,7 @@ export async function refreshCodexApiKeyUsageForAccounts(
 ): Promise<void> {
   const initialCache = readCodexApiKeyUsageCache();
   const eligibleAccounts = accounts.filter((account) => {
-    if (!isUsageEligibleApiKey(account)) return false;
+    if (!isUsageEligibleApiKey(account) && !initialCache[account.id]?.summary?.cockpit) return false;
     if (options?.force || isDeepSeekAccount(account) || isOpenAIOfficialUsageAccount(account) || isApiKeyFunUsageAccount(account)) return true;
     return !initialCache[account.id]?.unavailable;
   });

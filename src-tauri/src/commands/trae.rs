@@ -12,8 +12,10 @@ fn resolve_trae_refresh_protection_map(
 }
 
 #[tauri::command]
-pub fn list_trae_accounts() -> Result<Vec<TraeAccount>, String> {
-    trae_account::list_accounts_checked()
+pub async fn list_trae_accounts() -> Result<Vec<TraeAccount>, String> {
+    tauri::async_runtime::spawn_blocking(trae_account::list_accounts_checked)
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

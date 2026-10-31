@@ -2402,6 +2402,22 @@ mod tests {
     }
 
     #[test]
+    fn responses_normalization_preserves_explicit_ultra_selection() {
+        for model in ["gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-sol"] {
+            for lite in [false, true] {
+                let mut body = json!({
+                    "model": model,
+                    "input": "test",
+                    "reasoning": {"effort": "ultra", "summary": "auto"}
+                });
+                normalize_responses_body_for_codex_with_lite(&mut body, lite);
+                assert_eq!(body["model"], model);
+                assert_eq!(body["reasoning"], json!({"effort":"ultra", "summary":"auto"}));
+            }
+        }
+    }
+
+    #[test]
     fn gpt_6_1_terra_supports_ultra_and_preserves_existing_capabilities() {
         let catalog = build_codex_client_models_response(&["gpt-6.1-terra".into()]);
         let model = &catalog["models"][0];

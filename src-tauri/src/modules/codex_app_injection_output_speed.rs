@@ -123,6 +123,9 @@ pub(super) fn read_profile_selection(profile: &Path) -> Result<OutputSpeedSelect
 /// Fingerprint local binding inputs, never exposing secret text in a payload.
 /// DB replacement invalidates it, normal appends/WAL changes do not.
 pub(super) fn binding_snapshot(profile: &Path) -> Result<Option<String>, String> {
+    if let Some(endpoint) = super::remote_view::endpoint(profile)? {
+        return Ok(Some(endpoint.binding));
+    }
     let Some((base_url, bearer, scope)) = profile_gateway(profile)? else {
         return Ok(None);
     };
@@ -244,6 +247,13 @@ pub(super) fn read_output_speed_with_selection(
     thread_id: &str,
     selection: &OutputSpeedSelection,
 ) -> SpeedRead {
+    match super::remote_view::endpoint(profile) {
+        Ok(Some(endpoint)) => {
+            return super::remote_view::speed(profile, &endpoint, thread_id, selection)
+        }
+        Err(error) => return SpeedRead::failed(selection.normalized(), error),
+        Ok(None) => {}
+    }
     let selection = selection.normalized();
     let mut verified_binding = None;
     let mut operation = || -> Result<Option<ThreadOutputSpeed>, String> {
@@ -593,6 +603,37 @@ fn read_samples_with_selection(
             selection,
         }),
     )
+}
+
+/// Both local injection and the authenticated remote Key API use this reader.
+/// The remote DTO deliberately projects only public request metrics.
+pub(super) fn key_session_metrics(
+    conn: &Connection,
+    key: &str,
+    thread: &str,
+    instance: Option<&str>,
+    installation: Option<&str>,
+    model: Option<&str>,
+    tier: Option<&str>,
+) -> Result<serde_json::Value, String> {
+    let scope = RequestScope {
+        key_id: key.into(),
+        instance_id: instance.map(str::to_owned),
+        installation_id: installation.map(str::to_owned),
+        ..Default::default()
+    };
+    let selection = OutputSpeedSelection {
+        model: model.map(str::to_owned),
+        service_tier: tier.map(str::to_owned),
+    };
+    let sample = read_samples_with_selection(conn, thread, &scope, &selection, Instant::now())?;
+    Ok(sample.map(|s| serde_json::json!({"tokensPerSecond":s.tokens_per_second,"samples":s.samples,
+        "totalInputTokens":s.total_input_tokens,"totalCachedTokens":s.total_cached_tokens,"averageCacheHitRate":s.avg_cache_hit_rate,
+        "observedAt":s.observed_at_ms,
+        "selected":{"tokensPerSecond":s.latest_tokens_per_second,"inputTokens":s.latest_input_tokens,
+            "cachedTokens":s.latest_cached_tokens,"timestamp":s.latest_observed_at_ms,"requestId":s.request_id,
+            "model":s.model,"requestedServiceTier":s.requested_service_tier,"responseServiceTier":s.response_service_tier}
+    })).unwrap_or(serde_json::Value::Null))
 }
 
 #[cfg(test)]

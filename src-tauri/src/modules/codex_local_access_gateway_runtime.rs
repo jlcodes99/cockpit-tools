@@ -732,7 +732,9 @@ async fn record_request_stats_with_meta(
         meta.error_message.unwrap_or_default().trim(),
     );
     let error_category = (!normalized_category.is_empty()).then_some(normalized_category.as_ref());
-    let persisted_event = {
+    let mut budget_snapshot = None;
+    let mut budget_settlement = None;
+    let mut persisted_event = {
         let mut runtime = gateway_runtime().lock().await;
         let now = now_ms();
         let usage_ref = usage.as_ref();
@@ -812,6 +814,23 @@ async fn record_request_stats_with_meta(
                 })
             });
         runtime.collection_dirty |= token_usage_changed;
+        if let Some(key) = runtime.collection.as_mut().and_then(|collection| {
+            collection.api_keys.iter_mut().find(|key| Some(key.id.as_str()) == api_key_id)
+        }) {
+            if account_id.is_some() {
+                let before = key.budget_usage.lifetime_microusd;
+                record_key_budget_usage(key, now, estimated_cost_usd,
+                    usage_ref.is_some() && pricing.is_some(),
+                    success && matches!(request_kind, CodexLocalAccessRequestKind::ImageGeneration | CodexLocalAccessRequestKind::ImageEdit));
+                budget_snapshot = Some((key.id.clone(), key.budget_usage.clone()));
+                budget_settlement = Some(crate::models::codex_local_access::CodexRequestBudgetSettlement {
+                    amount_microusd: key.budget_usage.lifetime_microusd.saturating_sub(before),
+                    metered: usage_ref.is_some() && pricing.is_some(),
+                    settled_at: now,
+                });
+                runtime.collection_dirty = true;
+            }
+        }
         let mut event = append_usage_event_with_meta(
             &mut runtime.stats.events,
             now,
@@ -840,6 +859,7 @@ async fn record_request_stats_with_meta(
             meta.proxy_route,
         );
         event.authorization_route = meta.authorization_route.map(str::to_owned);
+        event.budget_settlement = budget_settlement;
         event.requested_service_tier = recorded_service_tier_value(meta.requested_service_tier);
         event.response_service_tier = recorded_service_tier_value(meta.response_service_tier);
         event.output_generation_ms = meta.output_generation_ms;
@@ -859,9 +879,13 @@ async fn record_request_stats_with_meta(
         event
     };
 
-    queue_local_access_usage_event(persisted_event);
+    let budget_result = if let Some((id, usage)) = budget_snapshot { persist_key_budget(id, usage).await } else { Ok(()) };
+    if budget_result.is_err() { persisted_event.budget_settlement=None; }
+    let log_result=queue_local_access_usage_event(persisted_event).await;
 
     schedule_stats_flush_if_needed().await;
+    budget_result?;
+    log_result?;
     if success {
         if let Some(account_id) = account_id {
             if bound_oauth_quota_refresh_target().await.as_deref() == Some(account_id) {

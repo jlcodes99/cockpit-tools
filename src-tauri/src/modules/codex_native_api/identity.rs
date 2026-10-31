@@ -25,6 +25,8 @@ mod identity_handoff;
 pub(crate) use identity_handoff::begin_handoff;
 #[path = "identity_automatic_history.rs"]
 mod automatic_history;
+#[path = "identity_key_continuity.rs"]
+mod key_continuity;
 #[path = "identity_partial_history.rs"]
 mod partial_history;
 pub(crate) use partial_history::PartialHistory;
@@ -45,6 +47,7 @@ pub struct IdentityStore {
     connection: Mutex<Connection>,
     path: PathBuf,
     session_identity_mapping_enabled: AtomicBool,
+    shared_continuation_references: AtomicBool,
 }
 
 #[derive(Clone, Debug)]
@@ -366,6 +369,7 @@ impl IdentityStore {
             connection: Mutex::new(connection),
             path,
             session_identity_mapping_enabled: AtomicBool::new(true),
+            shared_continuation_references: AtomicBool::new(false),
         })
     }
 
@@ -426,6 +430,7 @@ impl IdentityStore {
         if checked_identity(caller)?.is_none() {
             return Err(invalid("A caller identity is required"));
         }
+        self.adopt_client_continuation(caller, headers, body)?;
         let canonical_value = canonical_metadata(headers, body)?;
         let canonical = canonical_value.as_ref();
         let flat = body.get("client_metadata");

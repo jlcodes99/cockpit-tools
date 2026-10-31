@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.3.77] - 2026-10-31
+
+### Added
+
+- **Cockpit Gateway**: Connect to LAN-shared services by address and API Key, with dedicated account styling and the host's models, reasoning levels and image capabilities. View your key's budget, usage trends and request history without exposing upstream accounts.
+- **Key budgets**: Set USD-denominated usage budgets based on server-configured prices, with lifetime, daily, weekly or monthly limits, plus daily spending, image-request and concurrency caps.
+- **Request logs**: Filter API Service logs by session, open matching records from the Codex usage dialog, and distinguish image generation from editing requests.
+
+### Changed
+
+- **Local data performance**: Improve account loading, log queries and Codex usage statistics with large histories; process historical data automatically in the background.
+- **OpenAI usage cards**: Keep cards and tables compact by moving the statistics scope note to usage details.
+
+### Fixed
+
+- **Codex reasoning levels**: Restore missing Ultra options for supported models in newer clients' API mode while preserving user settings. Requires the native Fast control to be enabled.
+- **API Service conversations**: Fix continuation failures with existing history or response references after changing API Keys; permissions and usage remain tied to the current key.
+- **Release notes**: Display locally saved and bundled update notes without depending on GitHub API availability.
+
 ## [1.3.76] - 2026-10-30
 
 ### Added

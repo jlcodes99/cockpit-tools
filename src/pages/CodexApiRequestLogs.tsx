@@ -76,6 +76,7 @@ type Props = Pick<CodexApiServiceViewProps,
   "requestLogLoaded" |
   "requestLogLoading" |
   "requestLogModelQuery" |
+  "requestLogSessionQuery" |
   "requestLogPageSize" |
   "requestLogRangeEnd" |
   "requestLogRangeStart" |
@@ -90,6 +91,7 @@ type Props = Pick<CodexApiServiceViewProps,
   "setRequestLogInstanceQuery" |
   "setRequestLogKindFilter" |
   "setRequestLogModelQuery" |
+  "setRequestLogSessionQuery" |
   "setRequestLogPage" |
   "setRequestLogPageSize" |
   "setRequestLogStatusFilter" |
@@ -125,6 +127,7 @@ export function CodexApiRequestLogs(props: Props) {
     requestLogLoaded,
     requestLogLoading,
     requestLogModelQuery,
+    requestLogSessionQuery,
     requestLogPageSize,
     requestLogRangeEnd,
     requestLogRangeStart,
@@ -139,6 +142,7 @@ export function CodexApiRequestLogs(props: Props) {
     setRequestLogInstanceQuery,
     setRequestLogKindFilter,
     setRequestLogModelQuery,
+    setRequestLogSessionQuery,
     setRequestLogPage,
     setRequestLogPageSize,
     setRequestLogStatusFilter,
@@ -171,6 +175,14 @@ export function CodexApiRequestLogs(props: Props) {
   return (
               <>
                 <div className="codex-api-service-log-filters">
+                  <label>
+                    <span>{t("codex.apiService.logs.sessionFilter")}</span>
+                    <input
+                      value={requestLogSessionQuery}
+                      onChange={(event) => setRequestLogSessionQuery(event.target.value)}
+                      placeholder={t("codex.apiService.logs.sessionPlaceholder")}
+                    />
+                  </label>
                   <label>
                     <span>
                       {t("codex.apiService.logs.modelFilter", "模型")}

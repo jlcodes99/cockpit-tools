@@ -124,6 +124,11 @@ async fn run(
         }
     };
     tracker.request_size(request_size);
+    if let Err(error) = tracker.admit(&caller).await {
+        tracker.fail(&error).await;
+        send_error(&state, &mut socket, &error).await;
+        return;
+    }
     if let Err(error) = tracker.start_turn() {
         tracker.fail(&error).await;
         send_error(&state, &mut socket, &error).await;
@@ -361,6 +366,11 @@ async fn run(
                                     tracker.context("GET", "/v1/responses", &client_headers, capture);
                                     tracker.request_size(request_size);
                                     tracker.authorized(&caller, &requested_model);
+                                    if let Err(error) = tracker.admit(&caller).await {
+                                        tracker.fail(&error).await;
+                                        timed_client_until(&state, None, client_sink.send(Message::Text(error_event(&error).to_string().into()))).await?;
+                                        continue;
+                                    }
                                     let preferred = interrupted_owner.as_ref().map(|owner| owner.account.as_str())
                                         .or_else(|| (upstream_lost && partial_history.is_none()).then_some(prepared.route.account_id.as_str()));
                                     let next = match execution.run(super::execution::prepare(&state, async {

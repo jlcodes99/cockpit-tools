@@ -75,7 +75,7 @@ fn native_gateway_model(
     if models.iter().any(|candidate| candidate == model) {
         return Ok(model.to_owned());
     }
-    if shells {
+    if shells && !crate::modules::codex_remote_service::is_known(&gateway.base_url,&gateway.api_key) {
         if let Some(slot) = provider_gateway_model_slots(&models)
             .into_iter()
             .find(|slot| slot.client_model == model)
@@ -800,11 +800,11 @@ fn native_catalog(
     if let Some(gateway) = key.and_then(|key| key.provider_gateway.as_ref()) {
         let models = native_gateway_models(gateway);
         candidates.extend(models.iter().cloned());
-        candidates.extend(
-            provider_gateway_model_slots(&models)
+        if !crate::modules::codex_remote_service::is_known(&gateway.base_url,&gateway.api_key) {
+            candidates.extend(provider_gateway_model_slots(&models)
                 .into_iter()
-                .map(|slot| slot.client_model),
-        );
+                .map(|slot| slot.client_model));
+        }
     } else if automatic {
         let scope = native_scoped_account_ids(collection, key);
         let scoped = accounts
@@ -900,8 +900,13 @@ fn native_catalog(
         }
     }
     let mut value = codex_protocol::build_codex_client_models_response(&ids);
+    let remote_templates: HashMap<(String,String), Value> = accounts.iter().filter_map(|account|
+        remote_catalog_for_account(account).map(|catalog|(account.id.clone(),catalog)))
+        .flat_map(|(id,catalog)|catalog["models"].as_array().cloned().unwrap_or_default().into_iter()
+            .filter_map(move|entry|Some(((id.clone(),entry["slug"].as_str()?.to_owned()),entry))))
+        .collect();
     if let Some(models) = value["models"].as_array_mut() {
-        for model in models {
+        for model in models.iter_mut() {
             if let Some((_, upstream, account, plan)) = selected
                 .iter()
                 .find(|(id, _, _, _)| model["slug"].as_str() == Some(id.as_str()))
@@ -932,7 +937,7 @@ fn native_catalog(
                         if display.trim() != plan.model.trim() {
                             model["display_name"] = json!(display);
                         }
-                        if let Some(template) = account_model_template(account, &plan.model)
+                        if let Some(template) = remote_templates.get(&(account.id.clone(),upstream.clone())).cloned().or_else(|| account_model_template(account, &plan.model))
                             .or_else(|| account_model_template(account, upstream))
                         {
                             for field in ["supported_reasoning_levels", "default_reasoning_level"] {
@@ -943,14 +948,21 @@ fn native_catalog(
                         }
                     }
                 }
+                if let Some(template) = remote_templates.get(&(account.id.clone(),upstream.clone()))
+                {
+                    for field in REMOTE_MODEL_FIELDS {
+                        if let Some(value) = template.get(*field) { model[*field] = value.clone(); }
+                    }
+                }
             }
         }
+        models.sort_by_key(|model| model["priority"].as_i64().unwrap_or(i64::MAX));
     }
     value["object"] = json!("list");
     value["data"] = json!(selected
         .iter()
         .map(|(id, upstream, account, plan)| native_public_model_entry(
-            collection, plan, account, id, upstream
+            collection, plan, account, id, upstream, remote_templates.get(&(account.id.clone(),upstream.clone()))
         ))
         .collect::<Vec<_>>());
     Ok(value)
@@ -962,7 +974,13 @@ async fn native_models(
 ) -> Result<Value, native_contract::ServiceError> {
     let collection = host.collection().await?;
     let key = native_caller_key(&collection, caller)?;
-    let mut ids = native_scoped_account_ids(&collection, key);
+    native_model_catalog_snapshot(host,caller,&collection,key).await.map(|(catalog,_)|catalog)
+}
+
+async fn native_model_catalog_snapshot(host:&NativeHostBridge, caller:&native_contract::Caller,
+    collection:&CodexLocalAccessCollection,key:Option<&CodexLocalAccessApiKey>)
+    ->Result<(Value,Vec<CodexAccount>),native_contract::ServiceError> {
+    let mut ids = native_scoped_account_ids(collection, key);
     if let Some(routing) = key.and_then(|key| key.model_routing.as_ref()) {
         ids.extend(
             routing
@@ -1005,7 +1023,7 @@ async fn native_models(
             &raw_accounts
         },
     );
-    Ok(catalog)
+    Ok((catalog,accounts))
 }
 
 // Some(ZERO) is ready now; Some(delay) is a known quota reset; None means
@@ -1417,6 +1435,7 @@ async fn native_select_route_once(
     )
     .ok_or_else(|| native_error(403, "model_not_allowed", "Selected model is unavailable"))?;
     let preflight_fallback = local_fallbacks.remove(&account.id);
+    check_budget_pricing(&collection, key, &upstream_model)?;
     let selected_official = account.official_registration_id.clone();
     let source_id = account.id.clone();
     // Capture the grant before credential refresh or any other preparation await.
@@ -1853,8 +1872,10 @@ async fn native_route_for_reserved_account(
         )
     })?;
     let wire_api = native_wire_api(&account)?;
+    let remote_cockpit = crate::modules::codex_remote_service::is_known_account(&account);
     if wire_api == native_contract::WireApi::Responses
         && !chatgpt_plan
+        && !remote_cockpit
         && !headers.contains_key("x-xai-token-auth")
     {
         crate::modules::codex_api_identity::apply_headers(&installation_profile, &mut headers)
@@ -1916,7 +1937,9 @@ async fn native_route_for_reserved_account(
         }),
         account_id: account.id.clone(),
         owner_id,
-        installation_profile: (!chatgpt_plan).then_some(installation_profile),
+        // The final Cockpit host owns account installation rewriting. Preserve
+        // the client's installation until that host records its request scope.
+        installation_profile: (!chatgpt_plan && !remote_cockpit).then_some(installation_profile),
         official_authorization_revision,
         transport_identity: Some(transport_identity),
         base_url,
@@ -2036,12 +2059,12 @@ fn native_append_image_models(
                 .filter(|v| !v.is_empty())
                 .map(|prefix| format!("{}/{model}", prefix.trim_end_matches('/')))
                 .unwrap_or(model);
-            if native_model_for_key(collection, key, &exposed).is_ok()
-                && !data.iter().any(|entry| entry["id"] == exposed)
-            {
-                data.push(
-                    json!({"id":exposed,"object":"model","owned_by":"configured-image-source"}),
-                );
+            if native_model_for_key(collection, key, &exposed).is_ok() {
+                if let Some(entry) = data.iter_mut().find(|entry| entry["id"] == exposed) {
+                    entry["cockpit_image"] = json!(true);
+                } else {
+                    data.push(json!({"id":exposed,"object":"model","owned_by":"configured-image-source","cockpit_image":true}));
+                }
             }
         }
     }

@@ -92,6 +92,149 @@ fn empty_projection_schema_never_scans_or_backfills_history() {
 }
 
 #[test]
+fn image_session_only_identity_is_canonical_and_explicit_thread_still_wins() {
+    let conn = database();
+    conn.execute_batch(
+        "ALTER TABLE request_logs ADD COLUMN request_kind TEXT;
+        ALTER TABLE request_diagnostics ADD COLUMN client_session_id TEXT;",
+    )
+    .unwrap();
+    log(&conn, "image", 1000);
+    conn.execute("INSERT INTO request_diagnostics(request_id,client_identity_captured,client_session_id,
+        client_identity_metadata_captured,client_installation_id,attempts_json) VALUES('image',1,?1,1,'installation-a',?2)",params![THREAD.to_uppercase(),json!([attempt("original",1,"official")]).to_string()]).unwrap();
+    conn.execute("UPDATE request_logs SET request_kind='image_generation',requested_model='gpt-image-2.5' WHERE request_id='image'",[]).unwrap();
+    refresh_request(&conn, "image").unwrap();
+    assert_eq!(
+        conn.query_row(
+            "SELECT client_thread_id FROM request_display_summaries WHERE request_id='image'",
+            [],
+            |r| r.get::<_, String>(0)
+        )
+        .unwrap(),
+        THREAD
+    );
+    assert_eq!(summary(&conn, "image")["requestKind"], "image_generation");
+    conn.execute(
+        "UPDATE request_diagnostics SET client_thread_id=?1 WHERE request_id='image'",
+        [OTHER_THREAD],
+    )
+    .unwrap();
+    refresh_request(&conn, "image").unwrap();
+    assert_eq!(
+        conn.query_row(
+            "SELECT client_thread_id FROM request_display_summaries",
+            [],
+            |r| r.get::<_, String>(0)
+        )
+        .unwrap(),
+        OTHER_THREAD
+    );
+    conn.execute("UPDATE request_diagnostics SET client_thread_id='invalid-explicit-thread' WHERE request_id='image'",[]).unwrap();
+    refresh_request(&conn, "image").unwrap();
+    assert!(conn
+        .query_row(
+            "SELECT client_thread_id FROM request_display_summaries",
+            [],
+            |r| r.get::<_, Option<String>>(0)
+        )
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn session_summary_repair_is_bounded_resumable_and_preserves_live_changes_and_unknowns() {
+    let conn = database();
+    conn.execute_batch("ALTER TABLE request_diagnostics ADD COLUMN client_session_id TEXT;")
+        .unwrap();
+    for id in 0..70 {
+        let request = format!("image-{id}");
+        log(&conn, &request, id);
+        conn.execute("INSERT INTO request_diagnostics(request_id,client_identity_captured,client_session_id,client_identity_metadata_captured,attempts_json)
+            VALUES(?1,1,?2,1,'[]')",params![request,THREAD]).unwrap();
+        refresh_request(&conn, &request).unwrap();
+    }
+    // Emulate the previous summary version. Stored diagnostic identity remains
+    // authoritative, and no historical bodies need to be loaded.
+    conn.execute(
+        "UPDATE request_display_summaries SET client_thread_id=NULL,client_identity_captured=0",
+        [],
+    )
+    .unwrap();
+    assert!(!repair_session_scope_batch(&conn).unwrap());
+    assert_eq!(
+        conn.query_row(
+            "SELECT COUNT(*) FROM request_display_summaries WHERE client_identity_captured=1",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        32
+    );
+    conn.execute(
+        "UPDATE request_diagnostics SET client_thread_id=?1 WHERE request_id='image-40'",
+        [OTHER_THREAD],
+    )
+    .unwrap();
+    refresh_request(&conn, "image-40").unwrap();
+    conn.execute(
+        "UPDATE request_diagnostics SET client_identity_captured=0 WHERE request_id='image-60'",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "DELETE FROM request_display_summaries WHERE request_id='image-61'",
+        [],
+    )
+    .unwrap();
+    conn.execute_batch("CREATE TRIGGER abort_session_repair BEFORE UPDATE ON request_display_summaries BEGIN SELECT RAISE(ABORT,'repair failed'); END;").unwrap();
+    assert!(repair_session_scope_batch(&conn).is_err());
+    assert_eq!(
+        conn.query_row(
+            "SELECT cursor FROM request_summary_session_repair",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        32
+    );
+    conn.execute_batch("DROP TRIGGER abort_session_repair;")
+        .unwrap();
+    conn.execute("UPDATE request_diagnostics SET client_thread_id=?1 WHERE request_id='image-62'",["x".repeat(6000)]).unwrap();
+    conn.execute("UPDATE request_diagnostics SET client_session_id=?1 WHERE request_id='image-63'",["x".repeat(6000)]).unwrap();
+    while !repair_session_scope_batch(&conn).unwrap() {}
+    assert_eq!(
+        conn.query_row(
+            "SELECT client_thread_id FROM request_display_summaries WHERE request_id='image-40'",
+            [],
+            |r| r.get::<_, String>(0)
+        )
+        .unwrap(),
+        OTHER_THREAD
+    );
+    assert!(conn
+        .query_row(
+            "SELECT client_thread_id FROM request_display_summaries WHERE request_id='image-60'",
+            [],
+            |r| r.get::<_, Option<String>>(0)
+        )
+        .unwrap()
+        .is_none());
+    assert_eq!(
+        conn.query_row("SELECT COUNT(*) FROM request_display_summaries", [], |r| {
+            r.get::<_, i64>(0)
+        })
+        .unwrap(),
+        69
+    );
+    let changes = conn.total_changes();
+    assert!(repair_session_scope_batch(&conn).unwrap());
+    assert_eq!(conn.total_changes(), changes);
+    for id in [62,63] {
+        assert!(conn.query_row("SELECT client_thread_id FROM request_display_summaries WHERE request_id=?1",[format!("image-{id}")],|r|r.get::<_,Option<String>>(0)).unwrap().is_none());
+    }
+}
+
+#[test]
 fn usage_and_detail_order_are_idempotent_and_identity_is_canonical() {
     for diagnostic_first in [true, false] {
         let conn = database();

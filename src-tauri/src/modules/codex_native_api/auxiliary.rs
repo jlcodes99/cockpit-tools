@@ -59,6 +59,7 @@ async fn handle_tracked(
     tracker.context(request.method().as_str(), &path, request.headers(), false);
     let auth = bindings::authorize(&state, request.headers(), allow_secret).await?;
     tracker.authorized(&auth.caller, "");
+    tracker.admit(&auth.caller).await?;
     if path.contains("/translations") && path.contains("realtime")
         || path.ends_with("/transcription_sessions")
         || ["/accept", "/reject", "/refer"]
@@ -489,6 +490,7 @@ async fn websocket_tracked(
     tracker.context("GET", request.uri().path(), request.headers(), false);
     let auth = bindings::authorize(&state, request.headers(), true).await?;
     tracker.authorized(&auth.caller, "");
+    tracker.admit(&auth.caller).await?;
     let headers = request.headers().clone();
     let query: std::collections::HashMap<String, String> =
         url::form_urlencoded::parse(request.uri().query().unwrap_or_default().as_bytes())
@@ -746,6 +748,7 @@ fn auth_headers(incoming: &HeaderMap, route: &Route) -> Result<HeaderMap, Servic
         }
     }
     headers.extend(route.headers.clone());
+    super::server::forward_remote_scope_headers(incoming,route,&mut headers);
     if !route.chatgpt && route.installation_profile.is_some() {
         // API-key audio is a provider-native endpoint. Its client is still
         // isolated by account, but no Codex installation is sent to it.

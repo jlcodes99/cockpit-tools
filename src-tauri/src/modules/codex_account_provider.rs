@@ -878,6 +878,7 @@ pub(crate) fn account_uses_provider_direct_access(account: &CodexAccount) -> boo
 
 /// 直连上游或 CDP 注入：模型清单按上游真实 ID 呈现，不做客户端壳位改写。
 pub(crate) fn account_uses_raw_provider_model_ids(account: &CodexAccount) -> bool {
+    if crate::modules::codex_remote_service::for_routing_account(account).is_some() {return true;}
     account_uses_provider_direct_access(account) || account_uses_cdp_model_injection(account)
 }
 

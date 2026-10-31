@@ -261,7 +261,13 @@ async fn native_management(
     request: NativeManagementRequest,
 ) -> Result<Value, native_contract::ServiceError> {
     native_management_permission(caller, &request)?;
+    if let Some(result)=forward_remote_key_view(bridge,caller,&request).await {return result;}
     match request {
+        NativeManagementRequest::Connection => native_remote_connection(bridge, caller).await,
+        NativeManagementRequest::Usage { range } => native_remote_usage(caller, &range).await,
+        NativeManagementRequest::KeyStats { query } => native_remote_key_query(caller,query,false).await,
+        NativeManagementRequest::KeyRequests { query } => native_remote_key_query(caller,query,true).await,
+        NativeManagementRequest::KeySession { query } => native_remote_key_resource(caller,query,"session").await,
         NativeManagementRequest::DiagnosticsConfig { enabled } => {
             // Compatibility ACK for the host's already-persisted setting, not a second writer.
             // Reject stale retries rather than overwrite a newer local preference.

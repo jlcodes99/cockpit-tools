@@ -474,6 +474,7 @@ pub fn load_account(account_id: &str) -> Option<TraeAccount> {
 fn save_account_file(account: &TraeAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
     let content = crate::modules::secure_account_storage::serialize_account_file("trae", account)?;
+    crate::modules::account_query_identity::invalidate_before_write(&get_accounts_index_path()?,&account.id,&query_identity(account))?;
     crate::modules::atomic_write::write_string_atomic(&path, &content)
         .map_err(|e| format!("保存 Trae 账号失败: {}", e))
 }
@@ -1393,6 +1394,7 @@ fn runtime_payload_matches_account_platform(
 }
 
 pub fn list_accounts() -> Vec<TraeAccount> {
+    schedule_identity_maintenance();
     let index = load_account_index();
     index
         .accounts
@@ -1402,6 +1404,7 @@ pub fn list_accounts() -> Vec<TraeAccount> {
 }
 
 pub fn list_accounts_checked() -> Result<Vec<TraeAccount>, String> {
+    schedule_identity_maintenance();
     let index = load_account_index_checked()?;
     Ok(index
         .accounts
@@ -1427,18 +1430,14 @@ pub fn upsert_account(payload: TraeImportPayload) -> Result<TraeAccount, String>
     let account_id = index
         .accounts
         .iter()
-        .filter_map(|summary| load_account(summary.id.as_str()))
-        .find(|account| {
-            if resolve_account_platform_kind(account) != incoming_platform {
-                return false;
-            }
-            account_matches_import_identity(
-                account,
+        .find(|summary| {
+            summary_matches_payload(
+                summary, incoming_platform,
                 normalized_user_id.as_deref(),
                 normalized_email.as_deref(),
             )
         })
-        .map(|account| account.id)
+        .map(|summary| summary.id.clone())
         .unwrap_or(generated_id);
 
     let existing = load_account(&account_id);

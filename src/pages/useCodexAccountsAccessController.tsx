@@ -3,6 +3,7 @@ import { prepareCodexServiceJoins } from "../utils/codexServiceJoin";
 import { chatGptPlanErrorKey, listChatGptPlanAccounts } from "../services/chatgptPlanService";
 import { canChooseCodexServiceAuthorization } from "../utils/codexAccountServiceNavigation";
 import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
+import { isCodexRemoteGateway } from '../utils/codexRemotePresentation';
 import { listenSafely as listen } from "../utils/tauriEventListener";
 import { useState, useEffect, useMemo, useCallback, useRef, type ReactElement } from "react";
 import { RefreshCw, CircleAlert, Eye, EyeOff, Link2 } from "lucide-react";
@@ -2957,6 +2958,9 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
 
     const resolveApiProviderDisplayName = useCallback(
       (account: CodexAccount): string => {
+        if (isCodexRemoteGateway(account, apiKeyUsageMap[account.id]?.summary)) {
+          return t('common.apiBudget.gatewayName');
+        }
         const providerMode = inferCodexAccountProviderMode(account);
         if (providerMode === "openai_builtin") {
           const fallback = findCodexApiProviderPresetById(
@@ -2982,7 +2986,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           return t(`codex.api.providers.${preset.id}.name`, preset.name);
         return t("codex.api.provider.custom", "自定义");
       },
-      [managedProviders, t],
+      [apiKeyUsageMap, managedProviders, t],
     );
 
     const resolveUsageProviderForApiKeyAccount = useCallback(
@@ -3008,7 +3012,8 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           !isDeepSeekAccount(account) &&
           !isCodexTokenPlanAccount(account) &&
           !isApiKeyFunUsageAccount(account) &&
-          !isOpenAIOfficialUsageAccount(account)
+          !isOpenAIOfficialUsageAccount(account) &&
+          !readCodexApiKeyUsageCache()[account.id]?.summary?.cockpit
         ) {
           return;
         }
@@ -3083,7 +3088,8 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
             !isDeepSeekAccount(account) &&
             !isCodexTokenPlanAccount(account) &&
             !isApiKeyFunUsageAccount(account) &&
-            !isOpenAIOfficialUsageAccount(account))
+            !isOpenAIOfficialUsageAccount(account) &&
+            !readCodexApiKeyUsageCache()[account.id]?.summary?.cockpit)
         ) {
           return false;
         }
@@ -3142,6 +3148,27 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
     useEffect(() => {
       writeCodexApiKeyUsageCache(apiKeyUsageMap);
     }, [apiKeyUsageMap]);
+
+    useEffect(() => {
+      let active = true;
+      let running = false;
+      const refresh = async () => {
+        if (document.hidden || running) return;
+        running = true;
+        const cache = readCodexApiKeyUsageCache();
+        const remoteAccounts = accounts.filter(account => cache[account.id]?.summary?.cockpit);
+        let index = 0;
+        try {
+          await Promise.all(Array.from({ length: 2 }, async () => {
+            while (active && !document.hidden && index < remoteAccounts.length) {
+              await refreshApiKeyUsage(remoteAccounts[index++]);
+            }
+          }));
+        } finally { running = false; }
+      };
+      const timer = window.setInterval(() => { void refresh().catch(() => {}); }, 30_000);
+      return () => { active = false; window.clearInterval(timer); };
+    }, [accounts, refreshApiKeyUsage]);
 
     useEffect(() => {
       for (const account of accounts) {

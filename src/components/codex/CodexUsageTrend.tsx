@@ -35,11 +35,11 @@ function formatMetricValue(value: number, metric: UsageTrendMetric, lang: string
   return formatSessionUsageTokensShort(value, lang, 2);
 }
 
-function formatBucketLabel(timestamp: number, hourly: boolean, lang: string): string {
+function formatBucketLabel(timestamp: number, hourly: boolean, lang: string, timeZone?: string): string {
   const date = new Date(timestamp);
   return hourly
-    ? date.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })
-    : date.toLocaleDateString(lang, { month: "numeric", day: "numeric" });
+    ? date.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit", timeZone })
+    : date.toLocaleDateString(lang, { month: "numeric", day: "numeric", timeZone });
 }
 
 function buildSmoothPath(points: Array<{ x: number; y: number }>): string {
@@ -69,6 +69,7 @@ export function CodexUsageTrend({
   metrics = ["totalTokens", "requestCount", "estimatedCostUsd"],
   labels,
   hourly: hourlyOverride,
+  timeZone,
 }: {
   statsWindow?: CodexLocalAccessStatsWindow | null;
   points?: UsageTrendPoint[];
@@ -77,6 +78,7 @@ export function CodexUsageTrend({
   metrics?: UsageTrendMetric[];
   labels?: Partial<Record<UsageTrendMetric, string>>;
   hourly?: boolean;
+  timeZone?: string;
 }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.resolvedLanguage || i18n.language || "zh-CN";
@@ -288,7 +290,7 @@ export function CodexUsageTrend({
                     onFocus={() => setHoveredIndex(point.index)}
                     onBlur={() => setHoveredIndex(null)}
                   >
-                    <title>{`${formatBucketLabel(point.point.bucketStart, hourly, lang)} · ${formatMetricValue(point.value, metric, lang)}`}</title>
+                    <title>{`${formatBucketLabel(point.point.bucketStart, hourly, lang, timeZone)} · ${formatMetricValue(point.value, metric, lang)}`}</title>
                   </circle>
                 ) : null}
                 {valueLabels.has(point.index) ? (
@@ -309,7 +311,7 @@ export function CodexUsageTrend({
                 ) : null}
                 {axisIndexes.has(point.index) ? (
                   <text className="codex-usage-trend__axis-label" x={point.x} y={CHART_HEIGHT - 21} textAnchor="middle">
-                    {formatBucketLabel(point.point.bucketStart, hourly, lang)}
+                    {formatBucketLabel(point.point.bucketStart, hourly, lang, timeZone)}
                   </text>
                 ) : null}
                 {axisIndexes.has(point.index) ? (
@@ -322,7 +324,7 @@ export function CodexUsageTrend({
           </svg>
           {hoveredPoint ? (
             <div ref={tooltipRef} className="codex-usage-trend__tooltip" role="status" style={{ left: tooltipLeft }}>
-              <strong>{formatBucketLabel(hoveredPoint.point.bucketStart, hourly, lang)}</strong>
+              <strong>{formatBucketLabel(hoveredPoint.point.bucketStart, hourly, lang, timeZone)}</strong>
               <div>
                 <span>{labels?.totalTokens ?? t("codex.localAccess.stats.tokens", "总 Token 数")}</span>
                 <b>{formatMetricValue(hoveredPoint.point.usage.totalTokens, "totalTokens", lang)}</b>

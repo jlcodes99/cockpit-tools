@@ -1,0 +1,102 @@
+.codex-accounts-page .codex-account-card.codex-card-skin-cockpit {
+  --cockpit-key-accent: #5751c9;
+  position: relative;
+  isolation: isolate;
+  border-color: #c4c1ee;
+  background: radial-gradient(ellipse at 100% 0%, #dedcfa 0%, transparent 65%),
+    linear-gradient(145deg, #f8f7ff, #eef3fb);
+  box-shadow: 0 8px 28px rgb(72 63 142 / 10%), inset 0 1px 0 rgb(255 255 255 / 70%);
+}
+[data-theme="dark"] .codex-accounts-page .codex-account-card.codex-card-skin-cockpit {
+  --cockpit-key-accent: #bab5ff;
+  border-color: #49416d;
+  background: radial-gradient(ellipse at 100% 0%, #302b50 0%, transparent 65%),
+    linear-gradient(145deg, #211f35, #1b2535);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 18%), inset 0 1px 0 rgb(255 255 255 / 5%);
+}
+.codex-accounts-page .codex-account-card.codex-card-skin-cockpit::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  inset: 0;
+  border-radius: inherit;
+  background: repeating-radial-gradient(circle at 110% -5%, transparent 0 32px,
+    color-mix(in srgb, var(--cockpit-key-accent) 6%, transparent) 33px 34px, transparent 35px 60px);
+}
+.codex-accounts-page .codex-account-card.codex-card-skin-cockpit:is(:hover, .current, .selected) {
+  border-color: var(--cockpit-key-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--cockpit-key-accent) 25%, transparent), 0 10px 28px rgb(72 63 142 / 15%);
+}
+.codex-accounts-page .codex-card-skin-cockpit .account-email:not(input) {
+  color: var(--cockpit-key-accent);
+  font-weight: 750;
+  letter-spacing: -.02em;
+}
+.codex-remote-service-panel { min-width: 0; }
+.codex-remote-service-panel .codex-daily-usage-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.codex-remote-service-panel .codex-daily-usage-grid > div { min-width: 0; }
+.codex-remote-service-panel .codex-daily-usage-grid span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.modal-content.codex-remote-key-modal {
+  --cockpit-api-accent: #6255bd;
+  width: min(1060px, calc(100vw - 32px));
+  max-height: min(940px, calc(100vh - 32px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+.codex-remote-key-modal .modal-header,
+.codex-remote-key-modal .modal-footer { flex-shrink: 0; }
+.codex-remote-key-modal .modal-body { min-height: 0; overflow-y: auto; }
+.codex-remote-key-modal .modal-footer { flex-wrap: wrap; }
+.codex-remote-details { display: grid; gap: 14px; min-width: 0; }
+.codex-remote-details h3 { margin: 0; color: var(--text-primary); font-size: 14px; font-weight: 650; }
+.codex-remote-details p { margin: 0; }
+.codex-remote-details code { overflow-wrap: anywhere; }
+.codex-remote-section.cockpit-api-panel-section { display: grid; grid-template-rows: none; gap: 16px; padding: 18px; border-radius: 12px; }
+.codex-remote-raw.cockpit-api-panel-section { display: block; padding: 0; }
+.codex-remote-raw summary { cursor: pointer; padding: 14px 18px; color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.codex-remote-raw[open] summary { border-bottom: 1px solid var(--border-light); }
+.codex-remote-raw > :not(summary) { margin: 14px 18px; }
+.codex-remote-raw code { display: block; }
+.codex-remote-details-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 16px 20px; }
+.codex-remote-detail-value { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.codex-remote-detail-value > span, .codex-remote-note { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.codex-remote-detail-value strong { overflow-wrap: anywhere; font-size: 16px; font-variant-numeric: tabular-nums; }
+.codex-remote-budget-notes { display: grid; gap: 4px; padding-top: 12px; border-top: 1px solid var(--border-light); }
+.codex-remote-stats { padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
+.codex-remote-stats strong { font-size: 22px; }
+.codex-remote-toolbar, .codex-remote-range-options { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.codex-remote-range-toolbar { justify-content: space-between; gap: 12px; }
+.codex-remote-range-options .codex-remote-note { margin-inline-start: 4px; }
+.codex-remote-logs .codex-remote-toolbar { gap: 10px; }
+.codex-remote-details .codex-usage-trend { border-radius: 12px; box-shadow: none; }
+.codex-remote-toolbar label { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--text-secondary); }
+.codex-remote-toolbar input {
+  appearance: none; font: inherit; color: var(--text-primary); background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: 7px; padding: 7px 9px; min-width: 0; max-width: 100%;
+}
+.codex-remote-toolbar input:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.codex-remote-toolbar input[aria-invalid="true"] { border-color: var(--danger, #dc2626); }
+.codex-remote-feedback { padding: 10px 12px; border-radius: 8px; background: var(--bg-card); color: var(--text-secondary); font-size: 12px; }
+.codex-remote-feedback.error { color: var(--danger, #dc2626); border: 1px solid currentColor; }
+.codex-remote-log-table { overflow-x: auto; }
+.codex-remote-log-table table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+.codex-remote-log-table :is(th, td) { padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.codex-remote-log-table th { color: var(--text-secondary); white-space: nowrap; font-weight: 500; }
+.codex-remote-log-table td { font-variant-numeric: tabular-nums; }
+.codex-remote-log-table code { overflow-wrap: anywhere; }
+.codex-remote-log-expanded { background: var(--bg-secondary); }
+.codex-remote-pagination { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+@media (max-width: 620px) {
+  .codex-remote-key-modal .cockpit-api-panel-body { padding: 12px; }
+  .codex-remote-section.cockpit-api-panel-section, .codex-remote-stats { padding: 14px; }
+  .codex-remote-raw.cockpit-api-panel-section { padding: 0; }
+  .codex-remote-toolbar { align-items: stretch; }
+  .codex-remote-range-options { flex: 1 1 100%; }
+  .codex-remote-toolbar label { flex-wrap: wrap; }
+}

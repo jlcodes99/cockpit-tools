@@ -53,6 +53,7 @@ struct Upstream {
 struct TestHost {
     base: String,
     enabled: AtomicBool,
+    distinct_callers: bool,
     oauth: AtomicBool,
     passthrough: AtomicBool,
     removed_a: AtomicBool,
@@ -61,10 +62,10 @@ struct TestHost {
     reports: Mutex<Vec<RequestReport>>,
 }
 impl Host for TestHost {
-    fn authorize<'a>(&'a self, _: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
-        Box::pin(async {
+    fn authorize<'a>(&'a self, bearer: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
+        Box::pin(async move {
             Ok(Caller {
-                id: "caller".into(),
+                id: if self.distinct_callers { bearer.into() } else { "caller".into() },
                 label: "synthetic".into(),
             })
         })
@@ -333,6 +334,9 @@ struct Fixture {
 }
 impl Fixture {
     async fn new(enabled: bool, a: Vec<Step>, b: Vec<Step>) -> Self {
+        Self::with_key_continuity(enabled, a, b, false).await
+    }
+    async fn with_key_continuity(enabled: bool, a: Vec<Step>, b: Vec<Step>, shared: bool) -> Self {
         let upstream = Arc::new(Upstream {
             steps: Mutex::new([a.into(), b.into()]),
             sent: Mutex::new(vec![]),
@@ -350,6 +354,7 @@ impl Fixture {
         let host = Arc::new(TestHost {
             base: format!("http://{address}"),
             enabled: AtomicBool::new(enabled),
+            distinct_callers: shared,
             oauth: AtomicBool::new(false),
             passthrough: AtomicBool::new(false),
             removed_a: AtomicBool::new(false),
@@ -362,7 +367,7 @@ impl Fixture {
             "127.0.0.1:0".parse().unwrap(),
             host.clone(),
             root.path().join("identity.sqlite"),
-            Options::default(),
+            Options { shared_continuation_references: shared, ..Options::default() },
         )
         .await
         .unwrap();
@@ -1047,3 +1052,6 @@ mod partial_history_tests;
 
 #[path = "encrypted_reasoning_http_tests.rs"]
 mod encrypted_reasoning_tests;
+
+#[path = "key_continuity_http_tests.rs"]
+mod key_continuity_http_tests;

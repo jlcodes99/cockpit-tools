@@ -58,6 +58,7 @@ async fn handle(
     let headers = incoming.headers().clone();
     let request = parse_request(&state, incoming, operation).await?;
     tracker.authorized(&caller, request.model.as_deref().unwrap_or(""));
+    tracker.admit(&caller).await?;
     let mut policy = match super::super::retry::execution_policy(&state).await {
         Ok(policy) => policy.for_images(),
         Err(error) => {
@@ -396,6 +397,7 @@ impl Execution {
             previous_open_deadline = Some(self.budget.open_deadline);
             let mut headers = outbound_headers(&self.headers);
             headers.extend(self.selected.route.headers.clone());
+            super::super::server::forward_remote_scope_headers(&self.headers,&self.selected.route,&mut headers);
             headers.remove(header::CONTENT_LENGTH);
             headers.remove(header::CONTENT_ENCODING);
             headers.remove(header::CONTENT_TYPE);

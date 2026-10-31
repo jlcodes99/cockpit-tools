@@ -27,6 +27,7 @@ import {
   buildAccountTierFilterOptions,
 } from '../utils/accountFilters';
 import {
+  getUpdaterReleaseHighlightLines,
   resolveUpdaterDownloadUrl,
 } from '../utils/updaterReleaseNotes';
 import { applyReducedMotion } from '../utils/reducedMotion';
@@ -84,7 +85,6 @@ import {
 import { getZedAccountDisplayEmail } from '../types/zed';
 import { ALL_PLATFORM_IDS, PlatformId } from '../types/platform';
 import { useEscClose } from '../hooks/useEscClose';
-import { useRemoteReleaseHistory } from '../hooks/useRemoteReleaseData';
 import './settings/Settings.css';
 import { RefreshCw } from 'lucide-react';
 import { SettingsPageView } from "./SettingsPageView";
@@ -340,6 +340,16 @@ type UpdateCheckFinishedDetail = {
 };
 
 type ReleaseHistorySectionKey = 'highlights' | 'added' | 'changed' | 'fixed' | 'removed';
+
+interface ReleaseHistoryItem {
+  version: string;
+  date: string;
+  highlights?: string[];
+  added: string[];
+  changed: string[];
+  fixed: string[];
+  removed: string[];
+}
 
 const generateReportToken = () => {
   const bytes = new Uint8Array(12);
@@ -735,13 +745,9 @@ export function useSettingsPageController() {
     tone?: 'error' | 'success';
   } | null>(null);
   const [releaseHistoryOpen, setReleaseHistoryOpen] = useState(false);
-  const {
-    data: remoteReleaseHistory,
-    loading: releaseHistoryLoading,
-    error: releaseHistoryError,
-    reload: loadReleaseHistory,
-  } = useRemoteReleaseHistory(releaseHistoryOpen, language);
-  const releaseHistoryItems = remoteReleaseHistory ?? [];
+  const [releaseHistoryLoading, setReleaseHistoryLoading] = useState(false);
+  const [releaseHistoryError, setReleaseHistoryError] = useState('');
+  const [releaseHistoryItems, setReleaseHistoryItems] = useState<ReleaseHistoryItem[]>([]);
   const [autoInstall, setAutoInstall] = useState(false);
   const [autoInstallLoaded, setAutoInstallLoaded] = useState(false);
   const autoInstallTouchedRef = useRef(false);
@@ -3098,8 +3104,36 @@ export function useSettingsPageController() {
     [t],
   );
 
+  const loadReleaseHistory = async () => {
+    setReleaseHistoryLoading(true);
+    setReleaseHistoryError('');
+    try {
+      const items = await invoke<ReleaseHistoryItem[]>('get_release_history', {
+        locale: language,
+        limit: 30,
+      });
+      setReleaseHistoryItems(
+        Array.isArray(items)
+          ? items.map((item) => ({
+              ...item,
+              highlights: getUpdaterReleaseHighlightLines(item.version, language),
+            }))
+          : [],
+      );
+    } catch (error) {
+      console.error('加载更新记录失败:', error);
+      setReleaseHistoryItems([]);
+      setReleaseHistoryError(
+        error instanceof Error ? error.message : String(error || ''),
+      );
+    } finally {
+      setReleaseHistoryLoading(false);
+    }
+  };
+
   const handleOpenReleaseHistory = () => {
     setReleaseHistoryOpen(true);
+    void loadReleaseHistory();
   };
 
   const handleCloseReleaseHistory = () => {
@@ -3314,7 +3348,6 @@ export function useSettingsPageController() {
     handleDownloadReleaseVersion,
     handleErrorReportingEnabledChange,
     handleOpenReleaseHistory,
-    loadReleaseHistory,
     handlePickAppPath,
     handlePickCodexSpecifiedAppPath,
     handleResetAppPath,

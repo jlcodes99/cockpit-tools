@@ -24,7 +24,7 @@ const DEFAULT_INSTANCE_ID: &str = "__default__";
 const DEFAULT_INSTANCE_NAME: &str = "默认实例";
 const DB_FILE_NAME: &str = "codex_session_usage.sqlite";
 const REQUEST_ID_PREFIX: &str = "codex_session:thread-v1";
-const INSERT_BATCH_SIZE: usize = 500;
+const INSERT_BATCH_SIZE: usize = 32;
 
 static SYNC_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static REPLAY_CACHE: OnceLock<Mutex<ReplayCaches>> = OnceLock::new();
@@ -114,7 +114,7 @@ pub struct CodexSessionUsageQuery {
     pub instance_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct CumulativeTokens {
     input: u64,
     cached_input: u64,
@@ -134,7 +134,7 @@ impl DeltaTokens {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct TokenCountersSignature {
     input: Option<u64>,
     cached_input: Option<u64>,
@@ -143,34 +143,10 @@ struct TokenCountersSignature {
     total: Option<u64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct TokenUsageSignature {
     total: Option<TokenCountersSignature>,
     last: Option<TokenCountersSignature>,
-}
-
-#[derive(Debug, Clone)]
-struct TimestampedTokenSignature {
-    timestamp: DateTime<Utc>,
-    signature: TokenUsageSignature,
-}
-
-#[derive(Debug, Default)]
-struct ParentTokenTimeline {
-    events: Vec<TimestampedTokenSignature>,
-    has_token_without_timestamp: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct ParentFileStamp {
-    modified_nanos: i64,
-    size: u64,
-}
-
-#[derive(Debug)]
-struct CachedParentTimeline {
-    stamp: ParentFileStamp,
-    timeline: ParentTokenTimeline,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -189,11 +165,10 @@ struct PendingEntry {
 
 #[derive(Debug, Default)]
 struct ReplayCaches {
-    parent_timelines: HashMap<PathBuf, CachedParentTimeline>,
     pending: HashMap<PathBuf, PendingEntry>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum ParentResolution {
     None,
     Parent,
@@ -213,6 +188,7 @@ struct ParsedTokenEvent {
 
 #[derive(Debug)]
 struct ParsedCodexFile {
+    checkpoint: ParserCheckpoint,
     root_thread_id: Option<String>,
     root_meta_seen: bool,
     root_timestamp: Option<DateTime<Utc>>,
@@ -226,10 +202,16 @@ struct ParsedCodexFile {
 
 #[derive(Debug, Default)]
 struct FileSyncResult {
+    more: bool,
     imported: u32,
     skipped: u32,
     deferred: bool,
 }
+
+include!("codex_session_usage_checkpoint.rs");
+include!("codex_session_usage_rollup.rs");
+include!("codex_session_usage_parent.rs");
+include!("codex_session_usage_rewrite.rs");
 
 pub fn query_session_usage(
     query: CodexSessionUsageQuery,
@@ -243,8 +225,8 @@ pub fn sync_session_usage(
     query: CodexSessionUsageQuery,
 ) -> Result<CodexSessionUsageSyncResult, String> {
     let _guard = sync_lock()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+        .try_lock()
+        .map_err(|_| crate::modules::background_maintenance::busy_message())?;
     let store = SessionUsageStore::open_default()?;
     let instances = collect_usage_instances()?;
     let mut result = store.sync(rebuild, &instances)?;
@@ -286,6 +268,14 @@ impl SessionUsageStore {
                 last_size INTEGER NOT NULL,
                 last_line_offset INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS session_parser_checkpoints (
+                file_path TEXT PRIMARY KEY, state TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS session_parent_sync (file_path TEXT PRIMARY KEY,state TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS session_parent_signatures (
+                file_path TEXT NOT NULL,generation INTEGER NOT NULL,line INTEGER NOT NULL,timestamp INTEGER NOT NULL,signature TEXT NOT NULL,
+                UNIQUE(file_path,generation,line));
+            CREATE INDEX IF NOT EXISTS idx_parent_signature ON session_parent_signatures(file_path,generation,signature,line);
             CREATE TABLE IF NOT EXISTS session_usage_events (
                 request_id TEXT PRIMARY KEY,
                 instance_id TEXT NOT NULL,
@@ -313,6 +303,12 @@ impl SessionUsageStore {
             ",
         )
         .map_err(|error| format!("初始化会话用量库失败: {error}"))?;
+        SESSION_USAGE_ROLLUP
+            .ensure(&conn)
+            .map_err(|e| e.to_string())?;
+        ensure_rewrite_schema(&conn)?;
+        #[cfg(not(test))]
+        schedule_session_rollup_backfill(self.db_path.clone());
         Ok(conn)
     }
 
@@ -327,6 +323,11 @@ impl SessionUsageStore {
                 "
                 DELETE FROM session_usage_events;
                 DELETE FROM session_log_sync;
+                DELETE FROM session_parser_checkpoints;
+                DELETE FROM session_parent_sync;
+                DELETE FROM session_parent_signatures;
+                DELETE FROM session_rewrite_state;
+                DELETE FROM session_rewrite_events;
                 DELETE FROM session_usage_meta;
                 ",
             )
@@ -348,29 +349,55 @@ impl SessionUsageStore {
             result.files_scanned = result.files_scanned.saturating_add(files.len() as u32);
 
             for file_path in &files {
-                match sync_single_file(&mut conn, instance, file_path, &rollout_index, &mut cursors)
-                {
-                    Ok(file_result) => {
-                        result.imported = result.imported.saturating_add(file_result.imported);
-                        result.skipped = result.skipped.saturating_add(file_result.skipped);
-                        if file_result.imported > 0 || file_result.skipped > 0 {
-                            result.files_changed = result.files_changed.saturating_add(1);
+                let mut file_changed = false;
+                loop {
+                    if crate::modules::app_lifecycle::is_shutdown_started() {
+                        return Ok(result);
+                    }
+                    let Some(resource) = crate::modules::background_maintenance::try_resource()
+                    else {
+                        std::thread::sleep(std::time::Duration::from_millis(150));
+                        continue;
+                    };
+                    let file_result = sync_single_file(
+                        &mut conn,
+                        instance,
+                        file_path,
+                        &rollout_index,
+                        &mut cursors,
+                    );
+                    drop(resource);
+                    match file_result {
+                        Ok(file_result) => {
+                            result.imported = result.imported.saturating_add(file_result.imported);
+                            result.skipped = result.skipped.saturating_add(file_result.skipped);
+                            if !file_changed
+                                && (file_result.imported > 0 || file_result.skipped > 0)
+                            {
+                                result.files_changed = result.files_changed.saturating_add(1);
+                                file_changed = true;
+                            }
+                            if file_result.deferred {
+                                result.deferred_files = result.deferred_files.saturating_add(1);
+                            }
+                            if file_result.more {
+                                std::thread::sleep(std::time::Duration::from_millis(150));
+                                continue;
+                            }
                         }
-                        if file_result.deferred {
-                            result.deferred_files = result.deferred_files.saturating_add(1);
+                        Err(error) => {
+                            tracing::warn!(
+                                "[CODEX-SESSION-USAGE] 解析失败 {}: {error}",
+                                file_path.display()
+                            );
+                            if result.errors.len() < 20 {
+                                result
+                                    .errors
+                                    .push(format!("{}: {error}", file_path.display()));
+                            }
                         }
                     }
-                    Err(error) => {
-                        tracing::warn!(
-                            "[CODEX-SESSION-USAGE] 解析失败 {}: {error}",
-                            file_path.display()
-                        );
-                        if result.errors.len() < 20 {
-                            result
-                                .errors
-                                .push(format!("{}: {error}", file_path.display()));
-                        }
-                    }
+                    break;
                 }
             }
         }
@@ -387,6 +414,16 @@ impl SessionUsageStore {
 
     fn query(&self, query: &CodexSessionUsageQuery) -> Result<CodexSessionUsageReport, String> {
         let conn = self.open_conn()?;
+        conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
+        let source = session_report_source(
+            &conn,
+            query.from_timestamp.unwrap_or(0),
+            query.to_timestamp.unwrap_or(i64::MAX / 2),
+        );
+        conn.execute_batch(&format!(
+            "CREATE TEMP VIEW session_usage_report AS {source}"
+        ))
+        .map_err(|e| e.to_string())?;
         let instance_names = current_instance_names();
         let instance_filter = query
             .instance_id
@@ -434,9 +471,14 @@ impl SessionUsageStore {
             .unwrap_or(0)
             .max(0) as u64;
         let event_count = conn
-            .query_row("SELECT COUNT(*) FROM session_usage_events", [], |row| {
-                row.get::<_, i64>(0)
-            })
+            .query_row(
+                &format!(
+                    "SELECT COALESCE(SUM(request_count),0) FROM ({})",
+                    session_report_source(&conn, 0, i64::MAX / 2)
+                ),
+                [],
+                |row| row.get::<_, i64>(0),
+            )
             .unwrap_or(0)
             .max(0) as u64;
 
@@ -664,7 +706,19 @@ fn sync_single_file(
         .or_else(|| inherit_archived_cursor(file_path, cursors))
         .unwrap_or((0, 0, 0));
 
-    if file_size >= last_size.max(0) as u64 && file_modified <= last_modified && last_offset > 0 {
+    let checkpoint = if last_modified > 0
+        && file_modified != last_modified
+        && file_size == last_size.max(0) as u64
+    {
+        None
+    } else {
+        load_parser_checkpoint(conn, file_path, file_size, last_size)?
+    };
+    if file_size >= last_size.max(0) as u64
+        && file_modified <= last_modified
+        && last_offset > 0
+        && checkpoint.as_ref().is_none_or(|c| c.complete)
+    {
         return Ok(FileSyncResult::default());
     }
 
@@ -692,26 +746,52 @@ fn sync_single_file(
         }
     }
 
-    if file_size < last_size.max(0) as u64 {
-        conn.execute(
-            "DELETE FROM session_usage_events WHERE file_path = ?1",
-            params![file_path_str],
-        )
-        .map_err(|error| format!("清理已重写会话用量失败: {error}"))?;
+    let prior_offset = checkpoint.as_ref().map(|c| c.byte_offset).unwrap_or(0);
+    let rewrite = file_size < last_size.max(0) as u64
+        || (checkpoint.is_none()
+            && conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM session_parser_checkpoints WHERE file_path=?1)",
+                    [&file_path_str],
+                    |r| r.get::<_, bool>(0),
+                )
+                .map_err(|e| e.to_string())?);
+    let last_offset = if rewrite { 0 } else { last_offset };
+    if rewrite && !prepare_rewrite_batch(conn, &file_path_str)? {
+        return Ok(FileSyncResult {
+            more: true,
+            ..Default::default()
+        });
     }
-
-    let parsed = parse_codex_file(file_path, thread_id_from_filename(file_path))?;
+    let mut parsed =
+        parse_codex_file_batch(file_path, thread_id_from_filename(file_path), checkpoint)?;
+    let more = !parsed.checkpoint.complete && parsed.checkpoint.byte_offset > prior_offset;
+    let cursor_modified = if parsed.checkpoint.complete {
+        file_modified
+    } else {
+        0
+    };
     if !parsed.has_billable_tokens {
-        upsert_cursor(
-            conn,
-            cursors,
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        upsert_cursor_on_conn(
+            &tx,
             &file_path_str,
             &instance.id,
-            file_modified,
+            cursor_modified,
             file_size,
             parsed.line_offset,
         )?;
-        return Ok(FileSyncResult::default());
+        save_parser_checkpoint(&tx, file_path, &parsed.checkpoint)?;
+        publish_rewrite(&tx, &file_path_str, parsed.checkpoint.complete)?;
+        tx.commit().map_err(|e| e.to_string())?;
+        cursors.insert(
+            file_path_str,
+            (cursor_modified, file_size as i64, parsed.line_offset),
+        );
+        return Ok(FileSyncResult {
+            more,
+            ..FileSyncResult::default()
+        });
     }
 
     let Some(root_thread_id) = parsed.root_thread_id.as_deref() else {
@@ -731,77 +811,113 @@ fn sync_single_file(
         ));
     }
 
-    let replay_prefix = match parsed.parent {
-        ParentResolution::None => 0,
-        ParentResolution::Deferred => {
-            return Ok(mark_deferred(
-                file_path,
-                file_modified,
-                file_size,
-                PendingReason::Stable(
-                    parsed
-                        .deferred_reason
-                        .unwrap_or_else(|| "分叉会话元数据不完整".to_string()),
-                ),
-            ));
-        }
-        ParentResolution::Parent => {
-            let Some(parent_id) = parsed.parent_id.as_deref() else {
-                return Ok(mark_deferred(
-                    file_path,
-                    file_modified,
-                    file_size,
-                    PendingReason::Stable("分叉会话缺少父会话 ID".to_string()),
-                ));
-            };
-            let Some(cutoff) = parsed.root_timestamp else {
+    let replay_prefix = if parsed.checkpoint.replay_closed {
+        0
+    } else {
+        match parsed.parent {
+            ParentResolution::None => 0,
+            ParentResolution::Deferred => {
                 return Ok(mark_deferred(
                     file_path,
                     file_modified,
                     file_size,
                     PendingReason::Stable(
-                        "parented rollout 的 root meta 缺少有效 timestamp".to_string(),
+                        parsed
+                            .deferred_reason
+                            .unwrap_or_else(|| "分叉会话元数据不完整".to_string()),
                     ),
                 ));
-            };
-            match resolve_parent_signatures(parent_id, cutoff, rollout_index) {
-                Ok(signatures) => matching_replay_prefix(&parsed.token_events, &signatures),
-                Err(reason) => {
-                    let pending_reason = if rollout_index.contains_key(parent_id) {
-                        PendingReason::Retryable(reason)
-                    } else {
-                        PendingReason::MissingParent(parent_id.to_string())
-                    };
+            }
+            ParentResolution::Parent => {
+                let Some(parent_id) = parsed.parent_id.as_deref() else {
                     return Ok(mark_deferred(
                         file_path,
                         file_modified,
                         file_size,
-                        pending_reason,
+                        PendingReason::Stable("分叉会话缺少父会话 ID".to_string()),
                     ));
+                };
+                let Some(cutoff) = parsed.root_timestamp else {
+                    return Ok(mark_deferred(
+                        file_path,
+                        file_modified,
+                        file_size,
+                        PendingReason::Stable(
+                            "parented rollout 的 root meta 缺少有效 timestamp".to_string(),
+                        ),
+                    ));
+                };
+                match resolve_parent_replay(
+                    conn,
+                    parent_id,
+                    cutoff,
+                    rollout_index,
+                    &parsed.token_events,
+                    &mut parsed.checkpoint,
+                ) {
+                    Ok(ParentReplay::Pending) => {
+                        return Ok(FileSyncResult {
+                            more: true,
+                            ..Default::default()
+                        })
+                    }
+                    Ok(ParentReplay::Matched(count)) => count,
+                    Err(reason) => {
+                        let pending_reason = if rollout_index.contains_key(parent_id) {
+                            PendingReason::Retryable(reason)
+                        } else {
+                            PendingReason::MissingParent(parent_id.to_string())
+                        };
+                        return Ok(mark_deferred(
+                            file_path,
+                            file_modified,
+                            file_size,
+                            pending_reason,
+                        ));
+                    }
                 }
             }
-        }
-        ParentResolution::Continuation => {
-            // Continuation/branch rollout `...-<root-uuid>_<leaf-uuid>.jsonl`: the parent is
-            // only used to skip replayed context. If the root rollout is unavailable, count
-            // every event rather than dropping the file.
-            match (parsed.parent_id.as_deref(), parsed.root_timestamp) {
-                (Some(parent_id), Some(cutoff)) => {
-                    resolve_parent_signatures(parent_id, cutoff, rollout_index)
-                        .map(|signatures| matching_replay_prefix(&parsed.token_events, &signatures))
-                        .unwrap_or(0)
+            ParentResolution::Continuation => {
+                // Continuation/branch rollout `...-<root-uuid>_<leaf-uuid>.jsonl`: the parent is
+                // only used to skip replayed context. If the root rollout is unavailable, count
+                // every event rather than dropping the file.
+                match (parsed.parent_id.as_deref(), parsed.root_timestamp) {
+                    (Some(parent_id), Some(cutoff)) => {
+                        match resolve_parent_replay(
+                            conn,
+                            parent_id,
+                            cutoff,
+                            rollout_index,
+                            &parsed.token_events,
+                            &mut parsed.checkpoint,
+                        ) {
+                            Ok(ParentReplay::Pending) => {
+                                return Ok(FileSyncResult {
+                                    more: true,
+                                    ..Default::default()
+                                })
+                            }
+                            Ok(ParentReplay::Matched(count)) => count,
+                            Err(_) => 0,
+                        }
+                    }
+                    _ => 0,
                 }
-                _ => 0,
             }
         }
     };
+    parsed.checkpoint.replay_closed |=
+        parsed.parent == ParentResolution::None || replay_prefix < parsed.token_events.len();
 
     if let Ok(mut caches) = replay_caches().lock() {
         caches.pending.remove(file_path);
     }
 
     let mut to_insert = Vec::new();
-    let mut result = FileSyncResult::default();
+    let mut result = FileSyncResult {
+        more,
+        ..FileSyncResult::default()
+    };
     for (token_offset, event) in parsed.token_events.iter().enumerate() {
         let Some(event_index) = event.event_index else {
             continue;
@@ -818,7 +934,7 @@ fn sync_single_file(
         to_insert.push((event, event_index));
     }
 
-    if !to_insert.is_empty() {
+    {
         let tx = conn
             .unchecked_transaction()
             .map_err(|error| format!("开启会话用量写入事务失败: {error}"))?;
@@ -860,26 +976,18 @@ fn sync_single_file(
             &tx,
             &file_path_str,
             &instance.id,
-            file_modified,
+            cursor_modified,
             file_size,
             parsed.line_offset,
         )?;
+        save_parser_checkpoint(&tx, file_path, &parsed.checkpoint)?;
+        publish_rewrite(&tx, &file_path_str, parsed.checkpoint.complete)?;
         tx.commit()
             .map_err(|error| format!("提交会话用量写入失败: {error}"))?;
         cursors.insert(
             file_path_str,
-            (file_modified, file_size as i64, parsed.line_offset),
+            (cursor_modified, file_size as i64, parsed.line_offset),
         );
-    } else {
-        upsert_cursor(
-            conn,
-            cursors,
-            &file_path_str,
-            &instance.id,
-            file_modified,
-            file_size,
-            parsed.line_offset,
-        )?;
     }
 
     Ok(result)
@@ -942,31 +1050,76 @@ fn upsert_cursor_on_conn(
     Ok(())
 }
 
+#[cfg(test)]
 fn parse_codex_file(
     file_path: &Path,
     root_thread_id: Option<String>,
 ) -> Result<ParsedCodexFile, String> {
-    let file = File::open(file_path).map_err(|error| format!("无法打开文件: {error}"))?;
-    let reader = BufReader::new(file);
-    let mut root_meta_seen = false;
-    let mut root_timestamp = None;
-    let mut parent = ParentResolution::None;
-    let mut parent_id = None;
-    let mut deferred_reason = None;
-    let mut current_model = "unknown".to_string();
-    let mut total_high_water = None;
-    let mut last_signature_by_source: HashMap<Option<String>, TokenUsageSignature> = HashMap::new();
-    let mut previous_token_signature = None;
-    let mut event_index = 0u32;
-    let mut token_events = Vec::new();
-    let mut line_offset = 0i64;
-    let mut has_billable_tokens = false;
+    let mut parsed = parse_codex_file_batch(file_path, root_thread_id.clone(), None)?;
+    while !parsed.checkpoint.complete {
+        let next = parse_codex_file_batch(
+            file_path,
+            root_thread_id.clone(),
+            Some(parsed.checkpoint.clone()),
+        )?;
+        if next.checkpoint.byte_offset == parsed.checkpoint.byte_offset {
+            break;
+        }
+        parsed.token_events.extend(next.token_events);
+        parsed.line_offset = next.line_offset;
+        parsed.has_billable_tokens = next.has_billable_tokens;
+        parsed.checkpoint = next.checkpoint;
+    }
+    Ok(parsed)
+}
 
-    for line_result in reader.lines() {
-        line_offset += 1;
-        let Ok(line) = line_result else {
-            continue;
+fn parse_codex_file_batch(
+    file_path: &Path,
+    root_thread_id: Option<String>,
+    checkpoint: Option<ParserCheckpoint>,
+) -> Result<ParsedCodexFile, String> {
+    let mut file = File::open(file_path).map_err(|error| format!("无法打开文件: {error}"))?;
+    let previous = checkpoint.unwrap_or_default();
+    file.seek(SeekFrom::Start(previous.byte_offset))
+        .map_err(|e| e.to_string())?;
+    let mut reader = BufReader::new(file);
+    let mut root_meta_seen = previous.root_meta_seen;
+    let mut root_timestamp = previous.root_timestamp;
+    let mut parent = previous.parent;
+    let mut parent_id = previous.parent_id.clone();
+    let mut deferred_reason = previous.deferred_reason.clone();
+    let mut current_model = previous.current_model.clone();
+    let mut total_high_water = previous.total_high_water.clone();
+    let mut last_signature_by_source: HashMap<Option<String>, TokenUsageSignature> =
+        previous.signatures.iter().cloned().collect();
+    let mut previous_token_signature = previous.previous_token_signature.clone();
+    let mut event_index = previous.event_index;
+    let mut token_events = Vec::new();
+    let mut line_offset = previous.line_offset;
+    let mut has_billable_tokens = previous.has_billable_tokens;
+    let mut discard_line = previous.discard_line;
+    let started = std::time::Instant::now();
+    loop {
+        let position = reader.stream_position().map_err(|e| e.to_string())?;
+        if line_offset > previous.line_offset
+            && (position.saturating_sub(previous.byte_offset)
+                >= crate::modules::background_maintenance::BATCH_BYTES
+                || token_events.len() >= INSERT_BATCH_SIZE
+                || started.elapsed() >= crate::modules::background_maintenance::BATCH_TIME)
+        {
+            break;
+        }
+        let Some(line) = read_usage_line(&mut reader, &mut discard_line)? else {
+            break;
         };
+        // Do not advance past a partially written JSON record.
+        if !line.ends_with('\n') && !line.is_empty() {
+            reader
+                .seek(SeekFrom::Start(position))
+                .map_err(|e| e.to_string())?;
+            break;
+        }
+        line_offset += 1;
         if line.trim().is_empty() {
             continue;
         }
@@ -1088,6 +1241,11 @@ fn parse_codex_file(
                     && (last_signature_by_source.get(&snapshot_source) == Some(&signature)
                         || previous_token_signature.as_ref() == Some(&signature));
                 if has_total_snapshot {
+                    if !last_signature_by_source.contains_key(&snapshot_source)
+                        && last_signature_by_source.len() >= 1024
+                    {
+                        return Err("usage snapshot source count exceeds checkpoint budget".into());
+                    }
                     last_signature_by_source.insert(snapshot_source, signature.clone());
                 }
                 previous_token_signature = Some(signature.clone());
@@ -1137,7 +1295,36 @@ fn parse_codex_file(
         }
     }
 
+    let byte_offset = reader.stream_position().map_err(|e| e.to_string())?;
+    let complete = byte_offset
+        >= reader
+            .get_ref()
+            .metadata()
+            .map_err(|e| e.to_string())?
+            .len();
+    let checkpoint = ParserCheckpoint {
+        version: PARSER_VERSION,
+        byte_offset,
+        line_offset,
+        root_meta_seen,
+        root_timestamp,
+        parent,
+        parent_id: parent_id.clone(),
+        deferred_reason: deferred_reason.clone(),
+        current_model,
+        total_high_water,
+        signatures: last_signature_by_source.into_iter().collect(),
+        previous_token_signature,
+        event_index,
+        has_billable_tokens,
+        replay_matched: previous.replay_matched,
+        replay_closed: previous.replay_closed,
+        anchor: checkpoint_anchor(file_path, byte_offset)?,
+        complete,
+        discard_line,
+    };
     Ok(ParsedCodexFile {
+        checkpoint,
         root_thread_id,
         root_meta_seen,
         root_timestamp,
@@ -1172,145 +1359,6 @@ fn explicit_parent_from_meta(payload: &JsonValue) -> Result<Option<String>, Stri
     uuid::Uuid::parse_str(&parent)
         .map(|value| Some(value.hyphenated().to_string()))
         .map_err(|_| format!("显式 parent_thread_id 不是有效 UUID: {parent}"))
-}
-
-fn resolve_parent_signatures(
-    parent_id: &str,
-    cutoff: DateTime<Utc>,
-    rollout_index: &RolloutIndex,
-) -> Result<Vec<TokenUsageSignature>, String> {
-    let Some(candidates) = rollout_index.get(parent_id) else {
-        return Err(format!("找不到父 rollout: {parent_id}"));
-    };
-    let mut snapshots = Vec::with_capacity(candidates.len());
-    for candidate in candidates {
-        snapshots.push(parent_signatures_before(candidate, cutoff)?);
-    }
-    let Some(first) = snapshots.first() else {
-        return Err(format!("找不到父 rollout: {parent_id}"));
-    };
-    if snapshots.iter().skip(1).any(|snapshot| snapshot != first) {
-        return Err(format!(
-            "父 rollout UUID {parent_id} 对应多个内容不一致的文件"
-        ));
-    }
-    Ok(first.clone())
-}
-
-fn parent_signatures_before(
-    parent_path: &Path,
-    cutoff: DateTime<Utc>,
-) -> Result<Vec<TokenUsageSignature>, String> {
-    let metadata = fs::metadata(parent_path)
-        .map_err(|error| format!("无法读取父 rollout {}: {error}", parent_path.display()))?;
-    let stamp = ParentFileStamp {
-        modified_nanos: metadata_modified_nanos(&metadata),
-        size: metadata.len(),
-    };
-    if let Ok(caches) = replay_caches().lock() {
-        if let Some(cached) = caches
-            .parent_timelines
-            .get(parent_path)
-            .filter(|entry| entry.stamp == stamp)
-        {
-            return signatures_before(&cached.timeline, parent_path, cutoff);
-        }
-    }
-
-    let file = File::open(parent_path)
-        .map_err(|error| format!("无法打开父 rollout {}: {error}", parent_path.display()))?;
-    let mut events = Vec::new();
-    let mut has_token_without_timestamp = false;
-    for line in BufReader::new(file).lines() {
-        let Ok(line) = line else {
-            continue;
-        };
-        let Ok(value) = serde_json::from_str::<JsonValue>(&line) else {
-            continue;
-        };
-        let timestamp = parse_timestamp(value.get("timestamp"));
-        if value.get("type").and_then(JsonValue::as_str) != Some("event_msg")
-            || value
-                .get("payload")
-                .and_then(|payload| payload.get("type"))
-                .and_then(JsonValue::as_str)
-                != Some("token_count")
-        {
-            continue;
-        }
-        let Some(info) = value
-            .get("payload")
-            .and_then(|payload| payload.get("info"))
-            .filter(|info| !info.is_null())
-        else {
-            continue;
-        };
-        let Some(signature) = parse_token_signature(info) else {
-            continue;
-        };
-        let Some(timestamp) = timestamp else {
-            has_token_without_timestamp = true;
-            continue;
-        };
-        events.push(TimestampedTokenSignature {
-            timestamp,
-            signature,
-        });
-    }
-
-    let timeline = ParentTokenTimeline {
-        events,
-        has_token_without_timestamp,
-    };
-    let result = signatures_before(&timeline, parent_path, cutoff);
-    if let Ok(mut caches) = replay_caches().lock() {
-        caches.parent_timelines.insert(
-            parent_path.to_path_buf(),
-            CachedParentTimeline { stamp, timeline },
-        );
-    }
-    result
-}
-
-fn signatures_before(
-    timeline: &ParentTokenTimeline,
-    parent_path: &Path,
-    cutoff: DateTime<Utc>,
-) -> Result<Vec<TokenUsageSignature>, String> {
-    if timeline.has_token_without_timestamp {
-        return Err(format!(
-            "父 rollout {} 的 token_count 缺少有效 timestamp",
-            parent_path.display()
-        ));
-    }
-    if timeline.events.is_empty() {
-        return Err(format!(
-            "父 rollout {} 尚无可用 token_count",
-            parent_path.display()
-        ));
-    }
-    Ok(timeline
-        .events
-        .iter()
-        .filter(|event| event.timestamp <= cutoff)
-        .map(|event| event.signature.clone())
-        .collect())
-}
-
-fn matching_replay_prefix(child: &[ParsedTokenEvent], parent: &[TokenUsageSignature]) -> usize {
-    let mut parent_offset = 0usize;
-    let mut matched = 0usize;
-    for event in child {
-        let Some(relative_match) = parent[parent_offset..]
-            .iter()
-            .position(|signature| signature == &event.signature)
-        else {
-            break;
-        };
-        parent_offset += relative_match + 1;
-        matched += 1;
-    }
-    matched
 }
 
 fn normalize_codex_model(raw: &str) -> String {
@@ -1501,8 +1549,8 @@ fn query_totals(
             COALESCE(SUM(input_tokens), 0),
             COALESCE(SUM(cached_input_tokens), 0),
             COALESCE(SUM(output_tokens), 0),
-            COALESCE(COUNT(*), 0)
-         FROM session_usage_events {where_sql}"
+            COALESCE(SUM(request_count), 0)
+         FROM session_usage_report {where_sql}"
     );
     conn.query_row(&sql, rusqlite::params_from_iter(params.iter()), |row| {
         let input = row.get::<_, i64>(0)?.max(0) as u64;
@@ -1537,8 +1585,8 @@ fn query_breakdown(
             COALESCE(SUM(input_tokens), 0),
             COALESCE(SUM(cached_input_tokens), 0),
             COALESCE(SUM(output_tokens), 0),
-            COALESCE(COUNT(*), 0)
-         FROM session_usage_events {where_sql}
+            COALESCE(SUM(request_count), 0)
+         FROM session_usage_report {where_sql}
          GROUP BY {key_column}
          ORDER BY SUM(input_tokens + output_tokens) DESC, {key_column} ASC"
     );
@@ -1583,43 +1631,76 @@ fn query_day_breakdown(
     where_sql: &str,
     params: &[rusqlite::types::Value],
 ) -> Result<Vec<CodexSessionUsageBreakdownRow>, String> {
-    let sql = format!("SELECT timestamp, model, input_tokens, cached_input_tokens, output_tokens
-        FROM session_usage_events {where_sql}");
-    let mut statement = conn.prepare(&sql).map_err(|error| format!("查询会话用量日期失败: {error}"))?;
-    let rows = statement.query_map(rusqlite::params_from_iter(params.iter()), |row| Ok((
-        row.get::<_, i64>(0)?, row.get::<_, String>(1)?,
-        row.get::<_, i64>(2)?.max(0) as u64, row.get::<_, i64>(3)?.max(0) as u64,
-        row.get::<_, i64>(4)?.max(0) as u64,
-    ))).map_err(|error| format!("遍历会话用量日期失败: {error}"))?;
+    let sql = format!(
+        "SELECT timestamp, model, input_tokens, cached_input_tokens, output_tokens, request_count
+        FROM session_usage_report {where_sql}"
+    );
+    let mut statement = conn
+        .prepare(&sql)
+        .map_err(|error| format!("查询会话用量日期失败: {error}"))?;
+    let rows = statement
+        .query_map(rusqlite::params_from_iter(params.iter()), |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?.max(0) as u64,
+                row.get::<_, i64>(3)?.max(0) as u64,
+                row.get::<_, i64>(4)?.max(0) as u64,
+                row.get::<_, i64>(5)?.max(0) as u64,
+            ))
+        })
+        .map_err(|error| format!("遍历会话用量日期失败: {error}"))?;
     let mut days: HashMap<String, HashMap<String, CodexSessionUsageTotals>> = HashMap::new();
     for row in rows {
-        let (timestamp, model, input, cached, output) = row.map_err(|error| format!("解析会话用量日期失败: {error}"))?;
-        let totals = days.entry(local_day_key(timestamp)).or_default().entry(model).or_default();
+        let (timestamp, model, input, cached, output, requests) =
+            row.map_err(|error| format!("解析会话用量日期失败: {error}"))?;
+        let totals = days
+            .entry(local_day_key(timestamp))
+            .or_default()
+            .entry(model)
+            .or_default();
         totals.input_tokens = totals.input_tokens.saturating_add(input);
         totals.cached_input_tokens = totals.cached_input_tokens.saturating_add(cached);
         totals.output_tokens = totals.output_tokens.saturating_add(output);
-        totals.total_tokens = totals.total_tokens.saturating_add(input.saturating_add(output));
-        totals.request_count = totals.request_count.saturating_add(1);
+        totals.total_tokens = totals
+            .total_tokens
+            .saturating_add(input.saturating_add(output));
+        totals.request_count = totals.request_count.saturating_add(requests);
     }
-    Ok(days.into_iter().map(|(key, models)| {
-        let mut row = CodexSessionUsageBreakdownRow {
-            label: key.clone(), key, input_tokens: 0, cached_input_tokens: 0,
-            output_tokens: 0, total_tokens: 0, request_count: 0, estimated_cost_usd: Some(0.0),
-        };
-        for (model, totals) in models {
-            row.input_tokens = row.input_tokens.saturating_add(totals.input_tokens);
-            row.cached_input_tokens = row.cached_input_tokens.saturating_add(totals.cached_input_tokens);
-            row.output_tokens = row.output_tokens.saturating_add(totals.output_tokens);
-            row.total_tokens = row.total_tokens.saturating_add(totals.total_tokens);
-            row.request_count = row.request_count.saturating_add(totals.request_count);
-            row.estimated_cost_usd = row.estimated_cost_usd.and_then(|cost| {
-                crate::modules::codex_local_access::estimate_known_model_token_cost_usd(
-                    &model, totals.input_tokens, totals.cached_input_tokens, totals.output_tokens,
-                ).map(|model_cost| cost + model_cost)
-            });
-        }
-        row
-    }).collect())
+    Ok(days
+        .into_iter()
+        .map(|(key, models)| {
+            let mut row = CodexSessionUsageBreakdownRow {
+                label: key.clone(),
+                key,
+                input_tokens: 0,
+                cached_input_tokens: 0,
+                output_tokens: 0,
+                total_tokens: 0,
+                request_count: 0,
+                estimated_cost_usd: Some(0.0),
+            };
+            for (model, totals) in models {
+                row.input_tokens = row.input_tokens.saturating_add(totals.input_tokens);
+                row.cached_input_tokens = row
+                    .cached_input_tokens
+                    .saturating_add(totals.cached_input_tokens);
+                row.output_tokens = row.output_tokens.saturating_add(totals.output_tokens);
+                row.total_tokens = row.total_tokens.saturating_add(totals.total_tokens);
+                row.request_count = row.request_count.saturating_add(totals.request_count);
+                row.estimated_cost_usd = row.estimated_cost_usd.and_then(|cost| {
+                    crate::modules::codex_local_access::estimate_known_model_token_cost_usd(
+                        &model,
+                        totals.input_tokens,
+                        totals.cached_input_tokens,
+                        totals.output_tokens,
+                    )
+                    .map(|model_cost| cost + model_cost)
+                });
+            }
+            row
+        })
+        .collect())
 }
 
 fn local_day_key(timestamp: i64) -> String {
@@ -1644,46 +1725,87 @@ fn local_day_key(timestamp: i64) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+    include!("codex_session_usage_checkpoint_tests.rs");
 
     fn daily_cost_test_connection() -> Connection {
         let connection = Connection::open_in_memory().unwrap();
         connection.execute_batch("CREATE TABLE session_usage_events (
             timestamp INTEGER, model TEXT, input_tokens INTEGER, cached_input_tokens INTEGER,
             output_tokens INTEGER, instance_id TEXT
-        )").unwrap();
+        ); CREATE TEMP VIEW session_usage_report AS SELECT *,1 AS request_count FROM session_usage_events;").unwrap();
         connection
     }
 
     #[test]
     fn daily_cost_sums_models_and_preserves_time_and_instance_filters() {
         let conn = daily_cost_test_connection();
-        let noon = Local.with_ymd_and_hms(2026, 10, 3, 12, 0, 0).single().unwrap().timestamp();
-        let next_day = Local.with_ymd_and_hms(2026, 10, 4, 12, 0, 0).single().unwrap().timestamp();
-        for (timestamp, model, instance) in [(noon, "gpt-5.4", "a"), (noon + 1, "gpt-5.4-mini", "a"),
-            (next_day, "gpt-5.4", "a"), (noon, "gpt-5.4", "b")] {
-            conn.execute("INSERT INTO session_usage_events VALUES (?1, ?2, 1000000, 200000, 100000, ?3)",
-                rusqlite::params![timestamp, model, instance]).unwrap();
+        let noon = Local
+            .with_ymd_and_hms(2026, 10, 3, 12, 0, 0)
+            .single()
+            .unwrap()
+            .timestamp();
+        let next_day = Local
+            .with_ymd_and_hms(2026, 10, 4, 12, 0, 0)
+            .single()
+            .unwrap()
+            .timestamp();
+        for (timestamp, model, instance) in [
+            (noon, "gpt-5.4", "a"),
+            (noon + 1, "gpt-5.4-mini", "a"),
+            (next_day, "gpt-5.4", "a"),
+            (noon, "gpt-5.4", "b"),
+        ] {
+            conn.execute(
+                "INSERT INTO session_usage_events VALUES (?1, ?2, 1000000, 200000, 100000, ?3)",
+                rusqlite::params![timestamp, model, instance],
+            )
+            .unwrap();
         }
-        let params = vec![rusqlite::types::Value::Integer(noon), rusqlite::types::Value::Integer(next_day),
-            rusqlite::types::Value::Text("a".into())];
-        let rows = query_day_breakdown(&conn, "WHERE timestamp >= ?1 AND timestamp < ?2 AND instance_id = ?3", &params).unwrap();
+        let params = vec![
+            rusqlite::types::Value::Integer(noon),
+            rusqlite::types::Value::Integer(next_day),
+            rusqlite::types::Value::Text("a".into()),
+        ];
+        let rows = query_day_breakdown(
+            &conn,
+            "WHERE timestamp >= ?1 AND timestamp < ?2 AND instance_id = ?3",
+            &params,
+        )
+        .unwrap();
         assert_eq!(rows.len(), 1);
         let row = &rows[0];
         assert_eq!(row.key, "2026-10-03");
         assert_eq!(row.request_count, 2);
         assert_eq!(row.total_tokens, 2200000);
-        let expected = ["gpt-5.4", "gpt-5.4-mini"].into_iter().map(|model|
-            crate::modules::codex_local_access::estimate_known_model_token_cost_usd(model, 1000000, 200000, 100000).unwrap()
-        ).sum::<f64>();
+        let expected = ["gpt-5.4", "gpt-5.4-mini"]
+            .into_iter()
+            .map(|model| {
+                crate::modules::codex_local_access::estimate_known_model_token_cost_usd(
+                    model, 1000000, 200000, 100000,
+                )
+                .unwrap()
+            })
+            .sum::<f64>();
         assert!((row.estimated_cost_usd.unwrap() - expected).abs() < 1e-10);
     }
 
     #[test]
     fn daily_cost_distinguishes_unpriced_models_from_real_zero() {
         let conn = daily_cost_test_connection();
-        let noon = Local.with_ymd_and_hms(2026, 10, 3, 12, 0, 0).single().unwrap().timestamp();
-        conn.execute("INSERT INTO session_usage_events VALUES (?1, 'gpt-5.4', 0, 0, 0, 'a')", [noon]).unwrap();
-        assert_eq!(query_day_breakdown(&conn, "", &[]).unwrap()[0].estimated_cost_usd, Some(0.0));
+        let noon = Local
+            .with_ymd_and_hms(2026, 10, 3, 12, 0, 0)
+            .single()
+            .unwrap()
+            .timestamp();
+        conn.execute(
+            "INSERT INTO session_usage_events VALUES (?1, 'gpt-5.4', 0, 0, 0, 'a')",
+            [noon],
+        )
+        .unwrap();
+        assert_eq!(
+            query_day_breakdown(&conn, "", &[]).unwrap()[0].estimated_cost_usd,
+            Some(0.0)
+        );
         conn.execute("INSERT INTO session_usage_events VALUES (?1, 'unpriced-future-model', 500, 0, 20, 'a')", [noon]).unwrap();
         let row = &query_day_breakdown(&conn, "", &[]).unwrap()[0];
         assert_eq!(row.estimated_cost_usd, None);
@@ -1986,8 +2108,9 @@ mod tests {
         let parent = sessions.join(format!("rollout-2026-07-10T03-00-00-{PARENT_ID}.jsonl"));
         // Continuation/branch form: the filename carries root UUID + `_` + leaf UUID while
         // session_meta.id is the root. This used to be deferred and dropped entirely (#2897).
-        let child =
-            sessions.join(format!("rollout-2026-07-10T03-10-00-{PARENT_ID}_{CHILD_ID}.jsonl"));
+        let child = sessions.join(format!(
+            "rollout-2026-07-10T03-10-00-{PARENT_ID}_{CHILD_ID}.jsonl"
+        ));
         write_jsonl(
             &parent,
             &[
@@ -2033,8 +2156,9 @@ mod tests {
         let sessions = home.join("sessions").join("2026").join("07").join("10");
         // Only the continuation exists; the root rollout is absent, so there is nothing to
         // dedup against and the turn must still be counted (not dropped).
-        let child =
-            sessions.join(format!("rollout-2026-07-10T03-10-00-{PARENT_ID}_{CHILD_ID}.jsonl"));
+        let child = sessions.join(format!(
+            "rollout-2026-07-10T03-10-00-{PARENT_ID}_{CHILD_ID}.jsonl"
+        ));
         write_jsonl(
             &child,
             &[

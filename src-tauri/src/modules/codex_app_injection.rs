@@ -20,6 +20,14 @@ mod output_speed;
 
 #[path = "codex_app_injection_dialog_data.rs"]
 mod dialog_data;
+#[path = "codex_app_injection_remote.rs"]
+mod remote_view;
+
+pub(crate) fn remote_key_session_metrics(conn: &rusqlite::Connection, key: &str,
+    query: &crate::modules::codex_remote_service::KeyQuery) -> Result<serde_json::Value, String> {
+    output_speed::key_session_metrics(conn,key,query.thread_id.as_deref().ok_or("session requires threadId")?,
+        query.instance_id.as_deref(),query.installation_id.as_deref(),query.model.as_deref(),query.service_tier.as_deref())
+}
 
 #[path = "codex_app_injection_pool.rs"]
 mod pool;
@@ -266,6 +274,8 @@ fn bind_uses_deepseek_balance_injection(bind_account_id: Option<&str>) -> bool {
 
 pub fn should_enable_injection(bind_account_id: Option<&str>) -> bool {
     (enabled_for_app() && supports_bind_account(bind_account_id))
+        || (enabled_for_app() && bound_api_key_account(bind_account_id)
+            .is_some_and(|account| crate::modules::codex_remote_service::for_routing_account(&account).is_some()))
         || bind_uses_cdp_model_injection(bind_account_id)
         || (enabled_for_app() && bind_uses_deepseek_balance_injection(bind_account_id))
 }
@@ -987,6 +997,8 @@ struct InjectionGrokQuotaLine {
 #[derive(Debug, Deserialize, Default, Clone)]
 #[serde(rename_all = "camelCase")]
 struct QuotaResponse {
+    #[serde(default)]
+    remote: Option<Value>,
     weekly_remaining_percent: Option<i64>,
     five_hour_remaining_percent: Option<i64>,
     weekly_capacity_percent: Option<i64>,
@@ -1002,6 +1014,7 @@ struct QuotaResponse {
 impl QuotaResponse {
     fn empty_pool() -> Self {
         Self {
+            remote: None,
             weekly_remaining_percent: Some(0),
             five_hour_remaining_percent: Some(0),
             weekly_capacity_percent: Some(0),
@@ -1026,8 +1039,13 @@ impl QuotaResponse {
 async fn fetch_quota(
     client: &Client,
     gateway: Option<&ProfileGatewayConfig>,
+    remote: bool,
 ) -> Option<QuotaResponse> {
     let gateway = gateway?;
+    if remote {
+        let remote = crate::modules::codex_remote_service::discover(&gateway.base_url, &gateway.api_key, true).await.ok()??;
+        return Some(QuotaResponse { remote: serde_json::to_value(remote).ok(), ..Default::default() });
+    }
     let url = local_quota_url(&gateway.base_url)?;
     let response = client
         .get(url)
@@ -3489,6 +3507,7 @@ async fn run_injection_loop(
         }
         // 只有「CDP 模型注入」或「可查官方余额」时才需要进入注入分支：
         // 第三方中转没有官方余额接口，只做模型清单注入。
+        let remote_account = deepseek_account_cache.as_ref().filter(|account| crate::modules::codex_remote_service::for_routing_account(account).is_some());
         let deepseek_account = deepseek_account_cache.as_ref().filter(|account| {
             crate::modules::codex_account::account_uses_cdp_model_injection(account)
                 || deepseek_balance_endpoint(account).is_some()
@@ -3550,7 +3569,7 @@ async fn run_injection_loop(
                     }
                 }
             }
-            if enabled_for_app() {
+            if enabled_for_app() && remote_account.is_none() {
                 if last_balance_at.elapsed() >= DEEPSEEK_BALANCE_REFRESH_INTERVAL {
                     if let Some(value) =
                         fetch_deepseek_balance(&balance_client, deepseek_account).await
@@ -3603,10 +3622,13 @@ async fn run_injection_loop(
                     }
                 }
             }
-            tokio::time::sleep(INJECTION_INTERVAL).await;
-            continue;
+            if remote_account.is_none() {
+                tokio::time::sleep(INJECTION_INTERVAL).await;
+                continue;
+            }
         }
-        if !supports_bind_account(bind_account_id.as_deref()) {
+        if (!supports_bind_account(bind_account_id.as_deref()) && remote_account.is_none())
+            || (remote_account.is_some() && !enabled_for_app()) {
             tokio::time::sleep(INJECTION_INTERVAL).await;
             continue;
         }
@@ -3620,6 +3642,7 @@ async fn run_injection_loop(
             last_quota_at = Instant::now();
             let client = client.clone();
             let profile = profile_dir.clone();
+            let remote_account = remote_account.cloned();
             quota_fetch_tasks.spawn(async move {
                 let gateway = tauri::async_runtime::spawn_blocking(move || {
                     read_profile_gateway_config(&profile)
@@ -3627,7 +3650,14 @@ async fn run_injection_loop(
                 .await
                 .ok()
                 .flatten();
-                let value = fetch_quota(&client, gateway.as_ref()).await?;
+                let remote = remote_account.is_some();
+                // Discover through the profile's actual hop. This also primes
+                // the same endpoint identity used by dialog/speed readers.
+                let gateway = gateway.or_else(||remote_account.and_then(|account| Some(ProfileGatewayConfig {
+                    base_url: account.api_base_url?, api_key: account.openai_api_key?,
+                    provider_name: "Cockpit Tools".into(), managed_voice: false,
+                })));
+                let value = fetch_quota(&client, gateway.as_ref(), remote).await?;
                 if value.account_count == Some(0)
                     && !api_service_account_pool_is_empty()
                         .await
@@ -3641,9 +3671,9 @@ async fn run_injection_loop(
             });
         }
         // Slow balance requests must never delay the usage status line or its heartbeat.
-        if balance_fetch_due
+        if remote_account.is_none() && (balance_fetch_due
             || last_api_service_balance_at.elapsed() >= DEEPSEEK_BALANCE_REFRESH_INTERVAL
-        {
+        ) {
             if balance_fetch_tasks.is_empty() {
                 let client = balance_client.clone();
                 let locale = locale.clone();
@@ -3659,6 +3689,7 @@ async fn run_injection_loop(
         }
         let gateway = read_profile_gateway_config(&profile_dir);
         if let Some(state) = usage_state.as_object_mut() {
+            if let Some(remote) = &quota.remote { state.insert("__remoteService".into(), remote.clone()); }
             state.insert(
                 "__accountPool".into(),
                 pool_poller.collect(gateway.as_ref()),
@@ -3756,6 +3787,13 @@ async fn run_injection_loop(
         }
         if let Some(token) = refresh_request_token.filter(|_| refresh_tasks.is_empty()) {
             handled_refresh_token = Some(token);
+            if remote_account.is_some() {
+                quota_fetch_due = true;
+                quota_snapshot_pending = true;
+                snapshot_wait_started = Some(Instant::now());
+                quota_refresh_error = None;
+                continue;
+            }
             pool_poller.refresh();
             quota_refresh_error = None;
             // 手动刷新同时把余额与 Grok 额度快照请求一次，点刷新不会只更新账号池。

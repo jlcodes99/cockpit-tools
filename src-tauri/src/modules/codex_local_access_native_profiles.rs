@@ -148,6 +148,13 @@ impl NativeHostBridge {
             ids.iter()
                 .filter_map(|id| self.account_overrides.get(id).cloned()),
         );
+        for account in &mut accounts {
+            if let Some(remote) = crate::modules::codex_remote_service::for_routing_account(account) {
+                for model in remote.image_models {
+                    if !account.api_model_catalog.contains(&model) { account.api_model_catalog.push(model); }
+                }
+            }
+        }
         Ok(accounts)
     }
 }
@@ -395,7 +402,8 @@ async fn native_ensure_provider_profile(
                 }
                 codex_account::reapply_experimental_model_policy_if_enabled(profile)?;
                 reapply_deepseek_profile_config_overrides(profile, account)?;
-                if slots.iter().any(|slot| codex_protocol::deepseek_model_template(&slot.upstream_model).is_some()) {
+                if !crate::modules::codex_remote_service::is_known_account(account)
+                    && slots.iter().any(|slot| codex_protocol::deepseek_model_template(&slot.upstream_model).is_some()) {
                     ensure_profile_max_reasoning_effort(profile)?;
                 }
                 runtime.block_on(native_sync_profile_catalog_tool_capabilities(

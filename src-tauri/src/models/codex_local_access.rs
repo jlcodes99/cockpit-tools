@@ -497,6 +497,10 @@ pub struct CodexLocalAccessApiKey {
     pub token_limit: Option<u64>,
     #[serde(default)]
     pub token_used: u64,
+    #[serde(default)]
+    pub budget: CodexApiKeyBudget,
+    #[serde(default)]
+    pub budget_usage: CodexApiKeyBudgetUsage,
     #[serde(default = "default_true")]
     pub enabled: bool,
     #[serde(default)]
@@ -505,6 +509,46 @@ pub struct CodexLocalAccessApiKey {
     pub updated_at: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_used_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CodexBudgetPeriod {
+    #[default]
+    Lifetime,
+    Daily,
+    Weekly,
+    Monthly,
+}
+
+/// USD is stored in millionths; period boundaries use UTC, weeks start Monday.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CodexApiKeyBudget {
+    pub period: CodexBudgetPeriod,
+    pub limit_microusd: Option<u64>,
+    pub daily_limit_microusd: Option<u64>,
+    pub max_concurrent: Option<u32>,
+    pub daily_image_limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexBudgetBucket {
+    pub start: i64,
+    pub used_microusd: u64,
+    pub image_requests: u64,
+}
+
+/// Accounting counters are independent of repricable display statistics.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexApiKeyBudgetUsage {
+    pub lifetime_microusd: u64,
+    pub unmetered_requests: u64,
+    pub daily: CodexBudgetBucket,
+    pub weekly: CodexBudgetBucket,
+    pub monthly: CodexBudgetBucket,
 }
 
 fn default_true() -> bool {
@@ -880,6 +924,8 @@ pub struct CodexLocalAccessProxyRoute {
 #[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessUsageEvent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_settlement: Option<CodexRequestBudgetSettlement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authorization_route: Option<String>,
     /// Derived from recorded attempts when reading a page; never inferred from today's mode.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -967,6 +1013,14 @@ pub struct CodexLocalAccessUsageEvent {
     pub output_usd_per_million: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cached_input_usd_per_million: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexRequestBudgetSettlement {
+    pub amount_microusd: u64,
+    pub metered: bool,
+    pub settled_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

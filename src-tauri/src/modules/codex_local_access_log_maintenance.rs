@@ -1,9 +1,9 @@
 // Historical category compatibility is background maintenance, never an open-
 // database side effect. New/imported rows are classified as they are written.
 const ERROR_CATEGORY_MAINTENANCE_VERSION: i64 = 1;
-const ERROR_CATEGORY_MAINTENANCE_BATCH: i64 = 128;
+const ERROR_CATEGORY_MAINTENANCE_BATCH: i64 = 32;
 const ERROR_CATEGORY_MESSAGE_LIMIT: i64 = 65536;
-const ERROR_CATEGORY_BATCH_BUDGET: Duration = Duration::from_millis(150);
+const ERROR_CATEGORY_BATCH_BUDGET: Duration = Duration::from_millis(25);
 
 fn normalized_request_log_error_category<'a>(
     success: bool,
@@ -176,74 +176,14 @@ fn maintain_request_log_error_category_batch(
 }
 
 fn ensure_request_log_error_maintenance_started() {
-    static RUNNING: AtomicBool = AtomicBool::new(false);
-    static NEXT_CHECK: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
-    if now_ms() < NEXT_CHECK.load(Ordering::Acquire)
-        || RUNNING
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
-    {
-        return;
-    }
-    struct Flight;
-    impl Drop for Flight {
-        fn drop(&mut self) {
-            NEXT_CHECK.store(now_ms().saturating_add(60_000), Ordering::Release);
-            RUNNING.store(false, Ordering::Release);
-        }
-    }
-    tauri::async_runtime::spawn_blocking(move || {
-        let _flight = Flight;
-        let result = (|| -> Result<(), String> {
-            let path = local_access_logs_db_path()?;
-            if !path.is_file() {
-                return Ok(());
-            }
-            let conn =
-                Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE)
-                    .map_err(|error| error.to_string())?;
-            conn.busy_timeout(Duration::from_millis(20))
-                .map_err(|error| error.to_string())?;
-            if !request_logs_table_exists(&conn).map_err(|error| error.to_string())? {
-                return Ok(());
-            }
-            let mut changed = 0;
-            let mut oversized = 0;
-            loop {
-                if crate::modules::app_lifecycle::is_shutdown_started() {
-                    return Ok(());
-                }
-                let batch = {
-                    // Low-priority work yields to every existing writer. Never
-                    // wait on its mutex or retain it during the between-batch pause.
-                    match local_access_logs_db_write_lock().try_lock() {
-                        Ok(_guard) => Some(maintain_request_log_error_category_batch(&conn)?),
-                        Err(std::sync::TryLockError::WouldBlock) => None,
-                        Err(std::sync::TryLockError::Poisoned(_)) => {
-                            return Err("请求日志写入队列已损坏".into())
-                        }
-                    }
-                };
-                if let Some(batch) = batch {
-                    changed += batch.changed;
-                    oversized += batch.oversized;
-                    if batch.complete {
-                        if changed > 0 || oversized > 0 {
-                            logger::log_codex_api_info(&format!(
-                                "请求日志分类后台兼容完成: updated={changed}, oversized_preserved={oversized}"
-                            ));
-                        }
-                        return Ok(());
-                    }
-                }
-                std::thread::sleep(Duration::from_millis(40));
-            }
-        })();
-        if let Err(error) = result {
-            logger::log_codex_api_warn(&format!(
-                "请求日志分类后台兼容暂未完成，将从检查点重试: {error}"
-            ));
-        }
+    let Ok(path) = local_access_logs_db_path() else { return };
+    crate::modules::background_maintenance::schedule(format!("request-category:{}", path.display()), move || {
+        if !path.is_file() { return Ok(true); }
+        let Ok(_guard) = local_access_logs_db_write_lock().try_lock() else { return Ok(false) };
+        let conn = Connection::open_with_flags(&path,rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE).map_err(|e|e.to_string())?;
+        conn.busy_timeout(Duration::from_millis(10)).map_err(|e|e.to_string())?;
+        if !request_logs_table_exists(&conn).map_err(|e|e.to_string())? { return Ok(true); }
+        maintain_request_log_error_category_batch(&conn).map(|batch|batch.complete)
     });
 }
 

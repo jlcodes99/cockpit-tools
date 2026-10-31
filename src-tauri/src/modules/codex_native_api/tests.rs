@@ -38,6 +38,9 @@ mod thinking_suffix_tests;
 #[path = "legacy_forwarding_websocket_tests.rs"]
 mod legacy_forwarding_websocket_tests;
 
+#[path = "remote_gateway_tests.rs"]
+mod remote_gateway_tests;
+
 struct TestHost {
     base_url: String,
     chatgpt: bool,

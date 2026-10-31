@@ -23,6 +23,7 @@ static REQUEST_LOG_RECORDS_CLEARED_BEFORE: std::sync::atomic::AtomicI64 =
     std::sync::atomic::AtomicI64::new(0);
 static REQUEST_PAYLOAD_LOGGING_ENABLED: AtomicBool = AtomicBool::new(false);
 include!("codex_local_access_request_identity.rs");
+include!("codex_local_access_session_index.rs");
 static REQUEST_FIRST_RESPONSE_CACHE: std::sync::LazyLock<Mutex<HashMap<String, (u64, i64)>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 static REQUEST_PAYLOAD_SETTING_WRITE_LOCK: std::sync::LazyLock<TokioMutex<()>> =
@@ -104,30 +105,7 @@ fn queue_request_diagnostic(write: RequestDiagnosticWrite) {
     }
 }
 
-fn queue_local_access_usage_event(event: CodexLocalAccessUsageEvent) {
-    // Existing usage logs retain their persistence guarantee, independently of the
-    // lossy optional body/trace queue. A full diagnostic queue must never drop usage.
-    let epoch = REQUEST_LOG_WRITE_EPOCH.load(Ordering::SeqCst);
-    tauri::async_runtime::spawn(async move {
-        let result = tauri::async_runtime::spawn_blocking(move || {
-            let (_guard, conn) = open_local_access_logs_db_for_write()?;
-            if epoch == REQUEST_LOG_WRITE_EPOCH.load(Ordering::SeqCst) {
-                insert_live_local_access_usage_event(&conn, &event)?;
-            }
-            Ok::<_, String>(())
-        })
-        .await;
-        match result {
-            Ok(Ok(())) => {}
-            Ok(Err(error)) => {
-                logger::log_codex_api_warn(&format!("请求日志写入失败，已保留内存统计: {error}"))
-            }
-            Err(error) => logger::log_codex_api_warn(&format!(
-                "请求日志写入任务失败，已保留内存统计: {error}"
-            )),
-        }
-    });
-}
+include!("codex_local_access_usage_writer.rs");
 
 fn cached_request_first_response(request_id: Option<&str>) -> Option<u64> {
     let request_id = request_id.filter(|id| !id.is_empty())?;
@@ -240,7 +218,8 @@ fn create_request_diagnostics_table(conn: &Connection) -> Result<(), SqliteError
             ON request_diagnostics(captured_at_ms);
     "#,
     )?;
-    ensure_request_identity_columns(conn)
+    ensure_request_identity_columns(conn)?;
+    ensure_session_query_index(conn)
 }
 
 fn diagnostics_table_exists(conn: &Connection) -> Result<bool, SqliteError> {

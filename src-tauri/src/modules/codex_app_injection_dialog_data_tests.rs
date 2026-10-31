@@ -978,3 +978,15 @@ fn binding_fences_are_validated_and_part_of_pagination_identity() {
         assert!(parse_query(&serde_json::to_value(&q).unwrap()).is_none());
     }
 }
+
+#[test]
+fn request_log_navigation_carries_only_the_selected_session() {
+    let mut q = query("chat", "openLogs");
+    assert!(parse_query(&serde_json::to_value(&q).unwrap()).is_some());
+    assert_eq!(request_logs_target(&q), format!("codex-api-service?view=logs&sessionId={THREAD}"));
+    q.scope = "service".into();
+    assert_eq!(request_logs_target(&q), "codex-api-service?view=logs");
+    q.scope = "chat".into();
+    q.thread_id = None;
+    assert!(parse_query(&serde_json::to_value(&q).unwrap()).is_none());
+}

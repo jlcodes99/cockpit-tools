@@ -46,5 +46,9 @@ mod tests {
 include!("codex_account_mutations_quota.rs");
 
 #[cfg(test)]
+#[path = "codex_account_remote_service_tests.rs"]
+mod remote_service_tests;
+
+#[cfg(test)]
 #[path = "codex_account_tests_quota_proxy_persistence.rs"]
 mod quota_proxy_persistence_tests;

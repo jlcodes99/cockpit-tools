@@ -627,6 +627,8 @@ experimental_bearer_token = "agt_codex_test"
             excluded_models: Vec::new(),
             token_limit: None,
             token_used: 0,
+            budget: Default::default(),
+            budget_usage: Default::default(),
             enabled: true,
             created_at: 0,
             updated_at: 0,

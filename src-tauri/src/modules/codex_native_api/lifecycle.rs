@@ -93,6 +93,7 @@ pub(super) struct RequestTracker {
     global_permit: Option<OwnedSemaphorePermit>,
     capacity: Option<Arc<tokio::sync::Semaphore>>,
     route_permit: Option<Arc<dyn Send + Sync>>,
+    caller_permit: Option<Arc<dyn Send + Sync>>,
     rebuild_abort: Option<Arc<AtomicBool>>,
     quota_account: Option<String>,
     quota_started: Instant,
@@ -212,6 +213,7 @@ impl RequestTracker {
             global_permit: permit,
             capacity,
             route_permit: None,
+            caller_permit: None,
             rebuild_abort: None,
             quota_account: None,
             quota_started: Instant::now(),
@@ -361,6 +363,14 @@ impl RequestTracker {
                 reasoning_effort: None,
             });
         }
+    }
+
+    pub(super) async fn admit(&mut self, caller: &Caller) -> Result<(), ServiceError> {
+        if self.caller_permit.is_none() {
+            self.caller_permit = tokio::time::timeout(std::time::Duration::from_secs(5), self.host.caller_permit(caller))
+                .await.map_err(|_| ServiceError::new(504, "admission_timeout", "API key admission timed out"))??;
+        }
+        Ok(())
     }
 
     pub(super) fn deadline(&self, timeout: Duration) -> super::deadline::Deadline {
@@ -982,6 +992,7 @@ impl RequestTracker {
         } else {
             self.persist(None, diagnostics, downstream).await;
         }
+        self.caller_permit = None;
     }
 
     fn persistence_task(
@@ -998,8 +1009,10 @@ impl RequestTracker {
         let activity = self.activity.clone();
         let stop = self.stop.clone();
         let started = self.started;
+        let caller_permit = self.caller_permit.clone();
         activity.tasks.fetch_add(1, Ordering::SeqCst);
         Some(runtime.spawn(async move {
+            let _caller_permit = caller_permit;
             let _guard = PersistenceGuard(activity);
             settle_downstream(
                 &mut report,

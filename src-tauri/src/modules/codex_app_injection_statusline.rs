@@ -238,6 +238,17 @@ fn injection_script(
             )
         })
         .chain([
+            ("remoteBudget", "common.apiBudget.budget"),
+            ("remoteGatewayName", "common.apiBudget.gatewayName"),
+            ("remoteKeyScope", "common.apiBudget.keyScope"),
+            ("remoteUpgradeRequired", "common.apiBudget.upgradeRequired"),
+            ("remotePreparing", "common.apiBudget.preparing"),
+            ("requestId", "common.requestId"),
+            ("imageGeneration", "codex.localAccess.requestKind.imageGeneration"),
+            ("imageEdit", "codex.localAccess.requestKind.imageEdit"),
+            ("remoteUsed", "common.apiBudget.consumed"),
+            ("remoteUnlimited", "codex.apiService.keys.tokenLimitUnlimited"),
+            ("remoteBudgetHint", "common.apiBudget.hint"),
             ("requestTier", "codex.apiService.logs.requestedTier"),
             ("responseTier", "codex.apiService.logs.responseTier"),
             ("legacyTier", "codex.apiService.logs.legacyTier"),

@@ -1,8 +1,9 @@
 /*
- * Cockpit Tools native service-tier integration.
+ * Cockpit Tools native model-menu integration.
  * Independently implemented against the desktop client's local module structure.
- * Account and requirements policy stays native. API profiles without a custom
- * catalog may supplement missing speed metadata from Cockpit's bundled catalog.
+ * Service-tier requirements stay native. API profiles without a custom catalog
+ * may supplement missing speed metadata from Cockpit's bundled catalog. Custom
+ * API providers retain their declared Ultra capability and explicit user limits.
  */
 (() => {
   "use strict";
@@ -40,6 +41,22 @@
     return changed ? result : models;
   }
 
+  // Capture query identity outside select's parameter scope: newer clients
+  // reuse the host variable name for the isTeamCatalog result flag.
+  function modelSelector(select, host, auth, catalog) {
+    return result => {
+      const models = result.isTeamCatalog ? result.data : modelsForSpeed(result.data, host, auth, catalog);
+      return select(models === result.data ? result : { ...result, data: models });
+    };
+  }
+
+  function includeUltra(nativeValue, host, auth, custom, teamCatalog) {
+    // This only removes the native rollout gate for custom API providers.
+    // The caller's include flag, enabled efforts and each model's declared
+    // capabilities still go through the unmodified native selector.
+    return nativeValue || custom === true && teamCatalog == null && allow(host, auth);
+  }
+
   // Each gate is checked together with its surrounding call contract. No
   // replacement is applied unless all four known contracts occur exactly once.
   function transform(source) {
@@ -49,6 +66,7 @@
     const count = { ui: 0, request: 0, queued: 0, explicit: 0 };
     let queuedPolicy = null;
     let catalogMatches = 0;
+    let reasoningMatches = 0;
     const matches = (pattern) => source.matchAll(new RegExp(pattern, "g"));
     const enclosing = (at) => {
       const start = source.lastIndexOf("function ", at);
@@ -125,14 +143,33 @@
     }
     // Supplement the local API model query before the native selector builds
     // speed options and request settings. Do not replace/filter the model list.
-    for (const match of matches(`select:\\(\\{data:(?<models>${NAME})\\}\\)=>(?<select>${NAME})\\(\\{additionalAvailableModels:new Set\\(${NAME}\\),apiKeyDaybreakSupported:${NAME},authMethod:(?<auth>${NAME}),availableModels:(?<defaults>${NAME})\\.availableModels,defaultModel:\\k<defaults>\\.defaultModel,enabledReasoningEfforts:${NAME},hasConfiguredModelCatalog:(?<catalog>${NAME}),includeUltraReasoningEffort:${NAME},isCustomModelProvider:${NAME},models:\\k<models>,useHiddenModels:\\k<defaults>\\.useHiddenModels\\}\\)`)) {
-      const before = source.slice(Math.max(0, match.index - 500), match.index);
+    const selectOptions = `(?<select>${NAME})\\(\\{additionalAvailableModels:new Set\\(${NAME}\\),apiKeyDaybreakSupported:${NAME},authMethod:(?<auth>${NAME}),availableModels:(?<defaults>${NAME})\\.availableModels,defaultModel:\\k<defaults>\\.defaultModel,enabledReasoningEfforts:${NAME},hasConfiguredModelCatalog:(?<catalog>${NAME}),includeUltraReasoningEffort:(?<ultra>${NAME}),isCustomModelProvider:(?<custom>${NAME}),models:\\k<models>,useHiddenModels:\\k<defaults>\\.useHiddenModels\\}\\)`;
+    const selectors = [
+      `select:(?<selector>\\(\\{data:(?<models>${NAME})\\}\\)=>${selectOptions})`,
+      `select:(?<selector>\\(\\{data:(?<models>${NAME}),isTeamCatalog:(?<team>${NAME})=!1\\}\\)=>\\(\\{\\.\\.\\.${selectOptions},isTeamCatalog:\\k<team>\\}\\))`,
+    ];
+    for (const pattern of selectors) for (const match of matches(pattern)) {
+      const offset = Math.max(0, match.index - 2400);
+      const before = source.slice(offset, match.index);
       const request = before.match(new RegExp(`${NAME}\\(${NAME},(?<host>${NAME})\\)\\.sendRequest\\(\`model/list\`,\\{includeHidden:!0,cursor:null,limit:${NAME}\\},\\{priority:${NAME}\\}\\)\\},$`));
       if (!request) continue;
       catalogMatches++;
-      const { models, auth, catalog } = match.groups;
+      const { auth, catalog, ultra, custom, selector } = match.groups;
+      const { host } = request.groups;
       edits.push({ start: match.index, end: match.index + match[0].length,
-        text: match[0].replace(`models:${models},`, `models:window.__cockpitNativeFast.modelsForSpeed(${models},${request.groups.host},${auth},${catalog}),`) });
+        text: `select:window.__cockpitNativeFast.modelSelector(${selector},${host},${auth},${catalog})` });
+
+      // Validate the enclosing query contract and the exact gate feeding this
+      // selector, rather than replacing a feature flag globally. Retain the
+      // caller's explicit includeUltraReasoningEffort=false short circuit.
+      const header = before.match(new RegExp(`\\(\\{additionalAvailableModels:${NAME},authMethod:${auth},enabledReasoningEfforts:${NAME},hasConfiguredModelCatalog:${catalog},hostId:${host},includeUltraReasoningEffort:(?<requested>${NAME}),isCustomModelProvider:${custom},limit:${NAME},modelCatalogPath:${NAME},modelProvider:${NAME}(?:,teamCatalog:(?<teamCatalog>${NAME}))?\\},\\{get:(?<get>${NAME}),queryClient:${NAME},scope:${NAME}\\}\\)=>\\{`));
+      if (!header) continue;
+      const gate = new RegExp(`[,;]${ultra}=${header.groups.requested}&&(?<value>${header.groups.get}\\(${NAME},\`1186680773\`\\));return\\{`).exec(before.slice(header.index + header[0].length));
+      if (!gate) continue;
+      const start = offset + header.index + header[0].length + gate.index + gate[0].indexOf(gate.groups.value);
+      edits.push({ start, end: start + gate.groups.value.length,
+        text: `window.__cockpitNativeFast.includeUltra(${gate.groups.value},${host},${auth},${custom},${header.groups.teamCatalog || 'null'})` });
+      reasoningMatches++;
     }
     if (catalogMatches > 1) return failure(source, "ambiguous-model-catalog");
     if (Object.values(count).some(value => value !== 1)) return failure(source, "unsupported-gates");
@@ -140,7 +177,7 @@
     if (edits.some((edit, i) => i > 0 && edit.start < edits[i - 1].end)) return failure(source, "overlapping-gates");
     let patched = source;
     for (const edit of edits.reverse()) patched = patched.slice(0, edit.start) + edit.text + patched.slice(edit.end);
-    return { ok: true, patchedSource: patched, diagnostics: { reason: "prepared", gates: count, modelCatalog: catalogMatches } };
+    return { ok: true, patchedSource: patched, diagnostics: { reason: "prepared", gates: count, modelCatalog: catalogMatches, reasoning: reasoningMatches } };
   }
 
   function localAsset(value, entry = false) {
@@ -802,6 +839,8 @@
         : { ok: true, reason: "clean-startup" };
     } };
   api.modelsForSpeed = modelsForSpeed;
+  api.modelSelector = modelSelector;
+  api.includeUltra = includeUltra;
   root.__cockpitNativeFast = api;
   if (typeof module === "object" && module.exports) module.exports = api;
 })();

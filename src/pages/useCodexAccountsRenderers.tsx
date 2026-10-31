@@ -3,6 +3,7 @@ import { resolveCodexAccountDailyUsage } from "./codexApiKeyUsagePanel";
 import { codexDailyUsageMetrics } from "../components/codex/CodexDailyUsagePanel";
 import { isCodexOfficialApiAccount } from "../types/codex";
 import { OpenAIOfficialUsagePanel } from '../components/codex/OpenAIOfficialUsagePanel';
+import { CodexRemoteServiceDetails } from '../components/codex/CodexRemoteServiceDetails';
 import { isOpenAIOfficialUsageAccount, resolveAccountUsageBaseUrl } from '../utils/openaiOfficialUsage';
 import { useEffect, type ReactElement } from "react";
 import { RefreshCw, Upload, Trash2, X, Power, Database, Copy, Check, Play, RotateCw, CircleAlert, Info, Calendar, Tag, Eye, EyeOff, FileText, ExternalLink, Pencil, FolderPlus, ChevronRight, Wrench, Terminal, Link2, Waypoints } from "lucide-react";
@@ -490,7 +491,8 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
         const meta = resolveAccountMeta(account);
         const isCurrent = overviewCurrentAccountId === account.id;
         const isApiKeyAccount = isCodexApiKeyAccount(account);
-        const cardSkin = isApiKeyAccount ? resolveCodexAccountCardSkin(account.api_base_url) : "";
+        const isCockpitAccount = isApiKeyAccount && Boolean(apiKeyUsageMap[account.id]?.summary?.cockpit);
+        const cardSkin = isCockpitAccount ? "codex-card-skin-cockpit" : isApiKeyAccount ? resolveCodexAccountCardSkin(account.api_base_url) : "";
         const cardDisplayName = cardSkin === "codex-card-skin-apikey-fun"
           ? "APIKEY.FUN"
           : presentation.displayName;
@@ -646,12 +648,12 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
           !isApiKeyAccount ||
           (isNewApiAccount && !hideRelayQuota);
         const officialApi = isCodexOfficialApiAccount(account);
-        const displayPlanClass = officialApi ? planClass : isSponsorApiKeyAccount
+        const displayPlanClass = isCockpitAccount ? "codex-cockpit" : officialApi ? planClass : isSponsorApiKeyAccount
           ? "sponsor-api"
           : isQuotaAwareApiKeyAccount
             ? "new-api-exclusive"
             : planClass;
-        const displayPlanLabel = officialApi ? presentation.planLabel : isSponsorApiKeyAccount && cardSkin !== "codex-card-skin-apikey-fun"
+        const displayPlanLabel = isCockpitAccount ? "Cockpit" : officialApi ? presentation.planLabel : isSponsorApiKeyAccount && cardSkin !== "codex-card-skin-apikey-fun"
           ? apiProviderName
           : presentation.planLabel;
         const accountTags = (account.tags || [])
@@ -848,7 +850,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                   >
                     {apiBaseUrlLine}
                   </span>
-                  {(isSub2ApiUsageAccount || isTokenPlanUsageAccount || isOpenAIOfficialUsageAccount(account)) && (
+                  {(isCockpitAccount || isSub2ApiUsageAccount || isTokenPlanUsageAccount || isOpenAIOfficialUsageAccount(account)) && (
                     <button
                       type="button"
                       className="codex-provider-inline-switch"
@@ -1809,6 +1811,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
         const meta = resolveAccountMeta(account);
         const isCurrent = overviewCurrentAccountId === account.id;
         const isApiKeyAccount = isCodexApiKeyAccount(account);
+        const isCockpitAccount = isApiKeyAccount && Boolean(apiKeyUsageMap[account.id]?.summary?.cockpit);
         const serverRevokedReauth = isCodexServerRevokedReauth(account);
         const refreshTokenReusedState = isCodexRefreshTokenReusedAccount(account);
         const switchOrLaunchBlockedReason =
@@ -1913,12 +1916,12 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
             apiKeyUsageProvider?.integrationType === "new_api" ||
             apiKeyUsageProvider?.integrationType === "sub2api");
         const officialApi = isCodexOfficialApiAccount(account);
-        const displayPlanClass = officialApi ? planClass : isSponsorApiKeyAccount
+        const displayPlanClass = isCockpitAccount ? "codex-cockpit" : officialApi ? planClass : isSponsorApiKeyAccount
           ? "sponsor-api"
           : isQuotaAwareApiKeyAccount
             ? "new-api-exclusive"
             : planClass;
-        const displayPlanLabel = officialApi ? presentation.planLabel : isSponsorApiKeyAccount
+        const displayPlanLabel = isCockpitAccount ? "Cockpit" : officialApi ? presentation.planLabel : isSponsorApiKeyAccount
           ? apiProviderName
           : presentation.planLabel;
         const isInLocalAccess = chatGptPlanSourceMemberIds(account.id, planOverview.accounts, localAccessAccountIdSet, accounts).length > 0;
@@ -2071,7 +2074,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                       >
                         {apiBaseUrlLine}
                       </span>
-                      {(isSub2ApiUsageAccount || isTokenPlanUsageAccount || isOpenAIOfficialUsageAccount(account)) && (
+                      {(isCockpitAccount || isSub2ApiUsageAccount || isTokenPlanUsageAccount || isOpenAIOfficialUsageAccount(account)) && (
                         <button
                           type="button"
                           className="codex-provider-inline-switch"
@@ -2603,7 +2606,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
       return (
         <div className="modal-overlay">
           <div
-            className="modal-content cockpit-api-panel-modal codex-api-key-usage-detail-modal"
+            className={summary?.cockpit ? "modal-content codex-remote-key-modal" : "modal-content cockpit-api-panel-modal codex-api-key-usage-detail-modal"}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header cockpit-api-panel-header">
@@ -2611,7 +2614,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                 <h2>{t("codex.modelProviders.usage.detailTitle", "服务面板")}</h2>
                 <span className="cockpit-api-panel-subtitle">
                   {maskAccountText(resolvePresentation(account).displayName)}
-                  {provider ? ` · ${provider.name}` : ""}
+                  {provider && !summary?.cockpit ? ` · ${provider.name}` : ""}
                 </span>
               </div>
               <button
@@ -2622,7 +2625,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                 <X />
               </button>
             </div>
-            <div className="cockpit-api-panel-body">
+            <div className={`cockpit-api-panel-body${summary?.cockpit ? " modal-body" : ""}`}>
               <section className="cockpit-api-connection-card">
                 <div className="cockpit-api-connection-row">
                   <span>{t("codex.localAccess.baseUrl", "地址")}</span>
@@ -2672,7 +2675,9 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                   </div>
                 </div>
               </section>
-              {usageMode === "openai_official" ? (
+              {summary?.cockpit ? (
+                <CodexRemoteServiceDetails key={account.id} state={state!} baseUrl={baseUrl} apiKey={account.openai_api_key || ""} t={t} />
+              ) : usageMode === "openai_official" ? (
                 <OpenAIOfficialUsagePanel summary={summary} loading={state?.loading} error={state?.error} detailed t={t} />
               ) : <>
                 {state?.loading && <p className="codex-daily-usage-note" role="status">{t("common.loading")}</p>}

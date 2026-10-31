@@ -77,6 +77,8 @@ pub struct WindsurfAccount {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindsurfAccountSummary {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_identity: Option<crate::modules::account_query_identity::QueryIdentity>,
     pub id: String,
     pub github_login: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -91,6 +93,10 @@ pub struct WindsurfAccountSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindsurfAccountIndex {
+    #[serde(default)]
+    pub identity_revision: u64,
+    #[serde(default)]
+    pub identity_maintenance_version: u32,
     pub version: String,
     pub accounts: Vec<WindsurfAccountSummary>,
 }
@@ -98,6 +104,8 @@ pub struct WindsurfAccountIndex {
 impl WindsurfAccountIndex {
     pub fn new() -> Self {
         Self {
+            identity_revision: 0,
+            identity_maintenance_version: 0,
             version: "1.0".to_string(),
             accounts: Vec::new(),
         }
@@ -159,6 +167,7 @@ pub struct WindsurfOAuthCompletePayload {
 impl WindsurfAccount {
     pub fn summary(&self) -> WindsurfAccountSummary {
         WindsurfAccountSummary {
+            query_identity: Some(crate::modules::windsurf_account::query_identity(self)),
             id: self.id.clone(),
             github_login: self.github_login.clone(),
             github_email: self.github_email.clone(),

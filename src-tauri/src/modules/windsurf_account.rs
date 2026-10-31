@@ -82,6 +82,11 @@ fn save_account_file(account: &WindsurfAccount) -> Result<(), String> {
     let path = get_accounts_dir()?.join(format!("{}.json", account.id));
     let content =
         crate::modules::secure_account_storage::serialize_account_file("windsurf", account)?;
+    crate::modules::account_query_identity::invalidate_before_write(
+        &get_accounts_index_path()?,
+        &account.id,
+        &query_identity(account),
+    )?;
     crate::modules::atomic_write::write_string_atomic(&path, &content)
         .map_err(|e| format!("保存账号失败: {}", e))
 }
@@ -245,6 +250,15 @@ fn repair_account_index_from_details(reason: &str) -> Option<WindsurfAccountInde
 }
 
 fn refresh_summary(index: &mut WindsurfAccountIndex, account: &WindsurfAccount) {
+    let next = account.summary();
+    if !index
+        .accounts
+        .iter()
+        .any(|s| s.id == account.id && s.query_identity == next.query_identity)
+    {
+        index.identity_revision = index.identity_revision.wrapping_add(1);
+        index.identity_maintenance_version = 0;
+    }
     if let Some(summary) = index.accounts.iter_mut().find(|item| item.id == account.id) {
         *summary = account.summary();
         return;
@@ -489,112 +503,7 @@ fn merge_account_group(group: Vec<WindsurfAccount>) -> WindsurfAccount {
     merged
 }
 
-fn deduplicate_accounts_by_identity_with_index(index: WindsurfAccountIndex) -> Result<(), String> {
-    if index.accounts.len() <= 1 {
-        return Ok(());
-    }
-
-    let mut accounts: Vec<WindsurfAccount> = index
-        .accounts
-        .iter()
-        .filter_map(|summary| load_account(&summary.id))
-        .collect();
-    if accounts.len() <= 1 {
-        return Ok(());
-    }
-
-    for account in &mut accounts {
-        merge_local_auth_status_into_account(account);
-    }
-
-    let mut groups: Vec<Vec<WindsurfAccount>> = Vec::new();
-    for account in accounts {
-        // 仅按 github_id 分组合并，同邮箱不同 github_id 不合并
-        let mut matched_indices: Vec<usize> = groups
-            .iter()
-            .enumerate()
-            .filter(|(_, group)| {
-                group.iter().any(|existing| {
-                    existing.github_id == account.github_id
-                        && account_apis_are_compatible(&account, existing)
-                })
-            })
-            .map(|(idx, _)| idx)
-            .collect();
-
-        if matched_indices.is_empty() {
-            groups.push(vec![account]);
-            continue;
-        }
-
-        matched_indices.sort_unstable();
-        let primary_idx = matched_indices[0];
-        groups[primary_idx].push(account);
-
-        for idx in matched_indices.into_iter().skip(1).rev() {
-            let mut moved = groups.remove(idx);
-            groups[primary_idx].append(&mut moved);
-        }
-    }
-
-    if groups.iter().all(|group| group.len() == 1) {
-        return Ok(());
-    }
-
-    let old_ids: HashSet<String> = groups
-        .iter()
-        .flat_map(|group| group.iter().map(|account| account.id.clone()))
-        .collect();
-
-    let mut merged_accounts = Vec::new();
-    let mut merged_duplicate_count = 0usize;
-    for group in groups {
-        if group.len() == 1 {
-            merged_accounts.push(group.into_iter().next().unwrap());
-            continue;
-        }
-        merged_duplicate_count += group.len() - 1;
-        merged_accounts.push(merge_account_group(group));
-    }
-
-    merged_accounts.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
-
-    for account in &merged_accounts {
-        save_account_file(account)?;
-    }
-
-    let keep_ids: HashSet<String> = merged_accounts
-        .iter()
-        .map(|account| account.id.clone())
-        .collect();
-    for old_id in old_ids {
-        if !keep_ids.contains(&old_id) {
-            delete_account_file(&old_id)?;
-        }
-    }
-
-    let mut next_index = WindsurfAccountIndex::new();
-    next_index.accounts = merged_accounts
-        .iter()
-        .map(WindsurfAccount::summary)
-        .collect();
-    save_account_index(&next_index)?;
-
-    logger::log_info(&format!(
-        "Windsurf 账号去重完成：合并 {} 条重复记录",
-        merged_duplicate_count
-    ));
-    Ok(())
-}
-
-fn deduplicate_accounts_by_identity() -> Result<(), String> {
-    deduplicate_accounts_by_identity_with_index(load_account_index())
-}
-
-fn deduplicate_accounts_by_identity_checked() -> Result<(), String> {
-    let index = load_account_index_checked()?;
-    deduplicate_accounts_by_identity_with_index(index)
-}
+include!("windsurf_account_identity.rs");
 
 fn merge_local_auth_status_into_account(account: &mut WindsurfAccount) {
     let account_api_key = account
@@ -791,9 +700,7 @@ fn merge_refresh_payload_with_existing(
 }
 
 pub fn list_accounts() -> Vec<WindsurfAccount> {
-    if let Err(err) = deduplicate_accounts_by_identity() {
-        logger::log_warn(&format!("Windsurf 账号去重失败（已忽略）：{}", err));
-    }
+    schedule_identity_maintenance();
 
     let index = load_account_index();
     index
@@ -808,7 +715,7 @@ pub fn list_accounts() -> Vec<WindsurfAccount> {
 }
 
 pub fn list_accounts_checked() -> Result<Vec<WindsurfAccount>, String> {
-    deduplicate_accounts_by_identity_checked()?;
+    schedule_identity_maintenance();
     let index = load_account_index_checked()?;
     Ok(index
         .accounts
@@ -825,9 +732,7 @@ pub fn upsert_account(payload: WindsurfOAuthCompletePayload) -> Result<WindsurfA
     let _lock = WINDSURF_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "获取 Windsurf 账号锁失败".to_string())?;
-    if let Err(err) = deduplicate_accounts_by_identity() {
-        logger::log_warn(&format!("Windsurf upsert 前去重失败（已忽略）：{}", err));
-    }
+    schedule_identity_maintenance();
 
     let now = now_ts();
     let mut index = load_account_index();
@@ -843,22 +748,10 @@ pub fn upsert_account(payload: WindsurfOAuthCompletePayload) -> Result<WindsurfA
     let account_id = index
         .accounts
         .iter()
-        .filter_map(|item| load_account(&item.id))
-        .find(|account| {
-            if account.github_id != payload.github_id {
-                return false;
-            }
-            if let (Some(incoming_api), Some(existing_api)) = (
-                payload_api_key.as_ref(),
-                resolve_account_api_key(account).as_ref(),
-            ) {
-                if incoming_api != existing_api {
-                    return false;
-                }
-            }
-            true
+        .find(|summary| {
+            summary_matches_payload(summary, payload.github_id, payload_api_key.as_deref())
         })
-        .map(|account| account.id)
+        .map(|summary| summary.id.clone())
         .unwrap_or(generated_id);
 
     let existing = load_account(&account_id);
@@ -1045,6 +938,8 @@ pub fn remove_account(account_id: &str) -> Result<(), String> {
         .map_err(|_| "获取 Windsurf 账号锁失败".to_string())?;
     let mut index = load_account_index();
     index.accounts.retain(|item| item.id != account_id);
+    index.identity_revision = index.identity_revision.wrapping_add(1);
+    index.identity_maintenance_version = 0;
     save_account_index(&index)?;
     delete_account_file(account_id)?;
     Ok(())

@@ -1116,14 +1116,12 @@ test('request tabs support keyboard navigation with stable dialog size and retai
   assert.equal(logs.focused, true);
   dialogResponse(h, { requests: { rows: [requestRecord('paged-row')], nextCursor: 'next' } });
   h.details().querySelector('.request-scroll')!.scrollTop = 300;
-  dialogAction(h, 'more');
-  dialogResponse(h, { requests: { rows: [requestRecord('older-row')], nextCursor: 'next2' } });
   dialogAction(h, 'tab', 'overview');
   dialogAction(h, 'tab', 'logs');
   assert.equal(h.details(), details);
   assert.equal(dialogQuery(h).cursor, null);
   assert.equal(h.root().dialogState.paged, false);
-  assert.equal(h.details().querySelectorAll('.request-row').length, 2);
+  assert.equal(h.details().querySelectorAll('.request-row').length, 1);
   assert.equal(h.details().querySelector('.request-scroll')!.scrollTop, 0);
 });
 
@@ -1187,36 +1185,34 @@ test('scope and period switches replace pending requests and never accept a late
   assert.match(h.details().querySelector('.stats-grid')!.textContent, /Requests9/);
 });
 
-test('more appends pages, deduplicates request IDs and preserves list scroll and focus', () => {
+test('view more navigates to host logs with the selected scope and keeps the preview usable', () => {
   const h = harness('injection_script', [composer('gpt-6-sol')]);
   h.evaluate();
   openRequests(h);
-  dialogResponse(h, { requests: { rows: Array.from({ length: 10 }, (_, i) => requestRecord('r' + i)), nextCursor: 'opaque-page-2' } });
-  assert.equal(h.details().querySelectorAll('.request-row').length, 10);
+  dialogResponse(h, { requests: { rows: [requestRecord('retained')], nextCursor: null } });
+  const more = h.details().querySelector('[data-cockpit-dialog-action="more"]')!;
+  assert.equal(more.disabled, false, 'navigation is available without another preview page');
   h.details().querySelector('.request-scroll')!.scrollTop = 540;
-  h.details().querySelector('[data-cockpit-dialog-action="more"]')!.focus();
+  more.focus();
   dialogAction(h, 'more');
-  const page2 = dialogQuery(h);
-  assert.equal(page2.cursor, 'opaque-page-2');
-  assert.equal(h.details().querySelectorAll('.request-row').length, 10);
+  const navigation = dialogQuery(h);
+  assert.equal(navigation.view, 'openLogs');
+  assert.equal(navigation.scope, 'chat');
+  assert.equal(navigation.threadId, h.root().threadId);
+  assert.equal(navigation.cursor, null);
+  assert.equal(h.details().querySelectorAll('.request-row').length, 1);
   assert.equal(h.details().querySelector('.request-scroll')!.scrollTop, 540);
-  assert.equal(h.details().querySelector('.request-scroll')!.focused, true, 'disabled loading button transfers focus to its readable request region');
-  dialogResponse(h, { requests: { rows: [requestRecord('r9'), requestRecord('r10'), requestRecord('r11')], nextCursor: 'opaque-page-3' } });
-  assert.equal(h.details().querySelectorAll('.request-row').length, 12);
-  assert.equal(h.details().querySelector('.request-scroll')!.scrollTop, 540);
-  assert.equal(h.details().querySelector('.request-scroll')!.focused, true, 'completion keeps focus inside the same request region');
-  assert.match(h.details().querySelector('.records-count')!.textContent, /12 shown/);
-  h.advance(6000);
-  h.root().render();
-  assert.equal(dialogQuery(h).requestToken, page2.requestToken, 'polling must not replace paginated results');
+  assert.equal(h.details().querySelector('.request-scroll')!.focused, true);
+  dialogResponse(h, {});
+  assert.equal(dialogQuery(h).view, 'logs', 'acknowledgement resumes ordinary preview reads');
+  dialogAction(h, 'scope', 'service');
+  dialogResponse(h, { requests: { rows: [], nextCursor: null } });
   dialogAction(h, 'more');
-  dialogResponse(h, { requests: { rows: [requestRecord('r12')], nextCursor: null } });
-  assert.equal(h.details().querySelectorAll('.request-row').length, 13);
-  assert.equal(h.details().querySelector('[data-cockpit-dialog-action="more"]')!.disabled, true);
-  assert.match(h.details().textContent, /All loaded/);
+  assert.equal(dialogQuery(h).view, 'openLogs');
+  assert.equal(dialogQuery(h).scope, 'service');
 });
 
-test('pagination failures retain existing records, expose one in-dialog error and retry the same cursor', () => {
+test('navigation failures retain records, expose one in-dialog error and retry navigation', () => {
   const h = harness('injection_script', [composer('gpt-6-sol')]);
   h.evaluate();
   openRequests(h);
@@ -1231,16 +1227,17 @@ test('pagination failures retain existing records, expose one in-dialog error an
   assert.equal(h.host().querySelector('[data-cockpit-quota-error]'), null);
   dialogAction(h, 'retry');
   const retry = dialogQuery(h);
-  assert.equal(retry.cursor, failed.cursor);
+  assert.equal(retry.cursor, null);
+  assert.equal(retry.view, 'openLogs');
   assert.notEqual(retry.requestToken, failed.requestToken);
   assert.equal(h.details().querySelector('[data-cockpit-quota-error]'), null);
   assert.match(h.details().textContent, /Loading/);
-  dialogResponse(h, { requests: { rows: [requestRecord('after-retry')], nextCursor: null } });
-  assert.equal(h.details().querySelectorAll('.request-row').length, 2);
-  assert.match(h.details().textContent, /retained@example\.com.*after-retry@example\.com/);
+  dialogResponse(h, {});
+  assert.equal(h.details().querySelectorAll('.request-row').length, 1);
+  assert.match(h.details().textContent, /retained@example\.com/);
 });
 
-test('only the first request page refreshes automatically and a manual refresh replaces a paginated snapshot', () => {
+test('preview refreshes automatically and manual refresh replaces the snapshot after navigation', () => {
   const h = harness('injection_script', [composer('gpt-6-sol')]);
   h.evaluate();
   openRequests(h);
@@ -1255,7 +1252,7 @@ test('only the first request page refreshes automatically and a manual refresh r
   dialogResponse(h, { requests: { rows: [requestRecord('updated')], nextCursor: 'next' } });
   assert.doesNotMatch(h.details().textContent, /first@example\.com/);
   dialogAction(h, 'more');
-  dialogResponse(h, { requests: { rows: [requestRecord('older')], nextCursor: null } });
+  dialogResponse(h, {});
   h.details().querySelector('[data-cockpit-quota-refresh]')!.click();
   assert.equal(dialogQuery(h).cursor, null);
   dialogResponse(h, { requests: { rows: [requestRecord('latest')], nextCursor: null } });

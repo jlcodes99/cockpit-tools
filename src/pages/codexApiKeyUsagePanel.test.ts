@@ -12,7 +12,7 @@ registerHooks({ load(url, context, next) {
   return url.endsWith('.css') ? { format: 'module', source: '', shortCircuit: true } : next(url, context);
 } });
 const { renderCodexApiKeyUsagePanel, resolveCodexAccountDailyUsage } = await import('./codexApiKeyUsagePanel');
-const t = ((key: string, fallback?: string) => fallback ?? key) as TFunction;
+const t = ((key: string, fallback?: unknown) => typeof fallback === 'string' ? fallback : key) as TFunction;
 const account: CodexAccount = {
   id: 'test', email: 'test@example.com', auth_mode: 'apikey',
   openai_api_key: 'test-key', api_base_url: 'https://provider.example',
@@ -35,6 +35,7 @@ for (const variant of ['card', 'table'] as const) {
     for (const field of ['todayCost', 'todayRequests', 'todayTokens']) assert.ok(html.includes(`usage.fields.${field}`));
     assert.ok(html.includes('$12.50') && html.includes('>7<') && html.includes('>123<'));
     assert.ok(!html.includes('$900'));
+    assert.ok(!html.includes('codex.openaiUsage.scope'));
   });
   test(`DeepSeek ${variant} shows its balance instead of daily cost`, () => {
     const html = renderSummary({ mode: 'deepseek', balance: 9.59, todayCost: 12.5 }, variant);
@@ -86,4 +87,30 @@ test('legacy Cockpit daily requests survive without treating total tokens as tod
   assert.equal(summary?.todayRequests, 4);
   assert.equal(summary?.todayTotalTokens, undefined);
   assert.equal(summary?.todayCost, undefined);
+});
+
+test('remote Cockpit cards keep only three daily fields and move budget and warnings into details', async () => {
+  const cockpit = {
+    product:'cockpit-tools' as const, protocolVersion:1 as const, serviceId:'A', serviceName:'Cockpit Tools', keyLabel:'B', status:'active',
+    models:['gpt-5.5'], imageModels:['gpt-image-2.5'],
+    capabilities:{ responses:true, images:true, imageEdits:true, hostedImages:true, usage:true, websockets:true },
+    tokenLimit:1000, tokenUsed:100, updatedAt:0,
+    budget:{ policy:{ period:'monthly' as const, limitMicrousd:20_000_000, dailyLimitMicrousd:null, maxConcurrent:2, dailyImageLimit:10 },
+      usedMicrousd:5_000_000, remainingMicrousd:15_000_000, dailyUsedMicrousd:0, dailyRemainingMicrousd:null,
+      resetsAt:null, lifetimeMicrousd:5_000_000, unmeteredRequests:0, dailyImageRequests:1, timezone:'UTC' as const, inFlightMayExceed:true },
+  };
+  const summary={ mode:'cockpit', cockpit, totalCost:900, todayCost:1.25, todayRequests:7, todayTotalTokens:123, modelStatsCount:0, latencyMs:0 };
+  for (const variant of ['card','table'] as const) {
+    const html = renderSummary(summary,variant);
+    assert.equal((html.match(/<strong>/g) ?? []).length,3);
+    for (const field of ['todayCost','todayRequests','todayTokens']) assert.ok(html.includes(`usage.fields.${field}`));
+    assert.ok(html.includes('$1.25') && html.includes('>7<') && html.includes('>123<'));
+    for (const key of ['remote','images','unmetered','consumed']) assert.ok(!html.includes(`common.apiBudget.${key}`));
+    assert.ok(!html.includes('$900') && !html.includes('$15.00'));
+  }
+  const { CodexRemoteServiceDetails }=await import('../components/codex/CodexRemoteServiceDetails');
+  const details=renderToStaticMarkup(createElement(CodexRemoteServiceDetails,{state:{loading:false,summary},baseUrl:'http://gateway.test/v1',apiKey:'private-key',t}));
+  assert.ok(details.includes('$15.00') && details.includes('$20.00'));
+  assert.ok(details.includes('common.apiBudget.accountingNote') && details.includes('codex.localAccess.requestLogTitle'));
+  assert.ok(!details.includes('private-key'));
 });

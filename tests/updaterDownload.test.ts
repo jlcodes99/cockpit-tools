@@ -57,6 +57,7 @@ function harness(options: {
   const timers: (() => void)[] = [];
   const updates: { previous: Action; update: (old: Action) => Action }[] = [];
   const notifications: unknown[] = [];
+  const savedNotes: { version: string; body?: string }[] = [];
   const refs = {
     updateCheckInFlightRef: { current: false },
     updateDownloadOwnerRef: { current: 'none' },
@@ -103,6 +104,7 @@ function harness(options: {
     setUpdateErrorDetails() {}, setSilentUpdateVersion() {},
     setUpdateNotificationInfo(value: unknown) { notifications.push(value); },
     applyUpdateReminderPreference() {}, openAutomaticUpdatePrompt() {}, writeUpdateLog() {},
+    savePendingUpdateNotes(version: string, body?: string) { savedNotes.push({ version, body }); },
     t: (key: string) => key,
   };
   for (const name of ['runSharedUpdateDownload', 'handleUpdateCheckResult']) {
@@ -116,7 +118,7 @@ function harness(options: {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText, context);
   return {
-    refs, updates, notifications, start: exports.runSharedUpdateDownload as (version: string, initial?: Candidate) => Promise<void>,
+    refs, updates, notifications, savedNotes, start: exports.runSharedUpdateDownload as (version: string, initial?: Candidate) => Promise<void>,
     background: exports.background as () => () => void,
     poll: () => timers.at(-1)!(), state: () => action, retryStatus: () => retryStatus,
     error: () => error, checks: () => checks, settingsReads: () => settingsReads,
@@ -137,6 +139,7 @@ test('manual download followed by the hourly check keeps one task and real progr
   assert.equal(h.settingsReads(), 0);
   assert.equal(h.checks(), 1);
   assert.equal(update.downloads, 1);
+  assert.deepEqual(h.savedNotes, [{ version: update.version, body: update.body }]);
   update.emit(chunk(400));
   assert.equal(h.state().progress, 72);
   update.emit(chunk(10));
@@ -147,6 +150,7 @@ test('manual download followed by the hourly check keeps one task and real progr
   h.poll(); await settlePromises();
   await h.start(update.version);
   assert.equal(h.checks(), 1, 'ready update must not be downloaded again');
+  assert.equal(h.savedNotes.length, 1, 'deduplicated downloads do not save duplicate notes');
   assert.equal(h.refs.pendingSilentUpdateRef.current, update);
 });
 

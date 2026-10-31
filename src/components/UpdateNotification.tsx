@@ -3,14 +3,15 @@ import { X, Download, Sparkles, RefreshCw, Check, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useEscClose } from '../hooks/useEscClose';
-import { useRemoteReleaseNotes } from '../hooks/useRemoteReleaseData';
-import { RemoteReleaseStatus } from './RemoteReleaseStatus';
+import { prependUpdaterReleaseHighlights } from '../utils/updaterReleaseNotes';
 import './UpdateNotification.css';
 
 export interface UpdateInfo {
   latest_version: string;
   current_version: string;
   download_url: string;
+  release_notes: string;
+  release_notes_zh: string;
 }
 
 type UpdateCheckSource = 'auto' | 'manual';
@@ -61,7 +62,6 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
   onSkipUpdate,
 }) => {
   const { t, i18n } = useTranslation();
-  const remoteNotes = useRemoteReleaseNotes(visible ? updateInfo?.latest_version : undefined);
 
   useEscClose(visible, onClose);
 
@@ -123,8 +123,15 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
   const releaseNotes = useMemo(() => {
     if (!updateInfo) return '';
     const isZh = i18n.language.startsWith('zh');
-    return (isZh ? remoteNotes.data?.release_notes_zh : remoteNotes.data?.release_notes) || '';
-  }, [updateInfo, remoteNotes.data, i18n.language]);
+    const notes = isZh && updateInfo.release_notes_zh
+      ? updateInfo.release_notes_zh
+      : updateInfo.release_notes;
+    return prependUpdaterReleaseHighlights(
+      updateInfo.latest_version,
+      notes,
+      i18n.language,
+    );
+  }, [updateInfo, i18n.language]);
 
   // 简单的 Markdown 渲染
   const formattedNotes = useMemo(() => {
@@ -332,12 +339,6 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
             </div>
           )}
 
-          {updateInfo && <RemoteReleaseStatus
-            loading={remoteNotes.loading}
-            error={remoteNotes.error}
-            empty={!releaseNotes}
-            onRetry={remoteNotes.reload}
-          />}
           {formattedNotes && (
             <div className="release-notes">
               <h3 className="release-notes-title">{t('update_notification.whatsNew', "What's New")}</h3>

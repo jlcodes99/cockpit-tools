@@ -464,6 +464,12 @@ pub trait Host: Send + Sync + 'static {
         Box::pin(async { Ok(true) })
     }
     fn authorize<'a>(&'a self, bearer: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>>;
+    fn authorize_management<'a>(&'a self, bearer: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
+        self.authorize(bearer)
+    }
+    fn caller_permit<'a>(&'a self, _caller: &'a Caller) -> BoxFuture<'a, Result<Option<Arc<dyn Send + Sync>>, ServiceError>> {
+        Box::pin(async { Ok(None) })
+    }
     fn route<'a>(
         &'a self,
         caller: &'a Caller,

@@ -39,6 +39,8 @@ import {
   resolveCodexApiProviderPresetId,
 } from "../utils/codexProviderPresets";
 import { useEscClose } from "../hooks/useEscClose";
+import { useCodexRemoteUsageCache } from '../hooks/useCodexRemoteUsageCache';
+import { isCodexRemoteGateway, withCodexRemotePresentation } from '../utils/codexRemotePresentation';
 import {
   isDeepSeekAccount,
   parseCodexBoundAccountId,
@@ -105,6 +107,7 @@ export function CodexInstancesContent({
     updateAccountInstanceAccess,
   } = useCodexAccountStore();
   const accounts = accountsForSelect ?? storeAccounts;
+  const remoteUsage = useCodexRemoteUsageCache();
   const isMacOS = usePlatformRuntimeSupport("macos-only");
   const isWindows = usePlatformRuntimeSupport("windows-only");
   const isSupportedPlatform = isMacOS || isWindows;
@@ -184,10 +187,12 @@ export function CodexInstancesContent({
     };
   }, []);
 
-  const resolvePresentation = (account: CodexAccount) => {
+  const resolvePresentation = useCallback((account: CodexAccount) => {
     // Read planBadgeStyle so style event rebuilds badge classes on instances.
     void planBadgeStyle;
-    const presentation = buildCodexAccountPresentation(account, t);
+    const presentation = withCodexRemotePresentation(account,
+      buildCodexAccountPresentation(account, t), remoteUsage[account.id]?.summary,
+      t('common.apiBudget.gatewayName'));
     return {
       ...presentation,
       quotaItems: presentation.quotaItems.filter((item) => {
@@ -197,21 +202,22 @@ export function CodexInstancesContent({
         return true;
       }),
     };
-  };
+  }, [remoteUsage, t, planBadgeStyle, showCodeReviewQuota, showAdditionalQuota]);
 
   const accountsWithDisplayName = useMemo(
     () =>
       accounts.map((account) => {
         void planBadgeStyle;
         const displayName =
-          buildCodexAccountPresentation(account, t).displayName ||
+          resolvePresentation(account).displayName ||
           account.email;
         return { ...account, email: displayName };
       }),
-    [accounts, t, planBadgeStyle],
+    [accounts, resolvePresentation],
   );
 
   const resolveApiProviderDisplayName = (account: CodexAccount): string => {
+    if (isCodexRemoteGateway(account, remoteUsage[account.id]?.summary)) return t('common.apiBudget.gatewayName');
     const baseUrl = normalizeCodexApiBaseUrl(account.api_base_url);
     const isOpenAiBuiltin =
       account.api_provider_mode === "openai_builtin" ||
@@ -260,7 +266,7 @@ export function CodexInstancesContent({
           : instance.followLocalAccount
             ? t("instances.form.followCurrent", "跟随当前账号")
             : account
-              ? buildCodexAccountPresentation(account, t).displayName ||
+              ? resolvePresentation(account).displayName ||
                 account.email
               : t("instances.labels.unbound", "未绑定账号");
       return new Promise<boolean>((resolve) => {
@@ -275,7 +281,7 @@ export function CodexInstancesContent({
         });
       });
     },
-    [accountMap, t],
+    [accountMap, t, resolvePresentation],
   );
 
   const closeLaunchPreview = useCallback(() => {
@@ -401,7 +407,7 @@ export function CodexInstancesContent({
       instance.bindAccountId === CODEX_API_SERVICE_BIND_ID
         ? t("codex.localAccess.title", "API 服务")
         : boundAccount
-          ? buildCodexAccountPresentation(boundAccount, t).displayName ||
+          ? resolvePresentation(boundAccount).displayName ||
             boundAccount.email
           : null;
     const instanceName = instance.isDefault
@@ -661,7 +667,7 @@ export function CodexInstancesContent({
             const providerText = isCodexApiKeyAccount(account)
               ? resolveApiProviderDisplayName(account)
               : "";
-            return `${presentation.displayName} ${presentation.planLabel} ${providerText}`;
+            return `${presentation.displayName} ${presentation.planLabel} ${providerText} ${account.api_base_url || ''}`;
           }}
           appType="codex"
           isSupported={isSupportedPlatform}
