@@ -4998,6 +4998,8 @@
         "singleStatusAttempts": "Single-account retries",
         "singleStatusBaseDelay": "Single base delay (ms)",
         "singleStatusMaxDelay": "Single max delay (ms)",
+        "autoRetryWhenOverload": "Auto retry when overload",
+        "autoRetryWhenOverloadHint": "Automatically retry upstream requests when overloaded (e.g. server_is_overloaded / 502 / 503) without immediately returning errors to client",
         "maxDelayGteBase": "Max delay cannot be less than base delay",
         "longWaitPreset": "Long wait preset",
         "shortWaitPreset": "Short wait preset",
@@ -5013,7 +5015,11 @@
         "presetDeleted": "Preset deleted",
         "presetNameRequired": "Enter a preset name",
         "deletePresetConfirm": "Delete this custom preset?",
-        "deletePresetTitle": "Delete preset"
+        "deletePresetTitle": "Delete preset",
+        "autoResetUsageOn5hLimit": "Auto use \"Reset usage\" if hit limit 5h usage",
+        "autoResetUsageOn5hLimitHint": "Automatically use available reset credits when the account reaches its 5-hour limit",
+        "autoResetUsageOnWeekLimit": "Auto use \"Reset usage\" if hit limit week usage",
+        "autoResetUsageOnWeekLimitHint": "Automatically use available reset credits when the account reaches its weekly limit"
       },
       "validation": {
         "numberRange": "Enter a number from {{min}} to {{max}}"

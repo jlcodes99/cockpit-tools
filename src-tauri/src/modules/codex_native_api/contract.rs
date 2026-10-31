@@ -88,6 +88,7 @@ pub struct ExecutionPolicy {
     pub websocket_initial_timeout: Duration,
     pub websocket_idle_timeout: Duration,
     pub websocket_heartbeat: Duration,
+    pub auto_retry_when_overload: bool,
 }
 
 impl Default for ExecutionPolicy {
@@ -115,6 +116,7 @@ impl Default for ExecutionPolicy {
             websocket_initial_timeout: Duration::from_secs(30),
             websocket_idle_timeout: Duration::from_secs(180),
             websocket_heartbeat: Duration::ZERO,
+            auto_retry_when_overload: false,
         }
     }
 }
@@ -357,6 +359,7 @@ pub trait Host: Send + Sync + 'static {
     fn check_quota_before_send(&self, _account_id: &str) -> Result<(), ServiceError> { Ok(()) }
     /// A runtime policy notification; must not perform blocking I/O.
     fn set_cooling_disabled(&self, _disabled: bool) {}
+    fn clear_overload_cooldowns(&self) {}
     /// Disabling affinity clears only the transient routing preference cache.
     fn set_session_affinity_enabled(&self, _enabled: bool) {}
     fn prepare_body<'a>(

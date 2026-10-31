@@ -408,6 +408,32 @@ async fn send_inner(
                     refreshed = false;
                     continue;
                 }
+                if policy.auto_retry_when_overload
+                    && is_overload_error(error.status, Some(error.code), Some(&error.message))
+                {
+                    state.host.clear_overload_cooldowns();
+                    let backoff = error.retry_after.unwrap_or(Duration::from_millis(1500));
+                    delay(
+                        state,
+                        backoff,
+                        policy.status_retry_max_delay.max(Duration::from_millis(1500)),
+                        deadline,
+                    )
+                    .await?;
+                    prepared.request.excluded_account_ids.clear();
+                    local_fallback_sources.clear();
+                    let _ = mapping::retry_cooldown_round(state, prepared).await;
+                    tracker.routed(&prepared.caller, &prepared.route, &prepared.request.model);
+                    tracker.routing_identity(&prepared.request);
+                    tracker.track_rebuild(prepared.binding.rebuild_abort_handle());
+                    tracker.prepared_metadata(&prepared);
+                    send_attempts = 0;
+                    status_attempts = 0;
+                    open_attempts = 1;
+                    refreshed = false;
+                    round_attempted = false;
+                    continue;
+                }
                 return Err(if connect_failed {
                     // A candidate that could not connect cannot replace a real
                     // rejection already received earlier in this request.
@@ -472,6 +498,34 @@ async fn send_inner(
                     )
                     .await?;
                     renew_transport_after_tls(state, prepared, tracker, &error).await?;
+                    continue;
+                }
+                Err(error)
+                    if policy.auto_retry_when_overload
+                        && is_overload_error(error.status, Some(error.code), Some(&error.message)) =>
+                {
+                    tracker.attempt_error(&error);
+                    state.host.clear_overload_cooldowns();
+                    let backoff = error.retry_after.unwrap_or(Duration::from_millis(1500));
+                    delay(
+                        state,
+                        backoff,
+                        policy.status_retry_max_delay.max(Duration::from_millis(1500)),
+                        deadline,
+                    )
+                    .await?;
+                    prepared.request.excluded_account_ids.clear();
+                    local_fallback_sources.clear();
+                    let _ = mapping::retry_cooldown_round(state, prepared).await;
+                    tracker.routed(&prepared.caller, &prepared.route, &prepared.request.model);
+                    tracker.routing_identity(&prepared.request);
+                    tracker.track_rebuild(prepared.binding.rebuild_abort_handle());
+                    tracker.prepared_metadata(&prepared);
+                    send_attempts = 0;
+                    status_attempts = 0;
+                    open_attempts = 1;
+                    refreshed = false;
+                    round_attempted = false;
                     continue;
                 }
                 Err(error) => return Err(error),
@@ -708,7 +762,9 @@ async fn send_inner(
                 continue;
             }
             note_failed_route(state,route,503,wait,credential_scope,failure_message.as_deref(),deadline).await?;
-            return Ok(response);
+            if !policy.auto_retry_when_overload {
+                return Ok(response);
+            }
         }
         if retryable
             && !round_attempted
@@ -746,6 +802,37 @@ async fn send_inner(
                 refreshed = false;
                 continue;
             }
+        }
+        if policy.auto_retry_when_overload
+            && is_overload_error(
+                status.as_u16(),
+                upstream_error_code.as_deref(),
+                failure_message.as_deref(),
+            )
+        {
+            drop(response);
+            state.host.clear_overload_cooldowns();
+            let backoff = wait.unwrap_or(Duration::from_millis(1500));
+            delay(
+                state,
+                backoff,
+                policy.status_retry_max_delay.max(Duration::from_millis(1500)),
+                deadline,
+            )
+            .await?;
+            prepared.request.excluded_account_ids.clear();
+            local_fallback_sources.clear();
+            let _ = mapping::retry_cooldown_round(state, prepared).await;
+            tracker.routed(&prepared.caller, &prepared.route, &prepared.request.model);
+            tracker.routing_identity(&prepared.request);
+            tracker.track_rebuild(prepared.binding.rebuild_abort_handle());
+            tracker.prepared_metadata(&prepared);
+            send_attempts = 0;
+            status_attempts = 0;
+            open_attempts = 1;
+            refreshed = false;
+            round_attempted = false;
+            continue;
         }
         return Ok(response);
     }
@@ -930,6 +1017,73 @@ pub(super) async fn note_failed_classified(
             else { state.host.route_failed_attempt(route, &route.model, status, wait, credential_scope, message).await; }
         }) => result.map_err(|_| total_timeout()),
     }
+}
+
+pub(super) fn is_overload_error(
+    status: u16,
+    code: Option<&str>,
+    message: Option<&str>,
+) -> bool {
+    if matches!(status, 429 | 502 | 503 | 504 | 529) {
+        if status == 429 {
+            let is_overload_code = code.is_some_and(|c| {
+                let c = c.to_ascii_lowercase();
+                c.contains("model_at_capacity")
+                    || c.contains("model_is_at_capacity")
+                    || c.contains("slow_down")
+                    || c.contains("capacity_exceeded")
+                    || c.contains("server_is_overloaded")
+                    || c.contains("overloaded")
+            });
+            let is_overload_msg = message.is_some_and(|m| {
+                let m = m.to_ascii_lowercase();
+                m.contains("model is at capacity")
+                    || m.contains("model_at_capacity")
+                    || m.contains("slow_down")
+                    || m.contains("capacity_exceeded")
+                    || m.contains("overloaded")
+                    || m.contains("server_is_overloaded")
+            });
+            return is_overload_code || is_overload_msg;
+        }
+        return true;
+    }
+    if let Some(code) = code {
+        let code = code.to_ascii_lowercase();
+        if code.contains("server_is_overloaded")
+            || code.contains("service_unavailable")
+            || code.contains("model_at_capacity")
+            || code.contains("model_is_at_capacity")
+            || code.contains("slow_down")
+            || code.contains("capacity_exceeded")
+            || code.contains("server_overload")
+            || code.contains("upstream_overload")
+            || code.contains("overloaded_error")
+        {
+            return true;
+        }
+    }
+    if let Some(message) = message {
+        let message = message.to_ascii_lowercase();
+        if message.contains("server_is_overloaded")
+            || message.contains("servers are currently overloaded")
+            || message.contains("service_unavailable_error")
+            || message.contains("model_at_capacity")
+            || message.contains("model is at capacity")
+            || message.contains("slow_down")
+            || message.contains("capacity_exceeded")
+            || message.contains("server_overload")
+            || message.contains("upstream_overload")
+            || message.contains("bad gateway")
+            || message.contains("service unavailable")
+            || message.contains("cooling down")
+            || message.contains("no account is currently schedulable")
+            || message.contains("no auth available")
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn compact_availability_neutral(
@@ -1126,27 +1280,47 @@ pub(super) async fn recover_before_output(
     // Do not impose the generic 60-second failure cooldown before the short
     // same-account capacity fallback has had a chance to reacquire its permit.
     if !overload { note_failed(state,prepared,status,wait,scope,message.as_deref(),error.transient_rate_limit,deadline).await?; }
-    let used=tracker.upstream_account_ids().len().max(1);
-    if can_switch_account(prepared) && (policy.credential_retries==0 || used<usize::from(policy.credential_retries)) {
+    let used = tracker.upstream_account_ids().len().max(1);
+    if can_switch_account(prepared) && (policy.credential_retries == 0 || used < usize::from(policy.credential_retries)) {
         tracker.release_route();
-        match alternate(state,prepared,deadline).await {
+        match alternate(state, prepared, deadline).await {
             Ok(()) => {
-                if overload { note_failed_route(state,&failed_route,503,wait,scope,message.as_deref(),deadline).await?; }
-                tracker.routed(&prepared.caller,&prepared.route,&prepared.request.model);
+                if overload { note_failed_route(state, &failed_route, 503, wait, scope, message.as_deref(), deadline).await?; }
+                tracker.routed(&prepared.caller, &prepared.route, &prepared.request.model);
                 tracker.routing_identity(&prepared.request);
                 tracker.track_rebuild(prepared.binding.rebuild_abort_handle());
                 tracker.prepared_metadata(prepared);
                 return Ok(true);
             },
-            Err(error) if state.stop.stopped() || tokio::time::Instant::now()>=deadline => return Err(error),
+            Err(error) if state.stop.stopped() || tokio::time::Instant::now() >= deadline => return Err(error),
             Err(error) => tracing::info!(target: "codex_api", "[NativeAPI][recovery] request_id={} result=alternate_unavailable code={} status={}", tracker.diagnostic_request_id(), error.code, error.status),
         }
     } else {
         tracing::info!(target: "codex_api", "[NativeAPI][recovery] request_id={} result=blocked switch_allowed={} accounts_used={} credential_limit={}", tracker.diagnostic_request_id(), can_switch_account(prepared), used, policy.credential_retries);
     }
     if overload {
-        if super::overload::retry_same(state,prepared,tracker,wait,deadline,policy.retry_max_delay).await? { return Ok(true); }
-        note_failed_route(state,&failed_route,503,wait,scope,message.as_deref(),deadline).await?;
+        if super::overload::retry_same(state, prepared, tracker, wait, deadline, policy.retry_max_delay).await? { return Ok(true); }
+        note_failed_route(state, &failed_route, 503, wait, scope, message.as_deref(), deadline).await?;
+    }
+    if policy.auto_retry_when_overload
+        && is_overload_error(status, Some(error.code), Some(&error.message))
+    {
+        state.host.clear_overload_cooldowns();
+        let backoff = wait.unwrap_or(Duration::from_millis(1500));
+        delay(
+            state,
+            backoff,
+            policy.status_retry_max_delay.max(Duration::from_millis(1500)),
+            deadline,
+        )
+        .await?;
+        prepared.request.excluded_account_ids.clear();
+        let _ = mapping::retry_cooldown_round(state, prepared).await;
+        tracker.routed(&prepared.caller, &prepared.route, &prepared.request.model);
+        tracker.routing_identity(&prepared.request);
+        tracker.track_rebuild(prepared.binding.rebuild_abort_handle());
+        tracker.prepared_metadata(prepared);
+        return Ok(true);
     }
     Ok(false)
 }

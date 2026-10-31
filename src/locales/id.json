@@ -4856,7 +4856,13 @@
         "presetDeleted": "Preset dihapus",
         "presetNameRequired": "Masukkan nama preset",
         "deletePresetConfirm": "Hapus preset kustom ini?",
-        "deletePresetTitle": "Hapus preset"
+        "deletePresetTitle": "Hapus preset",
+        "autoRetryWhenOverload": "Coba lagi otomatis saat kelebihan beban",
+        "autoRetryWhenOverloadHint": "Coba lagi permintaan secara otomatis ketika server upstream kelebihan beban (502 / 503)",
+        "autoResetUsageOn5hLimit": "Otomatis gunakan \"Reset penggunaan\" jika batas 5 jam tercapai",
+        "autoResetUsageOn5hLimitHint": "Gunakan kredit reset yang tersedia secara otomatis saat akun mencapai batas 5 jam",
+        "autoResetUsageOnWeekLimit": "Otomatis gunakan \"Reset penggunaan\" jika batas mingguan tercapai",
+        "autoResetUsageOnWeekLimitHint": "Gunakan kredit reset yang tersedia secara otomatis saat akun mencapai batas mingguan"
       },
       "accountModelRules": {
         "action": "Blokir Model",

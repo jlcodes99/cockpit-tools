@@ -4809,7 +4809,13 @@
         "presetDeleted": "Ön ayar silindi",
         "presetNameRequired": "Ön ayar adı girin",
         "deletePresetConfirm": "Bu özel ön ayar silinsin mi?",
-        "deletePresetTitle": "Ön ayarı sil"
+        "deletePresetTitle": "Ön ayarı sil",
+        "autoRetryWhenOverload": "Aşırı yüklenmede otomatik yeniden dene",
+        "autoRetryWhenOverloadHint": "Sunucu aşırı yüklendiğinde (502 / 503) istemciye hemen hata döndürmeden istekleri otomatik yeniden dene",
+        "autoResetUsageOn5hLimit": "5 saatlik sınıra ulaşıldığında otomatik \"Kullanımı sıfırla\"",
+        "autoResetUsageOn5hLimitHint": "Hesap 5 saatlik sınıra ulaştığında mevcut sıfırlama hakkını otomatik kullan",
+        "autoResetUsageOnWeekLimit": "Haftalık sınıra ulaşıldığında otomatik \"Kullanımı sıfırla\"",
+        "autoResetUsageOnWeekLimitHint": "Hesap haftalık sınıra ulaştığında mevcut sıfırlama hakkını otomatik kullan"
       },
       "accountModelRules": {
         "action": "Model engelle",

@@ -4998,6 +4998,8 @@
         "singleStatusAttempts": "单账号重试",
         "singleStatusBaseDelay": "单账号基础延迟(ms)",
         "singleStatusMaxDelay": "单账号最大延迟(ms)",
+        "autoRetryWhenOverload": "过载时自动重试",
+        "autoRetryWhenOverloadHint": "遇到上游服务器过载（如 server_is_overloaded / 502 / 503）时自动重试，不立即向客户端返回错误",
         "maxDelayGteBase": "最大延迟不能小于基础延迟",
         "longWaitPreset": "长等待方案",
         "shortWaitPreset": "短等待方案",
@@ -5013,7 +5015,11 @@
         "presetDeleted": "方案已删除",
         "presetNameRequired": "请输入方案名称",
         "deletePresetConfirm": "确定删除这个自定义方案吗？",
-        "deletePresetTitle": "删除方案"
+        "deletePresetTitle": "删除方案",
+        "autoResetUsageOn5hLimit": "达到 5 小时限额时自动使用 Reset usage",
+        "autoResetUsageOn5hLimitHint": "当账号达到 5 小时使用限额且存在可用重置次数时，自动执行 Reset usage",
+        "autoResetUsageOnWeekLimit": "达到周限额时自动使用 Reset usage",
+        "autoResetUsageOnWeekLimitHint": "当账号达到每周使用限额且存在可用重置次数时，自动执行 Reset usage"
       },
       "validation": {
         "numberRange": "请输入 {{min}} 到 {{max}} 之间的数字"

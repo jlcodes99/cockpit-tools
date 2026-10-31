@@ -805,6 +805,34 @@ impl Execution {
                     continue;
                 }
             }
+            let status_code = response.status().as_u16();
+            if policy.auto_retry_when_overload
+                && super::super::retry::is_overload_error(
+                    status_code,
+                    None,
+                    failure_message.as_deref(),
+                )
+            {
+                drop(response);
+                self.state.host.clear_overload_cooldowns();
+                let backoff = retry_after.unwrap_or(std::time::Duration::from_millis(1500));
+                super::super::retry::delay(
+                    &self.state,
+                    backoff,
+                    policy.status_retry_max_delay.max(std::time::Duration::from_millis(1500)),
+                    deadline,
+                )
+                .await?;
+                self.route_request.excluded_account_ids.clear();
+                let _ = self.cooldown_round(status_code, &policy, deadline).await;
+                credential_attempts = 0;
+                send_attempts = 0;
+                status_attempts = 0;
+                open_attempts = 1;
+                refreshed = false;
+                round_attempted = false;
+                continue;
+            }
             self.tracker.set_retry_after(retry_after);
             if let Some(binding) = &binding {
                 let store = self.state.identity.clone();

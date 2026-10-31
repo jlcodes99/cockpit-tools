@@ -4809,7 +4809,13 @@
         "presetDeleted": "Predefinição excluída",
         "presetNameRequired": "Informe o nome da predefinição",
         "deletePresetConfirm": "Excluir esta predefinição personalizada?",
-        "deletePresetTitle": "Excluir predefinição"
+        "deletePresetTitle": "Excluir predefinição",
+        "autoRetryWhenOverload": "Repetir automaticamente em sobrecarga",
+        "autoRetryWhenOverloadHint": "Repetir solicitações automaticamente quando o servidor estiver sobrecarregado (502 / 503)",
+        "autoResetUsageOn5hLimit": "Usar automaticamente \"Redefinir uso\" ao atingir o limite de 5h",
+        "autoResetUsageOn5hLimitHint": "Usar créditos de redefinição disponíveis automaticamente quando a conta atingir o limite de 5 horas",
+        "autoResetUsageOnWeekLimit": "Usar automaticamente \"Redefinir uso\" ao atingir o limite semanal",
+        "autoResetUsageOnWeekLimitHint": "Usar créditos de redefinição disponíveis automaticamente quando a conta atingir o limite semanal"
       },
       "accountModelRules": {
         "action": "Bloquear modelos",

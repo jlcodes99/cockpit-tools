@@ -1531,6 +1531,32 @@ async fn retry_opening_failure(
             return Ok(true);
         }
     }
+    if policy.auto_retry_when_overload
+        && super::retry::is_overload_error(error.status, Some(error.code), Some(&error.message))
+    {
+        state.host.clear_overload_cooldowns();
+        let backoff = wait.unwrap_or(std::time::Duration::from_millis(1500));
+        super::retry::delay(
+            state,
+            backoff,
+            policy.status_retry_max_delay.max(std::time::Duration::from_millis(1500)),
+            deadline,
+        )
+        .await?;
+        prepared.request.excluded_account_ids.clear();
+        let _ = mapping::retry_cooldown_round(state, prepared).await;
+        tracker.routed(&prepared.caller, &prepared.route, &prepared.request.model);
+        tracker.routing_identity(&prepared.request);
+        tracker.track_rebuild(prepared.binding.rebuild_abort_handle());
+        tracker.prepared_metadata(prepared);
+        retries.credentials = 0;
+        retries.send = 0;
+        retries.status = 0;
+        retries.bootstrap = 0;
+        retries.refreshed = false;
+        retries.cooldown_round = false;
+        return Ok(true);
+    }
     Ok(false)
 }
 

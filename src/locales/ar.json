@@ -4856,7 +4856,13 @@
         "presetDeleted": "تم حذف الإعداد",
         "presetNameRequired": "أدخل اسم الإعداد",
         "deletePresetConfirm": "هل تريد حذف هذا الإعداد المخصص؟",
-        "deletePresetTitle": "حذف الإعداد"
+        "deletePresetTitle": "حذف الإعداد",
+        "autoRetryWhenOverload": "إعادة المحاولة تلقائيًا عند التحميل الزائد",
+        "autoRetryWhenOverloadHint": "إعادة محاولة الطلبات تلقائيًا عند زيادة التحميل على الخادم (مثل 502/503)",
+        "autoResetUsageOn5hLimit": "استخدام \"إعادة تعيين الاستخدام\" تلقائيًا عند بلوغ حد 5 ساعات",
+        "autoResetUsageOn5hLimitHint": "استخدام رصيد إعادة التعيين تلقائيًا عند وصول الحساب إلى حد 5 ساعات",
+        "autoResetUsageOnWeekLimit": "استخدام \"إعادة تعيين الاستخدام\" تلقائيًا عند بلوغ الحد الأسبوعي",
+        "autoResetUsageOnWeekLimitHint": "استخدام رصيد إعادة التعيين تلقائيًا عند وصول الحساب إلى الحد الأسبوعي"
       },
       "accountModelRules": {
         "action": "حظر النماذج",
