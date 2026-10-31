@@ -486,6 +486,14 @@ const CC_SWITCH_DIRECT_CLAUDE_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset
     extraEnv: modelEnv('zai-org/glm-5.1'),
   }),
   createClaudeApiProviderPreset({
+    id: 'runcrate',
+    name: 'Runcrate',
+    baseUrl: 'https://api.runcrate.ai',
+    website: 'https://www.runcrate.ai',
+    apiKeyUrl: 'https://www.runcrate.ai/dashboard/api-keys',
+    extraEnv: modelEnv('deepseek-ai/DeepSeek-V4.1-Flash'),
+  }),
+  createClaudeApiProviderPreset({
     id: 'pipellm',
     name: 'PIPELLM',
     baseUrl: 'https://cc-api.pipellm.ai',

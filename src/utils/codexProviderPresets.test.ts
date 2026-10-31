@@ -89,3 +89,22 @@ test("presets without a declared vision catalog report no image support", () => 
   assert.deepEqual(codexApiProviderPresetVisionSupport(preset), {});
   assert.deepEqual(codexApiProviderPresetVisionSupport(null), {});
 });
+
+test("Runcrate preset uses the chat-completions transport and declares vision models", () => {
+  const preset = findCodexApiProviderPresetByBaseUrl("https://api.runcrate.ai/v1/");
+
+  assert.ok(preset);
+  assert.equal(preset.id, "runcrate");
+  assert.ok(preset.modelCatalog?.includes("deepseek-ai/DeepSeek-V4.1-Flash"));
+
+  const support = codexApiProviderPresetVisionSupport(preset);
+  assert.equal(support["deepseek-ai/deepseek-v4.1-flash"], true);
+  assert.equal(support["zai-org/glm-5.3"], undefined);
+
+  const profile = resolveCodexProviderCapabilityProfile({
+    presetId: preset.id,
+    baseUrl: preset.baseUrls[0],
+  });
+  assert.equal(profile.wireApi, "chat_completions");
+  assert.equal(profile.requiresGateway, true);
+});

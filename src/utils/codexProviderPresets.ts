@@ -417,6 +417,20 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     baseUrls: ["https://api.therouter.ai/v1"],
     website: "https://therouter.ai/",
   },
+  {
+    id: "runcrate",
+    name: "Runcrate",
+    baseUrls: ["https://api.runcrate.ai/v1"],
+    modelCatalog: [
+      "deepseek-ai/DeepSeek-V4.1-Flash",
+      "zai-org/GLM-5.3",
+      "Qwen/Qwen3.8-Flash",
+      "moonshotai/Kimi-K2.6",
+    ],
+    visionModelCatalog: ["deepseek-ai/DeepSeek-V4.1-Flash", "moonshotai/Kimi-K2.6"],
+    website: "https://www.runcrate.ai/",
+    apiKeyUrl: "https://www.runcrate.ai/dashboard/api-keys",
+  },
 ];
 
 function normalizeCodexProviderBaseUrl(value: string): string | null {

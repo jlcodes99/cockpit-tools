@@ -53,6 +53,7 @@ const CHAT_COMPLETIONS_PROVIDER_HOSTS = [
   "cc-api.pipellm.ai",
   "openrouter.ai",
   "api.therouter.ai",
+  "api.runcrate.ai",
 ];
 
 export type CodexLocalAccessAccountIneligibleReason =
