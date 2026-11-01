@@ -1,0 +1,21 @@
+name: Windows sandbox recovery
+on:
+  pull_request:
+    paths:
+      - 'scripts/windows/codex-sandbox-owner*'
+      - '.github/workflows/windows-sandbox-recovery.yml'
+  push:
+    paths:
+      - 'scripts/windows/codex-sandbox-owner*'
+      - '.github/workflows/windows-sandbox-recovery.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  recovery:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test native owner repair and rollback on isolated fixtures
+        shell: powershell
+        run: .\scripts\windows\codex-sandbox-owner.test.ps1
