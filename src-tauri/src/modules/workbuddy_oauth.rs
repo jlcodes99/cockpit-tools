@@ -860,12 +860,91 @@ async fn fetch_quota_resource_for_account(
     enterprise_id: Option<&str>,
     domain: Option<&str>,
 ) -> Result<Value, String> {
-    if let Some(enterprise_id) = enterprise_id {
-        let body = fetch_enterprise_user_usage(access_token, uid, enterprise_id, domain).await?;
+    if let Some(enterprise_id) = normalize_non_empty(enterprise_id) {
+        let body = fetch_enterprise_user_usage(access_token, uid, &enterprise_id, domain).await?;
         wrap_enterprise_usage_as_resource(&body)
     } else {
         fetch_user_resource_with_access_token_default(access_token, uid, None, domain).await
     }
+}
+
+/// Refresh only the existing identity: never pick a different last-login user
+/// or another enterprise returned by the same token.
+fn merge_refreshed_profile(
+    account: &crate::models::workbuddy::WorkbuddyAccount,
+    body: &Value,
+) -> Result<crate::models::workbuddy::WorkbuddyAccount, String> {
+    let uid = normalize_non_empty(account.uid.as_deref()).ok_or("无法刷新缺少 UID 的账号资料")?;
+    let enterprise_id = normalize_non_empty(account.enterprise_id.as_deref());
+    let profile = body
+        .pointer("/data/accounts")
+        .and_then(Value::as_array)
+        .and_then(|accounts| {
+            accounts.iter().find(|profile| {
+                normalize_non_empty(profile.get("uid").and_then(Value::as_str)).as_deref()
+                    == Some(uid.as_str())
+                    && normalize_non_empty(profile.get("enterpriseId").and_then(Value::as_str))
+                        == enterprise_id
+            })
+        })
+        .ok_or("账号资料响应中未找到匹配的 UID 和企业身份")?;
+
+    let mut updated = account.clone();
+    updated.enterprise_id = enterprise_id;
+    updated.nickname = normalize_non_empty(profile.get("nickname").and_then(Value::as_str))
+        .or_else(|| account.nickname.clone());
+    updated.enterprise_name =
+        normalize_non_empty(profile.get("enterpriseName").and_then(Value::as_str))
+            .or_else(|| account.enterprise_name.clone());
+    // The email field also stores a display-name fallback for accounts without
+    // an email. Replace stale/imported placeholders, but keep a real email when
+    // the profile endpoint does not return one.
+    updated.email = normalize_non_empty(profile.get("email").and_then(Value::as_str))
+        .or_else(|| {
+            if account.email.contains('@') {
+                Some(account.email.clone())
+            } else {
+                updated.nickname.clone()
+            }
+        })
+        .unwrap_or_else(|| account.email.clone());
+    updated.profile_raw = Some(profile.clone());
+    Ok(updated)
+}
+
+async fn fetch_refreshed_profile(
+    account: &crate::models::workbuddy::WorkbuddyAccount,
+    access_token: &str,
+    domain: Option<&str>,
+) -> Result<crate::models::workbuddy::WorkbuddyAccount, String> {
+    let client = build_client()?;
+    let mut request = client
+        .get(format!(
+            "{}{}/accounts",
+            WORKBUDDY_API_ENDPOINT, WORKBUDDY_API_PREFIX
+        ))
+        .bearer_auth(access_token);
+    if let Some(domain) = normalize_non_empty(domain) {
+        request = request.header("X-Domain", domain);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|_| "请求账号资料失败".to_string())?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("请求账号资料失败 (http={})", status.as_u16()));
+    }
+    let body: Value = response
+        .json()
+        .await
+        .map_err(|_| "解析账号资料失败".to_string())?;
+    if let Some(code) = body.get("code").and_then(Value::as_i64) {
+        if code != 0 && code != 200 {
+            return Err(format!("请求账号资料失败 (code={})", code));
+        }
+    }
+    merge_refreshed_profile(account, &body)
 }
 
 async fn refresh_payload_for_account_inner(
@@ -911,13 +990,23 @@ async fn refresh_payload_for_account_inner(
         }
     }
 
-    let resolved_email =
-        normalize_non_empty(Some(account.email.as_str())).unwrap_or_else(|| account.email.clone());
-    let resolved_uid = account.uid.clone();
-    let resolved_nickname = account.nickname.clone();
-    let resolved_enterprise_id = account.enterprise_id.clone();
-    let resolved_enterprise_name = account.enterprise_name.clone();
-    let resolved_profile_raw = account.profile_raw.clone();
+    let resolved_account =
+        match fetch_refreshed_profile(account, &new_access_token, new_domain.as_deref()).await {
+            Ok(updated) => updated,
+            Err(error) => {
+                logger::log_warn(&format!(
+                    "[WorkBuddy] 刷新账号资料失败，保留原身份并继续查询配额:{}",
+                    error
+                ));
+                account.clone()
+            }
+        };
+    let resolved_email = resolved_account.email;
+    let resolved_uid = resolved_account.uid;
+    let resolved_nickname = resolved_account.nickname;
+    let resolved_enterprise_id = normalize_non_empty(resolved_account.enterprise_id.as_deref());
+    let resolved_enterprise_name = resolved_account.enterprise_name;
+    let resolved_profile_raw = resolved_account.profile_raw;
 
     let dosage = fetch_dosage_notify(
         &new_access_token,
@@ -1225,6 +1314,68 @@ pub async fn build_payload_from_token(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn personal_account() -> crate::models::workbuddy::WorkbuddyAccount {
+        serde_json::from_value(json!({
+            "id": "workbuddy_fixture", "email": "待识别账号 4", "uid": "personal-user",
+            "enterprise_id": "", "access_token": "fixture", "created_at": 1, "last_used": 1
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn refreshes_placeholder_from_matching_personal_profile() {
+        let account = personal_account();
+        let updated = merge_refreshed_profile(
+            &account,
+            &json!({"data": {"accounts": [
+                {"uid": "other-user", "nickname": "Other", "lastLogin": true},
+                {"uid": "personal-user", "nickname": "Recovered name", "enterpriseId": ""}
+            ]}}),
+        )
+        .unwrap();
+        assert_eq!(updated.email, "Recovered name");
+        assert_eq!(updated.nickname.as_deref(), Some("Recovered name"));
+        assert_eq!(updated.uid, account.uid);
+        assert_eq!(updated.enterprise_id, None);
+        assert_eq!(updated.access_token, account.access_token);
+    }
+
+    #[test]
+    fn does_not_switch_identity_or_clear_existing_data_on_profile_mismatch() {
+        let account = personal_account();
+        for profile in [
+            json!({"uid": "other-user", "nickname": "Other"}),
+            json!({"uid": "personal-user", "enterpriseId": "other-enterprise"}),
+        ] {
+            assert!(
+                merge_refreshed_profile(&account, &json!({"data": {"accounts": [profile]}}))
+                    .is_err()
+            );
+        }
+        let mut account = account;
+        account.email = "existing@example.test".into();
+        let updated = merge_refreshed_profile(
+            &account,
+            &json!({"data": {"accounts": [
+                {"uid": "personal-user", "nickname": "Current name"}
+            ]}}),
+        )
+        .unwrap();
+        assert_eq!(updated.email, "existing@example.test");
+        assert_eq!(updated.nickname.as_deref(), Some("Current name"));
+    }
+
+    #[test]
+    fn empty_and_whitespace_enterprise_ids_are_personal() {
+        for id in [None, Some(""), Some("   ")] {
+            assert_eq!(normalize_non_empty(id), None);
+        }
+        assert_eq!(
+            normalize_non_empty(Some(" enterprise-id ")).as_deref(),
+            Some("enterprise-id")
+        );
+    }
 
     #[test]
     fn auth_url_contains_detected_version_and_login_session() {
