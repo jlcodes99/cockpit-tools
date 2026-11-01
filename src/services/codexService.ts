@@ -189,11 +189,6 @@ export async function forceRefreshCodexTokens(accountId: string): Promise<CodexA
   return await invoke<CodexAccount>('force_refresh_codex_tokens', { accountId });
 }
 
-/** 清除官方客户端登录页观测标识，不修改 Token 或远端授权状态。 */
-export async function clearClientAuthObservation(accountId: string): Promise<boolean> {
-  return await invoke<boolean>('codex_clear_client_auth_observation', { accountId });
-}
-
 /** 切换 Codex 账号 */
 export async function switchCodexAccount(
   accountId: string,

@@ -44,10 +44,7 @@ fn bounded_parameters(value: &Value, depth: usize) -> Result<(), String> {
                 let key = key.to_ascii_lowercase().replace('_', "-");
                 if matches!(
                     key.as_str(),
-                    "dialer-proxy"
-                        | "interface-name"
-                        | "routing-mark"
-                        | "detour"
+                    "detour"
                         | "bind-interface"
                         | "config-path"
                         | "client-cert"
@@ -95,6 +92,11 @@ pub fn validate_native_proxy(proxy: &Value) -> Result<(), String> {
         return Err(UNSUPPORTED.into());
     }
     bounded_parameters(proxy, 0)?;
+    if let Some(dialer) = proxy.get("dialer-proxy") {
+        if !dialer.as_str().is_some_and(|s| s.is_empty() || super::short_text(s)) {
+            return Err(INVALID.into());
+        }
+    }
     // The pinned engine decodes native protocol parameters and ignores unknown
     // subscription metadata. Keeping a second option whitelist here rejects
     // valid configurations as upstream adapters evolve. Preserve all parameters
@@ -287,7 +289,9 @@ pub fn runtime_parts(input: Value) -> Result<(Vec<Value>, Vec<Value>), String> {
         let name = proxy["name"].as_str().ok_or(INVALID)?;
         if !super::short_text(name)
             || super::is_builtin_name(name)
-            || graph.insert(name.into(), Vec::new()).is_some()
+            || graph.insert(name.into(), proxy.get("dialer-proxy")
+                .and_then(Value::as_str).filter(|s| !s.is_empty() && *s != "DIRECT")
+                .map(|s| vec![s.to_owned()]).unwrap_or_default()).is_some()
         {
             return Err(INVALID.into());
         }
@@ -481,9 +485,6 @@ mod tests {
             "plugin":"future-plugin","ports":"core-owned-syntax"});
         assert!(validate_native_proxy(&proxy).is_ok());
         for extra in [
-            json!({"Dialer_Proxy":"DIRECT"}),
-            json!({"Interface_Name":"eth0"}),
-            json!({"routing-mark":123}),
             json!({"certificate":"/private/cert.pem"}),
             json!({"CA":"/private/ca.pem"}),
             json!({"ca_str":"/private/ca.pem"}),

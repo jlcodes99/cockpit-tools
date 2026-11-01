@@ -6,6 +6,8 @@ use std::collections::HashSet;
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ImportOptions {
+    pub resource_directory: String,
+    pub rules_name: String,
     pub protocol: String,
     pub fallback_name: String,
     pub format: String,
@@ -15,6 +17,8 @@ pub struct ImportOptions {
 impl Default for ImportOptions {
     fn default() -> Self {
         Self {
+            resource_directory: String::new(),
+            rules_name: "PROFILE".into(),
             fallback_name: "Proxy list".into(),
             protocol: "socks5".into(),
             format: "auto".into(),
@@ -37,6 +41,8 @@ pub struct PreviewRow {
 }
 #[derive(Serialize)]
 pub struct ImportPreview {
+    pub native_profile: bool,
+    pub pending_providers: usize,
     pub structured: bool,
     pub rows: Vec<PreviewRow>,
     pub valid: usize,
@@ -186,14 +192,14 @@ pub fn prepare(
     // Structured formats preserve group references and existing parser behavior.
     if trimmed
         .lines()
-        .any(|line| line.starts_with("proxies:") || line.starts_with("proxy-groups:"))
+        .any(|line| line.starts_with("proxies:") || line.starts_with("proxy-groups:") || line.starts_with("proxy-providers:"))
         || trimmed.starts_with('{')
         || (!trimmed.contains(':') && !trimmed.contains('@') && !trimmed.contains('\n'))
     {
         if let Ok(mut catalog) = parser::parse(trimmed) {
             let mut seen = existing.clone();
             let mut rows = Vec::new();
-            let grouped = !catalog.groups.is_empty();
+            let grouped = !catalog.groups.is_empty() || catalog.nodes.iter().any(|n| parser::dialer(n).is_some());
             let mut retained = Vec::new();
             let mut names = HashSet::new();
             for (index, mut node) in catalog.nodes.into_iter().enumerate() {
@@ -217,7 +223,8 @@ pub fn prepare(
             let duplicates = rows.iter().filter(|r| r.duplicate).count();
             let invalid = rows.iter().filter(|r| r.error.is_some()).count();
             return Ok(Prepared {
-                preview: ImportPreview {
+                preview: ImportPreview { native_profile: false,
+                    pending_providers: 0,
                     structured: true,
                     valid: rows.len() - invalid - duplicates,
                     invalid,
@@ -297,10 +304,12 @@ pub fn prepare(
     }
     Ok(Prepared {
         catalog: ParsedCatalog {
+            native: None,
             nodes,
             groups: vec![],
         },
-        preview: ImportPreview {
+        preview: ImportPreview { native_profile: false,
+            pending_providers: 0,
             structured: false,
             rows,
             valid,

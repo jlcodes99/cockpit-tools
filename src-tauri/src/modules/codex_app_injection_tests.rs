@@ -1092,3 +1092,28 @@ fn app_server_auth_snapshot_never_contains_auth_contents() {
     assert!(!snapshot.contains("secret-refresh"));
     let _ = std::fs::remove_dir_all(directory);
 }
+
+#[test]
+fn device_restriction_cdp_requires_official_auth_endpoint_and_explicit_error() {
+    let response = json!({"result":{"body":r#"{"error":{"message":"Device limit reached"}}"#}});
+    assert!(super::official_device_limit_response("https://chatgpt.com/backend-api/accounts/check/v4", &response));
+    for url in ["https://example.org/backend-api/accounts/check/v4", "https://chatgpt.com.evil.test/backend-api/accounts/check/v4",
+        "http://chatgpt.com/backend-api/accounts/check/v4", "https://chatgpt.com/backend-api/conversation"] {
+        assert!(!super::official_device_limit_response(url, &response));
+    }
+    assert!(!super::official_device_limit_response("https://chatgpt.com/backend-api/accounts/check/v4", &json!({"result":{"body":"unauthorized"}})));
+}
+
+#[test]
+fn device_restriction_does_not_assign_another_login_to_the_profile_account() {
+    let known = super::ProfileOAuthIdentityObservation::Matched {
+        account_id: "local-a".into(),
+        observed: CodexOfficialOAuthIdentity { email: "fixture@example.test".into(), user_id: None,
+            account_id: Some("remote-a".into()), organization_id: None },
+    };
+    assert_eq!(super::confirmed_device_limit_subject(&known, &known, Some("remote-a")), Some("local-a".into()));
+    assert_eq!(super::confirmed_device_limit_subject(&known, &known, None), None);
+    assert_eq!(super::confirmed_device_limit_subject(&known, &known, Some("remote-b")), None);
+    let unknown = super::ProfileOAuthIdentityObservation::Unknown { account_id: None, reason: "test" };
+    assert_eq!(super::confirmed_device_limit_subject(&known, &unknown, Some("remote-a")), None);
+}

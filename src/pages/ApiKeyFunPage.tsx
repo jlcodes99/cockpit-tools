@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import {
   BookmarkPlus,
   CheckCircle2,
-  ExternalLink,
   Eye,
   EyeOff,
   KeyRound,
@@ -22,7 +21,6 @@ import {
 } from '../services/modelProviderUsageService';
 import {
   APIKEY_FUN_GLOBAL_ENDPOINT,
-  APIKEY_FUN_REGISTER_URL,
   APIKEY_FUN_SOURCE_TAG,
   buildApiKeyFunProviderBaseUrl,
 } from '../utils/apikeyFunLinks';
@@ -32,8 +30,8 @@ import {
   type ApiKeyFunPrefillTarget,
 } from '../utils/apiKeyFunPrefill';
 import { ApiKeyFunKeyConfigModal } from '../components/apiKeyFun/ApiKeyFunKeyConfigModal';
+import { ApiKeyFunPromotionHeader } from '../components/apiKeyFun/ApiKeyFunPromotionHeader';
 import { useSponsorStore } from '../stores/useSponsorStore';
-import apiKeyFunIcon from '../assets/icons/apikey-fun.png';
 import './ApiKeyFunPage.css';
 
 type ManagedApiKey = {
@@ -503,32 +501,7 @@ export function ApiKeyFunPage() {
 
   return (
     <div className="apikey-fun-page">
-      <header className="apikey-fun-header-brand">
-        <div className="apikey-fun-brand-main">
-          <img src={apiKeyFunIcon} alt="" className="apikey-fun-brand-logo" />
-          <div className="apikey-fun-brand-text">
-            <div className="apikey-fun-eyebrow-container">
-              <span className="apikey-fun-eyebrow">{t('apiKeyFun.eyebrow', '中转站')}</span>
-            </div>
-            <h1>{t('apiKeyFun.title', 'APIKEY.FUN 中转站')}</h1>
-            <p>
-              {t(
-                'apiKeyFun.description',
-                'Cockpit 官方合作中转站，为用户提供稳定、开放、高性价比的大模型 API 接入服务。支持 Claude、ChatGPT、Grok、Gemini、智谱 GLM、Kimi、DeepSeek 等主流模型，适合在 Codex、Gemini CLI、Claude Code 及其他开发工具中统一配置使用。通过 Cockpit 专属链接注册，可享受最高充值永久 95 折优惠。',
-              )}
-            </p>
-          </div>
-        </div>
-        <div className="apikey-fun-brand-actions">
-          <button
-            className="btn apikey-fun-register-btn"
-            onClick={() => openExternal(APIKEY_FUN_REGISTER_URL)}
-          >
-            <ExternalLink size={15} />
-            <span>{t('apiKeyFun.viewNow', '立即查看')}</span>
-          </button>
-        </div>
-      </header>
+      <ApiKeyFunPromotionHeader onOpen={openExternal} />
 
       <div className="apikey-fun-dashboard-grid">
         <main className="apikey-fun-main-col">

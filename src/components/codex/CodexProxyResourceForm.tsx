@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { open } from '@tauri-apps/plugin-dialog';
 import { useModalFocusTrap } from '../../hooks/useModalFocusTrap';
 import { useModalScrollLock } from '../../hooks/useModalScrollLock';
 import { useEscCloseTopmost } from '../../hooks/useEscClose';
@@ -19,6 +20,7 @@ export function CodexProxyResourceForm({ busy, error, onSubmit, onClose, onCance
   const [mode, setMode] = useState<'paste' | 'manual'>('paste');
   const [kind, setKind] = useState('auto');
   const [name, setName] = useState('');
+  const [resourceDirectory, setResourceDirectory] = useState('');
   const [input, setInput] = useState('');
   const [form, setForm] = useState(emptyProxyForm);
   const [protocol, setProtocol] = useState(rememberedProtocol);
@@ -38,7 +40,8 @@ export function CodexProxyResourceForm({ busy, error, onSubmit, onClose, onCance
   const value = mode === 'manual' ? proxyFormUrl(form) ?? '' : input;
   const resolvedKind = mode === 'manual' ? 'manual' : kind === 'auto' ? detectProxyInputKind(value) : kind as 'manual' | 'subscription';
   const fallbackName = t('codex.proxy.catalog.listName');
-  const options = { protocol, format, skipInvalid, skipDuplicates, fallbackName };
+  const directoryError = error === t('codex.proxy.catalog.resourceDirectoryRequired') ? error : '';
+  const options = { protocol, format, skipInvalid, skipDuplicates, fallbackName, resourceDirectory, rulesName: t('codex.proxy.catalog.rulesName') };
   useEffect(() => {
     let stale = false; setPreview(null); setPreviewError('');
     if (!value.trim() || resolvedKind !== 'manual') { setPreviewing(false); return; }
@@ -62,7 +65,7 @@ export function CodexProxyResourceForm({ busy, error, onSubmit, onClose, onCance
     const start = input.split('\n').slice(0, line - 1).reduce((n, text) => n + text.length + 1, 0);
     field.focus(); field.setSelectionRange(start, input.indexOf('\n', start) < 0 ? input.length : input.indexOf('\n', start));
   };
-  const blocked = resolvedKind === 'manual' && (!preview || previewing || !!previewError || (preview.invalid > 0 && !skipInvalid) || preview.valid + (skipDuplicates ? 0 : preview.duplicates) === 0);
+  const blocked = resolvedKind === 'manual' && (!preview || previewing || !!previewError || (preview.invalid > 0 && !skipInvalid) || (!preview.nativeProfile && !preview.pendingProviders && preview.valid + (skipDuplicates ? 0 : preview.duplicates) === 0));
   const submit = () => { if (!value.trim() || blocked) { setInvalid(true); return; } onSubmit({ name: name.trim(), kind: resolvedKind, input: value, options }); };
   return createPortal(<div className="modal-overlay codex-resource-add-overlay">
     <div ref={root} className="modal codex-resource-add-dialog" role="dialog" aria-modal="true" aria-labelledby="codex-resource-add-title" tabIndex={-1}>
@@ -100,10 +103,19 @@ export function CodexProxyResourceForm({ busy, error, onSubmit, onClose, onCance
           aria-invalid={invalid && !value && ['host', 'port'].includes(field)} onChange={(event) => { setForm({ ...form, [field]: event.target.value }); edit(); }} />
         {field === 'password' && <button type="button" className="btn btn-secondary compact" disabled={busy} aria-label={t(revealed ? 'codex.proxy.hideCredentials' : 'codex.proxy.showCredentials')} onClick={() => setRevealed(!revealed)}>{revealed ? <EyeOff size={14} /> : <Eye size={14} />}</button>}</div></label>)}
     </div>}
+    {mode === 'paste' && <label className="codex-proxy-field"><span>{t('codex.proxy.catalog.resourceDirectory')}</span>
+      <div className="codex-proxy-secret"><input value={resourceDirectory} disabled={busy} autoComplete="off" aria-invalid={!!directoryError} onChange={(event) => { setResourceDirectory(event.target.value); setPreviewError(''); edit(); }} />
+      <button type="button" className="btn btn-secondary compact" disabled={busy} onClick={() => {
+        setPreviewError(''); void open({ directory: true, multiple: false }).then((selected) => {
+          if (typeof selected === 'string') { setResourceDirectory(selected); edit(); }
+        }).catch(() => setPreviewError('codex.proxy.catalog.resourceMissing'));
+      }}>{t('codex.proxy.catalog.browseResources')}</button></div>
+      <small>{t('codex.proxy.catalog.resourceDirectoryHint')}</small></label>}
+    {directoryError && <span className="codex-strategy-field-error" role="alert">{directoryError}</span>}
     {previewing && <p role="status" className="codex-proxy-page-note">{t('codex.proxy.catalog.recognizing')}</p>}
     {previewError && <div role="alert" tabIndex={-1} className="codex-proxy-page-error">{t(previewError)}</div>}
     {preview && <div className="codex-resource-preview">
-      <p role="status">{t('codex.proxy.catalog.previewCount', { valid: preview.valid, invalid: preview.invalid, duplicates: preview.duplicates })}</p>
+      <p role="status">{preview.nativeProfile ? t('codex.proxy.catalog.nativePreview') : preview.pendingProviders ? t('codex.proxy.catalog.pendingProviders', { count: preview.pendingProviders }) : t('codex.proxy.catalog.previewCount', { valid: preview.valid, invalid: preview.invalid, duplicates: preview.duplicates })}</p>
       <div className="codex-resource-preview-rows">{[...preview.rows].sort((a, b) => Number(!!b.error) - Number(!!a.error)).slice(0, 100).map((row) => <div key={row.line} className={row.error ? 'invalid' : ''}>
         <button type="button" className="btn btn-secondary compact" disabled={busy || preview.structured} onClick={() => locateLine(row.line)}>{preview.structured ? '#' + row.line : t('codex.proxy.catalog.line', { line: row.line })}</button><span>
           {row.error ? t(row.error === 'IMPORT_AMBIGUOUS' ? 'codex.proxy.catalog.ambiguous' : row.error === 'IMPORT_INVALID' ? 'codex.proxy.catalog.invalidInput' : catalogUnsupportedKey({ error: row.error })) : row.name}
@@ -114,7 +126,7 @@ export function CodexProxyResourceForm({ busy, error, onSubmit, onClose, onCance
         {preview.duplicates > 0 && <button type="button" className={'btn btn-secondary compact' + (skipDuplicates ? ' active' : '')} disabled={busy} aria-pressed={skipDuplicates} onClick={() => { setSkipDuplicates(!skipDuplicates); edit(); }}>{t('codex.proxy.catalog.skipDuplicates')}</button>}</div>
     </div>}
     {invalid && mode === 'manual' && <div className="codex-proxy-page-error" role="alert">{t('codex.proxy.catalog.invalidInput')}</div>}
-    {error && <div className="codex-proxy-page-error" role="alert" tabIndex={-1}>{error}</div>}
+    {error && !directoryError && <div className="codex-proxy-page-error" role="alert" tabIndex={-1}>{error}</div>}
     <details className="codex-proxy-page-details codex-resource-import-notice"><summary>{t('common.advancedSettings')}</summary><p className="codex-proxy-page-note">{t('codex.proxy.catalog.importNotice')}</p></details>
     </div>
     <footer className="modal-footer">

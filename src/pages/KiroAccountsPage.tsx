@@ -1,3 +1,4 @@
+import { formatKiroImportError } from '../services/kiroImportErrors';
 import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import {
   Plus,
@@ -619,9 +620,11 @@ export function KiroAccountsPage() {
       const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
       const isSelected = selected.has(account.id);
       const isCurrent = currentAccountId === account.id;
-      const quotaError = account.quota_query_last_error?.trim();
+      const quotaError = account.quota_query_last_error?.trim()
+        ? formatKiroImportError(account.quota_query_last_error.trim(), t) : undefined;
       const hasQuotaData = hasKiroQuotaData(account);
-      const statusReason = presentation.accountStatusReason;
+      const statusReason = presentation.accountStatusReason
+        ? formatKiroImportError(presentation.accountStatusReason, t) : null;
       const isBanned = presentation.isBanned;
       const hasStatusError = presentation.hasStatusError;
       const bannedTitle = statusReason || t('accounts.status.forbidden_tooltip');
@@ -771,9 +774,11 @@ export function KiroAccountsPage() {
       const visibleTags = accountTags.slice(0, 3);
       const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
       const isCurrent = currentAccountId === account.id;
-      const quotaError = account.quota_query_last_error?.trim();
+      const quotaError = account.quota_query_last_error?.trim()
+        ? formatKiroImportError(account.quota_query_last_error.trim(), t) : undefined;
       const hasQuotaData = hasKiroQuotaData(account);
-      const statusReason = presentation.accountStatusReason;
+      const statusReason = presentation.accountStatusReason
+        ? formatKiroImportError(presentation.accountStatusReason, t) : null;
       const isBanned = presentation.isBanned;
       const hasStatusError = presentation.hasStatusError;
       const bannedTitle = statusReason || t('accounts.status.forbidden_tooltip');

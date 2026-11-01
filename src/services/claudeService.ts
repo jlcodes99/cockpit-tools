@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { withClaudeProfileErrors } from './claudeProfileErrors';
 import type {
   ClaudeAccount,
   ClaudeDesktopGatewayConnectionMode,
@@ -298,7 +299,7 @@ export async function getClaudeAccountsIndexPath(): Promise<string> {
 }
 
 export async function switchClaudeAccount(accountId: string): Promise<string> {
-  return await invoke('switch_claude_account', { accountId });
+  return await withClaudeProfileErrors(() => invoke('switch_claude_account', { accountId }));
 }
 
 export async function getClaudeCliLaunchCommand(

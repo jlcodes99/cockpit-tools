@@ -432,6 +432,7 @@ async fn catalog_refresh_rebuilds_encrypted_snapshot_and_preserves_selection_ref
     let fixture = Fixture::new();
     let target = fixture.provider();
     let catalog = |port| super::super::codex_proxy_subscription_parser::ParsedCatalog {
+        native: None,
         nodes: vec![super::super::codex_proxy_subscription_parser::ParsedNode {
             id: "stable-node".into(),
             name: "Node".into(),
@@ -623,6 +624,7 @@ async fn follow_unified_changes_effective_route_but_never_changes_api_upstream()
     let api_service = codex_instance::CODEX_API_SERVICE_BIND_ACCOUNT_ID;
     assert_eq!(resolve(&id).await.unwrap(), CodexLaunchProxy::Inherit);
     let catalog = super::super::codex_proxy_subscription_parser::ParsedCatalog {
+        native: None,
         nodes: vec![super::super::codex_proxy_subscription_parser::ParsedNode {
             id: "unified-node".into(),
             name: "Node".into(),

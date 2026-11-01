@@ -158,6 +158,9 @@
     "providerClear": "選択を解除"
   },
   "common": {
+    "profileRestoreBusy": "ログイン状態を復元中です。しばらくして再試行してください。",
+    "profileRestoreInvalid": "ログイン状態の保存先が無効です。アカウントを再インポートしてください。",
+    "profileRestoreRecoveryFailed": "ログイン状態の復元に失敗しました。バックアップは保持されています：{{detail}}",
     "dataQueryBusy": "データを処理中です。しばらくしてから再試行してください。",
     "apiBudget": {
       "keyScope": "この Key",
@@ -432,7 +435,11 @@
           "statusSkipped": "スキップ",
           "statusPending": "インポート待ち"
         },
-        "invalidJson": "JSON の形式が無効です。ファイルまたは貼り付けた内容を確認してください。"
+        "invalidJson": "JSON の形式が無効です。ファイルまたは貼り付けた内容を確認してください。",
+        "empty": "インポート内容が空です。",
+        "sizeLimit": "ファイルは {{limit}} MiB 以下にしてください。",
+        "countLimit": "一度にインポートできるのは {{count}} アカウントまでです。",
+        "itemFailed": "項目 {{index}}：{{error}}"
       },
       "externalImport": {
         "bundleInvalidJson": "インポートパッケージは有効な JSON ではありません",
@@ -543,6 +550,8 @@
         "title": "アカウント概要"
       },
       "quota": {
+        "usageWithUnit": "使用量（{{unit}}）",
+        "usage": "使用量",
         "noData": "クォータデータなし",
         "queryFailed": "割り当ての取得に失敗しました",
         "resetDone": "リセット済み",
@@ -631,6 +640,29 @@
         "missingTiming": "有効な出力時間が記録されていません。",
         "shortWindow": "出力の観測時間が100ミリ秒未満です。"
       }
+    },
+    "deviceRestriction": {
+      "title": "端末制限の記録",
+      "badge": "端末制限あり",
+      "paused": "明確な端末制限を検出したため、この操作の自動試行を停止しました。アカウント画面で記録を確認してください。",
+      "note": "これはこの端末での観測記録であり、OpenAI の端末枠ではありません。アカウントやローカル認証情報を削除しても、サーバー側の制限が解除されるとは限りません。",
+      "retryNote": "再試行を許可しても制限解除とは記録しません。再び明確な制限を受けると停止します。",
+      "desktop": "デスクトップ認証",
+      "quota": "使用枠の確認",
+      "api": "API リクエスト",
+      "oauth": "OAuth 認証",
+      "token": "トークン更新",
+      "recovered": "操作が復旧",
+      "pausedLabel": "試行を停止中",
+      "retryEnabled": "再試行を許可済み",
+      "observed": "初回：{{first}} · 最新：{{last}} · 観測 {{count}} 回",
+      "check": "再確認",
+      "allowRetry": "再試行を許可",
+      "help": "公式ヘルプ",
+      "support": "サポート",
+      "failed": "操作を完了できませんでした。直近の状態を保持しています。再試行してください。",
+      "loginAttempt": "アカウント未確認の認証",
+      "removed": "削除済みローカルアカウント"
     }
   },
   "nav": {
@@ -1369,8 +1401,6 @@
       "codexPreserveExternalBridge": "外部ブリッジを保持",
       "codexPreserveExternalBridgeDesc": "OAuth アカウント切替時、ローカル記録で検証済みの Codex Web GPT ブリッジを保持します。既定はオフです。",
       "codexEnhancements": {
-        "nativeFast": "標準 Fast 切替",
-        "nativeFastDesc": "API Key アカウントで公式の速度メニューを有効にし、モデルが対応する速度を表示します。実際の対応状況と料金は API 提供元によります。",
         "quotaCompat": "併用時の上限互換",
         "quotaCompatDesc": "実際の OAuth ログインと外部 API 経路の併用時のみ、契約の利用上限によるローカル API 送信の制限を防ぎます。実際の使用量と画像上限は変更しません。",
         "restartHint": "初期状態は有効です。変更後は対象の Codex インスタンスを再起動し、Cockpit Tools を起動したままにしてください。ネイティブの音声入力はクライアントの機能と設定に従います。Cockpit は処理を置き換えたり、強制的に有効化したりしません。",
@@ -2676,14 +2706,8 @@
       "unsupportedCountryRegion": "現在のネットワーク地域では Codex 認証を更新できません。OpenAI 認証サービスがこのネットワーク出口を拒否しました。対応地域に切り替えてから再試行してください。"
     },
     "switchAuth": {
-      "apiOnlyTitle": "クライアントのログインが必要",
       "reauthorizeTitle": "Codex の認証期限切れ",
-      "apiOnlyDescription": "現在のクライアントがログインページに移動しました。クライアントを復元するには再認証してください。しばらくは API サービスを引き続き利用できます。",
-      "observationStatus": "ログインページへのリダイレクトを検出しました",
-      "observationTime": "最新の確認：{{time}}",
-      "loginRedirectTime": "ログインページへの最新のリダイレクト：{{time}}",
       "observationInstance": "確認したインスタンス：{{instance}}",
-      "launchTime": "インスタンスの起動時刻：{{time}}",
       "reauthorizeDescription": "ログイン情報を更新できず、access_token も API サービスで利用できません。続行するには再認証してください。",
       "idTokenUnavailable": "クライアント ID 情報の期限が切れ、自動更新でも有効な id_token を取得できませんでした。",
       "reasonLabel": "理由",
@@ -2696,10 +2720,7 @@
       "startingInstanceAfterReauth": "認証情報を更新しました。インスタンスを再起動しています...",
       "startInstanceAfterReauthFailed": "認証情報は更新されましたが、インスタンスを起動できませんでした：{{error}}",
       "reauthorizedAndStartedInstance": "再認証してインスタンスを起動しました",
-      "apiOnlyBadge": "再認証必要",
-      "clearClientAuth": "警告をクリア",
-      "clearClientAuthSuccess": "クライアントの警告をクリアしました",
-      "clearClientAuthFailed": "クライアントの警告をクリアできませんでした：{{error}}"
+      "apiTokenUsableDescription": "一部のログイン認証情報には再認証が必要です。現在のアクセストークンは引き続き API サービスで使用できます。"
     },
     "current": "現在",
     "empty": {
@@ -4752,8 +4773,8 @@
         "allStatuses": "全ステータス",
         "allGatewayModes": "すべてのモード",
         "sessionFilter": "会話",
-      "sessionPlaceholder": "会話 ID",
-      "modelFilter": "モデル",
+        "sessionPlaceholder": "会話 ID",
+        "modelFilter": "モデル",
         "modelPlaceholder": "モデル ID",
         "accountFilter": "アカウント",
         "accountPlaceholder": "メールまたはアカウント ID",
@@ -5535,7 +5556,7 @@
         "subscriptionUrl": "サブスクリプション URL",
         "nodeLinks": "ノードリンクまたは設定",
         "import": "インポート",
-        "importNotice": "URL とノード認証情報はローカルで暗号化して保存します。取得リクエストにアカウントの Token は含めません。",
+        "importNotice": "設定とリソースのスナップショットは暗号化して保存し、実行時に専用フォルダーで復号します。サブスクリプションとリソースの取得にアカウントのトークンは送信しません。",
         "intro": "購読またはノードを取り込んでテストし、アカウント一覧から選択して割り当てます。",
         "emptyTitle": "最初のプロキシを追加",
         "emptyHint": "サブスクリプション、ノードリンク、HTTP / SOCKS5 に対応。アカウント追加前でもインポートとテストができます。",
@@ -5580,7 +5601,7 @@
         "unsupported": "未対応",
         "invalidInput": "名前と有効な URL、ノードリンク、またはプロキシ設定を入力してください。",
         "downloadFailed": "サブスクリプションをダウンロードできませんでした。ネットワークとプロキシ設定を確認して再試行してください。",
-        "downloadRedirect": "別のサイトへの転送または転送回数の超過により、サブスクリプションのダウンロードを停止しました。",
+        "downloadRedirect": "サブスクリプションのリダイレクトが無効か、上限を超えています。",
         "downloadDenied": "サブスクリプションサーバーがアクセスを拒否しました（HTTP 401/403）。リンクと有効期限を確認してください。",
         "downloadTls": "サブスクリプション接続の TLS ハンドシェイクまたは証明書検証に失敗しました。ネットワークとプロキシ設定を確認してください。",
         "timeout": "操作がタイムアウトしました。更新して結果を確認してから再試行してください。",
@@ -5598,6 +5619,7 @@
         "loadBalanceGroup": "負荷分散",
         "reasonStrategy": "このグループ方式には未対応です。展開して利用可能なノードを選んでください。",
         "reasonOptions": "未対応のプロトコルまたは設定項目が含まれています。",
+        "reasonProviderConfig": "このノード一覧の取得元、フィルター、変換設定には未対応です。",
         "reasonProvider": "このグループには、まだ読み込まれていない外部ノード配信元が必要です。",
         "reasonMembers": "グループのメンバーが検証に失敗しました。個別の理由を確認してください。",
         "reasonInvalid": "必須設定が不足しているか、形式が無効です。",
@@ -5619,6 +5641,14 @@
         "defaultProtocol": "省略時のプロトコル",
         "credentialFormat": "認証情報の形式",
         "recognizing": "解析中…",
+        "nativePreview": "インポート時に Mihomo が設定を直接解析し、リソースを読み込みます。プレビューではファイルやネットワークにアクセスしません。",
+        "resourceDirectory": "リソースフォルダー",
+        "browseResources": "フォルダー選択",
+        "resourceDirectoryHint": "ローカルファイルがある場合はリソースフォルダーを選択します。内容は専用の実行フォルダーにコピーされ、暗号化されたスナップショットとして保存されます。",
+        "resourceDirectoryRequired": "このサブスクリプションのリソースフォルダーを選択してください。",
+        "resourceMissing": "ローカルリソースを利用できません。フォルダーを確認するか再インポートしてください。",
+        "rulesName": "サブスクリプションのルール",
+        "pendingProviders": "インポート時に {{count}} 件のリモートノード一覧を読み込みます。プレビューではダウンロードしません。",
         "previewCount": "有効 {{valid}} · 要確認 {{invalid}} · 重複 {{duplicates}}",
         "line": "{{line}} 行目",
         "ambiguous": "形式を判別できません。認証情報の形式を選ぶか、完全なプロキシ URL を使用してください。",
@@ -6524,8 +6554,9 @@
       "desc": "Kiro アクセス トークンまたはエクスポートされた JSON データを貼り付けます。"
     },
     "import": {
-      "localDesc": "ローカル Kiro クライアントまたは JSON ファイルから Kiro アカウント データをインポートします。",
-      "localClient": "地元キロから輸入"
+      "localDesc": "ローカルまたは JSON からインポートできます。JSON のアカウントは先に保存し、認証状態と利用枠をバックグラウンドで更新します。",
+      "localClient": "地元キロから輸入",
+      "invalidCredentials": "認証情報の項目が不足しているか未対応です。アカウントを再度エクスポートしてください。"
     },
     "injectToVSCode": "キロに切り替えます"
   },
@@ -7708,6 +7739,17 @@
       "family": "グループ",
       "platform": "現在のシステム",
       "unsupportedGroup": "このグループにはワンクリック書き込みできるクライアントがまだありません。"
+    },
+    "campaign": {
+      "badge": "11.11",
+      "title": "チャージで11.11%増額",
+      "description": "新規・既存ユーザーともに対象です。",
+      "period": "開催期間：2026年11月1日〜11日（UTC+8）",
+      "terms": "詳細条件はキャンペーンページをご確認ください。",
+      "action": "詳細を見る",
+      "inactive": "現在キャンペーン期間外です。",
+      "label": "11.11 期間限定キャンペーン",
+      "promotionDescription": "Cockpit 公式提携中継サービスの11.11キャンペーン。新規・既存ユーザーともに、期間中のチャージで11.11%増額。Claude、ChatGPT、Geminiなどの主要モデルに対応しています。"
     }
   },
   "grok": {

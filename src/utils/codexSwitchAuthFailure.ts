@@ -190,7 +190,7 @@ export function isCodexIdTokenReauthReason(reason?: string | null): boolean {
 
 /**
  * 服务端明确撤销 Codex 授权时，账号进入最高优先级的终止状态。
- * 这类状态表示 refresh_token 无法恢复，不能再与“客户端需授权但 API 仍可用”并列展示。
+ * 这类状态表示 refresh_token 无法恢复，不能再与“凭据失效但 API 暂时可用”并列展示。
  */
 export function isCodexServerRevokedReauth(
   account?: CodexAccount | null,
@@ -232,7 +232,7 @@ export function isCodexRefreshTokenNoticeOnly(
   );
 }
 
-export function isCodexClientReauthNoticeOnly(
+export function isCodexApiUsableReauthNotice(
   account?: CodexAccount | null,
   nowSeconds = Math.floor(Date.now() / 1000),
 ): boolean {

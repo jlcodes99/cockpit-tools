@@ -149,6 +149,10 @@ async fn upstream(
             r#"{"error":{"code":"previous_response_not_found","message":"fixture upstream checkpoint unavailable","param":"previous_response_id"}}"#,
         )).unwrap();
     }
+    if matches!(source.mode, 401 | 403 | 429 | 503) {
+        return Response::builder().status(source.mode).header("content-type", "application/json")
+            .body(Body::from(r#"{"error":{"message":"Device limit reached"}}"#)).unwrap();
+    }
     if source.mode == 400 {
         return Response::builder()
             .status(400)
@@ -487,4 +491,19 @@ async fn automatic_history_compact_accepts_complete_unknown_cipher_without_a_gen
     drop(connection);
     service.shutdown(Duration::from_secs(2)).await.unwrap();
     task.abort();
+}
+
+#[tokio::test]
+async fn device_restriction_http_is_terminal_without_refresh_rotation_or_replay() {
+    for status in [401, 403, 429, 503] {
+        let (_directory, mut service, source, task) = fixture_with_route(status, true).await;
+        let response = reqwest::Client::builder().no_proxy().build().unwrap()
+            .post(format!("http://{}/v1/responses", service.addr)).bearer_auth("test")
+            .json(&body(false)).send().await.unwrap();
+        let payload = response.text().await.unwrap();
+        assert!(payload.contains("Device limit reached"), "{status}: {payload}");
+        assert_eq!(source.seen.lock().unwrap().len(), 1, "device errors must not consume credential retries");
+        service.shutdown(Duration::from_secs(2)).await.unwrap();
+        task.abort();
+    }
 }

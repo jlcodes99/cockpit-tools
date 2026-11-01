@@ -74,6 +74,7 @@ import {
   formatWindsurfResetTime,
   getWindsurfAccountDisplayEmail,
   getWindsurfOfficialUsageMode,
+  getWindsurfMeteredUsage,
   getWindsurfPlanBadgeClass,
   getWindsurfCreditsSummary,
   getWindsurfPlanDisplayName,
@@ -1074,6 +1075,7 @@ export function buildGitHubCopilotAccountPresentation(
   const usage = getGitHubCopilotUsage(account);
   const includedText = t("githubCopilot.usage.included", "Included");
   const premiumUsageText =
+    account.copilot_token_based_billing !== true &&
     usage.usedPremiumRequests != null &&
     usage.totalPremiumRequests != null &&
     usage.totalPremiumRequests > 0
@@ -1137,7 +1139,9 @@ export function buildGitHubCopilotAccountPresentation(
       },
       {
         key: "premium",
-        label: t("githubCopilot.columns.premium", "Premium requests"),
+        label: account.copilot_token_based_billing === true
+          ? t("common.shared.quota.usage", "Usage")
+          : t("githubCopilot.columns.premium", "Premium requests"),
         percentage: premium.percentage,
         quotaClass: premium.quotaClass,
         valueText: premium.valueText,
@@ -1163,7 +1167,20 @@ export function buildWindsurfAccountPresentation(
     ? formatWindsurfResetTime(credits.planEndsAt, t)
     : t("common.shared.credits.planEndsUnknown", "配额周期时间未知");
 
-  if (usageMode === "quota") {
+  if (usageMode === "acu") {
+    for (const meter of getWindsurfMeteredUsage(account)) {
+      const percentage = meter.used != null && meter.limit != null && meter.limit > 0
+        ? clampPercent(meter.used / meter.limit * 100) : null;
+      const used = meter.used == null ? "--" : formatQuotaNumber(meter.used);
+      const limit = meter.limit == null ? "--" : formatQuotaNumber(meter.limit);
+      quotaItems.push({ key: meter.key,
+        label: t("common.shared.quota.usageWithUnit", { unit: meter.unit }),
+        percentage: percentage ?? 0, progressPercent: percentage ?? undefined,
+        valueText: `${used} / ${limit}`, quotaClass: getWindsurfQuotaClass(percentage ?? 0),
+        showProgress: percentage != null,
+      });
+    }
+  } else if (usageMode === "quota") {
     const dailyUsedPercent =
       quotaSummary.dailyUsedPercent == null
         ? null
@@ -1173,7 +1190,7 @@ export function buildWindsurfAccountPresentation(
         ? null
         : clampPercent(quotaSummary.weeklyUsedPercent);
 
-    quotaItems.push({
+    if (!quotaSummary.hideDaily) quotaItems.push({
       key: "daily_quota",
       label: t("windsurf.usageSummary.dailyQuota", "Daily quota usage"),
       percentage: dailyUsedPercent ?? 0,
@@ -1186,7 +1203,7 @@ export function buildWindsurfAccountPresentation(
       resetAt: quotaSummary.dailyResetAt,
       showProgress: true,
     });
-    quotaItems.push({
+    if (!quotaSummary.hideWeekly) quotaItems.push({
       key: "weekly_quota",
       label: t("windsurf.usageSummary.weeklyQuota", "Weekly quota usage"),
       percentage: weeklyUsedPercent ?? 0,
@@ -1608,7 +1625,15 @@ export function buildTraeAccountPresentation(
     usedPercent == null ? null : clampPercent(100 - usedPercent);
   const quotaItems: UnifiedQuotaMetric[] = [];
 
-  if (
+  if (usage.usageModel === 'credits') {
+    quotaItems.push({
+      key: "credits", label: t("common.shared.columns.credits"),
+      percentage: remainingPercent ?? 0, progressPercent: remainingPercent ?? 0,
+      quotaClass: getCursorUsageQuotaClass(usedPercent ?? 0),
+      valueText: `${usage.creditsUsed == null ? "--" : formatQuotaNumber(usage.creditsUsed)} / ${usage.creditsUnlimited ? t("common.shared.quota.unlimited") : usage.creditsLimit == null ? "--" : formatQuotaNumber(usage.creditsLimit)}`,
+      showProgress: usedPercent != null,
+    });
+  } else if (
     remainingPercent != null ||
     usage.spentUsd != null ||
     usage.totalUsd != null ||

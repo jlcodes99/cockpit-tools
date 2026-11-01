@@ -63,7 +63,6 @@ fn refresh_response_preserves_concurrent_metadata_and_quota_write() {
     let mut latest = original.clone();
     latest.account_note = Some("edited during refresh".into());
     latest.tags = Some(vec!["keep".into()]);
-    latest.last_client_auth_observed_at = Some(123);
     latest.quota = Some(
         serde_json::from_value(serde_json::json!({
             "hourly_percentage": 70,
@@ -81,7 +80,6 @@ fn refresh_response_preserves_concurrent_metadata_and_quota_write() {
     for account in [&returned, &persisted] {
         assert_eq!(account.account_note, latest.account_note);
         assert_eq!(account.tags, latest.tags);
-        assert_eq!(account.last_client_auth_observed_at, Some(123));
         assert_eq!(account.quota.as_ref().unwrap().hourly_percentage, 70);
         assert_eq!(account.quota.as_ref().unwrap().weekly_percentage, 80);
         assert_eq!(

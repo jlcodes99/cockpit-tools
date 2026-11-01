@@ -490,13 +490,14 @@ async fn apply_launch_speed_after_auth(
             .unwrap_or_else(|| id.to_string())
     });
     tauri::async_runtime::spawn_blocking(move || {
+        modules::codex_model_catalog_capabilities::prepare_managed_catalog(&profile_dir)?;
         // DeepSeek deliberately removes service_tier as an unsupported option.
         if account_id.as_deref().and_then(modules::codex_account::load_account)
             .is_some_and(|account| modules::codex_account::is_deepseek_account(&account)) {
             return Ok(());
         }
         modules::codex_speed::write_app_speed_for_dir(&profile_dir, speed.clone())?;
-        if let Err(error) = modules::codex_native_speed_catalog::prepare_for_profile(&profile_dir) {
+        if let Err(error) = modules::codex_app_enhancements::prepare_native_fast_for_profile(&profile_dir) {
             if speed == CodexAppSpeed::Ultrafast {
                 return Err(format!("无法准备超高速请求能力: {error}"));
             }
@@ -2745,6 +2746,11 @@ async fn codex_start_instance_internal(
         }),
     );
     if let Some(account_id) = oauth_account_id.as_deref() {
+        if launch_mode_uses_desktop_runtime(&launch_target.launch_mode) {
+            modules::codex_device_restrictions::ensure_allowed(account_id,
+                modules::codex_device_restrictions::DESKTOP).await?;
+        }
+
         if skip_failed_step == Some("checkAccount") {
             emit_codex_instance_launch_step(
                 &app,
@@ -2789,7 +2795,6 @@ async fn codex_start_instance_internal(
                     > oauth_token_generation_before,
                 "localCredentialsValidated": skip_failed_step != Some("checkAccount"),
                 "skippedByUser": skip_failed_step == Some("checkAccount"),
-                "clientAuthStatus": checked_account.client_auth_status.clone(),
             }),
         );
     }

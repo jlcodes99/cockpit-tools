@@ -11,6 +11,8 @@ use url::Url;
 
 #[path = "codex_proxy_subscription_diagnostics.rs"]
 mod diagnostics;
+#[path = "codex_proxy_native_profile.rs"]
+pub(crate) mod native;
 pub(super) use diagnostics::{group_issues, reachable_nodes, GroupIssue};
 
 const INVALID: &str = "SUBSCRIPTION_INVALID";
@@ -23,6 +25,8 @@ type Result<T> = std::result::Result<T, String>;
 // Deliberately no Debug; IPC callers must return their own redacted DTOs.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ParsedCatalog {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native: Option<native::NativeProfile>,
     pub nodes: Vec<ParsedNode>,
     pub groups: Vec<ParsedGroup>,
 }
@@ -33,6 +37,11 @@ pub struct ParsedNode {
     pub protocol: String,
     pub outbound: Option<Value>,
     pub error: Option<String>,
+}
+/// A dependency is part of a node's connection, not an alternative exit.
+pub(crate) fn dialer(node: &ParsedNode) -> Option<&str> {
+    node.outbound.as_ref()?.get("proxy")?.get("dialer-proxy")?
+        .as_str().filter(|s| !s.is_empty())
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ParsedGroup {
@@ -196,6 +205,7 @@ fn links(input: &str) -> Result<ParsedCatalog> {
         });
     }
     let mut catalog = ParsedCatalog {
+        native: None,
         nodes,
         groups: vec![],
     };
@@ -275,7 +285,7 @@ fn bounded_yaml(value: &serde_yaml::Value, depth: usize, budget: &mut usize) -> 
     Ok(())
 }
 
-/// Only imports proxies and groups. Global DNS/rules/scripts/providers are never executed.
+/// Imports nodes/groups and materialized providers. Global DNS/rules/scripts never execute.
 pub fn parse(input: &str) -> Result<ParsedCatalog> {
     if input.len() > MAX_BYTES {
         return Err("SUBSCRIPTION_TOO_LARGE".into());
@@ -303,11 +313,7 @@ pub fn parse(input: &str) -> Result<ParsedCatalog> {
         let decoded = String::from_utf8(b64(&compact)?).map_err(|_| INVALID)?;
         return links(&decoded);
     }
-    // Value rejects duplicate YAML keys; serde_yaml also bounds alias expansion/recursion.
-    reject_yaml_tags(input)?;
-    let yaml: serde_yaml::Value = serde_yaml::from_str(input).map_err(|_| INVALID)?;
-    bounded_yaml(&yaml, 0, &mut 100_000)?;
-    let value = serde_json::to_value(yaml).map_err(|_| INVALID)?;
+    let value = yaml_document(input)?;
     let root = value.as_object().ok_or(INVALID)?;
     let empty = Vec::new();
     let proxies = match root.get("proxies") {
@@ -352,11 +358,20 @@ pub fn parse(input: &str) -> Result<ParsedCatalog> {
         .map(|g| clash_group(g, &node_names, has_providers))
         .collect::<Result<_>>()?;
     let mut catalog = ParsedCatalog {
+        native: None,
         nodes,
         groups: parsed_groups,
     };
     validate(&mut catalog)?;
     Ok(catalog)
+}
+
+pub(crate) fn yaml_document(input: &str) -> Result<Value> {
+    if input.len() > MAX_BYTES { return Err("SUBSCRIPTION_TOO_LARGE".into()); }
+    reject_yaml_tags(input)?;
+    let yaml: serde_yaml::Value = serde_yaml::from_str(input).map_err(|_| INVALID)?;
+    bounded_yaml(&yaml, 0, &mut 100_000)?;
+    serde_json::to_value(yaml).map_err(|_| INVALID.into())
 }
 
 // Never pass through arbitrary lower-level errors or subscription values to IPC.
@@ -365,7 +380,10 @@ fn safe_node_error(error: &str) -> String {
         INVALID
         | "PROXY_TLS_INSECURE"
         | "PROXY_TRANSPORT_UNSUPPORTED"
-        | "PROXY_ECH_UNSUPPORTED" => error.into(),
+        | "PROXY_ECH_UNSUPPORTED"
+        | "SUBSCRIPTION_GROUP_CYCLE"
+        | "SUBSCRIPTION_GROUP_MEMBER_MISSING"
+        | "SUBSCRIPTION_GROUP_MEMBER_UNSUPPORTED" => error.into(),
         _ => UNSUPPORTED.into(),
     }
 }
@@ -399,11 +417,12 @@ fn clash_node(m: &Map<String, Value>) -> Result<Value> {
 /// Recheck retained definitions against current capabilities. Node-declared TLS
 /// exceptions are accepted automatically; missing definitions still need a refresh.
 pub(super) fn revalidate_retained_nodes(catalog: &mut ParsedCatalog) {
+    if catalog.native.is_some() { return; }
     for node in &mut catalog.nodes {
         let Some(outbound) = node.outbound.as_ref() else {
             continue;
         };
-        let result = if outbound["type"] == "mihomo" {
+        let result = if native::valid_reference(outbound) { Ok(outbound.clone()) } else if outbound["type"] == "mihomo" {
             outbound["proxy"]
                 .as_object()
                 .ok_or_else(|| INVALID.to_owned())
@@ -534,6 +553,7 @@ fn clash_group(value: &Value, node_names: &[String], has_providers: bool) -> Res
 }
 
 pub(super) fn validate(catalog: &mut ParsedCatalog) -> Result<()> {
+    if let Some(profile) = &catalog.native { return profile.validate(); }
     // Availability is derived from the current capabilities.
     // Recompute it for persisted catalogs; keep actual parse/option failures.
     for group in &mut catalog.groups {
@@ -566,6 +586,7 @@ pub(super) fn validate(catalog: &mut ParsedCatalog) -> Result<()> {
             return Err("SUBSCRIPTION_DUPLICATE_NAME".into());
         }
     }
+    diagnostics::validate_dialers(catalog);
     let nodes: HashMap<_, _> = catalog
         .nodes
         .iter()
@@ -643,3 +664,6 @@ pub(super) fn validate(catalog: &mut ParsedCatalog) -> Result<()> {
 #[cfg(test)]
 #[path = "codex_proxy_subscription_parser_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "codex_proxy_subscription_compat_tests.rs"]
+mod compat_tests;

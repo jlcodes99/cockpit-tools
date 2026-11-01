@@ -103,6 +103,8 @@ pub(crate) async fn refresh_active_account(
     runtime: Option<std::sync::Arc<CodexQuotaRuntimeSnapshot>>,
 ) -> RefreshResult {
     refresh_with_operation(account_id, RefreshPriority::Background, Some(background_epoch()), |id| async move {
+        crate::modules::codex_device_restrictions::ensure_allowed(
+            &id, crate::modules::codex_device_restrictions::QUOTA).await?;
         Box::pin(crate::modules::codex_quota::refresh_active_account_quota(&id, runtime)).await
     }).await
 }
@@ -113,7 +115,13 @@ pub(crate) async fn refresh_account_with_priority(
     priority: RefreshPriority,
     epoch: Option<u64>,
 ) -> RefreshResult {
-    refresh_with_operation(account_id, priority, epoch, |account_id| async move {
+    refresh_with_operation(account_id, priority, epoch, move |account_id| async move {
+        // Check on the shared worker: enqueueing and joining a flight must not wait
+        // for storage, and cancelled/duplicate callers must not repeat the read.
+        if priority == RefreshPriority::Background {
+            crate::modules::codex_device_restrictions::ensure_allowed(
+                &account_id, crate::modules::codex_device_restrictions::QUOTA).await?;
+        }
         Box::pin(crate::modules::codex_quota::refresh_account_quota_unqueued(
             &account_id,
             runtime_snapshot.as_deref(),

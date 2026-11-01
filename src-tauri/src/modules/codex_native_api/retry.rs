@@ -517,6 +517,13 @@ async fn send_inner(
             tracker.capture_request_fault(request_scoped);
             tracker.attempt_result(status.as_u16(), false, Some(inspected.8.as_deref().unwrap_or("upstream_http_error")));
         }
+        // A provider device refusal is terminal for this request. Preserve its
+        // error and let the final report record the original request timestamp;
+        // do not refresh tokens, rotate accounts or replay the conversation.
+        if prepared.route.chatgpt && failure_message.as_deref()
+            .is_some_and(crate::modules::codex_device_restrictions::explicit_message) {
+            return Ok(response);
+        }
         let wait = match (retry_after_headers(response.headers()), body_retry_after) {
             (Some(headers), Some(body)) => Some(headers.max(body)),
             (headers, body) => headers.or(body),

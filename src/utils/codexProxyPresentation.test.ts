@@ -72,7 +72,9 @@ test('subscription detection accepts custom HTTPS ports with a subscription path
 
 test('subscription detection does not mistake multiline proxies or credential URLs for a subscription', () => {
   assert.equal(detectProxyInputKind(' https://example.test/sub?token=private '), 'subscription');
-  for (const value of ['https://user:pass@proxy.test:443', 'https://user:pass@proxy.test:8443/sub', 'https://proxy.test:8443', 'https://proxy.test:8443/', 'https://proxy.test', 'http://example.test:8080/sub', 'socks5://u:p@host:1080', 'host:1080:u:p', 'https://one.test/sub\nhttps://two.test/sub']) {
+  assert.equal(detectProxyInputKind('http://example.test:8080/sub'), 'subscription');
+  assert.equal(detectProxyInputKind('https://user:pass@proxy.test:8443/sub'), 'subscription');
+  for (const value of ['https://user:pass@proxy.test:443', 'https://proxy.test:8443', 'https://proxy.test:8443/', 'https://proxy.test', 'socks5://u:p@host:1080', 'host:1080:u:p', 'https://one.test/sub\nhttps://two.test/sub']) {
     assert.equal(detectProxyInputKind(value), 'manual');
   }
 });

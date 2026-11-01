@@ -1055,10 +1055,6 @@ pub async fn force_refresh_codex_tokens(account_id: String) -> Result<CodexAccou
 ///
 /// 该操作只影响账号卡片上的客户端观测状态，不会修改 Token、远端授权状态或
 /// API 服务可用性判断。
-#[tauri::command]
-pub async fn codex_clear_client_auth_observation(account_id: String) -> Result<bool, String> {
-    codex_account::clear_client_auth_observation(&account_id).await
-}
 
 /// 切换 Codex 账号（包含 token 刷新检查）
 /// 默认实例切换到非 OAuth 账号时，关闭它的混合模型路由并释放对应的实例网关。
@@ -1147,7 +1143,6 @@ async fn switch_codex_account_internal(
     let initial_token_generation = initial_account.token_generation;
     let user_config = config::get_user_config();
     let launch_after_switch = launch_after_switch.unwrap_or(user_config.codex_launch_on_switch);
-    // client_auth_status 仅记录官方客户端运行后的观测结果，不参与切号或启动拦截。
     // 真实 Token Authority 失败仍由 prepare/switch 流程返回结构化授权错误。
     if launch_after_switch {
         let default_settings = crate::modules::codex_instance::load_default_settings()?;

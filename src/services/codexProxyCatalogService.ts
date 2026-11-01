@@ -3,14 +3,15 @@ import type { CodexAccount } from '../types/codex';
 import type { CodexProxyProbeResult } from './codexAccountProxyService';
 import { proxyEnginePrerequisiteKey, withProxyEnginePrerequisite } from '../utils/codexProxyEnginePrerequisite';
 
-export interface ProxyCatalogNode { id: string; name: string; protocol: string; supported: boolean; error: string | null; insecure?: boolean; udp?: boolean | null; server?: string | null; port?: number | null }
+export interface ProxyCatalogNode { id: string; name: string; protocol: string; supported: boolean; error: string | null; insecure?: boolean; udp?: boolean | null; server?: string | null; port?: number | null; dialerProxy?: string | null }
 export interface ProxyCatalogIssue { name: string; error: string }
-export interface ProxyCatalogGroup { id: string; name: string; kind: string; members: string[]; supported: boolean; error: string | null; issues?: ProxyCatalogIssue[]; insecureNodeIds?: string[]; testUrl?: string | null }
+export interface ProxyCatalogGroup { id: string; name: string; kind: string; members: string[]; supported: boolean; error: string | null; issues?: ProxyCatalogIssue[]; insecureNodeIds?: string[]; testUrl?: string | null; nativeSelection?: string | null }
 /** A saved default is draft-only prefill: stable ids plus the manual member choices. */
 export interface ProxyCatalogDefault { itemId: string; groupId: string | null; selections: ProxyCatalogSelections }
 /** Strategy sources only: the original source and node each copied member came from. */
 export interface ProxyCatalogStrategyMember { sourceId: string; itemId: string; name: string; sourceName: string }
 export interface ProxyCatalogSource {
+  nativeProfile?: boolean;
   id: string; name: string; kind: 'subscription' | 'manual' | 'strategy'; updatedAt: number; lastAttemptAt: number | null;
   revision: string; autoUpdate: boolean; error: string | null; nodes: ProxyCatalogNode[]; groups: ProxyCatalogGroup[]; needsRefresh?: boolean;
   default: ProxyCatalogDefault | null; defaultInvalidated: boolean;
@@ -45,7 +46,7 @@ function timed<T>(pending: Promise<T>, command: string, args?: Record<string, un
 function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   const request = timed(invoke<T>(command, args), command, args);
   // Reads, cancellation and removal remain available without an engine.
-  const guarded = ['codex_proxy_catalog_import', 'codex_proxy_catalog_bind', 'codex_proxy_catalog_probe', 'codex_proxy_catalog_latency'];
+  const guarded = ['codex_proxy_catalog_import', 'codex_proxy_catalog_refresh', 'codex_proxy_catalog_bind', 'codex_proxy_catalog_probe', 'codex_proxy_catalog_latency'];
   return guarded.includes(command) ? withProxyEnginePrerequisite(request) : request;
 }
 let listing: Promise<ProxyCatalog> | null = null;
@@ -59,8 +60,8 @@ export function getProxyCatalog(): Promise<ProxyCatalog> {
 export function importProxyCatalog(requestId: string, name: string, input: string, kind: 'subscription' | 'manual', options?: ProxyImportOptions): Promise<ProxyCatalog> {
   return call('codex_proxy_catalog_import', { requestId, name, input, kind, options });
 }
-export function refreshProxyCatalog(requestId: string, sourceId: string): Promise<ProxyCatalog> {
-  return call('codex_proxy_catalog_refresh', { requestId, sourceId });
+export function refreshProxyCatalog(requestId: string, sourceId: string, resourceDirectory?: string): Promise<ProxyCatalog> {
+  return call('codex_proxy_catalog_refresh', { requestId, sourceId, ...(resourceDirectory === undefined ? {} : { resourceDirectory }) });
 }
 export function cancelProxyCatalog(requestId: string): Promise<void> { return call('codex_proxy_catalog_cancel', { requestId }); }
 export function removeProxyCatalog(sourceId: string): Promise<ProxyCatalog> { return call('codex_proxy_catalog_remove', { sourceId }); }
@@ -88,20 +89,26 @@ export function probeProxyCatalog(requestId: string, sourceId: string, itemId: s
 }
 /** Only reachable selectors matter: unrelated groups never block binding a node. */
 export function catalogSelectors(source: ProxyCatalogSource, itemId: string, selections: ProxyCatalogSelections): ProxyCatalogGroup[] {
+  if (source.nativeProfile && itemId) return source.groups.filter((g) => g.kind === 'select');
   const required: ProxyCatalogGroup[] = [];
   const visited = new Set<string>();
-  const visit = (group: ProxyCatalogGroup | undefined) => {
-    if (!group || visited.has(group.id)) return;
-    visited.add(group.id);
+  const visit = (item: ProxyCatalogGroup | ProxyCatalogNode | undefined) => {
+    if (!item || visited.has(item.id)) return;
+    visited.add(item.id);
+    if (!('kind' in item)) {
+      if (item.dialerProxy) visit([...source.nodes, ...source.groups].find((entry) => entry.name === item.dialerProxy));
+      return;
+    }
+    const group = item;
     if (group.kind === 'select') required.push(group);
     const members = group.kind === 'select' ? [selections[group.id]].filter(Boolean) : group.members;
-    for (const name of members) visit(source.groups.find((entry) => entry.name === name));
+    for (const name of members) visit([...source.nodes, ...source.groups].find((entry) => entry.name === name));
   };
-  visit(source.groups.find((entry) => entry.id === itemId));
+  visit([...source.nodes, ...source.groups].find((entry) => entry.id === itemId));
   return required;
 }
 const catalogGroupLabels: Record<string, string> = {
-  select: 'manualGroup', 'url-test': 'latencyGroup', fallback: 'fallbackGroup', 'load-balance': 'loadBalanceGroup',
+  native: 'groups', relay: 'groups', select: 'manualGroup', 'url-test': 'latencyGroup', fallback: 'fallbackGroup', 'load-balance': 'loadBalanceGroup',
 };
 /** Resolve only known group strategies to localized labels. */
 export function catalogGroupKindKey(kind: string): string {
@@ -123,6 +130,9 @@ export function catalogUnsupportedKey(item?: { error?: string | null; kind?: str
     SUBSCRIPTION_GROUP_OPTIONS: 'reasonOptions',
     SUBSCRIPTION_GROUP_TIMEOUT: 'reasonGroupTimeout',
     SUBSCRIPTION_PROVIDER_UNSUPPORTED: 'reasonProvider',
+    SUBSCRIPTION_PROVIDER_CONFIG: 'reasonProviderConfig',
+    PROXY_PROFILE_DIRECTORY: 'resourceDirectoryRequired',
+    PROXY_PROFILE_RESOURCE: 'resourceMissing',
     SUBSCRIPTION_GROUP_UNAVAILABLE: 'reasonMembers',
     SUBSCRIPTION_GROUP_CYCLE: 'reasonCycle',
     SUBSCRIPTION_GROUP_MEMBER_MISSING: 'reasonMissing',
@@ -164,6 +174,9 @@ export function catalogErrorKey(error: unknown): string {
     SUBSCRIPTION_GROUP_MEMBER_UNSUPPORTED: 'reasonMemberUnsupported',
     SUBSCRIPTION_GROUP_TIMEOUT: 'reasonGroupTimeout',
     SUBSCRIPTION_PROVIDER_UNSUPPORTED: 'reasonProvider', PROXY_TLS_INSECURE: 'refreshRequired',
+    SUBSCRIPTION_PROVIDER_CONFIG: 'reasonProviderConfig',
+    PROXY_PROFILE_DIRECTORY: 'resourceDirectoryRequired',
+    PROXY_PROFILE_RESOURCE: 'resourceMissing',
     PROXY_TRANSPORT_UNSUPPORTED: 'reasonTransport', PROXY_ECH_UNSUPPORTED: 'reasonEch',
   };
   if (code === 'CATALOG_CANCELLED' || code === 'PROXY_PROBE_CANCELLED') return 'common.cancelled';
@@ -175,9 +188,9 @@ export function catalogErrorKey(error: unknown): string {
   return `codex.proxy.catalog.${keys[code] ?? 'failed'}`;
 }
 
-export interface ProxyImportOptions { protocol: string; format: string; skipInvalid: boolean; skipDuplicates: boolean; fallbackName: string }
+export interface ProxyImportOptions { protocol: string; format: string; skipInvalid: boolean; skipDuplicates: boolean; fallbackName: string; resourceDirectory?: string; rulesName?: string }
 export interface ProxyImportRow { line: number; name: string | null; protocol: string | null; server: string | null; port: number | null; authenticated: boolean; duplicate: boolean; error: string | null }
-export interface ProxyImportPreview { structured: boolean; rows: ProxyImportRow[]; valid: number; invalid: number; duplicates: number }
+export interface ProxyImportPreview { structured: boolean; rows: ProxyImportRow[]; valid: number; invalid: number; duplicates: number; pendingProviders?: number; nativeProfile?: boolean }
 export interface ProxyLatency { latencyMs: number; checkedAt: number }
 export function previewProxyImport(input: string, options: ProxyImportOptions): Promise<ProxyImportPreview> {
   return call('codex_proxy_catalog_preview', { input, options });

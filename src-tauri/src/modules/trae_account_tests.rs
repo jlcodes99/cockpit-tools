@@ -637,3 +637,11 @@ use super::*;
             Some("public-key")
         );
     }
+
+#[test]
+fn credit_billing_skips_legacy_dashboard_overwrite() {
+    assert!(!should_fetch_cn_entitlement_list(true, Some(&serde_json::json!({"data":{"is_credits_billing":true}}))));
+    assert!(should_fetch_cn_entitlement_list(true, Some(&serde_json::json!({"is_credits_billing":false}))));
+    assert!(should_fetch_cn_entitlement_list(true, None));
+    assert!(!should_fetch_cn_entitlement_list(false, None));
+}

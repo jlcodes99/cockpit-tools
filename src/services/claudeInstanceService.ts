@@ -1,14 +1,18 @@
 import { invoke } from '@tauri-apps/api/core';
+import { withClaudeProfileErrors } from './claudeProfileErrors';
 import { createPlatformInstanceService } from './platform/createPlatformInstanceService';
 
 const service = createPlatformInstanceService('claude');
 
 export const getInstanceDefaults = service.getInstanceDefaults;
 export const listInstances = service.listInstances;
-export const createInstance = service.createInstance;
-export const updateInstance = service.updateInstance;
+export const createInstance = (...args: Parameters<typeof service.createInstance>) =>
+  withClaudeProfileErrors(() => service.createInstance(...args));
+export const updateInstance = (...args: Parameters<typeof service.updateInstance>) =>
+  withClaudeProfileErrors(() => service.updateInstance(...args));
 export const deleteInstance = service.deleteInstance;
-export const startInstance = service.startInstance;
+export const startInstance = (...args: Parameters<typeof service.startInstance>) =>
+  withClaudeProfileErrors(() => service.startInstance(...args));
 export const stopInstance = service.stopInstance;
 export const closeAllInstances = service.closeAllInstances;
 export const openInstanceWindow = service.openInstanceWindow;

@@ -158,6 +158,9 @@
     "providerClear": "Seçimi temizle"
   },
   "common": {
+    "profileRestoreBusy": "Oturum durumu geri yükleniyor. Biraz sonra yeniden deneyin.",
+    "profileRestoreInvalid": "Oturum yedeğinin yolu geçersiz. Hesabı yeniden içe aktarın.",
+    "profileRestoreRecoveryFailed": "Oturum geri yüklenemedi. Yedek korundu: {{detail}}",
     "dataQueryBusy": "Veriler işleniyor. Lütfen biraz sonra tekrar deneyin.",
     "apiBudget": {
       "keyScope": "Bu anahtar",
@@ -427,7 +430,11 @@
           "statusSkipped": "Atlandı",
           "statusPending": "İçe aktarım bekleniyor"
         },
-        "invalidJson": "Geçersiz JSON. Dosyayı veya yapıştırılan içeriği kontrol edin."
+        "invalidJson": "Geçersiz JSON. Dosyayı veya yapıştırılan içeriği kontrol edin.",
+        "empty": "İçe aktarılacak veri boş.",
+        "sizeLimit": "Dosya {{limit}} MiB boyutunu aşamaz.",
+        "countLimit": "Bir defada en fazla {{count}} hesap içe aktarılabilir.",
+        "itemFailed": "Öğe {{index}}: {{error}}"
       },
       "externalImport": {
         "bundleInvalidJson": "İçe aktarma paketi geçerli JSON değil",
@@ -538,6 +545,8 @@
         "title": "Hesap Genel Bakışı"
       },
       "quota": {
+        "usageWithUnit": "Kullanım ({{unit}})",
+        "usage": "Kullanım",
         "noData": "Kota verisi yok",
         "queryFailed": "Kota sorgusu başarısız",
         "resetDone": "Sıfırlandı",
@@ -631,6 +640,29 @@
         "missingTiming": "Geçerli çıkış süresi kaydedilmedi.",
         "shortWindow": "Gözlenen çıkış aralığı 100 ms altında."
       }
+    },
+    "deviceRestriction": {
+      "title": "Cihaz kısıtlama kayıtları",
+      "badge": "Cihaz kısıtlı",
+      "paused": "Açık bir cihaz kısıtlaması algılandı. Bu işlem için otomatik denemeler duraklatıldı. Hesap sayfasındaki yerel kaydı inceleyin.",
+      "note": "Bunlar yerel gözlemlerdir, OpenAI cihaz kontenjanları değildir. Hesapları veya yerel kimlik bilgilerini silmek sunucudaki cihaz sınırını kaldırmayı garanti etmez.",
+      "retryNote": "Yeniden denemeye izin vermek kısıtlamayı çözülmüş olarak işaretlemez. Yeni bir açık ret, denemeleri tekrar duraklatır.",
+      "desktop": "Masaüstü girişi",
+      "quota": "Kota sorgusu",
+      "api": "API istekleri",
+      "oauth": "OAuth girişi",
+      "token": "Belirteç yenileme",
+      "recovered": "İşlem düzeldi",
+      "pausedLabel": "Denemeler duraklatıldı",
+      "retryEnabled": "Yeniden deneme açık",
+      "observed": "İlk: {{first}} · Son: {{last}} · {{count}} gözlem",
+      "check": "Yeniden kontrol et",
+      "allowRetry": "Denemeye izin ver",
+      "help": "Resmî yardım",
+      "support": "Desteğe ulaş",
+      "failed": "İşlem tamamlanamadı. Son bilinen durum korundu. Yeniden deneyin.",
+      "loginAttempt": "Hesabı belirlenemeyen giriş",
+      "removed": "Silinmiş yerel hesap"
     }
   },
   "nav": {
@@ -1369,8 +1401,6 @@
       "codexPreserveExternalBridge": "Harici köprüyü koru",
       "codexPreserveExternalBridgeDesc": "OAuth hesabı değiştirirken yerel kayıtlarla doğrulanan Codex Web GPT köprüsünü korur. Varsayılan olarak kapalıdır.",
       "codexEnhancements": {
-        "nativeFast": "Yerleşik Fast seçimi",
-        "nativeFastDesc": "API Key hesaplarında istemcinin yerleşik hız menüsünü açar ve modelin desteklediği kademeleri gösterir. Kullanılabilirlik ve ücretler API sağlayıcısına bağlıdır.",
         "quotaCompat": "Karma mod kota uyumu",
         "quotaCompatDesc": "Gerçek OAuth oturumu ve harici API yolu birlikte kullanıldığında abonelik kotasının yerel API mesajlarını engellemesini önler. Gerçek kullanım ve görsel kotaları değişmez.",
         "restartHint": "Varsayılan olarak açıktır. Değişiklikten sonra ilgili Codex örneklerini yeniden başlatın ve Cockpit Tools açık kalsın. Yerel dikte, istemcinin yeteneklerine ve ayarlarına bağlıdır; Cockpit bu işlevi devralmaz veya zorla etkinleştirmez.",
@@ -2676,14 +2706,8 @@
       "unsupportedCountryRegion": "Geçerli ağ bölgesi Codex yetkilendirmesini yenilemeyi desteklemiyor. OpenAI yetkilendirme servisi bu ağ çıkışını reddetti. Desteklenen bir bölgeye geçip yeniden deneyin."
     },
     "switchAuth": {
-      "apiOnlyTitle": "İstemci girişi gerekli",
       "reauthorizeTitle": "Codex yetkilendirmesi sona erdi",
-      "apiOnlyDescription": "Geçerli istemci giriş sayfasına yönlendirildi. İstemciyi geri yüklemek için yeniden yetkilendirin; API hizmeti şimdilik kullanılmaya devam edilebilir.",
-      "observationStatus": "Giriş sayfasına yönlendirme algılandı",
-      "observationTime": "Son kontrol: {{time}}",
-      "loginRedirectTime": "Son giriş sayfası yönlendirmesi: {{time}}",
       "observationInstance": "Gözlemlenen örnek: {{instance}}",
-      "launchTime": "Örneğin başlatılma zamanı: {{time}}",
       "reauthorizeDescription": "Giriş bilgileri yenilenemedi ve access_token artık API hizmetinde kullanılamıyor. Devam etmek için hesabı yeniden yetkilendirin.",
       "idTokenUnavailable": "İstemci kimliği sona erdi ve otomatik yenileme geçerli bir id_token döndürmedi.",
       "reasonLabel": "Neden",
@@ -2696,10 +2720,7 @@
       "startingInstanceAfterReauth": "Yetkilendirme güncellendi. Örnek yeniden başlatılıyor...",
       "startInstanceAfterReauthFailed": "Yetkilendirme güncellendi ancak örnek başlatılamadı: {{error}}",
       "reauthorizedAndStartedInstance": "Yeniden yetkilendirildi ve örnek başlatıldı",
-      "apiOnlyBadge": "Giriş gerekli",
-      "clearClientAuth": "Uyarıyı temizle",
-      "clearClientAuthSuccess": "İstemci uyarısı temizlendi",
-      "clearClientAuthFailed": "İstemci uyarısı temizlenemedi: {{error}}"
+      "apiTokenUsableDescription": "Bazı giriş bilgileri yeniden yetkilendirme gerektiriyor. Mevcut erişim belirteci API hizmetinde kullanılmaya devam edebilir."
     },
     "current": "Geçerli",
     "empty": {
@@ -4752,8 +4773,8 @@
         "allStatuses": "Tüm durumlar",
         "allGatewayModes": "Tum modlar",
         "sessionFilter": "Oturum",
-      "sessionPlaceholder": "Oturum kimliği",
-      "modelFilter": "Model adı",
+        "sessionPlaceholder": "Oturum kimliği",
+        "modelFilter": "Model adı",
         "modelPlaceholder": "Model ID​",
         "accountFilter": "Hesap",
         "accountPlaceholder": "E-posta veya hesap ID",
@@ -5535,7 +5556,7 @@
         "subscriptionUrl": "Abonelik URL’si",
         "nodeLinks": "Düğüm bağlantıları veya yapılandırma",
         "import": "İçe aktar",
-        "importNotice": "URL ve kimlik bilgileri yerelde şifrelenir. Abonelik istekleri sağlayıcıya hesap Token bilgisi olmadan gönderilir.",
+        "importNotice": "Yapılandırma ve kaynak anlık görüntüleri şifreli saklanır ve ayrı bir çalışma klasöründe çözülür. Abonelik ve kaynak istekleri hesap belirteçlerini içermez.",
         "intro": "Abonelikleri veya düğümleri içe aktarın ve test edin; ardından hesap listesinden seçip bağlayın.",
         "emptyTitle": "İlk proxy’yi ekleyin",
         "emptyHint": "Abonelikler, düğüm bağlantıları ve HTTP / SOCKS5 desteklenir. Hesap eklemeden içe aktarabilir ve test edebilirsiniz.",
@@ -5580,7 +5601,7 @@
         "unsupported": "Desteklenmiyor",
         "invalidInput": "Ad ve geçerli URL, düğüm bağlantısı veya proxy yapılandırması girin.",
         "downloadFailed": "Abonelik indirilemedi. Ağ ve proxy ayarlarını kontrol edip tekrar deneyin.",
-        "downloadRedirect": "Farklı kökene yönlendirme veya çok fazla yönlendirme nedeniyle abonelik indirmesi durduruldu.",
+        "downloadRedirect": "Abonelik yönlendirmesi geçersiz veya yönlendirme sınırı aşıldı.",
         "downloadDenied": "Abonelik sunucusu erişimi reddetti (HTTP 401/403). Bağlantıyı ve geçerlilik süresini kontrol edin.",
         "downloadTls": "Abonelik bağlantısında TLS el sıkışması veya sertifika doğrulaması başarısız. Ağ ve proxy ayarlarını kontrol edin.",
         "timeout": "İşlem zaman aşımına uğradı. Yeniden denemeden önce sonucu yenileyerek doğrulayın.",
@@ -5598,6 +5619,7 @@
         "loadBalanceGroup": "Yük dengeleme",
         "reasonStrategy": "Bu grup stratejisi desteklenmiyor. Kullanılabilir bir düğüm seçmek için genişletin.",
         "reasonOptions": "Henüz desteklenmeyen bir protokol veya yapılandırma seçeneği içeriyor.",
+        "reasonProviderConfig": "Bu sağlayıcının kaynağı, filtresi veya dönüştürme ayarı desteklenmiyor.",
         "reasonProvider": "Bu grup, henüz yüklenmemiş harici düğüm sağlayıcıları gerektiriyor.",
         "reasonMembers": "Grup üyeleri doğrulamayı geçemedi. Her üyenin nedenini inceleyin.",
         "reasonInvalid": "Gerekli ayarlar eksik veya geçersiz.",
@@ -5619,6 +5641,14 @@
         "defaultProtocol": "Belirtilmeyen protokol",
         "credentialFormat": "Kimlik bilgisi biçimi",
         "recognizing": "Tanınıyor…",
+        "nativePreview": "İçe aktarırken Mihomo yapılandırmayı doğrudan işler ve kaynakları yükler. Önizleme dosyalara veya ağa erişmez.",
+        "resourceDirectory": "Kaynak klasörü",
+        "browseResources": "Klasör seç",
+        "resourceDirectoryHint": "Yerel dosyalar için aboneliğin kaynak klasörünü seçin. İçerik özel bir çalışma klasörüne kopyalanır ve şifreli anlık görüntüler olarak kaydedilir.",
+        "resourceDirectoryRequired": "Bu aboneliğin yerel kaynak klasörünü seçin.",
+        "resourceMissing": "Yerel kaynaklar kullanılamıyor. Klasörü kontrol edin veya yeniden içe aktarın.",
+        "rulesName": "Abonelik kuralları",
+        "pendingProviders": "İçe aktarırken {{count}} uzak düğüm kaynağı yüklenecek. Önizleme bunları indirmez.",
         "previewCount": "Geçerli {{valid}} · Kontrol {{invalid}} · Yinelenen {{duplicates}}",
         "line": "Satır {{line}}",
         "ambiguous": "Biçim belirsiz. Kimlik bilgisi biçimini seçin veya tam proxy URL’sini kullanın.",
@@ -6524,8 +6554,9 @@
       "desc": "Kiro erişim belirtecinizi veya dışa aktarılan JSON verilerinizi yapıştırın."
     },
     "import": {
-      "localDesc": "Kiro hesap verilerini yerel Kiro istemcisinden veya bir JSON dosyasından içe aktarın.",
-      "localClient": "Yerel Kiro'dan ithalat"
+      "localDesc": "Yerel istemciden veya JSON’dan içe aktarın. JSON hesapları önce kaydedilir, ardından oturum bilgileri ve kotalar arka planda yenilenir.",
+      "localClient": "Yerel Kiro'dan ithalat",
+      "invalidCredentials": "Kimlik bilgisi alanları eksik veya desteklenmiyor. Hesabı yeniden dışa aktarın."
     },
     "injectToVSCode": "Kiro'ya geç"
   },
@@ -7708,6 +7739,17 @@
       "family": "Grup",
       "platform": "Geçerli sistem",
       "unsupportedGroup": "Bu grup için tek tıkla yazılabilen istemci yok."
+    },
+    "campaign": {
+      "badge": "11.11",
+      "title": "Bakiye yüklemelerine %11,11 bonus",
+      "description": "Yeni ve mevcut kullanıcılar için.",
+      "period": "Kampanya dönemi: 1–11 Kasım 2026 (UTC+8)",
+      "terms": "Koşullar için kampanya sayfasına bakın.",
+      "action": "Kampanyayı gör",
+      "inactive": "Bu kampanya şu anda etkin değil.",
+      "label": "Sınırlı süreli 11.11 kampanyası",
+      "promotionDescription": "Cockpit’in resmi API aracı hizmet ortağıyla 11.11 fırsatı. Yeni ve mevcut kullanıcılar kampanya boyunca bakiye yüklemelerinde %11,11 bonus kazanır. Claude, ChatGPT, Gemini ve diğer önde gelen modellere erişin."
     }
   },
   "grok": {

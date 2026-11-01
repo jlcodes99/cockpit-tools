@@ -65,7 +65,11 @@ export type TraeUsage = {
   payAsYouGoUsd?: number | null;
   usageExhausted?: boolean | null;
   /** CN 速通额度模型（premium_model_fast_*），与国际站 USD basic 额度不同 */
-  usageModel?: 'usd' | 'fast_request' | 'unknown';
+  usageModel?: 'usd' | 'fast_request' | 'credits' | 'unknown';
+  creditsUsed?: number | null;
+  creditsLimit?: number | null;
+  creditsRemaining?: number | null;
+  creditsUnlimited?: boolean;
   fastRequestAvailable?: number | null;
   fastRequestLimit?: number | null;
   fastRequestUsed?: number | null;
@@ -825,11 +829,44 @@ function getCnEntitlementDetailFields(account: TraeAccount): {
   };
 }
 
+// TRAE 3.6 / CN 3.4: aggregate official credit buckets, independent of the
+// legacy USD and fast-request schemas. -1 is unlimited, missing stays unknown.
+function getTraeCreditsUsage(raw: unknown) {
+  const roots = collectUsageRoots(raw);
+  if (roots.some(root => root.code != null && toNumber(root.code) !== 0)) return null;
+  if (!roots.some(root => root.is_credits_billing === true)) return null;
+  let used = 0, limit = 0, remaining = 0;
+  let known = false, unlimited = false;
+  for (const pack of getUsagePacks(raw)) {
+    const cap = pickFirstNumber(getPackQuota(pack), ['credits_limit']);
+    const spent = pickFirstNumber(getPackUsage(pack), ['credits_amount']) ?? 0;
+    if (cap === -1) { known = true; unlimited = true; }
+    else if (cap != null && cap > 0) { known = true; limit += cap; remaining += Math.max(cap - spent, 0); }
+    if (cap != null && cap !== 0) used += spent;
+  }
+  return { used: known ? used : null, limit: known && !unlimited ? limit : null,
+    remaining: known && !unlimited ? remaining : null, unlimited };
+}
+
 export function getTraeUsage(account: TraeAccount): TraeUsage {
   const preferCn = isTraeCnAccountPlatform(account);
   const usageFromPackList = getUsageStatusFromPackList(account.trae_usage_raw, {
     preferCnSelection: preferCn,
   });
+  const credits = getTraeCreditsUsage(account.trae_usage_raw);
+  if (credits) {
+    return {
+      ...usageFromPackList,
+      usageModel: 'credits', spentUsd: null, totalUsd: null,
+      usedPercent: credits.limit != null && credits.limit > 0 && credits.used != null
+        ? Math.max(0, Math.min(100, credits.used / credits.limit * 100)) : null,
+      resetAt: usageFromPackList?.resetAt ?? account.plan_reset_at ?? null,
+      creditsUsed: credits.used, creditsLimit: credits.limit, creditsRemaining: credits.remaining,
+      creditsUnlimited: credits.unlimited,
+      payAsYouGoOpen: null, payAsYouGoUsd: null,
+      usageExhausted: !credits.unlimited && credits.remaining === 0,
+    };
+  }
   const cnDetail = preferCn
     ? getCnEntitlementDetailFields(account)
     : {

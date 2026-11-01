@@ -1261,6 +1261,60 @@ fn upsert_vscdb_item(conn: &Connection, key: &str, value: &str) -> Result<(), St
     Ok(())
 }
 
+// Cursor 3.27 owns membership caches by the JWT subject. Both entry points
+// replace the complete session in one transaction, including absent fields.
+fn write_cursor_auth(conn: &mut Connection, account: &CursorAccount) -> Result<(), String> {
+    conn.busy_timeout(std::time::Duration::from_secs(3))
+        .map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    for key in [
+        "cursorAuth/refreshToken",
+        "cursorAuth/stripeMembershipType",
+        "cursorAuth/stripeMembershipAuthId",
+        "cursorAuth/stripeSubscriptionStatus",
+        "cursorAuth/stripeCustomerId",
+        "cursorAuth/cachedSignUpType",
+        "cursorAuth/cachedScopedProfile",
+        "cursorAuth/cachedTeam",
+    ] {
+        tx.execute("DELETE FROM ItemTable WHERE key = ?1", [key])
+            .map_err(|e| e.to_string())?;
+    }
+    for (key, value) in [
+        ("cursorAuth/accessToken", account.access_token.as_str()),
+        ("cursorAuth/cachedEmail", account.email.as_str()),
+        ("cursor.accessToken", account.access_token.as_str()),
+        ("cursor.email", account.email.as_str()),
+    ] {
+        upsert_vscdb_item(&tx, key, value)?;
+    }
+    for (key, value) in [
+        ("cursorAuth/refreshToken", account.refresh_token.as_deref()),
+        (
+            "cursorAuth/stripeMembershipType",
+            account.membership_type.as_deref(),
+        ),
+        (
+            "cursorAuth/stripeSubscriptionStatus",
+            account.subscription_status.as_deref(),
+        ),
+        (
+            "cursorAuth/cachedSignUpType",
+            account.sign_up_type.as_deref(),
+        ),
+    ] {
+        if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
+            upsert_vscdb_item(&tx, key, value)?;
+        }
+    }
+    if account.membership_type.is_some() {
+        if let Some(auth_id) = extract_auth_id_from_access_token(&account.access_token) {
+            upsert_vscdb_item(&tx, "cursorAuth/stripeMembershipAuthId", &auth_id)?;
+        }
+    }
+    tx.commit().map_err(|e| e.to_string())
+}
+
 pub fn inject_to_cursor(account_id: &str) -> Result<(), String> {
     let account =
         load_account(account_id).ok_or_else(|| format!("Cursor 账号不存在: {}", account_id))?;
@@ -1269,23 +1323,10 @@ pub fn inject_to_cursor(account_id: &str) -> Result<(), String> {
         return Err(format!("Cursor state.vscdb 不存在: {}", db_path.display()));
     }
 
-    let conn =
+    let mut conn =
         Connection::open(&db_path).map_err(|e| format!("打开 Cursor 本地数据库失败: {}", e))?;
 
-    upsert_vscdb_item(&conn, "cursorAuth/accessToken", &account.access_token)?;
-    if let Some(ref rt) = account.refresh_token {
-        upsert_vscdb_item(&conn, "cursorAuth/refreshToken", rt)?;
-    }
-    upsert_vscdb_item(&conn, "cursorAuth/cachedEmail", &account.email)?;
-    if let Some(ref mt) = account.membership_type {
-        upsert_vscdb_item(&conn, "cursorAuth/stripeMembershipType", mt)?;
-    }
-    if let Some(ref ss) = account.subscription_status {
-        upsert_vscdb_item(&conn, "cursorAuth/stripeSubscriptionStatus", ss)?;
-    }
-
-    upsert_vscdb_item(&conn, "cursor.accessToken", &account.access_token)?;
-    upsert_vscdb_item(&conn, "cursor.email", &account.email)?;
+    write_cursor_auth(&mut conn, &account)?;
 
     logger::log_info(&format!(
         "[Cursor Account] 注入成功: id={}, email={}",
@@ -1301,23 +1342,10 @@ pub fn inject_to_cursor_at_path(db_path: &std::path::Path, account_id: &str) -> 
         return Err(format!("Cursor state.vscdb 不存在: {}", db_path.display()));
     }
 
-    let conn =
+    let mut conn =
         Connection::open(db_path).map_err(|e| format!("打开 Cursor 本地数据库失败: {}", e))?;
 
-    upsert_vscdb_item(&conn, "cursorAuth/accessToken", &account.access_token)?;
-    if let Some(ref rt) = account.refresh_token {
-        upsert_vscdb_item(&conn, "cursorAuth/refreshToken", rt)?;
-    }
-    upsert_vscdb_item(&conn, "cursorAuth/cachedEmail", &account.email)?;
-    if let Some(ref mt) = account.membership_type {
-        upsert_vscdb_item(&conn, "cursorAuth/stripeMembershipType", mt)?;
-    }
-    if let Some(ref ss) = account.subscription_status {
-        upsert_vscdb_item(&conn, "cursorAuth/stripeSubscriptionStatus", ss)?;
-    }
-
-    upsert_vscdb_item(&conn, "cursor.accessToken", &account.access_token)?;
-    upsert_vscdb_item(&conn, "cursor.email", &account.email)?;
+    write_cursor_auth(&mut conn, &account)?;
 
     logger::log_info(&format!(
         "[Cursor Account] 注入成功(自定义路径): id={}, email={}, path={}",
@@ -2155,4 +2183,68 @@ pub fn run_quota_alert_if_needed(
 
     crate::modules::account::dispatch_quota_alert(&payload);
     Ok(Some(payload))
+}
+
+#[cfg(test)]
+mod session_write_tests {
+    use super::*;
+    fn account() -> CursorAccount {
+        serde_json::from_value(serde_json::json!({
+            "id":"new", "email":"new@example.test", "access_token":"header.eyJzdWIiOiJuZXctdXNlciJ9.signature",
+            "membership_type":"pro", "created_at":0, "last_used":0
+        })).unwrap()
+    }
+    fn database() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE ItemTable(key TEXT PRIMARY KEY, value TEXT);")
+            .unwrap();
+        for key in [
+            "cursorAuth/refreshToken",
+            "cursorAuth/cachedTeam",
+            "cursorAuth/stripeMembershipAuthId",
+            "unrelated",
+        ] {
+            upsert_vscdb_item(&conn, key, "old").unwrap();
+        }
+        conn
+    }
+    #[test]
+    fn cursor_switch_clears_old_session_and_owns_new_membership() {
+        let mut conn = database();
+        write_cursor_auth(&mut conn, &account()).unwrap();
+        let count: i64 = conn.query_row("SELECT count(*) FROM ItemTable WHERE key IN ('cursorAuth/refreshToken','cursorAuth/cachedTeam')", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 0);
+        let owner: String = conn
+            .query_row(
+                "SELECT value FROM ItemTable WHERE key = 'cursorAuth/stripeMembershipAuthId'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(owner, "new-user");
+        assert_eq!(
+            conn.query_row(
+                "SELECT value FROM ItemTable WHERE key = 'unrelated'",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+            "old"
+        );
+    }
+    #[test]
+    fn cursor_switch_rolls_back_when_any_field_fails() {
+        let mut conn = database();
+        conn.execute_batch("CREATE TRIGGER reject_auth BEFORE INSERT ON ItemTable WHEN NEW.key = 'cursorAuth/accessToken' BEGIN SELECT RAISE(ABORT, 'fixture'); END;").unwrap();
+        assert!(write_cursor_auth(&mut conn, &account()).is_err());
+        assert_eq!(
+            conn.query_row(
+                "SELECT value FROM ItemTable WHERE key = 'cursorAuth/refreshToken'",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+            "old"
+        );
+    }
 }

@@ -138,7 +138,7 @@ export interface CodexAccount {
   /** Explicit direct mode; absent on older accounts means follow existing defaults. */
   egress_proxy_disabled?: boolean;
   /** Backend-provided safe proxy metadata; never contains credentials. */
-  egress_proxy?: { protocol: string; server?: string; port?: number; name?: string; sourceName?: string; sourceId?: string; itemId?: string; groupId?: string | null; selectedName?: string | null } | null;
+  egress_proxy?: { protocol: string; server?: string; port?: number; name?: string; sourceName?: string; sourceId?: string; itemId?: string; groupId?: string | null; selectedName?: string | null; selections?: Record<string, string> } | null;
   /** Legacy import/export metadata; no longer changes outgoing requests. */
   codex_fingerprint_mode?: CodexFingerprintMode;
   /** Legacy backup metadata; no longer restricts clients or reaches the sidecar. */
@@ -157,11 +157,6 @@ export interface CodexAccount {
   authorization_status?: string | null;
   requires_reauth?: boolean;
   reauth_reason?: string;
-  client_auth_status?: "available" | "login_required" | "unknown" | string | null;
-  last_client_auth_observed_at?: number | null;
-  last_client_login_redirect_at?: number | null;
-  last_client_launch_at?: number | null;
-  last_client_auth_instance_id?: string | null;
   quota?: CodexQuota;
   team_quota_history?: {
     user_id: string;

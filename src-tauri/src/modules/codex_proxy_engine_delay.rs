@@ -22,7 +22,17 @@ pub(crate) fn validate_delay_url(value: &str) -> Result<String, String> {
 
 impl EngineController {
     pub(crate) async fn measure_delay(&self, test_url: &str) -> Result<u64, String> {
-        query_delay(self, "account-node", test_url, DELAY_TIMEOUT).await
+        if self.entry.is_empty() {
+            let url = validate_delay_url(test_url)?;
+            let client = reqwest::Client::builder().no_proxy()
+                .proxy(reqwest::Proxy::all(&self.proxy_url).map_err(|_| "PROXY_PROBE_FAILED")?)
+                .timeout(DELAY_TIMEOUT).build().map_err(|_| "PROXY_PROBE_FAILED")?;
+            let started = std::time::Instant::now();
+            let response = client.head(url).send().await.map_err(|_| "PROXY_PROBE_FAILED")?;
+            if !response.status().is_success() { return Err("PROXY_PROBE_FAILED".into()); }
+            return Ok((started.elapsed().as_millis() as u64).max(1));
+        }
+        query_delay(self, &self.entry, test_url, DELAY_TIMEOUT).await
     }
 
     pub(crate) async fn measure_leaf_delay(

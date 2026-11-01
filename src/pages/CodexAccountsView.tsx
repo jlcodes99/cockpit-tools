@@ -1,3 +1,4 @@
+import { CodexDeviceRestrictions } from "../components/codex/CodexDeviceRestrictions";
 import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
@@ -230,6 +231,8 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
         tabs={topLayout.order}
         tabPlacement={topLayout.placement}
       />
+
+      {activeTab === "overview" && <CodexDeviceRestrictions accounts={accounts} maskAccountText={maskAccountText} />}
 
       {storageError && (
         <div className="codex-top-layout-save-error" role="alert">

@@ -2242,13 +2242,13 @@ multi_agent = true
     }
 
     #[test]
-    fn api_profile_refresh_keeps_native_speed_capability_catalog() {
+    fn api_profile_refresh_cleans_legacy_speed_capability_catalog() {
         let _lock = crate::modules::test_support::env_lock()
             .lock().unwrap_or_else(|error| error.into_inner());
         let env = TestEnvGuard::new("codex-native-speed-refresh");
         let base_dir = env.home_dir.join("profile");
         fs::create_dir_all(&base_dir).unwrap();
-        let file_name = crate::modules::codex_native_speed_catalog::FILE_NAME;
+        let file_name = crate::modules::codex_model_catalog_capabilities::FILE_NAME;
         fs::write(base_dir.join(file_name), r#"{"models":[]}"#).unwrap();
         fs::write(base_dir.join("config.toml"), format!(
             "model = 'gpt-6.1-sol'\nservice_tier = 'ultrafast'\nmodel_catalog_json = '{file_name}'\n"
@@ -2262,7 +2262,8 @@ multi_agent = true
         super::sync_or_cleanup_account_model_catalog_for_dir(&base_dir, &account).unwrap();
         let text = fs::read_to_string(base_dir.join("config.toml")).unwrap();
         let doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&text).unwrap();
-        assert_eq!(doc.get("model_catalog_json").and_then(|item| item.as_str()), Some(file_name));
+        assert!(doc.get("model_catalog_json").is_none());
+        assert!(!base_dir.join(file_name).exists());
         let state = super::inspect_experimental_model_catalog(&base_dir, &doc).unwrap();
         assert!(!state.enabled);
         assert!(state.conflict.is_none());
@@ -2291,7 +2292,7 @@ multi_agent = true
         account
             .api_model_context_windows
             .insert("custom-model".into(), 1_000_000);
-        let native_name = crate::modules::codex_native_speed_catalog::FILE_NAME;
+        let native_name = crate::modules::codex_model_catalog_capabilities::FILE_NAME;
         for reference in [
             native_name.to_owned(),
             base_dir.join(native_name).to_string_lossy().into_owned(),
@@ -2371,4 +2372,53 @@ multi_agent = true
                 )
             );
         }
+    }
+
+    #[test]
+    fn legacy_speed_migration_restores_saved_managed_catalog() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock().unwrap_or_else(|error| error.into_inner());
+        let env = TestEnvGuard::new("codex-managed-speed-migration");
+        let dir = env.home_dir.join("profile");
+        fs::create_dir_all(&dir).unwrap();
+        let models = vec![crate::models::codex::CodexExperimentalModelDefinition {
+            model_id: "gpt-6.1-sol".into(), display_name: "My Sol".into(),
+            reasoning_efforts: Some(vec!["low".into(), "high".into()]),
+            default_reasoning_effort: Some("high".into()),
+            context_window: Some(800_000), auto_compact_token_limit: Some(700_000),
+        }];
+        super::save_model_catalog_for_base_dir_preserving_context(
+            &dir, true, models, Some("gpt-6.1-sol".into()),
+        ).unwrap();
+        let legacy = crate::modules::codex_model_catalog_capabilities::FILE_NAME;
+        fs::write(dir.join(legacy), r#"{"models":[{"slug":"stale-model"}]}"#).unwrap();
+        fs::write(dir.join("config.toml"), format!("model_catalog_json = '{legacy}'\n")).unwrap();
+        crate::modules::codex_model_catalog_capabilities::prepare_managed_catalog(&dir).unwrap();
+        let text = fs::read_to_string(dir.join("config.toml")).unwrap();
+        assert!(text.contains("cockpit-model-catalog.json"));
+        let catalog: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)).unwrap(),
+        ).unwrap();
+        let entries = catalog["models"].as_array().unwrap();
+        assert!(!entries.iter().any(|m| m["slug"] == "stale-model"));
+        let sol = entries.iter().find(|m| m["slug"] == "gpt-6.1-sol").unwrap();
+        assert_eq!(sol["display_name"], "My Sol");
+        assert_eq!(sol["context_window"], 800_000);
+        assert_eq!(sol["auto_compact_token_limit"], 700_000);
+        assert_eq!(sol["default_reasoning_level"], "high");
+        assert!(sol["service_tiers"].as_array().unwrap().iter().any(|t| t["id"] == "ultrafast"));
+        assert!(!dir.join(legacy).exists());
+    }
+
+    #[test]
+    fn disabling_managed_catalog_does_not_restore_retired_speed_reference() {
+        let dir = tempfile::tempdir().unwrap();
+        super::persist_experimental_model_policy(dir.path(), true).unwrap();
+        super::persist_previous_experimental_catalog_reference(
+            dir.path(), Some(crate::modules::codex_model_catalog_capabilities::FILE_NAME), None,
+        ).unwrap();
+        let mut doc = "model_catalog_json = 'cockpit-model-catalog.json'\n"
+            .parse::<toml_edit::Document>().unwrap();
+        super::apply_experimental_model_catalog_to_doc(dir.path(), &mut doc, Some(false)).unwrap();
+        assert!(doc.get("model_catalog_json").is_none());
     }

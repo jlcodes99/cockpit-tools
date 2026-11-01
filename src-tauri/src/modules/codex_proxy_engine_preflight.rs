@@ -87,6 +87,8 @@ pub(crate) fn is_prerequisite_error(error: &str) -> bool {
     matches!(
         error,
         "PROXY_ENGINE_MISSING"
+            | "PROXY_PROFILE_RESOURCE"
+            | "PROXY_PROFILE_DIRECTORY"
             | "PROXY_ENGINE_TIMEOUT"
             | "PROXY_ENGINE_VERSION"
             | "PROXY_ENGINE_START_FAILED"

@@ -34,6 +34,7 @@ export function sourceDefaultDraft(source?: ProxyCatalogSource | null): { itemId
 
 /** A saved root selector exposes its member name without revealing proxy credentials. */
 export function savedRootProxySelections(source: ProxyCatalogSource, saved: CodexAccount['egress_proxy']): ProxyCatalogSelections {
+  if (source.nativeProfile && saved?.selections) return { ...saved.selections };
   const group = source.groups.find((entry) => entry.id === saved?.itemId && entry.kind === 'select');
   const member = saved?.selectedName;
   return group && member && group.members.includes(member) ? { [group.id]: member } : {};
@@ -43,6 +44,16 @@ export function savedRootProxySelections(source: ProxyCatalogSource, saved: Code
  * Return null for missing choices, cycles, unavailable members or excessive nesting.
  */
 export function defaultProxySelections(source: ProxyCatalogSource, itemId: string, chosen: ProxyCatalogSelections = {}): ProxyCatalogSelections | null {
+  if (source.nativeProfile) {
+    if (![...source.nodes, ...source.groups].some((item) => item.id === itemId && item.supported)) return null;
+    const selections: ProxyCatalogSelections = {};
+    for (const group of source.groups.filter((g) => g.kind === 'select')) {
+      const member = chosen[group.id] ?? group.nativeSelection ?? group.members[0];
+      if (!member || !group.members.includes(member)) return null;
+      selections[group.id] = member;
+    }
+    return selections;
+  }
   const nodes = new Map(source.nodes.map((node) => [node.name, node]));
   const groups = new Map(source.groups.map((group) => [group.name, group]));
   let remaining = 512;
@@ -51,11 +62,13 @@ export function defaultProxySelections(source: ProxyCatalogSource, itemId: strin
     // Blocking rules are real group members; they must never turn into a direct fallback.
     if (isCatalogBlockingMember(name)) return {};
     if (['DIRECT', 'PASS', 'PASS-RULE', 'COMPATIBLE'].includes(name)) return null;
+    if (path.has(name) || path.size >= 16) return null;
+    const nextPath = new Set(path).add(name);
     const node = nodes.get(name);
-    if (node) return node.supported ? {} : null;
+    if (node) return !node.supported ? null : node.dialerProxy && node.dialerProxy !== 'DIRECT'
+      ? visit(node.dialerProxy, nextPath) : {};
     const group = groups.get(name);
     if (!group?.supported || path.has(name) || path.size >= 16) return null;
-    const nextPath = new Set(path).add(name);
     if (group.kind === 'select') {
       const member = chosen[group.id];
       if (!member || !group.members.includes(member)) return null;

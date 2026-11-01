@@ -5,6 +5,8 @@ include!("claude_account_core_storage.rs");
 include!("claude_account_oauth_provider.rs");
 include!("claude_account_cookie_snapshot.rs");
 include!("claude_account_desktop_profile.rs");
+include!("claude_account_desktop_restore.rs");
+include!("claude_account_desktop_plan.rs");
 include!("claude_account_desktop_auth.rs");
 include!("claude_account_cli_sync.rs");
 include!("claude_account_oauth_updates.rs");
@@ -22,4 +24,9 @@ mod cookie_snapshot_tests {
 #[cfg(test)]
 mod cli_sync_tests {
     include!("claude_account_cli_sync_tests.rs");
+}
+
+#[cfg(test)]
+mod desktop_compat_tests {
+    include!("claude_account_desktop_compat_tests.rs");
 }

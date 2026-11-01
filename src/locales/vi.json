@@ -158,6 +158,9 @@
     "providerClear": "Bỏ chọn"
   },
   "common": {
+    "profileRestoreBusy": "Đang khôi phục phiên đăng nhập. Vui lòng thử lại sau.",
+    "profileRestoreInvalid": "Đường dẫn bản lưu phiên đăng nhập không hợp lệ. Hãy nhập lại tài khoản.",
+    "profileRestoreRecoveryFailed": "Không thể khôi phục phiên đăng nhập. Bản sao lưu đã được giữ lại: {{detail}}",
     "dataQueryBusy": "Dữ liệu đang được xử lý. Vui lòng thử lại sau ít phút.",
     "apiBudget": {
       "keyScope": "Khóa này",
@@ -427,7 +430,11 @@
           "statusSkipped": "Đã bỏ qua",
           "statusPending": "Đang chờ nhập"
         },
-        "invalidJson": "JSON không hợp lệ. Kiểm tra tệp hoặc nội dung đã dán."
+        "invalidJson": "JSON không hợp lệ. Kiểm tra tệp hoặc nội dung đã dán.",
+        "empty": "Dữ liệu nhập trống.",
+        "sizeLimit": "Tệp không được vượt quá {{limit}} MiB.",
+        "countLimit": "Mỗi lần chỉ được nhập tối đa {{count}} tài khoản.",
+        "itemFailed": "Mục {{index}}: {{error}}"
       },
       "externalImport": {
         "bundleInvalidJson": "Gói nhập không phải JSON hợp lệ",
@@ -538,6 +545,8 @@
         "title": "Tổng quan tài khoản"
       },
       "quota": {
+        "usageWithUnit": "Mức sử dụng ({{unit}})",
+        "usage": "Mức sử dụng",
         "noData": "Không có dữ liệu hạn mức",
         "queryFailed": "Truy vấn hạn mức thất bại",
         "resetDone": "Đã đặt lại",
@@ -631,6 +640,29 @@
         "missingTiming": "Chưa ghi nhận thời gian đầu ra hợp lệ.",
         "shortWindow": "Khoảng quan sát đầu ra dưới 100 ms."
       }
+    },
+    "deviceRestriction": {
+      "title": "Nhật ký giới hạn thiết bị",
+      "badge": "Thiết bị bị giới hạn",
+      "paused": "Đã ghi nhận giới hạn thiết bị rõ ràng. Các lần thử tự động cho thao tác này đã tạm dừng. Hãy xem bản ghi tại trang tài khoản.",
+      "note": "Đây là quan sát cục bộ, không phải suất thiết bị của OpenAI. Xóa tài khoản hoặc thông tin đăng nhập cục bộ không đảm bảo giải phóng giới hạn trên máy chủ.",
+      "retryNote": "Cho phép thử lại không đánh dấu giới hạn là đã gỡ. Khi nhận từ chối rõ ràng lần nữa, các lần thử sẽ lại tạm dừng.",
+      "desktop": "Đăng nhập máy tính",
+      "quota": "Tra cứu hạn mức",
+      "api": "Yêu cầu API",
+      "oauth": "Đăng nhập OAuth",
+      "token": "Làm mới mã truy cập",
+      "recovered": "Thao tác đã khôi phục",
+      "pausedLabel": "Đã dừng thử",
+      "retryEnabled": "Đã cho phép thử lại",
+      "observed": "Đầu tiên: {{first}} · Gần nhất: {{last}} · {{count}} lần ghi nhận",
+      "check": "Kiểm tra lại",
+      "allowRetry": "Cho phép thử lại",
+      "help": "Trợ giúp chính thức",
+      "support": "Liên hệ hỗ trợ",
+      "failed": "Không thể hoàn tất thao tác. Trạng thái gần nhất được giữ lại. Vui lòng thử lại.",
+      "loginAttempt": "Lần đăng nhập chưa xác định tài khoản",
+      "removed": "Tài khoản cục bộ đã xóa"
     }
   },
   "nav": {
@@ -1369,8 +1401,6 @@
       "codexPreserveExternalBridge": "Giữ cầu nối ngoài",
       "codexPreserveExternalBridgeDesc": "Giữ cầu nối Codex Web GPT đã xác minh bằng bản ghi cục bộ khi đổi tài khoản OAuth. Mặc định tắt.",
       "codexEnhancements": {
-        "nativeFast": "Bộ chọn Fast gốc",
-        "nativeFastDesc": "Bật menu tốc độ gốc của ứng dụng cho tài khoản API Key, hiển thị các mức mà mô hình hỗ trợ. Khả năng sử dụng và mức phí tùy nhà cung cấp API.",
         "quotaCompat": "Hạn mức chế độ kết hợp",
         "quotaCompatDesc": "Khi đăng nhập OAuth thật và dùng tuyến API bên ngoài, hạn mức gói đăng ký không chặn tin nhắn API cục bộ. Không đổi mức dùng thực tế hay hạn mức hình ảnh.",
         "restartHint": "Mặc định bật. Khởi động lại các phiên bản Codex liên quan sau khi đổi và giữ Cockpit Tools chạy. Tính năng nhập giọng nói gốc phụ thuộc vào khả năng và cài đặt của ứng dụng; Cockpit không thay thế hay ép bật tính năng này.",
@@ -2676,14 +2706,8 @@
       "unsupportedCountryRegion": "Khu vực mạng hiện tại không hỗ trợ làm mới ủy quyền Codex. Dịch vụ ủy quyền OpenAI đã từ chối lối ra mạng này. Hãy chuyển sang khu vực được hỗ trợ rồi thử lại."
     },
     "switchAuth": {
-      "apiOnlyTitle": "Ứng dụng cần đăng nhập",
       "reauthorizeTitle": "Ủy quyền Codex đã hết hạn",
-      "apiOnlyDescription": "Ứng dụng hiện tại đã chuyển đến trang đăng nhập. Hãy cấp quyền lại để khôi phục ứng dụng; bạn vẫn có thể tiếp tục dùng Dịch vụ API trong lúc này.",
-      "observationStatus": "Đã phát hiện chuyển hướng đến trang đăng nhập",
-      "observationTime": "Lần kiểm tra gần nhất: {{time}}",
-      "loginRedirectTime": "Lần chuyển hướng gần nhất đến trang đăng nhập: {{time}}",
       "observationInstance": "Phiên bản được kiểm tra: {{instance}}",
-      "launchTime": "Thời điểm khởi chạy phiên bản: {{time}}",
       "reauthorizeDescription": "Không thể làm mới thông tin đăng nhập và access_token không còn dùng được cho dịch vụ API. Hãy ủy quyền lại tài khoản để tiếp tục.",
       "idTokenUnavailable": "Danh tính ứng dụng đã hết hạn và quá trình làm mới tự động không trả về id_token hợp lệ.",
       "reasonLabel": "Lý do",
@@ -2696,10 +2720,7 @@
       "startingInstanceAfterReauth": "Đã cập nhật ủy quyền. Đang khởi động lại phiên...",
       "startInstanceAfterReauthFailed": "Đã cập nhật ủy quyền nhưng không thể khởi động phiên: {{error}}",
       "reauthorizedAndStartedInstance": "Đã ủy quyền lại và khởi động phiên",
-      "apiOnlyBadge": "Cần đăng nhập",
-      "clearClientAuth": "Xóa cảnh báo",
-      "clearClientAuthSuccess": "Đã xóa cảnh báo ứng dụng",
-      "clearClientAuthFailed": "Không thể xóa cảnh báo ứng dụng: {{error}}"
+      "apiTokenUsableDescription": "Một số thông tin đăng nhập cần được cấp quyền lại. Mã truy cập hiện tại vẫn có thể dùng cho dịch vụ API."
     },
     "current": "Hiện tại",
     "empty": {
@@ -4752,8 +4773,8 @@
         "allStatuses": "Mọi trạng thái",
         "allGatewayModes": "Tat ca che do",
         "sessionFilter": "Phiên",
-      "sessionPlaceholder": "ID phiên",
-      "modelFilter": "Mô hình",
+        "sessionPlaceholder": "ID phiên",
+        "modelFilter": "Mô hình",
         "modelPlaceholder": "ID mô hình",
         "accountFilter": "Tài khoản",
         "accountPlaceholder": "Email hoặc ID tài khoản",
@@ -5535,7 +5556,7 @@
         "subscriptionUrl": "URL đăng ký",
         "nodeLinks": "Liên kết nút hoặc cấu hình",
         "import": "Nhập",
-        "importNotice": "URL và thông tin xác thực được mã hóa cục bộ. Yêu cầu đăng ký gửi tới nhà cung cấp không kèm Token tài khoản.",
+        "importNotice": "Bản chụp cấu hình và tài nguyên được lưu mã hóa, rồi giải mã trong thư mục chạy riêng. Yêu cầu đăng ký và tài nguyên không kèm mã thông báo tài khoản.",
         "intro": "Nhập và kiểm tra gói đăng ký hoặc nút, sau đó chọn và liên kết từ danh sách tài khoản.",
         "emptyTitle": "Thêm proxy đầu tiên",
         "emptyHint": "Hỗ trợ đăng ký, liên kết nút và HTTP / SOCKS5. Có thể nhập và kiểm tra khi chưa có tài khoản.",
@@ -5580,7 +5601,7 @@
         "unsupported": "Chưa hỗ trợ",
         "invalidInput": "Nhập tên và URL, liên kết nút hoặc cấu hình proxy hợp lệ.",
         "downloadFailed": "Không tải được đăng ký. Kiểm tra mạng và cài đặt proxy rồi thử lại.",
-        "downloadRedirect": "Đã dừng tải đăng ký do chuyển hướng khác nguồn hoặc quá nhiều lần chuyển hướng.",
+        "downloadRedirect": "Chuyển hướng đăng ký không hợp lệ hoặc vượt quá giới hạn cho phép.",
         "downloadDenied": "Máy chủ đăng ký từ chối truy cập (HTTP 401/403). Kiểm tra liên kết và thời hạn hiệu lực.",
         "downloadTls": "Bắt tay TLS hoặc xác minh chứng chỉ của kết nối đăng ký thất bại. Kiểm tra mạng và cài đặt proxy.",
         "timeout": "Thao tác quá hạn. Làm mới để xác nhận kết quả trước khi thử lại.",
@@ -5598,6 +5619,7 @@
         "loadBalanceGroup": "Cân bằng tải",
         "reasonStrategy": "Chưa hỗ trợ chiến lược nhóm này. Mở rộng để chọn nút khả dụng.",
         "reasonOptions": "Chứa giao thức hoặc tùy chọn cấu hình chưa được hỗ trợ.",
+        "reasonProviderConfig": "Nguồn, bộ lọc hoặc cấu hình chuyển đổi của nhà cung cấp này chưa được hỗ trợ.",
         "reasonProvider": "Nhóm này cần các nhà cung cấp nút bên ngoài chưa được tải.",
         "reasonMembers": "Thành viên nhóm không vượt qua xác thực. Hãy xem lý do cụ thể.",
         "reasonInvalid": "Thiếu cài đặt bắt buộc hoặc cài đặt không hợp lệ.",
@@ -5619,6 +5641,14 @@
         "defaultProtocol": "Giao thức khi bỏ trống",
         "credentialFormat": "Định dạng đăng nhập",
         "recognizing": "Đang nhận diện…",
+        "nativePreview": "Khi nhập, Mihomo xử lý trực tiếp cấu hình và tải tài nguyên. Bản xem trước không truy cập tệp hoặc mạng.",
+        "resourceDirectory": "Thư mục tài nguyên",
+        "browseResources": "Chọn thư mục",
+        "resourceDirectoryHint": "Nếu có tệp cục bộ, hãy chọn thư mục tài nguyên của đăng ký. Nội dung được sao chép vào thư mục chạy riêng và lưu dưới dạng bản chụp mã hóa.",
+        "resourceDirectoryRequired": "Chọn thư mục tài nguyên cục bộ của đăng ký này.",
+        "resourceMissing": "Tài nguyên cục bộ không khả dụng. Kiểm tra thư mục hoặc nhập lại.",
+        "rulesName": "Quy tắc đăng ký",
+        "pendingProviders": "Khi nhập sẽ tải {{count}} nguồn nút từ xa. Bản xem trước không tải chúng xuống.",
         "previewCount": "Hợp lệ {{valid}} · Cần kiểm tra {{invalid}} · Trùng {{duplicates}}",
         "line": "Dòng {{line}}",
         "ambiguous": "Định dạng không rõ ràng. Chọn định dạng đăng nhập hoặc dùng URL proxy đầy đủ.",
@@ -6524,8 +6554,9 @@
       "desc": "Dán mã thông báo truy cập Kiro của bạn hoặc dữ liệu JSON đã xuất."
     },
     "import": {
-      "localDesc": "Nhập dữ liệu tài khoản Kiro từ ứng dụng khách Kiro cục bộ hoặc tệp JSON.",
-      "localClient": "Nhập khẩu từ Kiro địa phương"
+      "localDesc": "Nhập từ ứng dụng cục bộ hoặc JSON. Tài khoản JSON được lưu trước, sau đó trạng thái đăng nhập và hạn mức được cập nhật trong nền.",
+      "localClient": "Nhập khẩu từ Kiro địa phương",
+      "invalidCredentials": "Thiếu trường thông tin xác thực hoặc trường không được hỗ trợ. Hãy xuất lại tài khoản."
     },
     "injectToVSCode": "Chuyển sang Kiro"
   },
@@ -7708,6 +7739,17 @@
       "family": "Nhóm",
       "platform": "Hệ thống hiện tại",
       "unsupportedGroup": "Nhóm này chưa có ứng dụng khách ghi bằng một cú nhấp."
+    },
+    "campaign": {
+      "badge": "11.11",
+      "title": "Nạp tiền nhận thêm 11,11%",
+      "description": "Dành cho cả người dùng mới và hiện tại.",
+      "period": "Thời gian: 1–11 tháng 11 năm 2026 (UTC+8)",
+      "terms": "Xem điều kiện trên trang ưu đãi.",
+      "action": "Xem ưu đãi",
+      "inactive": "Ưu đãi hiện không có hiệu lực.",
+      "label": "Ưu đãi 11.11 có thời hạn",
+      "promotionDescription": "Đón 11.11 cùng đối tác trung chuyển API chính thức của Cockpit. Người dùng mới và hiện tại đều được tặng thêm 11,11% khi nạp tiền trong thời gian ưu đãi. Hỗ trợ Claude, ChatGPT, Gemini và các mô hình hàng đầu khác."
     }
   },
   "grok": {

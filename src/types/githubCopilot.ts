@@ -17,6 +17,7 @@ export interface GitHubCopilotAccount {
   copilot_chat_enabled?: boolean | null;
   copilot_expires_at?: number | null;
   copilot_refresh_in?: number | null;
+  copilot_token_based_billing?: boolean | null;
   copilot_quota_snapshots?: unknown;
   copilot_quota_reset_date?: string | null;
   copilot_limited_user_quotas?: unknown;

@@ -13,7 +13,7 @@ import type { CodexAccountGroup } from "../services/codexAccountGroupService";
 import { splitValidityFilterValues } from "./accountValidityFilter";
 import { compareCurrentAccountFirst } from "./currentAccountSort";
 import {
-  isCodexClientReauthNoticeOnly,
+  isCodexApiUsableReauthNotice,
   isCodexRefreshTokenReusedAccount,
 } from "./codexSwitchAuthFailure";
 import { normalizeAccountsOverviewScope } from "./accountsOverviewFilterPersistence";
@@ -303,7 +303,7 @@ export function isCodexOverviewAccountAbnormal(
   if (isCodexRefreshTokenReusedAccount(account)) return false;
   // refresh_token 失效只影响官方客户端切号。只要 access_token 仍在 API
   // 服务的安全有效期内，该账号就仍是可用账号，不应计入“授权失败”。
-  if (isCodexClientReauthNoticeOnly(account)) return false;
+  if (isCodexApiUsableReauthNotice(account)) return false;
   if (account.requires_reauth === true) return true;
 
   const rawMessage = getCodexAccountQuotaError(account.quota_error)?.message?.trim() ?? "";

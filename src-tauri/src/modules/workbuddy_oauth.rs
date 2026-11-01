@@ -81,16 +81,6 @@ fn normalize_non_empty(value: Option<&str>) -> Option<String> {
         .map(|v| v.to_string())
 }
 
-fn build_user_resource_request_body() -> Value {
-    json!({
-        "PageNumber": 1,
-        "PageSize": 100,
-        "ProductCode": "p_tcaca",
-        "Status": [0, 3],
-        "OnlyValidPeriod": true
-    })
-}
-
 fn user_resource_items(body: &Value) -> Option<&Vec<Value>> {
     [
         "/data/resources",
@@ -103,6 +93,7 @@ fn user_resource_items(body: &Value) -> Option<&Vec<Value>> {
     .find_map(|path| body.pointer(path).and_then(Value::as_array))
 }
 
+#[cfg(test)]
 fn user_resource_has_payload(body: &Value) -> bool {
     user_resource_items(body).is_some_and(|items| !items.is_empty())
 }
@@ -659,104 +650,44 @@ pub async fn fetch_user_resource_with_access_token(
     _page_size: i32,
 ) -> Result<Value, String> {
     let _ = (product_code, status);
-    let body = build_user_resource_request_body();
-    post_user_resource(access_token, uid, enterprise_id, domain, body).await
+    post_user_resource(access_token, uid, enterprise_id, domain).await
 }
 
 async fn post_user_resource(
     access_token: &str,
     uid: Option<&str>,
     enterprise_id: Option<&str>,
-    domain: Option<&str>,
-    body: Value,
+    _domain: Option<&str>,
 ) -> Result<Value, String> {
     let client = build_client()?;
-    let url = format!(
-        "{}/v2/billing/meter/get-user-resource",
-        WORKBUDDY_API_ENDPOINT
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        "Authorization",
+        format!("Bearer {}", access_token)
+            .parse()
+            .map_err(|e| format!("Invalid authorization header: {}", e))?,
     );
-
-    let mut req = client
-        .post(&url)
-        .header("Accept", "application/json, text/plain, */*")
-        .header("Accept-Language", "zh-CN,zh;q=0.9")
-        .header("Authorization", format!("Bearer {}", access_token))
-        .header("Content-Type", "application/json");
-
-    if let Some(u) = uid {
-        req = req.header("X-User-Id", u);
+    headers.insert("Accept-Language", "zh-CN,zh;q=0.9".parse().unwrap());
+    if let Some(uid) = uid {
+        headers.insert(
+            "X-User-Id",
+            uid.parse()
+                .map_err(|e| format!("Invalid user header: {}", e))?,
+        );
     }
-    if let Some(eid) = enterprise_id {
-        req = req.header("X-Enterprise-Id", eid);
-        req = req.header("X-Tenant-Id", eid);
+    if let Some(id) = enterprise_id {
+        headers.insert(
+            "X-Enterprise-Id",
+            id.parse()
+                .map_err(|e| format!("Invalid enterprise header: {}", e))?,
+        );
+        headers.insert(
+            "X-Tenant-Id",
+            id.parse()
+                .map_err(|e| format!("Invalid tenant header: {}", e))?,
+        );
     }
-    if let Some(d) = domain {
-        req = req.header("X-Domain", d);
-    }
-
-    let resp = req
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("请求 user resource（Token）失败:{}", e))?;
-
-    let status_code = resp.status();
-    let content_type = resp
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
-    let content_encoding = resp
-        .headers()
-        .get(reqwest::header::CONTENT_ENCODING)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
-    let body: Value = resp
-        .json()
-        .await
-        .map_err(|e| {
-            format!(
-                "解析 user resource（Token）响应失败:{} (http={}, url={}, has_uid={}, has_enterprise_id={}, content_type={}, content_encoding={})",
-                e,
-                status_code.as_u16(),
-                url,
-                uid.is_some(),
-                enterprise_id.is_some(),
-                content_type,
-                content_encoding
-            )
-        })?;
-
-    if !status_code.is_success() {
-        let message = body
-            .get("message")
-            .or_else(|| body.get("msg"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown error");
-        return Err(format!(
-            "请求 user resource（Token）失败 (http={}): {}",
-            status_code.as_u16(),
-            message
-        ));
-    }
-
-    if let Some(code) = body.get("code").and_then(|v| v.as_i64()) {
-        if code != 0 && code != 200 {
-            let message = body
-                .get("message")
-                .or_else(|| body.get("msg"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown error");
-            return Err(format!(
-                "请求 user resource（Token）失败 (code={}): {}",
-                code, message
-            ));
-        }
-    }
-
-    Ok(body)
+    crate::modules::buddy_resource_api::fetch(&client, WORKBUDDY_API_ENDPOINT, headers).await
 }
 
 /// 企业版用户用量（网页端 /profile/usage 实际使用的接口）
@@ -915,18 +846,9 @@ async fn fetch_user_resource_with_access_token_default(
     enterprise_id: Option<&str>,
     domain: Option<&str>,
 ) -> Result<Value, String> {
-    let payload = post_user_resource(
-        access_token,
-        uid,
-        enterprise_id,
-        domain,
-        build_user_resource_request_body(),
-    )
-    .await?;
-    if user_resource_has_payload(&payload) {
+    let payload = post_user_resource(access_token, uid, enterprise_id, domain).await?;
+    if user_resource_has_shape(&payload) {
         Ok(payload)
-    } else if user_resource_has_shape(&payload) {
-        Err("user resource 响应未包含可用资源".to_string())
     } else {
         Err("user resource 响应缺少 resources/Accounts".to_string())
     }
@@ -1322,20 +1244,6 @@ mod tests {
         assert_eq!(
             params.get("loginSessionId").map(|value| value.as_ref()),
             Some("00000000-0000-4000-8000-000000000000")
-        );
-    }
-
-    #[test]
-    fn user_resource_body_uses_only_current_official_fields() {
-        assert_eq!(
-            build_user_resource_request_body(),
-            json!({
-                "PageNumber": 1,
-                "PageSize": 100,
-                "ProductCode": "p_tcaca",
-                "Status": [0, 3],
-                "OnlyValidPeriod": true
-            })
         );
     }
 

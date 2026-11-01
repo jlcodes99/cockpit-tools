@@ -118,7 +118,7 @@ test('current selector captures host before result destructuring and preserves t
   const tier = { id: 'ultrafast' };
   const env = load(true, true, { serviceTierFallbacks: { 'gpt-6.1-sol': tier } }), input = models();
   const result = env.select(input, { hasConfiguredModelCatalog: false });
-  assert.equal(result.models[0].serviceTiers[1].id, 'ultrafast');
+  assert.equal(result.models[0].serviceTiers.length, input[0].serviceTiers.length);
   assert.equal(result.isTeamCatalog, false);
   const team = env.select(input, { hasConfiguredModelCatalog: false, teamCatalog: 'team' }, false, true);
   assert.equal(team.isTeamCatalog, true);

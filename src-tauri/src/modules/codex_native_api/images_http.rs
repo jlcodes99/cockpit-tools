@@ -678,6 +678,10 @@ impl Execution {
                 (headers, body) => headers.or(body),
             };
             self.tracker.set_retry_after(retry_after);
+            if self.selected.route.chatgpt && failure_message.as_deref()
+                .is_some_and(crate::modules::codex_device_restrictions::explicit_message) {
+                return Ok((response, binding));
+            }
             if request_scoped || execution_observed {
                 self.tracker.set_retry_after(retry_after);
                 return Ok((response, binding));

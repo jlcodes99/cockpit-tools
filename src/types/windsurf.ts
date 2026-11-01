@@ -366,9 +366,11 @@ export type WindsurfCreditsSummary = {
   planEndsAt: number | null;
 };
 
-export type WindsurfOfficialUsageMode = 'credits' | 'quota';
+export type WindsurfOfficialUsageMode = 'credits' | 'quota' | 'acu';
 
 export type WindsurfQuotaUsageSummary = {
+  hideDaily: boolean;
+  hideWeekly: boolean;
   dailyUsedPercent: number | null;
   weeklyUsedPercent: number | null;
   dailyResetAt: number | null;
@@ -1136,7 +1138,8 @@ export function getWindsurfBillingStrategy(account: WindsurfAccount): string | n
 
   const normalizedStrategy = strategy?.trim();
   if (!normalizedStrategy) {
-    return null;
+    const value = getNumberFromPaths(planInfo, [['billingStrategy'], ['billing_strategy']]);
+    return value === 1 ? 'credits' : value === 2 ? 'quota' : value === 3 ? 'acu' : null;
   }
 
   const canonicalStrategy = normalizedStrategy
@@ -1156,6 +1159,7 @@ export function getWindsurfBillingStrategy(account: WindsurfAccount): string | n
 
 export function getWindsurfOfficialUsageMode(account: WindsurfAccount): WindsurfOfficialUsageMode {
   const billingStrategy = getWindsurfBillingStrategy(account)?.trim().toLowerCase();
+  if (billingStrategy === 'acu') return 'acu';
   return billingStrategy === 'quota' ? 'quota' : 'credits';
 }
 
@@ -1201,7 +1205,10 @@ export function getWindsurfQuotaUsageSummary(account: WindsurfAccount): Windsurf
     parseTimestampSeconds(getPathValue(planStatus, ['weekly_quota_reset_at_unix'])) ??
     null;
 
+  const planInfo = resolveWindsurfPlanInfo(account, planStatus);
   return {
+    hideDaily: getPathValue(planInfo, ['hideDailyQuota']) === true || getPathValue(planInfo, ['hide_daily_quota']) === true,
+    hideWeekly: getPathValue(planInfo, ['hideWeeklyQuota']) === true || getPathValue(planInfo, ['hide_weekly_quota']) === true,
     dailyUsedPercent,
     weeklyUsedPercent,
     dailyResetAt,
@@ -1303,4 +1310,14 @@ export function formatWindsurfResetTimeAbsolute(resetTime: number | null | undef
   const hours = pad(date.getHours());
   const minutes = pad(date.getMinutes());
   return `${month}/${day} ${hours}:${minutes}`;
+}
+
+/** Optional doubles in Devin 3.11 PlanStatus. Missing limits stay unknown. */
+export function getWindsurfMeteredUsage(account: WindsurfAccount) {
+  const status = resolveWindsurfPlanStatus(account);
+  return ([['acu', 'ACU'], ['dollars', 'USD']] as const).map(([key, unit]) => {
+    const used = getNumberFromPaths(status, [[`${key}Consumed`], [`${key}_consumed`]]);
+    const limit = getNumberFromPaths(status, [[`${key}Limit`], [`${key}_limit`]]);
+    return { key, unit, used: used != null && used >= 0 ? used : null, limit: limit != null && limit >= 0 ? limit : null };
+  }).filter(item => item.used != null || item.limit != null);
 }

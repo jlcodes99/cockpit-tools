@@ -10,6 +10,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.3.78] - 2026-11-01
+
+### Changed
+
+- **Official client compatibility**: Align account login, switching and quota displays with current Claude, Kiro, Cursor, Qoder, ZCode, WorkBuddy, Devin and TRAE clients. Support Devin ACU/USD usage and TRAE credit billing, including unlimited credit allowances.
+- **Codex proxy subscriptions**: Use Mihomo 1.19.33 to run Clash/Mihomo configurations natively, including local and encrypted providers, transformations, download proxies, DNS and subscription rules. Support local resource folders and authenticated HTTP(S) subscriptions and redirects. Preserve group selections and the last usable configuration when refresh fails; unrelated rule-provider download failures no longer block individual nodes or groups.
+- **Codex speed controls**: Automatically enable native speed controls for API Key and API Service access without a separate switch. Preserve supported Ultrafast options and keep the existing model source when model management is disabled.
+
+### Added
+
+- **Codex device restrictions**: Show explicit official device-limit errors by operation, pause affected retries, and provide local records, manual retry controls and official help links. Clearing local records does not release server-side device slots.
+- **Kiro enterprise credentials**: Import and refresh existing Microsoft External IdP credentials through their matching authentication service.
+- **APIKEY.FAN 11.11 offer**: Show a seasonal promotion header, navigation badge and activity links during November 1–11, then restore the regular content automatically.
+
+### Fixed
+
+- **Kiro JSON imports**: Read nested KiroAccountManager credentials and refresh-token-only exports, preserve authentication types and regions, and refresh login state and quotas in the background. Save new credentials before querying quotas and prevent stale refreshes from overwriting newer credentials or restoring deleted accounts.
+- **Claude subscriptions and switching**: Recognize the active organization's actual subscription label, including Free, support newer desktop login cookies, and restore identity and OAuth caches together. Clear stale login state and recover interrupted profile writes on the next switch.
+- **Cursor switching**: Replace credentials together, clear old refresh tokens and account caches, and retain the original session if a write fails.
+- **Qoder quotas and switching**: Separate personal and enterprise quotas, save credentials and both caches together, and avoid blocking the interface during credential access. A 1% usage rate is no longer interpreted as 100%.
+- **WorkBuddy quotas**: Read paid/free resource packages completely and use daily balances for daily allowances. Incomplete refresh results no longer replace cached balances.
+- **Kiro quota errors**: Use the current quota service and stop treating unsupported features or rate limits as account suspensions.
+- **ZCode login**: Use the official web redirect bridge and shared desktop callback for BigModel and Z.ai, while retaining compatibility with the older Z.ai callback.
+- **Quota labels**: Respect Devin's actual billing mode and daily/weekly visibility settings, and stop labeling usage-based Copilot quotas as premium request counts.
+- **Codex authorization notices**: Remove the sign-in-needed badge inferred from login-page observations and its manual clearing controls. Historical observations no longer affect account display; actual credential failures still show authorization errors.
+
 ## [1.3.77] - 2026-10-31
 
 ### Added

@@ -18,11 +18,15 @@ use tokio::{
 
 #[path = "codex_proxy_engine_delay.rs"]
 mod delay;
+#[path = "codex_proxy_engine_native.rs"]
+mod native;
 #[path = "codex_proxy_engine_process.rs"]
 mod process;
+use super::codex_proxy_subscription_parser::native as native_profile;
 pub(crate) use delay::validate_delay_url;
+pub(crate) use native::{native_request, start_native_inspection};
 
-pub const ENGINE_VERSION: &str = "1.19.31";
+pub const ENGINE_VERSION: &str = "1.19.33";
 const START_TIMEOUT: Duration = Duration::from_secs(8);
 static CHILDREN: LazyLock<Mutex<HashMap<uuid::Uuid, Weak<Mutex<Child>>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -30,8 +34,11 @@ static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 
 /// Isolate Mihomo's non-configuration working files from other clients and
 /// accounts. Proxy secrets are sent only through stdin.
-struct RuntimeDirectory(PathBuf);
+pub(crate) struct RuntimeDirectory(PathBuf);
 impl RuntimeDirectory {
+    pub(crate) fn path(&self) -> &Path {
+        &self.0
+    }
     async fn create() -> Result<Self, String> {
         tokio::time::timeout(
             Duration::from_secs(3),
@@ -78,6 +85,8 @@ impl Drop for RuntimeDirectory {
 /// Dropping a lease also kills the child, including cancellation during a probe.
 /// Long-lived account tunnels will keep a lease in the per-account runtime store.
 pub struct NodeTunnel {
+    provider_progress: Option<Arc<super::codex_proxy_engine_errors::ProviderProgress>>,
+    _dependencies: Vec<NodeTunnel>,
     error: Arc<AtomicU8>,
     error_readers: Vec<tokio::task::JoinHandle<()>>,
     child: Arc<Mutex<Child>>,
@@ -88,11 +97,13 @@ pub struct NodeTunnel {
     selection: Option<SelectionReader>,
     // Shared release lease prevents cleanup while the tunnel uses this engine.
     _engine_lease: Option<std::fs::File>,
-    _runtime_dir: RuntimeDirectory,
+    _runtime_dir: Arc<RuntimeDirectory>,
 }
 
 #[derive(Clone)]
 pub struct EngineController {
+    pub(crate) entry: String,
+    pub(crate) proxy_url: String,
     pub(crate) endpoint: String,
     pub(crate) secret: String,
     pub(crate) tunnel_id: uuid::Uuid,
@@ -119,15 +130,25 @@ fn request_route_observer(
 ) -> RequestRouteObserver {
     let node_names = selection
         .map(|reader| {
-            reader.names.iter()
+            reader
+                .names
+                .iter()
                 .filter(|(tag, _)| !reader.groups.contains_key(*tag))
                 .map(|(tag, name)| (tag.clone(), name.clone()))
                 .collect()
         })
         .unwrap_or_default();
-    let proxy_url = url::Url::parse(proxy_url).ok().and_then(|url| {
-        Some(format!("{}://{}:{}", url.scheme(), url.host_str()?, url.port_or_known_default()?))
-    }).unwrap_or_default();
+    let proxy_url = url::Url::parse(proxy_url)
+        .ok()
+        .and_then(|url| {
+            Some(format!(
+                "{}://{}:{}",
+                url.scheme(),
+                url.host_str()?,
+                url.port_or_known_default()?
+            ))
+        })
+        .unwrap_or_default();
     RequestRouteObserver {
         mapping_url: String::new(),
         proxy_url,
@@ -141,6 +162,8 @@ fn request_route_observer(
 /// Clone before releasing the runtime lock; all HTTP work happens without that lock.
 #[derive(Clone)]
 pub struct SelectionReader {
+    entry: String,
+    native: bool,
     endpoint: String,
     secret: String,
     names: BTreeMap<String, String>,
@@ -156,27 +179,46 @@ pub struct ProxySelection {
 }
 
 fn selection_history(name: String, value: &Value) -> ProxySelection {
-    let history = value["history"].as_array().and_then(|entries| entries.last());
-    let checked_at = history.and_then(|entry| entry["time"].as_str())
+    let history = value["history"]
+        .as_array()
+        .and_then(|entries| entries.last());
+    let checked_at = history
+        .and_then(|entry| entry["time"].as_str())
         .and_then(|time| chrono::DateTime::parse_from_rfc3339(time).ok())
         .map(|time| time.timestamp_millis());
-    let delay_ms = history.and_then(|entry| entry["delay"].as_u64())
+    let delay_ms = history
+        .and_then(|entry| entry["delay"].as_u64())
         .filter(|delay| *delay > 0 && checked_at.is_some() && value["alive"] != false);
-    ProxySelection { name, delay_ms, checked_at }
+    ProxySelection {
+        name,
+        delay_ms,
+        checked_at,
+    }
 }
 
 const CURRENT_DELAY_URL: &str = "https://www.gstatic.com/generate_204";
 
 impl SelectionReader {
     pub(crate) async fn latency_target(&self) -> Result<Option<(String, String)>, String> {
-        self.selected_tag().await?.map(|(tag, url)| {
-            Ok((tag, validate_delay_url(url.as_deref().unwrap_or(CURRENT_DELAY_URL))?))
-        }).transpose()
+        self.selected_tag()
+            .await?
+            .map(|(tag, url)| {
+                Ok((
+                    tag,
+                    validate_delay_url(url.as_deref().unwrap_or(CURRENT_DELAY_URL))?,
+                ))
+            })
+            .transpose()
     }
 
-    pub(crate) async fn measure_current_delay(&self, controller: &EngineController)
-        -> Result<((String, String), Result<u64, String>), String> {
-        let target = self.latency_target().await?.ok_or("PROXY_LATENCY_NOT_RUNNING")?;
+    pub(crate) async fn measure_current_delay(
+        &self,
+        controller: &EngineController,
+    ) -> Result<((String, String), Result<u64, String>), String> {
+        let target = self
+            .latency_target()
+            .await?
+            .ok_or("PROXY_LATENCY_NOT_RUNNING")?;
         let result = controller.measure_leaf_delay(&target.0, &target.1).await;
         if self.latency_target().await?.as_ref() != Some(&target) {
             return Err("PROXY_BINDING_CHANGED".into());
@@ -185,47 +227,103 @@ impl SelectionReader {
     }
 
     pub(crate) fn record_latency(&self, target: (String, String), delay_ms: Option<u64>) {
-        let Some(name) = self.names.get(&target.0).cloned() else { return; };
+        let Some(name) = self.names.get(&target.0).cloned() else {
+            return;
+        };
         if let Ok(mut measured) = self.measured.lock() {
-            measured.insert(target, ProxySelection {
-                name, delay_ms, checked_at: Some(chrono::Utc::now().timestamp_millis()),
-            });
+            measured.insert(
+                target,
+                ProxySelection {
+                    name,
+                    delay_ms,
+                    checked_at: Some(chrono::Utc::now().timestamp_millis()),
+                },
+            );
         }
     }
 
     fn latest_latency(&self, target: &(String, String), history: ProxySelection) -> ProxySelection {
-        self.measured.lock().ok().and_then(|measured| measured.get(target)
-            .filter(|sample| sample.checked_at >= history.checked_at).cloned()).unwrap_or(history)
+        self.measured
+            .lock()
+            .ok()
+            .and_then(|measured| {
+                measured
+                    .get(target)
+                    .filter(|sample| sample.checked_at >= history.checked_at)
+                    .cloned()
+            })
+            .unwrap_or(history)
     }
 
     pub async fn selected_node(&self) -> Result<Option<String>, String> {
-        Ok(self.selected_tag().await?.and_then(|(tag, _)| self.names.get(&tag).cloned()))
+        Ok(self.selected_tag().await?.and_then(|(tag, _)| {
+            self.names
+                .get(&tag)
+                .cloned()
+                .or_else(|| self.native.then_some(tag))
+        }))
     }
 
     /// Read the running engine's last health check for the selected leaf. Never
     /// substitute a group delay or an unrelated UI probe for this node's history.
     pub async fn selected_info(&self) -> Result<Option<ProxySelection>, String> {
         tokio::time::timeout(Duration::from_secs(3), async {
-            let Some((tag, test_url)) = self.selected_tag().await? else { return Ok(None); };
-            let Some(name) = self.names.get(&tag).cloned() else { return Ok(None); };
+            let Some((tag, test_url)) = self.selected_tag().await? else {
+                return Ok(None);
+            };
+            let Some(name) = self
+                .names
+                .get(&tag)
+                .cloned()
+                .or_else(|| self.native.then(|| tag.clone()))
+            else {
+                return Ok(None);
+            };
             let history = async {
-                let client = reqwest::Client::builder().no_proxy()
+                let client = reqwest::Client::builder()
+                    .no_proxy()
                     .redirect(reqwest::redirect::Policy::none())
-                    .timeout(Duration::from_millis(900)).build().map_err(|_| ())?;
-                let mut response = client.get(format!("{}/proxies/{}", self.endpoint, urlencoding::encode(&tag)))
-                    .bearer_auth(&self.secret).send().await.map_err(|_| ())?;
-                if !response.status().is_success() { return Err(()); }
+                    .timeout(Duration::from_millis(900))
+                    .build()
+                    .map_err(|_| ())?;
+                let mut response = client
+                    .get(format!(
+                        "{}/proxies/{}",
+                        self.endpoint,
+                        urlencoding::encode(&tag)
+                    ))
+                    .bearer_auth(&self.secret)
+                    .send()
+                    .await
+                    .map_err(|_| ())?;
+                if !response.status().is_success() {
+                    return Err(());
+                }
                 let mut bytes = Vec::new();
                 while let Some(chunk) = response.chunk().await.map_err(|_| ())? {
-                    if bytes.len() + chunk.len() > 64 * 1024 { return Err(()); }
+                    if bytes.len() + chunk.len() > 64 * 1024 {
+                        return Err(());
+                    }
                     bytes.extend_from_slice(&chunk);
                 }
                 serde_json::from_slice::<Value>(&bytes).map_err(|_| ())
-            }.await.unwrap_or(Value::Null);
-            let history = test_url.as_deref().and_then(|url| history["extra"].get(url)).unwrap_or(&history);
-            let target = (tag, validate_delay_url(test_url.as_deref().unwrap_or(CURRENT_DELAY_URL))?);
-            Ok(Some(self.latest_latency(&target, selection_history(name, history))))
-        }).await.map_err(|_| "PROXY_STATUS_FAILED".to_string())?
+            }
+            .await
+            .unwrap_or(Value::Null);
+            let history = test_url
+                .as_deref()
+                .and_then(|url| history["extra"].get(url))
+                .unwrap_or(&history);
+            let target = (
+                tag,
+                validate_delay_url(test_url.as_deref().unwrap_or(CURRENT_DELAY_URL))?,
+            );
+            Ok(Some(
+                self.latest_latency(&target, selection_history(name, history)),
+            ))
+        })
+        .await
+        .map_err(|_| "PROXY_STATUS_FAILED".to_string())?
     }
 
     async fn selected_tag(&self) -> Result<Option<(String, Option<String>)>, String> {
@@ -238,11 +336,16 @@ impl SelectionReader {
                 .timeout(Duration::from_secs(2))
                 .build()
                 .map_err(|_| "PROXY_STATUS_FAILED")?;
-            let mut tag = "account-node".to_owned();
+            let mut tag = self.entry.clone();
+            if tag.is_empty() {
+                return Ok(None);
+            }
             let mut test_url = None;
             for _ in 0..=16 {
                 let Some(members) = self.groups.get(&tag) else {
-                    return Ok(self.names.contains_key(&tag).then_some((tag, test_url)));
+                    return Ok(
+                        (self.native || self.names.contains_key(&tag)).then_some((tag, test_url))
+                    );
                 };
                 let mut response = client
                     .get(format!(
@@ -278,7 +381,7 @@ impl SelectionReader {
                 if now.is_empty() {
                     return Ok(None);
                 }
-                if !members.iter().any(|member| member == now) {
+                if !self.native && !members.iter().any(|member| member == now) {
                     return Err("PROXY_STATUS_FAILED".into());
                 }
                 tag = now.to_owned();
@@ -291,6 +394,17 @@ impl SelectionReader {
 }
 
 impl NodeTunnel {
+    pub(crate) fn native_provider_failed(&self, kind: &str, name: &str) -> bool {
+        self.provider_progress
+            .as_ref()
+            .is_some_and(|p| p.failed(kind, name))
+    }
+    pub(crate) fn native_directory(&self) -> &Path {
+        &self._runtime_dir.0
+    }
+    pub(crate) fn native_directory_lease(&self) -> Arc<RuntimeDirectory> {
+        self._runtime_dir.clone()
+    }
     pub fn failure(&self, fallback: String) -> String {
         super::codex_proxy_engine_errors::code(self.error.load(Ordering::Relaxed))
             .unwrap_or(&fallback)
@@ -304,7 +418,12 @@ impl NodeTunnel {
     }
     /// Reclamation must preserve a child whose state cannot be read immediately.
     pub(crate) fn try_is_running(&self) -> Option<bool> {
-        self.child.try_lock().ok()?.try_wait().ok().map(|status| status.is_none())
+        self.child
+            .try_lock()
+            .ok()?
+            .try_wait()
+            .ok()
+            .map(|status| status.is_none())
     }
 
     pub fn proxy_url(&self) -> &str {
@@ -314,7 +433,9 @@ impl NodeTunnel {
     pub fn selection_reader(&self) -> Option<SelectionReader> {
         self.selection.clone()
     }
-    pub(crate) fn diagnostic_id(&self) -> uuid::Uuid { self.id }
+    pub(crate) fn diagnostic_id(&self) -> uuid::Uuid {
+        self.id
+    }
 
     pub fn controller(&self) -> EngineController {
         self.controller.clone()
@@ -331,7 +452,10 @@ impl NodeTunnel {
     }
 
     pub async fn stop(self) -> Result<(), String> {
-        super::logger::log_info(&format!("[ProxyEngine] stop_requested: tunnel_id={}, reason=explicit_stop", self.id));
+        super::logger::log_info(&format!(
+            "[ProxyEngine] stop_requested: tunnel_id={}, reason=explicit_stop",
+            self.id
+        ));
         self.child
             .lock()
             .map_err(|_| "PROXY_ENGINE_STOP_FAILED")?
@@ -359,7 +483,10 @@ impl NodeTunnel {
 
 impl Drop for NodeTunnel {
     fn drop(&mut self) {
-        super::logger::log_info(&format!("[ProxyEngine] stop_requested: tunnel_id={}, reason=lease_drop", self.id));
+        super::logger::log_info(&format!(
+            "[ProxyEngine] stop_requested: tunnel_id={}, reason=lease_drop",
+            self.id
+        ));
         for reader in self.error_readers.drain(..) {
             reader.abort();
         }
@@ -381,17 +508,22 @@ pub fn shutdown_all() {
         .filter_map(|(id, child)| child.upgrade().map(|child| (*id, child)))
         .collect::<Vec<_>>();
     for (id, child) in children {
-        super::logger::log_info(&format!("[ProxyEngine] stop_requested: tunnel_id={id}, reason=host_shutdown"));
+        super::logger::log_info(&format!(
+            "[ProxyEngine] stop_requested: tunnel_id={id}, reason=host_shutdown"
+        ));
         request_child_stop(&child, id);
     }
 }
 
 fn request_child_stop(child: &Mutex<Child>, id: uuid::Uuid) {
-    let mut child = child.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut child = child
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Err(error) = child.start_kill() {
         super::logger::log_warn(&format!(
             "[ProxyEngine] stop_failed: tunnel_id={id}, kind={:?}, os_code={:?}",
-            error.kind(), error.raw_os_error()
+            error.kind(),
+            error.raw_os_error()
         ));
     }
 }
@@ -533,15 +665,15 @@ pub(crate) async fn verify_version_with_timeout(
     binary: &Path,
     timeout: Duration,
 ) -> Result<(), String> {
-    let output = tokio::time::timeout(
-        timeout,
-        async {
-            let mut command = command(binary);
-            command.arg("-v").stdin(Stdio::null()).stdout(Stdio::piped());
-            let (child, _process_lifetime) = process::spawn(&mut command)?;
-            child.wait_with_output().await
-        },
-    )
+    let output = tokio::time::timeout(timeout, async {
+        let mut command = command(binary);
+        command
+            .arg("-v")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped());
+        let (child, _process_lifetime) = process::spawn(&mut command)?;
+        child.wait_with_output().await
+    })
     .await
     .map_err(|_| {
         super::logger::log_warn(&format!(
@@ -589,6 +721,9 @@ fn configuration(
     username: &str,
     password: &str,
 ) -> Result<Value, String> {
+    if let Some((profile, target, _)) = native_profile::from_outbound(&outbound)? {
+        return native_profile::configuration(&profile, &target, port, username, password);
+    }
     let (proxies, groups) = super::codex_proxy_catalog_binding::runtime_parts(outbound)?;
     Ok(json!({
         "mixed-port": port, "bind-address": "127.0.0.1", "allow-lan": false,
@@ -627,12 +762,29 @@ pub async fn start(input: &str) -> Result<NodeTunnel, String> {
         return start_resource(input, false, false).await;
     }
     let outbound = crate::modules::codex_proxy_node_parser::parse_node_link(input)?;
-    let name = url::Url::parse(input).ok().and_then(|url| url.fragment()
-        .and_then(|name| urlencoding::decode(name).ok()).map(|name| name.into_owned()))
+    let name = url::Url::parse(input)
+        .ok()
+        .and_then(|url| {
+            url.fragment()
+                .and_then(|name| urlencoding::decode(name).ok())
+                .map(|name| name.into_owned())
+        })
         .filter(|name| !name.trim().is_empty())
-        .unwrap_or_else(|| format!("{}:{}", outbound["server"].as_str().unwrap_or_default(), outbound["server_port"]));
+        .unwrap_or_else(|| {
+            format!(
+                "{}:{}",
+                outbound["server"].as_str().unwrap_or_default(),
+                outbound["server_port"]
+            )
+        });
     let binary = engine_path_async().await?;
-    start_with_binary_named(&binary, outbound, false, Some(BTreeMap::from([("account-node".into(), name)]))).await
+    start_with_binary_named(
+        &binary,
+        outbound,
+        false,
+        Some(BTreeMap::from([("account-node".into(), name)])),
+    )
+    .await
 }
 
 /// A latency check gets its own authenticated controller and process. Unified
@@ -740,6 +892,20 @@ async fn start_with_binary_options(
     unified_delay: bool,
 ) -> Result<NodeTunnel, String> {
     network.validate()?;
+    let startup_timeout = if outbound["inspection"] == true
+        || outbound
+            .as_array()
+            .is_some_and(|items| items.iter().any(|item| item["inspection"] == true))
+    {
+        Duration::from_secs(35)
+    } else {
+        START_TIMEOUT
+    };
+    let outbound = native_profile::resolve(outbound).await?;
+    let (outbound, dependencies) =
+        tokio::time::timeout(START_TIMEOUT, native::dependencies(binary, outbound))
+            .await
+            .map_err(|_| "PROXY_ENGINE_TIMEOUT")??;
     if SHUTTING_DOWN.load(Ordering::SeqCst) {
         return Err("PROXY_ENGINE_STOPPED".into());
     }
@@ -756,8 +922,8 @@ async fn start_with_binary_options(
     .map_err(|_| "PROXY_ENGINE_START_FAILED")?;
     super::codex_proxy_engine_install::verify_managed(binary).await?;
     verify_version(binary).await?;
-    tokio::time::timeout(
-        START_TIMEOUT,
+    let mut tunnel = tokio::time::timeout(
+        startup_timeout,
         start_inner(
             binary,
             outbound,
@@ -769,7 +935,9 @@ async fn start_with_binary_options(
         ),
     )
     .await
-    .map_err(|_| "PROXY_ENGINE_TIMEOUT".to_string())?
+    .map_err(|_| "PROXY_ENGINE_TIMEOUT".to_string())??;
+    tunnel._dependencies = dependencies;
+    Ok(tunnel)
 }
 
 async fn start_inner(
@@ -781,6 +949,36 @@ async fn start_inner(
     network: super::codex_proxy_network::NetworkOptions,
     unified_delay: bool,
 ) -> Result<NodeTunnel, String> {
+    let native = native_profile::from_outbound(&outbound)?;
+    let provider_progress = native.as_ref().map(|(p, _, _)| {
+        Arc::new(super::codex_proxy_engine_errors::ProviderProgress::new(
+            &p.config,
+        ))
+    });
+    let entry = native
+        .as_ref()
+        .map(|(p, t, _)| {
+            if t["name"] == "GLOBAL" || (t["rules"] == true && p.config["mode"] == "global") {
+                "GLOBAL".into()
+            } else if t["rules"] == true {
+                String::new()
+            } else {
+                p.entry()
+            }
+        })
+        .unwrap_or_else(|| "account-node".into());
+    let names = native
+        .as_ref()
+        .filter(|(p, _, _)| !p.names.is_empty())
+        .map(|(p, t, _)| {
+            let mut names = p.names.clone();
+            names.insert(
+                entry.clone(),
+                t["name"].as_str().unwrap_or(&p.rules_name).to_owned(),
+            );
+            names
+        })
+        .or(names);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .map_err(|_| "PROXY_ENGINE_START_FAILED")?;
@@ -811,7 +1009,7 @@ async fn start_inner(
         "allow-origins": ["http://cockpit.invalid"], "allow-private-network": false
     });
     let selection = if let Some(names) = names {
-        let groups = config["proxy-groups"]
+        let mut groups: BTreeMap<String, Vec<String>> = config["proxy-groups"]
             .as_array()
             .ok_or("PROXY_ENGINE_START_FAILED")?
             .iter()
@@ -826,7 +1024,18 @@ async fn start_inner(
                 ))
             })
             .collect();
+        if let Some((profile, target, _)) = &native {
+            groups.extend(profile.members.clone());
+            if !entry.is_empty() && entry != "GLOBAL" {
+                groups.insert(
+                    entry.clone(),
+                    vec![target["name"].as_str().unwrap_or("REJECT").to_owned()],
+                );
+            }
+        }
         Some(SelectionReader {
+            entry: entry.clone(),
+            native: native.is_some(),
             endpoint: format!("http://{address}"),
             secret: secret.clone(),
             names,
@@ -836,46 +1045,63 @@ async fn start_inner(
     } else {
         None
     };
+    let readiness_config = config.clone();
     let config = serde_json::to_vec(&config).map_err(|_| "PROXY_ENGINE_START_FAILED")?;
     drop(listener);
     drop(controller_listener);
-    let runtime_dir = RuntimeDirectory::create().await?;
+    let runtime_dir = Arc::new(RuntimeDirectory::create().await?);
+    if let Some((profile, _, _)) = &native {
+        native_profile::restore(profile, runtime_dir.clone()).await?;
+    }
     // Do not send configuration until the child is owned by its Windows job.
-    let (mut child, process_lifetime) =
-        process::spawn(&mut runtime_command(binary, &runtime_dir.0)).map_err(|error| {
-            super::logger::log_warn(&format!(
-                "[ProxyEngine] protected process spawn failed (kind={:?}, os_code={:?})",
-                error.kind(), error.raw_os_error()
-            ));
-            "PROXY_ENGINE_START_FAILED"
-        })?;
+    let mut command = runtime_command(binary, &runtime_dir.0);
+    if let Some((profile, _, _)) = &native {
+        if !profile.resource_directory.is_empty() {
+            command.env("SAFE_PATHS", &profile.resource_directory);
+        }
+    }
+    let (mut child, process_lifetime) = process::spawn(&mut command).map_err(|error| {
+        super::logger::log_warn(&format!(
+            "[ProxyEngine] protected process spawn failed (kind={:?}, os_code={:?})",
+            error.kind(),
+            error.raw_os_error()
+        ));
+        "PROXY_ENGINE_START_FAILED"
+    })?;
     let mut stdin = child.stdin.take().ok_or("PROXY_ENGINE_START_FAILED")?;
     let error = Arc::new(AtomicU8::new(0));
     let mut error_readers = Vec::new();
     let id = uuid::Uuid::new_v4();
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
-    super::logger::log_info(&format!("[ProxyEngine] process_started: tunnel_id={id}, pid={:?}, local_port={port}", child.id()));
+    super::logger::log_info(&format!(
+        "[ProxyEngine] process_started: tunnel_id={id}, pid={:?}, local_port={port}",
+        child.id()
+    ));
     let child = Arc::new(Mutex::new(child));
     if let Some(stdout) = stdout {
-        error_readers.push(super::codex_proxy_engine_errors::read(
+        error_readers.push(super::codex_proxy_engine_errors::read_with_providers(
             stdout,
             error.clone(),
             id,
             "stdout",
             Some(Arc::downgrade(&child)),
+            provider_progress.clone(),
         ));
     }
     if let Some(stderr) = stderr {
-        error_readers.push(super::codex_proxy_engine_errors::read(
+        error_readers.push(super::codex_proxy_engine_errors::read_with_providers(
             stderr,
             error.clone(),
             id,
             "stderr",
             Some(Arc::downgrade(&child)),
+            provider_progress.clone(),
         ));
     }
     let tunnel = NodeTunnel {
+        provider_progress,
+        _dependencies: Vec::new(),
         error,
         error_readers,
         child,
@@ -884,6 +1110,12 @@ async fn start_inner(
         _engine_lease: engine_lease,
         _runtime_dir: runtime_dir,
         controller: EngineController {
+            entry: entry.clone(),
+            proxy_url: if desktop {
+                format!("http://127.0.0.1:{port}")
+            } else {
+                format!("socks5h://{username}:{password}@127.0.0.1:{port}")
+            },
             endpoint: format!("http://{address}"),
             secret,
             tunnel_id: id,
@@ -916,10 +1148,15 @@ async fn start_inner(
             // An exited child may be observed before its final diagnostic is drained.
             // Wait only for the bounded readers, without holding the child/runtime lock.
             let _ = tokio::time::timeout(Duration::from_millis(100), async {
-                while tunnel.error_readers.iter().any(|reader| !reader.is_finished()) {
+                while tunnel
+                    .error_readers
+                    .iter()
+                    .any(|reader| !reader.is_finished())
+                {
                     tokio::time::sleep(Duration::from_millis(2)).await;
                 }
-            }).await;
+            })
+            .await;
             return Err(tunnel.failure("PROXY_ENGINE_START_FAILED".into()));
         }
         if let Ok(Ok(mut socket)) = tokio::time::timeout(
@@ -950,6 +1187,31 @@ async fn start_inner(
             })
             .await;
             if matches!(authenticated, Ok(Ok(true))) && tunnel.is_running() {
+                if let Some((_, _, selections)) = &native {
+                    native_profile::wait_providers(&tunnel, &readiness_config, false).await?;
+                    for (group, selected) in selections {
+                        let path = format!("proxies/{}", urlencoding::encode(group));
+                        // The socket can be ready before native providers. Wait
+                        // for the saved member under the outer startup deadline.
+                        loop {
+                            if !tunnel.is_running() {
+                                return Err("PROXY_ENGINE_START_FAILED".into());
+                            }
+                            if let Ok(metadata) =
+                                native_request(&tunnel.controller, &path, None).await
+                            {
+                                if metadata["all"].as_array().is_some_and(|all| {
+                                    all.iter().any(|name| name.as_str() == Some(selected))
+                                }) {
+                                    break;
+                                }
+                            }
+                            tokio::time::sleep(Duration::from_millis(50)).await;
+                        }
+                        native_request(&tunnel.controller, &path, Some(json!({"name":selected})))
+                            .await?;
+                    }
+                }
                 return Ok(tunnel);
             }
         }
@@ -964,11 +1226,15 @@ mod tests {
     #[test]
     fn request_route_observer_contains_only_leaf_names_and_private_controller_metadata() {
         let controller = EngineController {
+            entry: "account-node".into(),
+            proxy_url: String::new(),
             endpoint: "http://127.0.0.1:56789".into(),
             secret: "private-controller-secret".into(),
             tunnel_id: uuid::Uuid::nil(),
         };
         let selection = SelectionReader {
+            entry: "account-node".into(),
+            native: false,
             endpoint: controller.endpoint.clone(),
             secret: controller.secret.clone(),
             measured: Default::default(),
@@ -991,14 +1257,22 @@ mod tests {
             Some(&selection),
         );
         assert_eq!(observer.proxy_url, "socks5h://127.0.0.1:45678");
-        assert_eq!(observer.node_names, BTreeMap::from([
-            ("leaf-a".into(), "Tokyo".into()),
-            ("leaf-b".into(), "Singapore".into()),
-        ]));
+        assert_eq!(
+            observer.node_names,
+            BTreeMap::from([
+                ("leaf-a".into(), "Tokyo".into()),
+                ("leaf-b".into(), "Singapore".into()),
+            ])
+        );
         let manifest = serde_json::to_value(&observer).unwrap();
         assert_eq!(manifest["controllerUrl"], controller.endpoint);
         assert_eq!(manifest["controllerSecret"], controller.secret);
-        for private_part in ["private-user", "private-password", "private-query", "private-fragment"] {
+        for private_part in [
+            "private-user",
+            "private-password",
+            "private-query",
+            "private-fragment",
+        ] {
             assert!(!manifest.to_string().contains(private_part));
         }
 
@@ -1007,7 +1281,10 @@ mod tests {
             kind: "node".into(),
             name: observer.node_names["leaf-a"].clone(),
         };
-        assert_eq!(serde_json::to_value(route).unwrap(), json!({"kind":"node","name":"Tokyo"}));
+        assert_eq!(
+            serde_json::to_value(route).unwrap(),
+            json!({"kind":"node","name":"Tokyo"})
+        );
         let public_selection = ProxySelection {
             name: observer.node_names["leaf-b"].clone(),
             delay_ms: None,
@@ -1021,12 +1298,17 @@ mod tests {
     #[test]
     fn request_route_observer_without_selection_does_not_invent_a_leaf() {
         let controller = EngineController {
+            entry: "account-node".into(),
+            proxy_url: String::new(),
             endpoint: "http://127.0.0.1:56789".into(),
             secret: "private-controller-secret".into(),
             tunnel_id: uuid::Uuid::nil(),
         };
         for (raw, expected) in [
-            ("http://user:password@[::1]:8080/path?token=secret#fragment", "http://[::1]:8080"),
+            (
+                "http://user:password@[::1]:8080/path?token=secret#fragment",
+                "http://[::1]:8080",
+            ),
             ("http://user:password@localhost", "http://localhost:80"),
             ("invalid secret input", ""),
         ] {
@@ -1045,10 +1327,23 @@ mod tests {
         ]});
         let value = selection_history("US".into(), &history);
         assert_eq!(value.delay_ms, Some(216));
-        assert_eq!(value.checked_at, Some(chrono::DateTime::parse_from_rfc3339("2026-09-25T10:01:00Z").unwrap().timestamp_millis()));
+        assert_eq!(
+            value.checked_at,
+            Some(
+                chrono::DateTime::parse_from_rfc3339("2026-09-25T10:01:00Z")
+                    .unwrap()
+                    .timestamp_millis()
+            )
+        );
         let failed = json!({"alive":false,"history":[{"time":"2026-09-25T10:01:00Z","delay":216}]});
         assert_eq!(selection_history("US".into(), &failed).delay_ms, None);
-        for value in [Value::Null, json!({"history":[]}), json!({"history":[{"delay":216}]}), json!({"history":[{"time":"invalid","delay":216}]}), json!({"history":[{"time":"2026-09-25T10:01:00Z","delay":0}]})] {
+        for value in [
+            Value::Null,
+            json!({"history":[]}),
+            json!({"history":[{"delay":216}]}),
+            json!({"history":[{"time":"invalid","delay":216}]}),
+            json!({"history":[{"time":"2026-09-25T10:01:00Z","delay":0}]}),
+        ] {
             assert_eq!(selection_history("US".into(), &value).delay_ms, None);
         }
     }
@@ -1059,37 +1354,65 @@ mod tests {
         let endpoint = format!("http://{}", listener.local_addr().unwrap());
         let server = tokio::spawn(async move {
             for (path, body) in [
-                ("account-node", json!({"type":"URLTest","now":"leaf","testUrl":"https://check.invalid"})),
-                ("leaf", json!({"alive":true,"history":[{"time":"2026-09-25T10:01:00Z","delay":999}],"extra":{"https://check.invalid":{"alive":true,"history":[{"time":"2026-09-25T10:01:00Z","delay":216}]}},"password":"MUST_NOT_LEAK"})),
+                (
+                    "account-node",
+                    json!({"type":"URLTest","now":"leaf","testUrl":"https://check.invalid"}),
+                ),
+                (
+                    "leaf",
+                    json!({"alive":true,"history":[{"time":"2026-09-25T10:01:00Z","delay":999}],"extra":{"https://check.invalid":{"alive":true,"history":[{"time":"2026-09-25T10:01:00Z","delay":216}]}},"password":"MUST_NOT_LEAK"}),
+                ),
             ] {
                 let (mut socket, _) = listener.accept().await.unwrap();
                 let mut bytes = Vec::new();
-                while !bytes.ends_with(b"\r\n\r\n") { bytes.push(socket.read_u8().await.unwrap()); assert!(bytes.len()<8192); }
+                while !bytes.ends_with(b"\r\n\r\n") {
+                    bytes.push(socket.read_u8().await.unwrap());
+                    assert!(bytes.len() < 8192);
+                }
                 let request = String::from_utf8(bytes).unwrap().to_lowercase();
                 assert!(request.starts_with(&format!("get /proxies/{path} ")));
                 assert!(request.contains("authorization: bearer test-secret"));
                 let body = body.to_string();
-                socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",body.len(),body).as_bytes()).await.unwrap();
+                socket
+                    .write_all(
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                            body.len(),
+                            body
+                        )
+                        .as_bytes(),
+                    )
+                    .await
+                    .unwrap();
             }
         });
-        let reader = SelectionReader { endpoint, secret:"test-secret".into(), measured: Default::default(),
-            names:BTreeMap::from([("leaf".into(),"US".into())]),
-            groups:BTreeMap::from([("account-node".into(),vec!["leaf".into()])]) };
+        let reader = SelectionReader {
+            entry: "account-node".into(),
+            native: false,
+            endpoint,
+            secret: "test-secret".into(),
+            measured: Default::default(),
+            names: BTreeMap::from([("leaf".into(), "US".into())]),
+            groups: BTreeMap::from([("account-node".into(), vec!["leaf".into()])]),
+        };
         let info = reader.selected_info().await.unwrap().unwrap();
-        assert_eq!(info.name,"US"); assert_eq!(info.delay_ms,Some(216));
-        assert!(!serde_json::to_string(&info).unwrap().contains("MUST_NOT_LEAK"));
+        assert_eq!(info.name, "US");
+        assert_eq!(info.delay_ms, Some(216));
+        assert!(!serde_json::to_string(&info)
+            .unwrap()
+            .contains("MUST_NOT_LEAK"));
         server.await.unwrap();
     }
 
     #[test]
     fn version_requires_mihomo_identity_and_exact_release() {
         assert!(version_matches(
-            b"Mihomo Meta v1.19.31 darwin arm64 with go1.26\n"
+            b"Mihomo Meta v1.19.33 darwin arm64 with go1.26\n"
         ));
-        assert!(!version_matches(b"sing-box version 1.19.31\n"));
-        assert!(!version_matches(b"Mihomo Meta v1.19.310 darwin arm64\n"));
-        assert!(!version_matches(b"Mihomo Meta v1.19.31-alpha\n"));
-        assert!(!version_matches(b"1.19.31"));
+        assert!(!version_matches(b"sing-box version 1.19.33\n"));
+        assert!(!version_matches(b"Mihomo Meta v1.19.330 darwin arm64\n"));
+        assert!(!version_matches(b"Mihomo Meta v1.19.33-alpha\n"));
+        assert!(!version_matches(b"1.19.33"));
     }
 
     #[test]
@@ -1137,6 +1460,8 @@ mod tests {
             }
         });
         let reader = SelectionReader {
+            entry: "account-node".into(),
+            native: false,
             endpoint,
             secret: "local-secret".into(),
             measured: Default::default(),
@@ -1306,7 +1631,7 @@ mod tests {
     fn test_engine() -> PathBuf {
         std::env::var_os("COCKPIT_TEST_MIHOMO")
             .map(PathBuf::from)
-            .expect("Set COCKPIT_TEST_MIHOMO to a checksum-verified Mihomo 1.19.31 executable")
+            .expect("Set COCKPIT_TEST_MIHOMO to a checksum-verified Mihomo 1.19.33 executable")
     }
 
     #[tokio::test]
@@ -1316,7 +1641,10 @@ mod tests {
         verify_version(&binary).await.unwrap();
         let directory = RuntimeDirectory::create().await.unwrap();
         let mut command = runtime_command(&binary, &directory.0);
-        assert_eq!(command.as_std().get_current_dir(), Some(directory.0.as_path()));
+        assert_eq!(
+            command.as_std().get_current_dir(),
+            Some(directory.0.as_path())
+        );
         let (mut child, _process_lifetime) = process::spawn(&mut command).unwrap();
         let stdin = child.stdin.take().unwrap();
         // Before job assignment/configuration, the engine must wait for input.
@@ -1329,8 +1657,15 @@ mod tests {
             .expect("unconfigured engine did not exit after stdin closed")
             .unwrap();
         assert!(!output.status.success());
-        let diagnostic = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
-        assert!(diagnostic.contains("config.yaml"), "expected missing private config: {diagnostic}");
+        let diagnostic = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            diagnostic.contains("config.yaml"),
+            "expected missing private config: {diagnostic}"
+        );
         assert!(!directory.0.join("config.yaml").exists());
     }
 
@@ -1489,22 +1824,52 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires a verified Mihomo binary; synthetic config checks only"]
     async fn real_engine_accepts_native_protocol_matrix() {
-        use super::super::{codex_proxy_catalog_binding as binding, codex_proxy_subscription_parser as parser};
+        use super::super::{
+            codex_proxy_catalog_binding as binding, codex_proxy_subscription_parser as parser,
+        };
         let binary = test_engine();
         verify_version(&binary).await.unwrap();
-        let catalog = parser::parse(include_str!("../../tests/fixtures/native-proxy-compatibility.json")).unwrap();
+        let catalog = parser::parse(include_str!(
+            "../../tests/fixtures/native-proxy-compatibility.json"
+        ))
+        .unwrap();
         let directory = RuntimeDirectory::create().await.unwrap();
         let mut checked = 0;
-        for id in catalog.nodes.iter().map(|n| &n.id).chain(catalog.groups.iter().map(|g| &g.id)) {
-            let raw = binding::encode("fixture", "fixture", id, &catalog, &BTreeMap::new()).unwrap();
-            let config = configuration(json!(binding::outbounds(&raw).unwrap()), 12345, "fixture", "fixture").unwrap();
-            let mut child = command(&binary).args(["-t", "-f", "-"]).arg("-d").arg(&directory.0).spawn().unwrap();
+        for id in catalog
+            .nodes
+            .iter()
+            .map(|n| &n.id)
+            .chain(catalog.groups.iter().map(|g| &g.id))
+        {
+            let raw =
+                binding::encode("fixture", "fixture", id, &catalog, &BTreeMap::new()).unwrap();
+            let config = configuration(
+                json!(binding::outbounds(&raw).unwrap()),
+                12345,
+                "fixture",
+                "fixture",
+            )
+            .unwrap();
+            let mut child = command(&binary)
+                .args(["-t", "-f", "-"])
+                .arg("-d")
+                .arg(&directory.0)
+                .spawn()
+                .unwrap();
             tokio::time::timeout(Duration::from_secs(5), async {
                 let mut stdin = child.stdin.take().unwrap();
-                stdin.write_all(&serde_json::to_vec(&config).unwrap()).await.unwrap();
+                stdin
+                    .write_all(&serde_json::to_vec(&config).unwrap())
+                    .await
+                    .unwrap();
                 drop(stdin);
-                assert!(child.wait().await.unwrap().success(), "rejected fixture index {checked}");
-            }).await.expect("native matrix check deadline");
+                assert!(
+                    child.wait().await.unwrap().success(),
+                    "rejected fixture index {checked}"
+                );
+            })
+            .await
+            .expect("native matrix check deadline");
             checked += 1;
         }
         assert_eq!(checked, 16);
@@ -1513,21 +1878,45 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires a verified Mihomo binary; invalid configs never reach a node"]
     async fn real_engine_reports_configuration_errors_without_disabling_catalog_nodes() {
-        use super::super::{codex_proxy_catalog_binding as binding, codex_proxy_subscription_parser as parser};
+        use super::super::{
+            codex_proxy_catalog_binding as binding, codex_proxy_subscription_parser as parser,
+        };
         let binary = test_engine();
         for (proxy, expected) in [
-            (json!({"name":"fixture", "type":"fixture-unknown", "server":"localhost", "port":443}), "PROXY_UNSUPPORTED_PROTOCOL"),
-            (json!({"name":"fixture", "type":"vmess", "server":"localhost", "port":443,
-                "uuid":"11111111-2222-3333-4444-555555555555", "cipher":false}), "PROXY_ENGINE_CONFIG_INVALID"),
-            (json!({"name":"fixture", "type":"wireguard", "server":"localhost", "port":51820,
-                "ip":"10.0.0.2", "private-key":"not-base64", "public-key":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}), "PROXY_ENGINE_CONFIG_INVALID"),
+            (
+                json!({"name":"fixture", "type":"fixture-unknown", "server":"localhost", "port":443}),
+                "PROXY_UNSUPPORTED_PROTOCOL",
+            ),
+            (
+                json!({"name":"fixture", "type":"vmess", "server":"localhost", "port":443,
+                "uuid":"11111111-2222-3333-4444-555555555555", "cipher":false}),
+                "PROXY_ENGINE_CONFIG_INVALID",
+            ),
+            (
+                json!({"name":"fixture", "type":"wireguard", "server":"localhost", "port":51820,
+                "ip":"10.0.0.2", "private-key":"not-base64", "public-key":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}),
+                "PROXY_ENGINE_CONFIG_INVALID",
+            ),
         ] {
             let catalog = parser::parse(&json!({"proxies":[proxy]}).to_string()).unwrap();
-            assert!(catalog.nodes[0].error.is_none(), "configuration semantics belong to the engine");
-            let raw = binding::encode("fixture", "fixture", &catalog.nodes[0].id, &catalog, &BTreeMap::new()).unwrap();
+            assert!(
+                catalog.nodes[0].error.is_none(),
+                "configuration semantics belong to the engine"
+            );
+            let raw = binding::encode(
+                "fixture",
+                "fixture",
+                &catalog.nodes[0].id,
+                &catalog,
+                &BTreeMap::new(),
+            )
+            .unwrap();
             let result = start_with_binary(&binary, json!(binding::outbounds(&raw).unwrap())).await;
             assert_eq!(result.err().as_deref(), Some(expected));
-            assert!(catalog.nodes[0].error.is_none(), "runtime failure must not disable the catalog entry");
+            assert!(
+                catalog.nodes[0].error.is_none(),
+                "runtime failure must not disable the catalog entry"
+            );
         }
     }
 
@@ -1665,7 +2054,10 @@ mod tests {
             outbound
         };
         let host = native["server"].as_str()?;
-        let port = native.get("server_port").or_else(|| native.get("port"))?.as_u64()?;
+        let port = native
+            .get("server_port")
+            .or_else(|| native.get("port"))?
+            .as_u64()?;
         Some((host, u16::try_from(port).ok().filter(|port| *port > 0)?))
     }
 
@@ -1675,11 +2067,16 @@ mod tests {
             "proxies":[{"name":"fixture", "type":"trojan", "server":"fixture.invalid", "port":443,
                 "password":"synthetic-secret"}]
         }).to_string()).unwrap();
-        assert_eq!(diagnostic_node_endpoint(catalog.nodes[0].outbound.as_ref().unwrap()),
-            Some(("fixture.invalid", 443)));
-        assert_eq!(diagnostic_node_endpoint(&json!({
-            "type":"trojan", "server":"fixture.invalid", "server_port":8443
-        })), Some(("fixture.invalid", 8443)));
+        assert_eq!(
+            diagnostic_node_endpoint(catalog.nodes[0].outbound.as_ref().unwrap()),
+            Some(("fixture.invalid", 443))
+        );
+        assert_eq!(
+            diagnostic_node_endpoint(&json!({
+                "type":"trojan", "server":"fixture.invalid", "server_port":8443
+            })),
+            Some(("fixture.invalid", 8443))
+        );
         for value in [
             json!({"type":"mihomo"}),
             json!({"type":"mihomo", "proxy":{"server":"fixture.invalid", "port":0}}),
@@ -1892,7 +2289,8 @@ mod tests {
     #[test]
     fn engine_lookup_does_not_search_path() {
         let _env = super::super::test_support::env_lock()
-            .lock().unwrap_or_else(|error| error.into_inner());
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
         let missing = engine_path();
         if missing.is_err() {
             assert_eq!(missing.unwrap_err(), "PROXY_ENGINE_MISSING");

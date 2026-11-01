@@ -414,6 +414,12 @@ pub async fn claude_delete_instance(instance_id: String) -> Result<(), String> {
 pub async fn claude_start_instance(
     instance_id: String,
 ) -> Result<ClaudeInstanceProfileView, String> {
+    tauri::async_runtime::spawn_blocking(move || start_claude_instance_impl(instance_id))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn start_claude_instance_impl(instance_id: String) -> Result<ClaudeInstanceProfileView, String> {
     modules::logger::log_info(&format!("开始启动 Claude 实例: {}", instance_id));
 
     if instance_id == DEFAULT_INSTANCE_ID {

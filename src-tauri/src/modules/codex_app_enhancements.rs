@@ -23,8 +23,8 @@ fn runtimes() -> &'static Mutex<HashMap<PathBuf, watch::Sender<bool>>> {
 }
 
 pub fn enabled() -> bool {
-    let cfg = config::get_user_config();
-    cfg.codex_app_native_fast_enabled || cfg.codex_app_api_quota_compat_enabled
+    // API-only Fast adaptation is automatic; actual credentials gate each profile.
+    true
 }
 
 pub fn start_for_profile(
@@ -135,7 +135,7 @@ fn profile_from_values(
         })
     });
     Profile {
-        native_fast: cfg.codex_app_native_fast_enabled && api_key_auth_verified,
+        native_fast: api_key_auth_verified,
         api_key_auth_verified,
         quota_compat: cfg.codex_app_api_quota_compat_enabled
             && requires_auth == Some(true)
@@ -159,6 +159,37 @@ fn read_profile(profile: &Path) -> Result<Profile, ()> {
 
 pub(crate) fn native_fast_enabled_for_profile(profile: &Path) -> bool {
     read_profile(profile).is_ok_and(|profile| profile.native_fast)
+}
+
+pub(crate) fn prepare_native_fast_for_profile(base_dir: &Path) -> Result<(), String> {
+    if !native_fast_enabled_for_profile(base_dir) {
+        return Ok(());
+    }
+    enable_native_fast_feature(base_dir)
+}
+
+fn enable_native_fast_feature(base_dir: &Path) -> Result<(), String> {
+    let text = std::fs::read_to_string(base_dir.join("config.toml")).map_err(|e| e.to_string())?;
+    let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&text)
+        .map_err(|e| e.to_string())?;
+    if doc
+        .get("features")
+        .and_then(|v| v.get("fast_mode"))
+        .and_then(|v| v.as_bool())
+        == Some(true)
+    {
+        return Ok(());
+    }
+    if doc.get("features").is_none() {
+        doc["features"] = toml_edit::table();
+    }
+    doc["features"]["fast_mode"] = toml_edit::value(true);
+    let text = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
+    crate::modules::codex_config_format::write_codex_config_toml_atomic(
+        &base_dir.join("config.toml"),
+        &text,
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[derive(Deserialize)]
@@ -429,10 +460,36 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn enabling_native_fast_preserves_catalog_reference_and_selected_speed() {
+        let dir = tempfile::tempdir().unwrap();
+        for reference in [None, Some("cockpit-model-catalog.json"), Some("user-models.json")] {
+            let mut text = "service_tier = 'default'\n".to_string();
+            if let Some(reference) = reference {
+                text.push_str(&format!("model_catalog_json = '{reference}'\n"));
+            }
+            text.push_str("[features]\nfast_mode = false\nother = true\n");
+            std::fs::write(dir.path().join("config.toml"), text).unwrap();
+            enable_native_fast_feature(dir.path()).unwrap();
+            let content = std::fs::read_to_string(dir.path().join("config.toml")).unwrap();
+            let doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&content).unwrap();
+            assert_eq!(doc.get("model_catalog_json").and_then(|v| v.as_str()), reference);
+            assert_eq!(doc["service_tier"].as_str(), Some("default"));
+            assert_eq!(doc["features"]["fast_mode"].as_bool(), Some(true));
+            assert_eq!(doc["features"]["other"].as_bool(), Some(true));
+            assert!(!dir.path().join("cockpit-model-catalog.json").exists());
+            assert!(!dir.path().join("cockpit-native-speed-models.json").exists());
+            enable_native_fast_feature(dir.path()).unwrap();
+            assert_eq!(std::fs::read_to_string(dir.path().join("config.toml")).unwrap(), content);
+        }
+    }
+
+    #[test]
     fn enhancement_scope_requires_actual_auth_and_separate_api_route() {
-        let mut cfg = config::UserConfig::default();
-        cfg.codex_app_native_fast_enabled = true;
-        cfg.codex_app_api_quota_compat_enabled = true;
+        // Retired user opt-out must not suppress the automatic API adaptation.
+        let cfg: config::UserConfig = serde_json::from_value(json!({
+            "codex_app_native_fast_enabled": false,
+            "codex_app_api_quota_compat_enabled": true
+        })).unwrap();
         let doc: toml_edit::Document = "model_provider='relay'\n[model_providers.relay]\nbase_url='http://127.0.0.1:8000/v1'\nexperimental_bearer_token='local-key'\nrequires_openai_auth=true\n".parse().unwrap();
         let oauth = json!({"tokens":{"id_token":"id", "access_token":"access"}});
         let profile = profile_from_values(&doc, &oauth, &cfg);
@@ -497,8 +554,7 @@ mod tests {
 
     #[test]
     fn quota_route_does_not_accept_embedded_credentials_or_url_queries() {
-        let mut cfg = config::UserConfig::default();
-        cfg.codex_app_api_quota_compat_enabled = true;
+        let cfg = config::UserConfig::default();
         let auth = json!({"tokens":{"id_token":"id", "access_token":"access"}});
         for base in [
             "https://user:secret@example.test/v1",

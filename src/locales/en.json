@@ -158,6 +158,9 @@
     "providerClear": "Clear selection"
   },
   "common": {
+    "profileRestoreBusy": "Login state is being restored. Try again shortly.",
+    "profileRestoreInvalid": "The login snapshot path is invalid. Import the account again.",
+    "profileRestoreRecoveryFailed": "Login recovery failed. The backup was retained: {{detail}}",
     "dataQueryBusy": "Data is being processed. Please try again shortly.",
     "apiBudget": {
       "keyScope": "This key",
@@ -439,7 +442,11 @@
           "statusSkipped": "Skipped",
           "statusPending": "Pending import"
         },
-        "invalidJson": "Invalid JSON. Check the file or pasted content."
+        "invalidJson": "Invalid JSON. Check the file or pasted content.",
+        "empty": "Import data is empty.",
+        "sizeLimit": "Import files must not exceed {{limit}} MiB.",
+        "countLimit": "Import up to {{count}} accounts at a time.",
+        "itemFailed": "Item {{index}}: {{error}}"
       },
       "externalImport": {
         "bundleInvalidJson": "The import bundle is not valid JSON",
@@ -550,6 +557,8 @@
         "title": "Account Overview"
       },
       "quota": {
+        "usageWithUnit": "Usage ({{unit}})",
+        "usage": "Usage",
         "noData": "No quota data",
         "queryFailed": "Quota query failed",
         "resetDone": "Reset",
@@ -631,6 +640,29 @@
         "missingTiming": "No valid output timing was recorded.",
         "shortWindow": "Observed output window is shorter than 100 ms."
       }
+    },
+    "deviceRestriction": {
+      "title": "Device restrictions",
+      "badge": "Device restricted",
+      "paused": "An explicit device restriction was observed. Automatic attempts for this operation are paused. Review the local restriction record on the account page.",
+      "note": "These are local observations, not OpenAI device slots. Removing accounts or clearing local credentials does not guarantee release of the server-side device limit.",
+      "retryNote": "Allowing retries resumes attempts without marking the restriction resolved. A new explicit refusal pauses them again.",
+      "desktop": "Desktop login",
+      "quota": "Quota lookup",
+      "api": "API requests",
+      "oauth": "OAuth login",
+      "token": "Token refresh",
+      "recovered": "Operation recovered",
+      "pausedLabel": "Attempts paused",
+      "retryEnabled": "Retries allowed",
+      "observed": "First: {{first}} · Latest: {{last}} · {{count}} observations",
+      "check": "Check again",
+      "allowRetry": "Allow retries",
+      "help": "Official help",
+      "support": "Contact support",
+      "failed": "Could not complete the operation. The last known state is preserved; please retry.",
+      "loginAttempt": "Unidentified login attempt",
+      "removed": "Removed local account"
     }
   },
   "floatingCard": {
@@ -902,6 +934,17 @@
       "family": "Group",
       "platform": "Current system",
       "unsupportedGroup": "No one-click clients are available for this group yet."
+    },
+    "campaign": {
+      "badge": "11.11",
+      "title": "Get an 11.11% top-up bonus",
+      "description": "For new and existing users.",
+      "period": "Offer period: November 1–11, 2026 (UTC+8)",
+      "terms": "See the activity page for terms.",
+      "action": "View offer",
+      "inactive": "This offer is not currently active.",
+      "label": "Limited-time 11.11 offer",
+      "promotionDescription": "Celebrate 11.11 with Cockpit’s official API relay partner. New and existing users receive an 11.11% top-up bonus during the offer. Access Claude, ChatGPT, Gemini and other leading models."
     }
   },
   "platformLayout": {
@@ -1583,8 +1626,6 @@
       "codexPreserveExternalBridge": "Keep external bridge",
       "codexPreserveExternalBridgeDesc": "Keep a Codex Web GPT bridge verified against local integration records when switching OAuth accounts. Off by default.",
       "codexEnhancements": {
-        "nativeFast": "Native Fast control",
-        "nativeFastDesc": "Enable the client’s native speed menu for API Key accounts, showing model-supported tiers. Availability and pricing depend on your API provider.",
         "quotaCompat": "Mixed-mode quota compatibility",
         "quotaCompatDesc": "With real OAuth sign-in and an external API route, prevent subscription quota from blocking local API messages. Actual usage and image quotas stay unchanged.",
         "restartHint": "Enabled by default. Restart each target Codex instance after changing these settings. Keep Cockpit Tools running. Native dictation follows the client’s capabilities and settings; Cockpit does not take it over or force-enable it.",
@@ -2896,17 +2937,8 @@
       "unsupportedCountryRegion": "The current network region does not support refreshing Codex authorization. OpenAI authorization rejected this network exit. Switch to a supported region and retry."
     },
     "switchAuth": {
-      "apiOnlyTitle": "Client Sign-in Needed",
       "reauthorizeTitle": "Codex Authorization Expired",
-      "apiOnlyDescription": "The current client has reached the login page. Reauthorize to restore client use; you can still continue using the API Service for now.",
-      "clearClientAuth": "Clear warning",
-      "clearClientAuthSuccess": "Client warning cleared",
-      "clearClientAuthFailed": "Failed to clear client warning: {{error}}",
-      "observationStatus": "Detected a redirect to the login page",
-      "observationTime": "Latest check: {{time}}",
-      "loginRedirectTime": "Latest login-page redirect: {{time}}",
       "observationInstance": "Observed instance: {{instance}}",
-      "launchTime": "Instance launch time: {{time}}",
       "reauthorizeDescription": "The login credentials could not be refreshed and the access_token is no longer available to the API service. Reauthorize the account to continue.",
       "idTokenUnavailable": "The client identity credential expired and automatic refresh did not return a valid id_token.",
       "reasonLabel": "Reason",
@@ -2919,7 +2951,7 @@
       "startingInstanceAfterReauth": "Authorization updated. Restarting the instance...",
       "startInstanceAfterReauthFailed": "Authorization was updated, but the instance failed to start: {{error}}",
       "reauthorizedAndStartedInstance": "Reauthorized and started the instance",
-      "apiOnlyBadge": "Sign-in Needed"
+      "apiTokenUsableDescription": "Some sign-in credentials require reauthorization. The current access token can still be used by the API Service."
     },
     "switchProgress": {
       "completed": "Switch complete",
@@ -5066,8 +5098,8 @@
         "instanceFilter": "Instance",
         "instanceUnknown": "Instance -",
         "sessionFilter": "Session",
-      "sessionPlaceholder": "Session ID",
-      "modelFilter": "Model",
+        "sessionPlaceholder": "Session ID",
+        "modelFilter": "Model",
         "modelPlaceholder": "Model ID",
         "accountFilter": "Account",
         "accountPlaceholder": "Email or account ID",
@@ -5755,7 +5787,7 @@
         "subscriptionUrl": "Subscription URL",
         "nodeLinks": "Node links or configuration",
         "import": "Import",
-        "importNotice": "Subscription URLs and node credentials are encrypted locally. Subscription requests go to the provider without account tokens.",
+        "importNotice": "Configuration and resource snapshots are encrypted at rest and decrypted in a separate runtime folder. Subscription and resource requests do not include account tokens.",
         "intro": "Import and test subscriptions or nodes, then select and bind one from the account list.",
         "emptyTitle": "Add your first proxy",
         "emptyHint": "Import a subscription, node links, or an HTTP / SOCKS5 proxy. You can import and test before adding accounts.",
@@ -5800,7 +5832,7 @@
         "unsupported": "Unsupported",
         "invalidInput": "Enter a name and a valid subscription URL, node link, or proxy configuration.",
         "downloadFailed": "Subscription download failed. Check your network and proxy settings, then retry.",
-        "downloadRedirect": "Subscription download stopped due to a cross-origin redirect or too many redirects.",
+        "downloadRedirect": "The subscription redirect is invalid or exceeds the redirect limit.",
         "downloadDenied": "The subscription server denied access (HTTP 401/403). Check the link and its expiration.",
         "downloadTls": "The subscription connection failed TLS handshake or certificate verification. Check your network and proxy settings.",
         "timeout": "Operation timed out. Refresh to confirm the result before retrying.",
@@ -5818,6 +5850,7 @@
         "loadBalanceGroup": "Load balancing",
         "reasonStrategy": "This group strategy is not supported. Expand to choose an available node.",
         "reasonOptions": "Contains a protocol or configuration option that is not supported yet.",
+        "reasonProviderConfig": "This provider uses an unsupported source, filter or transformation.",
         "reasonProvider": "This group requires external node providers that have not been loaded.",
         "reasonMembers": "Group members failed validation. Check the individual reasons.",
         "reasonInvalid": "Required settings are missing or invalid.",
@@ -5839,6 +5872,14 @@
         "defaultProtocol": "Protocol when omitted",
         "credentialFormat": "Credential format",
         "recognizing": "Recognizing…",
+        "nativePreview": "Mihomo will parse the configuration and load its resources on import. Preview does not read files or access the network.",
+        "resourceDirectory": "Resource folder",
+        "browseResources": "Choose folder",
+        "resourceDirectoryHint": "For local files, select the subscription resource folder. Its contents are copied to a private runtime folder and saved as encrypted snapshots.",
+        "resourceDirectoryRequired": "Select the local resource folder for this subscription.",
+        "resourceMissing": "Local resources are unavailable. Check the folder or import again.",
+        "rulesName": "Subscription rules",
+        "pendingProviders": "Import will load {{count}} remote node providers. Preview does not download them.",
         "previewCount": "Valid {{valid}} · Review {{invalid}} · Duplicates {{duplicates}}",
         "line": "Line {{line}}",
         "ambiguous": "Ambiguous format. Choose a credential format or use a complete proxy URL.",
@@ -6844,8 +6885,9 @@
       "desc": "Paste your Kiro access token or exported JSON data."
     },
     "import": {
-      "localDesc": "Import Kiro account data from local Kiro client or a JSON file.",
-      "localClient": "Import from local Kiro"
+      "localDesc": "Import locally or from JSON. JSON accounts are saved first, then credentials and quotas refresh in the background.",
+      "localClient": "Import from local Kiro",
+      "invalidCredentials": "Credential fields are missing or unsupported. Export the account again."
     },
     "injectToVSCode": "Switch to Kiro"
   },

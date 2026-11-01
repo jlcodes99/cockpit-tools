@@ -40,6 +40,14 @@ test('selector traversal terminates even for cyclic imported groups', () => {
   assert.equal(service.catalogSelectors(cyclic, 'root', { root: 'Proxy' }).length, 1);
 });
 
+test('node chains expose required relay selectors and stop at cycles', () => {
+  const { service } = harness(async () => ({}));
+  const chained = { ...source, nodes: [{ ...node, dialerProxy: 'Nested' }] };
+  assert.deepEqual(Array.from(service.catalogSelectors(chained, 'node', {}), (g: any) => g.id), ['nested']);
+  assert.deepEqual(Array.from(service.catalogSelectors(chained, 'node', { nested: 'Tokyo' }), (g: any) => g.id), ['nested']);
+  assert.deepEqual(Array.from(service.catalogSelectors({ ...source, nodes: [{ ...node, dialerProxy: 'DIRECT' }] }, 'node', {})), []);
+});
+
 test('binding sends only identifiers and group choices, never subscription credentials', async () => {
   const calls: unknown[] = [];
   const { service } = harness(async (command, args) => { calls.push({ command, args }); return {}; });
@@ -110,7 +118,7 @@ test('unavailable resource reasons distinguish protocol limits, group limits and
   for (const [error, key] of Object.entries(reasons)) {
     assert.equal(service.catalogUnsupportedKey({ error }), `codex.proxy.catalog.${key}`);
   }
-  assert.equal(service.catalogUnsupportedKey({ kind: 'relay' }), 'codex.proxy.catalog.reasonStrategy');
+  assert.equal(service.catalogUnsupportedKey({ kind: 'relay', error: 'SUBSCRIPTION_GROUP_STRATEGY' }), 'codex.proxy.catalog.reasonStrategy');
   assert.equal(service.catalogErrorKey('SUBSCRIPTION_GROUP_TIMEOUT'), 'codex.proxy.catalog.reasonGroupTimeout');
   assert.equal(service.catalogUnsupportedKey(undefined, 'DIRECT'), 'codex.proxy.catalog.reasonBuiltin');
   assert.equal(service.catalogUnsupportedKey(undefined, 'missing'), 'codex.proxy.catalog.reasonMissing');
@@ -207,7 +215,8 @@ test('native automatic groups keep their distinct labels and precise unavailable
     assert.equal(service.catalogUnsupportedKey({ kind, error: 'SUBSCRIPTION_UNSUPPORTED' }), 'codex.proxy.catalog.reasonOptions');
     assert.equal(service.catalogUnsupportedKey({ kind, error: 'SUBSCRIPTION_GROUP_UNAVAILABLE' }), 'codex.proxy.catalog.reasonMembers');
   }
-  for (const kind of ['relay', 'https://secret.invalid', '__proto__', 'constructor']) {
+  for (const kind of ['native', 'relay']) assert.equal(service.catalogGroupKindKey(kind), 'codex.proxy.catalog.groups');
+  for (const kind of ['https://secret.invalid', '__proto__', 'constructor']) {
     assert.equal(service.catalogGroupKindKey(kind), 'codex.proxy.catalog.reasonStrategy');
   }
 });

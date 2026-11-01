@@ -13,6 +13,7 @@ const ACCOUNTS_DIR: &str = "qoder_accounts";
 const QODER_SECRET_USER_INFO_KEY: &str = "secret://aicoding.auth.userInfo";
 const QODER_SECRET_USER_PLAN_KEY: &str = "secret://aicoding.auth.userPlan";
 const QODER_SECRET_CREDIT_USAGE_KEY: &str = "secret://aicoding.auth.creditUsage";
+const QODER_SECRET_ENTERPRISE_USAGE_KEY: &str = "secret://aicoding.auth.enterpriseUsage";
 
 static QODER_ACCOUNT_INDEX_LOCK: std::sync::LazyLock<Mutex<()>> =
     std::sync::LazyLock::new(|| Mutex::new(()));
@@ -691,6 +692,13 @@ fn extract_snapshot_plan_type(snapshot: &QoderSnapshot) -> Option<String> {
 fn extract_snapshot_credits(
     snapshot: &QoderSnapshot,
 ) -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>) {
+    if let Some(credits) = snapshot
+        .credit_usage_raw
+        .as_ref()
+        .and_then(crate::modules::qoder_usage::scoped_credits)
+    {
+        return credits;
+    }
     let mut candidates = Vec::new();
     if let Some(value) = snapshot.credit_usage_raw.as_ref() {
         collect_numeric_candidates(value, "usage", &mut candidates);
@@ -876,6 +884,12 @@ fn snapshot_to_account(snapshot: QoderSnapshot, existing: Option<&QoderAccount>)
         .or_else(|| existing.and_then(|item| item.plan_type.clone()));
     let (credits_used, credits_total, credits_remaining, credits_usage_percent) =
         extract_snapshot_credits(&snapshot);
+    let cached_credits = existing.filter(|_| {
+        !snapshot
+            .credit_usage_raw
+            .as_ref()
+            .is_some_and(|value| crate::modules::qoder_usage::is_envelope(value) || value.is_null())
+    });
 
     QoderAccount {
         id: existing.map(|item| item.id.clone()).unwrap_or(generated_id),
@@ -883,12 +897,12 @@ fn snapshot_to_account(snapshot: QoderSnapshot, existing: Option<&QoderAccount>)
         user_id,
         display_name,
         plan_type,
-        credits_used: credits_used.or_else(|| existing.and_then(|item| item.credits_used)),
-        credits_total: credits_total.or_else(|| existing.and_then(|item| item.credits_total)),
+        credits_used: credits_used.or_else(|| cached_credits.and_then(|item| item.credits_used)),
+        credits_total: credits_total.or_else(|| cached_credits.and_then(|item| item.credits_total)),
         credits_remaining: credits_remaining
-            .or_else(|| existing.and_then(|item| item.credits_remaining)),
+            .or_else(|| cached_credits.and_then(|item| item.credits_remaining)),
         credits_usage_percent: credits_usage_percent
-            .or_else(|| existing.and_then(|item| item.credits_usage_percent)),
+            .or_else(|| cached_credits.and_then(|item| item.credits_usage_percent)),
         quota_query_last_error: if snapshot.credit_usage_raw.is_some() {
             None
         } else {
@@ -943,10 +957,19 @@ fn read_snapshot_from_state_db_path(db_path: &Path) -> Result<Option<QoderSnapsh
         return Ok(None);
     }
 
+    let credit = read_qoder_secret_json(db_path, QODER_SECRET_CREDIT_USAGE_KEY)?;
+    let enterprise = read_qoder_secret_json(db_path, QODER_SECRET_ENTERPRISE_USAGE_KEY)?;
+    let credit = if enterprise.as_ref().is_some_and(Value::is_object) {
+        Some(
+            serde_json::json!({"displayMode": if credit.as_ref().is_some_and(Value::is_object) { "hybrid" } else { "enterprise" }, "qoderUsage": credit, "enterpriseUsage": enterprise}),
+        )
+    } else {
+        credit
+    };
     let snapshot = QoderSnapshot {
         user_info_raw: read_qoder_secret_json(db_path, QODER_SECRET_USER_INFO_KEY)?,
         user_plan_raw: read_qoder_secret_json(db_path, QODER_SECRET_USER_PLAN_KEY)?,
-        credit_usage_raw: read_qoder_secret_json(db_path, QODER_SECRET_CREDIT_USAGE_KEY)?,
+        credit_usage_raw: credit,
     };
 
     if snapshot_has_any_data(&snapshot) {
@@ -1167,25 +1190,30 @@ pub fn inject_to_qoder_at_path(db_path: &Path, account_id: &str) -> Result<(), S
         &account.auth_user_plan_raw,
         build_user_plan_fallback(&account),
     )?;
-    let credit_usage_json = serialize_raw_or_fallback(
-        &account.auth_credit_usage_raw,
-        build_credit_usage_fallback(&account),
-    )?;
-
-    crate::modules::vscode_inject::inject_secret_to_state_db_for_qoder(
+    let personal_usage = account.auth_credit_usage_raw.as_ref().map(|raw| {
+        crate::modules::qoder_usage::personal(raw)
+            .cloned()
+            .unwrap_or(Value::Null)
+    });
+    let credit_usage_json =
+        serialize_raw_or_fallback(&personal_usage, build_credit_usage_fallback(&account))?;
+    let enterprise_usage = account
+        .auth_credit_usage_raw
+        .as_ref()
+        .and_then(crate::modules::qoder_usage::enterprise)
+        .cloned()
+        .unwrap_or(Value::Null);
+    crate::modules::vscode_inject::inject_qoder_secret_snapshot(
         db_path,
-        QODER_SECRET_USER_INFO_KEY,
-        &user_info_json,
-    )?;
-    crate::modules::vscode_inject::inject_secret_to_state_db_for_qoder(
-        db_path,
-        QODER_SECRET_USER_PLAN_KEY,
-        &user_plan_json,
-    )?;
-    crate::modules::vscode_inject::inject_secret_to_state_db_for_qoder(
-        db_path,
-        QODER_SECRET_CREDIT_USAGE_KEY,
-        &credit_usage_json,
+        &[
+            (QODER_SECRET_USER_INFO_KEY, &user_info_json),
+            (QODER_SECRET_USER_PLAN_KEY, &user_plan_json),
+            (QODER_SECRET_CREDIT_USAGE_KEY, &credit_usage_json),
+            (
+                QODER_SECRET_ENTERPRISE_USAGE_KEY,
+                &enterprise_usage.to_string(),
+            ),
+        ],
     )?;
 
     verify_state_db_key_exists(db_path, QODER_SECRET_USER_INFO_KEY)?;

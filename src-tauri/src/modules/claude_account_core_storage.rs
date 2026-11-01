@@ -105,6 +105,8 @@ const CLAUDE_DESKTOP_PROFILE_ITEMS: &[&str] = &[
     "Preferences",
     "Cookies",
     "Cookies-journal",
+    "Cookies-wal",
+    "Cookies-shm",
     "Network",
     "DIPS",
     "DIPS-wal",
@@ -117,6 +119,7 @@ const CLAUDE_DESKTOP_PROFILE_ITEMS: &[&str] = &[
     "Service Worker",
     "ant-did",
     "config.json",
+    "config.json.bak",
     CLAUDE_DESKTOP_CONFIG_FILE_NAME,
 ];
 static CLAUDE_ACCOUNT_INDEX_LOCK: std::sync::LazyLock<Mutex<()>> =

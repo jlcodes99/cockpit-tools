@@ -8,7 +8,7 @@ function nodes(value: any): any[] {
 }
 
 for (const variant of ['settings', 'quick'] as const) {
-  test(`${variant} enhancements omit retired dictation controls and patch only retained switches`, async () => {
+  test(`${variant} enhancements omit retired Fast and dictation controls and patch only retained switches`, async () => {
     const patches: Record<string, unknown>[] = [];
     const listeners = new Map<string, () => void>();
     const hook = loadHookModule(new URL('./CodexAppEnhancementSettings.tsx', import.meta.url), {
@@ -40,18 +40,17 @@ for (const variant of ['settings', 'quick'] as const) {
     tree = nodes(hook.flush());
     const controls = tree.filter(entry => entry.type === 'input');
     assert.deepEqual(controls.map(entry => entry.props['aria-label']), [
-      'settings.general.codexEnhancements.nativeFast',
       'settings.general.codexEnhancements.quotaCompat',
     ]);
     assert.equal(controls.every(entry => entry.props.type === 'checkbox' && !entry.props.disabled), true);
-    assert.deepEqual(controls.map(entry => entry.props.checked), [false, true]);
+    assert.deepEqual(controls.map(entry => entry.props.checked), [true]);
     assert.equal(tree.some(entry => String(entry.props.children).includes('dictation')), false);
     assert.equal(tree.some(entry => entry.props.children === 'settings.general.codexEnhancements.restartHint'), true);
     assert.deepEqual(patches, []);
-    controls[0].props.onChange({ target: { checked: true } });
+    controls[0].props.onChange({ target: { checked: false } });
     await settlePromises();
     hook.flush();
-    assert.equal(JSON.stringify(patches), JSON.stringify([{ codex_app_native_fast_enabled: true }]));
+    assert.equal(JSON.stringify(patches), JSON.stringify([{ codex_app_api_quota_compat_enabled: false }]));
     hook.unmount();
   });
 }

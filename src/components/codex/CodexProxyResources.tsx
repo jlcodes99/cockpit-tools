@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { open as chooseDirectory } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
 import { Activity, ArrowDown, ArrowUp, ArrowRight, ChevronDown, Download, GripVertical, Layers, Link2, MoreHorizontal, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, TriangleAlert, Pencil, X } from 'lucide-react';
 import { useEscCloseTopmost } from '../../hooks/useEscClose';
@@ -328,7 +329,13 @@ export function CodexProxyResources({ onAssign, onBindingsChanged }: {
                   <button type="button" className="btn btn-secondary" disabled={orderDisabled || index === visibleSources.length - 1} onClick={() => ordering.moveBy(entry.id, 1)}><ArrowDown size={14} />{t('codex.more.moveDown')}</button>
                   {strategy ? <button type="button" className="btn btn-secondary" onClick={() => openStrategy(entry.id)}><Pencil size={14} />{t('codex.proxy.catalog.strategyEdit')}</button>
                     : <button type="button" className="btn btn-secondary" onClick={() => editSource(entry)}><Pencil size={14} />{t('codex.proxy.catalog.rename')}</button>}
-                  {entry.kind === 'subscription' && <button type="button" className="btn btn-secondary" onClick={() => { setMenuId(''); void run('refresh', async (id) => { const next = await refreshProxyCatalog(id, entry.id); if (mounted.current) { apply(next); setResult(null); } }, true); }}><RefreshCw size={14} />{t('common.refresh')}</button>}
+                  {(entry.kind === 'subscription' || entry.nativeProfile) && <button type="button" className="btn btn-secondary" onClick={() => { setMenuId(''); void run('refresh', async (id) => { const next = await refreshProxyCatalog(id, entry.id); if (mounted.current) { apply(next); setResult(null); } }, true); }}><RefreshCw size={14} />{t('common.refresh')}</button>}
+                  {(entry.kind === 'subscription' || entry.nativeProfile) && <button type="button" className="btn btn-secondary" onClick={() => { setMenuId(''); void run('refresh', async (id) => {
+                    const directory = await chooseDirectory({ directory: true, multiple: false });
+                    if (typeof directory !== 'string' || !mounted.current) return;
+                    const next = await refreshProxyCatalog(id, entry.id, directory);
+                    if (mounted.current) { apply(next); setResult(null); }
+                  }, true); }}>{t('codex.proxy.catalog.resourceDirectory')}</button>}
                   <button type="button" className="btn btn-secondary" onClick={() => { if (sourceId !== entry.id) changeSource(entry.id); setExpanded(true); setAdvanced(true); setMenuId(''); }}><Star size={14} />{t('common.advancedSettings')}</button>
                   <button type="button" className="btn btn-secondary codex-resource-delete-action" onClick={(event) => { deleteButton.current = event.currentTarget.closest('.codex-resource-more')?.querySelector<HTMLButtonElement>('.codex-resource-more-trigger') ?? null; setMenuId(''); if (strategy) setStrategyDeleting(entry.id); else { setDeleting({ id: entry.id, name: entry.name }); setDeleteError(''); } }}><Trash2 size={14} />{t('common.delete')}</button>
                 </div>}

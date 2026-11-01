@@ -158,6 +158,9 @@
     "providerClear": "Wyczyść wybór"
   },
   "common": {
+    "profileRestoreBusy": "Trwa przywracanie sesji. Spróbuj ponownie za chwilę.",
+    "profileRestoreInvalid": "Ścieżka do kopii sesji jest nieprawidłowa. Zaimportuj konto ponownie.",
+    "profileRestoreRecoveryFailed": "Nie udało się przywrócić sesji. Kopia zapasowa została zachowana: {{detail}}",
     "dataQueryBusy": "Dane są przetwarzane. Spróbuj ponownie za chwilę.",
     "apiBudget": {
       "keyScope": "Ten klucz",
@@ -427,7 +430,11 @@
           "statusSkipped": "Pominięto",
           "statusPending": "Oczekuje na import"
         },
-        "invalidJson": "Nieprawidłowy JSON. Sprawdź plik lub wklejoną treść."
+        "invalidJson": "Nieprawidłowy JSON. Sprawdź plik lub wklejoną treść.",
+        "empty": "Dane importu są puste.",
+        "sizeLimit": "Plik nie może przekraczać {{limit}} MiB.",
+        "countLimit": "Jednorazowo można zaimportować najwyżej {{count}} kont.",
+        "itemFailed": "Pozycja {{index}}: {{error}}"
       },
       "externalImport": {
         "bundleInvalidJson": "Pakiet importu nie jest poprawnym JSON",
@@ -538,6 +545,8 @@
         "title": "Przegląd kont"
       },
       "quota": {
+        "usageWithUnit": "Zużycie ({{unit}})",
+        "usage": "Zużycie",
         "noData": "Brak danych limitu",
         "queryFailed": "Pobranie limitu nie powiodło się",
         "resetDone": "Zresetowano",
@@ -631,6 +640,29 @@
         "missingTiming": "Nie zapisano prawidłowego czasu wyjścia.",
         "shortWindow": "Obserwowane okno wyjścia jest krótsze niż 100 ms."
       }
+    },
+    "deviceRestriction": {
+      "title": "Ograniczenia urządzenia",
+      "badge": "Urządzenie ograniczone",
+      "paused": "Wykryto wyraźne ograniczenie urządzenia. Automatyczne próby tej operacji są wstrzymane. Sprawdź zapis na stronie kont.",
+      "note": "To obserwacje lokalne, nie miejsca urządzeń OpenAI. Usunięcie kont lub lokalnych danych logowania nie gwarantuje zwolnienia limitu na serwerze.",
+      "retryNote": "Zezwolenie na ponowienia nie oznacza usunięcia ograniczenia. Kolejna wyraźna odmowa ponownie wstrzyma próby.",
+      "desktop": "Logowanie w aplikacji",
+      "quota": "Odczyt limitu",
+      "api": "Żądania API",
+      "oauth": "Logowanie OAuth",
+      "token": "Odnowienie tokenu",
+      "recovered": "Operacja przywrócona",
+      "pausedLabel": "Próby wstrzymane",
+      "retryEnabled": "Ponowienia dozwolone",
+      "observed": "Pierwsza: {{first}} · Ostatnia: {{last}} · Obserwacje: {{count}}",
+      "check": "Sprawdź ponownie",
+      "allowRetry": "Zezwól na próby",
+      "help": "Oficjalna pomoc",
+      "support": "Kontakt ze wsparciem",
+      "failed": "Nie udało się ukończyć operacji. Zachowano ostatni stan. Spróbuj ponownie.",
+      "loginAttempt": "Logowanie bez ustalonego konta",
+      "removed": "Usunięte konto lokalne"
     }
   },
   "nav": {
@@ -1369,8 +1401,6 @@
       "codexPreserveExternalBridge": "Zachowaj zewnętrzny most",
       "codexPreserveExternalBridgeDesc": "Przy zmianie konta OAuth zachowaj most Codex Web GPT potwierdzony lokalnymi zapisami integracji. Domyślnie wyłączone.",
       "codexEnhancements": {
-        "nativeFast": "Natywny wybór Fast",
-        "nativeFastDesc": "Włącza wbudowane menu szybkości klienta dla kont z API Key i pokazuje poziomy obsługiwane przez model. Dostępność i ceny zależą od dostawcy API.",
         "quotaCompat": "Limity w trybie mieszanym",
         "quotaCompatDesc": "Przy prawdziwym logowaniu OAuth i zewnętrznej trasie API limit subskrypcji nie blokuje lokalnych wiadomości API. Rzeczywiste zużycie i limity obrazów nie zmieniają się.",
         "restartHint": "Domyślnie włączone. Po zmianach uruchom ponownie odpowiednie instancje Codex i pozostaw Cockpit Tools włączony. Natywne dyktowanie zależy od możliwości i ustawień klienta; Cockpit go nie przejmuje ani nie wymusza jego włączenia.",
@@ -2676,14 +2706,8 @@
       "unsupportedCountryRegion": "Bieżący region sieci nie obsługuje odświeżania autoryzacji Codex. Usługa autoryzacji OpenAI odrzuciła to wyjście sieciowe. Przełącz się na obsługiwany region i spróbuj ponownie."
     },
     "switchAuth": {
-      "apiOnlyTitle": "Klient wymaga logowania",
       "reauthorizeTitle": "Autoryzacja Codex wygasła",
-      "apiOnlyDescription": "Bieżący klient przeszedł na stronę logowania. Ponownie go autoryzuj, aby przywrócić działanie klienta; usługa API jest na razie nadal dostępna.",
-      "observationStatus": "Wykryto przekierowanie na stronę logowania",
-      "observationTime": "Ostatnie sprawdzenie: {{time}}",
-      "loginRedirectTime": "Ostatnie przekierowanie na stronę logowania: {{time}}",
       "observationInstance": "Obserwowana instancja: {{instance}}",
-      "launchTime": "Czas uruchomienia instancji: {{time}}",
       "reauthorizeDescription": "Nie udało się odnowić danych logowania, a access_token nie jest już dostępny dla usługi API. Ponownie autoryzuj konto.",
       "idTokenUnavailable": "Tożsamość klienta wygasła, a automatyczne odnowienie nie zwróciło prawidłowego id_token.",
       "reasonLabel": "Powód",
@@ -2696,10 +2720,7 @@
       "startingInstanceAfterReauth": "Autoryzacja została zaktualizowana. Ponowne uruchamianie instancji...",
       "startInstanceAfterReauthFailed": "Autoryzacja została zaktualizowana, ale nie udało się uruchomić instancji: {{error}}",
       "reauthorizedAndStartedInstance": "Ponownie autoryzowano i uruchomiono instancję",
-      "apiOnlyBadge": "Wymagane logowanie",
-      "clearClientAuth": "Wyczyść ostrzeżenie",
-      "clearClientAuthSuccess": "Ostrzeżenie klienta wyczyszczone",
-      "clearClientAuthFailed": "Nie udało się wyczyścić ostrzeżenia klienta: {{error}}"
+      "apiTokenUsableDescription": "Niektóre dane logowania wymagają ponownej autoryzacji. Bieżący token dostępu nadal może być używany w usłudze API."
     },
     "current": "Bieżące",
     "empty": {
@@ -4752,8 +4773,8 @@
         "allStatuses": "Wszystkie statusy",
         "allGatewayModes": "Wszystkie tryby",
         "sessionFilter": "Sesja",
-      "sessionPlaceholder": "ID sesji",
-      "modelFilter": "Modele",
+        "sessionPlaceholder": "ID sesji",
+        "modelFilter": "Modele",
         "modelPlaceholder": "ID modelu",
         "accountFilter": "Konto",
         "accountPlaceholder": "E-mail lub ID konta",
@@ -5535,7 +5556,7 @@
         "subscriptionUrl": "URL subskrypcji",
         "nodeLinks": "Linki węzłów lub konfiguracja",
         "import": "Importuj",
-        "importNotice": "Adresy i dane logowania są szyfrowane lokalnie. Zapytania do dostawcy nie zawierają Token kont.",
+        "importNotice": "Migawki konfiguracji i zasobów są przechowywane w postaci zaszyfrowanej i odszyfrowywane w osobnym folderze roboczym. Żądania subskrypcji i zasobów nie zawierają tokenów konta.",
         "intro": "Importuj i testuj subskrypcje lub węzły, a następnie wybierz i przypisz je z listy kont.",
         "emptyTitle": "Dodaj pierwsze proxy",
         "emptyHint": "Obsługuje subskrypcje, linki węzłów i HTTP / SOCKS5. Import i test są dostępne bez kont.",
@@ -5580,7 +5601,7 @@
         "unsupported": "Nieobsługiwane",
         "invalidInput": "Wpisz nazwę i poprawny URL, link węzła lub konfigurację proxy.",
         "downloadFailed": "Nie udało się pobrać subskrypcji. Sprawdź sieć i ustawienia proxy, a następnie spróbuj ponownie.",
-        "downloadRedirect": "Pobieranie subskrypcji zatrzymano z powodu przekierowania do innego źródła lub zbyt wielu przekierowań.",
+        "downloadRedirect": "Przekierowanie subskrypcji jest nieprawidłowe lub przekracza dozwolony limit.",
         "downloadDenied": "Serwer subskrypcji odmówił dostępu (HTTP 401/403). Sprawdź link i termin jego ważności.",
         "downloadTls": "Nie udało się uzgodnić połączenia TLS lub zweryfikować certyfikatu subskrypcji. Sprawdź sieć i ustawienia proxy.",
         "timeout": "Upłynął limit czasu. Odśwież wynik przed ponowną próbą.",
@@ -5598,6 +5619,7 @@
         "loadBalanceGroup": "Równoważenie obciążenia",
         "reasonStrategy": "Ta strategia grupy nie jest obsługiwana. Rozwiń grupę i wybierz dostępny węzeł.",
         "reasonOptions": "Zawiera nieobsługiwany jeszcze protokół lub parametr konfiguracji.",
+        "reasonProviderConfig": "Źródło, filtr lub przekształcenie tego dostawcy nie jest obsługiwane.",
         "reasonProvider": "Ta grupa wymaga zewnętrznych dostawców węzłów, którzy nie zostali załadowani.",
         "reasonMembers": "Członkowie grupy nie przeszli weryfikacji. Sprawdź poszczególne przyczyny.",
         "reasonInvalid": "Brak wymaganych ustawień lub są one nieprawidłowe.",
@@ -5619,6 +5641,14 @@
         "defaultProtocol": "Protokół domyślny",
         "credentialFormat": "Format danych logowania",
         "recognizing": "Rozpoznawanie…",
+        "nativePreview": "Podczas importu Mihomo bezpośrednio przetwarza konfigurację i ładuje zasoby. Podgląd nie korzysta z plików ani sieci.",
+        "resourceDirectory": "Folder zasobów",
+        "browseResources": "Wybierz folder",
+        "resourceDirectoryHint": "W przypadku plików lokalnych wybierz folder zasobów subskrypcji. Jego zawartość zostanie skopiowana do prywatnego folderu roboczego i zapisana w zaszyfrowanych migawkach.",
+        "resourceDirectoryRequired": "Wybierz lokalny folder zasobów tej subskrypcji.",
+        "resourceMissing": "Zasoby lokalne są niedostępne. Sprawdź folder lub zaimportuj ponownie.",
+        "rulesName": "Reguły subskrypcji",
+        "pendingProviders": "Import pobierze zdalne źródła węzłów: {{count}}. Podgląd ich nie pobiera.",
         "previewCount": "Poprawne {{valid}} · Do sprawdzenia {{invalid}} · Duplikaty {{duplicates}}",
         "line": "Wiersz {{line}}",
         "ambiguous": "Niejednoznaczny format. Wybierz format danych lub użyj pełnego adresu URL proxy.",
@@ -6524,8 +6554,9 @@
       "desc": "Wklej token dostępu Kiro lub wyeksportowane dane JSON."
     },
     "import": {
-      "localDesc": "Zaimportuj dane konta Kiro z lokalnego klienta Kiro lub pliku JSON.",
-      "localClient": "Importuj z lokalnego Kiro"
+      "localDesc": "Importuj z lokalnego klienta lub JSON. Konta JSON są najpierw zapisywane, a dane logowania i limity aktualizowane w tle.",
+      "localClient": "Importuj z lokalnego Kiro",
+      "invalidCredentials": "Brakuje pól danych logowania lub nie są obsługiwane. Wyeksportuj konto ponownie."
     },
     "injectToVSCode": "Przełącz się na Kiro"
   },
@@ -7708,6 +7739,17 @@
       "family": "Grupa",
       "platform": "Bieżący system",
       "unsupportedGroup": "Dla tej grupy nie ma jeszcze klientów z zapisem jednym kliknięciem."
+    },
+    "campaign": {
+      "badge": "11.11",
+      "title": "11,11% bonusu do doładowań",
+      "description": "Dla nowych i obecnych użytkowników.",
+      "period": "Termin: 1–11 listopada 2026 r. (UTC+8)",
+      "terms": "Warunki znajdziesz na stronie promocji.",
+      "action": "Zobacz ofertę",
+      "inactive": "Ta promocja nie jest obecnie aktywna.",
+      "label": "Oferta 11.11 · ograniczony czas",
+      "promotionDescription": "Świętuj 11.11 z oficjalnym partnerem Cockpit świadczącym usługi pośrednictwa API. Nowi i obecni użytkownicy otrzymują 11,11% bonusu do doładowań w czasie promocji. Korzystaj z Claude, ChatGPT, Gemini i innych czołowych modeli."
     }
   },
   "grok": {

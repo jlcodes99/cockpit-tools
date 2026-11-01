@@ -380,7 +380,6 @@ export function useCodexAccountsBaseController() {
       title?: string;
       summary?: string;
       reauthorizeAccountId?: string;
-      clearClientAuthObservationAccountId?: string;
       message: string;
     } | null>(null);
     const [editingAccountNoteId, setEditingAccountNoteId] = useState<

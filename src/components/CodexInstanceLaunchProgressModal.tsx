@@ -18,7 +18,6 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import * as codexInstanceService from "../services/codexInstanceService";
-import * as codexService from "../services/codexService";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
 import { useCodexAccountStore } from "../stores/useCodexAccountStore";
 import { useCodexInstanceStore } from "../stores/useCodexInstanceStore";
@@ -390,12 +389,7 @@ export function CodexInstanceLaunchProgressModal() {
     : null;
   const accountLabel = resolveCodexAccountDisplayName(account ?? { id: accountId ?? "" }, t("common.apiKeyAccount"));
   const authReason = authFailure
-    ? authFailure.reasonCode === "client_login_required"
-      ? t(
-          "codex.switchAuth.apiOnlyDescription",
-          "官方客户端上次运行时检测到需要登录，请重新授权后再启动。",
-        )
-      : authFailure.reasonCode === "refresh_token_expired"
+    ? authFailure.reasonCode === "refresh_token_expired"
         ? t("codex.authError.refreshTokenExpired")
         : authFailure.reasonCode === "refresh_token_invalidated"
           ? t("codex.authError.refreshTokenInvalidated")
@@ -515,7 +509,7 @@ export function CodexInstanceLaunchProgressModal() {
   };
   const title = authFailure
     ? authFailure.apiOnlyAvailable
-      ? t("codex.switchAuth.apiOnlyTitle")
+      ? t("codex.authError.badge")
       : t("codex.switchAuth.reauthorizeTitle")
     : state.status === "unconfirmed"
       ? t("codex.launchConfirmation.title")
@@ -693,31 +687,7 @@ export function CodexInstanceLaunchProgressModal() {
     }
   };
 
-  const clearClientAuthObservation = async () => {
-    if (
-      apiActionBusy ||
-      retryBusy ||
-      authFailure?.reasonCode !== "client_login_required" ||
-      !accountId
-    ) {
-      return;
-    }
-    setActionError(null);
-    setApiActionBusy(true);
-    try {
-      await codexService.clearClientAuthObservation(accountId);
-      await useCodexAccountStore.getState().fetchAccounts();
-      setState(null);
-    } catch (error) {
-      setActionError(
-        t("codex.switchAuth.clearClientAuthFailed", {
-          error: String(error).replace(/^Error:\s*/, ""),
-        }),
-      );
-    } finally {
-      setApiActionBusy(false);
-    }
-  };
+
   const selectOtherAccount = () => {
     const instanceId = state.instanceId;
     setState(null);
@@ -918,7 +888,7 @@ export function CodexInstanceLaunchProgressModal() {
             <div className="codex-switch-auth-summary">
               <p>
                 {authFailure.apiOnlyAvailable
-                  ? t("codex.switchAuth.apiOnlyDescription")
+                  ? t("codex.switchAuth.apiTokenUsableDescription")
                   : t("codex.switchAuth.reauthorizeDescription")}
               </p>
               <div className="codex-switch-auth-reason" role="alert">
@@ -1041,18 +1011,6 @@ export function CodexInstanceLaunchProgressModal() {
                     {apiActionBusy
                       ? t("common.loading", "加载中...")
                       : t("codex.localAccess.entryAction", "添加至 API 服务")}
-                  </button>
-                )}
-                {authFailure.reasonCode === "client_login_required" && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => void clearClientAuthObservation()}
-                    disabled={apiActionBusy || retryBusy !== null}
-                  >
-                    {apiActionBusy
-                      ? t("common.loading", "加载中...")
-                      : t("codex.switchAuth.clearClientAuth", "清除异常标识")}
                   </button>
                 )}
                 <button

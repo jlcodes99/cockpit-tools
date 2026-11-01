@@ -1,5 +1,5 @@
 import type { CodexAccount, CodexQuotaErrorInfo } from "../types/codex";
-import { isCodexClientReauthNoticeOnly } from "./codexSwitchAuthFailure";
+import { isCodexApiUsableReauthNotice } from "./codexSwitchAuthFailure";
 import { getCodexAccountQuotaError } from "./codexProxyRuntimeError";
 
 const BLOCKING_STATUS_CODES = new Set(["401", "403", "429"]);
@@ -135,7 +135,7 @@ export function isBlockingCodexAccountQuotaError(
   account: CodexAccount,
 ): boolean {
   return (
-    !isCodexClientReauthNoticeOnly(account) &&
+    !isCodexApiUsableReauthNotice(account) &&
     isBlockingCodexQuotaError(account.quota_error)
   );
 }

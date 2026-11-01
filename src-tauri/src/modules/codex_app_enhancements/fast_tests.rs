@@ -1803,13 +1803,7 @@ async fn page_worker_waits_for_browser_completion_before_replacing_its_owner() {
 }
 
 #[test]
-fn fallback_speed_metadata_uses_only_bundled_ultrafast_models() {
-    let fallbacks = service_tier_fallbacks().as_object().unwrap();
-    assert_eq!(fallbacks.len(), 2);
-    for model in ["gpt-6.1-sol", "gpt-6-astra"] {
-        assert_eq!(fallbacks[model]["id"], "ultrafast");
-        assert_eq!(fallbacks[model]["description"], "");
-    }
+fn automatic_fast_does_not_supply_catalog_fallbacks() {
     let runtime = bootstrap(true, false, true, false, "catalog-test");
-    assert!(runtime.contains("\"serviceTierFallbacks\""));
+    assert!(!runtime.contains("serviceTierFallbacks"));
 }

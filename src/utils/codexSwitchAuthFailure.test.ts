@@ -6,7 +6,7 @@ import {
   isCodexAccountReauthRequired,
   isCodexApiOnlyAccessTokenUsable,
   isCodexApiServiceAuthRejected,
-  isCodexClientReauthNoticeOnly,
+  isCodexApiUsableReauthNotice,
   isCodexIdTokenReauthReason,
   isCodexRefreshTokenNoticeOnly,
   isCodexRefreshTokenReauthReason,
@@ -118,15 +118,15 @@ test("server-revoked authorization is terminal and never API-only", () => {
   account.requires_reauth = true;
   account.reauth_reason =
     "Codex 登录授权已被服务端撤销，无法自动刷新。请重新登录 Codex 账号。";
-  account.client_auth_status = "login_required";
+  Object.assign(account, { client_auth_status: "login_required" });
 
   assert.equal(isCodexServerRevokedReauth(account), true);
   assert.equal(isCodexApiOnlyAccessTokenUsable(account, now), false);
-  assert.equal(isCodexClientReauthNoticeOnly(account, now), false);
+  assert.equal(isCodexApiUsableReauthNotice(account, now), false);
   assert.equal(isCodexAccountReauthRequired(account), true);
 
   const quotaRejected = accountWithAccessToken(jwt(now + 3600));
-  quotaRejected.client_auth_status = "login_required";
+  Object.assign(quotaRejected, { client_auth_status: "login_required" });
   quotaRejected.quota_error = {
     code: "token_invalidated",
     message: "API 返回错误 401 Unauthorized",
@@ -212,9 +212,9 @@ test("recognizes id_token failures that require client reauthorization", () => {
   account.requires_reauth = true;
   account.reauth_reason =
     "Codex 客户端登录凭据中的 id_token 已过期，自动刷新后仍未获得新的有效 id_token。";
-  assert.equal(isCodexClientReauthNoticeOnly(account, now), true);
+  assert.equal(isCodexApiUsableReauthNotice(account, now), true);
   account.tokens.access_token = jwt(now + 120);
-  assert.equal(isCodexClientReauthNoticeOnly(account, now), false);
+  assert.equal(isCodexApiUsableReauthNotice(account, now), false);
 });
 
 for (const reason of ['refresh_token_expired', 'refresh_token_invalidated', 'token_invalidated', 'token_revoked', 'invalid_grant', 'invalid_refresh_token']) {
@@ -235,3 +235,16 @@ for (const reason of [
     assert.equal(isCodexRefreshTokenReauthReason(reason), false);
   });
 }
+
+test("retired login-page observations do not require reauthorization or change API availability", () => {
+  const now = 2_000_000_000;
+  const account = Object.assign(accountWithAccessToken(jwt(now + 3600)), {
+    client_auth_status: "login_required",
+    last_client_auth_observed_at: now,
+    last_client_login_redirect_at: now,
+    last_client_auth_instance_id: "default",
+  });
+  assert.equal(isCodexAccountReauthRequired(account), false);
+  assert.equal(isCodexApiUsableReauthNotice(account, now), false);
+  assert.equal(isCodexApiOnlyAccessTokenUsable(account, now), true);
+});

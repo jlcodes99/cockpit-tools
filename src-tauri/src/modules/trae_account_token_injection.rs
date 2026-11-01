@@ -2307,6 +2307,12 @@ pub(crate) fn is_account_protected_from_token_refresh(
     map.get(account_id).cloned()
 }
 
+fn should_fetch_cn_entitlement_list(is_cn: bool, usage: Option<&Value>) -> bool {
+    is_cn && !usage.is_some_and(|raw| {
+        usage_response_payload_root(raw).get("is_credits_billing").and_then(Value::as_bool) == Some(true)
+    })
+}
+
 async fn refresh_quota_snapshot(
     account: &mut TraeAccount,
     client: &reqwest::Client,
@@ -2388,8 +2394,9 @@ async fn refresh_quota_snapshot(
         }
     }
 
-    // CN 额外拉当前权益列表：部分账号 ide_user_ent_usage 不完整，此接口补 pack / 速通字段。
-    if is_cn {
+    // Keep the legacy fast-request fallback, but never overwrite current credit
+    // billing with the older dashboard payload (which lacks its billing flag).
+    if should_fetch_cn_entitlement_list(is_cn, account.trae_usage_raw.as_ref()) {
         let list_urls = build_refresh_api_urls(account, TRAE_CN_CURRENT_ENTITLEMENT_LIST_PATH);
         match request_trae_pay_json_with_candidates(
             client,

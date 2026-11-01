@@ -158,6 +158,9 @@
     "providerClear": "Borrar selección"
   },
   "common": {
+    "profileRestoreBusy": "Se está restaurando la sesión. Inténtalo de nuevo en breve.",
+    "profileRestoreInvalid": "La ruta de la copia de sesión no es válida. Vuelve a importar la cuenta.",
+    "profileRestoreRecoveryFailed": "No se pudo restaurar la sesión. Se conservó la copia de seguridad: {{detail}}",
     "dataQueryBusy": "Se están procesando los datos. Vuelve a intentarlo en unos instantes.",
     "apiBudget": {
       "keyScope": "Esta clave",
@@ -432,7 +435,11 @@
           "statusSkipped": "Omitido",
           "statusPending": "Pendiente de importación"
         },
-        "invalidJson": "JSON no válido. Revisa el archivo o el contenido pegado."
+        "invalidJson": "JSON no válido. Revisa el archivo o el contenido pegado.",
+        "empty": "Los datos de importación están vacíos.",
+        "sizeLimit": "El archivo no debe superar {{limit}} MiB.",
+        "countLimit": "Importa como máximo {{count}} cuentas a la vez.",
+        "itemFailed": "Elemento {{index}}: {{error}}"
       },
       "externalImport": {
         "bundleInvalidJson": "El paquete de importación no es JSON válido",
@@ -543,6 +550,8 @@
         "title": "Resumen de cuentas"
       },
       "quota": {
+        "usageWithUnit": "Uso ({{unit}})",
+        "usage": "Uso",
         "noData": "Sin datos de cuota",
         "queryFailed": "Falló la consulta de cuota",
         "resetDone": "Reiniciado",
@@ -631,6 +640,29 @@
         "missingTiming": "No se registró un tiempo de salida válido.",
         "shortWindow": "La ventana de salida observada es inferior a 100 ms."
       }
+    },
+    "deviceRestriction": {
+      "title": "Restricciones del dispositivo",
+      "badge": "Dispositivo restringido",
+      "paused": "Se detectó una restricción explícita del dispositivo. Los intentos automáticos de esta operación están pausados. Consulta el registro en la página de cuentas.",
+      "note": "Son observaciones locales, no plazas de dispositivo de OpenAI. Eliminar cuentas o credenciales locales no garantiza liberar el límite del servidor.",
+      "retryNote": "Permitir reintentos no marca la restricción como resuelta. Un nuevo rechazo explícito vuelve a pausarlos.",
+      "desktop": "Inicio de sesión local",
+      "quota": "Consulta de cuota",
+      "api": "Solicitudes API",
+      "oauth": "Inicio de sesión OAuth",
+      "token": "Renovación del token",
+      "recovered": "Operación restablecida",
+      "pausedLabel": "Intentos pausados",
+      "retryEnabled": "Reintentos permitidos",
+      "observed": "Primera: {{first}} · Última: {{last}} · {{count}} observaciones",
+      "check": "Comprobar",
+      "allowRetry": "Permitir reintentos",
+      "help": "Ayuda oficial",
+      "support": "Contactar con soporte",
+      "failed": "No se pudo completar la operación. Se conserva el último estado. Vuelve a intentarlo.",
+      "loginAttempt": "Inicio de sesión sin cuenta identificada",
+      "removed": "Cuenta local eliminada"
     }
   },
   "nav": {
@@ -1369,8 +1401,6 @@
       "codexPreserveExternalBridge": "Mantener puente externo",
       "codexPreserveExternalBridgeDesc": "Conservar el puente Codex Web GPT verificado con registros locales al cambiar de cuenta OAuth. Desactivado por defecto.",
       "codexEnhancements": {
-        "nativeFast": "Control Fast nativo",
-        "nativeFastDesc": "Activa el menú de velocidad nativo del cliente para cuentas con API Key y muestra los niveles compatibles con el modelo. La disponibilidad y el precio dependen del proveedor API.",
         "quotaCompat": "Cuotas en modo mixto",
         "quotaCompatDesc": "Con inicio OAuth real y una ruta API externa, evita que la cuota de suscripción bloquee mensajes API locales. No cambia el consumo real ni las cuotas de imágenes.",
         "restartHint": "Activado por defecto. Reinicia cada instancia Codex afectada tras los cambios y mantén Cockpit Tools abierto. El dictado nativo depende de las funciones y ajustes del cliente; Cockpit no lo sustituye ni fuerza su activación.",
@@ -2676,14 +2706,8 @@
       "unsupportedCountryRegion": "La región de red actual no permite renovar la autorización de Codex. El servicio de autorización de OpenAI rechazó esta salida de red. Cambia a una región compatible y vuelve a intentarlo."
     },
     "switchAuth": {
-      "apiOnlyTitle": "El cliente requiere iniciar sesión",
       "reauthorizeTitle": "La autorización de Codex caducó",
-      "apiOnlyDescription": "El cliente actual ha llegado a la página de inicio de sesión. Vuelve a autorizarlo para restaurar su uso; el servicio API sigue disponible por ahora.",
-      "observationStatus": "Se detectó una redirección a la página de inicio de sesión",
-      "observationTime": "Última comprobación: {{time}}",
-      "loginRedirectTime": "Última redirección a la página de inicio de sesión: {{time}}",
       "observationInstance": "Instancia observada: {{instance}}",
-      "launchTime": "Hora de inicio de la instancia: {{time}}",
       "reauthorizeDescription": "No fue posible renovar las credenciales y el access_token ya no está disponible para el servicio API. Vuelve a autorizar la cuenta para continuar.",
       "idTokenUnavailable": "La identidad del cliente caducó y la renovación automática no devolvió un id_token válido.",
       "reasonLabel": "Motivo",
@@ -2696,10 +2720,7 @@
       "startingInstanceAfterReauth": "Autorización actualizada. Reiniciando la instancia...",
       "startInstanceAfterReauthFailed": "Autorización actualizada, pero no se pudo iniciar la instancia: {{error}}",
       "reauthorizedAndStartedInstance": "Reautorizada e instancia iniciada",
-      "apiOnlyBadge": "Falta autorizar",
-      "clearClientAuth": "Borrar advertencia",
-      "clearClientAuthSuccess": "Advertencia del cliente borrada",
-      "clearClientAuthFailed": "No se pudo borrar la advertencia del cliente: {{error}}"
+      "apiTokenUsableDescription": "Algunas credenciales necesitan una nueva autorización. El token de acceso actual sigue siendo válido para el servicio API."
     },
     "current": "Actual",
     "empty": {
@@ -4752,8 +4773,8 @@
         "allStatuses": "Todos los estados",
         "allGatewayModes": "Todos los modos",
         "sessionFilter": "Sesión",
-      "sessionPlaceholder": "ID de sesión",
-      "modelFilter": "Modelo",
+        "sessionPlaceholder": "ID de sesión",
+        "modelFilter": "Modelo",
         "modelPlaceholder": "ID de modelo",
         "accountFilter": "Cuenta",
         "accountPlaceholder": "Correo o ID de cuenta",
@@ -5535,7 +5556,7 @@
         "subscriptionUrl": "URL de suscripción",
         "nodeLinks": "Enlaces de nodos o configuración",
         "import": "Importar",
-        "importNotice": "Las URL y credenciales se cifran localmente. Las solicitudes de suscripción se envían al proveedor sin Token de cuenta.",
+        "importNotice": "Las instantáneas de configuración y recursos se guardan cifradas y se descifran en una carpeta de ejecución independiente. Las solicitudes de suscripciones y recursos no incluyen tokens de cuenta.",
         "intro": "Importa y prueba suscripciones o nodos; después selecciónalos y asígnalos desde la lista de cuentas.",
         "emptyTitle": "Añade tu primer proxy",
         "emptyHint": "Admite suscripciones, enlaces de nodos y HTTP / SOCKS5. Puedes importar y probar sin añadir cuentas.",
@@ -5580,7 +5601,7 @@
         "unsupported": "No compatible",
         "invalidInput": "Introduce un nombre y una URL, enlace de nodo o configuración proxy válidos.",
         "downloadFailed": "No se pudo descargar la suscripción. Revisa la red y la configuración del proxy e inténtalo de nuevo.",
-        "downloadRedirect": "Descarga detenida por una redirección a otro origen o demasiadas redirecciones.",
+        "downloadRedirect": "La redirección de la suscripción no es válida o supera el límite permitido.",
         "downloadDenied": "El servidor de suscripción denegó el acceso (HTTP 401/403). Revisa el enlace y su vigencia.",
         "downloadTls": "Falló la negociación TLS o la verificación del certificado de la suscripción. Revisa la red y la configuración del proxy.",
         "timeout": "Se agotó el tiempo. Actualiza para comprobar el resultado antes de reintentar.",
@@ -5598,6 +5619,7 @@
         "loadBalanceGroup": "Balanceo de carga",
         "reasonStrategy": "Esta estrategia de grupo no es compatible. Despliegue para elegir un nodo disponible.",
         "reasonOptions": "Contiene un protocolo o una opción de configuración aún no compatible.",
+        "reasonProviderConfig": "La fuente, el filtro o la transformación de este proveedor no es compatible.",
         "reasonProvider": "Este grupo depende de proveedores de nodos externos que no se han cargado.",
         "reasonMembers": "Los miembros del grupo no superaron la validación. Consulta los motivos individuales.",
         "reasonInvalid": "Falta una configuración necesaria o no es válida.",
@@ -5619,6 +5641,14 @@
         "defaultProtocol": "Protocolo si se omite",
         "credentialFormat": "Formato de credenciales",
         "recognizing": "Reconociendo…",
+        "nativePreview": "Al importar, Mihomo procesa la configuración directamente y carga sus recursos. La vista previa no accede a archivos ni a la red.",
+        "resourceDirectory": "Carpeta de recursos",
+        "browseResources": "Elegir carpeta",
+        "resourceDirectoryHint": "Si hay archivos locales, seleccione la carpeta de recursos de la suscripción. Su contenido se copia a una carpeta privada de ejecución y se guarda en instantáneas cifradas.",
+        "resourceDirectoryRequired": "Seleccione la carpeta de recursos locales de esta suscripción.",
+        "resourceMissing": "Los recursos locales no están disponibles. Revise la carpeta o vuelva a importar.",
+        "rulesName": "Reglas de suscripción",
+        "pendingProviders": "Al importar se cargarán {{count}} fuentes remotas de nodos. La vista previa no las descarga.",
         "previewCount": "Válidos {{valid}} · Revisar {{invalid}} · Duplicados {{duplicates}}",
         "line": "Línea {{line}}",
         "ambiguous": "Formato ambiguo. Elige un formato o usa una URL de proxy completa.",
@@ -6524,8 +6554,9 @@
       "desc": "Pegue su token de acceso Kiro o los datos JSON exportados."
     },
     "import": {
-      "localDesc": "Importe datos de la cuenta Kiro desde el cliente Kiro local o un archivo JSON.",
-      "localClient": "Importar desde Kiro local"
+      "localDesc": "Importa desde el cliente local o JSON. Las cuentas JSON se guardan primero; las credenciales y cuotas se actualizan después en segundo plano.",
+      "localClient": "Importar desde Kiro local",
+      "invalidCredentials": "Faltan campos de credenciales o no son compatibles. Vuelve a exportar la cuenta."
     },
     "injectToVSCode": "Cambiar a Kiro"
   },
@@ -7708,6 +7739,17 @@
       "family": "Grupo",
       "platform": "Sistema actual",
       "unsupportedGroup": "Aún no hay clientes de un clic para este grupo."
+    },
+    "campaign": {
+      "badge": "11.11",
+      "title": "11,11 % extra en recargas",
+      "description": "Para usuarios nuevos y actuales.",
+      "period": "Promoción: del 1 al 11 de noviembre de 2026 (UTC+8)",
+      "terms": "Consulta las condiciones en la página de la promoción.",
+      "action": "Ver oferta",
+      "inactive": "Esta promoción no está activa actualmente.",
+      "label": "Oferta limitada del 11.11",
+      "promotionDescription": "Celebra el 11.11 con el socio oficial de retransmisión API de Cockpit. Los usuarios nuevos y actuales reciben un 11,11 % extra en sus recargas durante la promoción. Accede a Claude, ChatGPT, Gemini y otros modelos destacados."
     }
   },
   "grok": {

@@ -28,6 +28,7 @@ pub mod codebuddy_oauth;
 pub mod codebuddy_session;
 pub mod codebuddy_session_transfer;
 pub mod codex_account;
+pub mod codex_device_restrictions;
 pub mod chatgpt_plan;
 pub mod chatgpt_plan_service;
 pub mod codex_account_proxy;
@@ -75,7 +76,7 @@ pub mod codex_session_usage;
 pub mod codex_session_visibility;
 pub(crate) mod codex_history_projection_repair;
 pub mod codex_speed;
-pub(crate) mod codex_native_speed_catalog;
+pub(crate) mod codex_model_catalog_capabilities;
 pub mod codex_ssh;
 pub mod codex_thread_sync;
 pub mod codex_wakeup;
@@ -190,3 +191,7 @@ pub mod codex_proxy_subscription_parser;
 
 pub mod codex_client_proxy;
 pub mod codex_proxy_targets;
+
+pub mod buddy_resource_api;
+
+pub mod qoder_usage;

@@ -545,11 +545,18 @@ fn restore_profile_config_toml_from_takeover_backup(
         .map(|doc| profile_has_managed_realtime_sideband(profile_dir, &doc))
         .transpose()?
         .unwrap_or(false);
-    restore_config_toml_from_takeover_backup_with_realtime_ownership(
+    let restored = restore_config_toml_from_takeover_backup_with_realtime_ownership(
         current_config,
         backup_config,
         managed_realtime_sideband,
-    )
+    )?;
+    // Old takeover backups must not resurrect the retired speed-only catalog.
+    let Some(content) = restored.as_deref() else { return Ok(None); };
+    let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(content)?;
+    if crate::modules::codex_model_catalog_capabilities::remove_legacy_references(profile_dir, &mut doc) {
+        return Ok(Some(crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc)));
+    }
+    Ok(restored)
 }
 
 fn restore_config_toml_from_takeover_backup_with_realtime_ownership(

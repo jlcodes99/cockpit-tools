@@ -3230,7 +3230,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       });
     }, [accounts]);
 
-    useCodexAccountSync({ fetchAccounts, fetchCurrentAccount, refreshApiKeyUsageByAccountId });
+    useCodexAccountSync({ refreshApiKeyUsageByAccountId });
 
     // 额度展示格式化统一由独立 hook 提供，保持原有签名与行为。
     const {

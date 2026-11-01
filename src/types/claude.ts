@@ -256,14 +256,15 @@ export function getClaudeAccountDisplayEmail(account: ClaudeAccount): string {
 }
 
 export function getClaudePlanBadge(account: ClaudeAccount): string {
+  // Desktop plan labels are authored by the backend; preserve custom/raw labels.
+  if (isClaudeDesktopOAuthAccount(account)) {
+    const plan = account.plan_type?.trim();
+    return plan && !/^(claude\s+desktop|desktop)$/i.test(plan) && !isClaudeBillingSourceValue(plan) ? plan : '';
+  }
   const derivedPlan = deriveClaudePlanBadge(account);
   if (derivedPlan) return derivedPlan;
 
   const raw = account.plan_type?.trim();
-  if (isClaudeDesktopOAuthAccount(account)) {
-    if (!raw || /^claude\s+desktop$/i.test(raw) || /^desktop$/i.test(raw) || isClaudeBillingSourceValue(raw)) return '';
-    return raw;
-  }
   if (raw && !isClaudeBillingSourceValue(raw)) return raw;
   if (!raw) {
     const org = account.organization_name?.trim();

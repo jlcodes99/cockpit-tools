@@ -39,7 +39,7 @@ fn version_fixture(temp: &Temp, body: &str) -> PathBuf {
 async fn cold_start_budget_and_failure_codes_are_distinct_from_archive_verification() {
     let temp = Temp::new();
     let control = InstallControl::for_test();
-    let binary = version_fixture(&temp, "sleep 0.15\nprintf 'Mihomo Meta v1.19.31\\n'");
+    let binary = version_fixture(&temp, "sleep 0.15\nprintf 'Mihomo Meta v1.19.33\\n'");
     assert_eq!(
         check_first_launch(&binary, &control, Duration::from_millis(20))
             .await
@@ -125,7 +125,7 @@ fn pinned_assets_cover_supported_platforms_and_current_version() {
     assert_eq!(manifest.version, codex_proxy_engine::ENGINE_VERSION);
     assert_eq!(manifest.assets.len(), 6);
     for asset in manifest.assets.values() {
-        assert!(asset.file.starts_with("mihomo-") && asset.file.contains("v1.19.31"));
+        assert!(asset.file.starts_with("mihomo-") && asset.file.contains("v1.19.33"));
         assert!(!asset.file.contains('/'));
         assert_eq!(asset.sha256.len(), 64);
         assert!(asset.size < MAX_ARCHIVE);

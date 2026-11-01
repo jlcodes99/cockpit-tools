@@ -15,7 +15,7 @@ pub use mihomo::{
 pub const PREFIX: &str = "cockpit-proxy://";
 const INVALID: &str = "PROXY_RESOURCE_INVALID";
 const UNSUPPORTED: &str = "PROXY_UNSUPPORTED_OPTION";
-const MAX_BYTES: usize = 512 * 1024;
+const MAX_BYTES: usize = 8 * 1024 * 1024;
 const MAX_ITEMS: usize = 512;
 
 /// Native blocking leaves can remain inside a group without becoming an exit.
@@ -173,6 +173,9 @@ pub fn validate_outbound(v: &Value) -> Result<(), String> {
     validate_outbound_capabilities(v)
 }
 fn validate_outbound_capabilities(v: &Value) -> Result<(), String> {
+    if v["type"] == super::codex_proxy_subscription_parser::native::KIND {
+        return super::codex_proxy_subscription_parser::native::valid_reference(v).then_some(()).ok_or_else(|| INVALID.into());
+    }
     if v["type"] == "mihomo" {
         keys(v, &["type", "tag", "proxy"])?;
         return validate_native_proxy(&v["proxy"]);
@@ -426,6 +429,31 @@ pub fn encode_with_group(
     group_id: Option<&str>,
 ) -> Result<String, String> {
     let group_id = group_id.filter(|id| !id.is_empty());
+    if let Some(profile) = &catalog.native {
+        let catalog_selections: BTreeMap<String,String> = catalog.groups.iter().filter(|g| g.kind == "select").filter_map(|g| {
+            selections.get(&g.id).cloned().or_else(|| g.native.as_ref().and_then(|v| v["default-selected"].as_str()).map(str::to_owned))
+                .map(|value| (g.id.clone(),value))
+        }).collect();
+        let (mut target, selections) = super::codex_proxy_subscription_parser::native::binding_target(catalog, item_id, selections)?;
+        if let Some(group_id) = group_id.filter(|_| target.get("name").is_some() && catalog.nodes.iter().any(|n| n.id == item_id)) {
+            let group = catalog.groups.iter().find(|g| g.id == group_id).ok_or(INVALID)?;
+            let member = target["name"].as_str().ok_or(INVALID)?;
+            if !group.members.iter().any(|n| n == member) { return Err(INVALID.into()); }
+            target["context"] = json!(group.name);
+        }
+        let name = catalog.nodes.iter().find(|n| n.id == item_id).map(|n| n.name.clone())
+            .or_else(|| catalog.groups.iter().find(|g| g.id == item_id).map(|g| g.name.clone())).ok_or(INVALID)?;
+        let mut outbound = super::codex_proxy_subscription_parser::native::envelope(profile,target,selections);
+        outbound["catalogSelections"] = json!(catalog_selections);
+        let binding = Binding { version:3, network:Default::default(), insecure_tags:BTreeSet::new(), source_id:source_id.into(),
+            source_name:source_name.into(), item_id:item_id.into(), group_id:group_id.map(str::to_owned), name:name.clone(),
+            outbounds:vec![outbound],
+            names:BTreeMap::from([("account-node".into(),name)]) };
+        validate(&binding)?;
+        let bytes = serde_json::to_vec(&binding).map_err(|_| INVALID)?;
+        if bytes.len() > MAX_BYTES { return Err(INVALID.into()); }
+        return Ok(format!("{PREFIX}{}", URL_SAFE_NO_PAD.encode(bytes)));
+    }
     if let Some(id) = group_id {
         let group = catalog
             .groups
@@ -500,8 +528,16 @@ pub fn encode_with_group(
                 result.insecure_tags.insert(tag.into());
             }
             outbound["tag"] = json!(tag);
+            let index = result.outbounds.len();
             result.outbounds.push(outbound);
             result.names.insert(tag.into(), n.name.clone());
+            if let Some(dependency) = super::codex_proxy_subscription_parser::dialer(n) {
+                if dependency != "DIRECT" && !is_blocking_builtin(dependency) {
+                    let child_tag = format!("resource-{}", result.outbounds.len());
+                    visit(dependency, &child_tag, catalog, selections, result, path, depth + 1)?;
+                    result.outbounds[index]["proxy"]["dialer-proxy"] = json!(child_tag);
+                }
+            }
         } else {
             let g = catalog
                 .groups
@@ -593,6 +629,13 @@ pub fn encode_with_group(
 }
 
 fn validate(binding: &Binding) -> Result<(), String> {
+    if binding.version == 3 {
+        if binding.source_id.is_empty() || binding.item_id.is_empty() || binding.outbounds.len() != 1
+            || !super::codex_proxy_subscription_parser::native::valid_reference(&binding.outbounds[0]) {
+            return Err(INVALID.into());
+        }
+        return Ok(());
+    }
     if !matches!(binding.version, 1 | 2)
         || [
             &binding.source_id,
@@ -669,6 +712,12 @@ fn validate(binding: &Binding) -> Result<(), String> {
             }
         } else {
             validate_outbound_capabilities(v)?;
+            if kind == "mihomo" {
+                if let Some(dependency) = v["proxy"].get("dialer-proxy").and_then(Value::as_str)
+                    .filter(|s| !s.is_empty() && *s != "DIRECT") {
+                    edges.push(dependency.into());
+                }
+            }
         }
         graph.insert(tag.into(), edges);
     }
@@ -754,6 +803,11 @@ pub fn names(raw: &str) -> Result<BTreeMap<String, String>, String> {
 }
 pub fn summary(raw: &str) -> Option<Value> {
     let b = decode(raw).ok()?;
+    if b.version == 3 {
+        let selections = b.outbounds[0].get("catalogSelections").cloned().unwrap_or(json!({}));
+        return Some(json!({"protocol":"RESOURCE","name":b.name,"sourceName":b.source_name,"sourceId":b.source_id,
+            "itemId":b.item_id,"groupId":b.group_id,"selectedName":selections.get(&b.item_id),"selections":selections}));
+    }
     let selected = b
         .outbounds
         .first()
@@ -783,6 +837,7 @@ mod tests {
     use super::*;
     fn catalog() -> ParsedCatalog {
         ParsedCatalog {
+            native: None,
             nodes: ["Alpha", "Beta"].into_iter().map(|n| ParsedNode {
                 id: n.into(), name: n.into(), protocol: "HTTP".into(),
                 outbound: Some(json!({"type":"http","server":"proxy.example","server_port":8080,"username":"user","password":"TOPSECRET"})), error: None,

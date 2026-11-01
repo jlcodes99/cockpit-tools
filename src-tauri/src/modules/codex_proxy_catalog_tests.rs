@@ -1,4 +1,26 @@
 use super::*;
+
+#[path = "codex_proxy_catalog_live_tests.rs"]
+mod live_tests;
+
+#[test]
+fn parser_upgrade_refreshes_in_background_once_then_backs_off_on_failure() {
+    let mut source = fixture();
+    source.parser_version = PARSER_VERSION - 1;
+    source.updated_at = 100;
+    source.last_attempt_at = Some(100);
+    assert_eq!(due_sources(&[source.clone()], 101), vec![source.id.clone()]);
+    source.last_attempt_at = Some(101);
+    assert!(due_sources(&[source.clone()], 102).is_empty());
+    assert_eq!(
+        due_sources(&[source.clone()], 101 + REFRESH_INTERVAL_MS),
+        vec![source.id.clone()]
+    );
+    source.parser_version = PARSER_VERSION;
+    source.updated_at = 102;
+    source.last_attempt_at = Some(102);
+    assert!(due_sources(&[source], 103).is_empty());
+}
 struct Temp(PathBuf);
 impl Temp {
     fn new() -> Self {
@@ -338,7 +360,7 @@ fn choices(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
 }
 fn selectable_catalog() -> ParsedCatalog {
     parser::parse(
-        "proxies:\n  - {name: Alpha, type: trojan, server: alpha.example, port: 443, password: private-alpha}\n  - {name: Beta, type: trojan, server: beta.example, port: 443, password: private-beta}\n  - {name: TLS, type: hysteria2, server: tls.example, port: 443, password: private-tls, dialer-proxy: DIRECT}\nproxy-groups:\n  - {name: Manual, type: select, proxies: [TLS, Beta, Alpha]}\n  - {name: Auto, type: url-test, proxies: [Alpha, Beta]}\n  - {name: Broken, type: url-test, proxies: [TLS]}\n  - {name: Nested, type: select, proxies: [Alpha]}\n  - {name: Outer, type: url-test, proxies: [Nested]}",
+        "proxies:\n  - {name: Alpha, type: trojan, server: alpha.example, port: 443, password: private-alpha}\n  - {name: Beta, type: trojan, server: beta.example, port: 443, password: private-beta}\n  - {name: TLS, type: hysteria2, server: tls.example, port: 443, password: private-tls, config-path: /private/unsupported}\nproxy-groups:\n  - {name: Manual, type: select, proxies: [TLS, Beta, Alpha]}\n  - {name: Auto, type: url-test, proxies: [Alpha, Beta]}\n  - {name: Broken, type: url-test, proxies: [TLS]}\n  - {name: Nested, type: select, proxies: [Alpha]}\n  - {name: Outer, type: url-test, proxies: [Nested]}",
     )
     .unwrap()
 }
@@ -476,6 +498,7 @@ fn strategy_defaults_accept_every_strategy_group_kind() {
             .iter()
             .filter(|node| node.error.is_none())
             .map(|node| strategy::StrategyNode {
+                dependencies: None,
                 name: node.name.clone(),
                 protocol: node.protocol.clone(),
                 outbound: node.outbound.clone().unwrap(),
@@ -506,13 +529,10 @@ fn strategy_defaults_accept_every_strategy_group_kind() {
             "{kind}"
         );
         assert!(strategy::group_supported(strategy::KIND, kind), "{kind}");
-        if !matches!(kind, "select" | "url-test") {
-            assert_eq!(
-                default_error("subscription", &catalog, &group, &selections),
-                Some("CATALOG_INVALID"),
-                "订阅来源不得因为策略来源放宽而接受 {kind}"
-            );
-        }
+        assert!(
+            default_error("subscription", &catalog, &group, &selections).is_none(),
+            "{kind}"
+        );
     }
 }
 /// 刷新或权限变化后默认项失效只清除并标记，绝不静默换成别的节点。
@@ -783,7 +803,10 @@ fn retained_legacy_nodes_accept_declared_tls_exceptions_without_writing() {
     );
     assert!(loaded.sources[0].catalog.nodes[0].error.is_none());
     assert!(loaded.sources[0].catalog.nodes[3].error.is_none());
-    assert!(loaded.sources[0].auto_update, "legacy false cannot disable valid subscription updates");
+    assert!(
+        loaded.sources[0].auto_update,
+        "legacy false cannot disable valid subscription updates"
+    );
     assert!(
         loaded.sources[1].catalog.nodes[3].error.is_none(),
         "keep a previously accepted node available"
@@ -1063,13 +1086,14 @@ fn latency_checks_target_reachability_without_bypassing_group_structure() {
 }
 #[test]
 fn urls_and_names_fail_with_safe_errors() {
-    assert!(subscription_url("https://example.com/s?token=secret").is_ok());
-    for input in [
-        "http://example.com/s?token=secret",
-        "file:///private/secret",
-        "https://user:secret@example.com/s",
-        "https://example.com/s#secret",
+    for url in [
+        "https://example.com/s?token=secret",
+        "http://example.com/sub",
+        "https://user:secret@example.com/sub#name",
     ] {
+        assert!(subscription_url(url).is_ok());
+    }
+    for input in ["file:///private/secret"] {
         assert_eq!(subscription_url(input).unwrap_err(), "CATALOG_URL");
     }
     assert!(valid_name("美国节点").is_ok());
@@ -1277,7 +1301,7 @@ async fn subscription_download_distinguishes_http_denial_server_error_and_redire
         (503, "", "CATALOG_DOWNLOAD"),
         (
             302,
-            "Location: https://other.example/secret-token\r\n",
+            "Location: file:///private/secret-token\r\n",
             "CATALOG_REDIRECT",
         ),
     ] {
@@ -2218,7 +2242,7 @@ async fn strategy_update_never_replaces_a_vanished_source_node_with_its_copy() {
             .find(|entry| entry.id == source.id)
             .unwrap()
             .catalog = parser::parse(
-            "proxies:\n  - {name: TLS, type: hysteria2, server: tls.example, port: 443, password: private-tls, dialer-proxy: DIRECT}\n",
+            "proxies:\n  - {name: TLS, type: hysteria2, server: tls.example, port: 443, password: private-tls, config-path: /private/unsupported}\n",
         )
         .unwrap();
         Ok(())
@@ -2429,7 +2453,8 @@ async fn strategy_save_rejects_invalid_input_without_touching_the_store() {
     let source = subscription_fixture();
     mutate(&path().unwrap(), |store| {
         let mut stored_source = subscription_fixture();
-        stored_source.catalog.nodes[3].outbound.as_mut().unwrap()["proxy"]["dialer-proxy"] = serde_json::json!("DIRECT");
+        stored_source.catalog.nodes[3].outbound.as_mut().unwrap()["proxy"]["config-path"] =
+            serde_json::json!("/private/unsupported");
         store.sources.push(stored_source);
         Ok(())
     })
@@ -2877,23 +2902,51 @@ fn auto_refresh_ignores_legacy_opt_out_and_preserves_retry_interval_and_url_boun
     let mut no_url = enabled.clone();
     no_url.id = "no-url".into();
     no_url.url = None;
-    let sources = vec![enabled, legacy_disabled, recent_failure, due_retry, invalid_url, manual, no_url];
-    assert_eq!(due_sources(&sources, now), ["enabled", "legacy-disabled", "due-retry"]);
-    assert!(view(&Store { sources, ..Store::default() }).sources[1].auto_update);
+    let sources = vec![
+        enabled,
+        legacy_disabled,
+        recent_failure,
+        due_retry,
+        invalid_url,
+        manual,
+        no_url,
+    ];
+    assert_eq!(
+        due_sources(&sources, now),
+        ["enabled", "legacy-disabled", "due-retry"]
+    );
+    assert!(
+        view(&Store {
+            sources,
+            ..Store::default()
+        })
+        .sources[1]
+            .auto_update
+    );
 }
 
 #[tokio::test]
 async fn legacy_subscription_toggle_cannot_disable_automatic_refresh() {
-    let _lock = crate::modules::test_support::env_lock().lock().unwrap_or_else(|e| e.into_inner());
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let temp = Temp::new();
     let _dir = DataDir::set(&temp.0);
     let source = fixture();
     let id = source.id.clone();
-    mutate(&path().unwrap(), |store| { store.sources.push(source); Ok(()) }).unwrap();
+    mutate(&path().unwrap(), |store| {
+        store.sources.push(source);
+        Ok(())
+    })
+    .unwrap();
     let before = fs::read(path().unwrap()).unwrap();
     let loaded = read(&path().unwrap()).unwrap();
     assert!(loaded.sources[0].auto_update);
-    assert_eq!(fs::read(path().unwrap()).unwrap(), before, "loading old flags never writes a migration");
+    assert_eq!(
+        fs::read(path().unwrap()).unwrap(),
+        before,
+        "loading old flags never writes a migration"
+    );
     let catalog = set_auto_update(id.clone(), false).await.unwrap();
     assert!(catalog.sources[0].auto_update);
     let stored = read(&path().unwrap()).unwrap();
@@ -3004,3 +3057,38 @@ fn usage_is_exposed_only_for_subscription_sources() {
 
 #[path = "codex_proxy_subscription_tls_tests.rs"]
 mod tls_subscription;
+
+#[tokio::test]
+async fn subscription_cross_origin_redirect_drops_url_basic_auth() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let first = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let second = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let from = first.local_addr().unwrap();
+    let to = second.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        for (index, listener) in [first, second].into_iter().enumerate() {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            while !request.ends_with(b"\r\n\r\n") {
+                request.push(socket.read_u8().await.unwrap());
+                assert!(request.len() < 8192);
+            }
+            let request = String::from_utf8(request).unwrap().to_ascii_lowercase();
+            assert_eq!(request.contains("authorization: basic "), index == 0);
+            let response = if index == 0 {
+                format!("HTTP/1.1 302 Found\r\nLocation: http://{to}/subscription\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            } else {
+                "HTTP/1.1 200 OK\r\nContent-Length: 11\r\nConnection: close\r\n\r\nproxies: []"
+                    .into()
+            };
+            socket.write_all(response.as_bytes()).await.unwrap();
+        }
+    });
+    let url = url::Url::parse(&format!("http://synthetic:password@{from}/sub")).unwrap();
+    let client = subscription_client_builder().no_proxy().build().unwrap();
+    let downloaded = fetch_with_client(client, url.clone(), url.origin())
+        .await
+        .unwrap();
+    assert_eq!(downloaded.body, "proxies: []");
+    server.await.unwrap();
+}

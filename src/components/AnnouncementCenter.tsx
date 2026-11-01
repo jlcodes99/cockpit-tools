@@ -8,6 +8,8 @@ import type { Announcement, AnnouncementAction } from '../types/announcement';
 import { useAnnouncementStore } from '../stores/useAnnouncementStore';
 import { useEscCloseTopmost } from '../hooks/useEscClose';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
+import { useApiKeyFunCampaign } from '../hooks/useApiKeyFunCampaign';
+import { APIKEY_FUN_CAMPAIGN, filterApiKeyFunCampaignAnnouncement, isApiKeyFunCampaignActive } from '../utils/apiKeyFunCampaign';
 import './AnnouncementCenter.css';
 
 interface AnnouncementCenterProps {
@@ -95,7 +97,12 @@ function AnnouncementSurface({
   autoRefresh,
 }: AnnouncementSurfaceProps) {
   const { t } = useTranslation();
-  const announcementState = useAnnouncementStore((state) => state.state);
+  const rawAnnouncementState = useAnnouncementStore((state) => state.state);
+  const campaignActive = useApiKeyFunCampaign();
+  const announcementState = useMemo(
+    () => filterApiKeyFunCampaignAnnouncement(rawAnnouncementState, campaignActive),
+    [rawAnnouncementState, campaignActive],
+  );
   const loading = useAnnouncementStore((state) => state.loading);
   const fetchState = useAnnouncementStore((state) => state.fetchState);
   const markAsRead = useAnnouncementStore((state) => state.markAsRead);
@@ -107,6 +114,7 @@ function AnnouncementSurface({
 
   const [listOpen, setListOpen] = useState(false);
   const [detailAnnouncement, setDetailAnnouncement] = useState<Announcement | null>(null);
+  const campaignDetailInactive = detailAnnouncement?.id === APIKEY_FUN_CAMPAIGN.id && !campaignActive;
   const [detailFromList, setDetailFromList] = useState(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const listDialog = useRef<HTMLDivElement>(null);
@@ -264,6 +272,7 @@ function AnnouncementSurface({
   };
 
   const runAction = async (action: AnnouncementAction) => {
+    if (detailAnnouncement?.id === APIKEY_FUN_CAMPAIGN.id && !isApiKeyFunCampaignActive()) return;
     if (action.type === 'tab') {
       const targetPage = TAB_TARGET_PAGE_MAP[action.target];
       if (targetPage) {
@@ -436,7 +445,9 @@ function AnnouncementSurface({
 
               <div className="modal-body announcement-detail-body">
                 <div className="announcement-detail-time">{formatTimeAgo(detailAnnouncement.createdAt, translateText)}</div>
-                <div className="announcement-detail-content">{detailAnnouncement.content}</div>
+                <div className="announcement-detail-content">
+                  {campaignDetailInactive ? t('apiKeyFun.campaign.inactive') : detailAnnouncement.content}
+                </div>
 
                 {detailAnnouncement.images && detailAnnouncement.images.length > 0 && (
                   <div className="announcement-images-grid">
@@ -483,6 +494,7 @@ function AnnouncementSurface({
                 {detailAnnouncement.action ? (
                   <button
                     className="btn btn-primary"
+                    disabled={campaignDetailInactive}
                     onClick={() => {
                       void runAction(detailAnnouncement.action as AnnouncementAction);
                     }}

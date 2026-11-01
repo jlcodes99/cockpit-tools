@@ -25,7 +25,7 @@ const USER_INFO_PATH: &str = "/api/v1/userinfo";
 const USER_STATUS_PATH: &str = "/api/v3/user/status";
 const DATA_POLICY_PATH: &str = "/api/v2/config/getDataPolicy";
 const USER_PLAN_PATH: &str = "/api/v2/user/plan";
-const CREDIT_USAGE_PATH: &str = "/api/v2/quota/usage";
+const CREDIT_USAGE_PATH: &str = "/sash/api/v2/me/usage";
 const AUTH_STATUS_AUTHORIZED: i64 = 2;
 const AUTH_STATUS_IP_BANNED_ERROR: i64 = 6;
 const AUTH_STATUS_APP_DISABLED_ERROR: i64 = 7;
@@ -706,10 +706,25 @@ async fn fetch_qoder_credit_usage(
     client: &reqwest::Client,
     openapi_base_url: &str,
     token: &str,
-    machine_info: Option<&QoderMachineInfo>,
+    _machine_info: Option<&QoderMachineInfo>,
 ) -> Result<Value, String> {
-    let headers = build_qoder_headers(token, machine_info);
-    fetch_openapi_json(client, openapi_base_url, CREDIT_USAGE_PATH, headers, &[]).await
+    // Official 1.38 uses raw Authorization headers for the usage endpoint.
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        reqwest::header::AUTHORIZATION,
+        format!("Bearer {}", token)
+            .parse()
+            .map_err(|_| "QODER_USAGE_INVALID_AUTH_HEADER".to_string())?,
+    );
+    let value =
+        fetch_openapi_json(client, openapi_base_url, CREDIT_USAGE_PATH, headers, &[]).await?;
+    if !crate::modules::qoder_usage::is_envelope(&value)
+        && value.get("totalUsagePercentage").is_none()
+        && value.get("userQuota").is_none()
+    {
+        return Err("QODER_USAGE_RESPONSE_INVALID".into());
+    }
+    Ok(value)
 }
 
 fn get_string_at_path(root: &Value, path: &[&str]) -> Option<String> {
@@ -902,7 +917,7 @@ async fn refresh_account_from_openapi_once(account_id: &str) -> Result<QoderAcco
         Ok(value) => Some(value),
         Err(err) => {
             logger::log_warn(&format!(
-                "[Qoder Refresh] 获取 /api/v2/quota/usage 失败，将沿用本地缓存: {}",
+                "[Qoder Refresh] 获取 /sash/api/v2/me/usage 失败，将沿用本地缓存: {}",
                 err
             ));
             quota_query_error = Some(err.clone());

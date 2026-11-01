@@ -164,7 +164,6 @@ fn declared_tls_exceptions_are_supported_without_separate_permission() {
 #[test]
 fn native_parameters_are_preserved_and_runtime_boundaries_are_rejected() {
     for extra in [
-        "    dialer-proxy: Evil\n",
         "    certificate: /private/certificate.pem\n",
         "    unknown-option: {config-path: /private/key}\n",
     ] {
@@ -226,7 +225,7 @@ fn group_diagnostics_shared_descendants_are_not_misreported_as_cycles() {
 }
 #[test]
 fn ignores_top_level_executable_and_network_configuration() {
-    let c=parse(&fixture("script: {code: evil}\nproxy-providers: {evil: {url: 'file:///private'}}\nrules: [MATCH,DIRECT]\nexternal-controller: '0.0.0.0:1'\n")).unwrap();
+    let c=parse(&fixture("script: {code: evil}\nrules: [MATCH,DIRECT]\nexternal-controller: '0.0.0.0:1'\n")).unwrap();
     assert_eq!(c.nodes.len(), 1);
     let out = c.nodes[0].outbound.as_ref().unwrap().to_string();
     assert!(!out.contains("evil"));
@@ -293,8 +292,7 @@ fn include_all_local_nodes_is_supported_without_fetching_providers() {
     .unwrap();
     assert_eq!(c.groups[0].members, vec!["Alpha"]);
     assert!(c.groups[0].error.is_none());
-    let c=parse(&fixture("proxy-providers: {remote: {url: 'https://example.com/token'}}\nproxy-groups:\n  - {name: All, type: select, include-all: true}")).unwrap();
-    assert!(c.groups[0].error.is_some());
+    assert!(parse(&fixture("proxy-providers: {remote: {type: http, url: 'https://example.com/token'}}\nproxy-groups:\n  - {name: All, type: select, include-all: true}")).unwrap().groups[0].error.is_some());
 }
 
 #[test]
@@ -341,9 +339,7 @@ fn vless_subscription_metadata_survives_binding_and_runtime_without_changing_pro
     assert_eq!(groups[0]["type"], "url-test");
 
     for extra in [
-        "    dialer-proxy: DIRECT\n",
         "    private-key: /private/key\n",
-        "    unknown-option: {routing-mark: 1}\n",
     ] {
         let rejected =
             parse(&input.replace("    alterId: 0\n", &format!("    alterId: 0\n{extra}"))).unwrap();
@@ -520,9 +516,6 @@ fn native_protocol_matrix_cannot_hide_files_or_routes_in_extra_parameters() {
     .unwrap();
     for original in input["proxies"].as_array().unwrap() {
         for (key, value) in [
-            ("dialer-proxy", json!("DIRECT")),
-            ("interface-name", json!("en0")),
-            ("routing-mark", json!(1)),
             ("config-path", json!("/private/key")),
             ("certificate", json!("/private/certificate.pem")),
         ] {
@@ -661,7 +654,6 @@ fn enabled_ech_dns_override_maps_without_removing_handshake_security() {
 #[test]
 fn compatibility_failures_have_safe_specific_codes() {
     for (extra, code) in [
-        ("    dialer-proxy: DIRECT\n", UNSUPPORTED),
         ("    private-key: /private/SECRET\n", UNSUPPORTED),
     ] {
         let c = parse(&fixture(extra)).unwrap();
@@ -739,9 +731,6 @@ fn native_catalog_never_enables_local_files_system_routes_or_direct_fallback() {
     for extra in [
         "    private-key: /private/secret\n",
         "    certificate: cert.pem\n",
-        "    dialer-proxy: DIRECT\n",
-        "    interface-name: eth0\n",
-        "    routing-mark: 123\n",
         "    ws-opts: {config_path: /private/secret}\n",
     ] {
         let catalog = parse(&fixture(extra)).unwrap();

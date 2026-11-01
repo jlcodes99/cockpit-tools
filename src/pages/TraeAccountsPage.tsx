@@ -605,6 +605,22 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
           ? Math.max(0, Math.min(100, Math.round(usage.usedPercent)))
           : null;
 
+      if (usage.usageModel === 'credits') {
+        const limit = usage.creditsUnlimited
+          ? t('common.shared.quota.unlimited') : formatNumber(usage.creditsLimit);
+        const known = usage.creditsUsed != null;
+        return {
+          percentage, percentageText: usage.creditsUnlimited ? t('common.shared.quota.unlimited') : percentage == null ? '--' : `${percentage}%`,
+          quotaClass: computeQuotaClass(percentage),
+          costText: `${t('common.shared.columns.credits')}: ${formatNumber(usage.creditsUsed)} / ${limit}`,
+          statusText: !known ? t('trae.quota.statusUnknown') : usage.usageExhausted
+            ? t('trae.quota.statusExhaustedFree') : t('trae.quota.statusSynced'),
+          statusTone: !known ? 'unknown' : usage.usageExhausted ? 'warning' : 'normal',
+          resetText: usage.resetAt ? t('trae.quota.resetAt', { date: formatTraeResetAt(usage.resetAt) }) : t('trae.quota.resetUnknown'),
+          bonusText: '', packageText: '', payAsYouGoText: '',
+        };
+      }
+
       const isFreePlan = (usage.identityStr ?? account.plan_type ?? '')
         .trim()
         .toLowerCase()

@@ -30,6 +30,6 @@ export function detectProxyInputKind(input: string): 'subscription' | 'manual' {
   if (/[\r\n]/.test(value)) return 'manual';
   try {
     const u = new URL(value);
-    return u.protocol === 'https:' && !u.username && !u.password && (u.pathname !== '/' || !!u.search) ? 'subscription' : 'manual';
+    return ['http:', 'https:'].includes(u.protocol) && (u.pathname !== '/' || !!u.search) ? 'subscription' : 'manual';
   } catch { return 'manual'; }
 }

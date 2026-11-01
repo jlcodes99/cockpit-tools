@@ -544,31 +544,11 @@ fn bootstrap(
     api_service: bool,
     owner: &str,
 ) -> String {
-    let options = json!({"nativeFast":native_fast,"quotaCompat":quota_compat,"apiKeyAuthVerified":api_key_auth_verified,"apiService":api_service,"owner":owner,
-        "serviceTierFallbacks":service_tier_fallbacks()});
+    let options = json!({"nativeFast":native_fast,"quotaCompat":quota_compat,"apiKeyAuthVerified":api_key_auth_verified,"apiService":api_service,"owner":owner});
     let state = STATE_SCRIPT.replace("__COCKPIT_STATE_OPTIONS__", &options.to_string());
     format!("{state}\n{GUARD_SCRIPT}\n{SCRIPT}\n{QUOTA_SCRIPT}\n{QUOTA_CURRENT_SCRIPT}\n;true;")
 }
 
-fn service_tier_fallbacks() -> &'static Value {
-    static FALLBACKS: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
-    FALLBACKS.get_or_init(|| {
-        let catalog = crate::modules::codex_protocol::build_codex_client_models_response(
-            &crate::modules::codex_protocol::managed_codex_model_ids(),
-        );
-        let mut fallbacks = serde_json::Map::new();
-        if let Some(models) = catalog["models"].as_array() {
-            for model in models {
-                if let (Some(slug), Some(tiers)) = (model["slug"].as_str(), model["service_tiers"].as_array()) {
-                    if let Some(tier) = tiers.iter().find(|tier| tier["id"] == "ultrafast") {
-                        fallbacks.insert(slug.to_string(), tier.clone());
-                    }
-                }
-            }
-        }
-        Value::Object(fallbacks)
-    })
-}
 
 async fn rollback_preparation(registration: &mut Registration) {
     if let Some(context) = registration.session().context() {

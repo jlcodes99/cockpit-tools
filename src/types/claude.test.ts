@@ -25,3 +25,12 @@ test('uses healthy colors for high remaining quota and warning colors when low',
   assert.equal(getClaudeRemainingQuotaClass(10), 'critical');
   assert.equal(getClaudeRemainingQuotaClass(Number.NaN), 'critical');
 });
+
+test('preserves server-authored desktop subscription labels', async () => {
+  const { getClaudePlanBadge } = await import('./claude.ts');
+  const account = { id: 'desktop', email: '', auth_mode: 'desktop_oauth' as const, created_at: 0, last_used: 0 };
+  assert.equal(getClaudePlanBadge({ ...account, plan_type: 'Free' }), 'Free');
+  assert.equal(getClaudePlanBadge({ ...account, plan_type: 'Enterprise Custom' }), 'Enterprise Custom');
+  assert.equal(getClaudePlanBadge({ ...account, plan_type: 'claude_pro' }), 'claude_pro');
+  assert.equal(getClaudePlanBadge(account), '');
+});

@@ -972,6 +972,8 @@ async fn refresh_account_tokens(account: &mut CodexAccount, reason: &str) -> Res
 
 /// 查询单个账号的配额
 pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, String> {
+    use crate::modules::codex_device_restrictions as restrictions;
+    let observation_started = restrictions::now();
     let account_id = account.account_id.clone().or_else(|| {
         codex_account::extract_chatgpt_account_id_from_access_token(&account.tokens.access_token)
     });
@@ -1007,6 +1009,10 @@ pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, Str
     ));
 
     if !status.is_success() {
+        if restrictions::explicit_message(&body) {
+            restrictions::observe_account(account, restrictions::QUOTA, "usage_response", observation_started, true).await;
+            return Err(restrictions::paused_message());
+        }
         let detail_code = extract_detail_code_from_body(&body);
 
         crate::modules::codex_auth_diagnostic::log_event(
@@ -1061,6 +1067,7 @@ pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, Str
     let quota = parse_quota_from_usage(&usage, &body)?;
     let plan_type = usage.plan_type.clone();
 
+    restrictions::observe_account(account, restrictions::QUOTA, "usage_response", observation_started, false).await;
     Ok(FetchQuotaResult { quota, plan_type })
 }
 

@@ -461,3 +461,16 @@ async fn chatgpt_plan_same_native_host_reads_updated_catalog_without_listener_re
     let next = host.load_accounts(vec![account.id.clone()]).await.unwrap();
     assert_eq!(next[0].api_model_catalog, vec!["fresh-account-model"]);
 }
+
+#[test]
+fn device_restriction_is_limited_to_local_oauth_credentials() {
+    let mut account = CodexAccount::new("device-fixture".into(), "fixture@example.invalid".into(),
+        crate::models::codex::CodexTokens { access_token: "synthetic-unused".into(), id_token: String::new(), refresh_token: None });
+    assert!(native_device_restriction_applies(&account));
+    account.auth_mode = crate::models::codex::CodexAuthMode::Apikey;
+    account.openai_api_key = Some("synthetic-unused-key".into());
+    assert!(!native_device_restriction_applies(&account));
+    account.api_provider_id = Some("cockpit_chatgpt_plan".into());
+    account.official_registration_id = Some("synthetic-grant".into());
+    assert!(!native_device_restriction_applies(&account));
+}

@@ -877,7 +877,7 @@ export function WindsurfAccountsPage() {
       const summary = resolveQuotaSummary(account);
       const items: WindsurfOfficialUsagePanelItem[] = [];
 
-      if (summary.dailyUsedPercent != null) {
+      if (!summary.hideDaily && summary.dailyUsedPercent != null) {
         const label = t('windsurf.usageSummary.dailyQuota', 'Daily quota usage');
         const value = formatQuotaUsagePercent(summary.dailyUsedPercent);
         const detail = summary.dailyResetAt
@@ -898,7 +898,7 @@ export function WindsurfAccountsPage() {
         });
       }
 
-      if (summary.weeklyUsedPercent != null) {
+      if (!summary.hideWeekly && summary.weeklyUsedPercent != null) {
         const label = t('windsurf.usageSummary.weeklyQuota', 'Weekly quota usage');
         const value = formatQuotaUsagePercent(summary.weeklyUsedPercent);
         const detail = summary.weeklyResetAt
@@ -987,6 +987,14 @@ export function WindsurfAccountsPage() {
       }
 
       const mode = resolveUsageMode(account);
+      if (mode === 'acu') {
+        const items = resolvePresentation(account).quotaItems.map(item => ({
+          key: item.key, label: item.label, value: item.valueText ?? '--', detail: '',
+          title: `${item.label}: ${item.valueText ?? '--'}`, progressPercent: item.progressPercent,
+          quotaClass: item.quotaClass, showProgress: item.showProgress,
+        }));
+        return { mode, headline: '', note: items.length ? '' : t('common.shared.quota.noData'), items, title: items.map(item => item.title).join(' | ') };
+      }
       if (mode === 'quota') {
         const items = buildQuotaDisplayItems(account);
         return {
@@ -1013,7 +1021,7 @@ export function WindsurfAccountsPage() {
         title: [headline, ...items.map((item) => item.title)].join(' | '),
       };
     },
-    [buildCreditsDisplayItems, buildQuotaDisplayItems, formatCreditValue, resolveCreditsSummary, resolveUsageMode, t],
+    [buildCreditsDisplayItems, buildQuotaDisplayItems, formatCreditValue, resolveCreditsSummary, resolveUsageMode, resolvePresentation, t],
   );
 
   // ─── Tier filter ────────────────────────────────────────────────────

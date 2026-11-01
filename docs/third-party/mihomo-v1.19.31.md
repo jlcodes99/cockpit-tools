@@ -1,5 +1,7 @@
 # Mihomo v1.19.31 — third-party review record
 
+> Historical record. The active pinned version is now [Mihomo v1.19.33](mihomo-v1.19.33.md).
+
 Status: **not approved for bundling**. The host downloads an official pinned archive only when the user requests installation, or accepts that exact archive from disk. Normal builds do not bundle the engine.
 
 ## Upstream and pinned artifacts

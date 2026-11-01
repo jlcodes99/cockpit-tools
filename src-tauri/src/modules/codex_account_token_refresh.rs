@@ -86,7 +86,7 @@ fn clear_refresh_token_reused_state(account: &mut CodexAccount) -> Result<(), St
     Ok(())
 }
 
-/// 服务端明确撤销授权是账号级终止状态，不能再降级为仅客户端需授权。
+/// 服务端明确撤销授权是账号级终止状态，不能再降级为 API 暂时可用。
 fn is_server_revoked_refresh_error(message: &str) -> bool {
     matches!(
         classify_refresh_error(message),
@@ -227,106 +227,6 @@ pub(crate) fn account_has_refresh_token(account: &CodexAccount) -> bool {
         .map(str::trim)
         .filter(|token| !token.is_empty())
         .is_some()
-}
-
-/// 持久化官方客户端实际页面观察结果；重新读取最新账号后只更新观测字段，
-/// 避免 CDP 后台任务把较旧的 Token 快照写回账号库。
-pub(crate) async fn update_client_auth_observation(
-    account_id: &str,
-    instance_id: &str,
-    status: &str,
-    login_redirect: bool,
-) -> Result<(), String> {
-    let token_lock = codex_token_lock_for(account_id);
-    let _token_guard = token_lock.lock().await;
-    let Some(_file_guard) =
-        try_acquire_codex_token_refresh_file_lock(account_id, "client-auth-observation").await?
-    else {
-        return Ok(());
-    };
-    let _guard = CODEX_ACCOUNT_MUTATION_LOCK
-        .lock()
-        .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
-    let Some(mut account) = load_account(account_id) else {
-        return Err(format!("账号不存在: {}", account_id));
-    };
-    let now = now_timestamp();
-    account.client_auth_status = Some(status.to_string());
-    account.last_client_auth_observed_at = Some(now);
-    account.last_client_auth_instance_id = Some(instance_id.to_string());
-    if login_redirect {
-        account.last_client_login_redirect_at = Some(now);
-    }
-    save_account_with_tombstone_guard(&account)
-}
-
-/// 记录实例本次启动（或恢复监控）的时间，不触碰任何 Token 或授权状态。
-pub(crate) async fn record_client_launch(
-    account_id: &str,
-    instance_id: &str,
-    launched_at: i64,
-) -> Result<(), String> {
-    let token_lock = codex_token_lock_for(account_id);
-    let _token_guard = token_lock.lock().await;
-    let Some(_file_guard) =
-        try_acquire_codex_token_refresh_file_lock(account_id, "client-launch-observation").await?
-    else {
-        return Ok(());
-    };
-    let _guard = CODEX_ACCOUNT_MUTATION_LOCK
-        .lock()
-        .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
-    let Some(mut account) = load_account(account_id) else {
-        return Err(format!("账号不存在: {}", account_id));
-    };
-    account.last_client_launch_at = Some(launched_at);
-    account.last_client_auth_instance_id = Some(instance_id.to_string());
-    save_account_with_tombstone_guard(&account)
-}
-
-/// 清除官方客户端登录页观测状态。
-///
-/// 这里只清理 CDP 观察字段，不清理 Token Authority 明确写入的
-/// `requires_reauth`/`reauth_reason`，也不修改任何 Token，避免把真实的远端凭据
-/// 失效伪装成正常。客户端观测状态只用于账号卡片展示，用户可随时手动清理。
-pub(crate) async fn clear_client_auth_observation(account_id: &str) -> Result<bool, String> {
-    let token_lock = codex_token_lock_for(account_id);
-    let _token_guard = token_lock.lock().await;
-    let Some(_file_guard) =
-        try_acquire_codex_token_refresh_file_lock(account_id, "clear-client-auth-observation")
-            .await?
-    else {
-        return Ok(false);
-    };
-    let _guard = CODEX_ACCOUNT_MUTATION_LOCK
-        .lock()
-        .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
-    let Some(mut account) = load_account(account_id) else {
-        return Err(format!("账号不存在: {}", account_id));
-    };
-    let had_observation = account.client_auth_status.is_some()
-        || account.last_client_auth_observed_at.is_some()
-        || account.last_client_login_redirect_at.is_some()
-        || account.last_client_launch_at.is_some()
-        || account.last_client_auth_instance_id.is_some();
-    if !had_observation {
-        return Ok(false);
-    }
-    account.client_auth_status = None;
-    account.last_client_auth_observed_at = None;
-    account.last_client_login_redirect_at = None;
-    account.last_client_launch_at = None;
-    account.last_client_auth_instance_id = None;
-    save_account_with_tombstone_guard(&account)?;
-    crate::modules::codex_auth_diagnostic::log_event(
-        "client_auth_observation_cleared_by_user",
-        serde_json::json!({
-            "account_id": account.id,
-            "email": account.email,
-            "reason": "user_clear_client_auth_observation",
-        }),
-    );
-    Ok(true)
 }
 
 pub(crate) fn managed_account_tokens_need_refresh(account: &CodexAccount) -> bool {

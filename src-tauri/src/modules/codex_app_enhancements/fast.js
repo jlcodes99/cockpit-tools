@@ -1,8 +1,7 @@
 /*
  * Cockpit Tools native model-menu integration.
  * Independently implemented against the desktop client's local module structure.
- * Service-tier requirements stay native. API profiles without a custom catalog
- * may supplement missing speed metadata from Cockpit's bundled catalog. Custom
+ * Service-tier requirements and model capabilities stay native. Custom
  * API providers retain their declared Ultra capability and explicit user limits.
  */
 (() => {
@@ -22,33 +21,6 @@
       // missing eligibility signal; never reinterpret another auth method.
       || auth == null && root.__cockpitEnhancements?.apiKeyAuthVerified === true);
   const failure = (source, reason) => ({ ok: false, patchedSource: source, diagnostics: { reason } });
-
-  function modelsForSpeed(models, host, auth, hasConfiguredModelCatalog) {
-    if (!allow(host, auth) || hasConfiguredModelCatalog !== false || !Array.isArray(models)) return models;
-    const fallbacks = root.__cockpitEnhancements?.serviceTierFallbacks;
-    if (!fallbacks) return models;
-    let changed = false;
-    const result = models.map(model => {
-      const tiers = model.serviceTiers;
-      const fallback = fallbacks[model.model];
-      // Keep custom/unsupported models and an upstream Ultrafast definition intact.
-      if (!fallback || !Array.isArray(tiers)
-        || !tiers.some(tier => tier.id === 'priority' || tier.id === 'fast')
-        || tiers.some(tier => tier.id === fallback.id)) return model;
-      changed = true;
-      return { ...model, serviceTiers: [...tiers, { ...fallback }] };
-    });
-    return changed ? result : models;
-  }
-
-  // Capture query identity outside select's parameter scope: newer clients
-  // reuse the host variable name for the isTeamCatalog result flag.
-  function modelSelector(select, host, auth, catalog) {
-    return result => {
-      const models = result.isTeamCatalog ? result.data : modelsForSpeed(result.data, host, auth, catalog);
-      return select(models === result.data ? result : { ...result, data: models });
-    };
-  }
 
   function includeUltra(nativeValue, host, auth, custom, teamCatalog) {
     // This only removes the native rollout gate for custom API providers.
@@ -141,8 +113,8 @@
         : `await ${storage}.readGlobalState(\`use-copilot-auth-if-available\`)===!0&&await ${runtime}.isCopilotApiAvailable()`;
       add("explicit", match.index, match[0], `(${match[0]}||${hostMatch.groups.host}===\`local\`&&${allowExpression(`${manager}.getHostId()`, `${match.groups.account}?.type`)}&&!(${copilot}))`);
     }
-    // Supplement the local API model query before the native selector builds
-    // speed options and request settings. Do not replace/filter the model list.
+    // Inspect the native model query only to adapt the custom-provider reasoning gate.
+    // Speed capabilities and the model list remain exactly as returned by the CLI.
     const selectOptions = `(?<select>${NAME})\\(\\{additionalAvailableModels:new Set\\(${NAME}\\),apiKeyDaybreakSupported:${NAME},authMethod:(?<auth>${NAME}),availableModels:(?<defaults>${NAME})\\.availableModels,defaultModel:\\k<defaults>\\.defaultModel,enabledReasoningEfforts:${NAME},hasConfiguredModelCatalog:(?<catalog>${NAME}),includeUltraReasoningEffort:(?<ultra>${NAME}),isCustomModelProvider:(?<custom>${NAME}),models:\\k<models>,useHiddenModels:\\k<defaults>\\.useHiddenModels\\}\\)`;
     const selectors = [
       `select:(?<selector>\\(\\{data:(?<models>${NAME})\\}\\)=>${selectOptions})`,
@@ -154,10 +126,8 @@
       const request = before.match(new RegExp(`${NAME}\\(${NAME},(?<host>${NAME})\\)\\.sendRequest\\(\`model/list\`,\\{includeHidden:!0,cursor:null,limit:${NAME}\\},\\{priority:${NAME}\\}\\)\\},$`));
       if (!request) continue;
       catalogMatches++;
-      const { auth, catalog, ultra, custom, selector } = match.groups;
+      const { auth, catalog, ultra, custom } = match.groups;
       const { host } = request.groups;
-      edits.push({ start: match.index, end: match.index + match[0].length,
-        text: `select:window.__cockpitNativeFast.modelSelector(${selector},${host},${auth},${catalog})` });
 
       // Validate the enclosing query contract and the exact gate feeding this
       // selector, rather than replacing a feature flag globally. Retain the
@@ -838,8 +808,6 @@
       return reason ? { ok: false, reason, ...(reason === 'draft-present' ? { draft: guard.snapshotDraft?.() } : {}) }
         : { ok: true, reason: "clean-startup" };
     } };
-  api.modelsForSpeed = modelsForSpeed;
-  api.modelSelector = modelSelector;
   api.includeUltra = includeUltra;
   root.__cockpitNativeFast = api;
   if (typeof module === "object" && module.exports) module.exports = api;

@@ -1,6 +1,22 @@
 use super::*;
 use std::{ffi::OsString, fs, path::PathBuf};
 
+#[tokio::test]
+async fn structured_preview_never_starts_engine_or_reads_resources() {
+    let _env = crate::modules::test_support::env_lock().lock().unwrap_or_else(|e| e.into_inner());
+    let dir = DataDir::new();
+    fs::write(dir.path.join("proxy-engine/active.json"), b"broken engine").unwrap();
+    fs::write(dir.path.join("codex-proxy-sources.json"), b"must not decrypt").unwrap();
+    let preview = codex_proxy_catalog_preview(
+        "proxy-providers:\n  local: {type: file, path: missing.age, age-secret-key: synthetic}".into(),
+        crate::modules::codex_proxy_manual_import::ImportOptions { resource_directory: "/must-not-read".into(), ..Default::default() }
+    ).await.unwrap();
+    assert!(preview.native_profile);
+    assert_eq!(preview.valid, 0);
+    assert!(!dir.path.join("codex-proxy-assets").exists());
+    assert_eq!(fs::read(dir.path.join("codex-proxy-sources.json")).unwrap(), b"must not decrypt");
+}
+
 struct DataDir {
     path: PathBuf,
     previous: Vec<(&'static str, Option<OsString>)>,

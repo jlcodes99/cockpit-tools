@@ -1,6 +1,6 @@
 # sing-box v1.14.1 — third-party review record
 
-> Historical record. The active proxy engine is now [Mihomo v1.19.31](mihomo-v1.19.31.md); the commands and runtime details below describe the former sing-box integration.
+> Historical record. The active proxy engine is now [Mihomo v1.19.33](mihomo-v1.19.33.md); the commands and runtime details below describe the former sing-box integration.
 
 Status: **not approved for distribution**. This file records engineering facts and is not legal advice.
 

@@ -4,17 +4,14 @@ import { invoke } from '@tauri-apps/api/core';
 import './CodexAppEnhancementSettings.css';
 
 interface EnhancementConfig {
-  codex_app_native_fast_enabled: boolean;
   codex_app_api_quota_compat_enabled: boolean;
 }
 
 const DEFAULTS: EnhancementConfig = {
-  codex_app_native_fast_enabled: true,
   codex_app_api_quota_compat_enabled: true,
 };
 const KEY = 'settings.general.codexEnhancements.';
 const SWITCHES = [
-  ['codex_app_native_fast_enabled', 'nativeFast'],
   ['codex_app_api_quota_compat_enabled', 'quotaCompat'],
 ] as const;
 

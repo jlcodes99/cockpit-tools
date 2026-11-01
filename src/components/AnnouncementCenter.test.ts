@@ -18,6 +18,7 @@ function harness(autoPopup: boolean) {
     '@tauri-apps/plugin-opener': { openUrl: async () => {} },
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
     '../stores/useAnnouncementStore': { useAnnouncementStore: (selector: any) => selector(store) },
+    '../hooks/useApiKeyFunCampaign': { useApiKeyFunCampaign: () => false },
     '../hooks/useModalFocusTrap': { useModalFocusTrap: (ref: any, open: boolean, _restore = true, active = true) => traps.push({ ref, open, active }) },
     '../hooks/useEscClose': { useEscCloseTopmost: (open: boolean, close: () => void, ref: any) => escapes.push({ open, close, ref }) },
   }, { document: { body: {}, querySelector: () => null, addEventListener() {}, removeEventListener() {} },

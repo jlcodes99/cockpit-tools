@@ -16,6 +16,8 @@ use crate::models::kiro::{
 use crate::modules::{kiro_account, logger};
 #[path = "kiro_idc_token.rs"]
 mod idc_token;
+#[path = "kiro_import_credentials.rs"]
+pub(crate) mod import_credentials;
 
 const KIRO_AUTH_PORTAL_URL: &str = "https://app.kiro.dev/signin";
 const KIRO_TOKEN_ENDPOINT: &str = "https://prod.us-east-1.auth.desktop.kiro.dev/oauth/token";
@@ -26,7 +28,6 @@ const KIRO_AWS_OIDC_CLIENT_REGISTER_ENDPOINT_FMT: &str =
 const KIRO_AWS_OIDC_DEVICE_AUTH_ENDPOINT_FMT: &str =
     "https://oidc.{region}.amazonaws.com/device_authorization";
 const KIRO_IDC_BUILDER_ID_START_URL: &str = "https://view.awsapps.com/start";
-const KIRO_RUNTIME_DEFAULT_ENDPOINT: &str = "https://q.us-east-1.amazonaws.com";
 const KIRO_ACCOUNT_STATUS_NORMAL: &str = "normal";
 const KIRO_ACCOUNT_STATUS_BANNED: &str = "banned";
 const KIRO_ACCOUNT_STATUS_ERROR: &str = "error";
@@ -470,18 +471,30 @@ fn parse_profile_arn_region(profile_arn: &str) -> Option<String> {
     }
 }
 
-fn runtime_endpoint_for_region(region: Option<&str>) -> String {
-    let region = region.unwrap_or("us-east-1").trim().to_ascii_lowercase();
-    match region.as_str() {
-        "us-east-1" => "https://q.us-east-1.amazonaws.com".to_string(),
-        "eu-central-1" => "https://q.eu-central-1.amazonaws.com".to_string(),
-        "us-gov-east-1" => "https://q-fips.us-gov-east-1.amazonaws.com".to_string(),
-        "us-gov-west-1" => "https://q-fips.us-gov-west-1.amazonaws.com".to_string(),
-        "us-iso-east-1" => "https://q.us-iso-east-1.c2s.ic.gov".to_string(),
-        "us-isob-east-1" => "https://q.us-isob-east-1.sc2s.sgov.gov".to_string(),
-        "us-isof-south-1" => "https://q.us-isof-south-1.csp.hci.ic.gov".to_string(),
-        "us-isof-east-1" => "https://q.us-isof-east-1.csp.hci.ic.gov".to_string(),
-        _ => KIRO_RUNTIME_DEFAULT_ENDPOINT.to_string(),
+fn management_usage_url(profile_arn: Option<&str>, region: Option<&str>) -> Result<Url, String> {
+    let profile_region = profile_arn.and_then(parse_profile_arn_region);
+    let region = normalize_idc_region(profile_region.as_deref().or(region))?;
+    let mut url = Url::parse(&format!(
+        "https://management.{region}.kiro.dev/Get-Usage-Limits"
+    ))
+    .map_err(|e| e.to_string())?;
+    let mut query = url.query_pairs_mut();
+    query.append_pair("origin", "AI_EDITOR");
+    if let Some(arn) = profile_arn.filter(|arn| !arn.is_empty()) {
+        query.append_pair("profileArn", arn);
+    }
+    query.append_pair("isEmailRequired", "true");
+    drop(query);
+    Ok(url)
+}
+
+fn usage_token_type(auth_method: Option<&str>) -> Option<&'static str> {
+    match auth_method {
+        Some("IdC") => Some("SSO_OIDC"),
+        Some("external_idp") => Some("EXTERNAL_IDP"),
+        Some("machine_token") => Some("KIRO_MACHINE_TOKEN"),
+        Some("api_key") => Some("API_KEY"),
+        _ => None,
     }
 }
 
@@ -775,7 +788,7 @@ fn should_prefer_idc_refresh(auth_token: &Value, account: &KiroAccount) -> bool 
     .map(|value| {
         matches!(
             value.as_str(),
-            "enterprise" | "builderid" | "internal" | "awsidc" | "external_idp"
+            "enterprise" | "builderid" | "internal" | "awsidc" | "iam_sso"
         )
     })
     .unwrap_or(false);
@@ -1362,23 +1375,23 @@ pub(crate) fn build_payload_from_snapshot(
     profile: Option<Value>,
     usage: Option<Value>,
 ) -> Result<KiroOAuthCompletePayload, String> {
+    let refresh_token = pick_string(
+        Some(&auth_token),
+        &[&["refreshToken"], &["refresh_token"], &["refreshTokenJwt"]],
+    );
     let access_token = pick_string(
         Some(&auth_token),
         &[
             &["accessToken"],
             &["access_token"],
             &["token"],
-            &["idToken"],
-            &["id_token"],
             &["accessTokenJwt"],
         ],
     )
-    .ok_or_else(|| "Kiro 本地授权信息缺少 access token".to_string())?;
-
-    let refresh_token = pick_string(
-        Some(&auth_token),
-        &[&["refreshToken"], &["refresh_token"], &["refreshTokenJwt"]],
-    );
+    .unwrap_or_default();
+    if access_token.is_empty() && refresh_token.is_none() {
+        return Err("KIRO_IMPORT_MISSING_CREDENTIALS".to_string());
+    }
     let token_type = pick_string(
         Some(&auth_token),
         &[&["tokenType"], &["token_type"], &["authType"]],
@@ -1481,14 +1494,20 @@ pub(crate) fn build_payload_from_snapshot(
     });
 
     let login_provider = pick_string(
-        profile.as_ref(),
-        &[
-            &["loginProvider"],
-            &["provider"],
-            &["authProvider"],
-            &["signedInWith"],
-        ],
+        Some(&auth_token),
+        &[&["provider"], &["loginProvider"], &["login_option"]],
     )
+    .or_else(|| {
+        pick_string(
+            profile.as_ref(),
+            &[
+                &["loginProvider"],
+                &["provider"],
+                &["authProvider"],
+                &["signedInWith"],
+            ],
+        )
+    })
     .or_else(|| {
         pick_string(
             Some(&auth_token),
@@ -1586,7 +1605,7 @@ pub fn build_payload_from_local_files() -> Result<KiroOAuthCompletePayload, Stri
 }
 
 async fn refresh_token_via_remote(refresh_token: &str) -> Result<Value, String> {
-    let response = reqwest::Client::new()
+    let response = idc_http_client()?
         .post(KIRO_REFRESH_ENDPOINT)
         .header("Content-Type", "application/json")
         .json(&json!({
@@ -1623,14 +1642,18 @@ async fn refresh_token_via_idc_oidc(
     auth_token: &Value,
     account: &KiroAccount,
 ) -> Result<Value, String> {
-    let region = resolve_idc_region(auth_token, account)
-        .ok_or_else(|| "缺少 idc_region，无法执行 AWS IAM Identity Center 刷新".to_string())?;
-    let (client_id, client_secret) =
-        resolve_idc_client_credentials_from_local_cache(auth_token, account)?;
+    let region = normalize_idc_region(resolve_idc_region(auth_token, account).as_deref())?;
+    let auth_for_read = auth_token.clone();
+    let account_for_read = account.clone();
+    let (client_id, client_secret) = tauri::async_runtime::spawn_blocking(move || {
+        resolve_idc_client_credentials_from_local_cache(&auth_for_read, &account_for_read)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
 
     let endpoint = KIRO_AWS_OIDC_TOKEN_ENDPOINT_FMT.replace("{region}", region.as_str());
     let response = idc_token::request(
-        &reqwest::Client::new(),
+        &idc_http_client()?,
         endpoint.as_str(),
         idc_token::TokenRequest {
             client_id: client_id.as_str(),
@@ -1711,28 +1734,48 @@ async fn refresh_token_via_idc_oidc(
     Ok(token)
 }
 
-async fn fetch_usage_limits_via_runtime(
-    access_token: &str,
-    profile_arn: &str,
-    is_email_required: bool,
-) -> Result<Value, String> {
-    let region = parse_profile_arn_region(profile_arn);
-    let endpoint = runtime_endpoint_for_region(region.as_deref());
-    let mut url = format!(
-        "{}/getUsageLimits?origin=AI_EDITOR&profileArn={}&resourceType=AGENTIC_REQUEST",
-        endpoint.trim_end_matches('/'),
-        urlencoding::encode(profile_arn),
-    );
-    if is_email_required {
-        url.push_str("&isEmailRequired=true");
+fn classify_usage_error(status: u16, body: &str) -> String {
+    let reason = parse_runtime_error_reason(body);
+    if status == 403
+        && matches!(
+            reason.as_deref(),
+            Some("TemporarilySuspended" | "TEMPORARILY_SUSPENDED")
+        )
+    {
+        return format!("BANNED:{}", reason.unwrap());
     }
+    if status == 401 {
+        return "KIRO_USAGE_UNAUTHORIZED".to_string();
+    }
+    format!("KIRO_USAGE_HTTP:{}", status)
+}
 
-    let response = reqwest::Client::new()
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", access_token.trim()))
+async fn fetch_usage_limits_via_runtime(
+    payload: &KiroOAuthCompletePayload,
+) -> Result<Value, String> {
+    let profile_arn = extract_profile_arn_from_payload(payload);
+    let raw = payload.kiro_auth_token_raw.as_ref();
+    let region = raw
+        .and_then(|raw| raw.get("region"))
+        .and_then(Value::as_str)
+        .or(payload.idc_region.as_deref());
+    let url = management_usage_url(profile_arn.as_deref(), region)?;
+    let auth_method = raw
+        .and_then(|raw| raw.get("authMethod"))
+        .and_then(Value::as_str);
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut request = client.get(url).bearer_auth(payload.access_token.trim());
+    if let Some(token_type) = usage_token_type(auth_method) {
+        request = request.header("TokenType", token_type);
+    }
+    let response = request
         .send()
         .await
-        .map_err(|e| format!("请求 Kiro runtime usage 接口失败: {}", e))?;
+        .map_err(|e| format!("请求 Kiro management usage 接口失败: {}", e))?;
 
     let status = response.status();
     let body = response
@@ -1741,20 +1784,11 @@ async fn fetch_usage_limits_via_runtime(
         .unwrap_or_else(|_| "<no-body>".to_string());
 
     if !status.is_success() {
-        let reason = parse_runtime_error_reason(&body)
-            .or_else(|| (status == reqwest::StatusCode::FORBIDDEN).then(|| body.clone()));
-        if let Some(reason) = reason {
-            return Err(format!("BANNED:{}", reason));
-        }
-        return Err(format!(
-            "Kiro runtime usage 接口返回异常: status={}, body_len={}",
-            status,
-            body.len()
-        ));
+        return Err(classify_usage_error(status.as_u16(), &body));
     }
 
     serde_json::from_str::<Value>(&body)
-        .map_err(|e| format!("解析 Kiro runtime usage 响应失败: {}", e))
+        .map_err(|e| format!("解析 Kiro management usage 响应失败: {}", e))
 }
 
 fn merge_refreshed_auth_token_into_payload(
@@ -1962,19 +1996,31 @@ fn apply_runtime_usage_to_payload(payload: &mut KiroOAuthCompletePayload, usage:
     payload.kiro_usage_raw = Some(usage);
 }
 
+pub(crate) async fn query_refreshed_payload_usage(
+    mut payload: KiroOAuthCompletePayload,
+) -> KiroOAuthCompletePayload {
+    // The caller has durably saved the rotated credentials. Query once; a quota
+    // failure must neither rotate them again nor discard the new refresh token.
+    match fetch_usage_limits_via_runtime(&payload).await {
+        Ok(usage) => {
+            apply_runtime_usage_to_payload(&mut payload, usage);
+            set_payload_status(&mut payload, KIRO_ACCOUNT_STATUS_NORMAL, None);
+        }
+        Err(error) => {
+            if let Some(reason) = parse_banned_reason_from_error(&error) {
+                set_payload_status(&mut payload, KIRO_ACCOUNT_STATUS_BANNED, Some(reason));
+            } else {
+                set_payload_status(&mut payload, KIRO_ACCOUNT_STATUS_ERROR, Some(error));
+            }
+        }
+    }
+    payload
+}
+
 pub async fn enrich_payload_with_runtime_usage(
     mut payload: KiroOAuthCompletePayload,
 ) -> KiroOAuthCompletePayload {
-    let Some(initial_profile_arn) = extract_profile_arn_from_payload(&payload) else {
-        return payload;
-    };
-
-    let first_try = fetch_usage_limits_via_runtime(
-        payload.access_token.as_str(),
-        initial_profile_arn.as_str(),
-        true,
-    )
-    .await;
+    let first_try = fetch_usage_limits_via_runtime(&payload).await;
 
     match first_try {
         Ok(usage) => {
@@ -1988,6 +2034,18 @@ pub async fn enrich_payload_with_runtime_usage(
                 return payload;
             }
             set_payload_status(&mut payload, KIRO_ACCOUNT_STATUS_ERROR, Some(err.clone()));
+            // Only retry authentication failures, and never send an IdC refresh
+            // token to the social OAuth endpoint. IdC refresh runs upstream.
+            let auth_method = payload
+                .kiro_auth_token_raw
+                .as_ref()
+                .and_then(|raw| raw.get("authMethod"))
+                .and_then(Value::as_str);
+            if err != "KIRO_USAGE_UNAUTHORIZED"
+                || matches!(auth_method, Some("IdC" | "external_idp"))
+            {
+                return payload;
+            }
             logger::log_warn(&format!(
                 "[Kiro Refresh] runtime usage 首次请求失败，准备尝试 refresh token: {}",
                 err
@@ -2017,10 +2075,7 @@ pub async fn enrich_payload_with_runtime_usage(
         }
     }
 
-    let profile_arn = extract_profile_arn_from_payload(&payload).unwrap_or(initial_profile_arn);
-    match fetch_usage_limits_via_runtime(payload.access_token.as_str(), profile_arn.as_str(), true)
-        .await
-    {
+    match fetch_usage_limits_via_runtime(&payload).await {
         Ok(usage) => {
             apply_runtime_usage_to_payload(&mut payload, usage);
             set_payload_status(&mut payload, KIRO_ACCOUNT_STATUS_NORMAL, None);
@@ -2189,6 +2244,78 @@ fn pick_profile_and_usage_for_refresh(
     )
 }
 
+async fn refresh_external_idp(refresh_token: &str, auth: &Value) -> Result<Value, String> {
+    let client_id = auth
+        .get("clientId")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .ok_or("KIRO_IMPORT_MISSING_CLIENT_ID")?;
+    let endpoint = auth
+        .get("tokenEndpoint")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .or_else(|| {
+            auth.get("issuerUrl").and_then(Value::as_str).map(|issuer| {
+                let issuer = issuer.trim_end_matches('/').trim_end_matches("/v2.0");
+                if issuer.ends_with("/oauth2") {
+                    format!("{issuer}/v2.0/token")
+                } else {
+                    format!("{issuer}/oauth2/v2.0/token")
+                }
+            })
+        })
+        .ok_or("KIRO_IMPORT_MISSING_TOKEN_ENDPOINT")?;
+    if !import_credentials::microsoft_token_endpoint(&endpoint) {
+        return Err("KIRO_IMPORT_INVALID_TOKEN_ENDPOINT".into());
+    }
+    let mut form = vec![
+        ("client_id", client_id),
+        ("grant_type", "refresh_token"),
+        ("refresh_token", refresh_token),
+    ];
+    for (field, key) in [("scope", "scopes"), ("client_secret", "clientSecret")] {
+        if let Some(value) = auth
+            .get(key)
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+        {
+            form.push((field, value));
+        }
+    }
+    let response = idc_http_client()?
+        .post(endpoint)
+        .form(&form)
+        .send()
+        .await
+        .map_err(|e| format!("KIRO_EXTERNAL_IDP_REFRESH_NETWORK: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "KIRO_EXTERNAL_IDP_REFRESH_HTTP:{}",
+            response.status().as_u16()
+        ));
+    }
+    let mut token: Value = response
+        .json()
+        .await
+        .map_err(|e| format!("KIRO_EXTERNAL_IDP_REFRESH_JSON: {e}"))?;
+    ensure_expires_at_from_expires_in(&mut token);
+    let access = token
+        .get("access_token")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .ok_or("KIRO_REFRESH_MISSING_ACCESS_TOKEN")?
+        .to_string();
+    token["accessToken"] = Value::String(access);
+    let next_refresh = token
+        .get("refresh_token")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(refresh_token)
+        .to_string();
+    token["refreshToken"] = Value::String(next_refresh);
+    Ok(token)
+}
+
 pub async fn refresh_payload_for_account(
     account: &KiroAccount,
 ) -> Result<KiroOAuthCompletePayload, String> {
@@ -2204,55 +2331,43 @@ pub async fn refresh_payload_for_account(
             .unwrap_or_else(|| json!({}));
         merge_account_context_into_auth_token(&mut account_auth_token, account);
 
-        let prefer_idc = should_prefer_idc_refresh(&account_auth_token, account);
-        let mut refresh_error_messages: Vec<String> = Vec::new();
-        let mut refreshed_auth_token: Option<Value> = None;
-
-        if prefer_idc {
-            match refresh_token_via_idc_oidc(&refresh_token, &account_auth_token, account).await {
-                Ok(token) => {
-                    refreshed_auth_token = Some(token);
-                }
-                Err(err) => {
-                    logger::log_warn(&format!(
-                        "[Kiro Refresh] AWS IAM Identity Center OIDC 刷新失败: {}",
-                        err
-                    ));
-                    refresh_error_messages
-                        .push(format!("AWS IAM Identity Center OIDC 刷新失败: {}", err));
-                }
-            }
+        let account_auth_token = import_credentials::normalize(&account_auth_token)?;
+        let auth_method = account_auth_token.get("authMethod").and_then(Value::as_str);
+        // The imported auth kind selects exactly one refresh protocol. An AWS
+        // failure must not send the same credential to the social endpoint.
+        let token = if auth_method == Some("external_idp") {
+            refresh_external_idp(&refresh_token, &account_auth_token).await?
+        } else if should_prefer_idc_refresh(&account_auth_token, account) {
+            refresh_token_via_idc_oidc(&refresh_token, &account_auth_token, account).await?
+        } else {
+            refresh_token_via_remote(&refresh_token).await?
+        };
+        let mut auth_token = import_credentials::merge_refreshed(&token, &account_auth_token)?;
+        let (profile, usage) = pick_profile_and_usage_for_refresh(account, &auth_token);
+        // Context is already normalized above; avoid reintroducing stale token aliases.
+        if let Some(object) = auth_token.as_object_mut() {
+            object
+                .entry("email")
+                .or_insert_with(|| Value::String(account.email.clone()));
         }
-
-        if refreshed_auth_token.is_none() {
-            match refresh_token_via_remote(&refresh_token).await {
-                Ok(token) => {
-                    refreshed_auth_token = Some(token);
-                }
-                Err(err) => {
-                    logger::log_warn(&format!("[Kiro Refresh] refreshToken 接口失败: {}", err));
-                    refresh_error_messages.push(format!("Kiro refreshToken 接口失败: {}", err));
-                }
-            }
-        }
-
-        if let Some(mut auth_token) = refreshed_auth_token {
-            merge_account_context_into_auth_token(&mut auth_token, account);
-            let (profile, usage) = pick_profile_and_usage_for_refresh(account, &auth_token);
-            let payload = build_payload_from_snapshot(auth_token, profile, usage)?;
-            return Ok(enrich_payload_with_runtime_usage(payload).await);
-        }
-
-        if refresh_error_messages.is_empty() {
-            return Err("刷新 Kiro 登录态失败: 未命中可用刷新策略".to_string());
-        }
-        return Err(format!(
-            "刷新 Kiro 登录态失败: {}",
-            refresh_error_messages.join("；")
-        ));
+        return build_payload_from_snapshot(auth_token, profile, usage);
     }
 
-    Err("账号缺少 refresh_token，无法刷新 Kiro 登录态".to_string())
+    if !account.access_token.trim().is_empty() {
+        let mut auth = account
+            .kiro_auth_token_raw
+            .clone()
+            .unwrap_or_else(|| json!({}));
+        merge_account_context_into_auth_token(&mut auth, account);
+        let auth = import_credentials::normalize(&auth)?;
+        let payload = build_payload_from_snapshot(
+            auth,
+            account.kiro_profile_raw.clone(),
+            account.kiro_usage_raw.clone(),
+        )?;
+        return Ok(payload);
+    }
+    Err("KIRO_IMPORT_MISSING_CREDENTIALS".into())
 }
 
 fn normalize_idc_region(raw: Option<&str>) -> Result<String, String> {
@@ -2296,6 +2411,8 @@ fn compute_idc_client_id_hash(start_url: &str) -> String {
 
 fn idc_http_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|error| format!("创建 AWS IAM Identity Center HTTP 客户端失败: {error}"))
@@ -3115,5 +3232,49 @@ mod tests {
             resolve_idc_client_secret(&auth_token).as_deref(),
             Some("client-secret")
         );
+    }
+}
+
+#[cfg(test)]
+mod management_usage_tests {
+    use super::*;
+    #[test]
+    fn kiro_usage_only_marks_explicit_suspension_as_blocked() {
+        assert_eq!(
+            classify_usage_error(403, r#"{"reason":"TemporarilySuspended"}"#),
+            "BANNED:TemporarilySuspended"
+        );
+        assert_eq!(
+            classify_usage_error(403, r#"{"reason":"FEATURE_NOT_SUPPORTED"}"#),
+            "KIRO_USAGE_HTTP:403"
+        );
+        assert_eq!(
+            classify_usage_error(401, r#"{"message":"expired"}"#),
+            "KIRO_USAGE_UNAUTHORIZED"
+        );
+        assert_eq!(
+            classify_usage_error(429, r#"{"message":"rate limit"}"#),
+            "KIRO_USAGE_HTTP:429"
+        );
+    }
+    #[test]
+    fn kiro_management_usage_supports_profileless_social_accounts() {
+        let url = management_usage_url(None, None).unwrap();
+        assert_eq!(url.host_str(), Some("management.us-east-1.kiro.dev"));
+        assert_eq!(url.path(), "/Get-Usage-Limits");
+        assert!(!url.query().unwrap().contains("profileArn"));
+        assert!(!url.query().unwrap().contains("resourceType"));
+        assert_eq!(usage_token_type(Some("social")), None);
+    }
+    #[test]
+    fn kiro_management_usage_uses_profile_region_and_token_type() {
+        let url = management_usage_url(
+            Some("arn:aws:codewhisperer:eu-central-1:123:profile/test"),
+            Some("us-east-1"),
+        )
+        .unwrap();
+        assert_eq!(url.host_str(), Some("management.eu-central-1.kiro.dev"));
+        assert_eq!(usage_token_type(Some("IdC")), Some("SSO_OIDC"));
+        assert_eq!(usage_token_type(Some("external_idp")), Some("EXTERNAL_IDP"));
     }
 }

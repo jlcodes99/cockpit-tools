@@ -158,6 +158,9 @@
     "providerClear": "Auswahl leeren"
   },
   "common": {
+    "profileRestoreBusy": "Der Anmeldestatus wird wiederhergestellt. Bitte später erneut versuchen.",
+    "profileRestoreInvalid": "Der Pfad zum Anmeldeschnappschuss ist ungültig. Importieren Sie das Konto erneut.",
+    "profileRestoreRecoveryFailed": "Die Anmeldung konnte nicht wiederhergestellt werden. Die Sicherung wurde behalten: {{detail}}",
     "dataQueryBusy": "Daten werden verarbeitet. Bitte versuchen Sie es gleich erneut.",
     "apiBudget": {
       "keyScope": "Dieser Key",
@@ -432,7 +435,11 @@
           "statusSkipped": "Übersprungen",
           "statusPending": "Wartet auf Import"
         },
-        "invalidJson": "Ungültiges JSON. Prüfen Sie die Datei oder den eingefügten Inhalt."
+        "invalidJson": "Ungültiges JSON. Prüfen Sie die Datei oder den eingefügten Inhalt.",
+        "empty": "Die Importdaten sind leer.",
+        "sizeLimit": "Importdateien dürfen {{limit}} MiB nicht überschreiten.",
+        "countLimit": "Pro Import sind höchstens {{count}} Konten erlaubt.",
+        "itemFailed": "Eintrag {{index}}: {{error}}"
       },
       "externalImport": {
         "bundleInvalidJson": "Das Importpaket ist kein gültiges JSON",
@@ -543,6 +550,8 @@
         "title": "Kontoübersicht"
       },
       "quota": {
+        "usageWithUnit": "Nutzung ({{unit}})",
+        "usage": "Nutzung",
         "noData": "Keine Kontingentdaten",
         "queryFailed": "Kontingentabfrage fehlgeschlagen",
         "resetDone": "Zurückgesetzt",
@@ -631,6 +640,29 @@
         "missingTiming": "Keine gültige Ausgabezeit aufgezeichnet.",
         "shortWindow": "Beobachtetes Ausgabefenster kürzer als 100 ms."
       }
+    },
+    "deviceRestriction": {
+      "title": "Gerätelimits",
+      "badge": "Gerätelimit erkannt",
+      "paused": "Ein eindeutiges Gerätelimit wurde erkannt. Automatische Versuche für diesen Vorgang sind pausiert. Prüfen Sie den lokalen Eintrag auf der Kontoseite.",
+      "note": "Dies sind lokale Beobachtungen, keine OpenAI-Geräteplätze. Das Löschen von Konten oder lokalen Zugangsdaten garantiert keine Freigabe des serverseitigen Gerätelimits.",
+      "retryNote": "Wiederholungen werden zugelassen, ohne das Limit als aufgehoben zu markieren. Eine erneute eindeutige Ablehnung pausiert sie wieder.",
+      "desktop": "Desktop-Anmeldung",
+      "quota": "Kontingentabfrage",
+      "api": "API-Anfragen",
+      "oauth": "OAuth-Anmeldung",
+      "token": "Token-Erneuerung",
+      "recovered": "Vorgang wieder möglich",
+      "pausedLabel": "Versuche pausiert",
+      "retryEnabled": "Wiederholungen erlaubt",
+      "observed": "Zuerst: {{first}} · Zuletzt: {{last}} · {{count}} Beobachtungen",
+      "check": "Erneut prüfen",
+      "allowRetry": "Erneut zulassen",
+      "help": "Offizielle Hilfe",
+      "support": "Support kontaktieren",
+      "failed": "Vorgang fehlgeschlagen. Der letzte bekannte Zustand bleibt erhalten. Bitte erneut versuchen.",
+      "loginAttempt": "Anmeldung ohne Kontozuordnung",
+      "removed": "Entferntes lokales Konto"
     }
   },
   "nav": {
@@ -1369,8 +1401,6 @@
       "codexPreserveExternalBridge": "Externe Brücke behalten",
       "codexPreserveExternalBridgeDesc": "Beim OAuth-Kontowechsel eine durch lokale Integrationsdaten geprüfte Codex Web GPT-Brücke behalten. Standardmäßig aus.",
       "codexEnhancements": {
-        "nativeFast": "Nativer Fast-Schalter",
-        "nativeFastDesc": "Aktiviert das native Geschwindigkeitsmenü des Clients für API-Key-Konten mit den vom Modell unterstützten Stufen. Verfügbarkeit und Preise hängen vom API-Anbieter ab.",
         "quotaCompat": "Kontingente im Mischbetrieb",
         "quotaCompatDesc": "Bei echter OAuth-Anmeldung mit externer API-Route verhindert dies, dass das Abokontingent lokale API-Nachrichten blockiert. Tatsächlicher Verbrauch und Bildkontingente bleiben unverändert.",
         "restartHint": "Standardmäßig eingeschaltet. Nach Änderungen jede betroffene Codex-Instanz neu starten und Cockpit Tools geöffnet lassen. Natives Diktieren richtet sich nach den Funktionen und Einstellungen des Clients; Cockpit übernimmt es nicht und erzwingt keine Aktivierung.",
@@ -2676,14 +2706,8 @@
       "unsupportedCountryRegion": "Die aktuelle Netzwerkregion unterstützt das Erneuern der Codex-Autorisierung nicht. Der OpenAI-Autorisierungsdienst hat diesen Netzwerkausgang abgelehnt. Wechseln Sie in eine unterstützte Region und versuchen Sie es erneut."
     },
     "switchAuth": {
-      "apiOnlyTitle": "Client-Anmeldung erforderlich",
       "reauthorizeTitle": "Codex-Autorisierung abgelaufen",
-      "apiOnlyDescription": "Der aktuelle Client wurde zur Anmeldeseite weitergeleitet. Autorisieren Sie ihn erneut, um die Client-Nutzung wiederherzustellen; der API-Dienst kann vorerst weiter verwendet werden.",
-      "observationStatus": "Weiterleitung zur Anmeldeseite erkannt",
-      "observationTime": "Letzte Prüfung: {{time}}",
-      "loginRedirectTime": "Letzte Weiterleitung zur Anmeldeseite: {{time}}",
       "observationInstance": "Beobachtete Instanz: {{instance}}",
-      "launchTime": "Startzeit dieser Instanz: {{time}}",
       "reauthorizeDescription": "Die Anmeldedaten konnten nicht erneuert werden und der access_token ist für den API-Dienst nicht mehr verfügbar. Autorisieren Sie das Konto erneut.",
       "idTokenUnavailable": "Die Client-Identität ist abgelaufen und die automatische Erneuerung lieferte keinen gültigen id_token.",
       "reasonLabel": "Grund",
@@ -2696,10 +2720,7 @@
       "startingInstanceAfterReauth": "Autorisierung aktualisiert. Instanz wird neu gestartet...",
       "startInstanceAfterReauthFailed": "Autorisierung aktualisiert, aber die Instanz konnte nicht gestartet werden: {{error}}",
       "reauthorizedAndStartedInstance": "Neu autorisiert und Instanz gestartet",
-      "apiOnlyBadge": "Anmeldung nötig",
-      "clearClientAuth": "Warnung löschen",
-      "clearClientAuthSuccess": "Client-Warnung gelöscht",
-      "clearClientAuthFailed": "Client-Warnung konnte nicht gelöscht werden: {{error}}"
+      "apiTokenUsableDescription": "Einige Anmeldedaten müssen erneut autorisiert werden. Das aktuelle Zugriffstoken kann weiterhin für den API-Dienst verwendet werden."
     },
     "current": "Aktuell",
     "empty": {
@@ -4752,8 +4773,8 @@
         "allStatuses": "Alle Status",
         "allGatewayModes": "Alle Modi",
         "sessionFilter": "Sitzung",
-      "sessionPlaceholder": "Sitzungs-ID",
-      "modelFilter": "Modell",
+        "sessionPlaceholder": "Sitzungs-ID",
+        "modelFilter": "Modell",
         "modelPlaceholder": "Modell-ID",
         "accountFilter": "Konto",
         "accountPlaceholder": "E-Mail oder Konto-ID",
@@ -5535,7 +5556,7 @@
         "subscriptionUrl": "Abo-URL",
         "nodeLinks": "Knotenlinks oder Konfiguration",
         "import": "Importieren",
-        "importNotice": "Abo-URLs und Zugangsdaten werden lokal verschlüsselt. Abo-Anfragen gehen ohne Konto-Token an den Anbieter.",
+        "importNotice": "Konfiguration und Ressourcen werden verschlüsselt gespeichert und zur Laufzeit in einem separaten Ordner entschlüsselt. Abonnement- und Ressourcenanfragen enthalten keine Konto-Token.",
         "intro": "Abos oder Knoten importieren und testen; anschließend in der Kontoliste auswählen und zuweisen.",
         "emptyTitle": "Ersten Proxy hinzufügen",
         "emptyHint": "Abonnements, Knotenlinks und HTTP / SOCKS5 werden unterstützt. Import und Test sind auch ohne Konto möglich.",
@@ -5580,7 +5601,7 @@
         "unsupported": "Nicht unterstützt",
         "invalidInput": "Namen und gültige Abo-URL, Knotenlink oder Proxy-Konfiguration eingeben.",
         "downloadFailed": "Abo-Download fehlgeschlagen. Netzwerk- und Proxy-Einstellungen prüfen und erneut versuchen.",
-        "downloadRedirect": "Abo-Download wegen einer Weiterleitung zu einem anderen Ursprung oder zu vieler Weiterleitungen gestoppt.",
+        "downloadRedirect": "Die Abonnementweiterleitung ist ungültig oder überschreitet das Limit.",
         "downloadDenied": "Der Abo-Server verweigert den Zugriff (HTTP 401/403). Link und Gültigkeit prüfen.",
         "downloadTls": "TLS-Verbindungsaufbau oder Zertifikatsprüfung für das Abo fehlgeschlagen. Netzwerk- und Proxy-Einstellungen prüfen.",
         "timeout": "Zeitüberschreitung. Vor erneutem Versuch den Status aktualisieren.",
@@ -5598,6 +5619,7 @@
         "loadBalanceGroup": "Lastverteilung",
         "reasonStrategy": "Diese Gruppenstrategie wird nicht unterstützt. Wählen Sie nach dem Aufklappen einen verfügbaren Knoten.",
         "reasonOptions": "Enthält ein noch nicht unterstütztes Protokoll oder eine Konfigurationsoption.",
+        "reasonProviderConfig": "Quelle, Filter oder Umwandlung dieses Knotenanbieters werden nicht unterstützt.",
         "reasonProvider": "Diese Gruppe benötigt externe Knotenanbieter, die noch nicht geladen wurden.",
         "reasonMembers": "Die Gruppenmitglieder haben die Prüfung nicht bestanden. Prüfen Sie die einzelnen Gründe.",
         "reasonInvalid": "Erforderliche Einstellungen fehlen oder sind ungültig.",
@@ -5619,6 +5641,14 @@
         "defaultProtocol": "Protokoll ohne Angabe",
         "credentialFormat": "Zugangsformat",
         "recognizing": "Wird erkannt…",
+        "nativePreview": "Beim Import verarbeitet Mihomo die Konfiguration direkt und lädt ihre Ressourcen. Die Vorschau greift weder auf Dateien noch auf das Netzwerk zu.",
+        "resourceDirectory": "Ressourcenordner",
+        "browseResources": "Ordner wählen",
+        "resourceDirectoryHint": "Wählen Sie bei lokalen Dateien den Ressourcenordner des Abonnements. Sein Inhalt wird in einen privaten Laufzeitordner kopiert und als verschlüsselte Momentaufnahme gespeichert.",
+        "resourceDirectoryRequired": "Wählen Sie den lokalen Ressourcenordner dieses Abonnements.",
+        "resourceMissing": "Lokale Ressourcen sind nicht verfügbar. Prüfen Sie den Ordner oder importieren Sie erneut.",
+        "rulesName": "Abonnementregeln",
+        "pendingProviders": "Beim Import werden {{count}} entfernte Knotenquellen geladen. Die Vorschau lädt sie nicht herunter.",
         "previewCount": "Gültig {{valid}} · Prüfen {{invalid}} · Doppelt {{duplicates}}",
         "line": "Zeile {{line}}",
         "ambiguous": "Mehrdeutiges Format. Zugangsformat wählen oder vollständige Proxy-URL verwenden.",
@@ -6524,8 +6554,9 @@
       "desc": "Fügen Sie Ihr Kiro-Zugriffstoken oder exportierte JSON-Daten ein."
     },
     "import": {
-      "localDesc": "Importieren Sie Kiro-Kontodaten vom lokalen Kiro-Client oder einer JSON-Datei.",
-      "localClient": "Import aus lokalem Kiro"
+      "localDesc": "Lokal oder aus JSON importieren. JSON-Konten werden zuerst gespeichert; Anmeldedaten und Kontingente werden danach im Hintergrund aktualisiert.",
+      "localClient": "Import aus lokalem Kiro",
+      "invalidCredentials": "Anmeldedaten fehlen oder werden nicht unterstützt. Exportieren Sie das Konto erneut."
     },
     "injectToVSCode": "Wechseln Sie zu Kiro"
   },
@@ -7708,6 +7739,17 @@
       "family": "Gruppe",
       "platform": "Aktuelles System",
       "unsupportedGroup": "Für diese Gruppe gibt es noch keine Ein-Klick-Clients."
+    },
+    "campaign": {
+      "badge": "11.11",
+      "title": "11,11 % Bonus auf Aufladungen",
+      "description": "Für neue und bestehende Nutzer.",
+      "period": "Aktionszeitraum: 1.–11. November 2026 (UTC+8)",
+      "terms": "Die Bedingungen stehen auf der Aktionsseite.",
+      "action": "Zur Aktion",
+      "inactive": "Diese Aktion ist derzeit nicht aktiv.",
+      "label": "11.11-Aktion · befristet",
+      "promotionDescription": "Die 11.11-Aktion beim offiziellen API-Relay-Partner von Cockpit: Neue und bestehende Nutzer erhalten im Aktionszeitraum 11,11 % Bonus auf Aufladungen. Mit Claude, ChatGPT, Gemini und weiteren führenden Modellen."
     }
   },
   "grok": {

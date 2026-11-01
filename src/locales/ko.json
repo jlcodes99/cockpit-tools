@@ -158,6 +158,9 @@
     "providerClear": "선택 해제"
   },
   "common": {
+    "profileRestoreBusy": "로그인 상태를 복원 중입니다. 잠시 후 다시 시도하세요.",
+    "profileRestoreInvalid": "로그인 스냅샷 경로가 잘못되었습니다. 계정을 다시 가져오세요.",
+    "profileRestoreRecoveryFailed": "로그인 복원에 실패했습니다. 백업은 보존되었습니다: {{detail}}",
     "dataQueryBusy": "데이터를 처리 중입니다. 잠시 후 다시 시도하세요。",
     "apiBudget": {
       "keyScope": "현재 Key",
@@ -432,7 +435,11 @@
           "statusSkipped": "건너뜀",
           "statusPending": "가져오기 대기"
         },
-        "invalidJson": "JSON 형식이 올바르지 않습니다. 파일이나 붙여넣은 내용을 확인하세요."
+        "invalidJson": "JSON 형식이 올바르지 않습니다. 파일이나 붙여넣은 내용을 확인하세요.",
+        "empty": "가져올 데이터가 없습니다.",
+        "sizeLimit": "파일은 {{limit}} MiB 이하여야 합니다.",
+        "countLimit": "한 번에 최대 {{count}}개 계정을 가져올 수 있습니다.",
+        "itemFailed": "항목 {{index}}: {{error}}"
       },
       "externalImport": {
         "bundleInvalidJson": "가져오기 패키지가 유효한 JSON이 아닙니다",
@@ -543,6 +550,8 @@
         "title": "계정 개요"
       },
       "quota": {
+        "usageWithUnit": "사용량 ({{unit}})",
+        "usage": "사용량",
         "noData": "쿼터 데이터 없음",
         "queryFailed": "할당량 조회 실패",
         "resetDone": "재설정됨",
@@ -631,6 +640,29 @@
         "missingTiming": "유효한 출력 시간이 기록되지 않았습니다.",
         "shortWindow": "출력 관측 시간이 100밀리초 미만입니다."
       }
+    },
+    "deviceRestriction": {
+      "title": "기기 제한 기록",
+      "badge": "기기 제한됨",
+      "paused": "명확한 기기 제한이 감지되어 이 작업의 자동 시도를 중지했습니다. 계정 페이지에서 기록을 확인하세요.",
+      "note": "이 기록은 로컬 관찰 결과이며 OpenAI 기기 슬롯이 아닙니다. 계정이나 로컬 인증 정보를 삭제해도 서버의 기기 제한이 해제된다는 보장은 없습니다.",
+      "retryNote": "재시도를 허용해도 제한이 해제된 것으로 표시하지 않습니다. 명확한 제한을 다시 받으면 중지합니다.",
+      "desktop": "데스크톱 로그인",
+      "quota": "할당량 조회",
+      "api": "API 요청",
+      "oauth": "OAuth 로그인",
+      "token": "토큰 갱신",
+      "recovered": "작업 복구됨",
+      "pausedLabel": "시도 중지됨",
+      "retryEnabled": "재시도 허용됨",
+      "observed": "최초: {{first}} · 최근: {{last}} · 관찰 {{count}}회",
+      "check": "다시 확인",
+      "allowRetry": "재시도 허용",
+      "help": "공식 도움말",
+      "support": "지원 문의",
+      "failed": "작업을 완료하지 못했습니다. 마지막 상태를 유지합니다. 다시 시도하세요.",
+      "loginAttempt": "계정 미확인 로그인",
+      "removed": "삭제된 로컬 계정"
     }
   },
   "nav": {
@@ -1369,8 +1401,6 @@
       "codexPreserveExternalBridge": "외부 브리지 유지",
       "codexPreserveExternalBridgeDesc": "OAuth 계정 전환 시 로컬 기록으로 검증된 Codex Web GPT 브리지를 유지합니다. 기본값은 꺼짐입니다.",
       "codexEnhancements": {
-        "nativeFast": "기본 Fast 선택기",
-        "nativeFastDesc": "API Key 계정에서 공식 속도 메뉴를 활성화하고 모델이 지원하는 단계를 표시합니다. 실제 지원 여부와 요금은 API 제공업체에 따라 다릅니다.",
         "quotaCompat": "혼합 모드 한도 호환",
         "quotaCompatDesc": "실제 OAuth 로그인과 외부 API 경로를 함께 쓸 때만 구독 한도가 로컬 API 메시지를 차단하지 않도록 합니다. 실제 사용량과 이미지 한도는 바뀌지 않습니다.",
         "restartHint": "기본적으로 켜져 있습니다. 변경 후 대상 Codex 인스턴스를 다시 시작하고 Cockpit Tools를 실행해 두세요. 기본 음성 입력은 클라이언트 기능과 설정을 따릅니다. Cockpit은 이를 대신 처리하거나 강제로 활성화하지 않습니다.",
@@ -2676,14 +2706,8 @@
       "unsupportedCountryRegion": "현재 네트워크 지역에서는 Codex 인증을 새로고침할 수 없습니다. OpenAI 인증 서비스가 이 네트워크 출구를 거부했습니다. 지원되는 지역으로 전환한 뒤 다시 시도하세요."
     },
     "switchAuth": {
-      "apiOnlyTitle": "클라이언트 로그인 필요",
       "reauthorizeTitle": "Codex 인증 만료",
-      "apiOnlyDescription": "현재 클라이언트가 로그인 페이지로 이동했습니다. 클라이언트를 복구하려면 다시 인증하세요. 당분간 API 서비스는 계속 사용할 수 있습니다.",
-      "observationStatus": "로그인 페이지로의 이동이 감지되었습니다",
-      "observationTime": "최근 확인: {{time}}",
-      "loginRedirectTime": "최근 로그인 페이지 리디렉션: {{time}}",
       "observationInstance": "확인된 인스턴스: {{instance}}",
-      "launchTime": "인스턴스 시작 시간: {{time}}",
       "reauthorizeDescription": "로그인 정보를 갱신할 수 없고 access_token도 API 서비스에서 사용할 수 없습니다. 계속하려면 다시 인증하세요.",
       "idTokenUnavailable": "클라이언트 ID 정보가 만료되었으며 자동 갱신 후에도 유효한 id_token을 받지 못했습니다.",
       "reasonLabel": "원인",
@@ -2696,10 +2720,7 @@
       "startingInstanceAfterReauth": "인증이 업데이트되었습니다. 인스턴스를 다시 시작합니다...",
       "startInstanceAfterReauthFailed": "인증은 업데이트되었지만 인스턴스를 시작하지 못했습니다: {{error}}",
       "reauthorizedAndStartedInstance": "재인증 후 인스턴스를 시작했습니다",
-      "apiOnlyBadge": "인증 필요",
-      "clearClientAuth": "경고 지우기",
-      "clearClientAuthSuccess": "클라이언트 경고를 지웠습니다",
-      "clearClientAuthFailed": "클라이언트 경고를 지우지 못했습니다: {{error}}"
+      "apiTokenUsableDescription": "일부 로그인 자격 증명은 재인증이 필요합니다. 현재 액세스 토큰은 API 서비스에서 계속 사용할 수 있습니다."
     },
     "current": "현재",
     "empty": {
@@ -4752,8 +4773,8 @@
         "allStatuses": "전체 상태",
         "allGatewayModes": "전체 모드",
         "sessionFilter": "세션",
-      "sessionPlaceholder": "세션 ID",
-      "modelFilter": "모델",
+        "sessionPlaceholder": "세션 ID",
+        "modelFilter": "모델",
         "modelPlaceholder": "모델 ID",
         "accountFilter": "계정",
         "accountPlaceholder": "이메일 또는 계정 ID",
@@ -5535,7 +5556,7 @@
         "subscriptionUrl": "구독 URL",
         "nodeLinks": "노드 링크 또는 설정",
         "import": "가져오기",
-        "importNotice": "구독 URL과 노드 자격 증명은 로컬에 암호화해 저장합니다. 구독 요청에는 계정 Token을 보내지 않습니다.",
+        "importNotice": "설정과 리소스 스냅샷은 암호화해 저장하고 실행 시 별도 폴더에서 복호화합니다. 구독 및 리소스 요청에는 계정 토큰을 보내지 않습니다.",
         "intro": "구독이나 노드를 가져와 테스트한 뒤 계정 목록에서 선택하고 연결하세요.",
         "emptyTitle": "첫 프록시 추가",
         "emptyHint": "구독 주소, 노드 링크, HTTP / SOCKS5를 지원합니다. 계정 없이도 가져오기와 테스트가 가능합니다.",
@@ -5580,7 +5601,7 @@
         "unsupported": "지원 안 됨",
         "invalidInput": "이름과 유효한 구독 URL, 노드 링크 또는 프록시 설정을 입력하세요.",
         "downloadFailed": "구독 다운로드에 실패했습니다. 네트워크와 프록시 설정을 확인한 후 다시 시도하세요.",
-        "downloadRedirect": "다른 사이트로의 리디렉션 또는 과도한 리디렉션으로 구독 다운로드를 중단했습니다.",
+        "downloadRedirect": "구독 리디렉션이 잘못되었거나 횟수 제한을 초과했습니다.",
         "downloadDenied": "구독 서버가 접근을 거부했습니다(HTTP 401/403). 링크와 유효기간을 확인하세요.",
         "downloadTls": "구독 연결의 TLS 핸드셰이크 또는 인증서 검증에 실패했습니다. 네트워크와 프록시 설정을 확인하세요.",
         "timeout": "작업 시간이 초과되었습니다. 새로고침하여 결과를 확인한 후 재시도하세요.",
@@ -5598,6 +5619,7 @@
         "loadBalanceGroup": "부하 분산",
         "reasonStrategy": "이 그룹 방식은 지원되지 않습니다. 펼쳐서 사용 가능한 노드를 선택하세요.",
         "reasonOptions": "아직 지원되지 않는 프로토콜 또는 설정 옵션이 포함되어 있습니다.",
+        "reasonProviderConfig": "이 노드 목록의 소스, 필터 또는 변환 설정은 지원되지 않습니다.",
         "reasonProvider": "이 그룹에는 아직 불러오지 않은 외부 노드 공급자가 필요합니다.",
         "reasonMembers": "그룹 구성원이 검증을 통과하지 못했습니다. 개별 사유를 확인하세요.",
         "reasonInvalid": "필수 설정이 없거나 올바르지 않습니다.",
@@ -5619,6 +5641,14 @@
         "defaultProtocol": "프로토콜 생략 시",
         "credentialFormat": "인증 정보 형식",
         "recognizing": "인식 중…",
+        "nativePreview": "가져올 때 Mihomo가 설정을 직접 해석하고 리소스를 불러옵니다. 미리 보기에서는 파일이나 네트워크에 접근하지 않습니다.",
+        "resourceDirectory": "리소스 폴더",
+        "browseResources": "폴더 선택",
+        "resourceDirectoryHint": "로컬 파일이 있으면 구독 리소스 폴더를 선택하세요. 내용은 별도 실행 폴더에 복사되고 암호화된 스냅샷으로 저장됩니다.",
+        "resourceDirectoryRequired": "이 구독의 로컬 리소스 폴더를 선택하세요.",
+        "resourceMissing": "로컬 리소스를 사용할 수 없습니다. 폴더를 확인하거나 다시 가져오세요.",
+        "rulesName": "구독 규칙",
+        "pendingProviders": "가져올 때 원격 노드 목록 {{count}}개를 불러옵니다. 미리 보기에서는 다운로드하지 않습니다.",
         "previewCount": "유효 {{valid}} · 확인 필요 {{invalid}} · 중복 {{duplicates}}",
         "line": "{{line}}번째 줄",
         "ambiguous": "형식이 모호합니다. 인증 형식을 선택하거나 전체 프록시 URL을 사용하세요.",
@@ -6524,8 +6554,9 @@
       "desc": "Kiro 액세스 토큰이나 내보낸 JSON 데이터를 붙여넣으세요."
     },
     "import": {
-      "localDesc": "로컬 Kiro 클라이언트 또는 JSON 파일에서 Kiro 계정 데이터를 가져옵니다.",
-      "localClient": "현지 키로에서 수입"
+      "localDesc": "로컬 또는 JSON에서 가져옵니다. JSON 계정을 먼저 저장한 후 백그라운드에서 로그인 상태와 사용 한도를 갱신합니다.",
+      "localClient": "현지 키로에서 수입",
+      "invalidCredentials": "인증 정보가 누락되었거나 지원되지 않습니다. 계정을 다시 내보내세요."
     },
     "injectToVSCode": "키로로 전환"
   },
@@ -7708,6 +7739,17 @@
       "family": "그룹",
       "platform": "현재 시스템",
       "unsupportedGroup": "이 그룹에는 아직 원클릭으로 쓸 수 있는 클라이언트가 없습니다."
+    },
+    "campaign": {
+      "badge": "11.11",
+      "title": "충전 시 11.11% 추가 지급",
+      "description": "신규 및 기존 사용자 모두 참여할 수 있습니다.",
+      "period": "행사 기간: 2026년 11월 1일~11일 (UTC+8)",
+      "terms": "자세한 조건은 행사 페이지를 확인하세요.",
+      "action": "행사 보기",
+      "inactive": "현재 행사 기간이 아닙니다.",
+      "label": "11.11 한정 행사",
+      "promotionDescription": "Cockpit 공식 제휴 API 중계 서비스의 11.11 혜택입니다. 신규 및 기존 사용자 모두 행사 기간 충전 시 11.11%를 추가로 받습니다. Claude, ChatGPT, Gemini 등 주요 모델을 지원합니다."
     }
   },
   "grok": {

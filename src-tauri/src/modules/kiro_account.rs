@@ -336,15 +336,6 @@ fn upsert_account_record(account: KiroAccount) -> Result<KiroAccount, String> {
     Ok(account)
 }
 
-fn persist_quota_query_error(account_id: &str, message: &str) {
-    let Some(mut account) = load_account(account_id) else {
-        return;
-    };
-    account.quota_query_last_error = Some(message.to_string());
-    account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
-    let _ = upsert_account_record(account);
-}
-
 fn normalize_non_empty(value: Option<&str>) -> Option<String> {
     value.and_then(|raw| {
         let trimmed = raw.trim();
@@ -723,49 +714,110 @@ pub fn upsert_account(payload: KiroOAuthCompletePayload) -> Result<KiroAccount, 
     Ok(account)
 }
 
-async fn refresh_account_token_once(account_id: &str) -> Result<KiroAccount, String> {
-    let started_at = Instant::now();
-    let mut account = load_account(account_id).ok_or_else(|| "账号不存在".to_string())?;
-    logger::log_info(&format!(
-        "[Kiro Refresh] 开始刷新账号: id={}, email={}",
-        account.id, account.email
-    ));
-
-    let payload = kiro_oauth::refresh_payload_for_account(&account).await?;
-    let usage_refreshed = payload.kiro_usage_raw.is_some();
-    let tags = account.tags.clone();
-    let created_at = account.created_at;
-    apply_payload(&mut account, payload);
-    account.tags = tags;
-    account.created_at = created_at;
-    let refreshed_at = now_ts();
-    if usage_refreshed {
-        account.quota_query_last_error = None;
-        account.quota_query_last_error_at = None;
-        account.usage_updated_at = Some(refreshed_at);
-    } else {
-        account.quota_query_last_error = Some("未获取到有效配额数据".to_string());
-        account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
+static REFRESHING: std::sync::LazyLock<Mutex<HashSet<String>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashSet::new()));
+struct RefreshGuard(String);
+impl Drop for RefreshGuard {
+    fn drop(&mut self) {
+        if let Ok(mut active) = REFRESHING.lock() {
+            active.remove(&self.0);
+        }
     }
-    account.last_used = refreshed_at;
+}
+fn begin_refresh(id: &str) -> Result<RefreshGuard, String> {
+    let mut active = REFRESHING.lock().map_err(|_| "KIRO_REFRESH_BUSY")?;
+    if !active.insert(id.to_string()) {
+        return Err("KIRO_REFRESH_BUSY".into());
+    }
+    Ok(RefreshGuard(id.to_string()))
+}
 
-    let updated = account.clone();
-    upsert_account_record(account)?;
-    logger::log_info(&format!(
-        "[Kiro Refresh] 刷新完成: id={}, email={}, elapsed={}ms",
-        updated.id,
-        updated.email,
-        started_at.elapsed().as_millis()
-    ));
-    Ok(updated)
+fn refresh_matches_snapshot(current: &KiroAccount, previous: &KiroAccount) -> bool {
+    current.access_token == previous.access_token
+        && current.refresh_token == previous.refresh_token
+        && current.kiro_auth_token_raw == previous.kiro_auth_token_raw
+}
+
+fn commit_refresh(
+    previous: KiroAccount,
+    result: Result<KiroOAuthCompletePayload, String>,
+    quota_checked: bool,
+) -> Result<KiroAccount, String> {
+    let _lock = KIRO_ACCOUNT_INDEX_LOCK
+        .lock()
+        .map_err(|_| "KIRO_REFRESH_BUSY")?;
+    let mut current = load_account(&previous.id).ok_or("KIRO_ACCOUNT_REMOVED")?;
+    if !refresh_matches_snapshot(&current, &previous) {
+        return Ok(current);
+    }
+    let error = match result {
+        Ok(payload) => {
+            let usage_refreshed =
+                payload.status.as_deref() == Some("normal") && payload.kiro_usage_raw.is_some();
+            let status_reason = payload.status_reason.clone();
+            let previous_status = (current.status.clone(), current.status_reason.clone());
+            apply_payload(&mut current, payload);
+            if quota_checked {
+                current.quota_query_last_error = if usage_refreshed {
+                    None
+                } else {
+                    status_reason.or_else(|| Some("KIRO_USAGE_UNAVAILABLE".into()))
+                };
+                current.quota_query_last_error_at = if usage_refreshed {
+                    None
+                } else {
+                    Some(chrono::Utc::now().timestamp_millis())
+                };
+                if usage_refreshed {
+                    current.usage_updated_at = Some(now_ts());
+                }
+            } else {
+                current.status = previous_status.0;
+                current.status_reason = previous_status.1;
+            }
+            current.last_used = now_ts();
+            None
+        }
+        Err(error) => {
+            current.quota_query_last_error = Some(error.clone());
+            current.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
+            Some(error)
+        }
+    };
+    let mut index = load_account_index();
+    save_account_file(&current)?;
+    refresh_summary(&mut index, &current);
+    save_account_index(&index)?;
+    match error {
+        Some(error) => Err(error),
+        None => Ok(current),
+    }
 }
 
 pub async fn refresh_account_token(account_id: &str) -> Result<KiroAccount, String> {
-    let result = refresh_account_token_once(account_id).await;
-    if let Err(err) = &result {
-        persist_quota_query_error(account_id, err);
+    let _flight = begin_refresh(account_id)?;
+    let id = account_id.to_string();
+    let previous = tauri::async_runtime::spawn_blocking(move || {
+        load_account(&id).ok_or("KIRO_ACCOUNT_REMOVED".to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    let result = kiro_oauth::refresh_payload_for_account(&previous).await;
+    let payload = result.as_ref().ok().cloned();
+    let saved =
+        tauri::async_runtime::spawn_blocking(move || commit_refresh(previous, result, false))
+            .await
+            .map_err(|e| e.to_string())??;
+    let Some(payload) = payload else {
+        return Ok(saved);
+    };
+    if saved.access_token != payload.access_token || saved.refresh_token != payload.refresh_token {
+        return Ok(saved);
     }
-    result
+    let payload = kiro_oauth::query_refreshed_payload_usage(payload).await;
+    tauri::async_runtime::spawn_blocking(move || commit_refresh(saved, Ok(payload), true))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 pub async fn refresh_all_tokens() -> Result<Vec<(String, Result<KiroAccount, String>)>, String> {
@@ -916,73 +968,7 @@ fn pick_import_profile(raw: &Value) -> Option<Value> {
 }
 
 fn build_import_auth_token(raw: &Value) -> Result<Value, String> {
-    let raw_obj = raw
-        .as_object()
-        .ok_or_else(|| "Kiro 导入 JSON 必须是对象".to_string())?;
-
-    let base = clone_object_value(raw_obj.get("kiro_auth_token_raw"))
-        .or_else(|| clone_object_value(raw_obj.get("authToken")))
-        .or_else(|| clone_object_value(raw_obj.get("token")))
-        .or_else(|| clone_object_value(raw_obj.get("auth")))
-        .unwrap_or_else(|| raw.clone());
-
-    let mut auth_obj = match base {
-        Value::Object(obj) => obj,
-        _ => serde_json::Map::new(),
-    };
-
-    for key in [
-        "accessToken",
-        "access_token",
-        "token",
-        "idToken",
-        "id_token",
-        "refreshToken",
-        "refresh_token",
-        "expiresAt",
-        "expires_at",
-        "expiry",
-        "expiration",
-        "email",
-        "userEmail",
-        "userId",
-        "user_id",
-        "provider",
-        "loginProvider",
-        "authMethod",
-        "login_option",
-        "profileArn",
-        "profile_arn",
-        "arn",
-        "login_hint",
-        "loginHint",
-        "idc_region",
-        "idcRegion",
-        "region",
-        "issuer_url",
-        "issuerUrl",
-        "issuer",
-        "client_id",
-        "clientId",
-        "client_secret",
-        "clientSecret",
-        "scope",
-        "scopes",
-        "startUrl",
-        "start_url",
-    ] {
-        if auth_obj.contains_key(key) {
-            continue;
-        }
-        if let Some(value) = raw_obj
-            .get(key)
-            .filter(|value| is_non_empty_json_value(value))
-        {
-            auth_obj.insert(key.to_string(), value.clone());
-        }
-    }
-
-    Ok(Value::Object(auth_obj))
+    kiro_oauth::import_credentials::normalize(raw)
 }
 
 fn payload_from_import_value(raw: Value) -> Result<KiroOAuthCompletePayload, String> {
@@ -996,77 +982,75 @@ fn payload_from_import_value(raw: Value) -> Result<KiroOAuthCompletePayload, Str
     kiro_oauth::build_payload_from_snapshot(auth_token, profile, usage)
 }
 
-fn payloads_from_import_json_value(value: Value) -> Result<Vec<KiroOAuthCompletePayload>, String> {
-    match value {
-        Value::Array(items) => {
-            if items.is_empty() {
-                return Err("导入数组为空".to_string());
-            }
-
-            let mut payloads = Vec::with_capacity(items.len());
-            for (idx, item) in items.into_iter().enumerate() {
-                let payload = payload_from_import_value(item)
-                    .map_err(|e| format!("第 {} 条 Kiro 账号解析失败: {}", idx + 1, e))?;
-                payloads.push(payload);
-            }
-            Ok(payloads)
-        }
-        Value::Object(mut obj) => {
-            let object_value = Value::Object(obj.clone());
-            if let Ok(payload) = payload_from_import_value(object_value.clone()) {
-                return Ok(vec![payload]);
-            }
-
-            if let Some(accounts) = obj
-                .remove("accounts")
-                .or_else(|| obj.remove("items"))
-                .and_then(|raw| raw.as_array().cloned())
-            {
-                if accounts.is_empty() {
-                    return Err("导入数组为空".to_string());
-                }
-                let mut payloads = Vec::with_capacity(accounts.len());
-                for (idx, item) in accounts.into_iter().enumerate() {
-                    let payload = payload_from_import_value(item)
-                        .map_err(|e| format!("第 {} 条 Kiro 账号解析失败: {}", idx + 1, e))?;
-                    payloads.push(payload);
-                }
-                return Ok(payloads);
-            }
-
-            Err("无法解析 Kiro 导入对象".to_string())
-        }
-        _ => Err("Kiro 导入 JSON 必须是对象或数组".to_string()),
+fn parse_import_json(
+    json_content: &str,
+) -> Result<Vec<(KiroOAuthCompletePayload, Option<KiroAccount>)>, String> {
+    if json_content.len() > 8 * 1024 * 1024 {
+        return Err("KIRO_IMPORT_TOO_LARGE".into());
     }
+    let value: Value = serde_json::from_str(json_content.trim_start_matches('\u{feff}'))
+        .map_err(|_| "KIRO_IMPORT_INVALID_JSON".to_string())?;
+    let entries = match value {
+        Value::Array(items) => items,
+        Value::Object(mut object)
+            if object.get("accounts").is_some_and(Value::is_array)
+                || object.get("items").is_some_and(Value::is_array) =>
+        {
+            object
+                .remove("accounts")
+                .filter(Value::is_array)
+                .or_else(|| object.remove("items"))
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .clone()
+        }
+        value => vec![value],
+    };
+    if entries.is_empty() {
+        return Err("KIRO_IMPORT_EMPTY".into());
+    }
+    if entries.len() > 1000 {
+        return Err("KIRO_IMPORT_TOO_MANY".into());
+    }
+    // Validate every entry before persisting any; serde's native-account fast
+    // path used to discard foreign top-level clientSecret/authMethod fields.
+    let parsed = entries
+        .into_iter()
+        .enumerate()
+        .map(|(index, raw)| {
+            let payload = payload_from_import_value(raw.clone())
+                .map_err(|error| format!("KIRO_IMPORT_ITEM:{}:{error}", index + 1))?;
+            let native = if raw.get("kiro_auth_token_raw").is_some() {
+                serde_json::from_value::<KiroAccount>(raw).ok()
+            } else {
+                None
+            };
+            Ok((payload, native))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    Ok(parsed)
 }
 
 pub fn import_from_json(json_content: &str) -> Result<Vec<KiroAccount>, String> {
-    if let Ok(account) = serde_json::from_str::<KiroAccount>(json_content) {
-        let saved = upsert_account_record(account)?;
-        return Ok(vec![saved]);
+    let parsed = parse_import_json(json_content)?;
+    let mut result = Vec::with_capacity(parsed.len());
+    for (payload, native) in parsed {
+        let saved = if let Some(mut account) = native {
+            account.kiro_auth_token_raw = payload.kiro_auth_token_raw;
+            account.login_provider = payload.login_provider;
+            account.idc_region = payload.idc_region;
+            account.client_id = payload.client_id;
+            account.refresh_token = payload.refresh_token;
+            account.access_token = payload.access_token;
+            account.expires_at = payload.expires_at;
+            upsert_account_record(account)?
+        } else {
+            upsert_account(payload)?
+        };
+        result.push(saved);
     }
-
-    if let Ok(accounts) = serde_json::from_str::<Vec<KiroAccount>>(json_content) {
-        let mut result = Vec::new();
-        for account in accounts {
-            let saved = upsert_account_record(account)?;
-            result.push(saved);
-        }
-        return Ok(result);
-    }
-
-    if let Ok(value) = serde_json::from_str::<Value>(json_content) {
-        if let Ok(payloads) = payloads_from_import_json_value(value) {
-            let mut result = Vec::with_capacity(payloads.len());
-            for payload in payloads {
-                let saved = upsert_account(payload)?;
-                result.push(saved);
-            }
-            return Ok(result);
-        }
-    }
-
-    Err("无法解析 JSON 内容".to_string())
+    Ok(result)
 }
 
 pub fn export_accounts(account_ids: &[String]) -> Result<String, String> {
@@ -1541,3 +1525,7 @@ mod tests {
         fs::remove_dir_all(cache_dir).expect("remove Kiro IdC fixture");
     }
 }
+
+#[cfg(test)]
+#[path = "kiro_import_tests.rs"]
+mod import_tests;

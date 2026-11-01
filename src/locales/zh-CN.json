@@ -158,6 +158,9 @@
     "providerClear": "清空选择"
   },
   "common": {
+    "profileRestoreBusy": "正在恢复登录态，请稍后重试。",
+    "profileRestoreInvalid": "登录态快照路径无效，请重新导入账号。",
+    "profileRestoreRecoveryFailed": "登录态恢复失败，备份已保留：{{detail}}",
     "dataQueryBusy": "数据正在处理中，请稍后重试。",
     "apiBudget": {
       "keyScope": "当前 Key",
@@ -439,7 +442,11 @@
           "statusSkipped": "已跳过",
           "statusPending": "待导入"
         },
-        "invalidJson": "JSON 格式无效，请检查文件或粘贴内容。"
+        "invalidJson": "JSON 格式无效，请检查文件或粘贴内容。",
+        "empty": "导入内容为空。",
+        "sizeLimit": "导入文件不能超过 {{limit}} MiB。",
+        "countLimit": "每次最多导入 {{count}} 个账号。",
+        "itemFailed": "第 {{index}} 条：{{error}}"
       },
       "externalImport": {
         "bundleInvalidJson": "导入包不是有效 JSON",
@@ -550,6 +557,8 @@
         "title": "账号总览"
       },
       "quota": {
+        "usageWithUnit": "用量（{{unit}}）",
+        "usage": "用量",
         "noData": "暂无配额数据",
         "queryFailed": "配额查询失败",
         "resetDone": "已重置",
@@ -631,6 +640,29 @@
         "missingTiming": "未记录有效输出计时。",
         "shortWindow": "输出观测窗口不足 100 毫秒。"
       }
+    },
+    "deviceRestriction": {
+      "title": "设备限制记录",
+      "badge": "设备受限",
+      "paused": "已观察到明确的设备限制，当前操作的自动尝试已暂停。请在账号页查看本地限制记录。",
+      "note": "这里记录本机观察结果，不代表 OpenAI 设备名额。删除账号或清理本地凭据不保证释放服务端设备额度。",
+      "retryNote": "允许重试只恢复尝试，不会把限制标为已解除；再次收到明确限制时会重新暂停。",
+      "desktop": "桌面登录",
+      "quota": "额度查询",
+      "api": "API 调用",
+      "oauth": "授权登录",
+      "token": "令牌刷新",
+      "recovered": "该操作已恢复",
+      "pausedLabel": "已暂停尝试",
+      "retryEnabled": "已允许重试",
+      "observed": "首次：{{first}} · 最近：{{last}} · {{count}} 次观察",
+      "check": "重新检查",
+      "allowRetry": "允许重试",
+      "help": "官方说明",
+      "support": "联系支持",
+      "failed": "操作未完成，已保留最近状态，请重试。",
+      "loginAttempt": "尚未确认账号的登录",
+      "removed": "已移除的本地账号"
     }
   },
   "floatingCard": {
@@ -902,6 +934,17 @@
       "family": "分组",
       "platform": "当前系统",
       "unsupportedGroup": "该分组暂时没有可一键写入的客户端。"
+    },
+    "campaign": {
+      "badge": "双11",
+      "title": "充值赠送 11.11%",
+      "description": "新老用户均可参与。",
+      "period": "活动时间：2026年11月1日—11日（北京时间）",
+      "terms": "活动规则以活动页为准。",
+      "action": "查看活动",
+      "inactive": "活动当前未开放。",
+      "label": "双十一限时活动",
+      "promotionDescription": "Cockpit 官方合作中转站双十一福利，新老用户均可参与。活动期间充值赠送 11.11%，支持 Claude、ChatGPT、Gemini 等主流模型。"
     }
   },
   "platformLayout": {
@@ -1583,8 +1626,6 @@
       "codexPreserveExternalBridge": "保留外部桥接",
       "codexPreserveExternalBridgeDesc": "OAuth 切号时保留经本地记录验证的 Codex Web GPT 桥接；默认关闭。",
       "codexEnhancements": {
-        "nativeFast": "原生 Fast 控件",
-        "nativeFastDesc": "为 API Key 账号启用官方速度菜单，显示模型支持的档位；实际支持和计费取决于 API 供应商。",
         "quotaCompat": "混合模式额度兼容",
         "quotaCompatDesc": "仅真实 OAuth 登录且走外部 API 路由时，避免订阅额度拦截本地 API 消息；不改变真实用量和图像额度。",
         "restartHint": "默认开启。修改后需重启各目标 Codex 实例，并保持 Cockpit Tools 运行。原生听写由客户端能力与设置决定，Cockpit 不接管或强制启用。",
@@ -2896,17 +2937,8 @@
       "unsupportedCountryRegion": "当前网络地区不支持刷新 Codex 授权。OpenAI 授权服务拒绝了当前网络出口的刷新请求，请切换到支持的网络地区后重试。"
     },
     "switchAuth": {
-      "apiOnlyTitle": "客户端需授权",
       "reauthorizeTitle": "Codex 授权已失效",
-      "apiOnlyDescription": "检测到当前客户端已跳转到登录页面。你可以重新授权以恢复客户端使用；如果暂时只使用 API 服务，仍可继续使用。",
-      "clearClientAuth": "清除异常标识",
-      "clearClientAuthSuccess": "已清除客户端异常标识",
-      "clearClientAuthFailed": "清除客户端异常标识失败：{{error}}",
-      "observationStatus": "检测到跳转到登录页面",
-      "observationTime": "最近一次检测时间：{{time}}",
-      "loginRedirectTime": "最近一次跳转登录页：{{time}}",
       "observationInstance": "检测实例：{{instance}}",
-      "launchTime": "本次实例启动时间：{{time}}",
       "reauthorizeDescription": "当前登录凭据无法自动更新，且 access_token 已不可用于 API 服务。请重新授权后继续使用。",
       "idTokenUnavailable": "客户端身份凭据已过期，自动更新后仍未获得有效的 id_token。",
       "reasonLabel": "原因",
@@ -2919,7 +2951,7 @@
       "startingInstanceAfterReauth": "授权成功，正在重新启动实例...",
       "startInstanceAfterReauthFailed": "授权已更新，但实例启动失败：{{error}}",
       "reauthorizedAndStartedInstance": "重新授权并启动实例成功",
-      "apiOnlyBadge": "客户端需授权"
+      "apiTokenUsableDescription": "部分登录凭据需要重新授权。当前 access_token 仍可用于 API 服务。"
     },
     "switchProgress": {
       "completed": "切换完成",
@@ -5066,8 +5098,8 @@
         "instanceFilter": "实例",
         "instanceUnknown": "实例 -",
         "sessionFilter": "会话",
-      "sessionPlaceholder": "会话 ID",
-      "modelFilter": "模型",
+        "sessionPlaceholder": "会话 ID",
+        "modelFilter": "模型",
         "modelPlaceholder": "模型 ID",
         "accountFilter": "账号",
         "accountPlaceholder": "邮箱或账号 ID",
@@ -5755,7 +5787,7 @@
         "subscriptionUrl": "订阅地址",
         "nodeLinks": "节点链接或配置内容",
         "import": "导入",
-        "importNotice": "订阅地址与节点凭据加密保存在本机；订阅请求仅发送至提供方，不附带账号 Token。",
+        "importNotice": "配置与资源快照加密保存，运行时在独立目录解密使用；订阅和资源请求不附带账号 Token。",
         "intro": "导入和测试订阅或节点，再到账号列表中选择并绑定。",
         "emptyTitle": "先添加你的代理",
         "emptyHint": "支持订阅地址、节点链接与 HTTP / SOCKS5 代理。没有账号也可以先导入和检测。",
@@ -5800,7 +5832,7 @@
         "unsupported": "暂不支持",
         "invalidInput": "请填写名称和有效的订阅地址、节点链接或代理信息。",
         "downloadFailed": "订阅下载失败，请检查网络及代理设置后重试。",
-        "downloadRedirect": "订阅发生跨站跳转或跳转次数过多，下载已停止。",
+        "downloadRedirect": "订阅跳转无效或次数过多，下载已停止。",
         "downloadDenied": "订阅服务器拒绝访问（HTTP 401/403），请检查链接及有效期。",
         "downloadTls": "订阅连接的 TLS 握手或证书校验失败，请检查网络及代理设置。",
         "timeout": "操作超时，请刷新确认结果后重试。",
@@ -5818,6 +5850,7 @@
         "loadBalanceGroup": "负载均衡",
         "reasonStrategy": "暂不支持此分组策略，可展开选择可用节点。",
         "reasonOptions": "包含尚未兼容的协议或配置参数。",
+        "reasonProviderConfig": "节点集合的来源、筛选或转换配置尚不受支持。",
         "reasonProvider": "此分组依赖尚未加载的外部节点集合。",
         "reasonMembers": "分组成员未通过校验，请查看具体原因。",
         "reasonInvalid": "必要配置缺失或格式无效。",
@@ -5839,6 +5872,14 @@
         "defaultProtocol": "无协议时使用",
         "credentialFormat": "账号格式",
         "recognizing": "正在识别…",
+        "nativePreview": "导入时由 Mihomo 原生解析并加载资源；预览不会读取文件或联网。",
+        "resourceDirectory": "资源目录",
+        "browseResources": "选择目录",
+        "resourceDirectoryHint": "含本地文件时选择订阅资源目录；目录内容将复制到独立运行目录，并加密保存快照。",
+        "resourceDirectoryRequired": "请选择该订阅的本地资源目录。",
+        "resourceMissing": "本地资源不可用，请检查目录或重新导入。",
+        "rulesName": "订阅规则",
+        "pendingProviders": "导入时将加载 {{count}} 个远程节点集合；预览不会下载。",
         "previewCount": "有效 {{valid}} · 需检查 {{invalid}} · 重复 {{duplicates}}",
         "line": "第 {{line}} 行",
         "ambiguous": "格式有歧义，请选择账号格式或改用完整代理链接。",
@@ -6844,8 +6885,9 @@
       "desc": "粘贴您的 Kiro Access Token 或导出的 JSON 数据。"
     },
     "import": {
-      "localDesc": "支持从本机 Kiro 客户端或 JSON 文件导入账号数据。",
-      "localClient": "从本机 Kiro 导入"
+      "localDesc": "支持本机或 JSON 导入；JSON 账号先保存，再后台刷新登录态与额度。",
+      "localClient": "从本机 Kiro 导入",
+      "invalidCredentials": "凭据字段缺失或不受支持，请重新导出账号。"
     },
     "injectToVSCode": "切换到 Kiro"
   },

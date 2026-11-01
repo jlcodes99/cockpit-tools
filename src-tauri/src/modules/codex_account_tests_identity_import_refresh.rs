@@ -3,7 +3,7 @@
 use super::{
     authority_projection_dirs_for_account, build_account_storage_id,
     build_agent_identity_account_draft, build_auth_file_value,
-    build_legacy_agent_identity_account_id, clear_client_auth_observation,
+    build_legacy_agent_identity_account_id,
     clear_retired_app_server_preflight_reauth, decode_jwt_payload_value,
     detect_auth_file_plan_type_from_path, ensure_managed_account_fresh,
     extract_codex_import_candidate_from_value, extract_codex_tokens_from_value, extract_user_info,
@@ -3340,64 +3340,27 @@ fn switch_auth_error_treats_server_revocation_as_terminal_without_quota_error() 
     assert_eq!(payload["apiOnlyAvailable"], false);
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn clearing_client_auth_observation_preserves_credentials_and_reauth_state() {
-    let _lock = crate::modules::test_support::env_lock()
-        .lock()
-        .unwrap_or_else(|err| err.into_inner());
-    let _env = TestEnvGuard::new("codex-skip-auth-check-clears-observation-test");
-    let mut account = seed_oauth_account(make_codex_tokens(
-        "skip-observation@example.com",
-        "acc-skip-observation",
-        "org-skip-observation",
-        "skip-observation",
-        "rt-skip-observation",
-    ));
-    account.client_auth_status = Some("login_required".to_string());
-    account.last_client_auth_observed_at = Some(100);
-    account.last_client_login_redirect_at = Some(101);
-    account.last_client_launch_at = Some(99);
-    account.last_client_auth_instance_id = Some("default".to_string());
-    account.requires_reauth = true;
-    account.reauth_reason = Some("真实 Token Authority 授权异常".to_string());
-    save_account(&account).expect("save observed account");
-
-    assert!(clear_client_auth_observation(&account.id)
-        .await
-        .expect("clear client observation"));
-    let persisted = load_account(&account.id).expect("load cleared account");
-    assert_eq!(persisted.client_auth_status, None);
-    assert_eq!(persisted.last_client_auth_observed_at, None);
-    assert_eq!(persisted.last_client_login_redirect_at, None);
-    assert_eq!(persisted.last_client_launch_at, None);
-    assert_eq!(persisted.last_client_auth_instance_id, None);
-    assert!(persisted.requires_reauth);
-    assert_eq!(
-        persisted.reauth_reason.as_deref(),
-        Some("真实 Token Authority 授权异常")
-    );
-}
-
 #[test]
-fn client_auth_observation_does_not_wrap_switch_errors() {
-    let _lock = crate::modules::test_support::env_lock()
-        .lock()
-        .unwrap_or_else(|err| err.into_inner());
-    let _env = TestEnvGuard::new("codex-client-auth-observation-no-switch-block-test");
-    let mut account = seed_oauth_account(make_codex_tokens(
-        "client-observation@example.com",
-        "acc-client-observation",
-        "org-client-observation",
-        "client-observation",
-        "rt-client-observation",
-    ));
-    account.client_auth_status = Some("login_required".to_string());
-    save_account(&account).expect("save observed account");
-
-    assert_eq!(
-        format_account_switch_error(&account.id, "ordinary switch error".to_string()),
-        "ordinary switch error"
-    );
+fn retired_client_login_observations_are_ignored_without_clearing_real_auth_errors() {
+    let account = CodexAccount::new("legacy-observation".into(), "fixture@example.test".into(),
+        make_codex_tokens("fixture@example.test", "acc-fixture", "org-fixture", "fixture", "rt-fixture"));
+    let mut raw = serde_json::to_value(&account).unwrap();
+    raw["client_auth_status"] = serde_json::json!("login_required");
+    raw["last_client_auth_observed_at"] = serde_json::json!(100);
+    raw["last_client_login_redirect_at"] = serde_json::json!(101);
+    raw["last_client_launch_at"] = serde_json::json!(99);
+    raw["last_client_auth_instance_id"] = serde_json::json!("default");
+    raw["requires_reauth"] = serde_json::json!(true);
+    raw["reauth_reason"] = serde_json::json!("refresh_token_invalidated");
+    let decoded: CodexAccount = serde_json::from_value(raw).unwrap();
+    assert!(decoded.requires_reauth);
+    assert_eq!(decoded.reauth_reason.as_deref(), Some("refresh_token_invalidated"));
+    assert_eq!(decoded.tokens.access_token, account.tokens.access_token);
+    assert_eq!(decoded.tokens.refresh_token, account.tokens.refresh_token);
+    let saved = serde_json::to_value(decoded).unwrap();
+    for key in ["client_auth_status", "last_client_auth_observed_at", "last_client_login_redirect_at", "last_client_launch_at", "last_client_auth_instance_id"] {
+        assert!(saved.get(key).is_none(), "retired field persisted: {key}");
+    }
 }
 
 #[test]

@@ -28,7 +28,7 @@ async fn mock_response(
         request
     });
     (
-        EngineController {
+        EngineController { entry: "account-node".into(), proxy_url: String::new(),
             endpoint,
             secret: "local-controller-secret".into(),
             tunnel_id: uuid::Uuid::new_v4(),
@@ -150,7 +150,7 @@ async fn native_delay_does_not_follow_controller_redirects_or_leak_auth() {
 #[tokio::test]
 async fn native_delay_has_a_bounded_controller_deadline() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let controller = EngineController {
+    let controller = EngineController { entry: "account-node".into(), proxy_url: String::new(),
         endpoint: format!("http://{}", listener.local_addr().unwrap()),
         secret: "timeout-secret".into(),
         tunnel_id: uuid::Uuid::new_v4(),
@@ -181,7 +181,7 @@ async fn native_delay_has_a_bounded_controller_deadline() {
 #[tokio::test]
 async fn native_delay_rejects_credential_and_non_http_urls_before_controller_io() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let controller = EngineController {
+    let controller = EngineController { entry: "account-node".into(), proxy_url: String::new(),
         endpoint: format!("http://{}", listener.local_addr().unwrap()),
         secret: "must-not-be-sent".into(),
         tunnel_id: uuid::Uuid::new_v4(),
@@ -210,7 +210,7 @@ async fn native_delay_rejects_credential_and_non_http_urls_before_controller_io(
 fn test_engine() -> std::path::PathBuf {
     std::env::var_os("COCKPIT_TEST_MIHOMO")
         .map(std::path::PathBuf::from)
-        .expect("Set COCKPIT_TEST_MIHOMO to a checksum-verified Mihomo 1.19.31 executable")
+        .expect("Set COCKPIT_TEST_MIHOMO to a checksum-verified Mihomo 1.19.33 executable")
 }
 
 #[tokio::test]

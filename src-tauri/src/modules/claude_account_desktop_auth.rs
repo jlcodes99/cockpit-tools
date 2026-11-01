@@ -1544,145 +1544,6 @@ fn plan_from_capability_list(caps: &[String], is_enterprise: bool) -> Option<Str
     None
 }
 
-/// 是否企业版：对齐官方 oauth/profile 分支，看 organization.organization_type === "claude_enterprise"。
-fn is_enterprise_from_profile(profile: &Value) -> bool {
-    let Some(endpoints) = profile.get("endpoints") else {
-        return false;
-    };
-    let direct_paths: &[&[&str]] = &[
-        &["accountProfile", "organization", "organization_type"],
-        &["account", "organization", "organization_type"],
-        &[
-            "bootstrapAppStart",
-            "activeOrganization",
-            "organization_type",
-        ],
-        &[
-            "bootstrapAppStart",
-            "active_organization",
-            "organization_type",
-        ],
-        &["bootstrapAppStart", "organization", "organization_type"],
-    ];
-    for path in direct_paths {
-        if let Some(value) = read_string_path(endpoints, path) {
-            if value.eq_ignore_ascii_case("claude_enterprise") {
-                return true;
-            }
-        }
-    }
-    let memberships_paths: &[&[&str]] = &[
-        &["bootstrapAppStart", "account", "memberships"],
-        &["accountProfile", "account", "memberships"],
-        &["account", "account", "memberships"],
-        &["account", "memberships"],
-    ];
-    for path in memberships_paths {
-        let mut current = endpoints;
-        let mut ok = true;
-        for key in *path {
-            match current.get(*key) {
-                Some(next) => current = next,
-                None => {
-                    ok = false;
-                    break;
-                }
-            }
-        }
-        if !ok {
-            continue;
-        }
-        let Some(memberships) = current.as_array() else {
-            continue;
-        };
-        for membership in memberships {
-            if let Some(org_type) = membership
-                .get("organization")
-                .and_then(|org| read_string_path(org, &["organization_type"]))
-            {
-                if org_type.eq_ignore_ascii_case("claude_enterprise") {
-                    return true;
-                }
-            }
-        }
-    }
-    false
-}
-
-fn infer_desktop_plan_from_capabilities(profile: &Value) -> Option<String> {
-    let endpoints = profile.get("endpoints")?;
-    let is_enterprise = is_enterprise_from_profile(profile);
-
-    // 1) accountProfile.organization.capabilities
-    let direct_paths: &[&[&str]] = &[
-        &["accountProfile", "organization", "capabilities"],
-        &["account", "organization", "capabilities"],
-        &["bootstrapAppStart", "activeOrganization", "capabilities"],
-        &["bootstrapAppStart", "active_organization", "capabilities"],
-        &["bootstrapAppStart", "organization", "capabilities"],
-    ];
-    for path in direct_paths {
-        let mut current = endpoints;
-        let mut ok = true;
-        for key in *path {
-            match current.get(*key) {
-                Some(next) => current = next,
-                None => {
-                    ok = false;
-                    break;
-                }
-            }
-        }
-        if ok {
-            let caps = capability_strings(Some(current));
-            if let Some(plan) = plan_from_capability_list(&caps, is_enterprise) {
-                return Some(plan);
-            }
-        }
-    }
-
-    // 2) bootstrapAppStart.account.memberships[*].organization.capabilities
-    let memberships_paths: &[&[&str]] = &[
-        &["bootstrapAppStart", "account", "memberships"],
-        &["accountProfile", "account", "memberships"],
-        &["account", "account", "memberships"],
-        &["account", "memberships"],
-    ];
-    for path in memberships_paths {
-        let mut current = endpoints;
-        let mut ok = true;
-        for key in *path {
-            match current.get(*key) {
-                Some(next) => current = next,
-                None => {
-                    ok = false;
-                    break;
-                }
-            }
-        }
-        if !ok {
-            continue;
-        }
-        let Some(memberships) = current.as_array() else {
-            continue;
-        };
-        let mut all_caps: Vec<String> = Vec::new();
-        for membership in memberships {
-            let caps = capability_strings(
-                membership
-                    .get("organization")
-                    .and_then(|org| org.get("capabilities")),
-            );
-            all_caps.extend(caps);
-        }
-        if let Some(plan) = plan_from_capability_list(&all_caps, is_enterprise) {
-            return Some(plan);
-        }
-    }
-
-    None
-}
-
 fn is_desktop_plan_placeholder(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
@@ -1831,6 +1692,10 @@ fn slim_organization_object(org: &Value) -> Value {
         "organization_type",
         "rate_limit_tier",
         "capabilities",
+        "plan_display_name",
+        "planDisplayName",
+        "paidAccountTier",
+        "subscription_type",
     ] {
         if let Some(v) = obj.get(key) {
             slim.insert(key.to_string(), v.clone());
@@ -1856,6 +1721,9 @@ fn slim_account_object(value: &Value) -> Option<Value> {
         "uuid",
         "full_name",
         "display_name",
+        "paidAccountTier",
+        "planDisplayName",
+        "plan_display_name",
     ] {
         if let Some(v) = obj.get(key) {
             slim.insert(key.to_string(), v.clone());
@@ -1878,10 +1746,16 @@ fn slim_account_profile_payload(value: &Value) -> Option<Value> {
         "uuid",
         "full_name",
         "display_name",
+        "paidAccountTier",
+        "planDisplayName",
+        "plan_display_name",
     ] {
         if let Some(v) = obj.get(key) {
             slim.insert(key.to_string(), v.clone());
         }
+    }
+    if let Some(memberships) = obj.get("memberships").and_then(Value::as_array) {
+        slim.insert("memberships".to_string(), Value::Array(memberships.iter().map(slim_membership_entry).collect()));
     }
     if let Some(org) = obj.get("organization") {
         slim.insert("organization".to_string(), slim_organization_object(org));
@@ -1898,6 +1772,9 @@ fn slim_account_profile_payload(value: &Value) -> Option<Value> {
 fn slim_bootstrap_payload(value: &Value) -> Option<Value> {
     let obj = value.as_object()?;
     let mut slim = serde_json::Map::new();
+    for key in ["paidAccountTier", "planDisplayName", "plan_display_name"] {
+        if let Some(value) = obj.get(key) { slim.insert(key.to_string(), value.clone()); }
+    }
     for org_key in ["activeOrganization", "active_organization", "organization"] {
         if let Some(org) = obj.get(org_key) {
             slim.insert(org_key.to_string(), slim_organization_object(org));
@@ -1918,7 +1795,7 @@ fn slim_bootstrap_payload(value: &Value) -> Option<Value> {
 /// 生成可安全写入 claude_usage_raw / 导出的 webProfile 瘦身副本。
 fn slim_web_profile_for_storage(profile: &Value) -> Value {
     let mut slim = serde_json::Map::new();
-    for key in ["version", "fetchContext", "fetchedAt"] {
+    for key in ["version", "fetchContext", "fetchedAt", "lastActiveOrg"] {
         if let Some(v) = profile.get(key) {
             slim.insert(key.to_string(), v.clone());
         }
@@ -2381,154 +2258,11 @@ fn desktop_web_profile_summary(profile: &Value) -> Value {
         ],
     )
     .or_else(|| find_string_by_key(profile, &["account_uuid", "accountUuid"]));
-    let organization_uuid = first_string_path_candidates(
-        Some(profile),
-        &[
-            &["endpoints", "accountProfile", "organization", "uuid"],
-            &["endpoints", "account", "organization", "uuid"],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "activeOrganization",
-                "uuid",
-            ],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "active_organization",
-                "uuid",
-            ],
-            &["endpoints", "bootstrapAppStart", "organization", "uuid"],
-        ],
-    )
-    .or_else(|| find_string_by_key(profile, &["organization_uuid", "organizationUuid"]));
-    let organization_name = first_string_path_candidates(
-        Some(profile),
-        &[
-            &["endpoints", "accountProfile", "organization", "name"],
-            &[
-                "endpoints",
-                "accountProfile",
-                "organization",
-                "display_name",
-            ],
-            &["endpoints", "account", "organization", "name"],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "activeOrganization",
-                "name",
-            ],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "active_organization",
-                "name",
-            ],
-            &["endpoints", "bootstrapAppStart", "organization", "name"],
-        ],
-    )
-    .or_else(|| find_string_by_key(profile, &["organization_name", "organizationName"]));
-    let raw_plan = first_string_path_candidates(
-        Some(profile),
-        &[
-            &["endpoints", "subscriptionDetails", "plan_type"],
-            &["endpoints", "subscriptionDetails", "planType"],
-            &["endpoints", "subscriptionDetails", "plan"],
-            &["endpoints", "subscriptionDetails", "tier"],
-            &["endpoints", "subscriptionDetails", "subscription_type"],
-            &["endpoints", "subscriptionDetails", "subscriptionType"],
-            &[
-                "endpoints",
-                "subscriptionDetails",
-                "subscription",
-                "plan_type",
-            ],
-            &[
-                "endpoints",
-                "subscriptionDetails",
-                "subscription",
-                "planType",
-            ],
-            &["endpoints", "subscriptionDetails", "subscription", "plan"],
-            &["endpoints", "subscriptionDetails", "subscription", "tier"],
-            &["endpoints", "organizationUsage", "plan_type"],
-            &["endpoints", "organizationUsage", "planType"],
-            &["endpoints", "organizationUsage", "subscription_type"],
-            &["endpoints", "organizationUsage", "subscriptionType"],
-            &[
-                "endpoints",
-                "accountProfile",
-                "organization",
-                "rate_limit_tier",
-            ],
-            &[
-                "endpoints",
-                "accountProfile",
-                "organization",
-                "organization_type",
-            ],
-            &[
-                "endpoints",
-                "accountProfile",
-                "organization",
-                "billing_type",
-            ],
-            &["endpoints", "account", "organization", "rate_limit_tier"],
-            &["endpoints", "account", "organization", "organization_type"],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "activeOrganization",
-                "rate_limit_tier",
-            ],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "activeOrganization",
-                "organization_type",
-            ],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "active_organization",
-                "rate_limit_tier",
-            ],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "active_organization",
-                "organization_type",
-            ],
-        ],
-    )
-    .or_else(|| {
-        find_string_by_key(
-            profile,
-            &[
-                "rate_limit_tier",
-                "rateLimitTier",
-                "subscription_type",
-                "subscriptionType",
-                "billing_type",
-                "billingType",
-                "organization_type",
-                "organizationType",
-                "plan_type",
-                "planType",
-                "plan_name",
-                "planName",
-                "subscription_tier",
-                "subscriptionTier",
-                "plan",
-                "tier",
-            ],
-        )
-    });
-    // 严格对齐官方：仅 capabilities 识别、OAuth profile organization_type 识别。
-    // 拿不到时返回 None，与官方 "没值则不显示" 一致。
-    let plan_type = infer_desktop_plan_from_capabilities(profile)
-        .or_else(|| normalize_desktop_plan_value(raw_plan.clone()));
+    let organization = desktop_plan_organization(profile);
+    let organization_uuid = read_string_path(profile, &["lastActiveOrg"])
+        .or_else(|| organization.and_then(|org| read_string_path(org, &["uuid"])));
+    let organization_name = organization.and_then(|org| read_string_path(org, &["name"]));
+    let (plan_type, raw_plan) = desktop_plan_from_profile(profile);
     json!({
         "fetchedAt": read_string_path(profile, &["fetchedAt"]),
         "email": email,
@@ -3187,7 +2921,7 @@ pub fn inject_to_claude_config(account_id: &str, config_dir: Option<&Path>) -> R
         quit_claude_desktop_for_profile_write()?;
         let _backup_dir = backup_current_desktop_profile(&target_dir)?;
         restore_default_desktop_gateway_official_config()?;
-        restore_desktop_profile_snapshot(&snapshot_dir, &target_dir)?;
+        restore_desktop_profile_snapshot(&snapshot_dir, &target_dir, account.account_uuid.as_deref())?;
         restore_default_desktop_gateway_official_config()?;
 
         let mut updated = account.clone();

@@ -261,25 +261,22 @@
         let mut config = UserConfig::default();
         config.language = "ja".to_string();
         let updates = serde_json::json!({
-            "codex_app_native_fast_enabled": true,
             "codex_app_api_quota_compat_enabled": true
         });
         apply_general_config_updates(&mut config, updates.as_object().unwrap()).unwrap();
-        assert!(config.codex_app_native_fast_enabled);
         assert!(config.codex_app_api_quota_compat_enabled);
         assert_eq!(config.language, "ja");
         let invalid = serde_json::json!({
-            "codex_app_native_fast_enabled": false,
             "codex_app_api_quota_compat_enabled": "invalid boolean"
         });
         assert!(apply_general_config_updates(&mut config, invalid.as_object().unwrap()).is_err());
-        assert!(config.codex_app_native_fast_enabled);
         assert!(config.codex_app_api_quota_compat_enabled);
     }
 
     #[test]
     fn general_config_patch_rejects_retired_codex_api_dictation_fields_atomically() {
         for (field, value) in [
+            ("codex_app_native_fast_enabled", serde_json::json!(false)),
             ("codex_app_api_dictation_enabled", serde_json::json!(true)),
             (
                 "codex_app_api_dictation_model",
@@ -288,7 +285,7 @@
         ] {
             let mut config = UserConfig::default();
             let before = serde_json::to_value(&config).expect("serialize current configuration");
-            let mut updates = serde_json::json!({"codex_app_native_fast_enabled": false});
+            let mut updates = serde_json::json!({"codex_app_api_quota_compat_enabled": false});
             updates.as_object_mut().unwrap().insert(field.into(), value);
             let error = apply_general_config_updates(&mut config, updates.as_object().unwrap())
                 .expect_err("retired dictation fields must not be writable");

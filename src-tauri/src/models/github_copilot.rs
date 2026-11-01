@@ -26,6 +26,8 @@ pub struct GitHubCopilotAccount {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub copilot_refresh_in: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub copilot_token_based_billing: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub copilot_quota_snapshots: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub copilot_quota_reset_date: Option<String>,
@@ -103,6 +105,7 @@ pub struct GitHubCopilotOAuthCompletePayload {
     pub copilot_chat_enabled: Option<bool>,
     pub copilot_expires_at: Option<i64>,
     pub copilot_refresh_in: Option<i64>,
+    pub copilot_token_based_billing: Option<bool>,
     pub copilot_quota_snapshots: Option<serde_json::Value>,
     pub copilot_quota_reset_date: Option<String>,
     pub copilot_limited_user_quotas: Option<serde_json::Value>,

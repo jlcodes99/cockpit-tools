@@ -1441,6 +1441,7 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
           )
             return;
           oauthActiveRef.current = false;
+          completeOauthError(event.payload?.error || t("common.shared.oauth.failed"));
           setDeviceAuthError(
             event.payload?.error || t("common.shared.oauth.failed", "授权失败"),
           );

@@ -328,7 +328,11 @@ fn detect_prefix(encrypted: &[u8]) -> Option<&'static str> {
 
 #[cfg(target_os = "macos")]
 fn run_command_get_trimmed(program: &str, args: &[&str]) -> Option<String> {
-    let output = Command::new(program).args(args).output().ok()?;
+    let output = crate::modules::process_timeout::output_with_timeout(
+        Command::new(program).args(args),
+        std::time::Duration::from_secs(2),
+    )
+    .ok()?;
     if !output.status.success() {
         return None;
     }
@@ -489,7 +493,11 @@ fn get_macos_safe_storage_password(
     mode: SafeStorageReadMode,
 ) -> Result<String, String> {
     let candidates = build_macos_safe_storage_candidates(data_root, mode);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(8);
     for (service, account) in candidates {
+        if std::time::Instant::now() >= deadline {
+            break;
+        }
         if let Some(account_value) = account.as_deref() {
             if let Some(password) = run_command_get_trimmed(
                 "security",
@@ -1247,6 +1255,13 @@ pub fn inject_secret_to_state_db_for_qoder(
     inject_secret_to_state_db_with_mode(db_path, db_key, plaintext, SafeStorageReadMode::QoderOnly)
 }
 
+pub fn inject_qoder_secret_snapshot(
+    db_path: &Path,
+    entries: &[(&str, &str)],
+) -> Result<(), String> {
+    inject_secret_batch_with_mode(db_path, entries, SafeStorageReadMode::QoderOnly)
+}
+
 pub fn inject_secret_to_state_db_for_workbuddy(
     db_path: &std::path::Path,
     db_key: &str,
@@ -1266,6 +1281,14 @@ fn inject_secret_to_state_db_with_mode(
     plaintext: &str,
     mode: SafeStorageReadMode,
 ) -> Result<(), String> {
+    inject_secret_batch_with_mode(db_path, &[(db_key, plaintext)], mode)
+}
+
+fn inject_secret_batch_with_mode(
+    db_path: &Path,
+    entries: &[(&str, &str)],
+    mode: SafeStorageReadMode,
+) -> Result<(), String> {
     let data_root = db_path
         .parent()
         .and_then(|p| p.parent())
@@ -1282,7 +1305,7 @@ fn inject_secret_to_state_db_with_mode(
             .map_err(|e| format!("Failed to create state.vscdb parent dir: {}", e))?;
     }
 
-    let conn = rusqlite::Connection::open(db_path)
+    let mut conn = rusqlite::Connection::open(db_path)
         .map_err(|e| format!("Failed to open state.vscdb: {}", e))?;
     conn.execute(
         "CREATE TABLE IF NOT EXISTS ItemTable (key TEXT PRIMARY KEY, value TEXT)",
@@ -1290,51 +1313,105 @@ fn inject_secret_to_state_db_with_mode(
     )
     .map_err(|e| format!("Failed to init ItemTable: {}", e))?;
 
-    let existing_prefix: Option<String> = match conn.query_row(
-        "SELECT value FROM ItemTable WHERE key = ?",
-        [db_key],
-        |row| row.get::<_, String>(0),
-    ) {
-        Ok(val) => {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&val) {
-                if let Ok(bytes) = decode_buffer_data(&parsed) {
-                    detect_prefix(&bytes).map(|s| s.to_string())
+    let mut prepared = Vec::with_capacity(entries.len());
+    // Finish keychain/encryption work before taking the SQLite write transaction.
+    for &(db_key, plaintext) in entries {
+        let existing_prefix: Option<String> = match conn.query_row(
+            "SELECT value FROM ItemTable WHERE key = ?",
+            [db_key],
+            |row| row.get::<_, String>(0),
+        ) {
+            Ok(val) => {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&val) {
+                    if let Ok(bytes) = decode_buffer_data(&parsed) {
+                        detect_prefix(&bytes).map(|s| s.to_string())
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }
-            } else {
-                None
             }
-        }
-        Err(_) => None,
-    };
+            Err(_) => None,
+        };
 
-    let encrypted = encrypt_secret_payload_with_mode(
-        plaintext.as_bytes(),
-        existing_prefix.as_deref(),
-        Some(data_root),
-        mode,
-    )?;
+        let encrypted = encrypt_secret_payload_with_mode(
+            plaintext.as_bytes(),
+            existing_prefix.as_deref(),
+            Some(data_root),
+            mode,
+        )?;
 
-    let buffer_json = serde_json::json!({
-        "type": "Buffer",
-        "data": encrypted
-    });
-    let buffer_str = serde_json::to_string(&buffer_json)
-        .map_err(|e| format!("Failed to serialize Buffer: {}", e))?;
+        let buffer_json = serde_json::json!({
+            "type": "Buffer",
+            "data": encrypted
+        });
+        let buffer_str = serde_json::to_string(&buffer_json)
+            .map_err(|e| format!("Failed to serialize Buffer: {}", e))?;
 
-    conn.execute(
-        "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
-        rusqlite::params![db_key, buffer_str],
-    )
-    .map_err(|e| format!("Failed to write to state.vscdb: {}", e))?;
+        prepared.push((db_key.to_string(), buffer_str));
+    }
+    write_secret_snapshot(&mut conn, &prepared)
+}
 
-    Ok(())
+fn write_secret_snapshot(
+    conn: &mut Connection,
+    entries: &[(String, String)],
+) -> Result<(), String> {
+    conn.busy_timeout(std::time::Duration::from_secs(3))
+        .map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    for (key, value) in entries {
+        tx.execute(
+            "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?1, ?2)",
+            rusqlite::params![key, value],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn qoder_secret_snapshot_rolls_back_all_keys_on_failure() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE ItemTable(key TEXT PRIMARY KEY, value TEXT); INSERT INTO ItemTable VALUES('identity','old'); INSERT INTO ItemTable VALUES('enterprise','old'); CREATE TRIGGER reject_quota BEFORE INSERT ON ItemTable WHEN NEW.key = 'credit' BEGIN SELECT RAISE(ABORT, 'fixture'); END;").unwrap();
+        let fields = [
+            ("identity".into(), "new".into()),
+            ("enterprise".into(), "null".into()),
+            ("credit".into(), "new-quota".into()),
+        ];
+        assert!(write_secret_snapshot(&mut conn, &fields).is_err());
+        let old: String = conn
+            .query_row(
+                "SELECT value FROM ItemTable WHERE key = 'identity'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(old, "old");
+        let old: String = conn
+            .query_row(
+                "SELECT value FROM ItemTable WHERE key = 'enterprise'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(old, "old");
+        conn.execute_batch("DROP TRIGGER reject_quota").unwrap();
+        write_secret_snapshot(&mut conn, &fields).unwrap();
+        let new: String = conn
+            .query_row(
+                "SELECT value FROM ItemTable WHERE key = 'identity'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(new, "new");
+    }
 
     fn sessions_array(value: serde_json::Value) -> Vec<serde_json::Value> {
         value.as_array().cloned().unwrap_or_default()

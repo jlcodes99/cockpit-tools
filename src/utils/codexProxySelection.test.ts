@@ -18,6 +18,28 @@ import * as catalogService from '../services/codexProxyCatalogService';
 import * as pickerModel from './codexProxyPickerModel';
 import * as previewUtils from './codexProxyPreview';
 
+test('chain defaults require relay choices and reject missing or cyclic dependencies', () => {
+  const chained: ProxyCatalogSource = { ...source, nodes: source.nodes.map((n, i) => i ? n : { ...n, dialerProxy: 'relay-choice' }),
+    groups: [group('relay-choice', 'select', ['Beta', 'Alpha'])] };
+  assert.equal(defaultProxySelections(chained, 'node-a'), null);
+  assert.deepEqual(defaultProxySelections(chained, 'node-a', { 'relay-choice': 'Beta' }), { 'relay-choice': 'Beta' });
+  assert.equal(defaultProxySelections(chained, 'node-a', { 'relay-choice': 'Alpha' }), null);
+  assert.equal(defaultProxySelections({ ...chained, groups: [] }, 'node-a'), null);
+  assert.deepEqual(defaultProxySelections({ ...chained, nodes: [{ ...chained.nodes[0], dialerProxy: 'DIRECT' }] }, 'node-a'), {});
+});
+
+test('native profiles restore core defaults and every saved manual choice', () => {
+  const native: ProxyCatalogSource = { ...source, nativeProfile: true, groups: [
+    { ...group('first','select',['Alpha','Beta']), nativeSelection:'Beta' },
+    { ...group('second','select',['Alpha','Beta']), nativeSelection:'Alpha' },
+  ] };
+  assert.deepEqual(defaultProxySelections(native,'node-a'), { first:'Beta', second:'Alpha' });
+  const saved = { protocol:'RESOURCE', itemId:'first', selections:{ first:'Alpha', second:'Beta' } };
+  assert.deepEqual(savedRootProxySelections(native,saved), saved.selections);
+  assert.deepEqual(defaultProxySelections(native,'first', savedRootProxySelections(native,saved)), saved.selections);
+  assert.equal(defaultProxySelections(native,'first',{first:'removed'}), null);
+});
+
 function elements(tree: any): any[] {
   if (!tree || typeof tree !== 'object') return [];
   return Array.isArray(tree) ? tree.flatMap(elements) : [tree, ...elements(tree.props?.children)];

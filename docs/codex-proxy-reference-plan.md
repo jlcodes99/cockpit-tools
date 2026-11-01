@@ -4,11 +4,30 @@
 
 ## 固定的上游源码
 
+### 2026-11-01 原生订阅执行
+
+结构化 Clash/Mihomo 订阅现在直接交给独立的 **Mihomo 1.19.33** 解析和执行，不再由 Rust 展开 provider、翻译协议参数、运行替代正则或重写 `override-expr`。六个平台的安装清单固定到官方 v1.19.33 的文件、大小和 SHA-256；没有改变内核分发审批状态，也没有把测试二进制加入应用包。
+
+对照来源：Clash Verge Rev 的 [`config/prfitem.rs`](https://github.com/clash-verge-rev/clash-verge-rev/blob/main/src-tauri/src/config/prfitem.rs)、`utils/network.rs`、`enhance/script.rs`、`scripts/prebuild.mjs`；Mihomo 的 [`provider/parser.go`](https://github.com/MetaCubeX/mihomo/blob/v1.19.33/adapter/provider/parser.go)、`provider.go`、`override.go`、`override_expr.go`、`component/age` 和 `hub/executor`。Clash Verge 的 JavaScript 增强脚本是额外的本地 profile，不是订阅 YAML 中由 Mihomo 执行的字段；宿主不会把订阅中的任意字符串当作 JavaScript 启动。
+
+- `http`、`file`、`inline` 节点集合，AGE 密钥、转换表达式、完整内核正则、具名下载代理、声明请求头、原生健康检查及集合刷新周期均保留给内核处理。节点与策略组列表读取内核控制 API 的解析结果。
+- 对齐 Clash Verge 默认配置整理：顶层键名归一、历史 script 模式、Hysteria ALPN 与失效组引用清理；YAML 锚点合并和 Base64 包装的结构化配置同样走原生路径。
+- 主订阅支持 HTTP(S)、URL 鉴权和跨站跳转，跳转上限与 Clash Verge 的网络客户端一致为 10。订阅和资源请求不附带 Cockpit 账号 Token。
+- 导入节点目录及固定节点/分组只加载所需集合；未参与该连接的路由规则集合不会阻断节点使用。DNS 等保留配置引用的规则集合仍需加载；选择“订阅规则”时保留完整路由与规则集合。
+- 用户可以绑定节点、分组或“订阅规则”。订阅规则保留原配置的运行模式、DNS、hosts、规则与规则集合；GLOBAL 也可选择。手选组按内核实际默认成员回显，已保存的全部分组选择会在编辑和重启时恢复。
+- 宿主只管理接入边界：本地监听端口、鉴权和控制器独立分配；不会占用订阅指定的系统端口、安装 TUN、修改 iptables 或通过 NTP 改写系统时间。Codex 请求经专属本地入口进入原生代理和路由逻辑。
+- 本地文件通过明确选择的资源目录提供。目录内容复制到独立运行目录，读取与快照处理在阻塞工作线程完成；原目录不被内核写入。导入入口和已有资源的“资源目录”操作都支持设置目录，已有资源重建失败保留原版本。纯预览不访问目录或网络。
+- 配置和资源缓存以内容摘要寻址，分别加密保存在宿主拥有的 `codex-proxy-assets` 中；账号绑定只携带不可变引用与选择，不嵌入整份配置或大文件。运行时在独立目录解密使用。资源快照不会因来源删除而立即删除，以保留已有绑定的可恢复性；HTTP 集合仍按其原生配置更新，缓存只用于恢复启动，不代表离线时获得了最新订阅。
+- 资源目录最多 512 个条目、合计 128 MiB；控制 API 响应有大小边界。导入沿用可取消事务与整体超时，失败不会覆盖旧来源。进程沿用 Windows 隐藏窗口及生命周期管理，取消导入会关闭内核和未完成的网络连接。
+- 旧目录仍可快速读取；解析版本变化在现有后台刷新任务中处理，成功后提交版本，失败保留旧数据并退避。自建策略保留原生 profile 的独立 DNS/集合命名空间，通过受管的鉴权本地入口组合，停止策略时同时回收其子内核。
+
+验收按相同内核版本、同一订阅及其所需的资源和密钥进行；不会把远端服务可用性、操作系统权限或缺失的外部文件冒充为格式兼容结果。开发测试只使用合成订阅、临时资源和本地服务，不操作 Clash Verge GUI。
+
 两个仓库独立放在本项目同级目录，均以浅克隆检出标签；不会进入本项目 Git 提交，也不作为运行时源码依赖。
 
 | 项目 | 本地目录（相对本项目根目录） | 标签 / commit | 用途 |
 | --- | --- | --- | --- |
-| [Mihomo](https://github.com/MetaCubeX/mihomo/tree/v1.19.31) | `../mihomo` | `v1.19.31` / `ab405bad5beeeac8b003bb01f60f134f6df54471` | 当前采用的运行内核；参考分组、健康检查、故障转移与控制 API 的实际行为 |
+| [Mihomo](https://github.com/MetaCubeX/mihomo/tree/v1.19.31) | `../mihomo` | `v1.19.31` / `ab405bad5beeeac8b003bb01f60f134f6df54471` | 历史参考检出；当前执行与验收使用固定的 v1.19.33 官方内核 |
 | [sing-box](https://github.com/SagerNet/sing-box/tree/v1.14.1) | `../sing-box` | `v1.14.1` / `1ac1a339cb1223e9c70eae14c44411c75033c02d` | 仅参考自动测速的空闲策略、切换容差和已有连接处理；当前运行内核仍为 Mihomo |
 
 阅读入口（路径相对对应的上游仓库根目录）：

@@ -31,10 +31,70 @@ fn own_group_error(error: &str) -> &str {
     }
 }
 
+/// Check node -> node/group dependencies before deriving group availability.
+/// Selectors need one usable branch; binding later validates the actual choice.
+pub(super) fn validate_dialers(catalog: &mut ParsedCatalog) {
+    for node in &mut catalog.nodes {
+        if node.error.as_deref().is_some_and(|e| matches!(e,
+            "SUBSCRIPTION_GROUP_CYCLE" | "SUBSCRIPTION_GROUP_MEMBER_MISSING" |
+            "SUBSCRIPTION_GROUP_MEMBER_UNSUPPORTED")) {
+            node.error = None;
+        }
+    }
+    let nodes: HashMap<_, _> = catalog.nodes.iter().map(|n| (n.name.as_str(), n)).collect();
+    let groups: HashMap<_, _> = catalog.groups.iter().map(|g| (g.name.as_str(), g)).collect();
+    let mut available = HashSet::<&str>::new();
+    // Least fixed point handles shared dependency graphs in O(32 * edges),
+    // rather than traversing the same chain separately for every catalog node.
+    for _ in 0..32 {
+        let count = available.len();
+        for node in &catalog.nodes {
+            if node.error.is_none() && node.outbound.is_some()
+                && super::dialer(node).is_none_or(|d| d == "DIRECT"
+                    || binding::is_blocking_builtin(d) || available.contains(d)) {
+                available.insert(&node.name);
+            }
+        }
+        for group in &catalog.groups {
+            if group.error.as_deref().is_some_and(|e| !derived_group_error(e)) || group.members.is_empty() { continue; }
+            let supported = |m: &String| binding::is_blocking_builtin(m) || available.contains(m.as_str());
+            if if group.kind == "select" { group.members.iter().any(supported) } else { group.members.iter().all(supported) } {
+                available.insert(&group.name);
+            }
+        }
+        if available.len() == count { break; }
+    }
+    fn reason<'a>(name: &'a str, nodes: &HashMap<&str, &'a ParsedNode>,
+        groups: &HashMap<&str, &'a super::ParsedGroup>, path: &mut HashSet<&'a str>, budget: &mut usize) -> &'static str {
+        if *budget == 0 || path.len() >= 16 || !path.insert(name) { return "SUBSCRIPTION_GROUP_CYCLE"; }
+        *budget -= 1;
+        let error = if let Some(node) = nodes.get(name) {
+            if node.error.is_some() || node.outbound.is_none() { "SUBSCRIPTION_GROUP_MEMBER_UNSUPPORTED" }
+            else if let Some(dependency) = super::dialer(node) { reason(dependency, nodes, groups, path, budget) }
+            else { "SUBSCRIPTION_GROUP_MEMBER_UNSUPPORTED" }
+        } else if let Some(group) = groups.get(name) {
+            // Availability above is authoritative; this bounded walk only picks
+            // a useful reason for a group that has no executable branch.
+            group.members.first().map(|m| reason(m, nodes, groups, path, budget))
+                .unwrap_or("SUBSCRIPTION_GROUP_MEMBER_MISSING")
+        } else { "SUBSCRIPTION_GROUP_MEMBER_MISSING" };
+        path.remove(name);
+        error
+    }
+    let errors: Vec<_> = catalog.nodes.iter().map(|node| {
+        if node.error.is_some() || super::dialer(node).is_none() || available.contains(node.name.as_str()) { return None; }
+        Some(reason(&node.name, &nodes, &groups, &mut HashSet::new(), &mut 128))
+    }).collect();
+    for (node, error) in catalog.nodes.iter_mut().zip(errors) {
+        if let Some(error) = error { node.error = Some(error.into()); }
+    }
+}
+
 /// Report the actual rejected leaves, missing references and cycles without
 /// flattening or removing candidates from automatic groups. A manual selector
 /// may remain usable while showing issues in its other, unselected branches.
 pub(crate) fn group_issues(catalog: &ParsedCatalog) -> Vec<Vec<GroupIssue>> {
+    if catalog.native.is_some() { return vec![vec![]; catalog.groups.len()]; }
     let nodes: HashMap<_, _> = catalog.nodes.iter().map(|n| (n.name.as_str(), n)).collect();
     let groups: HashMap<_, _> = catalog
         .groups

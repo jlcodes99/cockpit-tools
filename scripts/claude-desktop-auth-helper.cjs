@@ -166,6 +166,7 @@ async function fetchClaudeWebProfileInPage(webContents, lastActiveOrg) {
       const result = {
         version: 1,
         fetchContext: 'page',
+        lastActiveOrg,
         fetchedAt: new Date().toISOString(),
         endpoints: {},
       };
@@ -269,6 +270,7 @@ async function fetchClaudeWebProfileWithCookies(cookies, pageContextError) {
   const result = {
     version: 1,
     fetchContext: 'cookie',
+    lastActiveOrg,
     fetchedAt: new Date().toISOString(),
     endpoints: {},
   };
@@ -332,7 +334,8 @@ async function fetchClaudeWebProfile(cookies, webContents) {
 
 async function writeStatus(status, extra = {}, webContents = null, options = {}) {
   const cookies = await readClaudeCookies().catch(() => []);
-  const sessionKey = findCookie(cookies, 'sessionKey');
+  const sessionKey = ['sessionKey', 'sessionKeyV3', 'sessionKeyV2']
+    .map((name) => findCookie(cookies, name)).find(Boolean);
   const lastActiveOrg = findCookie(cookies, 'lastActiveOrg');
   const authenticated = Boolean(sessionKey && lastActiveOrg && isUuid(lastActiveOrg.value));
   const profileKey = authenticated ? `${sessionKey.value}:${lastActiveOrg.value}` : '';

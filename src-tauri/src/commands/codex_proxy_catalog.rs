@@ -28,7 +28,6 @@ pub async fn codex_proxy_catalog_preview(
     input: String,
     options: crate::modules::codex_proxy_manual_import::ImportOptions,
 ) -> Result<crate::modules::codex_proxy_manual_import::ImportPreview, String> {
-    crate::modules::codex_proxy_engine_preflight::require().await?;
     catalog::preview(input, options).await
 }
 #[tauri::command]
@@ -55,9 +54,10 @@ pub async fn codex_proxy_catalog_latency(
 pub async fn codex_proxy_catalog_refresh(
     request_id: String,
     source_id: String,
+    resource_directory: Option<String>,
 ) -> Result<CatalogView, String> {
     crate::modules::codex_proxy_engine_preflight::require().await?;
-    let view = catalog::refresh(request_id, source_id.clone()).await?;
+    let view = catalog::refresh_with_directory(request_id, source_id.clone(), resource_directory).await?;
     crate::modules::codex_unified_proxy::resync_source(&source_id, false).await;
     crate::modules::codex_client_proxy::resync_source(&source_id, false).await?;
     Ok(view)

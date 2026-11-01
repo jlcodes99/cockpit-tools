@@ -1366,6 +1366,9 @@ async fn retry_opening_failure(
     kind: OpeningFailure,
     wait: Option<std::time::Duration>,
 ) -> Result<bool, ServiceError> {
+    if prepared.route.chatgpt && crate::modules::codex_device_restrictions::explicit_message(&error.message) {
+        return Ok(false);
+    }
     retries.credentials = retries.credentials.max(tracker.upstream_account_ids().len().saturating_sub(1));
     if !error.upstream_not_sent {
         retries.last_upstream_failure = Some(error.clone().with_retry_after(wait.max(error.retry_after)));

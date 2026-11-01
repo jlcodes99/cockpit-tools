@@ -1,5 +1,9 @@
 // Claude 账号模块：Desktop profile discovery, cookies and local profile metadata。
 // 通过 include! 保持原 modules::claude_account 作用域和私有调用关系。
+fn is_desktop_session_cookie(name: &str) -> bool {
+    matches!(name, "sessionKey" | "sessionKeyV2" | "sessionKeyV3")
+}
+
 fn desktop_account_display_name(account_name: Option<&str>) -> String {
     if let Some(name) = normalize_non_empty(account_name) {
         return name;
@@ -63,8 +67,8 @@ fn cookies_db_has_required_desktop_session(cookies_path: &Path) -> Result<bool, 
     })?;
     let count: i64 = conn
         .query_row(
-            "select count(distinct name) from cookies \
-             where name in ('sessionKey', 'lastActiveOrg') \
+            "select count(distinct case when name in ('sessionKey', 'sessionKeyV2', 'sessionKeyV3') then 'session' else name end) from cookies \
+             where name in ('sessionKey', 'sessionKeyV2', 'sessionKeyV3', 'lastActiveOrg') \
              and (host_key like '%claude.ai' or host_key like '%claude.com') \
              and (length(value) > 0 or length(encrypted_value) > 0)",
             [],
@@ -126,7 +130,7 @@ fn desktop_profile_metadata_from_export(
     source: &str,
 ) -> ClaudeDesktopProfileMetadata {
     let session_key = export.cookies.iter().find(|cookie| {
-        cookie.name == "sessionKey"
+        is_desktop_session_cookie(&cookie.name)
             && !cookie.value.is_empty()
             && is_claude_cookie_domain(&cookie.domain)
     });
@@ -190,7 +194,7 @@ fn desktop_profile_metadata_from_cookies_db(
             continue;
         }
         cookie_names.insert(name.clone());
-        if name == "sessionKey" {
+        if is_desktop_session_cookie(&name) {
             has_session_key = true;
             session_expires_at = chromium_cookie_expires_utc_to_unix_ms(expires_utc);
         } else if name == "lastActiveOrg" {
@@ -744,7 +748,7 @@ fn ensure_desktop_auth_export_logged_in(
     export: &ClaudeDesktopAuthCookieExport,
 ) -> Result<(), String> {
     let has_session_key = export.cookies.iter().any(|cookie| {
-        cookie.name == "sessionKey"
+        is_desktop_session_cookie(&cookie.name)
             && !cookie.value.is_empty()
             && is_claude_cookie_domain(&cookie.domain)
     });
@@ -1287,6 +1291,7 @@ async fn fetch_desktop_web_profile_with_cookies(
         "fetchedAt".to_string(),
         Value::String(chrono::Utc::now().to_rfc3339()),
     );
+    result.insert("lastActiveOrg".to_string(), Value::String(last_active_org));
     result.insert("endpoints".to_string(), Value::Object(endpoints));
     if !errors.is_empty() {
         result.insert("errors".to_string(), Value::Object(errors));
@@ -1497,47 +1502,6 @@ fn copy_desktop_profile_snapshot(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn merge_desktop_config_token(
-    snapshot_config_path: &Path,
-    target_config_path: &Path,
-) -> Result<(), String> {
-    if !snapshot_config_path.exists() {
-        return Ok(());
-    }
-    let snapshot = read_config_file(snapshot_config_path)?.unwrap_or_else(|| json!({}));
-    let Some(token_cache) = snapshot.get("oauth:tokenCache").cloned() else {
-        return Ok(());
-    };
-    let mut target = read_config_file(target_config_path)?.unwrap_or_else(|| json!({}));
-    if !target.is_object() {
-        target = json!({});
-    }
-    let object = target
-        .as_object_mut()
-        .ok_or_else(|| "Claude config.json 结构非法".to_string())?;
-    object.insert("oauth:tokenCache".to_string(), token_cache);
-    write_config_file(target_config_path, &target)
-}
-
-fn restore_desktop_profile_snapshot(snapshot_dir: &Path, target_dir: &Path) -> Result<(), String> {
-    if !snapshot_dir.exists() {
-        return Err(format!("Claude 快照目录不存在: {}", snapshot_dir.display()));
-    }
-    fs::create_dir_all(target_dir).map_err(|e| format!("创建 Claude profile 目录失败: {}", e))?;
-    for item in CLAUDE_DESKTOP_PROFILE_ITEMS {
-        let source = snapshot_dir.join(item);
-        if !source.exists() {
-            continue;
-        }
-        if *item == "config.json" {
-            merge_desktop_config_token(&source, &target_dir.join(item))?;
-        } else {
-            copy_path_overwrite(&source, &target_dir.join(item))?;
-        }
-    }
-    Ok(())
-}
-
 fn desktop_gateway_managed_config_ids() -> Result<BTreeSet<String>, String> {
     let mut ids = BTreeSet::new();
     for summary in load_index()?.accounts {
@@ -1661,7 +1625,7 @@ pub fn restore_desktop_account_to_profile(
         let _backup_dir = backup_current_desktop_profile(target_dir)?;
     }
     remove_desktop_gateway_profile_config(target_dir)?;
-    restore_desktop_profile_snapshot(&snapshot_dir, target_dir)?;
+    restore_desktop_profile_snapshot(&snapshot_dir, target_dir, account.account_uuid.as_deref())?;
     remove_desktop_gateway_profile_config(target_dir)?;
 
     let mut updated = account.clone();

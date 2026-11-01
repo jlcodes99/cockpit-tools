@@ -50,7 +50,8 @@ export function CodexProxyPicker({ source, itemId, selectedGroupId, selections, 
     // Empty selections also switch the displayed cache, without starting a request.
     latency.measure(candidates, true, context || undefined);
   };
-  const selectedBlockingMember = manualGroups.some((selector) => selector.members.includes(selections[selector.id]) && isCatalogBlockingMember(selections[selector.id]));
+  const selectedBlockingMember = source.nativeProfile ? !!target && isCatalogBlockingMember(target.name)
+    : manualGroups.some((selector) => selector.members.includes(selections[selector.id]) && isCatalogBlockingMember(selections[selector.id]));
   let selectionErrorKey = itemId && !selectedItem?.supported ? catalogUnsupportedKey(selectedItem) : '';
   for (const selector of manualGroups) {
     const name = selections[selector.id];

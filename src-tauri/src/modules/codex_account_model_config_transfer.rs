@@ -748,6 +748,7 @@ fn model_config_stage(
                 .collect::<Vec<_>>();
             let mut catalog = crate::modules::codex_protocol::build_codex_client_models_response_with_model_definitions_and_reasoning(&definitions);
             crate::modules::codex_protocol::ensure_codex_reserve_fallback(&mut catalog);
+            crate::modules::codex_model_catalog_capabilities::supplement(&mut catalog)?;
             apply_model_context_config_to_catalog(&mut catalog, &document.models);
             apply_model_reasoning_config_to_catalog(&mut catalog, &document.models)?;
             set_file(

@@ -577,16 +577,20 @@ async fn poll_device_token(
                 }
                 return;
             }
-            Ok(response)
-                if response.status() == reqwest::StatusCode::FORBIDDEN
-                    || response.status() == reqwest::StatusCode::NOT_FOUND => {}
             Ok(response) => {
-                emit_device_auth_error(
-                    &app_handle,
-                    &login_id,
-                    format!("Codex 设备授权轮询失败: status={}", response.status()),
-                );
-                return;
+                let status = response.status();
+                let started = crate::modules::codex_device_restrictions::now();
+                let body = crate::modules::codex_device_restrictions::bounded_error_body(response).await.unwrap_or_default();
+                if crate::modules::codex_device_restrictions::explicit_message(&body) {
+                    crate::modules::codex_device_restrictions::observe(format!("login:{login_id}"),
+                        crate::modules::codex_device_restrictions::OAUTH, "device_authorization", None, started, true).await;
+                    emit_device_auth_error(&app_handle, &login_id, crate::modules::codex_device_restrictions::paused_message());
+                    return;
+                }
+                if status != reqwest::StatusCode::FORBIDDEN && status != reqwest::StatusCode::NOT_FOUND {
+                    emit_device_auth_error(&app_handle, &login_id, format!("Codex 设备授权轮询失败: status={}", status));
+                    return;
+                }
             }
             Err(error) => logger::log_warn(&format!("Codex 设备授权轮询请求失败: {}", error)),
         }
@@ -1163,6 +1167,16 @@ async fn start_callback_server(
                     continue;
                 }
 
+                if params.get("error_description").is_some_and(|text|
+                    crate::modules::codex_device_restrictions::explicit_message(text)) {
+                    crate::modules::codex_device_restrictions::observe(format!("login:{expected_login_id}"),
+                        crate::modules::codex_device_restrictions::OAUTH, "oauth_callback", None,
+                        crate::modules::codex_device_restrictions::now(), true).await;
+                    emit_device_auth_error(&app_handle, &expected_login_id, crate::modules::codex_device_restrictions::paused_message());
+                    let _ = request.respond(Response::from_string(crate::modules::codex_device_restrictions::paused_message()).with_status_code(403));
+                    break;
+                }
+
                 if code.is_empty() {
                     let mut param_keys = params.keys().cloned().collect::<Vec<_>>();
                     param_keys.sort();
@@ -1299,12 +1313,14 @@ async fn start_callback_server(
 }
 
 async fn exchange_code_for_token_internal(
+    login_id: &str,
     code: &str,
     code_verifier: &str,
     port: u16,
     exchange_redirect_uri: Option<&str>,
     proxy_url: Option<&str>,
 ) -> Result<CodexTokens, String> {
+    let observation_started = crate::modules::codex_device_restrictions::now();
     let redirect_uri = resolve_exchange_redirect_uri(port, exchange_redirect_uri);
     let mut builder = reqwest::Client::builder()
         .connect_timeout(TOKEN_REFRESH_TIMEOUT)
@@ -1349,6 +1365,11 @@ async fn exchange_code_for_token_internal(
     })?;
 
     if !status.is_success() {
+        if crate::modules::codex_device_restrictions::explicit_message(&body) {
+            crate::modules::codex_device_restrictions::observe(format!("login:{login_id}"),
+                crate::modules::codex_device_restrictions::OAUTH, "oauth_exchange", None, observation_started, true).await;
+            return Err(crate::modules::codex_device_restrictions::paused_message());
+        }
         let response_summary = serde_json::from_str::<serde_json::Value>(&body)
             .map(|value| crate::modules::codex_auth_diagnostic::oauth_response_summary(&value))
             .unwrap_or_else(|_| serde_json::json!({"body_type":"non_json"}));
@@ -1403,6 +1424,10 @@ async fn exchange_code_for_token_internal(
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
+    if !access_token.trim().is_empty() && !id_token.trim().is_empty() {
+        crate::modules::codex_device_restrictions::observe(format!("login:{login_id}"),
+            crate::modules::codex_device_restrictions::OAUTH, "oauth_exchange", None, observation_started, false).await;
+    }
     Ok(CodexTokens {
         id_token,
         access_token,
@@ -1466,6 +1491,7 @@ pub async fn complete_oauth_login(login_id: &str) -> Result<CodexOAuthCompletion
     };
 
     let tokens = match exchange_code_for_token_internal(
+        login_id,
         &code,
         &code_verifier,
         port,
@@ -1726,6 +1752,11 @@ pub async fn refresh_access_token_with_account_proxy(
     current_id_token: Option<&str>,
     account: Option<&crate::models::codex::CodexAccount>,
 ) -> Result<CodexTokens, String> {
+    use crate::modules::codex_device_restrictions as restrictions;
+    if let Some(account) = account {
+        restrictions::ensure_allowed(&account.id, restrictions::TOKEN).await?;
+    }
+    let observation_started = restrictions::now();
     let builder = reqwest::Client::builder()
         .connect_timeout(TOKEN_REFRESH_TIMEOUT)
         .timeout(TOKEN_REFRESH_TIMEOUT);
@@ -1758,6 +1789,12 @@ pub async fn refresh_access_token_with_account_proxy(
         .map_err(|e| format!("读取响应失败: {}", e))?;
 
     if !status.is_success() {
+        if restrictions::explicit_message(&body) {
+            if let Some(account) = account {
+                restrictions::observe_account(account, restrictions::TOKEN, "token_response", observation_started, true).await;
+            }
+            return Err(restrictions::paused_message());
+        }
         let error_code = extract_token_error_code(&body);
         let response_summary = serde_json::from_str::<serde_json::Value>(&body)
             .map(|value| crate::modules::codex_auth_diagnostic::oauth_response_summary(&value))
@@ -1820,6 +1857,9 @@ pub async fn refresh_access_token_with_account_proxy(
         }),
     );
 
+    if let Some(account) = account {
+        restrictions::observe_account(account, restrictions::TOKEN, "token_response", observation_started, false).await;
+    }
     Ok(refreshed_tokens)
 }
 
@@ -2027,6 +2067,7 @@ mod tests {
     #[test]
     fn oauth_proxy_use_keeps_resource_snapshots_backend_side() {
         let catalog = crate::modules::codex_proxy_subscription_parser::ParsedCatalog {
+            native: None,
             nodes: vec![crate::modules::codex_proxy_subscription_parser::ParsedNode {
                 id: "node-1".into(),
                 name: "Alpha".into(),

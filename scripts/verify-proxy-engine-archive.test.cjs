@@ -7,8 +7,8 @@ const { sha256File, verifyArchive } = require('./verify-proxy-engine-archive.cjs
 const { buildBundleConfig } = require('./proxy-engine-bundle-config.cjs');
 const manifest = require('../sidecars/mihomo/upstream-assets.json');
 
-test('manifest pins v1.19.31 for six targets and withholds distribution approval', () => {
-  assert.equal(manifest.version, '1.19.31');
+test('manifest pins v1.19.33 for six targets and withholds distribution approval', () => {
+  assert.equal(manifest.version, '1.19.33');
   assert.equal(manifest.distributionApproved, false);
   assert.deepEqual(Object.keys(manifest.assets).sort(), [
     'aarch64-apple-darwin',
@@ -19,7 +19,7 @@ test('manifest pins v1.19.31 for six targets and withholds distribution approval
     'x86_64-unknown-linux-gnu',
   ]);
   for (const asset of Object.values(manifest.assets)) {
-    assert.match(asset.file, /^mihomo-.*-v1\.19\.31\.(gz|zip)$/);
+    assert.match(asset.file, /^mihomo-.*-v1\.19\.33\.(gz|zip)$/);
     assert.match(asset.sha256, /^[a-f0-9]{64}$/);
   }
 });

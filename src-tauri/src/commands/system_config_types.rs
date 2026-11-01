@@ -90,7 +90,6 @@ pub struct GeneralConfig {
     pub codex_sync_wsl: bool,
     /// 是否启用 Codex 客户端中的 API 服务额度显示注入
     pub codex_app_ui_injection_enabled: bool,
-    pub codex_app_native_fast_enabled: bool,
     pub codex_app_api_quota_compat_enabled: bool,
     /// Codex WSL 配置目录 (Windows Only)
     pub codex_wsl_config_dir: String,
@@ -1155,7 +1154,6 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "codex_auto_refresh_plan_types"
             | "codex_sync_wsl"
             | "codex_app_ui_injection_enabled"
-            | "codex_app_native_fast_enabled"
             | "codex_app_api_quota_compat_enabled"
             | "codex_wsl_config_dir"
             | "zed_auto_refresh_minutes"

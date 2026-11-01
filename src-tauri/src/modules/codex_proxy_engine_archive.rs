@@ -478,7 +478,7 @@ mod tests {
     fn official_gzip_extracts_binary_and_checks_trailer() {
         for corrupt in [false, true] {
             let fixture = Fixture::new();
-            let path = fixture.0.join("mihomo-darwin-arm64-v1.19.31.gz");
+            let path = fixture.0.join("mihomo-darwin-arm64-v1.19.33.gz");
             let mut encoder =
                 flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
             encoder.write_all(b"official-binary-fixture").unwrap();
@@ -513,7 +513,7 @@ mod tests {
         let files = prepare(
             &path,
             &fixture.0.join("out"),
-            "mihomo-windows-amd64-v1-v1.19.31.zip",
+            "mihomo-windows-amd64-v1-v1.19.33.zip",
             &hash,
             &control,
         )

@@ -655,6 +655,11 @@ fn native_model_for_key(
     Ok(canonical.to_string())
 }
 
+fn native_device_restriction_applies(account: &CodexAccount) -> bool {
+    !account.is_api_key_auth() && !account.is_web_session_auth()
+        && !account.is_agent_identity_auth() && !native_is_chatgpt_plan_account(account)
+}
+
 fn native_eligible(account: &CodexAccount) -> bool {
     !account.is_web_session_auth()
         && !account.requires_reauth
@@ -1374,6 +1379,20 @@ impl native_contract::Host for NativeHostBridge {
                 )
                 .await
             };
+            if current && official_feedback && report.official_registration_id.is_none() && self.account_overrides.is_empty() {
+                let restricted = !report.success && report.error_message.as_deref()
+                    .is_some_and(crate::modules::codex_device_restrictions::explicit_message);
+                if report.success || restricted {
+                    if let Ok(accounts) = self.load_accounts(vec![report.account_id.clone()]).await {
+                        if let Some(account) = accounts.first().filter(|a| native_device_restriction_applies(a)) {
+                            let started = crate::modules::codex_device_restrictions::now()
+                                .saturating_sub(report.elapsed.as_millis().min(i64::MAX as u128) as i64);
+                            crate::modules::codex_device_restrictions::observe_account(account,
+                                crate::modules::codex_device_restrictions::API, "api_response", started, restricted).await;
+                        }
+                    }
+                }
+            }
             if current && official_feedback {
                 self.record_failure_cooldown(&report);
                 self.record_soft_binding_result(&report).await;

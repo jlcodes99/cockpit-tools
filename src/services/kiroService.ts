@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { KiroAccount } from '../types/kiro';
+import i18n from '../i18n';
+import { formatKiroImportError } from './kiroImportErrors';
 
 export interface KiroOAuthLoginStartResponse {
   loginId: string;
@@ -28,7 +30,11 @@ export async function deleteKiroAccounts(accountIds: string[]): Promise<void> {
 
 /** 从 JSON 字符串导入账号 */
 export async function importKiroFromJson(jsonContent: string): Promise<KiroAccount[]> {
-  return await invoke('import_kiro_from_json', { jsonContent });
+  try {
+    return await invoke('import_kiro_from_json', { jsonContent });
+  } catch (error) {
+    throw new Error(formatKiroImportError(error instanceof Error ? error.message : String(error), i18n.t.bind(i18n)));
+  }
 }
 
 /** 从本机 Kiro 客户端导入当前登录账号 */
@@ -43,7 +49,11 @@ export async function exportKiroAccounts(accountIds: string[]): Promise<string> 
 
 /** 刷新单个账号 token/usage */
 export async function refreshKiroToken(accountId: string): Promise<KiroAccount> {
-  return await invoke('refresh_kiro_token', { accountId });
+  try {
+    return await invoke('refresh_kiro_token', { accountId });
+  } catch (error) {
+    throw new Error(formatKiroImportError(error instanceof Error ? error.message : String(error), i18n.t.bind(i18n)));
+  }
 }
 
 /** 刷新全部账号 token/usage */

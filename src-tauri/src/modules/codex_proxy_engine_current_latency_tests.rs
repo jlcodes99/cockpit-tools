@@ -9,12 +9,12 @@ async fn mock(
 ) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let endpoint = format!("http://{}", listener.local_addr().unwrap());
-    let controller = EngineController {
+    let controller = EngineController { entry: "account-node".into(), proxy_url: String::new(),
         endpoint: endpoint.clone(),
         secret: "test-secret".into(),
         tunnel_id: uuid::Uuid::new_v4(),
     };
-    let reader = SelectionReader {
+    let reader = SelectionReader { entry: "account-node".into(), native:false,
         endpoint,
         secret: "test-secret".into(),
         names: BTreeMap::from([
@@ -144,7 +144,7 @@ async fn active_latency_does_not_probe_a_load_balancer_without_unique_exit() {
 
 #[test]
 fn current_latency_cache_is_scoped_to_reader_leaf_and_test_url_and_latest_observation() {
-    let reader = SelectionReader {
+    let reader = SelectionReader { entry: "account-node".into(), native:false,
         endpoint: String::new(),
         secret: String::new(),
         names: BTreeMap::from([("leaf-a".into(), "US".into())]),
@@ -177,7 +177,7 @@ fn current_latency_cache_is_scoped_to_reader_leaf_and_test_url_and_latest_observ
             .delay_ms,
         Some(900)
     );
-    let restarted = SelectionReader {
+    let restarted = SelectionReader { entry: "account-node".into(), native:false,
         measured: Default::default(),
         ..reader.clone()
     };

@@ -199,10 +199,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
     t,
     tagFilter,
   } = context;
-  const [clearClientAuthBusy, setClearClientAuthBusy] = useState(false);
-  const [clearClientAuthError, setClearClientAuthError] = useState<string | null>(
-    null,
-  );
   const [instanceGateways, setInstanceGateways] = useState<
     CodexInstanceGatewayView[]
   >([]);
@@ -291,7 +287,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
         summary?: string,
         reauthorizeAccountId?: string,
         title?: string,
-        clearClientAuthObservationAccountId?: string,
       ) => {
         const text = message.trim();
         if (!text) return;
@@ -304,11 +299,8 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
               ? normalizedSummary
               : undefined,
           reauthorizeAccountId: reauthorizeAccountId?.trim() || undefined,
-          clearClientAuthObservationAccountId:
-            clearClientAuthObservationAccountId?.trim() || undefined,
           message: text,
         });
-        setClearClientAuthError(null);
       },
       [t],
     );
@@ -322,7 +314,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
         detailSummary?: string;
         detailReauthorizeAccountId?: string;
         detailTitle?: string;
-        clearClientAuthObservationAccountId?: string;
         isRefreshNotice?: boolean;
         showReauthorize?: boolean;
         onReauthorize?: () => void;
@@ -336,7 +327,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
           detailSummary,
           detailReauthorizeAccountId,
           detailTitle,
-          clearClientAuthObservationAccountId,
           isRefreshNotice = false,
           showReauthorize = false,
           onReauthorize,
@@ -372,7 +362,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
                     detailSummary,
                     detailReauthorizeAccountId,
                     detailTitle,
-                    clearClientAuthObservationAccountId,
                   )
                 }
                 title={t("codex.quotaError.viewDetails", "查看详情")}
@@ -401,21 +390,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
       const clipboardText = quotaErrorDetail.summary
         ? `${quotaErrorDetail.summary}\n\n${quotaErrorDetail.message}`
         : quotaErrorDetail.message;
-      const clearClientAuth = async () => {
-        const accountId = quotaErrorDetail.clearClientAuthObservationAccountId;
-        if (!accountId || clearClientAuthBusy) return;
-        setClearClientAuthBusy(true);
-        setClearClientAuthError(null);
-        try {
-          await codexService.clearClientAuthObservation(accountId);
-          setQuotaErrorDetail(null);
-          await fetchAccounts({ allowEmpty: true });
-        } catch (error) {
-          setClearClientAuthError(String(error).replace(/^Error:\s*/, ""));
-        } finally {
-          setClearClientAuthBusy(false);
-        }
-      };
       return createPortal(
         <div className="modal-overlay">
           <div
@@ -449,25 +423,8 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
               <pre className="codex-quota-error-detail-text">
                 {quotaErrorDetail.message}
               </pre>
-              {clearClientAuthError && (
-                <div className="codex-switch-progress-error" role="alert">
-                  {clearClientAuthError}
-                </div>
-              )}
             </div>
             <div className="modal-footer">
-              {quotaErrorDetail.clearClientAuthObservationAccountId && (
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => void clearClientAuth()}
-                  disabled={clearClientAuthBusy}
-                >
-                  {clearClientAuthBusy
-                    ? t("common.loading", "加载中...")
-                    : t("codex.switchAuth.clearClientAuth", "清除异常标识")}
-                </button>
-              )}
               {quotaErrorDetail.reauthorizeAccountId && (
                 <button
                   type="button"

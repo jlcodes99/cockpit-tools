@@ -612,7 +612,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                             </button>
                           </div>
                         )}
-                        {deviceAuthError && (
+                        {deviceAuthError && addStatus !== "error" && (
                           <div className="add-status error">
                             <CircleAlert size={16} />
                             <span>{deviceAuthError}</span>

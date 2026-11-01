@@ -1,39 +1,39 @@
 {
-  "version": "1.19.31",
-  "assetBaseUrl": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.31/",
-  "digestSource": "https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/v1.19.31",
-  "sourceUrl": "https://github.com/MetaCubeX/mihomo/tree/v1.19.31",
+  "version": "1.19.33",
+  "assetBaseUrl": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.33/",
+  "digestSource": "https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/v1.19.33",
+  "sourceUrl": "https://github.com/MetaCubeX/mihomo/tree/v1.19.33",
   "distributionApproved": false,
   "assets": {
     "x86_64-apple-darwin": {
-      "file": "mihomo-darwin-amd64-v1-v1.19.31.gz",
-      "sha256": "b914c5a1713807202f3319eacef8c33afecb0adc5cf232d7b7ba3713186fe2ba",
-      "size": 22244324
+      "file": "mihomo-darwin-amd64-v1-v1.19.33.gz",
+      "sha256": "61f979d6aae3deffe4e3895161349c3d9189149eef88c5aceb7c6d4a7270a78d",
+      "size": 22333945
     },
     "aarch64-apple-darwin": {
-      "file": "mihomo-darwin-arm64-v1.19.31.gz",
-      "sha256": "d131f44b3deb2a8356f7ac75048ad67a10d53243323951c4f3cda7b672922963",
-      "size": 20701178
+      "file": "mihomo-darwin-arm64-v1.19.33.gz",
+      "sha256": "060b64b0f2c9a310831db0fe4adb2878de67bfa606c311813c1f13966aa504b6",
+      "size": 20784157
     },
     "x86_64-unknown-linux-gnu": {
-      "file": "mihomo-linux-amd64-v1-v1.19.31.gz",
-      "sha256": "d4304c546c3cddcb6fafd4b4fddb0ba1a95ffa36606fda56d75db2e59ad24114",
-      "size": 22821828
+      "file": "mihomo-linux-amd64-v1-v1.19.33.gz",
+      "sha256": "8ec92e7b2fdc6b853ba00156bab7e4e965c8b0d843b8c4ac8ab98795f02ad524",
+      "size": 22893964
     },
     "aarch64-unknown-linux-gnu": {
-      "file": "mihomo-linux-arm64-v1.19.31.gz",
-      "sha256": "9e0f11afbf38426b8bd88fdc594678f8161c57eccb4e1b77acb12b493904f1d4",
-      "size": 20757911
+      "file": "mihomo-linux-arm64-v1.19.33.gz",
+      "sha256": "ba408b317080ee265c46cb923a50018c1b82cbd708551cdd46a1e3e307396187",
+      "size": 20824326
     },
     "x86_64-pc-windows-msvc": {
-      "file": "mihomo-windows-amd64-v1-v1.19.31.zip",
-      "sha256": "d89c9bd746e8aacff89b2edf674813e25e8bd2dc565f4e12dc3b4526dd2b3177",
-      "size": 22460787
+      "file": "mihomo-windows-amd64-v1-v1.19.33.zip",
+      "sha256": "fb0b960eff568459502d4ebe53e9cca203053d86ec9024fe935f19615d74d9aa",
+      "size": 22543530
     },
     "aarch64-pc-windows-msvc": {
-      "file": "mihomo-windows-arm64-v1.19.31.zip",
-      "sha256": "68659624a38ae1dbc4e1b92f45d4dc75da0eaedd4d732b0a6f01a308da945792",
-      "size": 20136226
+      "file": "mihomo-windows-arm64-v1.19.33.zip",
+      "sha256": "a2a26869a14634c49f3fbcecc593b498ed8591fbdd7616b24475b3d60b148da3",
+      "size": 20212418
     }
   }
 }
