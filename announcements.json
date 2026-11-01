@@ -119,9 +119,9 @@
       "id": "apikey-fan-double11-2026",
       "type": "info",
       "priority": 100,
-      "title": "APIKEY.FAN · 11.11 · Get an 11.11% top-up bonus",
-      "summary": "Get an 11.11% top-up bonus · For new and existing users.",
-      "content": "Get an 11.11% top-up bonus\n\nFor new and existing users.\n\nOffer period: November 1–11, 2026 (UTC+8)\n\nSee the activity page for terms.",
+      "title": "11.11: 11.11% top-up bonus for new and existing users | APIKEY.FAN",
+      "summary": "11.11: 11.11% top-up bonus for new and existing users! Cockpit’s official API relay partner, supporting Claude, ChatGPT, Gemini and other leading models.",
+      "content": "November 1–11: new and existing users receive an 11.11% bonus on top-ups!\n\nAPIKEY.FAN is Cockpit’s official API relay partner. It provides API access to leading models including Claude, ChatGPT and Gemini, which you can configure in tools such as Codex, Claude Code and Gemini CLI.\n\nIf you need model API access, visit the activity page to learn more.\n\nOffer period: November 1–11, 2026 (UTC+8)\nSee the activity page for participation details and terms.",
       "action": {
         "type": "url",
         "target": "https://apikey.fan/activities/double11-2026?aff=COCKPIT",
@@ -137,111 +137,111 @@
       "expiresAt": "2026-11-12T00:00:00+08:00",
       "locales": {
         "zh-CN": {
-          "title": "APIKEY.FAN · 双11 · 充值赠送 11.11%",
-          "summary": "充值赠送 11.11% · 新老用户均可参与。",
-          "content": "充值赠送 11.11%\n\n新老用户均可参与。\n\n活动时间：2026年11月1日—11日（北京时间）\n\n活动规则以活动页为准。",
+          "title": "双十一新老用户充值赠送 11.11%｜APIKEY.FAN",
+          "summary": "双十一新老用户充值赠送 11.11%！Cockpit 官方合作 API 中转站，支持 Claude、ChatGPT、Gemini 等主流模型。",
+          "content": "11 月 1 日—11 日，新老用户充值均可获赠 11.11%！\n\nAPIKEY.FAN 是 Cockpit 的官方合作 API 中转站，提供 Claude、ChatGPT、Gemini 等主流模型的 API 接入，可在 Codex、Claude Code、Gemini CLI 等工具中配置使用。\n\n有模型 API 使用需求的用户，可以前往活动页了解详情。\n\n活动时间：2026年11月1日—11日（北京时间）\n具体参与方式及规则以活动页为准。",
           "actionLabel": "查看活动"
         },
         "zh-tw": {
-          "title": "APIKEY.FAN · 雙11 · 儲值加贈 11.11%",
-          "summary": "儲值加贈 11.11% · 新舊用戶皆可參加。",
-          "content": "儲值加贈 11.11%\n\n新舊用戶皆可參加。\n\n活動期間：2026年11月1日—11日（UTC+8）\n\n活動規則以活動頁面為準。",
+          "title": "雙十一新舊用戶儲值加贈 11.11%｜APIKEY.FAN",
+          "summary": "雙十一新舊用戶儲值加贈 11.11%！Cockpit 官方合作 API 中轉站，支援 Claude、ChatGPT、Gemini 等主流模型。",
+          "content": "11 月 1 日—11 日，新舊用戶儲值皆可獲贈 11.11%！\n\nAPIKEY.FAN 是 Cockpit 的官方合作 API 中轉站，提供 Claude、ChatGPT、Gemini 等主流模型的 API 存取，可在 Codex、Claude Code、Gemini CLI 等工具中設定使用。\n\n有模型 API 使用需求的用戶，可前往活動頁面了解詳情。\n\n活動期間：2026年11月1日—11日（UTC+8）\n具體參加方式及規則以活動頁面為準。",
           "actionLabel": "查看活動"
         },
         "en": {
-          "title": "APIKEY.FAN · 11.11 · Get an 11.11% top-up bonus",
-          "summary": "Get an 11.11% top-up bonus · For new and existing users.",
-          "content": "Get an 11.11% top-up bonus\n\nFor new and existing users.\n\nOffer period: November 1–11, 2026 (UTC+8)\n\nSee the activity page for terms.",
+          "title": "11.11: 11.11% top-up bonus for new and existing users | APIKEY.FAN",
+          "summary": "11.11: 11.11% top-up bonus for new and existing users! Cockpit’s official API relay partner, supporting Claude, ChatGPT, Gemini and other leading models.",
+          "content": "November 1–11: new and existing users receive an 11.11% bonus on top-ups!\n\nAPIKEY.FAN is Cockpit’s official API relay partner. It provides API access to leading models including Claude, ChatGPT and Gemini, which you can configure in tools such as Codex, Claude Code and Gemini CLI.\n\nIf you need model API access, visit the activity page to learn more.\n\nOffer period: November 1–11, 2026 (UTC+8)\nSee the activity page for participation details and terms.",
           "actionLabel": "View offer"
         },
         "ja": {
-          "title": "APIKEY.FAN · 11.11 · チャージで11.11%増額",
-          "summary": "チャージで11.11%増額 · 新規・既存ユーザーともに対象です。",
-          "content": "チャージで11.11%増額\n\n新規・既存ユーザーともに対象です。\n\n開催期間：2026年11月1日〜11日（UTC+8）\n\n詳細条件はキャンペーンページをご確認ください。",
+          "title": "11.11：新規・既存ユーザーともにチャージで11.11%増額 | APIKEY.FAN",
+          "summary": "11.11：新規・既存ユーザーともにチャージで11.11%増額！Cockpit の公式提携 API 中継サービス。Claude、ChatGPT、Gemini などの主要モデルに対応。",
+          "content": "11月1日〜11日、新規・既存ユーザーともにチャージで11.11%増額！\n\nAPIKEY.FAN は Cockpit の公式提携 API 中継サービスです。Claude、ChatGPT、Gemini などの主要モデルへの API アクセスを提供し、Codex、Claude Code、Gemini CLI などのツールで設定して利用できます。\n\nモデルの API アクセスが必要な方は、キャンペーンページで詳細をご確認ください。\n\n開催期間：2026年11月1日〜11日（UTC+8）\n参加方法と条件はキャンペーンページをご確認ください。",
           "actionLabel": "詳細を見る"
         },
         "ko": {
-          "title": "APIKEY.FAN · 11.11 · 충전 시 11.11% 추가 지급",
-          "summary": "충전 시 11.11% 추가 지급 · 신규 및 기존 사용자 모두 참여할 수 있습니다.",
-          "content": "충전 시 11.11% 추가 지급\n\n신규 및 기존 사용자 모두 참여할 수 있습니다.\n\n행사 기간: 2026년 11월 1일~11일 (UTC+8)\n\n자세한 조건은 행사 페이지를 확인하세요.",
+          "title": "11.11 신규·기존 사용자 충전 시 11.11% 추가 지급 | APIKEY.FAN",
+          "summary": "11.11 신규·기존 사용자 충전 시 11.11% 추가 지급! Claude, ChatGPT, Gemini 등 주요 모델을 지원하는 Cockpit 공식 제휴 API 중계 서비스입니다.",
+          "content": "11월 1일~11일, 신규 및 기존 사용자 모두 충전 시 11.11%를 추가로 받습니다!\n\nAPIKEY.FAN은 Cockpit의 공식 제휴 API 중계 서비스입니다. Claude, ChatGPT, Gemini 등 주요 모델의 API를 제공하며 Codex, Claude Code, Gemini CLI 등의 도구에서 설정하여 사용할 수 있습니다.\n\n모델 API가 필요하다면 행사 페이지에서 자세한 내용을 확인하세요.\n\n행사 기간: 2026년 11월 1일~11일 (UTC+8)\n참여 방법과 조건은 행사 페이지를 확인하세요.",
           "actionLabel": "행사 보기"
         },
         "de": {
-          "title": "APIKEY.FAN · 11.11 · 11,11 % Bonus auf Aufladungen",
-          "summary": "11,11 % Bonus auf Aufladungen · Für neue und bestehende Nutzer.",
-          "content": "11,11 % Bonus auf Aufladungen\n\nFür neue und bestehende Nutzer.\n\nAktionszeitraum: 1.–11. November 2026 (UTC+8)\n\nDie Bedingungen stehen auf der Aktionsseite.",
+          "title": "11.11: 11,11 % Aufladebonus für neue und bestehende Nutzer | APIKEY.FAN",
+          "summary": "11.11: 11,11 % Aufladebonus für neue und bestehende Nutzer! Der offizielle API-Relay-Partner von Cockpit unterstützt Claude, ChatGPT, Gemini und weitere führende Modelle.",
+          "content": "Vom 1. bis 11. November erhalten neue und bestehende Nutzer 11,11 % Bonus auf Aufladungen!\n\nAPIKEY.FAN ist der offizielle API-Relay-Partner von Cockpit. Der Dienst bietet API-Zugang zu führenden Modellen wie Claude, ChatGPT und Gemini und lässt sich in Tools wie Codex, Claude Code und Gemini CLI einrichten.\n\nWenn Sie Modell-APIs nutzen möchten, finden Sie weitere Informationen auf der Aktionsseite.\n\nAktionszeitraum: 1.–11. November 2026 (UTC+8)\nTeilnahmebedingungen und weitere Einzelheiten stehen auf der Aktionsseite.",
           "actionLabel": "Zur Aktion"
         },
         "fr": {
-          "title": "APIKEY.FAN · 11.11 · 11,11 % de bonus sur les recharges",
-          "summary": "11,11 % de bonus sur les recharges · Pour les nouveaux utilisateurs comme pour les utilisateurs actuels.",
-          "content": "11,11 % de bonus sur les recharges\n\nPour les nouveaux utilisateurs comme pour les utilisateurs actuels.\n\nPériode : du 1er au 11 novembre 2026 (UTC+8)\n\nConsultez les conditions sur la page de l’offre.",
+          "title": "11.11 : 11,11 % de bonus sur les recharges pour tous les utilisateurs | APIKEY.FAN",
+          "summary": "11.11 : 11,11 % de bonus sur les recharges pour tous les utilisateurs! Le partenaire officiel de relais API de Cockpit prend en charge Claude, ChatGPT, Gemini et d’autres grands modèles.",
+          "content": "Du 1er au 11 novembre, les nouveaux utilisateurs comme les utilisateurs actuels reçoivent 11,11 % de bonus sur leurs recharges !\n\nAPIKEY.FAN est le partenaire officiel de relais API de Cockpit. Le service donne accès aux API de grands modèles comme Claude, ChatGPT et Gemini, à configurer dans des outils tels que Codex, Claude Code et Gemini CLI.\n\nSi vous avez besoin d’accéder aux API de ces modèles, consultez la page de l’offre pour en savoir plus.\n\nPériode : du 1er au 11 novembre 2026 (UTC+8)\nLes modalités de participation et les conditions figurent sur la page de l’offre.",
           "actionLabel": "Voir l’offre"
         },
         "es": {
-          "title": "APIKEY.FAN · 11.11 · 11,11 % extra en recargas",
-          "summary": "11,11 % extra en recargas · Para usuarios nuevos y actuales.",
-          "content": "11,11 % extra en recargas\n\nPara usuarios nuevos y actuales.\n\nPromoción: del 1 al 11 de noviembre de 2026 (UTC+8)\n\nConsulta las condiciones en la página de la promoción.",
+          "title": "11.11: 11,11 % extra en recargas para usuarios nuevos y actuales | APIKEY.FAN",
+          "summary": "11.11: 11,11 % extra en recargas para usuarios nuevos y actuales! El socio oficial de retransmisión API de Cockpit admite Claude, ChatGPT, Gemini y otros modelos destacados.",
+          "content": "¡Del 1 al 11 de noviembre, los usuarios nuevos y actuales reciben un 11,11 % extra en sus recargas!\n\nAPIKEY.FAN es el socio oficial de retransmisión API de Cockpit. Ofrece acceso a las API de modelos destacados como Claude, ChatGPT y Gemini, que puedes configurar en herramientas como Codex, Claude Code y Gemini CLI.\n\nSi necesitas acceso a las API de estos modelos, visita la página de la promoción para obtener más información.\n\nPromoción: del 1 al 11 de noviembre de 2026 (UTC+8)\nConsulta la página de la promoción para conocer cómo participar y las condiciones.",
           "actionLabel": "Ver oferta"
         },
         "it": {
-          "title": "APIKEY.FAN · 11.11 · Bonus dell’11,11% sulle ricariche",
-          "summary": "Bonus dell’11,11% sulle ricariche · Per utenti nuovi e già registrati.",
-          "content": "Bonus dell’11,11% sulle ricariche\n\nPer utenti nuovi e già registrati.\n\nPeriodo: 1–11 novembre 2026 (UTC+8)\n\nConsulta le condizioni nella pagina della promozione.",
+          "title": "11.11: bonus dell’11,11% sulle ricariche per utenti nuovi e già registrati | APIKEY.FAN",
+          "summary": "11.11: bonus dell’11,11% sulle ricariche per utenti nuovi e già registrati! Il partner ufficiale di inoltro API di Cockpit supporta Claude, ChatGPT, Gemini e altri modelli di punta.",
+          "content": "Dal 1° all’11 novembre, gli utenti nuovi e già registrati ricevono un bonus dell’11,11% sulle ricariche!\n\nAPIKEY.FAN è il partner ufficiale di inoltro API di Cockpit. Offre accesso alle API di modelli di punta come Claude, ChatGPT e Gemini, configurabili in strumenti quali Codex, Claude Code e Gemini CLI.\n\nSe hai bisogno di accedere alle API dei modelli, visita la pagina della promozione per saperne di più.\n\nPeriodo: 1–11 novembre 2026 (UTC+8)\nLe modalità di partecipazione e le condizioni sono disponibili nella pagina della promozione.",
           "actionLabel": "Vedi offerta"
         },
         "pt-br": {
-          "title": "APIKEY.FAN · 11.11 · Bônus de 11,11% nas recargas",
-          "summary": "Bônus de 11,11% nas recargas · Para usuários novos e atuais.",
-          "content": "Bônus de 11,11% nas recargas\n\nPara usuários novos e atuais.\n\nPeríodo: 1 a 11 de novembro de 2026 (UTC+8)\n\nConfira as condições na página da promoção.",
+          "title": "11.11: bônus de 11,11% nas recargas para usuários novos e atuais | APIKEY.FAN",
+          "summary": "11.11: bônus de 11,11% nas recargas para usuários novos e atuais! O parceiro oficial de retransmissão de API do Cockpit oferece Claude, ChatGPT, Gemini e outros modelos de destaque.",
+          "content": "De 1 a 11 de novembro, usuários novos e atuais recebem 11,11% de bônus nas recargas!\n\nAPIKEY.FAN é o parceiro oficial de retransmissão de API do Cockpit. Oferece acesso às APIs de modelos de destaque como Claude, ChatGPT e Gemini, que podem ser configuradas em ferramentas como Codex, Claude Code e Gemini CLI.\n\nSe você precisa acessar APIs de modelos, visite a página da promoção para saber mais.\n\nPeríodo: 1 a 11 de novembro de 2026 (UTC+8)\nConfira como participar e as condições na página da promoção.",
           "actionLabel": "Ver oferta"
         },
         "ru": {
-          "title": "APIKEY.FAN · 11.11 · Бонус 11,11% при пополнении",
-          "summary": "Бонус 11,11% при пополнении · Для новых и действующих пользователей.",
-          "content": "Бонус 11,11% при пополнении\n\nДля новых и действующих пользователей.\n\nСрок акции: 1–11 ноября 2026 года (UTC+8)\n\nУсловия доступны на странице акции.",
+          "title": "11.11: бонус 11,11% при пополнении для новых и действующих пользователей | APIKEY.FAN",
+          "summary": "11.11: бонус 11,11% при пополнении для новых и действующих пользователей! Официальный партнёр Cockpit по ретрансляции API поддерживает Claude, ChatGPT, Gemini и другие ведущие модели.",
+          "content": "С 1 по 11 ноября новые и действующие пользователи получают бонус 11,11% при пополнении!\n\nAPIKEY.FAN — официальный партнёр Cockpit по ретрансляции API. Сервис предоставляет доступ к API ведущих моделей, включая Claude, ChatGPT и Gemini, с возможностью настройки в Codex, Claude Code, Gemini CLI и других инструментах.\n\nЕсли вам нужен доступ к API моделей, подробности можно узнать на странице акции.\n\nСрок акции: 1–11 ноября 2026 года (UTC+8)\nПорядок участия и условия указаны на странице акции.",
           "actionLabel": "К акции"
         },
         "pl": {
-          "title": "APIKEY.FAN · 11.11 · 11,11% bonusu do doładowań",
-          "summary": "11,11% bonusu do doładowań · Dla nowych i obecnych użytkowników.",
-          "content": "11,11% bonusu do doładowań\n\nDla nowych i obecnych użytkowników.\n\nTermin: 1–11 listopada 2026 r. (UTC+8)\n\nWarunki znajdziesz na stronie promocji.",
+          "title": "11.11: 11,11% bonusu do doładowań dla nowych i obecnych użytkowników | APIKEY.FAN",
+          "summary": "11.11: 11,11% bonusu do doładowań dla nowych i obecnych użytkowników! Oficjalny partner Cockpit świadczący usługi pośrednictwa API obsługuje Claude, ChatGPT, Gemini i inne czołowe modele.",
+          "content": "Od 1 do 11 listopada nowi i obecni użytkownicy otrzymują 11,11% bonusu do doładowań!\n\nAPIKEY.FAN to oficjalny partner Cockpit świadczący usługi pośrednictwa API. Zapewnia dostęp do API czołowych modeli, takich jak Claude, ChatGPT i Gemini, które można skonfigurować w narzędziach Codex, Claude Code, Gemini CLI i innych.\n\nJeśli potrzebujesz dostępu do API modeli, odwiedź stronę promocji, aby poznać szczegóły.\n\nTermin: 1–11 listopada 2026 r. (UTC+8)\nSposób udziału i warunki znajdziesz na stronie promocji.",
           "actionLabel": "Zobacz ofertę"
         },
         "cs": {
-          "title": "APIKEY.FAN · 11.11 · Bonus 11,11 % k dobití",
-          "summary": "Bonus 11,11 % k dobití · Pro nové i stávající uživatele.",
-          "content": "Bonus 11,11 % k dobití\n\nPro nové i stávající uživatele.\n\nObdobí akce: 1.–11. listopadu 2026 (UTC+8)\n\nPodmínky najdete na stránce akce.",
+          "title": "11.11: bonus 11,11 % k dobití pro nové i stávající uživatele | APIKEY.FAN",
+          "summary": "11.11: bonus 11,11 % k dobití pro nové i stávající uživatele! Oficiální partner Cockpit pro zprostředkování API podporuje Claude, ChatGPT, Gemini a další přední modely.",
+          "content": "Od 1. do 11. listopadu získají noví i stávající uživatelé bonus 11,11 % k dobití!\n\nAPIKEY.FAN je oficiální partner Cockpit pro zprostředkování API. Poskytuje přístup k API předních modelů včetně Claude, ChatGPT a Gemini, které lze nastavit v nástrojích Codex, Claude Code, Gemini CLI a dalších.\n\nPokud potřebujete přístup k API modelů, podrobnosti najdete na stránce akce.\n\nObdobí akce: 1.–11. listopadu 2026 (UTC+8)\nZpůsob účasti a podmínky najdete na stránce akce.",
           "actionLabel": "Zobrazit akci"
         },
         "tr": {
-          "title": "APIKEY.FAN · 11.11 · Bakiye yüklemelerine %11,11 bonus",
-          "summary": "Bakiye yüklemelerine %11,11 bonus · Yeni ve mevcut kullanıcılar için.",
-          "content": "Bakiye yüklemelerine %11,11 bonus\n\nYeni ve mevcut kullanıcılar için.\n\nKampanya dönemi: 1–11 Kasım 2026 (UTC+8)\n\nKoşullar için kampanya sayfasına bakın.",
+          "title": "11.11: yeni ve mevcut kullanıcılara bakiye yüklemelerinde %11,11 bonus | APIKEY.FAN",
+          "summary": "11.11: yeni ve mevcut kullanıcılara bakiye yüklemelerinde %11,11 bonus! Cockpit’in resmi API aracı hizmet ortağı Claude, ChatGPT, Gemini ve diğer önde gelen modelleri destekler.",
+          "content": "1–11 Kasım arasında yeni ve mevcut kullanıcılar bakiye yüklemelerinde %11,11 bonus kazanır!\n\nAPIKEY.FAN, Cockpit’in resmi API aracı hizmet ortağıdır. Claude, ChatGPT ve Gemini gibi önde gelen modellerin API’lerine erişim sağlar; Codex, Claude Code, Gemini CLI ve benzeri araçlarda yapılandırılarak kullanılabilir.\n\nModel API erişimine ihtiyaç duyuyorsanız ayrıntılar için kampanya sayfasını ziyaret edin.\n\nKampanya dönemi: 1–11 Kasım 2026 (UTC+8)\nKatılım bilgileri ve koşullar kampanya sayfasında yer almaktadır.",
           "actionLabel": "Kampanyayı gör"
         },
         "id": {
-          "title": "APIKEY.FAN · 11.11 · Bonus isi ulang 11,11%",
-          "summary": "Bonus isi ulang 11,11% · Untuk pengguna baru dan lama.",
-          "content": "Bonus isi ulang 11,11%\n\nUntuk pengguna baru dan lama.\n\nPeriode promo: 1–11 November 2026 (UTC+8)\n\nLihat ketentuan di halaman promo.",
+          "title": "11.11: bonus isi ulang 11,11% untuk pengguna baru dan lama | APIKEY.FAN",
+          "summary": "11.11: bonus isi ulang 11,11% untuk pengguna baru dan lama! Mitra resmi perantara API Cockpit mendukung Claude, ChatGPT, Gemini, dan model unggulan lainnya.",
+          "content": "Pada 1–11 November, pengguna baru dan lama mendapat bonus isi ulang 11,11%!\n\nAPIKEY.FAN adalah mitra resmi perantara API Cockpit. Layanan ini menyediakan akses API ke model unggulan seperti Claude, ChatGPT, dan Gemini, yang dapat dikonfigurasi di alat seperti Codex, Claude Code, dan Gemini CLI.\n\nJika Anda memerlukan akses API model, kunjungi halaman promo untuk informasi selengkapnya.\n\nPeriode promo: 1–11 November 2026 (UTC+8)\nLihat cara berpartisipasi dan ketentuan di halaman promo.",
           "actionLabel": "Lihat promo"
         },
         "vi": {
-          "title": "APIKEY.FAN · 11.11 · Nạp tiền nhận thêm 11,11%",
-          "summary": "Nạp tiền nhận thêm 11,11% · Dành cho cả người dùng mới và hiện tại.",
-          "content": "Nạp tiền nhận thêm 11,11%\n\nDành cho cả người dùng mới và hiện tại.\n\nThời gian: 1–11 tháng 11 năm 2026 (UTC+8)\n\nXem điều kiện trên trang ưu đãi.",
+          "title": "11.11: nạp tiền nhận thêm 11,11% cho người dùng mới và hiện tại | APIKEY.FAN",
+          "summary": "11.11: nạp tiền nhận thêm 11,11% cho người dùng mới và hiện tại! Đối tác trung chuyển API chính thức của Cockpit hỗ trợ Claude, ChatGPT, Gemini và các mô hình hàng đầu khác.",
+          "content": "Từ ngày 1 đến 11 tháng 11, người dùng mới và hiện tại đều được tặng thêm 11,11% khi nạp tiền!\n\nAPIKEY.FAN là đối tác trung chuyển API chính thức của Cockpit. Dịch vụ cung cấp quyền truy cập API của các mô hình hàng đầu như Claude, ChatGPT và Gemini, có thể cấu hình trong Codex, Claude Code, Gemini CLI và các công cụ khác.\n\nNếu bạn cần sử dụng API mô hình, hãy truy cập trang ưu đãi để tìm hiểu chi tiết.\n\nThời gian: 1–11 tháng 11 năm 2026 (UTC+8)\nCách tham gia và điều kiện được nêu trên trang ưu đãi.",
           "actionLabel": "Xem ưu đãi"
         },
         "ar": {
-          "title": "APIKEY.FAN · ١١.١١ · مكافأة ١١٫١١٪ عند شحن الرصيد",
-          "summary": "مكافأة ١١٫١١٪ عند شحن الرصيد · للمستخدمين الجدد والحاليين.",
-          "content": "مكافأة ١١٫١١٪ عند شحن الرصيد\n\nللمستخدمين الجدد والحاليين.\n\nفترة العرض: ١–١١ نوفمبر ٢٠٢٦ (UTC+8)\n\nراجع شروط العرض في صفحة الفعالية.",
+          "title": "عرض ١١.١١: مكافأة شحن ١١٫١١٪ للمستخدمين الجدد والحاليين | APIKEY.FAN",
+          "summary": "عرض ١١.١١: مكافأة شحن ١١٫١١٪ للمستخدمين الجدد والحاليين! شريك Cockpit الرسمي لخدمة ترحيل API يدعم Claude وChatGPT وGemini وغيرها من النماذج الرائدة.",
+          "content": "من ١ إلى ١١ نوفمبر، يحصل المستخدمون الجدد والحاليون على مكافأة ١١٫١١٪ عند شحن الرصيد!\n\nAPIKEY.FAN هو شريك Cockpit الرسمي لخدمة ترحيل API. يوفر الوصول إلى واجهات API لنماذج رائدة مثل Claude وChatGPT وGemini، ويمكن إعدادها للاستخدام في أدوات مثل Codex وClaude Code وGemini CLI.\n\nإذا كنت بحاجة إلى الوصول إلى واجهات API للنماذج، فتفضل بزيارة صفحة الفعالية لمعرفة التفاصيل.\n\nفترة العرض: ١–١١ نوفمبر ٢٠٢٦ (UTC+8)\nتجد طريقة المشاركة والشروط في صفحة الفعالية.",
           "actionLabel": "عرض التفاصيل"
         },
         "en-US": {
-          "title": "APIKEY.FAN · 11.11 · Get an 11.11% top-up bonus",
-          "summary": "Get an 11.11% top-up bonus · For new and existing users.",
-          "content": "Get an 11.11% top-up bonus\n\nFor new and existing users.\n\nOffer period: November 1–11, 2026 (UTC+8)\n\nSee the activity page for terms.",
+          "title": "11.11: 11.11% top-up bonus for new and existing users | APIKEY.FAN",
+          "summary": "11.11: 11.11% top-up bonus for new and existing users! Cockpit’s official API relay partner, supporting Claude, ChatGPT, Gemini and other leading models.",
+          "content": "November 1–11: new and existing users receive an 11.11% bonus on top-ups!\n\nAPIKEY.FAN is Cockpit’s official API relay partner. It provides API access to leading models including Claude, ChatGPT and Gemini, which you can configure in tools such as Codex, Claude Code and Gemini CLI.\n\nIf you need model API access, visit the activity page to learn more.\n\nOffer period: November 1–11, 2026 (UTC+8)\nSee the activity page for participation details and terms.",
           "actionLabel": "View offer"
         }
       }
