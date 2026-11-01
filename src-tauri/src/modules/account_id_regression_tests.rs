@@ -133,3 +133,45 @@ fn new_accounts_use_canonical_id_and_reimport_does_not_duplicate() {
     assert!(!updated.pending_oauth);
     assert_eq!(load_account_index().unwrap().accounts.len(), 1);
 }
+
+#[test]
+fn missing_account_detail_file_is_recreated_on_upsert_and_pending_creation() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _guard = DataDirGuard::new();
+    let old = seed("legacy-uuid");
+    let path = get_accounts_dir().unwrap().join(format!("{}.json", old.id));
+    // Simulate detail file being deleted or missing while index still references it
+    fs::remove_file(&path).unwrap();
+    assert!(!path.exists());
+
+    // upsert_account should self-heal and recreate the detail file with the existing ID
+    let updated = upsert_account(old.email.clone(), Some("Restored".into()), token("new")).unwrap();
+    assert_eq!(updated.id, old.id);
+    assert!(path.exists());
+    let loaded = load_account(&old.id).unwrap();
+    assert_eq!(loaded.token.refresh_token, "new");
+    assert_eq!(loaded.name.as_deref(), Some("Restored"));
+
+    // Also verify pending oauth account creation self-heals when detail file is missing
+    let pending_id = "pending-uuid";
+    let mut index = load_account_index().unwrap();
+    index.accounts.push(AccountSummary {
+        id: pending_id.into(),
+        email: "ghost@example.com".into(),
+        name: None,
+        created_at: 0,
+        last_used: 0,
+    });
+    save_account_index(&index).unwrap();
+
+    let pending =
+        create_pending_oauth_account("ghost@example.com".into(), AccountNoteUpdate::default())
+            .unwrap();
+    assert_eq!(pending.id, pending_id);
+    assert!(pending.pending_oauth);
+    let pending_path = get_accounts_dir().unwrap().join(format!("{}.json", pending_id));
+    assert!(pending_path.exists());
+}
+
