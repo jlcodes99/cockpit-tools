@@ -114,5 +114,137 @@
       }
     ]
   },
-  "announcements": []
+  "announcements": [
+    {
+      "id": "apikey-fan-double11-2026",
+      "type": "info",
+      "priority": 100,
+      "title": "APIKEY.FAN · 11.11 · Get an 11.11% top-up bonus",
+      "summary": "Get an 11.11% top-up bonus · For new and existing users.",
+      "content": "Get an 11.11% top-up bonus\n\nFor new and existing users.\n\nOffer period: November 1–11, 2026 (UTC+8)\n\nSee the activity page for terms.",
+      "action": {
+        "type": "url",
+        "target": "https://apikey.fan/activities/double11-2026?aff=COCKPIT",
+        "label": "View offer"
+      },
+      "targetVersions": "*",
+      "targetLanguages": [
+        "*"
+      ],
+      "showOnce": false,
+      "popup": false,
+      "createdAt": "2026-11-01T00:00:00+08:00",
+      "expiresAt": "2026-11-12T00:00:00+08:00",
+      "locales": {
+        "zh-CN": {
+          "title": "APIKEY.FAN · 双11 · 充值赠送 11.11%",
+          "summary": "充值赠送 11.11% · 新老用户均可参与。",
+          "content": "充值赠送 11.11%\n\n新老用户均可参与。\n\n活动时间：2026年11月1日—11日（北京时间）\n\n活动规则以活动页为准。",
+          "actionLabel": "查看活动"
+        },
+        "zh-tw": {
+          "title": "APIKEY.FAN · 雙11 · 儲值加贈 11.11%",
+          "summary": "儲值加贈 11.11% · 新舊用戶皆可參加。",
+          "content": "儲值加贈 11.11%\n\n新舊用戶皆可參加。\n\n活動期間：2026年11月1日—11日（UTC+8）\n\n活動規則以活動頁面為準。",
+          "actionLabel": "查看活動"
+        },
+        "en": {
+          "title": "APIKEY.FAN · 11.11 · Get an 11.11% top-up bonus",
+          "summary": "Get an 11.11% top-up bonus · For new and existing users.",
+          "content": "Get an 11.11% top-up bonus\n\nFor new and existing users.\n\nOffer period: November 1–11, 2026 (UTC+8)\n\nSee the activity page for terms.",
+          "actionLabel": "View offer"
+        },
+        "ja": {
+          "title": "APIKEY.FAN · 11.11 · チャージで11.11%増額",
+          "summary": "チャージで11.11%増額 · 新規・既存ユーザーともに対象です。",
+          "content": "チャージで11.11%増額\n\n新規・既存ユーザーともに対象です。\n\n開催期間：2026年11月1日〜11日（UTC+8）\n\n詳細条件はキャンペーンページをご確認ください。",
+          "actionLabel": "詳細を見る"
+        },
+        "ko": {
+          "title": "APIKEY.FAN · 11.11 · 충전 시 11.11% 추가 지급",
+          "summary": "충전 시 11.11% 추가 지급 · 신규 및 기존 사용자 모두 참여할 수 있습니다.",
+          "content": "충전 시 11.11% 추가 지급\n\n신규 및 기존 사용자 모두 참여할 수 있습니다.\n\n행사 기간: 2026년 11월 1일~11일 (UTC+8)\n\n자세한 조건은 행사 페이지를 확인하세요.",
+          "actionLabel": "행사 보기"
+        },
+        "de": {
+          "title": "APIKEY.FAN · 11.11 · 11,11 % Bonus auf Aufladungen",
+          "summary": "11,11 % Bonus auf Aufladungen · Für neue und bestehende Nutzer.",
+          "content": "11,11 % Bonus auf Aufladungen\n\nFür neue und bestehende Nutzer.\n\nAktionszeitraum: 1.–11. November 2026 (UTC+8)\n\nDie Bedingungen stehen auf der Aktionsseite.",
+          "actionLabel": "Zur Aktion"
+        },
+        "fr": {
+          "title": "APIKEY.FAN · 11.11 · 11,11 % de bonus sur les recharges",
+          "summary": "11,11 % de bonus sur les recharges · Pour les nouveaux utilisateurs comme pour les utilisateurs actuels.",
+          "content": "11,11 % de bonus sur les recharges\n\nPour les nouveaux utilisateurs comme pour les utilisateurs actuels.\n\nPériode : du 1er au 11 novembre 2026 (UTC+8)\n\nConsultez les conditions sur la page de l’offre.",
+          "actionLabel": "Voir l’offre"
+        },
+        "es": {
+          "title": "APIKEY.FAN · 11.11 · 11,11 % extra en recargas",
+          "summary": "11,11 % extra en recargas · Para usuarios nuevos y actuales.",
+          "content": "11,11 % extra en recargas\n\nPara usuarios nuevos y actuales.\n\nPromoción: del 1 al 11 de noviembre de 2026 (UTC+8)\n\nConsulta las condiciones en la página de la promoción.",
+          "actionLabel": "Ver oferta"
+        },
+        "it": {
+          "title": "APIKEY.FAN · 11.11 · Bonus dell’11,11% sulle ricariche",
+          "summary": "Bonus dell’11,11% sulle ricariche · Per utenti nuovi e già registrati.",
+          "content": "Bonus dell’11,11% sulle ricariche\n\nPer utenti nuovi e già registrati.\n\nPeriodo: 1–11 novembre 2026 (UTC+8)\n\nConsulta le condizioni nella pagina della promozione.",
+          "actionLabel": "Vedi offerta"
+        },
+        "pt-br": {
+          "title": "APIKEY.FAN · 11.11 · Bônus de 11,11% nas recargas",
+          "summary": "Bônus de 11,11% nas recargas · Para usuários novos e atuais.",
+          "content": "Bônus de 11,11% nas recargas\n\nPara usuários novos e atuais.\n\nPeríodo: 1 a 11 de novembro de 2026 (UTC+8)\n\nConfira as condições na página da promoção.",
+          "actionLabel": "Ver oferta"
+        },
+        "ru": {
+          "title": "APIKEY.FAN · 11.11 · Бонус 11,11% при пополнении",
+          "summary": "Бонус 11,11% при пополнении · Для новых и действующих пользователей.",
+          "content": "Бонус 11,11% при пополнении\n\nДля новых и действующих пользователей.\n\nСрок акции: 1–11 ноября 2026 года (UTC+8)\n\nУсловия доступны на странице акции.",
+          "actionLabel": "К акции"
+        },
+        "pl": {
+          "title": "APIKEY.FAN · 11.11 · 11,11% bonusu do doładowań",
+          "summary": "11,11% bonusu do doładowań · Dla nowych i obecnych użytkowników.",
+          "content": "11,11% bonusu do doładowań\n\nDla nowych i obecnych użytkowników.\n\nTermin: 1–11 listopada 2026 r. (UTC+8)\n\nWarunki znajdziesz na stronie promocji.",
+          "actionLabel": "Zobacz ofertę"
+        },
+        "cs": {
+          "title": "APIKEY.FAN · 11.11 · Bonus 11,11 % k dobití",
+          "summary": "Bonus 11,11 % k dobití · Pro nové i stávající uživatele.",
+          "content": "Bonus 11,11 % k dobití\n\nPro nové i stávající uživatele.\n\nObdobí akce: 1.–11. listopadu 2026 (UTC+8)\n\nPodmínky najdete na stránce akce.",
+          "actionLabel": "Zobrazit akci"
+        },
+        "tr": {
+          "title": "APIKEY.FAN · 11.11 · Bakiye yüklemelerine %11,11 bonus",
+          "summary": "Bakiye yüklemelerine %11,11 bonus · Yeni ve mevcut kullanıcılar için.",
+          "content": "Bakiye yüklemelerine %11,11 bonus\n\nYeni ve mevcut kullanıcılar için.\n\nKampanya dönemi: 1–11 Kasım 2026 (UTC+8)\n\nKoşullar için kampanya sayfasına bakın.",
+          "actionLabel": "Kampanyayı gör"
+        },
+        "id": {
+          "title": "APIKEY.FAN · 11.11 · Bonus isi ulang 11,11%",
+          "summary": "Bonus isi ulang 11,11% · Untuk pengguna baru dan lama.",
+          "content": "Bonus isi ulang 11,11%\n\nUntuk pengguna baru dan lama.\n\nPeriode promo: 1–11 November 2026 (UTC+8)\n\nLihat ketentuan di halaman promo.",
+          "actionLabel": "Lihat promo"
+        },
+        "vi": {
+          "title": "APIKEY.FAN · 11.11 · Nạp tiền nhận thêm 11,11%",
+          "summary": "Nạp tiền nhận thêm 11,11% · Dành cho cả người dùng mới và hiện tại.",
+          "content": "Nạp tiền nhận thêm 11,11%\n\nDành cho cả người dùng mới và hiện tại.\n\nThời gian: 1–11 tháng 11 năm 2026 (UTC+8)\n\nXem điều kiện trên trang ưu đãi.",
+          "actionLabel": "Xem ưu đãi"
+        },
+        "ar": {
+          "title": "APIKEY.FAN · ١١.١١ · مكافأة ١١٫١١٪ عند شحن الرصيد",
+          "summary": "مكافأة ١١٫١١٪ عند شحن الرصيد · للمستخدمين الجدد والحاليين.",
+          "content": "مكافأة ١١٫١١٪ عند شحن الرصيد\n\nللمستخدمين الجدد والحاليين.\n\nفترة العرض: ١–١١ نوفمبر ٢٠٢٦ (UTC+8)\n\nراجع شروط العرض في صفحة الفعالية.",
+          "actionLabel": "عرض التفاصيل"
+        },
+        "en-US": {
+          "title": "APIKEY.FAN · 11.11 · Get an 11.11% top-up bonus",
+          "summary": "Get an 11.11% top-up bonus · For new and existing users.",
+          "content": "Get an 11.11% top-up bonus\n\nFor new and existing users.\n\nOffer period: November 1–11, 2026 (UTC+8)\n\nSee the activity page for terms.",
+          "actionLabel": "View offer"
+        }
+      }
+    }
+  ]
 }
