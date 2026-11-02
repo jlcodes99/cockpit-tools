@@ -725,6 +725,16 @@ export const CLAUDE_DESKTOP_GATEWAY_PROVIDER_PRESETS: readonly ClaudeDesktopGate
     modelMappings: repeatedMappedRoute('zai-org/glm-5.1'),
   },
   {
+    id: 'runcrate',
+    name: 'Runcrate',
+    baseUrls: ['https://api.runcrate.ai'],
+    authScheme: 'bearer',
+    connectionMode: 'local_mapping',
+    website: 'https://www.runcrate.ai',
+    apiKeyUrl: 'https://www.runcrate.ai/dashboard/api-keys',
+    modelMappings: repeatedMappedRoute('deepseek-ai/DeepSeek-V4.1-Flash'),
+  },
+  {
     id: 'pipellm',
     name: 'PIPELLM',
     baseUrls: ['https://cc-api.pipellm.ai'],

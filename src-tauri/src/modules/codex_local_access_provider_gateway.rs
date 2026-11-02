@@ -1160,6 +1160,7 @@ fn provider_gateway_wire_api_for_account(account: &CodexAccount) -> String {
         "cc-api.pipellm.ai",
         "openrouter.ai",
         "api.therouter.ai",
+        "api.runcrate.ai",
     ];
     if chat_hosts.iter().any(|pattern| host.contains(pattern)) {
         "chat_completions".to_string()

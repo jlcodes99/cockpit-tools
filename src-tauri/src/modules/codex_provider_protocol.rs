@@ -40,6 +40,7 @@ pub(crate) fn normalize_model_provider_wire_api(value: Option<&str>, base_url: &
         || lower.contains("cc-api.pipellm.ai")
         || lower.contains("openrouter.ai")
         || lower.contains("api.therouter.ai")
+        || lower.contains("api.runcrate.ai")
     {
         "chat_completions".to_string()
     } else {
