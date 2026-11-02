@@ -228,20 +228,44 @@ fn inject_unified_oauth_token(
 }
 
 fn inject_user_status(conn: &Connection, email: &str) -> Result<(), String> {
-    // 检查是否已存在 userStatus；如果已存在完整配置，绝不覆盖，避免抹掉已缓存的模型与特性
-    let existing_count: i64 = conn
+    const USER_STATUS_KEY: &str = "antigravityUnifiedStateSync.userStatus";
+
+    // 检查是否已存在 userStatus；如果已存在且属于同一个账号，绝不覆盖，避免抹掉已缓存的模型与特性
+    let existing: Option<Vec<u8>> = conn
         .query_row(
-            "SELECT COUNT(*) FROM ItemTable WHERE key = 'antigravityUnifiedStateSync.userStatus'",
-            [],
+            "SELECT value FROM ItemTable WHERE key = ?",
+            [USER_STATUS_KEY],
             |row| row.get(0),
         )
-        .unwrap_or(0);
+        .optional()
+        .ok()
+        .flatten();
 
-    if existing_count > 0 {
-        crate::modules::logger::log_info(
-            "antigravityUnifiedStateSync.userStatus 已存在，保留完整配置由 Language Server 动态同步",
-        );
-        return Ok(());
+    if let Some(existing) = existing {
+        let existing_email = general_purpose::STANDARD
+            .decode(existing.as_slice())
+            .ok()
+            .and_then(|topic| protobuf::extract_email_from_unified_user_status(&topic));
+
+        let belongs_to_other_account = existing_email
+            .as_deref()
+            .map(|previous| !previous.eq_ignore_ascii_case(email))
+            .unwrap_or(false);
+
+        if !belongs_to_other_account {
+            crate::modules::logger::log_info(
+                "antigravityUnifiedStateSync.userStatus 已存在，保留完整配置由 Language Server 动态同步",
+            );
+            return Ok(());
+        }
+
+        // 切号后 userStatus 仍属于上一个账号，会让 IDE 继续沿用旧账号的模型与额度。
+        // 这里只写入最小 payload，Language Server 会在下次启动时按新账号重建完整状态。
+        crate::modules::logger::log_info(&format!(
+            "antigravityUnifiedStateSync.userStatus 属于上一个账号 ({}), 重写为当前账号 ({})",
+            existing_email.unwrap_or_default(),
+            email
+        ));
     }
 
     let payload = protobuf::create_minimal_user_status_payload(email);
@@ -249,7 +273,7 @@ fn inject_user_status(conn: &Connection, email: &str) -> Result<(), String> {
     let topic_b64 = general_purpose::STANDARD.encode(topic);
     conn.execute(
         "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
-        ["antigravityUnifiedStateSync.userStatus", &topic_b64],
+        [USER_STATUS_KEY, &topic_b64],
     )
     .map_err(|e| format!("写入 UserStatus 失败: {}", e))?;
     Ok(())
@@ -312,6 +336,45 @@ mod tests {
         let mut account = Account::new("id-1".to_string(), "test@example.com".to_string(), token);
         account.quota = quota;
         account
+    }
+
+    #[test]
+    fn test_inject_user_status_replaces_state_from_previous_account() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE ItemTable(key TEXT PRIMARY KEY, value BLOB);")
+            .unwrap();
+
+        inject_user_status(&conn, "first@example.com").unwrap();
+        assert_eq!(
+            read_user_status_email(&conn).as_deref(),
+            Some("first@example.com")
+        );
+
+        // 同一账号重复注入：保留已缓存的完整配置
+        inject_user_status(&conn, "first@example.com").unwrap();
+        assert_eq!(
+            read_user_status_email(&conn).as_deref(),
+            Some("first@example.com")
+        );
+
+        // 切号：必须替换为新账号，否则 IDE 会继续沿用上一个账号的模型与额度
+        inject_user_status(&conn, "second@example.com").unwrap();
+        assert_eq!(
+            read_user_status_email(&conn).as_deref(),
+            Some("second@example.com")
+        );
+    }
+
+    fn read_user_status_email(conn: &Connection) -> Option<String> {
+        let value: Vec<u8> = conn
+            .query_row(
+                "SELECT value FROM ItemTable WHERE key = 'antigravityUnifiedStateSync.userStatus'",
+                [],
+                |row| row.get(0),
+            )
+            .ok()?;
+        let topic = general_purpose::STANDARD.decode(value.as_slice()).ok()?;
+        protobuf::extract_email_from_unified_user_status(&topic)
     }
 
     #[test]
