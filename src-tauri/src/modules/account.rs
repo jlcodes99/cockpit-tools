@@ -2347,24 +2347,6 @@ pub async fn fetch_quota_with_fresh_token(
     }
 }
 
-/// 同步 Antigravity 系统凭据。
-///
-/// IDE 切号只写入 IDE profile，而 `agy` CLI 与 Antigravity 桌面版共用 Windows 凭据管理器里的
-/// `gemini:antigravity`；不同步的话，它们会继续使用上一个账号，表现为切号后额度与账号信息
-/// 都没有变化（见 #2795）。失败只记录日志，不影响切号本身。
-fn sync_antigravity_shared_credential(account: &Account) {
-    match crate::modules::antigravity_credential::write_antigravity_system_credential(account) {
-        Ok(()) => modules::logger::log_info(&format!(
-            "[Switch] 已同步 Antigravity 系统凭据: {}",
-            account.email
-        )),
-        Err(error) => modules::logger::log_warn(&format!(
-            "[Switch] 同步 Antigravity 系统凭据失败，agy CLI 可能仍停留在旧账号: {}",
-            error
-        )),
-    }
-}
-
 /// 内部切换账号函数（供 WebSocket 调用）
 /// 完整流程：Token刷新 + 关闭程序 + 注入 + 重启
 pub async fn switch_account_internal(account_id: &str) -> Result<Account, String> {
@@ -2405,7 +2387,6 @@ pub async fn switch_account_internal(account_id: &str) -> Result<Account, String
     modules::process::close_antigravity_instances(&[default_dir_str], 20)?;
     let _ = modules::instance::update_default_pid(None);
     modules::instance::inject_account_to_profile_with_account(&default_dir, &account)?;
-    sync_antigravity_shared_credential(&account);
     for target_dir in modules::instance::get_all_antigravity_user_data_dirs() {
         if target_dir == default_dir {
             continue;
@@ -2730,7 +2711,6 @@ pub async fn switch_account_local_no_restart(account_id: &str) -> Result<Account
 
     let default_dir = modules::instance::get_default_user_data_dir()?;
     modules::instance::inject_account_to_profile_with_account(&default_dir, &account)?;
-    sync_antigravity_shared_credential(&account);
     for target_dir in modules::instance::get_all_antigravity_user_data_dirs() {
         if target_dir == default_dir {
             continue;
