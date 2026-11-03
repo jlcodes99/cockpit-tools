@@ -182,10 +182,16 @@ fn effective_quota_window(
     observed: Option<&ObservedQuotaWindow>,
     primary: bool,
 ) -> Option<ObservedQuotaWindow> {
-    observed
-        .filter(|window| window.observed_at.elapsed().as_secs() <= 180)
+    fresh_observed_quota_window(observed)
         .cloned()
         .or_else(|| window_from_account(account, primary))
+}
+
+fn fresh_observed_quota_window(window: Option<&ObservedQuotaWindow>) -> Option<&ObservedQuotaWindow> {
+    window.filter(|window| {
+        window.observed_at.elapsed().as_secs() <= BOUND_OAUTH_QUOTA_RESERVE_MAX_SNAPSHOT_AGE_SECONDS as u64
+            && window.request_started.elapsed().as_secs() <= BOUND_OAUTH_QUOTA_RESERVE_MAX_SNAPSHOT_AGE_SECONDS as u64
+    })
 }
 
 fn quota_window_blocks(window: Option<&ObservedQuotaWindow>, cutoff: f64) -> bool {
@@ -229,9 +235,10 @@ fn quota_reserve_decision(
     Option<ObservedQuotaWindow>,
     Option<ObservedQuotaWindow>,
 ) {
-    let primary = effective_quota_window(account, runtime.and_then(|r| r.primary.as_ref()), true);
-    let secondary =
-        effective_quota_window(account, runtime.and_then(|r| r.secondary.as_ref()), false);
+    // A display snapshot does not carry the query ordering evidence needed for
+    // dispatch. Both admission and the send fence use the same live windows.
+    let primary = fresh_observed_quota_window(runtime.and_then(|r| r.primary.as_ref())).cloned();
+    let secondary = fresh_observed_quota_window(runtime.and_then(|r| r.secondary.as_ref())).cloned();
     let blocked = !runtime.is_some_and(|state| state.verified)
         || account.quota_error.is_some()
         || quota_refresh_fail_closed_for_account(&account.id)
@@ -326,6 +333,46 @@ fn observe_gateway_quota(account_id: &str, snapshot: QuotaSnapshot, request_star
     notify_quota_reserve_changed(account_id);
 }
 
+fn merge_refresh_window(
+    current: &mut Option<ObservedQuotaWindow>,
+    value: Option<QuotaWindow>,
+    absent: bool,
+    started: Instant,
+    complete: bool,
+) {
+    // A partial query must not remove or relax evidence while settlement is
+    // pending. It may still tighten a known window before a complete query.
+    let tightens = current.as_ref().is_some_and(|old| {
+        value.as_ref().is_some_and(|new| {
+            old.absent || old.value.as_ref().is_some_and(|old| {
+                new.remaining_percent <= old.remaining_percent
+            })
+        })
+    });
+    if complete || tightens {
+        merge_observed_window(current, value, absent, started, complete);
+    }
+}
+
+fn clear_stale_reversed_baseline(
+    current: &mut Option<ObservedQuotaWindow>,
+    incoming: Option<&QuotaWindow>,
+    started: Instant,
+) -> bool {
+    let recover = current.as_ref().zip(incoming).is_some_and(|(old, new)| {
+        fresh_observed_quota_window(Some(old)).is_none()
+            && old.observed_at <= started
+            && old.value.as_ref()
+                .and_then(|window| window.resets_at)
+                .zip(new.resets_at)
+                .is_some_and(|(old_reset, new_reset)| new_reset < old_reset)
+    });
+    if recover {
+        *current = None;
+    }
+    recover
+}
+
 pub(crate) fn confirm_gateway_quota_refresh(
     account_id: &str,
     quota: &CodexQuota,
@@ -343,6 +390,33 @@ pub(crate) fn confirm_gateway_quota_refresh(
             resets_at: reset,
         })
     };
+    let evidence = |primary: bool| {
+        let (present, key) = if primary {
+            (quota.hourly_window_present, "primary_window")
+        } else {
+            (quota.weekly_window_present, "secondary_window")
+        };
+        // Usage parsing normalizes both a missing key and a null window to
+        // Some(false). Only an explicit null proves absence when raw data exists.
+        let absent = present == Some(false)
+            && quota.raw_data.as_ref().map_or(true, |raw| {
+                raw.get("rate_limit")
+                    .and_then(Value::as_object)
+                    .and_then(|limit| limit.get(key))
+                    .is_some_and(Value::is_null)
+                    || (raw.get("provider").and_then(Value::as_str) == Some("cockpit-api")
+                        && !primary)
+            });
+        let value = if present == Some(false) { None } else { from(primary) };
+        (value, absent)
+    };
+    let (primary, primary_absent) = evidence(true);
+    let (secondary, secondary_absent) = evidence(false);
+    let complete = (primary.is_some() || primary_absent)
+        && (secondary.is_some() || secondary_absent)
+        && started.elapsed().as_secs() <= BOUND_OAUTH_QUOTA_RESERVE_MAX_SNAPSHOT_AGE_SECONDS as u64;
+    let mut recovered_primary = false;
+    let mut recovered_secondary = false;
     if let Ok(mut runtime) = quota_reserve_coordinator().lock() {
         if runtime.watched_account.as_deref() != Some(account_id)
             && !runtime.accounts.contains_key(account_id)
@@ -350,35 +424,50 @@ pub(crate) fn confirm_gateway_quota_refresh(
             return;
         }
         let state = runtime.accounts.entry(account_id.to_string()).or_default();
-        state.verified = true;
-        state.verified_at = Some(Instant::now());
-        state.verified_query_started_at = Some(
-            state.verified_query_started_at.map_or(started, |previous| previous.max(started)),
-        );
-        merge_observed_window(
+        let settled = state.completed_at
+            .is_none_or(|completed| started >= completed + Duration::from_secs(1));
+        if complete {
+            state.verified = true;
+            state.verified_at = Some(Instant::now());
+            state.verified_query_started_at = Some(
+                state.verified_query_started_at.map_or(started, |previous| previous.max(started)),
+            );
+        }
+        // Re-establish only an expired reset baseline from a fresh complete
+        // query taken after the last observation and settled consumption.
+        if complete && state.in_flight == 0 && settled {
+            recovered_primary = clear_stale_reversed_baseline(&mut state.primary, primary.as_ref(), started);
+            recovered_secondary = clear_stale_reversed_baseline(&mut state.secondary, secondary.as_ref(), started);
+        }
+        merge_refresh_window(
             &mut state.primary,
-            from(true),
-            quota.hourly_window_present == Some(false),
+            primary,
+            primary_absent,
             started,
-            true,
+            complete,
         );
-        merge_observed_window(
+        merge_refresh_window(
             &mut state.secondary,
-            from(false),
-            quota.weekly_window_present == Some(false),
+            secondary,
+            secondary_absent,
             started,
-            true,
+            complete,
         );
         // A query started before completion is not evidence of settled consumption.
-        if state
-            .completed_at
-            .is_none_or(|completed| started >= completed + Duration::from_secs(1))
-        {
+        if complete && settled {
             state.awaiting_confirmation = false;
         }
     }
-    if let Ok(mut failures) = bound_oauth_quota_refresh_failures().lock() {
-        failures.remove(account_id);
+    if recovered_primary {
+        tracing::info!(window = "primary", "stale_baseline_recovered");
+    }
+    if recovered_secondary {
+        tracing::info!(window = "secondary", "stale_baseline_recovered");
+    }
+    if complete {
+        if let Ok(mut failures) = bound_oauth_quota_refresh_failures().lock() {
+            failures.remove(account_id);
+        }
     }
     notify_quota_reserve_changed(account_id);
 }
@@ -467,13 +556,6 @@ fn acquire_quota_admission(
         .lock()
         .map_err(|_| native_error(503, "quota_unavailable", "Quota admission is unavailable"))?;
     let state = runtime.accounts.entry(account.id.clone()).or_default();
-    // Keep the admission's disk snapshot available to the final send fence.
-    if state.primary.is_none() {
-        state.primary = window_from_account(account, true);
-    }
-    if state.secondary.is_none() {
-        state.secondary = window_from_account(account, false);
-    }
     let (blocked, near, _, _) = quota_reserve_decision(&reserve, account, Some(state));
     if blocked || (near && (state.in_flight > 0 || state.awaiting_confirmation)) {
         return Err(native_error(
@@ -516,23 +598,22 @@ fn check_gateway_quota_before_send(
         return Ok(());
     };
     let state = runtime.accounts.get(account_id);
-    fn fresh(window: Option<&ObservedQuotaWindow>) -> Option<&ObservedQuotaWindow> {
-        window.filter(|w| w.observed_at.elapsed().as_secs() <= 180)
-    }
+    let primary = fresh_observed_quota_window(state.and_then(|s| s.primary.as_ref()));
+    let secondary = fresh_observed_quota_window(state.and_then(|s| s.secondary.as_ref()));
     let blocked = !state.is_some_and(|state| state.verified)
         || quota_refresh_fail_closed_for_account(account_id)
         || (quota_windows_near(
                 reserve,
-                fresh(state.and_then(|s| s.primary.as_ref())),
-                fresh(state.and_then(|s| s.secondary.as_ref())),
+                primary,
+                secondary,
             )
             && state.is_some_and(|s| s.awaiting_confirmation || s.in_flight > 1))
         || quota_window_blocks(
-            fresh(state.and_then(|s| s.primary.as_ref())),
+            primary,
             quota_reserve_cutoff(reserve, reserve.hourly_percent),
         )
         || quota_window_blocks(
-            fresh(state.and_then(|s| s.secondary.as_ref())),
+            secondary,
             quota_reserve_cutoff(reserve, reserve.weekly_percent),
         );
     if blocked {
@@ -576,11 +657,8 @@ fn build_quota_reserve_status(
     let account_id = normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref())?;
     let runtime = quota_reserve_coordinator().lock().ok()?;
     let state = runtime.accounts.get(&account_id);
-    let fresh = |window: Option<&ObservedQuotaWindow>| {
-        window.filter(|window| window.observed_at.elapsed().as_secs() <= 180).cloned()
-    };
-    let primary = fresh(state.and_then(|state| state.primary.as_ref()));
-    let secondary = fresh(state.and_then(|state| state.secondary.as_ref()));
+    let primary = fresh_observed_quota_window(state.and_then(|state| state.primary.as_ref())).cloned();
+    let secondary = fresh_observed_quota_window(state.and_then(|state| state.secondary.as_ref())).cloned();
     let near = quota_windows_near(reserve, primary.as_ref(), secondary.as_ref());
     let pending = primary.is_none() || secondary.is_none()
         || state.is_none_or(|state| !state.verified || (near && state.awaiting_confirmation));

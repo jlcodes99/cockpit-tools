@@ -911,6 +911,7 @@ async fn send_until(
             tracker.begin_attempt("http");
             tracker.upstream_headers(request.headers());
             tracker.check_quota_before_send()?;
+            tracker.quota_request_started();
             client.execute(request).await.map_err(|error| {
                 ServiceError::new(502,"upstream_unavailable","Unable to connect to upstream")
                     .with_upstream_not_sent(error.is_connect() || error.is_builder())

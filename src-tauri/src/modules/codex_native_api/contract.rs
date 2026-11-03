@@ -231,6 +231,9 @@ pub struct ServiceError {
     /// Proven local build/connect failure before an HTTP request reached upstream.
     /// Timeouts, read failures and WebSocket upgrade failures do not establish this.
     pub upstream_not_sent: bool,
+    /// Internal identity of a candidate rejected by the local quota gate before
+    /// dispatch. This is never exposed in the public error response.
+    pub local_rejected_account_id: Option<String>,
 }
 
 impl ServiceError {
@@ -245,6 +248,7 @@ impl ServiceError {
             transient_rate_limit: false,
             transport_failure: None,
             upstream_not_sent: false,
+            local_rejected_account_id: None,
         }
     }
 
@@ -270,6 +274,12 @@ impl ServiceError {
 
     pub fn with_upstream_not_sent(mut self, upstream_not_sent: bool) -> Self {
         self.upstream_not_sent = upstream_not_sent;
+        self
+    }
+
+    pub fn with_local_rejected_account(mut self, account_id: impl Into<String>) -> Self {
+        self.local_rejected_account_id = Some(account_id.into());
+        self.upstream_not_sent = true;
         self
     }
 }

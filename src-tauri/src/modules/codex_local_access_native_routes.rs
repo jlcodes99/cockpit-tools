@@ -1477,6 +1477,12 @@ async fn native_select_route_once(
     .await;
     let mut route = match route_result {
         Ok(route) => route,
+        // This candidate was rejected locally, before it could be sent
+        // upstream. Let the request layer decide whether its history can be
+        // safely routed elsewhere; the host cannot inspect that history.
+        Err(error) if error.code == "quota_reserved" => {
+            return Err(error.with_local_rejected_account(source_id));
+        }
         Err(error)
             if official_snapshot.is_some() && native_official_prepare_recoverable(&error) =>
         {
@@ -1682,7 +1688,7 @@ async fn native_acquire_account_permit_impl(
             }
             Err(error) if error.code == "quota_reserved" => {
                 drop(concurrency);
-                last_error = Some(error);
+                last_error = Some(error.with_local_rejected_account(accounts[index].id.clone()));
                 candidates.remove(position);
             }
             Err(error) => return Err(error),
