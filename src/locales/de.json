@@ -290,6 +290,7 @@
     "failureTime": "Fehlerzeit",
     "clearRecord": "Eintrag löschen",
     "clearingRecord": "Löschen…",
+    "to": "bis",
     "dragSortHint": "Zum Sortieren am linken Griff ziehen. Beim Loslassen wird automatisch gespeichert.",
     "dragSortFilteredHint": "Zum Sortieren die Suche leeren.",
     "recycleBin": {
@@ -7070,6 +7071,17 @@
       "resetUnknown": "Zeit der Zurucksetzung unbekannt",
       "statusUnknown": "Status: unbekannt",
       "statusNormal": "Status: normal",
+      "statusSynced": "Status: Sync",
+      "statusSyncedPending": "Status: Sync, Rest offen",
+      "fastAvailable": "Fast: {{times}}",
+      "fastTimes": "{{count}}×",
+      "fastUnlimited": "Unbegrenzt",
+      "fastPerMonth": "Fast/Mon: {{count}}",
+      "fastChannelPerMonth": "Express: {{count}}/Mon",
+      "fastChannelStatus": "Schnellkanal: {{status}}",
+      "freeRemainingUnknown": "Free Rest: --",
+      "timesRemainingUnknown": "Rest: --",
+      "soloParallel": "Paket: Solo ×{{count}}",
       "statusExhaustedFree": "Status: Nutzung aufgebraucht, Upgrade empfohlen",
       "statusExhaustedPro": "Status: Nutzung aufgebraucht, bitte upgraden oder nutzungsbasierte Abrechnung aktivieren",
       "bonusUsed": "Bonusguthaben: +{{amount}}",
@@ -7082,17 +7094,8 @@
       "payAsYouGoEnabled": "Nutzung nach Verbrauch: aktiviert",
       "payAsYouGoEmpty": "Nutzung nach Verbrauch: --",
       "payAsYouGoLabel": "Nutzungsabrechnung",
-      "statusSynced": "Status: Sync",
-      "statusSyncedPending": "Status: Sync, Rest offen",
-      "fastAvailable": "Fast: {{times}}",
-      "fastTimes": "{{count}}×",
-      "fastUnlimited": "Unbegrenzt",
-      "fastPerMonth": "Fast/Mon: {{count}}",
-      "fastChannelPerMonth": "Express: {{count}}/Mon",
-      "fastChannelStatus": "Schnellkanal: {{status}}",
-      "freeRemainingUnknown": "Free Rest: --",
-      "timesRemainingUnknown": "Rest: --",
-      "soloParallel": "Paket: Solo ×{{count}}"
+      "creditsMember": "Mitgliedschafts-Credits",
+      "creditsBonus": "Bonus-Credits"
     },
     "flowNotice": {
       "title": "Trae-Kontoleitfaden (zum Auf- und Zuklappen klicken)",
@@ -7108,6 +7111,18 @@
     "token": {
       "jsonOnlyDesc": "Vollständiges Trae-CN-JSON einfügen. Rohe Tokens werden nicht unterstützt.",
       "jsonOnlyPlaceholder": "Vollständiges Trae-CN-JSON..."
+    },
+    "checkin": {
+      "modalTitle": "Täglicher Check-in",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} s",
+      "durationTitle": "Gesamte Check-in-Zeit",
+      "logSuccess": "Erfolgreich ({{done}}/{{total}})",
+      "logPartial": "Teilweise ({{done}}/{{total}})",
+      "logIncomplete": "Unvollständig",
+      "detailSuccess": "Eingecheckt",
+      "detailAlreadyClaimed": "Heute bereits erhalten",
+      "detailError": "Check-in-Fehler"
     }
   },
   "codebuddyCn": {
@@ -7278,6 +7293,21 @@
       "startTime": "Startzeit",
       "endTime": "Endzeit",
       "timeRangeHint": "Wählt täglich eine zufällige Zeit in diesem Bereich, um den Hintergrund-Check-in abzuschließen.",
+      "errors": "Fehler",
+      "tabSettings": "Auto-Check-in-Einstellungen",
+      "tabHistory": "Auto-Check-in-Verlauf",
+      "manualTest": "Testlauf",
+      "clearLogs": "Leeren",
+      "clearLogsFailed": "Löschen der Check-in-Einträge fehlgeschlagen: {{message}}",
+      "historyLoading": "Auto-Check-in-Verlauf wird geladen...",
+      "historyLoadFailed": "Auto-Check-in-Verlauf konnte nicht geladen werden: {{message}}",
+      "totalCredits": "{{credits}} Credits",
+      "historyRangeHint": "Es werden nur die Auto-Check-in-Aufzeichnungen der letzten 30 Tage aufbewahrt (insgesamt {{count}})",
+      "noHistory": "Keine Auto-Check-in-Aufzeichnungen der letzten 30 Tage",
+      "saveFailed": "Speichern der Auto-Check-in-Einstellungen fehlgeschlagen: {{message}}",
+      "manualTestPartialFailure": "Der Check-in ist für einige Konten fehlgeschlagen. Siehe Aufzeichnungen; eine Wiederholung im Hintergrund erfolgt später.",
+      "manualTestAlreadyRunning": "Ein Auto-Check-in-Vorgang läuft bereits. Bitte später die Aufzeichnungen prüfen.",
+      "manualTestFailed": "Testlauf fehlgeschlagen: {{message}}",
       "timeRangeError": "Die Startzeit darf nicht nach der Endzeit liegen"
     }
   },
