@@ -183,3 +183,48 @@ fn desktop_restore_rejects_concurrent_switch_without_waiting() {
             .contains("CLAUDE_PROFILE_RESTORE_BUSY")
     );
 }
+
+fn touch_desktop_cookies(profile_dir: &Path, age_secs: u64) {
+    let network = profile_dir.join("Network");
+    fs::create_dir_all(&network).unwrap();
+    let file = fs::File::create(network.join("Cookies")).unwrap();
+    let modified = std::time::SystemTime::now() - std::time::Duration::from_secs(age_secs);
+    file.set_modified(modified).unwrap();
+}
+
+#[test]
+fn claude_data_dir_resolves_store_publisher_profile() {
+    let dir = TestDir::new();
+    let root = dir.0.join("Claude-Data");
+    let profile = root.join("claude_pzs8sxrjxfjjc");
+    touch_desktop_cookies(&profile, 0);
+    fs::write(root.join("README.txt"), b"readme").unwrap();
+    fs::create_dir_all(root.join("unrelated")).unwrap();
+
+    assert_eq!(find_claude_data_user_data_dir(&root), Some(profile));
+}
+
+#[test]
+fn claude_data_dir_prefers_profile_with_newest_cookies() {
+    let dir = TestDir::new();
+    let root = dir.0.join("Claude-Data");
+    let stale = root.join("claude_stale");
+    let active = root.join("claude_active");
+    let empty = root.join("claude_empty");
+    touch_desktop_cookies(&stale, 3600);
+    touch_desktop_cookies(&active, 0);
+    fs::create_dir_all(&empty).unwrap();
+
+    assert_eq!(find_claude_data_user_data_dir(&root), Some(active));
+}
+
+#[test]
+fn claude_data_dir_falls_back_when_missing_or_empty() {
+    let dir = TestDir::new();
+    assert_eq!(find_claude_data_user_data_dir(&dir.0.join("missing")), None);
+
+    let root = dir.0.join("Claude-Data");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("README.txt"), b"readme").unwrap();
+    assert_eq!(find_claude_data_user_data_dir(&root), None);
+}
