@@ -446,13 +446,13 @@ npm run tauri build
 
 ## 💬 交流群
 
-QQ 交流群、微信群或新建的 Telegram 畅聊群都可以加入。
+可以通过微信联系，或加入新建的 Telegram 畅聊群。
 
 新建 Telegram 畅聊群：[点击加入](https://t.me/+Y8gMv4SlZUU2MWY1)
 
-| QQ 群：1025957317 | 微信（个人） |
-| :---: | :---: |
-| <img src="docs/images/qq_group_1025957317.png" alt="QQ 群二维码" width="200" /> | <img src="docs/images/wechat_info.jpg" alt="微信联系二维码" width="200" /> |
+| 微信（个人） |
+| :---: |
+| <img src="docs/images/wechat_info.jpg" alt="微信联系二维码" width="200" /> |
 
 ---
 
