@@ -79,6 +79,8 @@ const CLAUDE_DESKTOP_LOGIN_DIR: &str = "claude_desktop_login";
 const CLAUDE_DESKTOP_CONFIG_FILE_NAME: &str = "claude_desktop_config.json";
 const CLAUDE_DESKTOP_CONFIG_LIBRARY_DIR: &str = "configLibrary";
 const CLAUDE_DESKTOP_THREEP_DIR_NAME: &str = "Claude-3p";
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+const CLAUDE_DESKTOP_DATA_ROOT_DIR_NAME: &str = "Claude-Data";
 const CLAUDE_DESKTOP_AUTH_HELPER_SCRIPT: &str = "scripts/claude-desktop-auth-helper.cjs";
 const CLAUDE_DESKTOP_AUTH_STATUS_FILE: &str = "claude_desktop_auth_status.json";
 const CLAUDE_DESKTOP_AUTH_EXPORT_FILE: &str = "claude_desktop_auth_export.json";
@@ -1033,6 +1035,21 @@ pub fn get_default_claude_desktop_user_data_dir() -> Result<PathBuf, String> {
         }
     }
 
+    // Claude Desktop 4.x 在 Windows 上通过 `--user-data-dir` 使用
+    // `%LOCALAPPDATA%\Claude-Data\claude_<PublisherId>`；旧版 `%APPDATA%\Claude` 和
+    // `Packages\Claude_*\LocalCache\Roaming\Claude` 可能仍残留但已不再被读取，必须优先命中新目录，
+    // 否则切号会写进旧目录，Desktop 启动后仍要求登录。
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(local_data_dir) = dirs::data_local_dir() {
+            if let Some(dir) = find_claude_data_user_data_dir(
+                &local_data_dir.join(CLAUDE_DESKTOP_DATA_ROOT_DIR_NAME),
+            ) {
+                return Ok(dir);
+            }
+        }
+    }
+
     let data_dir = dirs::data_dir().ok_or_else(|| "无法获取系统应用数据目录".to_string())?;
     let standard_dir = data_dir.join("Claude");
     if standard_dir.exists() {
@@ -1181,23 +1198,50 @@ fn find_windows_store_claude_desktop_user_data_dir() -> Option<PathBuf> {
         if !package_name.starts_with("claude_") && !package_name.contains("anthropic") {
             continue;
         }
-        let profile_dir = entry
-            .path()
-            .join("LocalCache")
-            .join("Roaming")
-            .join("Claude");
-        if !profile_dir.exists() {
-            continue;
-        }
-        let has_cookies = desktop_cookies_path(&profile_dir).exists();
-        let modified_at = fs::metadata(&profile_dir)
-            .and_then(|metadata| metadata.modified())
-            .ok();
-        candidates.push((has_cookies, modified_at, profile_dir));
+        candidates.push(
+            entry
+                .path()
+                .join("LocalCache")
+                .join("Roaming")
+                .join("Claude"),
+        );
     }
 
-    candidates.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| right.1.cmp(&left.1)));
-    candidates.into_iter().map(|(_, _, path)| path).next()
+    pick_preferred_desktop_user_data_dir(candidates)
+}
+
+/// 在 `Claude-Data` 根目录下查找 Claude Desktop 4.x 的 user-data 目录（`claude_<PublisherId>`）。
+///
+/// 不限定平台，便于单元测试；运行时只在 Windows 上调用。
+#[cfg_attr(not(any(test, target_os = "windows")), allow(dead_code))]
+fn find_claude_data_user_data_dir(root: &Path) -> Option<PathBuf> {
+    let entries = fs::read_dir(root).ok()?;
+    let candidates = entries.flatten().filter_map(|entry| {
+        let is_dir = entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false);
+        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+        (is_dir && name.starts_with("claude_")).then(|| entry.path())
+    });
+    pick_preferred_desktop_user_data_dir(candidates)
+}
+
+/// 多个候选目录时优先选择已有 Cookies 的，其次选择 Cookies（或目录本身）最近修改的。
+#[cfg_attr(not(any(test, target_os = "windows")), allow(dead_code))]
+fn pick_preferred_desktop_user_data_dir(
+    candidates: impl IntoIterator<Item = PathBuf>,
+) -> Option<PathBuf> {
+    candidates
+        .into_iter()
+        .filter(|dir| dir.is_dir())
+        .map(|dir| {
+            let cookies_path = desktop_cookies_path(&dir);
+            let has_cookies = cookies_path.exists();
+            let modified_at = fs::metadata(if has_cookies { &cookies_path } else { &dir })
+                .and_then(|metadata| metadata.modified())
+                .ok();
+            (has_cookies, modified_at, dir)
+        })
+        .max_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)))
+        .map(|(_, _, dir)| dir)
 }
 
 pub fn get_default_claude_code_config_dir() -> Result<PathBuf, String> {
