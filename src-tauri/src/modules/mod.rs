@@ -1,4 +1,5 @@
 pub mod account;
+pub(crate) mod account_http;
 pub mod account_index_repair;
 pub(crate) mod account_query_identity;
 pub(crate) mod background_maintenance;

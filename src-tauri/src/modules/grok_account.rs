@@ -1782,7 +1782,8 @@ async fn cli_user_for(
 }
 
 async fn subscriptions_for(account: &GrokAccount, client_version: &str) -> Option<Value> {
-    let client = reqwest::Client::builder()
+    let client = super::account_http::client_builder()
+        .ok()?
         .timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
         .build()
@@ -1812,7 +1813,7 @@ async fn subscriptions_for(account: &GrokAccount, client_version: &str) -> Optio
 }
 
 async fn task_usage_for(account: &GrokAccount) -> Result<Value, String> {
-    let client = reqwest::Client::builder()
+    let client = super::account_http::client_builder()?
         .timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
         .build()
@@ -2266,7 +2267,7 @@ pub(crate) fn quota_client_version(detected_version: Option<String>) -> String {
 
 async fn query_quota(account: &mut GrokAccount) -> Result<(), String> {
     let client_version = quota_client_version(None);
-    let client = reqwest::Client::builder()
+    let client = super::account_http::client_builder()?
         .timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
         .build()
