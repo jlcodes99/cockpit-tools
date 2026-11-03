@@ -110,6 +110,7 @@ const scriptBody = [
   `set "PATH=${cargoBinPath};%PATH%"`,
   `call "${vcvars64Path}"`,
   'if errorlevel 1 exit /b %errorlevel%',
+  `set "PATH=${cargoBinPath};${goBinPath};%PATH%"`,
   'call npm.cmd run sync-version',
   'if errorlevel 1 exit /b %errorlevel%',
   `call "${tauriCliPath}" ${quotedArgs.join(' ')}`.trim(),

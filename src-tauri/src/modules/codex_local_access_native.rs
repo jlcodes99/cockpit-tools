@@ -828,6 +828,11 @@ impl native_contract::Host for NativeHostBridge {
             }
         }
     }
+    fn clear_overload_cooldowns(&self) {
+        if let Ok(mut states) = self.cooldowns.lock() {
+            states.retain(|_, state| state.quota);
+        }
+    }
     fn websockets_enabled(
         &self,
     ) -> futures_util::future::BoxFuture<'_, Result<bool, native_contract::ServiceError>> {
@@ -1117,6 +1122,7 @@ impl native_contract::Host for NativeHostBridge {
                     limits.websocket_idle_timeout_ms.max(1000),
                 ),
                 websocket_heartbeat: Duration::from_millis(limits.websocket_heartbeat_interval_ms),
+                auto_retry_when_overload: limits.auto_retry_when_overload,
             })
         })
     }

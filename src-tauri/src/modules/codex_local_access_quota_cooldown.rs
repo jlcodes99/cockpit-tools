@@ -143,6 +143,24 @@ fn sync_runtime_quota_cooldowns(runtime: &mut GatewayRuntime, accounts: &[CodexA
             .is_some_and(|current| current.updated_at_ms > next.updated_at_ms) {
             continue;
         }
+        if next.exhausted {
+            let timeouts = &collection.timeouts;
+            let can_auto_reset = if let Some(quota) = account.quota.as_ref() {
+                let credits = quota.reset_credits_available.unwrap_or(0);
+                credits > 0 && (
+                    (timeouts.auto_reset_usage_on_5h_limit && (quota.hourly_percentage <= 0 || (quota.hourly_window_present == Some(true) && quota.hourly_percentage == 0)))
+                    || (timeouts.auto_reset_usage_on_week_limit && (quota.weekly_percentage <= 0 || (quota.weekly_window_present == Some(true) && quota.weekly_percentage == 0)))
+                )
+            } else {
+                false
+            };
+            if can_auto_reset {
+                let id = account.id.clone();
+                tokio::spawn(async move {
+                    let _ = crate::modules::codex_quota::refresh_account_quota(&id).await;
+                });
+            }
+        }
         runtime.account_quota_cooldowns.insert(account.id.clone(), next);
     }
 }

@@ -324,6 +324,18 @@ fn default_sidecar_streaming_bootstrap_retries() -> u8 {
     1
 }
 
+fn default_auto_retry_when_overload() -> bool {
+    false
+}
+
+fn default_auto_reset_usage_on_week_limit() -> bool {
+    false
+}
+
+fn default_auto_reset_usage_on_5h_limit() -> bool {
+    false
+}
+
 fn default_timeout_preset_long_wait() -> String {
     "long_wait".to_string()
 }
@@ -373,6 +385,12 @@ pub struct CodexLocalAccessTimeouts {
     pub single_account_status_retry_max_delay_ms: u64,
     #[serde(default = "default_sidecar_streaming_bootstrap_retries")]
     pub sidecar_streaming_bootstrap_retries: u8,
+    #[serde(default = "default_auto_retry_when_overload")]
+    pub auto_retry_when_overload: bool,
+    #[serde(default = "default_auto_reset_usage_on_week_limit")]
+    pub auto_reset_usage_on_week_limit: bool,
+    #[serde(default = "default_auto_reset_usage_on_5h_limit")]
+    pub auto_reset_usage_on_5h_limit: bool,
 }
 
 impl Default for CodexLocalAccessTimeouts {
@@ -401,6 +419,9 @@ impl Default for CodexLocalAccessTimeouts {
             single_account_status_retry_max_delay_ms:
                 default_single_account_status_retry_max_delay_ms(),
             sidecar_streaming_bootstrap_retries: default_sidecar_streaming_bootstrap_retries(),
+            auto_retry_when_overload: default_auto_retry_when_overload(),
+            auto_reset_usage_on_week_limit: default_auto_reset_usage_on_week_limit(),
+            auto_reset_usage_on_5h_limit: default_auto_reset_usage_on_5h_limit(),
         }
     }
 }

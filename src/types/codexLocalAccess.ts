@@ -140,6 +140,9 @@ export interface CodexLocalAccessTimeouts {
   singleAccountStatusRetryBaseDelayMs: number;
   singleAccountStatusRetryMaxDelayMs: number;
   sidecarStreamingBootstrapRetries: number;
+  autoRetryWhenOverload: boolean;
+  autoResetUsageOnWeekLimit: boolean;
+  autoResetUsageOn5hLimit: boolean;
 }
 
 export interface CodexLocalAccessTimeoutPreset {

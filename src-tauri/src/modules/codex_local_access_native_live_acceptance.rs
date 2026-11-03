@@ -106,6 +106,9 @@ impl Host for AcceptanceHost {
     fn invalidate_transport(&self, identity: &str) -> bool {
         self.inner.invalidate_transport(identity)
     }
+    fn clear_overload_cooldowns(&self) {
+        self.inner.clear_overload_cooldowns();
+    }
     fn route_failed_attempt<'a>(
         &'a self,
         route: &'a Route,

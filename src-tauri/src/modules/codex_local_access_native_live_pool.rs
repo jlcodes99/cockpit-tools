@@ -195,6 +195,9 @@ impl Host for PoolHost {
     fn set_cooling_disabled(&self, disabled: bool) {
         self.inner.set_cooling_disabled(disabled);
     }
+    fn clear_overload_cooldowns(&self) {
+        self.inner.clear_overload_cooldowns();
+    }
     fn set_session_affinity_enabled(&self, enabled: bool) {
         self.inner.set_session_affinity_enabled(enabled);
     }

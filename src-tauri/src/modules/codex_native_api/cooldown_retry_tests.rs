@@ -560,3 +560,207 @@ async fn model_availability_errors_rotate_but_client_faults_do_not() {
         task.abort();
     }
 }
+
+struct OverloadRetryHost {
+    base: String,
+    auto_retry_when_overload: bool,
+    cleared_cooldowns: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl Host for OverloadRetryHost {
+    fn authorize<'a>(&'a self, _: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
+        Box::pin(async move {
+            Ok(Caller {
+                id: "caller".into(),
+                label: "fixture".into(),
+            })
+        })
+    }
+
+    fn route<'a>(
+        &'a self,
+        _: &'a Caller,
+        request: RouteRequest,
+    ) -> BoxFuture<'a, Result<Route, ServiceError>> {
+        Box::pin(async move {
+            Ok(Route {
+                continuity_account_id: None,
+                installation_profile: None,
+                official_authorization_revision: None,
+                official_registration_id: None,
+                official_fallback_registration_id: None,
+                official_fallback_authorization_revision: None,
+                authorization_scope_fingerprint: None,
+                official_fallback_failure: None,
+                transport_identity: None,
+                account_id: "test-account".into(),
+                owner_id: "owner-test".into(),
+                base_url: self.base.clone(),
+                model: request.model,
+                headers: HeaderMap::new(),
+                client: reqwest::Client::builder().no_proxy().build().unwrap(),
+                proxy_url: None,
+                proxy_route: None,
+                chatgpt: false,
+                chatgpt_plan: false,
+                wire_api: WireApi::Responses,
+                compact_endpoint: None,
+                websocket_endpoint: None,
+                default_service_tier: None,
+                permit: None,
+            })
+        })
+    }
+
+    fn models<'a>(&'a self, _: &'a Caller) -> BoxFuture<'a, Result<Value, ServiceError>> {
+        Box::pin(async { Ok(json!({"data":[]})) })
+    }
+
+    fn execution_policy(&self) -> BoxFuture<'_, Result<ExecutionPolicy, ServiceError>> {
+        Box::pin(async move {
+            Ok(ExecutionPolicy {
+                total_timeout: Duration::from_secs(5),
+                auto_retry_when_overload: self.auto_retry_when_overload,
+                status_retry_max_delay: Duration::from_millis(50),
+                ..Default::default()
+            })
+        })
+    }
+
+    fn clear_overload_cooldowns(&self) {
+        self.cleared_cooldowns
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    fn record(&self, _: RequestReport) -> BoxFuture<'_, ()> {
+        Box::pin(async {})
+    }
+}
+
+#[tokio::test]
+async fn native_auto_retry_when_overload_enabled_retries_and_succeeds() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let calls = Arc::new(AtomicUsize::new(0));
+    let capture = calls.clone();
+    let app = Router::new().route(
+        "/responses",
+        post(move || {
+            let capture = capture.clone();
+            async move {
+                let call = capture.fetch_add(1, Ordering::SeqCst);
+                if call < 3 {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        Json(json!({
+                            "type": "error",
+                            "error": {
+                                "type": "service_unavailable_error",
+                                "code": "server_is_overloaded",
+                                "message": "Our servers are currently overloaded. Please try again later."
+                            }
+                        })),
+                    )
+                } else {
+                    (
+                        StatusCode::OK,
+                        Json(json!({
+                            "id": "resp-success",
+                            "status": "completed",
+                            "output": []
+                        })),
+                    )
+                }
+            }
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let cleared = Arc::new(AtomicUsize::new(0));
+    let host = Arc::new(OverloadRetryHost {
+        base: format!("http://{addr}"),
+        auto_retry_when_overload: true,
+        cleared_cooldowns: cleared.clone(),
+    });
+    let root = tempfile::tempdir().unwrap();
+    let mut service = start(
+        "127.0.0.1:0".parse().unwrap(),
+        host.clone(),
+        root.path().join("identity.sqlite"),
+        Options::default(),
+    )
+    .await
+    .unwrap();
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
+    let response = client
+        .post(format!("http://{}/v1/responses", service.addr))
+        .bearer_auth("fixture")
+        .json(&json!({"model":"gpt-6.1-sol","input":[],"stream":false}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status().as_u16(), 200);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["id"], "resp-success");
+    assert!(calls.load(Ordering::SeqCst) >= 4);
+    assert!(cleared.load(Ordering::SeqCst) > 0);
+    service.shutdown(Duration::from_secs(2)).await.unwrap();
+    task.abort();
+}
+
+#[tokio::test]
+async fn native_auto_retry_when_overload_disabled_fails_immediately() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let calls = Arc::new(AtomicUsize::new(0));
+    let capture = calls.clone();
+    let app = Router::new().route(
+        "/responses",
+        post(move || {
+            let capture = capture.clone();
+            async move {
+                capture.fetch_add(1, Ordering::SeqCst);
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(json!({
+                        "type": "error",
+                        "error": {
+                            "type": "service_unavailable_error",
+                            "code": "server_is_overloaded",
+                            "message": "Our servers are currently overloaded. Please try again later."
+                        }
+                    })),
+                )
+            }
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let cleared = Arc::new(AtomicUsize::new(0));
+    let host = Arc::new(OverloadRetryHost {
+        base: format!("http://{addr}"),
+        auto_retry_when_overload: false,
+        cleared_cooldowns: cleared.clone(),
+    });
+    let root = tempfile::tempdir().unwrap();
+    let mut service = start(
+        "127.0.0.1:0".parse().unwrap(),
+        host.clone(),
+        root.path().join("identity.sqlite"),
+        Options::default(),
+    )
+    .await
+    .unwrap();
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
+    let response = client
+        .post(format!("http://{}/v1/responses", service.addr))
+        .bearer_auth("fixture")
+        .json(&json!({"model":"gpt-6.1-sol","input":[],"stream":false}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status().as_u16(), 503);
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
+    service.shutdown(Duration::from_secs(2)).await.unwrap();
+    task.abort();
+}
