@@ -268,6 +268,71 @@ fn extract_refresh_token_from_unified_entry(data: &[u8]) -> Option<String> {
 }
 
 /// 从 protobuf 消息中提取指定字段的字符串
+/// 从 antigravityUnifiedStateSync.userStatus 中提取 email。
+/// 结构: Topic.data[userStatusSentinelKey].Row.value = base64(UserStatus)，再取 Field 3。
+/// 用于识别 IDE 里缓存的 userStatus 属于哪个账号，避免切号后继续沿用上一个账号的状态。
+pub fn extract_email_from_unified_user_status(data: &[u8]) -> Option<String> {
+    let mut offset = 0;
+    while offset < data.len() {
+        let (tag, new_offset) = read_varint(data, offset).ok()?;
+        let wire_type = (tag & 7) as u8;
+        let field_num = (tag >> 3) as u32;
+
+        if field_num == 1 && wire_type == 2 {
+            let (length, content_offset) = read_varint(data, new_offset).ok()?;
+            let length = length as usize;
+            if content_offset + length > data.len() {
+                return None;
+            }
+            let entry = &data[content_offset..content_offset + length];
+            if let Some(email) = extract_email_from_unified_entry(entry) {
+                return Some(email);
+            }
+        }
+
+        offset = skip_field(data, new_offset, wire_type).ok()?;
+    }
+
+    None
+}
+
+fn extract_email_from_unified_entry(data: &[u8]) -> Option<String> {
+    let mut offset = 0;
+    let mut sentinel_matched = false;
+    let mut row_data: Option<Vec<u8>> = None;
+
+    while offset < data.len() {
+        let (tag, new_offset) = read_varint(data, offset).ok()?;
+        let wire_type = (tag & 7) as u8;
+        let field_num = (tag >> 3) as u32;
+
+        if wire_type == 2 {
+            let (length, content_offset) = read_varint(data, new_offset).ok()?;
+            let length = length as usize;
+            if content_offset + length > data.len() {
+                return None;
+            }
+            let value = &data[content_offset..content_offset + length];
+            if field_num == 1 {
+                sentinel_matched = std::str::from_utf8(value).ok()? == "userStatusSentinelKey";
+            } else if field_num == 2 {
+                row_data = Some(value.to_vec());
+            }
+        }
+
+        offset = skip_field(data, new_offset, wire_type).ok()?;
+    }
+
+    if !sentinel_matched {
+        return None;
+    }
+
+    let row_data = row_data?;
+    let payload_b64 = extract_string_field(&row_data, 1)?;
+    let payload = general_purpose::STANDARD.decode(payload_b64).ok()?;
+    extract_string_field(&payload, 3)
+}
+
 fn extract_string_field(data: &[u8], target_field: u32) -> Option<String> {
     let mut offset = 0;
     while offset < data.len() {
