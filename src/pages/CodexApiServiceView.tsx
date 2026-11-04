@@ -80,6 +80,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
     apiKeyStatsById,
     apiServiceIsCurrent,
     applyTimeoutPreset,
+    baseUrl,
     busy: controllerBusy,
     clearTestChat,
     clientBaseUrlHost,
@@ -272,6 +273,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
     planGrants.accounts, planGrants.displaySourceIds), [selectedStatsWindow?.accounts, accounts, planGrants.accounts, planGrants.displaySourceIds]);
   const displayPoolHealth = summarizeAccountPoolHealth(localAccessAccounts, memberIds, state);
   const busy = controllerBusy;
+  const lanBaseUrl = state?.lanBaseUrl;
   const localAccessStatus = resolveCodexLocalAccessRuntimeStatus(collection, state);
   const keyRecoveryRequired = isCodexGatewayKeyRecoveryError(state?.lastError);
   return (
@@ -585,12 +587,12 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                 <label>
                   <span>Base URL</span>
                   <div className="codex-api-service-copy-row">
-                    <code>{displayBaseUrl}</code>
+                    <code>{baseUrl}</code>
                     <button
                       type="button"
                       className="folder-icon-btn"
-                      onClick={() => void handleCopy("baseUrl", displayBaseUrl)}
-                      disabled={!displayBaseUrl}
+                      onClick={() => void handleCopy("baseUrl", baseUrl)}
+                      disabled={!baseUrl}
                     >
                       {copiedField === "baseUrl" ? (
                         <Check size={14} />
@@ -600,6 +602,26 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                     </button>
                   </div>
                 </label>
+                {lanBaseUrl && (
+                  <label>
+                    <span>{t("codex.localAccess.addressLan", "局域网")} Base URL</span>
+                    <div className="codex-api-service-copy-row">
+                      <code>{lanBaseUrl}</code>
+                      <button
+                        type="button"
+                        className="folder-icon-btn"
+                        aria-label={`${t("common.copy", "复制")} ${t("codex.localAccess.addressLan", "局域网")} Base URL`}
+                        onClick={() => void handleCopy("lanBaseUrl", lanBaseUrl)}
+                      >
+                        {copiedField === "lanBaseUrl" ? (
+                          <Check size={14} />
+                        ) : (
+                          <Copy size={14} />
+                        )}
+                      </button>
+                    </div>
+                  </label>
+                )}
                 <label>
                   <span>
                     {t(
