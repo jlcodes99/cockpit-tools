@@ -43,7 +43,7 @@ async fn post(
 ) -> Result<(Value, usize), String> {
     let mut response = client
         .post(format!(
-            "{}/v2/billing/meter/{}",
+            "{}/billing/meter/{}",
             base.trim_end_matches('/'),
             route
         ))
@@ -276,6 +276,9 @@ mod transport_tests {
                                 continue;
                             }
                             assert!(header.contains("authorization: bearer fixture"));
+                            // Personal resource routes have no /v2 prefix. The
+                            // enterprise usage route uses a different contract.
+                            assert!(header.starts_with("post /billing/meter/get-user-resource-"));
                             let body: Value =
                                 serde_json::from_slice(&request[end + 4..end + 4 + length])
                                     .unwrap();
