@@ -13,6 +13,7 @@ import {
 } from '../types/codebuddy';
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
 import { CodebuddySuiteAccountsSharedView, type CodebuddySuiteAccountsPlatformConfig } from '../components/codebuddy-suite/CodebuddySuiteAccountsSharedView';
+import { CodebuddyQuotaCreditsSummary } from '../components/codebuddy-suite/CodebuddyQuotaCreditsSummary';
 import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessionManager';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 
@@ -128,6 +129,26 @@ export function CodebuddyCnAccountsPage() {
     [page.sortDirection, store.accounts, store.currentAccountId],
   );
 
+  // 与 WorkBuddy 一致，用「总剩余额度 + 分组明细」的新版概览替换平铺的资源包列表；
+  // 无配额数据时返回 null，让共享视图回退到原有的空状态提示。
+  const platformConfig = useMemo<
+    CodebuddySuiteAccountsPlatformConfig<CodebuddyAccount>
+  >(
+    () => ({
+      ...codebuddyCnPlatformConfig,
+      renderQuotaSummary: (account) => {
+        const groups = getCodebuddyQuotaCategoryGroups(
+          account,
+          page.t as (key: string, defaultValue?: string) => string,
+        );
+        return groups.some((group) => group.visible) ? (
+          <CodebuddyQuotaCreditsSummary groups={groups} />
+        ) : null;
+      },
+    }),
+    [page.t],
+  );
+
   return (
     <div className={`ghcp-accounts-page ${codebuddyCnPlatformConfig.pageClassName}`}>
       <PlatformOverviewTabsHeader
@@ -145,7 +166,7 @@ export function CodebuddyCnAccountsPage() {
           accounts={store.accounts}
           loading={store.loading}
           page={page}
-          platformConfig={codebuddyCnPlatformConfig}
+          platformConfig={platformConfig}
           onRefreshAccounts={() => { store.fetchAccounts(); }}
         />
       )}
