@@ -62,6 +62,17 @@ for (const variant of ['card', 'table'] as const) {
     assert.ok(html.includes('$80.00') && html.includes('Example'));
   });
 }
+test('codex-proxy-rs shows daily and weekly used amounts, including zero and unknown', () => {
+  const html = renderSummary({ mode: 'codex_proxy_rs', details: [
+    { key: 'daily.used', label: 'daily used', value: '0' },
+    { key: 'weekly.used', label: 'weekly used', value: '12.3456' },
+  ] });
+  assert.ok(html.includes('每日（今日已用：$0.00）</span>'));
+  assert.ok(html.includes('每周（本周已用：$12.35）</span>'));
+  const missing = renderSummary({ mode: 'codex_proxy_rs' });
+  assert.ok(missing.includes('今日已用：—') && missing.includes('本周已用：—'));
+});
+
 test('official missing daily usage stays unknown', () => {
   const html = renderSummary({ mode: 'openai_official', balance: 40, totalCost: 120 });
   assert.equal((html.match(/<strong>—<\/strong>/g) ?? []).length, 2);

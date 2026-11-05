@@ -1,3 +1,4 @@
+import { CodexProxyRsUsagePanel } from "../components/codex/CodexProxyRsUsagePanel";
 import { getCockpitApiStatsRecord, toCockpitApiRecord } from "./codexAccountsControllerModel";
 import { CodexRemoteServicePanel } from '../components/codex/CodexRemoteServicePanel';
 import { isOpenAIOfficialUsageAccount } from "../utils/openaiOfficialUsage";
@@ -99,6 +100,7 @@ export function renderCodexApiKeyUsagePanel({
   const isNewApiUsage = usageMode === "new_api";
   const isSub2ApiUsage = usageMode === "sub2api";
   const isTokenPlanUsage = usageMode === "token_plan";
+  const isCodexProxyRsUsage = usageMode === "codex_proxy_rs";
   const usedPercent = formatApiKeyUsagePercent(summary);
   if (isDeepSeekUsage) {
     return (
@@ -144,6 +146,15 @@ export function renderCodexApiKeyUsagePanel({
           </div>
         ) : null}
       </div>
+    );
+  }
+  if (isCodexProxyRsUsage) {
+    return (
+      <CodexProxyRsUsagePanel
+        summary={summary}
+        loading={loading}
+        error={usageState?.error}
+      />
     );
   }
   if (variant === "card" && summary && isNewApiUsage) {

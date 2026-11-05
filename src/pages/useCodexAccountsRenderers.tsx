@@ -1,3 +1,4 @@
+import { CodexProxyRsUsagePanel } from "../components/codex/CodexProxyRsUsagePanel";
 import { CodexDeviceRestrictionBadge } from "../components/codex/CodexDeviceRestrictions";
 import { resolveNewApiQuotaSnapshot } from "../services/modelProviderUsageService";
 import { resolveCodexAccountDailyUsage } from "./codexApiKeyUsagePanel";
@@ -386,7 +387,9 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
             <CodexAccountOfficialBadge account={account} grants={planOverview.accounts} memberIds={localAccessAccountIdSet} />
             <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDate} />
             <div className="codex-compact-quotas">
-              {isApiKeyAccount ? (
+              {isApiKeyAccount && apiKeyUsageMap[account.id]?.summary?.mode === "codex_proxy_rs" ? (
+                !hideRelayQuota && <CodexProxyRsUsagePanel summary={apiKeyUsageMap[account.id]?.summary} />
+              ) : isApiKeyAccount ? (
                 (!hideRelayQuota || shouldShowCodexApiKeyUsagePanel(account, hideRelayQuota)) && (isOpenAIOfficialUsageAccount(account)
                   ? renderApiKeyUsagePanel(account, resolveUsageProviderForApiKeyAccount(account), 'table')
                   : codexDailyUsageMetrics(resolveCodexAccountDailyUsage(account, apiKeyUsageMap[account.id]?.summary), t).map(item => (
@@ -2340,7 +2343,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
       const summary = state?.summary;
       const usageMode =
         resolveApiKeyUsageMode(summary) ??
-        (isOpenAIOfficialUsageAccount(account, provider?.baseUrl) ? "openai_official" : provider?.integrationType === "sub2api" ? "sub2api" : null);
+        (isOpenAIOfficialUsageAccount(account, provider?.baseUrl) ? "openai_official" : provider?.integrationType === "codex_proxy_rs" ? "codex_proxy_rs" : provider?.integrationType === "sub2api" ? "sub2api" : null);
       if (!usageMode) return null;
       const coreDetailKeys =
         usageMode === "new_api"
@@ -2591,6 +2594,8 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
               </section>
               {summary?.cockpit ? (
                 <CodexRemoteServiceDetails key={account.id} state={state!} baseUrl={baseUrl} apiKey={account.openai_api_key || ""} t={t} />
+              ) : usageMode === "codex_proxy_rs" ? (
+                  <CodexProxyRsUsagePanel summary={summary} loading={state?.loading} error={state?.error} detailed />
               ) : usageMode === "openai_official" ? (
                 <OpenAIOfficialUsagePanel provider={provider} apiKey={account.openai_api_key ?? ""} sourceBinding={state?.sourceBinding} onRefresh={() => void refreshApiKeyUsageByAccountId(account.id)} summary={summary} loading={state?.loading} error={state?.error} detailed t={t} />
               ) : <>

@@ -9,6 +9,8 @@ pub async fn codex_discover_remote_service(base_url: String, api_key: String) ->
 
 #[path = "codex_openai_usage.rs"]
 mod openai_usage;
+#[path = "codex_proxy_rs_usage.rs"]
+mod codex_proxy_rs_usage;
 
 #[tauri::command]
 pub async fn codex_query_remote_key_data(base_url:String,api_key:String,resource:String,
@@ -1836,6 +1838,7 @@ pub async fn codex_query_model_provider_usage(
     match requested_type {
         Some("new_api") => query_new_api_model_provider_usage(&client, &base_url, key).await,
         Some("sub2api") => query_sub2api_model_provider_usage(&client, &base_url, key).await,
+        Some("codex_proxy_rs") => codex_proxy_rs_usage::query(&base_url, key).await,
         Some(value) => Err(format!("PROVIDER_USAGE_TYPE_UNSUPPORTED: {}", value)),
         None => {
             let new_api_error =
@@ -2062,6 +2065,9 @@ async fn query_sub2api_model_provider_usage(
     }
     let parsed = serde_json::from_str::<serde_json::Value>(&text)
         .map_err(|e| format!("PROVIDER_USAGE_PARSE_FAILED: {}", e))?;
+    if codex_proxy_rs_usage::matches(&parsed) {
+        return codex_proxy_rs_usage::summarize(&parsed, latency_ms);
+    }
     Ok(summarize_model_provider_usage(&parsed, latency_ms))
 }
 

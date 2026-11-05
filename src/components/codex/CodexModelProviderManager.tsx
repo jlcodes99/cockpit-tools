@@ -409,7 +409,7 @@ interface ProviderFormState {
   authScheme: "x-api-key" | "bearer";
   supportsWebsockets: boolean;
   enableModePreference: CodexProviderEnableModePreference;
-  integrationType: "sub2api" | "new_api" | "";
+  integrationType: "sub2api" | "new_api" | "codex_proxy_rs" | "";
   newApiKeyName: string;
   newApiKey: string;
   newUsageApiKey: string;
@@ -455,7 +455,7 @@ interface SponsorProviderTemplate {
   website: string;
   apiKeyUrl: string;
   wireApi?: CodexProviderWireApi | null;
-  integrationType?: "sub2api" | "new_api" | null;
+  integrationType?: "sub2api" | "new_api" | "codex_proxy_rs" | null;
 }
 
 interface ProviderPreviewPaths {
@@ -3338,7 +3338,7 @@ export function useCodexModelProviderManagerController({
           integrationType: provider.integrationType ?? null,
         });
         if (
-          (summary.mode === "sub2api" || summary.mode === "new_api") &&
+          (summary.mode === "sub2api" || summary.mode === "new_api" || summary.mode === "codex_proxy_rs") &&
           summary.mode !== provider.integrationType
         ) {
           await saveCodexModelProviderDetectedIntegrationType(provider.id, summary.mode);

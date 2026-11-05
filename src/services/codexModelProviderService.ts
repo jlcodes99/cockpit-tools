@@ -45,7 +45,7 @@ export interface CodexModelProvider {
   name: string;
   baseUrl: string;
   sourceTag?: string;
-  integrationType?: 'sub2api' | 'new_api';
+  integrationType?: 'sub2api' | 'new_api' | 'codex_proxy_rs';
   modelCatalog?: string[];
   modelContextWindows?: Record<string, number>;
   supportsVision?: boolean;
@@ -89,7 +89,7 @@ interface UpsertFromCredentialInput {
   authScheme?: 'x-api-key' | 'bearer';
   wireApi?: CodexProviderWireApi | null;
   supportsWebsockets?: boolean;
-  integrationType?: 'sub2api' | 'new_api' | null;
+  integrationType?: 'sub2api' | 'new_api' | 'codex_proxy_rs' | null;
 }
 
 let providerIdCounter = 0;
@@ -225,8 +225,8 @@ function hasOwnProperty(value: object, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
 }
 
-function normalizeIntegrationType(value: unknown): 'sub2api' | 'new_api' | undefined {
-  return value === 'sub2api' || value === 'new_api' ? value : undefined;
+function normalizeIntegrationType(value: unknown): 'sub2api' | 'new_api' | 'codex_proxy_rs' | undefined {
+  return value === 'sub2api' || value === 'new_api' || value === 'codex_proxy_rs' ? value : undefined;
 }
 
 function migrateApiKeyFunProvider(
@@ -719,7 +719,7 @@ export const createCodexModelProvider = serializedProviderMutation(async functio
   wireApi?: CodexProviderWireApi;
   supportsWebsockets?: boolean;
   enableModePreference?: CodexProviderEnableModePreference;
-  integrationType?: 'sub2api' | 'new_api';
+  integrationType?: 'sub2api' | 'new_api' | 'codex_proxy_rs';
   boundOauthAccountId?: string | null;
   initialApiKey?: string;
   initialApiKeyName?: string;
@@ -797,7 +797,7 @@ export const updateCodexModelProvider = serializedProviderMutation(async functio
   wireApi?: CodexProviderWireApi | null;
     supportsWebsockets?: boolean;
     enableModePreference?: CodexProviderEnableModePreference | null;
-    integrationType?: 'sub2api' | 'new_api' | null;
+    integrationType?: 'sub2api' | 'new_api' | 'codex_proxy_rs' | null;
     boundOauthAccountId?: string | null;
     keyModelConfig?: { apiKeyId: string; config: CodexProviderModelConfig };
   },
@@ -1102,7 +1102,7 @@ export async function queryCodexModelProviderUsage(input: {
   baseUrl: string;
   apiKey: string;
   usageApiKey?: string;
-  integrationType?: 'sub2api' | 'new_api' | null;
+  integrationType?: 'sub2api' | 'new_api' | 'codex_proxy_rs' | null;
 }): Promise<CodexModelProviderUsageSummary> {
   if (!isOpenAIOfficialUsageUrl(input.baseUrl)) return await queryModelProviderUsage(input);
   if (!input.usageApiKey?.trim()) throw new Error('OPENAI_USAGE_NOT_CONFIGURED');
@@ -1139,7 +1139,7 @@ export const updateCodexOpenAIUsageKey = serializedProviderMutation(async functi
 
 export async function saveCodexModelProviderDetectedIntegrationType(
   providerId: string,
-  integrationType: 'sub2api' | 'new_api',
+  integrationType: 'sub2api' | 'new_api' | 'codex_proxy_rs',
 ): Promise<CodexModelProvider> {
   return updateCodexModelProvider(providerId, { integrationType });
 }

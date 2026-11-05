@@ -2709,6 +2709,16 @@
     "save": "Save Groups",
     "other_group": "Other Models"
   },
+  "codexProxyRs": {
+    "todayUsed": "Used today",
+    "weekUsed": "Used this week",
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "total": "Total quota",
+    "used": "Used",
+    "remaining": "Remaining",
+    "noReset": "No reset time available"
+  },
   "codex": {
     "overload": {
       "setting": "Keep retrying at capacity",
