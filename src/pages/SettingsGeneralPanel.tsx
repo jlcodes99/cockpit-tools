@@ -14,6 +14,7 @@ import { StartupPageSetting } from "./settings/StartupPageSetting";
 import { ThemeColorSetting } from './settings/ThemeColorSetting';
 import { AppBackgroundSettings } from './settings/AppBackgroundSettings';
 import { SettingsCodexPlatformPanel } from "./SettingsCodexPlatformPanel";
+import { PlatformSettingsSection } from "./settings/PlatformSettingsSection";
 
 
 /** 渲染 SettingsPageView 的 activeTab === 'general' 业务面板。 */
@@ -1028,7 +1029,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ order: platformSettingsOrder.antigravity }}>
+              <PlatformSettingsSection platformId={'antigravity'} order={platformSettingsOrder.antigravity}>
                 <div className="group-title">{t('settings.general.antigravitySettingsTitle', 'Antigravity IDE 设置')}</div>
                 <div className="settings-group">
               <div className="settings-row">
@@ -1481,11 +1482,11 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               )}
             </div>
 
-              </div>
+              </PlatformSettingsSection>
 
               <SettingsCodexPlatformPanel {...props} />
 
-              <div style={{ order: platformSettingsOrder.claude_manager }}>
+              <PlatformSettingsSection platformId={'claude_manager'} order={platformSettingsOrder.claude_manager}>
                 <div className="group-title">
                   {t('settings.general.claudeSettingsTitle', 'Claude 设置')}
                 </div>
@@ -1628,9 +1629,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     isPreset: claudeQuotaAlertThresholdIsPreset,
                   })}
                 </div>
-              </div>
+              </PlatformSettingsSection>
 
-              <div style={{ order: platformSettingsOrder['github-copilot'] }}>
+              <PlatformSettingsSection platformId={'github-copilot'} order={platformSettingsOrder['github-copilot']}>
                 <div className="group-title">{t('settings.general.githubCopilotSettingsTitle', 'GitHub Copilot 设置')}</div>
                 <div className="settings-group">
               <div className="settings-row">
@@ -1816,9 +1817,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               )}
             </div>
 
-              </div>
+              </PlatformSettingsSection>
 
-              <div style={{ order: platformSettingsOrder.windsurf }}>
+              <PlatformSettingsSection platformId={'windsurf'} order={platformSettingsOrder.windsurf}>
                 <div className="group-title">{t('settings.general.windsurfSettingsTitle', 'Windsurf 设置')}</div>
                 <div className="settings-group">
               <div className="settings-row">
@@ -2004,9 +2005,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               )}
             </div>
 
-              </div>
+              </PlatformSettingsSection>
 
-              <div style={{ order: platformSettingsOrder.kiro }}>
+              <PlatformSettingsSection platformId={'kiro'} order={platformSettingsOrder.kiro}>
                 <div className="group-title">{t('settings.general.kiroSettingsTitle', 'Kiro 设置')}</div>
                 <div className="settings-group">
               <div className="settings-row">
@@ -2191,9 +2192,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                 </div>
               )}
             </div>
-              </div>
+              </PlatformSettingsSection>
 
-              <div style={{ order: platformSettingsOrder.codebuddy }}>
+              <PlatformSettingsSection platformId={'codebuddy'} order={platformSettingsOrder.codebuddy}>
                 <div className="group-title">{t('settings.general.codebuddySettingsTitle', 'CodeBuddy 设置')}</div>
                 <div className="settings-group">
               <div className="settings-row">
@@ -2403,9 +2404,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                 </div>
               )}
             </div>
-              </div>
+              </PlatformSettingsSection>
 
-              <div style={{ order: platformSettingsOrder.codebuddy_cn }}>
+              <PlatformSettingsSection platformId={'codebuddy_cn'} order={platformSettingsOrder.codebuddy_cn}>
                 <div className="group-title">{t('settings.general.codebuddyCnSettingsTitle', 'CodeBuddy CN 设置')}</div>
                 <div className="settings-group">
                   <div className="settings-row">
@@ -2600,9 +2601,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     </div>
                   )}
                 </div>
-              </div>
+              </PlatformSettingsSection>
 
-              <div style={{ order: platformSettingsOrder.qoder }}>
+              <PlatformSettingsSection platformId={'qoder'} order={platformSettingsOrder.qoder}>
                 <div className="group-title">{t('quickSettings.qoder.title', 'Qoder 设置')}</div>
                 <div className="settings-group">
                   <div className="settings-row">
@@ -2791,9 +2792,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     </div>
                   )}
                 </div>
-              </div>
+              </PlatformSettingsSection>
 
-              <div style={{ order: platformSettingsOrder.zcode }}>
+              <PlatformSettingsSection platformId={'zcode'} order={platformSettingsOrder.zcode}>
                 <div className="group-title">{t('quickSettings.zcode.title', 'ZCode 设置')}</div>
                 <div className="settings-group">
                   <div className="settings-row">
@@ -2909,9 +2910,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     </div>
                   </div>
                 </div>
-              </div>
+              </PlatformSettingsSection>
 
-              <div style={{ order: platformSettingsOrder.trae }}>
+              <PlatformSettingsSection platformId={'trae'} order={platformSettingsOrder.trae}>
                 <div className="group-title">{t('quickSettings.trae.title', 'Trae 设置')}</div>
                 <div className="settings-group">
                   <div className="settings-row">
@@ -3122,7 +3123,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     </div>
                   )}
                 </div>
-              </div>
+              </PlatformSettingsSection>
 
               {renderTraeVariantSettingsGroup({
                 target: 'trae_solo',
@@ -3187,7 +3188,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                 quotaAlertThresholdIsPreset: traeSoloCnQuotaAlertThresholdIsPreset,
               })}
 
-              <div style={{ order: platformSettingsOrder.workbuddy }}>
+              <PlatformSettingsSection platformId={'workbuddy'} order={platformSettingsOrder.workbuddy}>
                 <div className="group-title">{t('quickSettings.workbuddy.title', 'WorkBuddy 设置')}</div>
                 <div className="settings-group">
                   <div className="settings-row">
@@ -3399,9 +3400,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     </div>
                   )}
                 </div>
-              </div>
+              </PlatformSettingsSection>
 
-              <div style={{ order: platformSettingsOrder.zed }}>
+              <PlatformSettingsSection platformId={'zed'} order={platformSettingsOrder.zed}>
                 <div className="group-title">{t('quickSettings.zed.title', 'Zed 设置')}</div>
                 <div className="settings-group">
                   <div className="settings-row">
@@ -3586,9 +3587,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     </div>
                   )}
                 </div>
-              </div>
+              </PlatformSettingsSection>
 
-              <div style={{ order: platformSettingsOrder.cursor }}>
+              <PlatformSettingsSection platformId={'cursor'} order={platformSettingsOrder.cursor}>
                 <div className="group-title">{t('quickSettings.cursor.title', 'Cursor 设置')}</div>
                 <div className="settings-group">
               <div className="settings-row">
@@ -3773,8 +3774,8 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                 </div>
               )}
             </div>
-              </div>
-<div style={{ order: platformSettingsOrder.grok }}>
+              </PlatformSettingsSection>
+<PlatformSettingsSection platformId={'grok'} order={platformSettingsOrder.grok}>
                 <div className="group-title">{t('quickSettings.grok.title', 'Grok CLI 设置')}</div>
                 <div className="settings-group">
                   <div className="settings-row">
@@ -3968,7 +3969,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     </div>
                   )}
                 </div>
-              </div>
+              </PlatformSettingsSection>
             </div>
 
           </fieldset>

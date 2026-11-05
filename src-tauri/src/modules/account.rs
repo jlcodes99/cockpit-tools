@@ -2092,6 +2092,9 @@ where
     F: FnOnce(String, modules::antigravity_switch_history::AntigravityAutoSwitchReason) -> Fut,
     Fut: std::future::Future<Output = Result<Account, String>>,
 {
+    if !crate::modules::tray_layout::is_platform_enabled("antigravity") {
+        return Ok(None);
+    }
     let Some(_guard) = AutoSwitchGuard::acquire(&AUTO_SWITCH_IN_PROGRESS) else {
         modules::logger::log_info("[AutoSwitch] 自动切号进行中，跳过本次检查");
         return Ok(None);
