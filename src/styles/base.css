@@ -3,6 +3,9 @@
    Brand Direction: floating dashboard with soft gradients
    ============================================ */
 
+/* Important limits in the first layer also override component-specific important styles. */
+@layer simplified-visuals;
+
 :root {
   /* Typography */
   --font-sans: 'Inter', 'Segoe UI', sans-serif;
@@ -180,23 +183,81 @@ html[data-theme="dark"] body {
   color-scheme: dark;
 }
 
-html[data-reduced-motion="true"] {
-  scroll-behavior: auto !important;
-}
+@layer simplified-visuals {
+  html[data-reduced-motion="true"] body:not(.floating-card-overlay-root) {
+    background: var(--bg-primary) !important;
+  }
 
-html[data-reduced-motion="true"] body {
-  background: var(--bg-primary) !important;
-}
+  /* Stop decorative animations; keep the existing loading indicators. */
+  html[data-reduced-motion="true"],
+  html[data-reduced-motion="true"]::before,
+  html[data-reduced-motion="true"]::after,
+  html[data-reduced-motion="true"] *:not(:is(.loading-spinner, .spin, .spin svg, .icon-spin, .floating-card-spin, .animate-spin, .chatgpt-plan-spin, .codex-official-spin, .official-auth-spin, .pelican-spinner, .codex-proxy-latency-spinner)),
+  html[data-reduced-motion="true"] *::before,
+  html[data-reduced-motion="true"] *::after {
+    animation: none !important;
+  }
 
-/* Keep essential loading spinners; disable decorative motion/glass. */
-html[data-reduced-motion="true"] *:not(.loading-spinner):not(.spin):not(.icon-spin):not(.floating-card-spin):not(.animate-spin),
-html[data-reduced-motion="true"] *:not(.loading-spinner):not(.spin):not(.icon-spin):not(.floating-card-spin):not(.animate-spin)::before,
-html[data-reduced-motion="true"] *:not(.loading-spinner):not(.spin):not(.icon-spin):not(.floating-card-spin):not(.animate-spin)::after {
-  animation: none !important;
-  transition: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  scroll-behavior: auto !important;
+  html[data-reduced-motion="true"] .flying-rocket,
+  html[data-reduced-motion="true"] .side-nav-update-progress-ripple {
+    display: none !important;
+  }
+
+  /* Disable transitions, filters and shadows across the interface. */
+  html[data-reduced-motion="true"],
+  html[data-reduced-motion="true"]::before,
+  html[data-reduced-motion="true"]::after,
+  html[data-reduced-motion="true"] *,
+  html[data-reduced-motion="true"] *::before,
+  html[data-reduced-motion="true"] *::after,
+  html[data-reduced-motion="true"] *::-webkit-slider-thumb {
+    transition: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    filter: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Cards stay still on hover; positioning transforms on controls remain intact. */
+  html[data-reduced-motion="true"] :where(.accounts-page, .codex-accounts-page, .ghcp-accounts-page) :is(.account-card, .codex-account-card, .ghcp-account-card) {
+    transform: none !important;
+  }
+
+  /* Keep the original account surfaces and state indicators from reduced motion. */
+  html[data-reduced-motion="true"] :where(
+    .accounts-page .toolbar,
+    .accounts-page .accounts-grid .account-card,
+    .accounts-page .card-quota-grid,
+    .codex-accounts-page .codex-accounts-grid .codex-account-card,
+    .ghcp-accounts-page .ghcp-accounts-grid .ghcp-account-card
+  ) {
+    background: var(--bg-surface) !important;
+  }
+
+  html[data-reduced-motion="true"] :where(
+    .accounts-page .account-card.selected,
+    .codex-accounts-page .codex-accounts-grid .codex-account-card.selected,
+    .ghcp-accounts-page .ghcp-accounts-grid .ghcp-account-card.selected
+  ) {
+    background: color-mix(in srgb, var(--bg-surface) 88%, var(--primary) 12%) !important;
+  }
+
+  html[data-reduced-motion="true"] :where(
+    .accounts-page .account-card.disabled,
+    .ghcp-accounts-page .ghcp-accounts-grid .ghcp-account-card.disabled
+  ) {
+    background: color-mix(in srgb, var(--bg-surface) 92%, var(--danger) 8%) !important;
+  }
+
+  html[data-reduced-motion="true"] :where(
+    .codex-accounts-page .codex-accounts-grid .codex-account-card:is(.new-api-exclusive, .api-key-usage-account, .sponsor-api-account),
+    .claude-accounts-page .codex-account-card.sponsor-api-account,
+    .claude-accounts-page .ghcp-account-card.sponsor-api-account
+  ) {
+    background: var(--bg-surface) !important;
+  }
 }
 
 /* Optional OLED palette; independent of the existing theme packs. */

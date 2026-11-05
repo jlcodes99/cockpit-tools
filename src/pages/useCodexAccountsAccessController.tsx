@@ -1,5 +1,6 @@
 import { resolveAccountUsageBaseUrl, isOpenAIOfficialUsageAccount } from '../utils/openaiOfficialUsage';
 import { prepareCodexServiceJoins } from "../utils/codexServiceJoin";
+import { scrollElementIntoView } from "../utils/reducedMotion";
 import { chatGptPlanErrorKey, listChatGptPlanAccounts } from "../services/chatgptPlanService";
 import { canChooseCodexServiceAuthorization } from "../utils/codexAccountServiceNavigation";
 import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
@@ -399,7 +400,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           const target = fieldErrors.hourlyPercent
             ? oauthBindingHourlyReserveInputRef.current
             : oauthBindingWeeklyReserveInputRef.current;
-          target?.scrollIntoView({ behavior: "smooth", block: "center" });
+          scrollElementIntoView(target, { block: "center" });
           target?.focus();
         });
         return;
