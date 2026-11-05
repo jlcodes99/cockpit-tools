@@ -55,7 +55,7 @@ jobs:
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: 📖 Read app version
         id: app_version
@@ -180,7 +180,7 @@ jobs:
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
@@ -226,7 +226,7 @@ jobs:
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
@@ -377,7 +377,7 @@ jobs:
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
@@ -568,7 +568,7 @@ jobs:
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
@@ -755,7 +755,7 @@ jobs:
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
@@ -927,7 +927,7 @@ jobs:
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
@@ -1062,7 +1062,7 @@ jobs:
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: 📥 Download release metadata
         uses: actions/download-artifact@v4
@@ -1149,7 +1149,7 @@ jobs:
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: 📥 Download release assets
         env:
@@ -1205,7 +1205,7 @@ jobs:
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: 🚀 Publish release
         env:
@@ -1362,7 +1362,7 @@ jobs:
       - name: ⚙️ Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: 📥 Download packaged release artifacts
         uses: actions/download-artifact@v4

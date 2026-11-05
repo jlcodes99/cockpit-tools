@@ -1436,9 +1436,9 @@ pub fn minimax_code_record_key_for_auth_home(
     format!("{}\u{0}{}", service_prefix, account_component)
 }
 
-/// 计算 `expiresAtMs` 的兜底值：账号没有过期时间时，给一个足够远的未来时间，
-/// 让客户端 `parseStoredCredential` 的 `Number.isFinite` 校验通过。
-const MINIMAX_CODE_FALLBACK_EXPIRES_AT_MS: i64 = 4_102_444_800_000; // 2100-01-01T00:00:00Z
+// An unknown expiry is not a lease valid until 2100. The official parser accepts
+// zero; getAccessToken then refreshes this credential before using it.
+const MINIMAX_CODE_UNKNOWN_EXPIRES_AT_MS: i64 = 0;
 
 /// Switch the local MiniMax client to `account` by rewriting its `auth.json`.
 ///
@@ -1566,7 +1566,7 @@ fn switch_minimax_code_account_impl(
         "audience": instance::MINIMAX_CODE_OAUTH_AUDIENCE,
         "accessToken": account.access_token,
         "refreshToken": refresh_token,
-        "expiresAtMs": account.expires_at.unwrap_or(MINIMAX_CODE_FALLBACK_EXPIRES_AT_MS),
+        "expiresAtMs": account.expires_at.unwrap_or(MINIMAX_CODE_UNKNOWN_EXPIRES_AT_MS),
         "generation": 1,
     });
     // Identity belongs to the incoming credential. Never retain the previous
@@ -1583,7 +1583,7 @@ fn switch_minimax_code_account_impl(
     let expires_at_ms = record
         .get("expiresAtMs")
         .and_then(|v| v.as_i64())
-        .unwrap_or(MINIMAX_CODE_FALLBACK_EXPIRES_AT_MS);
+        .unwrap_or(MINIMAX_CODE_UNKNOWN_EXPIRES_AT_MS);
 
     // Keep only the target record: the client's FileStore keys by the computed record key,
     // and `parsePayload` validates every record it finds.
@@ -2243,8 +2243,8 @@ mod minimax_code_switch_tests {
         // 账号没有 expiresAtMs 时必须写一个有限的兜底值（客户端校验要求）。
         let expires = record.get("expiresAtMs").and_then(|v| v.as_i64());
         assert!(
-            expires.is_some_and(|value| value > 0),
-            "a finite expiresAtMs must be written even when the account has none"
+            expires == Some(0),
+            "unknown expiry must require client refresh instead of inventing a future lease"
         );
     }
 
@@ -2461,8 +2461,8 @@ mod minimax_code_switch_tests {
         );
         assert_eq!(
             record.get("expiresAtMs").and_then(|v| v.as_i64()),
-            Some(MINIMAX_CODE_FALLBACK_EXPIRES_AT_MS),
-            "a finite fallback expiry must be written"
+            Some(MINIMAX_CODE_UNKNOWN_EXPIRES_AT_MS),
+            "unknown expiry must require client refresh"
         );
         let state: Value = serde_json::from_str(
             &fs::read_to_string(namespace.join("auth-state.json")).unwrap(),
