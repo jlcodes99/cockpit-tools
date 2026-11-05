@@ -413,7 +413,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          node scripts/tauri.cjs build --ci --config src-tauri/tauri.release.conf.json --target aarch64-apple-darwin
+          node scripts/tauri.cjs build --ci --target aarch64-apple-darwin --config src-tauri/tauri.release.conf.json
 
       - name: 📦 Prepare Universal binary inputs
         shell: bash
@@ -603,7 +603,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          node scripts/tauri.cjs build --ci --config src-tauri/tauri.release.conf.json --target x86_64-apple-darwin
+          node scripts/tauri.cjs build --ci --target x86_64-apple-darwin --config src-tauri/tauri.release.conf.json
 
       - name: 📦 Prepare Universal binary inputs
         shell: bash
