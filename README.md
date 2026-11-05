@@ -402,6 +402,11 @@ brew install --cask --force cockpit-tools
 
 ### 🛠️ 常见问题排查 (Troubleshooting)
 
+#### Windows：Codex 反复提示“Windows 设置未完成”？
+
+若当前错误为 `helper_sandbox_lock_failed` 且 `.sandbox-bin` 目录访问被拒绝，请参阅[Codex Windows 沙箱临时恢复说明](docs/codex-windows-sandbox-recovery.md)。该问题已在 Codex 上游报告；恢复工具默认只读，需手动修复并保留回滚备份。
+
+
 #### macOS 提示“应用已损坏，无法打开”？
 
 新的 macOS 正式发布流程会验证 Developer ID 签名、Apple 公证和公证票据，覆盖应用、自动更新包及最终 DMG。首次打开仍可能出现“从互联网下载，是否打开”的正常确认。
