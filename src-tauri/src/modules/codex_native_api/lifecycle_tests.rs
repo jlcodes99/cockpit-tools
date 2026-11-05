@@ -13,9 +13,13 @@ struct Recorder {
     changed: Notify,
     quota_checks: Mutex<Vec<String>>,
     quota_denied: Mutex<Vec<String>>,
+    quota_requests: Mutex<Vec<String>>,
 }
 
 impl Host for Recorder {
+    fn quota_request_started(&self, account_id: &str) {
+        self.quota_requests.lock().unwrap().push(account_id.into());
+    }
     fn check_quota_before_send(&self, account_id: &str) -> Result<(), ServiceError> {
         self.quota_checks.lock().unwrap().push(account_id.into());
         if self.quota_denied.lock().unwrap().iter().any(|id| id == account_id) {
@@ -59,6 +63,20 @@ impl Host for Recorder {
 }
 
 include!("lifecycle_dispatch_tests.rs");
+
+#[tokio::test]
+async fn native_lifecycle_local_quota_checks_are_not_inference_dispatch() {
+    let (mut tracker, host, _activity, _stop, _gate) = fixture().await;
+    tracker.quota_account = Some("quota-check-only".into());
+    tracker.check_quota_before_send().unwrap();
+    tracker.check_quota_before_send().unwrap();
+    assert!(host.quota_requests.lock().unwrap().is_empty());
+    tracker.quota_request_started();
+    assert_eq!(*host.quota_requests.lock().unwrap(), ["quota-check-only"]);
+    host.quota_denied.lock().unwrap().push("quota-check-only".into());
+    assert_eq!(tracker.check_quota_before_send().unwrap_err().code, "quota_reserved");
+    assert_eq!(host.quota_requests.lock().unwrap().len(), 1);
+}
 
 fn usage() -> Value {
     json!({"input_tokens": 17, "output_tokens": 23, "total_tokens": 40})

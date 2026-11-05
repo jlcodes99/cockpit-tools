@@ -98,6 +98,7 @@ async fn send_inner(
     let mut bootstrap_attempts = 0u8;
     let mut local_fallback_sources = std::collections::HashSet::new();
     let mut last_upstream_failure: Option<ServiceError> = None;
+    let mut local_quota_rejections = std::collections::HashSet::new();
     let deadline = prepared
         .execution
         .total_deadline
@@ -269,7 +270,61 @@ async fn send_inner(
         let (request, plain_request) = super::http_compression::request(
             state, request, codex_backend && !prepared.route.chatgpt_plan,
         ).await?;
-        tracker.check_quota_before_send()?;
+        if let Err(error) = tracker.check_quota_before_send() {
+            let safe_replay = mapping::local_quota_prepared_replay_is_safe(prepared);
+            if error.code == "quota_reserved"
+                && error.upstream_not_sent
+                && !prepared.transport_pinned
+                && !prepared.compact
+                && prepared.image_route_request.is_none()
+                && prepared.request.target_account_id.is_none()
+                && safe_replay
+                && local_quota_rejections.len() < 128
+                && local_quota_rejections.insert(prepared.route.account_id.clone())
+            {
+                // No upstream operation has started for this candidate. Drop
+                // both references to its permit and exclude it for this request
+                // without charging a credential retry or reporting a failure.
+                tracker.release_route();
+                let mut stop = state.stop.clone();
+                let replacement = tokio::select! {
+                    _ = stop.wait() => Err(stopping_error()),
+                    result = deadline::timeout_at(deadline, mapping::retry_local_quota_account(state, prepared)) =>
+                        result.map_err(|_| total_timeout())?,
+                };
+                match replacement {
+                    Ok(()) => {
+                        send_attempts = 0;
+                        status_attempts = 0;
+                        open_attempts = 1;
+                        refreshed = false;
+                        tracker.routed(&prepared.caller, &prepared.route, &prepared.request.model);
+                        tracker.routing_identity(&prepared.request);
+                        tracker.track_rebuild(prepared.binding.rebuild_abort_handle());
+                        tracker.prepared_metadata(&prepared);
+                        // Preserve the original opening deadline across local
+                        // skips; genuine later retry attempts may renew it.
+                        previous_open_deadline = None;
+                        continue;
+                    }
+                    Err(replacement_error)
+                        if state.stop.stopped() || tokio::time::Instant::now() >= deadline =>
+                    {
+                        return Err(replacement_error);
+                    }
+                    Err(replacement_error) => {
+                        return Err(last_upstream_failure.clone().unwrap_or_else(|| {
+                            if matches!(replacement_error.code, "no_available_account" | "quota_reserved") {
+                                error
+                            } else {
+                                replacement_error
+                            }
+                        }));
+                    }
+                }
+            }
+            return Err(last_upstream_failure.clone().unwrap_or(error));
+        }
         let mut stop = state.stop.clone();
         let mut connect_failed = false;
         let open_deadline = deadline.cap(prepared.execution.prepare_deadline());
@@ -290,6 +345,7 @@ async fn send_inner(
                 tracker.capability_fallback(prepared.capability_fallback.clone());
                 tracker.payload("upstream_request", "http", request.headers(), &body.to_string());
                 tracker.upstream_headers(request.headers());
+                tracker.quota_request_started();
                 let response = client.execute(request).await?;
                 // Keep decoder/read failures separate from connection failures:
                 // an error body is not permission to replay a dispatched turn.

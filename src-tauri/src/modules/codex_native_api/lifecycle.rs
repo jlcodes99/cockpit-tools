@@ -469,6 +469,23 @@ impl RequestTracker {
     /// Use only when transport evidence proves no HTTP request reached upstream
     /// (e.g. reqwest's is_connect). A timeout/read failure is not such evidence.
     pub(super) fn discard_unsent_attempt(&mut self) -> bool {
+        self.rollback_dispatch_checkpoint()
+    }
+
+    /// The WebSocket upgrade succeeded, but the inference create frame was not
+    /// sent. Keep that distinction in tracing while rolling back inference
+    /// accounting so a replacement candidate receives its own dispatch record.
+    pub(super) fn discard_unstarted_websocket_attempt(&mut self) -> bool {
+        let rolled_back = self.rollback_dispatch_checkpoint();
+        if rolled_back {
+            tracing::info!(target: "codex_api",
+                "[NativeAPI][websocket] request_id={} transport_connected=true inference_not_sent=true",
+                self.diagnostic_request_id());
+        }
+        rolled_back
+    }
+
+    fn rollback_dispatch_checkpoint(&mut self) -> bool {
         if !self.dispatch_open {
             return false;
         }
@@ -529,19 +546,29 @@ impl RequestTracker {
         }
     }
 
-    pub(super) fn check_quota_before_send(&self) -> Result<(), ServiceError> {
+    fn quota_candidate(&self) -> Option<&str> {
         // Routing stages a candidate without recording a send. Fence that exact
         // candidate, including an official route whose quota account is None.
-        let account_id = match &self.pending_dispatch {
+        match &self.pending_dispatch {
             Some(candidate) => candidate.quota_account.as_deref(),
             None => self.quota_account.as_deref(),
-        };
-        if let Some(account_id) = account_id {
+        }
+    }
+
+    pub(super) fn check_quota_before_send(&self) -> Result<(), ServiceError> {
+        if let Some(account_id) = self.quota_candidate() {
             self.host.check_quota_before_send(account_id)
                 .map_err(|error| error.with_upstream_not_sent(true))?;
-            self.host.quota_request_started(account_id);
         }
         Ok(())
+    }
+
+    /// Mark only when a business request is actually about to be sent. A
+    /// successful quota check or a WebSocket upgrade does not spend quota.
+    pub(super) fn quota_request_started(&self) {
+        if let Some(account_id) = self.quota_candidate() {
+            self.host.quota_request_started(account_id);
+        }
     }
 
     pub(super) fn quota_event(&self, event: &serde_json::Value) {

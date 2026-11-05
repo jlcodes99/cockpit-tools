@@ -504,6 +504,7 @@ impl Execution {
                 self.tracker.payload("upstream_request", "http", built.headers(), &payload.to_string());
                 self.tracker.upstream_headers(built.headers());
                 self.tracker.check_quota_before_send()?;
+                self.tracker.quota_request_started();
                 client.execute(built).await.map_err(|error| {
                     super::super::diagnostics::transport_failure(502,"upstream_unavailable","Unable to connect to the image upstream",&error)
                         .with_upstream_not_sent(error.is_connect() || error.is_builder())

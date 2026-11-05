@@ -1,4 +1,6 @@
 //! Synthetic loopback coverage: rebuilding creates a new generation, never transfers state.
+#[path = "context_rebuild_local_quota_tests.rs"]
+mod local_quota_tests;
 use crate::modules::codex_native_api::{
     contract::*, identity::IdentityStore, start, Handle, Options,
 };
@@ -57,11 +59,24 @@ struct TestHost {
     oauth: AtomicBool,
     passthrough: AtomicBool,
     removed_a: AtomicBool,
+    local_quota_preparation_denied: Mutex<Vec<String>>,
+    local_quota_send_denied: Mutex<Vec<String>>,
+    local_quota_send_checks: Mutex<Vec<String>>,
+    local_quota_allow_first_check: AtomicBool,
     selections: Mutex<Vec<RouteRequest>>,
     failures: Mutex<Vec<(String, u16)>>,
     reports: Mutex<Vec<RequestReport>>,
 }
 impl Host for TestHost {
+    fn check_quota_before_send(&self, account: &str) -> Result<(), ServiceError> {
+        self.local_quota_send_checks.lock().unwrap().push(account.into());
+        if self.local_quota_send_denied.lock().unwrap().iter().any(|id| id == account)
+            && !self.local_quota_allow_first_check.swap(false, Ordering::SeqCst)
+        {
+            return Err(ServiceError::new(429, "quota_reserved", "Synthetic local quota reserve"));
+        }
+        Ok(())
+    }
     fn authorize<'a>(&'a self, bearer: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
         Box::pin(async move {
             Ok(Caller {
@@ -111,6 +126,10 @@ impl Host for TestHost {
                         ServiceError::new(503, "no_available_account", "Synthetic pool exhausted")
                     })?
             };
+            if self.local_quota_preparation_denied.lock().unwrap().iter().any(|id| id == account) {
+                return Err(ServiceError::new(429, "quota_reserved", "Synthetic local preparation reserve")
+                    .with_local_rejected_account(account));
+            }
             Ok(Route {
                 continuity_account_id: None,
                 installation_profile: Some(installation_profile(account)),
@@ -358,6 +377,10 @@ impl Fixture {
             oauth: AtomicBool::new(false),
             passthrough: AtomicBool::new(false),
             removed_a: AtomicBool::new(false),
+            local_quota_preparation_denied: Mutex::new(vec![]),
+            local_quota_send_denied: Mutex::new(vec![]),
+            local_quota_send_checks: Mutex::new(vec![]),
+            local_quota_allow_first_check: AtomicBool::new(false),
             selections: Mutex::new(vec![]),
             failures: Mutex::new(vec![]),
             reports: Mutex::new(vec![]),
