@@ -407,6 +407,10 @@ brew install --cask --force cockpit-tools
 
 ### 🛠️ Troubleshooting
 
+#### Windows: Codex setup incomplete
+
+For the specific `helper_sandbox_lock_failed` / `.sandbox-bin` access-denied failure, see the [temporary Codex sandbox recovery guide](docs/codex-windows-sandbox-recovery.md). This is an upstream Codex issue; the recovery tool is read-only by default and offers explicit ownership repair with rollback.
+
 #### macOS says "App is damaged and can't be opened"?
 
 The new macOS release pipeline verifies Developer ID signatures, Apple notarization and stapled tickets for the app, updater archive and final DMG. A normal first-launch confirmation that the app was downloaded from the Internet may still appear.

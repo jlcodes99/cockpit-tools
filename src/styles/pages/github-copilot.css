@@ -3291,32 +3291,3 @@
 .ghcp-instances-content .empty-state .btn {
   margin-top: 8px;
 }
-
-html[data-reduced-motion="true"] .ghcp-accounts-page .ghcp-accounts-grid .ghcp-account-card {
-  background: var(--bg-surface);
-  backdrop-filter: none;
-  box-shadow: none;
-  transform: none;
-}
-
-html[data-reduced-motion="true"] .ghcp-accounts-page .ghcp-accounts-grid .ghcp-account-card:hover {
-  box-shadow: none;
-  transform: none;
-}
-
-html[data-reduced-motion="true"] .ghcp-accounts-page .ghcp-accounts-grid .ghcp-account-card.current {
-  box-shadow: 0 0 0 2px var(--primary-light);
-}
-
-html[data-reduced-motion="true"] .ghcp-accounts-page .ghcp-accounts-grid .ghcp-account-card.selected {
-  background: color-mix(in srgb, var(--bg-surface) 88%, var(--primary) 12%);
-}
-
-html[data-reduced-motion="true"] .ghcp-accounts-page .ghcp-accounts-grid .ghcp-account-card.disabled {
-  background: color-mix(in srgb, var(--bg-surface) 92%, var(--danger) 8%);
-}
-
-html[data-reduced-motion="true"] .claude-accounts-page .codex-account-card.sponsor-api-account,
-html[data-reduced-motion="true"] .claude-accounts-page .ghcp-account-card.sponsor-api-account {
-  background: var(--bg-surface);
-}

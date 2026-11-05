@@ -1300,11 +1300,6 @@
   transform: rotate(180deg);
 }
 
-html[data-reduced-motion="true"] .codex-api-service-summary-card:hover,
-html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-expanded="true"] .codex-api-service-key-advanced-state svg {
-  transform: none;
-}
-
 .codex-api-service-key-policy {
   display: grid;
   gap: 9px;

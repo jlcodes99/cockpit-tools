@@ -42,6 +42,7 @@ import {
 import { CLASSIC_SIDEBAR_ENTRY_LIMIT, ORIGINAL_SIDEBAR_ENTRY_LIMIT, useSideNavLayoutStore } from '../stores/useSideNavLayoutStore';
 import { getPlatformLabel, renderPlatformIcon } from '../utils/platformMeta';
 import { useEscClose } from '../hooks/useEscClose';
+import { scrollElementIntoView } from '../utils/reducedMotion';
 import {
   getPlatformLayoutPersistenceError,
   retryPlatformLayoutPersistence,
@@ -407,7 +408,7 @@ export function PlatformLayoutModal({
 
   useEffect(() => {
     if (open && persistenceError) {
-      persistenceErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      scrollElementIntoView(persistenceErrorRef.current, { block: 'nearest' });
     }
   }, [open, persistenceError]);
 
