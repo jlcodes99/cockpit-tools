@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next';
+import { formatOpenAIUsageMoney } from '../../utils/openaiOfficialUsage';
 import {
   formatModelProviderUsageInteger,
   formatModelProviderUsageMoney,
@@ -11,7 +12,11 @@ export function codexDailyUsageMetrics(summary: ModelProviderUsageSummary | unde
   const known = (value: number | null | undefined) => typeof value === 'number' && Number.isFinite(value);
   return [
     { key: 'todayCost', label: t('codex.modelProviders.usage.fields.todayCost'),
-      value: known(summary?.todayCost) ? formatModelProviderUsageMoney(summary!.todayCost, summary?.unit) : '—' },
+      value: known(summary?.todayCost)
+        ? summary?.mode === 'openai_official'
+          ? formatOpenAIUsageMoney(summary.todayCost!)
+          : formatModelProviderUsageMoney(summary!.todayCost, summary?.unit)
+        : '—' },
     { key: 'todayRequests', label: t('codex.modelProviders.usage.fields.todayRequests'),
       value: known(summary?.todayRequests) ? formatModelProviderUsageInteger(summary!.todayRequests) : '—' },
     { key: 'todayTokens', label: t('codex.modelProviders.usage.fields.todayTokens'),

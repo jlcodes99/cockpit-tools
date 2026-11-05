@@ -432,3 +432,18 @@
             assert!(apply_general_config_updates(&mut config, &updates).is_err());
         }
     }
+
+
+#[test]
+fn antigravity_shared_login_requires_ide_2_6_or_newer() {
+    for (version, expected) in [
+        ("2.5.9", Some(false)),
+        ("2.6.0", Some(true)),
+        ("2.10.1", Some(true)),
+        ("3.0.0", Some(true)),
+        ("1.107.0", Some(false)),
+        ("unknown", None),
+    ] {
+        assert_eq!(super::antigravity_ide_version_uses_shared_credentials(version), expected);
+    }
+}

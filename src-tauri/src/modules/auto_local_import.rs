@@ -386,10 +386,13 @@ async fn enrich_codebuddy_payload(
 
 fn import_antigravity() -> ImportFuture {
     Box::pin(async {
-        import::import_from_local_logic()
-            .await
-            .map(|_| true)
-            .map_err(|error| error.to_string())
+        // The macOS watcher peeks at the database and must import that same
+        // identity without prompting for Keychain access in the background.
+        #[cfg(target_os = "macos")]
+        let imported = import::import_from_local_state_db_logic().await;
+        #[cfg(not(target_os = "macos"))]
+        let imported = import::import_from_local_logic().await;
+        imported.map(|_| true)
     })
 }
 

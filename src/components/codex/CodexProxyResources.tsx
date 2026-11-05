@@ -6,6 +6,8 @@ import { Activity, ArrowDown, ArrowUp, ArrowRight, ChevronDown, Download, GripVe
 import { useEscCloseTopmost } from '../../hooks/useEscClose';
 import { CodexProxyPicker } from './CodexProxyPicker';
 import { useProxyLatency } from './useProxyLatency';
+import { useCodexProxyEngine } from './useCodexProxyEngine';
+import { proxySourceDisplayError } from '../../utils/codexProxySourceError';
 import { useProxyResourceOrder } from './useProxyResourceOrder';
 import { useCodexProxyAccountName } from './useCodexProxyExitEditor';
 import { useModalFocusTrap } from '../../hooks/useModalFocusTrap';
@@ -31,6 +33,7 @@ export function CodexProxyResources({ onAssign, onBindingsChanged }: {
   onBindingsChanged: (sourceId: string, sourceRemoved: boolean) => Promise<void>;
 }) {
   const { t } = useTranslation();
+  const { readiness } = useCodexProxyEngine();
   const resolveName = useCodexProxyAccountName();
   const [catalog, setCatalog] = useState<ProxyCatalog>({ sources: [] });
   const [loading, setLoading] = useState(true);
@@ -294,6 +297,7 @@ export function CodexProxyResources({ onAssign, onBindingsChanged }: {
       <div className="codex-resource-list-caption"><span>{t('codex.proxy.managerResources.count', { count: catalog.sources.length })}</span><span>{t('codex.proxy.managerResources.listHint')}</span></div>
       {catalog.sources.length > 1 && <p className="codex-resource-sort-hint">{t(query.trim() ? 'common.dragSortFilteredHint' : 'common.dragSortHint')}</p>}
       <div className={'codex-resource-list' + (ordering.draggingId ? ' is-sorting' : '')} onMouseLeave={ordering.finish}>{visibleSources.map((entry, index) => {
+        const sourceError = proxySourceDisplayError(entry.error, readiness);
         const open = expanded && sourceId === entry.id;
         const strategy = entry.kind === 'strategy';
         const firstNode = entry.nodes.length === 1 ? entry.nodes[0] : null;
@@ -313,7 +317,7 @@ export function CodexProxyResources({ onAssign, onBindingsChanged }: {
               <ChevronDown size={16} className="codex-resource-entry-chevron" aria-hidden="true" />
             </button>
             <div className="codex-resource-entry-status">
-              {entry.defaultInvalidated || entry.error ? <span className="codex-resource-entry-warning"><TriangleAlert size={13} />{t(entry.defaultInvalidated ? 'codex.proxy.catalog.defaultUnavailable' : catalogErrorKey(entry.error))}</span>
+              {entry.defaultInvalidated || sourceError ? <span className="codex-resource-entry-warning"><TriangleAlert size={13} />{t(entry.defaultInvalidated ? 'codex.proxy.catalog.defaultUnavailable' : catalogErrorKey(sourceError))}</span>
                 : entry.kind === 'subscription' && entry.usage ? <span>{t('codex.proxy.resources.usageLine', { used: formatProxyBytes(entry.usage.upload + entry.usage.download), total: entry.usage.total > 0 ? formatProxyBytes(entry.usage.total) : t('codex.proxy.resources.usageUnknown') })}</span>
                   : measured?.status === 'success' ? <CodexProxyLatencyBadge result={measured} /> : <span>{t('codex.proxy.catalog.availabilityCount', { count: entry.nodes.length, available: entry.nodes.filter((node) => node.supported).length })}</span>}
               {entry.kind === 'subscription' && entry.usage?.expireAt ? <small>{t('codex.proxy.resources.expireLine', { date: formatProxyDateTime(entry.usage.expireAt) })}</small>

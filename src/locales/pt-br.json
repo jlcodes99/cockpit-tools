@@ -2453,6 +2453,22 @@
     "other_group": "Outros modelos"
   },
   "codex": {
+    "overload": {
+      "setting": "Tentar de novo se lotado",
+      "settingHint": "Para novas solicitações no serviço de API local do Codex. Solicitações que podem ser repetidas com segurança aguardam o modelo voltar.",
+      "retrying": "Modelo ocupado, tentando de novo ({{count}})",
+      "count": "Sobrecargas: {{count}}",
+      "countHint": "Conta tentativas no provedor, incluindo as automáticas. O histórico dura até 7 dias.",
+      "history": "Histórico de sobrecarga",
+      "empty": "Não houve erros de sobrecarga no período.",
+      "attempt": "Tentativa {{number}}",
+      "sameAccount": "Recuperada na mesma conta",
+      "otherAccount": "Recuperada após trocar de conta",
+      "pending": "Resultado pendente",
+      "cancelled": "Cancelada",
+      "failed": "Falha na solicitação",
+      "countUnavailable": "Estatísticas de sobrecarga indisponíveis"
+    },
     "instance": {
       "errors": {
         "threadSyncWorkerFailed": "Falha na tarefa de sincronização de sessões: {{error}}",
@@ -3273,7 +3289,7 @@
       "resetCreditDialogDesc": "Redefina o limite de taxa para continuar trabalhando sem interrupções. Redefinições disponíveis: {{count}}.",
       "resetCreditDialogAction": "Redefinir uso",
       "resetCreditNoCredits": "Nenhum reset disponível",
-      "resetCreditConsumed": "Cota de 5 horas redefinida",
+      "resetCreditConsumed": "Cota redefinida",
       "resetCreditFailed": "Falha ao redefinir: {{error}}",
       "resetCreditRefreshAfterConsumeFailed": "Reset enviado, mas a atualização da cota falhou: {{error}}",
       "resetCreditsTitleWithExpiry": "Redefinições restantes para a janela de 5 horas: {{count}}. Próximo vencimento: {{time}}",
@@ -4144,7 +4160,7 @@
         "apiKeyUrlInvalid": "Use uma URL de gerenciamento HTTP(S) sem credenciais embutidas; insira a chave API no campo de chave."
       },
       "saveSuccess": "Provedor de modelo salvo.",
-      "deleteBlocked": "Este provedor está vinculado a {{count}} conta(s) e não pode ser excluído.",
+      "confirmDeleteWithAccounts": "Excluir o provedor “{{name}}” e suas {{count}} contas vinculadas?",
       "confirmDelete": "Excluir o provedor \"{{name}}\"?",
       "deleteFailed": "Falha ao excluir o provedor: {{error}}",
       "deleteApiKeyFailed": "Falha ao excluir a chave API: {{error}}",
@@ -4274,7 +4290,7 @@
         "selectVisible": "Selecionar visíveis",
         "resultSelectedCount": "{{count}} selecionados",
         "selectFailed": "Selecionar falhos",
-        "deleteConfirm": "Excluir {{providerCount}} provedores selecionados? Isso também excluirá {{accountCount}} contas Codex API Key vinculadas exatamente.",
+        "deleteConfirm": "Excluir {{providerCount}} provedores selecionados e {{accountCount}} contas vinculadas?",
         "deleteSuccess": "{{providerCount}} provedores e {{accountCount}} contas vinculadas foram excluídos.",
         "deleteFailed": "Falha ao excluir os itens selecionados: {{error}}",
         "protocolSummary": "{{protocol}} · {{mode}} · {{model}}",
@@ -5141,7 +5157,7 @@
       "boundProxyUnavailable": "A conta vinculada não tem um proxy disponível. Escolha outro.",
       "sourceUnavailable": "A fonte do proxy ou o nó não está disponível. Selecione novamente.",
       "operationTimeout": "A operação do proxy excedeu o tempo limite. Tente novamente.",
-      "cardScopeHint": "O cliente Codex para desktop iniciado usa o proxy deste cartão. As conexões dos gateways de modelos com seus provedores mantêm suas próprias rotas.",
+      "cardScopeHint": "Os proxies de contas com chave API se aplicam aos clientes desktop e às solicitações de saída do serviço API. O proxy do cartão do serviço API se aplica apenas aos clientes desktop. O proxy do sistema não é alterado.",
       "display": {
         "title": "Exibição do proxy",
         "compact": "Compacta",
@@ -5442,7 +5458,7 @@
       "modeDefaultHint": "Esta conta não usa proxy e mantém a saída padrão anterior.",
       "modeStaleHint": "A origem ou o nó vinculado não está mais disponível. Escolha novamente.",
       "management": "Gerenciar proxies",
-      "managementHint": "Configure proxies para cartões de contas OAuth, API e serviço API sem alterar o proxy do sistema. Em cartões API, aplica-se ao cliente desktop iniciado; os gateways de modelos mantêm suas próprias rotas.",
+      "managementHint": "Os proxies de contas com chave API se aplicam aos clientes desktop e às solicitações de saída do serviço API. O proxy do cartão do serviço API se aplica apenas aos clientes desktop. O proxy do sistema não é alterado.",
       "emptyTitle": "Uma conexão dedicada à sua conta",
       "emptyDescription": "Nenhum cartão de conta compatível disponível. Adicione uma conta OAuth ou API, ou ative o cartão do serviço API, e escolha um proxy aqui.",
       "search": "Buscar contas",
@@ -5750,7 +5766,7 @@
         "assign": "Atribuir proxy",
         "specific": "Contas escolhidas",
         "shared": "Proxy compartilhado",
-        "sharedHint": "Cartões compatíveis sem proxy próprio usam este proxy, incluindo os novos. Configurações individuais e Sem proxy têm prioridade. Cartões API o usam para o cliente desktop; os gateways de modelos mantêm suas próprias rotas.",
+        "sharedHint": "Contas sem proxy próprio herdam este proxy, incluindo novas contas. Proxies individuais e Sem proxy têm prioridade. Contas com chave API o usam para desktop e solicitações API; o cartão do serviço API, apenas para desktop.",
         "apply": "Atribuir"
       },
       "managerResources": {
@@ -5877,7 +5893,7 @@
       "title": "Detalhes da solicitação",
       "totalLatency": "Tempo total",
       "firstResponse": "Primeira resposta",
-      "firstResponseHint": "Tempo do início até o primeiro fragmento da resposta do servidor, não necessariamente até o primeiro token gerado.",
+      "firstResponseHint": "Em novas solicitações de streaming do Responses, o tempo vai do fim do processamento do corpo pelo gateway ao primeiro evento de resposta do servidor de origem. Sinais de manutenção da conexão e avisos de limite de taxa são ignorados.",
       "unavailable": "Ainda não há diagnóstico. Atualize mais tarde. Solicitações antigas não são preenchidas.",
       "attempts": "Tentativas",
       "noAttempts": "Nenhum histórico de tentativas registrado.",
@@ -6057,10 +6073,27 @@
       "pending": "Uso da OpenAI pendente",
       "permissionRequired": "Esta chave não pode ler o uso da organização (api.usage.read).",
       "permissionGuide": "Use uma chave de administrador: Admin keys → Restricted → Usage API Scope → Read. Consulta gastos e uso, não o saldo restante.",
-      "openAdminKeys": "Permissões de uso",
-      "invalidKey": "A chave é inválida ou expirou. Confira a chave de API atual.",
+      "openAdminKeys": "Criar chave de admin",
+      "invalidKey": "A chave de consulta é inválida ou expirou. Confira a chave API de administrador.",
       "networkFailed": "Não foi possível conectar ao uso da OpenAI. Atualize mais tarde.",
-      "queryFailed": "Falha ao consultar o uso da OpenAI. Tente novamente mais tarde."
+      "queryFailed": "Falha ao consultar o uso da OpenAI. Tente novamente mais tarde.",
+      "organization": "Uso da organização",
+      "configure": "Configurar uso",
+      "settings": "Ajustes de uso",
+      "title": "Configurar consulta de uso",
+      "optional": "Consulta de uso (opcional)",
+      "queryKey": "Chave API de administrador",
+      "callKey": "Chave API do modelo",
+      "notConfigured": "Adicione uma chave de administrador para consultar gastos e uso da organização.",
+      "purpose": "Use uma chave de administrador da mesma organização da chave do modelo. Ela serve apenas para consultar o uso e não substitui a chave do modelo.",
+      "saveVerify": "Salvar e verificar",
+      "remove": "Remover configuração",
+      "keyRequired": "Insira uma chave API de administrador.",
+      "saveFailed": "Não foi possível salvar os ajustes. Tente novamente.",
+      "configChanged": "A conta ou a chave de consulta mudou. Reabra os ajustes.",
+      "openFailed": "Não foi possível abrir a página de chaves. Tente novamente.",
+      "costUnavailable": "Sem valor",
+      "costUnavailableHint": "A API oficial de custos não retornou valores para este período. Requisições e tokens vêm de outra API de uso; a ausência de valores não significa gasto zero."
     },
     "officialApi": {
       "hint": "Conta com chave de API oficial da OpenAI, identificada pelo endereço real de conexão."
@@ -7137,6 +7170,35 @@
     "syncToWorkbuddy": "Sincronizar com WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Créditos básicos do plano",
+      "planBonus": "Bônus do plano",
+      "benefit": "Prêmios da plataforma",
+      "addon": "Créditos comprados",
+      "total": "Total de créditos restantes",
+      "details": "Detalhes dos créditos",
+      "usedOf": "Usados {{used}}/{{total}}",
+      "remainingPercent": "Restam {{percent}}%",
+      "nearestExpiry": "Próximo vencimento {{time}}",
+      "nextRefresh": "Próxima renovação {{time}}",
+      "expiring": "Alguns créditos vencem em breve",
+      "valid": "Válidos",
+      "expired": "Vencidos",
+      "expiresAt": "Vence em {{time}}",
+      "expiryHours": "Vence em 24 h",
+      "expiryDays": "Vence em 3 dias",
+      "empty": "Nenhum registro",
+      "loadFailed": "Falha ao carregar ({{error}})",
+      "overview": "Visão geral",
+      "remaining": "Restam {{amount}}",
+      "loadMore": "Carregar mais",
+      "usage": "Detalhes de consumo",
+      "requestAndTime": "Solicitação e horário",
+      "creditUsed": "Créditos usados",
+      "model": "Modelo",
+      "recentUsage": "Últimos 5 registros",
+      "viewMore": "Ver mais"
+    },
     "title": "Gerenciamento de contas do WorkBuddy",
     "noAccounts": "Nenhuma conta WorkBuddy",
     "addAccount": "Adicionar conta WorkBuddy",
@@ -7144,7 +7206,7 @@
       "title": "Informacoes de gerenciamento de conta do WorkBuddy (clique para expandir/recolher)",
       "desc": "A troca de conta grava o arquivo local de login seguindo o layout mais recente do cliente oficial do WorkBuddy; a importação local lê o mesmo arquivo. Os dados são processados somente localmente.",
       "permission": "Escopo de permissão: ler e gravar o arquivo de login do WorkBuddy (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) para importação local e troca de conta; o state.vscdb legado não é mais lido nem modificado.",
-      "network": "Escopo de rede: login OAuth e renovação de token exigem requisições para WorkBuddy; consultas de cota chamam APIs de cobrança. Arquivos locais de login e credenciais brutas não são enviados."
+      "network": "O login OAuth e a renovação do token se conectam ao WorkBuddy. O saldo e os detalhes dos créditos são consultados no serviço de cobrança com o token da conta. Os arquivos de login e as chaves do sistema ficam no dispositivo."
     },
     "nickname": "Apelido",
     "enterprise": "Empresa",
@@ -7161,8 +7223,8 @@
       "oauth": {
         "title": "Somente login do IDE",
         "item1": "Adicione a conta apos concluir o OAuth no navegador e use-a para alternancia no IDE.",
-        "item2": "Os parametros de consulta de cota nao sao vinculados automaticamente.",
-        "item3": "Se precisar exibir a cota, execute manualmente \"Consultar cota\" no cartao da conta."
+        "item2": "O saldo de créditos é consultado automaticamente após a autorização.",
+        "item3": "O cartão mostra um resumo dos créditos. Abra os detalhes para ver cada crédito concedido e seu vencimento."
       }
     },
     "oauthWebviewTab": "OAuth na WebView",

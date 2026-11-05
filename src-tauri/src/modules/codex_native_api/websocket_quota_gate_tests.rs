@@ -130,8 +130,10 @@ fn gate(metadata: bool, business: Option<Value>, reused: bool, wait_interrupt: b
 async fn websocket_delayed_quota_after_published_handshake_switches_for_plain_oauth_long_history() {
     for reused in [false, true] {
         for metadata in [false, true] {
+            let mut quota_policy = policy();
+            quota_policy.credential_retries = 1;
             let fixture =
-                Fixture::start(gate(metadata, None, reused, false), policy(), false).await;
+                Fixture::start(gate(metadata, None, reused, false), quota_policy, false).await;
             let mut socket = connect(&fixture).await;
             if reused {
                 send(&mut socket, request()).await;
@@ -240,7 +242,7 @@ async fn websocket_published_handshake_accepts_interrupt_and_never_replays_after
 }
 
 #[tokio::test]
-async fn websocket_late_rejections_retain_actual_credential_budget_after_reopening() {
+async fn websocket_late_quota_checks_remaining_candidates_after_reopening() {
     let fixture = Fixture::start_with_second(
         gate(false, None, false, false),
         gate(false, None, false, false),
@@ -267,10 +269,12 @@ async fn websocket_late_rejections_retain_actual_credential_budget_after_reopeni
             .lock()
             .unwrap()
             .iter()
-            .filter(|request| request.excluded_account_ids.contains(&"b".to_owned()))
+            .filter(|request| {
+                ["a", "b"].iter().all(|id| request.excluded_account_ids.iter().any(|excluded| excluded == id))
+            })
             .count(),
-        0,
-        "no extra candidate lookup once actual-send credential budget is exhausted"
+        1,
+        "the final lookup must exclude both confirmed exhausted credentials"
     );
     let host = fixture.host.clone();
     let _ = socket.close(None).await;

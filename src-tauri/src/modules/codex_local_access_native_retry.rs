@@ -180,6 +180,7 @@ async fn native_image_retry_cooldown_wait(
     let mut closest = None;
     for account in accounts {
         if (caller.id != NATIVE_INTERNAL_CALLER && service_account_paused(collection, &account.id))
+            || request.excluded_account_ids.contains(&account.id)
             || account.is_web_session_auth()
             || account.is_agent_identity_auth()
             || account.requires_reauth

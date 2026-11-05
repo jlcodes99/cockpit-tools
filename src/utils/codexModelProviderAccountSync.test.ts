@@ -3,7 +3,7 @@ import test from "node:test";
 
 import type { CodexModelProvider } from "../services/codexModelProviderService.ts";
 import type { CodexAccount } from "../types/codex.ts";
-import { buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider } from "./codexModelProviderAccountSync.ts";
+import { buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider, findCodexAccountsForModelProviderDeletion } from "./codexModelProviderAccountSync.ts";
 
 test('official providers keep built-in account behavior and match implicit/default endpoint aliases', () => {
   const provider: CodexModelProvider = { id: 'official', name: 'OpenAI Official', baseUrl: 'https://api.openai.com/',
@@ -95,6 +95,24 @@ test("excludes OAuth accounts and API Key accounts without a readable key", () =
   );
 
   assert.deepEqual(result, []);
+});
+
+test('provider deletion includes unhealthy and keyless accounts without crossing into OAuth or other endpoints', () => {
+  const providers = [
+    { id: 'provider-1', baseUrl: 'https://relay.example.com/v1/' },
+    { id: 'provider-2', baseUrl: 'https://second.example.com/v1' },
+  ];
+  const accounts = [
+    account({ id: 'healthy', api_provider_id: 'provider-1' }),
+    account({ id: 'no-key', api_provider_id: 'provider-1', openai_api_key: undefined, requires_reauth: true }),
+    account({ id: 'quota-error', api_base_url: 'https://relay.example.com/v1', openai_api_key: '', quota_error: { code: '401', message: 'expired key', timestamp: 1 } }),
+    account({ id: 'second', api_provider_id: 'provider-2', api_base_url: 'https://second.example.com/v1' }),
+    account({ id: 'oauth', auth_mode: 'oauth', api_provider_id: 'provider-1' }),
+    account({ id: 'other', api_base_url: 'https://other.example.com/v1' }),
+    account({ id: 'unknown', api_provider_id: undefined, api_base_url: undefined }),
+  ];
+  assert.deepEqual(findCodexAccountsForModelProviderDeletion(providers, accounts), ['healthy', 'no-key', 'quota-error', 'second']);
+  assert.deepEqual(findCodexAccountsForModelProviderDeletion([], accounts), []);
 });
 
 test('account snapshots resolve by credential and preserve another key and legacy defaults', () => {

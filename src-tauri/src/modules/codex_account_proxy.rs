@@ -1,4 +1,4 @@
-//! Shared account-proxy policy. Provider/API-key routing must never consume this setting.
+//! OAuth account-proxy policy. API-key bindings live in codex_client_proxy instead.
 use crate::models::codex::{CodexAccount, CodexApiProviderMode};
 use serde::{Serialize, Serializer};
 use std::borrow::Cow;

@@ -2453,6 +2453,22 @@
     "other_group": "Ostatní modely"
   },
   "codex": {
+    "overload": {
+      "setting": "Opakovat při přetížení",
+      "settingHint": "Platí pro nové požadavky místní služby API Codex. Požadavky, které lze bezpečně opakovat, počkají na dostupnost modelu.",
+      "retrying": "Model je vytížený, opakuji pokus ({{count}})",
+      "count": "Přetížení: {{count}}",
+      "countHint": "Počítá pokusy u poskytovatele včetně automatických opakování. Historie se uchovává až 7 dní.",
+      "history": "Historie přetížení",
+      "empty": "V tomto období nebyly zjištěny chyby přetížení.",
+      "attempt": "Pokus {{number}}",
+      "sameAccount": "Obnoveno na stejném účtu",
+      "otherAccount": "Obnoveno po změně účtu",
+      "pending": "Čeká se na výsledek",
+      "cancelled": "Zrušeno",
+      "failed": "Požadavek selhal",
+      "countUnavailable": "Statistiky přetížení nejsou dostupné"
+    },
     "instance": {
       "errors": {
         "threadSyncWorkerFailed": "Úloha synchronizace relací selhala: {{error}}",
@@ -3273,7 +3289,7 @@
       "resetCreditDialogDesc": "Resetujte rychlostní limit a pokračujte bez přerušení. Dostupné resety: {{count}}.",
       "resetCreditDialogAction": "Resetovat využití",
       "resetCreditNoCredits": "Žádné dostupné resety",
-      "resetCreditConsumed": "5hodinová kvóta byla resetována",
+      "resetCreditConsumed": "Kvóta byla resetována",
       "resetCreditFailed": "Reset selhal: {{error}}",
       "resetCreditRefreshAfterConsumeFailed": "Reset byl odeslán, ale obnova kvóty selhala: {{error}}",
       "resetCreditsTitleWithExpiry": "Zbývající resety pro 5hodinové okno: {{count}}. Nejbližší expirace: {{time}}",
@@ -4144,7 +4160,7 @@
         "apiKeyUrlInvalid": "Použijte HTTP(S) adresu správy bez vložených přihlašovacích údajů; klíč API patří do pole klíče."
       },
       "saveSuccess": "Poskytovatel modelu byl uložen.",
-      "deleteBlocked": "Tento poskytovatel je propojen s {{count}} účty a nelze jej smazat.",
+      "confirmDeleteWithAccounts": "Smazat poskytovatele „{{name}}“ a jeho propojené účty ({{count}})?",
       "confirmDelete": "Smazat poskytovatele „{{name}}“?",
       "deleteFailed": "Nepodařilo se smazat poskytovatele: {{error}}",
       "deleteApiKeyFailed": "Nepodařilo se smazat API klíč: {{error}}",
@@ -4274,7 +4290,7 @@
         "selectVisible": "Vybrat viditelné",
         "resultSelectedCount": "Vybráno {{count}}",
         "selectFailed": "Vybrat neúspěšné",
-        "deleteConfirm": "Smazat {{providerCount}} vybraných poskytovatelů? Zároveň se smaže {{accountCount}} přesně propojených účtů Codex API Key.",
+        "deleteConfirm": "Smazat vybrané poskytovatele ({{providerCount}}) a propojené účty ({{accountCount}})?",
         "deleteSuccess": "Smazáno {{providerCount}} poskytovatelů a {{accountCount}} propojených účtů.",
         "deleteFailed": "Nepodařilo se smazat vybrané položky: {{error}}",
         "protocolSummary": "{{protocol}} · {{mode}} · {{model}}",
@@ -5141,7 +5157,7 @@
       "boundProxyUnavailable": "Propojený účet nemá dostupnou proxy. Znovu ji vyberte.",
       "sourceUnavailable": "Zdroj proxy nebo uzel není dostupný. Znovu jej vyberte.",
       "operationTimeout": "Operace proxy překročila časový limit. Zkuste to znovu.",
-      "cardScopeHint": "Proxy této karty používá spuštěný desktopový klient Codex. Odchozí připojení modelových bran si ponechávají vlastní trasy.",
+      "cardScopeHint": "Proxy účtů API Key platí pro desktopové klienty i odchozí požadavky služby API. Proxy karty služby API platí jen pro desktopové klienty. Systémová proxy se nemění.",
       "display": {
         "title": "Zobrazení proxy",
         "compact": "Stručné",
@@ -5442,7 +5458,7 @@
       "modeDefaultHint": "Účet nepoužívá proxy a zachovává původní výchozí odchod.",
       "modeStaleHint": "Přiřazený zdroj nebo uzel už není dostupný. Vyberte jej znovu.",
       "management": "Správa proxy",
-      "managementHint": "Nastavte proxy pro karty účtů OAuth, API a služby API beze změny systémové proxy. Na kartách API platí pro spuštěného desktopového klienta; modelové brány si ponechávají vlastní trasy.",
+      "managementHint": "Proxy účtů API Key platí pro desktopové klienty i odchozí požadavky služby API. Proxy karty služby API platí jen pro desktopové klienty. Systémová proxy se nemění.",
       "emptyTitle": "Samostatné připojení pro váš účet",
       "emptyDescription": "Nejsou dostupné způsobilé karty účtů. Přidejte účet OAuth či API nebo zapněte kartu služby API a poté zde vyberte proxy.",
       "search": "Hledat účty",
@@ -5750,7 +5766,7 @@
         "assign": "Přiřadit proxy",
         "specific": "Vybrané účty",
         "shared": "Sdílená proxy",
-        "sharedHint": "Způsobilé karty bez vlastní proxy používají tuto proxy, včetně nových karet. Vlastní nastavení a volba Bez proxy mají přednost. Karty API ji používají pro desktopového klienta; modelové brány si ponechávají vlastní trasy.",
+        "sharedHint": "Účty bez vlastní proxy dědí tuto proxy, včetně nových účtů. Vlastní proxy a volba Bez proxy mají přednost. Účty API Key ji používají pro desktop i požadavky API; karta služby API jen pro desktop.",
         "apply": "Přiřadit"
       },
       "managerResources": {
@@ -5877,7 +5893,7 @@
       "title": "Podrobnosti požadavku",
       "totalLatency": "Celkový čas",
       "firstResponse": "První odpověď",
-      "firstResponseHint": "Čas od začátku požadavku do prvního úseku odpovědi serveru, ne nutně do prvního vytvořeného tokenu.",
+      "firstResponseHint": "U nových streamovaných požadavků Responses se čas měří od zpracování těla požadavku bránou do první události odpovědi nadřazeného serveru. Zprávy keep-alive a oznámení o limitech se přeskakují.",
       "unavailable": "Diagnostika zatím není k dispozici. Obnovte později. Starší požadavky se nedoplňují.",
       "attempts": "Pokusy",
       "noAttempts": "Historie pokusů nebyla zaznamenána.",
@@ -6057,10 +6073,27 @@
       "pending": "Čekání na využití OpenAI",
       "permissionRequired": "Klíč nemá oprávnění číst využití organizace (api.usage.read).",
       "permissionGuide": "Použijte klíč správce: Admin keys → Restricted → Usage API Scope → Read. Zpřístupní výdaje a využití, nikoli zbývající kredit.",
-      "openAdminKeys": "Oprávnění využití",
-      "invalidKey": "Klíč je neplatný nebo vypršel. Zkontrolujte aktuální klíč API.",
+      "openAdminKeys": "Vytvořit klíč správce",
+      "invalidKey": "Klíč pro dotazy je neplatný nebo vypršel. Zkontrolujte API klíč správce.",
       "networkFailed": "Nelze se připojit ke statistikám OpenAI. Obnovte později.",
-      "queryFailed": "Načtení využití OpenAI selhalo. Zkuste to později."
+      "queryFailed": "Načtení využití OpenAI selhalo. Zkuste to později.",
+      "organization": "Využití organizace",
+      "configure": "Nastavit dotazy",
+      "settings": "Nastavení dotazů",
+      "title": "Nastavit dotazy na využití",
+      "optional": "Dotazy na využití (volitelné)",
+      "queryKey": "API klíč správce",
+      "callKey": "API klíč modelu",
+      "notConfigured": "Přidejte klíč správce pro zobrazení výdajů a využití organizace.",
+      "purpose": "Použijte klíč správce ze stejné organizace jako klíč modelu. Slouží pouze k dotazům na využití a nenahrazuje klíč modelu.",
+      "saveVerify": "Uložit a ověřit",
+      "remove": "Odebrat nastavení",
+      "keyRequired": "Zadejte API klíč správce.",
+      "saveFailed": "Nastavení se nepodařilo uložit. Zkuste to znovu.",
+      "configChanged": "Účet nebo klíč pro dotazy se změnil. Otevřete nastavení znovu.",
+      "openFailed": "Stránku klíčů se nepodařilo otevřít. Zkuste to znovu.",
+      "costUnavailable": "Bez částky",
+      "costUnavailableHint": "Oficiální API nákladů nevrátilo částky za toto období. Požadavky a tokeny pocházejí ze samostatného API využití; chybějící částky neznamenají nulové výdaje."
     },
     "officialApi": {
       "hint": "Účet s oficiálním API klíčem OpenAI, rozpoznaný podle skutečné adresy připojení."
@@ -7137,6 +7170,35 @@
     "syncToWorkbuddy": "Synchronizovat s WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Základní kredity tarifu",
+      "planBonus": "Bonusové kredity tarifu",
+      "benefit": "Odměny platformy",
+      "addon": "Zakoupené kredity",
+      "total": "Celkem zbývá kreditů",
+      "details": "Přehled kreditů",
+      "usedOf": "Využito {{used}}/{{total}}",
+      "remainingPercent": "Zbývá {{percent}} %",
+      "nearestExpiry": "Nejbližší konec {{time}}",
+      "nextRefresh": "Další obnova {{time}}",
+      "expiring": "Obsahuje brzy končící kredity",
+      "valid": "Platné",
+      "expired": "Vypršelé",
+      "expiresAt": "Vyprší {{time}}",
+      "expiryHours": "Vyprší do 24 h",
+      "expiryDays": "Vyprší do 3 dnů",
+      "empty": "Žádné záznamy",
+      "loadFailed": "Načtení se nezdařilo ({{error}})",
+      "overview": "Přehled",
+      "remaining": "Zbývá {{amount}}",
+      "loadMore": "Načíst další",
+      "usage": "Historie spotřeby",
+      "requestAndTime": "Požadavek a čas",
+      "creditUsed": "Využité kredity",
+      "model": "Model AI",
+      "recentUsage": "Posledních 5 záznamů",
+      "viewMore": "Zobrazit další"
+    },
     "title": "Správa účtů WorkBuddy",
     "noAccounts": "Žádné účty WorkBuddy",
     "addAccount": "Přidat účet WorkBuddy",
@@ -7144,7 +7206,7 @@
       "title": "Informace o správě účtů WorkBuddy (kliknutím rozbalíte/sbalíte)",
       "desc": "Přepnutí účtu zapisuje místní soubor přihlášení podle aktuální struktury oficiálního klienta WorkBuddy; místní import čte stejný soubor. Data se zpracovávají pouze lokálně.",
       "permission": "Rozsah oprávnění: čtení a zápis přihlašovacího souboru WorkBuddy (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) pro místní import a přepínání účtů; starší state.vscdb se již nečte ani neupravuje.",
-      "network": "Rozsah sítě: přihlášení OAuth a obnovení tokenu vyžadují síťové požadavky na WorkBuddy; dotazy na kvótu volají billing API. Místní přihlašovací soubory ani surové přihlašovací údaje se neodesílají."
+      "network": "Přihlášení OAuth a obnova tokenu vyžadují spojení se službou WorkBuddy. Dotazy na kredity a jejich podrobnosti používají token účtu. Přihlašovací soubory a systémové klíče zůstávají v zařízení."
     },
     "nickname": "Přezdívka",
     "enterprise": "Podnikový",
@@ -7161,8 +7223,8 @@
       "oauth": {
         "title": "Pouze přihlášení IDE",
         "item1": "Po dokončení OAuth v prohlížeči přidejte účet a použijte ho pro přepínání IDE.",
-        "item2": "Parametry dotazu kvóty se nenavážou automaticky.",
-        "item3": "Pokud potřebujete zobrazení kvóty, spusťte na kartě účtu ručně \"Dotázat kvótu\"."
+        "item2": "Po autorizaci se kredity načtou automaticky.",
+        "item3": "Karta zobrazuje přehled kreditů. V podrobnostech najdete jednotlivé záznamy a data platnosti."
       }
     },
     "oauthWebviewTab": "OAuth přes WebView",

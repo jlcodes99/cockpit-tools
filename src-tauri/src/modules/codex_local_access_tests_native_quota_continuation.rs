@@ -413,3 +413,25 @@ fn native_quota_snapshot_wait_preserves_api_key_and_official_plan_exceptions() {
         Some(Duration::ZERO)
     );
 }
+
+#[tokio::test]
+async fn rebuildable_quota_owner_yields_to_ready_backup_before_its_reset() {
+    let (_root, mut host, mut request) =
+        native_quota_continuation_fixture(Some(chrono::Utc::now().timestamp() + 60));
+    host.collection_override.as_mut().unwrap().max_retry_interval_ms = 120_000;
+    let caller = native_test_caller(NATIVE_PRIMARY_CALLER);
+    let outcome = tokio::time::timeout(
+        Duration::from_secs(2),
+        native_contract::Host::route_for_rebuild(&host, &caller, request.clone()),
+    )
+    .await
+    .expect("a ready backup must be tried before waiting for quota reset")
+    .err()
+    .unwrap();
+    assert_eq!(outcome.code, "account_cooling");
+    assert!(outcome.retry_after.is_none());
+
+    request.excluded_account_ids.push(request.preferred_account_id.take().unwrap());
+    let replacement = native_select_route(&host, &caller, request).await.unwrap();
+    assert_eq!(replacement.account_id, "pool-b");
+}

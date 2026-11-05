@@ -2607,15 +2607,20 @@ fn resolve_antigravity_legacy_launch_path() -> Result<std::path::PathBuf, String
         #[cfg(target_os = "linux")]
         {
             let custom_path = Path::new(&custom);
-            if custom_path.exists() {
-                return resolve_linux_antigravity_exec_path(custom_path);
+            if let Ok(executable) = resolve_linux_antigravity_exec_path(custom_path) {
+                let actual = executable.canonicalize().unwrap_or_else(|_| executable.clone());
+                if linux_antigravity_install_root_for_match(&executable).is_none()
+                    && linux_antigravity_install_root_for_match(&actual).is_none()
+                {
+                    return Ok(executable);
+                }
             }
         }
 
         #[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
         {
             let custom_path = std::path::PathBuf::from(&custom);
-            let lower = custom.to_ascii_lowercase();
+            let lower = custom.to_ascii_lowercase().replace(['-', '_'], " ");
             if lower.contains("antigravity") && !lower.contains("antigravity ide") {
                 if custom_path.is_file() {
                     return Ok(custom_path);

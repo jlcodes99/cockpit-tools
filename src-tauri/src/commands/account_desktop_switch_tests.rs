@@ -1,4 +1,5 @@
-use super::{complete_desktop_switch, try_begin_desktop_switch};
+use super::complete_desktop_switch;
+use crate::modules::account::try_begin_antigravity_switch;
 use std::cell::RefCell;
 use std::sync::Arc;
 
@@ -38,7 +39,7 @@ fn no_launch_still_writes_credentials_before_binding() {
             panic!("no-launch switch must not start a client");
         },
     );
-    assert_eq!(result.unwrap(), None);
+    assert_eq!(result.unwrap(), ((), None));
     assert_eq!(*effects.borrow(), ["inject", "commit"]);
 }
 
@@ -60,7 +61,7 @@ fn launch_failure_retains_successful_credential_switch_result() {
             Err("launch failed".to_string())
         },
     );
-    assert_eq!(result.unwrap(), Some("launch failed".to_string()));
+    assert_eq!(result.unwrap(), ((), Some("launch failed".to_string())));
     assert_eq!(*effects.borrow(), ["inject", "commit", "launch"]);
 }
 
@@ -68,7 +69,7 @@ fn launch_failure_retains_successful_credential_switch_result() {
 fn identity_commit_failure_reports_that_credentials_have_already_changed() {
     let result = complete_desktop_switch(
         || Ok(()),
-        || Err("binding write failed".to_string()),
+        || Err::<(), _>("binding write failed".to_string()),
         true,
         || {
             panic!("cannot launch after binding failure");
@@ -83,7 +84,7 @@ fn identity_commit_failure_reports_that_credentials_have_already_changed() {
 #[tokio::test]
 async fn blocking_worker_keeps_single_flight_after_caller_is_dropped() {
     let gate = Arc::new(tokio::sync::Semaphore::new(1));
-    let permit = try_begin_desktop_switch(&gate).unwrap();
+    let permit = try_begin_antigravity_switch(&gate).unwrap();
     let (finish_tx, finish_rx) = std::sync::mpsc::channel();
     let (done_tx, done_rx) = tokio::sync::oneshot::channel();
     let task = tokio::task::spawn_blocking(move || {
@@ -93,8 +94,8 @@ async fn blocking_worker_keeps_single_flight_after_caller_is_dropped() {
         let _ = done_tx.send(());
     });
     drop(task);
-    assert!(try_begin_desktop_switch(&gate).is_err());
+    assert!(try_begin_antigravity_switch(&gate).is_err());
     finish_tx.send(()).unwrap();
     done_rx.await.unwrap();
-    assert!(try_begin_desktop_switch(&gate).is_ok());
+    assert!(try_begin_antigravity_switch(&gate).is_ok());
 }

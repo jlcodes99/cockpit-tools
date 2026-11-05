@@ -148,7 +148,7 @@ pub(super) async fn connect_websocket_tracked(
         } else {
             (status, None)
         };
-        let retry_after = retry_after.max(grok_wait);
+        let retry_after = retry_after.max(grok_wait).max(super::events::retry_after_event(&body));
         let (mut message, scope) =
             super::diagnostics::upstream_error_metadata_status(status, &body);
         if header_challenge {
@@ -156,7 +156,8 @@ pub(super) async fn connect_websocket_tracked(
         }
         return Err(ServiceError::new(
             status,
-            if !header_challenge && super::upstream_errors::request_fault(status, &body) {
+            if !header_challenge && super::quota_exhaustion::code(&body).is_none()
+                && super::upstream_errors::request_fault(status, &body) {
                 super::upstream_errors::REQUEST_SCOPED
             } else if super::upstream_errors::model_unavailable(status, &body, &route.model) {
                 "upstream_model_unavailable"

@@ -1,4 +1,4 @@
-import { resolveAccountUsageBaseUrl } from "../../utils/openaiOfficialUsage";
+import { resolveOpenAIUsageConfig, isOpenAIOfficialUsageUrl, resolveAccountUsageBaseUrl } from "../../utils/openaiOfficialUsage";
 import { useDialogSession } from "../../hooks/useDialogSession";
 import { useCodexPelicanStore } from "../../stores/useCodexPelicanStore";
 import { pelicanProviderTarget } from "./pelican/pelicanProviderModel";
@@ -30,7 +30,6 @@ import type {
 } from "../../types/codexLocalAccess";
 import {
   addCodexAccountWithApiKey,
-  deleteCodexAccounts,
   getCurrentCodexAccount,
   getCodexStoragePaths,
   listCodexAccounts,
@@ -76,6 +75,7 @@ import {
   renameApiKeyOnCodexModelProvider,
   updateApiKeyOnCodexModelProvider,
   queryCodexModelProviderUsage,
+  OPENAI_USAGE_CONFIG_CHANGED_EVENT,
   saveCodexModelProviderDetectedIntegrationType,
   testCodexModelProviderConnection,
   testCodexModelProviderChatBatch,
@@ -132,7 +132,7 @@ import {
   shouldSyncCodexModelProviderAccountName,
 } from "../../utils/codexModelProviderAccountName";
 import { resolveCodexModelProviderForApiKey } from "../../utils/codexModelProviderKeyConfig";
-import { buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider } from "../../utils/codexModelProviderAccountSync";
+import { buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider, findCodexAccountsForModelProviderDeletion } from "../../utils/codexModelProviderAccountSync";
 import { buildProviderModelVisionCapabilities } from "../../utils/codexModelProviderVision";
 import { isImageGenerationModelId, selectProviderBatchTestModelId } from "../../utils/codexTestModel";
 import { CodexModelProviderManagerView } from "./CodexModelProviderManagerView";
@@ -250,6 +250,7 @@ const PROVIDER_USAGE_CACHE_KEY = "agtools.codex.modelProviders.usage.cache.v1";
 
 type ProviderUsageState = {
   loading: boolean;
+  sourceBinding?: string;
   summary?: CodexModelProviderUsageSummary;
   error?: string;
   unavailable?: boolean;
@@ -267,6 +268,7 @@ function readProviderUsageCache(): Record<string, ProviderUsageState> {
       if (!value || typeof value !== "object") return;
       const item = value as {
         summary?: CodexModelProviderUsageSummary;
+        sourceBinding?: string;
         error?: string;
         unavailable?: boolean;
         updatedAt?: number;
@@ -274,6 +276,7 @@ function readProviderUsageCache(): Record<string, ProviderUsageState> {
       next[providerId] = {
         loading: false,
         summary: item.summary,
+        sourceBinding: item.sourceBinding,
         error: typeof item.error === "string" ? item.error : undefined,
         unavailable: item.unavailable === true,
         updatedAt:
@@ -298,6 +301,7 @@ function writeProviderUsageCache(value: Record<string, ProviderUsageState>): voi
             providerId,
             {
               summary: item.summary,
+              sourceBinding: item.sourceBinding,
               error: item.error,
               unavailable: item.unavailable === true,
               updatedAt: item.updatedAt,
@@ -332,9 +336,11 @@ function getAccountUsageForProviderApiKey(
 
   const accountUsage = readCodexApiKeyUsageCache()[matchedAccount.id];
   if (!accountUsage) return null;
+  if (isOpenAIOfficialUsageUrl(provider.baseUrl) && accountUsage.sourceBinding !== resolveOpenAIUsageConfig(provider, apiKey.apiKey)?.binding) return null;
   return {
     loading: false,
     summary: accountUsage.summary,
+    sourceBinding: accountUsage.sourceBinding,
     error: accountUsage.error,
     unavailable: accountUsage.unavailable,
     updatedAt: accountUsage.updatedAt,
@@ -406,6 +412,7 @@ interface ProviderFormState {
   integrationType: "sub2api" | "new_api" | "";
   newApiKeyName: string;
   newApiKey: string;
+  newUsageApiKey: string;
 }
 
 interface EditingApiKeyState {
@@ -435,6 +442,7 @@ const EMPTY_FORM: ProviderFormState = {
   integrationType: "",
   newApiKeyName: "",
   newApiKey: "",
+  newUsageApiKey: "",
 };
 
 interface SponsorProviderTemplate {
@@ -578,6 +586,10 @@ export function useCodexModelProviderManagerController({
     (state) => state.updateAccountInstanceAccess,
   );
   const fetchAccounts = useCodexAccountStore((state) => state.fetchAccounts);
+  const deleteAccounts = useCodexAccountStore((state) => state.deleteAccounts);
+  const [deletingProviderIds, setDeletingProviderIds] = useState<Set<string>>(new Set());
+  const deletingProviders = deletingProviderIds.size > 0;
+  const providerDeletionRef = useRef(false);
   const sponsorModule = useSponsorStore((state) => state.state.sponsorModule);
   const fetchSponsorState = useSponsorStore((state) => state.fetchState);
   const [providers, setProviders] = useState<CodexModelProvider[]>(initialProviders ?? []);
@@ -954,6 +966,24 @@ export function useCodexModelProviderManagerController({
       setLoading(false);
     }
   }, [accounts, onProvidersChanged, t]);
+
+  const deleteProvidersAndAccounts = useCallback(async (
+    targets: CodexModelProvider[],
+    accountIds: string[],
+  ) => {
+    if (providerDeletionRef.current) return false;
+    providerDeletionRef.current = true;
+    setDeletingProviderIds(new Set(targets.map(provider => provider.id)));
+    try {
+      if (accountIds.length > 0) await deleteAccounts(accountIds);
+      for (const provider of targets) await deleteCodexModelProvider(provider.id);
+      await reloadProviders(false);
+      return true;
+    } finally {
+      providerDeletionRef.current = false;
+      setDeletingProviderIds(new Set());
+    }
+  }, [deleteAccounts, reloadProviders]);
 
   const reloadCurrentAccount = useCallback(async () => {
     try {
@@ -1697,6 +1727,7 @@ export function useCodexModelProviderManagerController({
       integrationType: provider.integrationType ?? "",
       newApiKeyName: account && !selectedKey ? account.account_name ?? "" : "",
       newApiKey: account && !selectedKey ? account.openai_api_key ?? "" : "",
+      newUsageApiKey: "",
     });
     setSelectedPresetId(resolveCodexApiProviderPresetId(provider.baseUrl));
     setSelectedSponsorTemplateId(null);
@@ -2174,22 +2205,16 @@ export function useCodexModelProviderManagerController({
   ]);
 
   const handleDeleteBatchTestResults = useCallback(async () => {
-    if (batchTestDeleting || batchTestSession?.running) return;
+    if (batchTestDeleting || providerDeletionRef.current || batchTestSession?.running) return;
     const providerIds = Array.from(batchTestResultSelectedProviderIds);
     if (providerIds.length === 0) return;
     const providerIdSet = new Set(providerIds);
-    const linkedAccountIds = accounts
-      .filter(
-        (account) =>
-          isCodexApiKeyAccount(account) &&
-          !!account.api_provider_id &&
-          providerIdSet.has(account.api_provider_id),
-      )
-      .map((account) => account.id);
+    const targets = providers.filter(provider => providerIdSet.has(provider.id));
+    const linkedAccountIds = findCodexAccountsForModelProviderDeletion(targets, accounts);
     const confirmed = await confirmDialog(
       t("codex.modelProviders.batchTest.deleteConfirm", {
         defaultValue:
-          "确认删除选中的 {{providerCount}} 个供应商吗？会同时删除 {{accountCount}} 个精确关联的 Codex API Key 账号。",
+          "确认删除选中的 {{providerCount}} 个供应商及其关联的 {{accountCount}} 个账号吗？",
         providerCount: providerIds.length,
         accountCount: linkedAccountIds.length,
       }),
@@ -2205,16 +2230,7 @@ export function useCodexModelProviderManagerController({
     setBatchTestDeleting(true);
     setBatchTestError(null);
     try {
-      if (linkedAccountIds.length > 0) {
-        await deleteCodexAccounts(linkedAccountIds);
-        await emitAccountsChanged({
-          platformId: "codex",
-          reason: "delete",
-        });
-      }
-      for (const providerId of providerIds) {
-        await deleteCodexModelProvider(providerId);
-      }
+      if (!await deleteProvidersAndAccounts(targets, linkedAccountIds)) return;
       setSelectedProviderIds((previous) => {
         const next = new Set(previous);
         providerIds.forEach((providerId) => next.delete(providerId));
@@ -2242,7 +2258,6 @@ export function useCodexModelProviderManagerController({
           records: nextRecords,
         };
       });
-      await reloadProviders();
       setNotice({
         tone: "success",
         text: t("codex.modelProviders.batchTest.deleteSuccess", {
@@ -2264,11 +2279,12 @@ export function useCodexModelProviderManagerController({
     }
   }, [
     accounts,
+    providers,
+    deleteProvidersAndAccounts,
     batchTestDeleting,
     batchTestResultSelectedProviderIds,
     batchTestSession?.running,
     parseServiceError,
-    reloadProviders,
     t,
   ]);
 
@@ -2383,6 +2399,7 @@ export function useCodexModelProviderManagerController({
           integrationType: form.integrationType || undefined,
           initialApiKey: newApiKey || undefined,
           initialApiKeyName: form.newApiKeyName,
+          initialUsageApiKey: form.newUsageApiKey,
         });
       } else {
         savedProvider = await updateCodexModelProvider(providerToUpdate.id, {
@@ -2403,6 +2420,7 @@ export function useCodexModelProviderManagerController({
             providerToUpdate.id,
             newApiKey,
             form.newApiKeyName,
+            form.newUsageApiKey,
           );
           if (editorModelKeyId === "__new__") {
             const key = savedProvider.apiKeys.find(item => item.apiKey.trim() === newApiKey)!;
@@ -2413,7 +2431,7 @@ export function useCodexModelProviderManagerController({
       }
       // Keep the persisted provider available after a downstream sync failure so retry is idempotent.
       setProviders(current => [...current.filter(item => item.id !== savedProvider!.id), savedProvider!]);
-      setForm(current => ({ ...current, providerId: savedProvider!.id, newApiKey: "", newApiKeyName: "" }));
+      setForm(current => ({ ...current, providerId: savedProvider!.id, newApiKey: "", newApiKeyName: "", newUsageApiKey: "" }));
       if (accountEditor) {
         const key = savedProvider.apiKeys.find(item => item.id === accountEditor.apiKeyId)
           ?? savedProvider.apiKeys.find(item => newApiKey && item.apiKey.trim() === newApiKey);
@@ -2498,21 +2516,14 @@ export function useCodexModelProviderManagerController({
 
   const handleDeleteProvider = useCallback(
     async (provider: CodexModelProvider) => {
-      const referenceCount = providerReferenceMap.get(provider.id) ?? 0;
-      if (referenceCount > 0) {
-        setNotice({
-          tone: "error",
-          text: t("codex.modelProviders.deleteBlocked", {
-            defaultValue: "该供应商已被 {{count}} 个账号引用，禁止删除。",
-            count: referenceCount,
-          }),
-        });
-        return;
-      }
+      if (providerDeletionRef.current) return;
+      const linkedAccountIds = findCodexAccountsForModelProviderDeletion([provider], accounts);
       const confirmed = await confirmDialog(
-        t("codex.modelProviders.confirmDelete", {
-          defaultValue: "确认删除供应商「{{name}}」吗？",
+        t(linkedAccountIds.length > 0
+          ? "codex.modelProviders.confirmDeleteWithAccounts"
+          : "codex.modelProviders.confirmDelete", {
           name: provider.name,
+          count: linkedAccountIds.length,
         }),
         {
           title: t("common.confirm", "确认"),
@@ -2522,9 +2533,14 @@ export function useCodexModelProviderManagerController({
         },
       );
       if (!confirmed) return;
+      setNotice(null);
       try {
-        await deleteCodexModelProvider(provider.id);
-        await reloadProviders(false);
+        if (!await deleteProvidersAndAccounts([provider], linkedAccountIds)) return;
+        setSelectedProviderIds(previous => {
+          const next = new Set(previous);
+          next.delete(provider.id);
+          return next;
+        });
       } catch (err) {
         setNotice({
           tone: "error",
@@ -2535,7 +2551,7 @@ export function useCodexModelProviderManagerController({
         });
       }
     },
-    [parseServiceError, providerReferenceMap, reloadProviders, t],
+    [accounts, deleteProvidersAndAccounts, parseServiceError, t],
   );
 
   const handleDeleteApiKey = useCallback(
@@ -2708,12 +2724,15 @@ export function useCodexModelProviderManagerController({
   );
 
   const handleBatchDeleteProviders = useCallback(async () => {
+    if (providerDeletionRef.current) return;
     const ids = Array.from(selectedProviderIds);
     if (ids.length === 0) return;
+    const targets = providers.filter(provider => selectedProviderIds.has(provider.id));
+    const linkedAccountIds = findCodexAccountsForModelProviderDeletion(targets, accounts);
     const confirmed = await confirmDialog(
-      t("codex.modelProviders.batchDeleteConfirm", {
-        defaultValue: "确定要删除选中的 {{count}} 个供应商吗？",
-        count: ids.length,
+      t("codex.modelProviders.batchTest.deleteConfirm", {
+        providerCount: targets.length,
+        accountCount: linkedAccountIds.length,
       }),
       {
         title: t("common.delete", "删除"),
@@ -2723,16 +2742,13 @@ export function useCodexModelProviderManagerController({
     if (!confirmed) return;
     setNotice(null);
     try {
-      for (const id of ids) {
-        await deleteCodexModelProvider(id);
-      }
+      if (!await deleteProvidersAndAccounts(targets, linkedAccountIds)) return;
       setSelectedProviderIds(new Set());
-      await reloadProviders();
       setNotice({
         tone: "success",
-        text: t("codex.modelProviders.batchDeleteSuccess", {
-          defaultValue: "已删除 {{count}} 个供应商",
-          count: ids.length,
+        text: t("codex.modelProviders.batchTest.deleteSuccess", {
+          providerCount: targets.length,
+          accountCount: linkedAccountIds.length,
         }),
       });
     } catch (err) {
@@ -2744,7 +2760,7 @@ export function useCodexModelProviderManagerController({
         }),
       });
     }
-  }, [deleteCodexModelProvider, parseServiceError, reloadProviders, selectedProviderIds, t]);
+  }, [accounts, providers, deleteProvidersAndAccounts, parseServiceError, selectedProviderIds, t]);
 
   const handleProviderInstanceChange = useCallback(
     async (provider: CodexModelProvider, instanceId: string) => {
@@ -3294,14 +3310,22 @@ export function useCodexModelProviderManagerController({
     [formatProviderTestFailure, parseServiceError, t, testingProviderId],
   );
 
+  const providerUsageInFlight = useRef(new Set<string>());
   const refreshProviderUsage = useCallback(
     async (provider: CodexModelProvider, apiKey?: CodexModelProviderApiKey | null) => {
       if (!apiKey) return;
+      const usageConfig = resolveOpenAIUsageConfig(provider, apiKey.apiKey);
+      if (isOpenAIOfficialUsageUrl(provider.baseUrl) && !usageConfig) return;
+      const queryId = usageConfig ? `${provider.id}:${usageConfig.binding}` : provider.id;
+      if (providerUsageInFlight.current.has(queryId)) return;
+      providerUsageInFlight.current.add(queryId);
       setProviderUsageMap((previous) => ({
         ...previous,
         [provider.id]: {
           ...previous[provider.id],
           loading: true,
+          sourceBinding: usageConfig?.binding,
+          summary: previous[provider.id]?.sourceBinding === usageConfig?.binding ? previous[provider.id]?.summary : undefined,
           error: undefined,
           unavailable: false,
         },
@@ -3310,6 +3334,7 @@ export function useCodexModelProviderManagerController({
         const summary = await queryCodexModelProviderUsage({
           baseUrl: provider.baseUrl,
           apiKey: apiKey.apiKey,
+          usageApiKey: usageConfig?.apiKey,
           integrationType: provider.integrationType ?? null,
         });
         if (
@@ -3319,9 +3344,9 @@ export function useCodexModelProviderManagerController({
           await saveCodexModelProviderDetectedIntegrationType(provider.id, summary.mode);
           await reloadProviders();
         }
-        setProviderUsageMap((previous) => ({
+        setProviderUsageMap((previous) => previous[provider.id]?.sourceBinding !== usageConfig?.binding ? previous : ({
           ...previous,
-          [provider.id]: { loading: false, summary, updatedAt: Date.now() },
+          [provider.id]: { loading: false, sourceBinding: usageConfig?.binding, summary, updatedAt: Date.now() },
         }));
       } catch (err) {
         const errorMessage = parseServiceError(err);
@@ -3329,20 +3354,44 @@ export function useCodexModelProviderManagerController({
           errorMessage.includes("PROVIDER_USAGE_DETECT_FAILED") ||
           errorMessage.includes("PROVIDER_USAGE_HTTP_404") ||
           errorMessage.includes("PROVIDER_USAGE_TYPE_UNSUPPORTED");
-        setProviderUsageMap((previous) => ({
+        setProviderUsageMap((previous) => previous[provider.id]?.sourceBinding !== usageConfig?.binding ? previous : ({
           ...previous,
           [provider.id]: {
             loading: false,
-            summary: previous[provider.id]?.summary,
+            sourceBinding: usageConfig?.binding,
+            summary: previous[provider.id]?.sourceBinding === usageConfig?.binding ? previous[provider.id]?.summary : undefined,
             error: unavailable ? undefined : errorMessage,
             unavailable,
             updatedAt: Date.now(),
           },
         }));
+      } finally {
+        providerUsageInFlight.current.delete(queryId);
       }
     },
     [parseServiceError, reloadProviders],
   );
+
+  useEffect(() => {
+    const reload = (event: Event) => {
+      const { providerId, apiKeyId, binding } = (event as CustomEvent<{ providerId: string; apiKeyId: string; binding: string }>).detail;
+      const prefix = `${providerId}:${apiKeyId}:`;
+      void reloadProviders().then(() => setProviderUsageMap(previous => Object.fromEntries(
+        Object.entries(previous).map(([id, state]) => [id, state.sourceBinding?.startsWith(prefix) && state.sourceBinding !== binding ? { loading: false } : state]),
+      )));
+    };
+    window.addEventListener(OPENAI_USAGE_CONFIG_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(OPENAI_USAGE_CONFIG_CHANGED_EVENT, reload);
+  }, [reloadProviders]);
+
+  useEffect(() => {
+    for (const provider of providers) {
+      const key = getSelectedProviderApiKey(provider);
+      const config = key && resolveOpenAIUsageConfig(provider, key.apiKey);
+      const state = providerUsageMap[provider.id];
+      if (config && !state?.loading && state?.sourceBinding !== config.binding) void refreshProviderUsage(provider, key);
+    }
+  }, [providers, getSelectedProviderApiKey, providerUsageMap, refreshProviderUsage]);
 
   const refreshAllProviderUsage = useCallback(async () => {
     if (providerUsageRefreshingAll) return;
@@ -3659,6 +3708,8 @@ export function useCodexModelProviderManagerController({
     currentEditingProvider,
     providerLaunchDialog,
     displayInstances,
+    deletingProviders,
+    deletingProviderIds,
     draggedProviderCustomSortId,
     editingApiKey,
     enablingProviderId,

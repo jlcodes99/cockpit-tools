@@ -511,3 +511,32 @@ export async function streamCodexLocalAccessChatTest(
     messages,
   });
 }
+
+export interface CodexOverloadAttempt {
+  id: number;
+  requestId: string;
+  accountId: string;
+  model: string;
+  sequence: number;
+  timestamp: number;
+  outcome?: 'recovered' | 'cancelled' | 'failed';
+  finalAccountId?: string;
+}
+
+export function getCodexOverloadStatus(): Promise<{ enabled: boolean; activeRequests: number }> {
+  return invoke('codex_local_access_get_overload_status');
+}
+
+export function updateCodexOverloadRetry(enabled: boolean): Promise<boolean> {
+  return invoke('codex_local_access_update_overload_retry', { enabled });
+}
+
+export function queryCodexOverloadCounts(startAt: number, endAt: number): Promise<Record<string, number>> {
+  return invoke('codex_local_access_query_overload_counts', { startAt, endAt });
+}
+
+export function queryCodexOverloadAttempts(accountId: string, startAt: number, endAt: number, before?: CodexOverloadAttempt): Promise<CodexOverloadAttempt[]> {
+  return invoke('codex_local_access_query_overload_attempts', {
+    accountId, startAt, endAt, beforeTimestamp: before?.timestamp ?? null, beforeId: before?.id ?? null,
+  });
+}

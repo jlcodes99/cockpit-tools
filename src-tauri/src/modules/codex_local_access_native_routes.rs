@@ -1059,10 +1059,19 @@ async fn native_select_route(
     caller: &native_contract::Caller,
     request: native_contract::RouteRequest,
 ) -> Result<native_contract::Route, native_contract::ServiceError> {
+    native_select_route_with_owner_wait(host, caller, request, false).await
+}
+
+async fn native_select_route_with_owner_wait(
+    host: &NativeHostBridge,
+    caller: &native_contract::Caller,
+    request: native_contract::RouteRequest,
+    rebuild_available: bool,
+) -> Result<native_contract::Route, native_contract::ServiceError> {
     // Route preparation contains credential, proxy and installation futures.
     // Keep its state on the heap when nested inside an HTTP cooldown retry;
     // otherwise repeated polling/moves approach the default thread stack limit.
-    let first = Box::pin(native_select_route_once(host, caller, request.clone())).await;
+    let first = Box::pin(native_select_route_once(host, caller, request.clone(), rebuild_available)).await;
     let Err(error) = &first else {
         return first;
     };
@@ -1073,7 +1082,7 @@ async fn native_select_route(
     {
         if matches!(error.code, "no_available_account" | "account_cooling") {
             tokio::time::sleep(wait).await;
-            return Box::pin(native_select_route_once(host, caller, request)).await;
+            return Box::pin(native_select_route_once(host, caller, request, rebuild_available)).await;
         }
     }
     first
@@ -1083,6 +1092,7 @@ async fn native_select_route_once(
     host: &NativeHostBridge,
     caller: &native_contract::Caller,
     mut request: native_contract::RouteRequest,
+    rebuild_available: bool,
 ) -> Result<native_contract::Route, native_contract::ServiceError> {
     let collection = host.collection().await?;
     let key = native_caller_key(&collection, caller)?;
@@ -1266,14 +1276,21 @@ async fn native_select_route_once(
         })
         .collect();
     let mut closest_cooldown = None;
+    let mut owner_quota_exhausted = false;
+    let confirmed_quota_failover;
     {
         let cooldowns = host.cooldowns.lock().map_err(|_| {
             native_error(503, "service_unavailable", "Account state is unavailable")
         })?;
+        confirmed_quota_failover = request.excluded_account_ids.iter().any(|id| {
+            cooldowns.get(&native_cooldown_key(id, "", true))
+                .is_some_and(|state| state.reason == NATIVE_CONFIRMED_QUOTA)
+        });
         accounts.retain(|account| {
             let Some((upstream, quota_wait)) = quota_candidates.get(&account.id) else {
                 return false;
             };
+            let now = Instant::now();
             let memory_wait = if native_is_chatgpt_plan_account(account) {
                 Duration::ZERO
             } else {
@@ -1282,10 +1299,15 @@ async fn native_select_route_once(
                     &account.id,
                     upstream,
                     collection.disable_cooling,
-                    Instant::now(),
+                    now,
                 )
                 .unwrap_or(Duration::ZERO)
             };
+            if rebuild_available && request.preferred_account_id.as_ref() == Some(&account.id) {
+                owner_quota_exhausted = !quota_wait.is_zero() || cooldowns
+                    .get(&native_cooldown_key(&account.id, "", true))
+                    .is_some_and(|state| state.reason == NATIVE_CONFIRMED_QUOTA && state.until > now);
+            }
             // Both barriers must expire; an ordinary cooldown cannot shorten
             // the real quota window, including when soft cooling is disabled.
             let wait = (*quota_wait).max(memory_wait);
@@ -1311,7 +1333,12 @@ async fn native_select_route_once(
             "account_cooling",
             "The original account is temporarily cooling; retry this conversation after the indicated delay",
         )
-        .with_retry_after(closest_cooldown));
+        .with_retry_after(if owner_quota_exhausted && !accounts.is_empty() {
+            // The caller has a verified rebuild and will try the remaining pool now.
+            None
+        } else {
+            closest_cooldown
+        }));
     }
     if accounts.is_empty() {
         if request.capability_fallback_from.is_some() {
@@ -1415,16 +1442,17 @@ async fn native_select_route_once(
             .with_retry_after(closest_cooldown));
         }
     }
-    let affinity_selected = preferred
-        .as_ref()
-        .is_some_and(|id| accounts.first().is_some_and(|account| &account.id == id));
-    if affinity_selected {
+    let soft_affinity_selected = !confirmed_quota_failover
+        && preferred.as_ref().is_some_and(|id| accounts.first().is_some_and(|account| &account.id == id));
+    if request.preferred_account_id.is_some() {
         accounts.truncate(1);
     }
     drop(bindings);
-    let (position, permit) =
-        native_acquire_account_permit(host, &collection, &accounts, request.requires_permit)
-            .await?;
+    let (position, permit) = if soft_affinity_selected && accounts.len() > 1 {
+        Box::pin(native_acquire_affinity_permit(host, &collection, &accounts, request.requires_permit)).await?
+    } else {
+        native_acquire_account_permit(host, &collection, &accounts, request.requires_permit).await?
+    };
     let account = accounts.swap_remove(position);
     let upstream_model = native_operation_model(
         &collection,
@@ -1477,6 +1505,12 @@ async fn native_select_route_once(
     .await;
     let mut route = match route_result {
         Ok(route) => route,
+        // This candidate was rejected locally, before it could be sent
+        // upstream. Let the request layer decide whether its history can be
+        // safely routed elsewhere; the host cannot inspect that history.
+        Err(error) if error.code == "quota_reserved" => {
+            return Err(error.with_local_rejected_account(source_id));
+        }
         Err(error)
             if official_snapshot.is_some() && native_official_prepare_recoverable(&error) =>
         {
@@ -1623,6 +1657,24 @@ fn native_acquire_account_permit<'a>(
     ))
 }
 
+// A soft binding can wait for its existing concurrency slot, but a quota
+// rejection during admission must leave the already eligible backups reachable.
+async fn native_acquire_affinity_permit(
+    host: &NativeHostBridge,
+    collection: &CodexLocalAccessCollection,
+    accounts: &[CodexAccount],
+    reserve_permit: bool,
+) -> Result<(usize, Option<Arc<dyn Send + Sync>>), native_contract::ServiceError> {
+    match native_acquire_account_permit(host, collection, &accounts[..1], reserve_permit).await {
+        Err(error) if error.code == "quota_reserved" => {
+            native_acquire_account_permit(host, collection, &accounts[1..], reserve_permit)
+                .await
+                .map(|(index, permit)| (index + 1, permit))
+        }
+        result => result,
+    }
+}
+
 async fn native_acquire_account_permit_impl(
     host: &NativeHostBridge,
     collection: &CodexLocalAccessCollection,
@@ -1682,7 +1734,7 @@ async fn native_acquire_account_permit_impl(
             }
             Err(error) if error.code == "quota_reserved" => {
                 drop(concurrency);
-                last_error = Some(error);
+                last_error = Some(error.with_local_rejected_account(accounts[index].id.clone()));
                 candidates.remove(position);
             }
             Err(error) => return Err(error),

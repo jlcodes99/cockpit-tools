@@ -1,6 +1,7 @@
 import { CodexAppEnhancementSettings } from '../components/codex/CodexAppEnhancementSettings';
 import { CodexRefreshPlanScopeControl } from '../components/CodexRefreshPlanScopeControl';
 import { CodexRequestPayloadSetting } from '../components/codex/CodexRequestPayloadSetting';
+import { CodexOverloadRetrySetting } from '../components/codex/CodexOverloadRetrySetting';
 import { AutoSwitchAccountScopeSelector } from '../components/AutoSwitchAccountScopeSelector';
 import { CodexContextManagementControl } from '../components/codex/CodexContextManagementControl';
 import { CodexSshSyncSettingsControl } from '../components/codex/CodexSshSyncSettingsControl';
@@ -180,6 +181,7 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
 
               <CodexRefreshPlanScopeControl value={codexAutoRefreshPlanTypes} onChange={setCodexAutoRefreshPlanTypes} />
               <CodexRequestPayloadSetting />
+              <CodexOverloadRetrySetting />
               {renderCurrentAccountRefreshRow('codex')}
               {renderAccountLevelRefreshConfig('codex')}
 

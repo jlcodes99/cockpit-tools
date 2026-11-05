@@ -97,6 +97,7 @@ import {
 import { SingleSelectDropdown } from "./SingleSelectDropdown";
 import { CodexImageModelSelect } from "./CodexImageModelConfig";
 import { CodexRequestPayloadSetting } from "./codex/CodexRequestPayloadSetting";
+import { CodexOverloadRetrySetting } from "./codex/CodexOverloadRetrySetting";
 import { CodexMemberImagePolicy } from "./codex/CodexMemberImagePolicy";
 import { CodexImageForwardConfig } from "./CodexImageForwardConfig";
 import { buildGrokMemberRowAccounts, CodexGrokBuildQuotaChip, selectCodexLocalAccessMemberRows } from "./codex/codexGrokMemberRows";
@@ -2775,6 +2776,7 @@ export function CodexLocalAccessModal({
                       <CodexRequestPayloadSetting />
                     </div>
                   </details>
+                  <CodexOverloadRetrySetting />
                 </section>
 
                 <section className="codex-local-access-section codex-local-access-section-surface codex-local-access-account-stats-section">

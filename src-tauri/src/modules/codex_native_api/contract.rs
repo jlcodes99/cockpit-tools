@@ -75,6 +75,7 @@ pub struct ExecutionPolicy {
     /// Zero means no credential-count limit (pool, time and replay fences still apply).
     pub credential_retries: u16,
     pub retry_max_delay: Duration,
+    pub continuous_overload_retry: bool,
     pub send_retries: u8,
     pub send_retry_max_delay: Duration,
     pub retry_base_delay: Duration,
@@ -102,6 +103,7 @@ impl Default for ExecutionPolicy {
             total_timeout: Duration::ZERO,
             credential_retries: 0,
             retry_max_delay: Duration::from_secs(1),
+            continuous_overload_retry: false,
             send_retries: 0,
             send_retry_max_delay: Duration::from_millis(1200),
             retry_base_delay: Duration::from_millis(200),
@@ -231,6 +233,9 @@ pub struct ServiceError {
     /// Proven local build/connect failure before an HTTP request reached upstream.
     /// Timeouts, read failures and WebSocket upgrade failures do not establish this.
     pub upstream_not_sent: bool,
+    /// Internal identity of a candidate rejected by the local quota gate before
+    /// dispatch. This is never exposed in the public error response.
+    pub local_rejected_account_id: Option<String>,
 }
 
 impl ServiceError {
@@ -245,6 +250,7 @@ impl ServiceError {
             transient_rate_limit: false,
             transport_failure: None,
             upstream_not_sent: false,
+            local_rejected_account_id: None,
         }
     }
 
@@ -270,6 +276,12 @@ impl ServiceError {
 
     pub fn with_upstream_not_sent(mut self, upstream_not_sent: bool) -> Self {
         self.upstream_not_sent = upstream_not_sent;
+        self
+    }
+
+    pub fn with_local_rejected_account(mut self, account_id: impl Into<String>) -> Self {
+        self.local_rejected_account_id = Some(account_id.into());
+        self.upstream_not_sent = true;
         self
     }
 }
@@ -373,6 +385,8 @@ pub trait Host: Send + Sync + 'static {
     fn payload_logging_enabled(&self) -> BoxFuture<'_, bool> {
         Box::pin(async { false })
     }
+    fn overload_attempt(&self, _request_id: &str, _attempt: &super::diagnostics::DiagnosticAttempt) {}
+    fn overload_outcome(&self, _request_id: &str, _outcome: &str, _account_id: Option<&str>) {}
     fn diagnostic(&self, _context: super::diagnostics::DiagnosticContext) -> BoxFuture<'_, ()> {
         Box::pin(async {})
     }
@@ -437,6 +451,11 @@ pub trait Host: Send + Sync + 'static {
             message,
         )
     }
+    fn route_quota_exhausted<'a>(
+        &'a self, route: &'a Route, status: u16, retry_after: Option<Duration>,
+    ) -> BoxFuture<'a, ()> {
+        self.route_failed_attempt(route, &route.model, status, retry_after, true, None)
+    }
     fn route_transient_rate_limited<'a>(
         &'a self, route: &'a Route, model: &'a str, retry_after: Option<Duration>,
     ) -> BoxFuture<'a, ()> {
@@ -469,6 +488,12 @@ pub trait Host: Send + Sync + 'static {
     }
     fn caller_permit<'a>(&'a self, _caller: &'a Caller) -> BoxFuture<'a, Result<Option<Arc<dyn Send + Sync>>, ServiceError>> {
         Box::pin(async { Ok(None) })
+    }
+    /// A verified rebuild may use an eligible backup before waiting for an exhausted owner.
+    fn route_for_rebuild<'a>(
+        &'a self, caller: &'a Caller, request: RouteRequest,
+    ) -> BoxFuture<'a, Result<Route, ServiceError>> {
+        self.route(caller, request)
     }
     fn route<'a>(
         &'a self,

@@ -2453,6 +2453,22 @@
     "other_group": "その他のモデル"
   },
   "codex": {
+    "overload": {
+      "setting": "混雑時に再試行を続ける",
+      "settingHint": "ローカルの Codex API サービス向け。安全に再試行できるリクエストはモデルの復旧を待ちます。新規リクエストに適用されます。",
+      "retrying": "モデル混雑中、再試行中（{{count}}）",
+      "count": "上流の混雑 {{count}} 回",
+      "countHint": "自動再試行を含む上流への試行を集計します。履歴は最大7日間保存されます。",
+      "history": "混雑履歴",
+      "empty": "この期間に混雑エラーはありません。",
+      "attempt": "試行 {{number}} 回目",
+      "sameAccount": "同じアカウントで復旧",
+      "otherAccount": "切り替え後に復旧",
+      "pending": "結果待ち",
+      "cancelled": "キャンセル済み",
+      "failed": "リクエスト失敗",
+      "countUnavailable": "混雑の集計を取得できません"
+    },
     "instance": {
       "errors": {
         "threadSyncWorkerFailed": "セッションの同期タスクが失敗しました：{{error}}",
@@ -3273,7 +3289,7 @@
       "resetCreditDialogDesc": "レート制限をリセットすると、中断せずに作業を続けられます。利用可能なリセット: {{count}} 回。",
       "resetCreditDialogAction": "使用量をリセット",
       "resetCreditNoCredits": "利用可能なリセット回数がありません",
-      "resetCreditConsumed": "5時間クォータをリセットしました",
+      "resetCreditConsumed": "クォータをリセットしました",
       "resetCreditFailed": "リセット失敗: {{error}}",
       "resetCreditRefreshAfterConsumeFailed": "リセットを送信しましたが、クォータ更新に失敗しました: {{error}}",
       "resetCreditsTitleWithExpiry": "5時間枠の残りリセット回数: {{count}}。次の有効期限: {{time}}",
@@ -4144,7 +4160,7 @@
         "apiKeyUrlInvalid": "認証情報を含まない HTTP(S) 管理ページ URL を入力してください。API Key はキー欄に入力します。"
       },
       "saveSuccess": "モデルプロバイダーを保存しました。",
-      "deleteBlocked": "このプロバイダーは {{count}} 件のアカウントに関連付けられているため、削除できません。",
+      "confirmDeleteWithAccounts": "プロバイダー「{{name}}」と関連する {{count}} 件のアカウントを削除しますか？",
       "confirmDelete": "プロバイダー「{{name}}」を削除しますか？",
       "deleteFailed": "プロバイダーの削除に失敗しました: {{error}}",
       "deleteApiKeyFailed": "API キーの削除に失敗しました: {{error}}",
@@ -4274,7 +4290,7 @@
         "selectVisible": "表示中を選択",
         "resultSelectedCount": "{{count}} 件選択済み",
         "selectFailed": "失敗を選択",
-        "deleteConfirm": "選択した {{providerCount}} 件のプロバイダーを削除しますか？正確に関連付けられた Codex API Key アカウント {{accountCount}} 件も削除されます。",
+        "deleteConfirm": "選択した {{providerCount}} 件のプロバイダーと関連する {{accountCount}} 件のアカウントを削除しますか？",
         "deleteSuccess": "{{providerCount}} 件のプロバイダーと {{accountCount}} 件の関連アカウントを削除しました。",
         "deleteFailed": "選択項目の削除に失敗しました：{{error}}",
         "protocolSummary": "{{protocol}} · {{mode}} · {{model}}",
@@ -5141,7 +5157,7 @@
       "boundProxyUnavailable": "紐付けたアカウントに利用可能なプロキシがありません。選び直してください。",
       "sourceUnavailable": "プロキシソースまたはノードを利用できません。選び直してください。",
       "operationTimeout": "プロキシ操作がタイムアウトしました。再試行してください。",
-      "cardScopeHint": "このカードのプロキシは、起動する Codex デスクトップクライアントに適用されます。モデルゲートウェイから上流への接続は、それぞれの経路を維持します。",
+      "cardScopeHint": "API Key アカウントのプロキシは、デスクトップクライアントと API サービスの上流リクエストの両方に適用されます。API サービスカードのプロキシはデスクトップクライアントのみに適用されます。システムプロキシは変更しません。",
       "display": {
         "title": "プロキシ表示",
         "compact": "簡易",
@@ -5442,7 +5458,7 @@
       "modeDefaultHint": "このアカウントはプロキシを使用せず、元の既定の出口で接続します。",
       "modeStaleHint": "紐付けた取得元またはノードが利用できません。もう一度選択してください。",
       "management": "プロキシ管理",
-      "managementHint": "システムプロキシを変更せず、OAuth・API アカウント・API サービスのカードにプロキシを設定します。API カードでは起動するデスクトップクライアントに適用され、モデルゲートウェイはそれぞれの経路を維持します。",
+      "managementHint": "API Key アカウントのプロキシは、デスクトップクライアントと API サービスの上流リクエストの両方に適用されます。API サービスカードのプロキシはデスクトップクライアントのみに適用されます。システムプロキシは変更しません。",
       "emptyTitle": "アカウント専用の接続経路",
       "emptyDescription": "対応するアカウントカードがありません。OAuth または API アカウントを追加するか、API サービスカードを有効にしてから、ここでプロキシを選択してください。",
       "search": "アカウントを検索",
@@ -5750,7 +5766,7 @@
         "assign": "プロキシを割り当て",
         "specific": "指定アカウント",
         "shared": "共通プロキシ",
-        "sharedHint": "独立プロキシのない対応カードは、新規カードも含めてこのプロキシを使用します。独立設定と「プロキシなし」が優先されます。API カードではデスクトップクライアントに適用され、モデルゲートウェイはそれぞれの経路を維持します。",
+        "sharedHint": "個別のプロキシがないアカウントは、新規アカウントも含めてこのプロキシを継承します。個別プロキシと「プロキシなし」が優先されます。API Key アカウントではデスクトップと API リクエストの両方に、API サービスカードではデスクトップのみに適用されます。",
         "apply": "割り当て"
       },
       "managerResources": {
@@ -5877,7 +5893,7 @@
       "title": "リクエスト詳細",
       "totalLatency": "合計時間",
       "firstResponse": "初回応答",
-      "firstResponseHint": "要求開始から上流の最初の応答断片までの時間です。最初の生成トークンまでの時間とは限りません。",
+      "firstResponseHint": "新しい Responses ストリーミング要求では、ゲートウェイが要求本文を処理し終えてから、上流の最初の応答イベントまでを計測します。キープアライブとレート制限の通知は除外します。",
       "unavailable": "診断情報はまだありません。後で更新してください。過去の要求は補完されません。",
       "attempts": "試行履歴",
       "noAttempts": "試行履歴は記録されていません。",
@@ -6057,10 +6073,27 @@
       "pending": "公式の使用量の取得待ち",
       "permissionRequired": "このキーには組織の使用量を読む権限がありません（api.usage.read）。",
       "permissionGuide": "管理者キーを使用：Admin keys → Restricted → Usage API Scope → Read。費用と使用量を取得できますが、残高は取得できません。",
-      "openAdminKeys": "使用量の権限",
-      "invalidKey": "キーが無効か期限切れです。現在の API キーを確認してください。",
+      "openAdminKeys": "管理者キーを作成",
+      "invalidKey": "照会キーが無効または期限切れです。管理者 API キーを確認してください。",
       "networkFailed": "公式の使用量サービスに接続できません。後で更新してください。",
-      "queryFailed": "公式の使用量の取得に失敗しました。後で再試行してください。"
+      "queryFailed": "公式の使用量の取得に失敗しました。後で再試行してください。",
+      "organization": "組織の使用量",
+      "configure": "照会を設定",
+      "settings": "照会設定",
+      "title": "使用量の照会設定",
+      "optional": "使用量の照会（任意）",
+      "queryKey": "管理者 API キー",
+      "callKey": "モデル API キー",
+      "notConfigured": "管理者キーを設定すると組織の費用と使用量を確認できます。",
+      "purpose": "モデルキーと同じ組織の管理者キーを使用してください。このキーは使用量の照会専用で、モデルキーを置き換えません。",
+      "saveVerify": "保存して検証",
+      "remove": "設定を削除",
+      "keyRequired": "管理者 API キーを入力してください。",
+      "saveFailed": "照会設定を保存できませんでした。再試行してください。",
+      "configChanged": "アカウントまたは照会キーが変更されました。設定を開き直してください。",
+      "openFailed": "キーのページを開けませんでした。再試行してください。",
+      "costUnavailable": "記録なし",
+      "costUnavailableHint": "公式の費用 API から、この期間の金額が返されていません。リクエスト数と Token は別の使用量 API から取得されます。金額の記録がないことは、費用がゼロであることを意味しません。"
     },
     "officialApi": {
       "hint": "実際の接続先アドレスで識別した、OpenAI 公式 API キーのアカウントです。"
@@ -7137,6 +7170,35 @@
     "syncToWorkbuddy": "WorkBuddyに同期"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "プラン基本クレジット",
+      "planBonus": "プラン特典クレジット",
+      "benefit": "プラットフォーム報酬",
+      "addon": "購入クレジット",
+      "total": "残りクレジット合計",
+      "details": "クレジット明細",
+      "usedOf": "使用済み {{used}}/{{total}}",
+      "remainingPercent": "残り {{percent}}%",
+      "nearestExpiry": "直近の有効期限 {{time}}",
+      "nextRefresh": "次回更新 {{time}}",
+      "expiring": "まもなく期限切れのクレジットを含む",
+      "valid": "有効",
+      "expired": "期限切れ",
+      "expiresAt": "有効期限 {{time}}",
+      "expiryHours": "24時間以内に期限切れ",
+      "expiryDays": "3日以内に期限切れ",
+      "empty": "明細なし",
+      "loadFailed": "読み込めませんでした（{{error}}）",
+      "overview": "クレジット概要",
+      "remaining": "残り {{amount}}",
+      "loadMore": "さらに表示",
+      "usage": "消費明細",
+      "requestAndTime": "リクエストと時刻",
+      "creditUsed": "消費クレジット",
+      "model": "モデル",
+      "recentUsage": "最新の5件",
+      "viewMore": "もっと見る"
+    },
     "title": "WorkBuddyアカウント管理",
     "noAccounts": "WorkBuddy アカウントがありません",
     "addAccount": "WorkBuddy アカウントを追加",
@@ -7144,7 +7206,7 @@
       "title": "WorkBuddy アカウント管理ガイド（クリックで展開/折りたたみ）",
       "desc": "アカウント切り替えでは、最新の WorkBuddy 公式クライアントの形式に従ってローカルのログインファイルを書き込みます。ローカルインポートも同じファイルを読み取ります。データはローカルでのみ処理されます。",
       "permission": "権限範囲：ローカルインポートとアカウント切り替えのために WorkBuddy のログインファイル（CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info）を読み書きします。旧 state.vscdb は読み取りも変更もしません。",
-      "network": "ネットワーク範囲：OAuth ログインと Token 更新では WorkBuddy へのリクエストが必要で、クォータ照会では課金 API を呼び出します。ローカルのログインファイルや生の認証情報はアップロードされません。"
+      "network": "OAuth ログインとトークン更新では WorkBuddy に接続します。残高と明細の取得には、アカウントのトークンを使って課金サービスに接続します。ログインファイルとシステムキーは端末内に保存されます。"
     },
     "nickname": "ニックネーム",
     "enterprise": "企業",
@@ -7161,8 +7223,8 @@
       "oauth": {
         "title": "IDE ログイン情報のみを認証",
         "item1": "ブラウザで OAuth を完了すると、アカウントを追加して IDE 切り替えに利用できます。",
-        "item2": "クォータ照会パラメータは自動では紐付けられません。",
-        "item3": "クォータ表示が必要な場合は、アカウントカードで「クォータ照会」を手動実行してください。"
+        "item2": "認証後にクレジット残高を自動で照会します。",
+        "item3": "アカウントカードに残高の概要が表示されます。明細では付与履歴と有効期限を確認できます。"
       }
     },
     "oauthWebviewTab": "WebView 認証",

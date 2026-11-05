@@ -3,6 +3,42 @@ fn recycle_seed_account(tokens: CodexTokens) -> CodexAccount {
 }
 
 #[test]
+fn recycle_bin_deletes_unhealthy_api_key_account_without_usable_credentials() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _env = TestEnvGuard::new("codex-recycle-unhealthy-api-key");
+    let mut account = recycle_seed_account(make_codex_tokens(
+        "unhealthy@example.com",
+        "acc-unhealthy",
+        "org",
+        "old",
+        "expired-refresh",
+    ));
+    account.auth_mode = super::CodexAuthMode::Apikey;
+    account.openai_api_key = None;
+    account.tokens = CodexTokens {
+        id_token: String::new(),
+        access_token: String::new(),
+        refresh_token: None,
+    };
+    account.requires_reauth = true;
+    account.reauth_reason = Some("expired credentials".into());
+    account.authorization_status = Some("revoked".into());
+    save_account(&account).unwrap();
+
+    super::remove_account(&account.id).unwrap();
+    assert!(list_accounts_checked().unwrap().is_empty());
+    assert!(super::account_is_tombstoned(&account.id));
+    assert!(!get_accounts_dir().join(format!("{}.json", account.id)).exists());
+    let recycled = super::list_recycled_accounts().unwrap();
+    assert_eq!(recycled.len(), 1);
+    assert_eq!(recycled[0].account_id, account.id);
+    super::remove_account(&account.id).unwrap();
+    assert_eq!(super::list_recycled_accounts().unwrap().len(), 1);
+}
+
+#[test]
 fn recycle_bin_round_trip_preserves_metadata_and_rejects_stale_writes() {
     let _lock = crate::modules::test_support::env_lock()
         .lock()

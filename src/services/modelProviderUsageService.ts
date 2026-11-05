@@ -118,6 +118,8 @@ export function buildUsageBaseUrlCandidates(baseUrl: string): string[] {
 export async function queryModelProviderUsage(input: {
   baseUrl: string;
   apiKey: string;
+  /** Only used for OpenAI organization usage; never replaces the model credential. */
+  usageApiKey?: string;
   integrationType?: ModelProviderUsageIntegrationType | null;
 }): Promise<ModelProviderUsageSummary> {
   const candidates = buildUsageBaseUrlCandidates(input.baseUrl);
@@ -127,6 +129,7 @@ export async function queryModelProviderUsage(input: {
       const summary = await invoke<ModelProviderUsageSummary>('codex_query_model_provider_usage', {
         baseUrl,
         apiKey: input.apiKey,
+        usageApiKey: input.usageApiKey ?? null,
         integrationType: input.integrationType ?? null,
       });
       if (summary.cockpit) summary.sourceBinding = await codexRemoteBinding(input.baseUrl, input.apiKey);

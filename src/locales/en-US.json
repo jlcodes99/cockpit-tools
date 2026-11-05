@@ -2684,6 +2684,22 @@
     "other_group": "Other Models"
   },
   "codex": {
+    "overload": {
+      "setting": "Keep retrying at capacity",
+      "settingHint": "For the local Codex API service. Safely retryable requests wait for the model to recover. Applies to new requests.",
+      "retrying": "Model busy, retrying ({{count}})",
+      "count": "At capacity: {{count}}",
+      "countHint": "Counts upstream attempts, including automatic retries. History is kept for up to 7 days.",
+      "history": "Capacity history",
+      "empty": "No capacity errors in this range.",
+      "attempt": "Attempt {{number}}",
+      "sameAccount": "Same account recovered",
+      "otherAccount": "Recovered after switching",
+      "pending": "Result pending",
+      "cancelled": "Cancelled",
+      "failed": "Request failed",
+      "countUnavailable": "Capacity counts unavailable"
+    },
     "instance": {
       "errors": {
         "threadSyncWorkerFailed": "Session sync task failed: {{error}}",
@@ -3818,7 +3834,7 @@
         "apiKeyUrlInvalid": "Use an HTTP(S) management-page URL without embedded credentials; enter API keys in the key field."
       },
       "saveSuccess": "Model provider saved.",
-      "deleteBlocked": "This provider is linked to {{count}} account(s) and cannot be deleted.",
+      "confirmDeleteWithAccounts": "Delete provider “{{name}}” and its {{count}} linked accounts?",
       "confirmDelete": "Delete provider \"{{name}}\"?",
       "deleteFailed": "Failed to delete provider: {{error}}",
       "deleteApiKeyFailed": "Failed to delete API Key: {{error}}",
@@ -3948,7 +3964,7 @@
         "selectVisible": "Select visible",
         "resultSelectedCount": "{{count}} selected",
         "selectFailed": "Select failed",
-        "deleteConfirm": "Delete {{providerCount}} selected provider(s)? This will also delete {{accountCount}} precisely linked Codex API Key account(s).",
+        "deleteConfirm": "Delete {{providerCount}} selected providers and {{accountCount}} linked accounts?",
         "deleteSuccess": "Deleted {{providerCount}} provider(s) and {{accountCount}} linked account(s).",
         "deleteFailed": "Failed to delete selected items: {{error}}",
         "protocolSummary": "{{protocol}} · {{mode}} · {{model}}",
@@ -4166,7 +4182,7 @@
       "resetCreditDialogDesc": "Reset the rate limit so you can keep working without interruption. Available resets: {{count}}.",
       "resetCreditDialogAction": "Reset usage",
       "resetCreditNoCredits": "No reset credits available",
-      "resetCreditConsumed": "5-hour quota reset",
+      "resetCreditConsumed": "Quota reset",
       "resetCreditFailed": "Reset failed: {{error}}",
       "resetCreditRefreshAfterConsumeFailed": "Reset submitted, but quota refresh failed: {{error}}",
       "resetCreditsTitleWithExpiry": "Resets left for the 5-hour window: {{count}}. Next expires: {{time}}",
@@ -5372,7 +5388,7 @@
       "boundProxyUnavailable": "The bound account has no available proxy. Choose one again.",
       "sourceUnavailable": "The proxy source or node is unavailable. Choose it again.",
       "operationTimeout": "The proxy operation timed out. Please retry.",
-      "cardScopeHint": "This card’s proxy is used by the launched Codex desktop client. Model gateway upstreams keep their own routes.",
+      "cardScopeHint": "API Key account proxies apply to both desktop clients and API Service upstream requests. The API Service card proxy applies only to desktop clients. System proxy settings are unchanged.",
       "display": {
         "title": "Proxy display",
         "compact": "Compact",
@@ -5673,7 +5689,7 @@
       "modeDefaultHint": "This account uses no proxy and keeps its previous default exit.",
       "modeStaleHint": "The bound source or node is no longer available. Choose it again.",
       "management": "Proxy management",
-      "managementHint": "Set proxies for OAuth, API account and API service cards without changing the system proxy. API cards apply the proxy to the launched desktop client; model gateway upstreams keep their own routes.",
+      "managementHint": "API Key account proxies apply to both desktop clients and API Service upstream requests. The API Service card proxy applies only to desktop clients. System proxy settings are unchanged.",
       "emptyTitle": "A dedicated route for your account",
       "emptyDescription": "No eligible account cards are available. Add an OAuth or API account, or enable the API service card, then choose a proxy here.",
       "search": "Search accounts",
@@ -5981,7 +5997,7 @@
         "assign": "Assign proxy",
         "specific": "Selected accounts",
         "shared": "Shared proxy",
-        "sharedHint": "Eligible cards without an individual proxy follow this proxy, including newly added cards. Individual settings and No proxy take priority. API cards use it for the desktop client; model gateway upstreams keep their own routes.",
+        "sharedHint": "Accounts without an individual proxy inherit this proxy, including new accounts. Individual proxies and No proxy take priority. API Key accounts use it for desktop and API requests; the API Service card uses it only for desktop.",
         "apply": "Assign"
       },
       "managerResources": {
@@ -6108,7 +6124,7 @@
       "title": "Request details",
       "totalLatency": "Total time",
       "firstResponse": "First response",
-      "firstResponseHint": "Time from request start to the first upstream response fragment, not necessarily the first generated token.",
+      "firstResponseHint": "For new streaming Responses requests, timing starts after the gateway processes the request body and ends at the first upstream response event, skipping keepalives and rate-limit notices.",
       "unavailable": "No diagnostics yet. Try refreshing later. Older requests are not backfilled.",
       "attempts": "Attempts",
       "noAttempts": "No attempt trace was recorded.",
@@ -6288,10 +6304,27 @@
       "pending": "Waiting for OpenAI usage",
       "permissionRequired": "This key lacks organization usage access (api.usage.read).",
       "permissionGuide": "Use an admin key: Admin keys → Restricted → Usage API Scope → Read. This provides spend and usage, not remaining credit.",
-      "openAdminKeys": "Usage permissions",
-      "invalidKey": "The key is invalid or expired. Check the current API key.",
+      "openAdminKeys": "Create admin key",
+      "invalidKey": "The query key is invalid or expired. Check the admin API key.",
       "networkFailed": "Cannot connect to OpenAI usage. Refresh later.",
-      "queryFailed": "OpenAI usage query failed. Try again later."
+      "queryFailed": "OpenAI usage query failed. Try again later.",
+      "organization": "Organization usage",
+      "configure": "Set up usage",
+      "settings": "Usage settings",
+      "title": "Configure usage queries",
+      "optional": "Usage queries (optional)",
+      "queryKey": "Admin API Key",
+      "callKey": "Model API Key",
+      "notConfigured": "Add an admin key to view organization spend and usage.",
+      "purpose": "Use an admin key from the same organization as the model key. This key is used only for usage queries and does not replace the model key.",
+      "saveVerify": "Save and verify",
+      "remove": "Remove setup",
+      "keyRequired": "Enter an admin API key.",
+      "saveFailed": "Could not save usage settings. Please retry.",
+      "configChanged": "The account or query key changed. Reopen the settings and try again.",
+      "openFailed": "Could not open the key page. Please retry.",
+      "costUnavailable": "Not reported",
+      "costUnavailableHint": "The official Costs API returned no cost records for this period. Requests and tokens come from a separate usage API; missing cost records do not mean zero spend."
     },
     "officialApi": {
       "hint": "OpenAI API key account, identified by its actual endpoint."
@@ -7496,6 +7529,35 @@
     "syncToWorkbuddy": "Sync to WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Plan Base Credits",
+      "planBonus": "Plan Bonus Credits",
+      "benefit": "Platform Reward Credits",
+      "addon": "Top-up Credits",
+      "total": "Total credits left",
+      "details": "Credit details",
+      "usedOf": "Used {{used}}/{{total}}",
+      "remainingPercent": "{{percent}}% left",
+      "nearestExpiry": "Earliest expiry {{time}}",
+      "nextRefresh": "Next refresh {{time}}",
+      "expiring": "Includes credits expiring soon",
+      "valid": "Valid",
+      "expired": "Expired",
+      "expiresAt": "Expires {{time}}",
+      "expiryHours": "Expires within 24 hours",
+      "expiryDays": "Expires within 3 days",
+      "empty": "No information yet",
+      "loadFailed": "Could not load credit details ({{error}})",
+      "overview": "Credit overview",
+      "remaining": "{{amount}} left",
+      "loadMore": "Load more",
+      "usage": "Usage details",
+      "requestAndTime": "Request and time",
+      "creditUsed": "Credits used",
+      "model": "Model",
+      "recentUsage": "Last 5 records",
+      "viewMore": "View more"
+    },
     "title": "WorkBuddy Account",
     "noAccounts": "No WorkBuddy accounts",
     "addAccount": "Add WorkBuddy Account",
@@ -7544,7 +7606,7 @@
       "title": "WorkBuddy Account Info (click to expand/collapse)",
       "desc": "Account switching writes the local WorkBuddy sign-in file using the current official client layout; local import reads the same file. Data is processed locally only. If an opaque official encryption wrapper is detected, the original file is preserved and the overwrite is stopped.",
       "permission": "Permission scope: read and write the WorkBuddy sign-in file (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) for local import and account switching; the legacy state.vscdb is no longer read or modified. Files with an official encryption wrapper are not overwritten without its key.",
-      "network": "Network scope: OAuth login and token refresh require network requests to WorkBuddy; quota queries call billing APIs. Local sign-in files and raw credentials are not uploaded."
+      "network": "OAuth sign-in and token refresh contact WorkBuddy. Credit balances and details are fetched from its billing service using the account token. Local sign-in files and system keys stay on this device."
     },
     "nickname": "Nickname",
     "enterprise": "Enterprise",
@@ -7561,8 +7623,8 @@
       "oauth": {
         "title": "IDE sign-in only",
         "item1": "Add the account after completing OAuth in your browser, then use it for IDE switching.",
-        "item2": "Resource-package quota data will refresh automatically after authorization.",
-        "item3": "Account cards show quota amount, progress, and refresh/expiry time by resource package."
+        "item2": "Credit balances are queried automatically after authorization.",
+        "item3": "Account cards show a credit overview. Open Credit details for individual grants and expiry dates."
       }
     },
     "oauthWebviewTab": "WebView OAuth",

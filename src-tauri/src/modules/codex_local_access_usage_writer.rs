@@ -121,7 +121,9 @@ fn write_usage_log_batch(
     batch: &[UsageLogWrite],
     epoch: u64,
 ) -> Result<usize, String> {
-    write_usage_log_batch_limited(conn, batch, epoch, USAGE_WRITER_BATCH_ROWS)
+    write_usage_log_batch_limited(
+        conn, batch, epoch, USAGE_WRITER_BATCH_ROWS, &AtomicBool::new(false),
+    )
 }
 
 fn write_usage_log_batch_limited(
@@ -129,9 +131,10 @@ fn write_usage_log_batch_limited(
     batch: &[UsageLogWrite],
     epoch: u64,
     limit: usize,
+    budget_expired: &AtomicBool,
 ) -> Result<usize, String> {
     ensure_remote_analytics_schema(conn).map_err(|e| e.to_string())?;
-    with_request_log_sql_budget(conn, USAGE_WRITER_BATCH_TIME, || {
+    with_request_log_sql_budget_status(conn, USAGE_WRITER_BATCH_TIME, budget_expired, || {
         let start = Instant::now();
         let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
         let mut count = 0;
@@ -191,6 +194,7 @@ fn run_usage_log_writer(mut receiver: tokio::sync::mpsc::Receiver<UsageLogWrite>
                 write.official = official_stats_account_id(&write.event.account_id);
             }
         }
+        let budget_expired = AtomicBool::new(false);
         let result = (|| -> Result<Option<usize>, String> {
             let Ok(_guard) = local_access_logs_db_write_lock().try_lock() else {
                 return Ok(None);
@@ -207,6 +211,7 @@ fn run_usage_log_writer(mut receiver: tokio::sync::mpsc::Receiver<UsageLogWrite>
                 &batch,
                 REQUEST_LOG_WRITE_EPOCH.load(Ordering::Acquire),
                 row_limit,
+                &budget_expired,
             )
             .map(Some)
         })();
@@ -221,18 +226,22 @@ fn run_usage_log_writer(mut receiver: tokio::sync::mpsc::Receiver<UsageLogWrite>
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(10)),
             Err(error) => {
-                USAGE_WRITER_FAILED.store(true, Ordering::Release);
                 failures = failures.saturating_add(1);
                 row_limit = (row_limit / 2).max(1);
+                let budget_expired = budget_expired.load(Ordering::Relaxed);
+                if !budget_expired {
+                    USAGE_WRITER_FAILED.store(true, Ordering::Release);
+                }
+                let admission_paused = USAGE_WRITER_FAILED.load(Ordering::Acquire);
                 logger::log_codex_api_warn(&format!(
-                    "请求日志批次保留待重试，暂停新请求准入: attempt={failures}, error={error}"
+                    "请求日志批次保留待重试: attempt={failures}, budget_expired={budget_expired}, admission_paused={admission_paused}, error={error}"
                 ));
-                // Three short attempts, then a visible degraded state and low
-                // frequency recovery. Keep accepted rows bounded in this batch.
-                std::thread::sleep(if failures >= 3 {
+                // An interrupted budget retains the batch. Queue capacity
+                // provides backpressure while short, smaller writes retry.
+                std::thread::sleep(if admission_paused && failures >= 3 {
                     Duration::from_secs(30)
                 } else {
-                    Duration::from_millis(100 * u64::from(failures))
+                    Duration::from_millis(100 * u64::from(failures.min(3)))
                 });
             }
         }

@@ -14,15 +14,18 @@ test('saved official authorization is reused without model verification or anoth
   assert.deepEqual(resolveCodexServiceJoinPlan(source, [{ ...grant, source_binding_valid: false }], []), { kind: 'saved', mode: 'official', registrationId: grant.id }, 'pending association is rechecked by the backend, not replaced with browser login');
 });
 
-test('last successful local choice survives membership removal and an expired official session', () => {
-  assert.deepEqual(resolveCodexServiceJoinPlan(source, [{ ...grant, last_service_mode: 'codex', needs_reauth: true }], []), { kind: 'saved', mode: 'codex', registrationId: grant.id });
+test('last successful local choice survives membership removal', () => {
+  assert.deepEqual(resolveCodexServiceJoinPlan(source, [{ ...grant, last_service_mode: 'codex' }], []), { kind: 'saved', mode: 'codex', registrationId: grant.id });
   assert.deepEqual(resolveCodexServiceJoinPlan(source, [grant], [source.id]), { kind: 'saved', mode: 'codex', registrationId: grant.id });
 });
 
-test('unbound accounts join locally without a prompt; invalid saved authorization remains explicit', () => {
+test('unbound, disconnected and expired accounts join locally while binding conflicts remain explicit', () => {
   assert.equal(resolveCodexServiceJoinPlan(source, [], []).kind, 'local');
+  assert.equal(resolveCodexServiceJoinPlan(source, [{ ...grant, connected: false }], []).kind, 'local');
+  assert.equal(resolveCodexServiceJoinPlan(source, [{ ...grant, needs_reauth: true }], []).kind, 'local');
+  assert.equal(resolveCodexServiceJoinPlan(source, [{ ...grant, needs_reauth: true }], ['chatgpt_plan_grant']).kind, 'reauthorize');
   assert.equal(resolveCodexServiceJoinPlan(source, [grant, { ...grant, id: 'other' }], []).kind, 'reauthorize');
-  for (const value of [{ ...grant, connected: false }, { ...grant, needs_reauth: true }, { ...grant, source_binding_error: 'CHATGPT_PLAN_SOURCE_CHANGED' }]) assert.equal(resolveCodexServiceJoinPlan(source, [value], []).kind, 'reauthorize');
+  assert.equal(resolveCodexServiceJoinPlan(source, [{ ...grant, source_binding_error: 'CHATGPT_PLAN_SOURCE_CHANGED' }], []).kind, 'reauthorize');
   assert.equal(resolveCodexServiceJoinPlan({ ...source, auth_mode: 'apikey' }, [grant], []).kind, 'local');
 });
 
@@ -36,8 +39,11 @@ test('only committed real membership is announced; model is never supplied and t
   assert.deepEqual(applied, [[['source'], ['source']]]);
   dependencies.setMode = async () => { throw new Error('CHATGPT_PLAN_NETWORK'); };
   await assert.rejects(reuseCodexServiceJoin(source, [grant], [], dependencies), /CHATGPT_PLAN_NETWORK/);
-  dependencies.setMode = async () => { throw new Error('CHATGPT_PLAN_REAUTH_REQUIRED'); };
-  await assert.rejects(reuseCodexServiceJoin(source, [grant], [], dependencies), /CHATGPT_PLAN_REAUTH_REQUIRED/);
+  for (const code of ['CHATGPT_PLAN_REAUTH_REQUIRED', 'CHATGPT_PLAN_DISCONNECTED', 'CHATGPT_PLAN_PERMISSION_REQUIRED']) {
+    dependencies.setMode = async () => { throw code; };
+    assert.deepEqual(await reuseCodexServiceJoin(source, [grant], [], dependencies), { kind: 'local' });
+    await assert.rejects(reuseCodexServiceJoin(source, [grant], ['chatgpt_plan_grant'], dependencies), (error) => error === code);
+  }
   dependencies.setMode = async () => ({ collection: { accountIds: ['source'], officialAccountBindings: {} } }) as CodexLocalAccessState;
   await assert.rejects(reuseCodexServiceJoin(source, [grant], [], dependencies), /CHATGPT_PLAN_SERVICE_CHANGED/);
   assert.equal(applied.length, 1);
@@ -69,10 +75,10 @@ test('unbound joins and batch imports never require browser authorization or mut
   const dependencies = { setMode: async () => { throw new Error('unexpected authorization mutation'); }, applied: () => { throw new Error('unexpected event'); } };
   assert.deepEqual(await reuseCodexServiceJoin(source, [], [], dependencies), { kind: 'local' });
   assert.deepEqual(await prepareCodexServiceJoins([source], [], [], () => {}, (account, grants, members) => reuseCodexServiceJoin(account, grants, members, dependencies)), { localIds: ['source'], resumedIds: [], failures: [] });
-  await assert.rejects(reuseCodexServiceJoin(source, [{ ...grant, needs_reauth: true }], [], dependencies), /CHATGPT_PLAN_REAUTH_REQUIRED/);
+  assert.deepEqual(await reuseCodexServiceJoin(source, [{ ...grant, needs_reauth: true }], [], dependencies), { kind: 'local' });
 });
 
-test('a stale official grant does not discard local IDs before or after it or change its route', async () => {
+test('batch joins send expired official grants through the same local path as unbound accounts', async () => {
   const before = { ...source, id: 'before' }, after = { ...source, id: 'after' };
   const stale = { ...grant, needs_reauth: true, last_service_mode: 'official' as const };
   const visited: string[] = [];
@@ -85,11 +91,9 @@ test('a stale official grant does not discard local IDs before or after it or ch
     return reuseCodexServiceJoin(account, grants, members, dependencies);
   });
   assert.deepEqual(visited, ['before', 'source', 'after']);
-  assert.deepEqual(result.localIds, ['before', 'after']);
+  assert.deepEqual(result.localIds, ['before', 'source', 'after']);
   assert.deepEqual(result.resumedIds, []);
-  assert.equal(result.failures.length, 1);
-  assert.equal(result.failures[0].accountId, 'source');
-  assert.match(String(result.failures[0].error), /CHATGPT_PLAN_REAUTH_REQUIRED/);
+  assert.deepEqual(result.failures, []);
   assert.equal(stale.last_service_mode, 'official');
 });
 
@@ -112,9 +116,9 @@ test('backend join failures are reported individually while successful membershi
         applied: (_related, selected) => { applied.push(selected); },
       });
     });
-  assert.deepEqual(result.localIds, []);
+  assert.deepEqual(result.localIds, ['reauth']);
   assert.deepEqual(result.resumedIds, ['first', 'last']);
-  assert.deepEqual(result.failures, [{ accountId: 'reauth', error: reauth }, { accountId: 'network', error: network }]);
+  assert.deepEqual(result.failures, [{ accountId: 'network', error: network }]);
   assert.deepEqual(seenMembers, [[], ['first'], ['first'], ['first']]);
   assert.deepEqual(snapshots, [['first'], ['first', 'last']]);
   assert.deepEqual(applied, [['first'], ['last']]);

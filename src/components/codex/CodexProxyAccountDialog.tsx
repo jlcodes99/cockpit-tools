@@ -9,7 +9,7 @@ import { proxySourceInspectable } from '../../utils/codexProxyPickerModel';
 import { executeProxyBatch, proxyBatchCompletedSuccessfully, type BatchBindResult } from '../../utils/codexProxyBatch';
 import { summarizeProxyBatch, unifiedProxyActive } from '../../utils/codexProxyDraft';
 import { proxyErrorKey } from '../../services/codexAccountProxyService';
-import { getCodexProxyTarget, updateCodexProxyAccount, isCodexProxyTarget, type CodexProxyTargetAccount } from '../../services/codexProxyTargetService';
+import { CODEX_API_SERVICE_PROXY_TARGET, getCodexProxyTarget, updateCodexProxyAccount, isCodexProxyTarget, type CodexProxyTargetAccount } from '../../services/codexProxyTargetService';
 import { useCodexAccountStore } from '../../stores/useCodexAccountStore';
 import { SingleSelectDropdown } from '../SingleSelectDropdown';
 import { ModalErrorMessage } from '../ModalErrorMessage';
@@ -131,7 +131,7 @@ export function CodexProxyAccountDialog({ accountId, initialTab, initialMode, on
           </div>}
           <p className="codex-proxy-page-note">{t('codex.proxy.restartHint')}</p>
         </> : <div className="codex-proxy-account-details">
-          <CodexProxyRuntimeStatusPanel accountId={accountId} revision={editor.savedBinding} desktopOnly={Boolean(editor.account && isCodexProxyTarget(editor.account))} />
+          <CodexProxyRuntimeStatusPanel accountId={accountId} revision={editor.savedBinding} desktopOnly={accountId === CODEX_API_SERVICE_PROXY_TARGET} />
           <div className="codex-proxy-account-check-actions">
             <button type="button" className="btn btn-secondary compact" disabled={measuring || !editor.bound} onClick={() => editor.test()}>
               {editor.testing ? <RefreshCw size={15} className="loading-spinner" /> : <Activity size={15} />}{t('codex.proxy.test')}</button>

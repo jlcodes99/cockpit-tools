@@ -1,10 +1,16 @@
-//! Official organization costs and text usage, using the account's existing key.
+//! Official organization costs and text usage, using a separate admin key.
 //! No dashboard/session endpoints, inferred remaining balance or credential writes.
 use super::CodexModelProviderUsageSummary;
 use chrono::{DateTime, Datelike, Utc};
 use reqwest::Client;
 use serde_json::Value;
 use std::{collections::HashSet, time::Instant};
+
+pub(super) fn require_usage_key(key: Option<&str>) -> Result<&str, String> {
+    key.map(str::trim)
+        .filter(|key| !key.is_empty())
+        .ok_or_else(|| "OPENAI_USAGE_NOT_CONFIGURED".into())
+}
 
 pub(super) fn is_official_base_url(base: &str) -> bool {
     reqwest::Url::parse(base.trim()).is_ok_and(|url| {
@@ -23,7 +29,12 @@ pub(super) async fn query(
     client: &Client,
     key: &str,
 ) -> Result<CodexModelProviderUsageSummary, String> {
-    query_at(client, key, "https://api.openai.com/v1", Utc::now()).await
+    tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        query_at(client, key, "https://api.openai.com/v1", Utc::now()),
+    )
+    .await
+    .map_err(|_| "OPENAI_USAGE_NETWORK_FAILED".to_string())?
 }
 
 fn response_error(status: u16, body: &Value) -> String {
@@ -114,6 +125,8 @@ fn summarize(
 ) -> Result<CodexModelProviderUsageSummary, String> {
     let mut month_cost = 0.0;
     let mut today_cost = 0.0;
+    let mut has_month_cost = false;
+    let mut has_today_cost = false;
     let mut requests = 0;
     let mut tokens = 0;
     for bucket in costs {
@@ -135,8 +148,10 @@ fn summarize(
                 .as_f64()
                 .ok_or("OPENAI_USAGE_INVALID_RESPONSE")?;
             month_cost += value;
+            has_month_cost = true;
             if start >= today {
                 today_cost += value;
+                has_today_cost = true;
             }
         }
     }
@@ -160,8 +175,9 @@ fn summarize(
     Ok(CodexModelProviderUsageSummary {
         mode: Some("openai_official".into()),
         unit: Some("USD".into()),
-        today_cost: Some(today_cost),
-        total_cost: Some(month_cost),
+        // Empty cost buckets are not evidence of a reported zero charge.
+        today_cost: has_today_cost.then_some(today_cost),
+        total_cost: has_month_cost.then_some(month_cost),
         today_requests: Some(requests),
         today_total_tokens: Some(tokens),
         ..Default::default()
@@ -211,6 +227,14 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn usage_requires_its_own_credential() {
+        for key in [None, Some(""), Some("  ")] {
+            assert_eq!(require_usage_key(key).unwrap_err(), "OPENAI_USAGE_NOT_CONFIGURED");
+        }
+        assert_eq!(require_usage_key(Some(" admin-key ")).unwrap(), "admin-key");
+    }
+
+    #[test]
     fn official_host_is_exact_and_does_not_capture_other_providers() {
         assert!(is_official_base_url("https://api.openai.com/v1"));
         assert!(is_official_base_url("https://api.openai.com/"));
@@ -241,8 +265,34 @@ mod tests {
                 && result.remaining.is_none()
                 && result.quota_remaining.is_none()
         );
-        assert_eq!(summarize(&[], &[], 2).unwrap().total_cost, Some(0.0));
+        assert_eq!(summarize(&[], &[], 2).unwrap().total_cost, None);
         assert!(summarize(&[json!({"start_time":1,"results":[{}]})], &[], 2).is_err());
+    }
+
+    #[test]
+    fn missing_cost_records_do_not_hide_usage_or_turn_into_zero() {
+        let usage = [json!({"results":[{"num_model_requests":407,"input_tokens":83000000,"output_tokens":881000}]})];
+        for costs in [vec![], vec![json!({"start_time":2,"results":[]})]] {
+            let result = summarize(&costs, &usage, 2).unwrap();
+            assert_eq!(result.today_cost, None);
+            assert_eq!(result.total_cost, None);
+            assert_eq!(result.today_requests, Some(407));
+            assert_eq!(result.today_total_tokens, Some(83881000));
+        }
+    }
+
+    #[test]
+    fn reported_zero_and_small_costs_are_preserved_and_days_stay_separate() {
+        let past = json!({"start_time":1,"results":[{"amount":{"currency":"usd","value":1.25}}]});
+        let missing_today = json!({"start_time":2,"results":[]});
+        let result = summarize(&[past, missing_today], &[], 2).unwrap();
+        assert_eq!(result.total_cost, Some(1.25));
+        assert_eq!(result.today_cost, None);
+        for value in [0.0, 0.000321957] {
+            let result = summarize(&[json!({"start_time":2,"results":[{"amount":{"currency":"usd","value":value}}]})], &[], 2).unwrap();
+            assert_eq!(result.total_cost, Some(value));
+            assert_eq!(result.today_cost, Some(value));
+        }
     }
 
     #[test]

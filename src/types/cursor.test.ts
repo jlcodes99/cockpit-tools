@@ -31,3 +31,17 @@ test('legacy Cursor usage keeps plan usage separate from paid additional usage',
   assert.equal(usage.onDemandUsedCents, 800);
   assert.equal(usage.allowanceResetAt, Date.parse('2026-11-12T00:00:00Z') / 1000);
 });
+
+test('Cursor uses the official weekly reset without falling back to the billing cycle', () => {
+  const base = { billingCycleEnd: '2026-12-01T00:00:00Z' };
+  const includedUsageResetsAt = Date.parse('2026-11-12T00:00:00Z');
+  const membership_type = 'unified_ultra';
+  const usage = (cursor_usage_raw: unknown) => getCursorUsage(account({ membership_type, cursor_usage_raw }));
+
+  assert.equal(usage(base).allowanceResetAt, null);
+  assert.equal(usage({
+    ...base,
+    planInfo: { includedUsagePeriod: 'INCLUDED_USAGE_PERIOD_WEEKLY', includedUsageResetsAt: String(includedUsageResetsAt) },
+  }).allowanceResetAt, includedUsageResetsAt / 1000);
+  assert.equal(usage({ ...base, included_usage_resets_at: includedUsageResetsAt }).allowanceResetAt, includedUsageResetsAt / 1000);
+});

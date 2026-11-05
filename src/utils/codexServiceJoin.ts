@@ -26,6 +26,8 @@ export function resolveCodexServiceJoinPlan(
   // preferences existed, including a deliberate choice of the local gateway.
   const officialMember = officialAccountBindings ? officialAccountBindings[account.id] === grant.id && memberIds.includes(account.id) : memberIds.includes(chatGptPlanOverviewId(grant.id));
   const localMember = memberIds.includes(account.id);
+  // A new local member uses the original Codex credentials and needs no grant.
+  if (!officialMember && !localMember && (!grant.connected || grant.needs_reauth)) return { kind: 'local' };
   const saved = officialAccountBindings && localMember ? officialMember ? 'official' : 'codex'
     : grant.last_service_mode ?? (officialMember ? 'official' : localMember ? 'codex' : undefined);
   if (saved === 'codex') return { kind: 'saved', mode: 'codex', registrationId: grant.id };
@@ -56,14 +58,27 @@ export async function reuseCodexServiceJoin(
   const plan = resolveCodexServiceJoinPlan(account, grants, memberIds);
   if (plan.kind === 'reauthorize') throw new Error('CHATGPT_PLAN_REAUTH_REQUIRED');
   if (plan.kind !== 'saved') return plan;
-  const state = await dependencies.setMode(account.id, plan.mode, plan.registrationId, { intent: 'join' });
+  let state: CodexLocalAccessState;
+  try {
+    state = await dependencies.setMode(account.id, plan.mode, plan.registrationId, { intent: 'join' });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : error;
+    const authorizationInvalid = code === 'CHATGPT_PLAN_REAUTH_REQUIRED'
+      || code === 'CHATGPT_PLAN_DISCONNECTED'
+      || code === 'CHATGPT_PLAN_PERMISSION_REQUIRED';
+    if (authorizationInvalid && plan.mode === 'official'
+      && !memberIds.includes(account.id) && !memberIds.includes(chatGptPlanOverviewId(plan.registrationId))) {
+      return { kind: 'local' };
+    }
+    throw error;
+  }
   if (!isChatGptPlanServiceModeApplied(state, account.id, plan.mode, plan.registrationId)) throw new Error('CHATGPT_PLAN_SERVICE_CHANGED');
   const selectedIds = [account.id];
   dependencies.applied([account.id], selectedIds);
   return { kind: 'joined', state, selectedIds };
 }
 
-/** Imports use local access when unbound and preserve saved routes without an authorization prompt. */
+/** Imports use the same join rules as the account card. */
 export async function prepareCodexServiceJoins(
   accounts: readonly CodexAccount[],
   grants: readonly ChatGptPlanAccount[],

@@ -1039,6 +1039,28 @@ fn antigravity_metadata_candidates(
     candidates
 }
 
+/// IDE and Electron publish different versions. Only the product's IDE version
+/// determines whether it signs in through the shared App/agy Hub.
+pub(crate) fn antigravity_ide_uses_shared_credentials() -> bool {
+    antigravity_metadata_candidates(Some("antigravity_ide"), AntigravityVersionScanMode::Quick)
+        .into_iter()
+        .flat_map(|root| antigravity_product_json_candidates(&root))
+        .filter_map(|path| fs::read_to_string(path).ok())
+        .filter_map(|content| serde_json::from_str::<serde_json::Value>(&content).ok())
+        .find_map(|product| {
+            json_string_field(&product, &["ideVersion"])
+                .and_then(|version| antigravity_ide_version_uses_shared_credentials(&version))
+        })
+        .unwrap_or(false)
+}
+
+fn antigravity_ide_version_uses_shared_credentials(version: &str) -> Option<bool> {
+    let mut parts = version.trim().trim_start_matches(['v', 'V']).split('.');
+    let major: u32 = parts.next()?.parse().ok()?;
+    let minor: u32 = parts.next()?.parse().ok()?;
+    Some((major, minor) >= (2, 6))
+}
+
 fn resolve_antigravity_installed_version_info_for_target_with_mode(
     target: Option<&str>,
     scan_mode: AntigravityVersionScanMode,

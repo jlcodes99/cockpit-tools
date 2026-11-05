@@ -2190,7 +2190,7 @@ export function useCodexAccountsBaseController() {
         try {
           await refreshQuota(account.id);
           setMessage({
-            text: t("codex.quota.resetCreditConsumed", "已重置 5 小时额度"),
+            text: t("codex.quota.resetCreditConsumed", "已重置额度"),
           });
           setResetCreditConfirmAccountId(null);
         } catch (error) {

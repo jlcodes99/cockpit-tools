@@ -2684,6 +2684,22 @@
     "other_group": "其他模型"
   },
   "codex": {
+    "overload": {
+      "setting": "满载时持续重试",
+      "settingHint": "仅用于本地 Codex API 服务。开启后，可安全重试的请求会持续等待模型恢复。设置对新请求生效。",
+      "retrying": "模型繁忙，正在重试（{{count}}）",
+      "count": "上游满载 {{count}} 次",
+      "countHint": "按上游尝试计数，含自动重试。记录最多保留 7 天。",
+      "history": "满载明细",
+      "empty": "此时间范围内没有满载记录。",
+      "attempt": "第 {{number}} 次尝试",
+      "sameAccount": "同号恢复",
+      "otherAccount": "换号恢复",
+      "pending": "结果待定",
+      "cancelled": "已取消",
+      "failed": "请求失败",
+      "countUnavailable": "暂时无法读取满载统计"
+    },
     "instance": {
       "errors": {
         "threadSyncWorkerFailed": "会话同步任务失败：{{error}}",
@@ -3818,7 +3834,7 @@
         "apiKeyUrlInvalid": "请填写不含内嵌凭据的 HTTP(S) 管理页面网址；API Key 请填入密钥栏。"
       },
       "saveSuccess": "模型供应商已保存",
-      "deleteBlocked": "该供应商已被 {{count}} 个账号引用，禁止删除。",
+      "confirmDeleteWithAccounts": "确认删除供应商「{{name}}」及其关联的 {{count}} 个账号吗？",
       "confirmDelete": "确认删除供应商「{{name}}」吗？",
       "deleteFailed": "删除供应商失败：{{error}}",
       "deleteApiKeyFailed": "删除 API Key 失败：{{error}}",
@@ -3948,7 +3964,7 @@
         "selectVisible": "选择当前结果",
         "resultSelectedCount": "已选 {{count}} 个",
         "selectFailed": "选择失败",
-        "deleteConfirm": "确认删除选中的 {{providerCount}} 个供应商吗？会同时删除 {{accountCount}} 个精确关联的 Codex API Key 账号。",
+        "deleteConfirm": "确认删除选中的 {{providerCount}} 个供应商及其关联的 {{accountCount}} 个账号吗？",
         "deleteSuccess": "已删除 {{providerCount}} 个供应商和 {{accountCount}} 个关联账号。",
         "deleteFailed": "删除选中项失败：{{error}}",
         "protocolSummary": "{{protocol}} · {{mode}} · {{model}}",
@@ -4171,7 +4187,7 @@
       "resetCreditDialogDesc": "重置速率限制后，可以继续不间断地工作。你还有 {{count}} 次重置可用。",
       "resetCreditDialogAction": "重置使用次数",
       "resetCreditNoCredits": "没有可用的主动重置次数",
-      "resetCreditConsumed": "已重置 5 小时额度",
+      "resetCreditConsumed": "已重置额度",
       "resetCreditFailed": "重置失败：{{error}}",
       "resetCreditRefreshAfterConsumeFailed": "已提交重置，但刷新配额失败：{{error}}",
       "resetCreditsTitleWithExpiry": "可用于重置当前 5 小时窗口的剩余次数：{{count}}，最近到期：{{time}}",
@@ -5372,7 +5388,7 @@
       "boundProxyUnavailable": "绑定账号没有可用代理，请重新选择。",
       "sourceUnavailable": "代理来源或节点已失效，请重新选择。",
       "operationTimeout": "代理操作超时，请重试。",
-      "cardScopeHint": "此卡片代理用于启动的 Codex 桌面客户端；模型网关上游仍使用各自出口。",
+      "cardScopeHint": "API Key 账号代理同时用于桌面客户端和 API 服务上游请求；API 服务卡片代理仍仅用于桌面客户端。不修改系统代理。",
       "display": {
         "title": "代理展示",
         "compact": "简略",
@@ -5673,7 +5689,7 @@
       "modeDefaultHint": "该账号未使用代理，按原有默认出口连接。",
       "modeStaleHint": "绑定的来源或节点已失效，请重新选择。",
       "management": "代理管理",
-      "managementHint": "为 OAuth、API 账号与 API 服务卡片配置代理，不修改系统代理。API 卡片仅用于启动的桌面客户端，模型网关上游仍使用各自出口。",
+      "managementHint": "API Key 账号代理同时用于桌面客户端和 API 服务上游请求；API 服务卡片代理仍仅用于桌面客户端。不修改系统代理。",
       "emptyTitle": "为账号准备独立出口",
       "emptyDescription": "暂无适用账号卡片。添加 OAuth 或 API 账号，或开启 API 服务卡片后，即可在这里选择代理。",
       "search": "搜索账号",
@@ -5981,7 +5997,7 @@
         "assign": "分配代理",
         "specific": "指定账号",
         "shared": "设为统一代理",
-        "sharedHint": "未单独配置的适用卡片使用此代理，新增卡片也会跟随。独立代理和“不使用代理”优先。API 卡片用于桌面客户端，模型网关上游仍使用各自出口。",
+        "sharedHint": "未单独配置的账号继承此代理，新增账号也会跟随。独立代理和“不使用代理”优先。API Key 账号的客户端与 API 请求均生效；API 服务卡片仅影响客户端。",
         "apply": "确认分配"
       },
       "managerResources": {
@@ -6108,7 +6124,7 @@
       "title": "请求详情",
       "totalLatency": "总耗时",
       "firstResponse": "首响",
-      "firstResponseHint": "首响为请求开始到首个上游响应片段的耗时，不等同于首个生成 Token。",
+      "firstResponseHint": "新的 Responses 流式请求在网关处理完请求体后开始计首响，直至首个有效上游事件，跳过保活和限额通知。",
       "unavailable": "此请求暂无诊断详情，可稍后刷新。旧请求不会补录。",
       "attempts": "尝试轨迹",
       "noAttempts": "未记录尝试轨迹。",
@@ -6288,10 +6304,27 @@
       "pending": "等待查询官方用量",
       "permissionRequired": "当前 Key 缺少组织用量读取权限（api.usage.read）。",
       "permissionGuide": "使用管理员 Key：Admin keys → Restricted → Usage API Scope → Read。可查询消费和用量，不提供剩余余额。",
-      "openAdminKeys": "配置查询权限",
-      "invalidKey": "密钥无效或已失效，请检查当前 API Key。",
+      "openAdminKeys": "前往创建",
+      "invalidKey": "查询 Key 无效或已过期，请检查管理员 API Key。",
       "networkFailed": "无法连接官方用量服务，请稍后刷新。",
-      "queryFailed": "官方用量查询失败，请稍后重试。"
+      "queryFailed": "官方用量查询失败，请稍后重试。",
+      "organization": "组织用量",
+      "configure": "配置查询",
+      "settings": "查询设置",
+      "title": "配置用量查询",
+      "optional": "用量查询（可选）",
+      "queryKey": "管理员 API Key",
+      "callKey": "调用 API Key",
+      "notConfigured": "配置管理员 Key 可查看组织消费与用量。",
+      "purpose": "请使用与调用 Key 属于同一组织的管理员 Key。此 Key 仅用于用量查询，不替换调用 Key。",
+      "saveVerify": "保存并验证",
+      "remove": "移除配置",
+      "keyRequired": "请输入管理员 API Key。",
+      "saveFailed": "保存查询配置失败，请重试。",
+      "configChanged": "账号或查询 Key 已变更，请重新打开设置后再试。",
+      "openFailed": "打开密钥页面失败，请重试。",
+      "costUnavailable": "暂无记录",
+      "costUnavailableHint": "官方成本接口未返回对应时段的金额记录。请求数和 Token 来自独立的用量接口，无金额记录不代表消费为零。"
     },
     "officialApi": {
       "hint": "OpenAI 官方 API Key 接入，按实际地址识别。"
@@ -7496,6 +7529,35 @@
     "syncToWorkbuddy": "同步到 WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "套餐基础积分",
+      "planBonus": "套餐赠送积分",
+      "benefit": "平台奖励积分",
+      "addon": "购买积分",
+      "total": "总剩余积分",
+      "details": "积分明细",
+      "usedOf": "已使用 {{used}}/{{total}}",
+      "remainingPercent": "剩余{{percent}}%",
+      "nearestExpiry": "最近到期时间 {{time}}",
+      "nextRefresh": "下次刷新时间 {{time}}",
+      "expiring": "包含即将到期的积分",
+      "valid": "有效期内",
+      "expired": "已过期",
+      "expiresAt": "到期时间 {{time}}",
+      "expiryHours": "24小时内到期",
+      "expiryDays": "3天内到期",
+      "empty": "暂无明细",
+      "loadFailed": "积分明细加载失败（{{error}}）",
+      "overview": "积分概览",
+      "remaining": "剩余 {{amount}}",
+      "loadMore": "加载更多",
+      "usage": "消耗明细",
+      "requestAndTime": "请求与时间",
+      "creditUsed": "积分消耗",
+      "model": "模型",
+      "recentUsage": "仅展示最近的 5 条数据",
+      "viewMore": "查看更多"
+    },
     "title": "WorkBuddy 账号管理",
     "noAccounts": "暂无 WorkBuddy 账号",
     "addAccount": "添加 WorkBuddy 账号",
@@ -7544,7 +7606,7 @@
       "title": "WorkBuddy 账号管理说明（点击展开/收起）",
       "desc": "切换账号会按当前 WorkBuddy 官方客户端登录文件布局写入本机；本机导入读取同一登录文件，数据仅在本地处理。若检测到无法解密的官方封装，会保留原文件并停止覆盖。",
       "permission": "权限范围：读取并写入 WorkBuddy 登录文件（CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info），用于本机导入与账号切换；不再读取或修改旧版 state.vscdb。遇到官方加密封装且未取得密钥时不会覆盖原文件。",
-      "network": "网络范围：OAuth 授权登录与 Token 刷新需联网请求 WorkBuddy；配额查询需调用计费 API。不上传本地登录文件或凭证原文。"
+      "network": "OAuth 登录和 Token 刷新会请求 WorkBuddy 服务。积分余额与明细查询使用账号 Token 请求 WorkBuddy 计费服务。本地登录文件和系统密钥保留在本机。"
     },
     "nickname": "昵称",
     "enterprise": "企业",
@@ -7561,8 +7623,8 @@
       "oauth": {
         "title": "仅授权 IDE 登录信息",
         "item1": "在浏览器完成 OAuth 后即可添加账号并用于 IDE 切换。",
-        "item2": "授权完成后会自动刷新资源包配额数据。",
-        "item3": "账号卡片将按资源包展示额度、进度和刷新/到期时间。"
+        "item2": "授权完成后会自动查询积分余额。",
+        "item3": "账号卡片展示积分概览，可打开「积分明细」查看积分记录和到期时间。"
       }
     },
     "oauthWebviewTab": "WebView 授权",

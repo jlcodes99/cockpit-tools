@@ -14,6 +14,46 @@ export async function listWorkbuddyAccounts(): Promise<WorkbuddyAccount[]> {
   return await invoke('list_workbuddy_accounts');
 }
 
+type WorkbuddyCreditPage = { items: Record<string, unknown>[]; hasMore: boolean };
+const pendingCreditPages = new Map<string, Promise<WorkbuddyCreditPage>>();
+
+export function getWorkbuddyCreditPackages(
+  accountId: string,
+  packageCodes: readonly string[],
+  expired: boolean,
+  page: number,
+  locale: string,
+): Promise<WorkbuddyCreditPage> {
+  const key = JSON.stringify([accountId, packageCodes, expired, page, locale]);
+  const pending = pendingCreditPages.get(key);
+  if (pending) return pending;
+  const request = invoke<WorkbuddyCreditPage>('get_workbuddy_credit_packages', {
+    accountId, packageCodes, expired, page, locale,
+  }).finally(() => pendingCreditPages.delete(key));
+  pendingCreditPages.set(key, request);
+  return request;
+}
+
+export interface WorkbuddyCreditUsageRow {
+  requestId: string | null;
+  requestTime: string | null;
+  inputTrunc: string | null;
+  input: string | null;
+  credit: number | string | null;
+  model: string | null;
+}
+
+const pendingCreditUsage = new Map<string, Promise<WorkbuddyCreditUsageRow[]>>();
+
+export function getWorkbuddyRecentCreditUsage(accountId: string): Promise<WorkbuddyCreditUsageRow[]> {
+  const pending = pendingCreditUsage.get(accountId);
+  if (pending) return pending;
+  const request = invoke<WorkbuddyCreditUsageRow[]>('get_workbuddy_recent_credit_usage', { accountId })
+    .finally(() => pendingCreditUsage.delete(accountId));
+  pendingCreditUsage.set(accountId, request);
+  return request;
+}
+
 export async function deleteWorkbuddyAccount(accountId: string): Promise<void> {
   return await invoke('delete_workbuddy_account', { accountId });
 }

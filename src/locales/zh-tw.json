@@ -2453,6 +2453,22 @@
     "other_group": "其他模型"
   },
   "codex": {
+    "overload": {
+      "setting": "滿載時持續重試",
+      "settingHint": "僅用於本機 Codex API 服務。開啟後，可安全重試的請求會持續等待模型恢復。設定對新請求生效。",
+      "retrying": "模型忙碌，正在重試（{{count}}）",
+      "count": "上游滿載 {{count}} 次",
+      "countHint": "按上游嘗試計數，含自動重試。記錄最多保留 7 天。",
+      "history": "滿載明細",
+      "empty": "此時間範圍內沒有滿載記錄。",
+      "attempt": "第 {{number}} 次嘗試",
+      "sameAccount": "同帳號恢復",
+      "otherAccount": "換帳號恢復",
+      "pending": "結果待定",
+      "cancelled": "已取消",
+      "failed": "請求失敗",
+      "countUnavailable": "暫時無法讀取滿載統計"
+    },
     "instance": {
       "errors": {
         "threadSyncWorkerFailed": "工作階段同步作業失敗：{{error}}",
@@ -3404,7 +3420,7 @@
       "resetCreditDialogDesc": "重置速率限制後，可以繼續不中斷地工作。你還有 {{count}} 次重置可用。",
       "resetCreditDialogAction": "重置使用次數",
       "resetCreditNoCredits": "沒有可用的主動重置次數",
-      "resetCreditConsumed": "已重置 5 小時額度",
+      "resetCreditConsumed": "已重置額度",
       "resetCreditFailed": "重置失敗：{{error}}",
       "resetCreditRefreshAfterConsumeFailed": "已送出重置，但重新整理配額失敗：{{error}}",
       "resetCreditsTitleWithExpiry": "可用於重置目前 5 小時視窗的剩餘次數：{{count}}，最近到期：{{time}}",
@@ -4144,7 +4160,7 @@
         "apiKeyUrlInvalid": "請填寫不含內嵌憑證的 HTTP(S) 管理頁網址；API Key 請填入金鑰欄。"
       },
       "saveSuccess": "模型供應商已儲存",
-      "deleteBlocked": "此供應商已連結 {{count}} 個帳號，無法刪除。",
+      "confirmDeleteWithAccounts": "確定刪除供應商「{{name}}」及其關聯的 {{count}} 個帳號嗎？",
       "confirmDelete": "確定刪除供應商「{{name}}」嗎？",
       "deleteFailed": "刪除供應商失敗：{{error}}",
       "deleteApiKeyFailed": "刪除 API Key 失敗：{{error}}",
@@ -4274,7 +4290,7 @@
         "selectVisible": "選擇目前結果",
         "resultSelectedCount": "已選 {{count}} 個",
         "selectFailed": "選擇失敗",
-        "deleteConfirm": "確認刪除選中的 {{providerCount}} 個供應商嗎？會同時刪除 {{accountCount}} 個精確關聯的 Codex API Key 帳號。",
+        "deleteConfirm": "確定刪除選取的 {{providerCount}} 個供應商及其關聯的 {{accountCount}} 個帳號嗎？",
         "deleteSuccess": "已刪除 {{providerCount}} 個供應商和 {{accountCount}} 個關聯帳號。",
         "deleteFailed": "刪除所選項失敗：{{error}}",
         "protocolSummary": "{{protocol}} · {{mode}} · {{model}}",
@@ -5141,7 +5157,7 @@
       "boundProxyUnavailable": "綁定帳號沒有可用代理，請重新選擇。",
       "sourceUnavailable": "代理來源或節點已失效，請重新選擇。",
       "operationTimeout": "代理操作逾時，請重試。",
-      "cardScopeHint": "此卡片代理用於啟動的 Codex 桌面用戶端；模型閘道上游仍使用各自出口。",
+      "cardScopeHint": "API Key 帳號代理同時用於桌面用戶端和 API 服務上游請求；API 服務卡片代理仍僅用於桌面用戶端。不修改系統代理。",
       "display": {
         "title": "代理顯示",
         "compact": "簡略",
@@ -5442,7 +5458,7 @@
       "modeDefaultHint": "該帳號未使用代理，依原有預設出口連線。",
       "modeStaleHint": "綁定的來源或節點已失效，請重新選擇。",
       "management": "代理管理",
-      "managementHint": "為 OAuth、API 帳號與 API 服務卡片設定代理，不修改系統代理。API 卡片僅用於啟動的桌面用戶端，模型閘道上游仍使用各自出口。",
+      "managementHint": "API Key 帳號代理同時用於桌面用戶端和 API 服務上游請求；API 服務卡片代理仍僅用於桌面用戶端。不修改系統代理。",
       "emptyTitle": "為帳號準備獨立出口",
       "emptyDescription": "暫無適用帳號卡片。新增 OAuth 或 API 帳號，或啟用 API 服務卡片後，即可在這裡選擇代理。",
       "search": "搜尋帳號",
@@ -5750,7 +5766,7 @@
         "assign": "指派代理",
         "specific": "指定帳號",
         "shared": "設為共用代理",
-        "sharedHint": "未單獨設定的適用卡片使用此代理，新增卡片也會跟隨。獨立代理和「不使用代理」優先。API 卡片用於桌面用戶端，模型閘道上游仍使用各自出口。",
+        "sharedHint": "未單獨設定的帳號繼承此代理，新增帳號也會跟隨。獨立代理和「不使用代理」優先。API Key 帳號的用戶端與 API 請求均生效；API 服務卡片僅影響用戶端。",
         "apply": "確認指派"
       },
       "managerResources": {
@@ -5877,7 +5893,7 @@
       "title": "請求詳情",
       "totalLatency": "總耗時",
       "firstResponse": "首響",
-      "firstResponseHint": "首響為請求開始到首個上游回應片段的耗時，不等同於首個產生的 Token。",
+      "firstResponseHint": "新的 Responses 串流請求在閘道處理完請求本文後開始計首響，直至首個有效上游事件，略過保活與限額通知。",
       "unavailable": "此請求暫無診斷詳情，可稍後重新整理。舊請求不會補記。",
       "attempts": "嘗試軌跡",
       "noAttempts": "未記錄嘗試軌跡。",
@@ -6057,10 +6073,27 @@
       "pending": "等待查詢官方用量",
       "permissionRequired": "目前金鑰缺少組織用量讀取權限（api.usage.read）。",
       "permissionGuide": "使用管理員金鑰：Admin keys → Restricted → Usage API Scope → Read。可查詢支出與用量，不提供剩餘餘額。",
-      "openAdminKeys": "設定查詢權限",
-      "invalidKey": "金鑰無效或已過期，請檢查目前的 API 金鑰。",
+      "openAdminKeys": "前往建立",
+      "invalidKey": "查詢 Key 無效或已過期，請檢查管理員 API Key。",
       "networkFailed": "無法連線至官方用量服務，請稍後重新整理。",
-      "queryFailed": "官方用量查詢失敗，請稍後重試。"
+      "queryFailed": "官方用量查詢失敗，請稍後重試。",
+      "organization": "組織用量",
+      "configure": "設定查詢",
+      "settings": "查詢設定",
+      "title": "設定用量查詢",
+      "optional": "用量查詢（選填）",
+      "queryKey": "管理員 API Key",
+      "callKey": "呼叫 API Key",
+      "notConfigured": "設定管理員 Key 可查看組織支出與用量。",
+      "purpose": "請使用與呼叫 Key 屬於同一組織的管理員 Key。此 Key 僅用於用量查詢，不取代呼叫 Key。",
+      "saveVerify": "儲存並驗證",
+      "remove": "移除設定",
+      "keyRequired": "請輸入管理員 API Key。",
+      "saveFailed": "儲存查詢設定失敗，請重試。",
+      "configChanged": "帳號或查詢 Key 已變更，請重新開啟設定後再試。",
+      "openFailed": "開啟金鑰頁面失敗，請重試。",
+      "costUnavailable": "暫無紀錄",
+      "costUnavailableHint": "官方成本介面未回傳對應時段的金額紀錄。請求數與 Token 來自獨立的用量介面，沒有金額紀錄不代表支出為零。"
     },
     "officialApi": {
       "hint": "OpenAI 官方 API Key 接入，依實際位址識別。"
@@ -7137,6 +7170,35 @@
     "syncToWorkbuddy": "同步至 WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "方案基礎點數",
+      "planBonus": "方案贈送點數",
+      "benefit": "平台獎勵點數",
+      "addon": "購買點數",
+      "total": "剩餘點數總計",
+      "details": "點數明細",
+      "usedOf": "已使用 {{used}}/{{total}}",
+      "remainingPercent": "剩餘 {{percent}}%",
+      "nearestExpiry": "最近到期時間 {{time}}",
+      "nextRefresh": "下次更新時間 {{time}}",
+      "expiring": "包含即將到期的點數",
+      "valid": "有效期限內",
+      "expired": "已過期",
+      "expiresAt": "到期時間 {{time}}",
+      "expiryHours": "24 小時內到期",
+      "expiryDays": "3 天內到期",
+      "empty": "沒有明細",
+      "loadFailed": "載入失敗 ({{error}})",
+      "overview": "點數總覽",
+      "remaining": "剩餘 {{amount}}",
+      "loadMore": "載入更多",
+      "usage": "消耗明細",
+      "requestAndTime": "請求與時間",
+      "creditUsed": "消耗點數",
+      "model": "模型",
+      "recentUsage": "僅顯示最近 5 筆資料",
+      "viewMore": "查看更多"
+    },
     "title": "WorkBuddy 帳號管理",
     "noAccounts": "暫無 WorkBuddy 帳號",
     "addAccount": "新增 WorkBuddy 帳號",
@@ -7144,7 +7206,7 @@
       "title": "WorkBuddy 帳號管理說明（點擊展開/收起）",
       "desc": "切換帳號會依新版 WorkBuddy 官方用戶端規則寫入本機登入檔；本機匯入讀取同一檔案，資料僅在本機處理。",
       "permission": "權限範圍：讀取並寫入 WorkBuddy 登入檔（CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info），用於本機匯入與帳號切換；不再讀取或修改舊版 state.vscdb。",
-      "network": "網路範圍：OAuth 登入與 Token 刷新需連線請求 WorkBuddy；配額查詢需呼叫計費 API。不會上傳本機登入檔或憑證原文。"
+      "network": "OAuth 登入與 Token 更新會連線至 WorkBuddy 服務。點數餘額與明細會使用帳號 Token 向 WorkBuddy 計費服務查詢。本機登入檔案和系統金鑰保留在裝置上。"
     },
     "nickname": "暱稱",
     "enterprise": "企業",
@@ -7161,8 +7223,8 @@
       "oauth": {
         "title": "僅授權 IDE 登入資訊",
         "item1": "在瀏覽器完成 OAuth 後即可新增帳號並用於 IDE 切換。",
-        "item2": "不會自動綁定配額查詢參數。",
-        "item3": "如需顯示配額，請在帳號卡片中手動執行「查詢配額」綁定。"
+        "item2": "授權完成後會自動查詢點數餘額。",
+        "item3": "帳號卡片顯示點數總覽，可開啟「點數明細」查看點數紀錄和到期時間。"
       }
     },
     "oauthWebviewTab": "WebView 授權",

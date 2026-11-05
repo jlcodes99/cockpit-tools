@@ -48,6 +48,9 @@ impl Host for MatrixHost {
 async fn nonofficial_http_quota_recovery_for_oauth_and_api_key_long_history() {
     let cases = [
         ("http429", 0, "", false, true),
+        ("ordinary429", 0, "", false, false),
+        ("http400_with_explicit_quota", 0, "", false, true),
+        ("json_quota", 0, "", false, true),
         ("immediate_usage", 0, "", false, true),
         ("delayed_usage", 400, "", false, true),
         (
@@ -84,7 +87,7 @@ async fn nonofficial_http_quota_recovery_for_oauth_and_api_key_long_history() {
                     inner: FixtureHost {
                         base: format!("http://{}", listener.local_addr().unwrap()),
                         policy: ExecutionPolicy {
-                            credential_retries: 3,
+                            credential_retries: 1,
                             status_retries: 0,
                             bootstrap_retries: 0,
                             total_timeout: Duration::from_secs(4),
@@ -111,9 +114,16 @@ async fn nonofficial_http_quota_recovery_for_oauth_and_api_key_long_history() {
                 if index==1 && name=="json_backup" { return Response::builder().header("content-type","application/json")
                     .body(Body::from(json!({"id":"backup-json","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Synthetic recovery success"}]}],"usage":{"input_tokens":10,"output_tokens":1,"total_tokens":11}}).to_string())).unwrap(); }
                 if index==1 { return Response::builder().header("content-type","text/event-stream").body(Body::from(format!("data: {}\n\ndata: {}\n\n",json!({"type":"response.created","response":{"id":"backup-created","status":"in_progress"}}),completed()))).unwrap(); }
-                let code=if name=="sharing_quota" {"subscription_sharing_usage_limit_exceeded"} else {"usage_limit_reached"};
+                let code = match name {
+                    "sharing_quota" => "subscription_sharing_usage_limit_exceeded",
+                    "ordinary429" => "rate_limit_exceeded",
+                    _ => "usage_limit_reached",
+                };
                 let error=json!({"code":code,"message":"Synthetic quota exhausted","resets_in_seconds":60});
-                if name=="http429" {return Response::builder().status(429).header("content-type","application/json").body(Body::from(json!({"error":error}).to_string())).unwrap();}
+                if let Some(status) = match name {
+                    "http429" | "ordinary429" => Some(429), "http400_with_explicit_quota" => Some(400), "json_quota" => Some(200), _ => None,
+                } { return Response::builder().status(status).header("content-type","application/json")
+                    .body(Body::from(json!({"error":error}).to_string())).unwrap(); }
                 let mut prefix=format!("data: {}\n\ndata: {}\n\n",created(),json!({"type":"response.in_progress","response":{"output":[],"usage":null}}));
                 if !metadata.is_empty() {prefix.push_str(&format!("data: {}\n\n",json!({"type":metadata,"metadata":{"fixture":true}})));}
                 if output {prefix.push_str(&format!("data: {}\n\n",json!({"type":match name {"tool_then_quota"=>"response.function_call_arguments.delta","reasoning_then_quota"=>"response.reasoning_text.delta",_=>"response.output_text.delta"},"delta":"already generated"})));}
@@ -210,7 +220,8 @@ async fn nonofficial_http_quota_recovery_for_oauth_and_api_key_long_history() {
                 if want_rotate {
                     assert!(!hooks.is_empty());
                 } else {
-                    assert!(body.contains("usage_limit_reached"), "{body}");
+                    let code = if name == "ordinary429" { "rate_limit_exceeded" } else { "usage_limit_reached" };
+                    assert!(body.contains(code), "{body}");
                 }
             }
         }
@@ -218,13 +229,13 @@ async fn nonofficial_http_quota_recovery_for_oauth_and_api_key_long_history() {
 }
 
 #[tokio::test]
-async fn nonofficial_http_late_quota_does_not_restart_credential_budget() {
+async fn nonofficial_http_late_quota_excludes_all_exhausted_accounts_beyond_credential_budget() {
     for streaming in [false, true] {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let inner = FixtureHost {
             base: format!("http://{}", listener.local_addr().unwrap()),
             policy: ExecutionPolicy {
-                credential_retries: 2,
+                credential_retries: 1,
                 status_retries: 0,
                 bootstrap_retries: 0,
                 total_timeout: Duration::from_secs(4),
@@ -285,17 +296,17 @@ async fn nonofficial_http_late_quota_does_not_restart_credential_budget() {
                 .iter()
                 .map(|c| c.load(Ordering::SeqCst))
                 .collect::<Vec<_>>(),
-            vec![1, 1, 0],
-            "only two actual credentials are allowed"
+            vec![1, 1, 1],
+            "confirmed quota may use every eligible credential once"
         );
         let reports = host.inner.reports.lock().unwrap();
         assert_eq!(reports.len(), 1);
         assert_eq!(reports[0].status, 429);
-        assert_eq!(reports[0].diagnostics.as_ref().unwrap().attempts.len(), 2);
+        assert_eq!(reports[0].diagnostics.as_ref().unwrap().attempts.len(), 3);
         assert_eq!(
             host.inner.failures.lock().unwrap().len(),
-            2,
-            "both actual quota rejections update health"
+            3,
+            "each actual quota rejection updates health"
         );
     }
 }

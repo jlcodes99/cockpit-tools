@@ -1,5 +1,5 @@
 #[cfg(target_os = "macos")]
-use super::write_antigravity_keychain_payload;
+use super::{parse_antigravity_system_credential, write_antigravity_keychain_payload};
 use super::{build_antigravity_credential_payload, write_antigravity_credential_payload};
 #[cfg(target_os = "macos")]
 use std::os::unix::fs::PermissionsExt;
@@ -169,7 +169,7 @@ fn standalone_fallback_replaces_old_account_with_the_same_system_payload() {
     let payload =
         build_antigravity_credential_payload(&account_with_id_token(Some("fixture-id"))).unwrap();
     let mut system_payload = String::new();
-    write_antigravity_credential_payload(&payload, &fallback, |value| {
+    write_antigravity_credential_payload(&payload, &fallback, None, |value| {
         system_payload = value.to_string();
         Ok(())
     })
@@ -196,7 +196,7 @@ fn system_write_failure_keeps_the_previous_standalone_fallback() {
     let dir = tempfile::tempdir().unwrap();
     let fallback = dir.path().join("jetski-standalone-oauth-token");
     std::fs::write(&fallback, "old-account").unwrap();
-    let error = write_antigravity_credential_payload("new-account", &fallback, |_| {
+    let error = write_antigravity_credential_payload("new-account", &fallback, None, |_| {
         Err("system write failed".into())
     })
     .unwrap_err();
@@ -210,7 +210,7 @@ fn fallback_write_failure_reports_partial_switch_instead_of_success() {
     let fallback = dir.path().join("jetski-standalone-oauth-token");
     std::fs::create_dir(&fallback).unwrap();
     let mut system_written = false;
-    let error = write_antigravity_credential_payload("fixture-secret", &fallback, |_| {
+    let error = write_antigravity_credential_payload("fixture-secret", &fallback, None, |_| {
         system_written = true;
         Ok(())
     })
@@ -220,4 +220,77 @@ fn fallback_write_failure_reports_partial_switch_instead_of_success() {
     assert!(error.contains("请重试切号"));
     assert!(!error.contains("fixture-secret"));
     assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn desktop_switch_syncs_only_an_initialized_agy_session() {
+    let dir = tempfile::tempdir().unwrap();
+    let gemini = dir.path().join(".gemini");
+    let fallback = gemini.join("jetski-standalone-oauth-token");
+    let cli_dir = gemini.join("antigravity-cli");
+    let payload = "fixture-payload";
+
+    let cli_session = super::initialized_cli_session_path(&gemini).unwrap();
+    assert!(cli_session.is_none());
+    write_antigravity_credential_payload(payload, &fallback, cli_session.as_deref(), |_| Ok(()))
+        .unwrap();
+    assert!(!cli_dir.exists());
+
+    std::fs::create_dir(&cli_dir).unwrap();
+    let cli_session = super::initialized_cli_session_path(&gemini)
+        .unwrap()
+        .unwrap();
+    assert_eq!(cli_session, cli_dir.join("antigravity-oauth-token"));
+    std::fs::write(&cli_session, "old-session").unwrap();
+    write_antigravity_credential_payload(payload, &fallback, Some(&cli_session), |system| {
+        assert_eq!(system, payload);
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(std::fs::read_to_string(&cli_session).unwrap(), payload);
+    assert_eq!(std::fs::read_to_string(&fallback).unwrap(), payload);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(&cli_session)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
+}
+
+#[test]
+fn agy_write_failure_reports_partial_switch() {
+    let dir = tempfile::tempdir().unwrap();
+    let fallback = dir.path().join("jetski-standalone-oauth-token");
+    let cli_session = dir.path().join("antigravity-oauth-token");
+    std::fs::create_dir(&cli_session).unwrap();
+    let error = write_antigravity_credential_payload(
+        "fixture-secret",
+        &fallback,
+        Some(&cli_session),
+        |_| Ok(()),
+    )
+    .unwrap_err();
+    assert!(error.starts_with("ANTIGRAVITY_SWITCH_STATE_SAVE_FAILED: agy: "));
+    assert!(!error.contains("fixture-secret"));
+    assert_eq!(
+        std::fs::read_to_string(&fallback).unwrap(),
+        "fixture-secret"
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn keychain_go_keyring_payload_decodes_for_local_import() {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    let payload = r#"{"token":{"refresh_token":"fixture"},"auth_method":"google"}"#;
+    let encoded = format!("go-keyring-base64:{}", STANDARD.encode(payload));
+    let credential = parse_antigravity_system_credential(&encoded).unwrap();
+    assert_eq!(credential.refresh_token, "fixture");
+    assert!(parse_antigravity_system_credential("go-keyring-base64:invalid!").is_err());
 }

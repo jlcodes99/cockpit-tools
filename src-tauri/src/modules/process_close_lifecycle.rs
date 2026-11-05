@@ -1187,19 +1187,12 @@ pub fn start_antigravity_with_args(
 ) -> Result<u32, String> {
     crate::modules::logger::log_info("正在启动 Antigravity IDE...");
 
-    #[cfg(target_os = "macos")]
-    let launch_path = resolve_antigravity_launch_path().ok();
-    #[cfg(not(target_os = "macos"))]
     let launch_path = resolve_antigravity_launch_path()?;
 
     #[cfg(target_os = "macos")]
     {
-        let app_root = resolve_macos_app_root_from_config("antigravity").or_else(|| {
-            launch_path
-                .as_ref()
-                .and_then(|path| normalize_macos_app_root(path))
-        });
-        let app_root = app_root.ok_or_else(|| app_path_missing_error("antigravity"))?;
+        let app_root = normalize_macos_app_root(&launch_path)
+            .ok_or_else(|| app_path_missing_error("antigravity"))?;
 
         let user_data_dir_trimmed = user_data_dir.trim();
         let mut args: Vec<String> = Vec::new();
@@ -1676,13 +1669,63 @@ fn close_captured_codex_direct_app_servers(
         "[Codex Close] direct app-server remained after main process exit; closing captured pids={}",
         summarize_pid_list_for_log(&remaining)
     ));
-    close_pids(&remaining, timeout_secs.min(5).max(1)).map_err(|error| {
-        format!(
-            "failed to close Codex direct app-server before auth switch: {}",
-            error
+    let mut close_errors = remaining
+        .iter()
+        .filter_map(|pid| send_close_signal(*pid))
+        .collect::<Vec<_>>();
+    if wait_pids_exit(&remaining, timeout_secs.clamp(1, 5)) {
+        return Ok(());
+    }
+
+    // app-server can keep draining work after SIGTERM. The desktop has already exited,
+    // so finish stopping only its captured children before writing the new credentials.
+    let remaining = collect_running_pids(&remaining);
+    crate::modules::logger::log_warn(&format!(
+        "[Codex Close] direct app-server did not exit after SIGTERM; sending SIGKILL to pids={}",
+        summarize_pid_list_for_log(&remaining)
+    ));
+    for pid in &remaining {
+        if unsafe { libc::kill(*pid as libc::pid_t, libc::SIGKILL) } != 0 {
+            let error = std::io::Error::last_os_error();
+            if error.raw_os_error() != Some(libc::ESRCH) {
+                close_errors.push(format!("pid {pid}: SIGKILL failed: {error}"));
+            }
+        }
+    }
+    if wait_pids_exit(&remaining, timeout_secs.clamp(1, 5)) {
+        crate::modules::logger::log_info(
+            "[Codex Close] captured direct app-server processes exited after SIGKILL",
+        );
+        return Ok(());
+    }
+
+    let remaining = collect_running_pids(&remaining);
+    if remaining.is_empty() {
+        return Ok(());
+    }
+    let reason = if close_errors.is_empty() {
+        "目标进程在等待超时后仍在运行".to_string()
+    } else {
+        close_errors.join(" | ")
+    };
+    Err(format!(
+        "failed to close Codex direct app-server before auth switch: {}",
+        crate::modules::windows_operation::format_error(
+            "stop_process",
+            "无法关闭实例进程",
+            &reason,
+            None,
+            &remaining,
+            true,
+            true,
+            true,
         )
-    })
+    ))
 }
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "process_codex_app_server_close_tests.rs"]
+mod codex_app_server_close_tests;
 
 #[cfg(target_os = "windows")]
 fn collect_codex_process_entries_from_powershell(

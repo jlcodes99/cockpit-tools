@@ -64,6 +64,8 @@ pub fn get_local_access_request_payload_logging_status() -> RequestPayloadLoggin
 
 enum RequestDiagnosticWrite {
     Usage(Box<CodexLocalAccessUsageEvent>, u64),
+    OverloadAttempt(Box<LocalAccessOverloadAttempt>, u64),
+    OverloadOutcome(String, String, Option<String>, u64),
     Detail(Box<CodexLocalAccessRequestDetail>, u64, u64),
 }
 
@@ -711,6 +713,17 @@ fn apply_request_diagnostic_write(
     write: RequestDiagnosticWrite,
 ) -> Result<(), String> {
     match write {
+        RequestDiagnosticWrite::OverloadAttempt(attempt, epoch) => {
+            if epoch == REQUEST_LOG_WRITE_EPOCH.load(Ordering::SeqCst) {
+                write_overload_attempt(conn, &attempt).map_err(|error| error.to_string())?;
+            }
+        }
+        RequestDiagnosticWrite::OverloadOutcome(request_id, outcome, account_id, epoch) => {
+            if epoch == REQUEST_LOG_WRITE_EPOCH.load(Ordering::SeqCst) {
+                conn.execute("UPDATE overload_attempts_v1 SET outcome=?2, final_account_id=?3 WHERE request_id=?1",
+                    params![request_id, outcome, account_id]).map_err(|error| error.to_string())?;
+            }
+        }
         RequestDiagnosticWrite::Usage(event, epoch) => {
             if epoch == REQUEST_LOG_WRITE_EPOCH.load(Ordering::SeqCst) {
                 insert_live_local_access_usage_event(conn, &event)?;
@@ -762,6 +775,7 @@ fn run_request_diagnostics_writer(receiver: std::sync::mpsc::Receiver<RequestDia
             }
             create_request_diagnostics_table(opened).map_err(|error| error.to_string())?;
             prune_request_diagnostics(opened, now_ms())?;
+            prune_overload_attempts(opened, now_ms()).map_err(|error| error.to_string())?;
             Ok::<(), String>(())
         })();
         if let Err(error) = result {

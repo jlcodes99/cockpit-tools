@@ -33,3 +33,14 @@ test('hiding relay quota does not hide an OpenAI Official account or prevent its
   assert.equal(shouldShowCodexApiKeyUsagePanel(account, true), true);
   assert.equal(isCodexApiKeyUsageQueryEligible(account), true);
 });
+
+test('query configuration matches the exact model key and only the official endpoint', async () => {
+  const { resolveOpenAIUsageConfig } = await import('./openaiOfficialUsage');
+  const provider = { id: 'p', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', supportsWebsockets: false, createdAt: 1, updatedAt: 1,
+    apiKeys: [{ id: 'a', name: '', apiKey: 'model-a', usageApiKey: 'admin-a', usageKeyVersion: 2, createdAt: 1, updatedAt: 1 },
+      { id: 'b', name: '', apiKey: 'model-b', createdAt: 1, updatedAt: 1 }] };
+  assert.deepEqual(resolveOpenAIUsageConfig(provider, ' model-a '), { apiKey: 'admin-a', binding: 'p:a:2:costs-v2' });
+  assert.equal(resolveOpenAIUsageConfig(provider, 'model-b'), null);
+  assert.equal(resolveOpenAIUsageConfig(provider, 'model-c'), null);
+  assert.equal(resolveOpenAIUsageConfig({ ...provider, baseUrl: 'https://relay.example/v1' }, 'model-a'), null);
+});

@@ -1,3 +1,5 @@
+import { OpenAIUsageKeyField, OpenAIUsageSettingsButton } from "./OpenAIUsageSettingsDialog";
+import { isOpenAIOfficialUsageUrl } from "../../utils/openaiOfficialUsage";
 import "./CodexModelProviderEditor.css";
 import { SingleSelectDropdown } from "../SingleSelectDropdown";
 import { CodexProviderModelFetch } from "./CodexProviderModelFetch";
@@ -727,18 +729,25 @@ export function CodexModelProviderEditor(props: Props) {
               </div>
               <div className="form-group">
                 <label>
-                  {t("codex.modelProviders.fields.newApiKey", "新增 API Key")}
+                  {t(isOpenAIOfficialUsageUrl(form.baseUrl) ? "codex.openaiUsage.callKey" : "codex.modelProviders.fields.newApiKey")}
                 </label>
                 <input
                   className="form-input"
                   type="text"
                   value={form.newApiKey}
                   onChange={(event) =>
-                    mutateForm({ newApiKey: event.target.value })
+                    mutateForm({ newApiKey: event.target.value, newUsageApiKey: "" })
                   }
                   disabled={saving}
                 />
               </div>
+
+              {isOpenAIOfficialUsageUrl(form.baseUrl) && <details className="openai-usage-optional">
+                <summary>{t('codex.openaiUsage.optional')}</summary>
+                {form.newApiKey.trim() || !currentEditingProvider
+                  ? <OpenAIUsageKeyField value={form.newUsageApiKey} onChange={newUsageApiKey => mutateForm({ newUsageApiKey })} disabled={saving} t={t} />
+                  : <OpenAIUsageSettingsButton provider={currentEditingProvider} apiKey={queryKey} t={t} />}
+              </details>}
 
               <div className="provider-save-preview">
                 <strong>{t("codex.modelProviders.preview.providerStoreTitle")}</strong>

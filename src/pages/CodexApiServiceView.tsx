@@ -10,7 +10,9 @@ import { summarizeAccountPoolHealth } from "../components/codex/codexLocalAccess
 import { CodexServiceMemberAuthorization } from "../components/codex/CodexServiceMemberAuthorization";
 import { CodexServiceEmptyMembers } from "../components/codex/CodexServiceEmptyMembers";
 import { CodexApiRequestLogs } from "./CodexApiRequestLogs";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { CodexOverloadRetrySetting } from "../components/codex/CodexOverloadRetrySetting";
+import { CodexOverloadHistory, useCodexOverloadCounts } from "./CodexOverloadHistory";
 import { isCodexChatgptPlanAccount } from "../types/codex";
 import { formatCodexGatewayModeError } from "../utils/codexGatewayError";
 import { CodexSessionIdentityMappingControl } from "../components/codex/CodexSessionIdentityMappingControl";
@@ -80,6 +82,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
     apiKeyStatsById,
     apiServiceIsCurrent,
     applyTimeoutPreset,
+    baseUrl,
     busy: controllerBusy,
     clearTestChat,
     clientBaseUrlHost,
@@ -268,10 +271,19 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
   } = props;
   const planGrants = useChatGptPlanOverview(collection?.accountIds, collection?.officialAccountBindings);
   const displayMemberAccounts = useMemo(() => codexServiceDisplayRows(memberAccounts), [memberAccounts]);
+  const [overloadAccount, setOverloadAccount] = useState<{ id: string; name: string } | null>(null);
+  const overload = useCodexOverloadCounts(statsTimeRange.startAt, statsTimeRange.endAt, activeTab === "accounts" ||
+    (activeTab === "logs" && statsLogTab === "accounts"));
+  const showOverloadHistory = (id: string, name: string) => {
+    setOverloadAccount({ id, name });
+    setStatsLogTab("logs");
+    setActiveTab("logs");
+  };
   const accountStats = useMemo(() => aggregateCodexServiceAccountStats(selectedStatsWindow?.accounts ?? [], accounts,
     planGrants.accounts, planGrants.displaySourceIds), [selectedStatsWindow?.accounts, accounts, planGrants.accounts, planGrants.displaySourceIds]);
   const displayPoolHealth = summarizeAccountPoolHealth(localAccessAccounts, memberIds, state);
   const busy = controllerBusy;
+  const lanBaseUrl = state?.lanBaseUrl;
   const localAccessStatus = resolveCodexLocalAccessRuntimeStatus(collection, state);
   const keyRecoveryRequired = isCodexGatewayKeyRecoveryError(state?.lastError);
   return (
@@ -585,12 +597,12 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                 <label>
                   <span>Base URL</span>
                   <div className="codex-api-service-copy-row">
-                    <code>{displayBaseUrl}</code>
+                    <code>{baseUrl}</code>
                     <button
                       type="button"
                       className="folder-icon-btn"
-                      onClick={() => void handleCopy("baseUrl", displayBaseUrl)}
-                      disabled={!displayBaseUrl}
+                      onClick={() => void handleCopy("baseUrl", baseUrl)}
+                      disabled={!baseUrl}
                     >
                       {copiedField === "baseUrl" ? (
                         <Check size={14} />
@@ -600,6 +612,26 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                     </button>
                   </div>
                 </label>
+                {lanBaseUrl && (
+                  <label>
+                    <span>{t("codex.localAccess.addressLan", "局域网")} Base URL</span>
+                    <div className="codex-api-service-copy-row">
+                      <code>{lanBaseUrl}</code>
+                      <button
+                        type="button"
+                        className="folder-icon-btn"
+                        aria-label={`${t("common.copy", "复制")} ${t("codex.localAccess.addressLan", "局域网")} Base URL`}
+                        onClick={() => void handleCopy("lanBaseUrl", lanBaseUrl)}
+                      >
+                        {copiedField === "lanBaseUrl" ? (
+                          <Check size={14} />
+                        ) : (
+                          <Copy size={14} />
+                        )}
+                      </button>
+                    </div>
+                  </label>
+                )}
                 <label>
                   <span>
                     {t(
@@ -1561,6 +1593,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
 
         {activeTab === "accounts" && (
           <div className="codex-api-service-grid accounts">
+            {overload.error && <p role="status">{t("codex.overload.countUnavailable")}</p>}
             <section className="codex-api-service-panel">
               <div className="codex-api-service-panel-head">
                 <h2>
@@ -1667,6 +1700,13 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                           <span>
                             {formatUsdCost(stat?.usage.estimatedCostUsd ?? 0)}
                           </span>
+                          {overload.counts && (
+                            <button type="button" className="btn btn-secondary btn-sm"
+                              title={t("codex.overload.countHint")}
+                              onClick={() => showOverloadHistory(account.id, maskAccountText(presentation.displayName))}>
+                              {t("codex.overload.count", { count: overload.counts[account.id] ?? 0 })}
+                            </button>
+                          )}
                           <span>
                             {t("codex.apiService.accountHealth.failures", {
                               count: health?.consecutiveFailures ?? 0,
@@ -1755,6 +1795,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                   {t("codex.apiService.routing.saveOptions", "保存选项")}
                 </button>
               </div>
+              <CodexOverloadRetrySetting showProgress />
               <div className="codex-api-service-config-list codex-api-service-routing-form">
                 <label>
                   <span>{t("codex.localAccess.routingLabel", "调度策略")}</span>
@@ -2086,7 +2127,10 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                     role="tab"
                     aria-selected={statsLogTab === tab.key}
                     className={statsLogTab === tab.key ? "active" : ""}
-                    onClick={() => setStatsLogTab(tab.key)}
+                    onClick={() => {
+                      setOverloadAccount(null);
+                      setStatsLogTab(tab.key);
+                    }}
                   >
                     {tab.label}
                   </button>
@@ -2118,6 +2162,18 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
               </div>
             </div>
 
+            {(statsLogTab === "accounts" || (statsLogTab === "logs" && overloadAccount)) && (
+              <CodexStatsRangePicker
+                value={statsRange}
+                range={statsTimeRange}
+                onPresetChange={handleStatsPresetChange}
+                onCustomApply={handleCustomStatsRangeApply}
+                disabled={busy}
+                error={statsRangeError}
+                compact
+              />
+            )}
+            {statsLogTab === "accounts" && overload.error && <p role="status">{t("codex.overload.countUnavailable")}</p>}
             {statsLogTab === "accounts" && (
               <div className="codex-api-service-account-grid codex-api-service-stats-account-grid">
                 {memberAccounts.length === 0 ? (
@@ -2162,6 +2218,13 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                           <span>
                             {formatUsdCost(stat?.usage.estimatedCostUsd ?? 0)}
                           </span>
+                          {overload.counts && (
+                            <button type="button" className="btn btn-secondary btn-sm"
+                              title={t("codex.overload.countHint")}
+                              onClick={() => showOverloadHistory(account.id, maskAccountText(presentation.displayName))}>
+                              {t("codex.overload.count", { count: overload.counts[account.id] ?? 0 })}
+                            </button>
+                          )}
                           <span>
                             {t("codex.apiService.accountHealth.failures", {
                               count: health?.consecutiveFailures ?? 0,
@@ -2276,7 +2339,12 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
             )}
 
             {statsLogTab === "logs" && (
-              <CodexApiRequestLogs {...props} />
+              overloadAccount
+                ? <CodexOverloadHistory key={`${overloadAccount.id}:${statsTimeRange.startAt}:${statsTimeRange.endAt}`}
+                    accountId={overloadAccount.id} accountName={overloadAccount.name}
+                    startAt={statsTimeRange.startAt} endAt={statsTimeRange.endAt}
+                    onClose={() => setOverloadAccount(null)} />
+                : <CodexApiRequestLogs {...props} />
             )}
           </section>
         )}

@@ -984,19 +984,10 @@ struct ParsedRequest {
 }
 
 fn request_uses_responses_lite(request: &ParsedRequest) -> bool {
-    request
-        .headers
-        .keys()
-        .any(|name| name.eq_ignore_ascii_case(CODEX_RESPONSES_LITE_HEADER))
-}
-
-fn request_body_uses_responses_lite(request: &ParsedRequest) -> bool {
-    request_uses_responses_lite(request)
-        || parse_request_body_json(&request.body)
-            .as_ref()
-            .and_then(|body| body.get("model"))
-            .and_then(Value::as_str)
-            .is_some_and(codex_protocol::codex_model_uses_responses_lite)
+    request.headers.iter().any(|(name, value)| {
+        name.eq_ignore_ascii_case(CODEX_RESPONSES_LITE_HEADER)
+            && value.trim().eq_ignore_ascii_case("true")
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -1746,6 +1737,7 @@ fn preserve_runtime_collection_fields(
 ) {
     // Only the dedicated settings command changes this field after initial load.
     collection.request_payload_logging = current.request_payload_logging;
+    collection.continuous_overload_retry = current.continuous_overload_retry;
     collection.capability_fallback = current.capability_fallback.clone();
     collection.multi_agent = current.multi_agent.clone();
     prune_multi_agent_references(collection);

@@ -146,3 +146,32 @@ async fn refresh_does_not_retry_unrelated_failures() {
     assert!(result.unwrap_err().contains("invalid_client"));
     assert_eq!(requests.len(), 1);
 }
+
+#[test]
+fn refresh_preserves_metadata_and_accepts_a_replacement_refresh_token() {
+    let current = crate::models::TokenData::new(
+        "old-access".into(),
+        "old-refresh".into(),
+        60,
+        Some("fixture@example.com".into()),
+        Some("fixture-project".into()),
+        Some("fixture-user".into()),
+    )
+    .with_oauth_metadata(Some(DEFAULT_OAUTH_CLIENT_KEY.into()), Some("old-id".into()));
+
+    let response = |refresh_token: Option<&str>| TokenResponse {
+        access_token: "new-access".into(),
+        expires_in: 3600,
+        token_type: "Bearer".into(),
+        refresh_token: refresh_token.map(str::to_owned),
+        id_token: None,
+        oauth_client_key: Some(DEFAULT_OAUTH_CLIENT_KEY.into()),
+    };
+    let rotated = build_refreshed_token(&current, response(Some("new-refresh")));
+    assert_eq!(rotated.refresh_token, "new-refresh");
+    assert_eq!(rotated.id_token.as_deref(), Some("old-id"));
+    assert_eq!(rotated.project_id.as_deref(), Some("fixture-project"));
+
+    let unchanged = build_refreshed_token(&current, response(None));
+    assert_eq!(unchanged.refresh_token, "old-refresh");
+}

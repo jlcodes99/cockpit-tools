@@ -2453,6 +2453,22 @@
     "other_group": "Altri modelli"
   },
   "codex": {
+    "overload": {
+      "setting": "Riprova se saturo",
+      "settingHint": "Per le nuove richieste del servizio API locale di Codex. Le richieste ripetibili in sicurezza attendono che il modello torni disponibile.",
+      "retrying": "Modello occupato, nuovo tentativo ({{count}})",
+      "count": "Saturazioni: {{count}}",
+      "countHint": "Conta i tentativi verso il fornitore, inclusi quelli automatici. Cronologia fino a 7 giorni.",
+      "history": "Cronologia saturazione",
+      "empty": "Nessun errore di saturazione nel periodo.",
+      "attempt": "Tentativo {{number}}",
+      "sameAccount": "Ripreso con lo stesso account",
+      "otherAccount": "Ripreso dopo il cambio account",
+      "pending": "Esito in attesa",
+      "cancelled": "Annullato",
+      "failed": "Richiesta non riuscita",
+      "countUnavailable": "Statistiche di saturazione non disponibili"
+    },
     "instance": {
       "errors": {
         "threadSyncWorkerFailed": "Sincronizzazione delle sessioni non riuscita: {{error}}",
@@ -3273,7 +3289,7 @@
       "resetCreditDialogDesc": "Reimposta il limite di frequenza per continuare a lavorare senza interruzioni. Reset disponibili: {{count}}.",
       "resetCreditDialogAction": "Reimposta utilizzo",
       "resetCreditNoCredits": "Nessun reset disponibile",
-      "resetCreditConsumed": "Quota di 5 ore reimpostata",
+      "resetCreditConsumed": "Quota reimpostata",
       "resetCreditFailed": "Reimpostazione non riuscita: {{error}}",
       "resetCreditRefreshAfterConsumeFailed": "Reset inviato, ma aggiornamento quota non riuscito: {{error}}",
       "resetCreditsTitleWithExpiry": "Reimpostazioni rimaste per la finestra di 5 ore: {{count}}. Prossima scadenza: {{time}}",
@@ -4144,7 +4160,7 @@
         "apiKeyUrlInvalid": "Usa un URL di gestione HTTP(S) senza credenziali incorporate; inserisci la chiave API nel campo della chiave."
       },
       "saveSuccess": "Provider di modelli salvato.",
-      "deleteBlocked": "Questo provider è collegato a {{count}} account e non può essere eliminato.",
+      "confirmDeleteWithAccounts": "Eliminare il fornitore «{{name}}» e i suoi {{count}} account collegati?",
       "confirmDelete": "Eliminare il provider \"{{name}}\"?",
       "deleteFailed": "Impossibile eliminare il provider: {{error}}",
       "deleteApiKeyFailed": "Impossibile eliminare la chiave API: {{error}}",
@@ -4274,7 +4290,7 @@
         "selectVisible": "Seleziona visibili",
         "resultSelectedCount": "{{count}} selezionati",
         "selectFailed": "Seleziona falliti",
-        "deleteConfirm": "Eliminare {{providerCount}} provider selezionati? Verranno eliminati anche {{accountCount}} account Codex API Key collegati esattamente.",
+        "deleteConfirm": "Eliminare {{providerCount}} fornitori selezionati e {{accountCount}} account collegati?",
         "deleteSuccess": "Eliminati {{providerCount}} provider e {{accountCount}} account collegati.",
         "deleteFailed": "Impossibile eliminare gli elementi selezionati: {{error}}",
         "protocolSummary": "{{protocol}} · {{mode}} · {{model}}",
@@ -5141,7 +5157,7 @@
       "boundProxyUnavailable": "L’account collegato non ha un proxy disponibile. Scegline uno di nuovo.",
       "sourceUnavailable": "La sorgente del proxy o il nodo non è disponibile. Selezionalo di nuovo.",
       "operationTimeout": "L’operazione del proxy è scaduta. Riprova.",
-      "cardScopeHint": "Il client desktop Codex avviato usa il proxy di questa scheda. Le connessioni dei gateway dei modelli ai fornitori mantengono i propri percorsi.",
+      "cardScopeHint": "I proxy degli account con chiave API si applicano ai client desktop e alle richieste in uscita del servizio API. Il proxy della scheda del servizio API si applica solo ai client desktop. Il proxy di sistema non cambia.",
       "display": {
         "title": "Vista proxy",
         "compact": "Compatta",
@@ -5442,7 +5458,7 @@
       "modeDefaultHint": "Questo account non usa un proxy e mantiene l'uscita predefinita.",
       "modeStaleHint": "La sorgente o il nodo associato non è più disponibile. Selezionalo di nuovo.",
       "management": "Gestione proxy",
-      "managementHint": "Imposta proxy per le schede degli account OAuth, API e del servizio API senza modificare il proxy di sistema. Nelle schede API si applica al client desktop avviato; i gateway dei modelli mantengono i propri percorsi.",
+      "managementHint": "I proxy degli account con chiave API si applicano ai client desktop e alle richieste in uscita del servizio API. Il proxy della scheda del servizio API si applica solo ai client desktop. Il proxy di sistema non cambia.",
       "emptyTitle": "Una connessione dedicata al tuo account",
       "emptyDescription": "Nessuna scheda account supportata disponibile. Aggiungi un account OAuth o API, oppure attiva la scheda del servizio API, quindi scegli un proxy qui.",
       "search": "Cerca account",
@@ -5750,7 +5766,7 @@
         "assign": "Assegna proxy",
         "specific": "Account selezionati",
         "shared": "Proxy condiviso",
-        "sharedHint": "Le schede supportate senza proxy proprio usano questo proxy, incluse quelle nuove. Le impostazioni individuali e Nessun proxy hanno la precedenza. Le schede API lo usano per il client desktop; i gateway dei modelli mantengono i propri percorsi.",
+        "sharedHint": "Gli account senza proxy proprio ereditano questo proxy, inclusi i nuovi. I proxy individuali e Nessun proxy hanno la precedenza. Gli account con chiave API lo usano per desktop e richieste API; la scheda del servizio API solo per desktop.",
         "apply": "Assegna"
       },
       "managerResources": {
@@ -5877,7 +5893,7 @@
       "title": "Dettagli richiesta",
       "totalLatency": "Tempo totale",
       "firstResponse": "Prima risposta",
-      "firstResponseHint": "Tempo dall’inizio al primo frammento della risposta upstream, non necessariamente al primo token generato.",
+      "firstResponseHint": "Per le nuove richieste Responses in streaming, il tempo va dal termine dell’elaborazione del corpo da parte del gateway al primo evento di risposta del server a monte. I segnali di mantenimento della connessione e gli avvisi sui limiti di frequenza vengono ignorati.",
       "unavailable": "Diagnostica non ancora disponibile. Aggiorna più tardi. Le vecchie richieste non vengono completate.",
       "attempts": "Tentativi",
       "noAttempts": "Nessuna traccia dei tentativi registrata.",
@@ -6057,10 +6073,27 @@
       "pending": "Utilizzo OpenAI in attesa",
       "permissionRequired": "La chiave non può leggere l’utilizzo dell’organizzazione (api.usage.read).",
       "permissionGuide": "Usa una chiave amministratore: Admin keys → Restricted → Usage API Scope → Read. Mostra spesa e utilizzo, non il credito residuo.",
-      "openAdminKeys": "Permessi utilizzo",
-      "invalidKey": "La chiave non è valida o è scaduta. Controlla la chiave API attuale.",
+      "openAdminKeys": "Crea chiave admin",
+      "invalidKey": "La chiave di verifica non è valida o è scaduta. Controlla la chiave API amministratore.",
       "networkFailed": "Impossibile connettersi ai dati OpenAI. Aggiorna più tardi.",
-      "queryFailed": "Consultazione dell’utilizzo OpenAI non riuscita. Riprova più tardi."
+      "queryFailed": "Consultazione dell’utilizzo OpenAI non riuscita. Riprova più tardi.",
+      "organization": "Utilizzo organizzazione",
+      "configure": "Configura utilizzo",
+      "settings": "Impostazioni uso",
+      "title": "Configura verifica utilizzo",
+      "optional": "Verifica utilizzo (facoltativa)",
+      "queryKey": "Chiave API amministratore",
+      "callKey": "Chiave API del modello",
+      "notConfigured": "Aggiungi una chiave amministratore per consultare spese e utilizzo dell’organizzazione.",
+      "purpose": "Usa una chiave amministratore della stessa organizzazione della chiave del modello. Serve solo a consultare l’utilizzo e non sostituisce la chiave del modello.",
+      "saveVerify": "Salva e verifica",
+      "remove": "Rimuovi impostazioni",
+      "keyRequired": "Inserisci una chiave API amministratore.",
+      "saveFailed": "Impossibile salvare le impostazioni. Riprova.",
+      "configChanged": "L’account o la chiave di verifica è cambiato. Riapri le impostazioni.",
+      "openFailed": "Impossibile aprire la pagina delle chiavi. Riprova.",
+      "costUnavailable": "Non fornito",
+      "costUnavailableHint": "L’API ufficiale dei costi non ha restituito importi per questo periodo. Richieste e token provengono da un’API di utilizzo separata; l’assenza di costi non significa spesa zero."
     },
     "officialApi": {
       "hint": "Account con chiave API ufficiale OpenAI, identificato dall’indirizzo di connessione effettivo."
@@ -7137,6 +7170,35 @@
     "syncToWorkbuddy": "Sincronizza con WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Crediti del piano",
+      "planBonus": "Bonus del piano",
+      "benefit": "Premi della piattaforma",
+      "addon": "Crediti acquistati",
+      "total": "Crediti residui totali",
+      "details": "Dettagli crediti",
+      "usedOf": "Usati {{used}}/{{total}}",
+      "remainingPercent": "Resta il {{percent}}%",
+      "nearestExpiry": "Prima scadenza {{time}}",
+      "nextRefresh": "Prossimo rinnovo {{time}}",
+      "expiring": "Alcuni crediti scadono a breve",
+      "valid": "Validi",
+      "expired": "Scaduti",
+      "expiresAt": "Scade il {{time}}",
+      "expiryHours": "Scade entro 24 ore",
+      "expiryDays": "Scade entro 3 giorni",
+      "empty": "Nessun dato",
+      "loadFailed": "Caricamento non riuscito ({{error}})",
+      "overview": "Riepilogo",
+      "remaining": "{{amount}} rimasti",
+      "loadMore": "Carica altro",
+      "usage": "Dettaglio consumi",
+      "requestAndTime": "Richiesta e ora",
+      "creditUsed": "Crediti usati",
+      "model": "Modello",
+      "recentUsage": "Ultimi 5 record",
+      "viewMore": "Vedi altro"
+    },
     "title": "Gestione account WorkBuddy",
     "noAccounts": "Nessun account WorkBuddy",
     "addAccount": "Aggiungi account WorkBuddy",
@@ -7144,7 +7206,7 @@
       "title": "Informazioni sulla gestione degli account WorkBuddy (clicca per espandere/comprimere)",
       "desc": "Il cambio account scrive il file di accesso locale secondo il layout più recente del client ufficiale WorkBuddy; l'importazione locale legge lo stesso file. I dati vengono elaborati solo in locale.",
       "permission": "Ambito autorizzazioni: leggere e scrivere il file di accesso WorkBuddy (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) per importazione locale e cambio account; il vecchio state.vscdb non viene più letto né modificato.",
-      "network": "Ambito rete: l'accesso OAuth e il rinnovo del token richiedono richieste a WorkBuddy; le query quota chiamano le API di fatturazione. I file di accesso locali e le credenziali grezze non vengono caricati."
+      "network": "L’accesso OAuth e il rinnovo del token contattano WorkBuddy. Il saldo e i dettagli dei crediti sono richiesti al servizio di fatturazione con il token dell’account. I file di accesso e le chiavi di sistema restano sul dispositivo."
     },
     "nickname": "Nickname​",
     "enterprise": "Enterprise​",
@@ -7161,8 +7223,8 @@
       "oauth": {
         "title": "Solo accesso IDE",
         "item1": "Aggiungi laccount dopo aver completato OAuth nel browser, poi usalo per il cambio account nellIDE.",
-        "item2": "I parametri di query della quota non vengono collegati automaticamente.",
-        "item3": "Se ti serve la visualizzazione della quota, esegui manualmente \"Interroga quota\" sulla scheda account."
+        "item2": "Il saldo viene richiesto automaticamente dopo l’autorizzazione.",
+        "item3": "La scheda mostra il riepilogo dei crediti. Nei dettagli trovi i singoli accrediti e le scadenze."
       }
     },
     "oauthWebviewTab": "OAuth in WebView",

@@ -145,6 +145,9 @@ pub(super) fn rejection(event: &Value) -> Option<(u16, Value)> {
     {
         return Some((400, event.clone()));
     }
+    if super::quota_exhaustion::code(event).is_some() && !http_execution_observed(event) {
+        return Some((429, event.clone()));
+    }
     // A generic invalid_request_error may carry a contradictory capacity hint.
     // Classify its real status/body before synthesizing a retryable HTTP status.
     if super::upstream_errors::chat_failure(event, 502)
@@ -622,7 +625,10 @@ async fn probe_inner(
     let mut reject = None;
     let mut hold_deadline = None;
     let mut json_prefix = Vec::new();
-    if source.is_sse || chat {
+    let responses_json = !source.is_sse && !chat && headers.get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.split(';').next().is_some_and(|mime| mime.trim().eq_ignore_ascii_case("application/json")));
+    if source.is_sse || chat || responses_json {
         'read: loop {
             let mut stop = state.stop.clone();
             let next = tokio::select! {
@@ -668,6 +674,7 @@ async fn probe_inner(
                         vec![]
                     };
                     if events.is_empty() {
+                        if responses_json { break 'read; }
                         return Err(ServiceError::new(
                             502,
                             "incomplete_upstream_stream",
@@ -685,6 +692,15 @@ async fn probe_inner(
                 // escape the retry path before any response was published.
                 if !official && frame.value.is_some() && hold_deadline.is_none() {
                     hold_deadline = Some(tokio::time::Instant::now() + MAX_HOLD);
+                }
+                if responses_json {
+                    if let Some(value) = frame.value {
+                        if super::quota_exhaustion::code(&value).is_some() && !http_execution_observed(&value) {
+                            reject = Some((429, value));
+                        }
+                        break 'read;
+                    }
+                    continue;
                 }
                 if chat {
                     if let Some(error) = super::upstream_errors::chat_frame_failure(&frame) {

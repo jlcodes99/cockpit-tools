@@ -2453,6 +2453,22 @@
     "other_group": "기타 모델"
   },
   "codex": {
+    "overload": {
+      "setting": "과부하 시 계속 재시도",
+      "settingHint": "로컬 Codex API 서비스용입니다. 안전하게 재시도할 수 있는 요청은 모델이 복구될 때까지 기다립니다. 새 요청부터 적용됩니다.",
+      "retrying": "모델이 바빠 재시도 중 ({{count}})",
+      "count": "상위 서버 과부하 {{count}}회",
+      "countHint": "자동 재시도를 포함해 상위 서버의 응답을 집계합니다. 기록은 최대 7일간 보관됩니다.",
+      "history": "과부하 기록",
+      "empty": "이 기간에 과부하 오류가 없습니다.",
+      "attempt": "{{number}}번째 시도",
+      "sameAccount": "같은 계정에서 복구",
+      "otherAccount": "계정 전환 후 복구",
+      "pending": "결과 대기 중",
+      "cancelled": "취소됨",
+      "failed": "요청 실패",
+      "countUnavailable": "과부하 통계를 불러올 수 없습니다"
+    },
     "instance": {
       "errors": {
         "threadSyncWorkerFailed": "세션 동기화 작업 실패: {{error}}",
@@ -3273,7 +3289,7 @@
       "resetCreditDialogDesc": "속도 제한을 재설정하면 중단 없이 계속 작업할 수 있습니다. 사용 가능한 재설정: {{count}}회.",
       "resetCreditDialogAction": "사용량 재설정",
       "resetCreditNoCredits": "사용 가능한 재설정 횟수가 없습니다",
-      "resetCreditConsumed": "5시간 쿼터가 재설정되었습니다",
+      "resetCreditConsumed": "쿼터가 재설정되었습니다",
       "resetCreditFailed": "재설정 실패: {{error}}",
       "resetCreditRefreshAfterConsumeFailed": "재설정은 제출됐지만 쿼터 새로고침에 실패했습니다: {{error}}",
       "resetCreditsTitleWithExpiry": "5시간 창에 남은 재설정 횟수: {{count}}. 다음 만료: {{time}}",
@@ -4144,7 +4160,7 @@
         "apiKeyUrlInvalid": "자격 증명이 포함되지 않은 HTTP(S) 관리 페이지 주소를 입력하세요. API Key는 키 입력란에 넣으세요."
       },
       "saveSuccess": "모델 공급자가 저장되었습니다.",
-      "deleteBlocked": "이 공급자는 {{count}}개 계정에 연결되어 있어 삭제할 수 없습니다.",
+      "confirmDeleteWithAccounts": "공급자 “{{name}}” 및 연결된 계정 {{count}}개를 삭제할까요?",
       "confirmDelete": "공급자 \"{{name}}\"을(를) 삭제할까요?",
       "deleteFailed": "공급자 삭제 실패: {{error}}",
       "deleteApiKeyFailed": "API 키 삭제 실패: {{error}}",
@@ -4274,7 +4290,7 @@
         "selectVisible": "현재 결과 선택",
         "resultSelectedCount": "{{count}}개 선택됨",
         "selectFailed": "실패 선택",
-        "deleteConfirm": "선택한 공급자 {{providerCount}}개를 삭제할까요? 정확히 연결된 Codex API Key 계정 {{accountCount}}개도 함께 삭제됩니다.",
+        "deleteConfirm": "선택한 공급자 {{providerCount}}개와 연결된 계정 {{accountCount}}개를 삭제할까요?",
         "deleteSuccess": "공급자 {{providerCount}}개와 연결 계정 {{accountCount}}개를 삭제했습니다.",
         "deleteFailed": "선택 항목 삭제 실패: {{error}}",
         "protocolSummary": "{{protocol}} · {{mode}} · {{model}}",
@@ -5141,7 +5157,7 @@
       "boundProxyUnavailable": "연결된 계정에 사용 가능한 프록시가 없습니다. 다시 선택하세요.",
       "sourceUnavailable": "프록시 소스 또는 노드를 사용할 수 없습니다. 다시 선택하세요.",
       "operationTimeout": "프록시 작업 시간이 초과되었습니다. 다시 시도하세요.",
-      "cardScopeHint": "이 카드의 프록시는 실행되는 Codex 데스크톱 클라이언트에 적용됩니다. 모델 게이트웨이의 업스트림 연결은 각각의 경로를 유지합니다.",
+      "cardScopeHint": "API Key 계정의 프록시는 데스크톱 클라이언트와 API 서비스의 업스트림 요청에 모두 적용됩니다. API 서비스 카드의 프록시는 데스크톱 클라이언트에만 적용됩니다. 시스템 프록시는 변경하지 않습니다.",
       "display": {
         "title": "프록시 표시",
         "compact": "간략",
@@ -5442,7 +5458,7 @@
       "modeDefaultHint": "이 계정은 프록시를 사용하지 않고 기존 기본 출구를 유지합니다.",
       "modeStaleHint": "연결한 소스 또는 노드를 더 이상 사용할 수 없습니다. 다시 선택하세요.",
       "management": "프록시 관리",
-      "managementHint": "시스템 프록시를 바꾸지 않고 OAuth·API 계정 및 API 서비스 카드에 프록시를 설정합니다. API 카드에서는 실행되는 데스크톱 클라이언트에 적용되며 모델 게이트웨이는 각각의 경로를 유지합니다.",
+      "managementHint": "API Key 계정의 프록시는 데스크톱 클라이언트와 API 서비스의 업스트림 요청에 모두 적용됩니다. API 서비스 카드의 프록시는 데스크톱 클라이언트에만 적용됩니다. 시스템 프록시는 변경하지 않습니다.",
       "emptyTitle": "계정 전용 연결 경로",
       "emptyDescription": "지원되는 계정 카드가 없습니다. OAuth 또는 API 계정을 추가하거나 API 서비스 카드를 활성화한 뒤 여기에서 프록시를 선택하세요.",
       "search": "계정 검색",
@@ -5750,7 +5766,7 @@
         "assign": "프록시 지정",
         "specific": "선택한 계정",
         "shared": "공통 프록시",
-        "sharedHint": "독립 프록시가 없는 지원 카드는 새 카드를 포함해 이 프록시를 사용합니다. 독립 설정과 프록시 사용 안 함이 우선합니다. API 카드는 데스크톱 클라이언트에 적용되며 모델 게이트웨이는 각각의 경로를 유지합니다.",
+        "sharedHint": "개별 프록시가 없는 계정은 새 계정을 포함해 이 프록시를 상속합니다. 개별 프록시와 프록시 사용 안 함이 우선합니다. API Key 계정은 데스크톱과 API 요청에 모두 사용하며, API 서비스 카드는 데스크톱에만 사용합니다.",
         "apply": "지정"
       },
       "managerResources": {
@@ -5877,7 +5893,7 @@
       "title": "요청 상세",
       "totalLatency": "총 소요 시간",
       "firstResponse": "첫 응답",
-      "firstResponseHint": "요청 시작부터 상위 서버의 첫 응답 조각까지의 시간이며 첫 생성 토큰 시간과 다를 수 있습니다.",
+      "firstResponseHint": "새 Responses 스트리밍 요청의 경우 게이트웨이가 요청 본문을 처리한 시점부터 첫 업스트림 응답 이벤트까지 측정합니다. 연결 유지 신호와 요청 빈도 제한 알림은 건너뜁니다.",
       "unavailable": "진단 정보가 아직 없습니다. 나중에 새로고침하세요. 과거 요청은 소급 기록하지 않습니다.",
       "attempts": "시도 이력",
       "noAttempts": "시도 이력이 기록되지 않았습니다.",
@@ -6057,10 +6073,27 @@
       "pending": "공식 사용량 조회 대기",
       "permissionRequired": "이 키에는 조직 사용량 읽기 권한이 없습니다(api.usage.read).",
       "permissionGuide": "관리자 키 사용: Admin keys → Restricted → Usage API Scope → Read. 비용과 사용량을 조회할 수 있으며 잔액은 제공하지 않습니다.",
-      "openAdminKeys": "사용량 권한",
-      "invalidKey": "키가 유효하지 않거나 만료되었습니다. 현재 API 키를 확인하세요.",
+      "openAdminKeys": "관리자 키 만들기",
+      "invalidKey": "조회 키가 유효하지 않거나 만료되었습니다. 관리자 API 키를 확인하세요.",
       "networkFailed": "공식 사용량 서비스에 연결할 수 없습니다. 나중에 새로고침하세요.",
-      "queryFailed": "공식 사용량 조회에 실패했습니다. 나중에 다시 시도하세요."
+      "queryFailed": "공식 사용량 조회에 실패했습니다. 나중에 다시 시도하세요.",
+      "organization": "조직 사용량",
+      "configure": "조회 설정",
+      "settings": "조회 설정",
+      "title": "사용량 조회 설정",
+      "optional": "사용량 조회 (선택)",
+      "queryKey": "관리자 API 키",
+      "callKey": "모델 API 키",
+      "notConfigured": "관리자 키를 설정하면 조직 비용과 사용량을 볼 수 있습니다.",
+      "purpose": "모델 키와 같은 조직의 관리자 키를 사용하세요. 이 키는 사용량 조회 전용이며 모델 키를 대체하지 않습니다.",
+      "saveVerify": "저장 및 검증",
+      "remove": "설정 삭제",
+      "keyRequired": "관리자 API 키를 입력하세요.",
+      "saveFailed": "조회 설정을 저장하지 못했습니다. 다시 시도하세요.",
+      "configChanged": "계정 또는 조회 키가 변경되었습니다. 설정을 다시 여세요.",
+      "openFailed": "키 페이지를 열지 못했습니다. 다시 시도하세요.",
+      "costUnavailable": "기록 없음",
+      "costUnavailableHint": "공식 비용 API가 해당 기간의 금액 기록을 반환하지 않았습니다. 요청 수와 Token은 별도의 사용량 API에서 가져오며, 금액 기록이 없다고 비용이 0인 것은 아닙니다."
     },
     "officialApi": {
       "hint": "실제 연결 주소로 식별한 OpenAI 공식 API 키 계정입니다."
@@ -7137,6 +7170,35 @@
     "syncToWorkbuddy": "WorkBuddy에 동기화"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "플랜 기본 크레딧",
+      "planBonus": "플랜 보너스 크레딧",
+      "benefit": "플랫폼 보상 크레딧",
+      "addon": "구매 크레딧",
+      "total": "총 남은 크레딧",
+      "details": "크레딧 내역",
+      "usedOf": "사용 {{used}}/{{total}}",
+      "remainingPercent": "{{percent}}% 남음",
+      "nearestExpiry": "가장 빠른 만료 {{time}}",
+      "nextRefresh": "다음 갱신 {{time}}",
+      "expiring": "곧 만료되는 크레딧 포함",
+      "valid": "유효",
+      "expired": "만료",
+      "expiresAt": "만료 {{time}}",
+      "expiryHours": "24시간 내 만료",
+      "expiryDays": "3일 내 만료",
+      "empty": "내역 없음",
+      "loadFailed": "불러오지 못했습니다 ({{error}})",
+      "overview": "크레딧 개요",
+      "remaining": "{{amount}} 남음",
+      "loadMore": "더 보기",
+      "usage": "사용 내역",
+      "requestAndTime": "요청 및 시간",
+      "creditUsed": "사용 크레딧",
+      "model": "모델",
+      "recentUsage": "최근 5건",
+      "viewMore": "더 보기"
+    },
     "title": "WorkBuddy 계정 관리",
     "noAccounts": "WorkBuddy 계정이 없습니다",
     "addAccount": "WorkBuddy 계정 추가",
@@ -7144,7 +7206,7 @@
       "title": "WorkBuddy 계정 관리 안내 (클릭하여 펼치기/접기)",
       "desc": "계정 전환은 최신 WorkBuddy 공식 클라이언트 구조에 맞춰 로컬 로그인 파일을 씁니다. 로컬 가져오기도 같은 파일을 읽습니다. 데이터는 로컬에서만 처리됩니다.",
       "permission": "권한 범위: 로컬 가져오기와 계정 전환을 위해 WorkBuddy 로그인 파일(CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info)을 읽고 씁니다. 기존 state.vscdb는 더 이상 읽거나 수정하지 않습니다.",
-      "network": "네트워크 범위: OAuth 로그인과 Token 갱신은 WorkBuddy 요청이 필요하고, 할당량 조회는 과금 API를 호출합니다. 로컬 로그인 파일이나 원본 자격 증명은 업로드되지 않습니다."
+      "network": "OAuth 로그인과 토큰 갱신은 WorkBuddy에 연결합니다. 크레딧 잔액과 내역은 계정 토큰으로 결제 서비스에서 조회합니다. 로그인 파일과 시스템 키는 이 기기에 저장됩니다."
     },
     "nickname": "닉네임",
     "enterprise": "기업",
@@ -7161,8 +7223,8 @@
       "oauth": {
         "title": "IDE 로그인 정보만 인증",
         "item1": "브라우저에서 OAuth를 완료하면 계정을 추가해 IDE 전환에 사용할 수 있습니다.",
-        "item2": "할당량 조회 파라미터는 자동으로 바인딩되지 않습니다.",
-        "item3": "할당량 표시가 필요하면 계정 카드에서 \"할당량 조회\"를 수동 실행하세요."
+        "item2": "인증 후 크레딧 잔액을 자동으로 조회합니다.",
+        "item3": "계정 카드에는 크레딧 개요가 표시됩니다. 내역에서 지급 기록과 만료일을 확인할 수 있습니다."
       }
     },
     "oauthWebviewTab": "WebView 인증",

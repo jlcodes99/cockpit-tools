@@ -824,7 +824,7 @@ impl native_contract::Host for NativeHostBridge {
         self.cooling_disabled.store(disabled, Ordering::Release);
         if disabled {
             if let Ok(mut states) = self.cooldowns.lock() {
-                states.clear();
+                states.retain(|_, state| state.reason == NATIVE_CONFIRMED_QUOTA);
             }
         }
     }
@@ -948,6 +948,18 @@ impl native_contract::Host for NativeHostBridge {
                     credential_scope,
                     Instant::now(),
                 );
+            }
+        })
+    }
+
+    fn route_quota_exhausted<'a>(
+        &'a self, route: &'a native_contract::Route, _status: u16, retry_after: Option<Duration>,
+    ) -> futures_util::future::BoxFuture<'a, ()> {
+        Box::pin(async move {
+            if self.selected_route_current(route).await {
+                if let Ok(mut states) = self.cooldowns.lock() {
+                    native_mark_quota_exhausted(&mut states, &route.account_id, retry_after, Instant::now());
+                }
             }
         })
     }
@@ -1092,6 +1104,7 @@ impl native_contract::Host for NativeHostBridge {
                 stream_open_max_attempts: limits.sidecar_stream_open_max_attempts.clamp(1, 3),
                 credential_retries: collection.max_retry_credentials,
                 retry_max_delay: Duration::from_millis(collection.max_retry_interval_ms),
+                continuous_overload_retry: self.collection_override.is_none() && collection.continuous_overload_retry,
                 send_retries: limits.upstream_send_retry_attempts,
                 send_retry_max_delay: Duration::from_millis(
                     limits.upstream_send_retry_max_delay_ms,
@@ -1133,6 +1146,14 @@ impl native_contract::Host for NativeHostBridge {
         Box::pin(native_capability_fallback_decision(
             self, caller, route, request,
         ))
+    }
+
+    fn route_for_rebuild<'a>(
+        &'a self,
+        caller: &'a native_contract::Caller,
+        request: native_contract::RouteRequest,
+    ) -> futures_util::future::BoxFuture<'a, Result<native_contract::Route, native_contract::ServiceError>> {
+        Box::pin(native_select_route_with_owner_wait(self, caller, request, true))
     }
 
     fn route<'a>(
@@ -1207,6 +1228,14 @@ impl native_contract::Host for NativeHostBridge {
     fn payload_logging_enabled(&self) -> futures_util::future::BoxFuture<'_, bool> {
         Box::pin(async { native_request_payload_logging_enabled() })
     }
+    fn overload_attempt(&self, request_id: &str, attempt: &native_api::diagnostics::DiagnosticAttempt) {
+        if self.collection_override.is_none() { queue_overload_attempt(request_id, attempt); }
+    }
+
+    fn overload_outcome(&self, request_id: &str, outcome: &str, account_id: Option<&str>) {
+        if self.collection_override.is_none() { queue_overload_outcome(request_id, outcome, account_id); }
+    }
+
     fn diagnostic(
         &self,
         context: NativeDiagnosticContext,

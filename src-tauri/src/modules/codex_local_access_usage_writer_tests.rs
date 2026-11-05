@@ -178,7 +178,9 @@ fn slow_sql_batch_is_interrupted_and_same_rows_can_be_retried_without_partial_ch
         END;").unwrap();
     let rows = vec![write("slow", 1)];
     let started = Instant::now();
-    assert!(write_usage_log_batch(&conn, &rows, 1).is_err());
+    let budget_expired = AtomicBool::new(false);
+    assert!(write_usage_log_batch_limited(&conn, &rows, 1, 1, &budget_expired).is_err());
+    assert!(budget_expired.load(Ordering::Relaxed));
     assert!(started.elapsed() < Duration::from_secs(1));
     assert_eq!(
         conn.query_row("SELECT COUNT(*) FROM request_logs", [], |r| r

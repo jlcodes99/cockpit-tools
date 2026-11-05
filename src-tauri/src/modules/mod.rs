@@ -8,6 +8,7 @@ pub mod apikey_fun_links;
 pub mod antigravity_credential;
 pub mod antigravity_legacy_instance;
 pub mod antigravity_paths;
+pub(crate) mod antigravity_shared_switch;
 pub mod antigravity_switch_history;
 pub mod app_lifecycle;
 pub mod atomic_write;

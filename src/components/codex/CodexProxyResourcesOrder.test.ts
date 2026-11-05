@@ -3,6 +3,8 @@ import test from 'node:test';
 import { deferred, loadHookModule, settlePromises } from '../../../tests/helpers/reactHookHarness';
 import type { ProxyCatalog, ProxyCatalogSource } from '../../services/codexProxyCatalogService';
 import * as selectionUtils from '../../utils/codexProxySelection';
+import * as sourceErrors from '../../utils/codexProxySourceError';
+import type { ProxyEngineReadiness } from '../../utils/codexProxySetup';
 
 type Element = { type: unknown; props: Record<string, any> };
 function nodes(value: any): Element[] {
@@ -10,8 +12,10 @@ function nodes(value: any): Element[] {
   return value && typeof value === 'object' && value.props ? [value, ...nodes(value.props.children)] : [];
 }
 const source = (id: string) => ({ id, name: id, kind: 'manual', nodes: [], groups: [], revision: 'rev', default: null } as unknown as ProxyCatalogSource);
-function harness(initialSources = ['a', 'b', 'c'].map(source)) {
+function harness(initialSources = ['a', 'b', 'c'].map(source), initialReadiness: ProxyEngineReadiness = 'ready') {
   let data: ProxyCatalog = { sources: initialSources };
+  let readiness = initialReadiness;
+  let catalogReads = 0;
   const assignments: any[][] = [];
   let preflights = 0;
   let commit!: (ids: string[]) => void;
@@ -25,6 +29,8 @@ function harness(initialSources = ['a', 'b', 'c'].map(source)) {
     '../../hooks/useModalScrollLock': { useModalScrollLock() {} },
     './useCodexProxyExitEditor': { useCodexProxyAccountName: () => (value: string) => value },
     './useProxyLatency': { useProxyLatency: () => ({ running: false, results: {}, cancel() {} }) },
+    './useCodexProxyEngine': { useCodexProxyEngine: () => ({ readiness }) },
+    '../../utils/codexProxySourceError': sourceErrors,
     './useProxyResourceOrder': { useProxyResourceOrder(sources: ProxyCatalogSource[], disabled: boolean, callback: typeof commit) {
       commit = callback; return { orderedSources: sources, draggingId: null, begin() {}, hover() {}, finish() {}, moveBy() {}, disabled };
     } },
@@ -40,15 +46,50 @@ function harness(initialSources = ['a', 'b', 'c'].map(source)) {
     '../../utils/codexProxyFormat': { formatProxyBytes: String, formatProxyDateTime: String },
     '../../utils/codexProxyRemoval': { proxyRemovalErrorKey: (error: unknown, fallback: (e: unknown) => string) => fallback(error) },
     '../../services/codexProxyCatalogService': {
-      getProxyCatalog: async () => data,
+      getProxyCatalog: async () => { catalogReads++; return data; },
       reorderProxyCatalog(ids: string[]) { writes.push(Array.from(ids)); return pending.promise; },
       catalogErrorKey: () => 'codex.proxy.catalog.changed',
     },
   });
   h.render(() => h.exports.CodexProxyResources({ onAssign(...args: any[]) { assignments.push(args); }, async onBindingsChanged() {} }));
   const rows = () => nodes(h.flush()).filter((node) => node.type === 'article').map((node) => nodes(node).find((child) => child.type === 'strong')!.props.children);
-  return { h, pending, writes, rows, assignments, preflights: () => preflights, commit(ids: string[]) { h.flush(); commit(ids); }, data(next: ProxyCatalog) { data = next; } };
+  return { h, pending, writes, rows, assignments, preflights: () => preflights, catalogReads: () => catalogReads,
+    readiness(next: ProxyEngineReadiness) { readiness = next; h.flush(); },
+    commit(ids: string[]) { h.flush(); commit(ids); }, data(next: ProxyCatalog) { data = next; } };
 }
+
+function warningRows(h: ReturnType<typeof harness>) {
+  return nodes(h.h.flush()).filter((node) => node.type === 'article'
+    && nodes(node).some((child) => child.props.className === 'codex-resource-entry-warning'))
+    .map((node) => nodes(node).find((child) => child.type === 'strong')!.props.children);
+}
+
+test('confirmed engine recovery immediately supersedes old install errors without refetching or mutating sources', async () => {
+  const entries = ['PROXY_ENGINE_MISSING', 'PROXY_ENGINE_VERSION', 'ENGINE_INSTALL_BUSY',
+    'CATALOG_DOWNLOAD', 'PROXY_PROFILE_RESOURCE', 'PROXY_ENGINE_START_FAILED', 'PROXY_ENGINE_TIMEOUT',
+    'ENGINE_INSTALL_VERIFY'].map((error) => ({ ...source(error), error }));
+  entries.push({ ...source('invalid-default'), error: 'PROXY_ENGINE_MISSING', defaultInvalidated: true } as typeof entries[number]);
+  const original = JSON.stringify(entries);
+  const h = harness(entries, 'loading'); await settlePromises();
+  for (const state of ['loading', 'unknown', 'missing', 'installing', 'failed', 'unsupported'] as const) {
+    h.readiness(state); assert.equal(warningRows(h).length, entries.length);
+  }
+  h.readiness('ready');
+  assert.deepEqual(warningRows(h), entries.slice(3).map((entry) => entry.name));
+  assert.equal(h.catalogReads(), 1);
+  assert.equal(h.preflights(), 0);
+  assert.equal(JSON.stringify(entries), original);
+  assert.deepEqual(h.writes, []);
+  h.h.unmount();
+});
+
+test('reopening resources after installation does not revive a persisted missing-engine warning', async () => {
+  const h = harness([{ ...source('old-error'), error: 'PROXY_ENGINE_MISSING' }], 'ready');
+  await settlePromises();
+  assert.deepEqual(warningRows(h), []);
+  assert.deepEqual(h.rows(), ['old-error']);
+  h.h.unmount();
+});
 
 test('resource reorder previews optimistically, blocks duplicate saves and adopts the persisted list', async () => {
   const h = harness(); await settlePromises(); assert.deepEqual(h.rows(), ['a', 'b', 'c']);

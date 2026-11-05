@@ -2453,6 +2453,22 @@
     "other_group": "Mô hình khác"
   },
   "codex": {
+    "overload": {
+      "setting": "Thử lại khi quá tải",
+      "settingHint": "Áp dụng cho yêu cầu mới của dịch vụ API Codex cục bộ. Yêu cầu có thể thử lại an toàn sẽ chờ mô hình hoạt động trở lại.",
+      "retrying": "Mô hình đang bận, đang thử lại ({{count}})",
+      "count": "Quá tải: {{count}}",
+      "countHint": "Đếm số lần thử tới nhà cung cấp, gồm cả lần thử tự động. Lịch sử lưu tối đa 7 ngày.",
+      "history": "Lịch sử quá tải",
+      "empty": "Không có lỗi quá tải trong khoảng này.",
+      "attempt": "Lần thử {{number}}",
+      "sameAccount": "Khôi phục trên cùng tài khoản",
+      "otherAccount": "Khôi phục sau khi đổi tài khoản",
+      "pending": "Đang chờ kết quả",
+      "cancelled": "Đã hủy",
+      "failed": "Yêu cầu thất bại",
+      "countUnavailable": "Không thể tải thống kê quá tải"
+    },
     "instance": {
       "errors": {
         "threadSyncWorkerFailed": "Tác vụ đồng bộ phiên thất bại: {{error}}",
@@ -3273,7 +3289,7 @@
       "resetCreditDialogDesc": "Đặt lại giới hạn tốc độ để tiếp tục làm việc không gián đoạn. Lượt đặt lại còn lại: {{count}}.",
       "resetCreditDialogAction": "Đặt lại mức dùng",
       "resetCreditNoCredits": "Không còn lượt đặt lại",
-      "resetCreditConsumed": "Đã đặt lại hạn mức 5 giờ",
+      "resetCreditConsumed": "Đã đặt lại hạn mức",
       "resetCreditFailed": "Đặt lại thất bại: {{error}}",
       "resetCreditRefreshAfterConsumeFailed": "Đã gửi đặt lại nhưng làm mới hạn mức thất bại: {{error}}",
       "resetCreditsTitleWithExpiry": "Lượt đặt lại còn lại cho cửa sổ 5 giờ: {{count}}. Hết hạn gần nhất: {{time}}",
@@ -4144,7 +4160,7 @@
         "apiKeyUrlInvalid": "Dùng URL quản lý HTTP(S) không chứa thông tin xác thực; nhập khóa API vào trường khóa."
       },
       "saveSuccess": "Đã lưu nhà cung cấp mô hình.",
-      "deleteBlocked": "Nhà cung cấp này đang được liên kết với {{count}} tài khoản nên không thể xóa.",
+      "confirmDeleteWithAccounts": "Xóa nhà cung cấp “{{name}}” và {{count}} tài khoản liên kết?",
       "confirmDelete": "Xóa nhà cung cấp \"{{name}}\"?",
       "deleteFailed": "Không thể xóa nhà cung cấp: {{error}}",
       "deleteApiKeyFailed": "Không thể xóa API Key: {{error}}",
@@ -4274,7 +4290,7 @@
         "selectVisible": "Chọn mục đang hiển thị",
         "resultSelectedCount": "Đã chọn {{count}}",
         "selectFailed": "Chọn lỗi",
-        "deleteConfirm": "Xóa {{providerCount}} nhà cung cấp đã chọn? Thao tác này cũng xóa {{accountCount}} tài khoản Codex API Key được liên kết chính xác.",
+        "deleteConfirm": "Xóa {{providerCount}} nhà cung cấp đã chọn và {{accountCount}} tài khoản liên kết?",
         "deleteSuccess": "Đã xóa {{providerCount}} nhà cung cấp và {{accountCount}} tài khoản liên kết.",
         "deleteFailed": "Không thể xóa các mục đã chọn: {{error}}",
         "protocolSummary": "{{protocol}} · {{mode}} · {{model}}",
@@ -5141,7 +5157,7 @@
       "boundProxyUnavailable": "Tài khoản đã liên kết không có proxy khả dụng. Hãy chọn lại.",
       "sourceUnavailable": "Nguồn proxy hoặc nút không khả dụng. Hãy chọn lại.",
       "operationTimeout": "Thao tác proxy đã hết thời gian chờ. Vui lòng thử lại.",
-      "cardScopeHint": "Proxy của thẻ này được dùng cho ứng dụng Codex trên máy tính được khởi chạy. Kết nối của cổng mô hình đến nhà cung cấp vẫn giữ tuyến riêng.",
+      "cardScopeHint": "Proxy của tài khoản API Key áp dụng cho cả ứng dụng máy tính và yêu cầu từ dịch vụ API đến nhà cung cấp. Proxy của thẻ dịch vụ API chỉ áp dụng cho ứng dụng máy tính. Không thay đổi proxy hệ thống.",
       "display": {
         "title": "Hiển thị proxy",
         "compact": "Gọn",
@@ -5442,7 +5458,7 @@
       "modeDefaultHint": "Tài khoản này không dùng proxy và giữ lối ra mặc định trước đó.",
       "modeStaleHint": "Nguồn hoặc nút đã liên kết không còn khả dụng. Hãy chọn lại.",
       "management": "Quản lý proxy",
-      "managementHint": "Thiết lập proxy cho thẻ tài khoản OAuth, API và dịch vụ API mà không đổi proxy hệ thống. Với thẻ API, proxy áp dụng cho ứng dụng máy tính được khởi chạy; cổng mô hình giữ tuyến riêng.",
+      "managementHint": "Proxy của tài khoản API Key áp dụng cho cả ứng dụng máy tính và yêu cầu từ dịch vụ API đến nhà cung cấp. Proxy của thẻ dịch vụ API chỉ áp dụng cho ứng dụng máy tính. Không thay đổi proxy hệ thống.",
       "emptyTitle": "Kết nối riêng cho tài khoản",
       "emptyDescription": "Chưa có thẻ tài khoản được hỗ trợ. Thêm tài khoản OAuth hoặc API, hoặc bật thẻ dịch vụ API, rồi chọn proxy tại đây.",
       "search": "Tìm tài khoản",
@@ -5750,7 +5766,7 @@
         "assign": "Chỉ định proxy",
         "specific": "Tài khoản đã chọn",
         "shared": "Proxy dùng chung",
-        "sharedHint": "Các thẻ được hỗ trợ không có proxy riêng sẽ dùng proxy này, kể cả thẻ mới. Cài đặt riêng và Không dùng proxy được ưu tiên. Thẻ API dùng cho ứng dụng máy tính; cổng mô hình giữ tuyến riêng.",
+        "sharedHint": "Các tài khoản không có proxy riêng sẽ kế thừa proxy này, kể cả tài khoản mới. Proxy riêng và Không dùng proxy được ưu tiên. Tài khoản API Key dùng cho cả ứng dụng máy tính và yêu cầu API; thẻ dịch vụ API chỉ dùng cho ứng dụng máy tính.",
         "apply": "Chỉ định"
       },
       "managerResources": {
@@ -5877,7 +5893,7 @@
       "title": "Chi tiết yêu cầu",
       "totalLatency": "Tổng thời gian",
       "firstResponse": "Phản hồi đầu",
-      "firstResponseHint": "Thời gian từ lúc bắt đầu yêu cầu đến đoạn phản hồi đầu tiên của máy chủ, không nhất thiết là token đầu tiên được tạo.",
+      "firstResponseHint": "Với yêu cầu Responses phát trực tuyến mới, thời gian được tính từ khi cổng xử lý xong nội dung yêu cầu đến sự kiện phản hồi đầu tiên từ máy chủ nguồn, bỏ qua tín hiệu duy trì kết nối và thông báo giới hạn tốc độ.",
       "unavailable": "Chưa có chẩn đoán. Hãy làm mới sau. Yêu cầu cũ không được ghi bổ sung.",
       "attempts": "Các lần thử",
       "noAttempts": "Không có lịch sử thử được ghi lại.",
@@ -6057,10 +6073,27 @@
       "pending": "Đang chờ mức dùng OpenAI",
       "permissionRequired": "Khóa này không có quyền đọc mức dùng của tổ chức (api.usage.read).",
       "permissionGuide": "Dùng khóa quản trị: Admin keys → Restricted → Usage API Scope → Read. Truy vấn chi phí và mức dùng, không cung cấp số dư còn lại.",
-      "openAdminKeys": "Quyền xem mức dùng",
-      "invalidKey": "Khóa không hợp lệ hoặc đã hết hạn. Kiểm tra khóa API hiện tại.",
+      "openAdminKeys": "Tạo khóa quản trị",
+      "invalidKey": "Khóa tra cứu không hợp lệ hoặc đã hết hạn. Hãy kiểm tra khóa API quản trị.",
       "networkFailed": "Không thể kết nối dịch vụ mức dùng OpenAI. Hãy làm mới sau.",
-      "queryFailed": "Không truy vấn được mức dùng OpenAI. Hãy thử lại sau."
+      "queryFailed": "Không truy vấn được mức dùng OpenAI. Hãy thử lại sau.",
+      "organization": "Mức dùng tổ chức",
+      "configure": "Thiết lập tra cứu",
+      "settings": "Cài đặt tra cứu",
+      "title": "Thiết lập tra cứu mức dùng",
+      "optional": "Tra cứu mức dùng (tùy chọn)",
+      "queryKey": "Khóa API quản trị",
+      "callKey": "Khóa API mô hình",
+      "notConfigured": "Thêm khóa quản trị để xem chi phí và mức dùng của tổ chức.",
+      "purpose": "Dùng khóa quản trị cùng tổ chức với khóa mô hình. Khóa này chỉ dùng để tra cứu mức dùng, không thay thế khóa mô hình.",
+      "saveVerify": "Lưu và kiểm tra",
+      "remove": "Xóa cấu hình",
+      "keyRequired": "Nhập khóa API quản trị.",
+      "saveFailed": "Không thể lưu cài đặt tra cứu. Vui lòng thử lại.",
+      "configChanged": "Tài khoản hoặc khóa tra cứu đã thay đổi. Hãy mở lại cài đặt.",
+      "openFailed": "Không thể mở trang khóa. Vui lòng thử lại.",
+      "costUnavailable": "Chưa có",
+      "costUnavailableHint": "API chi phí chính thức chưa trả về số tiền cho khoảng thời gian này. Số yêu cầu và token đến từ API mức dùng riêng; không có số tiền không có nghĩa là chi phí bằng không."
     },
     "officialApi": {
       "hint": "Tài khoản dùng khóa API chính thức của OpenAI, được xác định theo địa chỉ kết nối thực tế."
@@ -7137,6 +7170,35 @@
     "syncToWorkbuddy": "Đồng bộ tới WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Điểm cơ bản của gói",
+      "planBonus": "Điểm tặng kèm gói",
+      "benefit": "Điểm thưởng nền tảng",
+      "addon": "Điểm đã mua",
+      "total": "Tổng điểm còn lại",
+      "details": "Chi tiết điểm",
+      "usedOf": "Đã dùng {{used}}/{{total}}",
+      "remainingPercent": "Còn {{percent}}%",
+      "nearestExpiry": "Hết hạn gần nhất {{time}}",
+      "nextRefresh": "Lần làm mới tiếp theo {{time}}",
+      "expiring": "Có điểm sắp hết hạn",
+      "valid": "Còn hạn",
+      "expired": "Hết hạn",
+      "expiresAt": "Hết hạn lúc {{time}}",
+      "expiryHours": "Hết hạn trong 24 giờ",
+      "expiryDays": "Hết hạn trong 3 ngày",
+      "empty": "Không có dữ liệu",
+      "loadFailed": "Không tải được ({{error}})",
+      "overview": "Tổng quan",
+      "remaining": "Còn {{amount}}",
+      "loadMore": "Tải thêm",
+      "usage": "Chi tiết tiêu hao",
+      "requestAndTime": "Yêu cầu và thời gian",
+      "creditUsed": "Điểm đã dùng",
+      "model": "Mô hình",
+      "recentUsage": "5 mục gần nhất",
+      "viewMore": "Xem thêm"
+    },
     "title": "Quản lý tài khoản WorkBuddy",
     "noAccounts": "Chưa có tài khoản WorkBuddy",
     "addAccount": "Thêm tài khoản WorkBuddy",
@@ -7144,7 +7206,7 @@
       "title": "Hướng dẫn quản lý tài khoản WorkBuddy (bấm để mở rộng/thu gọn)",
       "desc": "Khi chuyển tài khoản, ứng dụng ghi tệp đăng nhập cục bộ theo bố cục mới nhất của ứng dụng WorkBuddy chính thức; nhập cục bộ đọc cùng tệp đó. Dữ liệu chỉ được xử lý cục bộ.",
       "permission": "Phạm vi quyền: đọc và ghi tệp đăng nhập WorkBuddy (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) để nhập cục bộ và chuyển tài khoản; state.vscdb cũ không còn được đọc hoặc sửa đổi.",
-      "network": "Phạm vi mạng: đăng nhập OAuth và làm mới Token cần gửi yêu cầu đến WorkBuddy; truy vấn hạn ngạch sẽ gọi API tính phí. Không tải lên tệp đăng nhập cục bộ hoặc thông tin xác thực thô."
+      "network": "Đăng nhập OAuth và làm mới mã thông báo cần kết nối với WorkBuddy. Số dư và chi tiết điểm được truy vấn từ dịch vụ thanh toán bằng mã thông báo của tài khoản. Tệp đăng nhập và khóa hệ thống được giữ trên thiết bị."
     },
     "nickname": "Biệt danh",
     "enterprise": "Doanh nghiệp",
@@ -7161,8 +7223,8 @@
       "oauth": {
         "title": "Chỉ ủy quyền thông tin đăng nhập IDE",
         "item1": "Sau khi hoàn tất OAuth trong trình duyệt, bạn có thể thêm tài khoản và dùng để chuyển IDE.",
-        "item2": "Tham số truy vấn hạn ngạch sẽ không được liên kết tự động.",
-        "item3": "Nếu cần hiển thị hạn ngạch, hãy chạy thủ công \"Truy vấn hạn ngạch\" trên thẻ tài khoản."
+        "item2": "Số dư điểm được truy vấn tự động sau khi cấp quyền.",
+        "item3": "Thẻ tài khoản hiển thị tổng quan điểm. Mở chi tiết để xem từng khoản điểm và ngày hết hạn."
       }
     },
     "oauthWebviewTab": "Xác thực WebView",

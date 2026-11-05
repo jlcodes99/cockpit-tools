@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 
-const { readdirSync } = require("node:fs");
+const { readdirSync, statSync } = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 function collectTests(dir) {
+  if (statSync(dir).isFile()) {
+    if (!dir.endsWith(".test.ts")) {
+      throw new Error(`Expected a .test.ts file or test directory: ${dir}`);
+    }
+    return [dir];
+  }
   const files = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const fullPath = path.join(dir, entry.name);
@@ -17,7 +23,17 @@ function collectTests(dir) {
   return files;
 }
 
-const files = ["src", "tests"].flatMap(collectTests).sort();
+// Explicit paths select related tests. With no arguments, retain the full
+// suite used by CI and existing callers.
+const paths = process.argv.slice(2);
+const roots = paths.length > 0 ? paths : ["src", "tests"];
+let files;
+try {
+  files = [...new Set(roots.flatMap((root) => collectTests(path.resolve(root))))].sort();
+} catch (error) {
+  console.error(error.message);
+  process.exit(1);
+}
 if (files.length === 0) {
   console.error("No TypeScript test files found.");
   process.exit(1);

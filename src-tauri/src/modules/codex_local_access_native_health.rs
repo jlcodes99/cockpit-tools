@@ -30,29 +30,27 @@ fn apply_native_health_snapshot(
             .iter()
             .map(|item| item.account_id.as_str())
             .collect();
-        if !host.cooling_disabled.load(Ordering::Acquire) {
-            for (key, state) in states
-                .iter()
-                .filter(|(key, state)| scope.contains(key.account.as_str()) && state.until > now)
-            {
-                let remaining_ms = state
-                    .until
-                    .saturating_duration_since(now)
-                    .as_millis()
-                    .min(i64::MAX as u128) as i64;
-                current.entry(key.account.clone()).or_default().push(
-                    CodexLocalAccessAccountCooldown {
-                        model_id: if key.model.is_empty() {
-                            "*".into()
-                        } else {
-                            key.model.clone()
-                        },
-                        next_retry_at: now_ms.saturating_add(remaining_ms),
-                        remaining_ms,
-                        reason: state.reason.into(),
+        let cooling_disabled = host.cooling_disabled.load(Ordering::Acquire);
+        for (key, state) in states.iter().filter(|(key, state)| {
+            scope.contains(key.account.as_str()) && state.active(now, cooling_disabled)
+        }) {
+            let remaining_ms = state
+                .until
+                .saturating_duration_since(now)
+                .as_millis()
+                .min(i64::MAX as u128) as i64;
+            current.entry(key.account.clone()).or_default().push(
+                CodexLocalAccessAccountCooldown {
+                    model_id: if key.model.is_empty() {
+                        "*".into()
+                    } else {
+                        key.model.clone()
                     },
-                );
-            }
+                    next_retry_at: now_ms.saturating_add(remaining_ms),
+                    remaining_ms,
+                    reason: state.reason.into(),
+                },
+            );
         }
     }
     drop(states);
@@ -70,9 +68,19 @@ fn apply_native_health_snapshot(
             health.scheduler_reason = Some("state_refreshing".into());
             continue;
         }
-        health
-            .cooldowns
-            .extend(current.remove(&health.account_id).unwrap_or_default());
+        for cooldown in current.remove(&health.account_id).unwrap_or_default() {
+            if cooldown.reason == NATIVE_CONFIRMED_QUOTA {
+                if let Some(existing) = health.cooldowns.iter_mut().find(|item| {
+                    item.model_id == cooldown.model_id && item.reason == NATIVE_CONFIRMED_QUOTA
+                }) {
+                    if existing.next_retry_at > 0 && cooldown.next_retry_at > existing.next_retry_at {
+                        *existing = cooldown;
+                    }
+                    continue;
+                }
+            }
+            health.cooldowns.push(cooldown);
+        }
         health.cooldowns.sort_by(|a, b| a.model_id.cmp(&b.model_id));
         health.available = health.cooldowns.is_empty()
             && runtime

@@ -504,6 +504,7 @@ impl Execution {
                 self.tracker.payload("upstream_request", "http", built.headers(), &payload.to_string());
                 self.tracker.upstream_headers(built.headers());
                 self.tracker.check_quota_before_send()?;
+                self.tracker.quota_request_started();
                 client.execute(built).await.map_err(|error| {
                     super::super::diagnostics::transport_failure(502,"upstream_unavailable","Unable to connect to the image upstream",&error)
                         .with_upstream_not_sent(error.is_connect() || error.is_builder())
@@ -625,6 +626,7 @@ impl Execution {
             let mut model_unavailable = false;
             let mut request_scoped = false;
             let mut execution_observed = false;
+            let mut exhausted = None;
             if !response.status().is_success() {
                 let inspected = super::super::retry::inspect_status_error(
                     &self.state,
@@ -635,6 +637,7 @@ impl Execution {
                     super::super::grok_errors::applies(&self.selected.route),
                 )
                 .await?;
+                exhausted = inspected.10.as_ref().and_then(super::super::quota_exhaustion::code);
                 response = inspected.0;
                 credential_scope = inspected.1;
                 body_retry_after = inspected.3;
@@ -678,6 +681,11 @@ impl Execution {
                 (headers, body) => headers.or(body),
             };
             self.tracker.set_retry_after(retry_after);
+            if let Some(code) = exhausted {
+                super::super::quota_exhaustion::record(
+                    &self.state, &mut self.tracker, &self.selected.route, code, response.status().as_u16(), retry_after, deadline,
+                ).await?;
+            }
             if self.selected.route.chatgpt && failure_message.as_deref()
                 .is_some_and(crate::modules::codex_device_restrictions::explicit_message) {
                 return Ok((response, binding));
@@ -687,6 +695,7 @@ impl Execution {
                 return Ok((response, binding));
             }
             if oauth
+                && exhausted.is_none()
                 && response.status() == StatusCode::UNAUTHORIZED
                 && !refreshed
                 && !model_unavailable
@@ -735,6 +744,7 @@ impl Execution {
                 }
             }
             if matches!(response.status().as_u16(), 408 | 500 | 502 | 503 | 504)
+                && exhausted.is_none()
                 && !model_unavailable
                 && status_attempts < policy.status_retries
             {
@@ -754,20 +764,20 @@ impl Execution {
                 .await?;
                 continue;
             }
-            let mut failure_recorded = false;
-            let retryable_source = model_unavailable
+            let mut failure_recorded = exhausted.is_some();
+            let retryable_source = exhausted.is_some() || model_unavailable
                 || oauth && matches!(response.status().as_u16(), 401 | 402)
                 || matches!(
                     response.status().as_u16(),
                     403 | 408 | 429 | 500 | 502 | 503 | 504
                 );
             if retryable_source
-                && super::super::retry::credential_limit_allows(&policy, credential_attempts)
+                && (exhausted.is_some() || super::super::retry::credential_limit_allows(&policy, credential_attempts))
                 && self.can_switch_source()
                 && {
                     failure_recorded = true;
                     self.alternate_source(
-                        Some((
+                        exhausted.is_none().then_some((
                             if model_unavailable {
                                 404
                             } else {
@@ -790,7 +800,7 @@ impl Execution {
                 refreshed = false;
                 continue;
             }
-            if retryable_source && !round_attempted {
+            if exhausted.is_none() && retryable_source && !round_attempted {
                 if !failure_recorded {
                     let mut stop = self.state.stop.clone();
                     tokio::select! {
@@ -955,7 +965,7 @@ impl Execution {
             force_refresh: false,
             image_generation_requested: true,
             image_input: false,
-            excluded_account_ids: vec![],
+            excluded_account_ids: self.tracker.quota_exhausted_accounts.iter().cloned().collect(),
             requires_permit: true,
             required_capabilities: Vec::new(),
             capability_fallback_from: None,
@@ -986,7 +996,7 @@ impl Execution {
         self.selected.route.permit = None;
         super::super::retry::delay(&self.state, wait, policy.retry_max_delay, deadline).await?;
         let mut request = self.route_request.clone();
-        request.excluded_account_ids.clear();
+        request.excluded_account_ids.retain(|id| self.tracker.quota_exhausted_accounts.contains(id));
         let mut stop = self.state.stop.clone();
         let selected = tokio::select! {
             _=stop.wait()=>return Err(stopping_error()),

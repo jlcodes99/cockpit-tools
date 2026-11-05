@@ -62,9 +62,11 @@
 
 > ![Dashboard Overview](docs/images/dashboard_overview.png)
 
+> 界面截图更新于 2026-11-02，使用 Cockpit Tools v1.3.78 实机拍摄；账号信息已隐藏。
+
 ### 2. Antigravity IDE 账号管理
 
-- **一键切号**：一键切换当前使用的账号，无需手动登录登出
+- **一键切号**：IDE 2.6 起，默认 IDE、桌面 App 和已初始化的 `agy` 共用登录凭据。启用切号启动时会重新打开正在运行的另一端客户端。旧版 IDE 使用独立的本地登录状态。
 - **多种导入**：支持 OAuth 授权、Refresh Token、插件同步
 - **唤醒任务**：定时唤醒 AI 模型，提前触发配额重置周期
 
@@ -75,9 +77,9 @@
 
 #### 2.1 Antigravity IDE 应用多开
 
-支持同一平台多账号多实例并行运行。比如同时打开两个 Antigravity IDE，分别绑定不同账号，分别处理不同项目，互不影响。
+使用独立 SQLite 登录状态的旧版 IDE 支持多账号多实例并行运行。IDE 2.6 起采用共享登录，独立实例目录仅隔离项目和本地设置。
 
-- **独立账号**：每个实例绑定不同账号并独立运行
+- **独立账号**：使用独立登录的旧版 IDE 可以为各实例绑定不同账号
 - **并行项目**：多实例同时处理不同任务/项目
 - **参数隔离**：支持自定义实例目录与启动参数
 
@@ -304,7 +306,7 @@ Grok CLI 默认实例通常直接沿用官方 `~/.grok` 目录，启动时不设
 
 ### WebSocket 账号切换 API
 
-`request.switch_account` 支持明确选择 Antigravity 客户端。未传 `runtime_target`，或传 `"antigravity_ide"`，保持原有 IDE 切号流程及现有启动/无感双通道设置；不会读取前端选择的客户端。
+`request.switch_account` 支持明确选择 Antigravity 客户端。未传 `runtime_target`，或传 `"antigravity_ide"`，选择 IDE。IDE 2.6 起使用共享凭据，启用切号启动时通过重启加载新账号。旧版 IDE 继续使用现有启动和无感切号设置。
 
 切换 Antigravity 桌面版及使用同一系统凭据的 `agy` CLI，可发送：
 
@@ -312,10 +314,10 @@ Grok CLI 默认实例通常直接沿用官方 `~/.grok` 目录，启动时不设
 {"type":"request.switch_account","payload":{"account_id":"<account-id>","request_id":"x","runtime_target":"antigravity","launch_on_switch":false}}
 ```
 
-- `runtime_target: "antigravity"`：复用桌面版切号认证规则；2.0 及以上版本写入系统凭据，并同步桌面版的本地回退文件 `~/.gemini/jetski-standalone-oauth-token`（保留 `id_token`，Unix 权限为 `0600`）；旧版写入本地 SQLite 登录状态。只有真实凭据及回退文件写入成功后才更新当前账号、默认实例绑定并通知切号结果。回退文件同步失败会明确报告系统凭据已写入并提示重试。
+- `runtime_target: "antigravity"`：复用桌面版切号认证规则；2.0 及以上版本写入系统凭据，并同步桌面版的本地回退文件 `~/.gemini/jetski-standalone-oauth-token`，并同步已初始化的 `agy` 会话。凭据文件保留 `id_token`，Unix 权限为 `0600`。旧版桌面 App 写入本地 SQLite 登录状态。只有真实凭据及回退文件写入成功后才更新当前账号、默认实例绑定并通知切号结果。回退文件同步失败会明确报告系统凭据已写入并提示重试。
 - `launch_on_switch`：仅用于 `"antigravity"`，默认 `false`；不关闭或启动客户端，已运行桌面版可能需下次启动才使用新账号。显式传 `true` 才执行与桌面版 UI 相同的关闭、写入、重启流程。IDE 请求不要传此字段，继续使用现有设置。
 - `request_id`：可选，传入后返回对应的 `response.success` 或 `response.error`。不支持的目标、凭据写入失败或并发桌面切号会返回错误，不报告成功；凭据已切换但启动失败会明确报告启动错误。无效目标返回 `WS_SWITCH_TARGET_INVALID`，在 IDE 请求中传启动策略返回 `WS_SWITCH_LAUNCH_POLICY_INVALID`；并发桌面切号返回 `ANTIGRAVITY_SWITCH_BUSY`，账号准备超时返回 `ANTIGRAVITY_SWITCH_PREPARATION_TIMEOUT`。
-- `ANTIGRAVITY_SWITCH_STATE_SAVE_FAILED` 表示客户端凭据已切换，但 Tools 当前账号状态保存失败，请重试切号。默认实例绑定更新保留原有尽力保存行为，失败会记录日志。
+- `ANTIGRAVITY_SWITCH_STATE_SAVE_FAILED` 表示客户端凭据已切换，但 Tools 当前账号状态保存失败，请重试切号。共享登录会同步保存两端的默认账号绑定。
 
 ## 设置项说明（小白版）
 

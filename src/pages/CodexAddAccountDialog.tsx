@@ -1,5 +1,7 @@
+import { OpenAIUsageKeyField } from "../components/codex/OpenAIUsageSettingsDialog";
+import { isOpenAIOfficialUsageUrl, OPENAI_OFFICIAL_USAGE_BASE_URL } from "../utils/openaiOfficialUsage";
 import { createPortal } from "react-dom";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RefreshCw, Download, X, Globe, KeyRound, Database, Copy, Check, RotateCw, CircleAlert, Info, Star, Eye, EyeOff, FileUp, FileText, ExternalLink, FolderPlus, Monitor, Terminal, ShieldCheck } from "lucide-react";
 import { ModalErrorMessage } from "../components/ModalErrorMessage";
 import { scrollElementIntoView } from "../utils/reducedMotion";
@@ -137,6 +139,9 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     tokenImportProgress,
     tokenInput,
   } = props;
+  const [usageApiKeyDraft, setUsageApiKeyDraft] = useState('');
+  useEffect(() => { setUsageApiKeyDraft(''); }, [showAddModal, apiKeyInput, apiBaseUrlInput]);
+  const officialUsage = isOpenAIOfficialUsageUrl(apiBaseUrlInput.trim() || OPENAI_OFFICIAL_USAGE_BASE_URL);
   const addStatusRef = useRef<HTMLDivElement>(null);
   const addDialogRef = useRef<HTMLDivElement>(null);
   const instancePickerDialogRef = useRef<HTMLDivElement>(null);
@@ -231,7 +236,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                     >
                       <KeyRound size={14} />
                       <span className="modal-tab-label">
-                        {t("codex.addModal.token", "API Key")}
+                        {t(officialUsage ? "codex.openaiUsage.callKey" : "codex.addModal.token")}
                       </span>
                     </button>
                     <button
@@ -1132,7 +1137,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                           </div>
                         )}
                         <div className="oauth-link">
-                          <label>{t("codex.addModal.token", "API Key")}</label>
+                          <label>{t(officialUsage ? "codex.openaiUsage.callKey" : "codex.addModal.token")}</label>
                           <div className="oauth-url-box oauth-manual-input codex-secret-input">
                             <input
                               type={apiKeyInputVisible ? "text" : "password"}
@@ -1207,6 +1212,10 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                             </div>
                           </div>
                         )}
+                        {officialUsage && <details className="openai-usage-optional">
+                          <summary>{t('codex.openaiUsage.optional')}</summary>
+                          <OpenAIUsageKeyField value={usageApiKeyDraft} onChange={setUsageApiKeyDraft} disabled={addStatus === 'loading'} t={t} />
+                        </details>}
                         {apiProviderPresetId !== OPENAI_OFFICIAL_PRESET_ID && (
                           <>
                             <div className="api-model-catalog-panel">
@@ -1533,7 +1542,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                   <div className="modal-footer api-key-add-actions">
                     <button
                       className="btn btn-primary"
-                      onClick={() => void handleApiKeyLogin()}
+                      onClick={() => void handleApiKeyLogin(officialUsage ? usageApiKeyDraft : undefined)}
                       disabled={importing || addStatus === "loading" || apiModelCatalogFetching || !apiKeyInput.trim()}
                     >
                       {addStatus === "loading" ? <RefreshCw size={16} className="loading-spinner" /> : <KeyRound size={16} />}

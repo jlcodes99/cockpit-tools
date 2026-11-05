@@ -45,6 +45,7 @@ fn new_local_access_collection() -> Result<CodexLocalAccessCollection, String> {
         responses_websockets_enabled: false,
         max_retry_credentials: 0,
         max_retry_interval_ms: DEFAULT_MAX_RETRY_INTERVAL_MS,
+        continuous_overload_retry: false,
         timeouts: CodexLocalAccessTimeouts::default(),
         active_timeout_preset_id: BUILTIN_TIMEOUT_PRESET_LONG_WAIT_ID.to_string(),
         timeout_presets: Vec::new(),

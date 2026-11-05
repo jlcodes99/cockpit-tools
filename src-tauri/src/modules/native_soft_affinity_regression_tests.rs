@@ -482,3 +482,29 @@ async fn shared_go_failure_golden_keeps_classification_in_actual_http_report_wra
         }
     }
 }
+
+#[tokio::test]
+async fn confirmed_quota_excludes_the_affinity_account_even_with_cooling_disabled() {
+    let _env = crate::modules::test_support::env_lock().lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let mut host = host();
+    let collection = host.collection_override.as_mut().unwrap();
+    collection.api_keys[0].priority_account_ids = vec!["a".into()];
+    collection.disable_cooling = true;
+    native_contract::Host::set_cooling_disabled(&host, true);
+
+    let caller = caller("caller-a");
+    let request = request("quota-session", "quota-thread", None);
+    let route = native_contract::Host::route(&host, &caller, request.clone()).await.unwrap();
+    assert_eq!(route.account_id, "a");
+    native_contract::Host::route_quota_exhausted(&host, &route, 429, Some(Duration::from_secs(60))).await;
+    drop(route);
+    native_contract::Host::set_cooling_disabled(&host, true);
+    assert_eq!(selected(&host, "caller-a", request.clone()).await, "b");
+    assert_eq!(selected(&host, "caller-b", request.clone()).await, "b");
+
+    // An account outside the key scope must remain unavailable to failover.
+    host.collection_override.as_mut().unwrap().api_keys[0].account_ids = vec!["a".into()];
+    let unavailable = native_contract::Host::route(&host, &caller, request).await.err().unwrap();
+    assert_eq!(unavailable.code, "no_available_account");
+}

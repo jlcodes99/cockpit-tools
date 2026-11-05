@@ -1,3 +1,4 @@
+import { formatOpenAIUsageMoney, currentOpenAIUsageState, isOpenAIOfficialUsageAccount } from "../utils/openaiOfficialUsage";
 import { codexOverviewMutableAccountIds } from "../utils/chatgptPlanOverview";
 import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { useEffect, useMemo, useCallback, type MouseEvent as ReactMouseEvent } from "react";
@@ -322,7 +323,10 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
         const providerName = isApiKey
           ? resolveApiProviderDisplayName(account)
           : "";
-        const usage = isApiKey ? apiKeyUsageMap[account.id]?.summary : undefined;
+        const usageProvider = resolveUsageProviderForApiKeyAccount(account);
+        const usage = isApiKey ? (isOpenAIOfficialUsageAccount(account, usageProvider?.baseUrl)
+          ? currentOpenAIUsageState(usageProvider, account.openai_api_key ?? '', apiKeyUsageMap[account.id])
+          : apiKeyUsageMap[account.id])?.summary : undefined;
         const useTodayUsage =
           usage?.todayRequests != null ||
           usage?.todayTotalTokens != null ||
@@ -416,7 +420,7 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
                       : null,
                   cost:
                     cost != null
-                      ? formatApiKeyUsageMoney(cost, usage.unit)
+                      ? usage.mode === 'openai_official' ? formatOpenAIUsageMoney(cost) : formatApiKeyUsageMoney(cost, usage.unit)
                       : null,
                   extraLabel: usage.planName
                     ? t("codex.modelProviders.usage.fields.planName", "订阅")
@@ -434,6 +438,7 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
         overviewCurrentAccountId,
         resolveAccountMeta,
         resolveApiProviderDisplayName,
+        resolveUsageProviderForApiKeyAccount,
         resolvePresentation,
         resolveSubscriptionPresentation,
         showAdditionalQuota,

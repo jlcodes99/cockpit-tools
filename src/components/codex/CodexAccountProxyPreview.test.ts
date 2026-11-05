@@ -10,7 +10,7 @@ function elements(value: any): any[] {
 }
 
 function harness(restore = async (_accountId: string) => {}, measure = async (_accountId: string) => {}) {
-  const calls = { closed: 0, refreshed: 0, focused: 0, managed: 0, escapeEnabled: false, restored: [] as string[], measured: [] as string[] };
+  const calls = { closed: 0, refreshed: 0, focused: 0, managed: 0, escapeEnabled: false, restored: [] as string[], measured: [] as string[], desktopOnly: [] as boolean[], targets: [] as string[] };
   const frames: (() => void)[] = [];
   const account = { id: 'account', egress_proxy: { sourceId: 'subscription', itemId: 'automatic' } };
   const data = { status: null as CodexProxyRuntimeStatus | null, statusError: false, requestsError: false, history: [], requests: [], loading: false,
@@ -18,9 +18,11 @@ function harness(restore = async (_accountId: string) => {}, measure = async (_a
   const h = loadHookModule(new URL('./CodexAccountProxyPreview.tsx', import.meta.url), {
     'react-dom': { createPortal: (content: unknown) => content },
     './useCodexProxyTargets': { useCodexProxyTargets: (accounts: unknown[]) => accounts },
-    '../../services/codexProxyTargetService': { isCodexProxyTarget: (account: any) => account.auth_mode === 'apikey' },
+    '../../services/codexProxyTargetService': { CODEX_API_SERVICE_PROXY_TARGET: '__api_service__',
+      isCodexProxyTarget: (account: any) => account.auth_mode === 'apikey',
+      getCodexProxyTarget: async (id: string) => { calls.targets.push(id); return account; } },
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
-    '../../utils/codexProxyPreview': { proxyRuntimeRows: () => [], proxyPreviewBinding: (summary: unknown) => ({ summary }) },
+    '../../utils/codexProxyPreview': { proxyRuntimeRows: (_status: unknown, desktopOnly: boolean) => { calls.desktopOnly.push(desktopOnly); return []; }, proxyPreviewBinding: (summary: unknown) => ({ summary }) },
     '../../stores/useCodexAccountStore': { useCodexAccountStore: (select: (state: any) => unknown) => select({ accounts: [account] }) },
     './useCodexProxyPreview': { useCodexProxyPreview: () => data },
     './CodexProxyWorkspaceContext': { CodexProxyWorkspaceProvider: function Provider() { return null; } },
@@ -45,6 +47,19 @@ function harness(restore = async (_accountId: string) => {}, measure = async (_a
     Array.isArray(node.props?.children) ? node.props.children.includes(key) : node.props?.children === key));
   return { ...h, show, named, overlay, button, calls, frames, data, account };
 }
+
+test('API Key previews show a shared route while the API Service card remains desktop-only', () => {
+  const h = harness();
+  Object.assign(h.account, { auth_mode: 'apikey' });
+  h.show();
+  assert.equal(h.calls.desktopOnly[h.calls.desktopOnly.length - 1], false);
+  h.button('common.refresh').props.onClick();
+  assert.deepEqual(h.calls.targets, ['account'], 'API Key refresh still reloads its separate binding');
+  h.account.id = '__api_service__';
+  h.show();
+  assert.equal(h.calls.desktopOnly[h.calls.desktopOnly.length - 1], true);
+  h.unmount();
+});
 
 test('preview edits remain explicit and resource management uses the shared page callback', () => {
   const h = harness();

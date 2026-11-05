@@ -10,6 +10,8 @@ struct SingleHost {
     alternates_after_refresh: bool,
     refreshes: AtomicUsize,
     rejected: tokio::sync::Notify,
+    overload_attempts: Mutex<Vec<(String, u32)>>,
+    overload_outcomes: Mutex<Vec<String>>,
 }
 impl Host for SingleHost {
     fn authorize<'a>(&'a self, token: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
@@ -57,6 +59,12 @@ impl Host for SingleHost {
     ) -> BoxFuture<'a, ()> {
         self.inner.route_failed(id, status, retry)
     }
+    fn overload_attempt(&self, _request_id: &str, attempt: &super::super::super::diagnostics::DiagnosticAttempt) {
+        self.overload_attempts.lock().unwrap().push((attempt.account_id.clone(), attempt.sequence));
+    }
+    fn overload_outcome(&self, _request_id: &str, outcome: &str, _account_id: Option<&str>) {
+        self.overload_outcomes.lock().unwrap().push(outcome.to_owned());
+    }
     fn record(&self, report: RequestReport) -> BoxFuture<'_, ()> {
         self.inner.record(report)
     }
@@ -73,6 +81,7 @@ struct Scenario {
     hang_retry: bool,
     http_status: u16,
     status_retries: u8,
+    continuous: bool,
     allow_alternates: bool,
     alternates_after_refresh: bool,
 }
@@ -89,6 +98,7 @@ impl Default for Scenario {
             hang_retry: false,
             http_status: 200,
             status_retries: 0,
+            continuous: false,
             allow_alternates: false,
             alternates_after_refresh: false,
         }
@@ -108,6 +118,7 @@ async fn fixture(
             base: format!("http://{}", listener.local_addr().unwrap()),
             policy: ExecutionPolicy {
                 status_retries: case.status_retries,
+                continuous_overload_retry: case.continuous,
                 credential_retries: 0,
                 total_timeout: case.total_timeout,
                 ..Default::default()
@@ -127,6 +138,8 @@ async fn fixture(
         alternates_after_refresh: case.alternates_after_refresh,
         refreshes: AtomicUsize::new(0),
         rejected: tokio::sync::Notify::new(),
+        overload_attempts: Mutex::new(Vec::new()),
+        overload_outcomes: Mutex::new(Vec::new()),
     });
     let upstream_host = host.clone();
     let app = Router::new().fallback(
@@ -392,10 +405,9 @@ fn capacity_aliases_are_explicit_and_input_faults_take_precedence() {
         let event = json!({"type":"error","error":{"code":code,"type":"invalid_request_error","message":"Context length exceeded"}});
         assert!(rejection(&event).is_none());
     }
-    let budget = capacity::Budget {
-        retries: 2,
-        started: Some(tokio::time::Instant::now()),
-    };
+    let mut budget = capacity::Budget::default();
+    budget.retries = 2;
+    budget.started = Some(tokio::time::Instant::now());
     assert!(budget
         .deadline(super::super::super::deadline::Deadline::NONE)
         .instant()
@@ -454,3 +466,56 @@ async fn shutdown_interrupts_capacity_backoff_without_another_send() {
 
 #[path = "overload_safety_tests.rs"]
 mod safety_tests;
+
+
+#[tokio::test]
+async fn continuous_capacity_hides_rejections_and_counts_every_upstream_attempt() {
+    for (status, error) in [
+        (200, overload()),
+        (503, overload()),
+        (429, json!({"error":{"code":"model_at_capacity","type":"rate_limit_error",
+            "message":"Selected model is at capacity. Please try a different model."}})),
+    ] {
+        let (host, mut handle, task, _temp) = fixture(Scenario {
+            continuous: true,
+            failures: 4,
+            http_status: status,
+            error,
+            delayed: false,
+            total_timeout: Duration::from_secs(12),
+            ..Default::default()
+        }).await;
+        let response = client().post(format!("http://{}/v1/responses", handle.addr))
+            .bearer_auth("fixture").json(&input(true)).send().await.unwrap();
+        assert_eq!(response.status(), 200);
+        let text = response.text().await.unwrap();
+        assert!(text.contains("completed"), "{text}");
+        assert!(!text.contains("server_is_overloaded") && !text.contains("model_at_capacity"), "{text}");
+        handle.shutdown(Duration::from_secs(2)).await.unwrap();
+        task.abort();
+        assert_eq!(host.inner.calls[0].load(Ordering::SeqCst), 5);
+        assert_eq!(*host.overload_attempts.lock().unwrap(),
+            (1..=4).map(|number| ("0".to_owned(), number)).collect::<Vec<_>>());
+        assert_eq!(*host.overload_outcomes.lock().unwrap(), ["recovered"]);
+    }
+}
+
+#[tokio::test]
+async fn continuous_capacity_cancels_backoff_when_client_disconnects() {
+    let (host, mut handle, task, _temp) = fixture(Scenario {
+        continuous: true,
+        failures: usize::MAX,
+        ..Default::default()
+    }).await;
+    let mut response = client().post(format!("http://{}/v1/responses", handle.addr))
+        .bearer_auth("fixture").json(&input(true)).send().await.unwrap();
+    assert!(response.chunk().await.unwrap().is_some());
+    tokio::time::timeout(Duration::from_secs(1), host.rejected.notified()).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    drop(response);
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    handle.shutdown(Duration::from_secs(2)).await.unwrap();
+    task.abort();
+    assert_eq!(host.inner.calls[0].load(Ordering::SeqCst), 1);
+    assert_eq!(*host.overload_outcomes.lock().unwrap(), ["cancelled"]);
+}

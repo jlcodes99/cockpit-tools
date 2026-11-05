@@ -240,6 +240,7 @@ fn open_local_access_logs_db_once(
     let conn = Connection::open(path)?;
     conn.busy_timeout(LOCAL_ACCESS_LOGS_DB_BUSY_TIMEOUT)?;
     create_request_logs_table(&conn, include_service_tier_column)?;
+    create_overload_attempt_table(&conn)?;
     ensure_request_logs_column(&conn, "event_key", "event_key TEXT NOT NULL DEFAULT ''")?;
     ensure_request_logs_column(&conn, "request_id", "request_id TEXT NOT NULL DEFAULT ''")?;
     ensure_request_logs_column(&conn, "account_id", "account_id TEXT NOT NULL DEFAULT ''")?;
@@ -1696,6 +1697,7 @@ fn clear_local_access_usage_events_db() -> Result<(), String> {
         conn.execute("DELETE FROM request_diagnostics", [])
             .map_err(|e| format!("清空 API 服务请求诊断失败: {}", e))?;
     }
+    conn.execute("DELETE FROM overload_attempts_v1", []).map_err(|error| error.to_string())?;
     crate::modules::codex_request_summary::clear_if_present(&conn)?;
     conn.execute("DELETE FROM request_logs", [])
         .map_err(|e| format!("清空 API 服务请求日志失败: {}", e))?;

@@ -61,9 +61,11 @@ A brand new visual dashboard providing a one-stop status overview:
 
 > ![Dashboard Overview](docs/images/dashboard_overview.png)
 
+> Screenshots updated on November 2, 2026, captured from Cockpit Tools v1.3.78 with account details hidden.
+
 ### 2. Antigravity IDE Account Management
 
-- **One-Click Switch**: Switch the currently active account instantly without manual login/logout
+- **One-Click Switch**: Starting with IDE 2.6, the default IDE, desktop App and initialized `agy` share sign-in credentials. With launch enabled, switching also reopens the other client if it was running. Older IDE versions use a separate local sign-in.
 - **Multiple Import Methods**: OAuth, Refresh Token, Plugin Sync
 - **Wake-up Tasks**: Schedule AI model wake-ups to trigger quota reset cycles in advance
 
@@ -74,9 +76,9 @@ A brand new visual dashboard providing a one-stop status overview:
 
 #### 2.1 Antigravity IDE Multi-Instance
 
-Run multiple Antigravity IDE instances in parallel with different accounts. For example, open two Antigravity IDE instances, bind different accounts, and handle different projects independently.
+Older IDE versions with separate SQLite sign-ins can run multiple instances under different accounts. Starting with IDE 2.6, instance directories separate projects and local settings while sharing sign-in credentials.
 
-- **Isolated Accounts**: Each instance binds a different account and runs independently
+- **Isolated Accounts**: Older IDE versions with separate sign-ins can bind a different account to each instance
 - **Parallel Projects**: Run multiple tasks/projects at the same time
 - **Argument Isolation**: Custom instance directory and launch arguments
 
@@ -303,7 +305,7 @@ These are the most common security questions answered directly:
 
 ### WebSocket account-switch API
 
-`request.switch_account` can explicitly select the Antigravity client. Omitting `runtime_target`, or setting it to `"antigravity_ide"`, preserves the existing IDE switch flow and launch/dual-channel settings. It does not read the client selected in the frontend.
+`request.switch_account` can explicitly select the Antigravity client. Omitting `runtime_target`, or setting it to `"antigravity_ide"`, selects the IDE. IDE 2.6 and later use shared credentials and reload the account by restarting when launch is enabled. Older IDE versions keep the existing launch and seamless-switch settings.
 
 To switch the Antigravity desktop app and the `agy` CLI that shares its system credential, send:
 
@@ -311,10 +313,10 @@ To switch the Antigravity desktop app and the `agy` CLI that shares its system c
 {"type":"request.switch_account","payload":{"account_id":"<account-id>","request_id":"x","runtime_target":"antigravity","launch_on_switch":false}}
 ```
 
-- `runtime_target: "antigravity"`: reuses desktop authentication rules; version 2.0 and later write the system credential and synchronize the desktop fallback file `~/.gemini/jetski-standalone-oauth-token`, preserving `id_token` and using `0600` permissions on Unix. Older versions write local SQLite login state. The current account, default-instance binding and switch notification are updated only after the credential and fallback writes succeed. A fallback synchronization failure explicitly reports that the system credential was written and asks you to retry.
+- `runtime_target: "antigravity"`: reuses desktop authentication rules; version 2.0 and later write the system credential and synchronize the desktop fallback file `~/.gemini/jetski-standalone-oauth-token` and the initialized `agy` session. Credential files preserve `id_token` and use `0600` permissions on Unix. Older desktop App versions write local SQLite login state. The current account, default-instance binding and switch notification are updated only after the credential and fallback writes succeed. A fallback synchronization failure explicitly reports that the system credential was written and asks you to retry.
 - `launch_on_switch`: only supported with `"antigravity"`, defaults to `false`; the client is neither closed nor started, and a running desktop app may use the new account on its next start. Explicit `true` uses the same close/write/relaunch flow as the desktop UI. Omit this field for IDE requests to keep using existing settings.
 - `request_id`: optional; when supplied, receives the corresponding `response.success` or `response.error`. Unsupported targets, credential-write failures and concurrent desktop switches return errors instead of success. A launch failure after a successful credential switch is explicitly reported as a launch error. Invalid targets return `WS_SWITCH_TARGET_INVALID`; supplying a launch policy for an IDE request returns `WS_SWITCH_LAUNCH_POLICY_INVALID`. Concurrent desktop switches return `ANTIGRAVITY_SWITCH_BUSY`, and account-preparation timeouts return `ANTIGRAVITY_SWITCH_PREPARATION_TIMEOUT`.
-- `ANTIGRAVITY_SWITCH_STATE_SAVE_FAILED` means the client credential changed but saving Tools' current-account state failed; retry the switch. Default-instance binding updates retain their existing best-effort behavior and log failures.
+- `ANTIGRAVITY_SWITCH_STATE_SAVE_FAILED` means the client credential changed but saving Tools' current-account state failed; retry the switch. A shared sign-in updates the default bindings for both clients.
 
 ## Settings Guide (Beginner Friendly)
 

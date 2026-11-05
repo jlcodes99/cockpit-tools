@@ -1,4 +1,4 @@
-//! Card-specific desktop egress. Never consumed by model/upstream routing.
+//! Card proxy settings. API-key accounts share these routes with native API requests.
 use super::{
     account, atomic_write, codex_account_proxy, codex_proxy_catalog_binding as binding,
     secure_account_storage,
@@ -98,7 +98,10 @@ fn write(store: &Store) -> Result<(), String> {
     if encrypted.len() > 4 * 1024 * 1024 {
         return Err(ERROR.into());
     }
-    atomic_write::write_secret_string_atomic(&path, &encrypted).map_err(|_| ERROR.to_string())
+    let mut cache = SETTINGS_CACHE.lock().map_err(|_| ERROR)?;
+    atomic_write::write_secret_string_atomic(&path, &encrypted).map_err(|_| ERROR.to_string())?;
+    *cache = None;
+    Ok(())
 }
 async fn io<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, String> + Send + 'static,
@@ -155,7 +158,30 @@ pub(crate) async fn target_account(target: &str) -> Result<Option<CodexAccount>,
 }
 async fn setting(target: &str) -> Result<Setting, String> {
     let target = target.to_owned();
-    io(move || Ok(read()?.targets.remove(&target).unwrap_or_default())).await
+    io(move || cached_setting(&target)).await
+}
+
+// Request preparation looks up one target, without repeatedly decrypting/parsing
+// the bounded store. Metadata detects atomic writes from other host processes too.
+// This lock is only used inside bounded blocking I/O workers, never on the runtime.
+type StoreStamp = (PathBuf, Option<(std::time::SystemTime, u64)>);
+static SETTINGS_CACHE: Mutex<Option<(StoreStamp, Store)>> = Mutex::new(None);
+
+fn cached_setting(target: &str) -> Result<Setting, String> {
+    let mut cache = SETTINGS_CACHE.lock().map_err(|_| ERROR)?;
+    let path = path()?;
+    let stamp = match std::fs::symlink_metadata(&path) {
+        Ok(meta) if meta.is_file() && meta.len() <= 4 * 1024 * 1024 => {
+            Some((meta.modified().map_err(|_| ERROR)?, meta.len()))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        _ => return Err(ERROR.into()),
+    };
+    let stamp = (path, stamp);
+    if cache.as_ref().is_none_or(|(current, _)| current != &stamp) {
+        *cache = Some((stamp, read()?));
+    }
+    Ok(cache.as_ref().ok_or(ERROR)?.1.targets.get(target).cloned().unwrap_or_default())
 }
 pub(crate) async fn modes() -> Result<BTreeMap<String, Mode>, String> {
     io(|| {
@@ -389,6 +415,16 @@ fn synthetic(id: &str, raw: Option<String>) -> CodexAccount {
 /// Synthetic identities exist only in the desktop router, never in account files or upstream pools.
 pub(crate) async fn load_route(target: &str) -> Result<CodexAccount, String> {
     target_account(target).await?;
+    load_proxy_route(target).await
+}
+
+/// Only the transport consumes this synthetic identity. Credentials, model
+/// routing, usage and account ownership must continue using the original account.
+pub(crate) async fn upstream_route(account: &CodexAccount) -> Result<CodexAccount, String> {
+    load_proxy_route(&account.id).await
+}
+
+async fn load_proxy_route(target: &str) -> Result<CodexAccount, String> {
     let setting = setting(target).await?;
     if setting.stale_error.is_some() {
         return Err("CLIENT_PROXY_STALE".into());

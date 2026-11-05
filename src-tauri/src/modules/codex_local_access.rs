@@ -11,6 +11,7 @@ include!("codex_local_access_historical_pricing.rs");
 include!("codex_local_access_routing_pricing.rs");
 include!("codex_local_access_request_logs.rs");
 include!("codex_local_access_request_diagnostics.rs");
+include!("codex_local_access_overload.rs");
 include!("codex_local_access_request_diagnostics_poll.rs");
 include!("codex_local_access_profile_takeover.rs");
 include!("codex_local_access_takeover_maintenance.rs");

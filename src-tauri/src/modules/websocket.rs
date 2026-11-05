@@ -738,8 +738,9 @@ async fn handle_client_message(
             // 异步执行切换
             let server_clone = server.tx.clone();
             tokio::spawn(async move {
-                let dual_no_restart_enabled = crate::modules::config::get_user_config()
-                    .antigravity_dual_switch_no_restart_enabled;
+                let config = crate::modules::config::get_user_config();
+                let dual_no_restart_enabled = config.antigravity_launch_on_switch
+                    && config.antigravity_dual_switch_no_restart_enabled;
                 let target = resolve_ws_switch_target(runtime_target.as_deref(), launch_on_switch);
                 let desktop_switch = matches!(target, Ok(WsSwitchTarget::Desktop { .. }));
                 let switch_result = match target {

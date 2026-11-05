@@ -1361,6 +1361,8 @@ pub fn inject_to_cursor_at_path(db_path: &std::path::Path, account_id: &str) -> 
 // ---------------------------------------------------------------------------
 
 const CURSOR_USAGE_SUMMARY_URL: &str = "https://cursor.com/api/usage-summary";
+const CURSOR_GET_PLAN_INFO_URL: &str =
+    "https://api2.cursor.sh/aiserver.v1.DashboardService/GetPlanInfo";
 const CURSOR_GET_USER_META_URL: &str = "https://api2.cursor.sh/aiserver.v1.AuthService/GetUserMeta";
 const CURSOR_FULL_STRIPE_PROFILE_URL: &str = "https://api2.cursor.sh/auth/full_stripe_profile";
 const CURSOR_STRIPE_PROFILE_URL: &str = "https://api2.cursor.sh/auth/stripe_profile";
@@ -1667,6 +1669,26 @@ async fn fetch_stripe_profile_with_client(
     }
 }
 
+async fn fetch_plan_info_with_client(
+    client: &reqwest::Client,
+    access_token: &str,
+) -> Result<Option<Value>, String> {
+    let response = client
+        .post(CURSOR_GET_PLAN_INFO_URL)
+        .bearer_auth(access_token)
+        .header("Connect-Protocol-Version", "1")
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .and_then(reqwest::Response::error_for_status)
+        .map_err(|error| format!("请求 Cursor GetPlanInfo 失败: {}", format_reqwest_error(&error)))?;
+    let body: Value = response
+        .json()
+        .await
+        .map_err(|error| format!("解析 Cursor GetPlanInfo 失败: {}", format_reqwest_error(&error)))?;
+    Ok(body.get("planInfo").filter(|plan| plan.is_object()).cloned())
+}
+
 async fn fetch_usage_summary_with_client(
     client: &reqwest::Client,
     access_token: &str,
@@ -1815,10 +1837,29 @@ async fn refresh_account_async_once(account_id: &str) -> Result<CursorAccount, S
 
     let mut usage_refreshed = false;
     match fetch_usage_summary_with_client(&client, &account.access_token).await {
-        Ok(usage) => {
+        Ok(mut usage) => {
             if let Some(mt) = usage.get("membershipType").and_then(|v| v.as_str()) {
                 if !mt.is_empty() {
                     account.membership_type = Some(mt.to_string());
+                }
+            }
+            if let Some(summary) = usage.as_object_mut() {
+                let is_unified = account.membership_type.as_deref().is_some_and(|tier| {
+                    tier.trim().to_ascii_lowercase().starts_with("unified_")
+                }) || ["unifiedIncludedUsage", "unified_included_usage"]
+                    .iter()
+                    .any(|key| summary.get(*key).and_then(Value::as_bool) == Some(true));
+                let has_reset = ["includedUsageResetsAt", "included_usage_resets_at"]
+                    .iter()
+                    .any(|key| summary.get(*key).is_some_and(|value| !value.is_null()));
+                if is_unified && !has_reset {
+                    match fetch_plan_info_with_client(&client, &account.access_token).await {
+                        Ok(Some(plan)) => {
+                            summary.insert("planInfo".into(), plan);
+                        }
+                        Ok(None) => {}
+                        Err(error) => logger::log_warn(&format!("[Cursor Refresh] {error}")),
+                    }
                 }
             }
             account.cursor_usage_raw = Some(usage);

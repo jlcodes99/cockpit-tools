@@ -272,6 +272,88 @@ async fn ws_json(
 }
 
 #[tokio::test]
+async fn responses_first_response_skips_transport_keepalives() {
+    const OUTPUT_DELAY: Duration = Duration::from_millis(400);
+    let app = Router::new().route(
+        "/v1/responses",
+        post(|axum::Json(request): axum::Json<Value>| async move {
+            let stream = request["stream"] == true;
+            let chunks = futures_util::stream::once(async {
+                Ok::<_, std::io::Error>(Bytes::from_static(
+                    b": keep-alive\n\ndata: {\"type\":\"codex.rate_limits\"}\n\n",
+                ))
+            })
+            .chain(futures_util::stream::once(async move {
+                tokio::time::sleep(OUTPUT_DELAY).await;
+                let response = if stream {
+                    format!("{}{}", created(), completed())
+                } else {
+                    "data: {\"id\":\"resp-a\",\"status\":\"completed\",\"output\":[]}\n\n".into()
+                };
+                Ok(Bytes::from(response))
+            }));
+            ([("content-type", "text/event-stream")], Body::from_stream(chunks))
+        })
+        .get(|upgrade: WebSocketUpgrade| async {
+            upgrade.on_upgrade(|mut socket| async move {
+                assert!(matches!(socket.recv().await, Some(Ok(Message::Text(_)))));
+                socket
+                    .send(Message::Text(r#"{"type":"keepalive"}"#.into()))
+                    .await
+                    .unwrap();
+                tokio::time::sleep(OUTPUT_DELAY).await;
+                for event in [created(), completed()] {
+                    let data = event.lines().find_map(|line| line.strip_prefix("data: ")).unwrap();
+                    socket.send(Message::Text(data.into())).await.unwrap();
+                }
+            })
+        }),
+    );
+    let (addr, upstream) = mock(app).await;
+    let (mut service, host, path) = native(addr, false, false, Options::default()).await;
+    for stream in [true, false] {
+        let response = client()
+            .post(format!("http://{}/v1/responses", service.addr))
+            .bearer_auth("local-test-key")
+            .json(&body(stream))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.text().await.unwrap().contains("resp-a"));
+    }
+
+    let mut request = format!("ws://{}/v1/responses", service.addr)
+        .into_client_request()
+        .unwrap();
+    request.headers_mut().insert(
+        "authorization",
+        HeaderValue::from_static("Bearer local-test-key"),
+    );
+    let (mut socket, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+    let mut request = body(true);
+    request["type"] = json!("response.create");
+    socket.send(ClientMessage::Text(request.to_string().into())).await.unwrap();
+    loop {
+        let event = ws_json(&mut socket).await;
+        assert_ne!(event["type"], "error", "{event}");
+        if event["type"] == "response.completed" {
+            break;
+        }
+    }
+    let _ = socket.close(None).await;
+    service.shutdown(Duration::from_secs(2)).await.unwrap();
+
+    let diagnostics = host.diagnostics.lock().unwrap();
+    assert_eq!(diagnostics.len(), 3);
+    for context in diagnostics.iter() {
+        assert!(context.first_response_ms.unwrap() >= OUTPUT_DELAY.as_millis() as u64, "{context:?}");
+    }
+    upstream.abort();
+    std::fs::remove_dir_all(path).unwrap();
+}
+
+#[tokio::test]
 async fn websocket_model_routes_append_and_late_interrupt_preserve_owner_identity() {
     let seen = Arc::new(Mutex::new(Vec::<(HeaderMap, Value)>::new()));
     let sequence = Arc::new(std::sync::atomic::AtomicUsize::new(0));

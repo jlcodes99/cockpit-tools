@@ -70,9 +70,9 @@ fn native_proxy_cold_start_storage_failure_blocks_fallback_and_can_retry() {
 }
 
 #[test]
-fn native_proxy_cold_start_explicit_direct_and_api_keys_skip_shared_storage() {
+fn native_proxy_cold_start_direct_bypasses_but_api_keys_inherit_shared_storage() {
     native_proxy_cold_start_case(
-        "native_proxy_cold_start_explicit_direct_and_api_keys_skip_shared_storage",
+        "native_proxy_cold_start_direct_bypasses_but_api_keys_inherit_shared_storage",
         "bypass",
     );
 }
@@ -86,6 +86,10 @@ fn native_proxy_cold_start_independent_binding_creates_missing_entry() {
 }
 
 async fn native_proxy_cold_start_network_case(scenario: &str) {
+    if scenario.starts_with("api-key-") {
+        native_api_key_proxy_network_case(scenario).await;
+        return;
+    }
     use crate::modules::{codex_proxy_desktop_router, codex_unified_proxy};
     use axum::{routing::get, Router};
     use std::sync::atomic::AtomicUsize;
@@ -191,27 +195,13 @@ async fn native_proxy_cold_start_network_case(scenario: &str) {
         input.account.auth_mode = CodexAuthMode::Apikey;
         input.account.egress_proxy_disabled = false;
         input.account.openai_api_key = Some("fixture-key".into());
-        let (client, proxy, _, _) =
+        let error =
             native_http_client(&host, &input.collection, &input.account, &input.context())
                 .await
-                .unwrap();
-        assert_eq!(proxy, input.collection.upstream_proxy_url);
-        assert_eq!(
-            client
-                .get("http://fixture.invalid/probe")
-                .timeout(Duration::from_secs(3))
-                .send()
-                .await
-                .unwrap()
-                .text()
-                .await
-                .unwrap(),
-            "service-proxy"
-        );
-        assert_eq!(
-            codex_unified_proxy::current().unwrap_err(),
-            "UNIFIED_PROXY_LOADING"
-        );
+                .err()
+                .expect("API keys now inherit unified proxy policy and must fail closed");
+        assert_eq!(error.code, "proxy_unavailable");
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
     } else {
         if scenario == "corrupt" {
             let error =

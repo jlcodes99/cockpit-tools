@@ -39,7 +39,10 @@ async fn handle(
     request: Request,
     compact: bool,
 ) -> Result<Response, ServiceError> {
-    let input = read_request(&state, request).await?;
+    let mut input = read_request(&state, request).await?;
+    if !compact {
+        input.tracker.start_response_clock();
+    }
     dispatch(state, input, compact).await
 }
 
@@ -133,6 +136,9 @@ pub(super) async fn dispatch(
     let immediate =
         !compact && input.body["stream"].as_bool().unwrap_or(false) && policy.immediate_sse;
     let codex_client = super::output_error::is_codex_client(&input.headers);
+    if !compact && policy.continuous_overload_retry && policy.keepalive.is_zero() {
+        policy.keepalive = std::time::Duration::from_secs(10);
+    }
     let keepalive = policy.keepalive;
     // The outer stream covers selection and credentials, so selected transports
     // must not wrap a second immediate stream around their own opening stage.
@@ -470,7 +476,9 @@ async fn forward_with_policy(
             deadline,
             policy,
         };
-        let body = Body::from_stream(stream::unfold(stream_state, |mut current| async move {
+        let continuous = stream_state.policy.continuous_overload_retry;
+        let keepalive = stream_state.policy.keepalive;
+        let body = Body::from_stream(stream::unfold(stream_state, move |mut current| async move {
             loop {
                 if current.finished {
                     return None;
@@ -486,7 +494,7 @@ async fn forward_with_policy(
                         _ = stop.wait() => Err(stopping_error()),
                         _ = deadline::sleep_until(read_deadline) => Err(super::retry::total_timeout()),
                         _ = deadline::sleep_until(current.idle_deadline) => Err(ServiceError::new(504, "upstream_idle_timeout", "Upstream stream stopped responding")),
-                        _ = deadline::sleep_until(current.keepalive_deadline), if !current.policy.keepalive.is_zero() => {
+                        _ = deadline::sleep_until(current.keepalive_deadline), if !continuous && !current.policy.keepalive.is_zero() => {
                             current.keepalive_deadline = tokio::time::Instant::now() + current.policy.keepalive;
                             return Some((Ok::<_, std::io::Error>(Bytes::from_static(b": keep-alive\n\n")), current));
                         },
@@ -496,7 +504,6 @@ async fn forward_with_policy(
                 let outcome = match next {
                     Ok(Some(Ok(bytes))) => {
                         if !bytes.is_empty() {
-                            current.tracker.first_response();
                             current.idle_deadline =
                                 tokio::time::Instant::now() + current.policy.idle_timeout;
                         }
@@ -558,6 +565,19 @@ async fn forward_with_policy(
                 }
             }
         }));
+        let body = if continuous && !keepalive.is_zero() {
+            let mut tick = tokio::time::interval_at(tokio::time::Instant::now() + keepalive, keepalive);
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            Body::from_stream(stream::unfold((body.into_data_stream(), tick), |(mut output, mut tick)| async move {
+                let item = tokio::select! {
+                    item = output.next() => item?,
+                    _ = tick.tick() => Ok(Bytes::from_static(b": keep-alive\n\n")),
+                };
+                Some((item, (output, tick)))
+            }))
+        } else {
+            body
+        };
         return Ok(downstream_response(status, &headers, body));
     }
     if is_sse && status.is_success() {
@@ -637,6 +657,10 @@ async fn forward_with_policy(
         }
     }
     if let Some(value) = &value {
+        if let Some(code) = super::quota_exhaustion::code(value) {
+            let wait = retry_after_headers(&headers).max(super::events::retry_after_event(value));
+            super::quota_exhaustion::record(&state, &mut tracker, &prepared.route, code, status.as_u16(), wait, deadline).await?;
+        }
         tracker.capture_upstream_error(status.as_u16(), value);
         if status.is_success() {
             if super::upstream_errors::chat_failure(value, 502).is_some() {
@@ -805,6 +829,7 @@ impl StreamingResponse {
             let public_frame = super::response_wire::visible_frame(&frame.bytes, super::output_error::is_codex_client(&self.prepared.source_headers));
             let mut outgoing = frame.bytes.clone();
             if let Some(mut event) = frame.value {
+                self.tracker.first_response_event(&event);
                 if self.prepared.route.chatgpt_plan {
                     super::chatgpt_plan_wire::validate_event(frame.identity_event.as_ref().unwrap_or(&event))?;
                 }
@@ -963,9 +988,6 @@ async fn collect_sse(
         };
         match next {
             Some(Ok(chunk)) => {
-                if !chunk.is_empty() {
-                    tracker.first_response();
-                }
                 total = total.saturating_add(chunk.len());
                 if total > state.options.max_response_bytes {
                     return Err(ServiceError::new(
@@ -984,6 +1006,7 @@ async fn collect_sse(
                         continue 'read;
                     }
                     let Some(mut event) = frame.value else { continue };
+                    tracker.first_response_event(&event);
                     if prepared.route.chatgpt_plan {
                         super::chatgpt_plan_wire::validate_event(frame.identity_event.as_ref().unwrap_or(&event))?;
                     }
@@ -1031,6 +1054,7 @@ async fn collect_sse(
                         continue 'read;
                     }
                     let Some(mut event) = frame.value else { continue };
+                    tracker.first_response_event(&event);
                     if prepared.route.chatgpt_plan {
                         super::chatgpt_plan_wire::validate_event(frame.identity_event.as_ref().unwrap_or(&event))?;
                     }
@@ -1080,6 +1104,9 @@ async fn observe_late_official_rejection(
     if !prepared.route.chatgpt_plan || !matches!(
         super::events::response_terminal_kind(event), Some("error" | "response.failed")
     ) {
+        return Ok(());
+    }
+    if super::quota_exhaustion::code(event).is_some() {
         return Ok(());
     }
     let Some((code, status)) = super::official_fallback::explicit_rejection(event) else {

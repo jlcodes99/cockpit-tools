@@ -336,6 +336,7 @@ async fn native_client_eviction_keeps_an_active_response_alive_and_never_retains
 
 include!("codex_local_access_native_proxy_bypass_tests.rs");
 include!("codex_local_access_native_proxy_startup_tests.rs");
+include!("codex_local_access_native_api_key_proxy_tests.rs");
 include!("codex_local_access_native_tls_lifecycle_tests.rs");
 
 const NATIVE_ALPN_DEADLINE: Duration = Duration::from_secs(5);

@@ -16,6 +16,12 @@ pub(super) async fn recover(
 ) -> Result<Option<HttpResponseStream>, ServiceError> {
     let original = frame.identity_event.as_ref().or(frame.value.as_ref());
     if let Some(event) = original {
+        if let Some(code) = super::super::quota_exhaustion::code(event) {
+            let wait = previous_wait.max(super::super::events::retry_after_event(event));
+            super::super::quota_exhaustion::record(state, tracker, &prepared.route, code, 429, wait, deadline).await?;
+        }
+        if super::super::overload::event(event) { tracker.observe_overload(); }
+        if !fence.active() { tracker.overload.recovered(); }
         let overloaded = ["/error/code", "/response/error/code", "/code"].iter()
             .any(|path| event.pointer(path).and_then(Value::as_str) == Some("server_is_overloaded"));
         if overloaded || super::super::bootstrap::rejection(event).is_some_and(|(status, _)| status == 503) {

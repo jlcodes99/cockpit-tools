@@ -1303,7 +1303,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
         let request = ParsedRequest {
             method: "POST".to_string(),
             target: "/v1/chat/completions".to_string(),
-            headers: HashMap::new(),
+            headers: HashMap::from([(super::CODEX_RESPONSES_LITE_HEADER.into(), "true".into())]),
             body: br#"{
                 "model":"gpt-5.6-sol",
                 "messages":[{"role":"user","content":"hello"}],
@@ -1341,7 +1341,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                         .filter_map(|tool| tool.get("type").and_then(Value::as_str))
                         .collect::<Vec<_>>()
                 }),
-            Some(vec!["function", "function", "custom", "tool_search"])
+            Some(vec!["function", "function", "custom", "tool_search", "namespace"])
         );
         assert!(mapped_body.get("tool_choice").is_none());
         assert!(mapped_body
@@ -1948,7 +1948,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             target: "/v1/responses".to_string(),
             headers: HashMap::from([(
                 "x-openai-internal-codex-responses-lite".to_string(),
-                String::new(),
+                "true".to_string(),
             )]),
             body: br#"{
                 "model":"gpt-5.6-sol",
@@ -1984,7 +1984,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                     .filter_map(|tool| tool.get("type").and_then(Value::as_str))
                     .collect::<Vec<_>>()
             }),
-            Some(vec!["function", "function", "custom", "tool_search"])
+            Some(vec!["function", "function", "custom", "tool_search", "namespace"])
         );
         assert!(parsed
             .get("tools")
@@ -2152,11 +2152,21 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             Message::Text(payload.into()),
             Message::Binary(payload.as_bytes().to_vec().into()),
         ] {
+            assert_eq!(
+                filter_websocket_client_message(
+                    message.clone(),
+                    &account,
+                    CodexLocalAccessImageGenerationMode::Enabled,
+                    false,
+                )
+                .expect("standard WebSocket payload should pass through"),
+                message,
+            );
             let filtered = filter_websocket_client_message(
                 message,
                 &account,
                 CodexLocalAccessImageGenerationMode::Enabled,
-                false,
+                true,
             )
             .expect("Responses Lite WebSocket follow-up payload should filter");
             let parsed = match filtered {
@@ -2174,7 +2184,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                             .filter_map(|tool| tool.get("type").and_then(Value::as_str))
                             .collect::<Vec<_>>()
                     }),
-                Some(vec!["function", "custom", "tool_search"])
+                Some(vec!["function", "custom", "tool_search", "namespace"])
             );
             assert!(parsed.pointer("/response/tool_choice").is_none());
         }

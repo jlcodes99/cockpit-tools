@@ -1033,6 +1033,11 @@ pub fn get_default_claude_desktop_user_data_dir() -> Result<PathBuf, String> {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    if let Some(profile) = crate::modules::claude_instance::windows_store_desktop_profile_dir() {
+        return Ok(profile);
+    }
+
     let data_dir = dirs::data_dir().ok_or_else(|| "无法获取系统应用数据目录".to_string())?;
     let standard_dir = data_dir.join("Claude");
     if standard_dir.exists() {

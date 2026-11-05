@@ -34,6 +34,8 @@ Um painel visual totalmente novo que oferece uma visão geral do status em um ú
 
 > ![Visão geral do painel](docs/images/dashboard_overview.png)
 
+> Capturas de tela atualizadas em 2 de novembro de 2026, feitas no Cockpit Tools v1.3.78 com os dados das contas ocultos.
+
 ### 2. Gerenciamento de Contas do Antigravity IDE
 
 - **Troca com Um Clique**: Altere instantaneamente a conta ativa no momento sem login/logout manual

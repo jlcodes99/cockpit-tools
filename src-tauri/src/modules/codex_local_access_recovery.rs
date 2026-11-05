@@ -738,15 +738,10 @@ fn filter_websocket_client_message(
     ) -> Result<Option<Vec<u8>>, String> {
         let mut body_value = parse_request_body_json(body);
         let message_uses_responses_lite = responses_lite
-            || body_value
-                .as_ref()
-                .and_then(|value| {
-                    value
-                        .get("model")
-                        .or_else(|| value.pointer("/response/model"))
-                })
-                .and_then(Value::as_str)
-                .is_some_and(codex_protocol::codex_model_uses_responses_lite);
+            || body_value.as_ref().is_some_and(|value| {
+                codex_protocol::responses_lite_metadata_enabled(value)
+                    || value.get("response").is_some_and(codex_protocol::responses_lite_metadata_enabled)
+            });
         let lite_filtered = if message_uses_responses_lite {
             match body_value.as_mut() {
                 Some(body_value) => {

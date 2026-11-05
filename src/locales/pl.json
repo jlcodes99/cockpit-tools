@@ -2453,6 +2453,22 @@
     "other_group": "Inne modele"
   },
   "codex": {
+    "overload": {
+      "setting": "Ponawiaj przy przeciążeniu",
+      "settingHint": "Dotyczy nowych żądań lokalnej usługi API Codex. Żądania, które można bezpiecznie ponowić, czekają na dostępność modelu.",
+      "retrying": "Model zajęty, ponawianie ({{count}})",
+      "count": "Przeciążenia: {{count}}",
+      "countHint": "Zlicza próby u dostawcy, także automatyczne. Historia obejmuje do 7 dni.",
+      "history": "Historia przeciążeń",
+      "empty": "W tym okresie nie było błędów przeciążenia.",
+      "attempt": "Próba {{number}}",
+      "sameAccount": "Wznowiono na tym samym koncie",
+      "otherAccount": "Wznowiono po zmianie konta",
+      "pending": "Oczekiwanie na wynik",
+      "cancelled": "Anulowano",
+      "failed": "Żądanie nie powiodło się",
+      "countUnavailable": "Statystyki przeciążenia są niedostępne"
+    },
     "instance": {
       "errors": {
         "threadSyncWorkerFailed": "Zadanie synchronizacji sesji nie powiodło się: {{error}}",
@@ -3273,7 +3289,7 @@
       "resetCreditDialogDesc": "Zresetuj limit szybkości, aby kontynuować pracę bez przerw. Dostępne resety: {{count}}.",
       "resetCreditDialogAction": "Resetuj użycie",
       "resetCreditNoCredits": "Brak dostępnych resetów",
-      "resetCreditConsumed": "Limit 5 godzin zresetowany",
+      "resetCreditConsumed": "Limit zresetowany",
       "resetCreditFailed": "Reset nieudany: {{error}}",
       "resetCreditRefreshAfterConsumeFailed": "Reset wysłany, ale odświeżenie limitu nieudane: {{error}}",
       "resetCreditsTitleWithExpiry": "Pozostałe resety okna 5 godzin: {{count}}. Najbliższe wygaśnięcie: {{time}}",
@@ -4144,7 +4160,7 @@
         "apiKeyUrlInvalid": "Użyj adresu HTTP(S) strony zarządzania bez danych logowania; klucz API wpisz w polu klucza."
       },
       "saveSuccess": "Dostawca modelu został zapisany.",
-      "deleteBlocked": "Ten dostawca jest powiązany z {{count}} kontami i nie można go usunąć.",
+      "confirmDeleteWithAccounts": "Usunąć dostawcę „{{name}}” i powiązane konta ({{count}})?",
       "confirmDelete": "Usunąć dostawcę „{{name}}”?",
       "deleteFailed": "Nie udało się usunąć dostawcy: {{error}}",
       "deleteApiKeyFailed": "Nie udało się usunąć klucza API: {{error}}",
@@ -4274,7 +4290,7 @@
         "selectVisible": "Wybierz widoczne",
         "resultSelectedCount": "Wybrano {{count}}",
         "selectFailed": "Wybierz nieudane",
-        "deleteConfirm": "Usunąć {{providerCount}} wybranych dostawców? Zostanie też usuniętych {{accountCount}} dokładnie powiązanych kont Codex API Key.",
+        "deleteConfirm": "Usunąć wybranych dostawców ({{providerCount}}) i powiązane konta ({{accountCount}})?",
         "deleteSuccess": "Usunięto {{providerCount}} dostawców i {{accountCount}} powiązanych kont.",
         "deleteFailed": "Nie udało się usunąć wybranych elementów: {{error}}",
         "protocolSummary": "{{protocol}} · {{mode}} · {{model}}",
@@ -5141,7 +5157,7 @@
       "boundProxyUnavailable": "Powiązane konto nie ma dostępnego proxy. Wybierz je ponownie.",
       "sourceUnavailable": "Źródło proxy lub węzeł jest niedostępny. Wybierz ponownie.",
       "operationTimeout": "Przekroczono limit czasu operacji proxy. Spróbuj ponownie.",
-      "cardScopeHint": "Uruchamiany klient komputerowy Codex korzysta z proxy tej karty. Połączenia bram modeli z dostawcami zachowują własne trasy.",
+      "cardScopeHint": "Proxy kont z kluczem API dotyczy klientów komputerowych i żądań wychodzących usługi API. Proxy karty usługi API dotyczy tylko klientów komputerowych. Systemowe proxy pozostaje bez zmian.",
       "display": {
         "title": "Widok proxy",
         "compact": "Zwięzły",
@@ -5442,7 +5458,7 @@
       "modeDefaultHint": "To konto nie używa proxy i zachowuje poprzednie domyślne wyjście.",
       "modeStaleHint": "Powiązane źródło lub węzeł nie jest już dostępny. Wybierz ponownie.",
       "management": "Zarządzanie proxy",
-      "managementHint": "Ustaw proxy dla kart kont OAuth, API i usługi API bez zmiany systemowego proxy. Na kartach API dotyczy ono uruchamianego klienta komputerowego; bramy modeli zachowują własne trasy.",
+      "managementHint": "Proxy kont z kluczem API dotyczy klientów komputerowych i żądań wychodzących usługi API. Proxy karty usługi API dotyczy tylko klientów komputerowych. Systemowe proxy pozostaje bez zmian.",
       "emptyTitle": "Osobne połączenie dla konta",
       "emptyDescription": "Brak obsługiwanych kart kont. Dodaj konto OAuth lub API albo włącz kartę usługi API, a następnie wybierz tutaj proxy.",
       "search": "Szukaj kont",
@@ -5750,7 +5766,7 @@
         "assign": "Przypisz proxy",
         "specific": "Wybrane konta",
         "shared": "Wspólne proxy",
-        "sharedHint": "Obsługiwane karty bez własnego proxy używają tego proxy, także nowo dodane. Własne ustawienia i Bez proxy mają pierwszeństwo. Karty API używają go dla klienta komputerowego; bramy modeli zachowują własne trasy.",
+        "sharedHint": "Konta bez własnego proxy dziedziczą to proxy, także nowe konta. Własne proxy i Bez proxy mają pierwszeństwo. Konta z kluczem API używają go dla klientów komputerowych i żądań API; karta usługi API tylko dla klientów komputerowych.",
         "apply": "Przypisz"
       },
       "managerResources": {
@@ -5877,7 +5893,7 @@
       "title": "Szczegóły żądania",
       "totalLatency": "Łączny czas",
       "firstResponse": "Pierwsza odpowiedź",
-      "firstResponseHint": "Czas od początku żądania do pierwszego fragmentu odpowiedzi serwera, niekoniecznie do pierwszego wygenerowanego tokenu.",
+      "firstResponseHint": "W nowych żądaniach strumieniowych Responses czas jest mierzony od przetworzenia treści żądania przez bramę do pierwszego zdarzenia odpowiedzi serwera nadrzędnego. Sygnały podtrzymania połączenia i powiadomienia o limitach są pomijane.",
       "unavailable": "Brak danych diagnostycznych. Odśwież później. Starsze żądania nie są uzupełniane.",
       "attempts": "Próby",
       "noAttempts": "Nie zapisano historii prób.",
@@ -6057,10 +6073,27 @@
       "pending": "Oczekiwanie na użycie OpenAI",
       "permissionRequired": "Klucz nie ma prawa do odczytu użycia organizacji (api.usage.read).",
       "permissionGuide": "Użyj klucza administratora: Admin keys → Restricted → Usage API Scope → Read. Udostępnia koszty i użycie, bez pozostałego salda.",
-      "openAdminKeys": "Uprawnienia użycia",
-      "invalidKey": "Klucz jest nieprawidłowy lub wygasł. Sprawdź bieżący klucz API.",
+      "openAdminKeys": "Utwórz klucz admina",
+      "invalidKey": "Klucz odczytu jest nieprawidłowy lub wygasł. Sprawdź klucz API administratora.",
       "networkFailed": "Brak połączenia ze statystykami OpenAI. Odśwież później.",
-      "queryFailed": "Nie udało się pobrać użycia OpenAI. Spróbuj później."
+      "queryFailed": "Nie udało się pobrać użycia OpenAI. Spróbuj później.",
+      "organization": "Użycie organizacji",
+      "configure": "Ustaw odczyt",
+      "settings": "Ustawienia odczytu",
+      "title": "Konfiguruj odczyt użycia",
+      "optional": "Odczyt użycia (opcjonalny)",
+      "queryKey": "Klucz API administratora",
+      "callKey": "Klucz API modelu",
+      "notConfigured": "Dodaj klucz administratora, aby odczytać koszty i użycie organizacji.",
+      "purpose": "Użyj klucza administratora z tej samej organizacji co klucz modelu. Służy on tylko do odczytu użycia i nie zastępuje klucza modelu.",
+      "saveVerify": "Zapisz i sprawdź",
+      "remove": "Usuń konfigurację",
+      "keyRequired": "Wpisz klucz API administratora.",
+      "saveFailed": "Nie udało się zapisać ustawień. Spróbuj ponownie.",
+      "configChanged": "Konto lub klucz odczytu uległ zmianie. Otwórz ustawienia ponownie.",
+      "openFailed": "Nie udało się otworzyć strony kluczy. Spróbuj ponownie.",
+      "costUnavailable": "Brak kwoty",
+      "costUnavailableHint": "Oficjalne API kosztów nie zwróciło kwot dla tego okresu. Żądania i tokeny pochodzą z osobnego API użycia; brak kwot nie oznacza zerowych wydatków."
     },
     "officialApi": {
       "hint": "Konto z oficjalnym kluczem API OpenAI, rozpoznane na podstawie rzeczywistego adresu połączenia."
@@ -7137,6 +7170,35 @@
     "syncToWorkbuddy": "Synchronizuj z WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Kredyty podstawowe",
+      "planBonus": "Bonus planu",
+      "benefit": "Nagrody platformy",
+      "addon": "Kupione kredyty",
+      "total": "Łącznie pozostało",
+      "details": "Szczegóły kredytów",
+      "usedOf": "Użyto {{used}}/{{total}}",
+      "remainingPercent": "Pozostało {{percent}}%",
+      "nearestExpiry": "Najbliższa ważność do {{time}}",
+      "nextRefresh": "Następne odnowienie {{time}}",
+      "expiring": "Część kredytów wkrótce wygaśnie",
+      "valid": "Ważne",
+      "expired": "Wygasłe",
+      "expiresAt": "Wygasa {{time}}",
+      "expiryHours": "Wygasa w ciągu 24 godz.",
+      "expiryDays": "Wygasa w ciągu 3 dni",
+      "empty": "Brak danych",
+      "loadFailed": "Nie udało się wczytać ({{error}})",
+      "overview": "Przegląd",
+      "remaining": "Pozostało {{amount}}",
+      "loadMore": "Wczytaj więcej",
+      "usage": "Historia zużycia",
+      "requestAndTime": "Żądanie i czas",
+      "creditUsed": "Zużyte kredyty",
+      "model": "Model AI",
+      "recentUsage": "Ostatnie 5 wpisów",
+      "viewMore": "Zobacz więcej"
+    },
     "title": "Zarządzanie kontami WorkBuddy",
     "noAccounts": "Brak kont WorkBuddy",
     "addAccount": "Dodaj konto WorkBuddy",
@@ -7144,7 +7206,7 @@
       "title": "Informacje o zarządzaniu kontami WorkBuddy (kliknij, aby rozwinąć/zwinąć)",
       "desc": "Przełączenie konta zapisuje lokalny plik logowania zgodnie z najnowszym układem oficjalnego klienta WorkBuddy; import lokalny czyta ten sam plik. Dane są przetwarzane wyłącznie lokalnie.",
       "permission": "Zakres uprawnień: odczyt i zapis pliku logowania WorkBuddy (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) dla importu lokalnego i przełączania kont; starszy state.vscdb nie jest już czytany ani modyfikowany.",
-      "network": "Zakres sieci: logowanie OAuth i odświeżanie tokenu wymagają żądań do WorkBuddy; zapytania o limity wywołują API rozliczeń. Lokalne pliki logowania ani surowe poświadczenia nie są wysyłane."
+      "network": "Logowanie OAuth i odświeżanie tokena łączą się z WorkBuddy. Saldo i szczegóły kredytów są pobierane z usługi rozliczeń za pomocą tokena konta. Pliki logowania i klucze systemowe pozostają na urządzeniu."
     },
     "nickname": "Pseudonim",
     "enterprise": "Firmowe",
@@ -7161,8 +7223,8 @@
       "oauth": {
         "title": "Tylko logowanie IDE",
         "item1": "Dodaj konto po zakończeniu OAuth w przeglądarce, a następnie użyj go do przełączania IDE.",
-        "item2": "Parametry zapytania limitu nie są automatycznie powiązywane.",
-        "item3": "Jeśli potrzebujesz podglądu limitu, uruchom ręcznie „Zapytaj limit” na karcie konta."
+        "item2": "Po autoryzacji saldo kredytów jest pobierane automatycznie.",
+        "item3": "Karta pokazuje przegląd kredytów. W szczegółach znajdziesz przyznane kredyty i daty ich ważności."
       }
     },
     "oauthWebviewTab": "OAuth przez WebView",

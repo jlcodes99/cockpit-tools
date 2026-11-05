@@ -27,6 +27,7 @@ export interface CodexApiKeyUsagePanelOptions {
   provider: CodexModelProvider | null;
   variant?: "card" | "table";
   usageState: CodexApiKeyUsageState | undefined;
+  onRefresh?: () => void;
   t: TFunction;
   formatApiKeyUsagePercent: (summary?: CodexModelProviderUsageSummary) => number;
   formatApiKeyUsageMoney: (value?: number | null, unit?: string | null) => string;
@@ -64,6 +65,7 @@ export function renderCodexApiKeyUsagePanel({
   provider,
   variant = "card",
   usageState,
+  onRefresh,
   t,
   formatApiKeyUsagePercent,
   formatApiKeyUsageMoney,
@@ -75,7 +77,7 @@ export function renderCodexApiKeyUsagePanel({
 }: CodexApiKeyUsagePanelOptions): ReactElement {
   if (usageState?.summary?.cockpit) return <CodexRemoteServicePanel state={usageState} variant={variant} t={t} />;
   if (isOpenAIOfficialUsageAccount(account, provider?.baseUrl)) {
-    return <OpenAIOfficialUsagePanel summary={resolveCodexAccountDailyUsage(account, usageState?.summary)} loading={usageState?.loading} error={usageState?.error} variant={variant} t={t} />;
+    return <OpenAIOfficialUsagePanel provider={provider} apiKey={account.openai_api_key ?? ""} sourceBinding={usageState?.sourceBinding} onRefresh={onRefresh} summary={resolveCodexAccountDailyUsage(account, usageState?.summary)} loading={usageState?.loading} error={usageState?.error} variant={variant} t={t} />;
   }
   if (
     isCodexChatCompletionsApiKeyAccount(account) &&

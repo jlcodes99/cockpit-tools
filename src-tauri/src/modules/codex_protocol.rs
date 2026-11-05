@@ -365,11 +365,7 @@ pub fn normalize_responses_body_for_codex_with_lite(
     body: &mut Value,
     force_responses_lite: bool,
 ) -> bool {
-    let responses_lite = force_responses_lite
-        || body
-            .get("model")
-            .and_then(Value::as_str)
-            .is_some_and(codex_model_uses_responses_lite);
+    let responses_lite = force_responses_lite || responses_lite_metadata_enabled(body);
     let Some(obj) = body.as_object_mut() else {
         return false;
     };
@@ -381,13 +377,13 @@ pub fn normalize_responses_body_for_codex_with_lite(
     // Catalog capability alone does not put an API request on the Lite wire
     // protocol. Keep the caller's explicit parallel setting unless the actual
     // request carries the Lite marker, matching the sidecar's request handling.
-    if force_responses_lite
+    if responses_lite
         || obj
             .get("parallel_tool_calls")
             .and_then(Value::as_bool)
             .is_none()
     {
-        changed |= ensure_bool_field(obj, "parallel_tool_calls", !force_responses_lite);
+        changed |= ensure_bool_field(obj, "parallel_tool_calls", !responses_lite);
     }
     changed |= ensure_reasoning_include(obj);
     changed |= normalize_responses_input(obj);
@@ -424,6 +420,16 @@ pub(crate) fn codex_model_uses_responses_lite(model_id: &str) -> bool {
         })
 }
 
+pub(crate) fn responses_lite_metadata_enabled(body: &Value) -> bool {
+    body.pointer("/client_metadata/ws_request_header_x_openai_internal_codex_responses_lite")
+        .is_some_and(|value| {
+            value == true
+                || value
+                    .as_str()
+                    .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+        })
+}
+
 pub(crate) fn filter_responses_lite_tools(body: &mut Value) -> bool {
     body.as_object_mut()
         .is_some_and(filter_responses_lite_tools_in_object)
@@ -436,7 +442,7 @@ fn responses_lite_tool_allowed(tool: &Value) -> bool {
         .map(|tool_type| tool_type.trim().to_ascii_lowercase())
         .as_deref()
     {
-        Some("function" | "custom") => true,
+        Some("function" | "custom" | "namespace") => true,
         Some("tool_search") => tool
             .get("execution")
             .and_then(Value::as_str)
@@ -472,7 +478,7 @@ fn filter_responses_lite_tool_choice(choice: &mut Value) -> (bool, bool) {
         .map(|value| value.trim().to_ascii_lowercase());
 
     match choice_type.as_deref() {
-        Some("function" | "custom") => return (false, true),
+        Some("function" | "custom" | "namespace") => return (false, true),
         Some("tool_search") => {
             let client_executed = choice_object
                 .get("execution")
@@ -1716,7 +1722,13 @@ mod tests {
             }
         });
 
-        assert!(normalize_responses_body_for_codex(&mut body));
+        let mut standard = body.clone();
+        assert!(normalize_responses_body_for_codex(&mut standard));
+        for pointer in ["/tools/3", "/tools/7", "/input/0/tools/5"] {
+            assert_eq!(standard.pointer(pointer), body.pointer(pointer));
+        }
+
+        assert!(normalize_responses_body_for_codex_with_lite(&mut body, true));
         for pointer in ["/tools", "/tool_choice/tools", "/input/0/tools"] {
             assert_eq!(
                 body.pointer(pointer)
@@ -1727,7 +1739,7 @@ mod tests {
                             .filter_map(|tool| tool.get("type").and_then(Value::as_str))
                             .collect::<Vec<_>>()
                     }),
-                Some(vec!["function", "custom", "tool_search"]),
+                Some(vec!["function", "custom", "tool_search", "namespace"]),
                 "unexpected tools at {pointer}"
             );
         }

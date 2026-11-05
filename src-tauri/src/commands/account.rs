@@ -184,7 +184,10 @@ pub async fn add_account(refresh_token: String) -> Result<models::Account, Strin
 
     let token = models::TokenData::new(
         token_res.access_token,
-        refresh_token,
+        token_res
+            .refresh_token
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(refresh_token),
         token_res.expires_in,
         Some(user_info.email.clone()),
         None,
@@ -551,101 +554,30 @@ pub async fn switch_account(
         AntigravitySwitchFlow::Restart => {}
     }
 
-    modules::logger::log_info(&format!("开始切换账号: {}", account_id));
-
-    // 1. 加载并验证账号存在，并预刷新与探测必要元数据
-    let mut account = modules::account::prepare_account_for_injection(&account_id).await?;
-    modules::logger::log_info(&format!(
-        "正在切换到账号: {} (ID: {})",
-        account.email, account.id
-    ));
-
-    // 预检应用路径：路径缺失时只触发引导，不执行任何关闭/注入动作。
-    if let Err(e) = modules::process::ensure_antigravity_launch_path_configured() {
-        if e.starts_with("APP_PATH_NOT_FOUND:") {
-            let _ = app.emit(
-                "app:path_missing",
-                serde_json::json!({
-                    "app": "antigravity",
-                    "retry": { "kind": "switchAccount", "accountId": account_id }
-                }),
-            );
-        }
-        return Err(e);
-    }
-
-    // 2. 更新工具内部状态
-    modules::set_current_account_id(&account_id)?;
-    account.update_last_used();
-    modules::save_account(&account)?;
-
-    // 3. 同步更新 Antigravity IDE 默认实例的绑定账号（不同步到 Codex，因为账号体系不同）
-    if let Err(e) = modules::instance::update_default_settings(
-        Some(Some(account_id.clone())),
-        None,
-        Some(false),
-    ) {
-        modules::logger::log_warn(&format!("更新 Antigravity IDE 默认实例绑定账号失败: {}", e));
-    } else {
-        modules::logger::log_info(&format!(
-            "已同步更新 Antigravity IDE 默认实例绑定账号: {}",
-            account_id
-        ));
-    }
-
-    // 4. 关闭受管进程：按默认实例目录关闭受管进程，等待其完全退出
-    let default_dir = modules::instance::get_default_user_data_dir()?;
-    let default_dir_str = default_dir.to_string_lossy().to_string();
-    modules::process::close_antigravity_instances(&[default_dir_str], 20)?;
-    let _ = modules::instance::update_default_pid(None);
-
-    // 5. 进程完全退出后，先确保本次要启动的默认目录写入成功；
-    // 其他已存在客户端目录只做尽力同步，不能反向阻断主流程。
-    modules::instance::inject_account_to_profile_with_account(&default_dir, &account)?;
-    for target_dir in modules::instance::get_all_antigravity_user_data_dirs() {
-        if target_dir == default_dir {
-            continue;
-        }
-        if let Err(e) =
-            modules::instance::inject_account_to_profile_with_account(&target_dir, &account)
-        {
-            modules::logger::log_warn(&format!(
-                "[Switch] 注入目录 {} 失败: {}",
-                target_dir.display(),
-                e
-            ));
-        }
-    }
-
-    // 7. 启动 Antigravity IDE（带默认实例自定义启动参数；启动失败不阻断切号，保持原行为）
-    modules::logger::log_info("正在启动 Antigravity IDE 默认实例...");
-    let default_settings = modules::instance::load_default_settings()?;
-    let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
-    let launch_result = if extra_args.is_empty() {
-        modules::process::start_antigravity()
-    } else {
-        modules::process::start_antigravity_with_args("", &extra_args)
-    };
-    let launch_error = match launch_result {
-        Ok(pid) => {
-            if let Err(e) = modules::instance::update_default_pid(Some(pid)) {
-                modules::logger::log_warn(&format!("更新默认实例 PID 失败: {}", e));
+    let (account, launch_error) =
+        match modules::account::switch_account_ide(&account_id, true).await {
+            Ok(result) => result,
+            Err(error) => {
+                if error.starts_with("APP_PATH_NOT_FOUND:") {
+                    let _ = app.emit(
+                        "app:path_missing",
+                        serde_json::json!({
+                            "app": "antigravity",
+                            "retry": { "kind": "switchAccount", "accountId": account_id }
+                        }),
+                    );
+                }
+                return Err(error);
             }
-            None
-        }
-        Err(e) => {
-            modules::logger::log_warn(&format!("Antigravity IDE 启动失败: {}", e));
-            if e.starts_with("APP_PATH_NOT_FOUND:") {
-                let _ = app.emit(
-                    "app:path_missing",
-                    serde_json::json!({ "app": "antigravity", "retry": { "kind": "default" } }),
-                );
-            }
-            Some(e)
-        }
-    };
+        };
 
     if let Some(err) = launch_error {
+        if err.starts_with("APP_PATH_NOT_FOUND:") {
+            let _ = app.emit(
+                "app:path_missing",
+                serde_json::json!({ "app": "antigravity", "retry": { "kind": "default" } }),
+            );
+        }
         // 账号状态已经切换成功，仍广播账号切换事件，确保前端状态与本地落盘一致
         modules::websocket::broadcast_account_switched(&account.id, &account.email);
         if err.starts_with("APP_PATH_NOT_FOUND:") {

@@ -45,6 +45,7 @@ export function mergeCodexModelProviderCredentialInput(
     apiBaseUrl: string;
     apiKey: string;
     apiKeyName?: string | null;
+    usageApiKey?: string;
     sourceTag?: string | null;
     modelCatalog?: string[];
     modelContextWindows?: Record<string, number>;
@@ -124,6 +125,20 @@ export function findCodexAccountsReferencingModelProvider(
       return matchesId || matchesBaseUrl;
     })
     .map((account) => account.id);
+}
+
+/** Deletion depends on local ownership, never on credential or account health. */
+export function findCodexAccountsForModelProviderDeletion(
+  providers: CodexModelProviderReference[],
+  accounts: CodexAccount[],
+): string[] {
+  const providerIds = new Set(providers.map(provider => provider.id.trim()).filter(Boolean));
+  const baseUrls = new Set(providers.map(provider => normalizeBaseUrl(provider.baseUrl)).filter(Boolean));
+  return accounts.filter(account => {
+    if ((account.auth_mode ?? "").trim().toLowerCase() !== "apikey") return false;
+    return providerIds.has(account.api_provider_id?.trim() ?? "")
+      || baseUrls.has(normalizeBaseUrl(resolveAccountUsageBaseUrl(account)));
+  }).map(account => account.id);
 }
 
 export function buildCodexModelProviderAccountSnapshot(

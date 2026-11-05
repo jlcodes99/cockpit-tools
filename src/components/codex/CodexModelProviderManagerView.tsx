@@ -1,6 +1,6 @@
 import { resolveNewApiQuotaSnapshot } from "../../services/modelProviderUsageService";
 import { OpenAIOfficialUsagePanel } from './OpenAIOfficialUsagePanel';
-import { isOpenAIOfficialUsageUrl } from '../../utils/openaiOfficialUsage';
+import { currentOpenAIUsageState, isOpenAIOfficialUsageUrl } from '../../utils/openaiOfficialUsage';
 import { ModalErrorMessage } from "../ModalErrorMessage";
 import { Bird, ArrowDownWideNarrow, ArrowDown, ArrowUp, CircleAlert, ChevronDown, Copy, Clock, Database, ExternalLink, GripVertical, Link2, LayoutGrid, Pencil, Plus, Rows3, Trash2, X, Search, Settings, Activity, RefreshCw, RotateCw, Play } from "lucide-react";
 import { MultiSelectFilterDropdown } from "../MultiSelectFilterDropdown";
@@ -52,6 +52,8 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
     closeBatchTestModal,
     providerLaunchDialog,
     displayInstances,
+    deletingProviders,
+    deletingProviderIds,
     draggedProviderCustomSortId,
     enablingProviderId,
     error,
@@ -310,9 +312,10 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
             <button
               className="btn btn-danger icon-only"
               onClick={() => void handleBatchDeleteProviders()}
+              disabled={deletingProviders}
               title={`${t("common.delete", "删除")} (${selectedProviderIds.size})`}
             >
-              <Trash2 size={14} />
+              {deletingProviders ? <RefreshCw size={14} className="loading-spinner" /> : <Trash2 size={14} />}
             </button>
           )}
         </div>
@@ -397,7 +400,8 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
             const primaryApiKey = getSelectedProviderApiKey(provider);
             const enabling = enablingProviderId === provider.id;
             const testing = testingProviderId === provider.id;
-            const usageState = providerUsageMap[provider.id];
+            const usageState = isOpenAIOfficialUsageUrl(provider.baseUrl)
+              ? currentOpenAIUsageState(provider, primaryApiKey?.apiKey ?? '', providerUsageMap[provider.id]) : providerUsageMap[provider.id];
             const usageSummary = usageState?.summary;
             const usagePrimaryText = usageSummary
               ? formatUsageQuotaValue(
@@ -600,7 +604,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                 </div>
                 <div className="codex-quota-section">
                   {isOpenAIOfficialUsageUrl(provider.baseUrl) ? (
-                    <OpenAIOfficialUsagePanel summary={usageSummary} loading={usageState?.loading} error={usageState?.error} t={t} />
+                    <OpenAIOfficialUsagePanel provider={provider} apiKey={primaryApiKey?.apiKey ?? ""} sourceBinding={usageState?.sourceBinding} onRefresh={() => void refreshProviderUsage(provider, primaryApiKey)} summary={usageSummary} loading={usageState?.loading} error={usageState?.error} t={t} />
                   ) : usageMode === "deepseek" ? (
                     <div className="codex-api-key-usage-panel sub2api">
                       <div className="codex-api-key-usage-grid">
@@ -828,9 +832,12 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                       <button
                         className="card-action-btn danger"
                         onClick={() => void handleDeleteProvider(provider)}
+                        disabled={deletingProviders}
                         title={t("common.delete", "删除")}
                       >
-                        <Trash2 size={14} />
+                        {deletingProviderIds.has(provider.id)
+                          ? <RefreshCw size={14} className="loading-spinner" />
+                          : <Trash2 size={14} />}
                       </button>
                     </div>
                   </div>
@@ -1150,7 +1157,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                             disabled={
                               batchTestResultSelectedProviderIds.size === 0 ||
                               batchTestSession.running ||
-                              batchTestDeleting
+                              batchTestDeleting || deletingProviders
                             }
                           >
                             {batchTestDeleting ? (
@@ -1981,8 +1988,9 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
         const storedProvider = providers.find((item) => item.id === providerDetailId);
         const provider = storedProvider ? resolveCodexModelProviderForApiKey(storedProvider, getSelectedProviderApiKey(storedProvider)?.apiKey) : null;
         if (!provider) return null;
-        const usageState = providerUsageMap[provider.id];
         const primaryApiKey = getSelectedProviderApiKey(provider);
+        const usageState = isOpenAIOfficialUsageUrl(provider.baseUrl)
+          ? currentOpenAIUsageState(provider, primaryApiKey?.apiKey ?? '', providerUsageMap[provider.id]) : providerUsageMap[provider.id];
         const usageSummary = usageState?.summary;
         const resolvedWireApi = resolveProviderWireApi(provider);
         const usageMode =
@@ -2255,7 +2263,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
             apiKeyDisplay={primaryApiKey ? maskApiKey(primaryApiKey.apiKey) : "-"}
             rawApiKey={primaryApiKey?.apiKey}
             connectionExtra={isOpenAIOfficialUsageUrl(provider.baseUrl)
-              ? <OpenAIOfficialUsagePanel summary={usageSummary} loading={usageState?.loading} error={usageState?.error} detailed t={t} />
+              ? <OpenAIOfficialUsagePanel provider={provider} apiKey={primaryApiKey?.apiKey ?? ""} sourceBinding={usageState?.sourceBinding} onRefresh={() => void refreshProviderUsage(provider, primaryApiKey)} summary={usageSummary} loading={usageState?.loading} error={usageState?.error} detailed t={t} />
               : <>
                 {usageState?.loading && <p className="codex-daily-usage-note" role="status">{t("common.loading")}</p>}
                 {usageState?.error && <p className="codex-daily-usage-note" role="status">{t("common.shared.quota.queryFailed")}</p>}

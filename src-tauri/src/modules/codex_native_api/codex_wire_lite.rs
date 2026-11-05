@@ -1,14 +1,6 @@
 use serde_json::Value;
 
-pub(super) fn metadata_enabled(body: &Value) -> bool {
-    body.pointer("/client_metadata/ws_request_header_x_openai_internal_codex_responses_lite")
-        .is_some_and(|value| {
-            value == true
-                || value
-                    .as_str()
-                    .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
-        })
-}
+pub(super) use crate::modules::codex_protocol::responses_lite_metadata_enabled as metadata_enabled;
 
 fn supported(tool: &Value) -> bool {
     match tool["type"].as_str().unwrap_or("").trim() {

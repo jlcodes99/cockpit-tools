@@ -20,7 +20,7 @@ pub struct RequestSize {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OverloadRetry {
-    pub retry: u8,
+    pub retry: u32,
     pub wait_ms: u64,
     /// From the first capacity fallback until the first response bytes, or preparation.
     pub recovery_ms: u64,

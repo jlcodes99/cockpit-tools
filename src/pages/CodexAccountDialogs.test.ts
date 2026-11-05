@@ -172,6 +172,7 @@ for (const { name, source, visibility, submit, ready, blocked } of dialogs) {
     let calls = 0;
     const onClick = vm.runInNewContext(`(${attributeExpression(button, 'onClick').getText(source)})`, {
       [submit]: () => { calls += 1; },
+      officialUsage: true, usageApiKeyDraft: 'test-admin-key',
     });
     onClick();
     assert.equal(calls, 1, 'The relocated button must invoke the original submit handler once');

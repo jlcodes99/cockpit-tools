@@ -748,6 +748,8 @@ pub struct CodexLocalAccessCollection {
     #[serde(default = "default_max_retry_interval_ms")]
     pub max_retry_interval_ms: u64,
     #[serde(default)]
+    pub continuous_overload_retry: bool,
+    #[serde(default)]
     pub timeouts: CodexLocalAccessTimeouts,
     #[serde(default = "default_timeout_preset_long_wait")]
     pub active_timeout_preset_id: String,

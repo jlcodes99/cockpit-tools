@@ -402,3 +402,64 @@ test('invalid or failed scoped writes leave both provider and key settings uncha
   assert.deepEqual(h.stored(), before);
   assert.equal((await h.service.listCodexModelProviders())[0].wireApi, 'responses');
 });
+
+test('OpenAI query credentials persist independently and never enter account snapshots', async () => {
+  const official = { ...provider(), baseUrl: 'https://api.openai.com/v1' };
+  const h = harness(official);
+  const saved = await h.service.updateCodexOpenAIUsageKey('provider', 'key-1', '  admin-one  ', { apiKey: 'sk-first' });
+  assert.equal(saved.apiKeys[0].apiKey, 'sk-first');
+  assert.equal(saved.apiKeys[0].usageApiKey, 'admin-one');
+  assert.equal(saved.apiKeys[0].usageKeyVersion, 1);
+  assert.equal(saved.apiKeys[1].usageApiKey, undefined);
+  assert.ok(!JSON.stringify(buildCodexModelProviderAccountSnapshot(saved, '', 'sk-first')).includes('admin-one'));
+  h.service.invalidateCodexModelProviderCache();
+  const reloaded = (await h.service.listCodexModelProviders())[0];
+  assert.equal(reloaded.apiKeys[0].usageApiKey, 'admin-one');
+  await h.service.mergeCodexModelProviderApiKeysFromAccounts([{ ...account(), api_base_url: official.baseUrl }]);
+  assert.equal(h.stored()[0].apiKeys[0].usageApiKey, 'admin-one');
+  await h.service.updateCodexOpenAIUsageKey('provider', 'key-1', '', { apiKey: 'sk-first', usageApiKey: 'admin-one' });
+  assert.equal(h.stored()[0].apiKeys[0].usageApiKey, undefined);
+  assert.equal(h.stored()[0].apiKeys[0].apiKey, 'sk-first');
+  assert.equal(h.stored()[0].apiKeys[0].usageKeyVersion, 2);
+});
+
+test('failed and stale query-key saves preserve the current credentials', async () => {
+  const h = harness({ ...provider(), baseUrl: 'https://api.openai.com/v1' });
+  h.failWrite(new Error('disk full'));
+  await assert.rejects(h.service.updateCodexOpenAIUsageKey('provider', 'key-1', 'admin-one', { apiKey: 'sk-first' }), /disk full/);
+  assert.equal((await h.service.listCodexModelProviders())[0].apiKeys[0].usageApiKey, undefined);
+  h.failWrite(null);
+  await h.service.updateCodexOpenAIUsageKey('provider', 'key-1', 'admin-new', { apiKey: 'sk-first' });
+  await assert.rejects(h.service.updateCodexOpenAIUsageKey('provider', 'key-1', 'admin-stale', { apiKey: 'sk-first' }), /OPENAI_USAGE_CONFIG_CHANGED/);
+  await assert.rejects(h.service.updateCodexOpenAIUsageKey('provider', 'key-1', '', { apiKey: 'old-model-key', usageApiKey: 'admin-new' }), /OPENAI_USAGE_CONFIG_CHANGED/);
+  assert.equal(h.stored()[0].apiKeys[0].usageApiKey, 'admin-new');
+  await h.service.removeApiKeyFromCodexModelProvider('provider', 'key-1');
+  await assert.rejects(h.service.updateCodexOpenAIUsageKey('provider', 'key-1', 'admin-stale', { apiKey: 'sk-first', usageApiKey: 'admin-new' }), /OPENAI_USAGE_CONFIG_CHANGED/);
+  assert.equal(h.stored()[0].apiKeys.length, 1);
+});
+
+test('creating an official account optionally stores its query key without requiring one', async () => {
+  const h = harness([]);
+  const saved = await h.service.upsertCodexModelProviderFromCredential({ apiBaseUrl: 'https://api.openai.com/v1', apiKey: 'model-one', usageApiKey: 'admin-one' });
+  await h.service.upsertCodexModelProviderFromCredential({ apiBaseUrl: saved.baseUrl, apiKey: 'model-two' });
+  const keys = h.stored()[0].apiKeys;
+  assert.equal(keys[0].usageApiKey, 'admin-one');
+  assert.equal(keys[1].usageApiKey, undefined);
+  await assert.rejects(h.service.queryCodexModelProviderUsage({ baseUrl: saved.baseUrl, apiKey: 'model-two' }), /OPENAI_USAGE_NOT_CONFIGURED/);
+});
+
+test('concurrent organization queries share one request while other providers retain their model key', async () => {
+  const gate = deferred<unknown>();
+  const requests: any[] = [];
+  const service = loadHookModule(new URL('./codexModelProviderService.ts', import.meta.url), {
+    './modelProviderUsageService': { queryModelProviderUsage(input: unknown) { requests.push(input); return gate.promise; } },
+  }, { URL, TextEncoder }).exports as typeof import('./codexModelProviderService');
+  const a = service.queryCodexModelProviderUsage({ baseUrl: 'https://api.openai.com/v1', apiKey: 'model-a', usageApiKey: 'admin' });
+  const b = service.queryCodexModelProviderUsage({ baseUrl: 'https://api.openai.com/v1', apiKey: 'model-b', usageApiKey: 'admin' });
+  assert.equal(requests.length, 1);
+  const relay = service.queryCodexModelProviderUsage({ baseUrl: 'https://relay.example/v1', apiKey: 'relay-model' });
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].apiKey, 'relay-model');
+  assert.equal(requests[1].usageApiKey, undefined);
+  gate.resolve({}); await Promise.all([a, b, relay]);
+});

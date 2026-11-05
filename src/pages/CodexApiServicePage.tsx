@@ -3651,6 +3651,7 @@ export function useCodexApiServicePageController() {
     currentGroup,
     currentPlatformId,
     disableCoolingDraft,
+    baseUrl,
     displayBaseUrl,
     error,
     excludedModelsText,

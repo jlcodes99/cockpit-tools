@@ -2999,3 +2999,8 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
   .codex-api-service-panel-head { flex-wrap: wrap; }
   .codex-api-service-panel-head h2 { flex-basis: 100%; }
 }
+
+.codex-overload-attempt code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

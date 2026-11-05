@@ -10,6 +10,28 @@ pub async fn codex_local_access_get_state() -> Result<CodexLocalAccessState, Str
 }
 
 #[tauri::command]
+pub async fn codex_local_access_get_overload_status() -> Result<codex_local_access::LocalAccessOverloadStatus, String> {
+    codex_local_access::get_local_access_overload_status().await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_overload_retry(enabled: bool) -> Result<bool, String> {
+    codex_local_access::update_local_access_overload_retry(enabled).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_query_overload_counts(start_at: i64, end_at: i64) -> Result<std::collections::HashMap<String, u64>, String> {
+    codex_local_access::query_local_access_overload_counts(start_at, end_at).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_query_overload_attempts(
+    account_id: String, start_at: i64, end_at: i64, before_timestamp: Option<i64>, before_id: Option<i64>,
+) -> Result<Vec<codex_local_access::LocalAccessOverloadAttempt>, String> {
+    codex_local_access::query_local_access_overload_attempts(account_id, start_at, end_at, before_timestamp, before_id).await
+}
+
+#[tauri::command]
 pub async fn codex_local_access_get_request_detail(
     request_id: String,
 ) -> Result<Option<crate::models::codex_local_access::CodexLocalAccessRequestDetail>, String> {

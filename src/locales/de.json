@@ -2453,6 +2453,22 @@
     "other_group": "Andere Modelle"
   },
   "codex": {
+    "overload": {
+      "setting": "Bei Auslastung weiter versuchen",
+      "settingHint": "Gilt für neue Anfragen am lokalen Codex-API-Dienst. Sicher wiederholbare Anfragen warten auf freie Modellkapazität.",
+      "retrying": "Modell ausgelastet, erneuter Versuch ({{count}})",
+      "count": "Ausgelastet: {{count}}",
+      "countHint": "Zählt Versuche beim Anbieter, auch automatische Wiederholungen. Verlauf bis zu 7 Tage.",
+      "history": "Auslastungsverlauf",
+      "empty": "Keine Auslastungsfehler in diesem Zeitraum.",
+      "attempt": "Versuch {{number}}",
+      "sameAccount": "Gleiches Konto erfolgreich",
+      "otherAccount": "Nach Kontowechsel erfolgreich",
+      "pending": "Ergebnis offen",
+      "cancelled": "Abgebrochen",
+      "failed": "Anfrage fehlgeschlagen",
+      "countUnavailable": "Auslastungszahlen nicht verfügbar"
+    },
     "instance": {
       "errors": {
         "threadSyncWorkerFailed": "Sitzungssynchronisation fehlgeschlagen: {{error}}",
@@ -3273,7 +3289,7 @@
       "resetCreditDialogDesc": "Setze das Rate-Limit zurück, um ohne Unterbrechung weiterzuarbeiten. Verfügbare Resets: {{count}}.",
       "resetCreditDialogAction": "Nutzung zurücksetzen",
       "resetCreditNoCredits": "Keine Resets verfügbar",
-      "resetCreditConsumed": "5-Stunden-Kontingent zurückgesetzt",
+      "resetCreditConsumed": "Kontingent zurückgesetzt",
       "resetCreditFailed": "Zurücksetzen fehlgeschlagen: {{error}}",
       "resetCreditRefreshAfterConsumeFailed": "Reset gesendet, aber Kontingentaktualisierung fehlgeschlagen: {{error}}",
       "resetCreditsTitleWithExpiry": "Verbleibende Rücksetzungen für das 5-Stunden-Fenster: {{count}}. Nächster Ablauf: {{time}}",
@@ -4144,7 +4160,7 @@
         "apiKeyUrlInvalid": "Eine HTTP(S)-Verwaltungsadresse ohne eingebettete Zugangsdaten verwenden; API-Schlüssel gehören ins Schlüsselfeld."
       },
       "saveSuccess": "Modellanbieter gespeichert.",
-      "deleteBlocked": "Dieser Anbieter ist mit {{count}} Konten verknüpft und kann nicht gelöscht werden.",
+      "confirmDeleteWithAccounts": "Anbieter „{{name}}“ und {{count}} verknüpfte Konten löschen?",
       "confirmDelete": "Anbieter „{{name}}“ löschen?",
       "deleteFailed": "Anbieter konnte nicht gelöscht werden: {{error}}",
       "deleteApiKeyFailed": "API-Key konnte nicht gelöscht werden: {{error}}",
@@ -4274,7 +4290,7 @@
         "selectVisible": "Sichtbare wählen",
         "resultSelectedCount": "{{count}} ausgewählt",
         "selectFailed": "Fehler wählen",
-        "deleteConfirm": "{{providerCount}} ausgewählte Provider löschen? Dabei werden auch {{accountCount}} exakt verknüpfte Codex-API-Key-Konten gelöscht.",
+        "deleteConfirm": "{{providerCount}} ausgewählte Anbieter und {{accountCount}} verknüpfte Konten löschen?",
         "deleteSuccess": "{{providerCount}} Provider und {{accountCount}} verknüpfte Konten gelöscht.",
         "deleteFailed": "Ausgewählte Elemente konnten nicht gelöscht werden: {{error}}",
         "protocolSummary": "{{protocol}} · {{mode}} · {{model}}",
@@ -5141,7 +5157,7 @@
       "boundProxyUnavailable": "Das verknüpfte Konto hat keinen verfügbaren Proxy. Wählen Sie erneut einen.",
       "sourceUnavailable": "Die Proxy-Quelle oder der Knoten ist nicht verfügbar. Wählen Sie erneut.",
       "operationTimeout": "Der Proxy-Vorgang hat das Zeitlimit überschritten. Versuchen Sie es erneut.",
-      "cardScopeHint": "Der gestartete Codex-Desktop-Client nutzt den Proxy dieser Karte. Verbindungen der Modell-Gateways zu ihren Anbietern behalten ihre eigenen Routen.",
+      "cardScopeHint": "Proxys von API-Key-Konten gelten für Desktop-Clients und ausgehende Anfragen des API-Dienstes. Der Proxy der API-Dienstkarte gilt nur für Desktop-Clients. Der Systemproxy bleibt unverändert.",
       "display": {
         "title": "Proxy-Anzeige",
         "compact": "Kompakt",
@@ -5442,7 +5458,7 @@
       "modeDefaultHint": "Dieses Konto verwendet keinen Proxy und behält den bisherigen Standardausgang.",
       "modeStaleHint": "Die gebundene Quelle oder der Knoten ist nicht mehr verfügbar. Bitte erneut auswählen.",
       "management": "Proxyverwaltung",
-      "managementHint": "Legen Sie Proxys für OAuth-, API-Konto- und API-Dienstkarten fest, ohne den Systemproxy zu ändern. Bei API-Karten gilt der Proxy für den gestarteten Desktop-Client; Modell-Gateways behalten ihre eigenen Routen.",
+      "managementHint": "Proxys von API-Key-Konten gelten für Desktop-Clients und ausgehende Anfragen des API-Dienstes. Der Proxy der API-Dienstkarte gilt nur für Desktop-Clients. Der Systemproxy bleibt unverändert.",
       "emptyTitle": "Ein eigener Zugang für dein Konto",
       "emptyDescription": "Keine geeigneten Kontokarten verfügbar. Fügen Sie ein OAuth- oder API-Konto hinzu oder aktivieren Sie die API-Dienstkarte. Wählen Sie dann hier einen Proxy.",
       "search": "Konten suchen",
@@ -5750,7 +5766,7 @@
         "assign": "Proxy zuweisen",
         "specific": "Ausgewählte Konten",
         "shared": "Gemeinsamer Proxy",
-        "sharedHint": "Geeignete Karten ohne eigenen Proxy folgen diesem Proxy, auch neu hinzugefügte. Eigene Einstellungen und Kein Proxy haben Vorrang. API-Karten nutzen ihn für den Desktop-Client; Modell-Gateways behalten ihre eigenen Routen.",
+        "sharedHint": "Konten ohne eigenen Proxy übernehmen diesen Proxy, auch neue Konten. Eigene Proxys und Kein Proxy haben Vorrang. API-Key-Konten nutzen ihn für Desktop- und API-Anfragen; die API-Dienstkarte nur für Desktop-Clients.",
         "apply": "Zuweisen"
       },
       "managerResources": {
@@ -5877,7 +5893,7 @@
       "title": "Anfragedetails",
       "totalLatency": "Gesamtzeit",
       "firstResponse": "Erste Antwort",
-      "firstResponseHint": "Zeit vom Anfragebeginn bis zum ersten Antwortfragment des Upstreams, nicht zwingend bis zum ersten erzeugten Token.",
+      "firstResponseHint": "Bei neuen Responses-Streaming-Anfragen läuft die Messung von der Verarbeitung des Anfrageinhalts durch das Gateway bis zum ersten Antwortereignis des Upstreams. Keepalive- und Ratenlimit-Meldungen werden übersprungen.",
       "unavailable": "Noch keine Diagnosedaten. Später aktualisieren. Ältere Anfragen werden nicht nachgetragen.",
       "attempts": "Versuche",
       "noAttempts": "Keine Versuchsfolge aufgezeichnet.",
@@ -6057,10 +6073,27 @@
       "pending": "OpenAI-Nutzung ausstehend",
       "permissionRequired": "Diesem Schlüssel fehlt die Leseberechtigung für die Organisationsnutzung (api.usage.read).",
       "permissionGuide": "Admin-Schlüssel verwenden: Admin keys → Restricted → Usage API Scope → Read. Liefert Kosten und Nutzung, kein Restguthaben.",
-      "openAdminKeys": "Nutzungsrechte",
-      "invalidKey": "Der Schlüssel ist ungültig oder abgelaufen. Aktuellen API-Schlüssel prüfen.",
+      "openAdminKeys": "Admin-Schlüssel erstellen",
+      "invalidKey": "Der Abfrageschlüssel ist ungültig oder abgelaufen. Prüfen Sie den Admin-API-Schlüssel.",
       "networkFailed": "Keine Verbindung zur OpenAI-Nutzung. Später aktualisieren.",
-      "queryFailed": "Abfrage der OpenAI-Nutzung fehlgeschlagen. Später erneut versuchen."
+      "queryFailed": "Abfrage der OpenAI-Nutzung fehlgeschlagen. Später erneut versuchen.",
+      "organization": "Organisationsnutzung",
+      "configure": "Abfrage einrichten",
+      "settings": "Abfrageoptionen",
+      "title": "Nutzungsabfrage einrichten",
+      "optional": "Nutzungsabfrage (optional)",
+      "queryKey": "Admin-API-Schlüssel",
+      "callKey": "Modell-API-Schlüssel",
+      "notConfigured": "Mit einem Admin-Schlüssel lassen sich Kosten und Nutzung der Organisation abrufen.",
+      "purpose": "Verwenden Sie einen Admin-Schlüssel derselben Organisation wie der Modellschlüssel. Er dient nur der Nutzungsabfrage und ersetzt den Modellschlüssel nicht.",
+      "saveVerify": "Speichern & prüfen",
+      "remove": "Einrichtung entfernen",
+      "keyRequired": "Geben Sie einen Admin-API-Schlüssel ein.",
+      "saveFailed": "Abfrageeinstellungen konnten nicht gespeichert werden. Bitte erneut versuchen.",
+      "configChanged": "Konto oder Abfrageschlüssel wurde geändert. Öffnen Sie die Einstellungen erneut.",
+      "openFailed": "Die Schlüsselseite konnte nicht geöffnet werden. Bitte erneut versuchen.",
+      "costUnavailable": "Kein Betrag",
+      "costUnavailableHint": "Die offizielle Kosten-API hat für diesen Zeitraum keine Kosten geliefert. Anfragen und Tokens stammen aus einer separaten Nutzungs-API; fehlende Kostendaten bedeuten keine Ausgaben von null."
     },
     "officialApi": {
       "hint": "Konto mit offiziellem OpenAI-API-Schlüssel, anhand der tatsächlichen Zieladresse erkannt."
@@ -7137,6 +7170,35 @@
     "syncToWorkbuddy": "Mit WorkBuddy synchronisieren"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Tarifguthaben",
+      "planBonus": "Tarifbonus",
+      "benefit": "Plattformprämien",
+      "addon": "Gekaufte Credits",
+      "total": "Restguthaben gesamt",
+      "details": "Guthabendetails",
+      "usedOf": "Verbraucht {{used}}/{{total}}",
+      "remainingPercent": "{{percent}} % übrig",
+      "nearestExpiry": "Nächster Ablauf {{time}}",
+      "nextRefresh": "Nächste Erneuerung {{time}}",
+      "expiring": "Guthaben läuft bald ab",
+      "valid": "Gültig",
+      "expired": "Abgelaufen",
+      "expiresAt": "Läuft ab am {{time}}",
+      "expiryHours": "Läuft in 24 Std. ab",
+      "expiryDays": "Läuft in 3 Tagen ab",
+      "empty": "Keine Einträge",
+      "loadFailed": "Laden fehlgeschlagen ({{error}})",
+      "overview": "Übersicht",
+      "remaining": "{{amount}} übrig",
+      "loadMore": "Mehr laden",
+      "usage": "Verbrauchsdetails",
+      "requestAndTime": "Anfrage und Zeit",
+      "creditUsed": "Verbrauchte Credits",
+      "model": "Modell",
+      "recentUsage": "Letzte 5 Einträge",
+      "viewMore": "Mehr anzeigen"
+    },
     "title": "WorkBuddy-Kontenverwaltung",
     "noAccounts": "Keine WorkBuddy-Konten",
     "addAccount": "WorkBuddy-Konto hinzufügen",
@@ -7144,7 +7206,7 @@
       "title": "Hinweise zur WorkBuddy-Kontoverwaltung (zum Ein-/Ausklappen klicken)",
       "desc": "Beim Kontowechsel wird die lokale Anmeldedatei nach dem aktuellen Layout des offiziellen WorkBuddy-Clients geschrieben; der lokale Import liest dieselbe Datei. Die Daten werden nur lokal verarbeitet.",
       "permission": "Berechtigungsumfang: Lesen und Schreiben der WorkBuddy-Anmeldedatei (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) für lokalen Import und Kontowechsel; die alte state.vscdb wird nicht mehr gelesen oder geändert.",
-      "network": "Netzwerkumfang: OAuth-Anmeldung und Token-Aktualisierung senden Anfragen an WorkBuddy; Kontingentabfragen nutzen Billing-APIs. Lokale Anmeldedateien oder rohe Zugangsdaten werden nicht hochgeladen."
+      "network": "OAuth-Anmeldung und Token-Aktualisierung greifen auf WorkBuddy zu. Guthaben und Details werden mit dem Kontotoken beim Abrechnungsdienst abgefragt. Anmeldedateien und Systemschlüssel bleiben lokal."
     },
     "nickname": "Spitzname",
     "enterprise": "Unternehmen",
@@ -7161,8 +7223,8 @@
       "oauth": {
         "title": "Nur IDE-Anmeldedaten autorisieren",
         "item1": "Nach Abschluss von OAuth im Browser kann das Konto hinzugefügt und für den IDE-Wechsel genutzt werden.",
-        "item2": "Parameter für die Kontingentabfrage werden nicht automatisch gebunden.",
-        "item3": "Wenn Sie Kontingente anzeigen möchten, führen Sie auf der Kontokarte manuell „Kontingent abfragen“ aus."
+        "item2": "Nach der Autorisierung wird das Guthaben automatisch abgefragt.",
+        "item3": "Die Kontokarte zeigt das Guthaben. Die Detailansicht zeigt einzelne Gutschriften und Ablaufdaten."
       }
     },
     "oauthWebviewTab": "OAuth im WebView",

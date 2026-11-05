@@ -233,17 +233,26 @@ async fn native_http_client(
     account: &CodexAccount,
     context: &NativeTransportContext<'_>,
 ) -> Result<(Client, Option<String>, Option<Value>, String), native_contract::ServiceError> {
+    let api_proxy_account;
+    let proxy_account = if account.is_api_key_auth() && !account.egress_proxy_disabled {
+        api_proxy_account = crate::modules::codex_client_proxy::upstream_route(account)
+            .await
+            .map_err(|_| native_error(503, "proxy_unavailable", "Account proxy is unavailable"))?;
+        &api_proxy_account
+    } else {
+        account
+    };
     // Synchronous proxy policy reads only the prepared in-memory snapshot. A
     // cold native service must load it here, without relying on UI/startup work.
-    // Reuse the bounded, single-flight loader; explicit account/direct/API-key
+    // Reuse the bounded, single-flight loader; explicit account/direct
     // routes skip shared storage and load failures must not become a fallback.
-    crate::modules::codex_proxy_runtime::ensure_account_proxy_state(account)
+    crate::modules::codex_proxy_runtime::ensure_account_proxy_state(proxy_account)
         .await
         .map_err(|_| native_error(503, "proxy_unavailable", "Account proxy is unavailable"))?;
-    let account_proxy = if account.egress_proxy_disabled {
+    let account_proxy = if proxy_account.egress_proxy_disabled {
         None
     } else {
-        crate::modules::codex_account_proxy::configured_url(account)
+        crate::modules::codex_account_proxy::configured_url(proxy_account)
             .map_err(|_| native_error(503, "proxy_unavailable", "Account proxy is unavailable"))?
             .map(|v| v.into_owned())
     };
@@ -251,7 +260,7 @@ async fn native_http_client(
     // account bindings may be node/catalog references rather than URL proxies.
     let prepared_proxy = if account_proxy.is_some() {
         Some(
-            crate::modules::codex_proxy_runtime::ensure(&account.id)
+            crate::modules::codex_proxy_runtime::ensure(&proxy_account.id)
                 .await
                 .map_err(|_| {
                     native_error(
@@ -271,7 +280,7 @@ async fn native_http_client(
     } else {
         None
     };
-    let (proxy, source) = if account.egress_proxy_disabled {
+    let (proxy, source) = if proxy_account.egress_proxy_disabled {
         (None, "account_direct")
     } else if let Some(proxy) = prepared_proxy {
         (Some(proxy), "account")
@@ -340,7 +349,7 @@ async fn native_http_client(
     let no_proxy = native_inherited_proxy_bypass(source);
     let entry_name = if source == "account" {
         proxy.as_deref().and_then(|url| {
-            crate::modules::codex_proxy_runtime::prepared_request_route_observer(account, url)
+            crate::modules::codex_proxy_runtime::prepared_request_route_observer(proxy_account, url)
                 .map(|observer| observer.proxy_name)
         })
     } else {
@@ -557,6 +566,8 @@ mod native_proxy_diagnostic_tests {
 
     #[tokio::test]
     async fn cached_clients_keep_recordable_proxy_snapshots_without_network_requests() {
+        let _proxy_state = crate::modules::codex_unified_proxy::TestCacheGuard::new();
+        _proxy_state.prepare_disabled();
         let collection: CodexLocalAccessCollection = serde_json::from_value(json!({
             "enabled":true,"port":1455,"apiKey":"fixture","accountIds":[],
             "createdAt":1,"updatedAt":1,
@@ -572,7 +583,7 @@ mod native_proxy_diagnostic_tests {
                 refresh_token: None,
             },
         );
-        // API-key accounts do not inspect real account/unified proxy bindings.
+        // With no account/unified binding, API keys use the service proxy.
         account.auth_mode = CodexAuthMode::Apikey;
         let host = NativeHostBridge::default();
         let profile = crate::modules::codex_api_identity::InstallationProfile {

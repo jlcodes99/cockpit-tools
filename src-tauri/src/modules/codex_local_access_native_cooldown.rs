@@ -20,6 +20,35 @@ fn native_cooldown_key(account: &str, model: &str, credential_scope: bool) -> Na
     }
 }
 
+const NATIVE_CONFIRMED_QUOTA: &str = "quota_exhausted";
+
+impl NativeCooldown {
+    fn active(&self, now: Instant, cooling_disabled: bool) -> bool {
+        self.until > now && (!cooling_disabled || self.reason == NATIVE_CONFIRMED_QUOTA)
+    }
+}
+
+fn native_mark_quota_exhausted(
+    states: &mut HashMap<NativeCooldownKey, NativeCooldown>,
+    account: &str,
+    retry_after: Option<Duration>,
+    now: Instant,
+) {
+    let key = native_cooldown_key(account, "", true);
+    if let Some(previous) = states.get_mut(&key)
+        .filter(|state| state.reason == NATIVE_CONFIRMED_QUOTA && state.until > now)
+    {
+        if let Some(until) = retry_after.and_then(|wait| now.checked_add(wait)) {
+            previous.until = previous.until.max(until);
+        }
+        return;
+    }
+    native_upsert_cooldown(states, account, "", 429, retry_after, true, now);
+    if let Some(state) = states.get_mut(&key) {
+        state.reason = NATIVE_CONFIRMED_QUOTA;
+    }
+}
+
 fn native_upsert_cooldown(
     states: &mut HashMap<NativeCooldownKey, NativeCooldown>,
     account: &str,
@@ -34,6 +63,9 @@ fn native_upsert_cooldown(
     }
     let key = native_cooldown_key(account, model, credential_scope || model.is_empty());
     let previous = states.get(&key);
+    if previous.is_some_and(|state| state.reason == NATIVE_CONFIRMED_QUOTA && state.until > now) {
+        return;
+    }
     let mut backoff_level = previous.map_or(0, |state| state.backoff_level);
     let (mut until, quota) = if status == 429 {
         let until = if let Some(hint) = retry_after {
@@ -97,7 +129,7 @@ fn native_cooldown_wait(
     ]
     .into_iter()
     .filter_map(|key| states.get(&key))
-    .filter(|state| state.until > now && !disable_cooling)
+    .filter(|state| state.active(now, disable_cooling))
     .map(|state| state.until.saturating_duration_since(now))
     .max()
 }

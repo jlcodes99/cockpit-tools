@@ -171,7 +171,7 @@ async fn native_remote_connection(
         "modelCatalog":model_catalog,"catalogRevision":catalog_revision,"keyViewsVersion":1,
         "capabilities":{"responses":true,"images":!image_models.is_empty(),"imageEdits":!image_models.is_empty(),
             "hostedImages":collection.image_generation_mode == CodexLocalAccessImageGenerationMode::Enabled && !image_models.is_empty(),
-            "usage":true,"websockets":true},
+            "usage":true,"websockets":collection.responses_websockets_enabled},
         "imageModels":image_models,
         "tokenLimit":key.token_limit,"tokenUsed":key.token_used,
         "budget":key_budget_snapshot(key, now),"updatedAt":now,
@@ -206,6 +206,21 @@ fn remote_usage_from_stats(stats: &CodexLocalAccessStats, key_id: &str, range: &
 mod remote_protocol_tests {
     use super::*;
     use native_contract::Host;
+
+    #[tokio::test]
+    async fn remote_connection_reports_the_websocket_listener_setting() {
+        let mut collection: CodexLocalAccessCollection = serde_json::from_value(json!({
+            "enabled":true,"port":0,"apiKey":"fixture-key","accountIds":[],"createdAt":42,"updatedAt":42,
+            "apiKeys":[{"id":"remote","label":"Remote","key":"fixture-key"}]
+        })).unwrap();
+        for enabled in [false, true] {
+            collection.responses_websockets_enabled = enabled;
+            let host = NativeHostBridge::for_collection(collection.clone());
+            let caller = host.authorize_management("fixture-key").await.unwrap();
+            let connection = native_remote_connection(&host, &caller).await.unwrap();
+            assert_eq!(connection["capabilities"]["websockets"], enabled);
+        }
+    }
 
     #[tokio::test]
     async fn remote_instance_forwards_only_public_key_views_with_the_upstream_key() {

@@ -270,7 +270,7 @@ async fn prepare_excluding_inner(
             "The continuation belongs to a different account; reconnect with full input",
         ));
     }
-    let request = RouteRequest {
+    let mut request = RouteRequest {
         model,
         session_id: context.session_id.clone(),
         thread_id: context.thread_id.clone(),
@@ -290,7 +290,18 @@ async fn prepare_excluding_inner(
         capability_fallback_from,
         auxiliary: websocket.then(|| "responses.websocket".to_owned()),
     };
-    let selected = match route(state, caller, request.clone()).await {
+    let allow_local_reselect = !compact
+        && preferred.is_none()
+        && request.preferred_account_id.is_none()
+        && request.target_account_id.is_none()
+        && request.capability_fallback_from.is_none()
+        && local_quota_replay_is_portable(incoming, &body);
+    let selected = if rebuild_plan.is_some() && request.preferred_account_id.is_some() {
+        super::execution::within(state, state.host.route_for_rebuild(caller, request.clone())).await
+    } else {
+        route_skipping_local_quota(state, caller, &mut request, allow_local_reselect).await
+    };
+    let selected = match selected {
         Ok(selected) => selected,
         Err(error)
             if matches!(
@@ -301,6 +312,42 @@ async fn prepare_excluding_inner(
         {
             let mut excluded = request.excluded_account_ids.clone();
             excluded.push(request.preferred_account_id.clone().unwrap());
+            return prepare_rebuilt(
+                state,
+                caller,
+                incoming,
+                &body,
+                rebuild_plan.unwrap(),
+                excluded,
+                request.capability_fallback_from.clone(),
+                websocket,
+            )
+            .await;
+        }
+        Err(error)
+            if error.code == "quota_reserved"
+                && error.upstream_not_sent
+                && error.local_rejected_account_id.is_some()
+                && rebuild_plan.as_ref().is_some_and(|plan| {
+                    local_quota_references_are_clean(&plan.headers, &plan.body, true)
+                })
+                && !allow_local_reselect
+                && preferred.is_none()
+                && request.target_account_id.is_none()
+                && request.capability_fallback_from.is_none() =>
+        {
+            let mut excluded = request.excluded_account_ids.clone();
+            for account in [
+                request.preferred_account_id.as_ref(),
+                error.local_rejected_account_id.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if !excluded.contains(account) {
+                    excluded.push(account.clone());
+                }
+            }
             return prepare_rebuilt(
                 state,
                 caller,
@@ -741,6 +788,196 @@ async fn route(
     super::execution::route(state, caller, request).await
 }
 
+/// Exclude only a locally rejected, unsent candidate. Scope and authorization
+/// are re-evaluated by the host for every selection, and each identity is tried
+/// at most once within the same opening deadline.
+async fn route_skipping_local_quota(
+    state: &AppState,
+    caller: &Caller,
+    request: &mut RouteRequest,
+    allow_reselect: bool,
+) -> Result<Route, ServiceError> {
+    let mut first_local_error: Option<ServiceError> = None;
+    loop {
+        match route(state, caller, request.clone()).await {
+            Ok(selected) => return Ok(selected),
+            Err(error)
+                if allow_reselect && error.code == "quota_reserved" && error.upstream_not_sent =>
+            {
+                let Some(account_id) = error.local_rejected_account_id.as_ref() else {
+                    return Err(error);
+                };
+                if account_id.is_empty() || request.excluded_account_ids.contains(account_id) {
+                    return Err(first_local_error.unwrap_or(error));
+                }
+                request.excluded_account_ids.push(account_id.clone());
+                if first_local_error.is_none() {
+                    first_local_error = Some(error);
+                }
+            }
+            Err(error) if error.code == "no_available_account" => {
+                return Err(first_local_error.unwrap_or(error));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+/// Check only the inputs to a new local-quota fallback. A validated rebuild
+/// may preserve portable encrypted history, but no owner-scoped routing token.
+fn local_quota_references_are_clean(
+    headers: &HeaderMap,
+    body: &Value,
+    allow_portable_opaque: bool,
+) -> bool {
+    #[derive(Clone, Copy)]
+    enum Scope {
+        Body,
+        Input,
+        InputItem,
+        Tools,
+        Tool,
+        Other,
+    }
+
+    fn account_bound(value: &Value, allow_portable_opaque: bool, scope: Scope) -> bool {
+        match value {
+            Value::Object(fields) => {
+                if !allow_portable_opaque
+                    && super::agent_communication::encrypted_message(value).is_some()
+                {
+                    return true;
+                }
+                let kind = fields.get("type").and_then(Value::as_str);
+                let function_definition = matches!(scope, Scope::Tool)
+                    && fields.get("name").is_some_and(Value::is_string)
+                    && (matches!(kind, Some("function" | "custom"))
+                        || (kind.is_none()
+                            && (fields.contains_key("parameters")
+                                || fields.contains_key("input_schema"))));
+                fields.iter().any(|(key, value)| {
+                    // These fields describe future arguments in a tool
+                    // definition. Continue scanning actual call arguments.
+                    if function_definition
+                        && matches!(key.as_str(), "parameters" | "input_schema" | "schema")
+                    {
+                        return false;
+                    }
+                    let child_scope = match scope {
+                        Scope::Body if key == "tools" => Scope::Tools,
+                        Scope::Body if key == "input" => Scope::Input,
+                        Scope::InputItem
+                            if key == "tools"
+                                && matches!(
+                                    kind,
+                                    Some("additional_tools" | "tool_search_output")
+                                ) =>
+                        {
+                            Scope::Tools
+                        }
+                        Scope::Tool if key == "tools" && kind == Some("namespace") => Scope::Tools,
+                        Scope::Tool if key == "function" && kind == Some("function") => Scope::Tool,
+                        _ => Scope::Other,
+                    };
+                    ((!value.is_null())
+                        && (key.eq_ignore_ascii_case("x-codex-turn-state")
+                            || key.eq_ignore_ascii_case("previous_response_id")
+                            || key.eq_ignore_ascii_case("parent_response_id")
+                            || key.eq_ignore_ascii_case("conversation_id")
+                            || (!allow_portable_opaque
+                                && (key == "encrypted_content"
+                                    || key == "signature"
+                                    || (key == "encrypted_function_args"
+                                        && value
+                                            .as_array()
+                                            .is_none_or(|items| !items.is_empty()))))))
+                        || account_bound(value, allow_portable_opaque, child_scope)
+                })
+            }
+            Value::Array(items) => {
+                let child_scope = match scope {
+                    Scope::Input => Scope::InputItem,
+                    Scope::Tools => Scope::Tool,
+                    _ => Scope::Other,
+                };
+                items
+                    .iter()
+                    .any(|item| account_bound(item, allow_portable_opaque, child_scope))
+            }
+            _ => false,
+        }
+    }
+    // Identity inspection accepts this JSON in either location. Looking only
+    // at the outer string would miss an upstream-owned routing token inside it.
+    fn metadata_is_safe(raw: &str, allow_portable_opaque: bool) -> bool {
+        serde_json::from_str::<Value>(raw)
+            .ok()
+            .is_some_and(|value| {
+                value.is_object() && !account_bound(&value, allow_portable_opaque, Scope::Other)
+            })
+    }
+    let header_metadata_portable = headers
+        .get_all("x-codex-turn-metadata")
+        .iter()
+        .all(|value| {
+            value
+                .to_str()
+                .ok()
+                .is_some_and(|raw| metadata_is_safe(raw, allow_portable_opaque))
+        });
+    let body_metadata_portable = body
+        .pointer("/client_metadata/x-codex-turn-metadata")
+        .is_none_or(|value| {
+            value
+                .as_str()
+                .is_some_and(|raw| metadata_is_safe(raw, allow_portable_opaque))
+        });
+    body.get("conversation").is_none_or(Value::is_null)
+        && body.get("conversation_id").is_none_or(Value::is_null)
+        && !headers.contains_key("x-codex-turn-state")
+        && !headers.contains_key("conversation_id")
+        && header_metadata_portable
+        && body_metadata_portable
+        && !account_bound(body, allow_portable_opaque, Scope::Body)
+}
+
+/// A local pre-dispatch rejection permits ordinary reselection only for input
+/// that carries no upstream-owned references. A validated rebuild plan is the
+/// separate path for continuations and encrypted history.
+pub(super) fn local_quota_replay_is_portable(headers: &HeaderMap, body: &Value) -> bool {
+    let portable_input = match body.get("input") {
+        Some(Value::String(_)) => true,
+        Some(Value::Array(items)) => {
+            // Incomplete tool calls may depend on prior upstream state even
+            // when they carry no explicit opaque reference.
+            super::identity::rebuild::replay_items(items)
+                && super::identity::rebuild::paired_tools(items)
+        }
+        _ => false,
+    };
+    portable_input
+        && super::identity::rebuild::replay_tools(body.get("tools"))
+        && local_quota_references_are_clean(headers, body, false)
+}
+
+/// Match the branch `retry_other_account_inner` will actually execute. A
+/// rebuild plan is not used for raw Chat or dedicated Images requests.
+pub(super) fn local_quota_prepared_replay_is_safe(prepared: &Prepared) -> bool {
+    if prepared.request.capability_fallback_from.is_some() {
+        return false;
+    }
+    if let Some(plan) = prepared
+        .rebuild_plan
+        .as_ref()
+        .filter(|_| prepared.raw_chat.is_none() && prepared.image_route_request.is_none())
+    {
+        return prepared.route.wire_api == super::contract::WireApi::Responses
+            && local_quota_references_are_clean(&plan.headers, &plan.body, true);
+    }
+    prepared.request.preferred_account_id.is_none()
+        && local_quota_replay_is_portable(&prepared.source_headers, &prepared.source_body)
+}
+
 async fn prepare_rebuilt(
     state: &AppState,
     caller: &Caller,
@@ -766,7 +1003,7 @@ async fn prepare_rebuilt(
     })
     .await?;
     context.start_rebuild_generation(&plan);
-    let request = RouteRequest {
+    let mut request = RouteRequest {
         model: plan.body["model"].as_str().unwrap_or_default().to_owned(),
         session_id: context.session_id.clone(),
         thread_id: context.thread_id.clone(),
@@ -783,7 +1020,10 @@ async fn prepare_rebuilt(
         capability_fallback_from,
         auxiliary: websocket.then(|| "responses.websocket".to_owned()),
     };
-    let selected = route(state, caller, request.clone()).await?;
+    let allow_local_reselect = request.target_account_id.is_none()
+        && request.capability_fallback_from.is_none()
+        && local_quota_references_are_clean(&plan.headers, &plan.body, true);
+    let selected = route_skipping_local_quota(state, caller, &mut request, allow_local_reselect).await?;
     if selected.wire_api != super::contract::WireApi::Responses {
         return Err(ServiceError::new(
             503,
@@ -1159,6 +1399,21 @@ pub(super) async fn retry_other_account(
         .await
 }
 
+/// The local quota gate has not sent a request. Keep the current opening budget
+/// rather than granting a new attempt budget to each locally rejected account.
+pub(super) async fn retry_local_quota_account(
+    state: &AppState,
+    prepared: &mut Prepared,
+) -> Result<(), ServiceError> {
+    let execution = prepared.execution.clone();
+    execution
+        .run(super::execution::prepare(
+            state,
+            retry_other_account_inner(state, prepared),
+        ))
+        .await
+}
+
 async fn retry_other_account_inner(
     state: &AppState,
     prepared: &mut Prepared,
@@ -1253,12 +1508,13 @@ async fn retry_other_account_inner(
 pub(super) async fn retry_cooldown_round(
     state: &AppState,
     prepared: &mut Prepared,
+    excluded: Vec<String>,
 ) -> Result<(), ServiceError> {
     let execution = prepared.execution.clone();
     execution
         .run(super::execution::prepare(
             state,
-            retry_cooldown_round_inner(state, prepared),
+            retry_cooldown_round_inner(state, prepared, excluded),
         ))
         .await
 }
@@ -1266,6 +1522,7 @@ pub(super) async fn retry_cooldown_round(
 async fn retry_cooldown_round_inner(
     state: &AppState,
     prepared: &mut Prepared,
+    excluded: Vec<String>,
 ) -> Result<(), ServiceError> {
     if prepared.request.capability_fallback_from.is_some() {
         return Err(ServiceError::new(
@@ -1283,7 +1540,7 @@ async fn retry_cooldown_round_inner(
             &prepared.source_headers,
             &prepared.source_body,
             prepared.rebuild_plan.clone().unwrap(),
-            Vec::new(),
+            excluded,
             prepared.request.capability_fallback_from.clone(),
             prepared.request.auxiliary.as_deref() == Some("responses.websocket"),
         )
@@ -1292,7 +1549,7 @@ async fn retry_cooldown_round_inner(
     }
     prepared.route.permit = None;
     let mut next = if let Some(mut image_request) = prepared.image_route_request.clone() {
-        image_request.excluded_account_ids.clear();
+        image_request.excluded_account_ids = excluded;
         image_request.preferred_account_id = pinned.clone();
         let selected = super::execution::within(
             state,
@@ -1324,7 +1581,7 @@ async fn retry_cooldown_round_inner(
             &prepared.source_headers,
             prepared.source_body.clone(),
             pinned.as_deref(),
-            Vec::new(),
+            excluded,
             prepared.request.capability_fallback_from.clone(),
             prepared.compact,
             prepared.request.auxiliary.as_deref() == Some("responses.websocket"),

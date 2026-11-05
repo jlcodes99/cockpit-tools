@@ -1,5 +1,5 @@
-//! Ordinary proxy command adapters for desktop-only API identities.
-//! API accounts remain excluded from upstream account proxy eligibility.
+//! Proxy command adapters for API identities with a separate binding store.
+//! API-key accounts share the entry with API requests; the service card is desktop-only.
 use super::{codex_client_proxy as desktop, codex_proxy_runtime as runtime};
 use crate::models::codex::CodexAccount;
 
@@ -76,7 +76,9 @@ pub async fn status(raw: &str, measure: bool) -> Result<runtime::RuntimeStatus, 
     } else {
         runtime::status(&id).await?
     };
-    Ok(desktop_status(status, desktop::route_target(&id).is_some()))
+    let desktop_only = desktop::route_target(&id)
+        .is_some_and(super::codex_instance::is_api_service_bind_account_id);
+    Ok(desktop_status(status, desktop_only))
 }
 
 pub async fn save(

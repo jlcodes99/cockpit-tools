@@ -99,6 +99,15 @@ fn with_request_log_sql_budget<T>(
     budget: Duration,
     operation: impl FnOnce() -> Result<T, String>,
 ) -> Result<T, String> {
+    with_request_log_sql_budget_status(conn, budget, &AtomicBool::new(false), operation)
+}
+
+fn with_request_log_sql_budget_status<T>(
+    conn: &Connection,
+    budget: Duration,
+    expired: &AtomicBool,
+    operation: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
     struct Completion(Option<std::sync::mpsc::Sender<()>>);
     impl Drop for Completion {
         fn drop(&mut self) {
@@ -117,6 +126,7 @@ fn with_request_log_sql_budget<T>(
                     completion.recv_timeout(budget),
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout)
                 ) {
+                    expired.store(true, Ordering::Relaxed);
                     // SQLite ignores interrupts between statements. Keep the
                     // deadline armed until the physical operation has stopped.
                     loop {

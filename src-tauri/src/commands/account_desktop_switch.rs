@@ -1,38 +1,28 @@
-// Desktop account switches from UI, auto-switch and WebSocket share this transaction.
-// Reject overlapping switches rather than queueing stale account selections.
-static DESKTOP_SWITCH_GATE: std::sync::LazyLock<std::sync::Arc<tokio::sync::Semaphore>> =
-    std::sync::LazyLock::new(|| std::sync::Arc::new(tokio::sync::Semaphore::new(1)));
-
-fn try_begin_desktop_switch(
-    gate: &std::sync::Arc<tokio::sync::Semaphore>,
-) -> Result<tokio::sync::OwnedSemaphorePermit, String> {
-    gate.clone()
-        .try_acquire_owned()
-        .map_err(|_| "ANTIGRAVITY_SWITCH_BUSY".to_string())
-}
-
 /// Only commit Tools' account identity after the real client credential is written.
 /// A launch failure is separate: the credential switch has already succeeded.
-fn complete_desktop_switch(
+fn complete_desktop_switch<T>(
     inject: impl FnOnce() -> Result<(), String>,
-    commit: impl FnOnce() -> Result<(), String>,
+    commit: impl FnOnce() -> Result<T, String>,
     launch_on_switch: bool,
     launch: impl FnOnce() -> Result<(), String>,
-) -> Result<Option<String>, String> {
+) -> Result<(T, Option<String>), String> {
     inject()?;
-    commit().map_err(|error| format!("ANTIGRAVITY_SWITCH_STATE_SAVE_FAILED: {error}"))?;
-    Ok(if launch_on_switch {
+    let committed =
+        commit().map_err(|error| format!("ANTIGRAVITY_SWITCH_STATE_SAVE_FAILED: {error}"))?;
+    let launch_error = if launch_on_switch {
         launch().err()
     } else {
         None
-    })
+    };
+    Ok((committed, launch_error))
 }
 
 pub(crate) async fn switch_account_desktop(
     account_id: String,
     launch_on_switch: bool,
 ) -> Result<models::Account, String> {
-    let permit = try_begin_desktop_switch(&DESKTOP_SWITCH_GATE)?;
+    let permit =
+        modules::account::try_begin_antigravity_switch(&modules::account::ANTIGRAVITY_SWITCH_GATE)?;
     modules::logger::log_info(&format!(
         "[Antigravity] 开始桌面切号: account_id={}, launch={}",
         account_id, launch_on_switch
@@ -48,17 +38,21 @@ pub(crate) async fn switch_account_desktop(
     // occupy a Tokio runtime thread. The blocking worker owns the single-flight
     // permit, so dropping a caller cannot start a competing credential write.
     let (account, launch_error, _permit) = tokio::task::spawn_blocking(move || {
+        let auth_mode = resolve_antigravity_desktop_auth_mode()?;
+        if auth_mode == AntigravityDesktopAuthMode::SystemCredential {
+            let (account, launch_error) = modules::antigravity_shared_switch::switch(
+                &account,
+                modules::antigravity_shared_switch::SwitchTarget::Desktop,
+                launch_on_switch,
+                crate::commands::system::antigravity_ide_uses_shared_credentials(),
+            )?;
+            return Ok::<_, String>((account, launch_error, permit));
+        }
         if launch_on_switch {
             modules::process::ensure_antigravity_legacy_launch_path_configured()?;
         }
-        let auth_mode = resolve_antigravity_desktop_auth_mode()?;
-        let mut account = account;
-        account.update_last_used();
-        let launch_error = complete_desktop_switch(
+        let (account, launch_error) = complete_desktop_switch(
             || {
-                // Persist prepared account data before changing the real credential.
-                // The current-account pointer and default binding are committed later.
-                modules::save_account(&account)?;
                 if launch_on_switch {
                     let default_dir = legacy_antigravity_user_data_dir()?
                         .to_string_lossy()
@@ -70,21 +64,11 @@ pub(crate) async fn switch_account_desktop(
                     )?;
                     let _ = modules::antigravity_legacy_instance::update_default_pid(None);
                 }
-                match auth_mode {
-                    AntigravityDesktopAuthMode::SystemCredential => {
-                        modules::logger::log_info("[Antigravity] 使用系统凭据认证模式写入账号");
-                        modules::antigravity_credential::write_antigravity_system_credential(
-                            &account,
-                        )
-                    }
-                    AntigravityDesktopAuthMode::LegacyStateDb => {
-                        modules::logger::log_info("[Antigravity] 使用旧版 SQLite 认证模式写入账号");
-                        let db_path = legacy_antigravity_state_db_path()?;
-                        modules::db::inject_account_token_to_path(&db_path, &account).map(|_| ())
-                    }
-                }
+                let db_path = legacy_antigravity_state_db_path()?;
+                modules::db::inject_account_token_to_path(&db_path, &account).map(|_| ())
             },
             || {
+                let switched_account = modules::account::commit_switched_account(&account.id)?;
                 if let Err(error) = modules::antigravity_legacy_instance::update_default_settings(
                     Some(Some(account.id.clone())),
                     None,
@@ -95,7 +79,7 @@ pub(crate) async fn switch_account_desktop(
                         "更新 Antigravity 默认实例绑定账号失败: {error}"
                     ));
                 }
-                modules::set_current_account_id(&account.id)
+                Ok(switched_account)
             },
             launch_on_switch,
             || {

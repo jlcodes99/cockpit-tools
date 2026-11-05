@@ -48,6 +48,18 @@ pub(super) fn validate_configuration_updates(body: &Value) -> Result<(), Service
     Ok(())
 }
 
+pub(super) fn latest_configuration_effort(body: &Value) -> Option<&str> {
+    body.get("input")?.as_array()?.iter().rev().find_map(|item| {
+        if item["type"] != "configuration_update" {
+            return None;
+        }
+        item.pointer("/reasoning/effort")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|effort| !effort.is_empty())
+    })
+}
+
 /// SIWC currently rejects configuration_update input items. Collapse their
 /// last usable effort into the request-level setting, accepting prompt-cache
 /// prefix changes. An already resolved explicit model suffix takes precedence.
@@ -60,22 +72,10 @@ pub(super) fn collapse_configuration_updates(
     let Some(input) = body.get("input").and_then(Value::as_array) else {
         return Ok(());
     };
-    let mut has_update = false;
-    let mut effort = None;
-    for item in input {
-        if item["type"] == "configuration_update" {
-            has_update = true;
-            if let Some(value) = item["reasoning"]["effort"].as_str() {
-                let value = value.trim();
-                if !value.is_empty() {
-                    effort = Some(value.to_ascii_lowercase());
-                }
-            }
-        }
-    }
-    if !has_update {
+    if !input.iter().any(|item| item["type"] == "configuration_update") {
         return Ok(());
     }
+    let effort = latest_configuration_effort(body).map(str::to_ascii_lowercase);
     if !keep_top_level_effort
         && effort.is_some()
         && body

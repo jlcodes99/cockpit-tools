@@ -1775,6 +1775,7 @@ pub async fn codex_query_model_provider_usage(
     base_url: String,
     api_key: String,
     integration_type: Option<String>,
+    usage_api_key: Option<String>,
 ) -> Result<CodexModelProviderUsageSummary, String> {
     let key = api_key.trim();
     if key.is_empty() {
@@ -1786,7 +1787,8 @@ pub async fn codex_query_model_provider_usage(
         .map_err(|e| format!("CREATE_HTTP_CLIENT_FAILED: {}", e))?;
 
     if openai_usage::is_official_base_url(&base_url) {
-        return openai_usage::query(&client, key).await;
+        let usage_key = openai_usage::require_usage_key(usage_api_key.as_deref())?;
+        return openai_usage::query(&client, usage_key).await;
     }
 
     if let Some(connection) = crate::modules::codex_remote_service::discover(&base_url, key, true).await? {

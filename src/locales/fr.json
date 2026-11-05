@@ -2453,6 +2453,22 @@
     "other_group": "Autres modèles"
   },
   "codex": {
+    "overload": {
+      "setting": "Réessayer en cas de saturation",
+      "settingHint": "Pour les nouvelles requêtes du service API Codex local. Les requêtes qui peuvent être relancées attendent le retour du modèle.",
+      "retrying": "Modèle saturé, nouvel essai ({{count}})",
+      "count": "Saturations : {{count}}",
+      "countHint": "Compte les tentatives auprès du fournisseur, y compris les relances automatiques. Historique de 7 jours maximum.",
+      "history": "Historique de saturation",
+      "empty": "Aucune erreur de saturation sur cette période.",
+      "attempt": "Tentative {{number}}",
+      "sameAccount": "Reprise sur le même compte",
+      "otherAccount": "Reprise après changement",
+      "pending": "Résultat en attente",
+      "cancelled": "Annulé",
+      "failed": "Échec de la requête",
+      "countUnavailable": "Statistiques de saturation indisponibles"
+    },
     "instance": {
       "errors": {
         "threadSyncWorkerFailed": "Échec de la tâche de synchronisation des sessions : {{error}}",
@@ -3273,7 +3289,7 @@
       "resetCreditDialogDesc": "Réinitialisez la limite de débit pour continuer à travailler sans interruption. Réinitialisations disponibles : {{count}}.",
       "resetCreditDialogAction": "Réinitialiser l’utilisation",
       "resetCreditNoCredits": "Aucune réinitialisation disponible",
-      "resetCreditConsumed": "Quota de 5 heures réinitialisé",
+      "resetCreditConsumed": "Quota réinitialisé",
       "resetCreditFailed": "Échec de la réinitialisation : {{error}}",
       "resetCreditRefreshAfterConsumeFailed": "Réinitialisation envoyée, mais actualisation du quota échouée : {{error}}",
       "resetCreditsTitleWithExpiry": "Réinitialisations restantes pour la fenêtre de 5 h : {{count}}. Prochaine expiration : {{time}}",
@@ -4144,7 +4160,7 @@
         "apiKeyUrlInvalid": "Utilisez une URL de gestion HTTP(S) sans identifiants intégrés ; saisissez la clé API dans le champ de clé."
       },
       "saveSuccess": "Fournisseur de modèles enregistré.",
-      "deleteBlocked": "Ce fournisseur est lié à {{count}} compte(s) et ne peut pas être supprimé.",
+      "confirmDeleteWithAccounts": "Supprimer le fournisseur « {{name}} » et ses {{count}} comptes liés ?",
       "confirmDelete": "Supprimer le fournisseur « {{name}} » ?",
       "deleteFailed": "Échec de la suppression du fournisseur : {{error}}",
       "deleteApiKeyFailed": "Échec de la suppression de la clé API : {{error}}",
@@ -4274,7 +4290,7 @@
         "selectVisible": "Sélectionner visibles",
         "resultSelectedCount": "{{count}} sélectionné(s)",
         "selectFailed": "Sélectionner échecs",
-        "deleteConfirm": "Supprimer {{providerCount}} fournisseur(s) sélectionné(s) ? Cela supprimera aussi {{accountCount}} compte(s) Codex API Key précisément liés.",
+        "deleteConfirm": "Supprimer {{providerCount}} fournisseurs sélectionnés et {{accountCount}} comptes liés ?",
         "deleteSuccess": "{{providerCount}} fournisseur(s) et {{accountCount}} compte(s) lié(s) supprimés.",
         "deleteFailed": "Échec de la suppression des éléments sélectionnés : {{error}}",
         "protocolSummary": "{{protocol}} · {{mode}} · {{model}}",
@@ -5141,7 +5157,7 @@
       "boundProxyUnavailable": "Le compte lié ne dispose d’aucun proxy disponible. Choisissez-en un à nouveau.",
       "sourceUnavailable": "La source du proxy ou le nœud est indisponible. Sélectionnez-le à nouveau.",
       "operationTimeout": "L’opération du proxy a expiré. Réessayez.",
-      "cardScopeHint": "Le client de bureau Codex lancé utilise le proxy de cette carte. Les connexions des passerelles de modèles à leurs fournisseurs conservent leurs propres routes.",
+      "cardScopeHint": "Les proxies des comptes à clé API s’appliquent aux clients de bureau et aux requêtes sortantes du service API. Le proxy de la carte du service API s’applique uniquement aux clients de bureau. Le proxy système reste inchangé.",
       "display": {
         "title": "Affichage du proxy",
         "compact": "Condensé",
@@ -5442,7 +5458,7 @@
       "modeDefaultHint": "Ce compte n'utilise pas de proxy et conserve sa sortie par défaut.",
       "modeStaleHint": "La source ou le nœud lié n'est plus disponible. Choisissez-le à nouveau.",
       "management": "Gestion des proxys",
-      "managementHint": "Définissez des proxies pour les cartes de comptes OAuth, API et du service API sans modifier le proxy système. Sur les cartes API, le proxy s’applique au client de bureau lancé ; les passerelles de modèles conservent leurs propres routes.",
+      "managementHint": "Les proxies des comptes à clé API s’appliquent aux clients de bureau et aux requêtes sortantes du service API. Le proxy de la carte du service API s’applique uniquement aux clients de bureau. Le proxy système reste inchangé.",
       "emptyTitle": "Une connexion dédiée à votre compte",
       "emptyDescription": "Aucune carte de compte compatible. Ajoutez un compte OAuth ou API, ou activez la carte du service API, puis choisissez un proxy ici.",
       "search": "Rechercher un compte",
@@ -5750,7 +5766,7 @@
         "assign": "Attribuer un proxy",
         "specific": "Comptes choisis",
         "shared": "Proxy partagé",
-        "sharedHint": "Les cartes compatibles sans proxy individuel utilisent ce proxy, y compris les nouvelles. Les réglages individuels et Aucun proxy sont prioritaires. Les cartes API l’utilisent pour le client de bureau ; les passerelles de modèles conservent leurs propres routes.",
+        "sharedHint": "Les comptes sans proxy individuel héritent de ce proxy, y compris les nouveaux. Les proxies individuels et Aucun proxy sont prioritaires. Les comptes à clé API l’utilisent pour le bureau et les requêtes API ; la carte du service API, uniquement pour le bureau.",
         "apply": "Attribuer"
       },
       "managerResources": {
@@ -5877,7 +5893,7 @@
       "title": "Détails de requête",
       "totalLatency": "Durée totale",
       "firstResponse": "Première réponse",
-      "firstResponseHint": "Durée entre le début de la requête et le premier fragment reçu en amont, pas forcément le premier jeton généré.",
+      "firstResponseHint": "Pour les nouvelles requêtes Responses en flux, la mesure va de la fin du traitement du corps par la passerelle au premier événement de réponse du serveur en amont. Les signaux de maintien de la connexion et les avis de limite de débit sont ignorés.",
       "unavailable": "Aucun diagnostic pour le moment. Actualisez plus tard. Les anciennes requêtes ne sont pas complétées.",
       "attempts": "Essais",
       "noAttempts": "Aucun historique d’essais enregistré.",
@@ -6057,10 +6073,27 @@
       "pending": "Données OpenAI en attente",
       "permissionRequired": "Cette clé ne peut pas lire l’utilisation de l’organisation (api.usage.read).",
       "permissionGuide": "Utiliser une clé administrateur : Admin keys → Restricted → Usage API Scope → Read. Fournit les dépenses et l’utilisation, sans le solde restant.",
-      "openAdminKeys": "Droits de consultation",
-      "invalidKey": "La clé est invalide ou expirée. Vérifiez la clé API actuelle.",
+      "openAdminKeys": "Créer une clé admin",
+      "invalidKey": "La clé de suivi est invalide ou expirée. Vérifiez la clé API admin.",
       "networkFailed": "Connexion aux données OpenAI impossible. Actualisez ultérieurement.",
-      "queryFailed": "Échec de la consultation des données OpenAI. Réessayez ultérieurement."
+      "queryFailed": "Échec de la consultation des données OpenAI. Réessayez ultérieurement.",
+      "organization": "Usage de l’organisation",
+      "configure": "Configurer l’usage",
+      "settings": "Réglages d’usage",
+      "title": "Configurer le suivi d’usage",
+      "optional": "Suivi d’usage (facultatif)",
+      "queryKey": "Clé API admin",
+      "callKey": "Clé API du modèle",
+      "notConfigured": "Ajoutez une clé admin pour consulter les dépenses et l’usage de l’organisation.",
+      "purpose": "Utilisez une clé admin de la même organisation que la clé du modèle. Elle sert uniquement au suivi d’usage et ne remplace pas la clé du modèle.",
+      "saveVerify": "Enregistrer et vérifier",
+      "remove": "Retirer la config.",
+      "keyRequired": "Saisissez une clé API admin.",
+      "saveFailed": "Impossible d’enregistrer les réglages. Réessayez.",
+      "configChanged": "Le compte ou la clé de suivi a changé. Rouvrez les réglages.",
+      "openFailed": "Impossible d’ouvrir la page des clés. Réessayez.",
+      "costUnavailable": "Non reçu",
+      "costUnavailableHint": "L’API officielle des coûts n’a renvoyé aucun montant pour cette période. Les requêtes et les tokens proviennent d’une API d’usage distincte ; l’absence de coûts ne signifie pas une dépense nulle."
     },
     "officialApi": {
       "hint": "Compte avec clé API officielle OpenAI, identifié par son adresse de connexion réelle."
@@ -7137,6 +7170,35 @@
     "syncToWorkbuddy": "Synchroniser avec WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Crédits du forfait",
+      "planBonus": "Bonus du forfait",
+      "benefit": "Récompenses de la plateforme",
+      "addon": "Crédits achetés",
+      "total": "Total des crédits restants",
+      "details": "Détail des crédits",
+      "usedOf": "Utilisés {{used}}/{{total}}",
+      "remainingPercent": "{{percent}} % restants",
+      "nearestExpiry": "Expiration la plus proche {{time}}",
+      "nextRefresh": "Prochain renouvellement {{time}}",
+      "expiring": "Des crédits expirent bientôt",
+      "valid": "Valides",
+      "expired": "Expirés",
+      "expiresAt": "Expire {{time}}",
+      "expiryHours": "Expire dans les 24 heures",
+      "expiryDays": "Expire dans les 3 jours",
+      "empty": "Pas encore d'information",
+      "loadFailed": "Échec du chargement ({{error}})",
+      "overview": "Aperçu",
+      "remaining": "{{amount}} restants",
+      "loadMore": "Charger plus",
+      "usage": "Détail de consommation",
+      "requestAndTime": "Requête et heure",
+      "creditUsed": "Crédits utilisés",
+      "model": "Modèle",
+      "recentUsage": "5 derniers relevés",
+      "viewMore": "Voir plus"
+    },
     "title": "Gestion des comptes WorkBuddy",
     "noAccounts": "Aucun compte WorkBuddy",
     "addAccount": "Ajouter un compte WorkBuddy",
@@ -7144,7 +7206,7 @@
       "title": "Informations sur la gestion des comptes WorkBuddy (cliquer pour developper/reduire)",
       "desc": "Le changement de compte écrit le fichier de connexion local selon la structure la plus récente du client officiel WorkBuddy ; l'import local lit le même fichier. Les données sont traitées uniquement en local.",
       "permission": "Portée des autorisations : lire et écrire le fichier de connexion WorkBuddy (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) pour l'import local et le changement de compte ; l'ancien state.vscdb n'est plus lu ni modifié.",
-      "network": "Portée réseau : la connexion OAuth et l'actualisation du jeton nécessitent des requêtes vers WorkBuddy ; les requêtes de quota appellent les API de facturation. Les fichiers de connexion locaux et les identifiants bruts ne sont pas téléversés."
+      "network": "La connexion OAuth et le renouvellement du jeton passent par WorkBuddy. Le solde et le détail des crédits sont consultés auprès du service de facturation avec le jeton du compte. Les fichiers de connexion et les clés système restent sur l’appareil."
     },
     "nickname": "Surnom",
     "enterprise": "Entreprise",
@@ -7161,8 +7223,8 @@
       "oauth": {
         "title": "Connexion IDE uniquement",
         "item1": "Ajoutez le compte apres avoir termine OAuth dans votre navigateur, puis utilisez-le pour le changement dans l'IDE.",
-        "item2": "Les parametres de requete de quota ne sont pas associes automatiquement.",
-        "item3": "Si vous avez besoin du quota, lancez manuellement « Interroger le quota » sur la carte du compte."
+        "item2": "Le solde est consulté automatiquement après autorisation.",
+        "item3": "La carte affiche un aperçu des crédits. Le détail présente les attributions et leurs dates d’expiration."
       }
     },
     "oauthWebviewTab": "OAuth en WebView",

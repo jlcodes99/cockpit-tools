@@ -1,5 +1,5 @@
 import { resolveCodexProviderCapabilityProfile } from "../utils/codexProviderGateway";
-import { isOpenAIOfficialUsageUrl, OPENAI_OFFICIAL_USAGE_BASE_URL, resolveAccountUsageBaseUrl } from '../utils/openaiOfficialUsage';
+import { openAIUsageBinding, isOpenAIOfficialUsageUrl, OPENAI_OFFICIAL_USAGE_BASE_URL, resolveAccountUsageBaseUrl } from '../utils/openaiOfficialUsage';
 import { invoke } from '@tauri-apps/api/core';
 import type { CodexAccount } from '../types/codex';
 import type {
@@ -27,11 +27,15 @@ import {
 import { moveCodexProviderApiKey } from '../utils/codexModelProviderApiKeyMove';
 import { migrateCodexModelProviderVisionCapabilities } from '../utils/codexModelProviderVisionMigration';
 import { cloneCodexProviderModelConfig, type CodexProviderModelConfig } from '../utils/codexModelProviderKeyConfig';
+import { findCodexAccountsForModelProviderDeletion } from '../utils/codexModelProviderAccountSync';
 
 export interface CodexModelProviderApiKey extends CodexProviderModelConfig {
   id: string;
   name: string;
   apiKey: string;
+  /** OpenAI organization usage only; excluded from client/account credential snapshots. */
+  usageApiKey?: string;
+  usageKeyVersion?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -72,6 +76,7 @@ interface UpsertFromCredentialInput {
   providerName?: string | null;
   apiBaseUrl: string;
   apiKey: string;
+  usageApiKey?: string;
   apiKeyName?: string | null;
   sourceTag?: string | null;
   modelCatalog?: string[];
@@ -415,6 +420,8 @@ function toValidApiKeys(value: unknown, now: number): CodexModelProviderApiKey[]
       id: String((item as { id?: unknown }).id ?? createApiKeyId()),
       name: sanitizeName(String((item as { name?: unknown }).name ?? '')),
       apiKey: rawKey,
+      usageApiKey: typeof (item as CodexModelProviderApiKey).usageApiKey === 'string' ? sanitizeApiKey((item as CodexModelProviderApiKey).usageApiKey!) || undefined : undefined,
+      usageKeyVersion: typeof (item as CodexModelProviderApiKey).usageKeyVersion === 'number' ? (item as CodexModelProviderApiKey).usageKeyVersion : undefined,
       ...normalizeApiKeyModelConfig(item as CodexProviderModelConfig),
       createdAt: Number((item as { createdAt?: unknown }).createdAt ?? now),
       updatedAt: Number((item as { updatedAt?: unknown }).updatedAt ?? now),
@@ -716,6 +723,7 @@ export const createCodexModelProvider = serializedProviderMutation(async functio
   boundOauthAccountId?: string | null;
   initialApiKey?: string;
   initialApiKeyName?: string;
+  initialUsageApiKey?: string;
 }): Promise<CodexModelProvider> {
   const name = sanitizeName(input.name);
   const baseUrl = normalizeBaseUrlForStore(input.baseUrl);
@@ -761,6 +769,10 @@ export const createCodexModelProvider = serializedProviderMutation(async functio
   enforceDeepSeekProvider(provider);
   if (input.initialApiKey) {
     ensureApiKeyOnProvider(provider, input.initialApiKey, input.initialApiKeyName);
+    if (input.initialUsageApiKey?.trim() && isOpenAIOfficialUsageUrl(baseUrl)) {
+      provider.apiKeys[0].usageApiKey = input.initialUsageApiKey.trim();
+      provider.apiKeys[0].usageKeyVersion = 1;
+    }
   }
   providers.push(provider);
   await writeProviders(providers);
@@ -907,11 +919,17 @@ export const addApiKeyToCodexModelProvider = serializedProviderMutation(async fu
   providerId: string,
   apiKey: string,
   apiKeyName?: string,
+  usageApiKey?: string,
 ): Promise<CodexModelProvider> {
   const providers = await ensureProvidersLoaded();
   const provider = providers.find((item) => item.id === providerId);
   if (!provider || provider.deletedAt) throw new Error('PROVIDER_NOT_FOUND');
   ensureApiKeyOnProvider(provider, apiKey, apiKeyName);
+  if (usageApiKey?.trim() && isOpenAIOfficialUsageUrl(provider.baseUrl)) {
+    const key = provider.apiKeys.find(item => item.apiKey.trim() === apiKey.trim())!;
+    key.usageApiKey = usageApiKey.trim();
+    key.usageKeyVersion = (key.usageKeyVersion ?? 0) + 1;
+  }
   await allowExplicitApiKey(provider, apiKey);
   provider.updatedAt = Date.now();
   await writeProviders(providers);
@@ -1078,13 +1096,46 @@ export async function cancelCodexModelProviderChatTest(runId: string): Promise<b
   return await invoke('codex_cancel_model_provider_chat_test', { runId });
 }
 
+const officialUsageQueries = new Map<string, Promise<CodexModelProviderUsageSummary>>();
+
 export async function queryCodexModelProviderUsage(input: {
   baseUrl: string;
   apiKey: string;
+  usageApiKey?: string;
   integrationType?: 'sub2api' | 'new_api' | null;
 }): Promise<CodexModelProviderUsageSummary> {
-  return await queryModelProviderUsage(input);
+  if (!isOpenAIOfficialUsageUrl(input.baseUrl)) return await queryModelProviderUsage(input);
+  if (!input.usageApiKey?.trim()) throw new Error('OPENAI_USAGE_NOT_CONFIGURED');
+  const id = input.usageApiKey.trim();
+  const existing = officialUsageQueries.get(id);
+  if (existing) return await existing;
+  const pending = queryModelProviderUsage(input);
+  officialUsageQueries.set(id, pending);
+  try { return await pending; }
+  finally { if (officialUsageQueries.get(id) === pending) officialUsageQueries.delete(id); }
 }
+
+export const OPENAI_USAGE_CONFIG_CHANGED_EVENT = 'codex-openai-usage-config-changed';
+
+/** Query settings are account-specific; ordinary model edits never overwrite them. */
+export const updateCodexOpenAIUsageKey = serializedProviderMutation(async function (
+  providerId: string, apiKeyId: string, usageApiKey: string,
+  expected: { apiKey: string; usageApiKey?: string },
+): Promise<CodexModelProvider> {
+  const providers = await ensureProvidersLoaded();
+  const provider = providers.find(item => item.id === providerId && !item.deletedAt);
+  const key = provider?.apiKeys.find(item => item.id === apiKeyId);
+  if (!provider || !key || !isOpenAIOfficialUsageUrl(provider.baseUrl) ||
+      key.apiKey !== expected.apiKey || (key.usageApiKey ?? '') !== (expected.usageApiKey ?? '')) {
+    throw new Error('OPENAI_USAGE_CONFIG_CHANGED');
+  }
+  key.usageApiKey = sanitizeApiKey(usageApiKey) || undefined;
+  key.usageKeyVersion = (key.usageKeyVersion ?? 0) + 1;
+  key.updatedAt = provider.updatedAt = Date.now();
+  await writeProviders(providers);
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(OPENAI_USAGE_CONFIG_CHANGED_EVENT, { detail: { providerId, apiKeyId, binding: openAIUsageBinding(providerId, apiKeyId, key.usageKeyVersion) } }));
+  return cloneProviders([provider])[0];
+});
 
 export async function saveCodexModelProviderDetectedIntegrationType(
   providerId: string,
@@ -1169,6 +1220,10 @@ export const upsertCodexModelProviderFromCredential = serializedProviderMutation
   await allowExplicitApiKey(provider, apiKey);
   provider.baseUrl = apiBaseUrl;
   const key = provider.apiKeys.find((item) => sanitizeApiKey(item.apiKey) === apiKey)!;
+  if (input.usageApiKey !== undefined && isOpenAIOfficialUsageUrl(apiBaseUrl)) {
+    key.usageApiKey = sanitizeApiKey(input.usageApiKey) || undefined;
+    key.usageKeyVersion = (key.usageKeyVersion ?? 0) + 1;
+  }
   Object.assign(key, normalizeApiKeyModelConfig(input));
   key.updatedAt = Date.now();
   if (input.website !== undefined) {
@@ -1197,20 +1252,9 @@ export const upsertCodexModelProviderFromCredential = serializedProviderMutation
   return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
 });
 
-function normalizeOptionalForCompare(value?: string | null): string {
-  return value?.trim().toLowerCase() ?? '';
-}
-
 export function countCodexModelProviderReferences(
   provider: CodexModelProvider,
   accounts: CodexAccount[],
 ): number {
-  const normalizedBaseUrl = normalizeCodexModelProviderBaseUrl(provider.baseUrl);
-  if (!normalizedBaseUrl) return 0;
-  return accounts.filter((account) => {
-    if ((account.auth_mode ?? '').toLowerCase() !== 'apikey') return false;
-    const accountBaseUrl = normalizeCodexModelProviderBaseUrl(resolveAccountUsageBaseUrl(account));
-    if (!accountBaseUrl || accountBaseUrl !== normalizedBaseUrl) return false;
-    return normalizeOptionalForCompare(account.openai_api_key).length > 0;
-  }).length;
+  return findCodexAccountsForModelProviderDeletion([provider], accounts).length;
 }

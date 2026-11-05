@@ -146,10 +146,18 @@ async fn refresh_codex_api_key_usage_for_menu(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string);
+    let usage_api_key = provider.as_ref()
+        .and_then(|provider| provider.get("apiKeys"))
+        .and_then(Value::as_array)
+        .and_then(|keys| keys.iter().find(|key| key.get("apiKey").and_then(Value::as_str).map(str::trim) == Some(api_key)))
+        .and_then(|key| key.get("usageApiKey"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
     let summary = commands::codex::codex_query_model_provider_usage(
         base_url.clone(),
         api_key.to_string(),
         integration_type,
+        usage_api_key,
     )
     .await?;
     let summary_value = serde_json::to_value(&summary)

@@ -210,6 +210,7 @@ fn save_collection_to_path(
                             .map(str::to_owned),
                     )
                     .unwrap_or(None);
+                    next.continuous_overload_retry = current.get("continuousOverloadRetry").and_then(Value::as_bool).unwrap_or(false);
                     next.request_payload_logging = current
                         .get("requestPayloadLogging")
                         .and_then(Value::as_bool)
@@ -2079,6 +2080,7 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
                 responses_websockets_enabled: false,
                 max_retry_credentials: 0,
                 max_retry_interval_ms: DEFAULT_MAX_RETRY_INTERVAL_MS,
+                continuous_overload_retry: false,
                 timeouts: CodexLocalAccessTimeouts::default(),
                 active_timeout_preset_id: "long_wait".to_string(),
                 timeout_presets: Vec::new(),

@@ -1363,27 +1363,32 @@ pub async fn fetch_quota_for_token(
     token: &TokenData,
     email: &str,
     skip_cache: bool,
-) -> crate::error::AppResult<QuotaFetchResult> {
+) -> (
+    ProjectMetadataResult,
+    crate::error::AppResult<QuotaFetchResult>,
+) {
     let ctx = QuotaCloudCodeContext::from_token(token);
-    fetch_quota_with_context(&token.access_token, email, skip_cache, &ctx).await
+    let meta = fetch_project_metadata_with_context(&token.access_token, email, &ctx).await;
+    let quota =
+        fetch_quota_with_project_metadata(&token.access_token, email, skip_cache, &ctx, &meta)
+            .await;
+    (meta, quota)
 }
 
-pub async fn fetch_quota_with_context(
+async fn fetch_quota_with_project_metadata(
     access_token: &str,
     email: &str,
     skip_cache: bool,
     ctx: &QuotaCloudCodeContext,
+    meta: &ProjectMetadataResult,
 ) -> crate::error::AppResult<QuotaFetchResult> {
     use crate::error::AppError;
 
     let base_url = resolve_cloud_code_base_url(ctx);
-    let meta = fetch_project_metadata_with_context(access_token, email, ctx).await;
-    let resolved_project_id = meta
-        .project_id
-        .map(|id| id.trim().to_string())
-        .filter(|id| !id.is_empty() && id != "aicode-consumers");
-    let subscription_tier = meta.subscription_tier;
-    let credits = meta.credits;
+    let resolved_project_id =
+        valid_cloud_code_project_id(meta.project_id.as_deref()).map(ToOwned::to_owned);
+    let subscription_tier = meta.subscription_tier.clone();
+    let credits = meta.credits.clone();
     let is_gcp_tos = meta.is_gcp_tos;
     let effective_project_id = resolved_project_id
         .clone()

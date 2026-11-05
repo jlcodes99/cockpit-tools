@@ -10,6 +10,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **WorkBuddy credit details**: Open an account’s credit overview and browse valid and expired grants, including remaining credits and expiration times. The compact account summary highlights the balance. The dialog keeps loaded details visible while switching tabs or fetching more records, shows the five latest usage records, and links to the full history.
+
+- **Codex API capacity recovery**: Optionally keep retrying safely replayable requests while an upstream model is at capacity. Account statistics show capacity rejections per upstream attempt, including those recovered by retrying or switching accounts.
+
+- **Antigravity desktop switching**: Switching the desktop client with system credentials also updates an initialized native `agy` CLI session.
+
+### Changed
+
+- **Codex API account failover**: Confirmed quota exhaustion excludes the account even when cooldowns are disabled. Replay-safe requests can switch to an eligible backup beyond the retry-account limit, and session affinity keeps backup accounts available.
+
+- **OpenAI usage settings**: Configure an optional admin key separately from the model API key in accounts and model providers. Usage cards identify organization statistics, offer setup and retry actions, and no longer report missing permissions before a query key is configured. Query failures do not affect model access. Missing cost records are distinguished from reported zero charges, and fractional-cent charges remain visible.
+
+- **Model provider deletion**: Deleting Codex model providers also removes their linked API Key accounts, including accounts with invalid or missing credentials, across individual, batch and test-result deletion actions.
+- **Codex quota reset**: Shorten the success message to “Quota reset”, without specifying a quota window.
+
+- **API Key proxies**: API Service requests now use each API Key account's proxy settings, including independent proxies, inherited unified proxies and explicit direct connections. Desktop clients and API requests share the same account proxy entry.
+
+### Fixed
+
+- **Cockpit Gateway**: Shared API services report whether their WebSocket listener is enabled. HTTP/SSE and WebSocket Responses measure first response after the gateway processes the request body and skip keepalives and rate-limit notices.
+
+- **WorkBuddy credit refresh**: Restore credit queries and show the official plan base, plan bonus, platform reward and purchased credit categories. Refresh personal accounts imported with an empty enterprise ID and update display names from the matching profile.
+
+- **Antigravity IDE 2.6+ switching**: Switch the shared App, IDE and initialized `agy` sign-in. With launch enabled, restart the running peer client and refresh the verified macOS App Hub session.
+- **Antigravity IDE login**: Import the current login from macOS Keychain in shared mode and refresh stale account status when switching independent IDE profiles.
+- **Cursor X Subscription**: Display the official weekly allowance reset separately from the billing cycle.
+- **Claude Desktop on Windows**: Locate the Microsoft Store app’s active profile so account switching writes to the data it reads.
+- **Codex gateway compatibility**: Keep hosted tools on standard Responses requests and preserve namespaces on Lite. Record reasoning changes in request logs, reselect an eligible account before dispatch on local quota rejection, and keep serving through transient usage-log write interruptions. Show the local and LAN endpoints separately.
+
+- **Antigravity accounts**: Save the selected IDE account after writing client credentials. Keep detected Google Cloud project and terms-of-service metadata even when quota retrieval fails, and save a replacement refresh token when Google returns one.
+- **Codex API Service**: Accounts can join through the local gateway when their official ChatGPT authorization is no longer valid.
+- **Codex account switching**: Automatically stop lingering app-server processes after a normal shutdown times out, then continue switching and restarting without requiring a manual retry.
+- **Proxy status**: Once the engine is ready, subscription cards no longer show outdated missing-engine, version-mismatch or installation-busy warnings. Genuine connection, configuration and subscription errors remain visible.
+
 ## [1.3.78] - 2026-11-01
 
 ### Changed

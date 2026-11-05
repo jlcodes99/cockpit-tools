@@ -17,6 +17,7 @@ test('the existing add-account dialog no longer embeds official authorization', 
   window.addEventListener('chatgpt-plan-accounts-changed', () => changed++);
   const hook = loadHookModule(new URL('./CodexAddAccountDialog.tsx', import.meta.url), {
     'react-dom': { createPortal: (value: unknown) => value },
+    '../components/codex/OpenAIUsageSettingsDialog': { OpenAIUsageKeyField: 'UsageKeyField' },
     '../components/codex/ChatGptPlanDialog': { ChatGptPlanDialog: 'PlanDialog' },
     '../components/ModalErrorMessage': { ModalErrorMessage: 'ErrorMessage' },
     '../components/MfaQuickCodeSelect': { MfaQuickCodeSelect: 'MfaSelect' },
@@ -30,7 +31,7 @@ test('the existing add-account dialog no longer embeds official authorization', 
     '../utils/codexAccountProxy': { canUseCodexOAuthAccountProxy: () => false },
   }, { window, document: { body: {} }, Event });
   const tree = nodes(hook.render(() => hook.exports.CodexAddAccountDialog({
-    showAddModal: true, addTab: 'token', addStatus: 'idle', tokenInput: '',
+    showAddModal: true, addTab: 'token', addStatus: 'idle', tokenInput: '', apiBaseUrlInput: '',
     CODEX_TOKEN_BATCH_EXAMPLE: '', CODEX_TOKEN_SESSION_EXAMPLE: '', CODEX_TOKEN_SINGLE_EXAMPLE: '',
     codexAddTargetGroup: { name: 'Ordinary Codex group' },
     t: (key: string) => key,

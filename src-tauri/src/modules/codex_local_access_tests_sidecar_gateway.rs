@@ -1130,6 +1130,7 @@
             responses_websockets_enabled: false,
             max_retry_credentials: 0,
             max_retry_interval_ms: DEFAULT_MAX_RETRY_INTERVAL_MS,
+            continuous_overload_retry: false,
             timeouts: CodexLocalAccessTimeouts::default(),
             active_timeout_preset_id: "long_wait".to_string(),
             timeout_presets: Vec::new(),

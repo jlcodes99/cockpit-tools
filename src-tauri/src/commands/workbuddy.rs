@@ -26,6 +26,33 @@ pub fn list_workbuddy_accounts() -> Result<Vec<WorkbuddyAccount>, String> {
 }
 
 #[tauri::command]
+pub async fn get_workbuddy_credit_packages(
+    account_id: String,
+    package_codes: Vec<String>,
+    expired: bool,
+    page: u32,
+    locale: String,
+) -> Result<serde_json::Value, String> {
+    let account = load_billing_account(account_id).await?;
+    workbuddy_oauth::fetch_credit_packages(&account, &package_codes, expired, page, &locale).await
+}
+
+#[tauri::command]
+pub async fn get_workbuddy_recent_credit_usage(
+    account_id: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    let account = load_billing_account(account_id).await?;
+    workbuddy_oauth::fetch_recent_credit_usage(&account).await
+}
+
+async fn load_billing_account(account_id: String) -> Result<WorkbuddyAccount, String> {
+    tauri::async_runtime::spawn_blocking(move || workbuddy_account::load_account(&account_id))
+        .await
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "WORKBUDDY_ACCOUNT_NOT_FOUND".to_string())
+}
+
+#[tauri::command]
 pub fn delete_workbuddy_account(account_id: String) -> Result<(), String> {
     workbuddy_account::remove_account(&account_id)
 }
