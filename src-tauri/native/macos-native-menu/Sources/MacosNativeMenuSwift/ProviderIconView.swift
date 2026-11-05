@@ -61,6 +61,8 @@ enum ProviderIconRegistry {
             return ProviderIconResource(name: "trae-solo-cn", ext: "png", renderingMode: .original)
         case "workbuddy":
             return ProviderIconResource(name: "workbuddy", ext: "png", renderingMode: .original)
+        case "minimax_code":
+            return ProviderIconResource(name: "minimax-code", ext: "png", renderingMode: .original)
         default:
             return nil
         }

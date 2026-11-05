@@ -14,6 +14,7 @@ import { CodebuddyIcon } from '../components/icons/CodebuddyIcon';
 import { QoderIcon } from '../components/icons/QoderIcon';
 import { TraeCnIcon, TraeIcon, TraeSoloCnIcon, TraeSoloIcon } from '../components/icons/TraeIcon';
 import { WorkbuddyIcon } from '../components/icons/WorkbuddyIcon';
+import { MinimaxCodeIcon } from '../components/icons/MinimaxCodeIcon';
 import { ZedIcon } from '../components/icons/ZedIcon';
 import { ZcodeIcon } from '../components/icons/ZcodeIcon';
 export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string {
@@ -58,6 +59,8 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
       return _t('nav.traeSoloCn', 'TRAE SOLO CN');
     case 'workbuddy':
       return 'WorkBuddy';
+    case 'minimaxcode':
+      return 'MiniMax Code';
     default:
       return platformId;
   }
@@ -105,6 +108,8 @@ export function renderPlatformIcon(platformId: PlatformId, size = 20): ReactNode
       return <TraeSoloCnIcon style={{ width: size, height: size }} />;
     case 'workbuddy':
       return <WorkbuddyIcon style={{ width: size, height: size }} />;
+    case 'minimaxcode':
+      return <MinimaxCodeIcon style={{ width: size, height: size }} />;
     default:
       return null;
   }

@@ -64,6 +64,7 @@ import * as qoderService from './qoderService';
 import * as zcodeService from './zcodeService';
 import * as traeService from './traeService';
 import * as workbuddyService from './workbuddyService';
+import * as minimaxCodeService from './minimaxCodeService';
 import type { InstanceLaunchMode } from '../types/instance';
 import type { ClaudeAccount } from '../types/claude';
 
@@ -86,6 +87,7 @@ const INSTANCE_PLATFORMS = [
   'zcode',
   'trae',
   'workbuddy',
+  'minimaxcode',
 ] as const;
 
 type InstancePlatform = (typeof INSTANCE_PLATFORMS)[number];
@@ -309,6 +311,8 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   trae_cn: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
   trae_solo_cn: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
   workbuddy: async () => (await workbuddyService.listWorkbuddyAccounts()) as unknown as TransferAccountRecord[],
+  minimaxcode: async () =>
+    (await minimaxCodeService.listMinimaxCodeAccounts()) as unknown as TransferAccountRecord[],
 };
 
 const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unknown[]>) | undefined> = {
@@ -332,6 +336,7 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   trae_cn: traeService.importTraeFromJson,
   trae_solo_cn: traeService.importTraeFromJson,
   workbuddy: workbuddyService.importWorkbuddyFromJson,
+  minimaxcode: minimaxCodeService.importMinimaxCodeFromJson,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -509,6 +514,7 @@ function buildAccountRef(platform: PlatformId, account: TransferAccountRecord): 
     case 'codebuddy':
     case 'codebuddy_cn':
     case 'workbuddy':
+    case 'minimaxcode':
       ref.email = normalizeString(account.email) ?? undefined;
       ref.uid = normalizeString(account.uid) ?? undefined;
       ref.domain = normalizeString(account.domain) ?? undefined;
@@ -593,6 +599,7 @@ function scoreAccountRef(ref: DataTransferAccountRef, account: TransferAccountRe
     case 'codebuddy':
     case 'codebuddy_cn':
     case 'workbuddy':
+    case 'minimaxcode':
       addStringScore(ref.uid, account.uid, 24);
       addStringScore(ref.email, account.email, 10);
       addStringScore(ref.domain, account.domain, 4);
@@ -1289,6 +1296,7 @@ function detectLegacyPlatform(value: unknown): PlatformId | null {
   const id = normalizeString(sample.id);
   if (id?.startsWith('codebuddy_cn_')) return 'codebuddy_cn';
   if (id?.startsWith('workbuddy_')) return 'workbuddy';
+  if (id?.startsWith('minimax_code_')) return 'minimaxcode';
   if (id?.startsWith('codebuddy_')) return 'codebuddy';
   if (
     id?.startsWith('zcode_') ||
@@ -1330,10 +1338,13 @@ function detectLegacyPlatform(value: unknown): PlatformId | null {
   }
   if ('uid' in sample || 'enterprise_id' in sample || 'dosage_notify_code' in sample) {
     if (stringContains(sample.domain, 'workbuddy')) return 'workbuddy';
+    if (stringContains(sample.domain, 'minimax')) return 'minimaxcode';
     if (stringContains(sample.domain, 'codebuddy.cn')) return 'codebuddy_cn';
     if (stringContains(sample.domain, 'codebuddy')) return 'codebuddy';
     return id?.startsWith('workbuddy_')
       ? 'workbuddy'
+      : id?.startsWith('minimax_code_')
+        ? 'minimaxcode'
       : id?.startsWith('codebuddy_cn_')
         ? 'codebuddy_cn'
         : 'codebuddy';

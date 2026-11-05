@@ -43,6 +43,7 @@ multer = "3"
 zstd = "0.13"
 chrono = "0.4"
 dirs = "5.0"
+iana-time-zone = "0.1"
 reqwest = { version = "0.12", features = ["json", "gzip", "brotli", "deflate", "zstd", "stream", "socks", "blocking", "multipart", "rustls-tls-native-roots"] }
 # Classify subscription TLS failures by type; macOS error Display may omit SSL/TLS.
 native-tls = "0.2"

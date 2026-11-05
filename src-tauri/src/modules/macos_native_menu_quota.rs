@@ -492,6 +492,7 @@
             | PlatformId::TraeCn
             | PlatformId::TraeSoloCn => "#4f46e5",
             PlatformId::Workbuddy => "#2fa36a",
+            PlatformId::MinimaxCode => "#3b82f6",
         }
     }
 

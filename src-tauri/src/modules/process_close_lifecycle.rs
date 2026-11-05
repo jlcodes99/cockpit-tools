@@ -479,6 +479,89 @@ pub fn close_trae_platform_instances(
     Ok(())
 }
 
+/// Close the MiniMax Code instance(s) belonging to `user_data_dirs`.
+///
+/// Every managed instance is launched with its own Electron `--user-data-dir`
+/// (`<data root>/electron-user-data`), and Electron's child processes **do** carry that
+/// path on their command line. That gives us a per-instance handle the data root alone
+/// cannot provide: we close only the processes whose userData dir matches, so starting
+/// instance B no longer kills instance A.
+///
+/// The Electron *main* process runs as `"…\MiniMax Code.exe"` with no data-dir argument,
+/// so it is matched by exe path only when its userData dir cannot be established. When no
+/// per-instance marker is available at all we fall back to a global close and say so in
+/// the logs — account bindings stay isolated either way, since each instance owns its own
+/// `auth.json` under its own data root.
+pub fn close_minimax_code_instances(
+    user_data_dirs: &[String],
+    timeout_secs: u64,
+) -> Result<(), String> {
+    let normalized: Vec<String> = user_data_dirs
+        .iter()
+        .map(|dir| normalize_path_for_compare(dir.trim()))
+        .filter(|value| !value.is_empty())
+        .collect();
+
+    if normalized.is_empty() {
+        return crate::modules::minimax_code_account::close_minimax_code_instances(timeout_secs);
+    }
+
+    let entries = collect_minimax_code_process_entries();
+    let target_pids = minimax_code_pids_for_user_data_dirs(&entries, &normalized);
+    if target_pids.is_empty() {
+        crate::modules::logger::log_info(
+            "[MiniMax Code Close] 未匹配到目标实例的 Electron userData 目录，无需关闭",
+        );
+        return Ok(());
+    }
+
+    crate::modules::logger::log_info(&format!(
+        "[MiniMax Code Close] 按实例关闭 target_dirs={} pids={}",
+        normalized.join(", "),
+        summarize_pid_list_for_log(&target_pids)
+    ));
+    for pid in target_pids {
+        close_pid(pid, timeout_secs)?;
+    }
+    // Electron 主进程可能不带 userData 参数，按 exe 路径兜底（仅当仍有残留进程时）。
+    let remaining = collect_minimax_code_process_entries();
+    let remaining_targets = minimax_code_pids_for_user_data_dirs(&remaining, &normalized);
+    if remaining_targets.is_empty() && !remaining.is_empty() {
+        crate::modules::logger::log_warn(
+            "[MiniMax Code Close] 仍有 MiniMax Code 进程残留，按 exe 路径兜底关闭（会关闭全部窗口）",
+        );
+        return crate::modules::minimax_code_account::close_minimax_code_instances(timeout_secs);
+    }
+    Ok(())
+}
+
+/// 从进程条目里挑出属于目标 Electron userData 目录的 PID。
+fn minimax_code_pids_for_user_data_dirs(
+    entries: &[(u32, Option<String>)],
+    user_data_dirs: &[String],
+) -> Vec<u32> {
+    let mut pids = Vec::new();
+    for (pid, dir) in entries {
+        let Some(dir) = dir.as_deref() else {
+            continue;
+        };
+        let normalized = normalize_path_for_compare(dir);
+        if normalized.is_empty() {
+            continue;
+        }
+        if user_data_dirs.iter().any(|target| {
+            normalized == *target
+                || normalized.starts_with(&format!("{target}\\"))
+                || normalized.starts_with(&format!("{target}/"))
+        }) {
+            pids.push(*pid);
+        }
+    }
+    pids.sort_unstable();
+    pids.dedup();
+    pids
+}
+
 pub fn close_workbuddy_instances(
     user_data_dirs: &[String],
     timeout_secs: u64,

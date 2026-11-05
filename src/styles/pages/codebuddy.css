@@ -564,11 +564,15 @@
   justify-content: center;
 }
 
+/* 分组名允许截断，把空间让给右侧的数字 —— 数字必须完整可见。 */
 .quota-category-label {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .quota-category-count {
@@ -577,6 +581,7 @@
   background: var(--bg-tertiary);
   padding: 1px 6px;
   border-radius: 10px;
+  flex-shrink: 0;
 }
 
 .quota-category-stats {
@@ -586,11 +591,18 @@
   flex-shrink: 0;
 }
 
+/* 数字不换行：换行会把 "12,345 / 12,345" 折成两段，积分越大越明显。 */
 .quota-category-value {
-  font-size: 12px;
-  font-weight: 500;
+  /* 12px 时等宽字体的 "4" 顶部开口太小，看起来像缺了一块；加到 13px 并加粗
+     后字形完整、也更易读。 */
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-mono);
+  /* 等宽数字：位数变化时不再左右抖动，读起来更稳。 */
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .quota-category-expand-icon {
@@ -665,10 +677,12 @@
 }
 
 .quota-detail-value {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .quota-detail-value.critical {
@@ -712,7 +726,7 @@
   }
 
   .quota-category-value {
-    font-size: 11px;
+    font-size: 12px;
   }
 }
 

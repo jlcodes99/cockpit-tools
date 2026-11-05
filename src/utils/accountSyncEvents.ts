@@ -48,6 +48,7 @@ const PROVIDER_PAGE_PLATFORM_MAP: Record<string, PlatformId> = {
   trae_solo_cn: 'trae_solo_cn',
   traesolocn: 'trae_solo_cn',
   workbuddy: 'workbuddy',
+  minimaxcode: 'minimaxcode',
 };
 
 function normalizePlatformKey(value: string): string {
