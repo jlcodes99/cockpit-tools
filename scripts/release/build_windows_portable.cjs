@@ -72,7 +72,7 @@ function collectPortableFiles({ releaseDir, executablePath }) {
     for (const sourcePath of listFilesRecursive(resourcesDir)) {
       files.push({
         sourcePath,
-        archivePath: path.join('resources', path.relative(resourcesDir, sourcePath)),
+        archivePath: path.join('resources', path.relative(resourcesDir, sourcePath)).replaceAll(path.sep, '/'),
       });
     }
   }

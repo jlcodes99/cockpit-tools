@@ -100,7 +100,7 @@ test('finalization rejects a bad updater app before notarizing or uploading the 
   assert.throws(() => finalize(directory, env, (exe, args) => {
     if (exe === 'tar') fs.mkdirSync(path.join(args.at(-1), 'test.app'));
     if (exe === 'codesign' && args[0] === '--display') {
-      return args.at(-1).includes('/updater/') ? validInfo.replace('TeamIdentifier=ABCDEFGHIJ', 'TeamIdentifier=WRONGTEAM1') : validInfo;
+      return /[/\\]updater[/\\]/.test(args.at(-1)) ? validInfo.replace('TeamIdentifier=ABCDEFGHIJ', 'TeamIdentifier=WRONGTEAM1') : validInfo;
     }
     if (args.includes('submit')) submitted = true;
     return '';
