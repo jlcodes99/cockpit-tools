@@ -56,7 +56,7 @@ export function mergeCodexModelProviderCredentialInput(
     wireApi?: CodexProviderWireApi | null;
     authScheme?: "x-api-key" | "bearer";
     supportsWebsockets?: boolean;
-    integrationType?: "sub2api" | "new_api" | null;
+    integrationType?: "sub2api" | "new_api" | "codex_proxy_rs" | null;
   },
 ) {
   provider = provider ? resolveCodexModelProviderForApiKey(provider, fallback.apiKey) : null;

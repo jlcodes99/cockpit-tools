@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { codexRemoteBinding } from '../utils/codexRemoteBinding';
 
-export type ModelProviderUsageIntegrationType = 'sub2api' | 'new_api';
+export type ModelProviderUsageIntegrationType = 'sub2api' | 'new_api' | 'codex_proxy_rs';
 export type ModelProviderUsageMode =
   | ModelProviderUsageIntegrationType
   | 'deepseek'
@@ -170,6 +170,7 @@ export function resolveModelProviderUsageMode(
   if (!summary) return null;
   if (summary.cockpit) return 'cockpit';
   if (
+    summary.mode === 'codex_proxy_rs' ||
     summary.mode === 'new_api' ||
     summary.mode === 'sub2api' ||
     summary.mode === 'deepseek' ||

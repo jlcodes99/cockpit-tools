@@ -2684,6 +2684,16 @@
     "other_group": "Other Models"
   },
   "codex": {
+    "proxyRsUsage": {
+      "todayUsed": "Used today",
+      "weekUsed": "Used this week",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "total": "Total quota",
+      "used": "Used",
+      "remaining": "Remaining",
+      "noReset": "No reset time available"
+    },
     "instance": {
       "errors": {
         "threadSyncWorkerFailed": "Session sync task failed: {{error}}",
