@@ -31,9 +31,7 @@ fn automatic_api_service_visible_model_ids_with_explicit_catalog(
                 || key == CODEX_GPT_RESERVE_MODEL_ID
                 || key == CODEX_AUTO_REVIEW_MODEL_ID
                 || key.starts_with("gpt-image")
-                || LOCAL_GATEWAY_VISIBLE_GPT_MODELS
-                    .iter()
-                    .any(|(model_id, _)| model_id.eq_ignore_ascii_case(&key))
+                || is_local_gateway_visible_gpt_model(&key)
         })
         .collect()
 }
@@ -224,10 +222,7 @@ fn pool_provides_gpt_models(accounts: &[CodexAccount]) -> bool {
 
 /// 该模型是否属于官方推荐 GPT 集（只用于展示收敛，内部隐藏模型不受影响）。
 fn is_local_gateway_visible_gpt_model(model: &str) -> bool {
-    let key = model.trim();
-    LOCAL_GATEWAY_VISIBLE_GPT_MODELS
-        .iter()
-        .any(|(model_id, _)| model_id.eq_ignore_ascii_case(key))
+    crate::modules::codex_model_catalog::is_recommended_model(model)
 }
 
 fn automatic_api_service_pool_model_ids(
