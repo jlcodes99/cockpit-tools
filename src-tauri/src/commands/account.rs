@@ -463,6 +463,13 @@ async fn run_auto_switch_for_runtime_target(
         return Ok(None);
     }
     let target = normalize_antigravity_runtime_target(runtime_target);
+    let platform = match target {
+        AntigravityRuntimeTarget::Legacy => "antigravity",
+        AntigravityRuntimeTarget::Ide => "antigravity_ide",
+    };
+    if !modules::tray_layout::is_platform_enabled(platform) {
+        return Ok(None);
+    }
     let current_id = get_current_account(runtime_target.map(str::to_owned))
         .await?
         .map(|account| account.id);

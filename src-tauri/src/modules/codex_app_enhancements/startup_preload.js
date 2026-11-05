@@ -27,6 +27,17 @@
     if (!fast || !quota) return fail('runtime-unavailable');
     const indexUrl = 'app://-/index.html';
     const html = read(indexUrl);
+    if (root.__cockpitEnhancements?.nativePredictions === true
+      && root.__cockpitEnhancements?.apiKeyAuthVerified === true) {
+      const rspack = root.__cockpitPredictionRspack;
+      const prepared = rspack?.prepare(html, read);
+      if (prepared?.ok) return record({ ok: rspack.install(prepared), mode: 'rspack-predictions' });
+      if (prepared && prepared.reason !== 'not-rspack') {
+        root.__cockpitEnhancements.nativePredictionPatchState = 'unsupported';
+        root.__cockpitEnhancements.nativePredictionPatchReason = prepared.reason;
+        return fail(prepared.reason);
+      }
+    }
     const entries = [...html.matchAll(/<script\b[^>]*\bsrc=(["'])(.*?)\1/g)]
       .map(match => new URL(match[2], indexUrl).href)
       .filter(url => fast.localAsset(url, true));

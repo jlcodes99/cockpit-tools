@@ -29,6 +29,7 @@ export interface TraeAccount {
 
   created_at: number;
   last_used: number;
+  last_switched_at?: number | null;
 
   quota?: TraeQuota;
 }

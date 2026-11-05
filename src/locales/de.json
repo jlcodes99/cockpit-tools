@@ -691,7 +691,6 @@
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "minimaxcode": "MiniMax Code",
-    "minimaxcode": "MiniMax Code",
     "zed": "Zed-Plattform",
     "expandSidebar": "Seitenleiste erweitern",
     "collapseSidebar": "Seitenleiste einklappen",
@@ -759,7 +758,12 @@
     "setAsDefaultInGroup": "Als Standardplattform in dieser Gruppe festlegen",
     "removeFromGroup": "Aus Gruppe entfernen",
     "sidebarSelectedUnlimited": "Ausgewählt ({count})",
-    "tipWithGroupsUnlimited": "Ausgewählte Plattformen und Gruppen manuell sortieren"
+    "tipWithGroupsUnlimited": "Ausgewählte Plattformen und Gruppen manuell sortieren",
+    "enabledToggle": "Aktiviert",
+    "groupEnabledHint": "Alle Plattformen dieser Gruppe gemeinsam aktivieren oder deaktivieren",
+    "disabledHint": "Deaktivieren stoppt automatische Vorgänge und blendet die Plattformeinstellungen aus. Die Sichtbarkeit des Eintrags wird separat gesteuert",
+    "enableAll": "Alle aktivieren",
+    "disableAll": "Alle deaktivieren"
   },
   "privacy": {
     "hideSensitive": "E-Mails ausblenden",
@@ -1418,7 +1422,9 @@
         "configFailed": "Einstellungen konnten nicht geladen oder gespeichert werden: {{error}}",
         "nativePredictions": "Native Vorhersagen für den nächsten Schritt (Tab)",
         "nativePredictionsDesc": "Erstellt Vorschläge für die nächste Nachricht mit dem API-Anbieter und Modell des aktuellen Chats. Verbraucht zusätzliche API-Credits; Codex nach dem Speichern neu starten."
-      }
+      },
+      "timeDisplayMode": "Zeitanzeige",
+      "timeDisplayModeDesc": "Zeitangabe auf Kontokarten und in Listen. Standard ist der Kontowechsel"
     },
     "network": {
       "apiTitle": "Antigravity-Cockpit-API",
@@ -2102,7 +2108,13 @@
     "tagUpdated": "Tag aktualisiert",
     "plan": {
       "personal": "Persönlich"
-    }
+    },
+    "lastSwitchTime": "Kontowechsel",
+    "neverSwitched": "Noch nie gewechselt",
+    "refreshTime": "Aktualisierung",
+    "lastSwitchTimeFull": "Kontowechsel: {{time}}",
+    "refreshTimeFull": "Aktualisierung: {{time}}",
+    "toggleTimeMode": "Wechsel- oder Aktualisierungszeit anzeigen"
   },
   "overview": {
     "title": "Kontoübersicht",
@@ -7389,7 +7401,7 @@
       "timeRangeError": "Die Startzeit darf nicht nach der Endzeit liegen"
     }
   },
-    "minimaxCode": {
+  "minimaxCode": {
     "title": "MiniMax Code-Kontenverwaltung",
     "noAccounts": "Keine MiniMax Code-Konten",
     "addAccount": "MiniMax Code-Konto hinzufügen",

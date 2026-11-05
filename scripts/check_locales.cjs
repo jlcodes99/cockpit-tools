@@ -242,6 +242,12 @@ function isAllowedEnglishReuse(key, value) {
     return true;
   }
 
+  // SI duration symbols are shared across languages.
+  if ((key === 'trae.checkin.durationMs' && normalized === '{{ms}} ms') ||
+      (key === 'trae.checkin.durationSeconds' && normalized === '{{seconds}} s')) {
+    return true;
+  }
+
   // Token speed contains only the approximation symbol, interpolation and a protocol unit.
   if (key === 'common.outputSpeed.value' && normalized === '≈ {{value}} tok/s') {
     return true;

@@ -103,9 +103,7 @@ pub fn load_account(account_id: &str) -> Option<CodebuddyAccount> {
 
 fn save_account_file(account: &CodebuddyAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
-    let content =
-        crate::modules::secure_account_storage::serialize_account_file("codebuddy_cn", account)?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
+    crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "codebuddy_cn", account)
         .map_err(|e| format!("保存账号失败: {}", e))
 }
 
@@ -114,7 +112,7 @@ fn save_account_file(account: &CodebuddyAccount) -> Result<(), String> {
 pub fn touch_last_used(account_id: &str) -> Result<(), String> {
     let mut account = load_account(account_id)
         .ok_or_else(|| format!("CodeBuddy CN account not found: {}", account_id))?;
-    account.last_used = now_ts();
+    account.last_switched_at = Some(now_ts());
     save_account_file(&account)?;
     logger::log_info(&format!(
         "[CN DIAG] touch_last_used: account_id={} -> last_used={}",
@@ -462,6 +460,7 @@ fn merge_duplicate_account(primary: &mut CodebuddyAccount, dup: &CodebuddyAccoun
     primary.tags = merge_string_list(primary.tags.clone(), dup.tags.clone());
     primary.created_at = primary.created_at.min(dup.created_at);
     primary.last_used = primary.last_used.max(dup.last_used);
+    primary.last_switched_at = primary.last_switched_at.max(dup.last_switched_at);
 }
 
 fn choose_primary_account_index(group: &[usize], accounts: &[CodebuddyAccount]) -> usize {
@@ -663,6 +662,8 @@ fn apply_payload(account: &mut CodebuddyAccount, payload: CodebuddyOAuthComplete
     if payload.checkin_rewards.is_some() {
         account.checkin_rewards = payload.checkin_rewards.clone();
     }
+
+    account.last_used = now_ts();
 }
 
 pub fn upsert_account(payload: CodebuddyOAuthCompletePayload) -> Result<CodebuddyAccount, String> {
@@ -704,6 +705,7 @@ pub fn upsert_account(payload: CodebuddyOAuthCompletePayload) -> Result<Codebudd
     let created_at = existing.as_ref().map(|a| a.created_at).unwrap_or(now);
 
     let mut account = existing.unwrap_or(CodebuddyAccount {
+        last_switched_at: None,
         id: account_id.clone(),
         email: payload.email.clone(),
         uid: payload.uid.clone(),
@@ -784,6 +786,7 @@ async fn refresh_account_token_once(account_id: &str) -> Result<CodebuddyAccount
     if usage_refreshed {
         account.usage_updated_at = Some(refreshed_at);
     }
+    account.last_used = refreshed_at;
 
     let updated = account.clone();
     upsert_account_record(account)?;
@@ -951,6 +954,7 @@ fn upsert_account_record_from_payload(
     let generated_id = format!("codebuddy_cn_{:x}", md5::compute(identity_seed.as_bytes()));
 
     let account = CodebuddyAccount {
+        last_switched_at: None,
         id: generated_id,
         email: payload.email,
         uid: payload.uid,

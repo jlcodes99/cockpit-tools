@@ -711,6 +711,21 @@ fn namespace_matches_scope(auth_file: &std::path::Path, scope: &MinimaxCodeAuthS
 mod minimax_code_instance_tests {
     use super::*;
 
+    struct RestoreEnv(Vec<(&'static str, Option<std::ffi::OsString>)>);
+    impl RestoreEnv {
+        fn capture() -> Self {
+            Self(["MINIMAX_DATA_DIR", "MAVIS_DATA_DIR", "COCKPIT_TOOLS_DATA_DIR", "COCKPIT_TOOLS_TEST_DATA_DIR"]
+                .into_iter().map(|key| (key, std::env::var_os(key))).collect())
+        }
+    }
+    impl Drop for RestoreEnv {
+        fn drop(&mut self) {
+            for (key, value) in &self.0 {
+                match value { Some(value) => std::env::set_var(key, value), None => std::env::remove_var(key) }
+            }
+        }
+    }
+
     fn temp_data_dir(tag: &str) -> PathBuf {
         let base = std::env::temp_dir().join(format!(
             "cockpit-minimax-code-instance-{}-{}",
@@ -718,12 +733,14 @@ mod minimax_code_instance_tests {
             Uuid::new_v4().simple()
         ));
         fs::create_dir_all(&base).expect("create temp data dir");
-        base
+        base.canonicalize().expect("canonical temp directory")
     }
 
     /// data root 必须尊重用户显式设置的 `MINIMAX_DATA_DIR`。
     #[test]
     fn default_data_dir_follows_explicit_env() {
+        let _env_lock = crate::modules::test_support::env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = RestoreEnv::capture();
         let previous = std::env::var("MINIMAX_DATA_DIR").ok();
         let temp = temp_data_dir("env");
         std::env::set_var("MINIMAX_DATA_DIR", &temp);
@@ -738,6 +755,8 @@ mod minimax_code_instance_tests {
     /// 未设置环境变量时回落到 `~/.minimax`。
     #[test]
     fn default_data_dir_falls_back_to_home() {
+        let _env_lock = crate::modules::test_support::env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = RestoreEnv::capture();
         let previous = std::env::var("MINIMAX_DATA_DIR").ok();
         let previous_mavis = std::env::var("MAVIS_DATA_DIR").ok();
         std::env::remove_var("MINIMAX_DATA_DIR");
@@ -904,6 +923,8 @@ mod minimax_code_instance_tests {
     /// 两者不一致会让删除守卫找不到受管根。生产构建里两者同源，不存在该差异。
     #[test]
     fn create_and_delete_empty_instance_uses_managed_root() {
+        let _env_lock = crate::modules::test_support::env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = RestoreEnv::capture();
         let temp_root = temp_data_dir("managed-round-trip");
         let previous = std::env::var("COCKPIT_TOOLS_DATA_DIR").ok();
         let previous_test = std::env::var("COCKPIT_TOOLS_TEST_DATA_DIR").ok();

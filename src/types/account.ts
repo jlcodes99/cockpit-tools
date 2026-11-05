@@ -18,6 +18,7 @@ export interface Account {
     protected_models?: string[];
     created_at: number;
     last_used: number;
+  last_switched_at?: number | null;
 }
 
 export interface AccountNoteUpdate {

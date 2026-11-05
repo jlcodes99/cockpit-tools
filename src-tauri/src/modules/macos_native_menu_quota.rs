@@ -279,7 +279,7 @@
         let visible: Vec<PlatformId> = sanitize_platform_list(&layout.tray_platform_ids)
             .into_iter()
             .filter(|platform| {
-                modules::tray_layout::is_platform_enabled(&platform.to_string())
+                modules::tray_layout::is_platform_enabled(platform.as_str())
             })
             .collect();
         let visible_set: HashSet<PlatformId> = visible.iter().copied().collect();

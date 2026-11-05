@@ -149,6 +149,7 @@ pub async fn inject_minimax_code_to_client(
     .await
     .map_err(|e| format!("MiniMax Code 切号后台任务失败: {e}"))??;
 
+    minimax_code_account::touch_last_used(&account_id)?;
     crate::modules::provider_current_state::set_current_account_id(
         "minimaxcode",
         Some(account_id.as_str()),

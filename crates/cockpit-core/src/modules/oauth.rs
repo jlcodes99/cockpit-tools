@@ -269,9 +269,19 @@ pub async fn ensure_fresh_token(
     )
     .await?;
 
+    Ok(build_refreshed_token(current_token, response))
+}
+
+fn build_refreshed_token(
+    current_token: &crate::models::TokenData,
+    response: TokenResponse,
+) -> crate::models::TokenData {
     let mut token = crate::models::TokenData::new(
         response.access_token,
-        current_token.refresh_token.clone(),
+        response
+            .refresh_token
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| current_token.refresh_token.clone()),
         response.expires_in,
         current_token.email.clone(),
         current_token.project_id.clone(),
@@ -282,7 +292,7 @@ pub async fn ensure_fresh_token(
         response.id_token.or_else(|| current_token.id_token.clone()),
     );
     token.is_gcp_tos = current_token.is_gcp_tos;
-    Ok(token)
+    token
 }
 
 fn token_needs_refresh(expiry_timestamp: i64, now: i64) -> bool {

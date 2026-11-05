@@ -5,6 +5,7 @@ use super::*;
 
     fn sample_account() -> TraeAccount {
         TraeAccount {
+            last_switched_at: None,
             id: "trae_test".to_string(),
             email: "lijie769328281@gmail.com".to_string(),
             user_id: Some("7463021402682639361".to_string()),

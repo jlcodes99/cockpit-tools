@@ -80,22 +80,20 @@ pub fn load_account(account_id: &str) -> Option<WindsurfAccount> {
 
 fn save_account_file(account: &WindsurfAccount) -> Result<(), String> {
     let path = get_accounts_dir()?.join(format!("{}.json", account.id));
-    let content =
-        crate::modules::secure_account_storage::serialize_account_file("windsurf", account)?;
     crate::modules::account_query_identity::invalidate_before_write(
         &get_accounts_index_path()?,
         &account.id,
         &query_identity(account),
     )?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
+    crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "windsurf", account)
         .map_err(|e| format!("保存账号失败: {}", e))
 }
 
-// ponytail: 切号时记录 last_used。O(n) load+save 单个账号文件。
+// Record credential-switch success separately from refresh activity.
 pub fn touch_last_used(account_id: &str) -> Result<(), String> {
     let mut account = load_account(account_id)
         .ok_or_else(|| format!("Windsurf account not found: {}", account_id))?;
-    account.last_used = now_ts();
+    account.last_switched_at = Some(now_ts());
     save_account_file(&account)?;
     Ok(())
 }
@@ -599,6 +597,7 @@ fn apply_payload(account: &mut WindsurfAccount, payload: WindsurfOAuthCompletePa
     account.windsurf_user_status = payload.windsurf_user_status;
     account.windsurf_plan_status = payload.windsurf_plan_status;
     account.windsurf_auth_status_raw = payload.windsurf_auth_status_raw;
+    account.last_used = now_ts();
 }
 
 fn value_has_number_like(value: &Value) -> bool {
@@ -767,6 +766,7 @@ pub fn upsert_account(payload: WindsurfOAuthCompletePayload) -> Result<WindsurfA
     let created_at = existing.as_ref().map(|acc| acc.created_at).unwrap_or(now);
 
     let mut account = existing.unwrap_or(WindsurfAccount {
+        last_switched_at: None,
         id: account_id.clone(),
         github_login: normalized_login.clone(),
         github_id: payload.github_id,
@@ -861,6 +861,7 @@ async fn refresh_account_token_once(account_id: &str) -> Result<WindsurfAccount,
         account.quota_query_last_error = Some("未获取到有效配额快照，已保留旧配额缓存".to_string());
         account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
     }
+    account.last_used = refreshed_at;
 
     let updated = account.clone();
     upsert_account_record(account)?;

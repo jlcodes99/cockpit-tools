@@ -12,6 +12,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Platform enable controls** Stop automatic refresh, token renewal, wakeups and check-ins for unused platforms while retaining manual actions. [#2402](https://github.com/jlcodes99/cockpit-tools/pull/2402) · [@qxo](https://github.com/qxo)
+- **Reduced motion** Reduce decorative animation, shadows and filters while retaining loading feedback and account status. [#2964](https://github.com/jlcodes99/cockpit-tools/pull/2964) · [@lcpdeb](https://github.com/lcpdeb)
+- **Codex model catalog** Refresh upstream model metadata with a validated cache and existing local settings so new catalog models become available. [#2669](https://github.com/jlcodes99/cockpit-tools/pull/2669) · [@jiabaoliu101](https://github.com/jiabaoliu101)
+- **TRAE China check-in** Add check-in status, manual claims, scheduled check-ins and logs for China and SOLO China accounts. [#2729](https://github.com/jlcodes99/cockpit-tools/pull/2729) · [@eye-gu](https://github.com/eye-gu)
+- **Account timestamps** Distinguish successful credential switches from quota refresh, allow a preferred timestamp display on account cards, and leave unknown historical times unset. [#2403](https://github.com/jlcodes99/cockpit-tools/pull/2403) · [@qxo](https://github.com/qxo)
+- **Codex native next-step predictions** Support Vite and newer Rspack clients and enable native predictions for local API connections. Accept suggestions into the draft with Tab using the current model and provider, with additional API usage. [#2938](https://github.com/jlcodes99/cockpit-tools/pull/2938) · [@HTExplicit](https://github.com/HTExplicit)
+- **MiniMax Code** Add account authorization, local import, switching, credit queries, check-ins and isolated instances. [#2919](https://github.com/jlcodes99/cockpit-tools/pull/2919) · [@SkyblueeeLabs](https://github.com/SkyblueeeLabs)
+- **Codex local project recovery** Retain built-in recovery and add a standalone Windows audit, repair and rollback script. [#2955](https://github.com/jlcodes99/cockpit-tools/pull/2955) · [@harryzhou0106-svg](https://github.com/harryzhou0106-svg)
+- **Codex Windows sandbox recovery** Provide an on-demand diagnostic and permission recovery tool with backup and rollback. [#2982](https://github.com/jlcodes99/cockpit-tools/pull/2982) · [@ws-cczj](https://github.com/ws-cczj)
+- **PR builds** Share frontend artifacts and reuse compilation caches with a CI profile that verifies platform executables. [#1771](https://github.com/jlcodes99/cockpit-tools/pull/1771) · [@khanra17](https://github.com/khanra17)
+- **Release builds** Share build inputs, reuse native macOS artifacts for Universal packages, and support validation runs that produce artifacts without publishing a release. [#1774](https://github.com/jlcodes99/cockpit-tools/pull/1774) · [@khanra17](https://github.com/khanra17)
+
 - **WorkBuddy credit details**: Open an account’s credit overview and browse valid and expired grants, including remaining credits and expiration times. The compact account summary highlights the balance. The dialog keeps loaded details visible while switching tabs or fetching more records, shows the five latest usage records, and links to the full history.
 
 - **Codex API capacity recovery**: Optionally keep retrying safely replayable requests while an upstream model is at capacity. Account statistics show capacity rejections per upstream attempt, including those recovered by retrying or switching accounts.
@@ -879,17 +891,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **Preserve the selected DeepSeek thinking level**: switching accounts or starting an instance no longer resets the reasoning effort to `high`, so the `low` / `high` / `max` level chosen in Codex is preserved.
 - **Narrow the scope of CDP injection changes**: model list detection now requires real model descriptors, so queue, thread, and other generic arrays are left untouched, and the default model is written back only when the user explicitly switches models, which reduces backend writes during a running turn. The injected script also no longer throws at the end of every run because of a removed constant, restoring model-switch state reporting over CDP.
-
-### Added
-
-- **Platform layout "Enable/Disable" switch**: each platform entry in the layout editor now has an Enable/Disable toggle, plus bulk "Enable all" / "Disable all" actions. Disabling a platform stops all of its automated activity (auto-refresh, token keep-alive, tray account reads) without affecting whether its entry is displayed. Platforms grouped under Antigravity, the Codex suite, CodeBuddy, and the Trae suite expose the same toggle on each child row once the group is expanded.
-- **Backend awareness of disabled platforms**: the disabled platform set is persisted through `save_tray_platform_layout` and stored in the tray layout config, so backend tasks can skip disabled platforms.
-
-### Changed
-
-- **Hiding and disabling are now separate concerns**: hiding a platform entry only controls its visibility (sidebar, dashboard, tray), while disabling it stops background automated activity. Previously hiding an entry also stopped its automated activity, which made it impossible to reduce visual clutter without losing background refreshes.
-- **Disabled platforms are hidden in App Settings**: a platform disabled in the platform layout no longer renders its App Settings section (auto-refresh, quota alerts, launch path, etc.), avoiding configuration of a platform whose background activity has stopped. Re-enabling it restores the section.
-- **Backward-compatible layout payload**: `save_tray_platform_layout` now treats the hidden and disabled platform sets as optional and preserves the previously persisted values when they are omitted, so older frontends keep working.
 
 ## [1.3.48] - 2026-09-11
 

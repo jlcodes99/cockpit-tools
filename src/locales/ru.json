@@ -691,7 +691,6 @@
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "minimaxcode": "MiniMax Code",
-    "minimaxcode": "MiniMax Code",
     "zed": "Платформа Zed",
     "expandSidebar": "Развернуть боковую панель",
     "collapseSidebar": "Свернуть боковую панель",
@@ -759,7 +758,12 @@
     "setAsDefaultInGroup": "Сделать платформой по умолчанию в этой группе",
     "removeFromGroup": "Удалить из группы",
     "sidebarSelectedUnlimited": "Выбрано ({count})",
-    "tipWithGroupsUnlimited": "Сортировать выбранные платформы и группы вручную"
+    "tipWithGroupsUnlimited": "Сортировать выбранные платформы и группы вручную",
+    "enabledToggle": "Включено",
+    "groupEnabledHint": "Включить или отключить все платформы группы",
+    "disabledHint": "Отключение останавливает автоматические задачи и скрывает настройки платформы. Видимость пункта настраивается отдельно",
+    "enableAll": "Включить все",
+    "disableAll": "Отключить все"
   },
   "privacy": {
     "hideSensitive": "Скрыть e-mail",
@@ -1418,7 +1422,9 @@
         "configFailed": "Не удалось прочитать или сохранить настройки: {{error}}",
         "nativePredictions": "Встроенные подсказки следующего шага (Tab)",
         "nativePredictionsDesc": "Предлагает следующее сообщение с помощью API-провайдера и модели текущего разговора. Расходует дополнительные API-кредиты; после сохранения перезапустите Codex."
-      }
+      },
+      "timeDisplayMode": "Показ времени",
+      "timeDisplayModeDesc": "Время в карточках и списках аккаунтов. По умолчанию — время переключения"
     },
     "network": {
       "apiTitle": "API антигравитационной кабины",
@@ -2102,7 +2108,13 @@
     "tagUpdated": "Тег обновлён",
     "plan": {
       "personal": "Личный"
-    }
+    },
+    "lastSwitchTime": "Переключение",
+    "neverSwitched": "Ещё не переключали",
+    "refreshTime": "Обновление",
+    "lastSwitchTimeFull": "Переключение: {{time}}",
+    "refreshTimeFull": "Обновление: {{time}}",
+    "toggleTimeMode": "Показать время переключения или обновления"
   },
   "overview": {
     "title": "Обзор аккаунтов",
@@ -7389,7 +7401,7 @@
       "timeRangeError": "Время начала не может быть позже времени окончания"
     }
   },
-    "minimaxCode": {
+  "minimaxCode": {
     "title": "Управление аккаунтами MiniMax Code",
     "noAccounts": "Нет аккаунтов MiniMax Code",
     "addAccount": "Добавить аккаунт MiniMax Code",

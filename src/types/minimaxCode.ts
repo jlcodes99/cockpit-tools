@@ -37,8 +37,8 @@ export function getMinimaxCodeAccountDisplayEmail(account: MinimaxCodeAccount): 
   return account.nickname?.trim() || account.email?.trim() || account.id;
 }
 
-export function getMinimaxCodePlanBadge(_account: MinimaxCodeAccount): string {
-  return 'FREE';
+export function getMinimaxCodePlanBadge(account: MinimaxCodeAccount): string {
+  return account.plan_type?.trim() || '—';
 }
 
 /**

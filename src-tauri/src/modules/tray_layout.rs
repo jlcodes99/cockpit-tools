@@ -454,11 +454,18 @@ pub fn is_platform_enabled(platform_id: &str) -> bool {
     if disabled.is_empty() {
         return true;
     }
-    let Some(normalized) = normalize_platform_id(platform_id) else {
+    let normalize = |id: &str| match id.trim() {
+        "antigravity_ide" => Some("antigravity_ide"),
+        "codex_api_service" => Some("codex_api_service"),
+        "claude" => Some(PLATFORM_CLAUDE_MANAGER),
+        "github_copilot" => Some(PLATFORM_GITHUB_COPILOT),
+        id => normalize_platform_id(id),
+    };
+    let Some(normalized) = normalize(platform_id) else {
         // 未知平台 ID 不做禁用判断，避免误停后台任务
         return true;
     };
-    !disabled.iter().any(|id| normalize_platform_id(id) == Some(normalized))
+    !disabled.iter().any(|id| normalize(id) == Some(normalized))
 }
 
 pub fn load_tray_layout() -> TrayLayoutConfig {

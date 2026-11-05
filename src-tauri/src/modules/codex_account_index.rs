@@ -1051,9 +1051,8 @@ fn save_account_unchecked(account: &CodexAccount) -> Result<(), String> {
         return Err("API_SERVICE_RUNTIME_ACCOUNT_READ_ONLY".into());
     }
     let path = get_accounts_dir().join(format!("{}.json", &account.id));
-    let content = crate::modules::secure_account_storage::serialize_account_file("codex",
+    crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "codex",
         &crate::modules::codex_account_proxy::storage_value(account)?)?;
-    write_string_atomic(&path, &content).map_err(|e| format!("写入账号详情失败: {}", e))?;
     Ok(())
 }
 

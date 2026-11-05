@@ -74,6 +74,7 @@ export interface GrokAccount {
   working_dir?: string | null;
   created_at: number;
   last_used: number;
+  last_switched_at?: number | null;
 }
 
 export function isGrokApiKeyAccount(account: GrokAccount): boolean {

@@ -544,6 +544,7 @@ fn desktop_login_component_cleanup_removes_only_owned_cache_dirs() {
         last_used: i64,
     ) -> ClaudeAccount {
         ClaudeAccount {
+            last_switched_at: None,
             id: id.to_string(),
             email: email.to_string(),
             auth_mode: ClaudeAuthMode::DesktopOAuth,

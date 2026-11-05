@@ -691,7 +691,6 @@
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "minimaxcode": "MiniMax Code",
-    "minimaxcode": "MiniMax Code",
     "zed": "Zed Platformu",
     "expandSidebar": "Kenar çubuğunu genişlet",
     "collapseSidebar": "Kenar çubuğunu daralt",
@@ -759,7 +758,12 @@
     "setAsDefaultInGroup": "Bu grupta varsayılan platform olarak ayarla",
     "removeFromGroup": "Gruptan kaldır",
     "sidebarSelectedUnlimited": "Seçilen ({count})",
-    "tipWithGroupsUnlimited": "Seçili platformları ve grupları manuel olarak sıralayın"
+    "tipWithGroupsUnlimited": "Seçili platformları ve grupları manuel olarak sıralayın",
+    "enabledToggle": "Etkin",
+    "groupEnabledHint": "Gruptaki tüm platformları birlikte etkinleştir veya devre dışı bırak",
+    "disabledHint": "Devre dışı bırakma otomatik görevleri durdurur ve platform ayarlarını gizler. Girişin görünürlüğü ayrı ayarlanır",
+    "enableAll": "Tümünü etkinleştir",
+    "disableAll": "Tümünü devre dışı bırak"
   },
   "privacy": {
     "hideSensitive": "E-postaları gizle",
@@ -1418,7 +1422,9 @@
         "configFailed": "Ayarlar okunamadı veya kaydedilemedi: {{error}}",
         "nativePredictions": "Yerel sonraki adım tahminleri (Tab)",
         "nativePredictionsDesc": "Geçerli konuşmanın API sağlayıcısı ve modeliyle sonraki mesaj önerileri oluşturur. Ek API kredisi kullanır; kaydettikten sonra Codex’i yeniden başlatın."
-      }
+      },
+      "timeDisplayMode": "Zaman gösterimi",
+      "timeDisplayModeDesc": "Hesap kartları ve listelerindeki zaman. Varsayılan, hesap değiştirme zamanıdır"
     },
     "network": {
       "apiTitle": "Yerçekimine Karşı Kokpit API'si",
@@ -2102,7 +2108,13 @@
     "tagUpdated": "Etiket güncellendi",
     "plan": {
       "personal": "Kişisel"
-    }
+    },
+    "lastSwitchTime": "Değiştirme",
+    "neverSwitched": "Henüz değiştirilmedi",
+    "refreshTime": "Yenileme",
+    "lastSwitchTimeFull": "Değiştirme: {{time}}",
+    "refreshTimeFull": "Yenileme: {{time}}",
+    "toggleTimeMode": "Değiştirme veya yenileme zamanını göster"
   },
   "overview": {
     "title": "Hesap Genel Bakışı",
@@ -7389,7 +7401,7 @@
       "timeRangeError": "Başlangıç zamanı bitiş zamanından sonra olamaz"
     }
   },
-    "minimaxCode": {
+  "minimaxCode": {
     "title": "MiniMax Code Hesap Yönetimi",
     "noAccounts": "MiniMax Code hesabı yok",
     "addAccount": "MiniMax Code Hesabı Ekle",

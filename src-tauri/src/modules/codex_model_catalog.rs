@@ -475,7 +475,7 @@ mod tests {
         let models = catalog["models"].as_array().unwrap();
         let mut model = models
             .iter()
-            .find(|model| model["slug"] == "gpt-5.5")
+            .find(|model| model["slug"] == "gpt-6.1-sol")
             .or_else(|| models.first())
             .unwrap()
             .clone();

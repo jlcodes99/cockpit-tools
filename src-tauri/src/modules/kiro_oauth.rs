@@ -3184,6 +3184,7 @@ mod tests {
     #[test]
     fn should_prefer_idc_refresh_for_enterprise_account() {
         let account = KiroAccount {
+            last_switched_at: None,
             id: "kiro_test".to_string(),
             email: "tester@example.com".to_string(),
             user_id: None,

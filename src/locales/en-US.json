@@ -745,7 +745,6 @@
     "traeSoloCn": "TRAE SOLO CN",
     "codebuddyCn": "CodeBuddy CN",
     "minimaxcode": "MiniMax Code",
-    "minimaxcode": "MiniMax Code",
     "switchClassicLayoutEntry": "Switch to classic layout",
     "switchClassicLayoutTitle": "Switch to the classic sidebar layout",
     "switchClassicLayoutDesc": "The classic layout shows the full platform navigation and supports sidebar collapsing. You can switch back anytime in Settings > General > Sidebar Layout.",
@@ -990,7 +989,12 @@
     "customIconDeleteConfirm": "Delete this custom icon?",
     "editChildPlatform": "Edit child platform",
     "setAsDefaultInGroup": "Set as the default platform in this group",
-    "removeFromGroup": "Remove from group"
+    "removeFromGroup": "Remove from group",
+    "enabledToggle": "Enabled",
+    "groupEnabledHint": "Enable/disable all platforms in this group at once",
+    "disabledHint": "When disabled, all automated activity for this platform stops and its section is hidden from App Settings (entry visibility is controlled separately by the Dashboard toggle)",
+    "enableAll": "Enable all",
+    "disableAll": "Disable all"
   },
   "privacy": {
     "hideSensitive": "Hide emails",
@@ -1643,7 +1647,9 @@
         "configFailed": "Could not load or save settings: {{error}}",
         "nativePredictions": "Native next-step predictions (Tab)",
         "nativePredictionsDesc": "Generate next-message suggestions with the current conversation’s API provider and model. Uses additional API credits; restart Codex after saving."
-      }
+      },
+      "timeDisplayMode": "Time display",
+      "timeDisplayModeDesc": "What to show in the time area of account cards/lists (default: switch time)"
     },
     "tabs": {
       "general": "General",
@@ -2333,7 +2339,13 @@
     "tagUpdated": "Tag updated",
     "plan": {
       "personal": "Personal"
-    }
+    },
+    "lastSwitchTime": "Switch time",
+    "neverSwitched": "Never switched",
+    "refreshTime": "Refresh time",
+    "lastSwitchTimeFull": "Switch time: {{time}}",
+    "refreshTimeFull": "Refresh time: {{time}}",
+    "toggleTimeMode": "Toggle switch / refresh time"
   },
   "overview": {
     "title": "Overview",
@@ -7748,7 +7760,7 @@
       }
     }
   },
-    "minimaxCode": {
+  "minimaxCode": {
     "title": "MiniMax Code Account",
     "noAccounts": "No MiniMax Code accounts",
     "addAccount": "Add MiniMax Code Account",

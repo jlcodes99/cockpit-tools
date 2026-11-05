@@ -744,7 +744,6 @@
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "minimaxcode": "MiniMax Code",
-    "minimaxcode": "MiniMax Code",
     "switchClassicLayoutEntry": "Beralih ke tata letak klasik",
     "switchClassicLayoutTitle": "Beralih ke tata letak bilah sisi klasik",
     "switchClassicLayoutDesc": "Tata letak klasik menampilkan navigasi platform secara lengkap dan mendukung penciutan bilah sisi. Anda dapat beralih kembali kapan saja di Pengaturan > Umum > Tata Letak Bilah Sisi.",
@@ -806,7 +805,12 @@
     "customIconDeleteConfirm": "Hapus ikon kustom ini?",
     "editChildPlatform": "Edit platform anak",
     "setAsDefaultInGroup": "Tetapkan sebagai platform bawaan dalam grup ini",
-    "removeFromGroup": "Keluarkan dari grup"
+    "removeFromGroup": "Keluarkan dari grup",
+    "enabledToggle": "Aktif",
+    "groupEnabledHint": "Aktifkan atau nonaktifkan semua platform dalam grup",
+    "disabledHint": "Menonaktifkan akan menghentikan tugas otomatis dan menyembunyikan pengaturan platform. Tampilan entri diatur terpisah",
+    "enableAll": "Aktifkan semua",
+    "disableAll": "Nonaktifkan semua"
   },
   "privacy": {
     "hideSensitive": "Sembunyikan email",
@@ -1465,7 +1469,9 @@
         "configFailed": "Gagal membaca atau menyimpan pengaturan: {{error}}",
         "nativePredictions": "Prediksi langkah berikutnya bawaan (Tab)",
         "nativePredictionsDesc": "Membuat saran pesan berikutnya dengan penyedia API dan model percakapan saat ini. Menggunakan kredit API tambahan; mulai ulang Codex setelah menyimpan."
-      }
+      },
+      "timeDisplayMode": "Tampilan waktu",
+      "timeDisplayModeDesc": "Waktu pada kartu dan daftar akun. Bawaan menggunakan waktu pergantian akun"
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -2149,7 +2155,13 @@
     "tagUpdated": "Tag diperbarui",
     "plan": {
       "personal": "Pribadi"
-    }
+    },
+    "lastSwitchTime": "Pergantian",
+    "neverSwitched": "Belum pernah beralih",
+    "refreshTime": "Pembaruan",
+    "lastSwitchTimeFull": "Pergantian: {{time}}",
+    "refreshTimeFull": "Pembaruan: {{time}}",
+    "toggleTimeMode": "Tampilkan waktu pergantian atau pembaruan"
   },
   "overview": {
     "title": "Ringkasan",
@@ -7564,7 +7576,7 @@
       "timeRangeError": "Waktu mulai tidak boleh lebih lambat dari waktu selesai"
     }
   },
-    "minimaxCode": {
+  "minimaxCode": {
     "title": "Akun MiniMax Code",
     "noAccounts": "Tidak ada akun MiniMax Code",
     "addAccount": "Tambah Akun MiniMax Code",

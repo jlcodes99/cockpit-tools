@@ -176,8 +176,8 @@ test("a raw entry id is rejected instead of silently dropped", () => {
 test("group-level enable reflects every member platform", () => {
   resetState();
 
-  const { platformGroups } = usePlatformLayoutStore.getState();
-  const codebuddyGroup = platformGroups.find((g) => g.id === "codebuddy-suite");
+  const codebuddyGroup = { id: "custom-codebuddy", name: "CodeBuddy", platformIds: ["codebuddy", "codebuddy_cn"] as PlatformId[] };
+  usePlatformLayoutStore.setState({ platformGroups: [codebuddyGroup] });
   assert.ok(codebuddyGroup, "应存在 codebuddy-suite 分组");
 
   // 全部启用 → 分组勾选

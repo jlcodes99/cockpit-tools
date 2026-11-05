@@ -46,6 +46,7 @@ fn inject_bound_account_for_instance_start_blocking(
         account.email, user_data_dir
     ));
 
+    modules::workbuddy_account::touch_last_used(bind_id)?;
     Ok(())
 }
 

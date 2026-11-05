@@ -4,6 +4,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { registerHooks } from 'node:module';
 import type { TFunction } from 'i18next';
+import type { CodexModelProvider } from '../services/codexModelProviderService';
 import type { CodexAccount } from '../types/codex';
 import type { ModelProviderUsageSummary } from '../services/modelProviderUsageService';
 import { useCodexApiKeyUsageFormatting } from './codexApiKeyUsageFormatting';
@@ -18,13 +19,18 @@ const account: CodexAccount = {
   openai_api_key: 'test-key', api_base_url: 'https://provider.example',
   tokens: { id_token: '', access_token: '' }, created_at: 0, last_used: 0,
 };
+const officialProvider: CodexModelProvider = {
+  id: 'official', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1',
+  supportsWebsockets: false, createdAt: 1, updatedAt: 1,
+  apiKeys: [{ id: 'key', name: '', apiKey: 'test-key', usageApiKey: 'test-admin', usageKeyVersion: 1, createdAt: 1, updatedAt: 1 }],
+};
 function renderSummary(partial: Partial<ModelProviderUsageSummary>, variant: 'card' | 'table' = 'card') {
   const summary: ModelProviderUsageSummary = { mode: 'new_api', unit: 'USD', modelStatsCount: 0, latencyMs: 0, ...partial };
   function Panel() {
     const formatting = useCodexApiKeyUsageFormatting(t, String);
     return renderCodexApiKeyUsagePanel({
       account: partial.mode === 'openai_official' ? { ...account, api_base_url: 'https://api.openai.com/v1' } : account,
-      provider: null, variant, usageState: { loading: false, summary }, t, ...formatting,
+      provider: partial.mode === 'openai_official' ? officialProvider : null, variant, usageState: { loading: false, summary, sourceBinding: 'official:key:1:costs-v2' }, t, ...formatting,
     });
   }
   return renderToStaticMarkup(createElement(Panel));
@@ -58,7 +64,8 @@ for (const variant of ['card', 'table'] as const) {
 }
 test('official missing daily usage stays unknown', () => {
   const html = renderSummary({ mode: 'openai_official', balance: 40, totalCost: 120 });
-  assert.equal((html.match(/<strong>—<\/strong>/g) ?? []).length, 3);
+  assert.equal((html.match(/<strong>—<\/strong>/g) ?? []).length, 2);
+  assert.ok(html.includes('codex.openaiUsage.costUnavailable'));
   assert.ok(!html.includes('$40.00'));
 });
 test('failed relay quota query shows an error instead of a blank panel', () => {

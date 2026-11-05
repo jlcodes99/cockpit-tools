@@ -691,7 +691,6 @@
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN",
     "minimaxcode": "MiniMax Code",
-    "minimaxcode": "MiniMax Code",
     "zed": "Zed 平台",
     "expandSidebar": "展開側邊欄",
     "collapseSidebar": "收起側邊欄",
@@ -759,7 +758,12 @@
     "setAsDefaultInGroup": "設為群組內預設平台",
     "removeFromGroup": "移出群組",
     "sidebarSelectedUnlimited": "已選 ({count})",
-    "tipWithGroupsUnlimited": "手動排序已選擇的平台和分組"
+    "tipWithGroupsUnlimited": "手動排序已選擇的平台和分組",
+    "enabledToggle": "啟用",
+    "groupEnabledHint": "啟用或停用此群組所有平台",
+    "disabledHint": "停用後停止自動活動並隱藏平台設定；入口顯示另行控制",
+    "enableAll": "全部啟用",
+    "disableAll": "全部停用"
   },
   "privacy": {
     "hideSensitive": "隱藏電子郵件",
@@ -1418,7 +1422,9 @@
         "configFailed": "設定讀取或儲存失敗：{{error}}",
         "nativePredictions": "原生下一步預測（Tab）",
         "nativePredictionsDesc": "使用目前對話的 API 供應商和模型產生下一則訊息建議，會額外消耗 API 額度；儲存後重新啟動 Codex 生效。"
-      }
+      },
+      "timeDisplayMode": "時間顯示",
+      "timeDisplayModeDesc": "選擇帳號卡片與列表的時間內容，預設為切換時間"
     },
     "network": {
       "apiTitle": "反重力駕駛艙 API",
@@ -2102,7 +2108,13 @@
     "tagUpdated": "標籤已更新",
     "plan": {
       "personal": "個人"
-    }
+    },
+    "lastSwitchTime": "切換時間",
+    "neverSwitched": "尚未切換",
+    "refreshTime": "更新時間",
+    "lastSwitchTimeFull": "切換時間：{{time}}",
+    "refreshTimeFull": "更新時間：{{time}}",
+    "toggleTimeMode": "切換顯示切換或更新時間"
   },
   "overview": {
     "title": "帳號總覽",
@@ -7389,7 +7401,7 @@
       "timeRangeError": "開始時間不能晚於結束時間"
     }
   },
-    "minimaxCode": {
+  "minimaxCode": {
     "title": "MiniMax Code 帳號管理",
     "noAccounts": "暫無 MiniMax Code 帳號",
     "addAccount": "新增 MiniMax Code 帳號",

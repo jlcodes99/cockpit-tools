@@ -30,6 +30,7 @@ export interface ZedAccount {
   preferences_raw?: unknown;
   created_at: number;
   last_used: number;
+  last_switched_at?: number | null;
   email?: string | null;
   plan_type?: string | null;
   quota?: unknown;

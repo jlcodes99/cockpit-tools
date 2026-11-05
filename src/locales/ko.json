@@ -691,7 +691,6 @@
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "minimaxcode": "MiniMax Code",
-    "minimaxcode": "MiniMax Code",
     "zed": "Zed 플랫폼",
     "expandSidebar": "사이드바 확장",
     "collapseSidebar": "사이드바 축소",
@@ -759,7 +758,12 @@
     "setAsDefaultInGroup": "이 그룹의 기본 플랫폼으로 설정",
     "removeFromGroup": "그룹에서 제거",
     "sidebarSelectedUnlimited": "선택됨 ({count})",
-    "tipWithGroupsUnlimited": "선택한 플랫폼 및 그룹을 수동으로 정렬합니다"
+    "tipWithGroupsUnlimited": "선택한 플랫폼 및 그룹을 수동으로 정렬합니다",
+    "enabledToggle": "사용",
+    "groupEnabledHint": "이 그룹의 모든 플랫폼을 함께 켜거나 끕니다",
+    "disabledHint": "끄면 자동 작업이 중지되고 설정 영역이 숨겨집니다. 메뉴 표시는 별도로 설정합니다",
+    "enableAll": "모두 켜기",
+    "disableAll": "모두 끄기"
   },
   "privacy": {
     "hideSensitive": "이메일 숨기기",
@@ -1418,7 +1422,9 @@
         "configFailed": "설정을 읽거나 저장하지 못했습니다: {{error}}",
         "nativePredictions": "네이티브 다음 단계 예측(Tab)",
         "nativePredictionsDesc": "현재 대화의 API 제공업체와 모델로 다음 메시지를 제안합니다. API 크레딧을 추가로 사용합니다. 저장 후 Codex를 다시 시작하세요."
-      }
+      },
+      "timeDisplayMode": "시간 표시",
+      "timeDisplayModeDesc": "계정 카드와 목록에 표시할 시간입니다. 기본값은 전환 시간입니다"
     },
     "network": {
       "apiTitle": "반중력 조종석 API",
@@ -2102,7 +2108,13 @@
     "tagUpdated": "태그가 업데이트되었습니다",
     "plan": {
       "personal": "개인"
-    }
+    },
+    "lastSwitchTime": "전환 시간",
+    "neverSwitched": "전환 이력 없음",
+    "refreshTime": "새로고침 시간",
+    "lastSwitchTimeFull": "전환 시간: {{time}}",
+    "refreshTimeFull": "새로고침 시간: {{time}}",
+    "toggleTimeMode": "전환 시간과 새로고침 시간 전환"
   },
   "overview": {
     "title": "계정 개요",
@@ -7389,7 +7401,7 @@
       "timeRangeError": "시작 시간은 종료 시간보다 늦을 수 없습니다"
     }
   },
-    "minimaxCode": {
+  "minimaxCode": {
     "title": "MiniMax Code 계정 관리",
     "noAccounts": "MiniMax Code 계정이 없습니다",
     "addAccount": "MiniMax Code 계정 추가",

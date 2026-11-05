@@ -216,7 +216,7 @@ fn automatic_routing_accepts_catalog_models_without_opening_unknown_gpt_names() 
         .as_array()
         .unwrap()
         .iter()
-        .find(|model| model["slug"] == "gpt-5.5")
+        .find(|model| model["slug"] == "gpt-6.1-sol")
         .unwrap()
         .clone();
     future["slug"] = json!("gpt-6.2-sol");
@@ -254,7 +254,7 @@ fn automatic_routing_accepts_catalog_models_without_opening_unknown_gpt_names() 
 fn configured_api_key_models_receive_catalog_thinking_without_changing_mapping() {
     let mut catalog = crate::modules::codex_model_catalog::snapshot().as_ref().clone();
     let mut future = catalog["models"].as_array().unwrap().iter()
-        .find(|model| model["slug"] == "gpt-5.5").unwrap().clone();
+        .find(|model| model["slug"] == "gpt-6.1-sol").unwrap().clone();
     future["slug"] = json!("gpt-6.2-sol");
     future["supported_reasoning_levels"] = json!([
         {"effort": "low", "description": "Low"},
@@ -272,7 +272,12 @@ fn configured_api_key_models_receive_catalog_thinking_without_changing_mapping()
         let values = super::sidecar_codex_key_model_values(&account, &collection);
         assert_eq!(values[0]["name"], "gpt-6.2-sol");
         assert_eq!(values[0]["alias"], "my-model");
-        assert_eq!(values[0]["thinking"]["levels"], json!(["low", "ultra"]));
+        // The native gateway exposes reasoning through /models, not the
+        // retired Go sidecar's `thinking` configuration field.
+        let rendered = super::codex_protocol::build_codex_client_models_response(&["gpt-6.2-sol".into()]);
+        let levels = rendered["models"][0]["supported_reasoning_levels"].as_array().unwrap()
+            .iter().map(|level| level["effort"].clone()).collect::<Vec<_>>();
+        assert_eq!(levels, vec![json!("low"), json!("ultra")]);
     });
 }
 

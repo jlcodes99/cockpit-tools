@@ -429,6 +429,7 @@ fn import_desktop_profile_snapshot(
     let now = now_ts_ms();
     let desktop_profile = desktop_profile_metadata_json(&metadata, &snapshot_dir, now);
     let mut account = ClaudeAccount {
+        last_switched_at: None,
         id: id.clone(),
         email: label,
         auth_mode: ClaudeAuthMode::DesktopOAuth,

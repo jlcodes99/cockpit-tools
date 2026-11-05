@@ -541,7 +541,10 @@ pub async fn run_trae_auto_checkin_cycle_if_needed(
     // 签到接口仅存在于 Trae CN（api.trae.cn），国际站账号直接跳过
     let cn_accounts: Vec<&TraeAccount> = all_accounts
         .iter()
-        .filter(|account| trae_account::resolve_account_platform_kind(account).is_cn())
+        .filter(|account| {
+            let platform = trae_account::resolve_account_platform_kind(account);
+            platform.is_cn() && (force || crate::modules::tray_layout::is_platform_enabled(platform.provider_key()))
+        })
         .collect();
     let accounts: Vec<&TraeAccount> = dedup_checkin_accounts(&cn_accounts);
     if accounts.is_empty() {
@@ -779,7 +782,10 @@ pub async fn run_trae_auto_checkin_cycle_if_needed(
             .collect();
         let refresh_ids: Vec<String> = all_accounts
             .iter()
-            .filter(|account| trae_account::resolve_account_platform_kind(account).is_cn())
+            .filter(|account| {
+            let platform = trae_account::resolve_account_platform_kind(account);
+            platform.is_cn() && (force || crate::modules::tray_layout::is_platform_enabled(platform.provider_key()))
+        })
             .filter(|account| {
                 claimed_account_ids.contains(&account.id)
                     || normalized_user_id(account)
@@ -866,6 +872,7 @@ mod tests {
 
     fn trae_account_min(id: &str, email: &str) -> TraeAccount {
         TraeAccount {
+            last_switched_at: None,
             id: id.to_string(),
             email: email.to_string(),
             user_id: None,

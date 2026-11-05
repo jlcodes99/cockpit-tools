@@ -147,17 +147,15 @@ pub fn load_account(account_id: &str) -> Option<CursorAccount> {
 
 fn save_account_file(account: &CursorAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
-    let content =
-        crate::modules::secure_account_storage::serialize_account_file("cursor", account)?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
+    crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "cursor", account)
         .map_err(|e| format!("保存账号失败: {}", e))
 }
 
-// ponytail: 切号时记录 last_used。O(n) load+save 单个账号文件。
+// Record credential-switch success separately from refresh activity.
 pub fn touch_last_used(account_id: &str) -> Result<(), String> {
     let mut account = load_account(account_id)
         .ok_or_else(|| format!("Cursor account not found: {}", account_id))?;
-    account.last_used = now_ts();
+    account.last_switched_at = Some(now_ts());
     save_account_file(&account)?;
     Ok(())
 }
@@ -528,6 +526,7 @@ fn merge_duplicate_account(primary: &mut CursorAccount, duplicate: &CursorAccoun
     primary.tags = merge_string_list(primary.tags.clone(), duplicate.tags.clone());
     primary.created_at = primary.created_at.min(duplicate.created_at);
     primary.last_used = primary.last_used.max(duplicate.last_used);
+    primary.last_switched_at = primary.last_switched_at.max(duplicate.last_switched_at);
 }
 
 fn choose_primary_account_index(group: &[usize], accounts: &[CursorAccount]) -> usize {
@@ -824,6 +823,7 @@ fn apply_payload(
     }
     account.status = payload.status;
     account.status_reason = payload.status_reason;
+    account.last_used = now_ts();
 }
 
 pub fn upsert_account(payload: CursorImportPayload) -> Result<CursorAccount, String> {
@@ -882,6 +882,7 @@ pub fn upsert_account(payload: CursorImportPayload) -> Result<CursorAccount, Str
     let created_at = existing.as_ref().map(|acc| acc.created_at).unwrap_or(now);
 
     let mut account = existing.unwrap_or(CursorAccount {
+        last_switched_at: None,
         id: account_id.clone(),
         email: payload.email.clone(),
         auth_id: incoming_auth_id.clone(),
@@ -1335,6 +1336,7 @@ pub fn inject_to_cursor(account_id: &str) -> Result<(), String> {
         Connection::open(&db_path).map_err(|e| format!("打开 Cursor 本地数据库失败: {}", e))?;
 
     write_cursor_auth(&mut conn, &account)?;
+    touch_last_used(account_id)?;
 
     logger::log_info(&format!(
         "[Cursor Account] 注入成功: id={}, email={}",
@@ -1354,6 +1356,7 @@ pub fn inject_to_cursor_at_path(db_path: &std::path::Path, account_id: &str) -> 
         Connection::open(db_path).map_err(|e| format!("打开 Cursor 本地数据库失败: {}", e))?;
 
     write_cursor_auth(&mut conn, &account)?;
+    touch_last_used(account_id)?;
 
     logger::log_info(&format!(
         "[Cursor Account] 注入成功(自定义路径): id={}, email={}, path={}",
@@ -1893,6 +1896,7 @@ async fn refresh_account_async_once(account_id: &str) -> Result<CursorAccount, S
     if usage_refreshed {
         account.usage_updated_at = Some(refreshed_at);
     }
+    account.last_used = refreshed_at;
     let updated = account.clone();
     upsert_account_record(account)?;
     logger::log_info(&format!(

@@ -277,7 +277,7 @@
     fn general_config_patch_native_predictions_preserves_other_preferences() {
         let mut config = UserConfig::default();
         config.language = "ja".to_string();
-        config.codex_app_native_fast_enabled = false;
+
         let before = serde_json::to_value(&config).unwrap();
         let updates = serde_json::json!({"codex_app_native_predictions_enabled": true});
         apply_general_config_updates(&mut config, updates.as_object().unwrap())
@@ -297,7 +297,7 @@
         apply_general_config_updates(&mut config, disabled.as_object().unwrap())
             .expect("disable predictions independently");
         assert!(!config.codex_app_native_predictions_enabled);
-        assert!(!config.codex_app_native_fast_enabled);
+
         assert!(config.codex_app_api_quota_compat_enabled);
         assert_eq!(config.language, "ja");
     }

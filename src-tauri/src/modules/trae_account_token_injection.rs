@@ -1005,6 +1005,7 @@ pub fn inject_to_trae_at_path(storage_path: &Path, account_id: &str) -> Result<(
     }
 
     write_storage_json(storage_path, &root)?;
+    touch_last_used(account_id)?;
 
     logger::log_info(&format!(
         "[Trae Account] 注入成功: id={}, email={}, path={}",
@@ -2448,6 +2449,7 @@ async fn refresh_quota_snapshot(
         account.quota_query_last_error = Some(quota_query_errors.join(" | "));
         account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
     }
+    account.last_used = refreshed_at;
 }
 
 async fn refresh_account_async_once(account_id: &str) -> Result<TraeAccount, String> {

@@ -183,8 +183,7 @@ pub fn load_account(account_id: &str) -> Option<QoderAccount> {
 
 fn save_account_file(account: &QoderAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
-    let content = crate::modules::secure_account_storage::serialize_account_file("qoder", account)?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
+    crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "qoder", account)
         .map_err(|e| format!("保存账号失败: {}", e))
 }
 
@@ -892,6 +891,7 @@ fn snapshot_to_account(snapshot: QoderSnapshot, existing: Option<&QoderAccount>)
     });
 
     QoderAccount {
+        last_switched_at: existing.and_then(|account| account.last_switched_at),
         id: existing.map(|item| item.id.clone()).unwrap_or(generated_id),
         email,
         user_id,
@@ -1224,6 +1224,7 @@ pub fn inject_to_qoder_at_path(db_path: &Path, account_id: &str) -> Result<(), S
 
     let mut updated = account.clone();
     updated.last_used = now_ts();
+    updated.last_switched_at = Some(updated.last_used);
     let _ = upsert_account_record(updated);
 
     logger::log_info(&format!(

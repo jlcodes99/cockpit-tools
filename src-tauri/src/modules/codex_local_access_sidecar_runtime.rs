@@ -1661,7 +1661,7 @@ fn apply_profile_model_ordering(client_models: &mut Value) {
     else {
         return;
     };
-    let reserve_priority = LOCAL_GATEWAY_VISIBLE_GPT_MODELS.len() as i64;
+    let reserve_priority = local_gateway_visible_gpt_model_definitions().len() as i64;
     let account_priority_base = reserve_priority + 1;
     let mut account_index = 0_i64;
     for model in models.iter_mut() {
@@ -1674,7 +1674,7 @@ fn apply_profile_model_ordering(client_models: &mut Value) {
             .get("visibility")
             .and_then(Value::as_str)
             .is_some_and(|visibility| visibility.eq_ignore_ascii_case("hide"));
-        let priority = if let Some(index) = LOCAL_GATEWAY_VISIBLE_GPT_MODELS
+        let priority = if let Some(index) = local_gateway_visible_gpt_model_definitions()
             .iter()
             .position(|(model_id, _)| model_id.eq_ignore_ascii_case(&slug))
         {
@@ -1884,7 +1884,7 @@ fn local_access_profile_model_definitions_with_accounts(profile_dir:&Path,collec
     // GPT 官方推荐集的显示名始终跟随官方客户端（带 `GPT-` 前缀），
     // 即使用户在「模型管理」里用了别的名字，API 服务 profile 也保持官方命名。
     for definition in definitions.iter_mut() {
-        if let Some((_, official_name)) = LOCAL_GATEWAY_VISIBLE_GPT_MODELS
+        if let Some((_, official_name)) = local_gateway_visible_gpt_model_definitions()
             .iter()
             .find(|(model_id, _)| model_id.eq_ignore_ascii_case(&definition.model_id))
         {
@@ -2019,7 +2019,7 @@ fn profile_catalog_allows_reserve(client_models: &Value) -> bool {
             .map(str::trim)
             .is_some_and(|slug| {
                 slug.eq_ignore_ascii_case(CODEX_GPT_RESERVE_MODEL_ID)
-                    || LOCAL_GATEWAY_VISIBLE_GPT_MODELS
+                    || local_gateway_visible_gpt_model_definitions()
                         .iter()
                         .any(|(model_id, _)| model_id.eq_ignore_ascii_case(slug))
             })

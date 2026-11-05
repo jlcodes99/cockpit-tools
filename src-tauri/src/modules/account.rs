@@ -500,10 +500,8 @@ pub fn save_account(account: &Account) -> Result<(), String> {
     let accounts_dir = get_accounts_dir()?;
     let account_path = accounts_dir.join(format!("{}.json", account.id));
 
-    let content = serialize_account_for_storage(account)?;
-
-    crate::modules::atomic_write::write_string_atomic(&account_path, &content)
-        .map_err(|e| format!("保存账号数据失败: {}", e))?;
+    crate::modules::secure_account_storage::write_account_preserving_switch_time(
+        &account_path, "antigravity", account)?;
     invalidate_list_accounts_cache();
     Ok(())
 }
@@ -2092,9 +2090,6 @@ where
     F: FnOnce(String, modules::antigravity_switch_history::AntigravityAutoSwitchReason) -> Fut,
     Fut: std::future::Future<Output = Result<Account, String>>,
 {
-    if !crate::modules::tray_layout::is_platform_enabled("antigravity") {
-        return Ok(None);
-    }
     let Some(_guard) = AutoSwitchGuard::acquire(&AUTO_SWITCH_IN_PROGRESS) else {
         modules::logger::log_info("[AutoSwitch] 自动切号进行中，跳过本次检查");
         return Ok(None);
@@ -2811,6 +2806,7 @@ pub(crate) fn commit_switched_account(account_id: &str) -> Result<Account, Strin
     let mut index = load_account_index()?;
     let mut account = load_account(account_id)?;
     account.update_last_used();
+    account.last_switched_at = Some(account.last_used);
     save_account(&account)?;
     index.current_account_id = Some(account_id.to_string());
     save_account_index(&index)?;

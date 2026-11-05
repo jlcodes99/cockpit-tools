@@ -17,6 +17,7 @@ use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream, WebSocketStre
 const GUARD_SCRIPT: &str = include_str!("startup_guard.js");
 const PRELOAD_SCRIPT: &str = include_str!("startup_preload.js");
 const SCRIPT: &str = include_str!("fast.js");
+const PREDICTIONS_RSPACK_SCRIPT: &str = include_str!("predictions_rspack.js");
 const PREDICTIONS_SCRIPT: &str = include_str!("predictions.js");
 const QUOTA_SCRIPT: &str = include_str!("quota.js");
 const QUOTA_CURRENT_SCRIPT: &str = include_str!("quota_current.js");
@@ -568,7 +569,7 @@ fn bootstrap(
 ) -> String {
     let options = json!({"nativeFast":native_fast,"nativePredictions":native_predictions,"quotaCompat":quota_compat,"apiKeyAuthVerified":api_key_auth_verified,"apiService":api_service,"owner":owner});
     let state = STATE_SCRIPT.replace("__COCKPIT_STATE_OPTIONS__", &options.to_string());
-    format!("{state}\n{GUARD_SCRIPT}\n{SCRIPT}\n{PREDICTIONS_SCRIPT}\n{QUOTA_SCRIPT}\n{QUOTA_CURRENT_SCRIPT}\n;true;")
+    format!("{state}\n{GUARD_SCRIPT}\n{SCRIPT}\n{PREDICTIONS_SCRIPT}\n{PREDICTIONS_RSPACK_SCRIPT}\n{QUOTA_SCRIPT}\n{QUOTA_CURRENT_SCRIPT}\n;true;")
 }
 
 

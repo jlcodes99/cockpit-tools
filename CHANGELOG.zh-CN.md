@@ -12,6 +12,18 @@
 
 ### 新增
 
+- **平台启用控制** 可单独停止不用平台的自动刷新、令牌保活、唤醒和签到，并保留手动操作。 [#2402](https://github.com/jlcodes99/cockpit-tools/pull/2402) · [@qxo](https://github.com/qxo)
+- **减少动画** 统一减少装饰动画、阴影和滤镜，保留加载反馈与账号状态。 [#2964](https://github.com/jlcodes99/cockpit-tools/pull/2964) · [@lcpdeb](https://github.com/lcpdeb)
+- **Codex 模型目录** 从上游更新模型目录，保留有效缓存与本地配置，新模型可随目录更新提供。 [#2669](https://github.com/jlcodes99/cockpit-tools/pull/2669) · [@jiabaoliu101](https://github.com/jiabaoliu101)
+- **TRAE 国内版签到** 增加签到状态、手动领取、自动签到和执行记录，按国内版与 SOLO 国内版账号处理。 [#2729](https://github.com/jlcodes99/cockpit-tools/pull/2729) · [@eye-gu](https://github.com/eye-gu)
+- **账号时间** 区分成功切号时间与配额刷新时间，支持卡片显示偏好；历史未知时间显示暂无记录。 [#2403](https://github.com/jlcodes99/cockpit-tools/pull/2403) · [@qxo](https://github.com/qxo)
+- **Codex 原生下一步预测** 适配 Vite 与新版 Rspack 客户端，本地 API 连接可启用原生预测，建议通过 Tab 接受到草稿，沿用当前模型和提供方并产生额外用量。 [#2938](https://github.com/jlcodes99/cockpit-tools/pull/2938) · [@HTExplicit](https://github.com/HTExplicit)
+- **MiniMax Code** 新增账号授权、本地导入、切号、积分查询、签到和独立实例管理。 [#2919](https://github.com/jlcodes99/cockpit-tools/pull/2919) · [@SkyblueeeLabs](https://github.com/SkyblueeeLabs)
+- **Codex 本地项目恢复** 保留宿主内置项目恢复流程，并提供 Windows 独立审计、恢复及回滚脚本。 [#2955](https://github.com/jlcodes99/cockpit-tools/pull/2955) · [@harryzhou0106-svg](https://github.com/harryzhou0106-svg)
+- **Codex Windows 沙箱恢复** 提供按需运行的诊断与权限修复工具，支持备份和回滚。 [#2982](https://github.com/jlcodes99/cockpit-tools/pull/2982) · [@ws-cczj](https://github.com/ws-cczj)
+- **PR 构建** 共享前端构建产物并复用编译缓存，使用 CI 编译配置验证各平台可执行文件。 [#1771](https://github.com/jlcodes99/cockpit-tools/pull/1771) · [@khanra17](https://github.com/khanra17)
+- **发布构建** 共享构建输入、复用原生 macOS 产物生成 Universal 包，并提供仅生成验收产物的运行模式。 [#1774](https://github.com/jlcodes99/cockpit-tools/pull/1774) · [@khanra17](https://github.com/khanra17)
+
 - **WorkBuddy 积分明细**：从账号页打开积分概览，查看有效期内和已过期的积分记录、剩余积分及到期时间。账号卡片以紧凑布局突出余额。弹框切换页签或翻页时保留已加载的记录，可查看最近 5 条消耗记录并前往官网查看完整明细。
 
 - **Codex API 满载恢复**：可开启持续重试，等待上游模型恢复后继续可安全重放的请求。账号统计按上游尝试记录满载次数，包含重试或换号后成功的请求。
@@ -802,16 +814,6 @@
 
 - **修复 DeepSeek 思考强度被重置**：切换账号或启动实例时不再把 `model_reasoning_effort` 重置为 `high`，Codex 里已选的 `low` / `high` / `max` 保持不变。
 - **收敛 CDP 注入的改动范围**：模型列表识别收紧为真正的模型描述符，不再改动队列、线程等通用数组；默认模型改为只在用户显式切换模型时回写，减少任务运行中的后端写入。同时修复注入脚本因引用已删除常量而在每次执行末尾报错、导致 CDP 下切换模型状态无法回传的问题。
-
-### 新增
-
-- **平台布局「启用/禁用」开关**：布局编辑器中每个平台条目新增启用开关，并提供「全部启用」/「全部禁用」批量操作。禁用某平台会停止其全部自动活动（自动刷新、token 保活、托盘账号读取），但不影响该条目是否显示。被收进分组（Antigravity、Codex 套件、CodeBuddy、Trae 套件）的平台，展开分组后其子级行同样提供启用开关。
-- **后端感知禁用平台**：禁用平台集合通过 `save_tray_platform_layout` 持久化到托盘布局配置中，后端任务可据此跳过被禁用的平台。
-
-### 变更
-
-- **隐藏与禁用自己的职责分离**：隐藏条目仅控制显示（侧边栏、仪表盘、托盘），禁用才停止后台自动活动。此前隐藏条目会一并停止自动活动，导致用户无法在只精简界面的同时保留后台刷新。
-- **禁用平台不再出现在应用设置中**：某个平台在平台布局中被禁用后，其在应用设置里的配置分区（自动刷新、额度提醒、启动路径等）会整体隐藏，避免继续配置一个后台已停摆的平台。重新启用后设置项自动恢复。
 
 ## [1.3.48] - 2026-09-11
 

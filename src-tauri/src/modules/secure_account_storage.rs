@@ -145,6 +145,37 @@ pub fn serialize_account_file<T: Serialize>(kind: &str, account: &T) -> Result<S
     serde_json::to_string_pretty(&envelope).map_err(|e| format!("序列化账号详情密文失败: {}", e))
 }
 
+/// Refresh and import snapshots may predate a completed switch. Merge only this
+/// monotonic metadata under the ordinary account-file write lock; credentials
+/// and quota fields keep their existing ownership and replacement semantics.
+pub(crate) fn write_account_preserving_switch_time<T: Serialize>(
+    path: &Path,
+    kind: &str,
+    account: &T,
+) -> Result<(), String> {
+    let mut next = serde_json::to_value(account).map_err(|error| error.to_string())?;
+    crate::modules::atomic_write::update_string_atomic(path, |current| {
+        if let Some(current) = current {
+            let current = current.strip_prefix('\u{feff}').unwrap_or(current);
+            let envelope: serde_json::Value = serde_json::from_str(current)
+                .map_err(|error| format!("读取账号切号记录失败: {error}"))?;
+            let previous = if envelope.get("ciphertext").is_some() {
+                deserialize_encrypted_snapshot::<serde_json::Value>(current)?
+            } else {
+                envelope
+            };
+            if previous.get("id") == next.get("id") {
+                let timestamp = previous.get("last_switched_at").and_then(serde_json::Value::as_i64)
+                    .max(next.get("last_switched_at").and_then(serde_json::Value::as_i64));
+                if let Some(timestamp) = timestamp {
+                    next["last_switched_at"] = timestamp.into();
+                }
+            }
+        }
+        serialize_account_file(kind, &next)
+    })
+}
+
 /// Decode an immutable encrypted snapshot without restoring backups, rotating
 /// storage, or creating a replacement key when the original key is missing.
 pub(crate) fn deserialize_encrypted_snapshot<T: DeserializeOwned>(
@@ -264,6 +295,17 @@ mod tests {
             deserialize_account_file::<DemoAccount>(&path, &plain).expect("legacy");
         assert_eq!(legacy, account);
         assert!(needs_migration);
+
+        let switched = serde_json::json!({"id":"a1", "last_switched_at": 200, "secret":"new"});
+        write_account_preserving_switch_time(&path, "demo", &switched).unwrap();
+        let stale = serde_json::json!({"id":"a1", "last_switched_at":100, "secret":"refreshed"});
+        write_account_preserving_switch_time(&path, "demo", &stale).unwrap();
+        let saved: serde_json::Value = deserialize_encrypted_snapshot(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(saved["last_switched_at"], 200);
+        assert_eq!(saved["secret"], "refreshed");
+        write_account_preserving_switch_time(&path, "demo", &serde_json::json!({"id":"a1", "secret":"imported"})).unwrap();
+        let saved: serde_json::Value = deserialize_encrypted_snapshot(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(saved["last_switched_at"], 200);
 
         std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
         let _ = fs::remove_dir_all(&dir);

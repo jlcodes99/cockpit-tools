@@ -545,7 +545,7 @@ mod tests {
     #[test]
     fn prediction_only_profile_is_opt_in_local_api_and_independent_of_fast() {
         let mut cfg = config::UserConfig::default();
-        cfg.codex_app_native_fast_enabled = false;
+
         cfg.codex_app_api_quota_compat_enabled = false;
         let doc: toml_edit::Document = "model_provider='relay'\n[model_providers.relay]\nbase_url='https://api.example.test/v1'\nrequires_openai_auth=false\n".parse().unwrap();
         let api = json!({"auth_mode":"apikey", "OPENAI_API_KEY":"synthetic-key"});
@@ -554,7 +554,7 @@ mod tests {
         let profile = profile_from_values(&doc, &api, &cfg);
         assert!(profile.native_predictions);
         assert!(profile.active());
-        assert!(!profile.native_fast);
+        assert!(profile.native_fast);
         assert!(!profile.quota_compat);
         let script = trusted_preload_source(Some(&profile), false, 9333).unwrap();
         assert!(script.contains("\"nativePredictions\":true"));

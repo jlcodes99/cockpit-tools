@@ -691,7 +691,6 @@
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "minimaxcode": "MiniMax Code",
-    "minimaxcode": "MiniMax Code",
     "zed": "Platforma Zed",
     "expandSidebar": "Rozwiń pasek boczny",
     "collapseSidebar": "Zwiń pasek boczny",
@@ -759,7 +758,12 @@
     "setAsDefaultInGroup": "Ustaw jako domyślną platformę w tej grupie",
     "removeFromGroup": "Usuń z grupy",
     "sidebarSelectedUnlimited": "Wybrano ({count})",
-    "tipWithGroupsUnlimited": "Ręczne sortowanie wybranych platform i grup"
+    "tipWithGroupsUnlimited": "Ręczne sortowanie wybranych platform i grup",
+    "enabledToggle": "Włączone",
+    "groupEnabledHint": "Włącz lub wyłącz wszystkie platformy w grupie",
+    "disabledHint": "Wyłączenie zatrzymuje zadania automatyczne i ukrywa ustawienia platformy. Widoczność pozycji ustawia się osobno",
+    "enableAll": "Włącz wszystkie",
+    "disableAll": "Wyłącz wszystkie"
   },
   "privacy": {
     "hideSensitive": "Ukryj e-maile",
@@ -1418,7 +1422,9 @@
         "configFailed": "Nie udało się odczytać lub zapisać ustawień: {{error}}",
         "nativePredictions": "Natywne przewidywanie następnego kroku (Tab)",
         "nativePredictionsDesc": "Generuje propozycje następnej wiadomości przy użyciu dostawcy API i modelu bieżącej rozmowy. Zużywa dodatkowe kredyty API; po zapisaniu uruchom ponownie Codex."
-      }
+      },
+      "timeDisplayMode": "Wyświetlany czas",
+      "timeDisplayModeDesc": "Czas na kartach i listach kont. Domyślnie czas przełączenia konta"
     },
     "network": {
       "apiTitle": "API kokpitu antygrawitacyjnego",
@@ -2102,7 +2108,13 @@
     "tagUpdated": "Tag zaktualizowany",
     "plan": {
       "personal": "Osobisty"
-    }
+    },
+    "lastSwitchTime": "Przełączenie",
+    "neverSwitched": "Brak przełączeń",
+    "refreshTime": "Odświeżenie",
+    "lastSwitchTimeFull": "Przełączenie: {{time}}",
+    "refreshTimeFull": "Odświeżenie: {{time}}",
+    "toggleTimeMode": "Pokaż czas przełączenia lub odświeżenia"
   },
   "overview": {
     "title": "Przegląd kont",
@@ -7389,7 +7401,7 @@
       "timeRangeError": "Czas rozpoczęcia nie może być późniejszy niż czas zakończenia"
     }
   },
-    "minimaxCode": {
+  "minimaxCode": {
     "title": "Zarządzanie kontami MiniMax Code",
     "noAccounts": "Brak kont MiniMax Code",
     "addAccount": "Dodaj konto MiniMax Code",

@@ -691,7 +691,6 @@
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "minimaxcode": "MiniMax Code",
-    "minimaxcode": "MiniMax Code",
     "zed": "Plataforma Zed",
     "expandSidebar": "Expandir barra lateral",
     "collapseSidebar": "Recolher barra lateral",
@@ -759,7 +758,12 @@
     "setAsDefaultInGroup": "Definir como plataforma padrão deste grupo",
     "removeFromGroup": "Remover do grupo",
     "sidebarSelectedUnlimited": "Selecionado ({count})",
-    "tipWithGroupsUnlimited": "Classifique manualmente as plataformas e grupos selecionados"
+    "tipWithGroupsUnlimited": "Classifique manualmente as plataformas e grupos selecionados",
+    "enabledToggle": "Ativado",
+    "groupEnabledHint": "Ativar ou desativar todas as plataformas do grupo",
+    "disabledHint": "Desativar interrompe as tarefas automáticas e oculta as configurações da plataforma. A visibilidade da entrada é controlada separadamente",
+    "enableAll": "Ativar todas",
+    "disableAll": "Desativar todas"
   },
   "privacy": {
     "hideSensitive": "Ocultar e-mails",
@@ -1418,7 +1422,9 @@
         "configFailed": "Falha ao ler ou salvar configurações: {{error}}",
         "nativePredictions": "Previsões nativas do próximo passo (Tab)",
         "nativePredictionsDesc": "Gera sugestões para a próxima mensagem com o provedor de API e o modelo da conversa atual. Consome créditos de API adicionais; reinicie o Codex após salvar."
-      }
+      },
+      "timeDisplayMode": "Hora exibida",
+      "timeDisplayModeDesc": "Hora nos cartões e listas de contas. Por padrão, a hora da troca de conta"
     },
     "network": {
       "apiTitle": "API de cockpit antigravidade",
@@ -2102,7 +2108,13 @@
     "tagUpdated": "Tag atualizado",
     "plan": {
       "personal": "Pessoal"
-    }
+    },
+    "lastSwitchTime": "Troca",
+    "neverSwitched": "Nenhuma troca",
+    "refreshTime": "Atualização",
+    "lastSwitchTimeFull": "Troca: {{time}}",
+    "refreshTimeFull": "Atualização: {{time}}",
+    "toggleTimeMode": "Exibir hora da troca ou da atualização"
   },
   "overview": {
     "title": "Visão Geral das Contas",
@@ -7389,7 +7401,7 @@
       "timeRangeError": "O horário de início não pode ser posterior ao horário de término"
     }
   },
-    "minimaxCode": {
+  "minimaxCode": {
     "title": "Gerenciamento de contas do MiniMax Code",
     "noAccounts": "Nenhuma conta MiniMax Code",
     "addAccount": "Adicionar conta MiniMax Code",

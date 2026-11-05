@@ -213,6 +213,7 @@ fn inject_bound_account_for_instance_start_blocking(
         state_db_path.to_string_lossy()
     ));
 
+    modules::codebuddy_cn_account::touch_last_used(bind_id)?;
     Ok(())
 }
 

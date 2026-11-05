@@ -691,7 +691,6 @@
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "minimaxcode": "MiniMax Code",
-    "minimaxcode": "MiniMax Code",
     "zed": "Zed プラットフォーム",
     "expandSidebar": "サイドバーを展開",
     "collapseSidebar": "サイドバーを折りたたむ",
@@ -759,7 +758,12 @@
     "setAsDefaultInGroup": "このグループのデフォルトプラットフォームに設定",
     "removeFromGroup": "グループから削除",
     "sidebarSelectedUnlimited": "選択済み ({count})",
-    "tipWithGroupsUnlimited": "選択したプラットフォームとグループを手動で並べ替える"
+    "tipWithGroupsUnlimited": "選択したプラットフォームとグループを手動で並べ替える",
+    "enabledToggle": "有効",
+    "groupEnabledHint": "グループ内の全プラットフォームを一括で有効・無効にします",
+    "disabledHint": "無効にすると自動処理を停止し、設定欄を非表示にします。入口の表示は個別に設定します",
+    "enableAll": "すべて有効",
+    "disableAll": "すべて無効"
   },
   "privacy": {
     "hideSensitive": "メールを隠す",
@@ -1418,7 +1422,9 @@
         "configFailed": "設定の読み込みまたは保存に失敗：{{error}}",
         "nativePredictions": "ネイティブの次のステップ予測（Tab）",
         "nativePredictionsDesc": "現在の会話の API プロバイダーとモデルを使って、次のメッセージを提案します。API クレジットを追加で消費します。保存後に Codex を再起動してください。"
-      }
+      },
+      "timeDisplayMode": "時刻表示",
+      "timeDisplayModeDesc": "アカウントカードと一覧に表示する時刻。既定は切替時刻です"
     },
     "network": {
       "apiTitle": "反重力コックピット API",
@@ -2102,7 +2108,13 @@
     "tagUpdated": "タグを更新しました",
     "plan": {
       "personal": "個人"
-    }
+    },
+    "lastSwitchTime": "切替時刻",
+    "neverSwitched": "切替履歴なし",
+    "refreshTime": "更新時刻",
+    "lastSwitchTimeFull": "切替：{{time}}",
+    "refreshTimeFull": "更新：{{time}}",
+    "toggleTimeMode": "切替時刻と更新時刻を切り替える"
   },
   "overview": {
     "title": "アカウント概要",
@@ -7389,7 +7401,7 @@
       "timeRangeError": "開始時間は終了時間より後にできません"
     }
   },
-    "minimaxCode": {
+  "minimaxCode": {
     "title": "MiniMax Codeアカウント管理",
     "noAccounts": "MiniMax Code アカウントがありません",
     "addAccount": "MiniMax Code アカウントを追加",

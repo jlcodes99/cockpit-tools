@@ -703,6 +703,10 @@ fn collect_peek_decisions(mode: WatchMode) -> (u32, Vec<PeekDecision>) {
     let mut pending = Vec::new();
 
     for watcher in platform_watchers() {
+        let platform = if watcher.platform == "antigravity" { "antigravity_ide" } else { watcher.platform };
+        if mode == WatchMode::PollOnChange && !crate::modules::tray_layout::is_platform_enabled(platform) {
+            continue;
+        }
         let current_identity = (watcher.peek_identity)();
         let Some(current_identity) = current_identity else {
             if let Ok(mut state) = LAST_IDENTITIES.lock() {

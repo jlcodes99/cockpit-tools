@@ -384,7 +384,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
               <CodexDeviceRestrictionBadge accountId={account.id} />
             </div>
             <CodexAccountOfficialBadge account={account} grants={planOverview.accounts} memberIds={localAccessAccountIdSet} />
-            <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
+            <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDate} />
             <div className="codex-compact-quotas">
               {isApiKeyAccount ? (
                 (!hideRelayQuota || shouldShowCodexApiKeyUsagePanel(account, hideRelayQuota)) && (isOpenAIOfficialUsageAccount(account)
@@ -900,7 +900,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
             )}
             <div className="codex-card-bottom">
               <CodexAccountProxyCard account={account} placement="detailed" />
-              <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
+              <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDate} />
               <CodexSpeedControl scope="account" account={account} disabled={!!switching}
                 onError={(text) => setMessage(text ? { text, tone: "error" } : null)} />
               <div className="card-footer">

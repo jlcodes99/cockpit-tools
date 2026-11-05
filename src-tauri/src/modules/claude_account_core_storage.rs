@@ -404,9 +404,7 @@ fn save_index(index: &ClaudeAccountIndex) -> Result<(), String> {
 
 fn write_account_file(account: &ClaudeAccount) -> Result<(), String> {
     let path = account_file_path(&account.id)?;
-    let content =
-        crate::modules::secure_account_storage::serialize_account_file("claude", account)?;
-    atomic_write::write_string_atomic(&path, &content)
+    crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "claude", account)
 }
 
 fn migrate_legacy_apikey_fun_urls(account: &mut ClaudeAccount) -> bool {
@@ -489,7 +487,7 @@ pub fn load_account(account_id: &str) -> Option<ClaudeAccount> {
 pub fn touch_last_used(account_id: &str) -> Result<(), String> {
     let mut account = load_account(account_id)
         .ok_or_else(|| format!("Account not found: {}", account_id))?;
-    account.last_used = now_ts();
+    account.last_switched_at = Some(now_ts());
     save_account_and_index(account)?;
     Ok(())
 }
@@ -646,6 +644,7 @@ fn merge_desktop_account_fields(base: &ClaudeAccount, incoming: &ClaudeAccount) 
     }
     merged.created_at = merged.created_at.min(incoming.created_at);
     merged.last_used = merged.last_used.max(incoming.last_used);
+    merged.last_switched_at = merged.last_switched_at.max(incoming.last_switched_at);
     merged
 }
 

@@ -722,6 +722,7 @@ fn switch_account_with_prepared(
     // 更新账号的 last_used
     let mut updated_account = account_for_write.clone();
     updated_account.update_last_used();
+    updated_account.last_switched_at = Some(updated_account.last_used);
     save_account(&updated_account)?;
 
     logger::log_info(&format!("已切换到 Codex 账号: {}", updated_account.email));
@@ -910,6 +911,7 @@ async fn commit_account_switch_locked(
 
             let mut updated_account = account.clone();
             updated_account.update_last_used();
+    updated_account.last_switched_at = Some(updated_account.last_used);
             save_account(&updated_account)?;
 
             logger::log_info(&format!(

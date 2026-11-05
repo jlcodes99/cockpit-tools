@@ -691,7 +691,6 @@
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "minimaxcode": "MiniMax Code",
-    "minimaxcode": "MiniMax Code",
     "zed": "Nền tảng Zed",
     "expandSidebar": "Mở rộng thanh bên",
     "collapseSidebar": "Thu gọn thanh bên",
@@ -759,7 +758,12 @@
     "setAsDefaultInGroup": "Đặt làm nền tảng mặc định trong nhóm này",
     "removeFromGroup": "Xóa khỏi nhóm",
     "sidebarSelectedUnlimited": "Đã chọn ({count})",
-    "tipWithGroupsUnlimited": "Sắp xếp thủ công các nền tảng và nhóm đã chọn"
+    "tipWithGroupsUnlimited": "Sắp xếp thủ công các nền tảng và nhóm đã chọn",
+    "enabledToggle": "Bật",
+    "groupEnabledHint": "Bật hoặc tắt tất cả nền tảng trong nhóm",
+    "disabledHint": "Tắt sẽ dừng tác vụ tự động và ẩn phần cài đặt nền tảng. Việc hiển thị mục được thiết lập riêng",
+    "enableAll": "Bật tất cả",
+    "disableAll": "Tắt tất cả"
   },
   "privacy": {
     "hideSensitive": "Ẩn email",
@@ -1418,7 +1422,9 @@
         "configFailed": "Không thể đọc hoặc lưu cài đặt: {{error}}",
         "nativePredictions": "Dự đoán bước tiếp theo gốc (Tab)",
         "nativePredictionsDesc": "Tạo gợi ý tin nhắn tiếp theo bằng nhà cung cấp API và mô hình của cuộc trò chuyện hiện tại. Tiêu tốn thêm tín dụng API; khởi động lại Codex sau khi lưu."
-      }
+      },
+      "timeDisplayMode": "Hiển thị thời gian",
+      "timeDisplayModeDesc": "Thời gian trên thẻ và danh sách tài khoản. Mặc định là thời gian chuyển tài khoản"
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -2102,7 +2108,13 @@
     "tagUpdated": "Thẻ đã được cập nhật",
     "plan": {
       "personal": "Cá nhân"
-    }
+    },
+    "lastSwitchTime": "Lần chuyển",
+    "neverSwitched": "Chưa từng chuyển",
+    "refreshTime": "Lần làm mới",
+    "lastSwitchTimeFull": "Lần chuyển: {{time}}",
+    "refreshTimeFull": "Lần làm mới: {{time}}",
+    "toggleTimeMode": "Hiển thị thời gian chuyển hoặc làm mới"
   },
   "overview": {
     "title": "Tổng quan tài khoản",
@@ -7389,7 +7401,7 @@
       "timeRangeError": "Thời gian bắt đầu không thể sau thời gian kết thúc"
     }
   },
-    "minimaxCode": {
+  "minimaxCode": {
     "title": "Quản lý tài khoản MiniMax Code",
     "noAccounts": "Chưa có tài khoản MiniMax Code",
     "addAccount": "Thêm tài khoản MiniMax Code",

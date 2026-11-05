@@ -52,6 +52,7 @@ fn inject_bound_account_for_instance_start(
 
     modules::logger::log_info(&format!("实例绑定账号注入完成: {}", account.github_login));
 
+    modules::github_copilot_account::touch_last_used(bind_id)?;
     Ok(())
 }
 

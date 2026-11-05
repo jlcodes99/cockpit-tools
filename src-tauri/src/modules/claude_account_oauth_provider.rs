@@ -467,6 +467,7 @@ fn derive_account_from_snapshots(
     );
     let now = now_ts_ms();
     let mut account = existing.unwrap_or_else(|| ClaudeAccount {
+        last_switched_at: None,
         id: id.clone(),
         email: email.clone(),
         auth_mode: ClaudeAuthMode::OAuth,
@@ -599,6 +600,7 @@ pub fn import_api_key(
         build_api_key_display_name(&api_key, account_name, api_provider_name.as_deref());
     let now = now_ts_ms();
     let mut account = load_account_file(&id).unwrap_or_else(|| ClaudeAccount {
+        last_switched_at: None,
         id: id.clone(),
         email: display_name.clone(),
         auth_mode: ClaudeAuthMode::ApiKey,
@@ -893,6 +895,7 @@ fn save_desktop_gateway(
     });
 
     let mut account = existing_account.unwrap_or_else(|| ClaudeAccount {
+        last_switched_at: None,
         id: id.clone(),
         email: display_name.clone(),
         auth_mode: ClaudeAuthMode::DesktopGateway,

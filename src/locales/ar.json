@@ -738,7 +738,6 @@
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "minimaxcode": "MiniMax Code",
-    "minimaxcode": "MiniMax Code",
     "zed": "منصة Zed",
     "expandSidebar": "توسيع الشريط الجانبي",
     "collapseSidebar": "طي الشريط الجانبي",
@@ -806,7 +805,12 @@
     "setAsDefaultInGroup": "تعيينها كمنصة افتراضية في هذه المجموعة",
     "removeFromGroup": "إزالة من المجموعة",
     "sidebarSelectedUnlimited": "محدد ({count})",
-    "tipWithGroupsUnlimited": "فرز المنصات والمجموعات المحددة يدوياً"
+    "tipWithGroupsUnlimited": "فرز المنصات والمجموعات المحددة يدوياً",
+    "enabledToggle": "مفعّل",
+    "groupEnabledHint": "تفعيل أو تعطيل جميع منصات المجموعة",
+    "disabledHint": "يوقف التعطيل المهام التلقائية ويخفي إعدادات المنصة. يُضبط ظهور المدخل بشكل مستقل",
+    "enableAll": "تفعيل الكل",
+    "disableAll": "تعطيل الكل"
   },
   "privacy": {
     "hideSensitive": "إخفاء البريد الإلكتروني",
@@ -1465,7 +1469,9 @@
         "configFailed": "تعذرت قراءة الإعدادات أو حفظها: {{error}}",
         "nativePredictions": "توقعات الخطوة التالية الأصلية (Tab)",
         "nativePredictionsDesc": "ينشئ اقتراحات للرسالة التالية باستخدام مزود API ونموذج المحادثة الحالية. يستهلك رصيد API إضافيًا؛ أعد تشغيل Codex بعد الحفظ."
-      }
+      },
+      "timeDisplayMode": "عرض الوقت",
+      "timeDisplayModeDesc": "الوقت المعروض في بطاقات الحسابات وقوائمها. الافتراضي هو وقت تبديل الحساب"
     },
     "network": {
       "apiTitle": "واجهة برمجة تطبيقات قمرة القيادة المضادة للجاذبية",
@@ -2149,7 +2155,13 @@
     "tagUpdated": "تم تحديث الوسم",
     "plan": {
       "personal": "شخصي"
-    }
+    },
+    "lastSwitchTime": "وقت التبديل",
+    "neverSwitched": "لم يُبدّل بعد",
+    "refreshTime": "وقت التحديث",
+    "lastSwitchTimeFull": "التبديل: {{time}}",
+    "refreshTimeFull": "التحديث: {{time}}",
+    "toggleTimeMode": "عرض وقت التبديل أو التحديث"
   },
   "overview": {
     "title": "نظرة عامة على الحسابات",
@@ -7436,7 +7448,7 @@
       "timeRangeError": "لا يمكن أن يكون وقت البدء متأخرًا عن وقت الانتهاء"
     }
   },
-    "minimaxCode": {
+  "minimaxCode": {
     "title": "إدارة حسابات MiniMax Code",
     "noAccounts": "لا توجد حسابات MiniMax Code",
     "addAccount": "إضافة حساب MiniMax Code",

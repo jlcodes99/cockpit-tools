@@ -546,7 +546,7 @@ export function CodebuddyAccountsPage() {
           <div className="card-footer">
             <AccountLastUsed
               accountId={account.id}
-              lastUsed={account.last_used}
+              lastSwitchedAt={account.last_switched_at}
               createdAt={account.created_at}
               formatDate={formatDate}
               refreshAt={getCodebuddyOfficialQuotaModel(account).updatedAt}

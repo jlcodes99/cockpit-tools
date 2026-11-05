@@ -99,11 +99,16 @@ pub fn load_account(account_id: &str) -> Option<MinimaxCodeAccount> {
     }
 }
 
+pub fn touch_last_used(account_id: &str) -> Result<(), String> {
+    let _guard = MINIMAX_CODE_ACCOUNT_INDEX_LOCK.lock().map_err(|error| error.to_string())?;
+    let mut account = load_account(account_id).ok_or_else(|| format!("账号不存在: {account_id}"))?;
+    account.last_switched_at = Some(now_ts());
+    save_account_file(&account)
+}
+
 fn save_account_file(account: &MinimaxCodeAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
-    let content =
-        crate::modules::secure_account_storage::serialize_account_file("minimaxcode", account)?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
+    crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "minimaxcode", account)
         .map_err(|e| format!("保存账号失败:{}", e))
 }
 
@@ -425,6 +430,7 @@ fn merge_duplicate_account(primary: &mut MinimaxCodeAccount, dup: &MinimaxCodeAc
     primary.tags = merge_string_list(primary.tags.clone(), dup.tags.clone());
     primary.created_at = primary.created_at.min(dup.created_at);
     primary.last_used = primary.last_used.max(dup.last_used);
+    primary.last_switched_at = primary.last_switched_at.max(dup.last_switched_at);
 }
 
 fn choose_primary_account_index(group: &[usize], accounts: &[MinimaxCodeAccount]) -> usize {
@@ -655,6 +661,7 @@ pub fn upsert_account(payload: MinimaxCodeOAuthCompletePayload) -> Result<Minima
     let created_at = existing.as_ref().map(|a| a.created_at).unwrap_or(now);
 
     let mut account = existing.unwrap_or(MinimaxCodeAccount {
+        last_switched_at: None,
         id: account_id.clone(),
         email: payload.email.clone(),
         uid: payload.uid.clone(),
@@ -1028,6 +1035,7 @@ fn upsert_account_record_from_payload(
     let generated_id = format!("minimax_code_{:x}", md5::compute(identity_seed.as_bytes()));
 
     let account = MinimaxCodeAccount {
+        last_switched_at: None,
         id: generated_id,
         email: payload.email,
         uid: payload.uid,
@@ -1511,10 +1519,14 @@ fn switch_minimax_code_account_impl(
             .map_err(|e| format!("创建 MiniMax Code 登录态目录失败: {e}"))?;
     }
 
-    let raw = std::fs::read_to_string(&auth_file)
-        .unwrap_or_else(|_| "{\"schemaVersion\":1,\"records\":{}}".to_string());
+    let raw = match std::fs::read_to_string(&auth_file) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound =>
+            "{\"schemaVersion\":1,\"records\":{}}".to_string(),
+        Err(error) => return Err(format!("读取 MiniMax Code 登录态失败: {error}")),
+    };
     let mut parsed: Value = serde_json::from_str(&raw)
-        .unwrap_or_else(|_| serde_json::json!({"schemaVersion": 1, "records": {}}));
+        .map_err(|error| format!("MiniMax Code 登录态文件格式非法: {error}"))?;
     if !parsed.is_object() {
         return Err("MiniMax Code 登录态文件格式非法".to_string());
     }
@@ -1557,29 +1569,11 @@ fn switch_minimax_code_account_impl(
         "expiresAtMs": account.expires_at.unwrap_or(MINIMAX_CODE_FALLBACK_EXPIRES_AT_MS),
         "generation": 1,
     });
-    // Preserve an existing record's optional fields (subject/accountId/loginEpoch) when
-    // we are updating in place rather than creating a fresh namespace.
-    let existing_record = parsed
-        .get("records")
-        .and_then(|v| v.as_object())
-        .and_then(|records| {
-            records
-                .get(&target_key)
-                .or_else(|| records.values().next())
-        })
-        .cloned();
-    if let Some(existing) = existing_record {
-        if let (Some(obj), Some(existing_obj)) = (record.as_object_mut(), existing.as_object()) {
-            // `loginEpoch` 必须是可选项字符串或整数，直接沿用原值即可。
-            for key in ["subject", "accountId", "loginEpoch"] {
-                if let Some(value) = existing_obj.get(key) {
-                    obj.insert(key.to_string(), value.clone());
-                }
-            }
-        }
-    }
+    // Identity belongs to the incoming credential. Never retain the previous
+    // account's subject, accountId or authorization lease across a switch.
     if let Some(obj) = record.as_object_mut() {
-        let generation = obj.get("generation").and_then(|v| v.as_i64()).unwrap_or(0);
+        let generation = parsed.get("records").and_then(|records| records.get(&target_key))
+            .and_then(|record| record.get("generation")).and_then(Value::as_i64).unwrap_or(1);
         obj.insert("generation".into(), serde_json::json!(generation + 1));
     }
     let generation = record
@@ -1602,11 +1596,11 @@ fn switch_minimax_code_account_impl(
 
     // `write_bytes_atomic` replaces via temp-file + rename and creates no `.bak`,
     // so it never touches the first-state backup above.
-    crate::modules::atomic_write::write_bytes_atomic(
+    crate::modules::atomic_write::write_secret_string_atomic(
         &auth_file,
+        &
         serde_json::to_string_pretty(&parsed)
-            .map_err(|e| e.to_string())?
-            .as_bytes(),
+            .map_err(|e| e.to_string())?,
     )
     .map_err(|e| format!("写入 MiniMax Code 登录态失败: {e}"))?;
 
@@ -1648,7 +1642,7 @@ fn write_minimax_code_auth_state(
     }
 
     // 客户端 `parseState` 拒绝任何名字匹配 access/refresh token 等敏感模式的键。
-    let mut state = serde_json::json!({
+    let state = serde_json::json!({
         "schemaVersion": 2,
         "status": "authenticated",
         "storeKind": "file",
@@ -1660,27 +1654,11 @@ fn write_minimax_code_auth_state(
         "generation": generation,
         "expiresAtMs": expires_at_ms,
     });
-    if let Some(existing_raw) = std::fs::read_to_string(&state_path)
-        .ok()
-        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
-    {
-        if let Some(obj) = state.as_object_mut() {
-            for key in ["schemaVersion", "buildEnv", "region", "expiresAtMs"] {
-                if let Some(value) = existing_raw.get(key) {
-                    obj.insert(key.to_string(), value.clone());
-                }
-            }
-            if let Some(authorization) = existing_raw.get("authorization") {
-                obj.insert("authorization".to_string(), authorization.clone());
-            }
-        }
-    }
-
-    crate::modules::atomic_write::write_bytes_atomic(
+    crate::modules::atomic_write::write_secret_string_atomic(
         &state_path,
+        &
         serde_json::to_string_pretty(&state)
-            .map_err(|e| e.to_string())?
-            .as_bytes(),
+            .map_err(|e| e.to_string())?,
     )
     .map_err(|e| format!("写入 MiniMax Code auth-state.json 失败: {e}"))?;
     Ok(())
@@ -1987,6 +1965,7 @@ mod minimax_code_switch_tests {
         auth_file: &Path,
     ) -> MinimaxCodeAccount {
         MinimaxCodeAccount {
+            last_switched_at: None,
             id: id.to_string(),
             email: format!("{id}@example.com"),
             uid: None,
@@ -2050,7 +2029,10 @@ mod minimax_code_switch_tests {
                     "scopes": ["agent.default"],
                     "audience": "agent-backend",
                     "expiresAtMs": 1792767948636_i64,
-                    "generation": 7
+                    "generation": 7,
+                    "subject": "previous-subject",
+                    "accountId": "previous-account",
+                    "loginEpoch": "previous-epoch"
                 },
                 "com.minimax.mcode.oauth.prod.cn\u{0}other_account": {
                     "accessToken": "mmoat_other",
@@ -2112,8 +2094,11 @@ mod minimax_code_switch_tests {
             record.get("refreshToken").and_then(|v| v.as_str()),
             Some("mmort_target_refresh")
         );
-        // 全新记录从 generation 1 起，写入时 +1 → 2。
-        assert_eq!(record.get("generation").and_then(|v| v.as_i64()), Some(2));
+        // A new login supersedes the existing generation and discards its identity.
+        assert_eq!(record.get("generation").and_then(|v| v.as_i64()), Some(8));
+        for field in ["subject", "accountId", "loginEpoch"] {
+            assert!(record.get(field).is_none(), "old identity must not survive: {field}");
+        }
         // 客户端 parseStoredCredential 要求有限的 expiresAtMs。
         let expires = record.get("expiresAtMs").and_then(|v| v.as_i64());
         assert_eq!(expires, Some(1792767948636_i64));
@@ -2254,7 +2239,7 @@ mod minimax_code_switch_tests {
             Some("mcode-public"),
             "reused record shape should be preserved"
         );
-        assert_eq!(record.get("generation").and_then(|v| v.as_i64()), Some(2));
+        assert_eq!(record.get("generation").and_then(|v| v.as_i64()), Some(4));
         // 账号没有 expiresAtMs 时必须写一个有限的兜底值（客户端校验要求）。
         let expires = record.get("expiresAtMs").and_then(|v| v.as_i64());
         assert!(
@@ -2348,6 +2333,11 @@ mod minimax_code_switch_tests {
         fs::create_dir_all(&namespace).unwrap();
         let auth_file = namespace.join("auth.json");
         let service = "com.minimax.mcode.oauth.prod.cn";
+        fs::write(namespace.join("auth-state.json"), json!({
+            "schemaVersion": 1, "expiresAtMs": 1,
+            "authorization": { "leaseId": "previous-login" }
+        }).to_string()).unwrap();
+
 
         let account = MinimaxCodeAccount {
             id: "cockpit-account-id".to_string(),
@@ -2409,6 +2399,8 @@ mod minimax_code_switch_tests {
         let state_raw = fs::read_to_string(&state_path).unwrap();
         let state: Value = serde_json::from_str(&state_raw).unwrap();
         assert_eq!(state.get("status").and_then(|v| v.as_str()), Some("authenticated"));
+        assert!(state.get("authorization").is_none());
+        assert_eq!(state["schemaVersion"], 2);
         assert_eq!(state.get("storeKind").and_then(|v| v.as_str()), Some("file"));
         assert_eq!(
             state.get("clientId").and_then(|v| v.as_str()),
@@ -2477,6 +2469,8 @@ mod minimax_code_switch_tests {
         )
         .unwrap();
         assert_eq!(state.get("status").and_then(|v| v.as_str()), Some("authenticated"));
+        assert!(state.get("authorization").is_none());
+        assert_eq!(state["schemaVersion"], 2);
         assert_eq!(
             state.get("generation").and_then(|v| v.as_i64()),
             record.get("generation").and_then(|v| v.as_i64())

@@ -691,7 +691,6 @@
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "minimaxcode": "MiniMax Code",
-    "minimaxcode": "MiniMax Code",
     "zed": "Platforma Zed",
     "expandSidebar": "Rozbalit postranní panel",
     "collapseSidebar": "Sbalit postranní panel",
@@ -759,7 +758,12 @@
     "setAsDefaultInGroup": "Nastavit jako výchozí platformu v této skupině",
     "removeFromGroup": "Odebrat ze skupiny",
     "sidebarSelectedUnlimited": "Vybráno ({count})",
-    "tipWithGroupsUnlimited": "Ruční seřazení vybraných platforem a skupin"
+    "tipWithGroupsUnlimited": "Ruční seřazení vybraných platforem a skupin",
+    "enabledToggle": "Zapnuto",
+    "groupEnabledHint": "Zapnout nebo vypnout všechny platformy ve skupině",
+    "disabledHint": "Vypnutí zastaví automatické úlohy a skryje nastavení platformy. Viditelnost položky se nastavuje zvlášť",
+    "enableAll": "Zapnout vše",
+    "disableAll": "Vypnout vše"
   },
   "privacy": {
     "hideSensitive": "Skrýt e-maily",
@@ -1418,7 +1422,9 @@
         "configFailed": "Nepodařilo se načíst nebo uložit nastavení: {{error}}",
         "nativePredictions": "Nativní návrhy dalšího kroku (Tab)",
         "nativePredictionsDesc": "Generuje návrhy další zprávy pomocí poskytovatele API a modelu aktuální konverzace. Spotřebovává další kredity API; po uložení restartujte Codex."
-      }
+      },
+      "timeDisplayMode": "Zobrazený čas",
+      "timeDisplayModeDesc": "Čas na kartách a v seznamu účtů. Výchozí je čas přepnutí účtu"
     },
     "network": {
       "apiTitle": "Antigravity Cockpit API​",
@@ -2102,7 +2108,13 @@
     "tagUpdated": "Štítek byl aktualizován",
     "plan": {
       "personal": "Osobní"
-    }
+    },
+    "lastSwitchTime": "Přepnutí",
+    "neverSwitched": "Dosud nepřepnuto",
+    "refreshTime": "Obnovení",
+    "lastSwitchTimeFull": "Přepnutí: {{time}}",
+    "refreshTimeFull": "Obnovení: {{time}}",
+    "toggleTimeMode": "Zobrazit čas přepnutí nebo obnovení"
   },
   "overview": {
     "title": "Přehled účtů",
@@ -7389,7 +7401,7 @@
       "timeRangeError": "Počáteční čas nesmí být pozdější než koncový čas"
     }
   },
-    "minimaxCode": {
+  "minimaxCode": {
     "title": "Správa účtů MiniMax Code",
     "noAccounts": "Žádné účty MiniMax Code",
     "addAccount": "Přidat účet MiniMax Code",

@@ -141,21 +141,20 @@ pub fn load_account(account_id: &str) -> Option<KiroAccount> {
 
 fn save_account_file(account: &KiroAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
-    let content = crate::modules::secure_account_storage::serialize_account_file("kiro", account)?;
     crate::modules::account_query_identity::invalidate_before_write(
         &get_accounts_index_path()?,
         &account.id,
         &query_identity(account),
     )?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
+    crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "kiro", account)
         .map_err(|e| format!("保存账号失败: {}", e))
 }
 
-// ponytail: 切号时记录 last_used。O(n) load+save 单个账号文件。
+// Record credential-switch success separately from refresh activity.
 pub fn touch_last_used(account_id: &str) -> Result<(), String> {
     let mut account = load_account(account_id)
         .ok_or_else(|| format!("Kiro account not found: {}", account_id))?;
-    account.last_used = now_ts();
+    account.last_switched_at = Some(now_ts());
     save_account_file(&account)?;
     Ok(())
 }
@@ -542,6 +541,7 @@ fn merge_duplicate_account(primary: &mut KiroAccount, duplicate: &KiroAccount) {
     primary.tags = merge_string_list(primary.tags.clone(), duplicate.tags.clone());
     primary.created_at = primary.created_at.min(duplicate.created_at);
     primary.last_used = primary.last_used.max(duplicate.last_used);
+    primary.last_switched_at = primary.last_switched_at.max(duplicate.last_switched_at);
 }
 
 fn choose_primary_account_index(
@@ -629,6 +629,7 @@ fn apply_payload(account: &mut KiroAccount, payload: KiroOAuthCompletePayload) {
     account.kiro_usage_raw = payload.kiro_usage_raw;
     account.status = payload.status;
     account.status_reason = payload.status_reason;
+    account.last_used = now_ts();
 }
 
 pub fn upsert_account(payload: KiroOAuthCompletePayload) -> Result<KiroAccount, String> {
@@ -670,6 +671,7 @@ pub fn upsert_account(payload: KiroOAuthCompletePayload) -> Result<KiroAccount, 
     let created_at = existing.as_ref().map(|acc| acc.created_at).unwrap_or(now);
 
     let mut account = existing.unwrap_or(KiroAccount {
+        last_switched_at: None,
         id: account_id.clone(),
         email: payload.email.clone(),
         user_id: payload.user_id.clone(),

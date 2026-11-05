@@ -38,45 +38,26 @@ pub struct MinimaxCodeCheckinResult {
     pub streak_days: Option<i32>,
 }
 
-/// MiniMax tokens are short-lived (~1h) and the client renews them; retry 401/403.
-async fn request_with_retry(
+// A retry cannot repair an expired bearer token. Refresh belongs to the account
+// layer; never replay a claim after an ambiguous network failure.
+async fn request_json(
     client: &reqwest::Client,
     url: &str,
     access_token: &str,
     is_post: bool,
 ) -> Result<Value, String> {
-    let backoff = [2000u64, 5000, 10000];
-    let mut last_err = "请求失败".to_string();
-    let mut attempt = 0usize;
-    loop {
-        let result = if is_post {
-            client.post(url).bearer_auth(access_token)
-                .header("accept", "application/json")
-                .header("content-type", "application/json")
-                .json(&serde_json::json!({})).send().await
-        } else {
-            client.get(url).bearer_auth(access_token)
-                .header("accept", "application/json")
-                .header("accept-language", "zh-CN,zh;q=0.9").send().await
-        };
-        match result {
-            Ok(resp) if resp.status().is_success() => {
-                return resp.json::<Value>().await.map_err(|e| format!("解析响应失败: {e}"));
-            }
-            Ok(resp) => {
-                let code = resp.status().as_u16();
-                last_err = format!("HTTP {code}");
-                let auth_error = code == 401 || code == 403;
-                if !auth_error && attempt >= 1 { break; }
-                if auth_error && attempt >= backoff.len() { break; }
-            }
-            Err(e) => { last_err = e.to_string(); if attempt >= 1 { break; } }
-        }
-        let delay = backoff.get(attempt).copied().unwrap_or(10000);
-        attempt += 1;
-        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+    let request = if is_post {
+        client.post(url).json(&serde_json::json!({}))
+    } else {
+        client.get(url)
+    };
+    let response = request.bearer_auth(access_token)
+        .header("accept", "application/json")
+        .send().await.map_err(|error| error.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}", response.status().as_u16()));
     }
-    Err(last_err)
+    response.json::<Value>().await.map_err(|error| format!("解析响应失败: {error}"))
 }
 
 fn check_base_resp(body: &Value) -> Result<(), String> {
@@ -109,7 +90,7 @@ pub async fn get_checkin_status(access_token: &str, region: &str) -> Result<Mini
     let tz = encode_timezone();
     let url = format!("{origin}{STATUS_PATH}?timezone_id={tz}");
     let client = super::minimax_code_oauth::build_client()?;
-    let body = request_with_retry(&client, &url, access_token, false).await?;
+    let body = request_json(&client, &url, access_token, false).await?;
     check_base_resp(&body)?;
 
     let empty = Vec::new();
@@ -143,7 +124,7 @@ pub async fn perform_checkin(access_token: &str, region: &str) -> Result<Minimax
     let tz = encode_timezone();
     let url = format!("{origin}{CLAIM_PATH}?timezone_id={tz}");
     let client = super::minimax_code_oauth::build_client()?;
-    let body = request_with_retry(&client, &url, access_token, true).await?;
+    let body = request_json(&client, &url, access_token, true).await?;
     check_base_resp(&body)?;
 
     let data = &body["data"];

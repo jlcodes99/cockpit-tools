@@ -368,6 +368,9 @@ pub struct CodexAccount {
     pub tags: Option<Vec<String>>,
     pub created_at: i64,
     pub last_used: i64,
+    /// Last successful credential switch; absent for historical/imported accounts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_switched_at: Option<i64>,
 }
 
 /// Codex Token 数据
@@ -654,6 +657,7 @@ impl CodexAccount {
     pub fn new(id: String, email: String, tokens: CodexTokens) -> Self {
         let now = chrono::Utc::now().timestamp();
         Self {
+        last_switched_at: None,
             id,
             email,
             auth_mode: CodexAuthMode::OAuth,

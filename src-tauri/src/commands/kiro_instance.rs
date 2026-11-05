@@ -39,6 +39,7 @@ fn inject_bound_account_for_instance_start(
     modules::kiro_instance::inject_account_to_profile(Path::new(user_data_dir), bind_id)?;
 
     modules::logger::log_info(&format!("Kiro 账号注入完成: {}", account.email));
+    modules::kiro_account::touch_last_used(bind_id)?;
     Ok(())
 }
 

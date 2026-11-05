@@ -105,17 +105,15 @@ pub fn load_account(account_id: &str) -> Option<WorkbuddyAccount> {
 
 fn save_account_file(account: &WorkbuddyAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
-    let content =
-        crate::modules::secure_account_storage::serialize_account_file("workbuddy", account)?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
+    crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "workbuddy", account)
         .map_err(|e| format!("保存账号失败:{}", e))
 }
 
-// ponytail: 切号时记录 last_used。O(n) load+save 单个账号文件。
+// Record credential-switch success separately from refresh activity.
 pub fn touch_last_used(account_id: &str) -> Result<(), String> {
     let mut account = load_account(account_id)
         .ok_or_else(|| format!("WorkBuddy account not found: {}", account_id))?;
-    account.last_used = now_ts();
+    account.last_switched_at = Some(now_ts());
     save_account_file(&account)?;
     Ok(())
 }
@@ -442,6 +440,7 @@ fn merge_duplicate_account(primary: &mut WorkbuddyAccount, dup: &WorkbuddyAccoun
     primary.tags = merge_string_list(primary.tags.clone(), dup.tags.clone());
     primary.created_at = primary.created_at.min(dup.created_at);
     primary.last_used = primary.last_used.max(dup.last_used);
+    primary.last_switched_at = primary.last_switched_at.max(dup.last_switched_at);
 }
 
 fn choose_primary_account_index(group: &[usize], accounts: &[WorkbuddyAccount]) -> usize {
@@ -634,6 +633,7 @@ fn apply_payload(account: &mut WorkbuddyAccount, payload: WorkbuddyOAuthComplete
     }
     account.status = payload.status;
     account.status_reason = payload.status_reason;
+    account.last_used = now_ts();
 }
 
 pub fn upsert_account(payload: WorkbuddyOAuthCompletePayload) -> Result<WorkbuddyAccount, String> {
@@ -675,6 +675,7 @@ pub fn upsert_account(payload: WorkbuddyOAuthCompletePayload) -> Result<Workbudd
     let created_at = existing.as_ref().map(|a| a.created_at).unwrap_or(now);
 
     let mut account = existing.unwrap_or(WorkbuddyAccount {
+        last_switched_at: None,
         id: account_id.clone(),
         email: payload.email.clone(),
         uid: payload.uid.clone(),
@@ -753,6 +754,7 @@ async fn refresh_account_token_once(account_id: &str) -> Result<WorkbuddyAccount
     if usage_refreshed {
         account.usage_updated_at = Some(refreshed_at);
     }
+    account.last_used = refreshed_at;
 
     let updated = account.clone();
     upsert_account_record(account)?;
@@ -919,6 +921,7 @@ fn upsert_account_record_from_payload(
     let generated_id = format!("workbuddy_{:x}", md5::compute(identity_seed.as_bytes()));
 
     let account = WorkbuddyAccount {
+        last_switched_at: None,
         id: generated_id,
         email: payload.email,
         uid: payload.uid,

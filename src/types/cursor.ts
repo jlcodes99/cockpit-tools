@@ -22,6 +22,7 @@ export interface CursorAccount {
 
   created_at: number;
   last_used: number;
+  last_switched_at?: number | null;
 
   plan_type?: string;
   quota?: CursorQuota;

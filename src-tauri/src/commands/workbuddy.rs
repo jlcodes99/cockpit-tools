@@ -313,7 +313,6 @@ pub async fn inject_workbuddy_to_vscode(
     let account = workbuddy_account::load_account(&account_id)
         .ok_or_else(|| format!("WorkBuddy account not found: {}", account_id))?;
 
-    workbuddy_account::touch_last_used(&account_id)?;
 
     if let Err(err) = crate::modules::workbuddy_instance::update_default_settings(
         Some(Some(account_id.clone())),
@@ -357,6 +356,7 @@ pub async fn inject_workbuddy_to_vscode(
         }
     };
 
+    workbuddy_account::touch_last_used(&account_id)?;
     let _ = crate::modules::tray::update_tray_menu(&app);
 
     if let Some(err) = launch_warning {

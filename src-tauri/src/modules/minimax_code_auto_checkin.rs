@@ -407,6 +407,9 @@ pub async fn run_minimax_code_auto_checkin_cycle_if_needed(
     app: &AppHandle,
     force: bool,
 ) -> Result<String, String> {
+    if !force && !crate::modules::tray_layout::is_platform_enabled("minimaxcode") {
+        return Ok("platform_disabled".to_string());
+    }
     if IS_CHECKIN_RUNNING.swap(true, Ordering::SeqCst) {
         return Ok("already_running".to_string());
     }
@@ -751,6 +754,7 @@ mod tests {
 
     fn make_test_account(id: &str, email: &str, access_token: &str) -> MinimaxCodeAccount {
         MinimaxCodeAccount {
+            last_switched_at: None,
             id: id.to_string(),
             email: email.to_string(),
             uid: None,

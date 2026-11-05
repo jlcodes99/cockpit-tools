@@ -17,6 +17,7 @@ export interface QoderAccount {
   auth_credit_usage_raw?: unknown;
   created_at: number;
   last_used: number;
+  last_switched_at?: number | null;
 }
 
 interface UnknownRecord {

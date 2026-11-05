@@ -2926,7 +2926,7 @@ mod tests {
             let restored: UserConfig =
                 serde_json::from_value(serde_json::to_value(config).unwrap()).unwrap();
             assert_eq!(restored.codex_app_native_predictions_enabled, enabled);
-            assert!(!restored.codex_app_native_fast_enabled);
+
             assert!(restored.codex_app_api_quota_compat_enabled);
         }
     }
