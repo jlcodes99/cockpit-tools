@@ -7137,6 +7137,35 @@
     "syncToWorkbuddy": "Sincronizza con WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Crediti del piano",
+      "planBonus": "Bonus del piano",
+      "benefit": "Premi della piattaforma",
+      "addon": "Crediti acquistati",
+      "total": "Crediti residui totali",
+      "details": "Dettagli crediti",
+      "usedOf": "Usati {{used}}/{{total}}",
+      "remainingPercent": "Resta il {{percent}}%",
+      "nearestExpiry": "Prima scadenza {{time}}",
+      "nextRefresh": "Prossimo rinnovo {{time}}",
+      "expiring": "Alcuni crediti scadono a breve",
+      "valid": "Validi",
+      "expired": "Scaduti",
+      "expiresAt": "Scade il {{time}}",
+      "expiryHours": "Scade entro 24 ore",
+      "expiryDays": "Scade entro 3 giorni",
+      "empty": "Nessun dato",
+      "loadFailed": "Caricamento non riuscito ({{error}})",
+      "overview": "Riepilogo",
+      "remaining": "{{amount}} rimasti",
+      "loadMore": "Carica altro",
+      "usage": "Dettaglio consumi",
+      "requestAndTime": "Richiesta e ora",
+      "creditUsed": "Crediti usati",
+      "model": "Modello",
+      "recentUsage": "Ultimi 5 record",
+      "viewMore": "Vedi altro"
+    },
     "title": "Gestione account WorkBuddy",
     "noAccounts": "Nessun account WorkBuddy",
     "addAccount": "Aggiungi account WorkBuddy",
@@ -7144,7 +7173,7 @@
       "title": "Informazioni sulla gestione degli account WorkBuddy (clicca per espandere/comprimere)",
       "desc": "Il cambio account scrive il file di accesso locale secondo il layout più recente del client ufficiale WorkBuddy; l'importazione locale legge lo stesso file. I dati vengono elaborati solo in locale.",
       "permission": "Ambito autorizzazioni: leggere e scrivere il file di accesso WorkBuddy (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) per importazione locale e cambio account; il vecchio state.vscdb non viene più letto né modificato.",
-      "network": "Ambito rete: l'accesso OAuth e il rinnovo del token richiedono richieste a WorkBuddy; le query quota chiamano le API di fatturazione. I file di accesso locali e le credenziali grezze non vengono caricati."
+      "network": "L’accesso OAuth e il rinnovo del token contattano WorkBuddy. Il saldo e i dettagli dei crediti sono richiesti al servizio di fatturazione con il token dell’account. I file di accesso e le chiavi di sistema restano sul dispositivo."
     },
     "nickname": "Nickname​",
     "enterprise": "Enterprise​",
@@ -7161,8 +7190,8 @@
       "oauth": {
         "title": "Solo accesso IDE",
         "item1": "Aggiungi laccount dopo aver completato OAuth nel browser, poi usalo per il cambio account nellIDE.",
-        "item2": "I parametri di query della quota non vengono collegati automaticamente.",
-        "item3": "Se ti serve la visualizzazione della quota, esegui manualmente \"Interroga quota\" sulla scheda account."
+        "item2": "Il saldo viene richiesto automaticamente dopo l’autorizzazione.",
+        "item3": "La scheda mostra il riepilogo dei crediti. Nei dettagli trovi i singoli accrediti e le scadenze."
       }
     },
     "oauthWebviewTab": "OAuth in WebView",

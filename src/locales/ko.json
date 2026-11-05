@@ -7137,6 +7137,35 @@
     "syncToWorkbuddy": "WorkBuddy에 동기화"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "플랜 기본 크레딧",
+      "planBonus": "플랜 보너스 크레딧",
+      "benefit": "플랫폼 보상 크레딧",
+      "addon": "구매 크레딧",
+      "total": "총 남은 크레딧",
+      "details": "크레딧 내역",
+      "usedOf": "사용 {{used}}/{{total}}",
+      "remainingPercent": "{{percent}}% 남음",
+      "nearestExpiry": "가장 빠른 만료 {{time}}",
+      "nextRefresh": "다음 갱신 {{time}}",
+      "expiring": "곧 만료되는 크레딧 포함",
+      "valid": "유효",
+      "expired": "만료",
+      "expiresAt": "만료 {{time}}",
+      "expiryHours": "24시간 내 만료",
+      "expiryDays": "3일 내 만료",
+      "empty": "내역 없음",
+      "loadFailed": "불러오지 못했습니다 ({{error}})",
+      "overview": "크레딧 개요",
+      "remaining": "{{amount}} 남음",
+      "loadMore": "더 보기",
+      "usage": "사용 내역",
+      "requestAndTime": "요청 및 시간",
+      "creditUsed": "사용 크레딧",
+      "model": "모델",
+      "recentUsage": "최근 5건",
+      "viewMore": "더 보기"
+    },
     "title": "WorkBuddy 계정 관리",
     "noAccounts": "WorkBuddy 계정이 없습니다",
     "addAccount": "WorkBuddy 계정 추가",
@@ -7144,7 +7173,7 @@
       "title": "WorkBuddy 계정 관리 안내 (클릭하여 펼치기/접기)",
       "desc": "계정 전환은 최신 WorkBuddy 공식 클라이언트 구조에 맞춰 로컬 로그인 파일을 씁니다. 로컬 가져오기도 같은 파일을 읽습니다. 데이터는 로컬에서만 처리됩니다.",
       "permission": "권한 범위: 로컬 가져오기와 계정 전환을 위해 WorkBuddy 로그인 파일(CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info)을 읽고 씁니다. 기존 state.vscdb는 더 이상 읽거나 수정하지 않습니다.",
-      "network": "네트워크 범위: OAuth 로그인과 Token 갱신은 WorkBuddy 요청이 필요하고, 할당량 조회는 과금 API를 호출합니다. 로컬 로그인 파일이나 원본 자격 증명은 업로드되지 않습니다."
+      "network": "OAuth 로그인과 토큰 갱신은 WorkBuddy에 연결합니다. 크레딧 잔액과 내역은 계정 토큰으로 결제 서비스에서 조회합니다. 로그인 파일과 시스템 키는 이 기기에 저장됩니다."
     },
     "nickname": "닉네임",
     "enterprise": "기업",
@@ -7161,8 +7190,8 @@
       "oauth": {
         "title": "IDE 로그인 정보만 인증",
         "item1": "브라우저에서 OAuth를 완료하면 계정을 추가해 IDE 전환에 사용할 수 있습니다.",
-        "item2": "할당량 조회 파라미터는 자동으로 바인딩되지 않습니다.",
-        "item3": "할당량 표시가 필요하면 계정 카드에서 \"할당량 조회\"를 수동 실행하세요."
+        "item2": "인증 후 크레딧 잔액을 자동으로 조회합니다.",
+        "item3": "계정 카드에는 크레딧 개요가 표시됩니다. 내역에서 지급 기록과 만료일을 확인할 수 있습니다."
       }
     },
     "oauthWebviewTab": "WebView 인증",

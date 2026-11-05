@@ -43,7 +43,7 @@ async fn post(
 ) -> Result<(Value, usize), String> {
     let mut response = client
         .post(format!(
-            "{}/v2/billing/meter/{}",
+            "{}/billing/meter/{}",
             base.trim_end_matches('/'),
             route
         ))
@@ -92,26 +92,38 @@ fn page_body(paid: bool, page: usize, date: &str) -> Value {
     body
 }
 
-fn append_page(items: &mut Vec<Value>, page: &Value) -> Result<bool, String> {
-    let accounts = page
-        .get("Accounts")
-        .and_then(Value::as_array)
-        .ok_or("BUDDY_RESOURCE_ACCOUNTS_MISSING")?;
-    let total = page
+fn package_page(data: &Value) -> Result<(&[Value], Option<u64>), String> {
+    let accounts = match data.get("Accounts") {
+        None | Some(Value::Null) => &[][..],
+        Some(Value::Array(items)) => items.as_slice(),
+        _ => return Err("BUDDY_RESOURCE_ACCOUNTS_INVALID".into()),
+    };
+    let total = data
         .get("TotalCount")
-        .and_then(|v| v.as_u64().or_else(|| v.as_str()?.parse().ok()))
-        .ok_or("BUDDY_RESOURCE_TOTAL_MISSING")?;
-    if accounts.len() > PAGE_SIZE || total > (PAGE_SIZE * MAX_PAGES) as u64 {
+        .and_then(|value| value.as_u64().or_else(|| value.as_str()?.parse().ok()))
+        .filter(|count| *count > 0);
+    Ok((accounts, total))
+}
+
+fn append_page(
+    items: &mut Vec<Value>,
+    total: &mut Option<u64>,
+    page: &Value,
+) -> Result<bool, String> {
+    let (accounts, page_total) = package_page(page)?;
+    *total = page_total.or(*total);
+    if accounts.len() > PAGE_SIZE
+        || total.is_some_and(|count| count > (PAGE_SIZE * MAX_PAGES) as u64)
+    {
         return Err("BUDDY_RESOURCE_PAGE_LIMIT".into());
     }
     items.extend(accounts.iter().cloned());
-    if items.len() as u64 >= total {
-        return Ok(true);
+    match *total {
+        Some(count) if items.len() as u64 >= count => Ok(true),
+        Some(_) if accounts.is_empty() => Err("BUDDY_RESOURCE_INCOMPLETE".into()),
+        Some(_) => Ok(false),
+        None => Ok(accounts.len() < PAGE_SIZE),
     }
-    if accounts.is_empty() {
-        return Err("BUDDY_RESOURCE_INCOMPLETE".into());
-    }
-    Ok(false)
 }
 
 async fn group(
@@ -127,6 +139,7 @@ async fn group(
         "get-user-resource-free-packages"
     };
     let mut items = Vec::new();
+    let mut total = None;
     let mut bytes = 0;
     for page in 1..=MAX_PAGES {
         let (data, size) = post(client, base, route, headers, &page_body(paid, page, date)).await?;
@@ -134,7 +147,7 @@ async fn group(
         if bytes > GROUP_BYTES {
             return Err("BUDDY_RESOURCE_GROUP_LIMIT".into());
         }
-        if append_page(&mut items, &data)? {
+        if append_page(&mut items, &mut total, &data)? {
             return Ok(items);
         }
         tokio::task::yield_now().await;
@@ -180,7 +193,7 @@ pub async fn fetch(client: &Client, base: &str, headers: HeaderMap) -> Result<Va
         )?;
         if summary
             .get("Packages")
-            .is_some_and(|value| !value.is_array())
+            .is_some_and(|value| !value.is_array() && !value.is_null())
         {
             return Err("BUDDY_RESOURCE_SUMMARY_MISSING".into());
         }
@@ -188,6 +201,130 @@ pub async fn fetch(client: &Client, base: &str, headers: HeaderMap) -> Result<Va
     })
     .await
     .map_err(|_| "BUDDY_RESOURCE_TIMEOUT".to_string())?
+}
+
+fn detail_body(page: u32, expired: bool, now: chrono::NaiveDateTime) -> Value {
+    let mut body = json!({
+        "PageNumber": page,
+        "PageSize": PAGE_SIZE,
+        "IsDisplayTotalInfo": true,
+        "Status": if expired { [2, 3] } else { [0, 3] },
+    });
+    if expired {
+        // WorkBuddy 5.9.3 uses a 101-year history window and descending end time.
+        let begin = now
+            .checked_sub_months(chrono::Months::new(101 * 12))
+            .expect("the billing date is in the current era");
+        body["PackageEndTimeRangeBegin"] = json!(begin.format("%Y-%m-%d %H:%M:%S").to_string());
+        body["PackageEndTimeRangeEnd"] = json!(now.format("%Y-%m-%d %H:%M:%S").to_string());
+        body["OrderBy"] = json!("endTime");
+        body["SortBy"] = json!("desc");
+    } else {
+        body["OnlyValidPeriod"] = json!(true);
+    }
+    body
+}
+
+async fn detail_group(
+    client: &Client,
+    base: &str,
+    headers: &HeaderMap,
+    route: &str,
+    mut body: Value,
+    codes: Vec<&str>,
+) -> Result<(Vec<Value>, bool), String> {
+    if codes.is_empty() {
+        return Ok((Vec::new(), false));
+    }
+    let page = body["PageNumber"].as_u64().unwrap_or(1);
+    body["PackageCodes"] = json!(codes);
+    let (data, _) = post(client, base, route, headers, &body).await?;
+    let (accounts, total) = package_page(&data)?;
+    let has_more = match total {
+        Some(count) => page * (PAGE_SIZE as u64) < count,
+        None => accounts.len() >= PAGE_SIZE,
+    };
+    let accounts = accounts
+        .iter()
+        .filter(|item| {
+            let kind = &item["CapacityType"];
+            kind.as_i64() != Some(4) && kind.as_str() != Some("4")
+        })
+        .cloned()
+        .collect();
+    Ok((accounts, has_more))
+}
+
+pub async fn fetch_credit_packages(
+    client: &Client,
+    base: &str,
+    headers: HeaderMap,
+    package_codes: &[String],
+    expired: bool,
+    page: u32,
+) -> Result<Value, String> {
+    let select_codes = |available: &'static [&str]| {
+        available
+            .iter()
+            .copied()
+            .filter(|code| package_codes.iter().any(|requested| requested == code))
+            .collect()
+    };
+    let body = detail_body(page.max(1), expired, chrono::Local::now().naive_local());
+    let ((mut paid, more_paid), (free, more_free)) = tokio::try_join!(
+        detail_group(
+            client,
+            base,
+            &headers,
+            "get-user-resource-paid-packages",
+            body.clone(),
+            select_codes(PAID)
+        ),
+        detail_group(
+            client,
+            base,
+            &headers,
+            "get-user-resource-free-packages",
+            body,
+            select_codes(FREE)
+        ),
+    )?;
+    paid.extend(free);
+    Ok(json!({"items": paid, "hasMore": more_paid || more_free}))
+}
+
+pub async fn fetch_recent_credit_usage(
+    client: &Client,
+    base: &str,
+    headers: HeaderMap,
+) -> Result<Vec<Value>, String> {
+    let today = chrono::Local::now().date_naive();
+    let start = today - chrono::Days::new(30);
+    let body = json!({
+        "startTime": format!("{} 00:00:00", start.format("%Y-%m-%d")),
+        "endTime": format!("{} 23:59:59", today.format("%Y-%m-%d")),
+        "pageNum": 1,
+        "pageSize": 5,
+    });
+    let (data, _) = post(client, base, "get-user-request-usage", &headers, &body).await?;
+    let rows = data
+        .get("data")
+        .and_then(Value::as_array)
+        .ok_or("WORKBUDDY_CREDIT_USAGE_MISSING")?;
+    Ok(rows
+        .iter()
+        .take(5)
+        .map(|row| {
+            json!({
+                "requestId": row["requestId"],
+                "requestTime": row["requestTime"],
+                "inputTrunc": row["inputTrunc"],
+                "input": row["input"],
+                "credit": row["credit"],
+                "model": row["model"],
+            })
+        })
+        .collect())
 }
 
 #[cfg(test)]
@@ -211,19 +348,46 @@ mod tests {
     #[test]
     fn pages_are_complete_or_fail_and_never_silently_truncate() {
         let mut items = Vec::new();
+        let mut total = None;
         assert!(!append_page(
             &mut items,
+            &mut total,
             &json!({"Accounts":[{"ResourceId":"one"}],"TotalCount":2})
         )
         .unwrap());
-        assert!(append_page(&mut items, &json!({"Accounts":[],"TotalCount":2})).is_err());
+        assert!(append_page(&mut items, &mut total, &json!({"Accounts":[]})).is_err());
         assert!(append_page(
             &mut items,
+            &mut total,
             &json!({"Accounts":[{"ResourceId":"two"}],"TotalCount":"2"})
         )
         .unwrap());
-        assert!(append_page(&mut Vec::new(), &json!({"Accounts":[],"TotalCount":2001})).is_err());
-        assert!(append_page(&mut Vec::new(), &json!({"Accounts":[]})).is_err());
+        assert!(append_page(
+            &mut Vec::new(),
+            &mut None,
+            &json!({"Accounts":[],"TotalCount":2001})
+        )
+        .is_err());
+        assert!(append_page(&mut Vec::new(), &mut None, &json!({"Accounts": null})).unwrap());
+        assert!(append_page(&mut Vec::new(), &mut None, &json!({"Accounts": {}})).is_err());
+    }
+
+    #[test]
+    fn valid_and_expired_package_requests_use_official_filters() {
+        let now = "2026-11-05T09:18:00".parse().unwrap();
+        let valid = detail_body(2, false, now);
+        assert_eq!(valid["PageNumber"], 2);
+        assert_eq!(valid["Status"], json!([0, 3]));
+        assert_eq!(valid["OnlyValidPeriod"], true);
+        assert_eq!(valid["IsDisplayTotalInfo"], true);
+        assert!(valid.get("SlicePeriodStartTime").is_none());
+        let expired = detail_body(1, true, now);
+        assert_eq!(expired["Status"], json!([2, 3]));
+        assert_eq!(expired["PackageEndTimeRangeBegin"], "1925-11-05 09:18:00");
+        assert_eq!(expired["PackageEndTimeRangeEnd"], "2026-11-05 09:18:00");
+        assert_eq!(expired["OrderBy"], "endTime");
+        assert_eq!(expired["SortBy"], "desc");
+        assert!(expired.get("OnlyValidPeriod").is_none());
     }
     #[test]
     fn merges_groups_without_double_counting_and_preserves_unknown_records() {
@@ -276,19 +440,42 @@ mod transport_tests {
                                 continue;
                             }
                             assert!(header.contains("authorization: bearer fixture"));
+                            assert!(header.starts_with("post /billing/meter/get-user-"));
                             let body: Value =
                                 serde_json::from_slice(&request[end + 4..end + 4 + length])
                                     .unwrap();
                             let free = header.contains("get-user-resource-free-packages");
                             let summary = header.contains("get-user-resource-summary");
-                            if !summary {
+                            let detail = body["IsDisplayTotalInfo"] == true;
+                            let usage = header.contains("get-user-request-usage");
+                            if usage {
+                                assert_eq!(body["pageNum"], 1);
+                                assert_eq!(body["pageSize"], 5);
+                                assert!(body["startTime"].as_str().unwrap().ends_with(" 00:00:00"));
+                                assert!(body["endTime"].as_str().unwrap().ends_with(" 23:59:59"));
+                            } else if !summary {
                                 assert_eq!(body["PageSize"], 200);
                             }
-                            if free {
+                            if detail {
+                                assert!(free);
+                                assert_eq!(body["PackageCodes"], json!([FREE[6]]));
+                                assert_eq!(body["Status"], json!([2, 3]));
+                                assert!(body.get("SlicePeriodStartTime").is_none());
+                            } else if free {
                                 assert!(body.get("SlicePeriodStartTime").is_some());
                             }
                             let data = if summary {
                                 json!({"Packages": []})
+                            } else if detail {
+                                json!({"Accounts": [
+                                    {"ResourceId": "daily", "CapacityType": 4},
+                                    {"ResourceId": "grant", "CapacitySizePrecise": "100"}
+                                ], "TotalCount": "201"})
+                            } else if usage {
+                                json!({"data": [
+                                    {"requestId": "request", "requestTime": "2026-11-05 12:00:00",
+                                     "credit": "1.25", "model": "fixture", "internalField": "ignored"}
+                                ]})
                             } else {
                                 json!({"Accounts": [{"ResourceId": "shared", "CycleCapacityRemainPrecise": "12.5"}], "TotalCount": 1})
                             };
@@ -333,5 +520,46 @@ mod transport_tests {
             }
             task.abort();
         }
+    }
+
+    #[tokio::test]
+    async fn expired_details_use_free_packages_and_keep_pagination_after_filtering() {
+        let (base, task) = server(false).await;
+        let mut headers = HeaderMap::new();
+        headers.insert("Authorization", "Bearer fixture".parse().unwrap());
+        let value = fetch_credit_packages(
+            &Client::builder().no_proxy().build().unwrap(),
+            &base,
+            headers,
+            &[FREE[6].to_string()],
+            true,
+            1,
+        )
+        .await
+        .unwrap();
+        assert_eq!(value["hasMore"], true);
+        assert_eq!(
+            value["items"],
+            json!([{"ResourceId":"grant","CapacitySizePrecise":"100"}])
+        );
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn request_usage_uses_official_preview_contract() {
+        let (base, task) = server(false).await;
+        let mut headers = HeaderMap::new();
+        headers.insert("Authorization", "Bearer fixture".parse().unwrap());
+        let rows = fetch_recent_credit_usage(
+            &Client::builder().no_proxy().build().unwrap(),
+            &base,
+            headers,
+        )
+        .await
+        .unwrap();
+        assert_eq!(rows[0]["requestId"], "request");
+        assert_eq!(rows[0]["credit"], "1.25");
+        assert!(rows[0].get("internalField").is_none());
+        task.abort();
     }
 }

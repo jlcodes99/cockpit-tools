@@ -7137,6 +7137,35 @@
     "syncToWorkbuddy": "WorkBuddy ile Senkronize Et"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Temel plan kredisi",
+      "planBonus": "Plan bonusu",
+      "benefit": "Platform ödülleri",
+      "addon": "Satın alınan kredi",
+      "total": "Toplam kalan kredi",
+      "details": "Kredi ayrıntıları",
+      "usedOf": "Kullanılan {{used}}/{{total}}",
+      "remainingPercent": "%{{percent}} kaldı",
+      "nearestExpiry": "İlk sona erme {{time}}",
+      "nextRefresh": "Sonraki yenileme {{time}}",
+      "expiring": "Bazı krediler yakında sona eriyor",
+      "valid": "Geçerli",
+      "expired": "Süresi dolmuş",
+      "expiresAt": "Bitiş {{time}}",
+      "expiryHours": "24 saat içinde sona erer",
+      "expiryDays": "3 gün içinde sona erer",
+      "empty": "Kayıt yok",
+      "loadFailed": "Yüklenemedi ({{error}})",
+      "overview": "Özet",
+      "remaining": "Kalan {{amount}}",
+      "loadMore": "Daha fazla yükle",
+      "usage": "Kullanım ayrıntıları",
+      "requestAndTime": "İstek ve saat",
+      "creditUsed": "Kullanılan kredi",
+      "model": "Model adı",
+      "recentUsage": "Son 5 kayıt",
+      "viewMore": "Daha fazla göster"
+    },
     "title": "WorkBuddy Hesap Yönetimi",
     "noAccounts": "WorkBuddy hesabı yok",
     "addAccount": "WorkBuddy Hesabı Ekle",
@@ -7144,7 +7173,7 @@
       "title": "WorkBuddy hesap yönetimi bilgisi (genişlet/daralt için tıklayın)",
       "desc": "Hesap değiştirme, en yeni resmi WorkBuddy istemci düzenine göre yerel oturum açma dosyasını yazar; yerel içe aktarma aynı dosyayı okur. Veriler yalnızca yerelde işlenir.",
       "permission": "İzin kapsamı: yerel içe aktarma ve hesap değiştirme için WorkBuddy oturum açma dosyasını (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) okuma ve yazma; eski state.vscdb artık okunmaz veya değiştirilmez.",
-      "network": "Ağ kapsamı: OAuth girişi ve belirteç yenileme için WorkBuddy'ye ağ istekleri gerekir; kota sorguları faturalama API'lerini çağırır. Yerel oturum açma dosyaları veya ham kimlik bilgileri yüklenmez."
+      "network": "OAuth girişi ve belirteç yenileme WorkBuddy’ye bağlanır. Kredi bakiyesi ve ayrıntılar, hesap belirteciyle faturalandırma hizmetinden alınır. Oturum dosyaları ve sistem anahtarları cihazda kalır."
     },
     "nickname": "Takma ad",
     "enterprise": "Kurumsal",
@@ -7161,8 +7190,8 @@
       "oauth": {
         "title": "Yalnızca IDE girişi",
         "item1": "Tarayıcıda OAuth tamamlandıktan sonra hesabı ekleyin ve IDE geçişi için kullanın.",
-        "item2": "Kota sorgu parametreleri otomatik bağlanmaz.",
-        "item3": "Kota görüntülemek gerekiyorsa hesap kartında \"Kota Sorgula\"yı elle çalıştırın."
+        "item2": "Yetkilendirmeden sonra kredi bakiyesi otomatik sorgulanır.",
+        "item3": "Hesap kartı kredi özetini gösterir. Ayrıntılarda verilen kredileri ve son kullanma tarihlerini görebilirsiniz."
       }
     },
     "oauthWebviewTab": "WebView ile OAuth",

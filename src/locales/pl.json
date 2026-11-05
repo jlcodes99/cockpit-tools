@@ -7137,6 +7137,35 @@
     "syncToWorkbuddy": "Synchronizuj z WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Kredyty podstawowe",
+      "planBonus": "Bonus planu",
+      "benefit": "Nagrody platformy",
+      "addon": "Kupione kredyty",
+      "total": "Łącznie pozostało",
+      "details": "Szczegóły kredytów",
+      "usedOf": "Użyto {{used}}/{{total}}",
+      "remainingPercent": "Pozostało {{percent}}%",
+      "nearestExpiry": "Najbliższa ważność do {{time}}",
+      "nextRefresh": "Następne odnowienie {{time}}",
+      "expiring": "Część kredytów wkrótce wygaśnie",
+      "valid": "Ważne",
+      "expired": "Wygasłe",
+      "expiresAt": "Wygasa {{time}}",
+      "expiryHours": "Wygasa w ciągu 24 godz.",
+      "expiryDays": "Wygasa w ciągu 3 dni",
+      "empty": "Brak danych",
+      "loadFailed": "Nie udało się wczytać ({{error}})",
+      "overview": "Przegląd",
+      "remaining": "Pozostało {{amount}}",
+      "loadMore": "Wczytaj więcej",
+      "usage": "Historia zużycia",
+      "requestAndTime": "Żądanie i czas",
+      "creditUsed": "Zużyte kredyty",
+      "model": "Model AI",
+      "recentUsage": "Ostatnie 5 wpisów",
+      "viewMore": "Zobacz więcej"
+    },
     "title": "Zarządzanie kontami WorkBuddy",
     "noAccounts": "Brak kont WorkBuddy",
     "addAccount": "Dodaj konto WorkBuddy",
@@ -7144,7 +7173,7 @@
       "title": "Informacje o zarządzaniu kontami WorkBuddy (kliknij, aby rozwinąć/zwinąć)",
       "desc": "Przełączenie konta zapisuje lokalny plik logowania zgodnie z najnowszym układem oficjalnego klienta WorkBuddy; import lokalny czyta ten sam plik. Dane są przetwarzane wyłącznie lokalnie.",
       "permission": "Zakres uprawnień: odczyt i zapis pliku logowania WorkBuddy (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) dla importu lokalnego i przełączania kont; starszy state.vscdb nie jest już czytany ani modyfikowany.",
-      "network": "Zakres sieci: logowanie OAuth i odświeżanie tokenu wymagają żądań do WorkBuddy; zapytania o limity wywołują API rozliczeń. Lokalne pliki logowania ani surowe poświadczenia nie są wysyłane."
+      "network": "Logowanie OAuth i odświeżanie tokena łączą się z WorkBuddy. Saldo i szczegóły kredytów są pobierane z usługi rozliczeń za pomocą tokena konta. Pliki logowania i klucze systemowe pozostają na urządzeniu."
     },
     "nickname": "Pseudonim",
     "enterprise": "Firmowe",
@@ -7161,8 +7190,8 @@
       "oauth": {
         "title": "Tylko logowanie IDE",
         "item1": "Dodaj konto po zakończeniu OAuth w przeglądarce, a następnie użyj go do przełączania IDE.",
-        "item2": "Parametry zapytania limitu nie są automatycznie powiązywane.",
-        "item3": "Jeśli potrzebujesz podglądu limitu, uruchom ręcznie „Zapytaj limit” na karcie konta."
+        "item2": "Po autoryzacji saldo kredytów jest pobierane automatycznie.",
+        "item3": "Karta pokazuje przegląd kredytów. W szczegółach znajdziesz przyznane kredyty i daty ich ważności."
       }
     },
     "oauthWebviewTab": "OAuth przez WebView",

@@ -7496,6 +7496,35 @@
     "syncToWorkbuddy": "同步到 WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "套餐基础积分",
+      "planBonus": "套餐赠送积分",
+      "benefit": "平台奖励积分",
+      "addon": "购买积分",
+      "total": "总剩余积分",
+      "details": "积分明细",
+      "usedOf": "已使用 {{used}}/{{total}}",
+      "remainingPercent": "剩余{{percent}}%",
+      "nearestExpiry": "最近到期时间 {{time}}",
+      "nextRefresh": "下次刷新时间 {{time}}",
+      "expiring": "包含即将到期的积分",
+      "valid": "有效期内",
+      "expired": "已过期",
+      "expiresAt": "到期时间 {{time}}",
+      "expiryHours": "24小时内到期",
+      "expiryDays": "3天内到期",
+      "empty": "暂无明细",
+      "loadFailed": "积分明细加载失败（{{error}}）",
+      "overview": "积分概览",
+      "remaining": "剩余 {{amount}}",
+      "loadMore": "加载更多",
+      "usage": "消耗明细",
+      "requestAndTime": "请求与时间",
+      "creditUsed": "积分消耗",
+      "model": "模型",
+      "recentUsage": "仅展示最近的 5 条数据",
+      "viewMore": "查看更多"
+    },
     "title": "WorkBuddy 账号管理",
     "noAccounts": "暂无 WorkBuddy 账号",
     "addAccount": "添加 WorkBuddy 账号",
@@ -7544,7 +7573,7 @@
       "title": "WorkBuddy 账号管理说明（点击展开/收起）",
       "desc": "切换账号会按当前 WorkBuddy 官方客户端登录文件布局写入本机；本机导入读取同一登录文件，数据仅在本地处理。若检测到无法解密的官方封装，会保留原文件并停止覆盖。",
       "permission": "权限范围：读取并写入 WorkBuddy 登录文件（CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info），用于本机导入与账号切换；不再读取或修改旧版 state.vscdb。遇到官方加密封装且未取得密钥时不会覆盖原文件。",
-      "network": "网络范围：OAuth 授权登录与 Token 刷新需联网请求 WorkBuddy；配额查询需调用计费 API。不上传本地登录文件或凭证原文。"
+      "network": "OAuth 登录和 Token 刷新会请求 WorkBuddy 服务。积分余额与明细查询使用账号 Token 请求 WorkBuddy 计费服务。本地登录文件和系统密钥保留在本机。"
     },
     "nickname": "昵称",
     "enterprise": "企业",
@@ -7561,8 +7590,8 @@
       "oauth": {
         "title": "仅授权 IDE 登录信息",
         "item1": "在浏览器完成 OAuth 后即可添加账号并用于 IDE 切换。",
-        "item2": "授权完成后会自动刷新资源包配额数据。",
-        "item3": "账号卡片将按资源包展示额度、进度和刷新/到期时间。"
+        "item2": "授权完成后会自动查询积分余额。",
+        "item3": "账号卡片展示积分概览，可打开「积分明细」查看积分记录和到期时间。"
       }
     },
     "oauthWebviewTab": "WebView 授权",

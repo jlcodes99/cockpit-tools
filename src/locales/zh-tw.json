@@ -7137,6 +7137,35 @@
     "syncToWorkbuddy": "同步至 WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "方案基礎點數",
+      "planBonus": "方案贈送點數",
+      "benefit": "平台獎勵點數",
+      "addon": "購買點數",
+      "total": "剩餘點數總計",
+      "details": "點數明細",
+      "usedOf": "已使用 {{used}}/{{total}}",
+      "remainingPercent": "剩餘 {{percent}}%",
+      "nearestExpiry": "最近到期時間 {{time}}",
+      "nextRefresh": "下次更新時間 {{time}}",
+      "expiring": "包含即將到期的點數",
+      "valid": "有效期限內",
+      "expired": "已過期",
+      "expiresAt": "到期時間 {{time}}",
+      "expiryHours": "24 小時內到期",
+      "expiryDays": "3 天內到期",
+      "empty": "沒有明細",
+      "loadFailed": "載入失敗 ({{error}})",
+      "overview": "點數總覽",
+      "remaining": "剩餘 {{amount}}",
+      "loadMore": "載入更多",
+      "usage": "消耗明細",
+      "requestAndTime": "請求與時間",
+      "creditUsed": "消耗點數",
+      "model": "模型",
+      "recentUsage": "僅顯示最近 5 筆資料",
+      "viewMore": "查看更多"
+    },
     "title": "WorkBuddy 帳號管理",
     "noAccounts": "暫無 WorkBuddy 帳號",
     "addAccount": "新增 WorkBuddy 帳號",
@@ -7144,7 +7173,7 @@
       "title": "WorkBuddy 帳號管理說明（點擊展開/收起）",
       "desc": "切換帳號會依新版 WorkBuddy 官方用戶端規則寫入本機登入檔；本機匯入讀取同一檔案，資料僅在本機處理。",
       "permission": "權限範圍：讀取並寫入 WorkBuddy 登入檔（CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info），用於本機匯入與帳號切換；不再讀取或修改舊版 state.vscdb。",
-      "network": "網路範圍：OAuth 登入與 Token 刷新需連線請求 WorkBuddy；配額查詢需呼叫計費 API。不會上傳本機登入檔或憑證原文。"
+      "network": "OAuth 登入與 Token 更新會連線至 WorkBuddy 服務。點數餘額與明細會使用帳號 Token 向 WorkBuddy 計費服務查詢。本機登入檔案和系統金鑰保留在裝置上。"
     },
     "nickname": "暱稱",
     "enterprise": "企業",
@@ -7161,8 +7190,8 @@
       "oauth": {
         "title": "僅授權 IDE 登入資訊",
         "item1": "在瀏覽器完成 OAuth 後即可新增帳號並用於 IDE 切換。",
-        "item2": "不會自動綁定配額查詢參數。",
-        "item3": "如需顯示配額，請在帳號卡片中手動執行「查詢配額」綁定。"
+        "item2": "授權完成後會自動查詢點數餘額。",
+        "item3": "帳號卡片顯示點數總覽，可開啟「點數明細」查看點數紀錄和到期時間。"
       }
     },
     "oauthWebviewTab": "WebView 授權",

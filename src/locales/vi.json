@@ -7137,6 +7137,35 @@
     "syncToWorkbuddy": "Đồng bộ tới WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Điểm cơ bản của gói",
+      "planBonus": "Điểm tặng kèm gói",
+      "benefit": "Điểm thưởng nền tảng",
+      "addon": "Điểm đã mua",
+      "total": "Tổng điểm còn lại",
+      "details": "Chi tiết điểm",
+      "usedOf": "Đã dùng {{used}}/{{total}}",
+      "remainingPercent": "Còn {{percent}}%",
+      "nearestExpiry": "Hết hạn gần nhất {{time}}",
+      "nextRefresh": "Lần làm mới tiếp theo {{time}}",
+      "expiring": "Có điểm sắp hết hạn",
+      "valid": "Còn hạn",
+      "expired": "Hết hạn",
+      "expiresAt": "Hết hạn lúc {{time}}",
+      "expiryHours": "Hết hạn trong 24 giờ",
+      "expiryDays": "Hết hạn trong 3 ngày",
+      "empty": "Không có dữ liệu",
+      "loadFailed": "Không tải được ({{error}})",
+      "overview": "Tổng quan",
+      "remaining": "Còn {{amount}}",
+      "loadMore": "Tải thêm",
+      "usage": "Chi tiết tiêu hao",
+      "requestAndTime": "Yêu cầu và thời gian",
+      "creditUsed": "Điểm đã dùng",
+      "model": "Mô hình",
+      "recentUsage": "5 mục gần nhất",
+      "viewMore": "Xem thêm"
+    },
     "title": "Quản lý tài khoản WorkBuddy",
     "noAccounts": "Chưa có tài khoản WorkBuddy",
     "addAccount": "Thêm tài khoản WorkBuddy",
@@ -7144,7 +7173,7 @@
       "title": "Hướng dẫn quản lý tài khoản WorkBuddy (bấm để mở rộng/thu gọn)",
       "desc": "Khi chuyển tài khoản, ứng dụng ghi tệp đăng nhập cục bộ theo bố cục mới nhất của ứng dụng WorkBuddy chính thức; nhập cục bộ đọc cùng tệp đó. Dữ liệu chỉ được xử lý cục bộ.",
       "permission": "Phạm vi quyền: đọc và ghi tệp đăng nhập WorkBuddy (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) để nhập cục bộ và chuyển tài khoản; state.vscdb cũ không còn được đọc hoặc sửa đổi.",
-      "network": "Phạm vi mạng: đăng nhập OAuth và làm mới Token cần gửi yêu cầu đến WorkBuddy; truy vấn hạn ngạch sẽ gọi API tính phí. Không tải lên tệp đăng nhập cục bộ hoặc thông tin xác thực thô."
+      "network": "Đăng nhập OAuth và làm mới mã thông báo cần kết nối với WorkBuddy. Số dư và chi tiết điểm được truy vấn từ dịch vụ thanh toán bằng mã thông báo của tài khoản. Tệp đăng nhập và khóa hệ thống được giữ trên thiết bị."
     },
     "nickname": "Biệt danh",
     "enterprise": "Doanh nghiệp",
@@ -7161,8 +7190,8 @@
       "oauth": {
         "title": "Chỉ ủy quyền thông tin đăng nhập IDE",
         "item1": "Sau khi hoàn tất OAuth trong trình duyệt, bạn có thể thêm tài khoản và dùng để chuyển IDE.",
-        "item2": "Tham số truy vấn hạn ngạch sẽ không được liên kết tự động.",
-        "item3": "Nếu cần hiển thị hạn ngạch, hãy chạy thủ công \"Truy vấn hạn ngạch\" trên thẻ tài khoản."
+        "item2": "Số dư điểm được truy vấn tự động sau khi cấp quyền.",
+        "item3": "Thẻ tài khoản hiển thị tổng quan điểm. Mở chi tiết để xem từng khoản điểm và ngày hết hạn."
       }
     },
     "oauthWebviewTab": "Xác thực WebView",

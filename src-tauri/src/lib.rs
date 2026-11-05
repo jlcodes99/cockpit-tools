@@ -1348,6 +1348,8 @@ pub fn run() {
             commands::codebuddy_cn::sync_codebuddy_cn_to_workbuddy,
             // WorkBuddy Commands
             commands::workbuddy::list_workbuddy_accounts,
+            commands::workbuddy::get_workbuddy_credit_packages,
+            commands::workbuddy::get_workbuddy_recent_credit_usage,
             commands::workbuddy::delete_workbuddy_account,
             commands::workbuddy::delete_workbuddy_accounts,
             commands::workbuddy::import_workbuddy_from_json,

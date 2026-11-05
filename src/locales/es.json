@@ -7137,6 +7137,35 @@
     "syncToWorkbuddy": "Sincronizar con WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Créditos del plan",
+      "planBonus": "Bonos del plan",
+      "benefit": "Premios de la plataforma",
+      "addon": "Créditos comprados",
+      "total": "Créditos restantes",
+      "details": "Detalle de créditos",
+      "usedOf": "Usados {{used}}/{{total}}",
+      "remainingPercent": "Queda el {{percent}}%",
+      "nearestExpiry": "Próximo vencimiento {{time}}",
+      "nextRefresh": "Próxima renovación {{time}}",
+      "expiring": "Hay créditos que vencen pronto",
+      "valid": "Vigentes",
+      "expired": "Vencidos",
+      "expiresAt": "Vence el {{time}}",
+      "expiryHours": "Vence en 24 h",
+      "expiryDays": "Vence en 3 días",
+      "empty": "Sin registros",
+      "loadFailed": "Error al cargar ({{error}})",
+      "overview": "Resumen",
+      "remaining": "Quedan {{amount}}",
+      "loadMore": "Cargar más",
+      "usage": "Detalle de consumo",
+      "requestAndTime": "Solicitud y hora",
+      "creditUsed": "Créditos usados",
+      "model": "Modelo",
+      "recentUsage": "Últimos 5 registros",
+      "viewMore": "Ver más"
+    },
     "title": "Gestión de cuentas de WorkBuddy",
     "noAccounts": "No hay cuentas de WorkBuddy",
     "addAccount": "Agregar cuenta de WorkBuddy",
@@ -7144,7 +7173,7 @@
       "title": "Información de gestión de cuentas de WorkBuddy (clic para expandir/contraer)",
       "desc": "El cambio de cuenta escribe el archivo local de inicio de sesión con la estructura más reciente del cliente oficial de WorkBuddy; la importación local lee el mismo archivo. Los datos solo se procesan localmente.",
       "permission": "Alcance de permisos: leer y escribir el archivo de inicio de sesión de WorkBuddy (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) para importación local y cambio de cuenta; el state.vscdb heredado ya no se lee ni modifica.",
-      "network": "Alcance de red: el inicio de sesión OAuth y la actualización del Token requieren solicitudes a WorkBuddy; la consulta de cuota usa APIs de facturación. No se suben archivos locales de inicio de sesión ni credenciales sin procesar."
+      "network": "El inicio de sesión con OAuth y la renovación del token contactan con WorkBuddy. El saldo y el detalle de créditos se consultan con el token de la cuenta. Los archivos de inicio de sesión y las claves del sistema permanecen en el dispositivo."
     },
     "nickname": "Apodo",
     "enterprise": "Empresa",
@@ -7161,8 +7190,8 @@
       "oauth": {
         "title": "Solo autorizar datos de inicio de sesión del IDE",
         "item1": "Tras completar OAuth en el navegador, puedes agregar la cuenta y usarla para cambiar en el IDE.",
-        "item2": "Los parámetros de consulta de cuota no se vinculan automáticamente.",
-        "item3": "Si necesitas ver la cuota, ejecuta manualmente \"Consultar cuota\" en la tarjeta de la cuenta."
+        "item2": "El saldo se consulta automáticamente tras autorizar la cuenta.",
+        "item3": "La tarjeta resume los créditos. Abre el detalle para ver los abonos y sus vencimientos."
       }
     },
     "oauthWebviewTab": "OAuth en WebView",

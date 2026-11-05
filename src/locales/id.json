@@ -7312,6 +7312,35 @@
     "syncToWorkbuddy": "Sinkronkan ke WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Kredit dasar paket",
+      "planBonus": "Kredit bonus paket",
+      "benefit": "Kredit hadiah platform",
+      "addon": "Kredit yang dibeli",
+      "total": "Total kredit tersisa",
+      "details": "Rincian kredit",
+      "usedOf": "Digunakan {{used}}/{{total}}",
+      "remainingPercent": "{{percent}}% tersisa",
+      "nearestExpiry": "Kedaluwarsa berikutnya {{time}}",
+      "nextRefresh": "Pembaruan berikutnya {{time}}",
+      "expiring": "Termasuk kredit yang akan segera kedaluwarsa",
+      "valid": "Berlaku",
+      "expired": "Kedaluwarsa",
+      "expiresAt": "Kedaluwarsa {{time}}",
+      "expiryHours": "Kedaluwarsa dalam 24 jam",
+      "expiryDays": "Kedaluwarsa dalam 3 hari",
+      "empty": "Belum ada informasi",
+      "loadFailed": "Gagal memuat ({{error}})",
+      "overview": "Ringkasan",
+      "remaining": "Sisa {{amount}}",
+      "loadMore": "Muat lagi",
+      "usage": "Rincian pemakaian",
+      "requestAndTime": "Permintaan dan waktu",
+      "creditUsed": "Kredit terpakai",
+      "model": "Model AI",
+      "recentUsage": "5 catatan terakhir",
+      "viewMore": "Lihat lainnya"
+    },
     "title": "Akun WorkBuddy",
     "noAccounts": "Tidak ada akun WorkBuddy",
     "addAccount": "Tambah Akun WorkBuddy",
@@ -7319,7 +7348,7 @@
       "title": "Info Akun WorkBuddy (klik untuk perluas/ciutkan)",
       "desc": "Penggantian akun menulis file masuk lokal sesuai tata letak terbaru klien resmi WorkBuddy; impor lokal membaca file yang sama. Data hanya diproses secara lokal.",
       "permission": "Cakupan izin: baca dan tulis file masuk WorkBuddy (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) untuk impor lokal dan penggantian akun; state.vscdb lama tidak lagi dibaca atau diubah.",
-      "network": "Cakupan jaringan: Login OAuth dan penyegaran token memerlukan permintaan jaringan ke WorkBuddy; kueri kuota memanggil API penagihan. File masuk lokal dan kredensial mentah tidak diunggah."
+      "network": "Login OAuth dan pembaruan token menghubungi WorkBuddy. Saldo dan rincian kredit diambil dari layanan penagihan dengan token akun. Berkas login dan kunci sistem tetap di perangkat ini."
     },
     "nickname": "Nama panggilan",
     "enterprise": "Perusahaan",
@@ -7336,8 +7365,8 @@
       "oauth": {
         "title": "IDE sign-in only​",
         "item1": "Add the account after completing OAuth in your browser, then use it for IDE switching.​",
-        "item2": "Resource-package quota data will refresh automatically after authorization.​",
-        "item3": "Account cards show quota amount, progress, and refresh/expiry time by resource package.​"
+        "item2": "Saldo kredit diperiksa otomatis setelah otorisasi.",
+        "item3": "Kartu akun menampilkan ringkasan kredit. Buka rincian untuk melihat setiap kredit dan tanggal kedaluwarsanya."
       }
     },
     "oauthWebviewTab": "WebView OAuth​",

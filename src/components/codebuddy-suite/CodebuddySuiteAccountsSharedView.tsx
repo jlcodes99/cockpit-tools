@@ -168,6 +168,8 @@ export interface CodebuddySuiteAccountsPlatformConfig<
     t: (key: string, defaultValue?: string) => string,
   ) => QuotaCategoryGroup[];
   hasQuotaData: (account: TAccount, groups: QuotaCategoryGroup[]) => boolean;
+  renderQuotaSummary?: (account: TAccount) => ReactNode;
+  renderQuotaAction?: (account: TAccount) => ReactNode;
   usagePrefix: string;
   quotaPrefix: string;
   tableUsageClassName: string;
@@ -568,11 +570,12 @@ export function CodebuddySuiteAccountsSharedView<
         return platformConfig.renderQuotaSection(account, variant);
       }
 
-      const groups = platformConfig.getQuotaGroups(
+      const quotaSummary = platformConfig.renderQuotaSummary?.(account);
+      const groups = quotaSummary != null ? [] : platformConfig.getQuotaGroups(
         account,
         t as (key: string, defaultValue?: string) => string,
       );
-      const hasQuotaData = platformConfig.hasQuotaData(account, groups);
+      const hasQuotaData = quotaSummary != null || platformConfig.hasQuotaData(account, groups);
       const refreshFailed = !!account.quota_query_last_error?.trim();
       const reauthorizationReason =
         platformConfig.getReauthorizationReason?.(account) || null;
@@ -625,16 +628,19 @@ export function CodebuddySuiteAccountsSharedView<
           <div
             className={`quota-item ${platformConfig.usagePrefix}-quota-item`}
           >
-            <div
-              className={`quota-header ${platformConfig.usagePrefix}-quota-header`}
-            >
-              <span className="quota-name">
-                {t(
-                  `${platformConfig.quotaPrefix}.quotaQuery.sectionTitle`,
-                  "配额查询",
-                )}
-              </span>
-            </div>
+            {quotaSummary == null && (
+              <div
+                className={`quota-header ${platformConfig.usagePrefix}-quota-header`}
+              >
+                <span className="quota-name">
+                  {t(
+                    `${platformConfig.quotaPrefix}.quotaQuery.sectionTitle`,
+                    "配额查询",
+                  )}
+                </span>
+                {platformConfig.renderQuotaAction?.(account)}
+              </div>
+            )}
             {refreshFailed && hasQuotaData && (
               <div className={`quota-cache-warning ${variant === "table" ? "table" : ""}`} role="status">
                 <CircleAlert size={14} />
@@ -651,7 +657,7 @@ export function CodebuddySuiteAccountsSharedView<
               </div>
             )}
             {shouldShowQuota ? (
-              renderResourceQuotaItems(account, variant)
+              quotaSummary ?? renderResourceQuotaItems(account, variant)
             ) : (
               <div
                 className={`quota-empty quota-query-state ${refreshFailed ? "error" : "empty"}`}

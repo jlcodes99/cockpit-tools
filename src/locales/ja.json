@@ -7137,6 +7137,35 @@
     "syncToWorkbuddy": "WorkBuddyに同期"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "プラン基本クレジット",
+      "planBonus": "プラン特典クレジット",
+      "benefit": "プラットフォーム報酬",
+      "addon": "購入クレジット",
+      "total": "残りクレジット合計",
+      "details": "クレジット明細",
+      "usedOf": "使用済み {{used}}/{{total}}",
+      "remainingPercent": "残り {{percent}}%",
+      "nearestExpiry": "直近の有効期限 {{time}}",
+      "nextRefresh": "次回更新 {{time}}",
+      "expiring": "まもなく期限切れのクレジットを含む",
+      "valid": "有効",
+      "expired": "期限切れ",
+      "expiresAt": "有効期限 {{time}}",
+      "expiryHours": "24時間以内に期限切れ",
+      "expiryDays": "3日以内に期限切れ",
+      "empty": "明細なし",
+      "loadFailed": "読み込めませんでした（{{error}}）",
+      "overview": "クレジット概要",
+      "remaining": "残り {{amount}}",
+      "loadMore": "さらに表示",
+      "usage": "消費明細",
+      "requestAndTime": "リクエストと時刻",
+      "creditUsed": "消費クレジット",
+      "model": "モデル",
+      "recentUsage": "最新の5件",
+      "viewMore": "もっと見る"
+    },
     "title": "WorkBuddyアカウント管理",
     "noAccounts": "WorkBuddy アカウントがありません",
     "addAccount": "WorkBuddy アカウントを追加",
@@ -7144,7 +7173,7 @@
       "title": "WorkBuddy アカウント管理ガイド（クリックで展開/折りたたみ）",
       "desc": "アカウント切り替えでは、最新の WorkBuddy 公式クライアントの形式に従ってローカルのログインファイルを書き込みます。ローカルインポートも同じファイルを読み取ります。データはローカルでのみ処理されます。",
       "permission": "権限範囲：ローカルインポートとアカウント切り替えのために WorkBuddy のログインファイル（CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info）を読み書きします。旧 state.vscdb は読み取りも変更もしません。",
-      "network": "ネットワーク範囲：OAuth ログインと Token 更新では WorkBuddy へのリクエストが必要で、クォータ照会では課金 API を呼び出します。ローカルのログインファイルや生の認証情報はアップロードされません。"
+      "network": "OAuth ログインとトークン更新では WorkBuddy に接続します。残高と明細の取得には、アカウントのトークンを使って課金サービスに接続します。ログインファイルとシステムキーは端末内に保存されます。"
     },
     "nickname": "ニックネーム",
     "enterprise": "企業",
@@ -7161,8 +7190,8 @@
       "oauth": {
         "title": "IDE ログイン情報のみを認証",
         "item1": "ブラウザで OAuth を完了すると、アカウントを追加して IDE 切り替えに利用できます。",
-        "item2": "クォータ照会パラメータは自動では紐付けられません。",
-        "item3": "クォータ表示が必要な場合は、アカウントカードで「クォータ照会」を手動実行してください。"
+        "item2": "認証後にクレジット残高を自動で照会します。",
+        "item3": "アカウントカードに残高の概要が表示されます。明細では付与履歴と有効期限を確認できます。"
       }
     },
     "oauthWebviewTab": "WebView 認証",

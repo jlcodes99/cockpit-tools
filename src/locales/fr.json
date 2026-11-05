@@ -7137,6 +7137,35 @@
     "syncToWorkbuddy": "Synchroniser avec WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Crédits du forfait",
+      "planBonus": "Bonus du forfait",
+      "benefit": "Récompenses de la plateforme",
+      "addon": "Crédits achetés",
+      "total": "Total des crédits restants",
+      "details": "Détail des crédits",
+      "usedOf": "Utilisés {{used}}/{{total}}",
+      "remainingPercent": "{{percent}} % restants",
+      "nearestExpiry": "Expiration la plus proche {{time}}",
+      "nextRefresh": "Prochain renouvellement {{time}}",
+      "expiring": "Des crédits expirent bientôt",
+      "valid": "Valides",
+      "expired": "Expirés",
+      "expiresAt": "Expire {{time}}",
+      "expiryHours": "Expire dans les 24 heures",
+      "expiryDays": "Expire dans les 3 jours",
+      "empty": "Pas encore d'information",
+      "loadFailed": "Échec du chargement ({{error}})",
+      "overview": "Aperçu",
+      "remaining": "{{amount}} restants",
+      "loadMore": "Charger plus",
+      "usage": "Détail de consommation",
+      "requestAndTime": "Requête et heure",
+      "creditUsed": "Crédits utilisés",
+      "model": "Modèle",
+      "recentUsage": "5 derniers relevés",
+      "viewMore": "Voir plus"
+    },
     "title": "Gestion des comptes WorkBuddy",
     "noAccounts": "Aucun compte WorkBuddy",
     "addAccount": "Ajouter un compte WorkBuddy",
@@ -7144,7 +7173,7 @@
       "title": "Informations sur la gestion des comptes WorkBuddy (cliquer pour developper/reduire)",
       "desc": "Le changement de compte écrit le fichier de connexion local selon la structure la plus récente du client officiel WorkBuddy ; l'import local lit le même fichier. Les données sont traitées uniquement en local.",
       "permission": "Portée des autorisations : lire et écrire le fichier de connexion WorkBuddy (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) pour l'import local et le changement de compte ; l'ancien state.vscdb n'est plus lu ni modifié.",
-      "network": "Portée réseau : la connexion OAuth et l'actualisation du jeton nécessitent des requêtes vers WorkBuddy ; les requêtes de quota appellent les API de facturation. Les fichiers de connexion locaux et les identifiants bruts ne sont pas téléversés."
+      "network": "La connexion OAuth et le renouvellement du jeton passent par WorkBuddy. Le solde et le détail des crédits sont consultés auprès du service de facturation avec le jeton du compte. Les fichiers de connexion et les clés système restent sur l’appareil."
     },
     "nickname": "Surnom",
     "enterprise": "Entreprise",
@@ -7161,8 +7190,8 @@
       "oauth": {
         "title": "Connexion IDE uniquement",
         "item1": "Ajoutez le compte apres avoir termine OAuth dans votre navigateur, puis utilisez-le pour le changement dans l'IDE.",
-        "item2": "Les parametres de requete de quota ne sont pas associes automatiquement.",
-        "item3": "Si vous avez besoin du quota, lancez manuellement « Interroger le quota » sur la carte du compte."
+        "item2": "Le solde est consulté automatiquement après autorisation.",
+        "item3": "La carte affiche un aperçu des crédits. Le détail présente les attributions et leurs dates d’expiration."
       }
     },
     "oauthWebviewTab": "OAuth en WebView",

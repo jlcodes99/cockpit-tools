@@ -7137,6 +7137,35 @@
     "syncToWorkbuddy": "Synchronizovat s WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Základní kredity tarifu",
+      "planBonus": "Bonusové kredity tarifu",
+      "benefit": "Odměny platformy",
+      "addon": "Zakoupené kredity",
+      "total": "Celkem zbývá kreditů",
+      "details": "Přehled kreditů",
+      "usedOf": "Využito {{used}}/{{total}}",
+      "remainingPercent": "Zbývá {{percent}} %",
+      "nearestExpiry": "Nejbližší konec {{time}}",
+      "nextRefresh": "Další obnova {{time}}",
+      "expiring": "Obsahuje brzy končící kredity",
+      "valid": "Platné",
+      "expired": "Vypršelé",
+      "expiresAt": "Vyprší {{time}}",
+      "expiryHours": "Vyprší do 24 h",
+      "expiryDays": "Vyprší do 3 dnů",
+      "empty": "Žádné záznamy",
+      "loadFailed": "Načtení se nezdařilo ({{error}})",
+      "overview": "Přehled",
+      "remaining": "Zbývá {{amount}}",
+      "loadMore": "Načíst další",
+      "usage": "Historie spotřeby",
+      "requestAndTime": "Požadavek a čas",
+      "creditUsed": "Využité kredity",
+      "model": "Model AI",
+      "recentUsage": "Posledních 5 záznamů",
+      "viewMore": "Zobrazit další"
+    },
     "title": "Správa účtů WorkBuddy",
     "noAccounts": "Žádné účty WorkBuddy",
     "addAccount": "Přidat účet WorkBuddy",
@@ -7144,7 +7173,7 @@
       "title": "Informace o správě účtů WorkBuddy (kliknutím rozbalíte/sbalíte)",
       "desc": "Přepnutí účtu zapisuje místní soubor přihlášení podle aktuální struktury oficiálního klienta WorkBuddy; místní import čte stejný soubor. Data se zpracovávají pouze lokálně.",
       "permission": "Rozsah oprávnění: čtení a zápis přihlašovacího souboru WorkBuddy (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) pro místní import a přepínání účtů; starší state.vscdb se již nečte ani neupravuje.",
-      "network": "Rozsah sítě: přihlášení OAuth a obnovení tokenu vyžadují síťové požadavky na WorkBuddy; dotazy na kvótu volají billing API. Místní přihlašovací soubory ani surové přihlašovací údaje se neodesílají."
+      "network": "Přihlášení OAuth a obnova tokenu vyžadují spojení se službou WorkBuddy. Dotazy na kredity a jejich podrobnosti používají token účtu. Přihlašovací soubory a systémové klíče zůstávají v zařízení."
     },
     "nickname": "Přezdívka",
     "enterprise": "Podnikový",
@@ -7161,8 +7190,8 @@
       "oauth": {
         "title": "Pouze přihlášení IDE",
         "item1": "Po dokončení OAuth v prohlížeči přidejte účet a použijte ho pro přepínání IDE.",
-        "item2": "Parametry dotazu kvóty se nenavážou automaticky.",
-        "item3": "Pokud potřebujete zobrazení kvóty, spusťte na kartě účtu ručně \"Dotázat kvótu\"."
+        "item2": "Po autorizaci se kredity načtou automaticky.",
+        "item3": "Karta zobrazuje přehled kreditů. V podrobnostech najdete jednotlivé záznamy a data platnosti."
       }
     },
     "oauthWebviewTab": "OAuth přes WebView",

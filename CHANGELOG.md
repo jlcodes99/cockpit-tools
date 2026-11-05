@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.3.79] - 2026-11-05
+
+### Added
+
+- **WorkBuddy credit details**: Open an account’s credit overview and browse valid and expired grants, including remaining credits and expiration times. The compact account summary highlights the balance. The dialog keeps loaded details visible while switching tabs or fetching more records, shows the five latest usage records, and links to the full history.
+
+### Fixed
+
+- **WorkBuddy credit refresh**: Restore credit queries and show the official plan base, plan bonus, platform reward and purchased credit categories.
+
 ## [1.3.78] - 2026-11-01
 
 ### Changed

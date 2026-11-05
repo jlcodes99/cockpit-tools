@@ -7137,6 +7137,35 @@
     "syncToWorkbuddy": "Sincronizar com WorkBuddy"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Créditos básicos do plano",
+      "planBonus": "Bônus do plano",
+      "benefit": "Prêmios da plataforma",
+      "addon": "Créditos comprados",
+      "total": "Total de créditos restantes",
+      "details": "Detalhes dos créditos",
+      "usedOf": "Usados {{used}}/{{total}}",
+      "remainingPercent": "Restam {{percent}}%",
+      "nearestExpiry": "Próximo vencimento {{time}}",
+      "nextRefresh": "Próxima renovação {{time}}",
+      "expiring": "Alguns créditos vencem em breve",
+      "valid": "Válidos",
+      "expired": "Vencidos",
+      "expiresAt": "Vence em {{time}}",
+      "expiryHours": "Vence em 24 h",
+      "expiryDays": "Vence em 3 dias",
+      "empty": "Nenhum registro",
+      "loadFailed": "Falha ao carregar ({{error}})",
+      "overview": "Visão geral",
+      "remaining": "Restam {{amount}}",
+      "loadMore": "Carregar mais",
+      "usage": "Detalhes de consumo",
+      "requestAndTime": "Solicitação e horário",
+      "creditUsed": "Créditos usados",
+      "model": "Modelo",
+      "recentUsage": "Últimos 5 registros",
+      "viewMore": "Ver mais"
+    },
     "title": "Gerenciamento de contas do WorkBuddy",
     "noAccounts": "Nenhuma conta WorkBuddy",
     "addAccount": "Adicionar conta WorkBuddy",
@@ -7144,7 +7173,7 @@
       "title": "Informacoes de gerenciamento de conta do WorkBuddy (clique para expandir/recolher)",
       "desc": "A troca de conta grava o arquivo local de login seguindo o layout mais recente do cliente oficial do WorkBuddy; a importação local lê o mesmo arquivo. Os dados são processados somente localmente.",
       "permission": "Escopo de permissão: ler e gravar o arquivo de login do WorkBuddy (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) para importação local e troca de conta; o state.vscdb legado não é mais lido nem modificado.",
-      "network": "Escopo de rede: login OAuth e renovação de token exigem requisições para WorkBuddy; consultas de cota chamam APIs de cobrança. Arquivos locais de login e credenciais brutas não são enviados."
+      "network": "O login OAuth e a renovação do token se conectam ao WorkBuddy. O saldo e os detalhes dos créditos são consultados no serviço de cobrança com o token da conta. Os arquivos de login e as chaves do sistema ficam no dispositivo."
     },
     "nickname": "Apelido",
     "enterprise": "Empresa",
@@ -7161,8 +7190,8 @@
       "oauth": {
         "title": "Somente login do IDE",
         "item1": "Adicione a conta apos concluir o OAuth no navegador e use-a para alternancia no IDE.",
-        "item2": "Os parametros de consulta de cota nao sao vinculados automaticamente.",
-        "item3": "Se precisar exibir a cota, execute manualmente \"Consultar cota\" no cartao da conta."
+        "item2": "O saldo de créditos é consultado automaticamente após a autorização.",
+        "item3": "O cartão mostra um resumo dos créditos. Abra os detalhes para ver cada crédito concedido e seu vencimento."
       }
     },
     "oauthWebviewTab": "OAuth na WebView",

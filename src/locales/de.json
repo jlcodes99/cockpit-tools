@@ -7137,6 +7137,35 @@
     "syncToWorkbuddy": "Mit WorkBuddy synchronisieren"
   },
   "workbuddy": {
+    "credits": {
+      "planBase": "Tarifguthaben",
+      "planBonus": "Tarifbonus",
+      "benefit": "Plattformprämien",
+      "addon": "Gekaufte Credits",
+      "total": "Restguthaben gesamt",
+      "details": "Guthabendetails",
+      "usedOf": "Verbraucht {{used}}/{{total}}",
+      "remainingPercent": "{{percent}} % übrig",
+      "nearestExpiry": "Nächster Ablauf {{time}}",
+      "nextRefresh": "Nächste Erneuerung {{time}}",
+      "expiring": "Guthaben läuft bald ab",
+      "valid": "Gültig",
+      "expired": "Abgelaufen",
+      "expiresAt": "Läuft ab am {{time}}",
+      "expiryHours": "Läuft in 24 Std. ab",
+      "expiryDays": "Läuft in 3 Tagen ab",
+      "empty": "Keine Einträge",
+      "loadFailed": "Laden fehlgeschlagen ({{error}})",
+      "overview": "Übersicht",
+      "remaining": "{{amount}} übrig",
+      "loadMore": "Mehr laden",
+      "usage": "Verbrauchsdetails",
+      "requestAndTime": "Anfrage und Zeit",
+      "creditUsed": "Verbrauchte Credits",
+      "model": "Modell",
+      "recentUsage": "Letzte 5 Einträge",
+      "viewMore": "Mehr anzeigen"
+    },
     "title": "WorkBuddy-Kontenverwaltung",
     "noAccounts": "Keine WorkBuddy-Konten",
     "addAccount": "WorkBuddy-Konto hinzufügen",
@@ -7144,7 +7173,7 @@
       "title": "Hinweise zur WorkBuddy-Kontoverwaltung (zum Ein-/Ausklappen klicken)",
       "desc": "Beim Kontowechsel wird die lokale Anmeldedatei nach dem aktuellen Layout des offiziellen WorkBuddy-Clients geschrieben; der lokale Import liest dieselbe Datei. Die Daten werden nur lokal verarbeitet.",
       "permission": "Berechtigungsumfang: Lesen und Schreiben der WorkBuddy-Anmeldedatei (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) für lokalen Import und Kontowechsel; die alte state.vscdb wird nicht mehr gelesen oder geändert.",
-      "network": "Netzwerkumfang: OAuth-Anmeldung und Token-Aktualisierung senden Anfragen an WorkBuddy; Kontingentabfragen nutzen Billing-APIs. Lokale Anmeldedateien oder rohe Zugangsdaten werden nicht hochgeladen."
+      "network": "OAuth-Anmeldung und Token-Aktualisierung greifen auf WorkBuddy zu. Guthaben und Details werden mit dem Kontotoken beim Abrechnungsdienst abgefragt. Anmeldedateien und Systemschlüssel bleiben lokal."
     },
     "nickname": "Spitzname",
     "enterprise": "Unternehmen",
@@ -7161,8 +7190,8 @@
       "oauth": {
         "title": "Nur IDE-Anmeldedaten autorisieren",
         "item1": "Nach Abschluss von OAuth im Browser kann das Konto hinzugefügt und für den IDE-Wechsel genutzt werden.",
-        "item2": "Parameter für die Kontingentabfrage werden nicht automatisch gebunden.",
-        "item3": "Wenn Sie Kontingente anzeigen möchten, führen Sie auf der Kontokarte manuell „Kontingent abfragen“ aus."
+        "item2": "Nach der Autorisierung wird das Guthaben automatisch abgefragt.",
+        "item3": "Die Kontokarte zeigt das Guthaben. Die Detailansicht zeigt einzelne Gutschriften und Ablaufdaten."
       }
     },
     "oauthWebviewTab": "OAuth im WebView",

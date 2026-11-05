@@ -653,13 +653,13 @@ pub async fn fetch_user_resource_with_access_token(
     post_user_resource(access_token, uid, enterprise_id, domain).await
 }
 
-async fn post_user_resource(
+fn billing_headers(
     access_token: &str,
     uid: Option<&str>,
     enterprise_id: Option<&str>,
-    _domain: Option<&str>,
-) -> Result<Value, String> {
-    let client = build_client()?;
+    domain: Option<&str>,
+    language: &'static str,
+) -> Result<reqwest::header::HeaderMap, String> {
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
         "Authorization",
@@ -667,14 +667,20 @@ async fn post_user_resource(
             .parse()
             .map_err(|e| format!("Invalid authorization header: {}", e))?,
     );
-    headers.insert("Accept-Language", "zh-CN,zh;q=0.9".parse().unwrap());
-    if let Some(uid) = uid {
-        headers.insert(
-            "X-User-Id",
-            uid.parse()
-                .map_err(|e| format!("Invalid user header: {}", e))?,
-        );
-    }
+    headers.insert(
+        "Accept",
+        reqwest::header::HeaderValue::from_static("application/json"),
+    );
+    headers.insert(
+        "Accept-Language",
+        reqwest::header::HeaderValue::from_static(language),
+    );
+    headers.insert(
+        "X-User-Id",
+        uid.unwrap_or_default()
+            .parse()
+            .map_err(|e| format!("Invalid user header: {}", e))?,
+    );
     if let Some(id) = enterprise_id {
         headers.insert(
             "X-Enterprise-Id",
@@ -687,7 +693,78 @@ async fn post_user_resource(
                 .map_err(|e| format!("Invalid tenant header: {}", e))?,
         );
     }
+    if let Some(domain) = domain.filter(|value| !value.is_empty()) {
+        headers.insert(
+            "X-Domain",
+            domain
+                .parse()
+                .map_err(|e| format!("Invalid domain header: {}", e))?,
+        );
+    }
+    Ok(headers)
+}
+
+async fn post_user_resource(
+    access_token: &str,
+    uid: Option<&str>,
+    enterprise_id: Option<&str>,
+    domain: Option<&str>,
+) -> Result<Value, String> {
+    let client = build_client()?;
+    let headers = billing_headers(access_token, uid, enterprise_id, domain, "zh")?;
     crate::modules::buddy_resource_api::fetch(&client, WORKBUDDY_API_ENDPOINT, headers).await
+}
+
+pub async fn fetch_credit_packages(
+    account: &crate::models::workbuddy::WorkbuddyAccount,
+    package_codes: &[String],
+    expired: bool,
+    page: u32,
+    locale: &str,
+) -> Result<Value, String> {
+    let language = if locale.to_ascii_lowercase().starts_with("zh") {
+        "zh"
+    } else {
+        "en"
+    };
+    let headers = billing_headers(
+        &account.access_token,
+        account.uid.as_deref(),
+        account.enterprise_id.as_deref(),
+        account.domain.as_deref(),
+        language,
+    )?;
+    crate::modules::buddy_resource_api::fetch_credit_packages(
+        &build_client()?,
+        WORKBUDDY_API_ENDPOINT,
+        headers,
+        package_codes,
+        expired,
+        page,
+    )
+    .await
+}
+
+pub async fn fetch_recent_credit_usage(
+    account: &crate::models::workbuddy::WorkbuddyAccount,
+) -> Result<Vec<Value>, String> {
+    let mut headers = billing_headers(
+        &account.access_token,
+        account.uid.as_deref(),
+        account.enterprise_id.as_deref(),
+        account.domain.as_deref(),
+        "zh",
+    )?;
+    headers.insert(
+        "X-Client-Platform",
+        reqwest::header::HeaderValue::from_static("workbuddy"),
+    );
+    crate::modules::buddy_resource_api::fetch_recent_credit_usage(
+        &build_client()?,
+        WORKBUDDY_API_ENDPOINT,
+        headers,
+    )
+    .await
 }
 
 /// 企业版用户用量（网页端 /profile/usage 实际使用的接口）
