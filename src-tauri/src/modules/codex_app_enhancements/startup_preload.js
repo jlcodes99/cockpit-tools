@@ -34,6 +34,7 @@
     const discovered = fast.resolveInitialModuleSync(entries, read);
     if (!discovered.ok) return fail(discovered.reason);
     const initialUrl = discovered.url, initialSource = read(initialUrl);
+    const predictionSeeds = entries.map(entry => ({url: entry, source: read(entry)}));
     let initial = fast.prepareLive(initialSource, initialUrl);
     if (!initial.ok) return fail(initial.diagnostics?.reason || 'initial-transform-failed');
     const modules = [];
@@ -81,6 +82,28 @@
         modules.length = 0;
       }
     }
+    if (root.__cockpitEnhancements?.nativePredictions === true
+      && root.__cockpitEnhancements?.apiKeyAuthVerified === true) {
+      try {
+        const prediction = fast.preparePredictionGraphSync(initial.patchedSource, initialUrl, read,
+          [{url: initialUrl, source: initialSource}, ...predictionSeeds]);
+        if (!prediction?.ok) throw Error(prediction?.reason || 'prediction-contract-failed');
+        const preparedModules = prediction.modules.map(module => ({ ...module,
+          source: `${fast.rewriteModuleSync(module.source, module.url)}
+${fast.predictionMarker}
+//# sourceURL=${module.url}
+`,
+        }));
+        // Publish none of these sources until every companion contract passes.
+        initial.patchedSource = prediction.patchedSource;
+        modules.push(...preparedModules);
+        fast.predictionState('ready', 'prediction-graph-prepared');
+      } catch (error) {
+        const reason = typeof error?.message === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(error.message)
+          ? error.message : 'prediction-graph-failed';
+        fast.predictionState('unsupported', reason);
+      }
+    }
     const initialPrepared = `${fast.rewriteModuleSync(initial.patchedSource, initialUrl)}
 ;window.__cockpitNativeFastComplete?.();
 //# sourceURL=${initialUrl}
@@ -92,7 +115,7 @@
       reason: installed.reason || 'preloaded-before-document',
       initialUrl,
       primaryUrls: modules.map(module => module.url),
-      ...(mode === 'fast-only' ? { mode, quotaReason: initial.quotaReason } : {}),
+      ...(mode !== 'full' ? { mode, quotaReason: initial.quotaReason } : {}),
     });
   } catch {
     return fail('startup-preload-failed');

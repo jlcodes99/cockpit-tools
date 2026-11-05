@@ -91,6 +91,7 @@ pub struct GeneralConfig {
     /// 是否启用 Codex 客户端中的 API 服务额度显示注入
     pub codex_app_ui_injection_enabled: bool,
     pub codex_app_api_quota_compat_enabled: bool,
+    pub codex_app_native_predictions_enabled: bool,
     /// Codex WSL 配置目录 (Windows Only)
     pub codex_wsl_config_dir: String,
     /// Zed 自动刷新间隔（分钟），-1 表示禁用
@@ -1177,6 +1178,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "codex_sync_wsl"
             | "codex_app_ui_injection_enabled"
             | "codex_app_api_quota_compat_enabled"
+            | "codex_app_native_predictions_enabled"
             | "codex_wsl_config_dir"
             | "zed_auto_refresh_minutes"
             | "ghcp_auto_refresh_minutes"

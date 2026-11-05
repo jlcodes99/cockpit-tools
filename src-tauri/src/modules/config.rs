@@ -113,6 +113,9 @@ pub struct UserConfig {
     /// 官方客户端增强，仅在重启目标实例后应用。
     #[serde(default = "default_codex_app_enhancements_enabled")]
     pub codex_app_api_quota_compat_enabled: bool,
+    /// 本地 API 模式下的原生下一步预测；额外消耗供应商额度，默认关闭。
+    #[serde(default)]
+    pub codex_app_native_predictions_enabled: bool,
     /// Codex WSL 配置目录 (Windows Only)
     #[serde(default = "default_codex_wsl_config_dir")]
     pub codex_wsl_config_dir: String,
@@ -1219,6 +1222,7 @@ impl Default for UserConfig {
             codex_sync_wsl: default_codex_sync_wsl(),
             codex_app_ui_injection_enabled: default_codex_app_ui_injection_enabled(),
             codex_app_api_quota_compat_enabled: default_codex_app_enhancements_enabled(),
+            codex_app_native_predictions_enabled: false,
             codex_wsl_config_dir: default_codex_wsl_config_dir(),
             zed_auto_refresh_minutes: default_zed_auto_refresh(),
             ghcp_auto_refresh_minutes: default_ghcp_auto_refresh(),
@@ -2827,6 +2831,34 @@ mod tests {
         let restored: UserConfig =
             serde_json::from_value(serde_json::to_value(config).unwrap()).unwrap();
         assert!(restored.codex_app_api_quota_compat_enabled);
+    }
+
+    #[test]
+    fn codex_native_predictions_remain_opt_in_across_config_upgrades() {
+        for config in [
+            UserConfig::default(),
+            serde_json::from_value(serde_json::json!({})).unwrap(),
+            serde_json::from_value(serde_json::json!({
+                "codex_app_native_fast_enabled": false,
+                "codex_app_api_quota_compat_enabled": true
+            }))
+            .unwrap(),
+        ] {
+            assert!(!config.codex_app_native_predictions_enabled);
+        }
+        for enabled in [true, false] {
+            let config: UserConfig = serde_json::from_value(serde_json::json!({
+                "codex_app_native_fast_enabled": false,
+                "codex_app_api_quota_compat_enabled": true,
+                "codex_app_native_predictions_enabled": enabled
+            }))
+            .expect("read an explicit prediction preference");
+            let restored: UserConfig =
+                serde_json::from_value(serde_json::to_value(config).unwrap()).unwrap();
+            assert_eq!(restored.codex_app_native_predictions_enabled, enabled);
+            assert!(!restored.codex_app_native_fast_enabled);
+            assert!(restored.codex_app_api_quota_compat_enabled);
+        }
     }
 
     #[test]

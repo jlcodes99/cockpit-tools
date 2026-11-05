@@ -1629,8 +1629,10 @@
       "codexEnhancements": {
         "quotaCompat": "Mixed-mode quota compatibility",
         "quotaCompatDesc": "With real OAuth sign-in and an external API route, prevent subscription quota from blocking local API messages. Actual usage and image quotas stay unchanged.",
-        "restartHint": "Enabled by default. Restart each target Codex instance after changing these settings. Keep Cockpit Tools running. Native dictation follows the client’s capabilities and settings; Cockpit does not take it over or force-enable it.",
-        "configFailed": "Could not load or save settings: {{error}}"
+        "restartHint": "Native predictions are off by default. Restart each target Codex instance after changing these settings. Keep Cockpit Tools running. Native dictation follows the client’s capabilities and settings; Cockpit does not take it over or force-enable it.",
+        "configFailed": "Could not load or save settings: {{error}}",
+        "nativePredictions": "Native next-step predictions (Tab)",
+        "nativePredictionsDesc": "Generate next-message suggestions with the current conversation’s API provider and model. Uses additional API credits; restart Codex after saving."
       }
     },
     "tabs": {

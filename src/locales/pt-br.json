@@ -1404,8 +1404,10 @@
       "codexEnhancements": {
         "quotaCompat": "Cotas no modo misto",
         "quotaCompatDesc": "Com login OAuth real e rota de API externa, impede que a cota da assinatura bloqueie mensagens de API locais. Não altera o uso real nem as cotas de imagens.",
-        "restartHint": "Ativado por padrão. Reinicie cada instância Codex afetada após mudanças e mantenha o Cockpit Tools aberto. O ditado nativo depende dos recursos e configurações do cliente; o Cockpit não assume seu controle nem força sua ativação.",
-        "configFailed": "Falha ao ler ou salvar configurações: {{error}}"
+        "restartHint": "As previsões nativas ficam desativadas por padrão. Reinicie cada instância Codex afetada após mudanças e mantenha o Cockpit Tools aberto. O ditado nativo depende dos recursos e configurações do cliente; o Cockpit não assume seu controle nem força sua ativação.",
+        "configFailed": "Falha ao ler ou salvar configurações: {{error}}",
+        "nativePredictions": "Previsões nativas do próximo passo (Tab)",
+        "nativePredictionsDesc": "Gera sugestões para a próxima mensagem com o provedor de API e o modelo da conversa atual. Consome créditos de API adicionais; reinicie o Codex após salvar."
       }
     },
     "network": {

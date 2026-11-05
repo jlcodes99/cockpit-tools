@@ -1404,8 +1404,10 @@
       "codexEnhancements": {
         "quotaCompat": "Hạn mức chế độ kết hợp",
         "quotaCompatDesc": "Khi đăng nhập OAuth thật và dùng tuyến API bên ngoài, hạn mức gói đăng ký không chặn tin nhắn API cục bộ. Không đổi mức dùng thực tế hay hạn mức hình ảnh.",
-        "restartHint": "Mặc định bật. Khởi động lại các phiên bản Codex liên quan sau khi đổi và giữ Cockpit Tools chạy. Tính năng nhập giọng nói gốc phụ thuộc vào khả năng và cài đặt của ứng dụng; Cockpit không thay thế hay ép bật tính năng này.",
-        "configFailed": "Không thể đọc hoặc lưu cài đặt: {{error}}"
+        "restartHint": "Dự đoán gốc mặc định tắt. Khởi động lại các phiên bản Codex liên quan sau khi đổi và giữ Cockpit Tools chạy. Tính năng nhập giọng nói gốc phụ thuộc vào khả năng và cài đặt của ứng dụng; Cockpit không thay thế hay ép bật tính năng này.",
+        "configFailed": "Không thể đọc hoặc lưu cài đặt: {{error}}",
+        "nativePredictions": "Dự đoán bước tiếp theo gốc (Tab)",
+        "nativePredictionsDesc": "Tạo gợi ý tin nhắn tiếp theo bằng nhà cung cấp API và mô hình của cuộc trò chuyện hiện tại. Tiêu tốn thêm tín dụng API; khởi động lại Codex sau khi lưu."
       }
     },
     "network": {

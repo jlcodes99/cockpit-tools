@@ -1404,8 +1404,10 @@
       "codexEnhancements": {
         "quotaCompat": "Quotas en mode mixte",
         "quotaCompatDesc": "Avec une connexion OAuth réelle et une route API externe, évite que le quota de l’abonnement bloque les messages API locaux. Ne modifie ni la consommation réelle ni les quotas d’images.",
-        "restartHint": "Activé par défaut. Redémarrez chaque instance Codex concernée après modification et gardez Cockpit Tools ouvert. La dictée native dépend des capacités et réglages du client ; Cockpit ne la remplace pas et ne force pas son activation.",
-        "configFailed": "Échec de lecture ou d’enregistrement des paramètres : {{error}}"
+        "restartHint": "Les prédictions natives sont désactivées par défaut. Redémarrez chaque instance Codex concernée après modification et gardez Cockpit Tools ouvert. La dictée native dépend des capacités et réglages du client ; Cockpit ne la remplace pas et ne force pas son activation.",
+        "configFailed": "Échec de lecture ou d’enregistrement des paramètres : {{error}}",
+        "nativePredictions": "Prédictions natives de l’étape suivante (Tab)",
+        "nativePredictionsDesc": "Génère des suggestions de message suivant avec le fournisseur d’API et le modèle de la conversation actuelle. Consomme des crédits d’API supplémentaires ; redémarrez Codex après l’enregistrement."
       }
     },
     "network": {
