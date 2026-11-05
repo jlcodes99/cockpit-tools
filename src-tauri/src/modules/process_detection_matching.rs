@@ -3332,7 +3332,7 @@ pub fn collect_minimax_code_process_entries() -> Vec<(u32, Option<String>)> {
                 if lower.contains("crashpad_handler") || is_helper_command_line(&lower) {
                     continue;
                 }
-                if !lower.contains(&expected_lower) && !lower.contains("minimax code.app") {
+                if lower != expected_lower && !lower.starts_with(&format!("{expected_lower} ")) {
                     continue;
                 }
                 let dir = extract_user_data_dir_from_command_line(cmdline).and_then(|value| {
@@ -3570,43 +3570,15 @@ fn collect_minimax_code_process_entries_from_sysinfo_fallback(
     entries
 }
 
-/// 解析 MiniMax Code 实例 PID（按 exe 路径）。
-///
-/// 客户端不暴露 data root，所以**无法把进程归属到某个实例**。这里只相信持久化的
-/// `last_pid`：它仍在运行、且 exe 路径匹配时，才认为该实例在运行；否则返回 `None`。
-/// 刻意不做「取最小 PID」式的猜测 —— 那会让多个实例同时显示为运行中（同一个 PID）。
-///
-/// `user_data_dir` 为 `None`（默认实例）时没有可归属的目录，只能按 exe 路径给出一个
-/// PID，但同样要求进程确实存在。
-pub fn resolve_minimax_code_pid(
-    last_pid: Option<u32>,
-    user_data_dir: Option<&str>,
-) -> Option<u32> {
+/// Resolve only processes belonging to the selected data directory. A process
+/// without a managed directory belongs to the default instance. Stored PIDs
+/// are hints and must still appear in that instance's current process set.
+pub fn resolve_minimax_code_pid(last_pid: Option<u32>, user_data_dir: Option<&str>) -> Option<u32> {
     let entries = collect_minimax_code_process_entries();
-    let mut matches: Vec<u32> = entries.into_iter().map(|(pid, _)| pid).collect();
-    matches.sort_unstable();
-    matches.dedup();
-
-    let _ = user_data_dir;
-    let Some(pid) = last_pid else {
-        // 没有持久化 PID 可归属。这里**刻意不做任何猜测**（尤其是「取最小 PID」）——
-        // 在 exe 路径匹配下那会让多个实例同时报告同一个 PID 在运行。
-        return None;
-    };
-
-    // `last_pid` 是启动时记录的 PID。它仍在运行、且确实探测到 MiniMax Code 进程，
-    // 才认为该实例在运行。
-    if !is_pid_running(pid) {
-        return None;
-    }
-    if matches.is_empty() {
-        crate::modules::logger::log_warn(&format!(
-            "[MiniMax Code PID Resolve] last_pid={} 仍在运行但未探测到 MiniMax Code 进程",
-            pid
-        ));
-        return None;
-    }
-    Some(pid)
+    let default_dir = crate::modules::minimax_code_instance::get_default_minimax_code_user_data_dir().ok()?;
+    let target = normalize_path_for_compare(user_data_dir.unwrap_or(default_dir.to_str()?));
+    let matches = minimax_code_pids_for_user_data_dirs(&entries, &[target]);
+    last_pid.filter(|pid| matches.contains(pid)).or_else(|| matches.first().copied())
 }
 
 fn get_default_codebuddy_user_data_dir_for_os() -> Option<String> {

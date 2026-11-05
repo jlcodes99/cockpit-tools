@@ -23,8 +23,9 @@ interface MiniMaxCreditDetail {
 
 function toNumber(value: string | number | undefined): number {
   if (typeof value === 'number') return value;
-  const n = Number((value ?? '').replace(/,/g, '').trim());
-  return Number.isFinite(n) ? n : 0;
+  if (typeof value !== 'string' || !value.trim()) return NaN;
+  const n = Number(value.replace(/,/g, '').trim());
+  return Number.isFinite(n) ? n : NaN;
 }
 
 /**
@@ -36,7 +37,7 @@ function isUsableMiniMaxCreditDetail(d: MiniMaxCreditDetail): boolean {
   if (d.credit_type !== 1 && d.credit_type !== 2) return false;
   if (d.remaining_amount === undefined && d.consumed_amount === undefined) return false;
   return [d.granted_amount, d.consumed_amount, d.remaining_amount].every(
-    (value) => value === undefined || value === null || Number.isFinite(toNumber(value)),
+    (value) => Number.isFinite(toNumber(value)),
   );
 }
 

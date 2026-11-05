@@ -189,7 +189,7 @@ export function MinimaxCodeAutoCheckinConfigModal({
   };
 
   return (
-    <div className="modal-overlay auto-checkin-config-overlay" onClick={onClose}>
+    <div className="modal-overlay auto-checkin-config-overlay">
       <div
         className="modal-content auto-checkin-config-modal"
         onClick={(e) => e.stopPropagation()}

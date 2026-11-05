@@ -7407,9 +7407,9 @@
     "addAccount": "Thêm tài khoản MiniMax Code",
     "flowNotice": {
       "title": "Hướng dẫn quản lý tài khoản MiniMax Code (bấm để mở rộng/thu gọn)",
-      "desc": "Khi chuyển tài khoản, ứng dụng ghi tệp đăng nhập cục bộ theo bố cục mới nhất của ứng dụng MiniMax Code chính thức; nhập cục bộ đọc cùng tệp đó. Dữ liệu chỉ được xử lý cục bộ.",
-      "permission": "Phạm vi quyền: đọc và ghi tệp đăng nhập MiniMax Code (~/.minimax/auth/auth.json) để nhập cục bộ và chuyển tài khoản; state.vscdb cũ không còn được đọc hoặc sửa đổi.",
-      "network": "Phạm vi mạng: đăng nhập OAuth và làm mới Token cần gửi yêu cầu đến MiniMax Code; truy vấn hạn ngạch sẽ gọi API tính phí. Không tải lên tệp đăng nhập cục bộ hoặc thông tin xác thực thô."
+      "desc": "Quản lý đăng nhập cục bộ và chuyển tài khoản MiniMax Code.",
+      "permission": "Đọc và ghi tệp đăng nhập chính thức. Mỗi phiên bản MiniMax Code dùng thư mục dữ liệu riêng.",
+      "network": "Chỉ gọi API chính thức của MiniMax để xác thực và lấy thông tin tài khoản, gói, điểm. Không tải lên tệp đăng nhập cục bộ."
     },
     "nickname": "Biệt danh",
     "enterprise": "Doanh nghiệp",
@@ -7426,8 +7426,8 @@
       "oauth": {
         "title": "Chỉ ủy quyền thông tin đăng nhập IDE",
         "item1": "Sau khi hoàn tất OAuth trong trình duyệt, bạn có thể thêm tài khoản và dùng để chuyển IDE.",
-        "item2": "Tham số truy vấn hạn ngạch sẽ không được liên kết tự động.",
-        "item3": "Nếu cần hiển thị hạn ngạch, hãy chạy thủ công \"Truy vấn hạn ngạch\" trên thẻ tài khoản."
+        "item2": "Số dư tín dụng",
+        "item3": "Điểm đã mua · Điểm được tặng"
       }
     },
     "oauthWebviewTab": "Xác thực WebView",
@@ -7502,7 +7502,10 @@
       }
     },
     "quota": {
-      "usedOfTotal": "{{used}} / {{total}}​"
+      "usedOfTotal": "{{used}} / {{total}}​",
+      "noPlan": "Chưa đăng ký M Plan",
+      "purchased": "Điểm đã mua",
+      "gifted": "Điểm được tặng"
     },
     "checkin": {
       "title": "Điểm danh hằng ngày",

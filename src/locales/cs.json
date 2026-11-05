@@ -7407,9 +7407,9 @@
     "addAccount": "Přidat účet MiniMax Code",
     "flowNotice": {
       "title": "Informace o správě účtů MiniMax Code (kliknutím rozbalíte/sbalíte)",
-      "desc": "Přepnutí účtu zapisuje místní soubor přihlášení podle aktuální struktury oficiálního klienta MiniMax Code; místní import čte stejný soubor. Data se zpracovávají pouze lokálně.",
-      "permission": "Rozsah oprávnění: čtení a zápis přihlašovacího souboru MiniMax Code (~/.minimax/auth/auth.json) pro místní import a přepínání účtů; starší state.vscdb se již nečte ani neupravuje.",
-      "network": "Rozsah sítě: přihlášení OAuth a obnovení tokenu vyžadují síťové požadavky na MiniMax Code; dotazy na kvótu volají billing API. Místní přihlašovací soubory ani surové přihlašovací údaje se neodesílají."
+      "desc": "Správa místního přihlášení a přepínání účtů MiniMax Code.",
+      "permission": "Čte a zapisuje oficiální přihlašovací soubory. Každá instance MiniMax Code používá vlastní datovou složku.",
+      "network": "Autorizace, účet, tarif a kredity se ověřují pouze přes oficiální API MiniMax. Místní přihlašovací soubory se neodesílají."
     },
     "nickname": "Přezdívka",
     "enterprise": "Podnikový",
@@ -7426,8 +7426,8 @@
       "oauth": {
         "title": "Pouze přihlášení IDE",
         "item1": "Po dokončení OAuth v prohlížeči přidejte účet a použijte ho pro přepínání IDE.",
-        "item2": "Parametry dotazu kvóty se nenavážou automaticky.",
-        "item3": "Pokud potřebujete zobrazení kvóty, spusťte na kartě účtu ručně \"Dotázat kvótu\"."
+        "item2": "Zůstatek kreditů",
+        "item3": "Zakoupené kredity · Darované kredity"
       }
     },
     "oauthWebviewTab": "OAuth přes WebView",
@@ -7502,7 +7502,10 @@
       }
     },
     "quota": {
-      "usedOfTotal": "{{used}} / {{total}}​"
+      "usedOfTotal": "{{used}} / {{total}}​",
+      "noPlan": "Bez předplatného M Plan",
+      "purchased": "Zakoupené kredity",
+      "gifted": "Darované kredity"
     },
     "checkin": {
       "title": "Denní check-in",

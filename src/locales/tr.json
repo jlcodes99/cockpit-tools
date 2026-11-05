@@ -7407,9 +7407,9 @@
     "addAccount": "MiniMax Code Hesabı Ekle",
     "flowNotice": {
       "title": "MiniMax Code hesap yönetimi bilgisi (genişlet/daralt için tıklayın)",
-      "desc": "Hesap değiştirme, en yeni resmi MiniMax Code istemci düzenine göre yerel oturum açma dosyasını yazar; yerel içe aktarma aynı dosyayı okur. Veriler yalnızca yerelde işlenir.",
-      "permission": "İzin kapsamı: yerel içe aktarma ve hesap değiştirme için MiniMax Code oturum açma dosyasını (~/.minimax/auth/auth.json) okuma ve yazma; eski state.vscdb artık okunmaz veya değiştirilmez.",
-      "network": "Ağ kapsamı: OAuth girişi ve belirteç yenileme için MiniMax Code'ye ağ istekleri gerekir; kota sorguları faturalama API'lerini çağırır. Yerel oturum açma dosyaları veya ham kimlik bilgileri yüklenmez."
+      "desc": "MiniMax Code yerel oturumunu ve hesap geçişlerini yönetin.",
+      "permission": "Resmî oturum dosyalarını okur ve yazar. Her MiniMax Code örneği ayrı veri klasörü kullanır.",
+      "network": "Yetkilendirme, hesap, plan ve kredi bilgileri yalnızca resmî MiniMax API’lerinden alınır. Yerel oturum dosyaları yüklenmez."
     },
     "nickname": "Takma ad",
     "enterprise": "Kurumsal",
@@ -7426,8 +7426,8 @@
       "oauth": {
         "title": "Yalnızca IDE girişi",
         "item1": "Tarayıcıda OAuth tamamlandıktan sonra hesabı ekleyin ve IDE geçişi için kullanın.",
-        "item2": "Kota sorgu parametreleri otomatik bağlanmaz.",
-        "item3": "Kota görüntülemek gerekiyorsa hesap kartında \"Kota Sorgula\"yı elle çalıştırın."
+        "item2": "Kredi bakiyesi",
+        "item3": "Satın alınan krediler · Hediye krediler"
       }
     },
     "oauthWebviewTab": "WebView ile OAuth",
@@ -7502,7 +7502,10 @@
       }
     },
     "quota": {
-      "usedOfTotal": "{{used}} / {{total}}​"
+      "usedOfTotal": "{{used}} / {{total}}​",
+      "noPlan": "M Plan aboneliği yok",
+      "purchased": "Satın alınan krediler",
+      "gifted": "Hediye krediler"
     },
     "checkin": {
       "title": "Günlük check-in",

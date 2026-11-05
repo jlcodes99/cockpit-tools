@@ -7407,9 +7407,9 @@
     "addAccount": "Ajouter un compte MiniMax Code",
     "flowNotice": {
       "title": "Informations sur la gestion des comptes MiniMax Code (cliquer pour developper/reduire)",
-      "desc": "Le changement de compte écrit le fichier de connexion local selon la structure la plus récente du client officiel MiniMax Code ; l'import local lit le même fichier. Les données sont traitées uniquement en local.",
-      "permission": "Portée des autorisations : lire et écrire le fichier de connexion MiniMax Code (~/.minimax/auth/auth.json) pour l'import local et le changement de compte ; l'ancien state.vscdb n'est plus lu ni modifié.",
-      "network": "Portée réseau : la connexion OAuth et l'actualisation du jeton nécessitent des requêtes vers MiniMax Code ; les requêtes de quota appellent les API de facturation. Les fichiers de connexion locaux et les identifiants bruts ne sont pas téléversés."
+      "desc": "Gérer la connexion locale et le changement de compte MiniMax Code.",
+      "permission": "Lecture et écriture des fichiers de connexion officiels. Chaque instance MiniMax Code utilise son propre dossier de données.",
+      "network": "Seules les API officielles MiniMax sont contactées pour l’autorisation, le compte, le forfait et les crédits. Les fichiers de connexion locaux ne sont pas envoyés."
     },
     "nickname": "Surnom",
     "enterprise": "Entreprise",
@@ -7426,8 +7426,8 @@
       "oauth": {
         "title": "Connexion IDE uniquement",
         "item1": "Ajoutez le compte apres avoir termine OAuth dans votre navigateur, puis utilisez-le pour le changement dans l'IDE.",
-        "item2": "Les parametres de requete de quota ne sont pas associes automatiquement.",
-        "item3": "Si vous avez besoin du quota, lancez manuellement « Interroger le quota » sur la carte du compte."
+        "item2": "Solde de credits",
+        "item3": "Crédits achetés · Crédits offerts"
       }
     },
     "oauthWebviewTab": "OAuth en WebView",
@@ -7502,7 +7502,10 @@
       }
     },
     "quota": {
-      "usedOfTotal": "{{used}} / {{total}}​"
+      "usedOfTotal": "{{used}} / {{total}}​",
+      "noPlan": "Sans abonnement M Plan",
+      "purchased": "Crédits achetés",
+      "gifted": "Crédits offerts"
     },
     "checkin": {
       "title": "Check-in quotidien",

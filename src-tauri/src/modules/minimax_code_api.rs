@@ -33,6 +33,8 @@ pub struct MinimaxCodeCheckinResult {
     pub success: bool,
     #[serde(default)]
     pub already_claimed: bool,
+    #[serde(default)]
+    pub warning: Option<String>,
     pub message: Option<String>,
     pub credit: Option<i64>,
     pub streak_days: Option<i32>,
@@ -91,18 +93,23 @@ pub async fn get_checkin_status(access_token: &str, region: &str) -> Result<Mini
     let url = format!("{origin}{STATUS_PATH}?timezone_id={tz}");
     let client = super::minimax_code_oauth::build_client()?;
     let body = request_json(&client, &url, access_token, false).await?;
-    check_base_resp(&body)?;
+    parse_checkin_status(&body)
+}
 
-    let empty = Vec::new();
-    let days = body.get("data").and_then(|d| d.get("days")).and_then(|v| v.as_array()).unwrap_or(&empty);
+fn parse_checkin_status(body: &Value) -> Result<MinimaxCodeCheckinStatus, String> {
+    check_base_resp(body)?;
+    let days = body.get("data").and_then(|d| d.get("days")).and_then(Value::as_array)
+        .ok_or_else(|| "MiniMax 签到响应缺少 days".to_string())?;
     let Some(today) = days.iter().find(|d| d.get("is_today").and_then(|v| v.as_bool()).unwrap_or(false)) else {
         return Ok(MinimaxCodeCheckinStatus {
-            today_checked_in: false, active: true, points: 0, bonus_points: 0,
+            today_checked_in: false, active: false, points: 0, bonus_points: 0,
             streak_days: 0, day_index: None, message: "上游没有返回今天的签到信息".to_string(),
         });
     };
-    let status = today.get("status").and_then(|v| v.as_i64()).unwrap_or(0);
-    let points = today.get("points").and_then(|v| v.as_i64()).unwrap_or(0);
+    let status = today.get("status").and_then(Value::as_i64).filter(|status| (1..=4).contains(status))
+        .ok_or_else(|| "MiniMax 返回了未知签到状态".to_string())?;
+    let points = today.get("points").and_then(Value::as_i64).filter(|points| *points >= 0)
+        .ok_or_else(|| "MiniMax 签到响应缺少有效积分".to_string())?;
     let bonus = today.get("bonus_points").and_then(|v| v.as_i64()).unwrap_or(0);
     let day_index = today.get("day_no").and_then(|v| v.as_i64()).map(|v| v as i32);
 
@@ -125,17 +132,58 @@ pub async fn perform_checkin(access_token: &str, region: &str) -> Result<Minimax
     let url = format!("{origin}{CLAIM_PATH}?timezone_id={tz}");
     let client = super::minimax_code_oauth::build_client()?;
     let body = request_json(&client, &url, access_token, true).await?;
-    check_base_resp(&body)?;
+    parse_checkin_result(&body)
+}
 
+fn parse_checkin_result(body: &Value) -> Result<MinimaxCodeCheckinResult, String> {
+    check_base_resp(body)?;
     let data = &body["data"];
-    let result = data.get("claim_result").and_then(|v| v.as_i64()).unwrap_or(0);
-    let points = data.get("points").and_then(|v| v.as_i64()).unwrap_or(0);
+    let result = data.get("claim_result").and_then(Value::as_i64)
+        .filter(|value| matches!(value, 1 | 2)).ok_or_else(|| "MiniMax 未返回有效领取结果".to_string())?;
+    let points = data.get("points").and_then(Value::as_i64).filter(|value| *value >= 0)
+        .ok_or_else(|| "MiniMax 未返回有效签到积分".to_string())?;
+    let days = data.get("panel").and_then(|panel| panel.get("days")).and_then(Value::as_array)
+        .ok_or_else(|| "MiniMax 未返回签到面板".to_string())?;
     let already_claimed = result == 2;
-    match result {
-        1 => Ok(MinimaxCodeCheckinResult { success: true, already_claimed, message: Some(format!("签到成功 +{points} 积分")), credit: Some(points), streak_days: None }),
-        2 => Ok(MinimaxCodeCheckinResult { success: true, already_claimed, message: Some("今日已签到".to_string()), credit: Some(points), streak_days: None }),
-        _ => Ok(MinimaxCodeCheckinResult { success: false, already_claimed, message: Some("上游未返回领取结果".to_string()), credit: None, streak_days: None }),
+    Ok(MinimaxCodeCheckinResult {
+        success: true, already_claimed, warning: None,
+        message: Some(if already_claimed { "今日已签到".to_string() } else { format!("签到成功 +{points} 积分") }),
+        credit: Some(points), streak_days: Some(compute_streak(days)),
+    })
+}
+
+pub async fn get_account_checkin_status(account_id: &str) -> Result<MinimaxCodeCheckinStatus, String> {
+    let account = super::minimax_code_account::load_account(account_id).ok_or_else(|| format!("账号不存在: {account_id}"))?;
+    match get_checkin_status(&account.access_token, account.region.as_deref().unwrap_or("cn")).await {
+        Err(error) if error.contains("HTTP 401") => {
+            let updated = super::minimax_code_account::refresh_account_token(account_id).await?;
+            get_checkin_status(&updated.access_token, updated.region.as_deref().unwrap_or("cn")).await
+        }
+        result => result,
     }
+}
+
+/// Manual and scheduled claims share the same serialization, persistence and quota refresh.
+pub async fn checkin_account(account_id: &str) -> Result<MinimaxCodeCheckinResult, String> {
+    use std::sync::{Arc, LazyLock, Mutex};
+    static LOCKS: LazyLock<Mutex<std::collections::HashMap<String, Arc<tokio::sync::Mutex<()>>>>> =
+        LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
+    let lock = LOCKS.lock().map_err(|error| error.to_string())?.entry(account_id.into())
+        .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(()))).clone();
+    let _guard = lock.lock().await;
+    let account = super::minimax_code_account::refresh_account_token(account_id).await?;
+    let mut result = perform_checkin(&account.access_token, account.region.as_deref().unwrap_or("cn")).await?;
+    if result.success {
+        super::minimax_code_account::update_checkin_info(account_id, Some(chrono::Utc::now().timestamp()),
+            result.streak_days.unwrap_or(0), result.credit.map(|credit| serde_json::json!({"credit":credit})))
+            .map_err(|error| format!("签到已完成，但本地记录保存失败: {error}"))?;
+        match super::minimax_code_account::refresh_account_token(account_id).await {
+            Ok(updated) if updated.quota_query_last_error.is_none() => {},
+            Ok(updated) => result.warning = Some(format!("签到已完成，积分刷新失败: {}",updated.quota_query_last_error.unwrap_or_default())),
+            Err(error) => result.warning = Some(format!("签到已完成，积分刷新失败: {error}")),
+        }
+    }
+    Ok(result)
 }
 
 fn compute_streak(days: &[Value]) -> i32 {
@@ -160,6 +208,27 @@ fn compute_streak(days: &[Value]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn claimed_panel_and_duplicate_receipt_keep_the_real_streak_and_reward() {
+        let days = serde_json::json!([
+            {"day_no":1,"is_today":true,"status":3,"points":400,"bonus_points":0},
+            {"day_no":2,"is_today":false,"status":1,"points":400,"bonus_points":0}
+        ]);
+        let status = parse_checkin_status(&serde_json::json!({"base_resp":{"status_code":0},"data":{"scene":2,"days":days}})).unwrap();
+        assert!(status.today_checked_in);
+        assert_eq!((status.points,status.streak_days),(400,1));
+        for claim_result in [1,2] {
+            let result = parse_checkin_result(&serde_json::json!({"base_resp":{"status_code":0},"data":{"claim_result":claim_result,"points":400,"panel":{"days":days}}})).unwrap();
+            assert_eq!(result.already_claimed,claim_result==2);
+            assert_eq!(result.streak_days,Some(1));
+            assert_eq!(result.credit,Some(400));
+        }
+        assert!(parse_checkin_status(&serde_json::json!({"base_resp":{"status_code":0}})).is_err());
+        assert!(parse_checkin_result(&serde_json::json!({"data":{"claim_result":0}})).is_err());
+        let inactive = parse_checkin_status(&serde_json::json!({"data":{"days":[]}})).unwrap();
+        assert!(!inactive.active);
+    }
 
     #[test]
     fn compute_streak_counts_consecutive_claimed_days_ending_today() {

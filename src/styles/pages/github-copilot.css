@@ -1651,6 +1651,8 @@
 /* 卡片底部 */
 .ghcp-account-card .card-footer {
   display: flex;
+  flex-wrap: wrap;
+  row-gap: 10px;
   align-items: center;
   justify-content: space-between;
   padding-top: 12px;
@@ -1665,6 +1667,8 @@
 
 .ghcp-account-card .card-actions {
   display: flex;
+  flex-wrap: wrap;
+  margin-left: auto;
   gap: 6px;
 }
 

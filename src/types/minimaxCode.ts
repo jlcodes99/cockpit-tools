@@ -25,6 +25,7 @@ export interface MinimaxCodeCheckinStatus {
 export interface MinimaxCodeCheckinResult {
   success: boolean;
   alreadyClaimed?: boolean;
+  warning?: string | null;
   message?: string | null;
   credit?: number | null;
   streakDays?: number | null;
@@ -38,7 +39,8 @@ export function getMinimaxCodeAccountDisplayEmail(account: MinimaxCodeAccount): 
 }
 
 export function getMinimaxCodePlanBadge(account: MinimaxCodeAccount): string {
-  return account.plan_type?.trim() || '—';
+  const raw = getMinimaxCodeQuotaSnapshot(account).membership;
+  return account.plan_type?.trim() || textValue(raw?.token_plan_tier) || textValue(raw?.plan_name) || '';
 }
 
 /**
@@ -46,6 +48,7 @@ export function getMinimaxCodePlanBadge(account: MinimaxCodeAccount): string {
  * `chatMessagesUsedPercent` 恒为 null；`code` / `zh` / `en` 保留给共享账号总览使用。
  */
 export interface MinimaxCodeUsage {
+  isNormal: boolean;
   code: string | null;
   zh: string | null;
   en: string | null;
@@ -53,12 +56,38 @@ export interface MinimaxCodeUsage {
   chatMessagesUsedPercent: number | null;
 }
 
-export function getMinimaxCodeUsage(_account: MinimaxCodeAccount): MinimaxCodeUsage {
+export function getMinimaxCodeUsage(account: MinimaxCodeAccount): MinimaxCodeUsage {
   return {
-    code: null,
+    isNormal: !account.quota_query_last_error && getMinimaxCodeQuotaSnapshot(account).total !== null,
+    code: account.quota_query_last_error || null,
     zh: null,
     en: null,
     inlineSuggestionsUsedPercent: null,
     chatMessagesUsedPercent: null,
+  };
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+function textValue(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
+export function minimaxCreditNumber(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  if (typeof value === 'string' && !value.trim()) return null;
+  const number = typeof value === 'number' ? value : Number(value.replace(/,/g, '').trim());
+  return Number.isFinite(number) ? number : null;
+}
+export function getMinimaxCodeQuotaSnapshot(account: MinimaxCodeAccount) {
+  const raw = record(account.quota_raw);
+  const membership = record(raw?.membership);
+  const workspace = record(raw?.workspace);
+  const credits = record(membership?.op_credit_summary);
+  return {
+    membership,
+    total: minimaxCreditNumber(credits?.total_remaining_amount ?? membership?.opcredit_balance ?? workspace?.opcredit_balance),
+    purchased: minimaxCreditNumber(credits?.purchased_remaining_amount ?? credits?.purchased_credit),
+    gifted: minimaxCreditNumber(credits?.free_remaining_amount ?? credits?.free_credit),
+    unsubscribed: membership?.subscription_type === 'none',
+    plan: textValue(membership?.token_plan_tier) || textValue(membership?.plan_name),
   };
 }

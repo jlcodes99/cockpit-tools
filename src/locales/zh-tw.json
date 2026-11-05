@@ -7407,9 +7407,9 @@
     "addAccount": "新增 MiniMax Code 帳號",
     "flowNotice": {
       "title": "MiniMax Code 帳號管理說明（點擊展開/收起）",
-      "desc": "切換帳號會依新版 MiniMax Code 官方用戶端規則寫入本機登入檔；本機匯入讀取同一檔案，資料僅在本機處理。",
-      "permission": "權限範圍：讀取並寫入 MiniMax Code 登入檔（~/.minimax/auth/auth.json），用於本機匯入與帳號切換；不再讀取或修改舊版 state.vscdb。",
-      "network": "網路範圍：OAuth 登入與 Token 刷新需連線請求 MiniMax Code；配額查詢需呼叫計費 API。不會上傳本機登入檔或憑證原文。"
+      "desc": "管理 MiniMax Code 的本機登入與帳號切換。",
+      "permission": "讀取並寫入 MiniMax Code 官方登入檔案；預設與多開執行個體使用各自的資料目錄。",
+      "network": "僅向 MiniMax 官方介面請求授權、帳號、方案及積分資訊；不會上傳本機登入檔案。"
     },
     "nickname": "暱稱",
     "enterprise": "企業",
@@ -7426,8 +7426,8 @@
       "oauth": {
         "title": "僅授權 IDE 登入資訊",
         "item1": "在瀏覽器完成 OAuth 後即可新增帳號並用於 IDE 切換。",
-        "item2": "不會自動綁定配額查詢參數。",
-        "item3": "如需顯示配額，請在帳號卡片中手動執行「查詢配額」綁定。"
+        "item2": "積分餘額",
+        "item3": "購買積分 · 贈送積分"
       }
     },
     "oauthWebviewTab": "WebView 授權",
@@ -7502,7 +7502,10 @@
       }
     },
     "quota": {
-      "usedOfTotal": "{{used}} / {{total}}"
+      "usedOfTotal": "{{used}} / {{total}}",
+      "noPlan": "未訂閱 M Plan",
+      "purchased": "購買積分",
+      "gifted": "贈送積分"
     },
     "checkin": {
       "title": "每日簽到",

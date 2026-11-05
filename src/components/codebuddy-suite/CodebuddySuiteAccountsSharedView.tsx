@@ -727,12 +727,12 @@ export function CodebuddySuiteAccountsSharedView<
                 {t("accounts.status.current", "当前")}
               </span>
             )}
-            <span
+            {planBadge && <span
               className={`tier-badge ${tierBadgeClass}`}
               title={planBadgeTitle}
             >
               {planBadge}
-            </span>
+            </span>}
           </div>
           {accountTags.length > 0 && (
             <div className="card-tags">
@@ -859,12 +859,12 @@ export function CodebuddySuiteAccountsSharedView<
             )}
           </td>
           <td>
-            <span
+            {planBadge && <span
               className={`tier-badge ${tierBadgeClass}`}
               title={planBadgeTitle}
             >
               {planBadge}
-            </span>
+            </span>}
           </td>
           <td>
             <div className={platformConfig.tableUsageClassName}>

@@ -7807,9 +7807,9 @@
     },
     "flowNotice": {
       "title": "MiniMax Code Account Info (click to expand/collapse)",
-      "desc": "Account switching writes the local MiniMax Code sign-in file using the current official client layout; local import reads the same file. Data is processed locally only. If an opaque official encryption wrapper is detected, the original file is preserved and the overwrite is stopped.",
-      "permission": "Permission scope: read and write the MiniMax Code sign-in file (~/.minimax/auth/auth.json) for local import and account switching; the legacy state.vscdb is no longer read or modified. Files with an official encryption wrapper are not overwritten without its key.",
-      "network": "Network scope: OAuth login and token refresh require network requests to MiniMax Code; quota queries call billing APIs. Local sign-in files and raw credentials are not uploaded."
+      "desc": "Manage local MiniMax Code sign-in and account switching.",
+      "permission": "Read and write official MiniMax Code sign-in files. Default and additional instances use separate data directories.",
+      "network": "Contact only official MiniMax APIs for authorization, profile, plan and credit information. Local sign-in files are not uploaded."
     },
     "nickname": "Nickname",
     "enterprise": "Enterprise",
@@ -7826,8 +7826,8 @@
       "oauth": {
         "title": "IDE sign-in only",
         "item1": "Add the account after completing OAuth in your browser, then use it for IDE switching.",
-        "item2": "Resource-package quota data will refresh automatically after authorization.",
-        "item3": "Account cards show quota amount, progress, and refresh/expiry time by resource package."
+        "item2": "Credits Balance",
+        "item3": "Purchased credits · Gifted credits"
       }
     },
     "oauthWebviewTab": "WebView OAuth",
@@ -7865,7 +7865,10 @@
     },
     "search": "Search MiniMax Code accounts...",
     "quota": {
-      "usedOfTotal": "{{used}} / {{total}}"
+      "usedOfTotal": "{{used}} / {{total}}",
+      "noPlan": "No M Plan subscription",
+      "purchased": "Purchased credits",
+      "gifted": "Gifted credits"
     },
     "quotaQuery": {
       "failedRefreshCompact": "Quota query failed",

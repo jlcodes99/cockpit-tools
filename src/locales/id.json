@@ -7582,9 +7582,9 @@
     "addAccount": "Tambah Akun MiniMax Code",
     "flowNotice": {
       "title": "Info Akun MiniMax Code (klik untuk perluas/ciutkan)",
-      "desc": "Penggantian akun menulis file masuk lokal sesuai tata letak terbaru klien resmi MiniMax Code; impor lokal membaca file yang sama. Data hanya diproses secara lokal.",
-      "permission": "Cakupan izin: baca dan tulis file masuk MiniMax Code (~/.minimax/auth/auth.json) untuk impor lokal dan penggantian akun; state.vscdb lama tidak lagi dibaca atau diubah.",
-      "network": "Cakupan jaringan: Login OAuth dan penyegaran token memerlukan permintaan jaringan ke MiniMax Code; kueri kuota memanggil API penagihan. File masuk lokal dan kredensial mentah tidak diunggah."
+      "desc": "Kelola login lokal dan pergantian akun MiniMax Code.",
+      "permission": "Membaca dan menulis file login resmi. Setiap instans MiniMax Code memakai folder data terpisah.",
+      "network": "Hanya menghubungi API resmi MiniMax untuk otorisasi, akun, paket, dan kredit. File login lokal tidak diunggah."
     },
     "nickname": "Nama panggilan",
     "enterprise": "Perusahaan",
@@ -7601,8 +7601,8 @@
       "oauth": {
         "title": "IDE sign-in only​",
         "item1": "Add the account after completing OAuth in your browser, then use it for IDE switching.​",
-        "item2": "Resource-package quota data will refresh automatically after authorization.​",
-        "item3": "Account cards show quota amount, progress, and refresh/expiry time by resource package.​"
+        "item2": "Saldo Kredit",
+        "item3": "Kredit dibeli · Kredit hadiah"
       }
     },
     "oauthWebviewTab": "WebView OAuth​",
@@ -7640,7 +7640,10 @@
     },
     "search": "Cari akun MiniMax Code...",
     "quota": {
-      "usedOfTotal": "{{used}} / {{total}}​"
+      "usedOfTotal": "{{used}} / {{total}}​",
+      "noPlan": "Tanpa langganan M Plan",
+      "purchased": "Kredit dibeli",
+      "gifted": "Kredit hadiah"
     },
     "quotaQuery": {
       "failedRefreshCompact": "Quota query failed​",

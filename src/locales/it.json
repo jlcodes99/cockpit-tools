@@ -7407,9 +7407,9 @@
     "addAccount": "Aggiungi account MiniMax Code",
     "flowNotice": {
       "title": "Informazioni sulla gestione degli account MiniMax Code (clicca per espandere/comprimere)",
-      "desc": "Il cambio account scrive il file di accesso locale secondo il layout più recente del client ufficiale MiniMax Code; l'importazione locale legge lo stesso file. I dati vengono elaborati solo in locale.",
-      "permission": "Ambito autorizzazioni: leggere e scrivere il file di accesso MiniMax Code (~/.minimax/auth/auth.json) per importazione locale e cambio account; il vecchio state.vscdb non viene più letto né modificato.",
-      "network": "Ambito rete: l'accesso OAuth e il rinnovo del token richiedono richieste a MiniMax Code; le query quota chiamano le API di fatturazione. I file di accesso locali e le credenziali grezze non vengono caricati."
+      "desc": "Gestisci l’accesso locale e il cambio di account MiniMax Code.",
+      "permission": "Legge e scrive i file di accesso ufficiali. Ogni istanza di MiniMax Code usa una cartella dati separata.",
+      "network": "Contatta solo le API ufficiali MiniMax per autorizzazione, account, piano e crediti. I file di accesso locali non vengono caricati."
     },
     "nickname": "Nickname​",
     "enterprise": "Enterprise​",
@@ -7426,8 +7426,8 @@
       "oauth": {
         "title": "Solo accesso IDE",
         "item1": "Aggiungi laccount dopo aver completato OAuth nel browser, poi usalo per il cambio account nellIDE.",
-        "item2": "I parametri di query della quota non vengono collegati automaticamente.",
-        "item3": "Se ti serve la visualizzazione della quota, esegui manualmente \"Interroga quota\" sulla scheda account."
+        "item2": "Saldo crediti",
+        "item3": "Crediti acquistati · Crediti omaggio"
       }
     },
     "oauthWebviewTab": "OAuth in WebView",
@@ -7502,7 +7502,10 @@
       }
     },
     "quota": {
-      "usedOfTotal": "{{used}} / {{total}}​"
+      "usedOfTotal": "{{used}} / {{total}}​",
+      "noPlan": "Nessun abbonamento M Plan",
+      "purchased": "Crediti acquistati",
+      "gifted": "Crediti omaggio"
     },
     "checkin": {
       "title": "Check-in giornaliero",

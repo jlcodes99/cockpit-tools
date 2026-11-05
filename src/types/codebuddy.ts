@@ -119,6 +119,8 @@ export interface CheckinStatusResponse {
 
 export interface CheckinResponse {
   success: boolean;
+  already_claimed?: boolean;
+  warning?: string | null;
   message?: string | null;
   reward?: Record<string, unknown> | null;
   credit?: number | null;

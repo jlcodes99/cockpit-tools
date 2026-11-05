@@ -7407,9 +7407,9 @@
     "addAccount": "MiniMax Code-Konto hinzufügen",
     "flowNotice": {
       "title": "Hinweise zur MiniMax Code-Kontoverwaltung (zum Ein-/Ausklappen klicken)",
-      "desc": "Beim Kontowechsel wird die lokale Anmeldedatei nach dem aktuellen Layout des offiziellen MiniMax Code-Clients geschrieben; der lokale Import liest dieselbe Datei. Die Daten werden nur lokal verarbeitet.",
-      "permission": "Berechtigungsumfang: Lesen und Schreiben der MiniMax Code-Anmeldedatei (~/.minimax/auth/auth.json) für lokalen Import und Kontowechsel; die alte state.vscdb wird nicht mehr gelesen oder geändert.",
-      "network": "Netzwerkumfang: OAuth-Anmeldung und Token-Aktualisierung senden Anfragen an MiniMax Code; Kontingentabfragen nutzen Billing-APIs. Lokale Anmeldedateien oder rohe Zugangsdaten werden nicht hochgeladen."
+      "desc": "Lokale MiniMax Code-Anmeldungen und Kontowechsel verwalten.",
+      "permission": "Offizielle MiniMax Code-Anmeldedateien lesen und schreiben. Jede Instanz nutzt ein eigenes Datenverzeichnis.",
+      "network": "Nur offizielle MiniMax-APIs für Anmeldung, Konto, Tarif und Credits kontaktieren. Lokale Anmeldedateien werden nicht hochgeladen."
     },
     "nickname": "Spitzname",
     "enterprise": "Unternehmen",
@@ -7426,8 +7426,8 @@
       "oauth": {
         "title": "Nur IDE-Anmeldedaten autorisieren",
         "item1": "Nach Abschluss von OAuth im Browser kann das Konto hinzugefügt und für den IDE-Wechsel genutzt werden.",
-        "item2": "Parameter für die Kontingentabfrage werden nicht automatisch gebunden.",
-        "item3": "Wenn Sie Kontingente anzeigen möchten, führen Sie auf der Kontokarte manuell „Kontingent abfragen“ aus."
+        "item2": "Guthaben",
+        "item3": "Gekaufte Credits · Geschenkte Credits"
       }
     },
     "oauthWebviewTab": "OAuth im WebView",
@@ -7502,7 +7502,10 @@
       }
     },
     "quota": {
-      "usedOfTotal": "{{used}} / {{total}}​"
+      "usedOfTotal": "{{used}} / {{total}}​",
+      "noPlan": "Kein M Plan-Abo",
+      "purchased": "Gekaufte Credits",
+      "gifted": "Geschenkte Credits"
     },
     "checkin": {
       "title": "Täglicher Check-in",

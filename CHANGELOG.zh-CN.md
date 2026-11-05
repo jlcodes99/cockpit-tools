@@ -18,41 +18,30 @@
 - **TRAE 国内版签到** 增加签到状态、手动领取、自动签到和执行记录，按国内版与 SOLO 国内版账号处理。 [#2729](https://github.com/jlcodes99/cockpit-tools/pull/2729) · [@eye-gu](https://github.com/eye-gu)
 - **账号时间** 区分成功切号时间与配额刷新时间，支持卡片显示偏好；历史未知时间显示暂无记录。 [#2403](https://github.com/jlcodes99/cockpit-tools/pull/2403) · [@qxo](https://github.com/qxo)
 - **Codex 原生下一步预测** 适配 Vite 与新版 Rspack 客户端，本地 API 连接可启用原生预测，建议通过 Tab 接受到草稿，沿用当前模型和提供方并产生额外用量。 [#2938](https://github.com/jlcodes99/cockpit-tools/pull/2938) · [@HTExplicit](https://github.com/HTExplicit)
-- **MiniMax Code** 新增账号授权、本地导入、切号、积分查询、签到和独立实例管理。 [#2919](https://github.com/jlcodes99/cockpit-tools/pull/2919) · [@SkyblueeeLabs](https://github.com/SkyblueeeLabs)
+- **MiniMax Code** 新增账号授权、本地导入、首次切号启动与独立多开；按官方接口显示昵称、套餐及积分余额，区分零余额与查询失败。支持手动签到、自动签到和执行记录，重复签到不重复累计；刷新积分保留有效 Token，实例启动与停止互不影响。 [#2919](https://github.com/jlcodes99/cockpit-tools/pull/2919) · [@SkyblueeeLabs](https://github.com/SkyblueeeLabs)
 - **Codex 本地项目恢复** 保留宿主内置项目恢复流程，并提供 Windows 独立审计、恢复及回滚脚本。 [#2955](https://github.com/jlcodes99/cockpit-tools/pull/2955) · [@harryzhou0106-svg](https://github.com/harryzhou0106-svg)
 - **Codex Windows 沙箱恢复** 提供按需运行的诊断与权限修复工具，支持备份和回滚。 [#2982](https://github.com/jlcodes99/cockpit-tools/pull/2982) · [@ws-cczj](https://github.com/ws-cczj)
 - **PR 构建** 共享前端构建产物并复用编译缓存，使用 CI 编译配置验证各平台可执行文件。 [#1771](https://github.com/jlcodes99/cockpit-tools/pull/1771) · [@khanra17](https://github.com/khanra17)
 - **发布构建** 共享构建输入、复用原生 macOS 产物生成 Universal 包，并提供仅生成验收产物的运行模式。 [#1774](https://github.com/jlcodes99/cockpit-tools/pull/1774) · [@khanra17](https://github.com/khanra17)
-
 - **WorkBuddy 积分明细**：从账号页打开积分概览，查看有效期内和已过期的积分记录、剩余积分及到期时间。账号卡片以紧凑布局突出余额。弹框切换页签或翻页时保留已加载的记录，可查看最近 5 条消耗记录并前往官网查看完整明细。
-
 - **Codex API 满载恢复**：可开启持续重试，等待上游模型恢复后继续可安全重放的请求。账号统计按上游尝试记录满载次数，包含重试或换号后成功的请求。
-
 - **Antigravity 桌面切号**：使用系统凭据切换桌面账号时，同步已初始化的原生 `agy` CLI 会话。
 
 ### 变更
-
 - **Codex API 额度换号**：确认额度耗尽后，即使关闭冷却也会排除该账号。可安全续接的请求可超出重试账号数切换至可用备号，会话亲和保留备号供调度。
-
 - **OpenAI 用量配置**：账号与模型供应商支持独立配置可选的管理员查询 Key，调用 API Key 继续用于模型请求。用量卡片明确标注组织统计，提供配置和重试入口；未配置查询 Key 时不再提示权限不足，查询失败不影响模型调用。金额未返回时明确提示无记录，不再显示为零；小额消费保留有效精度。
-
 - **模型供应商删除**：删除 Codex 模型供应商时连带删除关联的 API Key 账号，包含凭据失效或缺失的异常账号；单个、批量及测试结果删除入口保持一致。
 - **Codex 额度重置**：成功提示简化为“已重置额度”，不再限定额度窗口。
-
 - **API Key 代理**：API 服务请求现在遵循各 API Key 账号的代理设置，支持独立代理、继承统一代理和明确不使用代理；桌面客户端与 API 请求共用同一账号代理入口。
 
 ### 修复
-
 - **Cockpit 网关**：共享 API 服务按实际监听设置声明 WebSocket 能力。HTTP/SSE 与 WebSocket 的 Responses 请求统一在网关处理完请求体后开始计首响，跳过保活和限额通知。
-
 - **WorkBuddy 积分刷新**：恢复积分查询，按官方分类展示套餐基础积分、套餐赠送积分、平台奖励积分和购买积分。修复旧数据中企业 ID 为空的个人账号刷新，并从匹配的账号资料更新昵称。
-
 - **Antigravity IDE 2.6+ 切号**：同步切换桌面、IDE 和已初始化 `agy` 的共享登录。启用切号启动时，重新打开正在运行的另一端客户端，并刷新已识别的 macOS App Hub 会话。
 - **Antigravity IDE 登录**：共享模式下可从 macOS 钥匙串导入当前账号，独立 IDE 实例切号时会刷新上一个账号遗留的状态。
 - **Cursor X Subscription**：显示官方每周额度重置时间，与月度账单周期分开。
 - **Claude Windows 客户端**：识别微软商店版实际使用的登录目录，切号时写入客户端读取的资料。
 - **Codex 网关兼容**：普通 Responses 保留托管工具，Lite 保留工具命名空间。请求日志记录生效的推理档位，发送前确认本地额度不足时可换到可用账号，短暂的用量日志写入超时不再立即中断服务。本机和局域网地址分开展示。
-
 - **Antigravity 账号**：写入 IDE 客户端凭据后再更新当前账号。即使配额查询失败，也保存已获取的 Google Cloud 项目和服务条款信息，并在 Google 返回新刷新令牌时保存新令牌。
 - **Codex API 服务**：ChatGPT 官方授权失效后，账号可通过本地网关加入 API 服务。
 - **Codex 切号重启**：普通关闭超时后自动结束残留的 app-server 进程，继续切号与重启，无需手动点击重试。

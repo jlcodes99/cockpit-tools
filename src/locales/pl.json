@@ -7407,9 +7407,9 @@
     "addAccount": "Dodaj konto MiniMax Code",
     "flowNotice": {
       "title": "Informacje o zarządzaniu kontami MiniMax Code (kliknij, aby rozwinąć/zwinąć)",
-      "desc": "Przełączenie konta zapisuje lokalny plik logowania zgodnie z najnowszym układem oficjalnego klienta MiniMax Code; import lokalny czyta ten sam plik. Dane są przetwarzane wyłącznie lokalnie.",
-      "permission": "Zakres uprawnień: odczyt i zapis pliku logowania MiniMax Code (~/.minimax/auth/auth.json) dla importu lokalnego i przełączania kont; starszy state.vscdb nie jest już czytany ani modyfikowany.",
-      "network": "Zakres sieci: logowanie OAuth i odświeżanie tokenu wymagają żądań do MiniMax Code; zapytania o limity wywołują API rozliczeń. Lokalne pliki logowania ani surowe poświadczenia nie są wysyłane."
+      "desc": "Zarządzaj lokalnym logowaniem i zmianą kont MiniMax Code.",
+      "permission": "Odczytuje i zapisuje oficjalne pliki logowania. Każda instancja MiniMax Code ma osobny katalog danych.",
+      "network": "Autoryzacja, konto, plan i kredyty są sprawdzane wyłącznie przez oficjalne API MiniMax. Lokalne pliki logowania nie są przesyłane."
     },
     "nickname": "Pseudonim",
     "enterprise": "Firmowe",
@@ -7426,8 +7426,8 @@
       "oauth": {
         "title": "Tylko logowanie IDE",
         "item1": "Dodaj konto po zakończeniu OAuth w przeglądarce, a następnie użyj go do przełączania IDE.",
-        "item2": "Parametry zapytania limitu nie są automatycznie powiązywane.",
-        "item3": "Jeśli potrzebujesz podglądu limitu, uruchom ręcznie „Zapytaj limit” na karcie konta."
+        "item2": "Saldo kredytów",
+        "item3": "Kupione kredyty · Kredyty w prezencie"
       }
     },
     "oauthWebviewTab": "OAuth przez WebView",
@@ -7502,7 +7502,10 @@
       }
     },
     "quota": {
-      "usedOfTotal": "{{used}} / {{total}}​"
+      "usedOfTotal": "{{used}} / {{total}}​",
+      "noPlan": "Brak subskrypcji M Plan",
+      "purchased": "Kupione kredyty",
+      "gifted": "Kredyty w prezencie"
     },
     "checkin": {
       "title": "Codzienne zameldowanie",

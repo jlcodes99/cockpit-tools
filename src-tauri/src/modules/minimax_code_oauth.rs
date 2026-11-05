@@ -225,7 +225,9 @@ pub async fn complete_login(login_id: &str) -> Result<MinimaxCodeOAuthCompletePa
                 clear_pending_oauth_login(login_id)?;
                 return Err("获取 MiniMax Code 账号信息失败：未返回 uid 或邮箱".to_string());
             }
-            let quota_raw = fetch_credit_details(&client, &access_token, &snapshot.2).await.ok();
+            let quota_result = fetch_usage_snapshot(&client, &access_token, &snapshot.2).await;
+            let status_reason = quota_result.as_ref().err().cloned();
+            let quota_raw = quota_result.ok();
 
             return Ok(MinimaxCodeOAuthCompletePayload {
                 email,
@@ -234,8 +236,8 @@ pub async fn complete_login(login_id: &str) -> Result<MinimaxCodeOAuthCompletePa
                 region: Some(snapshot.2.clone()),
                 auth_file: None,
                 quota_raw, auth_raw: None, profile_raw: None,
-                status: Some("normal".to_string()),
-                status_reason: None,
+                status: Some(if status_reason.is_some() { "quota_error" } else { "normal" }.into()),
+                status_reason,
             });
         }
 
@@ -386,7 +388,7 @@ fn error_detail(body: &Value) -> Option<String> {
 /// `/v1/api/user/info` usually returns no email address, so falling straight
 /// through to the numeric `realUserID` put strings like "570025187764355072" on
 /// the card. The username is a far better label; the raw id is a last resort.
-fn resolve_display_name(email: &str, nickname: Option<&str>, uid: Option<&str>) -> String {
+pub(crate) fn resolve_display_name(email: &str, nickname: Option<&str>, uid: Option<&str>) -> String {
     if !email.trim().is_empty() {
         return email.trim().to_string();
     }
@@ -401,11 +403,10 @@ fn resolve_display_name(email: &str, nickname: Option<&str>, uid: Option<&str>) 
 
 /// First non-blank string among `keys`, matching the client's `field()` helper.
 fn first_non_empty_str(value: &Value, keys: &[&str]) -> Option<String> {
-    keys.iter()
-        .find_map(|key| value.get(*key).and_then(|v| v.as_str()))
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
+    keys.iter().find_map(|key| {
+        value.get(*key).and_then(Value::as_str).map(str::trim)
+            .filter(|value| !value.is_empty()).map(str::to_owned)
+    })
 }
 
 pub async fn fetch_credit_details(
@@ -418,6 +419,7 @@ pub async fn fetch_credit_details(
     let url = format!("{origin}/minimax-cloud/api/v1/credit/details?timezone_id={tz}");
     let response = client
         .get(&url)
+        .query(&[("page_number", "1"), ("page_size", "20"), ("include_expired", "true")])
         .bearer_auth(access_token)
         .header("accept", "application/json")
         .header("accept-language", "zh-CN,zh;q=0.9")
@@ -431,6 +433,30 @@ pub async fn fetch_credit_details(
         .map_err(|e| format!("解析 credit/details 响应失败: {e}"))?;
     reject_quota_error_envelope(status, &body)?;
     Ok(body)
+}
+
+/// The desktop displays membership balances, not the sum of a paginated credit ledger.
+pub async fn fetch_usage_snapshot(client: &reqwest::Client, access_token: &str, region: &str) -> Result<Value, String> {
+    let origin = resolve_agent_origin(region);
+    async fn post(client: &reqwest::Client, token: &str, url: String, body: Value) -> Result<Value, String> {
+        let response = client.post(&url).bearer_auth(token).json(&body).send().await
+            .map_err(|error| format!("MiniMax 资源查询失败: {error}"))?;
+        let status = response.status();
+        let value: Value = response.json().await.map_err(|error| error.to_string())?;
+        reject_api_error_envelope(status, &value, "查询 MiniMax 套餐与积分")?;
+        Ok(value)
+    }
+    let extra = post(client, access_token, format!("{origin}/matrix/api/v1/user/get_user_extra_info"), serde_json::json!({})).await?;
+    let personal = extra.get("workspaces").and_then(Value::as_array)
+        .and_then(|items| items.iter().find(|item| item["workspace_type"] == 0));
+    let workspace_id = personal.and_then(|workspace| workspace.get("workspace_id"));
+    let body = workspace_id.map(|id| serde_json::json!({"workspace_id":id})).unwrap_or_else(|| serde_json::json!({}));
+    let membership = post(client, access_token, format!("{origin}/matrix/api/v1/commerce/get_membership_info"), body).await?;
+    if membership.get("subscription_type").is_none() && membership.get("op_credit_summary").is_none()
+        && membership.get("opcredit_balance").is_none() {
+        return Err("MiniMax 套餐响应缺少套餐或积分字段".into());
+    }
+    Ok(serde_json::json!({"membership":membership,"workspace":personal}))
 }
 
 /// Reject every shape the MiniMax cloud API uses to report failure.
@@ -483,7 +509,9 @@ pub async fn build_payload_from_token(access_token: &str, region: Option<&str>) 
     if email.trim().is_empty() {
         return Err("获取 MiniMax Code 账号信息失败：未返回 uid 或邮箱".to_string());
     }
-    let quota_raw = fetch_credit_details(&client, access_token, &region).await.ok();
+    let quota_result = fetch_usage_snapshot(&client, access_token, &region).await;
+    let status_reason = quota_result.as_ref().err().cloned();
+    let quota_raw = quota_result.ok();
     Ok(MinimaxCodeOAuthCompletePayload {
         email,
         id: None,
@@ -495,8 +523,8 @@ pub async fn build_payload_from_token(access_token: &str, region: Option<&str>) 
         region: Some(region),
         auth_file: None,
         quota_raw, auth_raw: None, profile_raw: None,
-        status: Some("normal".to_string()),
-        status_reason: None,
+        status: Some(if status_reason.is_some() { "quota_error" } else { "normal" }.into()),
+        status_reason,
     })
 }
 
@@ -688,6 +716,14 @@ mod api_response_tests {
         assert_eq!(uid.as_deref(), Some("515957084416724996"));
         assert_eq!(nickname.as_deref(), Some("Skyblueee"));
         assert_eq!(email, "skyblueee@example.com");
+    }
+
+    #[test]
+    fn empty_user_alias_does_not_hide_official_name() {
+        let body = json!({"data":{"userInfo":{"realUserID":"fixture-user", "subUserName":"", "userName":" ", "name":"MiniMax Fixture"}}});
+        let (uid, nickname, _) = parse_user_info_body(&body).unwrap();
+        assert_eq!(uid.as_deref(), Some("fixture-user"));
+        assert_eq!(nickname.as_deref(), Some("MiniMax Fixture"));
     }
 
     #[test]

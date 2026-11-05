@@ -7407,9 +7407,9 @@
     "addAccount": "Adicionar conta MiniMax Code",
     "flowNotice": {
       "title": "Informacoes de gerenciamento de conta do MiniMax Code (clique para expandir/recolher)",
-      "desc": "A troca de conta grava o arquivo local de login seguindo o layout mais recente do cliente oficial do MiniMax Code; a importação local lê o mesmo arquivo. Os dados são processados somente localmente.",
-      "permission": "Escopo de permissão: ler e gravar o arquivo de login do MiniMax Code (~/.minimax/auth/auth.json) para importação local e troca de conta; o state.vscdb legado não é mais lido nem modificado.",
-      "network": "Escopo de rede: login OAuth e renovação de token exigem requisições para MiniMax Code; consultas de cota chamam APIs de cobrança. Arquivos locais de login e credenciais brutas não são enviados."
+      "desc": "Gerencie o login local e a troca de contas do MiniMax Code.",
+      "permission": "Lê e grava os arquivos oficiais de login. Cada instância do MiniMax Code usa sua própria pasta de dados.",
+      "network": "Consulta apenas as APIs oficiais do MiniMax para autorização, conta, plano e créditos. Os arquivos locais de login não são enviados."
     },
     "nickname": "Apelido",
     "enterprise": "Empresa",
@@ -7426,8 +7426,8 @@
       "oauth": {
         "title": "Somente login do IDE",
         "item1": "Adicione a conta apos concluir o OAuth no navegador e use-a para alternancia no IDE.",
-        "item2": "Os parametros de consulta de cota nao sao vinculados automaticamente.",
-        "item3": "Se precisar exibir a cota, execute manualmente \"Consultar cota\" no cartao da conta."
+        "item2": "Saldo de créditos",
+        "item3": "Créditos comprados · Créditos recebidos"
       }
     },
     "oauthWebviewTab": "OAuth na WebView",
@@ -7502,7 +7502,10 @@
       }
     },
     "quota": {
-      "usedOfTotal": "{{used}} / {{total}}​"
+      "usedOfTotal": "{{used}} / {{total}}​",
+      "noPlan": "Sem assinatura M Plan",
+      "purchased": "Créditos comprados",
+      "gifted": "Créditos recebidos"
     },
     "checkin": {
       "title": "Check-in diário",

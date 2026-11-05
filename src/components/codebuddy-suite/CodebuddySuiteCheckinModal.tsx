@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import {
   X,
+  AlertCircle,
   ChevronLeft,
   Gift,
   CheckCircle,
@@ -638,9 +639,11 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
                     {state?.checkinResult && state.checkinResult.success && (
                       <div className="checkin-account-success">
                         <CheckCircle size={14} />
-                        {t(`${i18nPrefix}.checkin.success`, '签到成功！连续签到 {{days}} 天', {
-                          days: state.status?.streak_days ?? 0,
-                        })}
+                        {state.checkinResult.already_claimed
+                          ? t(`${i18nPrefix}.checkin.claimed`, '已领取')
+                          : t(`${i18nPrefix}.checkin.success`, '签到成功！连续签到 {{days}} 天', {
+                            days: state.status?.streak_days ?? 0,
+                          })}
                       </div>
                     )}
 
@@ -652,7 +655,10 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
                         </div>
                       )}
 
-                    {(state?.checkinResult?.credit != null ||
+                    {state?.checkinResult?.warning && <div className="checkin-account-info-msg" role="status">
+                      <AlertCircle size={12} /> {state.checkinResult.warning}
+                    </div>}
+                    {!state?.checkinResult?.already_claimed && (state?.checkinResult?.credit != null ||
                       state?.checkinResult?.reward) && (
                       <div className="checkin-reward-badge">
                         <Trophy size={12} />
@@ -800,6 +806,7 @@ export function MinimaxCodeCheckinModal({
         const result = await minimaxCodeService.checkinMinimaxCode(accountId);
         return {
           ...result,
+          already_claimed: result.alreadyClaimed ?? false,
           streak_days: result.streakDays ?? null,
         } as unknown as CheckinResponse;
       }}

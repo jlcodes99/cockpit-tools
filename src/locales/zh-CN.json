@@ -745,7 +745,6 @@
     "traeSoloCn": "TRAE SOLO CN",
     "codebuddyCn": "CodeBuddy CN",
     "minimaxcode": "MiniMax Code",
-    "minimaxcode": "MiniMax Code",
     "switchClassicLayoutEntry": "切换到经典布局",
     "switchClassicLayoutTitle": "切换至经典侧边栏布局",
     "switchClassicLayoutDesc": "经典布局将展示完整平台导航，并支持可折叠侧边栏。你可在“设置 > 通用 > 侧边栏布局”中随时切换回原始布局。",
@@ -7761,7 +7760,7 @@
       }
     }
   },
-    "minimaxCode": {
+  "minimaxCode": {
     "title": "MiniMax Code 账号管理",
     "noAccounts": "暂无 MiniMax Code 账号",
     "addAccount": "添加 MiniMax Code 账号",
@@ -7808,9 +7807,9 @@
     },
     "flowNotice": {
       "title": "MiniMax Code 账号管理说明（点击展开/收起）",
-      "desc": "切换账号会按当前 MiniMax Code 官方客户端登录文件布局写入本机；本机导入读取同一登录文件，数据仅在本地处理。若检测到无法解密的官方封装，会保留原文件并停止覆盖。",
-      "permission": "权限范围：读取并写入 MiniMax Code 登录文件（~/.minimax/auth/auth.json），用于本机导入与账号切换；不再读取或修改旧版 state.vscdb。遇到官方加密封装且未取得密钥时不会覆盖原文件。",
-      "network": "网络范围：OAuth 授权登录与 Token 刷新需联网请求 MiniMax Code；配额查询需调用计费 API。不上传本地登录文件或凭证原文。"
+      "desc": "管理 MiniMax Code 的本地登录与账号切换。",
+      "permission": "读取并写入 MiniMax Code 的官方登录文件；默认实例与多开实例使用各自的数据目录。",
+      "network": "仅向 MiniMax 官方接口请求授权、账号、套餐和积分信息；本地登录文件不会上传。"
     },
     "nickname": "昵称",
     "enterprise": "企业",
@@ -7827,8 +7826,8 @@
       "oauth": {
         "title": "仅授权 IDE 登录信息",
         "item1": "在浏览器完成 OAuth 后即可添加账号并用于 IDE 切换。",
-        "item2": "授权完成后会自动刷新资源包配额数据。",
-        "item3": "账号卡片将按资源包展示额度、进度和刷新/到期时间。"
+        "item2": "积分余额",
+        "item3": "购买积分 · 赠送积分"
       }
     },
     "oauthWebviewTab": "WebView 授权",
@@ -7866,7 +7865,10 @@
     },
     "search": "搜索 MiniMax Code 账号...",
     "quota": {
-      "usedOfTotal": "{{used}} / {{total}}"
+      "usedOfTotal": "{{used}} / {{total}}",
+      "noPlan": "未订阅 M Plan",
+      "purchased": "购买积分",
+      "gifted": "赠送积分"
     },
     "quotaQuery": {
       "failedRefreshCompact": "配额查询失败",

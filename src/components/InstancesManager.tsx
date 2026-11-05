@@ -737,6 +737,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     [stoppingInstanceIds],
   );
   const isGrokApp = appType === "grok";
+  const canBindBeforeInitialization = isGrokApp || appType === "minimax_code";
   const supportsInstanceInitialization = !isGrokApp;
   const isCodexApp = appType === "codex";
   const isClaudeApp = appType === "claude";
@@ -1125,14 +1126,14 @@ export function InstancesManager<TAccount extends AccountLike>({
 
   useEffect(() => {
     if (editing) return;
-    if (formInitMode === "empty") {
+    if (formInitMode === "empty" && !canBindBeforeInitialization) {
       setFormBindAccountId("");
       return;
     }
     if (!formCopySourceInstanceId) {
       setFormCopySourceInstanceId(defaultInstanceId);
     }
-  }, [defaultInstanceId, editing, formCopySourceInstanceId, formInitMode]);
+  }, [defaultInstanceId, editing, formCopySourceInstanceId, formInitMode, canBindBeforeInitialization]);
 
   useEffect(() => {
     if (!isAccountAllowedForLaunchMode || !formBindAccountId) return;
@@ -1578,7 +1579,7 @@ export function InstancesManager<TAccount extends AccountLike>({
           updatePayload.name = formName.trim();
         }
         const canEditBind =
-          isGrokApp || !(editing.initialized === false && !isEditingDefault);
+          canBindBeforeInitialization || !(editing.initialized === false && !isEditingDefault);
         if (canEditBind) {
           const nextBindId = resolveBindAccountValue(formBindAccountId);
           if (nextBindId !== (editing.bindAccountId ?? null)) {
@@ -1655,7 +1656,7 @@ export function InstancesManager<TAccount extends AccountLike>({
           initMode: isGrokApp ? "empty" : formInitMode,
           launchMode: nextLaunchMode,
           appSpeed: isCodexApp ? formAppSpeed : undefined,
-          bindAccountId: isCreateEmpty
+          bindAccountId: isCreateEmpty && !canBindBeforeInitialization
             ? null
             : resolveBindAccountValue(formBindAccountId),
           modelRouting: nextModelRouting,
@@ -1674,7 +1675,7 @@ export function InstancesManager<TAccount extends AccountLike>({
           );
         }
         setMessage({
-          text: isCreateEmpty
+          text: isCreateEmpty && !canBindBeforeInitialization
             ? t(
                 "instances.messages.emptyCreated",
                 "空白实例已创建，请先启动一次后再绑定账号",
@@ -2571,7 +2572,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     instance: InstanceProfile,
     nextId: string | null,
   ) => {
-    if (!isGrokApp && instance.initialized === false) {
+    if (!canBindBeforeInitialization && instance.initialized === false) {
       setInitGuideInstance(instance);
       return;
     }
@@ -2777,7 +2778,7 @@ export function InstancesManager<TAccount extends AccountLike>({
               isApiService: accountIsApiService,
             } = resolveAccount(instance);
             const accountDisabledByInit =
-              !isGrokApp &&
+              !canBindBeforeInitialization &&
               !instance.isDefault &&
               instance.initialized === false;
             const isInstanceStarting = startingInstanceIdSet.has(instance.id);
@@ -3304,7 +3305,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                       </span>
                     </label>
                   </div>
-                  {formInitMode === "empty" && (
+                  {formInitMode === "empty" && !canBindBeforeInitialization && (
                     <div className="instance-init-note">
                       {t(
                         "instances.form.emptyInitHint",
@@ -3485,7 +3486,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                       ? `（${t("instances.form.optional", "可选")}）`
                       : ""}
                   </label>
-                  {supportsInstanceInitialization &&
+                  {!canBindBeforeInitialization &&
                   formInitMode === "empty" ? (
                     <>
                       {renderFormAccountSelect({
@@ -3514,7 +3515,7 @@ export function InstancesManager<TAccount extends AccountLike>({
               ) : (
                 <div className="form-group">
                   <label>{t("instances.form.bindAccount", "绑定账号")}</label>
-                  {!isGrokApp &&
+                  {!canBindBeforeInitialization &&
                   editing?.initialized === false &&
                   !editing.isDefault ? (
                     <>

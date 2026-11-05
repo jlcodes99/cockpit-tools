@@ -487,11 +487,8 @@ pub fn close_trae_platform_instances(
 /// cannot provide: we close only the processes whose userData dir matches, so starting
 /// instance B no longer kills instance A.
 ///
-/// The Electron *main* process runs as `"…\MiniMax Code.exe"` with no data-dir argument,
-/// so it is matched by exe path only when its userData dir cannot be established. When no
-/// per-instance marker is available at all we fall back to a global close and say so in
-/// the logs — account bindings stay isolated either way, since each instance owns its own
-/// `auth.json` under its own data root.
+/// A main process without a user-data marker belongs to the default instance.
+/// Targeted shutdown never falls back to closing unrelated instances.
 pub fn close_minimax_code_instances(
     user_data_dirs: &[String],
     timeout_secs: u64,
@@ -523,15 +520,8 @@ pub fn close_minimax_code_instances(
     for pid in target_pids {
         close_pid(pid, timeout_secs)?;
     }
-    // Electron 主进程可能不带 userData 参数，按 exe 路径兜底（仅当仍有残留进程时）。
-    let remaining = collect_minimax_code_process_entries();
-    let remaining_targets = minimax_code_pids_for_user_data_dirs(&remaining, &normalized);
-    if remaining_targets.is_empty() && !remaining.is_empty() {
-        crate::modules::logger::log_warn(
-            "[MiniMax Code Close] 仍有 MiniMax Code 进程残留，按 exe 路径兜底关闭（会关闭全部窗口）",
-        );
-        return crate::modules::minimax_code_account::close_minimax_code_instances(timeout_secs);
-    }
+    // Remaining processes can belong to other independent instances.
+    // Never widen a targeted close into an application-wide termination.
     Ok(())
 }
 
@@ -542,10 +532,11 @@ fn minimax_code_pids_for_user_data_dirs(
 ) -> Vec<u32> {
     let mut pids = Vec::new();
     for (pid, dir) in entries {
-        let Some(dir) = dir.as_deref() else {
-            continue;
+        let default_dir = crate::modules::minimax_code_instance::get_default_minimax_code_user_data_dir().ok();
+        let normalized = match dir.as_deref() {
+            Some(dir) => normalize_path_for_compare(dir),
+            None => default_dir.map(|path| normalize_path_for_compare(&path.to_string_lossy())).unwrap_or_default(),
         };
-        let normalized = normalize_path_for_compare(dir);
         if normalized.is_empty() {
             continue;
         }

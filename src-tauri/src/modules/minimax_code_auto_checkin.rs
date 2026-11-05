@@ -403,6 +403,31 @@ fn mark_schedule_checked(
     schedule.last_checked_date = Some(today.to_string());
 }
 
+pub(crate) fn record_manual_result(
+    account_id: &str,
+    result: &Result<minimax_code_api::MinimaxCodeCheckinResult, String>,
+    duration_ms: u64,
+) -> Result<(), String> {
+    let email = minimax_code_account::load_account(account_id).map(|account| account.nickname.unwrap_or(account.email))
+        .unwrap_or_else(|| account_id.to_string());
+    let (status, message, credit) = match result {
+        Ok(value) if value.success => (if value.already_claimed { "already_checked" } else { "success" }, value.message.clone(), value.credit),
+        Ok(value) => ("failed", value.message.clone(), None),
+        Err(error) => ("failed", Some(error.clone()), None),
+    };
+    add_log_record(MinimaxCodeAutoCheckinLogRecord {
+        id: format!("manual_{}_{}", Local::now().timestamp_millis(), rand::random::<u16>()),
+        timestamp: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), date: get_today_date_string(), duration_ms,
+        total_accounts: 1, success_count: usize::from(status == "success"),
+        already_checked_count: usize::from(status == "already_checked"), failed_count: usize::from(status == "failed"),
+        status: if status == "failed" { "failed" } else { "success" }.into(),
+        details: vec![MinimaxCodeAutoCheckinAccountDetail {
+            account_id: account_id.into(), email, status: status.into(), time: Some(format_time_only()), message,
+            credit: credit.map(|value| serde_json::json!(value)),
+        }],
+    })
+}
+
 pub async fn run_minimax_code_auto_checkin_cycle_if_needed(
     app: &AppHandle,
     force: bool,
@@ -505,10 +530,16 @@ pub async fn run_minimax_code_auto_checkin_cycle_if_needed(
             Ok(refreshed) => refreshed,
             Err(err) => {
                 logger::log_warn(&format!(
-                    "[MinimaxCodeAutoCheckin] 账号 {} 刷新失败，使用已存 token: {}",
+                    "[MinimaxCodeAutoCheckin] 账号 {} 刷新失败: {}",
                     account.id, err
                 ));
-                account.clone()
+                failed_count += 1;
+                retry_needed = true;
+                details.push(MinimaxCodeAutoCheckinAccountDetail {
+                    account_id: account.id.clone(), email: account.email.clone(), status: "failed".into(),
+                    time: Some(format_time_only()), message: Some(err), credit: None,
+                });
+                continue;
             }
         };
         let email_display = if !account.email.trim().is_empty() {
@@ -541,36 +572,21 @@ pub async fn run_minimax_code_auto_checkin_cycle_if_needed(
                 details.push(MinimaxCodeAutoCheckinAccountDetail {
                     account_id: account.id.clone(),
                     email: email_display,
-                    status: "inactive".to_string(),
+                    status: "failed".to_string(),
                     time: Some(account_checkin_time),
                     message: Some("签到活动未开启或不适用".to_string()),
                     credit: None,
                 });
             }
-            Ok(_) => match minimax_code_api::perform_checkin(&account.access_token, region).await {
+            Ok(_) => match minimax_code_api::checkin_account(&account.id).await {
                 Ok(res) if res.success => {
-                    success_count += 1;
-                    did_checkin_any = true;
-                    let streak = res
-                        .streak_days
-                        .and_then(|v| i32::try_from(v).ok())
-                        .unwrap_or_else(|| account.checkin_streak.unwrap_or(0).saturating_add(1));
-                    let reward = res
-                        .credit
-                        .map(|credit| serde_json::json!({ "credit": credit }));
-                    let _ = minimax_code_account::update_checkin_info(
-                        &account.id,
-                        Some(Local::now().timestamp()),
-                        streak,
-                        reward,
-                    );
-
+                    if res.already_claimed { already_checked_count += 1; } else { success_count += 1; did_checkin_any = true; }
                     details.push(MinimaxCodeAutoCheckinAccountDetail {
                         account_id: account.id.clone(),
                         email: email_display,
-                        status: "success".to_string(),
+                        status: if res.already_claimed { "already_checked" } else { "success" }.to_string(),
                         time: Some(account_checkin_time),
-                        message: Some("签到成功".to_string()),
+                        message: res.message.clone(),
                         credit: res.credit.map(|c| serde_json::json!(c)),
                     });
 

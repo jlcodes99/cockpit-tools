@@ -190,6 +190,8 @@
 
 .account-last-used {
   display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: 4px;
 }

@@ -44,10 +44,12 @@ fn inject_bound_account_for_instance_start_blocking(
 
     // MiniMax 客户端把登录态写在 `<data root>/auth/<buildEnv>/<region>/<clientId>/auth.json`，
     // 因此直接改写该实例自己的 auth.json 即可，无需 WorkBuddy 那样的会话合并。
-    modules::minimax_code_account::switch_minimax_code_account_to_data_dir(
+    let auth_file = modules::minimax_code_account::switch_minimax_code_account_to_data_dir(
         &account,
         Path::new(user_data_dir),
     )?;
+
+    modules::minimax_code_account::record_client_switch(bind_id, &auth_file)?;
 
     modules::logger::log_info(&format!(
         "[MiniMax Code Instance] 账号注入完成: email={}, user_data_dir={}",
@@ -206,6 +208,22 @@ pub async fn minimax_code_delete_instance(instance_id: String) -> Result<(), Str
         return Err("默认实例不可删除".to_string());
     }
     modules::minimax_code_instance::delete_instance(&instance_id)
+}
+
+/// Account overview and the default instance use the same credential and launch transaction.
+pub async fn switch_default_account_and_start(account_id: String) -> Result<InstanceProfileView, String> {
+    let previous = modules::minimax_code_instance::load_default_settings()?;
+    modules::minimax_code_instance::update_default_settings(Some(Some(account_id.clone())), None, Some(false))?;
+    match minimax_code_start_instance(DEFAULT_INSTANCE_ID.into()).await {
+        Ok(view) => {
+            modules::provider_current_state::set_current_account_id("minimaxcode", Some(&account_id))?;
+            Ok(view)
+        }
+        Err(error) => {
+            modules::minimax_code_instance::update_default_settings(Some(previous.bind_account_id), None, Some(previous.follow_local_account))?;
+            Err(error)
+        }
+    }
 }
 
 #[tauri::command]

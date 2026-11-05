@@ -7407,9 +7407,9 @@
     "addAccount": "MiniMax Code アカウントを追加",
     "flowNotice": {
       "title": "MiniMax Code アカウント管理ガイド（クリックで展開/折りたたみ）",
-      "desc": "アカウント切り替えでは、最新の MiniMax Code 公式クライアントの形式に従ってローカルのログインファイルを書き込みます。ローカルインポートも同じファイルを読み取ります。データはローカルでのみ処理されます。",
-      "permission": "権限範囲：ローカルインポートとアカウント切り替えのために MiniMax Code のログインファイル（~/.minimax/auth/auth.json）を読み書きします。旧 state.vscdb は読み取りも変更もしません。",
-      "network": "ネットワーク範囲：OAuth ログインと Token 更新では MiniMax Code へのリクエストが必要で、クォータ照会では課金 API を呼び出します。ローカルのログインファイルや生の認証情報はアップロードされません。"
+      "desc": "MiniMax Code のローカルログインとアカウント切り替えを管理します。",
+      "permission": "MiniMax Code の公式ログインファイルを読み書きします。各インスタンスは独立したデータフォルダを使用します。",
+      "network": "認証・アカウント・プラン・クレジット情報は MiniMax 公式 API にのみ問い合わせます。ローカルのログインファイルは送信しません。"
     },
     "nickname": "ニックネーム",
     "enterprise": "企業",
@@ -7426,8 +7426,8 @@
       "oauth": {
         "title": "IDE ログイン情報のみを認証",
         "item1": "ブラウザで OAuth を完了すると、アカウントを追加して IDE 切り替えに利用できます。",
-        "item2": "クォータ照会パラメータは自動では紐付けられません。",
-        "item3": "クォータ表示が必要な場合は、アカウントカードで「クォータ照会」を手動実行してください。"
+        "item2": "クレジット残高",
+        "item3": "購入クレジット · 特典クレジット"
       }
     },
     "oauthWebviewTab": "WebView 認証",
@@ -7502,7 +7502,10 @@
       }
     },
     "quota": {
-      "usedOfTotal": "{{used}} / {{total}}​"
+      "usedOfTotal": "{{used}} / {{total}}​",
+      "noPlan": "M Plan 未加入",
+      "purchased": "購入クレジット",
+      "gifted": "特典クレジット"
     },
     "checkin": {
       "title": "デイリーチェックイン",
