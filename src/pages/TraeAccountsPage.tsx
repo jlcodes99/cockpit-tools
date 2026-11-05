@@ -27,6 +27,7 @@ import {
   BookOpen,
   CalendarCheck,
 } from 'lucide-react';
+import { AccountLastUsed } from '../components/AccountLastUsed';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
@@ -1014,7 +1015,7 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
             </div>
 
             <div className="card-footer">
-              <span className="card-date">{formatDate(account.created_at)}</span>
+              <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
               <div className="card-actions">
                 <button
                   className="card-action-btn success"
@@ -1172,7 +1173,7 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
             <td>
               {renderAccountQuota(account, 'table')}
             </td>
-            <td>{formatDate(account.created_at)}</td>
+            <td>{account.last_used > 0 ? formatDate(account.last_used) : '—'}</td>
             <td className="sticky-action-cell table-action-cell">
               <div className="action-buttons">
                 <button

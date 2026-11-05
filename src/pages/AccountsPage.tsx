@@ -21,6 +21,7 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { AccountLastUsed } from '../components/AccountLastUsed'
 import { useAccountStore } from '../stores/useAccountStore'
 import * as accountService from '../services/accountService'
 import { Account } from '../types/account'
@@ -130,6 +131,7 @@ import {
 } from '../utils/mfaVault'
 import { findFirstMailVerificationCode } from '../utils/mailVerificationCode'
 import { AccountsOverviewView } from "./AccountsOverviewView";
+import { getLocalOffsetMinutes } from '../utils/localTimeZone';
 import {
   ANTIGRAVITY_ACCOUNT_NOTE_MAX_LENGTH,
   ANTIGRAVITY_FILTER_FIELD_FILTER_TYPES,
@@ -2754,15 +2756,19 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   };
 
   const formatDate = (timestamp: number) => {
-    const d = new Date(timestamp * 1000)
+    // 用系统真实时区偏移把 UTC 时间戳平移到本地墙上时间，再以 UTC 渲染，
+    // 绕开 WebView 默认/ICU 时区库回退 UTC 的问题（#时区）。
+    const offsetMin = getLocalOffsetMinutes()
+    const d = new Date(timestamp * 1000 + offsetMin * 60000)
     return (
       d.toLocaleDateString(locale, {
         year: 'numeric',
         month: '2-digit',
-        day: '2-digit'
+        day: '2-digit',
+        timeZone: 'UTC'
       }) +
       ' ' +
-      d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+      d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
     )
   }
 
@@ -3072,7 +3078,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
             </div>
           )}
           <div className="card-footer">
-            <span className="card-date">{formatDate(account.created_at)}</span>
+            <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
             <div className="card-actions">
               {isPendingAntigravityAccount(account) && (
                 <button
@@ -3321,6 +3327,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
                 {maskAccountText(account.email)}
               </span>
             </span>
+            <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
             <div className={styles.quotas}>
               {groupQuotas.length > 0 ? (
                 groupQuotas.map((gq) => (
@@ -3694,6 +3701,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
               </div>
             </div>
           </td>
+          <td>{account.last_used > 0 ? formatDate(account.last_used) : '—'}</td>
           <td className="sticky-action-cell table-action-cell">
             <div className="action-buttons">
               {isPendingAntigravityAccount(account) && (
@@ -3804,6 +3812,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
             </th>
             <th style={{ width: 220 }}>{t('accounts.columns.email')}</th>
             <th>{t('accounts.columns.quota')}</th>
+            <th>{t('accounts.columns.lastUsed')}</th>
             <th className="sticky-action-header table-action-header">
               {t('accounts.columns.actions')}
             </th>

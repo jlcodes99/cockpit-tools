@@ -807,6 +807,7 @@ fn switch_claude_account_impl(account_id: String) -> Result<String, String> {
 
     let account = claude_account::load_account(&account_id)
         .ok_or_else(|| format!("Claude account not found: {}", account_id))?;
+    claude_account::touch_last_used(&account_id)?;
     claude_account::inject_to_claude(&account_id)?;
     let current_platform = if matches!(
         account.auth_mode,

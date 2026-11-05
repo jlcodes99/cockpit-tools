@@ -104,6 +104,7 @@ import {
 } from './services/workbuddyAutoCheckinService';
 import { prepareCodexLocalAccessForRestart } from './services/codexLocalAccessService';
 import { applyReducedMotion } from './utils/reducedMotion';
+import { initLocalTimeZone } from './utils/localTimeZone';
 import { isCodexInstanceAccountConflict } from './utils/codexInstanceLaunchConflict';
 import {
   applyWebviewUiScale,
@@ -171,7 +172,7 @@ const WorkbuddyAccountsPage = lazy(() =>
 );
 const ZedAccountsPage = lazy(() =>
   import('./pages/ZedAccountsPage').then((module) => ({ default: module.ZedAccountsPage })),
-);;
+);
 const WakeupTasksPage = lazy(() =>
   import('./pages/WakeupTasksPage').then((module) => ({ default: module.WakeupTasksPage })),
 );
@@ -1049,6 +1050,7 @@ function MainApp() {
     };
 
     void syncLanguageFromConfig();
+    void initLocalTimeZone();
     window.addEventListener('config-updated', syncLanguageFromConfig);
     return () => {
       disposed = true;

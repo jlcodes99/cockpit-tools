@@ -55,6 +55,7 @@ import {
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
 import { normalizeTimestamp } from '../utils/dataExtract';
+import { getLocalOffsetMinutes } from '../utils/localTimeZone';
 import { presentWindowsOperationError } from '../utils/windowsOperationDialog';
 
 // ---------------------------------------------------------------------------
@@ -138,6 +139,7 @@ export interface ProviderStoreActions<TAccount> {
   setCurrentAccountId?: (accountId: string | null) => void;
   fetchAccounts: () => Promise<void>;
   switchAccount?: (accountId: string) => Promise<unknown>;
+  touchLastUsed?: (accountId: string) => void;
   deleteAccounts: (ids: string[]) => Promise<void>;
   refreshToken: (id: string) => Promise<void>;
   refreshAllTokens: () => Promise<void>;
@@ -708,6 +710,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     refreshToken,
     refreshAllTokens,
     switchAccount,
+    touchLastUsed,
     setCurrentAccountId: setStoreCurrentAccountId,
     updateAccountTags,
   } = store;
@@ -1195,6 +1198,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
           resolvedCurrentAccountId = await storeFetchCurrentAccountId();
         } else {
           setCurrentAccountId(accountId);
+          touchLastUsed?.(accountId);
         }
         if (platformId) {
           await emitCurrentAccountChanged({
@@ -1215,6 +1219,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
             console.error(`[${platformKey}] onInjectSuccess callback failed:`, callbackError);
           }
         }
+        await fetchAccounts();
       } catch (e: unknown) {
         const retrySwitch = async () => {
           await injectFn(accountId);
@@ -1223,6 +1228,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
             resolvedCurrentAccountId = await storeFetchCurrentAccountId();
           } else {
             setCurrentAccountId(accountId);
+            touchLastUsed?.(accountId);
           }
           if (platformId) {
             await emitCurrentAccountChanged({
@@ -1262,11 +1268,13 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     accounts,
     config,
     dataService.injectToVSCode,
+    fetchAccounts,
     maskAccountText,
     platformId,
     platformKey,
     storeFetchCurrentAccountId,
     t,
+    touchLastUsed,
   ]);
 
   // ─── WebView（网页会话） ───────────────────────────────────────────────
@@ -2465,19 +2473,24 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   const formatDate = useCallback(
     (timestamp: number) => {
       const normalized = normalizeTimestamp(timestamp);
-      const d = new Date((normalized ?? 0) * 1000);
+      // 用系统真实时区偏移把 UTC 时间戳平移到本地墙上时间，再以 UTC 渲染，
+      // 绕开 WebView 默认/ICU 时区库回退 UTC 的问题（#时区）。
+      const offsetMin = getLocalOffsetMinutes();
+      const d = new Date((normalized ?? 0) * 1000 + offsetMin * 60000);
       // 固定 24 小时制，避免 en-US 等 locale 显示 12 小时制分不清上下午（#859）
       return (
         d.toLocaleDateString(locale, {
           year: 'numeric',
           month: '2-digit',
           day: '2-digit',
+          timeZone: 'UTC',
         }) +
         ' ' +
         d.toLocaleTimeString(locale, {
           hour: '2-digit',
           minute: '2-digit',
           hour12: false,
+          timeZone: 'UTC',
         })
       );
     },

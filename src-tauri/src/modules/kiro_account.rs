@@ -151,6 +151,15 @@ fn save_account_file(account: &KiroAccount) -> Result<(), String> {
         .map_err(|e| format!("保存账号失败: {}", e))
 }
 
+// ponytail: 切号时记录 last_used。O(n) load+save 单个账号文件。
+pub fn touch_last_used(account_id: &str) -> Result<(), String> {
+    let mut account = load_account(account_id)
+        .ok_or_else(|| format!("Kiro account not found: {}", account_id))?;
+    account.last_used = now_ts();
+    save_account_file(&account)?;
+    Ok(())
+}
+
 fn delete_account_file(account_id: &str) -> Result<(), String> {
     let path = resolve_account_file_path(account_id)?;
     if path.exists() {
@@ -620,7 +629,6 @@ fn apply_payload(account: &mut KiroAccount, payload: KiroOAuthCompletePayload) {
     account.kiro_usage_raw = payload.kiro_usage_raw;
     account.status = payload.status;
     account.status_reason = payload.status_reason;
-    account.last_used = now_ts();
 }
 
 pub fn upsert_account(payload: KiroOAuthCompletePayload) -> Result<KiroAccount, String> {

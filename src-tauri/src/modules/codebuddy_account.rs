@@ -109,6 +109,16 @@ fn save_account_file(account: &CodebuddyAccount) -> Result<(), String> {
         .map_err(|e| format!("保存账号失败: {}", e))
 }
 
+// Records the last switch time for a CodeBuddy account (used by the
+// inject/switch command). ponytail: O(n) load+save of a single account file.
+pub fn touch_last_used(account_id: &str) -> Result<(), String> {
+    let mut account = load_account(account_id)
+        .ok_or_else(|| format!("CodeBuddy account not found: {}", account_id))?;
+    account.last_used = now_ts();
+    save_account_file(&account)?;
+    Ok(())
+}
+
 fn delete_account_file(account_id: &str) -> Result<(), String> {
     let path = resolve_account_file_path(account_id)?;
     if path.exists() {
@@ -623,7 +633,6 @@ fn apply_payload(account: &mut CodebuddyAccount, payload: CodebuddyOAuthComplete
     }
     account.status = payload.status;
     account.status_reason = payload.status_reason;
-    account.last_used = now_ts();
 }
 
 pub fn upsert_account(payload: CodebuddyOAuthCompletePayload) -> Result<CodebuddyAccount, String> {
@@ -742,7 +751,6 @@ async fn refresh_account_token_once(account_id: &str) -> Result<CodebuddyAccount
     if usage_refreshed {
         account.usage_updated_at = Some(refreshed_at);
     }
-    account.last_used = refreshed_at;
 
     let updated = account.clone();
     upsert_account_record(account)?;
