@@ -402,3 +402,24 @@ fn transient_admission_cools_only_the_model_without_quota_or_backoff() {
     host.record_failure_cooldown(&report);
     assert!(!host.cooldowns.lock().unwrap()[&native_cooldown_key("pool-a","fixture-model",false)].quota);
 }
+
+#[test]
+fn native_clear_quota_cooldowns_unblocks_only_quota_state_for_that_account() {
+    let now = Instant::now();
+    let mut states = HashMap::new();
+    native_mark_quota_exhausted(&mut states, "pool-a", Some(Duration::from_secs(7989)), now);
+    native_upsert_cooldown(&mut states, "pool-a", "m", 429, Some(Duration::from_secs(600)), false, now);
+    native_upsert_cooldown(&mut states, "pool-a", "m2", 503, None, false, now);
+    native_mark_quota_exhausted(&mut states, "pool-b", Some(Duration::from_secs(7989)), now);
+    assert!(native_cooldown_wait(&states, "pool-a", "m", false, now).is_some());
+
+    assert!(native_clear_quota_cooldowns(&mut states, "pool-a"));
+    // Quota barriers for the refreshed account are gone.
+    assert!(native_cooldown_wait(&states, "pool-a", "m", false, now).is_none());
+    // A transient (non-quota) cooldown is left to expire on its own.
+    assert!(native_cooldown_wait(&states, "pool-a", "m2", false, now).is_some());
+    // Other accounts are untouched.
+    assert!(native_cooldown_wait(&states, "pool-b", "m", false, now).is_some());
+    // Nothing left to clear.
+    assert!(!native_clear_quota_cooldowns(&mut states, "pool-a"));
+}

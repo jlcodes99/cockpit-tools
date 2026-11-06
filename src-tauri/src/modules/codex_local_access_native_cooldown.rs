@@ -49,6 +49,20 @@ fn native_mark_quota_exhausted(
     }
 }
 
+/// Drop quota-type cooldowns for one account after a fresh quota snapshot proves
+/// the account usable again. Non-quota cooldowns (auth, model availability,
+/// transient upstream) are kept. Returns true when anything was removed.
+fn native_clear_quota_cooldowns(
+    states: &mut HashMap<NativeCooldownKey, NativeCooldown>,
+    account: &str,
+) -> bool {
+    let before = states.len();
+    states.retain(|key, state| {
+        key.account != account || !(state.quota || state.reason == NATIVE_CONFIRMED_QUOTA)
+    });
+    states.len() != before
+}
+
 fn native_upsert_cooldown(
     states: &mut HashMap<NativeCooldownKey, NativeCooldown>,
     account: &str,
