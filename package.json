@@ -41,6 +41,7 @@
     "otpauth": "^9.5.0",
     "otplib": "^13.4.0",
     "protobufjs": "^8.7.1",
+    "qrcode-generator": "2.0.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-i18next": "^16.5.3",
