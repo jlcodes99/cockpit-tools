@@ -2336,7 +2336,30 @@ pub async fn on_account_quota_refreshed(account_id: &str, refresh_succeeded: boo
         let mut runtime = gateway_runtime().lock().await;
         runtime.prepared_accounts.remove(account_id);
         if let Some(account) = refreshed_account.as_ref() {
-            sync_runtime_quota_cooldowns(&mut runtime, std::slice::from_ref(account), now_ms());
+            let now = now_ms();
+            sync_runtime_quota_cooldowns(&mut runtime, std::slice::from_ref(account), now);
+            // A successful refresh that shows usable quota is fresher evidence than
+            // the 429 retry-after the native scheduler recorded earlier. Without this,
+            // a manually reset/refreshed account stays "cooling" until the old
+            // retry-after expires or the process restarts.
+            let refreshed_available = account_quota_cooldown(account, now)
+                .is_some_and(|snapshot| !snapshot.active(now));
+            if refreshed_available {
+                if let Some(host) = runtime
+                    .native_health_source
+                    .as_ref()
+                    .and_then(|host| host.upgrade())
+                {
+                    if let Ok(mut states) = host.cooldowns.lock() {
+                        if native_clear_quota_cooldowns(&mut states, &account.id) {
+                            logger::log_codex_api_info(&format!(
+                                "[CodexLocalAccess] 额度刷新确认可用，已清除调度器额度冷却: account_id={}",
+                                account.id
+                            ));
+                        }
+                    }
+                }
+            }
         }
         runtime.collection.clone()
     };
