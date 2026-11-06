@@ -247,10 +247,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          COCKPIT_PREBUILT_FRONTEND_DIST: "dist"
         run: |
           set -euo pipefail
-          npx tauri build --ci
+          npx tauri build --ci --config src-tauri/tauri.release.conf.json
 
       - name: 📦 Build Windows portable archive
         shell: bash
@@ -412,10 +411,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          COCKPIT_PREBUILT_FRONTEND_DIST: "dist"
         run: |
           set -euo pipefail
-          node scripts/tauri.cjs build --ci --target aarch64-apple-darwin
+          node scripts/tauri.cjs build --ci --target aarch64-apple-darwin --config src-tauri/tauri.release.conf.json
 
       - name: 📦 Prepare Universal binary inputs
         shell: bash
@@ -603,10 +601,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          COCKPIT_PREBUILT_FRONTEND_DIST: "dist"
         run: |
           set -euo pipefail
-          node scripts/tauri.cjs build --ci --target x86_64-apple-darwin
+          node scripts/tauri.cjs build --ci --target x86_64-apple-darwin --config src-tauri/tauri.release.conf.json
 
       - name: 📦 Prepare Universal binary inputs
         shell: bash
@@ -948,10 +945,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          COCKPIT_PREBUILT_FRONTEND_DIST: "dist"
         run: |
           set -euo pipefail
-          npx tauri build --ci
+          npx tauri build --ci --config src-tauri/tauri.release.conf.json
 
       - name: 📥 Download release metadata
         uses: actions/download-artifact@v4
