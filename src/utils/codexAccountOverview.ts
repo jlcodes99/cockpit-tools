@@ -16,10 +16,15 @@ import {
   isCodexApiUsableReauthNotice,
   isCodexRefreshTokenReusedAccount,
 } from "./codexSwitchAuthFailure";
-import { normalizeAccountsOverviewScope } from "./accountsOverviewFilterPersistence";
+import {
+  normalizeAccountsOverviewScope,
+  readAccountsOverviewFilterField,
+  writeAccountsOverviewFilterField,
+} from "./accountsOverviewFilterPersistence";
 import {
   persistUserMemoryList,
   readUserMemoryList,
+  restoreUserMemoryList,
   USER_MEMORY_LISTS,
 } from "./userMemory";
 
@@ -58,6 +63,7 @@ export const CODEX_OVERVIEW_FILTER_FIELDS = {
 
 const CODEX_CUSTOM_SORT_ACTIVE_KEY =
   "agtools.codex.accounts.custom_sort_active.v1";
+export const CODEX_CUSTOM_SORT_RESTORED_EVENT = "codex:custom-sort-restored";
 
 export type CodexOverviewSortDirection = "asc" | "desc";
 
@@ -577,4 +583,19 @@ export function writeCodexCustomSortActive(active: boolean): void {
   } catch {
     // ignore persistence failures
   }
+}
+
+export async function restoreCodexCustomSortOrder(accountIds: string[], active: boolean): Promise<void> {
+  await restoreUserMemoryList(USER_MEMORY_LISTS.codexCustomSort, accountIds);
+  const savedSort = readAccountsOverviewFilterField<string>(
+    CODEX_OVERVIEW_FILTER_SCOPE, CODEX_OVERVIEW_FILTER_FIELDS.sortBy, "created_at",
+  );
+  const sortBy = active ? "custom" : savedSort === "custom" ? "created_at" : savedSort;
+  writeAccountsOverviewFilterField(CODEX_OVERVIEW_FILTER_SCOPE, CODEX_OVERVIEW_FILTER_FIELDS.sortBy, sortBy);
+  if (readAccountsOverviewFilterField(CODEX_OVERVIEW_FILTER_SCOPE, CODEX_OVERVIEW_FILTER_FIELDS.sortBy, null) !== sortBy) {
+    throw new Error("codex_sort_mode_save_failed");
+  }
+  // Imports must surface failures instead of reporting that the mode was restored.
+  localStorage.setItem(CODEX_CUSTOM_SORT_ACTIVE_KEY, active ? "1" : "0");
+  window.dispatchEvent(new Event(CODEX_CUSTOM_SORT_RESTORED_EVENT));
 }

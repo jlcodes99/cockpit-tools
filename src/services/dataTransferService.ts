@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { loadCodexTopLayoutPreference, normalizeCodexTopLayout, writeCodexTopLayoutPreference, type CodexTopLayoutPreference } from '../utils/codexTopLayoutPreferences';
+import { readCodexCustomSortActive, readCodexCustomSortOrder, restoreCodexCustomSortOrder } from '../utils/codexAccountOverview';
+import { hydrateUserMemory, mergeIdLists } from '../utils/userMemory';
 import {
   ACCOUNT_TRANSFER_SCHEMA,
   AccountTransferBundle,
@@ -228,6 +230,11 @@ export interface DataTransferSelection {
   includeConfig: boolean;
 }
 
+interface ExportedCodexAccountSort {
+  active: boolean;
+  account_refs: DataTransferAccountRef[];
+}
+
 export interface DataTransferConfigBundle {
   user_config: ExportedUserConfig;
   group_settings: GroupSettings;
@@ -243,6 +250,7 @@ export interface DataTransferConfigBundle {
   verification_history?: unknown;
   platform_layout_config?: unknown;
   codex_top_layout?: CodexTopLayoutPreference;
+  codex_account_sort?: ExportedCodexAccountSort;
   platform_layout_custom_icons?: unknown;
   compact_group_order?: unknown;
   compact_group_colors?: unknown;
@@ -1036,6 +1044,7 @@ function importCodexWakeupState(
 }
 
 async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransferConfigBundle> {
+  await hydrateUserMemory();
   let codexTopLayout: CodexTopLayoutPreference;
   try {
     codexTopLayout = loadCodexTopLayoutPreference();
@@ -1115,6 +1124,12 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
     verification_history: safeGetLocalStorageItem('agtools.mfa.vault.history'),
     platform_layout_config: safeGetLocalStorageItem('agtools.platform_layout.v1'),
     codex_top_layout: codexTopLayout,
+    codex_account_sort: {
+      active: readCodexCustomSortActive(),
+      account_refs: mapAccountIdsToRefs('codex', mergeIdLists(
+        readCodexCustomSortOrder(), registry.byPlatform.codex.map(account => account.id),
+      ), registry).filter(ref => CODEX_SORT_IDENTITY_FIELDS.some(key => normalizeString(ref[key]))),
+    },
     platform_layout_custom_icons: safeGetLocalStorageItem('agtools.platform_layout.custom_icons.v1'),
     compact_group_order: safeGetLocalStorageItem('compactGroupOrder'),
     compact_group_colors: safeGetLocalStorageItem('compactGroupColors'),
@@ -1130,10 +1145,49 @@ function validateImportedCodexTopLayout(value: unknown): CodexTopLayoutPreferenc
   return normalizeCodexTopLayout(value);
 }
 
+const CODEX_SORT_IDENTITY_FIELDS = [
+  'email', 'userId', 'accountId', 'organizationId', 'apiProviderId', 'apiBaseUrl',
+] as const;
+
+function validateImportedCodexAccountSort(value: unknown): ExportedCodexAccountSort {
+  if (!isRecord(value) || typeof value.active !== 'boolean' || !Array.isArray(value.account_refs)
+    || !value.account_refs.every(ref => isRecord(ref) && ref.platform === 'codex'
+      && CODEX_SORT_IDENTITY_FIELDS.every(key => ref[key] === undefined || typeof ref[key] === 'string')
+      && CODEX_SORT_IDENTITY_FIELDS.some(key => normalizeString(ref[key])))) {
+    throw new Error('codex_account_sort_invalid');
+  }
+  return value as unknown as ExportedCodexAccountSort;
+}
+
+function resolveCodexSortOrder(sort: ExportedCodexAccountSort, registry: AccountRegistry) {
+  const ids: string[] = [];
+  let unresolved = 0;
+  const candidates = registry.byPlatform.codex.map(account => ({
+    id: account.id, ref: buildAccountRef('codex', account),
+  }));
+  for (const ref of sort.account_refs) {
+    // Require all exported identity hints to agree. A shared email/user must not
+    // make a missing team account resolve to the personal account instead.
+    const matches = candidates.filter(({ ref: candidateRef }) => candidateRef && CODEX_SORT_IDENTITY_FIELDS.every(key =>
+      !normalizeString(ref[key]) || stringEquals(ref[key], candidateRef[key]),
+    ));
+    if (matches.length !== 1) {
+      unresolved += 1;
+    } else {
+      ids.push(matches[0].id);
+    }
+  }
+  const localIds = new Set(registry.byPlatform.codex.map(account => account.id));
+  const localOrder = readCodexCustomSortOrder().filter(id => localIds.has(id));
+  return { ids: mergeIdLists(ids, mergeIdLists(localOrder, [...localIds])), unresolved };
+}
+
 async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<DataTransferConfigImportResult> {
   // Validate before any writes. Older bundles intentionally retain the current layout.
   const codexTopLayout = bundle.codex_top_layout === undefined ? undefined
     : validateImportedCodexTopLayout(bundle.codex_top_layout);
+  const codexAccountSort = bundle.codex_account_sort === undefined ? undefined
+    : validateImportedCodexAccountSort(bundle.codex_account_sort);
   const registry = await loadAccountRegistry();
   let unresolvedAccountRefs = 0;
   let disabledTaskCount = 0;
@@ -1259,6 +1313,16 @@ async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<Dat
     } catch {
       // Other settings have already been applied; do not report a complete import.
       throw new Error('codex_top_layout_import_failed');
+    }
+  }
+  if (codexAccountSort !== undefined) {
+    try {
+      await hydrateUserMemory();
+      const restored = resolveCodexSortOrder(codexAccountSort, registry);
+      unresolvedAccountRefs += restored.unresolved;
+      await restoreCodexCustomSortOrder(restored.ids, codexAccountSort.active);
+    } catch {
+      throw new Error('codex_account_sort_import_failed');
     }
   }
 

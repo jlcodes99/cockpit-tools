@@ -19,6 +19,72 @@
   transform: translateY(-2px);
 }
 
+.codex-account-card[data-codex-sort-id] {
+  cursor: grab;
+}
+
+.codex-account-card[data-codex-sort-id] :where(span, p, strong, small, code) {
+  cursor: text;
+}
+
+.codex-account-card[data-codex-sort-id] :where(button, a, label, [role="button"]) * {
+  cursor: inherit;
+}
+
+.codex-accounts-grid[data-codex-sorting],
+.codex-accounts-grid[data-codex-sorting] * {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.codex-accounts-grid[data-codex-sorting] .codex-account-card {
+  transition: none;
+  transform: none;
+}
+
+.codex-accounts-grid[data-codex-sorting] .codex-account-card[data-codex-shifting] {
+  translate: var(--codex-card-shift-x, 0px) var(--codex-card-shift-y, 0px);
+  transition: translate 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.codex-accounts-grid .codex-account-card[data-codex-dragging] {
+  position: relative;
+  z-index: 20;
+  box-shadow: var(--shadow-lg);
+  transform: none;
+  /* Direct manipulation remains visible when reduced motion disables hover transforms. */
+  translate: var(--codex-card-drag-x, 0px) var(--codex-card-drag-y, 0px);
+  scale: 1.015;
+  transition: scale 180ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease-out;
+}
+
+.codex-accounts-grid .codex-account-card[data-codex-settling] {
+  position: relative;
+  transform: none;
+  transition: none;
+}
+
+.codex-accounts-grid .codex-account-card[data-codex-settling="source"] {
+  z-index: 20;
+}
+
+html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-codex-dragging] {
+  scale: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .codex-accounts-grid[data-codex-sorting] .codex-account-card[data-codex-shifting],
+  .codex-accounts-grid .codex-account-card[data-codex-dragging] {
+    scale: 1;
+    transition: none;
+  }
+}
+
+.codex-account-card[data-codex-dragging],
+.codex-account-card[data-codex-dragging] * {
+  pointer-events: none;
+}
+
 .codex-account-card.current {
   border-color: var(--primary);
   box-shadow:
