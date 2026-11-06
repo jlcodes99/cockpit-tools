@@ -15,7 +15,7 @@ import type { CodexLocalAccessOAuthQuotaReserve } from "../types/codexLocalAcces
 import { CODEX_ADDITIONAL_QUOTA_VISIBILITY_CHANGED_EVENT, CODEX_CODE_REVIEW_QUOTA_VISIBILITY_CHANGED_EVENT, isCodexAdditionalQuotaVisibleByDefault, isCodexCodeReviewQuotaVisibleByDefault } from "../utils/codexPreferences";
 import { emitAccountsChanged } from "../utils/accountSyncEvents";
 import { resolveCodexModelProviderAccountName } from "../utils/codexModelProviderAccountName";
-import { readCodexCustomSortOrder, writeCodexCustomSortActive, writeCodexCustomSortOrder } from "../utils/codexAccountOverview";
+import { CODEX_CUSTOM_SORT_RESTORED_EVENT, readCodexCustomSortActive, readCodexCustomSortOrder, writeCodexCustomSortActive, writeCodexCustomSortOrder } from "../utils/codexAccountOverview";
 import { shouldDefaultReauthProxy, oauthProxyUseAfterStart, oauthStartProxyArgs } from "../utils/codexOAuthReauthProxy";
 import { usePlatformRuntimeSupport } from "../hooks/usePlatformRuntimeSupport";
 import { CODEX_API_PROVIDER_CUSTOM_ID, COCKPIT_API_PROVIDER_ID, COCKPIT_API_PROVIDER_NAME, DEEPSEEK_API_PROVIDER_ID, codexApiProviderPresetVisionSupport, findCodexApiProviderPresetById, isCockpitApiProviderBaseUrl } from "../utils/codexProviderPresets";
@@ -63,6 +63,7 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
   | "setReauthTargetAccount"
   | "setSavedMfaRecords"
   | "setSavingPendingOAuthAccount"
+  | "setSortBy"
   | "showAddModal"
   | "sortBy"
   | "sponsorModule"
@@ -102,6 +103,7 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
     setReauthTargetAccount,
     setSavedMfaRecords,
     setSavingPendingOAuthAccount,
+    setSortBy,
     showAddModal,
     sortBy,
     sponsorModule,
@@ -693,6 +695,15 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
         );
       });
     }, []);
+
+    useEffect(() => {
+      const restoreSortMode = () => {
+        setSortBy(readCodexCustomSortActive()
+          ? "custom" : sortBy === "custom" ? "created_at" : sortBy);
+      };
+      window.addEventListener(CODEX_CUSTOM_SORT_RESTORED_EVENT, restoreSortMode);
+      return () => window.removeEventListener(CODEX_CUSTOM_SORT_RESTORED_EVENT, restoreSortMode);
+    }, [setSortBy, sortBy]);
   
     useEffect(() => {
       if (accounts.length === 0) {
