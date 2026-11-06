@@ -515,6 +515,12 @@ fn start_claude_instance_impl(instance_id: String) -> Result<ClaudeInstanceProfi
     let running =
         modules::claude_instance::resolve_claude_pid(Some(pid), Some(&updated.user_data_dir))
             .is_some();
+    let init_wait_started = std::time::Instant::now();
+    while !is_profile_initialized(&updated.user_data_dir)
+        && init_wait_started.elapsed() < std::time::Duration::from_secs(5)
+    {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
     let initialized = is_profile_initialized(&updated.user_data_dir);
     Ok(ClaudeInstanceProfileView::from_profile(
         updated,

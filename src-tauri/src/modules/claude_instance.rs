@@ -1791,7 +1791,7 @@ fn spawn_claude_windows(
         .stderr(Stdio::null());
     if let Some(target) = target {
         cmd.env(CLAUDE_USER_DATA_DIR_ENV, target);
-        cmd.arg("--user-data-dir").arg(target);
+        cmd.arg(format!("--user-data-dir={}", target));
     }
     if use_new_window {
         cmd.arg("--new-window");
@@ -1843,7 +1843,7 @@ fn spawn_claude_macos_open(
     cmd.arg("-n").arg("-a").arg(&app_root);
     cmd.arg("--args");
     if let Some(target) = target {
-        cmd.arg("--user-data-dir").arg(target);
+        cmd.arg(format!("--user-data-dir={}", target));
     }
     if use_new_window {
         cmd.arg("--new-window");
@@ -1890,7 +1890,7 @@ fn spawn_claude_unix(
         .filter(|value| !value.is_empty())
     {
         cmd.env(CLAUDE_USER_DATA_DIR_ENV, target);
-        cmd.arg("--user-data-dir").arg(target);
+        cmd.arg(format!("--user-data-dir={}", target));
     }
     if use_new_window {
         cmd.arg("--new-window");
