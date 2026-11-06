@@ -560,7 +560,12 @@ pub(super) fn backup(
     .map_err(|e| error("BACKUP", e))?;
     tx.commit().map_err(|e| error("BACKUP", e))?;
     db.close().map_err(|(_, e)| error("BACKUP", e))?;
-    fs::File::open(&path)
+    // Windows FlushFileBuffers requires write access; File::open is read-only.
+    // Reopen the completed backup without creating or truncating it.
+    fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&path)
         .and_then(|f| f.sync_all())
         .map_err(|e| error("BACKUP", e))?;
     let verified = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY)
