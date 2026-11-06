@@ -361,3 +361,22 @@ fn repair_session_visibility_for_instances_with_options(
     );
     Ok(summary)
 }
+
+
+/// Prepare account-scoped local groups only in the stopped, leased launch path.
+/// Refreshing credentials in a running app must never rewrite renderer state.
+pub(crate) fn prepare_local_project_account_state_for_launch(
+    instance_id: &str, data_dir: &Path,
+) -> Result<(), String> {
+    let instance = collect_instances()?.into_iter()
+        .find(|instance| instance.id == instance_id && instance.data_dir == data_dir)
+        .ok_or_else(|| "CODEX_PROJECT_INSTANCE_CHANGED".to_string())?;
+    verify_project_recovery_stopped(&instance)?;
+    let Some(owner) = modules::codex_account::desktop_renderer_project_owner(data_dir)? else {
+        return Ok(());
+    };
+    if local_projects::account_state::prepare(data_dir, owner.as_deref())? {
+        modules::logger::log_info("[Codex Local Projects] prepared account-scoped local groups for launch");
+    }
+    Ok(())
+}
