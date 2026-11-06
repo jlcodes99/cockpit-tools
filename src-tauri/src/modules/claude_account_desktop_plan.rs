@@ -49,6 +49,31 @@ fn desktop_plan_organization(profile: &Value) -> Option<&Value> {
     None
 }
 
+fn desktop_max_subtier_from_rate_limit(sources: &[Option<&Value>]) -> Option<(String, String)> {
+    for value in sources.iter().copied().flatten() {
+        if let Some(raw) = read_string_path(value, &["rate_limit_tier"]) {
+            if let Some(plan) = normalize_desktop_plan_value(Some(raw.clone())) {
+                if matches!(plan.as_str(), "Max 5x" | "Max 20x") {
+                    return Some((plan, raw));
+                }
+            }
+        }
+    }
+    None
+}
+
+fn refine_desktop_max_plan(
+    resolved: (String, Option<String>),
+    sources: &[Option<&Value>],
+) -> (Option<String>, Option<String>) {
+    if resolved.0 == "Max" {
+        if let Some((subtier, raw)) = desktop_max_subtier_from_rate_limit(sources) {
+            return (Some(subtier), Some(raw));
+        }
+    }
+    (Some(resolved.0), resolved.1)
+}
+
 fn desktop_plan_from_profile(profile: &Value) -> (Option<String>, Option<String>) {
     let org = desktop_plan_organization(profile);
     let enterprise = org
@@ -60,6 +85,7 @@ fn desktop_plan_from_profile(profile: &Value) -> (Option<String>, Option<String>
             .any(|v| v == "raven_enterprise");
     let endpoints = profile.get("endpoints");
     let subscription = endpoints.and_then(|v| v.get("subscriptionDetails"));
+    let nested_subscription = subscription.and_then(|v| v.get("subscription"));
     let usage = endpoints.and_then(|v| v.get("organizationUsage"));
     let account_profile = endpoints.and_then(|v| v.get("accountProfile"));
     let bootstrap = endpoints.and_then(|v| v.get("bootstrapAppStart"));
@@ -74,17 +100,19 @@ fn desktop_plan_from_profile(profile: &Value) -> (Option<String>, Option<String>
             }
         }
     }
-    for value in [
+
+    let sources = [
         org,
         subscription,
-        subscription.and_then(|v| v.get("subscription")),
+        nested_subscription,
         usage,
         account_profile,
         bootstrap,
-    ]
-    .into_iter()
-    .flatten()
-    {
+    ];
+
+    // Explicit paid/subscription tier fields take precedence over rate_limit_tier,
+    // because standard Pro accounts still carry `rate_limit_tier = "default_claude_ai"`.
+    for value in sources.into_iter().flatten() {
         for key in [
             "paidAccountTier",
             "subscription_type",
@@ -93,22 +121,48 @@ fn desktop_plan_from_profile(profile: &Value) -> (Option<String>, Option<String>
             "planType",
             "plan",
             "tier",
-            "rate_limit_tier",
-            "organization_type",
         ] {
             if let Some(raw) = read_string_path(value, &[key]) {
                 if raw == "raven" {
-                    return (
-                        Some(if enterprise { "Enterprise" } else { "Team" }.into()),
-                        Some(raw),
-                    );
+                    let plan = if enterprise { "Enterprise" } else { "Team" }.to_string();
+                    return (Some(plan), Some(raw));
                 }
                 if let Some(plan) = normalize_desktop_plan_value(Some(raw.clone())) {
-                    return (Some(plan), Some(raw));
+                    return refine_desktop_max_plan((plan, Some(raw)), &sources);
                 }
             }
         }
     }
+
     let caps = capability_strings(org.and_then(|v| v.get("capabilities")));
-    (plan_from_capability_list(&caps, enterprise), None)
+    let cap_plan = plan_from_capability_list(&caps, enterprise);
+    if let Some(plan) = cap_plan.as_ref().filter(|plan| plan.as_str() != "Free") {
+        return refine_desktop_max_plan((plan.clone(), None), &sources);
+    }
+
+    for value in sources.into_iter().flatten() {
+        if let Some(raw) = read_string_path(value, &["organization_type"]) {
+            if raw == "raven" {
+                let plan = if enterprise { "Enterprise" } else { "Team" }.to_string();
+                return (Some(plan), Some(raw));
+            }
+            if let Some(plan) = normalize_desktop_plan_value(Some(raw.clone())) {
+                return refine_desktop_max_plan((plan, Some(raw)), &sources);
+            }
+        }
+    }
+
+    if let Some(plan) = cap_plan {
+        return (Some(plan), None);
+    }
+
+    for value in sources.into_iter().flatten() {
+        if let Some(raw) = read_string_path(value, &["rate_limit_tier"]) {
+            if let Some(plan) = normalize_desktop_plan_value(Some(raw.clone())) {
+                return (Some(plan), Some(raw));
+            }
+        }
+    }
+
+    (None, None)
 }

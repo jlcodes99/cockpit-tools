@@ -1561,103 +1561,94 @@ fn normalize_desktop_usage_percentage(value: f64) -> i32 {
     clamp_percentage(Some(scaled))
 }
 
-/// Claude Web 近期 `/api/organizations/:org/usage` 返回 `limits[]`，
-/// 不再只返回 five_hour / seven_day 这些固定字段。按官方客户端
-/// `plan-usage` 的 schema 将 session、weekly 以及 extra_usage 映射到
-/// 现有账号模型，同时保留原始响应便于后续扩展。
-fn official_usage_limits_to_quota(raw: &Value) -> Option<ClaudeQuota> {
-    let limits = raw.get("limits").and_then(Value::as_array)?;
-    let mut five_hour_percentage = None;
-    let mut five_hour_reset_time = None;
-    let mut seven_day_percentage = None;
-    let mut seven_day_reset_time = None;
-    let mut seven_day_sonnet_percentage = None;
-    let mut seven_day_sonnet_reset_time = None;
+#[derive(Default)]
+struct ParsedUsageLimits {
+    five_hour_percentage: Option<i32>,
+    five_hour_reset_time: Option<i64>,
+    seven_day_percentage: Option<i32>,
+    seven_day_reset_time: Option<i64>,
+    seven_day_sonnet_percentage: Option<i32>,
+    seven_day_sonnet_reset_time: Option<i64>,
+    has_limits_array: bool,
+}
+
+/// Claude Web 近期 `/api/organizations/:org/usage` 与 `/api/oauth/usage` 会返回 `limits[]`
+/// （常用于下发 `weekly_scoped` 模型专属限额，如 Fable / Opus / Sonnet，同时保留顶层
+/// `five_hour` / `seven_day` 汇总窗口）。仅提取无 surface 限定且作用域匹配的窗口，并与
+/// 顶层字段合并，避免子模型限额覆盖全模型周限额或丢弃顶层 5 小时窗口。
+fn parse_official_usage_limits(raw: &Value) -> ParsedUsageLimits {
+    let Some(limits) = raw.get("limits").and_then(Value::as_array) else {
+        return ParsedUsageLimits::default();
+    };
+    let mut parsed = ParsedUsageLimits {
+        has_limits_array: true,
+        ..ParsedUsageLimits::default()
+    };
 
     for limit in limits {
         let Some(object) = limit.as_object() else {
             continue;
         };
+        let scope = object.get("scope").and_then(Value::as_object);
+        // Surface-scoped sub-limits (e.g. claude_code) must not overwrite account-wide windows.
+        if scope
+            .and_then(|s| s.get("surface"))
+            .is_some_and(|v| !v.is_null())
+        {
+            continue;
+        }
+
+        let Some(percent_raw) = read_f64_value(object.get("percent")) else {
+            continue;
+        };
+        if !percent_raw.is_finite() || percent_raw < 0.0 {
+            continue;
+        }
+        // `limits[].percent` is always on a 0..100 percentage scale.
+        let percent = clamp_percentage(Some(percent_raw));
+        let reset_time = parse_reset_seconds(object.get("resets_at"));
+
         let kind = object
             .get("kind")
-            .and_then(|value| value.as_str())
+            .and_then(Value::as_str)
             .unwrap_or_default()
             .to_ascii_lowercase();
         let group = object
             .get("group")
-            .and_then(|value| value.as_str())
+            .and_then(Value::as_str)
             .unwrap_or_default()
             .to_ascii_lowercase();
-        let percent = read_f64_value(object.get("percent"));
-        let reset_time = parse_reset_seconds(object.get("resets_at"));
-        let product_name = object
-            .get("scope")
-            .and_then(|scope| scope.as_object())
-            .and_then(|scope| scope.get("model").or_else(|| scope.get("surface")))
-            .and_then(|model| model.get("display_name"))
-            .and_then(|value| value.as_str())
+        let model_obj = scope
+            .and_then(|s| s.get("model"))
+            .filter(|v| !v.is_null());
+        let has_model_scope = model_obj.is_some();
+        let model_name = model_obj
+            .and_then(|model| model.get("display_name").or_else(|| model.get("id")))
+            .and_then(Value::as_str)
             .unwrap_or_default()
             .to_ascii_lowercase();
 
-        if kind == "session" || group == "session" {
-            if five_hour_percentage.is_none() {
-                five_hour_percentage = percent.map(normalize_desktop_usage_percentage);
-                five_hour_reset_time = reset_time;
+        if (kind == "session" || group == "session") && !has_model_scope {
+            if parsed.five_hour_percentage.is_none() {
+                parsed.five_hour_percentage = Some(percent);
+                parsed.five_hour_reset_time = reset_time;
             }
-        } else if group == "weekly" || kind == "weekly" {
-            if product_name.contains("sonnet") {
-                if seven_day_sonnet_percentage.is_none() {
-                    seven_day_sonnet_percentage = percent.map(normalize_desktop_usage_percentage);
-                    seven_day_sonnet_reset_time = reset_time;
+        } else if group == "weekly" || kind == "weekly" || kind == "weekly_scoped" {
+            if model_name.contains("sonnet") {
+                if parsed.seven_day_sonnet_percentage.is_none() {
+                    parsed.seven_day_sonnet_percentage = Some(percent);
+                    parsed.seven_day_sonnet_reset_time = reset_time;
                 }
-            } else if seven_day_percentage.is_none() {
-                seven_day_percentage = percent.map(normalize_desktop_usage_percentage);
-                seven_day_reset_time = reset_time;
+            } else if !has_model_scope && kind != "weekly_scoped" {
+                if parsed.seven_day_percentage.is_none() {
+                    parsed.seven_day_percentage = Some(percent);
+                    parsed.seven_day_reset_time = reset_time;
+                }
             }
         }
     }
 
-    let extra_usage = raw.get("extra_usage");
-    let extra_enabled = read_bool_value(extra_usage.and_then(|value| value.get("is_enabled")))
-        .unwrap_or(extra_usage.is_some());
-    let has_window = five_hour_percentage.is_some()
-        || seven_day_percentage.is_some()
-        || seven_day_sonnet_percentage.is_some();
-    if !has_window && !extra_enabled {
-        return None;
-    }
-
-    Some(ClaudeQuota {
-        five_hour_percentage: five_hour_percentage.unwrap_or(0),
-        five_hour_reset_time,
-        seven_day_percentage: seven_day_percentage.unwrap_or(0),
-        seven_day_reset_time,
-        seven_day_sonnet_percentage,
-        seven_day_sonnet_reset_time,
-        extra_usage_percentage: extra_enabled.then(|| {
-            read_f64_value(extra_usage.and_then(|value| value.get("utilization")))
-                .map(normalize_desktop_usage_percentage)
-                .unwrap_or(0)
-        }),
-        extra_usage_reset_time: parse_reset_seconds(
-            extra_usage.and_then(|value| value.get("resets_at")),
-        ),
-        extra_usage_used_cents: first_i64_path_candidates(
-            Some(raw),
-            &[
-                &["extra_usage", "used_credits"],
-                &["extra_usage", "used_cents"],
-            ],
-        ),
-        extra_usage_limit_cents: first_i64_path_candidates(
-            Some(raw),
-            &[
-                &["extra_usage", "monthly_limit"],
-                &["extra_usage", "limit_cents"],
-            ],
-        ),
-        raw_data: Some(raw.clone()),
-    })
+    parsed
 }
 
 fn quota_matches(left: &ClaudeQuota, right: &ClaudeQuota) -> bool {
@@ -1839,212 +1830,134 @@ fn slim_web_profile_for_storage(profile: &Value) -> Value {
     Value::Object(slim)
 }
 
+fn resolve_usage_percentage_from_candidates(
+    root: &Value,
+    direct_percentage_paths: &[&[&str]],
+    legacy_ratio_paths: &[&[&str]],
+) -> Option<i32> {
+    if let Some(val) = first_f64_path_candidates(Some(root), direct_percentage_paths) {
+        return Some(clamp_percentage(Some(val)));
+    }
+    first_f64_path_candidates(Some(root), legacy_ratio_paths).map(normalize_desktop_usage_percentage)
+}
+
 fn desktop_web_usage_to_quota(profile: &Value) -> Option<ClaudeQuota> {
     let usage_root = profile
         .get("endpoints")
         .and_then(|value| value.get("organizationUsage"))
         .unwrap_or(profile);
-    if let Some(quota) = official_usage_limits_to_quota(usage_root) {
-        return Some(quota);
-    }
+    let limits_parsed = parse_official_usage_limits(usage_root);
 
-    let five_hour = first_f64_path_candidates(
-        Some(profile),
+    let top_five_hour = resolve_usage_percentage_from_candidates(
+        usage_root,
         &[
-            &["endpoints", "organizationUsage", "five_hour", "utilization"],
-            &["endpoints", "organizationUsage", "five_hour", "percentage"],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "five_hour",
-                "percent_used",
-            ],
-            &["endpoints", "organizationUsage", "fiveHour", "utilization"],
-            &["endpoints", "organizationUsage", "fiveHour", "percentage"],
-            &["endpoints", "organizationUsage", "fiveHour", "percentUsed"],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "usage",
-                "five_hour",
-                "utilization",
-            ],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "usage",
-                "fiveHour",
-                "utilization",
-            ],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "limits",
-                "five_hour",
-                "utilization",
-            ],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "limits",
-                "fiveHour",
-                "utilization",
-            ],
-            &["endpoints", "organizationUsage", "five_hour_percentage"],
-            &["endpoints", "organizationUsage", "fiveHourPercentage"],
-            &["endpoints", "organizationUsage", "five_hour_utilization"],
-            &["endpoints", "organizationUsage", "fiveHourUtilization"],
-            &["endpoints", "organizationUsage", "five_hour_percent_used"],
-            &["endpoints", "organizationUsage", "fiveHourPercentUsed"],
+            &["five_hour", "utilization"],
+            &["five_hour", "percentage"],
+            &["usage", "five_hour", "utilization"],
+            &["limits", "five_hour", "utilization"],
+            &["five_hour_percentage"],
+            &["five_hour_utilization"],
+        ],
+        &[
+            &["five_hour", "percent_used"],
+            &["fiveHour", "utilization"],
+            &["fiveHour", "percentage"],
+            &["fiveHour", "percentUsed"],
+            &["usage", "fiveHour", "utilization"],
+            &["limits", "fiveHour", "utilization"],
+            &["fiveHourPercentage"],
+            &["fiveHourUtilization"],
+            &["five_hour_percent_used"],
+            &["fiveHourPercentUsed"],
         ],
     );
-    let seven_day = first_f64_path_candidates(
-        Some(profile),
+    let top_seven_day = resolve_usage_percentage_from_candidates(
+        usage_root,
         &[
-            &["endpoints", "organizationUsage", "seven_day", "utilization"],
-            &["endpoints", "organizationUsage", "seven_day", "percentage"],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "seven_day",
-                "percent_used",
-            ],
-            &["endpoints", "organizationUsage", "sevenDay", "utilization"],
-            &["endpoints", "organizationUsage", "sevenDay", "percentage"],
-            &["endpoints", "organizationUsage", "sevenDay", "percentUsed"],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "usage",
-                "seven_day",
-                "utilization",
-            ],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "usage",
-                "sevenDay",
-                "utilization",
-            ],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "limits",
-                "seven_day",
-                "utilization",
-            ],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "limits",
-                "sevenDay",
-                "utilization",
-            ],
-            &["endpoints", "organizationUsage", "seven_day_percentage"],
-            &["endpoints", "organizationUsage", "sevenDayPercentage"],
-            &["endpoints", "organizationUsage", "seven_day_utilization"],
-            &["endpoints", "organizationUsage", "sevenDayUtilization"],
-            &["endpoints", "organizationUsage", "seven_day_percent_used"],
-            &["endpoints", "organizationUsage", "sevenDayPercentUsed"],
+            &["seven_day", "utilization"],
+            &["seven_day", "percentage"],
+            &["usage", "seven_day", "utilization"],
+            &["limits", "seven_day", "utilization"],
+            &["seven_day_percentage"],
+            &["seven_day_utilization"],
+        ],
+        &[
+            &["seven_day", "percent_used"],
+            &["sevenDay", "utilization"],
+            &["sevenDay", "percentage"],
+            &["sevenDay", "percentUsed"],
+            &["usage", "sevenDay", "utilization"],
+            &["limits", "sevenDay", "utilization"],
+            &["sevenDayPercentage"],
+            &["sevenDayUtilization"],
+            &["seven_day_percent_used"],
+            &["sevenDayPercentUsed"],
         ],
     );
-    let seven_day_sonnet = first_f64_path_candidates(
-        Some(profile),
+    let top_seven_day_sonnet = resolve_usage_percentage_from_candidates(
+        usage_root,
         &[
-            &[
-                "endpoints",
-                "organizationUsage",
-                "seven_day_sonnet",
-                "utilization",
-            ],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "seven_day_sonnet",
-                "percentage",
-            ],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "seven_day_sonnet",
-                "percent_used",
-            ],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "sevenDaySonnet",
-                "utilization",
-            ],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "sevenDaySonnet",
-                "percentage",
-            ],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "sevenDaySonnet",
-                "percentUsed",
-            ],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "seven_day_sonnet_percentage",
-            ],
-            &["endpoints", "organizationUsage", "sevenDaySonnetPercentage"],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "seven_day_sonnet_utilization",
-            ],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "sevenDaySonnetUtilization",
-            ],
+            &["seven_day_sonnet", "utilization"],
+            &["seven_day_sonnet", "percentage"],
+            &["seven_day_sonnet_percentage"],
+            &["seven_day_sonnet_utilization"],
+        ],
+        &[
+            &["seven_day_sonnet", "percent_used"],
+            &["sevenDaySonnet", "utilization"],
+            &["sevenDaySonnet", "percentage"],
+            &["sevenDaySonnet", "percentUsed"],
+            &["sevenDaySonnetPercentage"],
+            &["sevenDaySonnetUtilization"],
         ],
     );
-    if five_hour.is_none() && seven_day.is_none() && seven_day_sonnet.is_none() {
-        return None;
-    }
 
-    let extra_usage = first_f64_path_candidates(
-        Some(profile),
+    let five_hour = limits_parsed.five_hour_percentage.or(top_five_hour);
+    let seven_day = limits_parsed.seven_day_percentage.or(top_seven_day);
+    let seven_day_sonnet = limits_parsed
+        .seven_day_sonnet_percentage
+        .or(top_seven_day_sonnet);
+
+    let extra_usage_pct = first_f64_path_candidates(
+        Some(usage_root),
         &[
-            &[
-                "endpoints",
-                "organizationUsage",
-                "extra_usage",
-                "utilization",
-            ],
-            &[
-                "endpoints",
-                "organizationUsage",
-                "extraUsage",
-                "utilization",
-            ],
-            &["endpoints", "organizationUsage", "extra_usage_percentage"],
-            &["endpoints", "organizationUsage", "extraUsagePercentage"],
-            &["endpoints", "overageSpendLimit", "utilization"],
-            &["endpoints", "overageSpendLimit", "percentage"],
-            &["endpoints", "overageSpendLimit", "percent_used"],
-            &["endpoints", "overageSpendLimit", "percentUsed"],
+            &["extra_usage", "utilization"],
+            &["extra_usage_percentage"],
         ],
-    );
+    )
+    .map(|val| clamp_percentage(Some(val)))
+    .or_else(|| {
+        first_f64_path_candidates(
+            Some(usage_root),
+            &[
+                &["extraUsage", "utilization"],
+                &["extraUsagePercentage"],
+            ],
+        )
+        .map(normalize_desktop_usage_percentage)
+    })
+    .or_else(|| {
+        first_f64_path_candidates(
+            Some(profile),
+            &[
+                &["endpoints", "overageSpendLimit", "utilization"],
+                &["endpoints", "overageSpendLimit", "percentage"],
+                &["endpoints", "overageSpendLimit", "percent_used"],
+                &["endpoints", "overageSpendLimit", "percentUsed"],
+            ],
+        )
+        .map(normalize_desktop_usage_percentage)
+    });
+
     let extra_enabled = read_bool_value(
-        profile
-            .get("endpoints")
-            .and_then(|value| value.get("organizationUsage"))
-            .and_then(|value| value.get("extra_usage"))
+        usage_root
+            .get("extra_usage")
             .and_then(|value| value.get("is_enabled")),
     )
     .or_else(|| {
         read_bool_value(
-            profile
-                .get("endpoints")
-                .and_then(|value| value.get("organizationUsage"))
-                .and_then(|value| value.get("extraUsage"))
+            usage_root
+                .get("extraUsage")
                 .and_then(|value| value.get("isEnabled")),
         )
     })
@@ -2056,137 +1969,166 @@ fn desktop_web_usage_to_quota(profile: &Value) -> Option<ClaudeQuota> {
                 .and_then(|value| value.get("is_enabled")),
         )
     })
-    .unwrap_or(extra_usage.is_some());
+    .unwrap_or(extra_usage_pct.is_some() || usage_root.get("extra_usage").is_some());
+
+    let has_window = five_hour.is_some() || seven_day.is_some() || seven_day_sonnet.is_some();
+    if !has_window && !(limits_parsed.has_limits_array && extra_enabled) {
+        return None;
+    }
+
+    let top_five_hour_reset = first_reset_path_candidates(
+        Some(usage_root),
+        &[
+            &["five_hour", "resets_at"],
+            &["five_hour", "reset_at"],
+            &["fiveHour", "resetsAt"],
+            &["fiveHour", "resetAt"],
+            &["five_hour_reset_time"],
+            &["fiveHourResetTime"],
+        ],
+    );
+    let top_seven_day_reset = first_reset_path_candidates(
+        Some(usage_root),
+        &[
+            &["seven_day", "resets_at"],
+            &["seven_day", "reset_at"],
+            &["sevenDay", "resetsAt"],
+            &["sevenDay", "resetAt"],
+            &["seven_day_reset_time"],
+            &["sevenDayResetTime"],
+        ],
+    );
+    let top_seven_day_sonnet_reset = first_reset_path_candidates(
+        Some(usage_root),
+        &[
+            &["seven_day_sonnet", "resets_at"],
+            &["seven_day_sonnet", "reset_at"],
+            &["sevenDaySonnet", "resetsAt"],
+            &["sevenDaySonnet", "resetAt"],
+            &["seven_day_sonnet_reset_time"],
+            &["sevenDaySonnetResetTime"],
+        ],
+    );
 
     let endpoints = profile.get("endpoints");
     Some(ClaudeQuota {
-        five_hour_percentage: five_hour
-            .map(normalize_desktop_usage_percentage)
-            .unwrap_or(0),
-        five_hour_reset_time: first_reset_path_candidates(
-            Some(profile),
-            &[
-                &["endpoints", "organizationUsage", "five_hour", "resets_at"],
-                &["endpoints", "organizationUsage", "five_hour", "reset_at"],
-                &["endpoints", "organizationUsage", "fiveHour", "resetsAt"],
-                &["endpoints", "organizationUsage", "fiveHour", "resetAt"],
-                &["endpoints", "organizationUsage", "five_hour_reset_time"],
-                &["endpoints", "organizationUsage", "fiveHourResetTime"],
-            ],
-        ),
-        seven_day_percentage: seven_day
-            .map(normalize_desktop_usage_percentage)
-            .unwrap_or(0),
-        seven_day_reset_time: first_reset_path_candidates(
-            Some(profile),
-            &[
-                &["endpoints", "organizationUsage", "seven_day", "resets_at"],
-                &["endpoints", "organizationUsage", "seven_day", "reset_at"],
-                &["endpoints", "organizationUsage", "sevenDay", "resetsAt"],
-                &["endpoints", "organizationUsage", "sevenDay", "resetAt"],
-                &["endpoints", "organizationUsage", "seven_day_reset_time"],
-                &["endpoints", "organizationUsage", "sevenDayResetTime"],
-            ],
-        ),
-        seven_day_sonnet_percentage: seven_day_sonnet.map(normalize_desktop_usage_percentage),
-        seven_day_sonnet_reset_time: first_reset_path_candidates(
-            Some(profile),
-            &[
-                &[
-                    "endpoints",
-                    "organizationUsage",
-                    "seven_day_sonnet",
-                    "resets_at",
-                ],
-                &[
-                    "endpoints",
-                    "organizationUsage",
-                    "seven_day_sonnet",
-                    "reset_at",
-                ],
-                &[
-                    "endpoints",
-                    "organizationUsage",
-                    "sevenDaySonnet",
-                    "resetsAt",
-                ],
-                &[
-                    "endpoints",
-                    "organizationUsage",
-                    "sevenDaySonnet",
-                    "resetAt",
-                ],
-                &[
-                    "endpoints",
-                    "organizationUsage",
-                    "seven_day_sonnet_reset_time",
-                ],
-                &["endpoints", "organizationUsage", "sevenDaySonnetResetTime"],
-            ],
-        ),
-        extra_usage_percentage: extra_enabled.then(|| {
-            extra_usage
-                .map(normalize_desktop_usage_percentage)
-                .unwrap_or(0)
-        }),
+        five_hour_percentage: five_hour.unwrap_or(0),
+        five_hour_reset_time: if limits_parsed.five_hour_percentage.is_some() {
+            limits_parsed.five_hour_reset_time.or(top_five_hour_reset)
+        } else {
+            top_five_hour_reset
+        },
+        seven_day_percentage: seven_day.unwrap_or(0),
+        seven_day_reset_time: if limits_parsed.seven_day_percentage.is_some() {
+            limits_parsed.seven_day_reset_time.or(top_seven_day_reset)
+        } else {
+            top_seven_day_reset
+        },
+        seven_day_sonnet_percentage: seven_day_sonnet,
+        seven_day_sonnet_reset_time: if limits_parsed.seven_day_sonnet_percentage.is_some() {
+            limits_parsed.seven_day_sonnet_reset_time
+        } else {
+            top_seven_day_sonnet_reset
+        },
+        extra_usage_percentage: extra_enabled.then(|| extra_usage_pct.unwrap_or(0)),
         extra_usage_reset_time: first_reset_path_candidates(
-            Some(profile),
+            Some(usage_root),
             &[
-                &["endpoints", "organizationUsage", "extra_usage", "resets_at"],
-                &["endpoints", "organizationUsage", "extraUsage", "resetsAt"],
-                &["endpoints", "overageSpendLimit", "resets_at"],
-                &["endpoints", "overageSpendLimit", "resetsAt"],
+                &["extra_usage", "resets_at"],
+                &["extraUsage", "resetsAt"],
             ],
-        ),
+        )
+        .or_else(|| {
+            first_reset_path_candidates(
+                Some(profile),
+                &[
+                    &["endpoints", "overageSpendLimit", "resets_at"],
+                    &["endpoints", "overageSpendLimit", "resetsAt"],
+                ],
+            )
+        }),
         extra_usage_used_cents: first_i64_path_candidates(
-            Some(profile),
+            Some(usage_root),
             &[
-                &[
-                    "endpoints",
-                    "organizationUsage",
-                    "extra_usage",
-                    "used_credits",
-                ],
-                &[
-                    "endpoints",
-                    "organizationUsage",
-                    "extraUsage",
-                    "usedCredits",
-                ],
-                &["endpoints", "overageSpendLimit", "used_credits"],
-                &["endpoints", "overageSpendLimit", "usedCredits"],
-                &["endpoints", "overageSpendLimit", "used_cents"],
-                &["endpoints", "overageSpendLimit", "usedCents"],
+                &["extra_usage", "used_credits"],
+                &["extra_usage", "used_cents"],
+                &["extraUsage", "usedCredits"],
             ],
-        ),
+        )
+        .or_else(|| {
+            first_i64_path_candidates(
+                Some(profile),
+                &[
+                    &["endpoints", "overageSpendLimit", "used_credits"],
+                    &["endpoints", "overageSpendLimit", "usedCredits"],
+                    &["endpoints", "overageSpendLimit", "used_cents"],
+                    &["endpoints", "overageSpendLimit", "usedCents"],
+                ],
+            )
+        }),
         extra_usage_limit_cents: first_i64_path_candidates(
-            Some(profile),
+            Some(usage_root),
             &[
-                &[
-                    "endpoints",
-                    "organizationUsage",
-                    "extra_usage",
-                    "monthly_limit",
-                ],
-                &[
-                    "endpoints",
-                    "organizationUsage",
-                    "extraUsage",
-                    "monthlyLimit",
-                ],
-                &["endpoints", "overageSpendLimit", "monthly_limit"],
-                &["endpoints", "overageSpendLimit", "monthlyLimit"],
-                &["endpoints", "overageSpendLimit", "limit_cents"],
-                &["endpoints", "overageSpendLimit", "limitCents"],
+                &["extra_usage", "monthly_limit"],
+                &["extra_usage", "limit_cents"],
+                &["extraUsage", "monthlyLimit"],
             ],
-        ),
-        raw_data: Some(json!({
-            "source": "claude_desktop_web",
-            "organizationUsage": endpoints.and_then(|value| value.get("organizationUsage")).cloned(),
-            "subscriptionDetails": endpoints.and_then(|value| value.get("subscriptionDetails")).cloned(),
-            "overageSpendLimit": endpoints.and_then(|value| value.get("overageSpendLimit")).cloned(),
-        })),
+        )
+        .or_else(|| {
+            first_i64_path_candidates(
+                Some(profile),
+                &[
+                    &["endpoints", "overageSpendLimit", "monthly_limit"],
+                    &["endpoints", "overageSpendLimit", "monthlyLimit"],
+                    &["endpoints", "overageSpendLimit", "limit_cents"],
+                    &["endpoints", "overageSpendLimit", "limitCents"],
+                ],
+            )
+        }),
+        raw_data: Some(if let Some(endpoints) = endpoints {
+            json!({
+                "source": "claude_desktop_web",
+                "organizationUsage": endpoints.get("organizationUsage").cloned(),
+                "subscriptionDetails": endpoints.get("subscriptionDetails").cloned(),
+                "overageSpendLimit": endpoints.get("overageSpendLimit").cloned(),
+            })
+        } else {
+            usage_root.clone()
+        }),
     })
+}
+
+fn normalize_cached_desktop_plan_from_raw(account: &mut ClaudeAccount) -> bool {
+    if account.auth_mode != ClaudeAuthMode::DesktopOAuth {
+        return false;
+    }
+    let Some(raw) = account.claude_usage_raw.as_ref() else {
+        return false;
+    };
+    let (Some(plan_type), raw_plan) = desktop_plan_from_profile(raw) else {
+        return false;
+    };
+    let mut changed = false;
+    if account.plan_type.as_deref() != Some(plan_type.as_str()) {
+        account.plan_type = Some(plan_type.clone());
+        changed = true;
+    }
+    if let Some(summary) = account
+        .claude_config_raw
+        .as_mut()
+        .and_then(Value::as_object_mut)
+        .and_then(|obj| obj.get_mut("desktopProfile"))
+        .and_then(Value::as_object_mut)
+        .and_then(|obj| obj.get_mut("webProfileSummary"))
+        .and_then(Value::as_object_mut)
+    {
+        if summary.get("planType").and_then(Value::as_str) != Some(plan_type.as_str()) {
+            summary.insert("planType".to_string(), json!(plan_type));
+            summary.insert("rawPlan".to_string(), json!(raw_plan));
+            changed = true;
+        }
+    }
+    changed
 }
 
 fn normalize_cached_desktop_quota_from_raw(account: &mut ClaudeAccount) -> bool {
@@ -3076,6 +3018,7 @@ pub fn update_account_note(account_id: &str, note: Option<&str>) -> Result<Claud
 }
 
 fn usage_to_quota(raw: &Value) -> ClaudeQuota {
+    let limits_parsed = parse_official_usage_limits(raw);
     let five_hour = raw.get("five_hour");
     let seven_day = raw.get("seven_day");
     let seven_day_sonnet = raw
@@ -3089,31 +3032,50 @@ fn usage_to_quota(raw: &Value) -> ClaudeQuota {
         .and_then(|item| item.as_bool())
         .unwrap_or(false);
     let extra_usage_percentage = extra_enabled.then(|| {
-        clamp_percentage(
-            extra_usage
-                .and_then(|item| item.get("utilization"))
-                .and_then(|item| item.as_f64()),
-        )
+        clamp_percentage(read_f64_value(extra_usage.and_then(|item| item.get("utilization"))))
     });
 
+    let top_five_hour = five_hour
+        .and_then(|item| read_f64_value(item.get("utilization")))
+        .map(|val| clamp_percentage(Some(val)));
+    let top_five_hour_reset = parse_reset_seconds(five_hour.and_then(|item| item.get("resets_at")));
+    let top_seven_day = seven_day
+        .and_then(|item| read_f64_value(item.get("utilization")))
+        .map(|val| clamp_percentage(Some(val)));
+    let top_seven_day_reset = parse_reset_seconds(seven_day.and_then(|item| item.get("resets_at")));
+    let top_seven_day_sonnet = seven_day_sonnet
+        .and_then(|item| read_f64_value(item.get("utilization")))
+        .map(|val| clamp_percentage(Some(val)));
+    let top_seven_day_sonnet_reset =
+        parse_reset_seconds(seven_day_sonnet.and_then(|item| item.get("resets_at")));
+
     ClaudeQuota {
-        five_hour_percentage: clamp_percentage(
-            five_hour
-                .and_then(|item| item.get("utilization"))
-                .and_then(|item| item.as_f64()),
-        ),
-        five_hour_reset_time: parse_reset_seconds(five_hour.and_then(|item| item.get("resets_at"))),
-        seven_day_percentage: clamp_percentage(
-            seven_day
-                .and_then(|item| item.get("utilization"))
-                .and_then(|item| item.as_f64()),
-        ),
-        seven_day_reset_time: parse_reset_seconds(seven_day.and_then(|item| item.get("resets_at"))),
-        seven_day_sonnet_percentage: seven_day_sonnet
-            .map(|item| clamp_percentage(item.get("utilization").and_then(|value| value.as_f64()))),
-        seven_day_sonnet_reset_time: parse_reset_seconds(
-            seven_day_sonnet.and_then(|item| item.get("resets_at")),
-        ),
+        five_hour_percentage: limits_parsed
+            .five_hour_percentage
+            .or(top_five_hour)
+            .unwrap_or(0),
+        five_hour_reset_time: if limits_parsed.five_hour_percentage.is_some() {
+            limits_parsed.five_hour_reset_time.or(top_five_hour_reset)
+        } else {
+            top_five_hour_reset
+        },
+        seven_day_percentage: limits_parsed
+            .seven_day_percentage
+            .or(top_seven_day)
+            .unwrap_or(0),
+        seven_day_reset_time: if limits_parsed.seven_day_percentage.is_some() {
+            limits_parsed.seven_day_reset_time.or(top_seven_day_reset)
+        } else {
+            top_seven_day_reset
+        },
+        seven_day_sonnet_percentage: limits_parsed
+            .seven_day_sonnet_percentage
+            .or(top_seven_day_sonnet),
+        seven_day_sonnet_reset_time: if limits_parsed.seven_day_sonnet_percentage.is_some() {
+            limits_parsed.seven_day_sonnet_reset_time
+        } else {
+            top_seven_day_sonnet_reset
+        },
         extra_usage_percentage,
         extra_usage_reset_time: parse_reset_seconds(
             extra_usage.and_then(|item| item.get("resets_at")),
