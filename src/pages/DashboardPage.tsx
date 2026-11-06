@@ -1,3 +1,4 @@
+import { CodexProxyRsUsagePanel } from "../components/codex/CodexProxyRsUsagePanel";
 import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import React, { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -201,12 +202,13 @@ function toFiniteNumber(value: number | null | undefined): number | null {
 
 function resolveDashboardCodexApiUsageMode(
   summary?: ModelProviderUsageSummary | null,
-): 'new_api' | 'sub2api' | 'deepseek' | null {
+): 'new_api' | 'sub2api' | 'deepseek' | 'codex_proxy_rs' | null {
   if (!summary) return null;
   if (
     summary.mode === 'new_api' ||
     summary.mode === 'sub2api' ||
-    summary.mode === 'deepseek'
+    summary.mode === 'deepseek' ||
+    summary.mode === 'codex_proxy_rs'
   ) {
     return summary.mode;
   }
@@ -2520,6 +2522,12 @@ export function DashboardPage({
                     <strong>{deepSeekDetailValue('toppedUpBalance')}</strong>
                   </div>
                 </div>
+              ) : usageMode === 'codex_proxy_rs' ? (
+                <CodexProxyRsUsagePanel
+                  summary={usageSummary}
+                  loading={usageState?.loading}
+                  error={usageState?.error}
+                />
               ) : (
                 <span className="no-data-text">{t('dashboard.noData', '暂无数据')}</span>
               )}

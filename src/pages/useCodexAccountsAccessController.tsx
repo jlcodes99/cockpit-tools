@@ -3050,7 +3050,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           const updatedAt = Date.now();
           if (
             targetProvider &&
-            (summary.mode === "sub2api" || summary.mode === "new_api") &&
+            (summary.mode === "sub2api" || summary.mode === "new_api" || summary.mode === "codex_proxy_rs") &&
             summary.mode !== targetProvider.integrationType
           ) {
             await saveCodexModelProviderDetectedIntegrationType(

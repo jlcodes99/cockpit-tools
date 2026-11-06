@@ -1,3 +1,4 @@
+import { CodexProxyRsUsagePanel } from "./CodexProxyRsUsagePanel";
 import { resolveNewApiQuotaSnapshot } from "../../services/modelProviderUsageService";
 import { OpenAIOfficialUsagePanel } from './OpenAIOfficialUsagePanel';
 import { currentOpenAIUsageState, isOpenAIOfficialUsageUrl } from '../../utils/openaiOfficialUsage';
@@ -448,6 +449,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
               provider.baseUrl
             }`;
             const usageMode =
+              usageSummary?.mode === "codex_proxy_rs" ||
               usageSummary?.mode === "new_api" ||
               usageSummary?.mode === "sub2api" ||
               usageSummary?.mode === "deepseek" ||
@@ -603,7 +605,9 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                   </span>
                 </div>
                 <div className="codex-quota-section">
-                  {isOpenAIOfficialUsageUrl(provider.baseUrl) ? (
+                  {usageMode === "codex_proxy_rs" ? (
+                    <CodexProxyRsUsagePanel summary={usageSummary} loading={usageState?.loading} error={usageState?.error} />
+                  ) : isOpenAIOfficialUsageUrl(provider.baseUrl) ? (
                     <OpenAIOfficialUsagePanel provider={provider} apiKey={primaryApiKey?.apiKey ?? ""} sourceBinding={usageState?.sourceBinding} onRefresh={() => void refreshProviderUsage(provider, primaryApiKey)} summary={usageSummary} loading={usageState?.loading} error={usageState?.error} t={t} />
                   ) : usageMode === "deepseek" ? (
                     <div className="codex-api-key-usage-panel sub2api">
@@ -1994,6 +1998,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
         const usageSummary = usageState?.summary;
         const resolvedWireApi = resolveProviderWireApi(provider);
         const usageMode =
+          usageSummary?.mode === "codex_proxy_rs" ||
           usageSummary?.mode === "openai_official" ||
           usageSummary?.mode === "new_api" ||
           usageSummary?.mode === "sub2api" ||

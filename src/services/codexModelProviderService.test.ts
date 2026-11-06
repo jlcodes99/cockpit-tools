@@ -463,3 +463,15 @@ test('concurrent organization queries share one request while other providers re
   assert.equal(requests[1].usageApiKey, undefined);
   gate.resolve({}); await Promise.all([a, b, relay]);
 });
+
+
+test('codex-proxy-rs integration survives persistence and account reconciliation', async () => {
+  const h = harness();
+  await h.service.saveCodexModelProviderDetectedIntegrationType('provider', 'codex_proxy_rs');
+  h.service.invalidateCodexModelProviderCache();
+  assert.equal((await h.service.listCodexModelProviders())[0].integrationType, 'codex_proxy_rs');
+  await h.service.mergeCodexModelProviderApiKeysFromAccounts([account()]);
+  assert.equal(h.stored()[0].integrationType, 'codex_proxy_rs');
+  assert.equal(h.stored()[0].baseUrl, 'https://relay.example/v1');
+  assert.equal(h.stored()[0].apiKeys[0].apiKey, 'sk-first');
+});

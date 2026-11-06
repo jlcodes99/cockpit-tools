@@ -396,10 +396,11 @@ export function getCockpitApiStatsRecord(
 
 export function resolveApiKeyUsageMode(
   summary?: CodexModelProviderUsageSummary,
-): "new_api" | "sub2api" | "deepseek" | "token_plan" | "openai_official" | "cockpit" | null {
+): "codex_proxy_rs" | "new_api" | "sub2api" | "deepseek" | "token_plan" | "openai_official" | "cockpit" | null {
   if (!summary) return null;
   if (summary.cockpit) return "cockpit";
   if (
+    summary.mode === "codex_proxy_rs" ||
     summary.mode === "new_api" ||
     summary.mode === "sub2api" ||
     summary.mode === "deepseek" ||
@@ -609,7 +610,7 @@ export interface SponsorApiProviderTemplate {
   website: string;
   apiKeyUrl: string;
   wireApi?: "responses" | "chat_completions" | "anthropic" | null;
-  integrationType?: "sub2api" | "new_api" | null;
+  integrationType?: "sub2api" | "new_api" | "codex_proxy_rs" | null;
 }
 
 export function normalizeSponsorApiProviderTemplates(

@@ -2708,6 +2708,16 @@
     "save": "保存分组",
     "other_group": "其他模型"
   },
+  "codexProxyRs": {
+    "todayUsed": "今日已用",
+    "weekUsed": "本周已用",
+    "daily": "每日",
+    "weekly": "每周",
+    "total": "总额度",
+    "used": "已使用",
+    "remaining": "剩余",
+    "noReset": "暂无重置时间"
+  },
   "codex": {
     "overload": {
       "setting": "满载时持续重试",
