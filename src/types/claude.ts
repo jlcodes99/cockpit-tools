@@ -202,26 +202,46 @@ function deriveClaudePlanBadge(account: ClaudeAccount): string {
   const credentialsOauth = asPlainRecord(asPlainRecord(account.claude_credentials_raw)?.claudeAiOauth);
   const profile = asPlainRecord(credentialsOauth?.profile);
 
-  const candidates = [
-    account.plan_type,
+  const rateLimitPlans = [
+    readStringPath(configOauth, ['rateLimitTier']),
+    readStringPath(credentialsOauth, ['rateLimitTier']),
+    readStringPath(profile, ['organization', 'rate_limit_tier']),
+  ]
+    .map((candidate) => normalizeClaudePlanValue(candidate))
+    .filter(Boolean);
+
+  const refineMax = (plan: string): string => {
+    if (plan === 'Max') {
+      const subtier = rateLimitPlans.find((item) => item === 'Max 5x' || item === 'Max 20x');
+      if (subtier) return subtier;
+    }
+    return plan;
+  };
+
+  const explicitCandidates = [
     readStringPath(configOauth, ['subscriptionType']),
     readStringPath(credentialsOauth, ['subscriptionType']),
     readStringPath(configOauth, ['organizationType']),
     readStringPath(profile, ['organization', 'organization_type']),
-    readStringPath(configOauth, ['rateLimitTier']),
-    readStringPath(credentialsOauth, ['rateLimitTier']),
-    readStringPath(profile, ['organization', 'rate_limit_tier']),
   ];
 
-  for (const candidate of candidates) {
+  for (const candidate of explicitCandidates) {
+    const normalized = normalizeClaudePlanValue(candidate);
+    if (normalized && normalized !== 'Free') return refineMax(normalized);
+  }
+
+  if (readBooleanPath(profile, ['account', 'has_claude_max'])) return refineMax('Max');
+  if (readBooleanPath(profile, ['account', 'has_claude_pro'])) return 'Pro';
+
+  const savedPlan = normalizeClaudePlanValue(account.plan_type);
+  if (savedPlan) return refineMax(savedPlan);
+
+  for (const candidate of explicitCandidates) {
     const normalized = normalizeClaudePlanValue(candidate);
     if (normalized) return normalized;
   }
 
-  if (readBooleanPath(profile, ['account', 'has_claude_max'])) return 'Max';
-  if (readBooleanPath(profile, ['account', 'has_claude_pro'])) return 'Pro';
-
-  return '';
+  return rateLimitPlans[0] || '';
 }
 
 export function normalizeClaudeAuthMode(mode?: ClaudeAuthMode | string | null): NormalizedClaudeAuthMode {

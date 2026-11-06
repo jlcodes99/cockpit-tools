@@ -825,6 +825,9 @@ pub fn list_accounts_checked() -> Result<Vec<ClaudeAccount>, String> {
             if slim_claude_account_snapshots(&mut account) {
                 should_save = true;
             }
+            if normalize_cached_desktop_plan_from_raw(&mut account) {
+                should_save = true;
+            }
             if normalize_cached_desktop_quota_from_raw(&mut account) {
                 should_save = true;
             }
