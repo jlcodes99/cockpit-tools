@@ -184,3 +184,33 @@ fn account_project_switch_initializes_legacy_profile_without_extra_files() {
     assert_eq!(actual["local-projects"]["legacy"]["name"], "My project");
     assert_eq!(actual[ASSIGN]["chat"]["projectId"], "legacy");
 }
+
+#[test]
+fn account_project_switch_respects_pending_deletion() {
+    let f = Fixture::new();
+    let mut source = f.local("legacy");
+    source["app-server-pending-project-deletions-by-host"] = json!({
+        format!("local:{}",f.home().display()): {"legacy":{"projectId":"server"}}
+    });
+    f.write(&json!({SCOPES:{"owner":null,"inactive":{
+        "a":{"globals":source,"atoms":{}}
+    }}}));
+    prepare(f.home(), Some("b")).unwrap();
+    let actual = native_start(f.state(), Some("b"));
+    assert!(actual["local-projects"].as_object().is_none_or(|v| v.is_empty()));
+    assert!(actual[ASSIGN].as_object().is_none_or(|v| v.is_empty()));
+}
+
+#[test]
+fn account_project_switch_does_not_copy_groups_to_another_profile() {
+    let source = Fixture::new();
+    let other = Fixture::new();
+    let source_globals = source.local("legacy");
+    other.write(&json!({SCOPES:{"owner":null,"inactive":{
+        "a":{"globals":source_globals,"atoms":{}}
+    }}}));
+    prepare(other.home(), Some("b")).unwrap();
+    let actual = native_start(other.state(), Some("b"));
+    assert!(actual["local-projects"].get("legacy").is_none());
+    assert_eq!(actual["local-projects"]["server"]["rootPaths"], json!([other.root]));
+}

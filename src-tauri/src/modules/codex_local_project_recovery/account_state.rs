@@ -73,14 +73,17 @@ fn local_view(
             || blocked.contains(&project.id)
         { continue; }
         let mut candidates = Vec::new();
+        let mut ambiguous = false;
         for source in sources {
             let matches: Vec<_> = object(&source["local-projects"]).into_iter()
                 .filter(|(id, p)| !cloud(p) && root_set(&p["rootPaths"]) == roots
                     && source[MAP][&host].get(id).is_none_or(|v| v.as_str() == Some(&project.id)))
                 .collect();
             // Do not guess between duplicate aliases inside the same account.
-            if matches.len() == 1 { candidates.extend(matches); }
+            if matches.len() > 1 { ambiguous = true; break; }
+            candidates.extend(matches);
         }
+        if ambiguous { continue; }
         let (legacy, entry) = candidates.first().cloned().unwrap_or_else(|| {
             (project.id.clone(), json!({"id":project.id,"name":project.name,
                 "rootPaths":project.roots,"createdAt":project.created,"updatedAt":project.updated}))
@@ -189,6 +192,12 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
     }
     let mut sources = vec![target["globals"].clone(), scoped_globals(&before)];
     sources.extend(object(&scopes["inactive"]).into_values().map(|scope| scope["globals"].clone()));
+    for source in &sources {
+        if ["local-projects", MAP, ASSIGN, HOSTS].iter()
+            .any(|key| source.get(*key).is_some_and(|v| !v.is_object()))
+            || source.get("project-order").is_some_and(|v| !v.is_array())
+        { return Err("CODEX_PROJECT_ACCOUNT_STATE_UNSUPPORTED".into()); }
+    }
     let Some(primary) = project_database(home)? else { return Ok(false); };
     let db = open(&home.join(primary), false)?;
     db.execute_batch("BEGIN").map_err(|e| e.to_string())?;
