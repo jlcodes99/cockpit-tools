@@ -112,6 +112,15 @@ fn provider_gateway_profile_port(profile_dir: &Path, account_id: &str) -> Result
         .expect("new provider gateway state must have a port"))
 }
 
+// Windows may reserve a previously persisted port after an OS/VM restart.
+// WSAEACCES is an unavailable port, not evidence that the port can be reused.
+fn provider_gateway_port_probe_allows_reuse(probe: Result<bool, std::io::Error>) -> bool {
+    match probe {
+        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => false,
+        other => other.unwrap_or(true),
+    }
+}
+
 /// 持久端口是否已被本进程之外的进程占用。
 ///
 /// 端口不可绑定、且本进程没有在该端口上托管 sidecar 时，说明它已被其它实例的网关或
@@ -127,7 +136,10 @@ async fn provider_gateway_profile_port_occupied_by_others(
     let Some(port) = state.port.filter(|port| *port > 0) else {
         return false;
     };
-    if is_local_access_port_bindable(CODEX_LOCAL_ACCESS_LOCALHOST_BIND_HOST, port).unwrap_or(true) {
+    if provider_gateway_port_probe_allows_reuse(is_local_access_port_bindable(
+        CODEX_LOCAL_ACCESS_LOCALHOST_BIND_HOST,
+        port,
+    )) {
         return false;
     }
 
@@ -150,7 +162,7 @@ async fn release_occupied_provider_gateway_profile_port(profile_dir: &Path, runt
         return;
     }
     logger::log_codex_api_warn(&format!(
-        "[CodexLocalAccess][provider-gateway] 持久端口已被其它进程占用，放弃该端口并重新分配: profile={}, runtime_id={}",
+        "[CodexLocalAccess][provider-gateway] 持久端口不可绑定（被占用或被系统拒绝），放弃该端口并重新分配: profile={}, runtime_id={}",
         profile_dir.display(),
         runtime_id
     ));
