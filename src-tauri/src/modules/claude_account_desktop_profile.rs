@@ -1689,6 +1689,8 @@ fn backup_current_desktop_profile(target_dir: &Path) -> Result<Option<PathBuf>, 
 const CLAUDE_DESKTOP_LOCK_SENSITIVE_PATHS: &[&str] = &[
     "Network/Cookies",
     "Network/Cookies-journal",
+    "Cookies",
+    "Cookies-journal",
     "Local Storage/leveldb/LOCK",
     "Session Storage/LOCK",
 ];
