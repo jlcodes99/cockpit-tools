@@ -46,7 +46,7 @@ fn remote_client_model_catalog(
         .api_keys
         .iter()
         .find(|entry| entry.key.trim() == key.trim());
-    native_apply_profile_catalog_tool_capabilities(
+    native_apply_profile_catalog_capabilities(
         &mut catalog,
         collection,
         resolved_key,

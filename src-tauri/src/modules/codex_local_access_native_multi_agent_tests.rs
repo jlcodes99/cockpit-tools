@@ -232,6 +232,7 @@ async fn multi_agent_policy_does_not_reject_independent_image_source_pool() {
         .lock()
         .unwrap_or_else(|error| error.into_inner());
     let mut collection = new_empty_local_access_collection().unwrap();
+    collection.image_generation_model = "gpt-image-2.5".into();
     collection.enabled = true;
     collection.account_ids = vec!["conversation".into()];
     collection.image_generation_account_ids = vec!["image".into()];

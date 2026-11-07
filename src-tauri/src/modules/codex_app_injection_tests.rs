@@ -98,7 +98,7 @@ fn deepseek_script_controls_official_picker_and_returns_pending_model() {
     assert!(script.contains("supportedReasoningEfforts = levels"));
     assert!(script.contains("applyVisionMetadata"));
     assert!(script.contains("item.input_modalities = modalities"));
-    assert!(script.contains("item.supports_image_detail_original = supportsImage"));
+    assert!(script.contains("item.supports_image_detail_original = false"));
     assert!(script.contains("\"vision\":true"));
     // 模型列表判定必须严格，否则会把队列/线程等 data 数组当成模型列表改写。
     assert!(script.contains("typeof item.slug !== \"string\""));

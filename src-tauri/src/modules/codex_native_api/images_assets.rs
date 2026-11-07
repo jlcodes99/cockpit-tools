@@ -366,6 +366,8 @@ pub(super) async fn normalize_output(
     let mime = match response.get("output_format").and_then(Value::as_str) {
         Some("jpeg" | "jpg") => "image/jpeg",
         Some("webp") => "image/webp",
+        Some("svg") => "image/svg+xml",
+        Some("gif") => "image/gif",
         _ => "image/png",
     };
     let items = response

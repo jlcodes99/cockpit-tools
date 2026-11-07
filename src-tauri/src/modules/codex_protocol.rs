@@ -333,9 +333,9 @@ fn managed_codex_model_ids_from_catalog(catalog: &Value) -> Vec<String> {
         .map(str::to_string)
         .collect::<Vec<_>>();
 
-    // 官方推荐集把 GPT-6 家族排在最前，顺序固定为 6.1 Sol → Astra → Sol → Luna；
+    // 官方推荐集把 GPT-6 家族排在最前，顺序为 6.1 Sol → Astra → 6.1 Terra → Sol → Luna；
     // 只移动已存在的条目，不插入目录里没有的模型。
-    for (offset, model_id) in ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"]
+    for (offset, model_id) in ["gpt-6.1-sol", "gpt-6-astra", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna"]
         .iter()
         .enumerate()
     {
@@ -737,20 +737,6 @@ fn codex_client_model_template(model_id: &str) -> (Value, bool) {
             .is_some_and(|slug| slug.eq_ignore_ascii_case(model_id))
     }) {
         return (model.clone(), true);
-    }
-
-    // Keep Luna's client capabilities and Fast tier, but include Terra's Ultra
-    // reasoning level until the bundled official catalog includes Terra.
-    if model_id.eq_ignore_ascii_case("gpt-6.1-terra") {
-        if let Some(luna) = models.iter().find(|model| model["slug"] == "gpt-6-luna") {
-            let mut terra = luna.clone();
-            terra["slug"] = json!("gpt-6.1-terra");
-            terra["display_name"] = json!("GPT-6.1 Terra");
-            terra["description"] = json!("GPT-6.1 Terra");
-            terra["supported_reasoning_levels"] =
-                codex_client_model_template("gpt-6-sol").0["supported_reasoning_levels"].clone();
-            return (terra, true);
-        }
     }
 
     if model_id.eq_ignore_ascii_case(CODEX_RESERVE_MODEL_ID) {
@@ -2283,6 +2269,7 @@ mod tests {
             vec![
                 "gpt-6.1-sol",
                 "gpt-6-astra",
+                "gpt-6.1-terra",
                 "gpt-6-sol",
                 "gpt-6-luna",
                 "gpt-5.6-sol",
@@ -2505,8 +2492,8 @@ mod tests {
     #[test]
     fn gpt_6_sol_and_luna_preserve_official_catalog_limits_and_reasoning_levels() {
         for (slug, official_name, fallback_name, priority, supports_ultra) in [
-            ("gpt-6-sol", "GPT-6 Sol", "GPT-6 Sol", 2, true),
-            ("gpt-6-luna", "GPT-6 Luna", "GPT-6 Luna", 3, false),
+            ("gpt-6-sol", "GPT-6 Sol", "GPT-6 Sol", 3, true),
+            ("gpt-6-luna", "GPT-6 Luna", "GPT-6 Luna", 4, false),
         ] {
             let response = build_codex_client_models_response(&[slug.to_string()]);
             let model = response
@@ -2639,6 +2626,9 @@ mod tests {
             "gpt-5.6-luna",
             "gpt-6.1-sol",
             "gpt-6-astra",
+            "gpt-6.1-terra",
+            "gpt-6-sol",
+            "gpt-6-luna",
         ]
         .map(str::to_string);
         let response = build_codex_client_models_response(&model_ids);
@@ -2652,7 +2642,7 @@ mod tests {
 
         assert_eq!(
             priorities,
-            vec![Some(4), Some(7), Some(8), Some(0), Some(1)]
+            vec![Some(5), Some(7), Some(8), Some(0), Some(1), Some(2), Some(3), Some(4)]
         );
     }
 

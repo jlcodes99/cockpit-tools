@@ -1173,11 +1173,12 @@ export function PlatformLayoutModal({
           )}
           <div className="platform-layout-summary">
             <span>
-              {t('platformLayout.sidebarSelected', {
-                count: sidebarSelectedCount,
-                max: sidebarSelectionLimit,
-                defaultValue: '侧边栏已选择 {{count}}/{{max}}',
-              })}
+              {sidebarSelectedCount > sidebarSelectionLimit
+                ? t('platformLayout.sidebarSelectedUnlimited', { count: sidebarSelectedCount })
+                : t('platformLayout.sidebarSelected', {
+                  count: sidebarSelectedCount,
+                  max: sidebarSelectionLimit,
+                })}
             </span>
             <div className="platform-layout-summary-actions">
               <button className="btn btn-secondary" onClick={openCreateGroupEditor}>
@@ -1220,7 +1221,7 @@ export function PlatformLayoutModal({
             </div>
             <div className="platform-layout-bulk-header-right">
               {/* 与行内控制区列顺序保持一致：启用 → 侧边栏 → 仪表盘 → 菜单栏 */}
-              <div className="platform-layout-bulk-cell platform-layout-bulk-enable">
+              <div className="platform-layout-bulk-cell">
                 <label className="platform-layout-bulk-toggle" title={t('platformLayout.disabledHint', '禁用后该平台的所有自动活动将停止')}>
                   <input
                     type="checkbox"
@@ -1229,14 +1230,6 @@ export function PlatformLayoutModal({
                   />
                   <span>{t('platformLayout.enabledToggle', '启用')}</span>
                 </label>
-                <div className="platform-layout-bulk-enable-actions">
-                  <button type="button" className="btn btn-link" onClick={() => handleBulkEnable(true)}>
-                    {t('platformLayout.enableAll', '全启')}
-                  </button>
-                  <button type="button" className="btn btn-link" onClick={() => handleBulkEnable(false)}>
-                    {t('platformLayout.disableAll', '全禁')}
-                  </button>
-                </div>
               </div>
               <div className="platform-layout-bulk-cell">
                 <label className="platform-layout-bulk-toggle">
@@ -1399,6 +1392,12 @@ export function PlatformLayoutModal({
 
                     <div className="platform-layout-controls-grid" onClick={(event) => event.stopPropagation()}>
                       {/* 启用排在最前：它是影响面最大的动作（会停止一切后台活动） */}
+                      {isApiRelayEntry && (
+                        <span className="platform-layout-toggle platform-layout-enable-placeholder" aria-hidden="true">
+                          <span className="platform-layout-checkbox-placeholder" />
+                          <span>{t('platformLayout.enabledToggle', '启用')}</span>
+                        </span>
+                      )}
                       {entry.type === 'platform' && (
                         <label
                           className={`platform-layout-toggle ${disabledSet.has(entry.id) ? 'is-disabled' : ''}`}

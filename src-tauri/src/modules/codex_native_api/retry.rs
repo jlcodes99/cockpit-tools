@@ -139,7 +139,7 @@ async fn send_inner(
             header::CONTENT_TYPE,
             HeaderValue::from_static("application/json"),
         );
-        let chat = prepared.route.wire_api == WireApi::Chat && !compact;
+        let chat = prepared.route.wire_api == WireApi::Chat && (!compact || prepared.route.compact_endpoint.is_none());
         let anthropic = prepared.route.wire_api == WireApi::Anthropic;
         let path = if let Some((_, endpoint)) = raw {
             endpoint
@@ -156,11 +156,16 @@ async fn send_inner(
             body
         } else {
             let mut body = prepared.body.clone();
+            body = super::anthropic_compact::expand_wire(state,body).await?;
             super::multi_agent_transport::sanitize_reasoning(prepared, &mut body);
             if chat || anthropic || super::grok_errors::applies(&prepared.route) {
                 super::multi_agent_transport::prepare(prepared, &mut body)?;
             }
-            if chat { super::chat_upstream::responses_to_chat(&body)? } else { body }
+            if chat {
+                if compact || super::anthropic_compact::triggered(&body) { super::anthropic_compact::prepare(&mut body)?; }
+                if super::chatgpt_plan_tools::has_client_declaration(&body) { super::chatgpt_plan_tools::prepare(&mut body)?; }
+                super::chat_upstream::responses_to_chat(&body)?
+            } else { body }
         };
         if prepared.request.auxiliary.as_deref() == Some("responses.websocket") {
             // The replay retains the downstream socket envelope. Each HTTP
@@ -235,6 +240,10 @@ async fn send_inner(
         }
         if raw.is_none() && !chat && !anthropic && !super::grok_errors::applies(&prepared.route) {
             super::multi_agent_transport::prepare(prepared, &mut body)?;
+        }
+        if prepared.route.chatgpt && prepared.source_headers.get("x-cockpit-compat-source").is_some_and(|value| value == "claude")
+            && body["max_output_tokens"].as_u64().is_some_and(|tokens| (1..16).contains(&tokens)) {
+            body["max_output_tokens"] = Value::from(16);
         }
         let codex_backend = prepared.route.chatgpt && !super::grok_errors::applies(&prepared.route);
         if codex_backend || prepared.route.chatgpt_plan {

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-pub const DEFAULT_CODEX_IMAGE_GENERATION_MODEL: &str = "gpt-image-2.5";
+pub const DEFAULT_CODEX_IMAGE_GENERATION_MODEL: &str = "gpt-image-2.6";
 pub const DEFAULT_MAX_ACCOUNT_CONCURRENCY: u16 = 2;
 
 fn default_image_generation_model() -> String {
@@ -9,7 +9,21 @@ fn default_image_generation_model() -> String {
 }
 
 pub fn default_image_generation_models() -> Vec<String> {
-    vec!["gpt-image-2.5".to_string(), "gpt-image-2".to_string()]
+    [
+        DEFAULT_CODEX_IMAGE_GENERATION_MODEL,
+        "gpt-image-2.5",
+        "gpt-image-2",
+        "gpt-image-2.6-sunburst",
+        "gpt-image-2.6-flare",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+/// Exact native Codex Images routes. Custom/vendor suffixes still require API keys.
+pub fn is_codex_oauth_image_model(model: &str) -> bool {
+    matches!(model.trim(), "gpt-image-2" | "gpt-image-2.5" | "gpt-image-2.5-sunburst" | "gpt-image-2.5-flare" | "gpt-image-2.6" | "gpt-image-2.6-sunburst" | "gpt-image-2.6-flare")
 }
 
 fn is_false(value: &bool) -> bool {

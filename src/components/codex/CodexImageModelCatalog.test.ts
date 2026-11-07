@@ -13,7 +13,7 @@ test('catalog management localizes the existing model-configuration busy error',
   const h = loadHookModule(new URL('../CodexImageModelConfig.tsx', import.meta.url), {
     'react-i18next': { useTranslation: () => ({ t: (key: string) => `translated:${key}` }) },
     './SingleSelectDropdown': { SingleSelectDropdown: 'dropdown' }, './ModalErrorMessage': { ModalErrorMessage: 'error' },
-    './codex/useCodexImageModelCatalog': { useCodexImageModelCatalog: () => ({ models, syncError: '', update: async () => { throw new Error('codex.modelConfig.errors.busy'); } }) },
+    './codex/useCodexImageModelCatalog': { useCodexImageModelCatalog: () => ({ models, deleted: [], syncError: '', update: async () => { throw new Error('codex.modelConfig.errors.busy'); } }) },
   });
   let tree = h.render(() => h.exports.CodexImageToolModelSelect({ model: 'gpt-image-2.5', disabled: false, onSave() {} }));
   nodes(tree).find((node) => node.props?.className?.includes('codex-image-model-manage')).props.onClick(); tree = h.flush();
@@ -142,7 +142,7 @@ test('missing deletion metadata keeps only the selected model visible until back
   h.unmount();
 });
 
-test('top presets stay as families while management persists actual IDs and custom input selects an exact full model', async () => {
+test('presets include available native variants and custom input selects an exact full model', async () => {
   let catalog = [...models];
   const operations: any[] = [];
   const saved: string[] = [];
@@ -151,7 +151,7 @@ test('top presets stay as families while management persists actual IDs and cust
     'react-i18next': { useTranslation: () => ({ t }) },
     './SingleSelectDropdown': { SingleSelectDropdown: 'dropdown' },
     './ModalErrorMessage': { ModalErrorMessage: 'error' },
-    './codex/useCodexImageModelCatalog': { useCodexImageModelCatalog: () => ({ models: catalog, syncError: '', update: async (add?: string, remove?: string) => {
+    './codex/useCodexImageModelCatalog': { useCodexImageModelCatalog: () => ({ models: catalog, deleted: ['gpt-image-2.6-sunburst'], syncError: '', update: async (add?: string, remove?: string) => {
       operations.push({ add, remove });
       if (add) catalog = [...new Set([...catalog, add])];
       if (remove) catalog = catalog.filter((id) => id !== remove);
@@ -159,6 +159,10 @@ test('top presets stay as families while management persists actual IDs and cust
   });
   let tree = h.render(() => h.exports.CodexImageToolModelSelect({ model: selected, disabled: false, onSave: async (id: string) => { selected = id; saved.push(id); } }));
   const dropdown = (tree: any) => nodes(tree).find((node) => node.type === 'dropdown');
+  const presets = dropdown(tree).props.options.map((option: any) => option.value);
+  assert.equal(presets.includes('gpt-image-2.6'), true);
+  assert.equal(presets.includes('gpt-image-2.6-flare'), true);
+  assert.equal(presets.includes('gpt-image-2.6-sunburst'), false);
   nodes(tree).find((node) => node.props?.className?.includes('codex-image-model-manage')).props.onClick(); tree = h.flush();
   nodes(tree).find((node) => node.type === 'input').props.onChange({ target: { value: 'gpt-image-2.5-high' } }); tree = h.flush();
   nodes(tree).find((node) => node.type === 'button' && [node.props.children].flat().includes('common.add')).props.onClick();
@@ -192,7 +196,7 @@ test('manual invalid model IDs stay near the field and never invoke catalog or s
     'react-i18next': { useTranslation: () => ({ t }) },
     './SingleSelectDropdown': { SingleSelectDropdown: 'dropdown' },
     './ModalErrorMessage': { ModalErrorMessage: 'error' },
-    './codex/useCodexImageModelCatalog': { useCodexImageModelCatalog: () => ({ models, syncError: '', update: async () => { writes++; } }) },
+    './codex/useCodexImageModelCatalog': { useCodexImageModelCatalog: () => ({ models, deleted: [], syncError: '', update: async () => { writes++; } }) },
   });
   let tree = h.render(() => h.exports.CodexImageToolModelSelect({ model: 'gpt-image-2.5', disabled: false, onSave: async () => { writes++; } }));
   nodes(tree).find((node) => node.props?.className?.includes('codex-image-model-manage')).props.onClick(); tree = h.flush();

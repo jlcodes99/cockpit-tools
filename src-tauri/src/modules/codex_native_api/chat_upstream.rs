@@ -23,10 +23,12 @@ pub(crate) fn responses_to_native_chat(body: &Value) -> Result<Value, ServiceErr
 }
 
 fn responses_to_chat_inner(body: &Value, native: bool) -> Result<Value, ServiceError> {
-    let mut out = body
+    // Do not clone the complete transcript and tool schemas only to delete them.
+    let mut out: serde_json::Map<String, Value> = body
         .as_object()
         .ok_or_else(|| invalid("body", "expected an object"))?
-        .clone();
+        .iter().filter(|(key,_)| !matches!(key.as_str(), "input" | "instructions" | "previous_response_id" | "conversation" | "background" | "include" | "text" | "reasoning" | "max_output_tokens" | "truncation" | "store" | "tools" | "tool_choice"))
+        .map(|(key,value)| (key.clone(),value.clone())).collect();
     if body
         .get("previous_response_id")
         .is_some_and(|v| !v.is_null())

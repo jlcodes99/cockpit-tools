@@ -4,10 +4,11 @@ import "./CodexModelProviderEditor.css";
 import { SingleSelectDropdown } from "../SingleSelectDropdown";
 import { CodexProviderModelFetch } from "./CodexProviderModelFetch";
 import { createPortal } from 'react-dom';
+import { useEffect, useRef, useState } from 'react';
 import { useModalScrollLock } from '../../hooks/useModalScrollLock';
 import { CodexAnthropicProviderFields } from "./CodexAnthropicProviderFields";
-import { ModalErrorMessage } from "../ModalErrorMessage";
-import { Check, ExternalLink, HelpCircle, KeyRound, Pencil, Star, Trash2, X, Search } from "lucide-react";
+import { ModalErrorMessage, useModalErrorState } from "../ModalErrorMessage";
+import { Check, Copy, Eye, EyeOff, ExternalLink, HelpCircle, KeyRound, Pencil, Star, Trash2, X, Search } from "lucide-react";
 import { CodexModelContextWindowTable } from "./CodexModelContextWindowTable";
 import { CODEX_API_PROVIDER_CUSTOM_ID, CODEX_API_PROVIDER_PRESETS, DEEPSEEK_API_PROVIDER_ID } from "../../utils/codexProviderPresets";
 import { canConfigureCodexProviderVision } from "../../utils/codexProviderGateway";
@@ -19,6 +20,30 @@ type Props = Pick<ReturnType<typeof useCodexModelProviderManagerController>,
 export function CodexModelProviderEditor(props: Props) {
   const { accountEditor, setAccountEditor, accounts, providers, editorModelKeyId, selectEditorModelKey, selectAccountEditorProvider, maskAccountText, closeModal, currentEditingProvider, editingApiKey, existingApiKeySearchQuery, form, formError, handleDeleteApiKey, handleSaveApiKeyEdit, handleSaveProvider, handleSelectPresetEndpoint, handleSelectProviderPreset, handleSelectSponsorTemplate, maskApiKey, mutateForm, parseModelCatalogText, previewPaths, resolveEnableModePreferenceForWireApi, saving, selectedPreset, selectedPresetId, selectedSponsorTemplate, selectedSponsorTemplateId, setEditingApiKey, setExistingApiKeySearchQuery, showModal, sponsorProviderTemplates, t } = props;
   useModalScrollLock(showModal);
+  const [apiKeyVisible, setApiKeyVisible] = useState(false);
+  const [apiKeyCopied, setApiKeyCopied] = useState(false);
+  const copyError = useModalErrorState();
+  const copyVersion = useRef(0);
+  useEffect(() => {
+    setApiKeyVisible(false);
+  }, [showModal, editingApiKey?.providerId, editingApiKey?.apiKeyId]);
+  useEffect(() => {
+    setApiKeyCopied(false);
+    copyError.clear();
+    return () => { copyVersion.current++; };
+  }, [showModal, editingApiKey?.providerId, editingApiKey?.apiKeyId, editingApiKey?.apiKey, saving, copyError.clear]);
+  const copyEditingApiKey = async () => {
+    if (!editingApiKey) return;
+    const version = ++copyVersion.current;
+    copyError.clear();
+    setApiKeyCopied(false);
+    try {
+      await navigator.clipboard.writeText(editingApiKey.apiKey);
+      if (version === copyVersion.current) setApiKeyCopied(true);
+    } catch {
+      if (version === copyVersion.current) copyError.report(t('common.shared.export.copyFailed'));
+    }
+  };
   const selectedKey = currentEditingProvider?.apiKeys.find(key => key.id === (editorModelKeyId ?? accountEditor?.apiKeyId));
   const queryKey = form.newApiKey || selectedKey?.apiKey || currentEditingProvider?.apiKeys[0]?.apiKey || "";
   const boundAccount = accounts.find(account => account.id === accountEditor?.accountId);
@@ -603,30 +628,52 @@ export function CodexModelProviderEditor(props: Props) {
                                     )}
                                     disabled={saving}
                                   />
-                                  <input
-                                    className="form-input"
-                                    type="password"
-                                    value={editingApiKey.apiKey}
-                                    onChange={(event) =>
-                                      setEditingApiKey((current) =>
-                                        current
-                                          ? { ...current, apiKey: event.target.value }
-                                          : current,
-                                      )
-                                    }
-                                    placeholder={t(
-                                      "codex.modelProviders.fields.apiKey",
-                                      "API Key",
-                                    )}
-                                    autoComplete="off"
-                                    disabled={saving}
-                                  />
+                                  <div className="codex-provider-key-input">
+                                    <input
+                                      className="form-input"
+                                      type={apiKeyVisible ? "text" : "password"}
+                                      aria-label={t("codex.addModal.token")}
+                                      value={editingApiKey.apiKey}
+                                      onChange={(event) =>
+                                        setEditingApiKey((current) =>
+                                          current
+                                            ? { ...current, apiKey: event.target.value }
+                                            : current,
+                                        )
+                                      }
+                                      placeholder={t("codex.addModal.token")}
+                                      autoComplete="off"
+                                      spellCheck={false}
+                                      disabled={saving}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary"
+                                      onClick={() => { copyError.clear(); setApiKeyVisible(current => !current); }}
+                                      disabled={saving}
+                                      title={t(apiKeyVisible ? "codex.api.hideApiKey" : "codex.api.showApiKey")}
+                                      aria-label={t(apiKeyVisible ? "codex.api.hideApiKey" : "codex.api.showApiKey")}
+                                      aria-pressed={apiKeyVisible}
+                                    >
+                                      {apiKeyVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary"
+                                      onClick={() => void copyEditingApiKey()}
+                                      disabled={saving}
+                                      title={t(apiKeyCopied ? "common.copied" : "common.copy")}
+                                      aria-label={t(apiKeyCopied ? "common.copied" : "common.copy")}
+                                    >
+                                      {apiKeyCopied ? <Check size={16} /> : <Copy size={16} />}
+                                    </button>
+                                  </div>
                                 </div>
                                 <div className="codex-provider-key-edit-actions">
                                   <button
                                     type="button"
                                     className="action-btn success"
-                                    onClick={() => void handleSaveApiKeyEdit()}
+                                    onClick={() => { copyError.clear(); void handleSaveApiKeyEdit(); }}
                                     disabled={saving}
                                     title={t("common.save", "Save")}
                                   >
@@ -755,7 +802,7 @@ export function CodexModelProviderEditor(props: Props) {
                 <p className="provider-save-preview-desc">{t("codex.modelProviders.editor.saveScope")}</p>
               </div>
 
-              <ModalErrorMessage message={formError} position="bottom" />
+              <ModalErrorMessage message={copyError.message || formError} scrollKey={copyError.scrollKey} position="bottom" />
             </div>
 
             <div className="modal-footer">
@@ -768,7 +815,7 @@ export function CodexModelProviderEditor(props: Props) {
               </button>
               <button
                 className="btn btn-primary codex-provider-save-button"
-                onClick={() => void handleSaveProvider()}
+                onClick={() => { copyError.clear(); void handleSaveProvider(); }}
                 disabled={saving}
               >
                 <span className="codex-provider-save-button-label">

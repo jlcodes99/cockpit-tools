@@ -110,7 +110,8 @@
       "store": false,
       "include": [
         "reasoning.encrypted_content"
-      ]
+      ],
+      "max_output_tokens": 7
     },
     "expected_headers": {}
   },
@@ -676,7 +677,7 @@
     }
   },
   {
-    "name": "lite_image_promotes_full",
+    "name": "lite_forced_hosted_image_rejected",
     "chatgpt": true,
     "compact": false,
     "websocket": false,
@@ -700,29 +701,7 @@
         "type": "image_generation"
       }
     },
-    "expected": {
-      "model": "fixture",
-      "input": [],
-      "tools": [
-        {
-          "type": "image_generation"
-        },
-        {
-          "type": "web_search"
-        }
-      ],
-      "tool_choice": {
-        "type": "image_generation"
-      },
-      "stream": true,
-      "store": false,
-      "parallel_tool_calls": false,
-      "include": [
-        "reasoning.encrypted_content"
-      ],
-      "instructions": ""
-    },
-    "expected_headers": {}
+    "expected_error": 400
   },
   {
     "name": "websocket_preserves_generate_and_parallel",

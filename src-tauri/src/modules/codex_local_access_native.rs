@@ -1581,6 +1581,10 @@ mod native_live_protocol;
 mod native_live_pool;
 
 #[cfg(test)]
+#[path = "codex_local_access_native_live_images.rs"]
+mod native_live_images;
+
+#[cfg(test)]
 mod native_host_tests {
     use super::*;
     include!("codex_local_access_tests_native.rs");

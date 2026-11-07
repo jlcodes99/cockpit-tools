@@ -47,6 +47,40 @@
   transform: translateY(-1px);
 }
 
+.codex-provider-key-edit-fields {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.codex-provider-key-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.codex-provider-key-input .form-input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+}
+
+.codex-provider-key-input .btn {
+  flex-shrink: 0;
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+}
+
+.codex-provider-key-edit-actions {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
 .codex-provider-modal .form-row.two-columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

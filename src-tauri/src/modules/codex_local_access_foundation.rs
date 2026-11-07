@@ -2396,13 +2396,7 @@ fn local_gateway_visible_gpt_model_ids() -> Vec<String> {
 
 /// 客户端模型目录（profile `model_catalog_json`）里的 GPT 条目：模型 ID + 官方显示名。
 fn local_gateway_visible_gpt_model_definitions() -> Vec<(String, String)> {
-    let mut models = crate::modules::codex_model_catalog::recommended_models();
-    // Keep the existing Terra support until upstream includes its catalog entry.
-    // codex_protocol already owns the corresponding capability template.
-    if !models.iter().any(|(id, _)| id.eq_ignore_ascii_case("gpt-6.1-terra")) {
-        models.insert(1.min(models.len()), ("gpt-6.1-terra".into(), "GPT-6.1 Terra".into()));
-    }
-    models
+    crate::modules::codex_model_catalog::recommended_models()
 }
 
 /// API 服务对外展示的模型清单：官方推荐 GPT 集 + 客户端内部需要的隐藏模型。

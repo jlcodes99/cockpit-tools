@@ -369,14 +369,11 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
         ).filter((item) => item.key === "primary" || item.key === "secondary");
         const subscriptionInfo = resolveSubscriptionPresentation(account);
         const showCompactExpiry =
-          !isApiKeyAccount &&
-          !isAgentIdentityAccount &&
-          subscriptionInfo.bucket !== "active";
+          !isApiKeyAccount && !isAgentIdentityAccount;
         const showSubscriptionRefreshAction =
           !isApiKeyAccount &&
           !isAgentIdentityAccount &&
-          (subscriptionInfo.bucket === "missing" ||
-            subscriptionInfo.bucket === "expired");
+          subscriptionInfo.bucket !== "access_token_only";
         const isSubscriptionRefreshPending =
           refreshingSubscriptionAccountId === account.id ||
           refreshing === account.id;
@@ -453,6 +450,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
               )}
             </div>
             <div className="codex-compact-actions">
+              {renderResetCreditControls(account)}
               <CodexSpeedControl scope="account" account={account} compact disabled={!!switching}
                 onError={(text) => setMessage(text ? { text, tone: "error" } : null)} />
               {renderAddLocalAccessAccountButton(
@@ -642,8 +640,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
         const showSubscriptionRefreshAction =
           !isApiKeyAccount &&
           !isPendingOAuthAccount &&
-          (subscriptionInfo.bucket === "missing" ||
-            subscriptionInfo.bucket === "expired");
+          subscriptionInfo.bucket !== "access_token_only";
         const isSubscriptionRefreshPending =
           refreshingSubscriptionAccountId === account.id ||
           refreshing === account.id;
@@ -1872,8 +1869,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
         const showSubscriptionRefreshAction =
           !isApiKeyAccount &&
           !isPendingOAuthAccount &&
-          (subscriptionInfo.bucket === "missing" ||
-            subscriptionInfo.bucket === "expired");
+          subscriptionInfo.bucket !== "access_token_only";
         const isSubscriptionRefreshPending =
           refreshingSubscriptionAccountId === account.id ||
           refreshing === account.id;

@@ -2,6 +2,7 @@ import { requestCodexOfficialAuthorizationManagement } from "../utils/codexAccou
 import { Fragment, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useModalScrollLock } from "../hooks/useModalScrollLock";
+import { useModalFocusTrap } from "../hooks/useModalFocusTrap";
 import "./CodexAccountDialogs.css";
 import { Plus, RefreshCw, Upload, Trash2, X, Globe, Power, Copy, Check, Play, Pause, RotateCw, CircleAlert, Info, Rows3, LayoutGrid, List, Search, ArrowDownWideNarrow, ArrowUp, ArrowDown, GripVertical, Clock, Tag, Eye, EyeOff, BookOpen, FileText, ExternalLink, FolderOpen, FolderPlus, LogOut, Terminal, ChevronDown } from "lucide-react";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
@@ -28,6 +29,8 @@ import { CodexAddAccountDialog } from "./CodexAddAccountDialog";
 import { useCodexPelicanStore } from "../stores/useCodexPelicanStore";
 import { CodexRecycleBinModal } from "../components/CodexRecycleBinModal";
 import { emitAccountsChanged } from "../utils/accountSyncEvents";
+import { CodexResetAutomationDialog, CodexResetAutomationSection } from "../components/codex/CodexResetAutomation";
+import { isCodexWebSessionAccount } from "../types/codex";
 import { PELICAN_GROUPS_CHANGED } from "../components/codex/pelican/PelicanResults";
 
 
@@ -324,6 +327,10 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [activeAccountNoteMode, accountNoteFieldErrors.twoFactorSecret]);
+  const [resetAutomationOpen, setResetAutomationOpen] = useState(false);
+  const resetCreditDialogRef = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(resetCreditDialogRef, Boolean(resetCreditConfirmAccount), true, !resetAutomationOpen);
+  useEffect(() => { setResetAutomationOpen(false); }, [resetCreditConfirmAccount?.id]);
   const [recycleBinOpen, setRecycleBinOpen] = useState(false);
   const recycleBinButton = (
     <button type="button" className="btn btn-secondary" onClick={() => setRecycleBinOpen(true)}>
@@ -335,7 +342,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     window.addEventListener(PELICAN_GROUPS_CHANGED, reload);
     return () => window.removeEventListener(PELICAN_GROUPS_CHANGED, reload);
   }, [reloadCodexGroups]);
-  useModalScrollLock(Boolean(quickSwitchAccountId));
+  useModalScrollLock(Boolean(quickSwitchAccountId || resetCreditConfirmAccount));
   return (
         <>
           {recycleBinOpen && <CodexRecycleBinModal
@@ -1879,9 +1886,14 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
             </div>
           )}
 
-          {resetCreditConfirmAccount && (
+          {resetCreditConfirmAccount && !resetAutomationOpen && (
             <div className="modal-overlay codex-reset-credit-confirm-overlay">
               <div
+                ref={resetCreditDialogRef}
+                tabIndex={-1}
+                role="dialog"
+                aria-modal="true"
+                aria-label={t('codex.quota.resetCreditDialogTitle')}
                 className="modal codex-reset-credit-confirm-modal"
                 onClick={(event) => event.stopPropagation()}
               >
@@ -1939,6 +1951,8 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                       </span>
                     </div>
                   )}
+                  {!isCodexWebSessionAccount(resetCreditConfirmAccount) && <CodexResetAutomationSection accountId={resetCreditConfirmAccount.id}
+                    disabled={isResetCreditConfirmSubmitting} onSettings={() => setResetAutomationOpen(true)} />}
                   <div className="codex-reset-credit-confirm-details">
                     <div className="codex-reset-credit-confirm-details-title">
                       {t("codex.quota.resetCreditDetailsTitle", "重置次数明细")}
@@ -2013,6 +2027,9 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
               </div>
             </div>
           )}
+          {resetCreditConfirmAccount && resetAutomationOpen && <CodexResetAutomationDialog key={resetCreditConfirmAccount.id}
+            accountId={resetCreditConfirmAccount.id} accountLabel={maskAccountText(resolvePresentation(resetCreditConfirmAccount).displayName)}
+            onClose={() => setResetAutomationOpen(false)} />}
 
           {deleteConfirm && (
             <div className="modal-overlay">

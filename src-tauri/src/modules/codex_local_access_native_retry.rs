@@ -169,8 +169,7 @@ async fn native_image_retry_cooldown_wait(
     let accounts = host
         .load_routing_accounts(
             ids,
-            caller.id != NATIVE_INTERNAL_CALLER
-                && collection.image_generation_account_ids.is_empty(),
+            false,
         )
         .await?;
     let states = host

@@ -145,7 +145,7 @@ async fn handle_prepared(
         owner_committed: false,
     };
     execution.record_route();
-    if execution.selected.route.chatgpt {
+    if execution.selected.route.chatgpt && execution.selected.main_model.is_some() {
         forward_oauth(execution).await
     } else {
         forward_native(execution).await
@@ -361,8 +361,8 @@ impl Execution {
         &mut self,
         oauth: bool,
     ) -> Result<(reqwest::Response, Option<Binding>), ServiceError> {
-        if !oauth {
-            // Go's independent Images API waits for generation with one
+        if !oauth && !self.selected.route.chatgpt {
+            // Go's independent API-key Images API waits for generation with one
             // five-minute context; the OAuth stream-open/idle knobs do not apply.
             let image_timeout = std::time::Duration::from_secs(300);
             self.budget.total_deadline = self.budget.total_deadline
@@ -401,6 +401,10 @@ impl Execution {
             headers.remove(header::CONTENT_LENGTH);
             headers.remove(header::CONTENT_ENCODING);
             headers.remove(header::CONTENT_TYPE);
+            if self.selected.route.chatgpt && !oauth {
+                headers.remove(header::USER_AGENT);
+                if let Some(ua) = self.selected.route.headers.get(header::USER_AGENT) { headers.insert(header::USER_AGENT, ua.clone()); }
+            }
             headers.insert(
                 header::ACCEPT,
                 HeaderValue::from_static("application/json, text/event-stream"),
@@ -443,11 +447,15 @@ impl Execution {
             } else {
                 (
                     self.request.operation.path(),
-                    self.request.native_json(&self.selected.image_model),
+                    if self.selected.route.chatgpt {
+                        self.request.codex_native_json(&self.selected.image_model)
+                    } else {
+                        self.request.native_json(&self.selected.image_model)
+                    },
                     None,
                 )
             };
-            if oauth {
+            if self.selected.route.chatgpt {
                 super::super::account_installation::apply(
                     &self.selected.route,
                     &mut headers,
@@ -464,7 +472,9 @@ impl Execution {
             );
             let mut outgoing = self.selected.route.client.post(url).headers(headers);
             if !oauth {
-                if let Some(parts) = self.request.native_parts(&self.selected.image_model) {
+                let parts = if self.selected.route.chatgpt { None }
+                    else { self.request.native_parts(&self.selected.image_model) };
+                if let Some(parts) = parts {
                     let mut form = reqwest::multipart::Form::new();
                     for part in parts {
                         let mut value = reqwest::multipart::Part::bytes(part.bytes);
@@ -497,6 +507,8 @@ impl Execution {
             let open_deadline = deadline.cap(self.budget.prepare_deadline());
             let outgoing = async {
                 let built = built?;
+                #[cfg(test)]
+                super::capture_live_geometry(&built)?;
                 if tokio::time::Instant::now() >= open_deadline {
                     return Err(ServiceError::new(504,"upstream_connect_timeout","Image upstream response headers timed out"));
                 }
@@ -694,7 +706,7 @@ impl Execution {
                 self.tracker.set_retry_after(retry_after);
                 return Ok((response, binding));
             }
-            if oauth
+            if self.selected.route.chatgpt
                 && exhausted.is_none()
                 && response.status() == StatusCode::UNAUTHORIZED
                 && !refreshed
@@ -766,7 +778,7 @@ impl Execution {
             }
             let mut failure_recorded = exhausted.is_some();
             let retryable_source = exhausted.is_some() || model_unavailable
-                || oauth && matches!(response.status().as_u16(), 401 | 402)
+                || self.selected.route.chatgpt && matches!(response.status().as_u16(), 401 | 402)
                 || matches!(
                     response.status().as_u16(),
                     403 | 408 | 429 | 500 | 502 | 503 | 504

@@ -994,6 +994,7 @@ async fn native_websocket_routes_bridge_chat_and_keep_responses_model_mapping() 
 async fn native_image_first_source_uses_free_account_but_continuation_stays_pinned() {
     let mut host = native_test_routing_host();
     let collection = host.collection_override.as_mut().unwrap();
+    collection.image_generation_model = "gpt-image-2.5".into();
     collection.image_generation_account_ids = vec!["pool-a".into(), "pool-b".into()];
     collection.max_concurrent_image_requests = 0;
     for account in host.account_overrides.values_mut() {

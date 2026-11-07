@@ -294,3 +294,22 @@ fn cpa_wire_only_drops_long_original_id_reasoning_with_nonempty_cipher() {
         assert_eq!(body["input"].as_array().unwrap().len(), 1);
     }
 }
+
+#[test]
+fn item_ids_with_invalid_characters_are_portable_collision_safe_and_do_not_rewrite_arguments() {
+    let original = json!({"input":[
+        {"type":"message","id":"msg_safe-1","content":"keep"},
+        {"type":"function_call","id":"a.b/猫","call_id":"call.exact","arguments":"a.b/猫"},
+        {"type":"function_call","id":"a_b_猫","call_id":"other","arguments":"{}"}
+    ]});
+    let mut body = original.clone();
+    sanitize_input_ids(&mut body);
+    let first = body["input"][1]["id"].as_str().unwrap();
+    let second = body["input"][2]["id"].as_str().unwrap();
+    assert_ne!(first,second);
+    assert!(first.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch,'_'|'-')));
+    assert_eq!(body["input"][0],original["input"][0]);
+    assert_eq!(body["input"][1]["arguments"],"a.b/猫");
+    assert_eq!(body["input"][1]["call_id"],"call.exact");
+    let once = body.clone(); sanitize_input_ids(&mut body); assert_eq!(body,once);
+}

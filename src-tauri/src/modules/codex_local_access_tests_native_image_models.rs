@@ -521,3 +521,87 @@ async fn native_image_bare_alias_http_generation_edit_and_responses_send_configu
         assert_eq!(*seen.lock().unwrap(), expected);
     }
 }
+
+#[test]
+fn native_oauth_image_26_variants_are_exact() {
+    let mut config = collection();
+    let source = account();
+    for model in ["gpt-image-2.6", "gpt-image-2.6-flare", "gpt-image-2.6-sunburst"] {
+        config.image_generation_model = model.into();
+        assert_eq!(native_image_source_model(&config, &source, model).as_deref(),Some(model));
+        assert!(is_image_generation_source_for_model(&source, model));
+    }
+    assert!(!is_image_generation_source_for_model(&source,"gpt-image-2.6-vendor"));
+}
+
+#[tokio::test]
+async fn standalone_oauth_images_ignore_text_model_exclusions_but_keep_image_permissions() {
+    let _env = crate::modules::test_support::env_lock().lock()
+        .unwrap_or_else(|error| error.into_inner());
+    for scope in ["service", "key", "account"] {
+        let mut source = account();
+        source.tokens.access_token = "at-fixture-image-token".into();
+        source.egress_proxy_disabled = true;
+        let id = source.id.clone();
+        let mut config = collection();
+        config.account_ids = vec![id.clone()];
+        config.image_generation_account_ids = vec![id.clone()];
+        config.image_generation_model = "gpt-image-2.6-flare".into();
+        config.max_concurrent_image_requests = 0;
+        config.api_keys = serde_json::from_value(json!([{
+            "id":"image-key", "label":"fixture", "key":"fixture-key", "enabled":true,
+            "allowedModels":["gpt-image-2.6-flare", "gpt-5.6-luna"],
+            "inheritAccountPool":true
+        }])).unwrap();
+        match scope {
+            "service" => config.excluded_models = vec!["gpt-5.6-luna".into()],
+            "key" => config.api_keys[0].excluded_models = vec!["gpt-5.6-luna".into()],
+            _ => config.account_model_rules = serde_json::from_value(json!([
+                {"accountId":id, "excludedModels":["gpt-5.6-luna"]}
+            ])).unwrap(),
+        }
+        let mut host = NativeHostBridge::for_collection(config);
+        host.account_overrides.insert(id.clone(), source);
+        let caller = native_contract::Caller { id:"image-key".into(), label:"fixture".into() };
+        let selected = native_image_route_once(&host, &caller, image_model_request("gpt-image-2.6-flare"))
+            .await.unwrap_or_else(|error| panic!("{scope}: {error:?}"));
+        assert_eq!(selected.image_model, "gpt-image-2.6-flare");
+        assert!(selected.main_model.is_none());
+        drop(selected);
+        let mut hosted = image_model_request("gpt-image-2.6-flare");
+        hosted.responses_model = Some("gpt-5.6-luna".into());
+        assert!(native_image_route_once(&host, &caller, hosted).await.is_err(), "{scope}");
+        let config = host.collection_override.as_mut().unwrap();
+        match scope {
+            "service" => config.excluded_models = vec!["gpt-image-2.6-flare".into()],
+            "key" => config.api_keys[0].excluded_models = vec!["gpt-image-2.6-flare".into()],
+            _ => config.account_model_rules[0].excluded_models = vec!["gpt-image-2.6-flare".into()],
+        }
+        assert!(native_image_route_once(&host, &caller, image_model_request("gpt-image-2.6-flare"))
+            .await.is_err(), "{scope}");
+    }
+}
+
+#[tokio::test]
+async fn image_inherited_pool_uses_outer_oauth_even_with_an_unavailable_official_binding() {
+    let _env = crate::modules::test_support::env_lock().lock().unwrap_or_else(|error|error.into_inner());
+    let mut source=account();
+    source.tokens.access_token = "at-fixture-image-token".into();
+    source.egress_proxy_disabled=true;
+    let token=source.tokens.access_token.clone();
+    let mut config=collection();
+    config.account_ids=vec![source.id.clone()];
+    config.image_generation_account_ids.clear();
+    config.image_generation_model="gpt-image-2.6-flare".into();
+    config.official_account_bindings.insert(source.id.clone(),"unavailable-siwc-grant".into());
+    config.max_concurrent_image_requests=0;
+    let mut host=NativeHostBridge::for_collection(config);
+    host.account_overrides.insert(source.id.clone(),source);
+    let caller=native_contract::Caller{id:NATIVE_PRIMARY_CALLER.into(),label:"fixture".into()};
+    let selected=native_image_route_once(&host,&caller,image_model_request("gpt-image-2.6-flare")).await.unwrap();
+    assert!(selected.route.chatgpt);
+    assert!(!selected.route.chatgpt_plan);
+    assert!(selected.route.official_registration_id.is_none());
+    assert_eq!(selected.route.headers["authorization"],format!("Bearer {token}"));
+    assert!(selected.main_model.is_none());
+}

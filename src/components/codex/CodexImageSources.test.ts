@@ -131,7 +131,7 @@ test('a failed model save restores the last saved dropdown selection', async () 
   const h = loadHookModule(new URL('../CodexImageModelConfig.tsx', import.meta.url), {
     'react-i18next': { useTranslation: () => ({ t }) },
     './SingleSelectDropdown': { SingleSelectDropdown: 'dropdown' },
-    './codex/useCodexImageModelCatalog': { useCodexImageModelCatalog: () => ({ models: ['gpt-image-2.5', 'gpt-image-2'], syncError: '', update: async () => {} }) },
+    './codex/useCodexImageModelCatalog': { useCodexImageModelCatalog: () => ({ models: ['gpt-image-2.5', 'gpt-image-2'], deleted: [], syncError: '', update: async () => {} }) },
     './ModalErrorMessage': { ModalErrorMessage: 'error' },
   });
   const ToolModelSelect = h.exports.CodexImageToolModelSelect;

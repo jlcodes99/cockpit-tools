@@ -4,10 +4,11 @@ import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName
 import { useEffect, useMemo, useCallback, type MouseEvent as ReactMouseEvent } from "react";
 import { RefreshCw, RotateCw } from "lucide-react";
 import { CodexResetCreditExpiry } from '../components/CodexResetCreditExpiry';
+import { CodexResetAutomationStatus } from '../components/codex/CodexResetAutomation';
 import * as codexService from "../services/codexService";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
 import { type CodexAccountGroup } from "../services/codexAccountGroupService";
-import { hasCodexAccountStructure, hasCodexAccountName, isCodexApiKeyAccount, isCodexChatgptPlanAccount, isCodexAgentIdentityAccount, isCodexNewApiAccount, isCodexTeamLikePlan } from "../types/codex";
+import { hasCodexAccountStructure, hasCodexAccountName, isCodexApiKeyAccount, isCodexChatgptPlanAccount, isCodexAgentIdentityAccount, isCodexWebSessionAccount, isCodexNewApiAccount, isCodexTeamLikePlan } from "../types/codex";
 import { summarizeCodexQuotaErrorMessage } from "../utils/codexQuotaError";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
 import { formatCodexWindowStatsText } from "../utils/codexWindowStats";
@@ -490,7 +491,7 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
       if (
         subscription &&
         !isPendingOAuthCodexAccount(account) &&
-        (subscription.bucket === "missing" || subscription.bucket === "expired")
+        subscription.bucket !== "access_token_only"
       ) {
         actions.push({
           id: "subscription",
@@ -1660,20 +1661,21 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
   
       const creditDetails = getResetCreditDetails(account);
       const availableCount = getResetCreditsAvailable(account);
-      if (availableCount == null && creditDetails.length === 0) return null;
   
       const displayCount =
         availableCount ?? creditDetails.filter(isAvailableResetCredit).length;
       const isResetting = resettingResetCreditAccountId === account.id;
       const isDisabled = isResetting;
       if (mode === 'expiry') {
-        return displayCount > 0 ? (
+        return (
           <div className="codex-account-reset-expiry-line">
-            <CodexResetCreditExpiry key={account.id} accountId={account.id} quota={account.quota}
+            {displayCount > 0 ? <CodexResetCreditExpiry key={account.id} accountId={account.id} quota={account.quota}
               disabled={isDisabled} onClick={() => openResetCreditConfirmModal(account)} />
+              : <span className="reset-automation-hint">{t(availableCount === 0 ? 'codex.resetAutomation.noCredits' : 'codex.quota.resetCreditTimeUnknown')}</span>}
           </div>
-        ) : null;
+        );
       }
+      if (availableCount == null && creditDetails.length === 0) return null;
       const titleText =
         displayCount > 0
           ? buildResetCreditsTitle(account, displayCount)
@@ -1696,6 +1698,7 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
               <RotateCw size={13} />
             )}
             {t("codex.quota.resetCredits", { count: displayCount })}
+            {!isCodexWebSessionAccount(account) && <CodexResetAutomationStatus accountId={account.id} />}
           </button>
         </div>
       );

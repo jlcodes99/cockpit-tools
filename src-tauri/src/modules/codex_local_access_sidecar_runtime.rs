@@ -1581,7 +1581,7 @@ struct ProfileModelDefinition {
     model_id: String,
     display_name: String,
     template: Option<Value>,
-    image_capable: bool,
+    image_capable: Option<bool>,
 }
 
 impl ProfileModelDefinition {
@@ -1590,7 +1590,7 @@ impl ProfileModelDefinition {
             model_id: model_id.trim().to_string(),
             display_name: display_name.trim().to_string(),
             template: None,
-            image_capable: false,
+            image_capable: None,
         }
     }
 
@@ -1602,7 +1602,7 @@ impl ProfileModelDefinition {
         image_capable: bool,
     ) -> Self {
         let mut definition = Self::plain(model_id, display_name);
-        definition.image_capable = image_capable;
+        definition.image_capable = Some(image_capable);
         definition.template = provider_template_for_model(accounts, &definition.model_id);
         definition
     }
@@ -1736,13 +1736,8 @@ fn apply_profile_model_definition_overrides(
         }
         // DeepSeek 官方模板可能含 null，不能覆盖最终的协作声明。
         codex_protocol::apply_deepseek_multi_agent_capability(model);
-        if definition.image_capable {
-            if let Some(object) = model.as_object_mut() {
-                // 与 DeepSeek 网关模式一致：请求里的图片会由网关自动转到识图模型，
-                // 因此这里声明为可发送图片，否则客户端会直接剥离图片。
-                object.insert("input_modalities".to_string(), json!(["text", "image"]));
-                object.insert("supports_image_detail_original".to_string(), json!(true));
-            }
+        if let Some(vision) = definition.image_capable {
+            apply_provider_catalog_image_input(model, vision);
         }
     }
 }
@@ -1903,16 +1898,20 @@ fn local_access_profile_model_definitions_with_accounts(profile_dir:&Path,collec
     let Some(resolved_key) = resolve_collection_api_key(collection, api_key) else {
         return Ok(definitions);
     };
-    let mut seen = definitions
-        .iter()
-        .map(|definition| definition.model_id.to_ascii_lowercase())
-        .collect::<HashSet<_>>();
+    let mut by_id = definitions.iter().enumerate()
+        .map(|(index, definition)| (definition.model_id.to_ascii_lowercase(), index))
+        .collect::<HashMap<_, _>>();
     for (model_id, image_capable) in
-        automatic_api_service_profile_extra_models(collection, &resolved_key, &accounts)
+        automatic_api_service_profile_extra_models(collection, &resolved_key, accounts)
     {
-        if !seen.insert(model_id.to_ascii_lowercase()) {
+        let id = model_id.to_ascii_lowercase();
+        if let Some(&index) = by_id.get(&id) {
+            // A user-defined row controls presentation; capabilities still
+            // come from the account route for that exact client model.
+            definitions[index].image_capable = Some(image_capable);
             continue;
         }
+        by_id.insert(id, definitions.len());
         let display_name = codex_account::provider_model_display_name(&model_id);
         definitions.push(ProfileModelDefinition::with_account_model(
             &model_id,

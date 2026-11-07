@@ -780,15 +780,18 @@ async fn repair_session_visibility_for_selected_instance(
     instance_id: &str,
     instance_name: &str,
     data_dir: &Path,
+    launch_mode: &InstanceLaunchMode,
 ) -> Result<bool, String> {
     let instance_id = instance_id.to_string();
     let instance_name = instance_name.to_string();
     let data_dir = data_dir.to_path_buf();
+    let launch_desktop = launch_mode_uses_desktop_runtime(launch_mode);
     tauri::async_runtime::spawn_blocking(move || {
         modules::codex_session_visibility::repair_session_visibility_quick_for_instance(
             &instance_id,
             &instance_name,
             &data_dir,
+            launch_desktop,
         )
         .map(|summary| !summary.local_project_recovery_deferred)
         .or_else(|error| {
@@ -3034,6 +3037,7 @@ async fn codex_start_instance_internal(
                 DEFAULT_INSTANCE_ID,
                 "默认实例",
                 &default_dir,
+                &default_settings.launch_mode,
             )
             .await
             .map_err(|error| format!("Codex 启动已取消: {}", error))?;
@@ -3345,7 +3349,9 @@ async fn codex_start_instance_internal(
     if should_skip_launch_step(skip_failed_step, "writeProfile") {
         modules::logger::log_warn("[Codex Start] 用户选择跳过会话可见性修复步骤");
     } else {
-        let repaired = repair_session_visibility_for_selected_instance(&instance.id, &instance.name, instance_dir)
+        let repaired = repair_session_visibility_for_selected_instance(
+            &instance.id, &instance.name, instance_dir, &instance.launch_mode,
+        )
             .await
             .map_err(|error| format!("Codex 启动已取消: {}", error))?;
         if !repaired {

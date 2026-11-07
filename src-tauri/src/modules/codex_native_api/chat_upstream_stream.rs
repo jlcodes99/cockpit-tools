@@ -110,8 +110,7 @@ impl ResponsesStreamAdapter {
             "reasoning" => ("summary", "text", "response.reasoning_summary_text.delta"),
             _ => ("content", "text", "response.output_text.delta"),
         };
-        let current = self.output[index][list][0][key].as_str().unwrap_or("");
-        self.output[index][list][0][key] = json!(format!("{current}{text}"));
+        if let Value::String(current) = &mut self.output[index][list][0][key] { current.push_str(text); }
         let mut event = json!({"type":event_type,"output_index":index,"item_id":self.output[index]["id"],"delta":text});
         event[if kind == "reasoning" {
             "summary_index"
@@ -154,21 +153,17 @@ impl ResponsesStreamAdapter {
         tool.wire_args.push_str(args);
         tool.wrapped = !custom && self.context.custom(&tool.name);
         tool.custom |= tool.wrapped;
-        let decoded = if self.context.pending_name(&tool.name) {
-            // Arguments may precede the identifying name. Keep their wire bytes
-            // buffered until the request declaration decides function vs custom.
-            tool.args.clone()
-        } else if tool.wrapped {
-            super::tools::unwrap_input(&tool.wire_args, true)
-        } else {
-            tool.wire_args.clone()
-        };
-        if !decoded.starts_with(&tool.args) {
-            return Err(upstream_error(
-                "Custom tool input disagrees with its streamed prefix",
-            ));
+        if !self.context.pending_name(&tool.name) {
+            if tool.wrapped {
+                let decoded = super::tools::unwrap_input(&tool.wire_args, true);
+                if !decoded.starts_with(&tool.args) { return Err(upstream_error("Custom tool input disagrees with its streamed prefix")); }
+                tool.args = decoded;
+            } else {
+                // Ordinary arguments append in place; never recopy the complete
+                // growing call for every small upstream token delta.
+                tool.args.push_str(&tool.wire_args[previous_args..]);
+            }
         }
-        tool.args = decoded;
         let args = &tool.args[previous_args..];
         let mut raw = Vec::new();
         if !tool.added

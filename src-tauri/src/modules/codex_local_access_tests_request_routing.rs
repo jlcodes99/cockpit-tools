@@ -3306,6 +3306,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             "gpt-6-sol",
             "gpt-6-luna",
             "gpt-6.1-sol",
+            "gpt-6.1-terra",
         ] {
             assert!(
                 models.iter().any(|model| model == model_id),
@@ -3321,6 +3322,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             vec![
                 "gpt-6.1-sol",
                 "gpt-6-astra",
+                "gpt-6.1-terra",
                 "gpt-6-sol",
                 "gpt-6-luna",
                 "gpt-5.6-sol",

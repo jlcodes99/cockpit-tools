@@ -233,6 +233,7 @@ struct RepairTargetSelection {
     target_provider: Option<String>,
     session_ids: Option<HashSet<String>>,
     instance_ids: Option<HashSet<String>>,
+    prepare_desktop_projects: bool,
 }
 
 impl RepairTargetSelection {
@@ -261,6 +262,7 @@ impl RepairTargetSelection {
             .filter(|value| !value.is_empty())
             .collect::<HashSet<_>>();
         Ok(Self {
+            prepare_desktop_projects: false,
             target_provider,
             session_ids: if session_ids.is_empty() {
                 None
@@ -478,6 +480,7 @@ pub fn repair_session_visibility_quick_for_instance(
     instance_id: &str,
     instance_name: &str,
     data_dir: &Path,
+    launch_desktop: bool,
 ) -> Result<CodexSessionVisibilityRepairSummary, String> {
     let _repair_guard = acquire_session_visibility_repair_lock()?;
     let started = std::time::Instant::now();
@@ -494,7 +497,10 @@ pub fn repair_session_visibility_quick_for_instance(
             ),
             None,
             None,
-            RepairTargetSelection::default(),
+            RepairTargetSelection {
+                prepare_desktop_projects: launch_desktop,
+                ..Default::default()
+            },
             vec![CodexSyncInstance {
                 id: instance_id.to_string(),
                 name: instance_name.to_string(),

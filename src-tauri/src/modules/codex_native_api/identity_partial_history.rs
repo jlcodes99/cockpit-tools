@@ -284,6 +284,7 @@ impl IdentityStore {
             let parameters: serde_json::Map<String, Value> =
                 serde_json::from_str(&parameters).map_err(storage)?;
             for (key, value) in parameters {
+                let value = rebuild::inherited_parameter(&key, value);
                 full.as_object_mut().unwrap().entry(key).or_insert(value);
             }
         }

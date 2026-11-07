@@ -9,7 +9,7 @@ const PRESERVED: u8 = 2;
 const SEEN: u8 = 4;
 const DUPLICATE: u8 = 8;
 
-pub(super) fn normalize(item: &Value, id: &str) -> String {
+fn prefixed(item: &Value, id: &str) -> String {
     let prefix = match item["type"].as_str() {
         Some("message") => "msg",
         Some("reasoning") => "rs",
@@ -29,6 +29,13 @@ pub(super) fn normalize(item: &Value, id: &str) -> String {
     } else {
         format!("{prefix}_{id}")
     }
+}
+fn portable(id: &str) -> String {
+    id.chars().map(|ch| if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-') { ch } else { '_' }).collect()
+}
+pub(super) fn normalize(item: &Value, id: &str) -> String {
+    let id = prefixed(item, id);
+    if id.chars().count() > LIMIT { id } else { portable(&id) }
 }
 fn drop_encrypted_reasoning(item: &Value) -> bool {
     item["type"] == "reasoning"
@@ -52,7 +59,7 @@ pub(super) fn hashed(id: &str, attempt: usize) -> String {
         .collect::<String>();
     format!(
         "{}_{}",
-        id.chars().take(LIMIT - 17).collect::<String>(),
+        portable(&id.chars().take(LIMIT - 17).collect::<String>()),
         suffix
     )
 }
@@ -102,7 +109,7 @@ pub(super) fn sanitize_input_ids(body: &mut Value) {
                 } else {
                     let mut attempt = 0;
                     loop {
-                        let candidate = hashed(&id, attempt);
+                        let candidate = hashed(&prefixed(item, original), attempt);
                         if !states
                             .get(&candidate)
                             .is_some_and(|state| state & OCCUPIED != 0)

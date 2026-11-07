@@ -2066,7 +2066,7 @@
 
 .platform-layout-bulk-header-right {
   display: grid;
-  /* 侧边栏 / 仪表盘 / 菜单栏 / 启用 四个开关 + 编辑列 */
+  /* 启用 / 侧边栏 / 仪表盘 / 菜单栏 + 编辑列 */
   grid-template-columns: max-content max-content max-content max-content 32px;
   align-items: center;
   justify-content: end;
@@ -2086,7 +2086,7 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--text-secondary);
 }
 
@@ -2247,7 +2247,7 @@
   margin-left: auto;
   min-width: 0;
   display: grid;
-  /* 侧边栏 / 仪表盘 / 菜单栏 / 启用（仅分组）+ 编辑按钮 */
+  /* 与表头保持相同列顺序：启用 / 侧边栏 / 仪表盘 / 菜单栏 + 编辑 */
   grid-template-columns: max-content max-content max-content max-content 32px;
   align-items: center;
   justify-content: end;
@@ -2316,23 +2316,14 @@
   pointer-events: none;
 }
 
-.platform-layout-bulk-enable {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+.platform-layout-enable-placeholder {
+  visibility: hidden;
 }
 
-.platform-layout-bulk-enable-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.platform-layout-bulk-enable-actions .btn-link {
-  font-size: 11px;
-  padding: 0;
-  color: var(--text-secondary);
-  text-decoration: underline;
+.platform-layout-checkbox-placeholder {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
 }
 
 .platform-layout-toggle input[type="checkbox"],

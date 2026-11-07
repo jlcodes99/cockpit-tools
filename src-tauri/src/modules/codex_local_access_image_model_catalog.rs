@@ -63,6 +63,7 @@ fn sanitize_image_model_catalog(collection: &mut CodexLocalAccessCollection) -> 
         .values()
         .cloned()
         .chain(std::iter::once(collection.image_generation_model.clone()))
+        .chain(crate::models::codex_local_access::default_image_generation_models())
         .collect();
     merge_discovered_image_models(collection, candidates);
     before_models != collection.image_generation_models
@@ -120,7 +121,7 @@ fn apply_selected_image_model(
     model: &str,
 ) -> Result<bool, String> {
     let model = normalize_image_model_id(model)?;
-    let mut changed = if matches!(model.as_str(), "gpt-image-2" | "gpt-image-2.5") {
+    let mut changed = if matches!(model.as_str(), "gpt-image-2" | "gpt-image-2.5" | "gpt-image-2.6") {
         false // A family selection does not restore the deleted bare actual model.
     } else {
         update_image_model_catalog(collection, None, Some(model.clone()), None)?

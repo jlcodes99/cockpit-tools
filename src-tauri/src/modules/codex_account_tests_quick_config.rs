@@ -438,6 +438,7 @@
         for expected in [
             "gpt-6.1-sol",
             "gpt-6-astra",
+            "gpt-6.1-terra",
             "gpt-6-sol",
             "gpt-6-luna",
             "gpt-5.6-sol",
@@ -628,8 +629,8 @@
             .filter_map(|model| model["slug"].as_str())
             .collect::<Vec<_>>();
         assert_eq!(
-            slugs.iter().take(4).copied().collect::<Vec<_>>(),
-            vec!["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"]
+            slugs.iter().take(5).copied().collect::<Vec<_>>(),
+            vec!["gpt-6.1-sol", "gpt-6-astra", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna"]
         );
         let luna_index = slugs.iter().position(|slug| *slug == "gpt-6-luna");
         let legacy_sol_index = slugs.iter().position(|slug| *slug == "gpt-5.6-sol");

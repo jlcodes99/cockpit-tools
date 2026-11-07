@@ -65,6 +65,7 @@ pub mod codex_official_app_server;
 pub mod codex_protocol;
 pub(crate) mod codex_model_catalog;
 pub mod codex_quota;
+pub(crate) mod codex_reset_automation;
 pub(crate) mod codex_quota_sync;
 pub mod codex_temp_login;
 pub(crate) mod codex_quota_refresh_scheduler;

@@ -54,7 +54,7 @@ import {
   WorkbuddyAccount,
   getWorkbuddyOfficialQuotaModel,
 } from '../types/workbuddy';
-import { CodexAccount, getCodexQuotaWindows } from '../types/codex';
+import { CodexAccount, getCodexQuotaWindows, isCodexAgentIdentityAccount, isCodexWebSessionAccount } from '../types/codex';
 import type { MinimaxCodeAccount } from '../types/minimaxCode';
 import { getMiniMaxCodeQuotaGroups } from '../utils/minimaxCode/parser';
 import { GitHubCopilotAccount } from '../types/githubCopilot';
@@ -81,7 +81,9 @@ import './DashboardPage.css';
 import apiKeyFunIcon from '../assets/icons/apikey-fun.png';
 import { RobotIcon } from '../components/icons/RobotIcon';
 import { CodexIcon } from '../components/icons/CodexIcon';
+import { requestCodexResetCreditDetails } from '../utils/codexResetCreditNavigation';
 import { CodexResetCreditExpiry } from '../components/CodexResetCreditExpiry';
+import { CodexResetAutomationStatus } from '../components/codex/CodexResetAutomation';
 import { WindsurfIcon } from '../components/icons/WindsurfIcon';
 import { KiroIcon } from '../components/icons/KiroIcon';
 import { CursorIcon } from '../components/icons/CursorIcon';
@@ -2557,10 +2559,15 @@ export function DashboardPage({
       isRefreshing: refreshing.has(account.id),
       isSwitching: false,
       maxMetrics: 4,
-      extraContent: !isCodexApiKeyAccount(account) && (account.quota?.reset_credits_available ?? 0) > 0 ? (
+      extraContent: !isCodexApiKeyAccount(account) ? (
         <div className="account-mini-reset-credits">
+          {!isCodexAgentIdentityAccount(account) && <button type="button" className={`codex-reset-credit-pill ${(account.quota?.reset_credits_available ?? 0) > 0 ? 'is-available' : 'is-unavailable'}`}
+            onClick={() => { requestCodexResetCreditDetails(account.id); onNavigate('codex'); }}>
+            <RotateCw size={13} />{typeof account.quota?.reset_credits_available === 'number' ? t('codex.quota.resetCredits', { count: account.quota.reset_credits_available }) : t('codex.quota.resetCreditDetailsTitle')}
+            {!isCodexWebSessionAccount(account) && <CodexResetAutomationStatus accountId={account.id} />}
+          </button>}
           <CodexResetCreditExpiry key={account.id} accountId={account.id} quota={account.quota}
-            disabled={refreshing.has(account.id)} onClick={() => onNavigate('codex')} />
+            disabled={refreshing.has(account.id)} onClick={() => { requestCodexResetCreditDetails(account.id); onNavigate('codex'); }} />
         </div>
       ) : undefined,
       onEditTags: () => setTagModalState({ accountId: account.id, platform: 'codex', tags: account.tags || [] }),

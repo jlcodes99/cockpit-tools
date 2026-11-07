@@ -35,6 +35,7 @@ const GPT_5_6_MODEL_PRESETS_MIGRATION_ID: &str = "add-gpt-5-6-model-presets";
 const GPT_5_5_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-5-5-model-preset";
 const RETIRE_GPT_5_5_WAKEUP_MODEL_MIGRATION_ID: &str = "retire-gpt-5-5-wakeup-model";
 const GPT_6_1_SOL_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-6-1-sol-model-preset";
+const GPT_6_1_TERRA_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-6-1-terra-model-preset";
 const GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-6-astra-model-preset";
 const GPT_6_SOL_LUNA_MODEL_PRESETS_MIGRATION_ID: &str = "add-gpt-6-sol-luna-model-presets";
 const PREFIX_BUILTIN_MODEL_PRESET_NAMES_MIGRATION_ID: &str = "prefix-builtin-model-preset-names";
@@ -511,7 +512,9 @@ fn default_reasoning_efforts_for_model(model: &str) -> Vec<String> {
             REASONING_EFFORT_MEDIUM.to_string(),
             REASONING_EFFORT_HIGH.to_string(),
         ]
-    } else if model.trim().eq_ignore_ascii_case("gpt-6.1-sol") {
+    } else if model.trim().eq_ignore_ascii_case("gpt-6.1-sol")
+        || model.trim().eq_ignore_ascii_case("gpt-6.1-terra")
+    {
         vec!["low", "medium", "high", "xhigh", "max", "ultra"]
             .into_iter()
             .map(str::to_string)
@@ -536,6 +539,7 @@ fn default_model_presets() -> Vec<CodexWakeupModelPreset> {
     let items = [
         ("preset-gpt-6-1-sol", "GPT-6.1 Sol", "gpt-6.1-sol"),
         ("preset-gpt-6-astra", "GPT-6 Astra", "gpt-6-astra"),
+        ("preset-gpt-6-1-terra", "GPT-6.1 Terra", "gpt-6.1-terra"),
         ("preset-gpt-6-sol", "GPT-6 Sol", "gpt-6-sol"),
         ("preset-gpt-6-luna", "GPT-6 Luna", "gpt-6-luna"),
         ("preset-gpt-5-6-sol", "GPT-5.6 Sol", "gpt-5.6-sol"),
@@ -667,10 +671,10 @@ fn ensure_gpt_6_sol_luna_model_presets(state: &mut CodexWakeupState) -> bool {
     }
 
     let defaults = default_model_presets();
-    let mut insert_at = state
-        .model_presets
-        .iter()
-        .position(|preset| preset.model.trim().eq_ignore_ascii_case("gpt-6-astra"))
+    let mut insert_at = state.model_presets.iter()
+        .position(|preset| preset.model.trim().eq_ignore_ascii_case("gpt-6.1-terra"))
+        .or_else(|| state.model_presets.iter()
+            .position(|preset| preset.model.trim().eq_ignore_ascii_case("gpt-6-astra")))
         .map(|index| index + 1)
         .unwrap_or(0);
     for model in ["gpt-6-sol", "gpt-6-luna"] {
@@ -899,7 +903,7 @@ fn ensure_gpt_6_1_sol_model_preset(state: &mut CodexWakeupState) -> bool {
     let defaults = default_model_presets();
     let unchanged = defaults
         .iter()
-        .filter(|preset| preset.model != "gpt-6.1-sol")
+        .filter(|preset| preset.model != "gpt-6.1-sol" && preset.model != "gpt-6.1-terra")
         .all(|preset| {
             state
                 .model_presets
@@ -917,6 +921,26 @@ fn ensure_gpt_6_1_sol_model_preset(state: &mut CodexWakeupState) -> bool {
     true
 }
 
+fn ensure_gpt_6_1_terra_model_preset(state: &mut CodexWakeupState) -> bool {
+    if state.model_preset_migrations.iter()
+        .any(|id| id == GPT_6_1_TERRA_MODEL_PRESET_MIGRATION_ID)
+    {
+        return false;
+    }
+    state.model_preset_migrations.push(GPT_6_1_TERRA_MODEL_PRESET_MIGRATION_ID.into());
+    if !state.model_presets.iter()
+        .any(|preset| preset.model.trim().eq_ignore_ascii_case("gpt-6.1-terra"))
+    {
+        let insert_at = state.model_presets.iter()
+            .position(|preset| preset.model.trim().eq_ignore_ascii_case("gpt-6-astra"))
+            .map(|index| index + 1).unwrap_or(0);
+        let terra = default_model_presets().into_iter()
+            .find(|preset| preset.model == "gpt-6.1-terra").expect("Terra preset");
+        state.model_presets.insert(insert_at, terra);
+    }
+    true
+}
+
 fn apply_model_preset_migrations(state: &mut CodexWakeupState) -> bool {
     let mut changed = false;
     changed |= prune_legacy_model_presets(state);
@@ -927,6 +951,7 @@ fn apply_model_preset_migrations(state: &mut CodexWakeupState) -> bool {
     changed |= ensure_gpt_6_astra_model_preset(state);
     changed |= ensure_gpt_6_sol_luna_model_presets(state);
     changed |= ensure_gpt_6_1_sol_model_preset(state);
+    changed |= ensure_gpt_6_1_terra_model_preset(state);
     changed |= prefix_builtin_model_preset_names(state);
     state.model_preset_migrations.sort();
     state.model_preset_migrations.dedup();
@@ -3421,6 +3446,35 @@ mod tests {
     }
 
     #[test]
+    fn gpt_6_1_terra_wakeup_upgrade_is_idempotent_and_respects_custom_presets() {
+        let mut state = CodexWakeupState {
+            enabled: false, tasks: vec![], model_presets: default_model_presets(),
+            model_preset_migrations: vec![],
+        };
+        state.model_presets.retain(|preset| preset.model != "gpt-6.1-terra");
+        assert!(apply_model_preset_migrations(&mut state));
+        let terra = &state.model_presets[2];
+        assert_eq!(terra.model, "gpt-6.1-terra");
+        assert_eq!(terra.allowed_reasoning_efforts, vec!["low", "medium", "high", "xhigh", "max", "ultra"]);
+        assert_eq!(terra.default_reasoning_effort, "medium");
+        assert!(!apply_model_preset_migrations(&mut state));
+        let serialized = serde_json::to_vec(&state).unwrap();
+        let mut restored: CodexWakeupState = serde_json::from_slice(&serialized).unwrap();
+        restored.model_presets.retain(|preset| preset.model != "gpt-6.1-terra");
+        assert!(!apply_model_preset_migrations(&mut restored));
+        assert!(!restored.model_presets.iter().any(|preset| preset.model == "gpt-6.1-terra"));
+        let terra = state.model_presets.iter_mut().find(|preset| preset.model == "gpt-6.1-terra").unwrap();
+        terra.name = "My Terra".into();
+        terra.allowed_reasoning_efforts = vec!["high".into()];
+        state.model_preset_migrations.retain(|id| id != super::GPT_6_1_TERRA_MODEL_PRESET_MIGRATION_ID);
+        assert!(apply_model_preset_migrations(&mut state));
+        let terra = state.model_presets.iter().filter(|preset| preset.model == "gpt-6.1-terra").collect::<Vec<_>>();
+        assert_eq!(terra.len(), 1);
+        assert_eq!(terra[0].name, "My Terra");
+        assert_eq!(terra[0].allowed_reasoning_efforts, vec!["high"]);
+    }
+
+    #[test]
     fn default_model_presets_include_gpt_5_6_models() {
         let models: Vec<String> = default_model_presets()
             .into_iter()
@@ -3432,6 +3486,7 @@ mod tests {
             vec![
                 "gpt-6.1-sol",
                 "gpt-6-astra",
+                "gpt-6.1-terra",
                 "gpt-6-sol",
                 "gpt-6-luna",
                 "gpt-5.6-sol",
@@ -3494,6 +3549,7 @@ mod tests {
             vec![
                 "gpt-6.1-sol",
                 "gpt-6-astra",
+                "gpt-6.1-terra",
                 "gpt-6-sol",
                 "gpt-6-luna",
                 "gpt-5.6-sol",
@@ -3575,6 +3631,7 @@ mod tests {
             vec![
                 "gpt-6.1-sol",
                 "gpt-6-astra",
+                "gpt-6.1-terra",
                 "gpt-6-sol",
                 "gpt-6-luna",
                 "gpt-5.6-terra",
@@ -3610,8 +3667,9 @@ mod tests {
         assert!(apply_model_preset_migrations(&mut state));
         assert_eq!(state.model_presets[0].model, "gpt-6.1-sol");
         assert_eq!(state.model_presets[1].model, "gpt-6-astra");
-        assert_eq!(state.model_presets[2].model, "gpt-6-sol");
-        assert_eq!(state.model_presets[3].model, "gpt-6-luna");
+        assert_eq!(state.model_presets[2].model, "gpt-6.1-terra");
+        assert_eq!(state.model_presets[3].model, "gpt-6-sol");
+        assert_eq!(state.model_presets[4].model, "gpt-6-luna");
         // 旧短名（6 Astra）在迁移中补上 GPT- 前缀。
         assert_eq!(state.model_presets[1].name, "GPT-6 Astra");
         assert!(state

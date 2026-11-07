@@ -39,6 +39,8 @@ test('GPT-6.1 Sol is preferred over legacy candidates when wakeup model is absen
 
 
 test('current models outrank retired provider entries during automatic tests', () => {
+  assert.equal(selectProviderBatchTestModelId('responses', ['gpt-5.4', 'gpt-6.1-terra']), 'gpt-6.1-terra');
+  assert.equal(selectProviderBatchTestModelId('responses', ['gpt-6.1-terra', DEFAULT_WAKEUP_MODEL]), DEFAULT_WAKEUP_MODEL);
   assert.equal(selectProviderBatchTestModelId('responses', ['gpt-4o', 'gpt-5.4', 'gpt-6-luna']), 'gpt-6-luna');
   assert.equal(selectProviderBatchTestModelId('responses', ['gpt-5.2', 'gpt-6-astra']), 'gpt-6-astra');
   assert.equal(selectProviderBatchTestModelId('responses', ['gpt-5.5', 'gpt-5.6-sol']), 'gpt-5.6-sol');

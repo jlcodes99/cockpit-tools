@@ -1,6 +1,58 @@
 // Codex 账号测试：DeepSeek and model catalog behavior。
 // 测试与生产实现共享 super 作用域，验证真实持久化和运行态行为。
     #[test]
+    fn gpt_6_1_terra_catalog_upgrade_preserves_profiles_and_customization() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock().unwrap_or_else(|error| error.into_inner());
+        let env = TestEnvGuard::new("codex-terra-catalog-upgrade");
+        for name in ["default", "multi-instance"] {
+            let dir = env.home_dir.join(name);
+            fs::create_dir_all(&dir).unwrap();
+            let defaults = super::default_experimental_model_definitions(&dir);
+            assert!(defaults.iter().any(|model| model.model_id == "gpt-6.1-terra"));
+            let mut previous = defaults.into_iter()
+                .filter(|model| model.model_id != "gpt-6.1-terra").collect::<Vec<_>>();
+            previous[0].context_window = Some(800_000);
+            let old_config = serde_json::json!({
+                "version": super::EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
+                "models": previous,
+                "migrations": [super::GPT_6_ASTRA_MODEL_CATALOG_MIGRATION_ID,
+                    super::GPT_6_SOL_LUNA_MODEL_CATALOG_MIGRATION_ID,
+                    super::GPT_6_1_SOL_MODEL_CATALOG_MIGRATION_ID]
+            });
+            let path = super::experimental_model_config_path(&dir);
+            fs::write(&path, serde_json::to_vec(&old_config).unwrap()).unwrap();
+            let upgraded = super::read_experimental_model_definitions(&dir);
+            assert_eq!(upgraded.iter().filter(|model| model.model_id == "gpt-6.1-terra").count(), 1);
+            assert_eq!(upgraded[0].context_window, Some(800_000));
+            let old_ids = previous.iter().map(|model| model.model_id.clone()).collect::<Vec<_>>();
+            let catalog_path = super::experimental_model_catalog_path(&dir);
+            fs::write(&catalog_path, serde_json::to_vec(
+                &crate::modules::codex_protocol::build_codex_client_models_response(&old_ids),
+            ).unwrap()).unwrap();
+            super::rebuild_managed_catalog_from_existing(&catalog_path).unwrap();
+            let rebuilt: serde_json::Value = serde_json::from_slice(&fs::read(&catalog_path).unwrap()).unwrap();
+            assert!(rebuilt["models"].as_array().unwrap().iter().any(|model| model["slug"] == "gpt-6.1-terra"));
+            let saved = super::persist_experimental_model_definitions(
+                &dir, upgraded, Some("gpt-5.6-luna"),
+            ).unwrap();
+            let reloaded = super::read_experimental_model_definitions(&dir);
+            assert_eq!(serde_json::to_value(&saved).unwrap(), serde_json::to_value(&reloaded).unwrap());
+            let config = super::read_experimental_model_catalog_config(&dir).unwrap();
+            assert!(config.migrations.iter().any(|id| id == super::GPT_6_1_TERRA_MODEL_CATALOG_MIGRATION_ID));
+            assert_eq!(config.default_model_id.as_deref(), Some("gpt-5.6-luna"));
+            let removed = reloaded.into_iter().filter(|model| model.model_id != "gpt-6.1-terra").collect();
+            super::persist_experimental_model_definitions(&dir, removed, None).unwrap();
+            assert!(!super::read_experimental_model_definitions(&dir).iter().any(|model| model.model_id == "gpt-6.1-terra"));
+            // A previously curated list must not gain models during an upgrade either.
+            let mut curated = old_config.clone();
+            curated["models"].as_array_mut().unwrap().retain(|model| model["model_id"] != "gpt-6-sol");
+            fs::write(&path, serde_json::to_vec(&curated).unwrap()).unwrap();
+            assert!(!super::read_experimental_model_definitions(&dir).iter().any(|model| model.model_id == "gpt-6.1-terra"));
+        }
+    }
+
+    #[test]
     fn deepseek_account_normalize_defaults_to_official_responses_profile() {
         let mut account = CodexAccount::new_api_key(
             "deepseek-api-key".to_string(),
@@ -2161,7 +2213,7 @@ multi_agent = true
         let mut account = CodexAccount::new_api_key(
             "api-image-self".into(), "images@example.com".into(), "test-image-key".into(),
             CodexApiProviderMode::Custom, Some("https://images.example/v1".into()),
-            Some("images".into()), Some("Images".into()), vec!["gpt-image-2.5".into()],
+            Some("images".into()), Some("Images".into()), vec!["gpt-image-2.6".into()],
         );
         save_account(&account).unwrap();
         let updated = update_account_instance_access(
@@ -2188,13 +2240,13 @@ multi_agent = true
             vec!["gpt-image-2.5-flare".into(), "gpt-image-2.5-vip".into()],
         );
         save_account(&account).unwrap();
-        assert_eq!(update_account_instance_access(&account.id, None, None, Some(vec![account.id.clone()])).unwrap_err(),
-            "codex.localAccess.imageAccounts.modelRequired");
         let service_path = crate::modules::codex_local_access::model_config_service_file_path().unwrap();
         fs::write(&service_path, serde_json::to_vec(&serde_json::json!({
             "enabled": false, "port": 14998, "apiKey": "test-service", "accountIds": [],
             "imageGenerationModel": "gpt-image-2.5", "createdAt": 1, "updatedAt": 1,
         })).unwrap()).unwrap();
+        assert_eq!(update_account_instance_access(&account.id, None, None, Some(vec![account.id.clone()])).unwrap_err(),
+            "codex.localAccess.imageAccounts.modelRequired");
         let selected = HashMap::from([(account.id.clone(), "gpt-image-2.5-vip".into())]);
         let saved = super::update_account_instance_access_with_image_models(
             &account.id, None, None, Some(vec![account.id.clone()]), Some(selected.clone()),
@@ -2333,14 +2385,16 @@ multi_agent = true
     }
 
     #[test]
-    fn managed_catalog_rebuild_preserves_model_context_and_compaction_limits() {
+    fn managed_catalog_rebuild_preserves_context_and_input_capabilities() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(super::CODEX_MANAGED_MODEL_CATALOG_FILE);
         let existing = serde_json::json!({"models":[
             {"slug":"custom-model", "display_name":"Custom", "context_window":1_000_000,
-             "max_context_window":1_000_000, "auto_compact_token_limit":900_000},
+             "max_context_window":1_000_000, "auto_compact_token_limit":900_000,
+             "input_modalities":["text","image"], "supports_image_detail_original":false},
             {"slug":"gpt-6.1-sol", "display_name":"Sol", "context_window":516_000,
-             "max_context_window":516_000, "auto_compact_token_limit":464_400}
+             "max_context_window":516_000, "auto_compact_token_limit":464_400,
+             "input_modalities":["text"], "supports_image_detail_original":false}
         ]});
         fs::write(&path, serde_json::to_string(&existing).unwrap()).unwrap();
         for _ in 0..2 {
@@ -2359,6 +2413,8 @@ multi_agent = true
                     "context_window",
                     "max_context_window",
                     "auto_compact_token_limit",
+                    "input_modalities",
+                    "supports_image_detail_original",
                 ] {
                     assert_eq!(
                         new[field], old[field],

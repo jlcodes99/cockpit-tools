@@ -14,6 +14,7 @@ test("vision switches honor mixed-case explicit values and provider defaults", (
   assert.equal(resolveProviderModelVisionState("Qwen-VL", {}, true), true);
   assert.equal(resolveProviderModelVisionState("GPT-6-LUNA", {}, false), true);
   assert.equal(resolveProviderModelVisionState("GPT-6-LUNA", { "gpt-6-luna": false }), false);
+  assert.equal(resolveProviderModelVisionState("GPT-6.1-TERRA", { "gpt-6.1-terra": false }), false);
 });
 
 test("saving and reopening retains explicit disabled overrides for inherited vision", () => {
@@ -128,6 +129,7 @@ test("models with catalog image input declarations default to vision input", () 
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-6.1-sol",
+    "gpt-6.1-terra",
     "gpt-6-astra",
     "gpt-6-sol",
     "gpt-6-luna",
@@ -141,6 +143,7 @@ test("models with catalog image input declarations default to vision input", () 
     "grok-4.7",
     "openai/gpt-5.6-sol",
     "openai/gpt-6-astra",
+    " OPENAI/GPT-6.1-TERRA ",
     "openai/gpt-6-sol",
     " OPENAI/GPT-6-LUNA ",
   ]) {

@@ -89,7 +89,7 @@ async fn native_image_route_once(
             catalog_ids.push(id);
         }
     }
-    let mut accounts = host.load_routing_accounts(catalog_ids, caller.id != NATIVE_INTERNAL_CALLER && collection.image_generation_account_ids.is_empty()).await?;
+    let mut accounts = host.load_routing_accounts(catalog_ids, false).await?;
     let use_configured_main = request.responses_model.is_none()
         || !matches!(
             collection.image_generation_model.trim(),
@@ -133,6 +133,10 @@ async fn native_image_route_once(
                     && native_excluded(&rule.excluded_models, client_image_model)
             })
             && (account.is_api_key_auth()
+                || (request.responses_model.is_none()
+                    && native_image_source_model(&collection, account, selection).is_some_and(
+                        |model| crate::models::codex_local_access::is_codex_oauth_image_model(&model),
+                    ))
                 || native_image_main_model_allowed(
                     &collection,
                     key,
@@ -198,7 +202,9 @@ async fn native_image_route_once(
             )
         })?;
     check_budget_pricing(&collection, key, &image_model)?;
-    let main_model = (!account.is_api_key_auth()).then(|| {
+    let direct = request.responses_model.is_none()
+        && crate::models::codex_local_access::is_codex_oauth_image_model(&image_model);
+    let main_model = (!account.is_api_key_auth() && !direct).then(|| {
         native_image_main_model(&collection, responses_model.as_deref(), use_configured_main)
     });
     let mut route = native_route_for_reserved_account(
@@ -681,7 +687,7 @@ fn native_image_source_model(
         Some(requested)
     };
     let actual = resolve_image_generation_source_model(account, collection, explicit)?;
-    // An OAuth source cannot serve a suffixed API-key-only model.
+    // OAuth sources execute only the exact configured native image ID.
     if !account.is_api_key_auth() && requested != actual {
         return None;
     }

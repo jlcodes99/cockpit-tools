@@ -509,9 +509,9 @@ fn migrate_builtin_model_display_names(base_dir: &Path, doc: &Document) -> Resul
     Ok(catalog_changed || cached_config_needs_write)
 }
 
-/// 把 GPT-6 家族按官方推荐顺序（astra → sol → luna）排到清单最前面。
+/// 把 GPT-6 家族按官方推荐顺序排到清单最前面。
 ///
-/// 官方客户端的推荐集把这三个模型放在 5.6 系列之前；缺失的条目会被跳过，
+/// 官方客户端的推荐集把这些模型放在 5.6 系列之前；缺失的条目会被跳过，
 /// 不会凭空插入用户清单里不存在的模型。
 fn prioritize_gpt_6_model_definitions(
     mut models: Vec<CodexExperimentalModelDefinition>,
@@ -520,6 +520,7 @@ fn prioritize_gpt_6_model_definitions(
     for model_id in [
         GPT_6_1_SOL_MODEL_ID,
         GPT_6_ASTRA_MODEL_ID,
+        GPT_6_1_TERRA_MODEL_ID,
         GPT_6_SOL_MODEL_ID,
         GPT_6_LUNA_MODEL_ID,
     ]
@@ -784,7 +785,7 @@ fn maybe_add_gpt_6_1_sol_to_previous_shipped_model_definitions(
         .collect::<HashSet<_>>();
     if !SHIPPED_VISIBLE_CODEX_MODEL_IDS
         .iter()
-        .filter(|id| **id != GPT_6_1_SOL_MODEL_ID && **id != "gpt-reserve")
+        .filter(|id| ![GPT_6_1_SOL_MODEL_ID, GPT_6_1_TERRA_MODEL_ID, "gpt-reserve"].contains(id))
         .filter(|id| !is_retired_builtin_codex_model(id))
         .all(|id| ids.contains(&id.to_ascii_lowercase()))
     {
@@ -799,12 +800,33 @@ fn maybe_add_gpt_6_1_sol_to_previous_shipped_model_definitions(
     prioritize_gpt_6_model_definitions(models)
 }
 
+/// Extend the previous default catalog once, preserving curated lists and explicit removals.
+fn maybe_add_gpt_6_1_terra_to_previous_shipped_model_definitions(
+    base_dir: &Path,
+    mut models: Vec<CodexExperimentalModelDefinition>,
+) -> Vec<CodexExperimentalModelDefinition> {
+    let ids = models.iter().map(|model| model.model_id.to_ascii_lowercase())
+        .filter(|id| id != "gpt-reserve").collect::<HashSet<_>>();
+    let previous = SHIPPED_VISIBLE_CODEX_MODEL_IDS.iter()
+        .filter(|id| ![GPT_6_1_TERRA_MODEL_ID, "gpt-reserve"].contains(id))
+        .map(|id| id.to_string()).collect::<HashSet<_>>();
+    if ids == previous {
+        if let Some(terra) = default_experimental_model_definitions(base_dir).into_iter()
+            .find(|model| model.model_id == GPT_6_1_TERRA_MODEL_ID)
+        {
+            models.push(terra);
+        }
+    }
+    prioritize_gpt_6_model_definitions(models)
+}
+
 fn model_catalog_display_name(model_id: &str, fallback: &str) -> String {
     match model_id.trim().to_ascii_lowercase().as_str() {
         "gpt-5.6-sol" => "GPT-5.6 Sol".to_string(),
         "gpt-5.6-terra" => "GPT-5.6 Terra".to_string(),
         "gpt-5.6-luna" => "GPT-5.6 Luna".to_string(),
         GPT_6_1_SOL_MODEL_ID => "GPT-6.1 Sol".to_string(),
+        GPT_6_1_TERRA_MODEL_ID => "GPT-6.1 Terra".to_string(),
         GPT_6_ASTRA_MODEL_ID => "GPT-6 Astra".to_string(),
         GPT_6_SOL_MODEL_ID => "GPT-6 Sol".to_string(),
         GPT_6_LUNA_MODEL_ID => "GPT-6 Luna".to_string(),
@@ -1114,6 +1136,8 @@ pub(crate) fn read_experimental_model_definitions(
                 .migrations
                 .iter()
                 .any(|item| item == GPT_6_1_SOL_MODEL_CATALOG_MIGRATION_ID);
+            let should_add_terra_61 = !config.migrations.iter()
+                .any(|item| item == GPT_6_1_TERRA_MODEL_CATALOG_MIGRATION_ID);
             normalize_experimental_model_definitions_for_profile(Some(base_dir), config.models).map(
                 |models| {
                     (
@@ -1122,17 +1146,18 @@ pub(crate) fn read_experimental_model_definitions(
                         should_add_astra,
                         should_add_sol_luna,
                         should_add_sol_61,
+                        should_add_terra_61,
                     )
                 },
             )
         }) {
-        Ok((_models, true, _, _, _)) => {
+        Ok((_models, true, _, _, _, _)) => {
             // A release migration intentionally resets all pre-release lists to the
             // shipped visible-model preset. Later user edits are preserved by version 4+
             // and the additive Astra / GPT-6 Sol-Luna migration markers.
             default_experimental_model_definitions(base_dir)
         }
-        Ok((models, false, should_add_astra, should_add_sol_luna, should_add_sol_61)) => {
+        Ok((models, false, should_add_astra, should_add_sol_luna, should_add_sol_61, should_add_terra_61)) => {
             let models = if should_add_astra {
                 maybe_add_gpt_6_astra_to_previous_shipped_model_definitions(base_dir, models)
             } else {
@@ -1143,10 +1168,15 @@ pub(crate) fn read_experimental_model_definitions(
             } else {
                 prioritize_gpt_6_model_definitions(models)
             };
-            if should_add_sol_61 {
+            let models = if should_add_sol_61 {
                 maybe_add_gpt_6_1_sol_to_previous_shipped_model_definitions(base_dir, models)
             } else {
                 prioritize_gpt_6_model_definitions(models)
+            };
+            if should_add_terra_61 {
+                maybe_add_gpt_6_1_terra_to_previous_shipped_model_definitions(base_dir, models)
+            } else {
+                models
             }
         }
         Err(error) => {
@@ -1233,6 +1263,9 @@ fn persist_experimental_model_definitions(
         .any(|item| item == GPT_6_1_SOL_MODEL_CATALOG_MIGRATION_ID)
     {
         migrations.push(GPT_6_1_SOL_MODEL_CATALOG_MIGRATION_ID.to_string());
+    }
+    if !migrations.iter().any(|item| item == GPT_6_1_TERRA_MODEL_CATALOG_MIGRATION_ID) {
+        migrations.push(GPT_6_1_TERRA_MODEL_CATALOG_MIGRATION_ID.to_string());
     }
     let mut content = serde_json::to_string_pretty(&ExperimentalModelCatalogConfig {
         version: EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
@@ -1748,11 +1781,18 @@ fn apply_experimental_model_catalog_to_doc(
             &generated_content,
         )?
     };
-    let content = crate::modules::codex_model_catalog_capabilities::decorate(&content)?;
-    write_string_atomic(&experimental_model_catalog_path(base_dir), &content)
+    let mut catalog = serde_json::from_str(&content)
+        .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_SERIALIZE_FAILED".to_string())?;
+    crate::modules::codex_local_access::apply_attached_catalog_image_capabilities(doc, &mut catalog)?;
+    crate::modules::codex_model_catalog_capabilities::supplement(&mut catalog)?;
+    let content = serde_json::to_string_pretty(&catalog)
+        .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_SERIALIZE_FAILED".to_string())?;
+    let path = experimental_model_catalog_path(base_dir);
+    write_string_atomic(&path, &content)
         .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_WRITE_FAILED".to_string())?;
     crate::modules::codex_local_access::invalidate_codex_model_cache(base_dir)
         .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_CACHE_CLEAR_FAILED".to_string())?;
+    crate::modules::codex_managed_model_catalog_version::write_managed_catalog_meta(&path)?;
     cleanup_legacy_managed_model_catalogs(base_dir);
     doc[CODEX_CONFIG_MODEL_CATALOG_JSON_KEY] = value(CODEX_MANAGED_MODEL_CATALOG_FILE);
     Ok(false)
@@ -2997,8 +3037,8 @@ fn cleanup_managed_model_catalog_for_dir(base_dir: &Path) -> Result<bool, String
 
 /// 启动时按版本戳重建落后的受管模型目录。
 ///
-/// 目录内容用「旧目录里的模型清单 + 当前生成逻辑」重建，只刷新结构/能力字段，
-/// 不改变用户实际可用的模型集合；展示名沿用旧目录，避免界面名称漂移。
+/// 目录内容用「旧目录里的模型清单 + 当前生成逻辑」重建，刷新结构/能力字段，
+/// 并为未自定义的默认清单补入新型号；展示名沿用旧目录，保留用户模型选择。
 pub(crate) fn rebuild_stale_managed_model_catalogs() -> usize {
     let mut rebuilt = 0usize;
     for base_dir in managed_catalog_profile_dirs() {
@@ -3044,6 +3084,7 @@ fn managed_catalog_profile_dirs() -> Vec<PathBuf> {
 
 fn rebuild_managed_catalog_from_existing(catalog_path: &Path) -> Result<(), String> {
     use serde_json::Value as JsonValue;
+    use sha2::{Digest, Sha256};
 
     let existing =
         fs::read_to_string(catalog_path).map_err(|e| format!("读取现有模型目录失败: {}", e))?;
@@ -3054,7 +3095,7 @@ fn rebuild_managed_catalog_from_existing(catalog_path: &Path) -> Result<(), Stri
         .and_then(JsonValue::as_array)
         .cloned()
         .unwrap_or_default();
-    let model_ids = old_models
+    let mut model_ids = old_models
         .iter()
         .filter_map(|model| {
             model
@@ -3066,9 +3107,21 @@ fn rebuild_managed_catalog_from_existing(catalog_path: &Path) -> Result<(), Stri
     if model_ids.is_empty() {
         return Err("现有模型目录没有可重建的模型条目".to_string());
     }
+    let configured = catalog_path.parent().map(read_experimental_model_definitions).unwrap_or_default();
+    // A capability rebuild also upgrades unchanged default catalogs. Provider and
+    // user-curated catalogs retain their actual model selection.
+    let previous_ids = SHIPPED_VISIBLE_CODEX_MODEL_IDS.iter()
+        .filter(|id| ![GPT_6_1_TERRA_MODEL_ID, "gpt-reserve"].contains(id))
+        .map(|id| id.to_string()).collect::<HashSet<_>>();
+    let existing_ids = model_ids.iter().map(|id| id.to_ascii_lowercase())
+        .filter(|id| id != "gpt-reserve").collect::<HashSet<_>>();
+    if existing_ids == previous_ids && configured.iter().any(|model| model.model_id == GPT_6_1_TERRA_MODEL_ID) {
+        let insert_at = model_ids.iter().position(|id| id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID))
+            .map(|index| index + 1).unwrap_or(0);
+        model_ids.insert(insert_at, GPT_6_1_TERRA_MODEL_ID.into());
+    }
     let mut rebuilt =
         crate::modules::codex_protocol::build_codex_client_models_response(&model_ids);
-    let configured = catalog_path.parent().map(read_experimental_model_definitions).unwrap_or_default();
     if let Some(new_models) = rebuilt.get_mut("models").and_then(JsonValue::as_array_mut) {
         for model in new_models.iter_mut() {
             let Some(slug) = model
@@ -3106,6 +3159,14 @@ fn rebuild_managed_catalog_from_existing(catalog_path: &Path) -> Result<(), Stri
                 let old_default = old["default_reasoning_level"].as_str();
                 model["default_reasoning_level"] = if levels.as_array().is_some_and(|items| items.iter().any(|item| item["effort"].as_str() == old_default)) { old["default_reasoning_level"].clone() } else { template["default_reasoning_level"].clone() };
             }
+            // Preserve provider-supplied modalities when rebuilding from disk.
+            // For an attached API service the current key's route wins below.
+            if let Some(modalities) = old.get("input_modalities").filter(|value| value.is_array()) {
+                model["input_modalities"] = modalities.clone();
+            }
+            if let Some(original) = old.get("supports_image_detail_original").and_then(JsonValue::as_bool) {
+                model["supports_image_detail_original"] = serde_json::json!(original);
+            }
             // Rebuilding capabilities must retain the profile's per-model limits.
             for field in [
                 "context_window",
@@ -3121,10 +3182,29 @@ fn rebuild_managed_catalog_from_existing(catalog_path: &Path) -> Result<(), Stri
             }
         }
     }
+    if let Some(profile) = catalog_path.parent() {
+        match fs::read_to_string(get_config_toml_path(profile)) {
+            Ok(text) => {
+                let doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&text)
+                    .map_err(|error| error.to_string())?;
+                crate::modules::codex_local_access::apply_attached_catalog_image_capabilities(&doc, &mut rebuilt)?;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.to_string()),
+        }
+    }
     let mut content = serde_json::to_string_pretty(&rebuilt)
         .map_err(|e| format!("序列化重建后的模型目录失败: {}", e))?;
     content.push('\n');
-    crate::modules::atomic_write::write_string_atomic(catalog_path, &content)?;
+    let expected_hash: [u8; 32] = Sha256::digest(existing.as_bytes()).into();
+    if !crate::modules::atomic_write::write_string_atomic_if_hash_matches(
+        catalog_path, expected_hash, || Ok(content),
+    )? {
+        return Err("CODEX_MANAGED_CATALOG_CHANGED".into());
+    }
+    if let Some(profile) = catalog_path.parent() {
+        crate::modules::codex_local_access::invalidate_codex_model_cache(profile)?;
+    }
     crate::modules::codex_managed_model_catalog_version::write_managed_catalog_meta(catalog_path)
 }
 

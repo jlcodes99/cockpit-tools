@@ -172,6 +172,7 @@ for (const { name, source, visibility, submit, ready, blocked } of dialogs) {
     let calls = 0;
     const onClick = vm.runInNewContext(`(${attributeExpression(button, 'onClick').getText(source)})`, {
       [submit]: () => { calls += 1; },
+      copyError: { clear() {} },
       officialUsage: true, usageApiKeyDraft: 'test-admin-key',
     });
     onClick();
@@ -197,11 +198,12 @@ test('structure: the relocated add footer only appears on the API Key tab', () =
   assert.ok(apiKeyOnly, 'The API Key action must not leak onto OAuth/import/token tabs');
 });
 
-test('structure: background scroll locks follow add and both edit visibility states', () => {
-  for (const [source, expected] of [
-    [addSource, 'Boolean(showAddModal)'],
-    [overviewSource, 'Boolean(quickSwitchAccountId)'],
-    [editorSource, 'showModal'],
+test('background scroll locks follow account dialogs and reset confirmation visibility', () => {
+  for (const [source, hidden, opened] of [
+    [addSource, { showAddModal: false }, [{ showAddModal: true }]],
+    [overviewSource, { quickSwitchAccountId: null, resetCreditConfirmAccount: null },
+      [{ quickSwitchAccountId: 'account' }, { resetCreditConfirmAccount: {} }]],
+    [editorSource, { showModal: false }, [{ showModal: true }]],
   ] as const) {
     assert.ok(source.statements.some((statement) =>
       ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier) &&
@@ -211,7 +213,12 @@ test('structure: background scroll locks follow add and both edit visibility sta
       ts.isIdentifier(node.expression) && node.expression.text === 'useModalScrollLock',
     );
     assert.equal(hooks.length, 1);
-    assert.equal(hooks[0].arguments[0]?.getText(source).replace(/\s+/g, ''), expected);
+    const active = hooks[0].arguments[0]?.getText(source);
+    assert.ok(active);
+    assert.equal(vm.runInNewContext(active, { ...hidden }), false);
+    for (const visible of opened) {
+      assert.equal(vm.runInNewContext(active, { ...hidden, ...visible }), true);
+    }
   }
 });
 

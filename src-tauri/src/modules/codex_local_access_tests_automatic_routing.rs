@@ -166,6 +166,7 @@ fn automatic_routing_excludes_retired_builtin_models() {
     // 只断言纯函数：清单不依赖全局实验目录（其它用例可能开启「模型管理」）。
     let trimmed = super::automatic_api_service_visible_model_ids_with_explicit_catalog(vec![
         "gpt-6-astra".into(),
+        "gpt-6.1-terra".into(),
         "gpt-6-sol".into(),
         "gpt-6-luna".into(),
         "gpt-5.6-sol".into(),
@@ -183,6 +184,7 @@ fn automatic_routing_excludes_retired_builtin_models() {
         trimmed,
         vec![
             "gpt-6-astra",
+            "gpt-6.1-terra",
             "gpt-6-sol",
             "gpt-6-luna",
             "gpt-5.6-sol",
@@ -637,4 +639,52 @@ fn profile_extra_models_include_account_owned_gpt_models() {
         !models.iter().any(|model| model == "gpt-5.6-sol"),
         "壳位别名不应进入目录: {models:?}"
     );
+}
+
+#[test]
+fn managed_catalog_save_preserves_scoped_image_input_and_explicit_disable() {
+    let _lock = crate::modules::test_support::env_lock().lock().unwrap_or_else(|error| error.into_inner());
+    let _env = LocalAccessTestDataGuard::new("catalog-scoped-vision-save");
+    let profile = tempfile::tempdir().unwrap();
+    let mut account = CodexAccount::new_api_key(
+        "vision-scoped".into(), "fixture@example.invalid".into(), "fixture-upstream-key".into(),
+        CodexApiProviderMode::Custom, Some("https://example.invalid/v1".into()), None, None,
+        vec!["custom-input-model".into()],
+    );
+    account.api_wire_api = Some("responses".into());
+    let mut collection = test_local_access_collection(vec![account.id.clone()]);
+    collection.gateway_mode = CodexLocalAccessGatewayMode::Native;
+    collection.api_keys = vec![serde_json::from_value(serde_json::json!({
+        "id":"vision-key", "key":"fixture-scoped-key", "label":"Vision",
+        "inheritAccountPool":false, "accountIds":[account.id], "modelPrefix":"team"
+    })).unwrap()];
+    super::save_collection_to_disk(&collection).unwrap();
+    let provider = super::CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID;
+    fs::write(profile.path().join("config.toml"), format!(
+        "model_provider = '{provider}'\n[model_providers.{provider}]\nbase_url = '{}'\nwire_api = 'responses'\nexperimental_bearer_token = 'fixture-scoped-key'\n",
+        super::build_collection_base_url(&collection),
+    )).unwrap();
+    let model = crate::models::codex::CodexExperimentalModelDefinition {
+        model_id: "team/custom-input-model".into(), display_name: "My custom model".into(),
+        reasoning_efforts: None, default_reasoning_effort: None,
+        context_window: None, auto_compact_token_limit: None,
+    };
+    let path = profile.path().join("cockpit-model-catalog.json");
+    for vision in [true, false] {
+        account.api_model_vision_support.insert("custom-input-model".into(), vision);
+        crate::modules::codex_account::save_account(&account).unwrap();
+        crate::modules::codex_account::save_model_catalog_for_base_dir_preserving_context(
+            profile.path(), true, vec![model.clone()], Some(model.model_id.clone()),
+        ).unwrap();
+        let saved: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let served = super::native_catalog(&collection, collection.api_keys.first(), &[account.clone()]).unwrap();
+        let get_model = |catalog: &serde_json::Value| catalog["models"].as_array().unwrap()
+            .iter().find(|entry| entry["slug"].as_str() == Some(model.model_id.as_str())).unwrap().clone();
+        let disk = get_model(&saved);
+        assert_eq!(disk["display_name"], "My custom model");
+        assert_eq!(disk["input_modalities"], get_model(&served)["input_modalities"]);
+        assert_eq!(disk["input_modalities"], if vision { serde_json::json!(["text", "image"]) } else { serde_json::json!(["text"]) });
+        assert_eq!(disk["supports_image_detail_original"], false);
+        assert!(!crate::modules::codex_managed_model_catalog_version::managed_catalog_needs_rebuild(&path));
+    }
 }

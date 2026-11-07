@@ -901,5 +901,33 @@
       "recovery_tests.rs::historical_completion_rows_remain_data_only_and_roundtrip_with_future_fields",
       "continuity_transaction_tests.rs::large_legacy_completion_transaction_remains_invisible_until_final_commit"
     ]
+  },
+  "native_upstream_followup": {
+    "review_date": "2026-11-07",
+    "cpa": {
+      "version": "v8.0.58",
+      "commit": "e5e6ad1e1b91fc20ab9964e6fb22c0c269b9d882"
+    },
+    "sub2api": {
+      "commit": "0eee80ba87aa4f3aff7282bf1695aa6dc0471c36"
+    },
+    "runtime": "Built-in Rust host; historical Go baseline unchanged",
+    "scope": [
+      "native OAuth GPT Image 2.6 direct Images",
+      "output budgets and portable input item IDs",
+      "native Lite hosted image boundaries",
+      "upstream-only replay metadata and original instructions echo",
+      "Chat client tool discovery and remote compaction",
+      "reduced large-history and incremental stream copying",
+      "provider image-input versus original-detail capabilities"
+    ],
+    "retained_policies": [
+      "caller/account ownership and complete-history replay fences",
+      "per-profile gateways",
+      "existing refresh_token_reused handling",
+      "local token counting and availability-neutral transport failures",
+      "existing ordinary request capacity"
+    ],
+    "reference": "docs/cpa-multi-agent-parity.md"
   }
 }

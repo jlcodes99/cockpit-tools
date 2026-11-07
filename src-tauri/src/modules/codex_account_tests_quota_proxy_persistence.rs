@@ -41,7 +41,7 @@ fn seed_quota_proxy_account() -> CodexAccount {
 }
 
 #[test]
-fn delayed_quota_response_preserves_independent_proxy_saved_after_disabled_snapshot() {
+fn delayed_quota_response_preserves_source_preferences_saved_after_disabled_snapshot() {
     let _env_lock = crate::modules::test_support::env_lock()
         .lock()
         .unwrap_or_else(|error| error.into_inner());

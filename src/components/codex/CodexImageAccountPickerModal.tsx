@@ -302,7 +302,7 @@ export function CodexImageAccountPickerModal({
                   <span>
                     {t(
                       "codex.deepSeek.start.pickerEmpty",
-                      "没有可用的生图来源。API Key 账号须包含上方所选完整型号；OAuth 仅支持 gpt-image-2 / gpt-image-2.5 的非 Free 账号。",
+                      "没有可用的生图来源。API Key 账号须包含上方所选完整型号；OAuth 支持原生 gpt-image-2 / gpt-image-2.5 / gpt-image-2.6 系列的非 Free 账号。",
                     )}
                   </span>
                 </div>
@@ -464,7 +464,11 @@ export function CodexImageAccountPickerModal({
                                   ariaLabel={`${emailText}: ${t("codex.localAccess.imageAccounts.upstreamModel")}`}
                                   className="codex-image-account-model-select" menuClassName="codex-image-account-model-menu" menuWidth={290} menuMaxHeight={200}
                                   disabled={saving || !selected || !registry.ready}
-                                  onChange={(model) => { if (saving || !selected || !registry.ready) return; onClearError?.(); setDraftModels((models) => ({ ...models, [account.id]: model })); }}
+                                  onChange={(model) => {
+                                    if (saving || !selected || !registry.ready) return;
+                                    onClearError?.();
+                                    setDraftModels((models) => ({ ...models, [account.id]: model }));
+                                  }}
                                 />
                                 {selected && registry.ready && !resolveImageAccountModel(account, imageGenerationModel, draftModels, registry.deleted) && (
                                   <small className="codex-image-account-model-error" role="alert">{t("codex.localAccess.imageAccounts.modelRequired")}</small>
@@ -520,7 +524,11 @@ export function CodexImageAccountPickerModal({
           </button>
           <button
             className="btn btn-primary"
-            onClick={() => { if (!saving && !waitingForModel && !missingSpecificModel) onConfirm(effectiveIds, selectedImageAccountModels(effectiveIds, accounts, imageGenerationModel, draftModels, registry.deleted)); }}
+            onClick={() => {
+              if (saving || waitingForModel || missingSpecificModel) return;
+              onClearError?.();
+              onConfirm(effectiveIds, selectedImageAccountModels(effectiveIds, accounts, imageGenerationModel, draftModels, registry.deleted));
+            }}
             disabled={saving || waitingForModel || missingSpecificModel}
           >
             {saving ? t("common.saving", "保存中...") : t("common.save", "保存")}

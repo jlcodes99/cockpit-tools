@@ -7,7 +7,8 @@ import {
 } from '../types/codex';
 
 export type CodexImageAccountModels = Record<string, string>;
-export const DEFAULT_CODEX_IMAGE_MODELS = ['gpt-image-2.5', 'gpt-image-2'];
+export const CODEX_OAUTH_IMAGE_MODELS = ['gpt-image-2', 'gpt-image-2.5', 'gpt-image-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.6', 'gpt-image-2.6-sunburst', 'gpt-image-2.6-flare'];
+export const DEFAULT_CODEX_IMAGE_MODELS = ['gpt-image-2.6', 'gpt-image-2.5', 'gpt-image-2'];
 
 /** 发现只读取已有模型目录，不探测网络，也不把视频型号加入图片目录。 */
 export function discoverImageModels(accounts: CodexAccount[]): string[] {
@@ -16,7 +17,7 @@ export function discoverImageModels(accounts: CodexAccount[]): string[] {
       (id.startsWith('gpt-image-') || id.startsWith('grok-imagine-image')) && !id.toLowerCase().includes('video')))];
 }
 
-/** 裸2/2.5按族筛选，其他自定义全名只exact匹配。 */
+/** 裸2/2.5/2.6按族筛选，其他自定义全名只exact匹配。 */
 export function isImageModelInFamily(model: string, family?: string | null): boolean {
   const selected = family?.trim();
   const actual = model.trim();
@@ -36,7 +37,7 @@ export function isImageGenerationEligibleAccount(account: CodexAccount, model?: 
   const selected = model?.trim();
   if (!selected) return false;
   if (isCodexApiKeyAccount(account)) return imageModelsForAccount(account, selected, deleted).length > 0;
-  return DEFAULT_CODEX_IMAGE_MODELS.includes(selected) && !deleted.includes(selected) && !(account.plan_type || '').trim().toLowerCase().includes('free');
+  return CODEX_OAUTH_IMAGE_MODELS.includes(selected) && !deleted.includes(selected) && !(account.plan_type || '').trim().toLowerCase().includes('free');
 }
 
 export function eligibleImageAccountIds(ids: string[], accounts: CodexAccount[], model?: string | null, deleted: string[] = []): string[] {

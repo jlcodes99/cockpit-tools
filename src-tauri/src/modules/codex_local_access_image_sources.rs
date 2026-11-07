@@ -10,7 +10,7 @@ fn image_model_matches_selection(actual: &str, selected: &str) -> bool {
     let actual = actual.trim();
     let selected = selected.trim();
     actual == selected
-        || (matches!(selected, "gpt-image-2" | "gpt-image-2.5")
+        || (matches!(selected, "gpt-image-2" | "gpt-image-2.5" | "gpt-image-2.6")
             && actual
                 .strip_prefix(selected)
                 .and_then(|suffix| suffix.strip_prefix('-'))
@@ -81,13 +81,10 @@ fn image_generation_manifest_policy(
     if codex_account::is_chatgpt_plan_account(account) {
         return "disabled";
     }
-    // Native OAuth images can only execute a live bare model. Keep its credential
+    // Native OAuth images can only execute a supported native ID. Keep its credential
     // admission behavior unchanged; this guard owns only image model availability.
     if !account.is_api_key_auth()
-        && (!matches!(
-            collection.image_generation_model.trim(),
-            "gpt-image-2" | "gpt-image-2.5"
-        ) || collection
+        && (!crate::models::codex_local_access::is_codex_oauth_image_model(&collection.image_generation_model) || collection
             .image_generation_deleted_models
             .iter()
             .any(|model| model.trim() == collection.image_generation_model.trim()))
@@ -123,7 +120,7 @@ pub(crate) fn is_image_generation_source_for_model(account: &CodexAccount, model
                     })
                 }))
     } else {
-        matches!(model.trim(), "gpt-image-2" | "gpt-image-2.5")
+        crate::models::codex_local_access::is_codex_oauth_image_model(model)
             && !account.is_agent_identity_auth()
             && codex_account::account_has_refresh_token(account)
     }

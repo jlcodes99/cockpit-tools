@@ -34,18 +34,30 @@ fn anthropic_catalog_exposes_only_configured_claude_models_and_respects_key_scop
     let mut claude = account("claude", "anthropic");
     claude.api_model_catalog = vec!["claude-sonnet-4-6".into(), "claude-opus-4-6".into()];
     claude.api_auth_scheme = Some("bearer".into());
-    assert_eq!(native_wire_api(&claude).unwrap(), native_contract::WireApi::Anthropic);
+    assert_eq!(
+        native_wire_api(&claude).unwrap(),
+        native_contract::WireApi::Anthropic
+    );
     let catalog = native_catalog(&collection, None, &[claude.clone()]).unwrap();
     let models = catalog["models"].as_array().unwrap();
     assert_eq!(models.len(), 2);
-    assert!(models.iter().all(|m| m["slug"].as_str().unwrap().starts_with("claude-")));
-    assert_eq!(entry(&catalog, "claude-sonnet-4-6")["supports_search_tool"], true);
+    assert!(models
+        .iter()
+        .all(|m| m["slug"].as_str().unwrap().starts_with("claude-")));
+    assert_eq!(
+        entry(&catalog, "claude-sonnet-4-6")["supports_search_tool"],
+        true
+    );
     let gateway = provider_gateway_for_account(&claude).unwrap();
     assert_eq!(gateway.wire_api.as_deref(), Some("anthropic"));
     assert_eq!(gateway.auth_scheme.as_deref(), Some("bearer"));
     let key: CodexLocalAccessApiKey = serde_json::from_value(json!({"id":"key","key":"fixture","label":"scope","inheritAccountPool":false,"accountIds":["unrelated"]})).unwrap();
     let denied = native_catalog(&collection, Some(&key), &[claude]).unwrap();
-    assert!(!denied["models"].as_array().unwrap().iter().any(|m|m["slug"]=="claude-sonnet-4-6"));
+    assert!(!denied["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|m| m["slug"] == "claude-sonnet-4-6"));
 }
 
 #[test]
@@ -173,10 +185,13 @@ fn native_catalog_search_follows_explicit_provider_and_namespaced_mixed_routes()
 async fn native_profile_catalog_and_models_endpoint_share_identical_tool_capability_gates() {
     let mut collection = collection();
     collection.api_keys=vec![serde_json::from_value(json!({"id":"scoped","label":"scope","key":"synthetic-key","inheritAccountPool":false,"accountIds":["responses","chat"]})).unwrap()];
-    let accounts = vec![
+    let mut accounts = vec![
         account("responses", "responses"),
         account("chat", "chat_completions"),
     ];
+    accounts[0]
+        .api_model_vision_support
+        .insert("custom-agent".into(), true);
     let directory =
         std::env::temp_dir().join(format!("cockpit-catalog-tools-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&directory).unwrap();
@@ -199,7 +214,12 @@ async fn native_profile_catalog_and_models_endpoint_share_identical_tool_capabil
     )
     .unwrap();
     let served = native_catalog(&collection, collection.api_keys.first(), &accounts).unwrap();
-    for field in ["multi_agent_version", "supports_search_tool"] {
+    for field in [
+        "multi_agent_version",
+        "supports_search_tool",
+        "input_modalities",
+        "supports_image_detail_original",
+    ] {
         assert_eq!(
             saved["models"][0][field],
             entry(&served, "custom-agent")[field]

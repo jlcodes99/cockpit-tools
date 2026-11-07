@@ -556,6 +556,29 @@ async fn oauth_http_previous_expands_same_account_twice_without_rotating_identit
 }
 
 #[tokio::test]
+async fn oauth_http_continuation_releases_prior_forced_tool_choice() {
+    let fixture = Fixture::new(true).await;
+    let mut first = initial();
+    first["tool_choice"] = json!({"type":"function","name":"lookup"});
+    *fixture.source.next_output.lock().unwrap() = Some(vec![json!({
+        "type":"function_call", "id":"fc_fixture_lookup", "call_id":"call_fixture_lookup",
+        "name":"lookup", "arguments":"{\"query\":\"test\"}", "status":"completed"
+    })]);
+    let first = fixture.complete(&first).await;
+    let mut next = delta(first["id"].as_str().unwrap(), "unused");
+    next["input"] = json!([{
+        "type":"function_call_output", "call_id":"call_fixture_lookup", "output":"fixture result"
+    }]);
+    fixture.complete(&next).await;
+    let sent = fixture.sent();
+    assert_eq!(sent[0].1["tool_choice"]["name"], "lookup");
+    assert_eq!(sent[1].1["tool_choice"], "auto");
+    assert_eq!(sent[1].1["tools"], sent[0].1["tools"]);
+    assert_eq!(sent[1].1["input"].as_array().unwrap().last().unwrap()["output"], "fixture result");
+    fixture.finish().await;
+}
+
+#[tokio::test]
 async fn oauth_http_full_history_with_previous_is_not_duplicated_and_explicit_clears_win() {
     let fixture = Fixture::new(true).await;
     let first = fixture.complete(&initial()).await;

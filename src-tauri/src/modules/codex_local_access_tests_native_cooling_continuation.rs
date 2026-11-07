@@ -17,6 +17,7 @@ fn native_test_set_owner_cooldown(host: &NativeHostBridge, delay: Duration) {
     host.cooldowns.lock().unwrap().insert(
         native_cooldown_key("pool-a", "gpt-fixture", false),
         NativeCooldown {
+            recorded_at: Instant::now(),
             until: Instant::now() + delay,
             quota: false,
             backoff_level: 0,

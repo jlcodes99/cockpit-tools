@@ -805,7 +805,6 @@
         BOUND_OAUTH_QUOTA_RESERVE_MAX_SNAPSHOT_AGE_SECONDS, CODEX_AUTO_REVIEW_MODEL_ID,
         CODEX_GPT_RESERVE_MODEL_ID,
         CODEX_IMAGEGEN_ACTOR_HEADER, CODEX_IMAGE_MODEL_ID,
-        DEFAULT_CODEX_IMAGE_GENERATION_MODEL,
         CODEX_LEGACY_LOCAL_ACCESS_MODEL_CATALOG_FILE, CODEX_LEGACY_PROVIDER_MODEL_CATALOG_FILE,
         CODEX_LOCAL_ACCESS_DISABLE_HOSTED_IMAGE_GENERATION_HEADER,
         CODEX_LOCAL_ACCESS_DISABLE_HOSTED_IMAGE_GENERATION_HEADER_VALUE,
@@ -1095,7 +1094,8 @@
             access_scope: CodexLocalAccessScope::Localhost,
             client_base_url_host: CodexLocalAccessClientBaseUrlHost::default(),
             image_generation_mode: CodexLocalAccessImageGenerationMode::default(),
-            image_generation_model: DEFAULT_CODEX_IMAGE_GENERATION_MODEL.to_string(),
+            // This fixture represents an existing service that selected 2.5.
+            image_generation_model: "gpt-image-2.5".to_string(),
         image_generation_models: crate::models::codex_local_access::default_image_generation_models(),
         image_generation_deleted_models: Vec::new(),
         image_generation_model_catalog_revision: 0,

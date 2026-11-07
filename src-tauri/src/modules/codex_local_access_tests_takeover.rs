@@ -1842,6 +1842,26 @@ experimental_bearer_token = "agt_codex_test"
         assert_eq!(super::normalize_request_log_time_bound(0), 0);
     }
 
+    #[test]
+    fn provider_gateway_port_probe_preserves_available_and_busy_results() {
+        assert!(super::provider_gateway_port_probe_allows_reuse(Ok(true)));
+        assert!(!super::provider_gateway_port_probe_allows_reuse(Ok(false)));
+        assert!(!super::provider_gateway_port_probe_allows_reuse(Err(
+            std::io::Error::from(std::io::ErrorKind::PermissionDenied)
+        )));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn provider_gateway_port_probe_rejects_windows_reserved_port_error() {
+        let error = std::io::Error::from_raw_os_error(10013);
+        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+        assert!(
+            !super::provider_gateway_port_probe_allows_reuse(Err(error)),
+            "WSAEACCES must enter the existing persisted-port reassignment path"
+        );
+    }
+
     #[tokio::test]
     async fn occupied_persisted_gateway_port_is_released_before_start() {
         let _lock = crate::modules::test_support::env_lock()

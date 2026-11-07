@@ -5,6 +5,24 @@ use std::collections::{HashMap, HashSet};
 #[path = "identity_checkpoint.rs"]
 pub(super) mod checkpoint_store;
 
+// Checkpoints keep reusable settings, but a prior turn's forced tool choice
+// must not force another call when the current request leaves the choice open.
+pub(super) fn inherited_parameter(key: &str, mut value: Value) -> Value {
+    if key != "tool_choice" {
+        return value;
+    }
+    if value["type"] == "allowed_tools" {
+        if value["mode"] == "required" {
+            value["mode"] = Value::String("auto".into());
+        }
+        return value;
+    }
+    if value == "required" || value.is_object() {
+        return Value::String("auto".into());
+    }
+    value
+}
+
 const MAX_CHECKPOINT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_CACHE_BYTES: i64 = 64 * 1024 * 1024;
 const MAX_CHECKPOINTS: i64 = 128;
@@ -762,7 +780,7 @@ impl IdentityStore {
         ] {
             if parameter_source.get(key).is_none() {
                 if let Some(value) = parameters.get(key) {
-                    object.insert(key.into(), value.clone());
+                    object.insert(key.into(), inherited_parameter(key, value.clone()));
                 }
             }
         }
@@ -809,6 +827,7 @@ impl IdentityStore {
         let mut missing = false;
         for (key, value) in parameters {
             if !object.contains_key(&key) {
+                let value = inherited_parameter(&key, value);
                 object.insert(key, value);
                 missing = true;
             }

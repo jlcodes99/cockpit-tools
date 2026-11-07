@@ -16,17 +16,17 @@ fn matches_shared_go_golden_requests_and_headers() {
         }
         let mut body = case["input"].clone();
         let chatgpt = case["chatgpt"].as_bool().unwrap();
-        if case["websocket"].as_bool().unwrap() {
-            normalize_websocket(&mut headers, &mut body, chatgpt).unwrap();
+        let outcome = if case["websocket"].as_bool().unwrap() {
+            normalize_websocket(&mut headers, &mut body, chatgpt)
         } else {
-            normalize(
-                &mut headers,
-                &mut body,
-                chatgpt,
-                case["compact"].as_bool().unwrap(),
-            )
-            .unwrap();
+            normalize(&mut headers,&mut body,chatgpt,case["compact"].as_bool().unwrap())
+        };
+        if let Some(status) = case["expected_error"].as_u64() {
+            assert_eq!(outcome.unwrap_err().status,u16::try_from(status).unwrap(),"{}",case["name"]);
+            assert_eq!(body,case["input"],"Rejected native requests retain the caller body");
+            continue;
         }
+        outcome.unwrap();
         assert_eq!(body, case["expected"], "{}", case["name"]);
         let mut expected = HeaderMap::new();
         for (name, values) in case["expected_headers"].as_object().unwrap() {

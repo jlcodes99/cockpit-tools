@@ -1,18 +1,18 @@
 #[test]
 fn image_main_model_legacy_collection_remains_opt_in() {
     let collection = test_local_access_collection(Vec::new());
-    let value = serde_json::to_value(&collection).unwrap();
+    let mut value = serde_json::to_value(&collection).unwrap();
     assert!(value.get("imageGenerationMainModel").is_none());
-    let restored: super::CodexLocalAccessCollection = serde_json::from_value(value).unwrap();
+    let restored: super::CodexLocalAccessCollection = serde_json::from_value(value.clone()).unwrap();
     assert_eq!(restored.image_generation_main_model, None);
     assert_eq!(
         super::effective_image_generation_main_model(None),
         "gpt-5.6-luna"
     );
-    assert_eq!(
-        restored.image_generation_model,
-        super::DEFAULT_CODEX_IMAGE_GENERATION_MODEL
-    );
+    assert_eq!(restored.image_generation_model, collection.image_generation_model);
+    value.as_object_mut().unwrap().remove("imageGenerationModel");
+    let restored: super::CodexLocalAccessCollection = serde_json::from_value(value).unwrap();
+    assert_eq!(restored.image_generation_model, "gpt-image-2.6");
 }
 
 #[test]
@@ -170,16 +170,14 @@ fn image_main_model_validates_trims_and_resets_without_touching_tool() {
         assert!(super::normalize_image_generation_main_model(Some(invalid)).is_err());
     }
     let mut collection = test_local_access_collection(Vec::new());
+    let image_model = collection.image_generation_model.clone();
     collection.image_generation_main_model = Some(" gpt-custom-image-main ".into());
     super::sanitize_collection_structure(&mut collection).unwrap();
     assert_eq!(
         collection.image_generation_main_model.as_deref(),
         Some("gpt-custom-image-main")
     );
-    assert_eq!(
-        collection.image_generation_model,
-        super::DEFAULT_CODEX_IMAGE_GENERATION_MODEL
-    );
+    assert_eq!(collection.image_generation_model, image_model);
     let restored: super::CodexLocalAccessCollection =
         serde_json::from_value(serde_json::to_value(collection).unwrap()).unwrap();
     assert_eq!(
@@ -218,7 +216,7 @@ fn image_main_model_survives_instance_template_and_sidecar_manifest() {
     );
     assert_eq!(
         manifest["imageGenerationModel"],
-        super::DEFAULT_CODEX_IMAGE_GENERATION_MODEL
+        template.image_generation_model
     );
     fs::remove_dir_all(dir).unwrap();
 }

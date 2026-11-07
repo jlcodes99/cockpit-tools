@@ -554,6 +554,7 @@ fn quick_visibility_directly_repairs_projects_and_unified_launch_uses_the_same_p
         "project-integration",
         "Project integration",
         f.home(),
+        false,
     )
     .unwrap();
     assert!(

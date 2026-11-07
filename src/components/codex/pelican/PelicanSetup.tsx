@@ -110,7 +110,7 @@ export function PelicanSetup({ mask }: { mask: (value: string) => string }) {
           onChange={(id) => { const preset = presets.find((entry) => entry.id === id); if (preset) { setModel(preset.model); setEffort(preset.default_reasoning_effort); fieldChanged(); } }} />}
       </label>}
       <label>{t('pelican.effort')}<SingleSelectDropdown value={effort} ariaLabel={t('pelican.effort')} disabled={busy}
-        options={['low', 'medium', 'high', 'xhigh', 'max'].map((value) => ({ value, label: t(`codex.wakeup.reasoningEfforts.${value}`) }))} onChange={(value) => { setEffort(value); fieldChanged(); }} /></label>
+        options={['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].map((value) => ({ value, label: t(`codex.wakeup.reasoningEfforts.${value}`) }))} onChange={(value) => { setEffort(value); fieldChanged(); }} /></label>
       <label>{t('pelican.concurrency')}
         <input data-field="concurrency" type="text" inputMode="numeric" value={concurrency} maxLength={8}
           placeholder={`1–${CODEX_PELICAN_MAX_CONCURRENCY}`} disabled={busy} aria-invalid={fieldError === 'concurrency'}

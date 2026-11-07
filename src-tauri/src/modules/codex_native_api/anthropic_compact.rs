@@ -43,6 +43,7 @@ pub(super) fn seal(summary: &str, model: &str) -> Result<String, ServiceError> {
 }
 
 pub(super) fn unseal(raw: &str) -> Result<String, ServiceError> {
+    let raw = raw.trim();
     let data = URL_SAFE_NO_PAD
         .decode(
             raw.strip_prefix(PREFIX)
@@ -62,6 +63,31 @@ pub(super) fn unseal(raw: &str) -> Result<String, ServiceError> {
         .filter(|s| !s.trim().is_empty())
         .map(str::to_owned)
         .ok_or_else(|| invalid("Claude compaction contains no summary"))
+}
+
+/// Capsule crypto uses the shared bounded blocking pool, never a Tokio worker.
+pub(super) async fn expand_wire(state: &super::server::AppState, mut body: Value) -> Result<Value, ServiceError> {
+    let present = body["input"].as_array().is_some_and(|items| items.iter().any(|item| {
+        matches!(item["type"].as_str(), Some("compaction" | "compaction_summary")) &&
+            (item["encrypted_content"].as_str().is_some_and(|raw| raw.trim().starts_with(PREFIX)) || item["id"].as_str().is_some_and(|id| id.starts_with("cmp_ag_compact_")))
+    }));
+    if !present { return Ok(body); }
+    super::blocking::run_prepared(state, move || { expand_recognized(&mut body)?; Ok(body) }).await
+}
+
+/// Only CPA-minted state is decrypted; official/foreign opaque state is untouched.
+pub(super) fn expand_recognized(body: &mut Value) -> Result<(), ServiceError> {
+    if let Some(input) = body.get_mut("input").and_then(Value::as_array_mut) {
+        for item in input {
+            if item["type"] != "compaction" && item["type"] != "compaction_summary" { continue; }
+            let raw = item["encrypted_content"].as_str().unwrap_or("").trim();
+            let known_id = item["id"].as_str().is_some_and(|id| id.trim().starts_with("cmp_ag_compact_"));
+            if !raw.starts_with(PREFIX) && !known_id { continue; }
+            let summary = unseal(raw)?;
+            *item = json!({"type":"message","role":"developer","content":[{"type":"input_text","text":format!("Context summary from previous turns:\n{summary}")}]});
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn expand(body: &mut Value) -> Result<(), ServiceError> {

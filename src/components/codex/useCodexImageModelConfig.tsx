@@ -8,6 +8,7 @@ import {
 import { useCodexImageModelCatalog } from "./useCodexImageModelCatalog";
 import { CodexImageModelSelect } from '../CodexImageModelConfig';
 import { ModalErrorMessage } from '../ModalErrorMessage';
+import { DEFAULT_CODEX_IMAGE_MODELS } from '../../utils/codexImageAccounts';
 
 /** 实例网关继承 API 服务的图片模型设置；读取在后台执行，不阻塞启动预览。 */
 export function useCodexImageModelConfig(disabled: boolean, enabled = true) {
@@ -35,7 +36,7 @@ export function useCodexImageModelConfig(disabled: boolean, enabled = true) {
     }, 10000);
     void getCodexLocalAccessState().then((state) => {
       if (!mounted) return;
-      setModel(state.collection?.imageGenerationModel || 'gpt-image-2.5');
+      setModel(state.collection?.imageGenerationModel || DEFAULT_CODEX_IMAGE_MODELS[0]);
       setMainModel(state.collection?.imageGenerationMainModel || null);
       setModels(state.collection?.imageGenerationModels);
       setDeletedModels(state.collection?.imageGenerationDeletedModels);

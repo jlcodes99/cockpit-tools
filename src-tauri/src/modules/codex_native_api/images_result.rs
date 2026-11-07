@@ -403,6 +403,8 @@ fn image_data(
             let mime = match output_format {
                 "jpeg" | "jpg" => "image/jpeg",
                 "webp" => "image/webp",
+                "svg" => "image/svg+xml",
+                "gif" => "image/gif",
                 _ => "image/png",
             };
             Ok(json!({"url":format!("data:{mime};base64,{result}")}))

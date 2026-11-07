@@ -157,6 +157,7 @@ use super::*;
             "compressed-instance",
             "Compressed instance",
             &data_dir,
+            false,
         )
         .expect("compressed rollout should not abort quick repair");
 
@@ -187,6 +188,7 @@ use super::*;
             "non-utf8-instance",
             "Non UTF-8 instance",
             &data_dir,
+            false,
         )
         .expect("non UTF-8 rollout should not abort quick repair");
 
@@ -910,23 +912,33 @@ use super::*;
                     git_branch TEXT,
                     thread_source TEXT,
                     has_user_event INTEGER,
-                    first_user_message TEXT
+                    first_user_message TEXT,
+                    recency_at INTEGER,
+                    recency_at_ms INTEGER
                 );
                 CREATE TABLE thread_spawn_edges (child_thread_id TEXT);",
             )
             .expect("create state schema");
         connection
             .execute(
-                "INSERT INTO threads VALUES ('user-1', '', 10, 20, 'User chat', 'C:\\\\repo', 'cli', 'old', 'main', 'user', 0, 'hello')",
+                "INSERT INTO threads VALUES ('user-1', '', 10, 20, 'User chat', 'C:\\\\repo', 'cli', 'old', 'main', 'user', 0, 'hello', 60, 60250)",
                 [],
             )
             .expect("insert user thread");
         connection
             .execute(
-                "INSERT INTO threads VALUES ('child-1', '', 11, 21, 'Child', 'C:\\\\repo', '{\"subagent\":{}}', 'old', NULL, 'subagent', 0, '')",
+                "INSERT INTO threads VALUES ('child-1', '', 11, 21, 'Child', 'C:\\\\repo', '{\"subagent\":{}}', 'old', NULL, 'subagent', 0, '', 21, 21000)",
                 [],
             )
             .expect("insert child thread");
+        connection
+            .execute_batch(
+                "INSERT INTO threads (id, created_at, updated_at, recency_at, recency_at_ms, thread_source) VALUES
+                    ('previously-repaired', 12, 40, 75, 75125, 'user'),
+                    ('observed-by-client', 13, 50, 55, 55000, 'user'),
+                    ('legacy', 14, 30, NULL, NULL, 'user');",
+            )
+            .expect("insert catalog ordering fixtures");
         connection
             .execute("INSERT INTO thread_spawn_edges VALUES ('child-1')", [])
             .expect("insert spawn edge");
@@ -970,7 +982,13 @@ use super::*;
                  INSERT INTO local_thread_catalog (
                     host_id, thread_id, display_title, source_created_at, source_updated_at,
                     cwd, source_kind, model_provider, observation_sequence, thread_source
-                 ) VALUES ('local', 'child-1', 'Child', 11, 21, 'C:\\repo', 'subagent', 'old', 1, 'subagent');",
+                 ) VALUES ('local', 'child-1', 'Child', 11, 21, 'C:\\repo', 'subagent', 'old', 1, 'subagent');
+                 INSERT INTO local_thread_catalog (
+                    host_id, thread_id, display_title, source_created_at, source_updated_at,
+                    source_kind, model_provider, observation_sequence, source_recency_at
+                 ) VALUES
+                    ('local', 'previously-repaired', 'Earlier repair', 12, 40, 'cli', 'relay', 2, 40),
+                    ('local', 'observed-by-client', 'Client observation', 13, 50, 'cli', 'old', 3, 80);",
             )
             .expect("create catalog schema");
         drop(connection);
@@ -1005,13 +1023,24 @@ use super::*;
         let preview =
             repair_local_thread_catalog_for_options(&data_dir, "relay", &selection, &facts, true)
                 .expect("preview catalog repair");
-        assert_eq!(preview.inserted_rows, 1);
+        assert_eq!(preview.inserted_rows, 2);
+        assert_eq!(preview.updated_rows, 2);
         assert_eq!(preview.removed_rows, 1);
+        let recency_before_repair: f64 = Connection::open(&catalog_db)
+            .unwrap()
+            .query_row(
+                "SELECT source_recency_at FROM local_thread_catalog WHERE thread_id = 'previously-repaired'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(recency_before_repair, 40.0);
 
         let repaired =
             repair_local_thread_catalog_for_options(&data_dir, "relay", &selection, &facts, false)
                 .expect("repair catalog");
-        assert_eq!(repaired.inserted_rows, 1);
+        assert_eq!(repaired.inserted_rows, 2);
+        assert_eq!(repaired.updated_rows, 2);
         assert_eq!(repaired.removed_rows, 1);
         let connection = Connection::open(&catalog_db).expect("reopen catalog db");
         let user_provider = connection
@@ -1022,6 +1051,32 @@ use super::*;
             )
             .expect("read repaired catalog row");
         assert_eq!(user_provider, "relay");
+        let catalog_order = connection
+            .prepare(
+                "SELECT thread_id, source_recency_at FROM local_thread_catalog
+                 WHERE host_id = 'local' AND missing_candidate = 0
+                 ORDER BY source_recency_at DESC, source_created_at DESC, thread_id",
+            )
+            .unwrap()
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            catalog_order,
+            [
+                ("observed-by-client".to_string(), 80.0),
+                ("previously-repaired".to_string(), 75.125),
+                ("user-1".to_string(), 60.25),
+                ("legacy".to_string(), 30.0),
+            ]
+        );
+        assert_eq!(
+            repair_local_thread_catalog_for_options(&data_dir, "relay", &selection, &facts, false)
+                .unwrap()
+                .total(),
+            0
+        );
         assert_eq!(
             connection
                 .query_row(
@@ -1240,6 +1295,7 @@ use super::*;
             "target-instance",
             "Target instance",
             &target_dir,
+            false,
         )
         .expect("repair target instance");
         assert_eq!(first.instance_count, 1);
@@ -1267,6 +1323,7 @@ use super::*;
             "target-instance",
             "Target instance",
             &target_dir,
+            false,
         )
         .expect("repeat target repair");
         assert_eq!(second.mutated_instance_count, 0);
@@ -1282,6 +1339,7 @@ use super::*;
             "target-instance",
             "Target instance",
             &target_dir,
+            false,
         )
         .expect("repair target after provider switch");
         assert_eq!(switched_back.mutated_instance_count, 1);

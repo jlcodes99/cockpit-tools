@@ -76,6 +76,8 @@ const CODEX_EXPERIMENTAL_MODEL_PREVIOUS_CATALOG_FILE: &str =
     ".cockpit-experimental-model-catalog-previous.json";
 pub(crate) const GPT_6_1_SOL_MODEL_ID: &str = "gpt-6.1-sol";
 const GPT_6_1_SOL_MODEL_CATALOG_MIGRATION_ID: &str = "add-gpt-6-1-sol-model";
+pub(crate) const GPT_6_1_TERRA_MODEL_ID: &str = "gpt-6.1-terra";
+const GPT_6_1_TERRA_MODEL_CATALOG_MIGRATION_ID: &str = "add-gpt-6-1-terra-model";
 pub(crate) const GPT_6_ASTRA_MODEL_ID: &str = "gpt-6-astra";
 pub(crate) const GPT_6_SOL_MODEL_ID: &str = "gpt-6-sol";
 pub(crate) const GPT_6_LUNA_MODEL_ID: &str = "gpt-6-luna";
@@ -109,6 +111,7 @@ const CODEX_REASONING_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "ma
 const SHIPPED_VISIBLE_CODEX_MODEL_IDS: &[&str] = &[
     GPT_6_1_SOL_MODEL_ID,
     GPT_6_ASTRA_MODEL_ID,
+    GPT_6_1_TERRA_MODEL_ID,
     GPT_6_SOL_MODEL_ID,
     GPT_6_LUNA_MODEL_ID,
     "gpt-5.6-sol",
@@ -1829,7 +1832,7 @@ fn apply_deepseek_model_vision(entry: &mut serde_json::Value, supports_vision: b
     );
     object.insert(
         "supports_image_detail_original".to_string(),
-        serde_json::Value::Bool(supports_vision),
+        serde_json::Value::Bool(false),
     );
 }
 

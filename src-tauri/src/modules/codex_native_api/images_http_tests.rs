@@ -80,6 +80,7 @@ async fn oauth_image_request_fault_keeps_error_without_refresh_rotation_or_cooli
 struct ImageHost {
     base_url: String,
     oauth: bool,
+    direct_images: AtomicUsize,
     deny: bool,
     reports: Mutex<Vec<RequestReport>>,
     failures: Mutex<Vec<(String, u16)>>,
@@ -203,8 +204,8 @@ impl Host for ImageHost {
                     default_service_tier: None,
                     permit: Some(Arc::new(permit)),
                 },
-                image_model: "gpt-image-2.5-flare".into(),
-                main_model: self.oauth.then(|| "text-main".into()),
+                image_model: if self.direct_images.load(Ordering::SeqCst)>0 { "gpt-image-2.6-flare" } else { "gpt-image-2.5-flare" }.into(),
+                main_model: (self.oauth && self.direct_images.load(Ordering::SeqCst)==0).then(|| "text-main".into()),
             })
         })
     }
@@ -255,6 +256,7 @@ fn fixture_host(base_url: String, oauth: bool, deny: bool) -> Arc<ImageHost> {
     Arc::new(ImageHost {
         base_url,
         oauth,
+        direct_images: AtomicUsize::new(0),
         deny,
         reports: Mutex::new(Vec::new()),
         failures: Mutex::new(Vec::new()),
@@ -1479,4 +1481,95 @@ async fn native_image_partial_tail_is_delivered_before_eof_failure() {
     );
     assert!(wire.contains("incomplete_upstream_stream"), "{wire}");
     cleanup(handle, upstream, root).await;
+}
+
+#[tokio::test]
+async fn native_oauth_image_26_uses_images_endpoint_preserves_complexity_and_refreshes_401() {
+    let seen=Arc::new(Mutex::new(Vec::<Value>::new()));
+    let capture=seen.clone();
+    let app=Router::new().route("/v1/images/generations",post(move |headers:HeaderMap,Json(body):Json<Value>| {
+        let capture=capture.clone(); async move {
+            assert_ne!(headers.get("user-agent").and_then(|v|v.to_str().ok()),Some("untrusted-client-agent"));
+            let count={let mut values=capture.lock().unwrap();values.push(body);values.len()};
+            if count==1 {return (axum::http::StatusCode::UNAUTHORIZED,Json(json!({"error":{"code":"invalid_token","message":"expired"}}))).into_response();}
+            Json(json!({"created":1,"data":[{"b64_json":"AA=="}],"size":"1536x1024","usage":{"total_tokens":3}})).into_response()
+        }
+    }));
+    let (handle,host,upstream,root)=fixture(app,true,false).await;
+    host.direct_images.store(1,Ordering::SeqCst);
+    let response=client().post(format!("http://{}/v1/images/generations",handle.addr)).bearer_auth("local-image-key")
+        .header("user-agent","untrusted-client-agent")
+        .json(&json!({"model":"gpt-image-2.6-flare","prompt":"draw","size":"2048x1152","width":2048,"height":1152,"aspect_ratio":"16:9","resolution":"2k","complexity":"medium","output_format":"svg"})).send().await.unwrap();
+    assert_eq!(response.status(),200);
+    let result = response.json::<Value>().await.unwrap();
+    assert_eq!(result["data"][0]["b64_json"],"AA==");
+    assert_eq!(result["size"],"1536x1024");
+    let payloads=seen.lock().unwrap().clone();
+    assert_eq!(payloads.len(),2);
+    assert!(payloads.iter().all(|body|body["model"]=="gpt-image-2.6-flare"&&body["complexity"]=="medium"&&body.get("tools").is_none()
+        && ["size","width","height","aspect_ratio","resolution"].iter().all(|key|body.get(*key).is_none())));
+    assert!(host.selections.lock().unwrap().iter().any(|request|request.force_refresh));
+    cleanup(handle,upstream,root).await;
+}
+
+#[tokio::test]
+async fn codex_native_edits_accept_json_and_multipart_while_api_key_wire_stays_intact() {
+    use axum::extract::FromRequest;
+    for oauth in [true, false] {
+        for multipart in [false, true] {
+            let app = Router::new().route("/v1/images/edits", post(move |request: axum::extract::Request| async move {
+                let is_form = request.headers().get("content-type").unwrap().to_str().unwrap().starts_with("multipart/");
+                if oauth {
+                    assert!(!is_form, "Codex edit endpoint requires JSON");
+                    let Json(body) = Json::<Value>::from_request(request,&()).await.unwrap();
+                    if !body["images"].is_array() { return (axum::http::StatusCode::BAD_REQUEST,Json(json!({"error":{"code":"missing_required_parameter","message":"Missing required parameter: 'images'."}}))).into_response(); }
+                    assert_eq!(body["images"][0]["image_url"],"data:image/png;base64,AA==");
+                    assert_eq!(body["mask"]["image_url"],"data:image/png;base64,AA==");
+                    assert_eq!(body["complexity"],"medium");
+                    assert!(body.get("image").is_none());
+                    assert!(["size","width","height","aspect_ratio","resolution"].iter().all(|key|body.get(*key).is_none()));
+                } else if multipart {
+                    assert!(is_form);
+                    let mut form = Multipart::from_request(request,&()).await.unwrap();
+                    let mut files = Vec::new();
+                    let mut fields = std::collections::HashMap::new();
+                    while let Some(field) = form.next_field().await.unwrap() {
+                        let name = field.name().unwrap().to_owned();
+                        if field.file_name().is_some() { files.push((name,field.bytes().await.unwrap())); }
+                        else { fields.insert(name,field.text().await.unwrap()); }
+                    }
+                    assert_eq!(files.len(),2);
+                    assert!(files.iter().all(|(_,bytes)|bytes.as_ref()==[0]));
+                    assert_eq!(fields["size"],"2048x1152");
+                    assert_eq!(fields["width"],"2048");
+                    assert_eq!(fields["height"],"1152");
+                    assert_eq!(fields["aspect_ratio"],"16:9");
+                    assert_eq!(fields["resolution"],"2k");
+                } else {
+                    let Json(body)=Json::<Value>::from_request(request,&()).await.unwrap();
+                    assert_eq!(body["image"],"data:image/png;base64,AA==");
+                    assert_eq!(body["mask"],"data:image/png;base64,AA==");
+                    assert!(body.get("images").is_none());
+                    assert_eq!(body["size"],"2048x1152");
+                    assert_eq!(body["width"],2048);
+                    assert_eq!(body["height"],1152);
+                    assert_eq!(body["aspect_ratio"],"16:9");
+                    assert_eq!(body["resolution"],"2k");
+                }
+                Json(json!({"created":1,"data":[{"b64_json":"AA=="}]})).into_response()
+            }));
+            let (handle,host,upstream,root)=fixture(app,oauth,false).await;
+            host.direct_images.store(1,Ordering::SeqCst);
+            let request=client().post(format!("http://{}/v1/images/edits",handle.addr)).bearer_auth("local-image-key");
+            let request=if multipart {
+                request.multipart(reqwest::multipart::Form::new().text("model","gpt-image-2.6-flare").text("prompt","edit").text("complexity","medium")
+                    .text("size","2048x1152").text("width","2048").text("height","1152").text("aspect_ratio","16:9").text("resolution","2k")
+                    .part("image",reqwest::multipart::Part::bytes(vec![0]).file_name("input.png").mime_str("image/png").unwrap())
+                    .part("mask",reqwest::multipart::Part::bytes(vec![0]).file_name("mask.png").mime_str("image/png").unwrap()))
+            } else {request.json(&json!({"model":"gpt-image-2.6-flare","prompt":"edit","image":"data:image/png;base64,AA==","mask":"data:image/png;base64,AA==","complexity":"medium","size":"2048x1152","width":2048,"height":1152,"aspect_ratio":"16:9","resolution":"2k"}))};
+            let response=request.send().await.unwrap();
+            assert_eq!(response.status(),200,"{}",response.text().await.unwrap());
+            cleanup(handle,upstream,root).await;
+        }
+    }
 }

@@ -30,13 +30,16 @@ pub(super) async fn canonical_stream(
     anthropic_search_scope: Option<String>,
     idle_timeout: Duration,
 ) -> Result<CanonicalStream, ServiceError> {
-    let chat = route.wire_api == WireApi::Chat && !compact;
+    let chat = route.wire_api == WireApi::Chat && (!compact || route.compact_endpoint.is_none());
     let anthropic = route.wire_api == WireApi::Anthropic;
+    let mut search_context = None;
     let chat_context = if chat {
-        super::chat_upstream::ToolContext::from_responses(request_body)
-    } else {
-        super::chat_upstream::ToolContext::default()
-    };
+        if super::chatgpt_plan_tools::has_client_declaration(request_body) {
+            let mut tools_body = request_body.clone();
+            search_context = Some(super::chatgpt_plan_tools::prepare(&mut tools_body)?);
+            super::chat_upstream::ToolContext::from_responses(&tools_body)
+        } else { super::chat_upstream::ToolContext::from_responses(request_body) }
+    } else { super::chat_upstream::ToolContext::default() };
     let convert = response.status().is_success()
         && (chat || anthropic
             || grok_context.is_some()
@@ -120,11 +123,17 @@ pub(super) async fn canonical_stream(
         } else {
             value
         };
+        if chat {
+            if let Some(context) = search_context.as_mut() {
+                canonical = super::chatgpt_plan_tools::restore_event(context, canonical)?.pop()
+                    .ok_or_else(|| ServiceError::new(502,"invalid_chat_upstream_response","Chat adapter returned no response"))?;
+            }
+        }
         // Adapters can restore echoed tool declarations from their own wire
         // context. Keep the client-facing namespace canonical there as well.
         multi_agent_context.restore(&mut canonical);
         if anthropic {state.anthropic_search.record(anthropic_search_scope.as_deref(),&canonical);}
-        if anthropic && (compact || super::anthropic_compact::triggered(request_body)) {
+        if (anthropic || chat) && (compact || super::anthropic_compact::triggered(request_body)) {
             canonical = super::anthropic_compact::finish(canonical, &route.model)?;
             if !compact {
                 let events=super::anthropic_compact::events(canonical,&route.model)?;
@@ -164,7 +173,7 @@ pub(super) async fn canonical_stream(
             Transform::Chat(super::chat_upstream::ResponsesStreamAdapter::with_context(
                 route.model.clone(),
                 chat_context,
-            ))
+            ), search_context)
         } else if let Some(context) = plan_tools_context {
             Transform::Plan(context)
         } else if let Some(context) = grok_context {
@@ -193,7 +202,7 @@ pub(super) async fn canonical_stream(
                     Ok(events) => {
                         let mut failure = None;
                         for frame in events {
-                            if matches!(&state.adapter, Transform::Chat(_)) {
+                            if matches!(&state.adapter, Transform::Chat(..)) {
                                 if let Some(error) =
                                     super::upstream_errors::chat_frame_failure(&frame)
                                 {
@@ -249,7 +258,7 @@ pub(super) async fn canonical_stream(
                         Ok(events) => {
                             let mut result = Ok(());
                             for frame in events {
-                                if matches!(&state.adapter, Transform::Chat(_)) {
+                                if matches!(&state.adapter, Transform::Chat(..)) {
                                     if let Some(error) =
                                         super::upstream_errors::chat_frame_failure(&frame)
                                     {
@@ -440,10 +449,17 @@ impl ChatStream {
     }
 }
 
+fn restore_chat_search(events: Vec<Value>, context: &mut Option<super::chatgpt_plan_tools::Context>) -> Result<Vec<Value>, ServiceError> {
+    let Some(context) = context else { return Ok(events); };
+    let mut restored = Vec::new();
+    for event in events { restored.extend(super::chatgpt_plan_tools::restore_event(context,event)?); }
+    Ok(restored)
+}
+
 enum Transform {
     Responses,
     Anthropic(super::anthropic::ResponsesStreamAdapter),
-    Chat(super::chat_upstream::ResponsesStreamAdapter),
+    Chat(super::chat_upstream::ResponsesStreamAdapter, Option<super::chatgpt_plan_tools::Context>),
     Grok(super::grok_wire::Context),
     Plan(super::chatgpt_plan_tools::Context),
 }
@@ -452,21 +468,21 @@ impl Transform {
         match self {
             Self::Responses => Ok(vec![value.clone()]),
             Self::Anthropic(adapter) => adapter.push(value),
-            Self::Chat(adapter) => adapter.push(value),
+            Self::Chat(adapter, context) => restore_chat_search(adapter.push(value)?, context),
             Self::Grok(context) => super::grok_wire::restore_event(context, value.clone()),
             Self::Plan(context) => super::chatgpt_plan_tools::restore_event(context, value.clone()),
         }
     }
     fn finish(&mut self) -> Result<Vec<Value>, ServiceError> {
         match self {
-            Self::Chat(adapter) => adapter.finish(),
+            Self::Chat(adapter, context) => restore_chat_search(adapter.finish()?, context),
             Self::Anthropic(adapter) => adapter.finish(),
             Self::Grok(_) | Self::Plan(_) | Self::Responses => Ok(Vec::new()),
         }
     }
     fn finish_done(&mut self) -> Result<Vec<Value>, ServiceError> {
         match self {
-            Self::Chat(adapter) => adapter.finish_done(),
+            Self::Chat(adapter, context) => restore_chat_search(adapter.finish_done()?, context),
             Self::Anthropic(adapter) => adapter.finish(),
             Self::Grok(_) | Self::Plan(_) | Self::Responses => Ok(Vec::new()),
         }

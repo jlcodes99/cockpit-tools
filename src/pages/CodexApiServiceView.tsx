@@ -30,6 +30,8 @@ import { formatCodexQuotaPoolPlanLabel, formatCodexQuotaPoolPercent, formatCodex
 import { CODEX_LOCAL_ACCESS_STATUS_KEYS, resolveCodexLocalAccessRuntimeStatus } from "../utils/codexLocalAccessStatus";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import { CodexLocalAccessModal } from "../components/CodexLocalAccessModal";
+import { CodexImageForwardConfig } from "../components/CodexImageForwardConfig";
+import { CodexImageModelSelect } from "../components/CodexImageModelConfig";
 import { CodexAccountPoolHealthModal } from "../components/CodexAccountPoolHealthModal";
 import { CodexStatsRangePicker } from "../components/CodexStatsRangePicker";
 import { CodexUsageTrend } from "../components/codex/CodexUsageTrend";
@@ -2028,6 +2030,29 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                   </button>
                 ))}
               </div>
+              {collection && (
+                <div className="codex-api-service-panel-stack">
+                  <CodexImageModelSelect
+                    model={collection.imageGenerationModel}
+                    models={collection.imageGenerationModels}
+                    deletedModels={collection.imageGenerationDeletedModels}
+                    catalogUpdatedAt={collection.updatedAt}
+                    mainModel={collection.imageGenerationMainModel}
+                    disabled={busy}
+                    onSave={(model) => codexLocalAccessService.updateCodexLocalAccessImageGenerationModel(model).then(setState)}
+                    onSaveMainModel={(model) => codexLocalAccessService.updateCodexLocalAccessImageGenerationMainModel(model).then(setState)}
+                  />
+                  <CodexImageForwardConfig
+                    accounts={accounts}
+                    accountIds={collection.imageGenerationAccountIds}
+                    imageGenerationModel={collection.imageGenerationModel}
+                    accountModels={collection.imageGenerationAccountModels}
+                    disabled={busy}
+                    maskAccountText={maskAccountText}
+                    onSave={(ids, models) => codexLocalAccessService.updateCodexLocalAccessImageGenerationAccounts(ids, models).then(setState)}
+                  />
+                </div>
+              )}
             </section>
             <div className="codex-api-service-panel-stack">
               <section className="codex-api-service-panel">

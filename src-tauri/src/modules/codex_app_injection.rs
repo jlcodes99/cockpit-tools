@@ -1384,8 +1384,8 @@ fn deepseek_model_injection_script(
         // depending on release, and a missing value would hide image input.
         item.inputModalities = modalities;
         item.input_modalities = modalities;
-        item.supportsImageDetailOriginal = supportsImage;
-        item.supports_image_detail_original = supportsImage;
+        item.supportsImageDetailOriginal = false;
+        item.supports_image_detail_original = false;
       }};
       const listMethods = {{ "model/list": true, "list-models-for-host": true }};
       const writeMethods = {{

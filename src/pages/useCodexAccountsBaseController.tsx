@@ -1,3 +1,4 @@
+import { CODEX_RESET_CREDIT_DETAILS_REQUEST, getPendingCodexResetCreditDetails, clearPendingCodexResetCreditDetails } from '../utils/codexResetCreditNavigation';
 import { prepareCodexServiceJoins } from "../utils/codexServiceJoin";
 import { chatGptPlanErrorKey, listChatGptPlanAccounts } from "../services/chatgptPlanService";
 import { implicitCodexServiceAccountIds } from "../utils/chatgptPlanOverview";
@@ -2157,6 +2158,20 @@ export function useCodexAccountsBaseController() {
       },
       [loadResetCreditConfirmSnapshot, setResetCreditConfirmError],
     );
+
+    useEffect(() => {
+      const openRequestedDetails = () => {
+        const id = getPendingCodexResetCreditDetails();
+        const account = id ? accounts.find(account => account.id === id) : undefined;
+        if (!account) return;
+        clearPendingCodexResetCreditDetails();
+        setActiveTab('overview');
+        openResetCreditConfirmModal(account);
+      };
+      openRequestedDetails();
+      window.addEventListener(CODEX_RESET_CREDIT_DETAILS_REQUEST, openRequestedDetails);
+      return () => window.removeEventListener(CODEX_RESET_CREDIT_DETAILS_REQUEST, openRequestedDetails);
+    }, [accounts, openResetCreditConfirmModal]);
 
     const closeResetCreditConfirmModal = useCallback(() => {
       if (resettingResetCreditAccountId) return;

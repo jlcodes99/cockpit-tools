@@ -588,6 +588,7 @@ struct CatalogThreadRecord {
     display_title: String,
     source_created_at: f64,
     source_updated_at: f64,
+    source_recency_at: Option<f64>,
     cwd: String,
     source_kind: String,
     source_detail: String,
@@ -743,13 +744,14 @@ fn collect_catalog_thread_records(
         };
         let created = sqlite_time_expr(&columns, "created_at", "created_at_ms");
         let updated = sqlite_time_expr(&columns, "updated_at", "updated_at_ms");
+        let recency = sqlite_time_expr(&columns, "recency_at", "recency_at_ms");
         let cwd = sqlite_text_expr(&columns, "cwd", "''");
         let source = sqlite_text_expr(&columns, "source", "''");
         let git_branch = sqlite_text_expr(&columns, "git_branch", "NULL");
         let thread_source = sqlite_text_expr(&columns, "thread_source", "NULL");
         let project_id = sqlite_text_expr(&columns, "project_id", "NULL");
         let sql = format!(
-            "SELECT id, {title}, {created}, {updated}, {cwd}, {source}, {git_branch}, {thread_source}, {project_id} FROM threads WHERE COALESCE(id, '') <> ''"
+            "SELECT id, {title}, {created}, {updated}, {cwd}, {source}, {git_branch}, {thread_source}, {project_id}, NULLIF({recency}, 0) FROM threads WHERE COALESCE(id, '') <> ''"
         );
         let mut statement = connection
             .prepare(&sql)
@@ -767,11 +769,12 @@ fn collect_catalog_thread_records(
                     git_branch: row.get::<_, Option<String>>(6).unwrap_or(None),
                     thread_source: row.get::<_, Option<String>>(7).unwrap_or(None),
                     project_id: row.get::<_, Option<String>>(8).unwrap_or(None),
+                    source_recency_at: row.get(9)?,
                 })
             })
             .map_err(|error| format!("查询会话目录修复数据失败 ({}): {error}", path.display()))?;
         for row in rows {
-            let record = row.map_err(|error| {
+            let mut record = row.map_err(|error| {
                 format!("读取会话目录修复数据失败 ({}): {error}", path.display())
             })?;
             if !selection.includes_session_id(&record.id) {
@@ -794,14 +797,23 @@ fn collect_catalog_thread_records(
                 non_root_ids.insert(record.id.clone());
                 continue;
             }
-            let replace = records
-                .get(&record.id)
-                .map(|current: &CatalogThreadRecord| {
-                    record.source_updated_at > current.source_updated_at
-                })
-                .unwrap_or(true);
-            if replace {
-                records.insert(record.id.clone(), record);
+            match records.entry(record.id.clone()) {
+                std::collections::hash_map::Entry::Occupied(mut entry) => {
+                    let current: &mut CatalogThreadRecord = entry.get_mut();
+                    let recency = [current.source_recency_at, record.source_recency_at]
+                        .into_iter()
+                        .flatten()
+                        .reduce(f64::max);
+                    if record.source_updated_at > current.source_updated_at {
+                        record.source_recency_at = recency;
+                        *current = record;
+                    } else {
+                        current.source_recency_at = recency;
+                    }
+                }
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(record);
+                }
             }
         }
     }
@@ -890,26 +902,40 @@ fn repair_local_thread_catalog_for_options(
                 })?;
         }
 
+        let mut assignments = vec!["model_provider = ?1".to_string()];
+        let mut predicates = vec!["COALESCE(model_provider, '') <> ?1"];
+        if columns.contains("missing_candidate") {
+            assignments.push("missing_candidate = 0".to_string());
+            predicates.push("COALESCE(missing_candidate, 0) <> 0");
+        }
+        let has_recency = columns.contains("source_recency_at");
+        if has_recency {
+            // Earlier repairs copied source_updated_at into source_recency_at.
+            // Keep independently observed activity times in existing catalog rows.
+            let stale_recency = "source_recency_at = source_updated_at AND source_recency_at <> ?4";
+            assignments.push(format!(
+                "source_recency_at = CASE WHEN {stale_recency} THEN ?4 ELSE source_recency_at END"
+            ));
+            predicates.push(stale_recency);
+        }
+        let update_sql = format!(
+            "UPDATE local_thread_catalog SET {} WHERE host_id = ?2 AND thread_id = ?3 AND ({})",
+            assignments.join(", "),
+            predicates.join(" OR "),
+        );
         for record in records.values() {
-            let mut assignments = vec!["model_provider = ?1"];
-            if columns.contains("missing_candidate") {
-                assignments.push("missing_candidate = 0");
-            }
-            let update_sql = format!(
-                "UPDATE local_thread_catalog SET {} WHERE host_id = ?2 AND thread_id = ?3 AND (COALESCE(model_provider, '') <> ?1{})",
-                assignments.join(", "),
-                if columns.contains("missing_candidate") {
-                    " OR COALESCE(missing_candidate, 0) <> 0"
-                } else {
-                    ""
-                }
-            );
-            let updated = transaction
-                .execute(
+            let updated = if has_recency {
+                transaction.execute(
+                    &update_sql,
+                    (target_provider, host_id.as_str(), record.id.as_str(), record.source_recency_at),
+                )
+            } else {
+                transaction.execute(
                     &update_sql,
                     (target_provider, host_id.as_str(), record.id.as_str()),
                 )
-                .map_err(|error| format!("更新会话目录失败 ({}): {error}", path.display()))?;
+            }
+            .map_err(|error| format!("更新会话目录失败 ({}): {error}", path.display()))?;
             totals.updated_rows += updated;
             if updated > 0 {
                 continue;
@@ -979,7 +1005,7 @@ fn repair_local_thread_catalog_for_options(
                 ("missing_candidate", SqlValue::Integer(0)),
                 (
                     "source_recency_at",
-                    SqlValue::Real(record.source_updated_at),
+                    SqlValue::Real(record.source_recency_at.unwrap_or(record.source_updated_at)),
                 ),
                 ("pending_observed_title", SqlValue::Integer(0)),
             ] {

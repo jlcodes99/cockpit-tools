@@ -787,6 +787,25 @@ fn native_model_visible(
         })
 }
 
+// The disk catalog and /models must select the same route for capabilities.
+fn native_catalog_model_account<'a>(
+    collection: &CodexLocalAccessCollection,
+    key: Option<&CodexLocalAccessApiKey>,
+    plan: &NativeModelRoutePlan,
+    accounts: &'a [CodexAccount],
+) -> Option<&'a CodexAccount> {
+    plan.account_ids.iter().find_map(|id| accounts.iter().find(|account| {
+        &account.id == id
+            && (!plan.provider || account.official_registration_id.is_none())
+            && (plan.provider
+                || !accounts.iter().any(|other| {
+                    other.id == account.id && other.official_registration_id.is_some()
+                })
+                || account.official_registration_id.is_some())
+            && native_model_visible(collection, key, plan, account)
+    }))
+}
+
 include!("codex_local_access_native_catalog_tools.rs");
 
 fn native_catalog(
@@ -881,15 +900,7 @@ fn native_catalog(
         let Ok(plan) = native_model_route_plan(collection, key, &model) else {
             continue;
         };
-        if let Some(account) = accounts.iter().find(|account| {
-            (!plan.provider || account.official_registration_id.is_none())
-                && (plan.provider
-                    || !accounts.iter().any(|other| {
-                        other.id == account.id && other.official_registration_id.is_some()
-                    })
-                    || account.official_registration_id.is_some())
-                && native_model_visible(collection, key, &plan, account)
-        }) {
+        if let Some(account) = native_catalog_model_account(collection, key, &plan, accounts) {
             ids.push(exposed.clone());
             selected.push((
                 exposed,
@@ -900,11 +911,7 @@ fn native_catalog(
         }
     }
     let mut value = codex_protocol::build_codex_client_models_response(&ids);
-    let remote_templates: HashMap<(String,String), Value> = accounts.iter().filter_map(|account|
-        remote_catalog_for_account(account).map(|catalog|(account.id.clone(),catalog)))
-        .flat_map(|(id,catalog)|catalog["models"].as_array().cloned().unwrap_or_default().into_iter()
-            .filter_map(move|entry|Some(((id.clone(),entry["slug"].as_str()?.to_owned()),entry))))
-        .collect();
+    let remote_templates = native_catalog_remote_templates(accounts);
     if let Some(models) = value["models"].as_array_mut() {
         for model in models.iter_mut() {
             if let Some((_, upstream, account, plan)) = selected
@@ -927,11 +934,7 @@ fn native_catalog(
                 }
                 if account.is_api_key_auth() {
                     let vision = native_catalog_vision(collection, plan, account, upstream);
-                    model["input_modalities"] = if vision {
-                        json!(["text", "image"])
-                    } else {
-                        json!(["text"])
-                    };
+                    apply_provider_catalog_image_input(model, vision);
                     if automatic {
                         let display = codex_account::provider_model_display_name(&plan.model);
                         if display.trim() != plan.model.trim() {
@@ -1444,24 +1447,102 @@ async fn native_select_route_once(
     }
     let soft_affinity_selected = !confirmed_quota_failover
         && preferred.as_ref().is_some_and(|id| accounts.first().is_some_and(|account| &account.id == id));
+    let has_ready_backups = accounts.len() > 1;
     if request.preferred_account_id.is_some() {
         accounts.truncate(1);
     }
     drop(bindings);
-    let (position, permit) = if soft_affinity_selected && accounts.len() > 1 {
-        Box::pin(native_acquire_affinity_permit(host, &collection, &accounts, request.requires_permit)).await?
-    } else {
-        native_acquire_account_permit(host, &collection, &accounts, request.requires_permit).await?
+    let admission_deadline = Instant::now() + native_account_concurrency_wait(&collection);
+    let mut admission_settings = None;
+    let mut use_affinity = soft_affinity_selected;
+    let (account, upstream_model, permit) = loop {
+        let settings = admission_settings.as_ref().unwrap_or(&collection);
+        let (position, permit) = if use_affinity && accounts.len() > 1 {
+            Box::pin(native_acquire_affinity_permit(
+                host,
+                settings,
+                &accounts,
+                request.requires_permit,
+            ))
+            .await?
+        } else {
+            native_acquire_account_permit(host, settings, &accounts, request.requires_permit)
+                .await?
+        };
+        let account = &accounts[position];
+        let upstream_model = native_operation_model(
+            &collection,
+            &plan,
+            account,
+            request.auxiliary.as_deref(),
+            request.image_input,
+        )
+        .ok_or_else(|| native_error(403, "model_not_allowed", "Selected model is unavailable"))?;
+        // Another request can cool this account while its semaphore is queued.
+        // Recheck the mapped model after admission, without holding the state
+        // lock across a wait or charging an upstream attempt for a local skip.
+        let (cooldown, quota_exhausted) = if native_is_chatgpt_plan_account(account) {
+            (None, false)
+        } else {
+            let states = host.cooldowns.lock().map_err(|_| {
+                native_error(503, "service_unavailable", "Account state is unavailable")
+            })?;
+            let now = Instant::now();
+            (
+                native_cooldown_wait(
+                    &states,
+                    &account.id,
+                    &upstream_model,
+                    collection.disable_cooling,
+                    now,
+                ),
+                states
+                    .get(&native_cooldown_key(&account.id, "", true))
+                    .is_some_and(|state| {
+                        state.reason == NATIVE_CONFIRMED_QUOTA && state.until > now
+                    }),
+            )
+        };
+        let Some(wait) = cooldown else {
+            break (accounts.swap_remove(position), upstream_model, permit);
+        };
+        drop(permit);
+        accounts.remove(position);
+        closest_cooldown = Some(closest_cooldown.map_or(wait, |current| current.min(wait)));
+        if request.preferred_account_id.is_some() {
+            return Err(native_error(503, "account_cooling",
+                "The original account is temporarily cooling; retry this conversation after the indicated delay")
+                .with_retry_after(if rebuild_available && quota_exhausted && has_ready_backups {
+                    None
+                } else {
+                    Some(wait)
+                }));
+        }
+        if accounts.is_empty() {
+            let error = if request.capability_fallback_from.is_some() {
+                native_error(
+                    503,
+                    "capability_fallback_no_compatible_account",
+                    "No compatible account is available within this API key's model scope",
+                )
+            } else {
+                native_error(
+                    503,
+                    "no_available_account",
+                    "No compatible account is available for this model",
+                )
+            };
+            return Err(error.with_retry_after(closest_cooldown));
+        }
+        // Each newly cooled candidate is removed once. Reuse the remaining
+        // admission budget instead of granting another full wait per account.
+        use_affinity = false;
+        admission_settings
+            .get_or_insert_with(|| collection.clone())
+            .account_concurrency_wait_ms = admission_deadline
+            .saturating_duration_since(Instant::now())
+            .as_millis() as u64;
     };
-    let account = accounts.swap_remove(position);
-    let upstream_model = native_operation_model(
-        &collection,
-        &plan,
-        &account,
-        request.auxiliary.as_deref(),
-        request.image_input,
-    )
-    .ok_or_else(|| native_error(403, "model_not_allowed", "Selected model is unavailable"))?;
     let preflight_fallback = local_fallbacks.remove(&account.id);
     check_budget_pricing(&collection, key, &upstream_model)?;
     let selected_official = account.official_registration_id.clone();

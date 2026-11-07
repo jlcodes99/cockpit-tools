@@ -558,3 +558,56 @@ async fn cancelling_native_compat_stream_records_cancellation_and_received_usage
     assert_eq!(reports[0].status, 499);
     assert_eq!(reports[0].usage.as_ref().unwrap()["output_tokens"], 3);
 }
+
+#[tokio::test]
+async fn chat_client_tool_search_roundtrips_in_json_and_streams() {
+    for streaming in [false,true] {
+        let seen=Arc::new(Mutex::new(Value::Null));let capture=seen.clone();
+        let app=Router::new().route("/v1/chat/completions",post(move |Json(body):Json<Value>| {
+            let capture=capture.clone();async move {
+                *capture.lock().unwrap()=body.clone();
+                let name=body["tools"][0]["function"]["name"].as_str().unwrap();
+                let call=json!({"index":0,"id":"search-call","type":"function","function":{"name":name,"arguments":"{\"query\":\"files\"}"}});
+                if body["stream"]==true {
+                    let chunk=json!({"id":"r-search","choices":[{"index":0,"delta":{"tool_calls":[call]},"finish_reason":"tool_calls"}]});
+                    Response::builder().header("content-type","text/event-stream").body(Body::from(format!("data: {chunk}\n\ndata: [DONE]\n\n"))).unwrap()
+                } else {Response::builder().header("content-type","application/json").body(Body::from(json!({"id":"r-search","choices":[{"index":0,"message":{"role":"assistant","tool_calls":[call]},"finish_reason":"tool_calls"}]}).to_string())).unwrap()}
+            }
+        }));
+        let mut fixture=Fixture::new(app,WireApi::Chat).await;
+        let response=client().post(fixture.url("/v1/responses")).bearer_auth("key")
+            .json(&json!({"model":"m","stream":streaming,"input":"find tools","tools":[{"type":"tool_search","execution":"client"}]})).send().await.unwrap();
+        assert_eq!(response.status(),200);
+        let canonical=if streaming {
+            let text=response.text().await.unwrap();
+            text.lines().filter_map(|line|line.strip_prefix("data: ")).filter_map(|line|serde_json::from_str::<Value>(line).ok()).find(|event|event["type"]=="response.completed").unwrap_or_else(||panic!("{text}"))["response"].clone()
+        }else{response.json::<Value>().await.unwrap()};
+        assert_eq!(canonical["output"][0]["type"],"tool_search_call");
+        assert_eq!(canonical["output"][0]["execution"],"client");
+        assert_eq!(canonical["output"][0]["arguments"]["query"],"files");
+        assert_eq!(seen.lock().unwrap()["tools"][0]["type"],"function");
+        fixture.shutdown().await;
+    }
+}
+
+#[tokio::test]
+async fn chat_remote_compaction_v2_produces_a_reusable_capsule_and_expands_it_on_replay() {
+    let seen=Arc::new(Mutex::new(Vec::<Value>::new()));let capture=seen.clone();
+    let app=Router::new().route("/v1/chat/completions",post(move |Json(body):Json<Value>| {
+        let capture=capture.clone();async move {
+            capture.lock().unwrap().push(body);
+            Json(json!({"id":"compact-result","choices":[{"index":0,"message":{"role":"assistant","content":"Retain the project goal."},"finish_reason":"stop"}]}))
+        }
+    }));
+    let mut fixture=Fixture::new(app,WireApi::Chat).await;
+    let response=client().post(fixture.url("/v1/responses/compact")).bearer_auth("key")
+        .json(&json!({"model":"m","input":[{"type":"message","role":"user","content":"project goal"},{"type":"compaction_trigger"}]})).send().await.unwrap();
+    assert_eq!(response.status(),200);
+    let capsule=response.json::<Value>().await.unwrap()["output"][0].clone();
+    assert_eq!(capsule["type"],"compaction");
+    let response=client().post(fixture.url("/v1/responses")).bearer_auth("key")
+        .json(&json!({"model":"m","input":[capsule,{"type":"message","role":"user","content":"continue"}]})).send().await.unwrap();
+    assert_eq!(response.status(),200);
+    assert!(seen.lock().unwrap()[1]["messages"].to_string().contains("Retain the project goal."));
+    fixture.shutdown().await;
+}

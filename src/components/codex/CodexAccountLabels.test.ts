@@ -15,6 +15,7 @@ test('image picker renders real account labels and searches and sorts by the vis
     { id: 'b', auth_mode: 'apikey', email: 'api-key-00000000', account_name: 'Zeta Images', api_base_url: 'https://beta.example/v1', api_model_catalog: ['gpt-image-2'] },
   ];
   const h = loadHookModule(new URL('./CodexImageAccountPickerModal.tsx', import.meta.url), {
+    '../../stores/useCodexAccountStore': { useCodexAccountStore: { setState() {} } },
     'react-i18next': { useTranslation: () => ({ t }) },
     '../../hooks/useModalFocusTrap': { useModalFocusTrap() {} },
     '../../hooks/useEscClose': { useEscCloseTopmost() {} },

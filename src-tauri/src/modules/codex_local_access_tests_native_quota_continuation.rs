@@ -209,6 +209,7 @@ async fn native_quota_snapshot_wait_covers_both_quota_windows_and_memory_cooling
     host.cooldowns.lock().unwrap().insert(
         native_cooldown_key("pool-a", &request.model, false),
         NativeCooldown {
+            recorded_at: Instant::now(),
             until: Instant::now() + Duration::from_secs(180),
             quota: true,
             backoff_level: 0,
@@ -315,6 +316,7 @@ async fn native_quota_snapshot_disable_cooling_does_not_disable_real_quota() {
     host.cooldowns.lock().unwrap().insert(
         native_cooldown_key("pool-a", &request.model, false),
         NativeCooldown {
+            recorded_at: Instant::now(),
             until: Instant::now() + Duration::from_secs(180),
             quota: true,
             backoff_level: 0,
@@ -343,6 +345,7 @@ async fn native_quota_snapshot_unknown_reset_is_not_replaced_by_finite_memory_co
     host.cooldowns.lock().unwrap().insert(
         native_cooldown_key("pool-a", &request.model, false),
         NativeCooldown {
+            recorded_at: Instant::now(),
             until: Instant::now() + Duration::from_secs(60),
             quota: false,
             backoff_level: 0,

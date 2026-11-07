@@ -150,7 +150,7 @@ fn image_catalog_legacy_defaults_migrate_candidates_without_changing_selection_o
     let mut collection: super::CodexLocalAccessCollection = serde_json::from_value(legacy).unwrap();
     assert_eq!(
         collection.image_generation_models,
-        vec!["gpt-image-2.5", "gpt-image-2"]
+        crate::models::codex_local_access::default_image_generation_models()
     );
     collection.image_generation_account_models =
         HashMap::from([("legacy-source".into(), "gpt-image-2.5-vip".into())]);
@@ -184,7 +184,7 @@ fn image_catalog_legacy_defaults_migrate_candidates_without_changing_selection_o
 }
 
 #[test]
-fn image_full_custom_model_excludes_oauth_and_keeps_legacy_declared_source_scope() {
+fn image_native_variants_and_custom_models_keep_declared_source_scope() {
     let _lock = crate::modules::test_support::env_lock()
         .lock()
         .unwrap_or_else(|error| error.into_inner());
@@ -217,7 +217,7 @@ fn image_full_custom_model_excludes_oauth_and_keeps_legacy_declared_source_scope
             refresh_token: Some("refresh".into()),
         },
     );
-    assert!(!super::is_image_generation_source_for_model(
+    assert!(super::is_image_generation_source_for_model(
         &oauth,
         "gpt-image-2.5-flare"
     ));

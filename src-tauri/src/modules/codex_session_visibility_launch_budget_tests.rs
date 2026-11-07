@@ -1,4 +1,31 @@
 #[test]
+fn desktop_api_key_launch_restores_onboarding_state_without_project_metadata() {
+    let temp = tempfile::tempdir().unwrap();
+    fs::write(temp.path().join(CONFIG_FILE_NAME), "cli_auth_credentials_store = 'file'\n").unwrap();
+    let auth = br#"{"auth_mode":"apikey","OPENAI_API_KEY":"fixture-key"}"#;
+    fs::write(temp.path().join("auth.json"), auth).unwrap();
+    let state = json!({
+        "electron-account-renderer-state-v1":{"owner":null,"inactive":{}},
+        "electron-persisted-atom-state":{"electron:onboarding-projectless-completed":true}
+    });
+    let state_path = temp.path().join(GLOBAL_STATE_FILE);
+    fs::write(&state_path, serde_json::to_vec(&state).unwrap()).unwrap();
+    // CLI launches keep the native renderer state intact.
+    repair_session_visibility_quick_for_instance("onboarding-api-service", "Fixture", temp.path(), false)
+        .unwrap();
+    assert_eq!(serde_json::from_slice::<JsonValue>(&fs::read(&state_path).unwrap()).unwrap(), state);
+    // The same desktop entry is exercised on macOS and Windows.
+    let result = repair_session_visibility_quick_for_instance(
+        "onboarding-api-service", "Fixture", temp.path(), true,
+    ).unwrap();
+    assert!(!result.local_project_recovery_deferred);
+    let prepared: JsonValue = serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
+    assert!(prepared.get("electron-account-renderer-state-v1").is_none());
+    assert_eq!(prepared["electron-persisted-atom-state"]["electron:onboarding-projectless-completed"], true);
+    assert_eq!(fs::read(temp.path().join("auth.json")).unwrap(), auth);
+}
+
+#[test]
 fn launch_budget_interrupts_sql_and_rolls_back_its_transaction() {
     let mut connection = Connection::open_in_memory().unwrap();
     connection
@@ -95,7 +122,7 @@ fn oversized_launch_rollout_header_fails_before_database_or_history_mutation() {
     fs::write(&fixture.rollout, &oversized).unwrap();
     let original_time = fs::metadata(&fixture.rollout).unwrap().modified().unwrap();
     let error =
-        repair_session_visibility_quick_for_instance("header-limit", "Header limit", &fixture.dir)
+        repair_session_visibility_quick_for_instance("header-limit", "Header limit", &fixture.dir, false)
             .unwrap_err();
     assert!(error.contains(LAUNCH_VISIBILITY_LINE_TOO_LARGE), "{error}");
     assert_eq!(read_thread_provider(&fixture.dir, "mtime-thread"), "openai");
@@ -168,7 +195,7 @@ fn expired_launch_repair_restores_committed_changes_across_both_official_databas
     fixture.assert_hash(&fixture.original);
     assert_eq!(fixture.time(), fixture.original_time);
     let retry =
-        repair_session_visibility_quick_for_instance("retry-after-timeout", "Retry", &fixture.dir)
+        repair_session_visibility_quick_for_instance("retry-after-timeout", "Retry", &fixture.dir, false)
             .unwrap();
     assert_eq!(retry.updated_sqlite_row_count, 2);
     assert_eq!(fixture.time(), fixture.target_time);
@@ -219,7 +246,7 @@ fn launch_quick_repair_leaves_backup_retention_outside_critical_path() {
     fs::create_dir_all(&old).unwrap();
     fs::create_dir_all(&newest).unwrap();
     let summary =
-        repair_session_visibility_quick_for_instance("retention", "Retention", &fixture.dir)
+        repair_session_visibility_quick_for_instance("retention", "Retention", &fixture.dir, false)
             .unwrap();
     assert!(old.exists() && newest.exists());
     for backup in summary.backup_dirs {

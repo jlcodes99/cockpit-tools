@@ -13,11 +13,74 @@
   font-weight: 500;
   line-height: 1.3;
   text-align: left;
-  white-space: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
 }
 .codex-reset-credit-expiry:hover:not(:disabled) { color: var(--text-primary); }
 .codex-reset-credit-expiry:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .codex-reset-credit-expiry.is-urgent { color: var(--danger); font-weight: 600; }
 .codex-reset-credit-expiry:disabled { cursor: not-allowed; opacity: 0.7; }
-.codex-account-reset-expiry-line { margin: 6px 0; min-width: 0; }
+.codex-account-reset-expiry-line { margin: 6px 0; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.codex-account-reset-expiry-line > .codex-reset-credit-expiry { flex: 1; min-width: 0; }
+
+.codex-reset-credit-pill {
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit;
+  font-weight: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--primary) 12%, var(--border-light));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 4%, var(--bg-secondary));
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.codex-reset-credit-pill svg {
+  flex-shrink: 0;
+  color: color-mix(in srgb, var(--primary) 70%, var(--text-secondary));
+}
+
+.codex-reset-credit-pill.is-available {
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--border-light));
+  background: color-mix(in srgb, var(--primary) 10%, var(--bg-secondary));
+  color: color-mix(in srgb, var(--primary) 82%, var(--text-primary));
+  cursor: pointer;
+}
+
+.codex-reset-credit-pill.is-available svg {
+  color: var(--primary);
+}
+
+.codex-reset-credit-pill.is-available:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--primary) 62%, var(--border-light));
+  background: color-mix(in srgb, var(--primary) 16%, var(--bg-secondary));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.codex-reset-credit-pill.is-unavailable:disabled {
+  cursor: not-allowed;
+}
+
+.codex-reset-credit-pill:hover:not(:disabled) { border-color: var(--primary); }
+.codex-reset-credit-pill:disabled { opacity: .55; cursor: not-allowed; }
+.codex-reset-credit-pill:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }

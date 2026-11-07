@@ -88,6 +88,7 @@ fn quick_entry_applies_actual_mtime_once_and_metadata_backup_restores_without_co
         "mtime-fixture",
         "Mtime fixture",
         &fixture.dir,
+        false,
     )
     .unwrap();
     assert_eq!(first.changed_rollout_file_count, 1);
@@ -112,6 +113,7 @@ fn quick_entry_applies_actual_mtime_once_and_metadata_backup_restores_without_co
         "mtime-fixture",
         "Mtime fixture",
         &fixture.dir,
+        false,
     )
     .unwrap();
     assert_eq!(second.changed_rollout_file_count, 0);

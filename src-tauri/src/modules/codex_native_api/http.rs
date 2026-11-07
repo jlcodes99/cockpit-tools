@@ -59,7 +59,8 @@ pub(super) async fn read_request(
     request: Request,
 ) -> Result<Input, ServiceError> {
     let mut tracker = state.begin()?;
-    let (parts, body) = request.into_parts();
+    let (mut parts, body) = request.into_parts();
+    parts.headers.remove("x-cockpit-compat-source");
     let capture = tokio::time::timeout(
         state.options.request_timeout,
         state.host.payload_logging_enabled(),
@@ -606,6 +607,7 @@ async fn forward_with_policy(
             tracker.fail(&error).await;
             return Err(error);
         }
+        super::replay_wire::instructions(&prepared.source_body, &mut response);
         super::response_wire::ResponseWire::default().stamp_response(&mut response);
         tracker.payload("upstream_response", "http", &headers, &response.to_string());
         tracker.set_retry_after(observation.retry_after);
@@ -653,7 +655,7 @@ async fn forward_with_policy(
     if !compact {
         if let Some(value) = &mut value {
             normalized = super::output_usage::normalize_usage_details(value);
-            if status.is_success() { normalized |= super::response_wire::ResponseWire::default().stamp_response(value); }
+            if status.is_success() { normalized |= super::replay_wire::instructions(&prepared.source_body,value); normalized |= super::response_wire::ResponseWire::default().stamp_response(value); }
         }
     }
     if let Some(value) = &value {
@@ -860,7 +862,7 @@ impl StreamingResponse {
                 .await?;
                 self.tracker.quota_event(&event);
                 self.observation.observe(&event);
-                if self.wire.stamp_event(&mut event) { outgoing = super::response_wire::rewrite_frame(&frame.bytes, &event); }
+                if super::replay_wire::instructions(&self.prepared.source_body, &mut event) | self.wire.stamp_event(&mut event) { outgoing = super::response_wire::rewrite_frame(&frame.bytes, &event); }
                 self.tracker
                     .response_tier(self.observation.service_tier.as_deref());
                 self.tracker.capture_usage(&self.observation.usage);

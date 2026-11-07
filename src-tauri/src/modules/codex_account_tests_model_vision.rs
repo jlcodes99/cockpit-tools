@@ -22,6 +22,7 @@ fn models_with_catalog_image_input_declarations_default_to_vision_input() {
         "gpt-5.6-sol",
         "gpt-5.6-terra",
         "gpt-6.1-sol",
+        "gpt-6.1-terra",
         "gpt-6-astra",
         "gpt-6-sol",
         "gpt-6-luna",
@@ -35,6 +36,7 @@ fn models_with_catalog_image_input_declarations_default_to_vision_input() {
         "grok-4.7",
         "openai/gpt-5.6-sol",
         "openai/gpt-6-astra",
+        " OPENAI/GPT-6.1-TERRA ",
         "openai/gpt-6-sol",
         " OPENAI/GPT-6-LUNA ",
     ] {

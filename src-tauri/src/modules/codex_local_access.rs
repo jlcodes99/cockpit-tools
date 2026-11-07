@@ -83,7 +83,7 @@ mod tests {
             display_name: "DeepSeek-V4.1-Flash".into(),
             template: Some(serde_json::json!({"multi_agent_version": null,
                 "supported_reasoning_levels": [{"effort": "max"}]})),
-            image_capable: true,
+            image_capable: Some(true),
         }];
         super::apply_profile_model_definition_overrides(&mut catalog, &definitions);
         assert_eq!(catalog["models"][0]["multi_agent_version"], "v2");

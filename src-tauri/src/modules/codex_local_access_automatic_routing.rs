@@ -534,8 +534,8 @@ fn automatic_api_service_account_model_entries(
                 .get("clientModel")
                 .and_then(Value::as_str)?
                 .to_string();
-            let image_capable =
-                routed_vision || automatic_api_service_account_model_vision(account, &client_model);
+            let upstream = model.get("upstreamModel").and_then(Value::as_str)?;
+            let image_capable = routed_vision || native_account_model_vision(account, upstream);
             Some((client_model, image_capable))
         })
         .collect()
@@ -575,14 +575,15 @@ fn automatic_api_service_profile_extra_models(
     }
     // 该 API Key 自己的供应商网关模型同样要在客户端可选。
     if let Some(gateway) = api_key.provider_gateway.as_ref() {
-        let image_capable = provider_gateway_has_vision_support(gateway);
-        for model in
-            apply_model_aliases_to_ids(gateway.upstream_models.clone(), &collection.model_aliases)
-        {
-            if is_gpt_or_codex_namespace_model(&model) {
-                gpt_backed_models.insert(model.trim().to_ascii_lowercase());
+        let routed_vision = provider_gateway_has_vision_support(gateway);
+        for upstream in &gateway.upstream_models {
+            let image_capable = routed_vision || provider_gateway_model_vision(gateway, upstream);
+            for model in apply_model_aliases_to_ids(vec![upstream.clone()], &collection.model_aliases) {
+                if is_gpt_or_codex_namespace_model(&model) {
+                    gpt_backed_models.insert(model.trim().to_ascii_lowercase());
+                }
+                models.push((model, image_capable));
             }
-            models.push((model, image_capable));
         }
     }
     // GPT / Codex 命名空间只保留两类：官方推荐集（显示名与档位跟随官方客户端），以及账号自己

@@ -218,9 +218,9 @@ struct UsageResponse {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CodexResetCreditsSnapshot {
-    available_count: Option<i64>,
-    credits: Vec<CodexResetCredit>,
-    next_expires_at: Option<i64>,
+    pub(crate) available_count: Option<i64>,
+    pub(crate) credits: Vec<CodexResetCredit>,
+    pub(crate) next_expires_at: Option<i64>,
 }
 
 fn normalize_remaining_percentage(window: &WindowInfo) -> Result<i32, String> {
@@ -1550,10 +1550,46 @@ pub async fn fetch_account_reset_credits(
     }
 }
 
+// Matches the official Codex backend-client consume response. HTTP 2xx
+// acknowledges the request; only the outcome confirms a redemption.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ResetCreditConsumeOutcome {
+    Reset,
+    NothingToReset,
+    NoCredit,
+    AlreadyRedeemed,
+}
+
+impl ResetCreditConsumeOutcome {
+    pub(crate) fn into_result(self) -> Result<(), String> {
+        use crate::modules::codex_reset_automation::message;
+        match self {
+            Self::Reset | Self::AlreadyRedeemed => Ok(()),
+            Self::NothingToReset => Err(message("nothingToReset")),
+            Self::NoCredit => Err(message("noCredits")),
+        }
+    }
+}
+
+fn parse_reset_credit_consume_outcome(body: &str) -> Result<ResetCreditConsumeOutcome, String> {
+    #[derive(Deserialize)]
+    struct ConsumeResponse {
+        code: ResetCreditConsumeOutcome,
+    }
+    serde_json::from_str::<ConsumeResponse>(body)
+        .map(|response| response.code)
+        .map_err(|_| crate::modules::codex_reset_automation::message("unknownOutcome"))
+}
+
 async fn post_reset_credit_once(
     account: &CodexAccount,
     redeem_request_id: &str,
-) -> Result<(), String> {
+    expected_identity: &str,
+) -> Result<ResetCreditConsumeOutcome, String> {
+    if crate::modules::codex_reset_automation::account_identity(account) != expected_identity {
+        return Err(crate::modules::codex_reset_automation::message("conflict"));
+    }
     let request_body = json!({ "redeem_request_id": redeem_request_id });
     let response = send_codex_api_request(
         account,
@@ -1578,7 +1614,7 @@ async fn post_reset_credit_once(
     ));
 
     if status.is_success() {
-        return Ok(());
+        return parse_reset_credit_consume_outcome(&body);
     }
 
     let detail_code = extract_detail_code_from_body(&body);
@@ -1596,6 +1632,14 @@ fn is_unauthorized_error(message: &str) -> bool {
 }
 
 pub async fn consume_reset_credit(account_id: &str) -> Result<(), String> {
+    crate::modules::codex_reset_automation::consume_manual(account_id).await
+}
+
+pub(crate) async fn consume_reset_credit_with_request_id(
+    account_id: &str,
+    redeem_request_id: &str,
+    expected_identity: &str,
+) -> Result<ResetCreditConsumeOutcome, String> {
     let mut account = codex_account::prepare_account_for_injection(account_id).await?;
     if account.is_api_key_auth() {
         return Err("API Key 账号不支持主动重置额度".to_string());
@@ -1605,7 +1649,7 @@ pub async fn consume_reset_credit(account_id: &str) -> Result<(), String> {
             "Codex 主动重置使用显式 mock JSON 空操作: account_id={}",
             account_id
         ));
-        return Ok(());
+        return Ok(ResetCreditConsumeOutcome::Reset);
     }
 
     if !account.is_agent_identity_auth()
@@ -1617,15 +1661,14 @@ pub async fn consume_reset_credit(account_id: &str) -> Result<(), String> {
         codex_account::save_account_preserving_egress_proxy(&account)?;
     }
 
-    let redeem_request_id = uuid::Uuid::new_v4().to_string();
-    match post_reset_credit_once(&account, &redeem_request_id).await {
-        Ok(()) => Ok(()),
+    match post_reset_credit_once(&account, redeem_request_id, expected_identity).await {
+        Ok(outcome) => Ok(outcome),
         Err(error) if !account.is_agent_identity_auth() && is_unauthorized_error(&error) => {
             refresh_account_tokens(&mut account, "主动重置接口返回 401").await?;
             sync_subscription_expiry_from_current_id_token(&mut account);
             normalize_subscription_retry_state(&mut account);
             codex_account::save_account_preserving_egress_proxy(&account)?;
-            post_reset_credit_once(&account, &redeem_request_id).await
+            post_reset_credit_once(&account, redeem_request_id, expected_identity).await
         }
         Err(error) => Err(error),
     }
@@ -1846,6 +1889,9 @@ async fn refresh_account_quota_once(
     crate::modules::codex_local_access::confirm_gateway_quota_refresh(
         account_id, &result.quota, quota_query_started,
     );
+    crate::modules::codex_local_access::clear_native_quota_cooldown_after_refresh(
+        account_id, &result.quota, quota_query_started,
+    ).await;
     if quota_only {
         return Ok(result.quota);
     }
@@ -2816,5 +2862,26 @@ mod tests {
                 && !lower.contains("referer:")
                 && !lower.contains("sec-fetch-site:")
         }));
+    }
+}
+
+#[cfg(test)]
+mod reset_credit_outcome_tests {
+    use super::*;
+
+    #[test]
+    fn reset_credit_consume_checks_business_result_of_successful_http_response() {
+        for (body, applied) in [
+            (r#"{"code":"reset","windows_reset":2}"#, true),
+            (r#"{"code":"already_redeemed"}"#, true),
+            (r#"{"code":"nothing_to_reset"}"#, false),
+            (r#"{"code":"no_credit"}"#, false),
+        ] {
+            let outcome = parse_reset_credit_consume_outcome(body).unwrap();
+            assert_eq!(outcome.into_result().is_ok(), applied, "{body}");
+        }
+        for body in ["", "{}", r#"{"code":"unknown"}"#, "<html>OK</html>"] {
+            assert!(parse_reset_credit_consume_outcome(body).is_err(), "{body}");
+        }
     }
 }

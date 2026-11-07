@@ -1442,3 +1442,117 @@ pub async fn sync_bound_oauth_consumers_after_reauth(account_id: &str) -> Result
         .await
         .map_err(|_| "PROXY_RUNTIME_FAILED".to_string())?
 }
+
+/// Derive the Desktop renderer owner from the actual projected credential,
+/// including API keys bound to OAuth. Never use Cockpit account IDs or email.
+pub(crate) fn desktop_renderer_project_owner(
+    base_dir: &Path,
+) -> Result<Option<Option<String>>, String> {
+    let Some(auth) = read_configured_codex_auth_value(base_dir)? else {
+        return Ok(None);
+    };
+    renderer_project_owner_from_auth(&auth)
+}
+
+fn renderer_project_owner_from_auth(
+    auth: &serde_json::Value,
+) -> Result<Option<Option<String>>, String> {
+    if auth["auth_mode"] == "apikey" {
+        return Ok(Some(None));
+    }
+    let tokens = &auth["tokens"];
+    if !tokens.is_object() {
+        return Ok(
+            if auth["auth_mode"] == "apikey" || auth["OPENAI_API_KEY"].is_string() {
+                Some(None)
+            } else {
+                None
+            },
+        );
+    }
+    let access = tokens["access_token"]
+        .as_str()
+        .and_then(decode_jwt_payload_value);
+    let id = tokens["id_token"]
+        .as_str()
+        .and_then(decode_jwt_payload_value);
+    let user = access
+        .as_ref()
+        .and_then(|v| v["https://api.openai.com/auth"]["chatgpt_user_id"].as_str())
+        .or_else(|| {
+            id.as_ref()
+                .and_then(|v| v["https://api.openai.com/auth"]["chatgpt_user_id"].as_str())
+        });
+    let account = tokens["account_id"]
+        .as_str()
+        .filter(|v| !v.is_empty())
+        .or_else(|| {
+            access
+                .as_ref()
+                .and_then(|v| v["https://api.openai.com/auth"]["chatgpt_account_id"].as_str())
+        })
+        .or_else(|| {
+            id.as_ref()
+                .and_then(|v| v["https://api.openai.com/auth"]["chatgpt_account_id"].as_str())
+        });
+    Ok(match (user, account) {
+        (Some(user), Some(account)) if !user.is_empty() && !account.is_empty() => {
+            let identity = serde_json::to_vec(&serde_json::json!([user, account]))
+                .map_err(|e| e.to_string())?;
+            Some(Some(format!("{:x}", Sha256::digest(identity))))
+        }
+        _ => None,
+    })
+}
+
+#[cfg(test)]
+mod account_project_switch_identity_tests {
+    use super::*;
+    fn token(user: &str, account: &str) -> String {
+        let claims = serde_json::json!({"https://api.openai.com/auth":{
+            "chatgpt_user_id":user,"chatgpt_account_id":account}});
+        format!(
+            "e30.{}.sig",
+            URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims).unwrap())
+        )
+    }
+    #[test]
+    fn account_project_switch_uses_projected_oauth_identity_not_key_label() {
+        let auth = serde_json::json!({"auth_mode":"chatgpt","tokens":{
+            "access_token":token("user-one","original-account"),
+            "account_id":"selected-workspace"
+        }});
+        let expected = format!(
+            "{:x}",
+            Sha256::digest(
+                serde_json::to_vec(&serde_json::json!(["user-one", "selected-workspace"])).unwrap()
+            )
+        );
+        assert_eq!(
+            renderer_project_owner_from_auth(&auth).unwrap(),
+            Some(Some(expected))
+        );
+    }
+    #[test]
+    fn account_project_switch_distinguishes_key_unknown_and_oauth() {
+        assert_eq!(
+            renderer_project_owner_from_auth(&serde_json::json!({
+                "auth_mode":"apikey","OPENAI_API_KEY":"fake","tokens":{}
+            }))
+            .unwrap(),
+            Some(None)
+        );
+        assert_eq!(
+            renderer_project_owner_from_auth(&serde_json::json!({
+                "auth_mode":"chatgpt","tokens":{"access_token":"opaque"}
+            }))
+            .unwrap(),
+            None
+        );
+        let auth = serde_json::json!({"tokens":{"id_token":token("user","account")}});
+        assert!(renderer_project_owner_from_auth(&auth)
+            .unwrap()
+            .flatten()
+            .is_some());
+    }
+}

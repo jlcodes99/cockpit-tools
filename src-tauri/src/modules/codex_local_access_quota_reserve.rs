@@ -373,12 +373,8 @@ fn clear_stale_reversed_baseline(
     recover
 }
 
-pub(crate) fn confirm_gateway_quota_refresh(
-    account_id: &str,
-    quota: &CodexQuota,
-    started: Instant,
-) {
-    let from = |primary: bool| {
+fn quota_refresh_window_evidence(quota: &CodexQuota, primary: bool) -> (Option<QuotaWindow>, bool) {
+    let from = || {
         let (minutes, reset) = if primary {
             (quota.hourly_window_minutes, quota.hourly_reset_time)
         } else {
@@ -390,28 +386,50 @@ pub(crate) fn confirm_gateway_quota_refresh(
             resets_at: reset,
         })
     };
-    let evidence = |primary: bool| {
-        let (present, key) = if primary {
-            (quota.hourly_window_present, "primary_window")
-        } else {
-            (quota.weekly_window_present, "secondary_window")
-        };
-        // Usage parsing normalizes both a missing key and a null window to
-        // Some(false). Only an explicit null proves absence when raw data exists.
-        let absent = present == Some(false)
-            && quota.raw_data.as_ref().map_or(true, |raw| {
-                raw.get("rate_limit")
-                    .and_then(Value::as_object)
-                    .and_then(|limit| limit.get(key))
-                    .is_some_and(Value::is_null)
-                    || (raw.get("provider").and_then(Value::as_str) == Some("cockpit-api")
-                        && !primary)
-            });
-        let value = if present == Some(false) { None } else { from(primary) };
-        (value, absent)
+    let (present, key) = if primary {
+        (quota.hourly_window_present, "primary_window")
+    } else {
+        (quota.weekly_window_present, "secondary_window")
     };
-    let (primary, primary_absent) = evidence(true);
-    let (secondary, secondary_absent) = evidence(false);
+    // Usage parsing normalizes both a missing key and a null window to
+    // Some(false). Only an explicit null proves absence when raw data exists.
+    let absent = present == Some(false)
+        && quota.raw_data.as_ref().map_or(true, |raw| {
+            raw.get("rate_limit")
+                .and_then(Value::as_object)
+                .and_then(|limit| limit.get(key))
+                .is_some_and(Value::is_null)
+                || (raw.get("provider").and_then(Value::as_str) == Some("cockpit-api")
+                    && !primary)
+        });
+    let value = if present == Some(false) { None } else { from() };
+    (value, absent)
+}
+
+fn quota_refresh_confirms_usable_allowance(quota: &CodexQuota, started: Instant, now: i64) -> bool {
+    if started.elapsed().as_secs() > BOUND_OAUTH_QUOTA_RESERVE_MAX_SNAPSHOT_AGE_SECONDS as u64 {
+        return false;
+    }
+    if quota_has_usable_credits(quota) {
+        return true;
+    }
+    let (primary, primary_absent) = quota_refresh_window_evidence(quota, true);
+    let (secondary, secondary_absent) = quota_refresh_window_evidence(quota, false);
+    let usable = |window: &QuotaWindow| {
+        window.remaining_percent > 0.0 && window.resets_at.is_none_or(|reset| reset > now)
+    };
+    (primary.is_some() || secondary.is_some())
+        && (primary_absent || primary.as_ref().is_some_and(usable))
+        && (secondary_absent || secondary.as_ref().is_some_and(usable))
+}
+
+pub(crate) fn confirm_gateway_quota_refresh(
+    account_id: &str,
+    quota: &CodexQuota,
+    started: Instant,
+) {
+    let (primary, primary_absent) = quota_refresh_window_evidence(quota, true);
+    let (secondary, secondary_absent) = quota_refresh_window_evidence(quota, false);
     let complete = (primary.is_some() || primary_absent)
         && (secondary.is_some() || secondary_absent)
         && started.elapsed().as_secs() <= BOUND_OAUTH_QUOTA_RESERVE_MAX_SNAPSHOT_AGE_SECONDS as u64;

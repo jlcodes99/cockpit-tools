@@ -37,9 +37,10 @@ mod steering;
 
 pub(super) async fn upgrade(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    mut headers: HeaderMap,
     ws: yawc::IncomingUpgrade,
 ) -> Result<Response, ServiceError> {
+    headers.remove("x-cockpit-compat-source");
     let mut tracker = state.begin()?;
     let capture = tokio::time::timeout(
         state.options.request_timeout,
@@ -414,7 +415,7 @@ async fn run(
                                     let mut reused_wire = None;
                                     if !reconnect {
                                         let mut wire_headers = prepared.headers.clone();
-                                        let mut wire_body = prepare_ws_body(&mut prepared, &mut wire_headers)?;
+                                        let mut wire_body = prepare_ws_body(&state, &mut prepared, &mut wire_headers).await?;
                                         tracker.field_compat.apply(&prepared.route, &mut wire_body);
                                         if !super::multi_agent_compat::has_namespace_conflict(&prepared.body) {
                                             prepared.multi_agent_context.optimized_namespace |= previous_multi_agent_context.optimized_namespace;
@@ -733,7 +734,7 @@ async fn run(
                             if probe_reused {
                                 if !upstream_http && first_event_rejection(&UpstreamMessage::Text(text.clone()), false).is_some_and(|(error, _)| error.status == 400) {
                                     let mut wire_headers = prepared.headers.clone();
-                                    let mut body = prepare_ws_body(&mut prepared, &mut wire_headers)?;
+                                    let mut body = prepare_ws_body(&state, &mut prepared, &mut wire_headers).await?;
                                     tracker.field_compat.apply(&prepared.route, &mut body);
                                     if tracker.field_compat.rejected_for(&prepared, &body, 400, &event) {
                                         tracker.field_compat.commit_reasoning(&mut prepared);
@@ -875,7 +876,7 @@ async fn run(
                                 tracker.capture_transient_rate_limit(observation.transient_rate_limit);
                                 tracker.response_tier(observation.service_tier.as_deref());
                                 tracker.capture_usage(&observation.usage);
-                                let wire_changed = wire.stamp_event(&mut event);
+                                let wire_changed = super::replay_wire::instructions(&prepared.source_body, &mut event) | wire.stamp_event(&mut event);
                                 if wire_changed { text = event.to_string(); }
                                 if active && observation.terminal {
                                     steering.completed(event.pointer("/response/id").and_then(Value::as_str).or(response_id.as_deref()));
@@ -1134,7 +1135,7 @@ async fn open_response(
             ));
         }
         let mut headers = prepared.headers.clone();
-        let mut wire_body = prepare_ws_body(prepared, &mut headers)?;
+        let mut wire_body = prepare_ws_body(state, prepared, &mut headers).await?;
         tracker.field_compat.apply(&prepared.route, &mut wire_body);
         let endpoint = prepared.route.websocket_endpoint.as_ref();
         let base_url = endpoint.map_or(prepared.route.base_url.as_str(), |endpoint| {
@@ -1777,7 +1778,8 @@ fn first_event_rejection(
     })
 }
 
-fn prepare_ws_body(
+async fn prepare_ws_body(
+    state: &AppState,
     prepared: &mut Prepared,
     headers: &mut HeaderMap,
 ) -> Result<Value, ServiceError> {
@@ -1788,7 +1790,7 @@ fn prepare_ws_body(
             "ChatGPT plan accounts support HTTP Responses inference only",
         ));
     }
-    let mut body = prepared.body.clone();
+    let mut body = super::anthropic_compact::expand_wire(state,prepared.body.clone()).await?;
     if prepared.route.chatgpt {
         body["store"] = Value::Bool(false);
         body["stream"] = Value::Bool(true);

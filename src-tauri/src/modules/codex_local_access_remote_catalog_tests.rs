@@ -18,7 +18,7 @@ fn remote_catalog_roundtrip_preserves_host_names_order_and_reasoning_with_key_pr
         model_id: "deepseek-flash".into(),
         display_name: "DeepSeek-V4.1-Flash".into(),
         template: codex_protocol::deepseek_model_template("deepseek-flash"),
-        image_capable: false,
+        image_capable: None,
     });
     let mut host = build_local_access_profile_catalog(&definitions);
     for model in host["models"].as_array_mut().unwrap() {

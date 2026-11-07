@@ -4,10 +4,13 @@ import { useTranslation } from "react-i18next";
 import { SingleSelectDropdown } from "./SingleSelectDropdown";
 import { useCodexImageModelCatalog } from "./codex/useCodexImageModelCatalog";
 import { ModalErrorMessage } from "./ModalErrorMessage";
+import { DEFAULT_CODEX_IMAGE_MODELS } from "../utils/codexImageAccounts";
 import "./CodexLocalAccessModal.css";
 import "./CodexImageModelConfig.css";
 
-const PRESETS = ["gpt-image-2.5", "gpt-image-2"];
+const PRESETS = DEFAULT_CODEX_IMAGE_MODELS;
+const OAUTH_VARIANTS = ["gpt-image-2.6-flare", "gpt-image-2.6-sunburst"];
+const isPreset = (id: string) => PRESETS.includes(id) || OAUTH_VARIANTS.includes(id);
 const CUSTOM = "__custom__";
 const keyPrefix = "codex.localAccess.imageGenerationModel";
 
@@ -99,8 +102,8 @@ function CodexImageMainModelInput({ model, disabled, onSave }: {
 export function CodexImageToolModelSelect({ model, models, deletedModels, catalogUpdatedAt, disabled, onSave }: Omit<Props, "mainModel" | "onSaveMainModel">) {
   const { t } = useTranslation();
   const currentModel = model?.trim() || PRESETS[0];
-  const [selection, setSelection] = useState(PRESETS.includes(currentModel) ? currentModel : CUSTOM);
-  const [customModel, setCustomModel] = useState(PRESETS.includes(currentModel) ? "" : currentModel);
+  const [selection, setSelection] = useState(isPreset(currentModel) ? currentModel : CUSTOM);
+  const [customModel, setCustomModel] = useState(isPreset(currentModel) ? "" : currentModel);
   const customInput = useRef<HTMLInputElement>(null);
   const [manageOpen, setManageOpen] = useState(false);
   const [draft, setDraft] = useState("");
@@ -111,7 +114,7 @@ export function CodexImageToolModelSelect({ model, models, deletedModels, catalo
   const savingRef = useRef(false);
   const catalog = useCodexImageModelCatalog(currentModel, models, deletedModels, catalogUpdatedAt);
   const busy = disabled || pending;
-  useEffect(() => { setSelection(PRESETS.includes(currentModel) ? currentModel : CUSTOM); setCustomModel(PRESETS.includes(currentModel) ? "" : currentModel); }, [currentModel]);
+  useEffect(() => { setSelection(isPreset(currentModel) ? currentModel : CUSTOM); setCustomModel(isPreset(currentModel) ? "" : currentModel); }, [currentModel]);
   const message = (cause: unknown) => {
     const text = String(cause).replace(/^Error:\s*/, "");
     return text.startsWith("codex.localAccess.") || text.startsWith("codex.modelConfig.errors.") ? t(text) : text;
@@ -134,12 +137,12 @@ export function CodexImageToolModelSelect({ model, models, deletedModels, catalo
       if (mode !== "select") await catalog.update(id);
       if (mode !== "catalog") {
         await onSave(id);
-        setSelection(PRESETS.includes(id) ? id : CUSTOM);
-        if (!PRESETS.includes(id)) setCustomModel(id);
+        setSelection(isPreset(id) ? id : CUSTOM);
+        if (!isPreset(id)) setCustomModel(id);
       }
       if (mode === "catalog") setDraft("");
     } catch (cause) {
-      setSelection(PRESETS.includes(currentModel) ? currentModel : CUSTOM);
+      setSelection(isPreset(currentModel) ? currentModel : CUSTOM);
       setError(message(cause));
     } finally {
       savingRef.current = false;
@@ -164,7 +167,11 @@ export function CodexImageToolModelSelect({ model, models, deletedModels, catalo
     <div className="codex-image-model-inline codex-image-tool-model">
       <span className="codex-image-model-inline-label">{t(`${keyPrefix}.label`)}</span>
       <div className="codex-image-model-select-row">
-        <SingleSelectDropdown value={selection} options={[...PRESETS.map((id) => ({ value: id, label: id })), { value: CUSTOM, label: t(`${keyPrefix}.custom`) }]}
+        <SingleSelectDropdown value={selection} options={[
+          ...[...PRESETS, ...OAUTH_VARIANTS.filter((id) => !catalog.deleted.includes(id))]
+            .map((id) => ({ value: id, label: id })),
+          { value: CUSTOM, label: t(`${keyPrefix}.custom`) },
+        ]}
           className="codex-image-model-inline-select" menuWidth={280} menuMaxHeight={200} disabled={busy}
           ariaLabel={t(`${keyPrefix}.label`)} onChange={(id) => { setError(""); setDraftInvalid(null); setSelection(id); if (id !== CUSTOM) void save(id); }} />
         <button type="button" className="btn btn-secondary btn-sm codex-image-model-manage" disabled={busy}

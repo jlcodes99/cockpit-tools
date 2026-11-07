@@ -8,6 +8,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.3.80] - 2026-11-07
+
+### Added
+
+- **GPT-6.1 Terra**: Complete support across default and multi-instance model lists, API routing, wakeup presets, model tests, image-input defaults and model names. Preserve custom model lists and expose Ultra reasoning in benchmark tests.
+
+- **Codex API image generation**: Add native OAuth Images routing for GPT Image 2.6 Sunburst and Flare, with independent image credentials. New API services default to GPT Image 2.6. Configure image models and sources directly from Models & Capabilities, including the 2.6 Flare and Sunburst presets. Forward complexity, SVG/GIF output and markup edits through the standalone Images API, translating JSON and multipart edit inputs into native Codex image references. Standalone OAuth image requests remain available when their unrelated text model is excluded. Omit ineffective geometry parameters on standalone Codex OAuth requests; API-key and Responses sizing stays unchanged.
+- **Codex Chat providers**: Bridge client tool discovery and support remote context compaction with reusable summaries.
+
+- **Codex reset-card automation**: Show automatic-use status in the reset-count entry and edit account rules directly from credit details or set shared defaults, with an option to save the rule to every account and replace existing custom or disabled settings. Default to one hour before expiry and 5% weekly remaining quota without changing saved rules. Keep disabled settings visible with a live trigger preview; automatically use a card before expiry or when weekly remaining quota reaches the configured threshold, with activity records and duplicate-redemption protection while the app is running.
+- **Codex card sorting** Drag account cards to save a custom order while preserving accounts outside the current filter or page. Include the order and its enabled state in backups and restore them by account identity. [#3037](https://github.com/jlcodes99/cockpit-tools/pull/3037) · [@zhbCloud](https://github.com/zhbCloud)
+- **2FA management and migration** Separate query and code panels, search by account or type, and select or batch-delete filtered records. Export selected or all saved accounts as locally generated migration QR codes, with paginated previews and SVG downloads; support SHA1, six-digit, 30-second TOTP credentials. JSON backups continue to include all saved records. [#3037](https://github.com/jlcodes99/cockpit-tools/pull/3037) · [@zhbCloud](https://github.com/zhbCloud)
+- **Model provider key controls** Show or hide an existing API Key while editing and copy the full current value with one click. Keys remain hidden when reopening the editor or switching keys.
+
+### Fixed
+
+- **Codex API startup**: Preserve completed onboarding and local projects when starting API Service or API Key profiles without OAuth through Cockpit on macOS and Windows, including projectless profiles. Keep genuine first-run onboarding and restore account-specific state when returning to OAuth.
+
+- **Codex history order**: Full history repair preserves recent activity order when rebuilding the local conversation list and corrects entries that earlier repairs sorted by last update time.
+- **Codex API quota cooldowns**: Clear stale quota cooldowns after a refresh confirms usable allowance, while keeping newer limits and non-quota cooldowns. [#3030](https://github.com/jlcodes99/cockpit-tools/pull/3030) · [@thinker1008-commits](https://github.com/thinker1008-commits)
+- **Codex Windows gateway ports**: Reassign an instance provider gateway port when Windows denies binding the saved port, while keeping the existing gateway key. [#3040](https://github.com/jlcodes99/cockpit-tools/pull/3040) · [@thekfjie](https://github.com/thekfjie)
+- **Codex Windows project groups**: Preserve verified local projects and groups after Desktop account switches, keeping the target account’s order and isolating cloud projects and remote threads. Fix flushing the history index backup. [#3039](https://github.com/jlcodes99/cockpit-tools/pull/3039) · [@thekfjie](https://github.com/thekfjie)
+- **Codex reset results**: Report the server’s redemption outcome so an unapplied reset no longer appears successful. Retry an unconfirmed outcome with the same request ID. [#3024](https://github.com/jlcodes99/cockpit-tools/issues/3024)
+- **Codex model image input**: Preserve the routed image input capability when saving a custom catalog, taking over a profile, or rebuilding a managed catalog, honoring each model’s settings. [#3035](https://github.com/jlcodes99/cockpit-tools/issues/3035)
+
+- **Codex API routing**: Skip accounts that enter cooldown while a request waits for a concurrency slot, release their slots and use eligible backups without restarting the wait budget. Preserve continuation ownership and return a retryable error when no account is available.
+
+- **Codex API compatibility**: Preserve output budgets, normalize invalid item-ID characters, clean output-only metadata on WebSocket replay and restore the caller’s original instructions in responses. HTTP continuations stop repeating a previous forced tool choice when the current request omits it. Unsupported forced hosted images on native Lite routes now return an actionable error while retaining the selected model and protocol. Reduce copying of long histories and streamed tool arguments, and keep image-input support separate from Codex-only original-detail metadata.
+
+- **Codex account switching**: Preserve project registrations and recovery backups when global state is empty or malformed. Speed settings still save normally without rebuilding the damaged state.
+
+- **Codex subscription refresh**: Allow manual subscription-term refresh before expiry in account cards, tables, compact views, and launch previews.
+
+- **Platform layout**: Keep bulk toggles on one line and align the relay row with platform columns; the header checkbox continues to enable or disable all platforms. Show the saved selection count when it exceeds the current layout limit.
+
 ## [1.3.79] - 2026-11-05
 
 ### Added

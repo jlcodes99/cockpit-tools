@@ -1008,58 +1008,6 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   min-width: 0;
 }
 
-.codex-reset-credit-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  max-width: 118px;
-  padding: 4px 8px;
-  border: 1px solid color-mix(in srgb, var(--primary) 12%, var(--border-light));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--primary) 4%, var(--bg-secondary));
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: default;
-  transition:
-    border-color 0.18s ease,
-    background 0.18s ease,
-    color 0.18s ease,
-    box-shadow 0.18s ease,
-    transform 0.18s ease;
-}
-
-.codex-reset-credit-pill svg {
-  flex-shrink: 0;
-  color: color-mix(in srgb, var(--primary) 70%, var(--text-secondary));
-}
-
-.codex-reset-credit-pill.is-available {
-  border-color: color-mix(in srgb, var(--primary) 42%, var(--border-light));
-  background: color-mix(in srgb, var(--primary) 10%, var(--bg-secondary));
-  color: color-mix(in srgb, var(--primary) 82%, var(--text-primary));
-  cursor: pointer;
-}
-
-.codex-reset-credit-pill.is-available svg {
-  color: var(--primary);
-}
-
-.codex-reset-credit-pill.is-available:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--primary) 62%, var(--border-light));
-  background: color-mix(in srgb, var(--primary) 16%, var(--bg-secondary));
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 18%, transparent);
-  transform: translateY(-1px);
-}
-
-.codex-reset-credit-pill.is-unavailable:disabled {
-  cursor: not-allowed;
-}
-
 .codex-reset-credit-btn {
   flex: 0 0 auto;
   min-height: 24px;
@@ -1084,11 +1032,13 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
 }
 
 .codex-reset-credit-confirm-overlay {
+  overflow-y: auto;
+  align-items: safe center;
   background: rgba(15, 23, 42, 0.48);
   backdrop-filter: blur(6px);
 }
 
-.codex-reset-credit-confirm-modal {
+.modal.codex-reset-credit-confirm-modal {
   display: flex;
   flex-direction: column;
   width: min(520px, calc(100vw - 32px));

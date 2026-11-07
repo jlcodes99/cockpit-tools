@@ -230,6 +230,7 @@ async fn execute_body(
         conversion_error: native.responses_error,
     });
     input.body = converted.responses;
+    if flavor == CompatFlavor::Claude { input.headers.insert("x-cockpit-compat-source", HeaderValue::from_static("claude")); }
     let mut outcome = input.tracker.defer_downstream();
     let response = match http::dispatch(
         state.clone(),

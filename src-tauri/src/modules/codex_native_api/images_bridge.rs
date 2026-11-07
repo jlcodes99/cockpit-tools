@@ -283,6 +283,7 @@ fn prepare_request(body: &Value) -> Result<ImageRequest, ServiceError> {
         for name in [
             "model",
             "size",
+            "complexity",
             "quality",
             "background",
             "output_format",

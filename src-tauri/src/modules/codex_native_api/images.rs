@@ -23,6 +23,26 @@ pub(super) use bridge::{is_forced_generation, responses};
 const MAX_INPUT_IMAGES: usize = 16;
 const MAX_MULTIPART_PARTS: usize = 64;
 
+/// Explicit live-probe evidence: final serialized geometry only, never headers,
+/// credentials, prompts, image inputs or generated image data.
+#[cfg(test)]
+fn capture_live_geometry(request: &reqwest::Request) -> Result<(), ServiceError> {
+    use std::io::Write;
+    let Some(path) = std::env::var_os("COCKPIT_IMAGE_WIRE_LOG") else { return Ok(()); };
+    let body: Value = request.body().and_then(|body|body.as_bytes())
+        .and_then(|bytes|serde_json::from_slice(bytes).ok()).unwrap_or(Value::Null);
+    let mut geometry = json!({"path":request.url().path()});
+    for key in ["model","size","width","height","aspect_ratio","resolution","image_size","quality","output_format","stream"] {
+        if let Some(value) = body.get(key) { geometry[key] = value.clone(); }
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.create(true).append(true);
+    #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
+    let mut file = options.open(path).map_err(|error|bad(format!("Live geometry evidence: {error}")))?;
+    writeln!(file,"{geometry}").map_err(|error|bad(format!("Live geometry evidence: {error}")))?;
+    Ok(())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ImageOperation {
     Generation,
@@ -103,11 +123,12 @@ impl ImageRequest {
         };
         let output_format =
             optional_string(object, "output_format")?.unwrap_or_else(|| "png".to_owned());
-        if !matches!(output_format.as_str(), "png" | "jpeg" | "webp") {
-            return Err(bad("output_format must be png, jpeg or webp"));
+        if !matches!(output_format.as_str(), "png" | "jpeg" | "webp" | "svg" | "gif") {
+            return Err(bad("output_format must be png, jpeg, webp, svg or gif"));
         }
         for name in [
             "size",
+            "complexity",
             "quality",
             "background",
             "moderation",
@@ -176,6 +197,9 @@ impl ImageRequest {
         for part in &parts {
             match part.name.as_str() {
                 "image" | "image[]" | "images" | "images[]" => images.push(part_reference(part)?),
+                "markup" => {
+                    body.insert("markup".into(), part_reference(part)?);
+                }
                 "mask" => {
                     if body.contains_key("mask") {
                         return Err(bad("Only one image mask is allowed"));
@@ -226,6 +250,22 @@ impl ImageRequest {
         body
     }
 
+    /// Standalone Codex OAuth ignores these geometry fields, so omit them here.
+    /// Edits additionally normalize singular images and multipart references.
+    pub(super) fn codex_native_json(&self, actual_model: &str) -> Value {
+        let edit = self.operation == ImageOperation::Edit;
+        let mut body: Map<String, Value> = self.original.as_object().unwrap().iter()
+            .filter(|(key, _)| !matches!(key.as_str(), "size" | "width" | "height" | "aspect_ratio" | "resolution")
+                && !(edit && matches!(key.as_str(), "image" | "images" | "mask")))
+            .map(|(key, value)| (key.clone(), value.clone())).collect();
+        body.insert("model".into(), json!(actual_model));
+        if edit {
+            body.insert("images".into(), Value::Array(self.input_images.clone()));
+            if let Some(mask) = &self.mask { body.insert("mask".into(), mask.clone()); }
+        }
+        Value::Object(body)
+    }
+
     pub(super) fn native_parts(&self, actual_model: &str) -> Option<Vec<ImagePart>> {
         let mut parts = self.parts.clone()?;
         if let Some(model) = parts.iter_mut().find(|part| part.name == "model") {
@@ -252,6 +292,7 @@ impl ImageRequest {
             "action": if self.operation == ImageOperation::Edit { "edit" } else { "generate" }});
         for key in [
             "size",
+            "complexity",
             "quality",
             "background",
             "output_format",
@@ -282,7 +323,7 @@ impl ImageRequest {
             }
         }
         // Never silently reinterpret vendor-specific image controls as model instructions.
-        for key in ["style", "aspect_ratio", "resolution"] {
+        for key in ["style", "aspect_ratio", "resolution", "markup"] {
             if self.original.get(key).is_some() {
                 return Err(bad(format!("{key} requires a native Images API source")));
             }

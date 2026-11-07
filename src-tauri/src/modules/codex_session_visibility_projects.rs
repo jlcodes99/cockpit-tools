@@ -174,6 +174,11 @@ fn repair_session_visibility_for_instances_with_options(
             if local_projects::has_pending(&instance.data_dir) {
                 return Err("CODEX_PROJECT_PENDING_RECOVERY".into());
             }
+            let prepared = if selection.prepare_desktop_projects {
+                prepare_local_project_account_state_for_launch(instance)?
+            } else {
+                false
+            };
             let Some(plan) = local_projects::scan_for_repair(
                 &instance.data_dir,
                 selection.session_ids(),
@@ -183,7 +188,7 @@ fn repair_session_visibility_for_instances_with_options(
                 return Ok(None);
             };
             let changed = plan.changed();
-            let state_changes = plan.state_changes();
+            let state_changes = plan.state_changes() + usize::from(prepared);
             let mut backup_dir = None;
             if changed && !options.dry_run {
                 // A launch already owns the profile lease. A manual quick repair
@@ -218,7 +223,7 @@ fn repair_session_visibility_for_instances_with_options(
                 local_projects::apply(&plan, &backup)?;
                 backup_dir = Some(backup.to_string_lossy().into_owned());
             }
-            Ok(Some((plan.counts, state_changes, changed, backup_dir)))
+            Ok(Some((plan.counts, state_changes, changed || prepared, backup_dir)))
         });
         let outcome = match result {
             Ok(outcome) => outcome,
@@ -360,4 +365,20 @@ fn repair_session_visibility_for_instances_with_options(
         None,
     );
     Ok(summary)
+}
+
+// The unified start transaction already holds the profile lease. Resolve the
+// renderer owner from the credentials actually written to this profile, then
+// update its state only while the matching Desktop instance is stopped.
+fn prepare_local_project_account_state_for_launch(instance: &CodexSyncInstance) -> Result<bool, String> {
+    check_launch_visibility_budget("read_project_owner")?;
+    let Some(owner) = modules::codex_account::desktop_renderer_project_owner(&instance.data_dir)? else {
+        return Ok(false);
+    };
+    verify_project_recovery_stopped(instance)?;
+    let prepared = local_projects::account_state::prepare(&instance.data_dir, owner.as_deref())?;
+    if prepared {
+        modules::logger::log_info("[Codex Local Projects] prepared account-scoped local groups for launch");
+    }
+    Ok(prepared)
 }

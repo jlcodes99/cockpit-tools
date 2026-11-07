@@ -477,6 +477,7 @@ pub fn run() {
             });
 
             tauri::async_runtime::spawn(modules::codex_proxy_catalog::auto_refresh_loop());
+            tauri::async_runtime::spawn(modules::codex_reset_automation::run(app.handle().clone()));
             tauri::async_runtime::spawn(modules::codex_proxy_desktop_router::restore_on_startup());
 
             // 启动 WebSocket 服务（使用 Tauri 的 async runtime）
@@ -1089,6 +1090,9 @@ pub fn run() {
             commands::codex::refresh_codex_quotas_batch,
             commands::codex::get_codex_reset_credits,
             commands::codex::consume_codex_reset_credit,
+            commands::codex::get_codex_reset_automation,
+            commands::codex::save_codex_reset_public_rule,
+            commands::codex::save_codex_reset_account_rule,
             commands::codex::refresh_codex_subscription_info,
             commands::codex::refresh_all_codex_quotas,
             commands::codex::refresh_current_codex_quota,

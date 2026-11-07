@@ -52,6 +52,12 @@ test('both account and provider entries submit built-in prompts without referenc
       assert.equal(requests[0].model, sourceMode === 'providers' ? 'saved-model' : 'selected-model');
       assert.deepEqual(Array.from(requests[0].accountIds), sourceMode === 'providers' ? [] : ['one']);
       assert.equal(requests[0].providerTargets?.[0].apiKeyId, sourceMode === 'providers' ? 'k' : undefined);
+      const effort = nodes(h.flush()).find((node) => node.type === 'dropdown' && node.props.ariaLabel === 'pelican.effort');
+      assert.ok(effort.props.options.some((option: any) => option.value === 'ultra' && option.label === 'codex.wakeup.reasoningEfforts.ultra'));
+      effort.props.onChange('ultra');
+      h.flush().props.onSubmit({ preventDefault() {} });
+      await settlePromises();
+      assert.equal(requests[1].effort, 'ultra');
       textarea().props.onChange({ target: { value: 'Return only {"answer":42}' } });
       assert.equal(cases().props.value, 'custom');
       assert.equal(state.draft.prompt, 'Return only {"answer":42}');

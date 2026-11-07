@@ -2405,6 +2405,38 @@
       ]
     },
     {
+      "id": "gpt-6.1-terra",
+      "object": "model",
+      "created": 1788480000,
+      "owned_by": "openai",
+      "type": "openai",
+      "display_name": "GPT-6.1 Terra",
+      "version": "gpt-6.1-terra",
+      "description": "GPT-6.1 Terra",
+      "context_length": 256000,
+      "max_completion_tokens": 128000,
+      "supported_parameters": [
+        "tools"
+      ],
+      "thinking": {
+        "levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
+      },
+      "supportedInputModalities": [
+        "text",
+        "image"
+      ],
+      "supportedOutputModalities": [
+        "text"
+      ]
+    },
+    {
       "id": "gpt-6-sol",
       "object": "model",
       "created": 1788480000,
@@ -2660,6 +2692,38 @@
       ]
     },
     {
+      "id": "gpt-6.1-terra",
+      "object": "model",
+      "created": 1788480000,
+      "owned_by": "openai",
+      "type": "openai",
+      "display_name": "GPT-6.1 Terra",
+      "version": "gpt-6.1-terra",
+      "description": "GPT-6.1 Terra",
+      "context_length": 256000,
+      "max_completion_tokens": 128000,
+      "supported_parameters": [
+        "tools"
+      ],
+      "thinking": {
+        "levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
+      },
+      "supportedInputModalities": [
+        "text",
+        "image"
+      ],
+      "supportedOutputModalities": [
+        "text"
+      ]
+    },
+    {
       "id": "gpt-6-sol",
       "object": "model",
       "created": 1788480000,
@@ -2891,6 +2955,38 @@
       "display_name": "GPT-6 Astra",
       "version": "gpt-6-astra",
       "description": "Our most capable model, built for the hardest end-to-end work.",
+      "context_length": 256000,
+      "max_completion_tokens": 128000,
+      "supported_parameters": [
+        "tools"
+      ],
+      "thinking": {
+        "levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
+      },
+      "supportedInputModalities": [
+        "text",
+        "image"
+      ],
+      "supportedOutputModalities": [
+        "text"
+      ]
+    },
+    {
+      "id": "gpt-6.1-terra",
+      "object": "model",
+      "created": 1788480000,
+      "owned_by": "openai",
+      "type": "openai",
+      "display_name": "GPT-6.1 Terra",
+      "version": "gpt-6.1-terra",
+      "description": "GPT-6.1 Terra",
       "context_length": 256000,
       "max_completion_tokens": 128000,
       "supported_parameters": [

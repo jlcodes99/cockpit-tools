@@ -198,6 +198,8 @@ fn set_map(state: &mut Value, key: &str, entries: BTreeMap<String, Value>) {
     }
 }
 
+pub(super) mod account_state;
+
 include!("plan.rs");
 include!("storage.rs");
 

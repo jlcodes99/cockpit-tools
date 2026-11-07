@@ -377,12 +377,12 @@ async fn prepare_excluding_inner(
             || body.get("input").is_some_and(Value::is_string))
     {
         let identity = state.identity.clone();
-        let original_body = body.clone();
+        let original_body = body;
         let original_headers = incoming.clone();
         let source_body = original_body.clone();
         let source_headers = original_headers.clone();
         let max_body_bytes = state.options.max_body_bytes;
-        let expanded_previous = body
+        let expanded_previous = original_body
             .get("previous_response_id")
             .is_some_and(Value::is_string);
         let (context, normalized_body, plan) = super::blocking::run_prepared(state, move || {
