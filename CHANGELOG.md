@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Native OpenCode session continuity**: Use an unambiguous inbound `x-opencode-session` as a caller-scoped Session/Thread fallback on conversation HTTP endpoints when explicit identity or continuation is absent. Preserve native mapping, ownership, validation and original request diagnostics, including for bodies larger than 1 MiB.
+
 ## [1.3.80] - 2026-11-07
 
 ### Added

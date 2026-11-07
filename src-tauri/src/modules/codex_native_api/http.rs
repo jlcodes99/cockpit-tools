@@ -86,26 +86,34 @@ pub(super) async fn read_request(
         };
         let bytes = decode_body(state, bytes, &parts.headers).await?;
         let small = bytes.len() <= 64 * 1024;
+        let identity = (super::opencode_session::conversation_path(parts.uri.path())
+            && parts.headers.contains_key("x-opencode-session"))
+            .then(|| (caller.id.clone(), parts.headers.clone()));
         let parse = move || {
-            let body: Value = serde_json::from_slice(&bytes).map_err(|_| ServiceError::new(400,"invalid_json","Request body must be a JSON object"))?;
+            let (body, headers) = super::opencode_session::parse(
+                &bytes,
+                identity.as_ref().map(|(caller, headers)| (caller.as_str(), headers)),
+            ).map_err(|_| ServiceError::new(400,"invalid_json","Request body must be a JSON object"))?;
             let size = super::request_metrics::measure(&body, bytes.len());
-            Ok((body, size))
+            Ok((body, size, headers))
         };
-        let (body, size) = if small { parse()? } else {
+        let (body, size, headers) = if small { parse()? } else {
             super::blocking::run(state.stop.clone(), state.options.request_timeout, parse).await?
         };
         tracker.request_size(size);
         if !body.is_object() { return Err(ServiceError::new(400,"invalid_json","Request body must be a JSON object")); }
-        Ok((caller,body))
+        Ok((caller,body,headers))
     }.await;
     match result {
-        Ok((caller, body)) => {
+        Ok((caller, body, headers)) => {
             tracker.authorized(&caller, body["model"].as_str().unwrap_or(""));
             tracker.payload("client_request", "http", &parts.headers, &body.to_string());
             Ok(Input {
                 tracker,
                 caller,
-                headers: parts.headers,
+                // Record the original request before supplying fallback identity
+                // to the unchanged native mapping and continuation checks.
+                headers: headers.unwrap_or(parts.headers),
                 body,
                 raw_chat: None,
             })

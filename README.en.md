@@ -319,6 +319,17 @@ To switch the Antigravity desktop app and the `agy` CLI that shares its system c
 - `request_id`: optional; when supplied, receives the corresponding `response.success` or `response.error`. Unsupported targets, credential-write failures and concurrent desktop switches return errors instead of success. A launch failure after a successful credential switch is explicitly reported as a launch error. Invalid targets return `WS_SWITCH_TARGET_INVALID`; supplying a launch policy for an IDE request returns `WS_SWITCH_LAUNCH_POLICY_INVALID`. Concurrent desktop switches return `ANTIGRAVITY_SWITCH_BUSY`, and account-preparation timeouts return `ANTIGRAVITY_SWITCH_PREPARATION_TIMEOUT`.
 - `ANTIGRAVITY_SWITCH_STATE_SAVE_FAILED` means the client credential changed but saving Tools' current-account state failed; retry the switch. A shared sign-in updates the default bindings for both clients.
 
+### OpenCode conversation identity on the native Codex API
+
+On HTTP Responses, Chat Completions and Completions endpoints, an unambiguous
+`x-opencode-session` supplies a deterministic, authenticated-caller-scoped
+Session/Thread fallback only when explicit identity or continuation is absent.
+Existing Session ID Mapping and continuation ownership checks remain in charge;
+the header is not authentication, an account selector or a cache-hit guarantee.
+Duplicate/ambiguous identity inputs disable only the fallback, preserving native
+validation. WebSockets, compact and unrelated API endpoints are unchanged. No
+additional setting is required.
+
 ## Settings Guide (Beginner Friendly)
 
 If you want a stable setup with minimal tuning, follow the "Recommended" values.
