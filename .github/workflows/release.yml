@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: release-${{ github.ref }}-{{ github.run_id }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
