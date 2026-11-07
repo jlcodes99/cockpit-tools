@@ -334,13 +334,8 @@ fn scan_impl(
     exists: &dyn Fn(&str) -> bool,
 ) -> Result<Plan, String> {
     check()?;
-    if quick
-        && [STATE, &format!("{STATE}.bak")]
-            .iter()
-            .any(|p| fs::metadata(home.join(p)).is_ok_and(|m| m.len() > 2_000_000))
-    {
-        return Err("CODEX_PROJECT_QUICK_LIMIT".into());
-    }
+    // read_bytes enforces MAX_STATE_BYTES. Account archives routinely make a
+    // valid state larger than 2 MB; its size must not disable project recovery.
     let before_bytes = read_bytes(&home.join(STATE))?;
     let before = decode(before_bytes.as_deref())?;
     for key in ["local-projects", MAP, ASSIGN, HOSTS, MIGRATION] {

@@ -1,8 +1,12 @@
 //! Bridge Codex Desktop's account-scoped renderer state at a stopped launch.
 //! Only projects and user threads verified in this profile's SQLite registry are
-//! shared. Remote/cloud state and account atoms stay in their original scope.
+//! shared. Configured SSH workspaces follow this machine's connection settings;
+//! cloud state and account atoms stay in their original scope.
 use super::*;
 use sha2::{Digest, Sha256};
+
+#[path = "account_state_ssh.rs"]
+mod ssh;
 
 const SCOPES: &str = "electron-account-renderer-state-v1";
 const PARKED: &str = "cockpit-local-project-account-state-v1";
@@ -397,18 +401,23 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
             return Err("CODEX_PROJECT_ACCOUNT_STATE_UNSUPPORTED".into());
         }
     }
+    let ssh_state = ssh::shared_state(&before, &sources)?;
     // Account-state restoration also carries the native onboarding flags. It
     // must run for projectless profiles, before a project database exists.
     if let Some(primary) = project_database(home)? {
         let db = open(&home.join(primary), false)?;
         db.execute_batch("BEGIN").map_err(|e| e.to_string())?;
-        let projects = projects_with_limit(&db, Some(QUICK_MAX_PROJECTS))?;
-        let threads = threads_with_limit(&db, Some(QUICK_MAX_THREADS))?;
+        // Required owner transitions must not inherit optional quick-scan row
+        // limits. The launch deadline still bounds every read and iteration.
+        let projects = projects_with_limit(&db, None)?;
+        let threads = threads_with_limit(&db, None)?;
         let view = local_view(home, &sources, &projects, &threads)?;
         // Finish the read transaction before writing the renderer state.
         drop(db);
         merge_local(&mut target["globals"], &view);
     }
+    ssh::merge(&mut target["globals"], &ssh_state)?;
+    ssh::remember_hosts(&mut after, &ssh_state);
     for key in SCOPED_GLOBALS {
         after.as_object_mut().unwrap().remove(*key);
         if let Some(value) = target["globals"].get(*key) {

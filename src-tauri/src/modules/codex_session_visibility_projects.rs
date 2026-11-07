@@ -2,6 +2,19 @@
 // separate repair mode, switch-time scanner or frontend notice.
 const QUICK_PROJECT_REPAIR_BUDGET: Duration = Duration::from_millis(500);
 
+fn quick_project_repair_budget(data_dir: &Path) -> Duration {
+    let large_state = [GLOBAL_STATE_FILE.to_string(), format!("{GLOBAL_STATE_FILE}.bak")]
+        .iter()
+        .any(|name| std::fs::metadata(data_dir.join(name)).is_ok_and(|m| m.len() > 2_000_000));
+    // Multi-account archives need more time to parse and atomically preserve.
+    // Startup still caps this work at the remaining five-second launch budget.
+    if large_state {
+        Duration::from_secs(2)
+    } else {
+        QUICK_PROJECT_REPAIR_BUDGET
+    }
+}
+
 fn project_recovery_message(key: &str, args: &[(&str, &str)]) -> String {
     modules::i18n::translate(
         &modules::config::get_user_config().language,
@@ -161,24 +174,20 @@ fn repair_session_visibility_for_instances_with_options(
         let project_budget = if deep {
             Duration::from_secs(30)
         } else {
+            let quick_budget = quick_project_repair_budget(&instance.data_dir);
             launch_visibility_budget()
                 .map(|budget| {
                     budget
                         .deadline
                         .saturating_duration_since(std::time::Instant::now())
-                        .min(QUICK_PROJECT_REPAIR_BUDGET)
+                        .min(quick_budget)
                 })
-                .unwrap_or(QUICK_PROJECT_REPAIR_BUDGET)
+                .unwrap_or(quick_budget)
         };
         let result = with_launch_visibility_budget(project_budget, || {
             if local_projects::has_pending(&instance.data_dir) {
                 return Err("CODEX_PROJECT_PENDING_RECOVERY".into());
             }
-            let prepared = if selection.prepare_desktop_projects {
-                prepare_local_project_account_state_for_launch(instance)?
-            } else {
-                false
-            };
             let Some(plan) = local_projects::scan_for_repair(
                 &instance.data_dir,
                 selection.session_ids(),
@@ -188,7 +197,7 @@ fn repair_session_visibility_for_instances_with_options(
                 return Ok(None);
             };
             let changed = plan.changed();
-            let state_changes = plan.state_changes() + usize::from(prepared);
+            let state_changes = plan.state_changes();
             let mut backup_dir = None;
             if changed && !options.dry_run {
                 // A launch already owns the profile lease. A manual quick repair
@@ -223,7 +232,7 @@ fn repair_session_visibility_for_instances_with_options(
                 local_projects::apply(&plan, &backup)?;
                 backup_dir = Some(backup.to_string_lossy().into_owned());
             }
-            Ok(Some((plan.counts, state_changes, changed || prepared, backup_dir)))
+            Ok(Some((plan.counts, state_changes, changed, backup_dir)))
         });
         let outcome = match result {
             Ok(outcome) => outcome,
@@ -372,6 +381,9 @@ fn repair_session_visibility_for_instances_with_options(
 // update its state only while the matching Desktop instance is stopped.
 fn prepare_local_project_account_state_for_launch(instance: &CodexSyncInstance) -> Result<bool, String> {
     check_launch_visibility_budget("read_project_owner")?;
+    if local_projects::has_pending(&instance.data_dir) {
+        return Err("CODEX_PROJECT_PENDING_RECOVERY".into());
+    }
     let Some(owner) = modules::codex_account::desktop_renderer_project_owner(&instance.data_dir)? else {
         return Ok(false);
     };

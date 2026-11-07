@@ -572,19 +572,20 @@ fn quick_visibility_directly_repairs_projects_and_unified_launch_uses_the_same_p
 }
 
 #[test]
-fn quick_visibility_preserves_large_current_state_and_full_repairs_it() {
+fn quick_visibility_repairs_large_current_state_without_losing_account_archives() {
     use super::super::CodexSessionVisibilityRepairMode as Mode;
     let f = Fixture::new();
     let mut state = f.state();
     state["large-cache"] = json!("x".repeat(2_000_000));
     f.set(&state);
     let quick = integrated_repair(&f, Mode::Quick, false).unwrap();
-    assert!(quick.local_project_recovery_deferred);
-    assert_eq!(f.state(), state);
-    assert!(f.project("chat").is_none());
+    assert!(!quick.local_project_recovery_deferred, "{}", quick.message);
+    assert_eq!(quick.local_project_recovery.unwrap().assignments, 2);
+    assert_eq!(f.state()["large-cache"], state["large-cache"]);
+    assert_eq!(f.project("chat").as_deref(), Some("server"));
     let full = integrated_repair(&f, Mode::Deep, false).unwrap();
     assert!(!full.local_project_recovery_deferred);
-    assert_eq!(full.local_project_recovery.unwrap().assignments, 2);
+    assert_eq!(full.local_project_recovery.unwrap().assignments, 0);
     assert_eq!(f.state()["large-cache"], state["large-cache"]);
     assert_eq!(f.project("chat").as_deref(), Some("server"));
 }

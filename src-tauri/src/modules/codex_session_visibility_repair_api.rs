@@ -233,7 +233,6 @@ struct RepairTargetSelection {
     target_provider: Option<String>,
     session_ids: Option<HashSet<String>>,
     instance_ids: Option<HashSet<String>>,
-    prepare_desktop_projects: bool,
 }
 
 impl RepairTargetSelection {
@@ -262,7 +261,6 @@ impl RepairTargetSelection {
             .filter(|value| !value.is_empty())
             .collect::<HashSet<_>>();
         Ok(Self {
-            prepare_desktop_projects: false,
             target_provider,
             session_ids: if session_ids.is_empty() {
                 None
@@ -491,23 +489,36 @@ pub fn repair_session_visibility_quick_for_instance(
         data_dir.display()
     ));
     let result = with_launch_visibility_budget(LAUNCH_VISIBILITY_REPAIR_BUDGET, || {
-        repair_session_visibility_for_instances_with_options(
+        let instance = CodexSyncInstance {
+            id: instance_id.to_string(),
+            name: instance_name.to_string(),
+            data_dir: data_dir.to_path_buf(),
+            last_pid: None,
+        };
+        // Desktop switches its renderer scope during startup. Restore the local
+        // workspace and SSH state before optional history maintenance can use up
+        // the budget or hit a quick-scan limit. Failure here must stop the launch.
+        let prepared = launch_desktop
+            && prepare_local_project_account_state_for_launch(&instance).map_err(|error| {
+                format!("CODEX_DESKTOP_STATE_PREPARATION_FAILED: {error}")
+            })?;
+        let mut summary = repair_session_visibility_for_instances_with_options(
             CodexSessionVisibilityRepairOptions::for_auto_repair_mode(
                 CodexSessionVisibilityAutoRepairMode::Current,
             ),
             None,
             None,
-            RepairTargetSelection {
-                prepare_desktop_projects: launch_desktop,
-                ..Default::default()
-            },
-            vec![CodexSyncInstance {
-                id: instance_id.to_string(),
-                name: instance_name.to_string(),
-                data_dir: data_dir.to_path_buf(),
-                last_pid: None,
-            }],
-        )
+            RepairTargetSelection::default(),
+            vec![instance],
+        )?;
+        if prepared {
+            summary.updated_global_state_entry_count += 1;
+            summary.mutated_instance_count = 1;
+            if let Some(item) = summary.items.first_mut() {
+                item.updated_global_state_entry_count += 1;
+            }
+        }
+        Ok(summary)
     });
     match &result {
         Ok(summary) => modules::logger::log_info(&format!(
