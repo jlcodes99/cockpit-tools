@@ -1,0 +1,46 @@
+.codex-proxy-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+}
+.codex-proxy-activity-head { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px 16px; }
+.codex-proxy-activity-head h3 { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 14px; }
+.codex-proxy-activity-head h3 svg { color: var(--primary); }
+.codex-proxy-activity-head p { margin: 5px 0 0; font-size: 11px; line-height: 1.5; color: var(--text-secondary); }
+.codex-proxy-activity-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.codex-proxy-activity-actions .btn { display: inline-flex; align-items: center; gap: 5px; }
+.codex-proxy-activity-notice, .codex-proxy-activity-warning, .codex-proxy-activity-diagnostic { margin: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
+.codex-proxy-activity-warning { display: flex; align-items: center; gap: 6px; border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); color: var(--danger); }
+.codex-proxy-activity-diagnostic small { margin-left: 6px; color: var(--text-secondary); }
+.codex-proxy-activity-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); }
+.codex-tool-page .codex-proxy-activity-tabs .btn { appearance: none; min-height: 32px; padding: 5px 10px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer; }
+.codex-tool-page .codex-proxy-activity-tabs .btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+.codex-tool-page .codex-proxy-activity-tabs .btn.is-active { color: var(--primary); border-bottom-color: var(--primary); background: transparent; }
+.codex-tool-page .codex-proxy-activity-tabs .btn:disabled { opacity: .5; cursor: not-allowed; }
+.codex-proxy-activity-tabs .btn span { margin-left: 5px; color: var(--text-muted); }
+.codex-proxy-activity-filters { display: grid; grid-template-columns: minmax(120px, 170px) minmax(120px, 170px) minmax(160px, 1fr); gap: 8px; }
+.codex-proxy-activity-filters:has(> :nth-child(2):last-child) { grid-template-columns: minmax(120px, 170px) minmax(160px, 1fr); }
+.codex-proxy-activity-filters input { min-width: 0; height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; outline: none; background: var(--bg-card); color: var(--text-primary); font: inherit; font-size: 12px; }
+.codex-proxy-activity-filters input:focus-visible { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 20%, transparent); }
+.codex-proxy-activity-filters input:disabled { opacity: .5; cursor: not-allowed; }
+.codex-proxy-activity-list { display: flex; flex-direction: column; gap: 5px; min-height: 64px; max-height: 360px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.codex-proxy-activity-list li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-card); font-size: 11px; }
+.codex-proxy-activity-list li.is-error { border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); }
+.codex-proxy-activity-list time { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.codex-proxy-activity-list strong { min-width: 0; overflow-wrap: anywhere; font-size: 12px; font-weight: 600; }
+.codex-proxy-activity-list small { min-width: 0; margin-left: auto; color: var(--text-secondary); overflow-wrap: anywhere; }
+.codex-proxy-activity-pill { padding: 2px 5px; border-radius: 4px; background: color-mix(in srgb, var(--primary) 8%, var(--bg-card)); color: var(--text-secondary); }
+.codex-proxy-activity-list .codex-proxy-activity-empty { display: block; padding: 20px; text-align: center; color: var(--text-secondary); }
+@container (max-width: 760px) {
+  .codex-proxy-activity-filters { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .codex-proxy-activity-filters input { grid-column: 1 / -1; }
+}
+@media (max-width: 600px) {
+  .codex-proxy-activity-actions { width: 100%; }
+  .codex-proxy-activity-list small { flex-basis: 100%; margin-left: 0; }
+}

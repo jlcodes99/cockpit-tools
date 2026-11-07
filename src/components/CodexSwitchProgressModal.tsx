@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -11,9 +12,10 @@ import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import { useCodexAccountStore } from "../stores/useCodexAccountStore";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
-import * as codexService from "../services/codexService";
 import { requestCodexOpenAddAccount } from "../utils/codexAddAccountRequest";
 import { conciseCodexCredentialFailure } from "../utils/codexCredentialProgress";
+import { proxyEnginePrerequisiteKey } from "../utils/codexProxyEnginePrerequisite";
+import { codexLaunchErrorKey } from "../utils/codexLaunchProgress";
 import type { CodexSwitchAuthFailure } from "../utils/codexSwitchAuthFailure";
 import { parseWindowsOperationError } from "../utils/windowsOperationError";
 import "./CodexSwitchProgressModal.css";
@@ -106,7 +108,7 @@ function optionalTimestamp(value: unknown): number | null {
 export function CodexSwitchProgressModal() {
   const { t, i18n } = useTranslation();
   const [state, setState] = useState<SwitchProgressState | null>(null);
-  const [actionBusy, setActionBusy] = useState<"api" | "clear" | null>(null);
+  const [actionBusy, setActionBusy] = useState<"api" | null>(null);
   const [retryBusy, setRetryBusy] = useState<"retry" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const accounts = useCodexAccountStore((store) => store.accounts);
@@ -138,8 +140,9 @@ export function CodexSwitchProgressModal() {
             ? previous
             : createProgressState(accountId);
         if (detail.type === "error") {
+          const prerequisite = proxyEnginePrerequisiteKey(detail.error) || codexLaunchErrorKey(detail.error);
           const errorText =
-            detail.error || base.error || t("common.failed", "失败");
+            prerequisite ? t(prerequisite) : detail.error || base.error || t("common.failed", "失败");
           const authFailure =
             detail.authFailure === undefined
               ? base.authFailure
@@ -262,7 +265,7 @@ export function CodexSwitchProgressModal() {
 
   const account = accounts.find((item) => item.id === state.accountId);
   const accountLabel =
-    account?.account_name || account?.email || state.accountId;
+    resolveCodexAccountDisplayName(account ?? { id: state.accountId }, t("common.apiKeyAccount"));
   const isError = state.status === "error";
   const isAuthRequired = state.status === "auth-required";
   const windowsOperationError = isError
@@ -498,30 +501,13 @@ export function CodexSwitchProgressModal() {
         launchAfterSwitch: state.launchAfterSwitch,
       });
     } catch (error) {
-      setActionError(String(error).replace(/^Error:\s*/, ""));
+      const errorKey = codexLaunchErrorKey(error);
+      setActionError(errorKey ? t(errorKey) : String(error).replace(/^Error:\s*/, ""));
     } finally {
       setRetryBusy(null);
     }
   };
 
-  const clearClientAuthObservation = async () => {
-    if (actionBusy || authFailure?.reasonCode !== "client_login_required") return;
-    setActionBusy("clear");
-    setActionError(null);
-    try {
-      await codexService.clearClientAuthObservation(state.accountId);
-      await useCodexAccountStore.getState().fetchAccounts();
-      setState(null);
-    } catch (error) {
-      setActionError(
-        t("codex.switchAuth.clearClientAuthFailed", {
-          error: String(error).replace(/^Error:\s*/, ""),
-        }),
-      );
-    } finally {
-      setActionBusy(null);
-    }
-  };
 
   const renderStepIcon = (step: SwitchStepState) => {
     if (step.status === "running") {
@@ -560,7 +546,7 @@ export function CodexSwitchProgressModal() {
             <h2 id="codex-switch-progress-title">
               {authFailure
                 ? authFailure.apiOnlyAvailable
-                  ? t("codex.switchAuth.apiOnlyTitle")
+                  ? t("codex.authError.badge")
                   : t("codex.switchAuth.reauthorizeTitle")
                 : t("codex.switch", "切换账号")}
             </h2>
@@ -591,11 +577,11 @@ export function CodexSwitchProgressModal() {
           <div className="codex-switch-step-list">
             {state.steps.map((step) => {
               const detailLines = stepDetailLines(step);
+              const failureValue = step.details.error || state.error;
+              const failureKey = codexLaunchErrorKey(failureValue);
               const failure =
                 step.status === "error"
-                  ? conciseCodexCredentialFailure(
-                      step.details.error || state.error,
-                    )
+                  ? failureKey ? t(failureKey) : conciseCodexCredentialFailure(failureValue)
                   : null;
               const renderedDetailLines =
                 failure && !detailLines.some((line) => line.includes(failure))
@@ -638,7 +624,7 @@ export function CodexSwitchProgressModal() {
             <div className="codex-switch-auth-summary">
               <p>
                 {authFailure.apiOnlyAvailable
-                  ? t("codex.switchAuth.apiOnlyDescription")
+                  ? t("codex.switchAuth.apiTokenUsableDescription")
                   : t("codex.switchAuth.reauthorizeDescription")}
               </p>
               <div className="codex-switch-auth-reason" role="alert">
@@ -694,18 +680,6 @@ export function CodexSwitchProgressModal() {
                 {actionBusy === "api"
                   ? t("common.loading", "加载中...")
                   : t("codex.localAccess.entryAction", "添加至 API 服务")}
-              </button>
-            )}
-            {authFailure.reasonCode === "client_login_required" && (
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => void clearClientAuthObservation()}
-                disabled={actionBusy !== null || retryBusy !== null}
-              >
-                {actionBusy === "clear"
-                  ? t("common.loading", "加载中...")
-                  : t("codex.switchAuth.clearClientAuth", "清除异常标识")}
               </button>
             )}
                 <button

@@ -28,7 +28,7 @@ test("empty official catalog returns control to Codex", () => {
   });
 });
 test("removed default resets while official model settings remain", () => {
-  const models = [{ model_id: "gpt-6-astra", context_window: 1050000 }];
+  const models = [{ model_id: "gpt-6-astra", context_window: 256000 }];
   assert.deepEqual(resolveRoutingCatalog(models, true, "cpa/gpt-6-astra"), {
     enabled: true, models, defaultModelId: null,
   });

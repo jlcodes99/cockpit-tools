@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SingleSelectDropdown } from "../SingleSelectDropdown";
+import { resolveProviderModelVisionState } from "../../utils/codexModelProviderVision";
 
 interface CodexModelContextWindowTableProps {
   models: string[];
@@ -10,6 +11,7 @@ interface CodexModelContextWindowTableProps {
   showContextWindow?: boolean;
   /** 逐模型识图开关；不传则不渲染该列。 */
   visionStates?: Record<string, boolean>;
+  visionDefault?: boolean;
   onVisionChange?: (model: string, value: boolean) => void;
   disabled?: boolean;
 }
@@ -34,6 +36,7 @@ export function CodexModelContextWindowTable({
   onChange,
   showContextWindow = true,
   visionStates,
+  visionDefault = false,
   onVisionChange,
   disabled = false,
 }: CodexModelContextWindowTableProps) {
@@ -140,9 +143,9 @@ export function CodexModelContextWindowTable({
                 <label className="api-model-vision-toggle">
                   <input
                     type="checkbox"
-                    checked={visionStates?.[model] ?? false}
+                    checked={resolveProviderModelVisionState(model, visionStates, visionDefault)}
                     onChange={(event) =>
-                      onVisionChange?.(model, event.target.checked)
+                      onVisionChange?.(model.trim().toLowerCase(), event.target.checked)
                     }
                     disabled={disabled}
                     aria-label={`${model} ${visionLabel}`}

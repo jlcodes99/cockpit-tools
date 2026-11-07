@@ -1,8 +1,12 @@
+import { getCockpitApiStatsRecord, toCockpitApiRecord } from "./codexAccountsControllerModel";
+import { CodexRemoteServicePanel } from '../components/codex/CodexRemoteServicePanel';
+import { isOpenAIOfficialUsageAccount } from "../utils/openaiOfficialUsage";
+import { OpenAIOfficialUsagePanel } from "../components/codex/OpenAIOfficialUsagePanel";
 import type { ReactElement } from "react";
 import type { TFunction } from "i18next";
 import { Database } from "lucide-react";
 import { isCodexChatCompletionsApiKeyAccount, type CodexAccount } from "../types/codex";
-import { isCodexTokenPlanAccount, isDeepSeekAccount } from "../utils/codexDeepSeekAccess";
+import { isApiKeyFunUsageAccount, isCodexTokenPlanAccount, isDeepSeekAccount } from "../utils/codexDeepSeekAccess";
 import {
   formatCockpitApiInteger,
   formatCockpitApiTokenCount,
@@ -23,6 +27,7 @@ export interface CodexApiKeyUsagePanelOptions {
   provider: CodexModelProvider | null;
   variant?: "card" | "table";
   usageState: CodexApiKeyUsageState | undefined;
+  onRefresh?: () => void;
   t: TFunction;
   formatApiKeyUsagePercent: (summary?: CodexModelProviderUsageSummary) => number;
   formatApiKeyUsageMoney: (value?: number | null, unit?: string | null) => string;
@@ -45,12 +50,22 @@ export interface CodexApiKeyUsagePanelOptions {
   ) => { key: string; label: string; value: string } | undefined;
 }
 
+export function resolveCodexAccountDailyUsage(account: CodexAccount, summary?: CodexModelProviderUsageSummary): CodexModelProviderUsageSummary | undefined {
+  if (summary) return summary;
+  const stats = getCockpitApiStatsRecord(account);
+  if (!stats) return undefined;
+  const requests = toCockpitApiRecord(stats.requests);
+  const todayRequests = typeof requests?.today === "number" ? requests.today : undefined;
+  return { todayRequests, modelStatsCount: 0, latencyMs: 0 };
+}
+
 /** 渲染额度面板；非 API Key / 供应商账号返回空节点。 */
 export function renderCodexApiKeyUsagePanel({
   account,
   provider,
   variant = "card",
   usageState,
+  onRefresh,
   t,
   formatApiKeyUsagePercent,
   formatApiKeyUsageMoney,
@@ -60,10 +75,15 @@ export function renderCodexApiKeyUsagePanel({
   formatApiKeyUsageDetailByKey,
   findApiKeyUsageDetail,
 }: CodexApiKeyUsagePanelOptions): ReactElement {
+  if (usageState?.summary?.cockpit) return <CodexRemoteServicePanel state={usageState} variant={variant} t={t} />;
+  if (isOpenAIOfficialUsageAccount(account, provider?.baseUrl)) {
+    return <OpenAIOfficialUsagePanel provider={provider} apiKey={account.openai_api_key ?? ""} sourceBinding={usageState?.sourceBinding} onRefresh={onRefresh} summary={resolveCodexAccountDailyUsage(account, usageState?.summary)} loading={usageState?.loading} error={usageState?.error} variant={variant} t={t} />;
+  }
   if (
     isCodexChatCompletionsApiKeyAccount(account) &&
     !isDeepSeekAccount(account) &&
-    !isCodexTokenPlanAccount(account)
+    !isCodexTokenPlanAccount(account) &&
+    !isApiKeyFunUsageAccount(account)
   ) {
     return <></>;
   }
@@ -145,8 +165,12 @@ export function renderCodexApiKeyUsagePanel({
       summary.quotaUnlimited === true
         ? unlimitedText
         : `${availableText} / ${grantedText}`;
-    const quotaBarWidth =
-      summary.quotaUnlimited === true ? 100 : usedPercent;
+    // Match the available / granted label and the other remaining-quota cards.
+    const quotaBarWidth = summary.quotaUnlimited === true
+      ? 100
+      : quota.granted != null && quota.granted > 0 && quota.available != null
+        ? Math.max(0, Math.min(100, Math.round((quota.available / quota.granted) * 100)))
+        : 0;
     return (
       <div
         className="quota-item codex-api-key-quota-item new-api"
@@ -453,7 +477,7 @@ export function renderCodexApiKeyUsagePanel({
           {loading
             ? t("codex.modelProviders.usage.loading", "正在查询额度...")
             : usageState?.error
-              ? null
+              ? t("common.shared.quota.queryFailed", "配额查询失败")
               : canRefresh
                 ? t("codex.modelProviders.usage.pending", "等待查询额度")
                 : t("codex.modelProviders.usage.noKey", "暂无可查询额度")}

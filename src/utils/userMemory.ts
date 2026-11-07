@@ -40,12 +40,26 @@ export interface UserMemorySnapshot {
 
 const diskDismissed = new Map<string, boolean>();
 const listCache = new Map<string, string[]>();
+const listWrites = new Map<string, Promise<void>>();
 const listeners = new Set<() => void>();
 let hydrated = false;
 let hydratePromise: Promise<void> | null = null;
 
 function notifyUserMemoryListeners(): void {
   listeners.forEach((listener) => listener());
+}
+
+function saveUserMemoryList(id: string, items: string[]): Promise<void> {
+  // Keep a pending local save from landing after a restored order.
+  const pending = (listWrites.get(id) ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => invoke<void>("save_user_memory_list", { id, items }));
+  listWrites.set(id, pending);
+  const cleanup = () => {
+    if (listWrites.get(id) === pending) listWrites.delete(id);
+  };
+  void pending.then(cleanup, cleanup);
+  return pending;
 }
 
 export function subscribeUserMemory(listener: () => void): () => void {
@@ -189,10 +203,7 @@ export async function hydrateUserMemory(): Promise<UserMemorySnapshot> {
             diskItems.length === merged.length &&
             diskItems.every((item, index) => item === merged[index]);
           if (!sameAsDisk) {
-            void invoke("save_user_memory_list", {
-              id: listId,
-              items: merged,
-            }).catch(() => undefined);
+            void saveUserMemoryList(listId, merged).catch(() => undefined);
           }
         });
       } catch {
@@ -243,7 +254,19 @@ export function persistUserMemoryList(id: string, items: string[]): void {
     return;
   }
   listCache.set(id, next);
-  void invoke("save_user_memory_list", { id, items: next }).catch(
+  void saveUserMemoryList(id, next).catch(
     () => undefined,
   );
+}
+
+/** Restore only after durable storage succeeds, then refresh mounted readers. */
+export async function restoreUserMemoryList(id: string, items: string[]): Promise<void> {
+  await hydrateUserMemory();
+  const next = mergeIdLists(items);
+  // Match the backend's guard against empty lists erasing existing memory.
+  if (next.length === 0) return;
+  await saveUserMemoryList(id, next);
+  listCache.set(id, next);
+  writeLocalStorageList(id, next);
+  notifyUserMemoryListeners();
 }

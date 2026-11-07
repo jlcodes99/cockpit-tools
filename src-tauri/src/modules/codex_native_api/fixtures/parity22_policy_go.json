@@ -1,0 +1,239 @@
+{
+  "catalogs": [
+    {
+      "enabled": false,
+      "name": "off",
+      "namespaced": false,
+      "prefer": false,
+      "provider": false
+    },
+    {
+      "enabled": true,
+      "name": "on",
+      "namespaced": false,
+      "prefer": true,
+      "provider": false
+    },
+    {
+      "enabled": true,
+      "name": "provider",
+      "namespaced": false,
+      "prefer": false,
+      "provider": true
+    },
+    {
+      "enabled": true,
+      "name": "namespace",
+      "namespaced": true,
+      "prefer": false,
+      "provider": false
+    }
+  ],
+  "counts": [
+    {
+      "alias": "short-alias",
+      "canonical": {
+        "messages": [],
+        "model": "vendor/private-extra-long-model-name"
+      },
+      "count": 15,
+      "input": {
+        "messages": [],
+        "model": "short-alias"
+      },
+      "mode": "plain_profile",
+      "upstream": "vendor/private-extra-long-model-name"
+    },
+    {
+      "alias": "short-alias",
+      "canonical": {
+        "messages": [
+          {
+            "content": "hello world",
+            "role": "user"
+          }
+        ],
+        "model": "vendor/private-extra-long-model-name"
+      },
+      "count": 2,
+      "input": {
+        "messages": [
+          {
+            "content": "hello world",
+            "role": "user"
+          }
+        ],
+        "model": "short-alias"
+      },
+      "mode": "plain_profile",
+      "upstream": "vendor/private-extra-long-model-name"
+    },
+    {
+      "alias": "short-alias",
+      "canonical": {
+        "messages": [],
+        "model": "vendor/private-extra-long-model-name"
+      },
+      "count": 15,
+      "input": {
+        "messages": [],
+        "model": "short-alias"
+      },
+      "mode": "provider",
+      "upstream": "vendor/private-extra-long-model-name"
+    },
+    {
+      "alias": "short-alias",
+      "canonical": {
+        "messages": [
+          {
+            "content": "hello world",
+            "role": "user"
+          }
+        ],
+        "model": "vendor/private-extra-long-model-name"
+      },
+      "count": 2,
+      "input": {
+        "messages": [
+          {
+            "content": "hello world",
+            "role": "user"
+          }
+        ],
+        "model": "short-alias"
+      },
+      "mode": "provider",
+      "upstream": "vendor/private-extra-long-model-name"
+    },
+    {
+      "alias": "short-alias",
+      "canonical": {
+        "messages": [],
+        "model": "short-alias"
+      },
+      "count": 9,
+      "input": {
+        "messages": [],
+        "model": "short-alias"
+      },
+      "mode": "automatic",
+      "upstream": "vendor/private-extra-long-model-name"
+    },
+    {
+      "alias": "short-alias",
+      "canonical": {
+        "messages": [
+          {
+            "content": "hello world",
+            "role": "user"
+          }
+        ],
+        "model": "short-alias"
+      },
+      "count": 2,
+      "input": {
+        "messages": [
+          {
+            "content": "hello world",
+            "role": "user"
+          }
+        ],
+        "model": "short-alias"
+      },
+      "mode": "automatic",
+      "upstream": "vendor/private-extra-long-model-name"
+    },
+    {
+      "alias": "m",
+      "canonical": {
+        "messages": [],
+        "model": "gpt-6.1-sol"
+      },
+      "count": 9,
+      "input": {
+        "messages": [],
+        "model": "m"
+      },
+      "mode": "explicit_oauth_alias",
+      "upstream": "gpt-6.1-sol"
+    },
+    {
+      "alias": "m",
+      "canonical": {
+        "messages": [
+          {
+            "content": "hello world",
+            "role": "user"
+          }
+        ],
+        "model": "gpt-6.1-sol"
+      },
+      "count": 2,
+      "input": {
+        "messages": [
+          {
+            "content": "hello world",
+            "role": "user"
+          }
+        ],
+        "model": "m"
+      },
+      "mode": "explicit_oauth_alias",
+      "upstream": "gpt-6.1-sol"
+    }
+  ],
+  "rules": [
+    {
+      "matches": true,
+      "model": "gpt-6.1-sol",
+      "pattern": "GPT-6.1-*"
+    },
+    {
+      "matches": true,
+      "model": "vendor/model",
+      "pattern": "Vendor/*"
+    },
+    {
+      "matches": true,
+      "model": " GPT-IMAGE-2.5 ",
+      "pattern": " gPt-image-* "
+    },
+    {
+      "matches": true,
+      "model": "οσ",
+      "pattern": "ΟΣ"
+    },
+    {
+      "matches": true,
+      "model": "i",
+      "pattern": "İ"
+    },
+    {
+      "matches": false,
+      "model": "evil/gpt-6",
+      "pattern": "gpt-*"
+    },
+    {
+      "matches": false,
+      "model": "gpt-6-mini",
+      "pattern": "gpt-6"
+    },
+    {
+      "matches": true,
+      "model": "gpt-6-codex",
+      "pattern": "gpt-*-codex"
+    },
+    {
+      "matches": false,
+      "model": "",
+      "pattern": ""
+    },
+    {
+      "matches": false,
+      "model": "",
+      "pattern": "*"
+    }
+  ],
+  "source": "Go production helpers; regenerate with TestParity22PolicyReference"
+}

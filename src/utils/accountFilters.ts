@@ -38,6 +38,20 @@ export function collectAvailableAccountTags(accounts: Account[]): string[] {
   return Array.from(values).sort((left, right) => left.localeCompare(right))
 }
 
+export function isAccountVerificationRequired(
+  account: Account,
+  verificationStatusMap: Record<string, string>
+): boolean {
+  const verificationStatus = account.disabled_reason || verificationStatusMap[account.id]
+  if (verificationStatus === 'verification_required') return true
+  const qErr = account.quota_error
+  if (qErr?.reason === 'VALIDATION_REQUIRED' || Boolean(qErr?.validation_url)) return true
+  if (qErr?.message && (qErr.message.includes('Verify your account') || qErr.message.includes('VALIDATION_REQUIRED'))) {
+    return true
+  }
+  return false
+}
+
 export function accountMatchesTypeFilters(
   account: Account,
   selectedTypes: Set<AccountFilterType>,
@@ -50,7 +64,7 @@ export function accountMatchesTypeFilters(
 
   if (
     selectedTypes.has('VERIFICATION_REQUIRED') &&
-    verificationStatus === 'verification_required'
+    isAccountVerificationRequired(account, verificationStatusMap)
   ) {
     return true
   }
@@ -93,7 +107,7 @@ export function buildAccountTierCounts(
     else counts.UNKNOWN++
 
     const verificationStatus = account.disabled_reason || verificationStatusMap[account.id]
-    if (verificationStatus === 'verification_required') counts.VERIFICATION_REQUIRED++
+    if (isAccountVerificationRequired(account, verificationStatusMap)) counts.VERIFICATION_REQUIRED++
     else if (verificationStatus === 'tos_violation') counts.TOS_VIOLATION++
   }
 

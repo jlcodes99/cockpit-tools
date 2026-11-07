@@ -16,11 +16,27 @@ interface ModelIdentity {
 interface CanonicalModel {
   id: string;
   displayName: string;
-  modelConstant: string;
+  modelConstant: string | null;
   aliases: string[];
 }
 
 const CANONICAL_MODELS: CanonicalModel[] = [
+  { id: 'gemini-4-argon', displayName: 'Gemini 4 Argon', modelConstant: null, aliases: [] },
+  { id: 'gemini-4-argon-medium', displayName: 'Gemini 4 Argon (Medium)', modelConstant: 'MODEL_PLACEHOLDER_M418', aliases: [] },
+  { id: 'gemini-4-argon-high', displayName: 'Gemini 4 Argon (High)', modelConstant: 'MODEL_PLACEHOLDER_M417', aliases: [] },
+  { id: 'gemini-4-argon-low', displayName: 'Gemini 4 Argon (Low)', modelConstant: 'MODEL_PLACEHOLDER_M419', aliases: [] },
+  { id: 'gemini-3.8-flash', displayName: 'Gemini 3.8 Flash', modelConstant: null, aliases: [] },
+  { id: 'gemini-3.8-flash-low', displayName: 'Gemini 3.8 Flash (Low)', modelConstant: 'MODEL_PLACEHOLDER_M320', aliases: [] },
+  { id: 'gemini-3.8-flash-medium', displayName: 'Gemini 3.8 Flash (Medium)', modelConstant: 'MODEL_PLACEHOLDER_M319', aliases: [] },
+  { id: 'gemini-3.8-flash-high', displayName: 'Gemini 3.8 Flash (High)', modelConstant: 'MODEL_PLACEHOLDER_M318', aliases: [] },
+  { id: 'claude-opus-5-5', displayName: 'Claude Opus 5.5', modelConstant: null, aliases: [] },
+  { id: 'claude-opus-5-5-low', displayName: 'Claude Opus 5.5 (Low)', modelConstant: 'MODEL_PLACEHOLDER_M400', aliases: [] },
+  { id: 'claude-opus-5-5-medium', displayName: 'Claude Opus 5.5 (Medium)', modelConstant: 'MODEL_PLACEHOLDER_M401', aliases: [] },
+  { id: 'claude-opus-5-5-high', displayName: 'Claude Opus 5.5 (High)', modelConstant: 'MODEL_PLACEHOLDER_M402', aliases: [] },
+  { id: 'claude-sonnet-5-5', displayName: 'Claude Sonnet 5.5', modelConstant: null, aliases: [] },
+  { id: 'claude-sonnet-5-5-low', displayName: 'Claude Sonnet 5.5 (Low)', modelConstant: 'MODEL_PLACEHOLDER_M403', aliases: [] },
+  { id: 'claude-sonnet-5-5-medium', displayName: 'Claude Sonnet 5.5 (Medium)', modelConstant: 'MODEL_PLACEHOLDER_M404', aliases: [] },
+  { id: 'claude-sonnet-5-5-high', displayName: 'Claude Sonnet 5.5 (High)', modelConstant: 'MODEL_PLACEHOLDER_M405', aliases: [] },
   {
     id: 'gemini-3.1-pro-high',
     displayName: 'Gemini 3.1 Pro (High)',
@@ -71,7 +87,7 @@ const normalize = (value?: string | null) =>
 const buildAliasMap = () => {
   const map = new Map<string, CanonicalModel>();
   CANONICAL_MODELS.forEach((item) => {
-    [item.id, item.modelConstant, item.displayName, ...item.aliases].forEach((value) => {
+    [item.id, item.modelConstant, item.modelConstant?.replace(/^MODEL_/, ''), item.displayName, ...item.aliases].forEach((value) => {
       const key = normalize(value);
       if (!key || map.has(key)) return;
       map.set(key, item);
@@ -103,7 +119,7 @@ export const getAntigravityModelDisplayName = (value: string): string => {
 
 export const filterAntigravityModelOptions = (
   models: AntigravityModelOption[],
-  _options?: {
+  options?: {
     allowedModelKeys?: Iterable<string>;
     includeNonRecommended?: boolean;
   },
@@ -116,24 +132,34 @@ export const filterAntigravityModelOptions = (
   const seen = new Set<string>();
 
   models.forEach((model) => {
+    if (options?.includeNonRecommended === false && model.recommended === false) return;
     const canonical = resolveCanonicalModel({
       id: model.id,
       modelConstant: model.modelConstant,
       displayName: model.displayName,
     });
-    if (!canonical) return;
-    if (seen.has(canonical.id)) return;
-    seen.add(canonical.id);
+    if (!canonical && !(model.recommended === true && model.modelConstant)) return;
+    const id = model.id.trim();
+    if (!id || seen.has(id)) return;
+    seen.add(id);
     result.push({
-      id: canonical.id,
-      displayName: (model.displayName || '').trim() || canonical.displayName,
-      modelConstant: model.modelConstant || canonical.modelConstant,
+      id,
+      displayName: (model.displayName || '').trim() || canonical?.displayName || id,
+      modelConstant: model.modelConstant || canonical?.modelConstant,
       recommended: true,
     });
   });
 
   return result;
 };
+
+export const DEFAULT_ANTIGRAVITY_WAKEUP_MODEL_ID = 'gemini-3.8-flash-high';
+
+export const getPreferredAntigravityWakeupModelId = (models: AntigravityModelOption[]): string =>
+  models.find((model) => model.id === DEFAULT_ANTIGRAVITY_WAKEUP_MODEL_ID)?.id
+  || models.find((model) => /flash/i.test(model.displayName || model.id))?.id
+  || models[0]?.id
+  || '';
 
 export const collectAntigravityQuotaModelKeys = (accounts: Account[]): string[] => {
   const keys: string[] = [];

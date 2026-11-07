@@ -22,10 +22,18 @@ export interface DisplayGroup {
 }
 
 const FIXED_DISPLAY_GROUPS: DisplayGroup[] = [
+  { id: 'g4_argon', name: 'Gemini 4 Argon', models: ['gemini-4-argon', 'gemini-4-argon-medium', 'gemini-4-argon-high', 'argon:weekly', 'gemini-argon-wtu-weekly'] },
   {
     id: 'claude_45',
     name: 'Claude',
     models: [
+        'claude-opus-5-5',
+        'claude-opus-5-5-medium',
+        'claude-opus-5-5-high',
+        'claude-sonnet-5-5',
+        'claude-sonnet-5-5-medium',
+        'claude-sonnet-5-5-high',
+
       'claude-opus-4-6-thinking',
       'claude-opus-4-6',
       'claude-opus-4-5-thinking',
@@ -62,6 +70,12 @@ const FIXED_DISPLAY_GROUPS: DisplayGroup[] = [
     id: 'g3_flash',
     name: 'Gemini Flash',
     models: [
+        'gemini-3.8-flash',
+        'gemini-3.8-flash-low',
+        'gemini-3.8-flash-medium',
+        'gemini-3.8-flash-high',
+        'MODEL_PLACEHOLDER_M318',
+
       'gemini-3-flash',
       'gemini-3.1-flash',
       'gemini-3-flash-image',

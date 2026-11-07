@@ -1,0 +1,18 @@
+.codex-account-service-overlay { padding: 16px; overflow-y: auto; align-items: safe center; }
+.modal.codex-account-service-dialog { width: min(720px, calc(100vw - 32px)); max-width: 720px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--bg-surface); color: var(--text-primary); box-shadow: 0 24px 80px #0003; }
+.codex-account-service-dialog > .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: 0 0 auto; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.codex-account-service-dialog > .modal-header h2 { margin: 0; font-size: 16px; line-height: 1.4; }
+.codex-account-service-dialog > .modal-header p { margin: 4px 0 0; color: var(--text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.codex-account-service-dialog > .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px 20px; font-size: 13px; line-height: 1.65; }
+.codex-account-service-dialog > .modal-footer { flex: 0 0 auto; display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 20px; }
+.codex-account-service-modes { display: flex; gap: 8px; flex: 0 0 auto; padding: 16px 20px 8px; }
+.codex-account-service-modes > .btn { flex: 1; min-width: 0; }
+.codex-account-service-current { margin: 0; padding: 0 20px 8px; flex: 0 0 auto; font-size: 12px; color: var(--text-secondary); }
+.codex-account-service-source { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin-top: 16px; }
+.codex-account-service-source > label { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.chatgpt-plan-binding-confirmation h3 { margin: 12px 0 8px; font-size: 14px; }
+.chatgpt-plan-binding-confirmation p { margin: 0 0 12px; overflow-wrap: anywhere; }
+@media (max-height: 600px) {
+  .codex-account-service-dialog > .modal-header, .codex-account-service-dialog > .modal-footer { padding-top: 10px; padding-bottom: 10px; }
+  .codex-account-service-modes { padding-top: 10px; }
+}

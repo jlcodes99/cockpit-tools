@@ -12,9 +12,11 @@ struct AntigravityCredentialToken {
 struct AntigravityCredentialPayload {
     token: AntigravityCredentialToken,
     auth_method: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id_token: Option<String>,
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 #[derive(Debug, serde::Deserialize)]
 struct StoredAntigravityCredentialToken {
     access_token: Option<String>,
@@ -23,14 +25,14 @@ struct StoredAntigravityCredentialToken {
     expiry: Option<String>,
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 #[derive(Debug, serde::Deserialize)]
 struct StoredAntigravityCredentialPayload {
     token: StoredAntigravityCredentialToken,
     auth_method: Option<String>,
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 #[derive(Debug, Clone)]
 pub struct AntigravitySystemCredential {
     pub access_token: Option<String>,
@@ -40,7 +42,7 @@ pub struct AntigravitySystemCredential {
     pub auth_method: Option<String>,
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn normalize_non_empty(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
@@ -48,16 +50,25 @@ fn normalize_non_empty(value: Option<&str>) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn normalize_antigravity_credential_secret(secret: &str) -> Result<String, String> {
     let trimmed = secret.trim();
     if trimmed.is_empty() {
         return Err("Antigravity 系统凭据为空".to_string());
     }
+    #[cfg(target_os = "macos")]
+    if let Some(encoded) = trimmed.strip_prefix("go-keyring-base64:") {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        let decoded = STANDARD
+            .decode(encoded)
+            .map_err(|_| "Antigravity Keychain 凭据编码无效".to_string())?;
+        return String::from_utf8(decoded)
+            .map_err(|_| "Antigravity Keychain 凭据不是有效 UTF-8".to_string());
+    }
     Ok(trimmed.to_string())
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn parse_antigravity_system_credential(
     secret: &str,
 ) -> Result<AntigravitySystemCredential, String> {
@@ -89,55 +100,85 @@ fn build_antigravity_credential_payload(account: &Account) -> Result<String, Str
             expiry,
         },
         auth_method: "consumer".to_string(),
+        id_token: account.token.id_token.clone(),
     })
     .map_err(|e| format!("序列化 Antigravity 系统凭据失败: {}", e))
 }
 
 pub fn write_antigravity_system_credential(account: &Account) -> Result<(), String> {
+    write_antigravity_credentials(account, false)
+}
+
+pub fn write_antigravity_desktop_switch_credentials(account: &Account) -> Result<(), String> {
+    write_antigravity_credentials(account, true)
+}
+
+fn write_antigravity_credentials(account: &Account, sync_cli: bool) -> Result<(), String> {
     let payload_json = build_antigravity_credential_payload(account)?;
+    let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
+    // Standalone 2.13.0 / 2.25.0's compositeTokenStorage falls back to this file when
+    // Keyring is unavailable. This is distinct from Gemini CLI / agy storage.
+    let gemini_dir = home.join(".gemini");
+    let fallback_path = gemini_dir.join("jetski-standalone-oauth-token");
+    let cli_session = if sync_cli {
+        initialized_cli_session_path(&gemini_dir)?
+    } else {
+        None
+    };
 
     crate::modules::logger::log_info(&format!(
         "[Antigravity 2.0] 写入系统凭据: {}",
         account.email
     ));
 
-    #[cfg(target_os = "macos")]
-    {
-        use base64::{engine::general_purpose::STANDARD, Engine as _};
-        use std::process::Command;
+    write_antigravity_credential_payload(
+        &payload_json,
+        &fallback_path,
+        cli_session.as_deref(),
+        write_antigravity_system_payload,
+    )?;
+    crate::modules::logger::log_info("[Antigravity 2.0] 系统凭据与桌面回退凭据写入完成");
+    Ok(())
+}
 
-        let encoded_payload = STANDARD.encode(&payload_json);
-        let keychain_value = format!("go-keyring-base64:{}", encoded_payload);
-
-        let _ = Command::new("security")
-            .args([
-                "delete-generic-password",
-                "-s",
-                "gemini",
-                "-a",
-                "antigravity",
-            ])
-            .output();
-
-        let output = Command::new("security")
-            .args([
-                "add-generic-password",
-                "-s",
-                "gemini",
-                "-a",
-                "antigravity",
-                "-w",
-                &keychain_value,
-                "-A",
-            ])
-            .output()
-            .map_err(|e| format!("执行 macOS Keychain 写入命令失败: {}", e))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("写入 macOS Keychain 失败: {}", stderr.trim()));
-        }
+fn initialized_cli_session_path(
+    gemini_dir: &std::path::Path,
+) -> Result<Option<std::path::PathBuf>, String> {
+    let directory = gemini_dir.join("antigravity-cli");
+    match std::fs::metadata(&directory) {
+        Ok(metadata) if metadata.is_dir() => Ok(Some(directory.join("antigravity-oauth-token"))),
+        Ok(_) => Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("{}: {error}", directory.display())),
     }
+}
+
+fn write_antigravity_credential_payload(
+    payload_json: &str,
+    fallback_path: &std::path::Path,
+    cli_session: Option<&std::path::Path>,
+    write_system: impl FnOnce(&str) -> Result<(), String>,
+) -> Result<(), String> {
+    write_system(payload_json)?;
+    // Use the same payload in both stores: an old fallback must not resurrect a
+    // previous account after a Keyring timeout. Never report a partial sync as success.
+    crate::modules::atomic_write::write_secret_string_atomic(fallback_path, payload_json).map_err(
+        |error| format!("系统凭据已写入，但同步 Antigravity 桌面回退凭据失败，请重试切号: {error}"),
+    )?;
+    if let Some(path) = cli_session {
+        crate::modules::atomic_write::write_secret_string_atomic(path, payload_json)
+            .map_err(|error| format!("ANTIGRAVITY_SWITCH_STATE_SAVE_FAILED: agy: {error}"))?;
+    }
+    Ok(())
+}
+
+fn write_antigravity_system_payload(payload_json: &str) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    write_antigravity_keychain_payload(
+        payload_json,
+        std::ffi::OsStr::new("security"),
+        std::time::Duration::from_secs(15),
+    )?;
 
     #[cfg(target_os = "windows")]
     {
@@ -169,7 +210,6 @@ pub fn write_antigravity_system_credential(account: &Account) -> Result<(), Stri
 
         #[link(name = "advapi32")]
         extern "system" {
-            fn CredDeleteW(target_name: *const u16, type_: u32, flags: u32) -> i32;
             fn CredWriteW(credential: *const CredentialW, flags: u32) -> i32;
         }
 
@@ -205,7 +245,7 @@ pub fn write_antigravity_system_credential(account: &Account) -> Result<(), Stri
         };
 
         unsafe {
-            let _ = CredDeleteW(target_wide.as_ptr(), CRED_TYPE_GENERIC, 0);
+            // CredWriteW replaces an existing target without deleting it first.
             if CredWriteW(&credential, 0) == 0 {
                 return Err(format!(
                     "写入 Windows Credential Manager 失败: {}",
@@ -217,40 +257,62 @@ pub fn write_antigravity_system_credential(account: &Account) -> Result<(), Stri
 
     #[cfg(target_os = "linux")]
     {
-        use std::io::Write;
-        use std::process::{Command, Stdio};
+        use std::process::Command;
 
-        let mut child = Command::new("secret-tool")
-            .args([
-                "store",
-                "--label=gemini",
-                "service",
-                "gemini",
-                "username",
-                "antigravity",
-            ])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("启动 Linux secret-tool 失败: {}", e))?;
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(payload_json.as_bytes())
-                .map_err(|e| format!("写入 Linux secret-tool 输入失败: {}", e))?;
-        }
-
-        let output = child
-            .wait_with_output()
-            .map_err(|e| format!("等待 Linux secret-tool 失败: {}", e))?;
+        let mut command = Command::new("secret-tool");
+        command.args([
+            "store",
+            "--label=gemini",
+            "service",
+            "gemini",
+            "username",
+            "antigravity",
+        ]);
+        let output = crate::modules::process_timeout::output_with_input_timeout(
+            &mut command,
+            payload_json.as_bytes(),
+            std::time::Duration::from_secs(15),
+        )
+        .map_err(|e| format!("执行 Linux secret-tool 写入命令失败: {}", e))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!("Linux secret-tool 写入失败: {}", stderr.trim()));
         }
     }
 
-    crate::modules::logger::log_info("[Antigravity 2.0] 系统凭据写入完成");
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn write_antigravity_keychain_payload(
+    payload_json: &str,
+    program: &std::ffi::OsStr,
+    timeout: std::time::Duration,
+) -> Result<(), String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    use std::process::Command;
+
+    let keychain_value = format!("go-keyring-base64:{}", STANDARD.encode(payload_json));
+    // Update the credential in place and preserve its existing access policy.
+    // Passing -A (or -T) also calls SecKeychainItemSetAccess, which prompts for
+    // authorization on every switch even when the password update is allowed.
+    let mut command = Command::new(program);
+    command.args([
+        "add-generic-password",
+        "-U",
+        "-s",
+        "gemini",
+        "-a",
+        "antigravity",
+        "-w",
+        &keychain_value,
+    ]);
+    let output = crate::modules::process_timeout::output_with_timeout(&mut command, timeout)
+        .map_err(|e| format!("执行 macOS Keychain 写入命令失败: {}", e))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("写入 macOS Keychain 失败: {}", stderr.trim()));
+    }
     Ok(())
 }
 
@@ -345,10 +407,34 @@ fn read_antigravity_system_credential_secret() -> Result<Option<String>, String>
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(target_os = "macos")]
+fn read_antigravity_system_credential_secret() -> Result<Option<String>, String> {
+    let mut command = std::process::Command::new("/usr/bin/security");
+    command.args(["find-generic-password", "-s", "gemini", "-a", "antigravity", "-w"]);
+    let output = crate::modules::process_timeout::output_with_timeout(
+        &mut command,
+        std::time::Duration::from_secs(15),
+    )
+    .map_err(|error| format!("执行 macOS Keychain 读取失败: {error}"))?;
+    if output.status.success() {
+        return String::from_utf8(output.stdout)
+            .map(Some)
+            .map_err(|_| "Antigravity Keychain 凭据不是有效 UTF-8".to_string());
+    }
+    if output.status.code() == Some(44) {
+        return Ok(None);
+    }
+    Err(format!("读取 Antigravity Keychain 凭据失败: {}", output.status))
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 pub fn read_antigravity_system_credential() -> Result<Option<AntigravitySystemCredential>, String> {
     let Some(secret) = read_antigravity_system_credential_secret()? else {
         return Ok(None);
     };
     parse_antigravity_system_credential(&secret).map(Some)
 }
+
+#[cfg(test)]
+#[path = "antigravity_credential_tests.rs"]
+mod tests;

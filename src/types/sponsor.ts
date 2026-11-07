@@ -19,7 +19,7 @@ export interface SponsorIntegration {
   baseUrl: string;
   /** 旧线路地址；命中后自动替换为当前 baseUrl。 */
   baseUrlAliases?: string[];
-  wireApi?: 'responses' | 'chat_completions' | null;
+  wireApi?: 'responses' | 'chat_completions' | 'anthropic' | null;
   quickConfigure?: boolean;
   dashboardCard?: boolean;
   models?: string[];

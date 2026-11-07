@@ -788,7 +788,17 @@ pub fn claude_launch_cli(
 }
 
 #[tauri::command]
-pub fn switch_claude_account(app: AppHandle, account_id: String) -> Result<String, String> {
+pub async fn switch_claude_account(app: AppHandle, account_id: String) -> Result<String, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || switch_claude_account_impl(account_id))
+        .await
+        .map_err(|error| error.to_string())?;
+    if result.is_ok() {
+        let _ = crate::modules::tray::update_tray_menu(&app);
+    }
+    result
+}
+
+fn switch_claude_account_impl(account_id: String) -> Result<String, String> {
     let started_at = Instant::now();
     logger::log_info(&format!(
         "[Claude Switch] 开始切换账号: account_id={}",
@@ -798,6 +808,7 @@ pub fn switch_claude_account(app: AppHandle, account_id: String) -> Result<Strin
     let account = claude_account::load_account(&account_id)
         .ok_or_else(|| format!("Claude account not found: {}", account_id))?;
     claude_account::inject_to_claude(&account_id)?;
+    claude_account::touch_last_used(&account_id)?;
     let current_platform = if matches!(
         account.auth_mode,
         ClaudeAuthMode::DesktopOAuth | ClaudeAuthMode::DesktopGateway
@@ -810,7 +821,6 @@ pub fn switch_claude_account(app: AppHandle, account_id: String) -> Result<Strin
         current_platform,
         Some(account_id.as_str()),
     )?;
-    let _ = crate::modules::tray::update_tray_menu(&app);
 
     logger::log_info(&format!(
         "[Claude Switch] 切号成功: account_id={}, email={}, elapsed={}ms",

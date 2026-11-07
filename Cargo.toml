@@ -5,6 +5,7 @@ members = [
     "crates/cockpit-cli",
 ]
 resolver = "2"
+exclude = ["vendor/tao"]
 
 [workspace.dependencies]
 # Common dependencies with shared versions
@@ -48,3 +49,16 @@ rsa = "0.9"
 serde_urlencoded = "0.7"
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
 junction = "2.0"
+
+# Backport only the upstream Windows input-lock fix; see vendor/tao/COCKPIT-PATCH.md.
+[patch.crates-io]
+tao = { path = "vendor/tao" }
+
+[profile.ci]
+inherits = "release"
+opt-level = 0
+debug = 0
+lto = "off"
+codegen-units = 256
+incremental = false
+panic = "abort"

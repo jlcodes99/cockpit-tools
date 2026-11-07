@@ -17,7 +17,10 @@ const BIGMODEL_REDIRECT_URI: &str = "zcode://oauth/callback";
 const ZAI_AUTHORIZE_URL: &str = "https://chat.z.ai/api/oauth/authorize";
 const ZAI_USER_INFO_URL: &str = "https://chat.z.ai/api/oauth/userinfo";
 const ZAI_BUSINESS_LOGIN_URL: &str = "https://api.z.ai/api/auth/z/login";
-const ZAI_REDIRECT_URI: &str = "zcode://zai-auth/callback";
+// OAuth redirect contract verified against ZCode 3.16.3. Both providers now
+// return through the official web bridge to the shared desktop callback.
+const DESKTOP_OAUTH_REDIRECT_URI: &str =
+    "https://zcode.z.ai/app/oauth/login?redirect=zcode%3A%2F%2Foauth%2Fcallback&app_version=3.16.3";
 const ZAI_CLIENT_ID: &str = "client_P8X5CMWmlaRO9gyO-KSqtg";
 const ZCODE_OAUTH_WINDOW_LABEL: &str = "zcode-oauth";
 
@@ -59,16 +62,16 @@ fn build_authorize_url(provider: &str, state: &str) -> Result<(String, String), 
     if provider == "zai" {
         let mut url = Url::parse(ZAI_AUTHORIZE_URL).map_err(|error| error.to_string())?;
         url.query_pairs_mut()
-            .append_pair("redirect_uri", ZAI_REDIRECT_URI)
+            .append_pair("redirect_uri", DESKTOP_OAUTH_REDIRECT_URI)
             .append_pair("response_type", "code")
             .append_pair("client_id", ZAI_CLIENT_ID)
             .append_pair("state", state);
-        return Ok((url.to_string(), ZAI_REDIRECT_URI.to_string()));
+        return Ok((url.to_string(), BIGMODEL_REDIRECT_URI.to_string()));
     }
 
     let mut url = Url::parse(BIGMODEL_AUTHORIZE_URL).map_err(|error| error.to_string())?;
     url.query_pairs_mut()
-        .append_pair("redirect", BIGMODEL_REDIRECT_URI)
+        .append_pair("redirect", DESKTOP_OAUTH_REDIRECT_URI)
         .append_pair("appId", "zcode")
         .append_pair("state", state);
     Ok((url.to_string(), BIGMODEL_REDIRECT_URI.to_string()))
@@ -110,12 +113,12 @@ fn authorize_url_matches_pending(url: &Url, pending: &PendingOAuthState) -> bool
             && url.path() == "/api/oauth/authorize"
             && query_value("client_id").as_deref() == Some(ZAI_CLIENT_ID)
             && query_value("response_type").as_deref() == Some("code")
-            && query_value("redirect_uri").as_deref() == Some(ZAI_REDIRECT_URI)
+            && query_value("redirect_uri").as_deref() == Some(DESKTOP_OAUTH_REDIRECT_URI)
     } else {
         url.host_str() == Some("bigmodel.cn")
             && url.path() == "/login"
             && query_value("appId").as_deref() == Some("zcode")
-            && query_value("redirect").as_deref() == Some(BIGMODEL_REDIRECT_URI)
+            && query_value("redirect").as_deref() == Some(DESKTOP_OAUTH_REDIRECT_URI)
     }
 }
 
@@ -243,12 +246,9 @@ fn parse_callback_url(callback_url: &str, pending: &PendingOAuthState) -> Result
     if url.scheme() != "zcode" {
         return Err("ZCode OAuth 回调协议必须是 zcode://".to_string());
     }
-    let expected_host = if pending.provider == "zai" {
-        "zai-auth"
-    } else {
-        "oauth"
-    };
-    if url.host_str() != Some(expected_host) || url.path() != "/callback" {
+    let supported_host = url.host_str() == Some("oauth")
+        || (pending.provider == "zai" && url.host_str() == Some("zai-auth"));
+    if !supported_host || url.path() != "/callback" {
         return Err("ZCode OAuth 回调地址与登录 provider 不匹配".to_string());
     }
     let state = url
@@ -414,18 +414,13 @@ async fn exchange_callback(
         .timeout(Duration::from_secs(30))
         .build()
         .map_err(|error| format!("创建 ZCode OAuth 客户端失败: {}", error))?;
-    let redirect_uri = if pending.provider == "zai" {
-        ZAI_REDIRECT_URI
-    } else {
-        BIGMODEL_REDIRECT_URI
-    };
     let token_response = read_json_response(
         client
             .post(ZCODE_TOKEN_URL)
             .json(&json!({
                 "provider": pending.provider,
                 "code": code,
-                "redirect_uri": redirect_uri,
+                "redirect_uri": DESKTOP_OAUTH_REDIRECT_URI,
                 "state": pending.state,
             }))
             .send()
@@ -658,7 +653,7 @@ mod tests {
     #[test]
     fn authorize_urls_use_official_redirects() {
         let (zai, zai_redirect) = build_authorize_url("zai", "state-1").unwrap();
-        assert_eq!(zai_redirect, ZAI_REDIRECT_URI);
+        assert_eq!(zai_redirect, BIGMODEL_REDIRECT_URI);
         assert!(zai.contains("client_id="));
         assert!(zai.contains("state=state-1"));
 
@@ -836,6 +831,28 @@ mod tests {
     }
 
     #[test]
+    fn current_zai_login_uses_web_bridge_and_shared_callback() {
+        let (authorize, callback) = build_authorize_url("zai", "state-1").unwrap();
+        let authorize = Url::parse(&authorize).unwrap();
+        let bridge = authorize
+            .query_pairs()
+            .find(|(key, _)| key == "redirect_uri")
+            .unwrap()
+            .1
+            .into_owned();
+        assert_eq!(bridge, DESKTOP_OAUTH_REDIRECT_URI);
+        assert_eq!(callback, "zcode://oauth/callback");
+        assert_eq!(
+            parse_callback_url(
+                "zcode://oauth/callback?code=new-code&state=state-1",
+                &pending("zai", "state-1")
+            )
+            .unwrap(),
+            "new-code"
+        );
+    }
+
+    #[test]
     fn callback_rejects_missing_or_mismatched_state() {
         let pending = pending("zai", "expected-state");
         let missing =
@@ -852,9 +869,12 @@ mod tests {
 
     #[test]
     fn callback_rejects_route_for_another_provider() {
-        let pending = pending("zai", "state-1");
-        let error = parse_callback_url("zcode://oauth/callback?code=value&state=state-1", &pending)
-            .unwrap_err();
+        let pending = pending("bigmodel", "state-1");
+        let error = parse_callback_url(
+            "zcode://zai-auth/callback?code=value&state=state-1",
+            &pending,
+        )
+        .unwrap_err();
         assert!(error.contains("provider 不匹配"));
     }
 

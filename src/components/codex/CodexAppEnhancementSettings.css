@@ -1,0 +1,25 @@
+.codex-app-enhancements .qs-row-label,
+.codex-app-enhancements .row-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.codex-app-enhancements--quick .codex-app-enhancement-option {
+  margin-top: 12px;
+}
+.codex-app-enhancements .qs-row-control,
+.codex-app-enhancements .row-control {
+  min-width: 0;
+}
+.codex-app-enhancements-error {
+  color: var(--danger, #dc3545);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  margin-top: 6px;
+}
+.codex-app-enhancements-error .btn {
+  margin-left: 8px;
+}
+.codex-app-enhancements-status {
+  font-size: 12px;
+  margin: 8px 0;
+}

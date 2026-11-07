@@ -1,0 +1,350 @@
+{
+  "schemaVersion": 1,
+  "goReferences": {
+    "policy": {
+      "file": "sidecars/cockpit-cliproxy/parity22_policy_reference_test.go",
+      "test": "TestParity22PolicyReference",
+      "fixture": "src-tauri/src/modules/codex_native_api/fixtures/parity22_policy_go.json"
+    },
+    "protocol": {
+      "file": "sidecars/cockpit-cliproxy/parity22_protocol_reference_test.go",
+      "test": "TestParity22ProtocolReference",
+      "fixture": "src-tauri/src/modules/codex_native_api/fixtures/parity22_protocol_go.json"
+    },
+    "images": {
+      "file": "sidecars/cockpit-cliproxy/parity22_media_reference_test.go",
+      "test": "TestParity22MediaImageReference",
+      "fixture": "src-tauri/src/modules/codex_native_api/fixtures/parity22_images_go.json"
+    },
+    "runtime": {
+      "file": "sidecars/cockpit-cliproxy/third_party/CLIProxyAPI/internal/runtime/executor/parity22_runtime_reference_test.go",
+      "test": "TestParity22RuntimeReference",
+      "fixture": "src-tauri/src/modules/codex_native_api/fixtures/parity22_runtime_go.json"
+    },
+    "close": {
+      "file": "sidecars/cockpit-cliproxy/third_party/CLIProxyAPI/sdk/api/handlers/openai/parity22_runtime_close_reference_test.go",
+      "test": "TestParity22RuntimeCloseReference",
+      "fixture": "src-tauri/src/modules/codex_native_api/fixtures/parity22_runtime_close_go.json"
+    },
+    "compact": {
+      "file": "sidecars/cockpit-cliproxy/third_party/CLIProxyAPI/sdk/cliproxy/auth/parity22_runtime_compact_reference_test.go",
+      "test": "TestParity22RuntimeCompactReference",
+      "fixture": "src-tauri/src/modules/codex_native_api/fixtures/parity22_runtime_compact_go.json"
+    },
+    "realtime": {
+      "file": "sidecars/cockpit-cliproxy/third_party/CLIProxyAPI/internal/client/codex/live/parity22_media_reference_test.go",
+      "test": "TestParity22MediaRealtimeReference",
+      "fixture": "src-tauri/src/modules/codex_native_api/fixtures/parity22_realtime_go.json"
+    }
+  },
+  "coverage": [
+    {
+      "id": 1,
+      "behavior": "Case-insensitive, trimmed model allow/exclude rules without weakening account or key grants",
+      "reference": "policy",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_local_access_tests_native_parity22.rs",
+          "name": "parity22_model_rules_match_go_and_keep_all_permission_layers"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "behavior": "Authorized conversation models may select the configured image pool; exact image variants stay exact",
+      "reference": "images",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_local_access_tests_native_image_parity22.rs",
+          "name": "parity22_image_outbound_models_match_go_relay"
+        },
+        {
+          "file": "src-tauri/src/modules/codex_local_access_tests_native_image_parity22.rs",
+          "name": "parity22_image_conversation_fallback_keeps_model_permissions_and_pool"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "behavior": "Mixed image pools use the configured OAuth main model without leaking API-provider aliases",
+      "reference": "images",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_local_access_tests_native_image_parity22.rs",
+          "name": "parity22_image_outbound_models_match_go_relay"
+        },
+        {
+          "file": "src-tauri/src/modules/codex_local_access_tests_native_image_parity22.rs",
+          "name": "parity22_image_conversation_fallback_keeps_model_permissions_and_pool"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "behavior": "Responses namespace/additional tools and custom input wrappers round-trip through Chat",
+      "reference": "protocol",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/protocol_parity22_tests.rs",
+          "name": "parity22_protocol_actual_go_request_and_output_fixtures"
+        },
+        {
+          "file": "src-tauri/src/modules/codex_native_api/protocol_parity22_tests.rs",
+          "name": "parity22_go_outputs_also_match_streamed_reasoning_namespaces_and_custom_wrappers"
+        },
+        {
+          "file": "src-tauri/src/modules/codex_native_api/protocol_parity22_tests.rs",
+          "name": "parity22_tool_choices_and_native_custom_extension_remain_consistent"
+        },
+        {
+          "file": "src-tauri/src/modules/codex_native_api/protocol_parity22_tests.rs",
+          "name": "parity22_custom_wrapper_decodes_unicode_surrogates_without_repeating_prefixes"
+        },
+        {
+          "file": "src-tauri/src/modules/codex_native_api/protocol_parity22_tests.rs",
+          "name": "parity22_fragmented_names_keep_rust_extension_beyond_go_stream_parser"
+        },
+        {
+          "file": "src-tauri/src/modules/codex_native_api/compat_native_chat_http_tests.rs",
+          "name": "parity22_http_responses_chat_restores_namespaced_custom_and_keeps_native_custom"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "behavior": "Deferred ordinary messages preserve tool call/result adjacency",
+      "reference": "protocol",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/protocol_parity22_tests.rs",
+          "name": "parity22_protocol_actual_go_request_and_output_fixtures"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "behavior": "Gemini call_id aliases pair calls and responses even when reordered",
+      "reference": "protocol",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/protocol_parity22_tests.rs",
+          "name": "parity22_protocol_actual_go_request_and_output_fixtures"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "behavior": "Ollama string arguments remain strings; null/missing arguments become empty objects",
+      "reference": "protocol",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/protocol_parity22_tests.rs",
+          "name": "parity22_protocol_actual_go_request_and_output_fixtures"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "behavior": "Claude message-level system reminders preserve history and tool adjacency",
+      "reference": "protocol",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/protocol_parity22_tests.rs",
+          "name": "parity22_protocol_actual_go_request_and_output_fixtures"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "behavior": "Claude/Gemini thinking budget thresholds and automatic modes",
+      "reference": "protocol",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/protocol_parity22_tests.rs",
+          "name": "parity22_protocol_actual_go_request_and_output_fixtures"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "behavior": "Thinking summary display intent reaches each converted protocol",
+      "reference": "protocol",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/protocol_parity22_tests.rs",
+          "name": "parity22_protocol_actual_go_request_and_output_fixtures"
+        },
+        {
+          "file": "src-tauri/src/modules/codex_native_api/compat_native_chat_http_tests.rs",
+          "name": "parity22_http_compat_preserves_explicit_tier_and_summary_visibility"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "behavior": "Claude structured output name, strictness and optional-property strict downgrade",
+      "reference": "protocol",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/protocol_parity22_tests.rs",
+          "name": "parity22_protocol_actual_go_request_and_output_fixtures"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "behavior": "Claude/Gemini service_tier and Claude speed=fast survive conversion",
+      "reference": "protocol",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/protocol_parity22_tests.rs",
+          "name": "parity22_protocol_actual_go_request_and_output_fixtures"
+        },
+        {
+          "file": "src-tauri/src/modules/codex_native_api/compat_native_chat_http_tests.rs",
+          "name": "parity22_http_compat_preserves_explicit_tier_and_summary_visibility"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "behavior": "Chat JSON and SSE reasoning fallback preserves final Responses output",
+      "reference": "protocol",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/protocol_parity22_tests.rs",
+          "name": "parity22_protocol_actual_go_request_and_output_fixtures"
+        },
+        {
+          "file": "src-tauri/src/modules/codex_native_api/protocol_parity22_tests.rs",
+          "name": "parity22_go_outputs_also_match_streamed_reasoning_namespaces_and_custom_wrappers"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "behavior": "HTTP SSE preserves reasoning_summary_delivery in stream_options",
+      "reference": "runtime",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/codex_wire_runtime_parity_tests.rs",
+          "name": "parity22_runtime_http_final_wire_matches_go_executor"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "behavior": "Lite metadata emits the Lite header in actual HTTP and WebSocket requests",
+      "reference": "runtime",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/codex_wire_runtime_parity_tests.rs",
+          "name": "parity22_runtime_http_final_wire_matches_go_executor"
+        },
+        {
+          "file": "src-tauri/src/modules/codex_native_api/websocket_retry_tests.rs",
+          "name": "parity22_runtime_websocket_lite_wire_matches_go_executor"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "behavior": "WebSocket Close1009 and structured message_too_big use close frames; generic 413 stays an error",
+      "reference": "close",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/websocket_retry_tests.rs",
+          "name": "parity22_runtime_websocket_1009_and_structured_413_match_go_close_frames"
+        },
+        {
+          "file": "src-tauri/src/modules/codex_native_api/websocket_retry_tests.rs",
+          "name": "parity22_runtime_websocket_generic_413_stays_an_error_without_1009"
+        },
+        {
+          "file": "src-tauri/src/modules/codex_native_api/websocket.rs",
+          "name": "parity22_runtime_close_reason_is_bounded_and_generic_413_does_not_signal_fallback"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "behavior": "Wrapped body.error retains sanitized details, quota resets and error scope before retry",
+      "reference": "runtime",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/websocket_retry_tests.rs",
+          "name": "parity22_runtime_wrapped_quota_preserves_go_reset_and_scope_before_failover"
+        },
+        {
+          "file": "src-tauri/src/modules/codex_native_api/diagnostic_error.rs",
+          "name": "parity22_runtime_wrapped_error_keeps_classification_and_public_details"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "behavior": "Compact transient failures do not cool credentials; auth/quota/challenge behavior stays intact",
+      "reference": "compact",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/cooldown_retry_tests.rs",
+          "name": "parity22_runtime_compact_cooldown_matches_default_go_conductor"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "behavior": "Public Realtime uses the public API root and model; native Codex/custom roots remain intact",
+      "reference": "realtime",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/auxiliary_parity22_tests.rs",
+          "name": "parity22_realtime_go_urls_match_actual_tls_proxy_wire"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "behavior": "Realtime forwards safe subprotocol offers and returns only the negotiated protocol",
+      "reference": "realtime",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_native_api/auxiliary_parity22_tests.rs",
+          "name": "parity22_realtime_go_subprotocols_are_negotiated_without_local_credentials"
+        },
+        {
+          "file": "src-tauri/src/modules/codex_native_api/auxiliary_parity22_tests.rs",
+          "name": "parity22_realtime_rejects_unoffered_upstream_subprotocols"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "behavior": "Catalog prefer_websockets respects the service switch, provider routing and xAI boundary",
+      "reference": "policy",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_local_access_tests_native_parity22.rs",
+          "name": "parity22_model_catalog_websocket_flags_match_go_configuration"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "behavior": "Token estimates use Go alias preprocessing for automatic/provider/profile/explicit OAuth routes without generation",
+      "reference": "policy",
+      "rustTests": [
+        {
+          "file": "src-tauri/src/modules/codex_local_access_tests_native_parity22.rs",
+          "name": "parity22_token_estimate_http_matches_go_alias_preprocessing_without_generation"
+        }
+      ]
+    }
+  ],
+  "preservedExtensions": [
+    "Native Chat custom tools stay native when the destination supports them.",
+    "Chat tool_choice retains the valid nested function wire schema; Go raw output is compared semantically for this known formatting difference.",
+    "Fragmented tool names and custom Unicode arguments remain supported.",
+    "Account isolation, cross-account history continuation, one-shot original-account recovery, multi-image support and bounded resource protection remain enabled."
+  ]
+}

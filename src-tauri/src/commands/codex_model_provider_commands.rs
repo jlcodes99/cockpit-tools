@@ -1,3 +1,21 @@
+use crate::modules::codex_provider_protocol::normalize_model_provider_wire_api;
+use serde_json::Value;
+
+#[tauri::command]
+pub async fn codex_discover_remote_service(base_url: String, api_key: String) -> Result<Option<crate::modules::codex_remote_service::Connection>, String> {
+    if api_key.trim().is_empty() { return Ok(None); }
+    crate::modules::codex_remote_service::discover(&base_url, &api_key, false).await
+}
+
+#[path = "codex_openai_usage.rs"]
+mod openai_usage;
+
+#[tauri::command]
+pub async fn codex_query_remote_key_data(base_url:String,api_key:String,resource:String,
+    query:crate::modules::codex_remote_service::KeyQuery) -> Result<Value,String> {
+    crate::modules::codex_remote_service::key_data(&base_url,&api_key,&resource,&query).await
+}
+
 // Codex 模型供应商命令实现。
 //
 // 本片段由 `commands/codex.rs` 通过 `include!` 纳入 `commands::codex` 模块，集中负责供应商
@@ -19,32 +37,26 @@ pub async fn load_codex_account_groups() -> Result<String, String> {
 
 #[tauri::command]
 pub async fn save_codex_account_groups(data: String) -> Result<(), String> {
-    let dir = account::get_data_dir()?;
-    if !dir.exists() {
-        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
-    }
-    let path = dir.join(CODEX_GROUPS_FILE);
-    std::fs::write(&path, data).map_err(|e| format!("Failed to write codex groups: {}", e))
+    // The shared and Codex-specific UI must use the same validated atomic write.
+    crate::commands::account::save_platform_account_groups("codex".to_string(), data).await
 }
 
 #[tauri::command]
 pub async fn load_codex_model_providers() -> Result<String, String> {
-    let path = account::get_data_dir()?.join(CODEX_MODEL_PROVIDERS_FILE);
-    if !path.exists() {
-        return Ok("[]".to_string());
-    }
-    std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read codex model providers: {}", e))
+    tauri::async_runtime::spawn_blocking(|| {
+        let path = account::get_data_dir()?.join(CODEX_MODEL_PROVIDERS_FILE);
+        if !path.exists() { return Ok("[]".to_string()); }
+        std::fs::read_to_string(&path).map_err(|error| format!("Failed to read codex model providers: {error}"))
+    }).await.map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
 pub async fn save_codex_model_providers(data: String) -> Result<(), String> {
-    let dir = account::get_data_dir()?;
-    if !dir.exists() {
-        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
-    }
-    let path = dir.join(CODEX_MODEL_PROVIDERS_FILE);
-    std::fs::write(&path, data).map_err(|e| format!("Failed to write codex model providers: {}", e))
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = account::get_data_dir()?;
+        std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+        crate::modules::atomic_write::write_secret_string_atomic(&dir.join(CODEX_MODEL_PROVIDERS_FILE), &data)
+    }).await.map_err(|error| error.to_string())?
 }
 
 fn codex_model_provider_models_url(base_url: &str) -> Result<String, String> {
@@ -80,7 +92,11 @@ fn codex_model_provider_usage_url(base_url: &str) -> Result<String, String> {
         _ => return Err("PROVIDER_BASE_URL_INVALID".to_string()),
     }
     let next_path = if url.path().is_empty() || url.path() == "/" {
-        "/usage".to_string()
+        if url.scheme() == "https" && matches!(url.host_str(), Some("api.apikey.fan" | "api.apikey.fun")) && url.port().is_none() && url.username().is_empty() && url.password().is_none() {
+            "/v1/usage".to_string()
+        } else {
+            "/usage".to_string()
+        }
     } else {
         format!("{}/usage", url.path().trim_end_matches('/'))
     };
@@ -89,7 +105,12 @@ fn codex_model_provider_usage_url(base_url: &str) -> Result<String, String> {
     Ok(url.to_string())
 }
 
-fn codex_model_provider_deepseek_balance_url(base_url: &str) -> Result<Option<String>, String> {
+/// DeepSeek 官方 `/user/balance` 地址。
+///
+/// 只有官方 host（`api.deepseek.com` + https）才有这个接口，自定义中转地址返回 `None`。
+pub(crate) fn codex_model_provider_deepseek_balance_url(
+    base_url: &str,
+) -> Result<Option<String>, String> {
     let mut url = reqwest::Url::parse(base_url.trim())
         .map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())?;
     if url.scheme() != "https"
@@ -261,6 +282,7 @@ pub struct CodexModelProviderChatTestTarget {
     pub api_key_name: Option<String>,
     pub api_key: String,
     pub wire_api: Option<String>,
+    pub auth_scheme: Option<String>,
     #[serde(default)]
     pub model_catalog: Vec<String>,
 }
@@ -332,59 +354,16 @@ fn emit_model_provider_chat_test_progress(
     let _ = app.emit(CODEX_MODEL_PROVIDER_CHAT_TEST_PROGRESS_EVENT, payload);
 }
 
-fn normalize_model_provider_wire_api(value: Option<&str>, base_url: &str) -> String {
-    match value.map(str::trim) {
-        Some("chat_completions") | Some("chat") => return "chat_completions".to_string(),
-        Some("responses") => return "responses".to_string(),
-        _ => {}
-    }
-    // DeepSeek defaults to official Responses when the caller did not choose a protocol.
-    if reqwest::Url::parse(base_url.trim())
-        .ok()
-        .and_then(|url| url.host_str().map(str::to_string))
-        .is_some_and(|host| host.eq_ignore_ascii_case("api.deepseek.com"))
-    {
-        return "responses".to_string();
-    }
-    let lower = base_url.trim().to_ascii_lowercase();
-    if lower.contains("/chat/completions")
-        || lower.contains("api.moonshot.cn")
-        || lower.contains("api.siliconflow.cn")
-        || lower.contains("api.siliconflow.com")
-        || lower.contains("open.bigmodel.cn")
-        || lower.contains("api.z.ai")
-        || lower.contains("volces.com")
-        || lower.contains("bytepluses.com")
-        || lower.contains("qianfan.baidubce.com")
-        || lower.contains("dashscope.aliyuncs.com")
-        || lower.contains("api.stepfun.com")
-        || lower.contains("api.stepfun.ai")
-        || lower.contains("modelscope.cn")
-        || lower.contains("api.longcat.chat")
-        || lower.contains("api.minimax.io")
-        || lower.contains("api.mini-max.chat")
-        || lower.contains("api.minimaxi.com")
-        || lower.contains("api.mimo.dev")
-        || lower.contains("token-plan-cn.xiaomimimo.com")
-        || lower.contains("api.novita.ai")
-        || lower.contains("integrate.api.nvidia.com")
-        || lower.contains("runapi.co")
-        || lower.contains("relaxycode.com")
-        || lower.contains("compshare.cn")
-        || lower.contains("api.lemondata.cc")
-        || lower.contains("e-flowcode.cc")
-        || lower.contains("cc-api.pipellm.ai")
-        || lower.contains("openrouter.ai")
-        || lower.contains("api.therouter.ai")
-    {
-        "chat_completions".to_string()
-    } else {
-        "responses".to_string()
-    }
-}
-
-const RESPONSES_NATIVE_CHAT_TEST_MODEL_PRIORITY: &[&str] =
-    &["gpt-5.5", "gpt-5.4", "gpt-5", "gpt-4.1", "gpt-4o"];
+const RESPONSES_NATIVE_CHAT_TEST_MODEL_PRIORITY: &[&str] = &[
+    crate::modules::codex_wakeup::DEFAULT_WAKEUP_MODEL,
+    "gpt-6.1-sol",
+    "gpt-6-astra",
+    "gpt-6.1-terra",
+    "gpt-6-sol",
+    "gpt-6-luna",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+];
 
 fn is_image_generation_model_id(model_id: &str) -> bool {
     let lower = model_id.trim().to_ascii_lowercase();
@@ -454,24 +433,15 @@ fn first_model_from_provider_models(body: &serde_json::Value, wire_api: &str) ->
 }
 
 async fn discover_model_provider_model(
-    client: &reqwest::Client,
-    base_url: &str,
-    api_key: &str,
-    wire_api: &str,
+    client: &reqwest::Client, base_url: &str, api_key: &str, wire_api: &str, auth_scheme: Option<&str>,
 ) -> Option<String> {
-    let url = codex_model_provider_models_url(base_url).ok()?;
-    let response = client
-        .get(url)
-        .bearer_auth(api_key.trim())
-        .header(reqwest::header::ACCEPT, "application/json")
-        .send()
-        .await
-        .ok()?;
-    if !response.status().is_success() {
-        return None;
-    }
-    let text = response.text().await.ok()?;
-    let parsed = serde_json::from_str::<serde_json::Value>(&text).ok()?;
+    let url = if wire_api == "anthropic" {
+        crate::modules::codex_native_api::anthropic::endpoint(base_url, "models").ok()?
+    } else { codex_model_provider_models_url(base_url).ok()? };
+    let response = crate::modules::codex_provider_protocol::authenticate_provider_request(client.get(url), wire_api, auth_scheme, api_key)
+        .header(reqwest::header::ACCEPT, "application/json").send().await.ok()?;
+    if !response.status().is_success() { return None; }
+    let parsed: serde_json::Value = response.json().await.ok()?;
     first_model_from_provider_models(&parsed, wire_api)
 }
 
@@ -513,6 +483,7 @@ async fn run_single_model_provider_chat_test(
                 &target.base_url,
                 &api_key,
                 &wire_api,
+                target.auth_scheme.as_deref(),
             ) => model_id,
             _ = async {
                 while !codex_local_access::is_model_provider_chat_test_cancelled(run_id) {
@@ -566,6 +537,7 @@ async fn run_single_model_provider_chat_test(
             api_key_name: target.api_key_name.clone(),
             api_key,
             wire_api: wire_api.clone(),
+            auth_scheme: target.auth_scheme.clone(),
             model_catalog: target.model_catalog.clone(),
             model_id: model_id.clone(),
             prompt: prompt.to_string(),
@@ -684,9 +656,10 @@ pub struct CodexModelProviderModelsResult {
     pub latency_ms: u64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexModelProviderUsageSummary {
+    pub cockpit: Option<crate::modules::codex_remote_service::Connection>,
     pub mode: Option<String>,
     pub is_valid: Option<bool>,
     pub status: Option<String>,
@@ -821,6 +794,7 @@ fn summarize_model_provider_usage(
     );
 
     CodexModelProviderUsageSummary {
+        cockpit: None,
         mode: json_string_at(body, &["mode"]),
         is_valid: json_bool_at(body, &["is_active"]).or_else(|| json_bool_at(body, &["isValid"])),
         status: json_string_at(body, &["status"]),
@@ -844,11 +818,24 @@ fn summarize_model_provider_usage(
     }
 }
 
-fn summarize_deepseek_balance(
+/// DeepSeek 官方 `/user/balance` 的关键字段快照。
+///
+/// 除了「服务面板」的完整用量详情，Codex 客户端底部还会注入一个余额徽标；
+/// 两者共用这里的解析口径，避免同一个接口出现两套解析实现。
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DeepSeekBalanceSnapshot {
+    pub is_available: bool,
+    pub currency: Option<String>,
+    pub total_balance: Option<f64>,
+    pub granted_balance: Option<f64>,
+    pub topped_up_balance: Option<f64>,
+}
+
+pub(crate) fn deepseek_balance_snapshot_from_body(
     body: &serde_json::Value,
-    latency_ms: u64,
-) -> CodexModelProviderUsageSummary {
-    let is_available = json_bool_at(body, &["is_available"]).unwrap_or(false);
+) -> DeepSeekBalanceSnapshot {
+    // 官方可能返回多种币种，优先展示人民币账户，与用量面板保持一致。
     let balance_info = body
         .get("balance_infos")
         .and_then(serde_json::Value::as_array)
@@ -861,8 +848,23 @@ fn summarize_deepseek_balance(
                 })
                 .or_else(|| items.first())
         });
-    let currency = balance_info.and_then(|item| json_string_at(item, &["currency"]));
-    let total_balance = balance_info.and_then(|item| json_f64_at(item, &["total_balance"]));
+    DeepSeekBalanceSnapshot {
+        is_available: json_bool_at(body, &["is_available"]).unwrap_or(false),
+        currency: balance_info.and_then(|item| json_string_at(item, &["currency"])),
+        total_balance: balance_info.and_then(|item| json_f64_at(item, &["total_balance"])),
+        granted_balance: balance_info.and_then(|item| json_f64_at(item, &["granted_balance"])),
+        topped_up_balance: balance_info.and_then(|item| json_f64_at(item, &["topped_up_balance"])),
+    }
+}
+
+fn summarize_deepseek_balance(
+    body: &serde_json::Value,
+    latency_ms: u64,
+) -> CodexModelProviderUsageSummary {
+    let snapshot = deepseek_balance_snapshot_from_body(body);
+    let is_available = snapshot.is_available;
+    let currency = snapshot.currency.clone();
+    let total_balance = snapshot.total_balance;
     let mut details = Vec::new();
     push_usage_detail(
         &mut details,
@@ -871,26 +873,24 @@ fn summarize_deepseek_balance(
         Some(is_available.to_string()),
     );
     push_usage_detail(&mut details, "currency", "Currency", currency.clone());
-    for (key, label) in [
-        ("total_balance", "Total Balance"),
-        ("granted_balance", "Granted Balance"),
-        ("topped_up_balance", "Topped-up Balance"),
+    for (key, label, value) in [
+        ("totalBalance", "Total Balance", snapshot.total_balance),
+        (
+            "grantedBalance",
+            "Granted Balance",
+            snapshot.granted_balance,
+        ),
+        (
+            "toppedUpBalance",
+            "Topped-up Balance",
+            snapshot.topped_up_balance,
+        ),
     ] {
-        push_usage_detail(
-            &mut details,
-            match key {
-                "total_balance" => "totalBalance",
-                "granted_balance" => "grantedBalance",
-                _ => "toppedUpBalance",
-            },
-            label,
-            balance_info
-                .and_then(|item| json_f64_at(item, &[key]))
-                .map(format_usage_number),
-        );
+        push_usage_detail(&mut details, key, label, value.map(format_usage_number));
     }
 
     CodexModelProviderUsageSummary {
+        cockpit: None,
         mode: Some("deepseek".to_string()),
         is_valid: Some(is_available),
         status: Some(
@@ -1134,6 +1134,7 @@ fn summarize_minimax_token_plan_usage(
     );
 
     Ok(CodexModelProviderUsageSummary {
+        cockpit: None,
         mode: Some("token_plan".to_string()),
         is_valid: Some(remaining_percent > 0.0),
         status: Some(if remaining_percent > 0.0 {
@@ -1281,6 +1282,7 @@ fn summarize_zhipu_token_plan_usage(
     }
 
     Ok(CodexModelProviderUsageSummary {
+        cockpit: None,
         mode: Some("token_plan".to_string()),
         is_valid: Some(remaining_percent > 0.0),
         status: Some(if remaining_percent > 0.0 {
@@ -1347,7 +1349,6 @@ fn summarize_new_api_model_provider_usage(
     let raw_quota_limit = json_f64_at(subscription, &["hard_limit_usd"])
         .or_else(|| json_f64_at(subscription, &["soft_limit_usd"]))
         .or_else(|| json_f64_at(subscription, &["system_hard_limit_usd"]));
-    let quota_used = json_f64_at(usage, &["total_usage"]).map(|value| value / 100.0);
     let token_data = token_usage.and_then(|value| value.get("data"));
     let quota_unlimited = token_data
         .and_then(|value| json_bool_at(value, &["unlimited_quota"]))
@@ -1363,34 +1364,60 @@ fn summarize_new_api_model_provider_usage(
                         && (sys - 100_000_000.0).abs() < f64::EPSILON
             )
         });
-    let quota_limit = if quota_unlimited {
-        None
+    // Never convert raw token quotas with a guessed site-specific multiplier.
+    // A display response is one coherent unit; missing fields must not fall back
+    // to billing amounts in a potentially different currency.
+    let display = token_data.and_then(|data| data.get("display"));
+    let display_unit = display
+        .and_then(|value| json_string_at(value, &["unit"]))
+        .map(|unit| unit.trim().to_uppercase())
+        .filter(|unit| !unit.is_empty());
+    let finite = |value: Option<f64>| value.filter(|number| number.is_finite());
+    let (total, quota_used, available) = if display_unit.is_some() {
+        let display = display.unwrap();
+        let total = finite(json_f64_at(display, &["total"]));
+        let used = finite(json_f64_at(display, &["used"]));
+        let remaining = finite(json_f64_at(display, &["remaining"]));
+        let total = total.or_else(|| finite(used.zip(remaining).map(|(u, r)| u + r)));
+        let used = used.or_else(|| finite(total.zip(remaining).map(|(t, r)| (t - r).max(0.0))));
+        let remaining =
+            remaining.or_else(|| finite(total.zip(used).map(|(t, u)| (t - u).max(0.0))));
+        (total, used, remaining)
     } else {
-        raw_quota_limit
+        let total = finite(raw_quota_limit).filter(|_| !quota_unlimited);
+        let used = finite(json_f64_at(usage, &["total_usage"]).map(|value| value / 100.0));
+        let remaining = finite(total.zip(used).map(|(limit, used)| (limit - used).max(0.0)));
+        (total, used, remaining)
     };
-    let quota_remaining = match (quota_limit, quota_used) {
-        (Some(limit), Some(used)) => Some((limit - used).max(0.0)),
-        _ => None,
-    };
+    let quota_limit = total.filter(|_| !quota_unlimited);
+    // An unlimited token can still expose its account's real balance in display.
+    // Only the legacy billing limit sentinel is suppressed above.
+    let quota_remaining = available;
+    // Legacy billing fields keep their historical *_usd names even when a
+    // site returns CNY or tokens. An explicit empty unit means unknown; do not
+    // guess a currency or a conversion factor from those field names.
+    let unit = display_unit.clone().unwrap_or_default();
     let mut details = Vec::new();
-    push_usage_detail(
-        &mut details,
-        "hardLimitUsd",
-        "Hard Limit USD",
-        json_f64_at(subscription, &["hard_limit_usd"]).map(format_usage_number),
-    );
-    push_usage_detail(
-        &mut details,
-        "softLimitUsd",
-        "Soft Limit USD",
-        json_f64_at(subscription, &["soft_limit_usd"]).map(format_usage_number),
-    );
-    push_usage_detail(
-        &mut details,
-        "systemHardLimitUsd",
-        "System Hard Limit USD",
-        json_f64_at(subscription, &["system_hard_limit_usd"]).map(format_usage_number),
-    );
+    if !quota_unlimited && display_unit.is_none() {
+        push_usage_detail(
+            &mut details,
+            "hardLimitUsd",
+            "Hard Limit USD",
+            json_f64_at(subscription, &["hard_limit_usd"]).map(format_usage_number),
+        );
+        push_usage_detail(
+            &mut details,
+            "softLimitUsd",
+            "Soft Limit USD",
+            json_f64_at(subscription, &["soft_limit_usd"]).map(format_usage_number),
+        );
+        push_usage_detail(
+            &mut details,
+            "systemHardLimitUsd",
+            "System Hard Limit USD",
+            json_f64_at(subscription, &["system_hard_limit_usd"]).map(format_usage_number),
+        );
+    }
     push_usage_detail(
         &mut details,
         "accessUntil",
@@ -1408,13 +1435,13 @@ fn summarize_new_api_model_provider_usage(
             &mut details,
             "totalGranted",
             "Total Granted",
-            json_f64_at(token_data, &["total_granted"]).map(format_usage_number),
+            total.map(format_usage_number),
         );
         push_usage_detail(
             &mut details,
             "totalAvailable",
             "Total Available",
-            json_f64_at(token_data, &["total_available"]).map(format_usage_number),
+            available.map(format_usage_number),
         );
         push_usage_detail(
             &mut details,
@@ -1433,17 +1460,19 @@ fn summarize_new_api_model_provider_usage(
         &mut details,
         "totalUsage",
         "Total Usage",
-        json_f64_at(usage, &["total_usage"]).map(format_usage_number),
+        // The existing detail contract uses hundredths; the UI divides by 100.
+        finite(quota_used.map(|value| value * 100.0)).map(format_usage_number),
     );
 
     CodexModelProviderUsageSummary {
+        cockpit: None,
         mode: Some("new_api".to_string()),
         is_valid: None,
         status: None,
         plan_name: None,
         remaining: quota_remaining,
         balance: None,
-        unit: Some("USD".to_string()),
+        unit: Some(unit),
         quota_unlimited: Some(quota_unlimited),
         quota_limit,
         quota_used,
@@ -1465,6 +1494,7 @@ pub async fn codex_test_model_provider_connection(
     base_url: String,
     api_key: String,
     wire_api: Option<String>,
+    auth_scheme: Option<String>,
 ) -> Result<CodexLocalAccessTestResult, String> {
     let key = api_key.trim();
     if key.is_empty() {
@@ -1478,7 +1508,10 @@ pub async fn codex_test_model_provider_connection(
         ));
     }
 
-    let url = match codex_model_provider_models_url(&base_url) {
+    let models_url = if wire_api.as_deref() == Some("anthropic") {
+        crate::modules::codex_native_api::anthropic::endpoint(&base_url, "models").map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())
+    } else { codex_model_provider_models_url(&base_url) };
+    let url = match models_url {
         Ok(url) => url,
         Err(error) => {
             return Ok(codex_model_provider_failure(
@@ -1497,9 +1530,8 @@ pub async fn codex_test_model_provider_connection(
         .build()
         .map_err(|e| format!("CREATE_HTTP_CLIENT_FAILED: {}", e))?;
     let started = Instant::now();
-    let response = match client
-        .get(&url)
-        .bearer_auth(key)
+    let request = crate::modules::codex_provider_protocol::authenticate_provider_request(client.get(&url), wire_api.as_deref().unwrap_or("responses"), auth_scheme.as_deref(), key);
+    let response = match request
         .header(reqwest::header::ACCEPT, "application/json")
         .send()
         .await
@@ -1703,43 +1735,40 @@ pub fn codex_cancel_model_provider_chat_test(run_id: String) -> Result<bool, Str
 }
 
 #[tauri::command]
-pub async fn codex_list_model_provider_models(
-    base_url: String,
-    api_key: String,
-) -> Result<CodexModelProviderModelsResult, String> {
-    let key = api_key.trim();
-    if key.is_empty() {
-        return Err("MISSING_API_KEY".to_string());
+pub async fn codex_list_model_provider_models(base_url: String, api_key: String, wire_api: Option<String>, auth_scheme: Option<String>) -> Result<CodexModelProviderModelsResult, String> {
+    if let Ok(Some(remote)) = crate::modules::codex_remote_service::discover(&base_url, api_key.trim(), false).await {
+        let names:std::collections::HashMap<String,String>=remote.model_catalog.as_ref().and_then(|c|c["models"].as_array())
+            .into_iter().flatten().filter_map(|m|Some((m["slug"].as_str()?.into(),m["display_name"].as_str()?.into()))).collect();
+        let priorities:std::collections::HashMap<String,i64>=remote.model_catalog.as_ref().and_then(|c|c["models"].as_array())
+            .into_iter().flatten().filter_map(|m|Some((m["slug"].as_str()?.into(),m["priority"].as_i64().unwrap_or(i64::MAX)))).collect();
+        let mut ids=remote.models;
+        ids.sort_by_key(|id|priorities.get(id).copied().unwrap_or(i64::MAX));
+        return Ok(CodexModelProviderModelsResult { models: ids.into_iter().map(|id| {
+            let display_name=names.get(&id).cloned();CodexModelProviderModel { id, display_name }
+        }).collect(), latency_ms: 0 });
     }
-    let url = codex_model_provider_models_url(&base_url)?;
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(CODEX_MODEL_PROVIDER_TEST_TIMEOUT_SECS))
-        .build()
-        .map_err(|e| format!("CREATE_HTTP_CLIENT_FAILED: {}", e))?;
+    if api_key.trim().is_empty() { return Err("MISSING_API_KEY".into()); }
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(20)).build().map_err(|_| "PROVIDER_MODELS_NETWORK_FAILED".to_string())?;
+    let protocol = normalize_model_provider_wire_api(wire_api.as_deref(), &base_url);
+    let raw = if protocol == "anthropic" {
+        crate::modules::codex_native_api::anthropic::endpoint(&base_url,"models").map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())?
+    } else { codex_model_provider_models_url(&base_url)? };
+    let mut url = reqwest::Url::parse(&raw).map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())?;
     let started = Instant::now();
-    let response = client
-        .get(&url)
-        .bearer_auth(key)
-        .header(reqwest::header::ACCEPT, "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("PROVIDER_MODELS_NETWORK_FAILED: {}", e))?;
-    let latency_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
-    let status = response.status();
-    let text = response.text().await.unwrap_or_default();
-    if !status.is_success() {
-        return Err(format!(
-            "PROVIDER_MODELS_HTTP_{}: {}",
-            status.as_u16(),
-            text.chars().take(300).collect::<String>()
-        ));
+    let mut models = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for _ in 0..10 {
+        let remaining = Duration::from_secs(20).checked_sub(started.elapsed()).ok_or("PROVIDER_MODELS_NETWORK_FAILED")?;
+        let request = crate::modules::codex_provider_protocol::authenticate_provider_request(client.get(url.clone()), &protocol, auth_scheme.as_deref(), &api_key).timeout(remaining);
+        let response = request.send().await.map_err(|_| "PROVIDER_MODELS_NETWORK_FAILED".to_string())?;
+        if !response.status().is_success() { return Err(format!("PROVIDER_MODELS_HTTP_{}",response.status().as_u16())); }
+        let body: serde_json::Value = response.json().await.map_err(|_| "PROVIDER_MODELS_PARSE_FAILED".to_string())?;
+        for model in list_model_provider_models(&body) { if seen.insert(model.id.clone()) { models.push(model); } }
+        if body["has_more"] != true { break; }
+        let Some(last) = body["last_id"].as_str().filter(|s|!s.is_empty()) else { break; };
+        url.query_pairs_mut().clear().append_pair("after_id",last);
     }
-    let parsed = serde_json::from_str::<serde_json::Value>(&text)
-        .map_err(|e| format!("PROVIDER_MODELS_PARSE_FAILED: {}", e))?;
-    Ok(CodexModelProviderModelsResult {
-        models: list_model_provider_models(&parsed),
-        latency_ms,
-    })
+    Ok(CodexModelProviderModelsResult {models,latency_ms:started.elapsed().as_millis().min(u64::MAX as u128) as u64})
 }
 
 #[tauri::command]
@@ -1747,6 +1776,7 @@ pub async fn codex_query_model_provider_usage(
     base_url: String,
     api_key: String,
     integration_type: Option<String>,
+    usage_api_key: Option<String>,
 ) -> Result<CodexModelProviderUsageSummary, String> {
     let key = api_key.trim();
     if key.is_empty() {
@@ -1756,6 +1786,41 @@ pub async fn codex_query_model_provider_usage(
         .timeout(Duration::from_secs(CODEX_MODEL_PROVIDER_TEST_TIMEOUT_SECS))
         .build()
         .map_err(|e| format!("CREATE_HTTP_CLIENT_FAILED: {}", e))?;
+
+    if openai_usage::is_official_base_url(&base_url) {
+        let usage_key = openai_usage::require_usage_key(usage_api_key.as_deref())?;
+        return openai_usage::query(&client, usage_key).await;
+    }
+
+    if let Some(connection) = crate::modules::codex_remote_service::discover(&base_url, key, true).await? {
+        let now=chrono::Utc::now().timestamp_millis();
+        let today_query=crate::modules::codex_remote_service::KeyQuery {
+            start_at:Some(now/86_400_000*86_400_000),
+            end_at:Some((now/86_400_000+1)*86_400_000),
+            ..Default::default()
+        };
+        let (totals, today) = tokio::join!(
+            crate::modules::codex_remote_service::usage(&base_url, key, "all"),
+            crate::modules::codex_remote_service::key_data(&base_url,key,"stats",&today_query),
+        );
+        let totals=totals?;
+        // Older servers and background backfills leave daily fields unknown.
+        let today=today.ok().filter(|value|value["ready"]==true).unwrap_or_default();
+        let amount = |name: &str| connection.budget[name].as_u64().map(|value| value as f64 / 1_000_000.0);
+        return Ok(CodexModelProviderUsageSummary {
+            mode: Some("cockpit".into()), is_valid: Some(connection.status == "active"), status: Some(connection.status.clone()),
+            unit: Some("USD".into()), quota_unlimited: Some(connection.budget.pointer("/policy/limitMicrousd").and_then(Value::as_u64).is_none()),
+            quota_limit: connection.budget.pointer("/policy/limitMicrousd").and_then(Value::as_u64).map(|v| v as f64 / 1_000_000.0),
+            quota_used: amount("usedMicrousd"), quota_remaining: amount("remainingMicrousd"),
+            today_cost: today.pointer("/summary/estimatedCostUsd").and_then(Value::as_f64),
+            today_requests: today.pointer("/summary/requestCount").and_then(Value::as_i64),
+            today_total_tokens: today.pointer("/summary/totalTokens").and_then(Value::as_i64),
+            total_requests: totals.pointer("/usage/requestCount").and_then(Value::as_i64),
+            total_total_tokens: totals.pointer("/usage/totalTokens").and_then(Value::as_i64),
+            total_cost: totals.pointer("/usage/estimatedCostUsd").and_then(Value::as_f64),
+            cockpit: Some(connection), ..Default::default()
+        });
+    }
 
     if let Some(provider) = codex_model_provider_token_plan_provider(&base_url)? {
         return query_token_plan_model_provider_usage(&client, &base_url, key, provider).await;
@@ -1790,11 +1855,12 @@ pub async fn codex_query_model_provider_usage(
     }
 }
 
-async fn query_deepseek_model_provider_balance(
+/// 请求 DeepSeek 官方余额接口，返回原始响应与耗时。
+async fn fetch_deepseek_balance_body(
     client: &reqwest::Client,
     url: &str,
     key: &str,
-) -> Result<CodexModelProviderUsageSummary, String> {
+) -> Result<(serde_json::Value, u64), String> {
     let started = Instant::now();
     let response = client
         .get(url)
@@ -1815,7 +1881,26 @@ async fn query_deepseek_model_provider_balance(
     }
     let parsed = serde_json::from_str::<serde_json::Value>(&text)
         .map_err(|e| format!("PROVIDER_USAGE_PARSE_FAILED: {}", e))?;
-    Ok(summarize_deepseek_balance(&parsed, latency_ms))
+    Ok((parsed, latency_ms))
+}
+
+async fn query_deepseek_model_provider_balance(
+    client: &reqwest::Client,
+    url: &str,
+    key: &str,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    let (body, latency_ms) = fetch_deepseek_balance_body(client, url, key).await?;
+    Ok(summarize_deepseek_balance(&body, latency_ms))
+}
+
+/// 查询 DeepSeek 账号余额快照（供 Codex 客户端底部余额注入使用）。
+pub(crate) async fn query_deepseek_balance_snapshot(
+    client: &reqwest::Client,
+    url: &str,
+    key: &str,
+) -> Result<DeepSeekBalanceSnapshot, String> {
+    let (body, _) = fetch_deepseek_balance_body(client, url, key).await?;
+    Ok(deepseek_balance_snapshot_from_body(&body))
 }
 
 async fn query_token_plan_model_provider_usage(
@@ -1979,4 +2064,143 @@ async fn query_sub2api_model_provider_usage(
     let parsed = serde_json::from_str::<serde_json::Value>(&text)
         .map_err(|e| format!("PROVIDER_USAGE_PARSE_FAILED: {}", e))?;
     Ok(summarize_model_provider_usage(&parsed, latency_ms))
+}
+
+#[cfg(test)]
+mod new_api_usage_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn apikey_fun_root_uses_versioned_usage_endpoint() {
+        assert_eq!(codex_model_provider_usage_url("https://api.apikey.fan").unwrap(), "https://api.apikey.fan/v1/usage");
+        assert_eq!(codex_model_provider_usage_url("https://api.apikey.fan/v1").unwrap(), "https://api.apikey.fan/v1/usage");
+        assert_eq!(codex_model_provider_usage_url("https://other.example").unwrap(), "https://other.example/usage");
+    }
+
+    fn detail(summary: &CodexModelProviderUsageSummary, key: &str) -> Option<String> {
+        summary
+            .details
+            .iter()
+            .find(|item| item.key == key)
+            .map(|item| item.value.clone())
+    }
+
+    #[test]
+    fn display_amounts_and_currency_are_used_without_raw_quota_multipliers() {
+        let token = json!({"data":{"total_granted":900000000,"total_available":700000000,
+            "display":{"total":180,"used":40,"remaining":140,"unit":" CNY "}}});
+        let result = summarize_new_api_model_provider_usage(
+            &json!({"hard_limit_usd":99}),
+            &json!({"total_usage":700}),
+            Some(&token),
+            2,
+        );
+        assert_eq!(result.unit.as_deref(), Some("CNY"));
+        assert_eq!(
+            (
+                result.quota_limit,
+                result.quota_used,
+                result.quota_remaining
+            ),
+            (Some(180.0), Some(40.0), Some(140.0))
+        );
+        assert_eq!(detail(&result, "totalGranted"), Some("180".into()));
+        assert_eq!(detail(&result, "totalAvailable"), Some("140".into()));
+        assert_eq!(
+            detail(&result, "totalUsage")
+                .unwrap()
+                .parse::<f64>()
+                .unwrap()
+                / 100.0,
+            40.0
+        );
+        assert!(detail(&result, "hardLimitUsd").is_none());
+    }
+
+    #[test]
+    fn legacy_billing_values_do_not_treat_raw_quota_as_currency() {
+        let token = json!({"data":{"total_granted":900000000,"total_available":700000000}});
+        let result = summarize_new_api_model_provider_usage(
+            &json!({"hard_limit_usd":90}),
+            &json!({"total_usage":2000}),
+            Some(&token),
+            0,
+        );
+        assert_eq!(
+            (
+                result.quota_limit,
+                result.quota_used,
+                result.quota_remaining
+            ),
+            (Some(90.0), Some(20.0), Some(70.0))
+        );
+        assert_eq!(detail(&result, "totalGranted"), Some("90".into()));
+        assert_eq!(result.unit.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn partial_display_does_not_mix_with_another_unit_and_retains_zero() {
+        let token = json!({"data":{"display":{"remaining":0,"unit":"CNY"}}});
+        let result = summarize_new_api_model_provider_usage(
+            &json!({"hard_limit_usd":99}),
+            &json!({"total_usage":700}),
+            Some(&token),
+            0,
+        );
+        assert_eq!(
+            (
+                result.quota_limit,
+                result.quota_used,
+                result.quota_remaining
+            ),
+            (None, None, Some(0.0))
+        );
+        let token = json!({"data":{"display":{"total":10,"remaining":3,"unit":"USD"}}});
+        let result =
+            summarize_new_api_model_provider_usage(&json!({}), &json!({}), Some(&token), 0);
+        assert_eq!(result.quota_used, Some(7.0));
+    }
+
+    #[test]
+    fn unlimited_sentinels_and_nonfinite_values_are_not_displayed_as_money() {
+        let subscription = json!({"hard_limit_usd":100000000,"soft_limit_usd":100000000,"system_hard_limit_usd":100000000});
+        let result = summarize_new_api_model_provider_usage(
+            &subscription,
+            &json!({"total_usage":100}),
+            None,
+            0,
+        );
+        assert_eq!(result.quota_unlimited, Some(true));
+        assert_eq!(result.quota_limit, None);
+        for key in [
+            "hardLimitUsd",
+            "softLimitUsd",
+            "systemHardLimitUsd",
+            "totalGranted",
+        ] {
+            assert!(detail(&result, key).is_none());
+        }
+        let token = json!({"data":{"unlimited_quota":true,
+            "display":{"total":480,"remaining":45,"used":435,"unit":"CNY"}}});
+        let result =
+            summarize_new_api_model_provider_usage(&subscription, &json!({}), Some(&token), 0);
+        assert_eq!(result.quota_limit, None);
+        assert_eq!(result.quota_remaining, Some(45.0));
+        assert_eq!(result.quota_used, Some(435.0));
+        assert_eq!(detail(&result, "totalGranted"), Some("480".into()));
+        assert_eq!(detail(&result, "totalAvailable"), Some("45".into()));
+        let token =
+            json!({"data":{"display":{"total":"NaN","used":"inf","remaining":2,"unit":"USD"}}});
+        let result =
+            summarize_new_api_model_provider_usage(&json!({}), &json!({}), Some(&token), 0);
+        assert_eq!(
+            (
+                result.quota_limit,
+                result.quota_used,
+                result.quota_remaining
+            ),
+            (None, None, Some(2.0))
+        );
+    }
 }

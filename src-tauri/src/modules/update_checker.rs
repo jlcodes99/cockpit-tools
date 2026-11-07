@@ -7,9 +7,12 @@ const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEFAULT_CHECK_INTERVAL_HOURS: u64 = 1;
 const LEGACY_DEFAULT_CHECK_INTERVAL_HOURS: u64 = 24;
 const LEGACY_PREVIOUS_DEFAULT_CHECK_INTERVAL_HOURS: u64 = 6;
-const PENDING_UPDATE_NOTES_FILE: &str = "pending_update_notes.json";
-const CHANGELOG_MARKDOWN_EN: &str = include_str!("../../../CHANGELOG.md");
-const CHANGELOG_MARKDOWN_ZH: &str = include_str!("../../../CHANGELOG.zh-CN.md");
+#[path = "update_checker_local.rs"]
+mod local;
+pub use local::{
+    get_bundled_release_notes, get_local_release_history, get_pending_release_notes,
+    save_pending_update_notes, ReleaseNotes,
+};
 
 static UPDATE_SETTINGS_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
@@ -60,8 +63,6 @@ impl Default for UpdateSettings {
 pub struct VersionJumpInfo {
     pub previous_version: String,
     pub current_version: String,
-    pub release_notes: String,
-    pub release_notes_zh: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -69,6 +70,7 @@ pub struct VersionJumpInfo {
 pub struct ReleaseHistoryItem {
     pub version: String,
     pub date: String,
+    pub highlights: Vec<String>,
     pub added: Vec<String>,
     pub changed: Vec<String>,
     pub fixed: Vec<String>,
@@ -77,20 +79,12 @@ pub struct ReleaseHistoryItem {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReleaseHistorySection {
+    Highlights,
     Added,
     Changed,
     Fixed,
     Removed,
     Unknown,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct PendingUpdateNotes {
-    pub version: String,
-    #[serde(default)]
-    pub release_notes: String,
-    #[serde(default)]
-    pub release_notes_zh: String,
 }
 
 /// Compare two semantic versions (e.g., "0.2.0" vs "0.1.0")
@@ -151,10 +145,6 @@ fn ensure_data_dir() -> Result<std::path::PathBuf, String> {
     Ok(data_dir)
 }
 
-fn pending_update_notes_path() -> Result<std::path::PathBuf, String> {
-    Ok(get_data_dir()?.join(PENDING_UPDATE_NOTES_FILE))
-}
-
 fn parse_release_header(line: &str) -> Option<(String, String)> {
     if !line.starts_with("## [") {
         return None;
@@ -178,6 +168,7 @@ fn parse_release_header(line: &str) -> Option<(String, String)> {
 fn parse_release_section(line: &str) -> Option<ReleaseHistorySection> {
     let heading = line.strip_prefix("### ")?.trim().to_lowercase();
     match heading.as_str() {
+        "highlights" | "重要更新" => Some(ReleaseHistorySection::Highlights),
         "added" | "新增" => Some(ReleaseHistorySection::Added),
         "changed" | "变更" => Some(ReleaseHistorySection::Changed),
         "fixed" | "修复" => Some(ReleaseHistorySection::Fixed),
@@ -205,6 +196,7 @@ fn parse_release_history_markdown(markdown: &str, limit: usize) -> Vec<ReleaseHi
             current_release = Some(ReleaseHistoryItem {
                 version,
                 date,
+                highlights: Vec::new(),
                 added: Vec::new(),
                 changed: Vec::new(),
                 fixed: Vec::new(),
@@ -232,6 +224,7 @@ fn parse_release_history_markdown(markdown: &str, limit: usize) -> Vec<ReleaseHi
         }
 
         match current_section {
+            ReleaseHistorySection::Highlights => release.highlights.push(content.to_string()),
             ReleaseHistorySection::Added => release.added.push(content.to_string()),
             ReleaseHistorySection::Changed => release.changed.push(content.to_string()),
             ReleaseHistorySection::Fixed => release.fixed.push(content.to_string()),
@@ -249,108 +242,6 @@ fn parse_release_history_markdown(markdown: &str, limit: usize) -> Vec<ReleaseHi
     }
 
     releases
-}
-
-fn release_history_markdown_for_locale(locale: &str) -> &'static str {
-    if locale.trim().to_lowercase().starts_with("zh") {
-        CHANGELOG_MARKDOWN_ZH
-    } else {
-        CHANGELOG_MARKDOWN_EN
-    }
-}
-
-pub fn get_release_history(
-    locale: Option<&str>,
-    limit: Option<usize>,
-) -> Result<Vec<ReleaseHistoryItem>, String> {
-    let resolved_locale = locale.unwrap_or("en");
-    let content = release_history_markdown_for_locale(resolved_locale);
-    let safe_limit = limit.unwrap_or(30).max(1).min(100);
-    Ok(parse_release_history_markdown(content, safe_limit))
-}
-
-fn load_pending_update_notes() -> Result<Option<PendingUpdateNotes>, String> {
-    let path = pending_update_notes_path()?;
-    if !path.exists() {
-        return Ok(None);
-    }
-
-    let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read pending update notes: {}", e))?;
-    match serde_json::from_str(&content) {
-        Ok(pending) => Ok(Some(pending)),
-        Err(error) => {
-            match crate::modules::atomic_write::quarantine_file(&path, "invalid-json") {
-                Ok(Some(backup_path)) => logger::log_warn(&format!(
-                    "[UpdateChecker] 待安装更新说明解析失败，已隔离并忽略: path={}, backup={}, error={}",
-                    path.display(),
-                    backup_path.display(),
-                    error
-                )),
-                Ok(None) => logger::log_warn(&format!(
-                    "[UpdateChecker] 待安装更新说明解析失败，文件已不存在，忽略: path={}, error={}",
-                    path.display(),
-                    error
-                )),
-                Err(backup_error) => logger::log_warn(&format!(
-                    "[UpdateChecker] 待安装更新说明解析失败，隔离失败，忽略: path={}, parse_error={}, backup_error={}",
-                    path.display(),
-                    error,
-                    backup_error
-                )),
-            }
-            Ok(None)
-        }
-    }
-}
-
-fn remove_pending_update_notes_file() {
-    match pending_update_notes_path() {
-        Ok(path) => {
-            if path.exists() {
-                if let Err(err) = std::fs::remove_file(&path) {
-                    logger::log_error(&format!(
-                        "删除待安装更新说明文件失败: path={}, error={}",
-                        path.display(),
-                        err
-                    ));
-                }
-            }
-        }
-        Err(err) => {
-            logger::log_error(&format!("解析待安装更新说明路径失败: {}", err));
-        }
-    }
-}
-
-pub fn save_pending_update_notes(
-    version: String,
-    release_notes: String,
-    release_notes_zh: String,
-) -> Result<(), String> {
-    let version = version.trim().to_string();
-    if version.is_empty() {
-        return Err("Version cannot be empty".to_string());
-    }
-
-    let data_dir = ensure_data_dir()?;
-    let path = data_dir.join(PENDING_UPDATE_NOTES_FILE);
-    let payload = PendingUpdateNotes {
-        version: version.clone(),
-        release_notes,
-        release_notes_zh,
-    };
-    let content = serde_json::to_string_pretty(&payload)
-        .map_err(|e| format!("Failed to serialize pending update notes: {}", e))?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
-        .map_err(|e| format!("Failed to write pending update notes: {}", e))?;
-
-    logger::log_info(&format!(
-        "已保存待安装更新说明: version={}, path={}",
-        version,
-        path.display()
-    ));
-    Ok(())
 }
 
 /// Load update settings from config file
@@ -476,25 +367,6 @@ pub fn check_version_jump() -> Result<Option<VersionJumpInfo>, String> {
         return Ok(None);
     }
 
-    let mut release_notes = String::new();
-    let mut release_notes_zh = String::new();
-    match load_pending_update_notes() {
-        Ok(Some(pending)) => {
-            if pending.version == current {
-                release_notes = pending.release_notes;
-                release_notes_zh = pending.release_notes_zh;
-                remove_pending_update_notes_file();
-            } else if compare_versions(&current, &pending.version) {
-                // 当前版本已经超过缓存版本，缓存内容过期，直接清理。
-                remove_pending_update_notes_file();
-            }
-        }
-        Ok(None) => {}
-        Err(err) => {
-            logger::log_error(&format!("读取待安装更新说明失败: {}", err));
-        }
-    }
-
     // Update the stored version
     settings.last_run_version = current.clone();
     save_update_settings_unlocked(&settings)?;
@@ -504,8 +376,6 @@ pub fn check_version_jump() -> Result<Option<VersionJumpInfo>, String> {
     Ok(Some(VersionJumpInfo {
         previous_version: previous,
         current_version: current,
-        release_notes,
-        release_notes_zh,
     }))
 }
 

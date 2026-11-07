@@ -81,16 +81,6 @@ fn normalize_non_empty(value: Option<&str>) -> Option<String> {
         .map(|v| v.to_string())
 }
 
-fn build_user_resource_request_body() -> Value {
-    json!({
-        "PageNumber": 1,
-        "PageSize": 100,
-        "ProductCode": "p_tcaca",
-        "Status": [0, 3],
-        "OnlyValidPeriod": true
-    })
-}
-
 fn user_resource_items(body: &Value) -> Option<&Vec<Value>> {
     [
         "/data/resources",
@@ -103,6 +93,7 @@ fn user_resource_items(body: &Value) -> Option<&Vec<Value>> {
     .find_map(|path| body.pointer(path).and_then(Value::as_array))
 }
 
+#[cfg(test)]
 fn user_resource_has_payload(body: &Value) -> bool {
     user_resource_items(body).is_some_and(|items| !items.is_empty())
 }
@@ -659,8 +650,58 @@ pub async fn fetch_user_resource_with_access_token(
     _page_size: i32,
 ) -> Result<Value, String> {
     let _ = (product_code, status);
-    let body = build_user_resource_request_body();
-    post_user_resource(access_token, uid, enterprise_id, domain, body).await
+    post_user_resource(access_token, uid, enterprise_id, domain).await
+}
+
+fn billing_headers(
+    access_token: &str,
+    uid: Option<&str>,
+    enterprise_id: Option<&str>,
+    domain: Option<&str>,
+    language: &'static str,
+) -> Result<reqwest::header::HeaderMap, String> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        "Authorization",
+        format!("Bearer {}", access_token)
+            .parse()
+            .map_err(|e| format!("Invalid authorization header: {}", e))?,
+    );
+    headers.insert(
+        "Accept",
+        reqwest::header::HeaderValue::from_static("application/json"),
+    );
+    headers.insert(
+        "Accept-Language",
+        reqwest::header::HeaderValue::from_static(language),
+    );
+    headers.insert(
+        "X-User-Id",
+        uid.unwrap_or_default()
+            .parse()
+            .map_err(|e| format!("Invalid user header: {}", e))?,
+    );
+    if let Some(id) = enterprise_id {
+        headers.insert(
+            "X-Enterprise-Id",
+            id.parse()
+                .map_err(|e| format!("Invalid enterprise header: {}", e))?,
+        );
+        headers.insert(
+            "X-Tenant-Id",
+            id.parse()
+                .map_err(|e| format!("Invalid tenant header: {}", e))?,
+        );
+    }
+    if let Some(domain) = domain.filter(|value| !value.is_empty()) {
+        headers.insert(
+            "X-Domain",
+            domain
+                .parse()
+                .map_err(|e| format!("Invalid domain header: {}", e))?,
+        );
+    }
+    Ok(headers)
 }
 
 async fn post_user_resource(
@@ -668,95 +709,62 @@ async fn post_user_resource(
     uid: Option<&str>,
     enterprise_id: Option<&str>,
     domain: Option<&str>,
-    body: Value,
 ) -> Result<Value, String> {
     let client = build_client()?;
-    let url = format!(
-        "{}/v2/billing/meter/get-user-resource",
-        WORKBUDDY_API_ENDPOINT
+    let headers = billing_headers(access_token, uid, enterprise_id, domain, "zh")?;
+    crate::modules::buddy_resource_api::fetch(&client, WORKBUDDY_API_ENDPOINT, headers).await
+}
+
+pub async fn fetch_credit_packages(
+    account: &crate::models::workbuddy::WorkbuddyAccount,
+    package_codes: &[String],
+    expired: bool,
+    page: u32,
+    locale: &str,
+) -> Result<Value, String> {
+    let language = if locale.to_ascii_lowercase().starts_with("zh") {
+        "zh"
+    } else {
+        "en"
+    };
+    let headers = billing_headers(
+        &account.access_token,
+        account.uid.as_deref(),
+        account.enterprise_id.as_deref(),
+        account.domain.as_deref(),
+        language,
+    )?;
+    crate::modules::buddy_resource_api::fetch_credit_packages(
+        &build_client()?,
+        WORKBUDDY_API_ENDPOINT,
+        headers,
+        package_codes,
+        expired,
+        page,
+    )
+    .await
+}
+
+pub async fn fetch_recent_credit_usage(
+    account: &crate::models::workbuddy::WorkbuddyAccount,
+) -> Result<Vec<Value>, String> {
+    let mut headers = billing_headers(
+        &account.access_token,
+        account.uid.as_deref(),
+        account.enterprise_id.as_deref(),
+        account.domain.as_deref(),
+        "zh",
+    )?;
+    headers.insert(
+        "X-Client-Platform",
+        reqwest::header::HeaderValue::from_static("workbuddy"),
     );
-
-    let mut req = client
-        .post(&url)
-        .header("Accept", "application/json, text/plain, */*")
-        .header("Accept-Language", "zh-CN,zh;q=0.9")
-        .header("Authorization", format!("Bearer {}", access_token))
-        .header("Content-Type", "application/json");
-
-    if let Some(u) = uid {
-        req = req.header("X-User-Id", u);
-    }
-    if let Some(eid) = enterprise_id {
-        req = req.header("X-Enterprise-Id", eid);
-        req = req.header("X-Tenant-Id", eid);
-    }
-    if let Some(d) = domain {
-        req = req.header("X-Domain", d);
-    }
-
-    let resp = req
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("请求 user resource（Token）失败:{}", e))?;
-
-    let status_code = resp.status();
-    let content_type = resp
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
-    let content_encoding = resp
-        .headers()
-        .get(reqwest::header::CONTENT_ENCODING)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
-    let body: Value = resp
-        .json()
-        .await
-        .map_err(|e| {
-            format!(
-                "解析 user resource（Token）响应失败:{} (http={}, url={}, has_uid={}, has_enterprise_id={}, content_type={}, content_encoding={})",
-                e,
-                status_code.as_u16(),
-                url,
-                uid.is_some(),
-                enterprise_id.is_some(),
-                content_type,
-                content_encoding
-            )
-        })?;
-
-    if !status_code.is_success() {
-        let message = body
-            .get("message")
-            .or_else(|| body.get("msg"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown error");
-        return Err(format!(
-            "请求 user resource（Token）失败 (http={}): {}",
-            status_code.as_u16(),
-            message
-        ));
-    }
-
-    if let Some(code) = body.get("code").and_then(|v| v.as_i64()) {
-        if code != 0 && code != 200 {
-            let message = body
-                .get("message")
-                .or_else(|| body.get("msg"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown error");
-            return Err(format!(
-                "请求 user resource（Token）失败 (code={}): {}",
-                code, message
-            ));
-        }
-    }
-
-    Ok(body)
+    crate::modules::buddy_resource_api::fetch_recent_credit_usage(
+        &build_client()?,
+        WORKBUDDY_API_ENDPOINT,
+        headers,
+    )
+    .await
 }
 
 /// 企业版用户用量（网页端 /profile/usage 实际使用的接口）
@@ -915,18 +923,9 @@ async fn fetch_user_resource_with_access_token_default(
     enterprise_id: Option<&str>,
     domain: Option<&str>,
 ) -> Result<Value, String> {
-    let payload = post_user_resource(
-        access_token,
-        uid,
-        enterprise_id,
-        domain,
-        build_user_resource_request_body(),
-    )
-    .await?;
-    if user_resource_has_payload(&payload) {
+    let payload = post_user_resource(access_token, uid, enterprise_id, domain).await?;
+    if user_resource_has_shape(&payload) {
         Ok(payload)
-    } else if user_resource_has_shape(&payload) {
-        Err("user resource 响应未包含可用资源".to_string())
     } else {
         Err("user resource 响应缺少 resources/Accounts".to_string())
     }
@@ -938,12 +937,91 @@ async fn fetch_quota_resource_for_account(
     enterprise_id: Option<&str>,
     domain: Option<&str>,
 ) -> Result<Value, String> {
-    if let Some(enterprise_id) = enterprise_id {
-        let body = fetch_enterprise_user_usage(access_token, uid, enterprise_id, domain).await?;
+    if let Some(enterprise_id) = normalize_non_empty(enterprise_id) {
+        let body = fetch_enterprise_user_usage(access_token, uid, &enterprise_id, domain).await?;
         wrap_enterprise_usage_as_resource(&body)
     } else {
         fetch_user_resource_with_access_token_default(access_token, uid, None, domain).await
     }
+}
+
+/// Refresh only the existing identity: never pick a different last-login user
+/// or another enterprise returned by the same token.
+fn merge_refreshed_profile(
+    account: &crate::models::workbuddy::WorkbuddyAccount,
+    body: &Value,
+) -> Result<crate::models::workbuddy::WorkbuddyAccount, String> {
+    let uid = normalize_non_empty(account.uid.as_deref()).ok_or("无法刷新缺少 UID 的账号资料")?;
+    let enterprise_id = normalize_non_empty(account.enterprise_id.as_deref());
+    let profile = body
+        .pointer("/data/accounts")
+        .and_then(Value::as_array)
+        .and_then(|accounts| {
+            accounts.iter().find(|profile| {
+                normalize_non_empty(profile.get("uid").and_then(Value::as_str)).as_deref()
+                    == Some(uid.as_str())
+                    && normalize_non_empty(profile.get("enterpriseId").and_then(Value::as_str))
+                        == enterprise_id
+            })
+        })
+        .ok_or("账号资料响应中未找到匹配的 UID 和企业身份")?;
+
+    let mut updated = account.clone();
+    updated.enterprise_id = enterprise_id;
+    updated.nickname = normalize_non_empty(profile.get("nickname").and_then(Value::as_str))
+        .or_else(|| account.nickname.clone());
+    updated.enterprise_name =
+        normalize_non_empty(profile.get("enterpriseName").and_then(Value::as_str))
+            .or_else(|| account.enterprise_name.clone());
+    // The email field also stores a display-name fallback for accounts without
+    // an email. Replace stale/imported placeholders, but keep a real email when
+    // the profile endpoint does not return one.
+    updated.email = normalize_non_empty(profile.get("email").and_then(Value::as_str))
+        .or_else(|| {
+            if account.email.contains('@') {
+                Some(account.email.clone())
+            } else {
+                updated.nickname.clone()
+            }
+        })
+        .unwrap_or_else(|| account.email.clone());
+    updated.profile_raw = Some(profile.clone());
+    Ok(updated)
+}
+
+async fn fetch_refreshed_profile(
+    account: &crate::models::workbuddy::WorkbuddyAccount,
+    access_token: &str,
+    domain: Option<&str>,
+) -> Result<crate::models::workbuddy::WorkbuddyAccount, String> {
+    let client = build_client()?;
+    let mut request = client
+        .get(format!(
+            "{}{}/accounts",
+            WORKBUDDY_API_ENDPOINT, WORKBUDDY_API_PREFIX
+        ))
+        .bearer_auth(access_token);
+    if let Some(domain) = normalize_non_empty(domain) {
+        request = request.header("X-Domain", domain);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|_| "请求账号资料失败".to_string())?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("请求账号资料失败 (http={})", status.as_u16()));
+    }
+    let body: Value = response
+        .json()
+        .await
+        .map_err(|_| "解析账号资料失败".to_string())?;
+    if let Some(code) = body.get("code").and_then(Value::as_i64) {
+        if code != 0 && code != 200 {
+            return Err(format!("请求账号资料失败 (code={})", code));
+        }
+    }
+    merge_refreshed_profile(account, &body)
 }
 
 async fn refresh_payload_for_account_inner(
@@ -989,13 +1067,23 @@ async fn refresh_payload_for_account_inner(
         }
     }
 
-    let resolved_email =
-        normalize_non_empty(Some(account.email.as_str())).unwrap_or_else(|| account.email.clone());
-    let resolved_uid = account.uid.clone();
-    let resolved_nickname = account.nickname.clone();
-    let resolved_enterprise_id = account.enterprise_id.clone();
-    let resolved_enterprise_name = account.enterprise_name.clone();
-    let resolved_profile_raw = account.profile_raw.clone();
+    let resolved_account =
+        match fetch_refreshed_profile(account, &new_access_token, new_domain.as_deref()).await {
+            Ok(updated) => updated,
+            Err(error) => {
+                logger::log_warn(&format!(
+                    "[WorkBuddy] 刷新账号资料失败，保留原身份并继续查询配额:{}",
+                    error
+                ));
+                account.clone()
+            }
+        };
+    let resolved_email = resolved_account.email;
+    let resolved_uid = resolved_account.uid;
+    let resolved_nickname = resolved_account.nickname;
+    let resolved_enterprise_id = normalize_non_empty(resolved_account.enterprise_id.as_deref());
+    let resolved_enterprise_name = resolved_account.enterprise_name;
+    let resolved_profile_raw = resolved_account.profile_raw;
 
     let dosage = fetch_dosage_notify(
         &new_access_token,
@@ -1304,6 +1392,68 @@ pub async fn build_payload_from_token(
 mod tests {
     use super::*;
 
+    fn personal_account() -> crate::models::workbuddy::WorkbuddyAccount {
+        serde_json::from_value(json!({
+            "id": "workbuddy_fixture", "email": "待识别账号 4", "uid": "personal-user",
+            "enterprise_id": "", "access_token": "fixture", "created_at": 1, "last_used": 1
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn refreshes_placeholder_from_matching_personal_profile() {
+        let account = personal_account();
+        let updated = merge_refreshed_profile(
+            &account,
+            &json!({"data": {"accounts": [
+                {"uid": "other-user", "nickname": "Other", "lastLogin": true},
+                {"uid": "personal-user", "nickname": "Recovered name", "enterpriseId": ""}
+            ]}}),
+        )
+        .unwrap();
+        assert_eq!(updated.email, "Recovered name");
+        assert_eq!(updated.nickname.as_deref(), Some("Recovered name"));
+        assert_eq!(updated.uid, account.uid);
+        assert_eq!(updated.enterprise_id, None);
+        assert_eq!(updated.access_token, account.access_token);
+    }
+
+    #[test]
+    fn does_not_switch_identity_or_clear_existing_data_on_profile_mismatch() {
+        let account = personal_account();
+        for profile in [
+            json!({"uid": "other-user", "nickname": "Other"}),
+            json!({"uid": "personal-user", "enterpriseId": "other-enterprise"}),
+        ] {
+            assert!(
+                merge_refreshed_profile(&account, &json!({"data": {"accounts": [profile]}}))
+                    .is_err()
+            );
+        }
+        let mut account = account;
+        account.email = "existing@example.test".into();
+        let updated = merge_refreshed_profile(
+            &account,
+            &json!({"data": {"accounts": [
+                {"uid": "personal-user", "nickname": "Current name"}
+            ]}}),
+        )
+        .unwrap();
+        assert_eq!(updated.email, "existing@example.test");
+        assert_eq!(updated.nickname.as_deref(), Some("Current name"));
+    }
+
+    #[test]
+    fn empty_and_whitespace_enterprise_ids_are_personal() {
+        for id in [None, Some(""), Some("   ")] {
+            assert_eq!(normalize_non_empty(id), None);
+        }
+        assert_eq!(
+            normalize_non_empty(Some(" enterprise-id ")).as_deref(),
+            Some("enterprise-id")
+        );
+    }
+
     #[test]
     fn auth_url_contains_detected_version_and_login_session() {
         let decorated = decorate_workbuddy_auth_url(
@@ -1322,20 +1472,6 @@ mod tests {
         assert_eq!(
             params.get("loginSessionId").map(|value| value.as_ref()),
             Some("00000000-0000-4000-8000-000000000000")
-        );
-    }
-
-    #[test]
-    fn user_resource_body_uses_only_current_official_fields() {
-        assert_eq!(
-            build_user_resource_request_body(),
-            json!({
-                "PageNumber": 1,
-                "PageSize": 100,
-                "ProductCode": "p_tcaca",
-                "Status": [0, 3],
-                "OnlyValidPeriod": true
-            })
         );
     }
 

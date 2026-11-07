@@ -458,6 +458,7 @@ fn resolve_macos_app_root_from_config(app: &str) -> Option<String> {
         "codebuddy" => current.codebuddy_app_path,
         "codebuddy_cn" => current.codebuddy_cn_app_path,
         "zcode" => current.zcode_app_path,
+        "minimaxcode" | "minimax_code" => current.minimax_code_app_path,
         _ => String::new(),
     };
     let trimmed = raw.trim();
@@ -499,11 +500,33 @@ fn spawn_open_app_with_options_and_env(
     force_new_instance: bool,
     env_pairs: &[(&str, &str)],
 ) -> Result<u32, String> {
+    spawn_open_app_with_options_and_env_and_egress(
+        app_root,
+        args,
+        force_new_instance,
+        env_pairs,
+        &CodexLaunchProxy::Inherit,
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn spawn_open_app_with_options_and_env_and_egress(
+    app_root: &str,
+    args: &[String],
+    force_new_instance: bool,
+    env_pairs: &[(&str, &str)],
+    launch_proxy: &CodexLaunchProxy,
+) -> Result<u32, String> {
     let mut cmd = Command::new("open");
     sanitize_macos_gui_launch_env(&mut cmd);
-    append_managed_proxy_env_to_open_args(&mut cmd);
+    if !matches!(launch_proxy, CodexLaunchProxy::Direct) {
+        append_effective_proxy_env_to_open_args(&mut cmd, launch_proxy);
+    }
     for (key, value) in env_pairs {
         cmd.arg("--env").arg(format!("{}={}", key, value));
+    }
+    if matches!(launch_proxy, CodexLaunchProxy::Direct) {
+        append_effective_proxy_env_to_open_args(&mut cmd, launch_proxy);
     }
     if force_new_instance {
         cmd.arg("-n");
@@ -741,86 +764,6 @@ fn find_codex_process_exe() -> Option<std::path::PathBuf> {
 fn is_codex_macos_main_process_command_line(lower_cmdline: &str) -> bool {
     lower_cmdline.contains("chatgpt.app/contents/macos/chatgpt")
         || lower_cmdline.contains("codex.app/contents/macos/codex")
-}
-
-#[cfg(any(test, target_os = "macos", target_os = "linux"))]
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct CodexProcessTreeEntry {
-    pid: u32,
-    parent_pid: u32,
-    command_line: String,
-}
-
-#[cfg(any(test, target_os = "macos", target_os = "linux"))]
-fn is_codex_direct_app_server_command_line(
-    command_line: &str,
-    expected_resource_executable: &str,
-) -> bool {
-    let command_line = command_line.trim();
-    let expected = expected_resource_executable.trim();
-    if command_line.is_empty() || expected.is_empty() {
-        return false;
-    }
-
-    let remainder = if let Some(remainder) = command_line.strip_prefix(expected) {
-        remainder
-    } else {
-        let quoted = format!("\"{}\"", expected);
-        let Some(remainder) = command_line.strip_prefix(&quoted) else {
-            return false;
-        };
-        remainder
-    };
-    let args = remainder.trim_start();
-    let Some(after_app_server) = args.strip_prefix("app-server") else {
-        return false;
-    };
-    if !after_app_server.is_empty() && !after_app_server.starts_with(char::is_whitespace) {
-        return false;
-    }
-    !after_app_server.trim_start().starts_with("daemon")
-}
-
-#[cfg(any(test, target_os = "macos", target_os = "linux"))]
-fn select_codex_direct_app_server_descendants(
-    entries: &[CodexProcessTreeEntry],
-    root_pids: &[u32],
-    expected_resource_executable: &str,
-) -> Vec<u32> {
-    let roots: HashSet<u32> = root_pids.iter().copied().filter(|pid| *pid != 0).collect();
-    if roots.is_empty() {
-        return Vec::new();
-    }
-    let parents: HashMap<u32, u32> = entries
-        .iter()
-        .map(|entry| (entry.pid, entry.parent_pid))
-        .collect();
-    let mut selected = Vec::new();
-
-    for entry in entries {
-        if !is_codex_direct_app_server_command_line(
-            &entry.command_line,
-            expected_resource_executable,
-        ) {
-            continue;
-        }
-        let mut current = entry.parent_pid;
-        let mut visited = HashSet::new();
-        while current != 0 && visited.insert(current) {
-            if roots.contains(&current) {
-                selected.push(entry.pid);
-                break;
-            }
-            let Some(parent) = parents.get(&current) else {
-                break;
-            };
-            current = *parent;
-        }
-    }
-
-    selected.sort();
-    selected.dedup();
-    selected
 }
 
 #[cfg(target_os = "macos")]
@@ -1118,7 +1061,7 @@ pub fn detect_antigravity_exec_path() -> Option<std::path::PathBuf> {
             candidates.push(base.join("antigravity-ide.exe"));
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -1181,7 +1124,7 @@ pub fn detect_antigravity_legacy_exec_path() -> Option<std::path::PathBuf> {
             candidates.push(base.join("Electron.exe"));
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -1257,7 +1200,7 @@ fn detect_vscode_exec_path() -> Option<std::path::PathBuf> {
             );
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -1335,7 +1278,7 @@ fn detect_codebuddy_exec_path() -> Option<std::path::PathBuf> {
             );
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -1406,7 +1349,7 @@ fn detect_codebuddy_cn_exec_path() -> Option<std::path::PathBuf> {
             );
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -1465,7 +1408,7 @@ fn detect_qoder_exec_path() -> Option<std::path::PathBuf> {
             );
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -1512,7 +1455,10 @@ fn detect_zcode_exec_path() -> Option<std::path::PathBuf> {
                 candidates.push(std::path::PathBuf::from(root).join("ZCode/ZCode.exe"));
             }
         }
-        if let Some(path) = candidates.into_iter().find(|path| path.is_file()) {
+        if let Some(path) = candidates
+            .into_iter()
+            .find(|path| can_probe_passive_windows_path(&path.to_string_lossy()) && path.is_file())
+        {
             return Some(path);
         }
         if let Some(path) = detect_windows_exec_path_by_signatures(
@@ -1586,7 +1532,7 @@ fn detect_zed_exec_path() -> Option<std::path::PathBuf> {
             );
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -1693,7 +1639,10 @@ fn detect_trae_exec_path_for_platform(
             }
         }
         for candidate in candidates {
-            if candidate.exists() && windows_trae_candidate_matches_platform(&candidate, platform) {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy())
+                && candidate.exists()
+                && windows_trae_candidate_matches_platform(&candidate, platform)
+            {
                 return Some(candidate);
             }
         }
@@ -1826,7 +1775,7 @@ fn detect_workbuddy_exec_path() -> Option<std::path::PathBuf> {
             );
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -2168,413 +2117,230 @@ fn resolve_codebuddy_macos_exec_path(path_str: &str) -> Option<std::path::PathBu
     resolve_macos_exec_path(path_str, "CodeBuddy")
 }
 
-#[cfg(target_os = "windows")]
-fn compare_windows_store_version(left: &[u32], right: &[u32]) -> std::cmp::Ordering {
-    let max_len = left.len().max(right.len());
-    for idx in 0..max_len {
-        let left_part = *left.get(idx).unwrap_or(&0);
-        let right_part = *right.get(idx).unwrap_or(&0);
-        match left_part.cmp(&right_part) {
-            std::cmp::Ordering::Equal => continue,
-            non_eq => return non_eq,
-        }
-    }
-    std::cmp::Ordering::Equal
+/// 商店版 Codex 桌面端在 `InstallLocation` 下的约定相对路径，取自 `AppxManifest.xml`
+/// 里 `Application Id="App"` 的 `Executable`。
+#[cfg(any(test, target_os = "windows"))]
+const CODEX_STORE_GUI_RELATIVE_EXE: &str = r"app\ChatGPT.exe";
+
+/// 只接受商店版 Codex 桌面端的主界面程序 `ChatGPT.exe`。
+///
+/// 同一个包目录里还有 `app\Codex.exe`（另一个 GUI 二进制，不是启动入口）与
+/// `app\resources\codex.exe`（CLI），都不能当官方桌面端的启动路径。
+#[cfg(any(test, target_os = "windows"))]
+fn is_chatgpt_store_gui_exe(path: &std::path::Path) -> bool {
+    // 测试会在非 Windows 平台构造 Windows 风格路径，Unix 下 `Path::file_name()`
+    // 不把 `\` 当分隔符，会返回整串；这里按两种分隔符取最后一段。
+    path.to_string_lossy()
+        .rsplit(|value| value == '\\' || value == '/')
+        .next()
+        .is_some_and(|value| value.eq_ignore_ascii_case("ChatGPT.exe"))
 }
 
-#[cfg(target_os = "windows")]
-fn parse_codex_store_version_from_dir_name(dir_name: &str) -> Option<Vec<u32>> {
-    let lower = dir_name.to_ascii_lowercase();
-    let prefix = [
-        "openai.chatgpt_",
-        "openai.chatgpt-desktop_",
-        "openai.codex_",
-    ]
-    .iter()
-    .find(|prefix| lower.starts_with(**prefix))?;
-    let suffix = dir_name.get(prefix.len()..)?;
-    let version_part = suffix.split('_').next()?.trim();
-    if version_part.is_empty() {
-        return None;
-    }
-    let mut version: Vec<u32> = Vec::new();
-    for part in version_part.split('.') {
-        if part.is_empty() {
-            return None;
+/// Read only the PE headers. A desktop path must not resolve to a console CLI,
+/// DLL or script merely because its filename exists.
+#[cfg(any(test, target_os = "windows"))]
+fn windows_executable_has_gui_subsystem(path: &Path) -> bool {
+    use std::io::{Read, Seek, SeekFrom};
+    let check = || -> std::io::Result<bool> {
+        let mut file = std::fs::File::open(path)?;
+        let mut dos = [0u8; 64];
+        file.read_exact(&mut dos)?;
+        if &dos[..2] != b"MZ" {
+            return Ok(false);
         }
-        version.push(part.parse::<u32>().ok()?);
-    }
-    if version.is_empty() {
-        return None;
-    }
-    Some(version)
+        let offset = u32::from_le_bytes(dos[60..64].try_into().unwrap());
+        file.seek(SeekFrom::Start(u64::from(offset)))?;
+        let mut pe = [0u8; 94];
+        file.read_exact(&mut pe)?;
+        let magic = u16::from_le_bytes([pe[24], pe[25]]);
+        let characteristics = u16::from_le_bytes([pe[22], pe[23]]);
+        Ok(&pe[..4] == b"PE\0\0"
+            && matches!(magic, 0x10b | 0x20b)
+            && u16::from_le_bytes([pe[92], pe[93]]) == 2
+            && characteristics & 0x2000 == 0)
+    };
+    check().unwrap_or(false)
 }
 
-#[cfg(target_os = "windows")]
-fn codex_store_package_priority(dir_name: &str) -> u8 {
-    let lower = dir_name.to_ascii_lowercase();
-    if lower.starts_with("openai.chatgpt_") || lower.starts_with("openai.chatgpt-desktop_") {
-        2
-    } else if lower.starts_with("openai.codex_") {
-        1
-    } else {
-        0
-    }
+#[cfg(any(test, target_os = "windows"))]
+fn is_usable_codex_windows_gui_path(path: &Path) -> bool {
+    is_chatgpt_store_gui_exe(path) && windows_executable_has_gui_subsystem(path)
 }
 
-#[cfg(target_os = "windows")]
-fn find_codex_windows_app_main_exe(app_dir: &std::path::Path) -> Option<std::path::PathBuf> {
-    for exe_name in ["ChatGPT.exe", "Codex.exe"] {
-        let candidate = app_dir.join(exe_name);
-        if candidate.exists() {
-            return Some(candidate);
-        }
-    }
-    None
+/// 读取 `AppxManifest.xml` 中桌面主程序的 `Executable`，不假定 Application Id。
+#[cfg(any(test, target_os = "windows"))]
+fn appx_manifest_gui_executable(install_location: &std::path::Path) -> Option<String> {
+    let bytes = std::fs::read(install_location.join("AppxManifest.xml")).ok()?;
+    appx_manifest_gui_executable_from_text(&String::from_utf8_lossy(&bytes))
 }
 
-#[cfg(target_os = "windows")]
-fn detect_codex_exec_path_by_windowsapps_scan() -> Option<std::path::PathBuf> {
-    let mut best: Option<(u8, Vec<u32>, std::path::PathBuf)> = None;
-
-    for drive_root in windows_fixed_drive_roots() {
-        let drive_letter = drive_root.to_string_lossy().chars().next().unwrap_or('C');
-        let windows_apps_root = if drive_letter == 'C' {
-            drive_root.join("Program Files").join("WindowsApps")
-        } else {
-            drive_root.join("WindowsApps")
-        };
-        let root_path = windows_apps_root;
-        if !root_path.exists() {
-            continue;
-        }
-
-        let entries = match std::fs::read_dir(&root_path) {
-            Ok(value) => value,
-            Err(_) => continue,
-        };
-        for entry in entries.flatten() {
-            let file_type = match entry.file_type() {
-                Ok(value) => value,
-                Err(_) => continue,
-            };
-            if !file_type.is_dir() {
-                continue;
-            }
-
-            let dir_name = entry.file_name();
-            let dir_name = dir_name.to_string_lossy();
-            let Some(version) = parse_codex_store_version_from_dir_name(&dir_name) else {
-                continue;
-            };
-            let package_priority = codex_store_package_priority(&dir_name);
-
-            let candidate = match find_codex_windows_app_main_exe(&entry.path().join("app")) {
-                Some(path) => path,
-                None => continue,
-            };
-
-            let replace = match &best {
-                None => true,
-                Some((best_priority, best_version, _)) => {
-                    package_priority > *best_priority
-                        || (package_priority == *best_priority
-                            && compare_windows_store_version(&version, best_version).is_gt())
+#[cfg(any(test, target_os = "windows"))]
+fn appx_manifest_gui_executable_from_text(text: &str) -> Option<String> {
+    use quick_xml::{events::Event, Reader};
+    let mut reader = Reader::from_str(text);
+    let mut matched = None;
+    loop {
+        match reader.read_event().ok()? {
+            Event::Start(element) | Event::Empty(element)
+                if element.local_name().as_ref() == b"Application" =>
+            {
+                let mut id = None;
+                let mut executable = None;
+                for attribute in element.attributes() {
+                    let attribute = attribute.ok()?;
+                    let value = attribute.decode_and_unescape_value(reader.decoder()).ok()?;
+                    match attribute.key.as_ref() {
+                        b"Id" => id = Some(value.into_owned()),
+                        b"Executable" => executable = Some(value.into_owned()),
+                        _ => {}
+                    }
                 }
-            };
-            if replace {
-                best = Some((package_priority, version, candidate));
+                if let (Some(id), Some(executable)) = (id, executable) {
+                    if !id.trim().is_empty()
+                        && is_chatgpt_store_gui_exe(Path::new(&executable))
+                        && !executable.contains(':')
+                        && !executable.starts_with(['/', '\\'])
+                        && !executable.split(['/', '\\']).any(|part| part == "..")
+                    {
+                        if matched.is_some() {
+                            return None;
+                        }
+                        matched = Some(executable);
+                    }
+                }
             }
+            Event::Eof => return matched,
+            _ => {}
         }
     }
-
-    if let Some((_, _, path)) = best {
-        crate::modules::logger::log_info(&format!(
-            "[Path Detect] codex windowsapps scan hit: {}",
-            path.to_string_lossy()
-        ));
-        return Some(path);
-    }
-
-    None
 }
 
-#[cfg(target_os = "windows")]
-fn detect_codex_exec_path_by_appx_install_location() -> Option<std::path::PathBuf> {
-    let script = r#"$names = @('OpenAI.ChatGPT', 'OpenAI.ChatGPT-Desktop', 'OpenAI.Codex')
-$pkg = $names |
-  ForEach-Object { Get-AppxPackage -Name $_ -ErrorAction SilentlyContinue } |
-  Sort-Object @{ Expression = { if ($_.Name -like 'OpenAI.ChatGPT*') { 0 } else { 1 } } }, @{ Expression = { $_.Version }; Descending = $true } |
-  Select-Object -First 1
-if (-not $pkg) {
-  $pkg = Get-AppxPackage |
-    Where-Object {
-      $_.Name -like 'OpenAI.ChatGPT*' -or
-      $_.Name -like 'OpenAI.Codex*' -or
-      $_.PackageFamilyName -like 'OpenAI.ChatGPT*' -or
-      $_.PackageFamilyName -like 'OpenAI.Codex*'
-    } |
-  Sort-Object @{ Expression = { if ($_.Name -like 'OpenAI.ChatGPT*' -or $_.PackageFamilyName -like 'OpenAI.ChatGPT*') { 0 } else { 1 } } }, @{ Expression = { $_.Version }; Descending = $true } |
-  Select-Object -First 1
-}
-if ($pkg -and -not [string]::IsNullOrWhiteSpace($pkg.InstallLocation)) {
-  Write-Output ([string]$pkg.InstallLocation.Trim())
-}"#;
-
-    let output =
-        powershell_output_with_timeout(&["-Command", script], WINDOWS_PROCESS_PROBE_TIMEOUT)
-            .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    for line in stdout.lines() {
-        let install_location = line.trim().trim_matches('"');
-        if install_location.is_empty() {
-            continue;
-        }
-        let Some(candidate) = find_codex_windows_app_main_exe(
-            &std::path::PathBuf::from(install_location).join("app"),
-        ) else {
-            continue;
-        };
-        if candidate.exists() {
-            crate::modules::logger::log_info(&format!(
-                "[Path Detect] codex appx install hit: {}",
-                candidate.to_string_lossy()
-            ));
+/// 在给定 `InstallLocation` 下解析商店版桌面端主程序，只返回 `ChatGPT.exe`。
+#[cfg(any(test, target_os = "windows"))]
+fn codex_store_gui_exe_in(install_location: &std::path::Path) -> Option<std::path::PathBuf> {
+    if let Some(relative) = appx_manifest_gui_executable(install_location) {
+        let candidate = install_location.join(relative.replace('/', "\\"));
+        if is_chatgpt_store_gui_exe(&candidate) && candidate.is_file() {
             return Some(candidate);
         }
     }
-    None
-}
 
-#[cfg(target_os = "windows")]
-fn detect_codex_store_app_user_model_id_by_startapps() -> Option<String> {
-    let script = r#"$entry = Get-StartApps |
-  Where-Object {
-    $_.AppID -like 'OpenAI.ChatGPT*' -or
-    $_.AppID -like 'OpenAI.Codex_*' -or
-    $_.Name -like 'ChatGPT*' -or
-    $_.Name -like 'Codex*'
-  } |
-  Sort-Object @{ Expression = { if ($_.AppID -like 'OpenAI.ChatGPT*' -or $_.Name -like 'ChatGPT*') { 0 } else { 1 } } }, Name |
-  Select-Object -First 1
-if ($entry -and -not [string]::IsNullOrWhiteSpace($entry.AppID)) {
-  Write-Output ([string]$entry.AppID.Trim())
-}"#;
-
-    let output = powershell_output(&["-Command", script]).ok()?;
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    for line in stdout.lines() {
-        let app_user_model_id = line.trim().trim_matches('"');
-        if !app_user_model_id.is_empty() {
-            return Some(app_user_model_id.to_string());
-        }
+    let fallback = install_location.join(CODEX_STORE_GUI_RELATIVE_EXE);
+    if is_chatgpt_store_gui_exe(&fallback) && fallback.is_file() {
+        return Some(fallback);
     }
     None
 }
 
+/// 一个「当前用户已注册」的商店版 Codex 包。
 #[cfg(target_os = "windows")]
-fn detect_codex_store_app_user_model_id_by_appx_fallback() -> Option<String> {
-    let script = r#"$names = @('OpenAI.ChatGPT', 'OpenAI.ChatGPT-Desktop', 'OpenAI.Codex')
-$pkg = $names |
-  ForEach-Object { Get-AppxPackage -Name $_ -ErrorAction SilentlyContinue } |
-  Sort-Object @{ Expression = { if ($_.Name -like 'OpenAI.ChatGPT*') { 0 } else { 1 } } }, @{ Expression = { $_.Version }; Descending = $true } |
-  Select-Object -First 1
-if (-not $pkg) {
-  $pkg = Get-AppxPackage |
+struct CodexStorePackage {
+    family_name: String,
+    install_location: std::path::PathBuf,
+}
+
+/// 列出当前用户已注册的商店版 Codex 包（新版本优先）。
+///
+/// 只读包注册信息：不扫描 WindowsApps 目录（普通用户会被拒，且带 `-Filter` 时可能
+/// 静默返回空），也不依赖客户端是否正在运行。PFN 一并输出，便于日志和后续匹配。
+#[cfg(target_os = "windows")]
+fn codex_store_packages() -> Vec<CodexStorePackage> {
+    let script = r#"$names = @('OpenAI.Codex', 'OpenAI.ChatGPT', 'OpenAI.ChatGPT-Desktop')
+$pkgs = @()
+foreach ($name in $names) {
+  $pkgs += @(Get-AppxPackage -Name $name -ErrorAction SilentlyContinue)
+}
+if ($pkgs.Count -eq 0) {
+  $pkgs = @(Get-AppxPackage -ErrorAction SilentlyContinue |
     Where-Object {
-      $_.Name -like 'OpenAI.ChatGPT*' -or
-      $_.Name -like 'OpenAI.Codex*' -or
-      $_.PackageFamilyName -like 'OpenAI.ChatGPT*' -or
-      $_.PackageFamilyName -like 'OpenAI.Codex*'
-    } |
-  Sort-Object @{ Expression = { if ($_.Name -like 'OpenAI.ChatGPT*' -or $_.PackageFamilyName -like 'OpenAI.ChatGPT*') { 0 } else { 1 } } }, @{ Expression = { $_.Version }; Descending = $true } |
-  Select-Object -First 1
+      $_.PackageFamilyName -like 'OpenAI.Codex*' -or
+      $_.PackageFamilyName -like 'OpenAI.ChatGPT*'
+    })
 }
-if ($pkg -and -not [string]::IsNullOrWhiteSpace($pkg.PackageFamilyName)) {
-  Write-Output ([string]($pkg.PackageFamilyName.Trim() + '!App'))
-}"#;
+$pkgs |
+  Where-Object { $_.InstallLocation -and $_.PackageFamilyName } |
+  Sort-Object -Property @{ Expression = { $_.Version }; Descending = $true } |
+  ForEach-Object { Write-Output ([string]$_.PackageFamilyName + '|' + [string]$_.InstallLocation.Trim()) }"#;
 
-    let output = powershell_output(&["-Command", script]).ok()?;
+    let mut packages = Vec::new();
+    let Ok(output) =
+        powershell_output_with_timeout(&["-Command", script], WINDOWS_PROCESS_PROBE_TIMEOUT)
+    else {
+        crate::modules::logger::log_warn(
+            "[Path Detect] 读取商店包注册信息失败（PowerShell 调用失败）",
+        );
+        return packages;
+    };
     if !output.status.success() {
-        return None;
+        crate::modules::logger::log_warn(&format!(
+            "[Path Detect] 读取商店包注册信息失败: status={}, stderr={}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+        return packages;
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     for line in stdout.lines() {
-        let app_user_model_id = line.trim().trim_matches('"');
-        if !app_user_model_id.is_empty() {
-            return Some(app_user_model_id.to_string());
+        let line = line.trim().trim_matches('"');
+        if line.is_empty() {
+            continue;
         }
+        let Some((family_name, install_location)) = line.split_once('|') else {
+            continue;
+        };
+        let family_name = family_name.trim();
+        let install_location = install_location.trim();
+        if family_name.is_empty() || install_location.is_empty() {
+            continue;
+        }
+        packages.push(CodexStorePackage {
+            family_name: family_name.to_string(),
+            install_location: std::path::PathBuf::from(install_location),
+        });
+    }
+    packages
+}
+
+/// 解析「当前用户已注册的商店版 Codex 桌面端」主程序路径，只返回 `ChatGPT.exe`。
+#[cfg(target_os = "windows")]
+fn detect_codex_store_gui_exe() -> Option<std::path::PathBuf> {
+    for package in codex_store_packages() {
+        if let Some(exe) = codex_store_gui_exe_in(&package.install_location) {
+            crate::modules::logger::log_info(&format!(
+                "[Path Detect] codex store hit: pfn={} install_location={} exe={}",
+                package.family_name,
+                package.install_location.to_string_lossy(),
+                exe.to_string_lossy()
+            ));
+            return Some(exe);
+        }
+        crate::modules::logger::log_warn(&format!(
+            "[Path Detect] 商店包 {} 的安装目录里没有 ChatGPT.exe: {}",
+            package.family_name,
+            package.install_location.to_string_lossy()
+        ));
     }
     None
-}
-
-#[cfg(target_os = "windows")]
-fn detect_codex_store_app_user_model_id_uncached() -> Option<String> {
-    if let Some(app_user_model_id) = detect_codex_store_app_user_model_id_by_startapps() {
-        crate::modules::logger::log_info(&format!(
-            "[Codex Store] StartApps 命中 AppUserModelId: {}",
-            app_user_model_id
-        ));
-        return Some(app_user_model_id);
-    }
-    if let Some(app_user_model_id) = detect_codex_store_app_user_model_id_by_appx_fallback() {
-        crate::modules::logger::log_info(&format!(
-            "[Codex Store] Appx fallback 命中 AppUserModelId: {}",
-            app_user_model_id
-        ));
-        return Some(app_user_model_id);
-    }
-    None
-}
-
-#[cfg(target_os = "windows")]
-fn detect_codex_store_app_user_model_id() -> Option<String> {
-    if let Some(app_user_model_id) = CODEX_STORE_APP_USER_MODEL_ID_CACHE.get() {
-        return Some(app_user_model_id.clone());
-    }
-
-    let detected = detect_codex_store_app_user_model_id_uncached();
-    if let Some(ref app_user_model_id) = detected {
-        let _ = CODEX_STORE_APP_USER_MODEL_ID_CACHE.set(app_user_model_id.clone());
-    }
-    detected
-}
-
-#[cfg(target_os = "windows")]
-fn powershell_argument_list_clause(values: &[String]) -> String {
-    let arguments = values
-        .iter()
-        .filter(|value| !value.trim().is_empty())
-        .map(|value| format!("'{}'", escape_powershell_single_quoted(value)))
-        .collect::<Vec<_>>();
-    if arguments.is_empty() {
-        return String::new();
-    }
-    format!(" -ArgumentList @({})", arguments.join(", "))
-}
-
-#[cfg(target_os = "windows")]
-fn launch_codex_via_store_app_user_model_id(
-    app_user_model_id: &str,
-    codex_home: Option<&str>,
-    app_user_data_dir: Option<&str>,
-    extra_args: &[String],
-) -> Result<(), String> {
-    let app_user_model_id = app_user_model_id.trim();
-    if app_user_model_id.is_empty() {
-        return Err("Codex AppUserModelId 为空".to_string());
-    }
-
-    let escaped = escape_powershell_single_quoted(app_user_model_id);
-    let mut env_pairs = managed_proxy_env_pairs();
-    if let Some(codex_home) = codex_home.map(str::trim).filter(|value| !value.is_empty()) {
-        env_pairs.push(("CODEX_HOME", codex_home.to_string()));
-    }
-    if let Some(app_user_data_dir) = app_user_data_dir
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        env_pairs.push((
-            "CODEX_ELECTRON_USER_DATA_PATH",
-            app_user_data_dir.to_string(),
-        ));
-    }
-    let env_lines = env_pairs
-        .into_iter()
-        .map(|(key, value)| format!("$env:{}='{}'", key, escape_powershell_single_quoted(&value)))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let argument_list = powershell_argument_list_clause(extra_args);
-    let script = format!(
-        r#"{env_lines}
-$appId='{escaped}';
-$target='shell:AppsFolder\' + $appId
-Start-Process -FilePath $target{argument_list} -ErrorAction Stop | Out-Null"#
-    );
-
-    let output = powershell_output(&["-Command", &script])
-        .map_err(|e| format!("系统入口启动调用失败: {}", e))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stderr_head = stderr.trim().chars().take(400).collect::<String>();
-        return Err(format!(
-            "系统入口启动失败: status={}, stderr={}",
-            output.status,
-            if stderr_head.is_empty() {
-                "<empty>".to_string()
-            } else {
-                stderr_head
-            }
-        ));
-    }
-    Ok(())
-}
-
-#[cfg(target_os = "windows")]
-fn launch_codex_via_powershell_exec_path(
-    launch_path: &std::path::Path,
-    codex_home: &str,
-    app_user_data_dir: &std::path::Path,
-    extra_args: &[String],
-) -> Result<(), String> {
-    let launch_path = launch_path.to_string_lossy();
-    let launch_path = launch_path.trim();
-    if launch_path.is_empty() {
-        return Err("Codex 启动路径为空".to_string());
-    }
-
-    let mut env_pairs = managed_proxy_env_pairs();
-    env_pairs.push(("CODEX_HOME", codex_home.to_string()));
-    env_pairs.push((
-        "CODEX_ELECTRON_USER_DATA_PATH",
-        app_user_data_dir.to_string_lossy().to_string(),
-    ));
-    let env_lines = env_pairs
-        .into_iter()
-        .map(|(key, value)| format!("$env:{}='{}'", key, escape_powershell_single_quoted(&value)))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let argument_list = powershell_argument_list_clause(extra_args);
-    let script = format!(
-        r#"{env_lines}
-$exe='{exe}';
-Start-Process -FilePath $exe{argument_list} -ErrorAction Stop | Out-Null"#,
-        exe = escape_powershell_single_quoted(launch_path),
-    );
-
-    let output = powershell_output(&["-Command", &script])
-        .map_err(|e| format!("PowerShell 启动 Codex 失败: {}", e))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stderr_head = stderr.trim().chars().take(400).collect::<String>();
-        return Err(format!(
-            "PowerShell 启动 Codex 失败: status={}, stderr={}",
-            output.status,
-            if stderr_head.is_empty() {
-                "<empty>".to_string()
-            } else {
-                stderr_head
-            }
-        ));
-    }
-    Ok(())
 }
 
 const CODEX_MANAGED_STORE_LAUNCH_UNSAFE_PREFIX: &str = "CODEX_MANAGED_STORE_LAUNCH_UNSAFE:";
 
-fn codex_managed_store_launch_unsafe_error(direct_error: &str, powershell_error: &str) -> String {
+fn codex_managed_store_launch_unsafe_error(
+    direct_error: &str,
+    powershell_error: &str,
+    diagnostics: &str,
+) -> String {
     format!(
-        "{}direct_error={}; powershell_error={}",
-        CODEX_MANAGED_STORE_LAUNCH_UNSAFE_PREFIX, direct_error, powershell_error
+        "{}direct_error={}; powershell_error={}{}",
+        CODEX_MANAGED_STORE_LAUNCH_UNSAFE_PREFIX,
+        direct_error,
+        powershell_error,
+        if diagnostics.trim().is_empty() {
+            String::new()
+        } else {
+            format!("; {}", diagnostics.trim())
+        }
     )
 }
 
@@ -2596,10 +2362,9 @@ pub(crate) fn detect_codex_exec_path() -> Option<std::path::PathBuf> {
 
     #[cfg(target_os = "windows")]
     {
-        if let Some(path) = detect_codex_exec_path_by_windowsapps_scan() {
-            return Some(path);
-        }
-        if let Some(path) = detect_codex_exec_path_by_appx_install_location() {
+        // 只按当前用户「已注册」的商店包解析：不扫描 WindowsApps 目录（普通用户会被拒，
+        // 带 -Filter 的枚举还可能静默返回空），也不依赖客户端此刻是否正在运行。
+        if let Some(path) = detect_codex_store_gui_exe() {
             return Some(path);
         }
     }
@@ -2653,6 +2418,9 @@ fn linux_codex_discovery_paths(
     candidates
 }
 
+/// macOS / Linux 的启动路径探测并写回；Windows 走 `resolve_codex_launch_path` 里的
+/// 「商店包解析 + 写回」分支，不再需要这个包装函数。
+#[cfg(not(target_os = "windows"))]
 fn detect_and_save_codex_launch_path() -> Option<std::path::PathBuf> {
     let expected_current = config::get_user_config().codex_app_path;
     let detected = detect_codex_exec_path()?;
@@ -2665,6 +2433,11 @@ fn normalized_windows_path_text(path: &Path) -> String {
     path.to_string_lossy()
         .replace('/', "\\")
         .to_ascii_lowercase()
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn is_windowsapps_launch_path(path: &Path) -> bool {
+    normalized_windows_path_text(path).contains("\\windowsapps\\")
 }
 
 #[cfg(any(test, target_os = "windows"))]
@@ -2790,7 +2563,7 @@ fn detect_opencode_exec_path() -> Option<std::path::PathBuf> {
             );
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -2894,15 +2667,20 @@ fn resolve_antigravity_legacy_launch_path() -> Result<std::path::PathBuf, String
         #[cfg(target_os = "linux")]
         {
             let custom_path = Path::new(&custom);
-            if custom_path.exists() {
-                return resolve_linux_antigravity_exec_path(custom_path);
+            if let Ok(executable) = resolve_linux_antigravity_exec_path(custom_path) {
+                let actual = executable.canonicalize().unwrap_or_else(|_| executable.clone());
+                if linux_antigravity_install_root_for_match(&executable).is_none()
+                    && linux_antigravity_install_root_for_match(&actual).is_none()
+                {
+                    return Ok(executable);
+                }
             }
         }
 
         #[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
         {
             let custom_path = std::path::PathBuf::from(&custom);
-            let lower = custom.to_ascii_lowercase();
+            let lower = custom.to_ascii_lowercase().replace(['-', '_'], " ");
             if lower.contains("antigravity") && !lower.contains("antigravity ide") {
                 if custom_path.is_file() {
                     return Ok(custom_path);
@@ -2935,13 +2713,9 @@ pub fn ensure_vscode_launch_path_configured() -> Result<(), String> {
 pub fn ensure_codex_launch_path_configured() -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        if detect_codex_store_app_user_model_id().is_some() {
-            return Ok(());
-        }
-        if resolve_codex_launch_path().is_ok() {
-            return Ok(());
-        }
-        return Err("未检测到 Codex 商店安装，请先在 Microsoft Store 安装 Codex".to_string());
+        // A StartApps alias alone is not a usable desktop executable. Use the
+        // same configured-path/registered-package resolver as the launch flow.
+        return resolve_codex_launch_path().map(|_| ());
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -2974,6 +2748,18 @@ pub fn ensure_trae_launch_path_configured() -> Result<(), String> {
 
 pub fn ensure_workbuddy_launch_path_configured() -> Result<(), String> {
     resolve_workbuddy_launch_path().map(|_| ())
+}
+
+/// MiniMax Code 客户端 exe 解析。
+///
+/// 直接复用账号模块里的解析器（配置覆盖 → 常见安装路径），避免两份候选逻辑漂移。
+/// 解析失败时回填用户配置，保持与其它平台一致的行为。
+pub(crate) fn resolve_minimax_code_launch_path() -> Result<std::path::PathBuf, String> {
+    crate::modules::minimax_code_account::resolve_minimax_code_launch_path()
+}
+
+pub fn ensure_minimax_code_launch_path_configured() -> Result<(), String> {
+    resolve_minimax_code_launch_path().map(|_| ())
 }
 
 fn resolve_vscode_launch_path() -> Result<std::path::PathBuf, String> {
@@ -3197,7 +2983,7 @@ fn resolve_trae_launch_path_for_platform(
     Err(app_path_missing_error(platform.provider_key()))
 }
 
-fn resolve_workbuddy_launch_path() -> Result<std::path::PathBuf, String> {
+pub(crate) fn resolve_workbuddy_launch_path() -> Result<std::path::PathBuf, String> {
     if let Some(custom) = normalize_custom_path(Some(&config::get_user_config().workbuddy_app_path))
     {
         if let Some(exec) = resolve_workbuddy_macos_exec_path(&custom) {
@@ -3246,13 +3032,53 @@ fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
     Err(app_path_missing_error("codex"))
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Windows：解析 Codex 桌面端启动路径。
+///
+/// 规则（按优先级）：
+/// 1. 配置里的路径存在且是桌面主程序 → 直接使用；CLI 与辅助程序不能作为桌面入口。
+/// 2. 未配置或路径已经不可用 → 按当前用户已注册的商店包解析
+///    （PFN → InstallLocation → 清单里的 `Executable`），解析成功即**写回配置**作为新的启动路径。
+///    商店更新换目录后旧目录若还在但已不能执行，由启动失败后的重新解析兜底。
+/// 3. 商店包解析不到 → 遗留商店路径迁移（旧版 `Codex.exe` → `ChatGPT.exe`）。
+///
+/// 全程只读包注册信息：不扫描 WindowsApps 目录（普通用户会被拒，带 `-Filter` 的枚举
+/// 还可能静默返回空），也不依赖客户端是否正在运行；只接受 `ChatGPT.exe`。
+#[cfg(target_os = "windows")]
+fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
+    let configured = config::get_user_config().codex_app_path;
+    let configured_path = normalize_custom_path(Some(&configured)).map(std::path::PathBuf::from);
+
+    if let Some(path) = configured_path.as_deref() {
+        if is_usable_codex_windows_gui_path(path) {
+            return Ok(path.to_path_buf());
+        }
+        crate::modules::logger::log_warn(&format!(
+            "[Codex Start] 配置路径已失效或不是桌面主程序，准备重新探测: {}",
+            path.to_string_lossy()
+        ));
+    }
+
+    if let Some(detected) =
+        detect_codex_store_gui_exe().filter(|path| is_usable_codex_windows_gui_path(path))
+    {
+        update_app_path_in_config("codex", &detected, &configured);
+        crate::modules::logger::log_info(&format!(
+            "[Codex Start] 已自动探测并写回 Codex 启动路径: {}",
+            detected.to_string_lossy()
+        ));
+        return Ok(detected);
+    }
+
+    if let Some(migrated) = migrate_legacy_codex_launch_path(&configured) {
+        return Ok(migrated);
+    }
+
+    Err(app_path_missing_error("codex"))
+}
+
+#[cfg(target_os = "linux")]
 fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
     if let Some(custom) = normalize_custom_path(Some(&config::get_user_config().codex_app_path)) {
-        #[cfg(target_os = "windows")]
-        if let Some(migrated) = migrate_legacy_codex_launch_path(&custom) {
-            return Ok(migrated);
-        }
         if let Some(exec) = resolve_macos_exec_path(&custom, "Codex") {
             return Ok(exec);
         }
@@ -3262,11 +3088,8 @@ fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
         return Err(app_path_missing_error("codex"));
     }
 
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
-    {
-        if let Some(detected) = detect_and_save_codex_launch_path() {
-            return Ok(detected);
-        }
+    if let Some(detected) = detect_and_save_codex_launch_path() {
+        return Ok(detected);
     }
 
     Err(app_path_missing_error("codex"))
@@ -3416,6 +3239,18 @@ fn detect_and_save_app_path_raw(app: &str, force: bool) -> Option<String> {
                     &current.workbuddy_ai_app_path,
                 );
                 return Some(config::get_user_config().workbuddy_ai_app_path);
+            }
+        }
+        "minimaxcode" | "minimax_code" => {
+            // `force` only skips the cached-config short-circuit below; the
+            // resolver still prefers an already-configured path, so a re-detect
+            // returns the configured path rather than re-scanning candidates.
+            if !force && !current.minimax_code_app_path.trim().is_empty() {
+                return Some(current.minimax_code_app_path);
+            }
+            if let Ok(detected) = resolve_minimax_code_launch_path() {
+                update_app_path_in_config("minimaxcode", &detected, &current.minimax_code_app_path);
+                return Some(config::get_user_config().minimax_code_app_path);
             }
         }
         _ => {}

@@ -1,5 +1,6 @@
 import type { UnifiedQuotaMetric } from "../../presentation/platformAccountPresentation";
 import {
+  estimateCodexWindowFullCostUsd,
   formatCodexWindowCostAmount,
   formatCodexWindowRequestCount,
   formatCodexWindowTokenCount,
@@ -19,6 +20,11 @@ function CodexQuotaMiniRow({
 }) {
   const stats = item.windowStats;
   const showProgress = item.showProgress !== false;
+  // 额度百分比是「剩余可用比例」，折算时用 100 - 剩余 得到已消耗比例。
+  const estimatedFullCostUsd = estimateCodexWindowFullCostUsd(
+    stats,
+    item.percentage,
+  );
   if (!showProgress) {
     return (
       <div className="codex-quota-mini" title={item.hintText}>
@@ -60,6 +66,17 @@ function CodexQuotaMiniRow({
             >
               A ${formatCodexWindowCostAmount(stats.estimatedCostUsd)}
             </span>
+            {estimatedFullCostUsd != null ? (
+              <span
+                className="codex-quota-mini-chip"
+                title={t(
+                  "codex.quota.windowEstimatedFullCostHint",
+                  "按已用额度折算：本窗口满额约合多少账号计费",
+                )}
+              >
+                ≈${formatCodexWindowCostAmount(estimatedFullCostUsd)}
+              </span>
+            ) : null}
             {stats.userCostUsd != null ? (
               <span
                 className="codex-quota-mini-chip"

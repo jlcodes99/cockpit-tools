@@ -177,6 +177,12 @@ pub async fn qoder_delete_instance(instance_id: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn qoder_start_instance(instance_id: String) -> Result<InstanceProfileView, String> {
+    tauri::async_runtime::spawn_blocking(move || start_qoder_instance_blocking(instance_id))
+        .await
+        .map_err(|error| format!("QODER_START_WORKER_FAILED: {}", error))?
+}
+
+fn start_qoder_instance_blocking(instance_id: String) -> Result<InstanceProfileView, String> {
     modules::process::ensure_qoder_launch_path_configured()?;
 
     if instance_id == DEFAULT_INSTANCE_ID {

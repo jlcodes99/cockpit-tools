@@ -23,6 +23,7 @@ export type Page =
   | 'trae-solo-cn'
   | 'workbuddy'
   | 'workbuddy-ai'
+  | 'minimaxcode'
   | 'codex-instances'
   | 'instances'
   | 'accounts'
@@ -57,6 +58,7 @@ export const MAIN_WINDOW_NAVIGABLE_PAGES: readonly Page[] = [
   'trae-solo-cn',
   'workbuddy',
   'workbuddy-ai',
+  'minimaxcode',
   'settings',
 ] as const;
 

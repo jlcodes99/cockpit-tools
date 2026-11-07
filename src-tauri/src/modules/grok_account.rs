@@ -1,6 +1,5 @@
 use crate::models::grok::{
     GrokAccount, GrokAccountIndex, GrokAccountView, GrokAuthMode, GrokOAuthCompletePayload,
-    GrokProductUsage, GrokQuota,
 };
 use crate::modules::{account, config, grok_oauth, logger, provider_current_state};
 use chrono::{DateTime, Utc};
@@ -15,6 +14,10 @@ use std::time::{Duration, Instant};
 use toml_edit::{table, value, Document};
 use uuid::Uuid;
 
+#[path = "grok_account_quota.rs"]
+mod quota;
+use quota::{quota_from_payload, user_payload, user_subscription};
+
 const INDEX_FILE: &str = "grok_accounts.json";
 const ACCOUNTS_DIR: &str = "grok_accounts";
 const PROFILES_DIR: &str = "grok_profiles";
@@ -26,7 +29,6 @@ const BILLING_URL: &str = "https://cli-chat-proxy.grok.com/v1/billing?format=cre
 const CLI_USER_URL: &str = "https://cli-chat-proxy.grok.com/v1/user?include=subscription";
 const SUBSCRIPTIONS_URL: &str = "https://grok.com/rest/subscriptions";
 const TASK_USAGE_URL: &str = "https://grok.com/rest/tasks/usage";
-const FALLBACK_GROK_CLIENT_VERSION: &str = "0.2.93";
 /// billing / user / task_usage 传输层瞬时失败（SSL EOF、断连、超时）重试次数
 const TRANSPORT_MAX_ATTEMPTS: usize = 3;
 const FILE_LOCK_TIMEOUT: Duration = Duration::from_secs(5);
@@ -575,9 +577,17 @@ fn official_auth_object(account: &GrokAccount) -> Value {
         "profile_image_asset_id",
         account.profile_image_asset_id.as_deref(),
     );
+    let retention = account
+        .coding_data_retention_opt_out
+        .or_else(|| {
+            object
+                .get("coding_data_retention_opt_out")
+                .and_then(Value::as_bool)
+        })
+        .unwrap_or(true);
     object.insert(
         "coding_data_retention_opt_out".to_string(),
-        Value::Bool(account.coding_data_retention_opt_out.unwrap_or(false)),
+        Value::Bool(retention),
     );
     object.insert(
         "oidc_issuer".to_string(),
@@ -1704,223 +1714,6 @@ pub fn update_working_dir(
     Ok(GrokAccountView::from(&account))
 }
 
-fn number(value: Option<&Value>) -> Option<f64> {
-    match value {
-        Some(Value::Number(value)) => value.as_f64(),
-        Some(Value::String(value)) => value.parse().ok(),
-        Some(Value::Object(value)) => value.get("val").and_then(|item| number(Some(item))),
-        _ => None,
-    }
-}
-
-fn raw_string(value: Option<&Value>) -> Option<String> {
-    value
-        .and_then(Value::as_str)
-        .and_then(|value| normalize_text(Some(value)))
-}
-
-fn active_subscription(value: &Value) -> Option<&Value> {
-    value
-        .get("subscriptions")
-        .and_then(Value::as_array)
-        .and_then(|items| {
-            items
-                .iter()
-                .find(|item| {
-                    matches!(
-                        item.get("status").and_then(Value::as_str),
-                        Some("SUBSCRIPTION_STATUS_ACTIVE" | "SubscriptionStatusActive")
-                    )
-                })
-                .or_else(|| items.first())
-        })
-}
-
-fn user_payload(value: &Value) -> &Value {
-    value
-        .get("user")
-        .filter(|item| item.is_object())
-        .unwrap_or(value)
-}
-
-fn user_subscription(value: &Value) -> Option<&Value> {
-    let user = user_payload(value);
-    user.get("subscription")
-        .filter(|item| item.is_object())
-        .or_else(|| active_subscription(user))
-}
-
-fn nested_number(value: &Value, key: &str) -> Option<f64> {
-    match value {
-        Value::Object(object) => object
-            .get(key)
-            .and_then(|item| number(Some(item)))
-            .or_else(|| object.values().find_map(|item| nested_number(item, key))),
-        Value::Array(items) => items.iter().find_map(|item| nested_number(item, key)),
-        _ => None,
-    }
-}
-
-fn credit_bag_amounts(value: &Value) -> Option<(Option<f64>, Option<f64>, Option<f64>)> {
-    if let Some(items) = value.as_array() {
-        return items.iter().find_map(credit_bag_amounts);
-    }
-    let object = value.as_object()?;
-    let total = number(
-        object
-            .get("total")
-            .or_else(|| object.get("limit"))
-            .or_else(|| object.get("cap"))
-            .or_else(|| object.get("allocation"))
-            .or_else(|| object.get("amount")),
-    );
-    let used = number(
-        object
-            .get("used")
-            .or_else(|| object.get("spent"))
-            .or_else(|| object.get("consumed"))
-            .or_else(|| object.get("usage")),
-    );
-    let remaining = number(
-        object
-            .get("remaining")
-            .or_else(|| object.get("balance"))
-            .or_else(|| object.get("left")),
-    );
-    if total.is_none() && used.is_none() && remaining.is_none() {
-        return object
-            .get("bags")
-            .or_else(|| object.get("items"))
-            .and_then(credit_bag_amounts);
-    }
-    let resolved_used = used.or_else(|| match (total, remaining) {
-        (Some(total), Some(remaining)) => Some((total - remaining).max(0.0)),
-        _ => None,
-    });
-    let resolved_remaining = remaining.or_else(|| match (total, resolved_used) {
-        (Some(total), Some(used)) => Some((total - used).max(0.0)),
-        _ => None,
-    });
-    Some((resolved_used, total, resolved_remaining))
-}
-
-fn credit_bag_usage_percent(value: &Value) -> Option<f64> {
-    let (used, total, _) = credit_bag_amounts(value)?;
-    if let Some(total) = total.filter(|value| value.is_finite() && *value > 0.0) {
-        let used = used.filter(|value| value.is_finite())?;
-        return Some(((used.max(0.0) / total) * 100.0).clamp(0.0, 100.0));
-    }
-    None
-}
-
-fn credit_usage_sources<'a>(billing: &'a Value, config: &'a Value) -> [Option<&'a Value>; 8] {
-    [
-        billing.get("credits"),
-        billing.get("creditBalance"),
-        billing.get("usage"),
-        config.get("credits"),
-        config.get("includedCredits"),
-        config.get("subscriptionCredits"),
-        config.get("weeklyCredits"),
-        config.get("sharedPool"),
-    ]
-}
-
-fn credit_usage_percent(billing: &Value, config: &Value) -> Option<f64> {
-    credit_usage_sources(billing, config)
-        .into_iter()
-        .flatten()
-        .find_map(credit_bag_usage_percent)
-}
-
-fn credit_usage_amounts(billing: &Value, config: &Value) -> (Option<f64>, Option<f64>) {
-    credit_usage_sources(billing, config)
-        .into_iter()
-        .flatten()
-        .find_map(|value| {
-            let (used, total, _) = credit_bag_amounts(value)?;
-            if used.is_some() || total.is_some() {
-                Some((used, total))
-            } else {
-                None
-            }
-        })
-        .unwrap_or((None, None))
-}
-
-fn product_usage_from_value(item: &Value) -> Option<GrokProductUsage> {
-    let product = raw_string(item.get("product"))
-        .or_else(|| raw_string(item.get("name")))
-        .or_else(|| raw_string(item.get("productName")))?;
-    let (used, total, remaining) = credit_bag_amounts(item).unwrap_or((None, None, None));
-    let usage_percent = number(item.get("usagePercent"))
-        .or_else(|| number(item.get("usedPercent")))
-        .or_else(|| match (used, total) {
-            (Some(used), Some(total)) if total > 0.0 => {
-                Some(((used.max(0.0) / total) * 100.0).clamp(0.0, 100.0))
-            }
-            _ => None,
-        });
-    Some(GrokProductUsage {
-        product,
-        usage_percent,
-        used,
-        total,
-        remaining,
-    })
-}
-
-fn quota_from_payload(
-    billing: &Value,
-    subscriptions: Option<&Value>,
-    cli_user: Option<&Value>,
-    task_usage: Option<&Value>,
-) -> GrokQuota {
-    let config = billing.get("config").unwrap_or(billing);
-    let period = config.get("currentPeriod").unwrap_or(&Value::Null);
-    let subscription = cli_user
-        .and_then(user_subscription)
-        .or_else(|| subscriptions.and_then(active_subscription))
-        .or_else(|| active_subscription(config));
-    let subscription_tier = raw_string(config.get("subscription_tier"))
-        .or_else(|| raw_string(config.get("subscriptionTier")))
-        .or_else(|| subscription.and_then(|item| raw_string(item.get("tier"))))
-        .or_else(|| {
-            cli_user.and_then(|value| {
-                let user = user_payload(value);
-                raw_string(user.get("subscriptionTier"))
-                    .or_else(|| raw_string(user.get("subscription_tier")))
-            })
-        });
-    let products = config
-        .get("productUsage")
-        .and_then(Value::as_array)
-        .map(|items| items.iter().filter_map(product_usage_from_value).collect())
-        .unwrap_or_default();
-    let (weekly_used, weekly_total) = credit_usage_amounts(billing, config);
-    GrokQuota {
-        period_type: raw_string(period.get("type")),
-        period_start: raw_string(period.get("start"))
-            .or_else(|| raw_string(config.get("billingPeriodStart"))),
-        period_end: raw_string(period.get("end"))
-            .or_else(|| raw_string(config.get("billingPeriodEnd"))),
-        weekly_limit_percent: number(config.get("creditUsagePercent"))
-            .or_else(|| credit_usage_percent(billing, config)),
-        weekly_used,
-        weekly_total,
-        on_demand_used: number(config.get("onDemandUsed")),
-        on_demand_cap: number(config.get("onDemandCap")),
-        prepaid_balance: number(config.get("prepaidBalance")),
-        frequent_usage: task_usage.and_then(|value| nested_number(value, "frequentUsage")),
-        frequent_limit: task_usage.and_then(|value| nested_number(value, "frequentLimit")),
-        occasional_usage: task_usage.and_then(|value| nested_number(value, "occasionalUsage")),
-        occasional_limit: task_usage.and_then(|value| nested_number(value, "occasionalLimit")),
-        subscription_tier,
-        subscription_status: subscription.and_then(|item| raw_string(item.get("status"))),
-        products,
-    }
-}
-
 fn cli_proxy_get(
     client: &reqwest::Client,
     url: &str,
@@ -2346,6 +2139,41 @@ fn adopt_live_tokens_from_account_home(account: &mut GrokAccount) -> Result<bool
 }
 
 async fn refresh_credentials(account: &mut GrokAccount, force: bool) -> Result<(), String> {
+    refresh_credentials_with_exchange(account, force, |token, endpoint, client_id| {
+        Box::pin(grok_oauth::refresh_token(token, endpoint, client_id))
+    })
+    .await
+}
+
+type GrokTokenExchange =
+    for<'a> fn(
+        &'a str,
+        Option<&'a str>,
+        Option<&'a str>,
+    )
+        -> futures::future::BoxFuture<'a, Result<grok_oauth::GrokTokenResponse, String>>;
+
+type GrokQuotaQuery =
+    for<'a> fn(&'a mut GrokAccount) -> futures::future::BoxFuture<'a, Result<(), String>>;
+
+fn persist_refreshed_credentials(
+    account: &GrokAccount,
+    previous_access_token: &str,
+) -> Result<(), String> {
+    // There must be no await between receiving a rotating token and this durable checkpoint.
+    // Quota requests are optional and may be cancelled independently; retain their existing cache.
+    save_refreshed_account(account, previous_access_token)?;
+    crate::modules::codex_local_access::sync_grok_upstream_auth_files_in_background(
+        account.id.clone(),
+    );
+    Ok(())
+}
+
+async fn refresh_credentials_with_exchange(
+    account: &mut GrokAccount,
+    force: bool,
+    exchange: GrokTokenExchange,
+) -> Result<(), String> {
     // 先在多源中找同账号「最新可用」凭据（官方 CLI / 受管 home / 库可能已轮换 RT）
     let _ = adopt_best_live_credentials(account);
     let now = now_ts();
@@ -2365,7 +2193,7 @@ async fn refresh_credentials(account: &mut GrokAccount, force: bool) -> Result<(
         .refresh_token
         .clone()
         .ok_or_else(|| "Grok refresh_token 为空，请重新授权".to_string())?;
-    match grok_oauth::refresh_token(
+    match exchange(
         &refresh_token,
         account.token_endpoint.as_deref(),
         account.oidc_client_id.as_deref(),
@@ -2388,7 +2216,7 @@ async fn refresh_credentials(account: &mut GrokAccount, force: bool) -> Result<(
                             if !force && access_still_usable(account.expires_at, now_ts()) {
                                 return Ok(());
                             }
-                            let token = grok_oauth::refresh_token(
+                            let token = exchange(
                                 &rotated,
                                 account.token_endpoint.as_deref(),
                                 account.oidc_client_id.as_deref(),
@@ -2432,15 +2260,18 @@ fn apply_refreshed_token(account: &mut GrokAccount, token: grok_oauth::GrokToken
     account.auth_raw = Some(official_auth_object(account));
 }
 
+pub(crate) fn quota_client_version(detected_version: Option<String>) -> String {
+    crate::modules::grok_client_version::resolve(detected_version.as_deref())
+}
+
 async fn query_quota(account: &mut GrokAccount) -> Result<(), String> {
-    let client_version = crate::commands::grok::detect_grok_client_version()
-        .await
-        .unwrap_or_else(|| FALLBACK_GROK_CLIENT_VERSION.to_string());
+    let client_version = quota_client_version(None);
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|error| format!("创建 Grok 配额客户端失败: {}", error))?;
+    crate::modules::grok_client_version::refresh_in_background(client.clone());
     // billing 是主数据源：补上与 task_usage 相同的传输重试，降低 SSL EOF 等偶发失败
     let access_token = account.access_token.clone();
     let client_version_for_billing = client_version.clone();
@@ -2488,7 +2319,11 @@ async fn query_quota(account: &mut GrokAccount) -> Result<(), String> {
         || quota.prepaid_balance.is_some_and(|value| value > 0.0)
         || quota.frequent_limit.is_some_and(|value| value > 0.0)
         || quota.occasional_limit.is_some_and(|value| value > 0.0);
-    account.plan_type = quota.subscription_tier.clone();
+    // Supplemental subscription lookups can fail while billing succeeds.
+    // Preserve the last known tier until the server supplies a replacement.
+    if quota.subscription_tier.is_some() {
+        account.plan_type = quota.subscription_tier.clone();
+    }
     account.quota = Some(quota);
     account.billing_raw = Some(billing);
     account.subscription_raw = subscriptions;
@@ -2523,6 +2358,15 @@ fn save_refreshed_account(
     {
         let _guard = ACCOUNT_LOCK.lock().map_err(|_| "获取 Grok 账号锁失败")?;
         let _store_guard = acquire_store_lock()?;
+        // Deletion uses these same locks. A quota/refresh request that started earlier must
+        // never recreate a removed source account and reactivate its sidecar credential.
+        let path = account_path(&account.id)?;
+        if !path
+            .try_exists()
+            .map_err(|error| format!("检查 Grok 账号文件失败: {}", error))?
+        {
+            return Err(format!("Grok 账号已删除，取消刷新保存: {}", account.id));
+        }
         save_account_locked(account)?;
     }
 
@@ -2595,6 +2439,23 @@ async fn refresh_account_inner(
     account_id: &str,
     force_credentials: bool,
 ) -> Result<GrokAccountView, String> {
+    refresh_account_inner_with_io(
+        account_id,
+        force_credentials,
+        |token, endpoint, client_id| {
+            Box::pin(grok_oauth::refresh_token(token, endpoint, client_id))
+        },
+        |account| Box::pin(query_quota(account)),
+    )
+    .await
+}
+
+async fn refresh_account_inner_with_io(
+    account_id: &str,
+    force_credentials: bool,
+    exchange: GrokTokenExchange,
+    query: GrokQuotaQuery,
+) -> Result<GrokAccountView, String> {
     let token_lock = token_lock_for(account_id)?;
     let _token_guard = token_lock.lock().await;
     let _file_guard = acquire_token_refresh_file_lock(account_id)?;
@@ -2616,15 +2477,19 @@ async fn refresh_account_inner(
         save_account_locked(&account)?;
         return Ok(GrokAccountView::from(&account));
     }
-    let previous_access_token = account.access_token.clone();
-    if let Err(error) = refresh_credentials(&mut account, force_credentials).await {
+    let mut previous_access_token = account.access_token.clone();
+    if let Err(error) =
+        refresh_credentials_with_exchange(&mut account, force_credentials, exchange).await
+    {
         account.status = Some(refresh_error_status(&error).to_string());
         account.status_reason = Some(error.clone());
         save_refreshed_account(&account, &previous_access_token)?;
         return Err(error);
     }
+    persist_refreshed_credentials(&account, &previous_access_token)?;
+    previous_access_token = account.access_token.clone();
 
-    let mut quota_result = query_quota(&mut account).await;
+    let mut quota_result = query(&mut account).await;
     let mut quota_auth_retries = 0;
     while should_retry_quota_after_unauthorized(
         force_credentials,
@@ -2632,8 +2497,12 @@ async fn refresh_account_inner(
         &quota_result,
     ) {
         quota_auth_retries += 1;
-        match refresh_credentials(&mut account, true).await {
-            Ok(()) => quota_result = query_quota(&mut account).await,
+        match refresh_credentials_with_exchange(&mut account, true, exchange).await {
+            Ok(()) => {
+                persist_refreshed_credentials(&account, &previous_access_token)?;
+                previous_access_token = account.access_token.clone();
+                quota_result = query(&mut account).await;
+            }
             Err(error) => {
                 account.status = Some(refresh_error_status(&error).to_string());
                 account.status_reason = Some(error.clone());
@@ -2752,12 +2621,12 @@ fn remaining_percent_from_used_total(used: f64, total: f64) -> Option<i32> {
     if !used.is_finite() || !total.is_finite() || total <= 0.0 {
         return None;
     }
-    let remaining = ((total - used).max(0.0) / total * 100.0).clamp(0.0, 100.0);
-    Some(remaining.round() as i32)
+    Some(remaining_percent_from_used_pct(used / total * 100.0))
 }
 
 fn remaining_percent_from_used_pct(used_percent: f64) -> i32 {
-    (100.0 - used_percent.clamp(0.0, 100.0)).round() as i32
+    // Match the official CLI: 99.99% used still has 1% displayed allowance.
+    (100.0 - used_percent.clamp(0.0, 100.0).floor()) as i32
 }
 
 /// 与账号页/概览可见桶对齐：周额度 + productUsage + 任务/按量。
@@ -2776,6 +2645,9 @@ fn quota_remaining_metrics(account: &GrokAccountView) -> Vec<(String, i32)> {
         if let Some(remaining) = remaining_percent_from_used_total(used, total) {
             metrics.push(("weekly".to_string(), remaining));
         }
+    }
+    if quota.is_unified_billing_user == Some(true) {
+        return metrics;
     }
     for product in &quota.products {
         let remaining = match (product.used, product.total) {
@@ -2804,9 +2676,11 @@ fn quota_remaining_metrics(account: &GrokAccountView) -> Vec<(String, i32)> {
             metrics.push(("occasional".to_string(), remaining));
         }
     }
-    if let (Some(used), Some(cap)) = (quota.on_demand_used, quota.on_demand_cap) {
-        if let Some(remaining) = remaining_percent_from_used_total(used, cap) {
-            metrics.push(("on-demand".to_string(), remaining));
+    if quota.on_demand_enabled != Some(false) {
+        if let (Some(used), Some(cap)) = (quota.on_demand_used, quota.on_demand_cap) {
+            if let Some(remaining) = remaining_percent_from_used_total(used, cap) {
+                metrics.push(("on-demand".to_string(), remaining));
+            }
         }
     }
     metrics
@@ -2921,6 +2795,39 @@ mod tests {
     };
     use serde_json::{json, Value};
     use std::path::PathBuf;
+
+    #[test]
+    fn quota_client_version_uses_supported_versions_and_rejects_obsolete_cli() {
+        assert_eq!(
+            super::quota_client_version(Some("1.0.47".to_string())),
+            "1.0.47"
+        );
+        assert_eq!(
+            super::quota_client_version(Some("0.2.93".to_string())),
+            "1.0.52"
+        );
+        assert_eq!(super::quota_client_version(None), "1.0.52");
+    }
+
+    #[test]
+    fn quota_headers_share_detected_or_fallback_client_version() {
+        let client = reqwest::Client::new();
+        for detected in [Some("1.0.47".to_string()), None] {
+            let version = super::quota_client_version(detected);
+            for url in [super::BILLING_URL, super::CLI_USER_URL] {
+                let request = super::cli_proxy_get(&client, url, "test-token", &version)
+                    .build()
+                    .expect("build quota request without sending");
+                let headers = request.headers();
+                assert_eq!(headers["x-grok-cli-version"], version);
+                assert_eq!(headers["x-grok-client-version"], version);
+                assert_eq!(
+                    headers[reqwest::header::USER_AGENT],
+                    format!("grok-cli/{version}")
+                );
+            }
+        }
+    }
 
     fn sample_account() -> GrokAccount {
         GrokAccount {
@@ -3285,6 +3192,21 @@ mod tests {
 
     #[test]
     fn full_export_json_can_be_reimported() {
+        let _env_lock = crate::modules::test_support::env_lock()
+            .lock()
+            .expect("lock test environment");
+        let temp = TestDir::new();
+        struct ImportDataDirGuard(Option<std::ffi::OsString>);
+        impl Drop for ImportDataDirGuard {
+            fn drop(&mut self) {
+                match self.0.as_ref() {
+                    Some(value) => std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", value),
+                    None => std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR"),
+                }
+            }
+        }
+        let _environment = ImportDataDirGuard(std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR"));
+        std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &temp.0);
         let account = sample_account();
         let exported = serde_json::to_string_pretty(&vec![&account]).expect("serialize export");
         let value: Value = serde_json::from_str(&exported).expect("parse export");
@@ -3622,6 +3544,10 @@ mod tests {
         include!("grok_account_index_tests.rs");
     }
     #[cfg(unix)]
+    mod refresh_cancellation {
+        include!("grok_account_refresh_cancellation_tests.rs");
+    }
+    #[cfg(unix)]
     #[test]
     fn corrupted_account_detail_restores_private_backup() {
         use std::os::unix::fs::PermissionsExt;
@@ -3744,6 +3670,57 @@ mod tests {
         assert_eq!(quota.frequent_limit, Some(10.0));
         assert_eq!(quota.occasional_usage, Some(3.0));
         assert_eq!(quota.occasional_limit, Some(30.0));
+    }
+
+    #[test]
+    fn shared_pool_alerts_ignore_product_shares_and_legacy_buckets() {
+        let mut account = sample_account();
+        account.quota = Some(GrokQuota {
+            is_unified_billing_user: Some(true),
+            weekly_limit_percent: Some(99.99),
+            products: vec![GrokProductUsage {
+                product: "Cursor".into(),
+                usage_percent: Some(100.0),
+                used: None,
+                total: None,
+                remaining: None,
+            }],
+            frequent_usage: Some(10.0),
+            frequent_limit: Some(10.0),
+            on_demand_used: Some(100.0),
+            on_demand_cap: Some(100.0),
+            ..Default::default()
+        });
+        assert_eq!(
+            quota_remaining_metrics(&GrokAccountView::from(&account)),
+            vec![("weekly".into(), 1)]
+        );
+    }
+
+    #[test]
+    fn auth_retention_defaults_out_and_preserves_explicit_preferences() {
+        let mut account = sample_account();
+        account.coding_data_retention_opt_out = None;
+        account.auth_raw = Some(json!({}));
+        assert_eq!(
+            super::official_auth_object(&account)["coding_data_retention_opt_out"],
+            true
+        );
+        account.auth_raw = Some(json!({"coding_data_retention_opt_out":false}));
+        assert_eq!(
+            super::official_auth_object(&account)["coding_data_retention_opt_out"],
+            false
+        );
+        account.coding_data_retention_opt_out = Some(true);
+        assert_eq!(
+            super::official_auth_object(&account)["coding_data_retention_opt_out"],
+            true
+        );
+        account.coding_data_retention_opt_out = Some(false);
+        assert_eq!(
+            super::official_auth_object(&account)["coding_data_retention_opt_out"],
+            false
+        );
     }
 
     #[test]

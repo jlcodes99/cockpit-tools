@@ -1,20 +1,87 @@
 use serde_json::{json, Map, Value};
-use std::collections::HashSet;
-use std::sync::OnceLock;
+use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, OnceLock};
 
 const REASONING_ENCRYPTED_CONTENT_INCLUDE: &str = "reasoning.encrypted_content";
 const CODEX_AUTO_REVIEW_MODEL_ID: &str = "codex-auto-review";
 const CODEX_RESERVE_MODEL_ID: &str = "gpt-reserve";
 const CODEX_RESERVE_TEMPLATE_MODEL_ID: &str = "gpt-5.6-luna";
-const CODEX_MODEL_CATALOG_TEMPLATE_SLUG: &str = "gpt-5.5";
-const CODEX_CLIENT_MODEL_TEMPLATES_JSON: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../sidecars/cockpit-cliproxy/third_party/CLIProxyAPI/internal/registry/models/codex_client_models.json"
-));
+/// 额度兜底模型对客户端展示的名称（跟随官方 5.6 命名）。
+pub(crate) const CODEX_RESERVE_DISPLAY_NAME: &str = "GPT-5.6 Reserve";
+const CODEX_MODEL_CATALOG_TEMPLATE_SLUG: &str = "gpt-5.6-sol";
+const CODEX_INPUT_ITEM_ID_LIMIT: usize = 64;
+/// Codex 客户端模型目录统一的压缩格式哈希（comp_hash）。
+///
+/// 各模型带不同 comp_hash 时，客户端在切换模型后会触发 PreTurn 自动压缩
+/// （`run_auto_compact{reason=CompHashChanged}`），与当前 token 用量无关；
+/// 统一为最新官方值即可避免混合模型目录内切换模型被强制重建上下文。
+pub(crate) const CODEX_CLIENT_COMP_HASH: &str = "3000";
 const DEFAULT_CONTEXT_WINDOW: i64 = 272_000;
-const DEFAULT_MAX_CONTEXT_WINDOW: i64 = 1_000_000;
+/// 未知 / 自定义 Codex 模型的兜底上限。
+///
+/// 兜底不再声明 1M 上限：1M 级上下文属于具体模型的真实能力值，只能来自模型目录或
+/// 用户显式覆盖；兜底一律与 `DEFAULT_CONTEXT_WINDOW` 保持一致，避免客户端按 1M
+/// 上报所有第三方模型。
+const DEFAULT_MAX_CONTEXT_WINDOW: i64 = DEFAULT_CONTEXT_WINDOW;
 const LOCAL_PROXY_BYPASS_HOSTS: [&str; 5] =
     ["127.0.0.1", "127.0.0.0/8", "localhost", "::1", "::1/128"];
+
+/// Codex 客户端「上下文 / 压缩」统一口径：压缩阈值固定取上下文窗口的 90%。
+pub(crate) const AUTO_COMPACT_RATIO_PERCENT: i64 = 90;
+
+/// 按统一口径派生自动压缩阈值：`context_window * 90 / 100`（整数除法，向下取整）。
+///
+/// 例：`516000 -> 464400`、`1000000 -> 900000`、`272000 -> 244800`、`128000 -> 115200`。
+/// 非正输入返回 0，调用方据此判断「无法派生」。
+pub(crate) fn derived_auto_compact_token_limit(context_window: i64) -> i64 {
+    if context_window <= 0 {
+        return 0;
+    }
+    context_window.saturating_mul(AUTO_COMPACT_RATIO_PERCENT) / 100
+}
+
+/// 为单个模型条目补齐压缩阈值：声明了 `context_window` 但缺少、非正或大于等于窗口的
+/// 压缩阈值时，按统一口径派生写入；合法的显式阈值保持原样。
+fn ensure_model_auto_compact_limit(object: &mut Map<String, Value>) -> bool {
+    let Some(context_window) = object
+        .get("context_window")
+        .and_then(Value::as_i64)
+        .filter(|value| *value > 0)
+    else {
+        return false;
+    };
+    let existing = object
+        .get("auto_compact_token_limit")
+        .and_then(Value::as_i64)
+        .filter(|value| *value > 0);
+    // 已声明的压缩阈值必须小于上下文窗口，否则视为无效并重新派生。
+    if existing.is_some_and(|value| value < context_window) {
+        return false;
+    }
+    object.insert(
+        "auto_compact_token_limit".to_string(),
+        json!(derived_auto_compact_token_limit(context_window)),
+    );
+    true
+}
+
+/// 为整个 Codex 客户端模型目录补齐压缩阈值（统一口径的收口点）。
+///
+/// 只要条目声明了 `context_window > 0`，就必定带 `auto_compact_token_limit`；
+/// 内置模板、`gpt-reserve`、模板回落条目与外部覆盖都不再留空。
+pub(crate) fn ensure_client_model_auto_compact_limits(catalog: &mut Value) -> bool {
+    let Some(models) = catalog.get_mut("models").and_then(Value::as_array_mut) else {
+        return false;
+    };
+    let mut changed = false;
+    for model in models {
+        if let Some(object) = model.as_object_mut() {
+            changed |= ensure_model_auto_compact_limit(object);
+        }
+    }
+    changed
+}
 
 pub fn merge_local_no_proxy(raw: &str) -> String {
     let mut seen = HashSet::new();
@@ -124,17 +191,20 @@ pub fn apply_model_context_overrides(
         let Some(object) = model.as_object_mut() else {
             continue;
         };
-        if let Some(context_window) = context_window.filter(|value| *value > 0) {
-            object.insert("context_window".to_string(), json!(context_window));
-            object.insert("max_context_window".to_string(), json!(context_window));
-        }
-        if let Some(auto_compact_token_limit) = auto_compact_token_limit.filter(|value| *value > 0)
-        {
-            object.insert(
-                "auto_compact_token_limit".to_string(),
-                json!(auto_compact_token_limit),
-            );
-        }
+        // 上下文窗口与压缩阈值必须成对出现：只给了压缩阈值属于半边配置，直接忽略，
+        // 保持「跟随官方」语义（客户端继续使用官方目录值）。
+        let Some(context_window) = context_window.filter(|value| *value > 0) else {
+            continue;
+        };
+        object.insert("context_window".to_string(), json!(context_window));
+        object.insert("max_context_window".to_string(), json!(context_window));
+        let auto_compact_token_limit = auto_compact_token_limit
+            .filter(|value| *value > 0 && *value < context_window)
+            .unwrap_or_else(|| derived_auto_compact_token_limit(context_window));
+        object.insert(
+            "auto_compact_token_limit".to_string(),
+            json!(auto_compact_token_limit),
+        );
     }
 }
 
@@ -156,6 +226,9 @@ pub(crate) fn ensure_codex_reserve_fallback(catalog: &mut Value) {
     models.push(reserve);
 }
 
+pub(crate) const CODEX_REASONING_EFFORT_ORDER: &[&str] =
+    &["low", "medium", "high", "xhigh", "max", "ultra"];
+
 fn apply_reasoning_effort_override(object: &mut Map<String, Value>, efforts: &[String]) {
     let levels = object
         .get("supported_reasoning_levels")
@@ -169,7 +242,7 @@ fn apply_reasoning_effort_override(object: &mut Map<String, Value>, efforts: &[S
                 .cloned()
         })
         .unwrap_or_default();
-    let selected = efforts
+    let mut selected = efforts
         .iter()
         .filter_map(|effort| {
             levels
@@ -181,42 +254,68 @@ fn apply_reasoning_effort_override(object: &mut Map<String, Value>, efforts: &[S
     if selected.is_empty() {
         return;
     }
-    object.insert(
-        "supported_reasoning_levels".to_string(),
-        Value::Array(selected.clone()),
-    );
+    // Capture the old input-order fallback before canonicalizing the output.
     let current_default = object
         .get("default_reasoning_level")
         .and_then(Value::as_str)
-        .unwrap_or_default();
-    if !selected.iter().any(|level| {
-        level.get("effort").and_then(Value::as_str) == Some(current_default)
-    }) {
-        if let Some(first) = selected
-            .first()
-            .and_then(|level| level.get("effort"))
-            .and_then(Value::as_str)
-        {
-            object.insert(
-                "default_reasoning_level".to_string(),
-                Value::String(first.to_string()),
-            );
-        }
+        .filter(|default| {
+            selected
+                .iter()
+                .any(|level| level["effort"].as_str() == Some(default))
+        })
+        .map(str::to_owned)
+        .or_else(|| selected.first()?.get("effort")?.as_str().map(str::to_owned));
+    selected.sort_by_key(|level| {
+        CODEX_REASONING_EFFORT_ORDER
+            .iter()
+            .position(|effort| level["effort"].as_str() == Some(effort))
+            .unwrap_or(usize::MAX)
+    });
+    selected.dedup_by(|a, b| a["effort"] == b["effort"]);
+    object.insert(
+        "supported_reasoning_levels".to_string(),
+        Value::Array(selected),
+    );
+    if let Some(default) = current_default {
+        object.insert(
+            "default_reasoning_level".to_string(),
+            Value::String(default),
+        );
     }
 }
 
 pub(crate) fn managed_codex_model_ids() -> Vec<String> {
-    let catalog = codex_client_model_catalog();
-    let overrides = catalog.get("model_overrides").and_then(Value::as_array);
-    let models = overrides
-        .filter(|models| !models.is_empty())
-        .or_else(|| catalog.get("models").and_then(Value::as_array));
+    managed_codex_model_ids_from_catalog(codex_client_model_catalog().as_ref())
+}
+
+fn managed_codex_model_ids_from_catalog(catalog: &Value) -> Vec<String> {
+    // Provider metadata shares the client template catalog but is not part of
+    // the official Codex account's default model entitlement.
+    let is_codex_model = |model: &&Value| {
+        model.get("slug").and_then(Value::as_str).is_some_and(|slug| {
+            let slug = slug.trim().to_ascii_lowercase();
+            slug.starts_with("gpt-") || slug.starts_with("codex-")
+        })
+    };
+    let overrides = catalog
+        .get("model_overrides")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(is_codex_model)
+        .collect::<Vec<_>>();
+    let uses_overrides = !overrides.is_empty();
+    let models = if uses_overrides {
+        overrides
+    } else {
+        catalog.get("models").and_then(Value::as_array)
+            .into_iter().flatten().filter(is_codex_model).collect()
+    };
 
     let mut model_ids = models
         .into_iter()
-        .flatten()
         .filter(|model| {
-            overrides.is_some_and(|overrides| !overrides.is_empty())
+            uses_overrides
                 || (model
                     .get("use_responses_lite")
                     .and_then(Value::as_bool)
@@ -228,16 +327,27 @@ pub(crate) fn managed_codex_model_ids() -> Vec<String> {
         })
         .filter_map(|model| model.get("slug").and_then(Value::as_str))
         .map(str::trim)
-        .filter(|model| !model.is_empty())
+        .filter(|model| {
+            !model.is_empty() && !crate::modules::codex_account::is_retired_gpt55_model(model)
+        })
         .map(str::to_string)
         .collect::<Vec<_>>();
 
-    if let Some(index) = model_ids
+    // 官方推荐集把 GPT-6 家族排在最前，顺序为 6.1 Sol → Astra → 6.1 Terra → Sol → Luna；
+    // 只移动已存在的条目，不插入目录里没有的模型。
+    for (offset, model_id) in ["gpt-6.1-sol", "gpt-6-astra", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna"]
         .iter()
-        .position(|model| model.eq_ignore_ascii_case("gpt-6-astra"))
+        .enumerate()
     {
-        let astra = model_ids.remove(index);
-        model_ids.insert(0, astra);
+        if let Some(index) = model_ids
+            .iter()
+            .position(|model| model.eq_ignore_ascii_case(model_id))
+        {
+            if index > offset {
+                let model = model_ids.remove(index);
+                model_ids.insert(offset, model);
+            }
+        }
     }
 
     model_ids
@@ -251,11 +361,7 @@ pub fn normalize_responses_body_for_codex_with_lite(
     body: &mut Value,
     force_responses_lite: bool,
 ) -> bool {
-    let responses_lite = force_responses_lite
-        || body
-            .get("model")
-            .and_then(Value::as_str)
-            .is_some_and(codex_model_uses_responses_lite);
+    let responses_lite = force_responses_lite || responses_lite_metadata_enabled(body);
     let Some(obj) = body.as_object_mut() else {
         return false;
     };
@@ -264,7 +370,17 @@ pub fn normalize_responses_body_for_codex_with_lite(
     changed |= ensure_string_field(obj, "instructions", "");
     changed |= ensure_bool_field(obj, "stream", true);
     changed |= ensure_bool_field(obj, "store", false);
-    changed |= ensure_bool_field(obj, "parallel_tool_calls", !responses_lite);
+    // Catalog capability alone does not put an API request on the Lite wire
+    // protocol. Keep the caller's explicit parallel setting unless the actual
+    // request carries the Lite marker, matching the sidecar's request handling.
+    if responses_lite
+        || obj
+            .get("parallel_tool_calls")
+            .and_then(Value::as_bool)
+            .is_none()
+    {
+        changed |= ensure_bool_field(obj, "parallel_tool_calls", !responses_lite);
+    }
     changed |= ensure_reasoning_include(obj);
     changed |= normalize_responses_input(obj);
     changed |= normalize_codex_builtin_tools(obj);
@@ -300,6 +416,16 @@ pub(crate) fn codex_model_uses_responses_lite(model_id: &str) -> bool {
         })
 }
 
+pub(crate) fn responses_lite_metadata_enabled(body: &Value) -> bool {
+    body.pointer("/client_metadata/ws_request_header_x_openai_internal_codex_responses_lite")
+        .is_some_and(|value| {
+            value == true
+                || value
+                    .as_str()
+                    .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+        })
+}
+
 pub(crate) fn filter_responses_lite_tools(body: &mut Value) -> bool {
     body.as_object_mut()
         .is_some_and(filter_responses_lite_tools_in_object)
@@ -312,7 +438,7 @@ fn responses_lite_tool_allowed(tool: &Value) -> bool {
         .map(|tool_type| tool_type.trim().to_ascii_lowercase())
         .as_deref()
     {
-        Some("function" | "custom") => true,
+        Some("function" | "custom" | "namespace") => true,
         Some("tool_search") => tool
             .get("execution")
             .and_then(Value::as_str)
@@ -348,7 +474,7 @@ fn filter_responses_lite_tool_choice(choice: &mut Value) -> (bool, bool) {
         .map(|value| value.trim().to_ascii_lowercase());
 
     match choice_type.as_deref() {
-        Some("function" | "custom") => return (false, true),
+        Some("function" | "custom" | "namespace") => return (false, true),
         Some("tool_search") => {
             let client_executed = choice_object
                 .get("execution")
@@ -445,10 +571,29 @@ fn build_codex_client_model(model_id: &str, index: usize) -> Value {
         .expect("Codex client model template should be a JSON object");
     object.insert("slug".to_string(), Value::String(model_id.to_string()));
     if model_id.trim().eq_ignore_ascii_case(CODEX_RESERVE_MODEL_ID) {
-        object.insert("display_name".to_string(), json!("Luna Reserve"));
+        object.insert(
+            "display_name".to_string(),
+            json!(CODEX_RESERVE_DISPLAY_NAME),
+        );
         object.insert("visibility".to_string(), json!("list"));
     }
     if !is_catalog_model {
+        // An unknown provider must not inherit new Sol-only execution modes.
+        object.insert("multi_agent_version".into(), Value::Null);
+        object.insert("minimal_client_version".into(), json!("0.124.0"));
+        object.insert("tool_mode".into(), Value::Null);
+        object.insert("use_responses_lite".into(), json!(false));
+        object.insert("include_skills".into(), json!(true));
+        object.insert("default_reasoning_level".into(), json!("medium"));
+        object.insert(
+            "supported_reasoning_levels".into(),
+            json!([
+                {"effort":"low","description":"Low"},
+                {"effort":"medium","description":"Medium"},
+                {"effort":"high","description":"High"},
+                {"effort":"xhigh","description":"Extra high"}
+            ]),
+        );
         let display_name = display_name_for_model(model_id);
         object.insert(
             "display_name".to_string(),
@@ -460,6 +605,10 @@ fn build_codex_client_model(model_id: &str, index: usize) -> Value {
             "max_context_window".to_string(),
             json!(DEFAULT_MAX_CONTEXT_WINDOW),
         );
+        object.insert(
+            "auto_compact_token_limit".to_string(),
+            json!(derived_auto_compact_token_limit(DEFAULT_CONTEXT_WINDOW)),
+        );
         object.insert("priority".to_string(), json!(1000 + index));
         object.insert(
             "additional_speed_tiers".to_string(),
@@ -467,6 +616,19 @@ fn build_codex_client_model(model_id: &str, index: usize) -> Value {
         );
         object.insert("service_tiers".to_string(), Value::Array(Vec::new()));
         inherit_routed_gpt_capabilities(object, model_id);
+        // Grok 平台模型由第三方 executor 承接，官方模型目录没有对应条目。
+        // 缺少 multi_agent_version 时 Codex 客户端不会为这些模型注入子智能体
+        // 协作工具（spawn/send/wait 等），会话里就表现为「找不到协作工具」。
+        if is_grok_codex_model(model_id) {
+            object.insert(
+                "multi_agent_version".to_string(),
+                json!(GROK_MULTI_AGENT_VERSION),
+            );
+            object.insert(
+                "minimal_client_version".to_string(),
+                json!(GROK_MINIMAL_CLIENT_VERSION),
+            );
+        }
     }
     if visibility == "hide" || !object.contains_key("visibility") {
         object.insert(
@@ -477,15 +639,48 @@ fn build_codex_client_model(model_id: &str, index: usize) -> Value {
     object.insert("supported_in_api".to_string(), Value::Bool(true));
     object.insert("availability_nux".to_string(), Value::Null);
     object.insert("upgrade".to_string(), Value::Null);
+    object.insert(
+        "comp_hash".to_string(),
+        Value::String(CODEX_CLIENT_COMP_HASH.to_string()),
+    );
+    apply_deepseek_multi_agent_capability(&mut model);
+    // 统一口径收口：任何声明了上下文窗口的条目（内置模板、模板回落、外部覆盖）都必须
+    // 带自动压缩阈值，避免目录里出现「有窗口无阈值」的空档。
+    if let Some(object) = model.as_object_mut() {
+        ensure_model_auto_compact_limit(object);
+    }
     model
 }
 
-fn codex_client_model_catalog() -> &'static Value {
-    static CATALOG: OnceLock<Value> = OnceLock::new();
-    CATALOG.get_or_init(|| {
-        serde_json::from_str(CODEX_CLIENT_MODEL_TEMPLATES_JSON)
-            .expect("Codex client model templates JSON should be valid")
-    })
+/// 只为已适配的 DeepSeek 模型补协作声明；必须在模板覆盖之后调用。
+pub(crate) fn apply_deepseek_multi_agent_capability(model: &mut Value) {
+    let slug = model
+        .get("slug")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let id = slug
+        .trim()
+        .rsplit('/')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if !matches!(
+        id.as_str(),
+        "deepseek-flash" | "deepseek-v4-flash" | "deepseek-v4-pro"
+    ) {
+        return;
+    }
+    model["multi_agent_version"] = json!("v2");
+}
+
+fn codex_client_model_catalog() -> Arc<Value> {
+    crate::modules::codex_model_catalog::snapshot()
+}
+
+/// Returns only a known model's metadata, never the client bootstrap fallback.
+pub(crate) fn known_codex_model_template(model_id: &str) -> Option<Value> {
+    let (template, known) = codex_client_model_template(model_id);
+    known.then_some(template)
 }
 
 fn inherit_routed_gpt_capabilities(object: &mut Map<String, Value>, model_id: &str) {
@@ -506,6 +701,7 @@ fn inherit_routed_gpt_capabilities(object: &mut Map<String, Value>, model_id: &s
         "additional_speed_tiers",
         "context_window",
         "max_context_window",
+        "auto_compact_token_limit",
     ] {
         if let Some(value) = template.get(field) {
             object.insert(field.to_string(), value.clone());
@@ -513,7 +709,22 @@ fn inherit_routed_gpt_capabilities(object: &mut Map<String, Value>, model_id: &s
     }
 }
 
+/// Grok 平台模型沿用的官方多智能体协议版本；与官方 DeepSeek 条目保持一致。
+const GROK_MULTI_AGENT_VERSION: &str = "v2";
+/// 声明 v2 协作能力所需的最低客户端版本，取官方同代模型的值。
+const GROK_MINIMAL_CLIENT_VERSION: &str = "0.144.0";
+
+fn is_grok_codex_model(model_id: &str) -> bool {
+    let model_id = model_id.trim();
+    crate::modules::codex_account::GROK_CODEX_MODELS
+        .iter()
+        .any(|id| id.eq_ignore_ascii_case(model_id))
+}
+
 fn codex_client_model_template(model_id: &str) -> (Value, bool) {
+    if let Some(model) = deepseek_model_template(model_id) {
+        return (model, true);
+    }
     let payload = codex_client_model_catalog();
     let models = payload
         .get("models")
@@ -537,13 +748,23 @@ fn codex_client_model_template(model_id: &str) -> (Value, bool) {
         }
     }
 
+    // 未知型号借一个条目做能力模板。优先官方兜底型号，但它随时可能被上游下线，
+    // 因此退而取上下文窗口最小的可见条目：对未知模型而言这是最保守的假设，
+    // 不会让它虚报出远超实际的上下文。
     let default_model = models
         .iter()
         .find(|model| {
             model.get("slug").and_then(Value::as_str) == Some(CODEX_MODEL_CATALOG_TEMPLATE_SLUG)
         })
+        .or_else(|| {
+            models
+                .iter()
+                .filter(|model| model.get("context_window").and_then(Value::as_i64).is_some())
+                .min_by_key(|model| model["context_window"].as_i64().unwrap_or(i64::MAX))
+        })
+        .or_else(|| models.first())
         .cloned()
-        .expect("Codex client model templates should include gpt-5.5");
+        .expect("Codex client model catalog should not be empty");
     let Some(model_override) = payload
         .get("model_overrides")
         .and_then(Value::as_array)
@@ -572,6 +793,48 @@ fn codex_client_model_template(model_id: &str) -> (Value, bool) {
     (model, true)
 }
 
+/// Recognize DeepSeek model IDs, including namespaced relay IDs.
+pub(crate) fn is_deepseek_model(model_id: &str) -> bool {
+    let id = model_id.trim().rsplit('/').next().unwrap_or_default();
+    id.len() > "deepseek-".len()
+        && id.get(.."deepseek-".len()).is_some_and(|prefix| prefix.eq_ignore_ascii_case("deepseek-"))
+}
+
+pub(crate) fn is_known_deepseek_model(model_id: &str) -> bool {
+    matches!(model_id.trim().rsplit('/').next().unwrap_or_default().to_ascii_lowercase().as_str(),
+        "deepseek-flash" | "deepseek-v4-flash" | "deepseek-v4-pro" | "deepseek-v4-flash-vision-exp")
+}
+
+pub(crate) fn deepseek_model_template(model_id: &str) -> Option<Value> {
+    if !is_deepseek_model(model_id) {
+        return None;
+    }
+    let id = model_id.trim().rsplit('/').next()?.to_ascii_lowercase();
+    let template_id = match id.as_str() {
+        "deepseek-flash" | "deepseek-v4-flash" => "deepseek-v4-flash",
+        "deepseek-v4-pro" => "deepseek-v4-pro",
+        "deepseek-v4-flash-vision-exp" => "deepseek-v4-flash-vision-exp",
+        _ => "deepseek-v4-flash",
+    };
+    static CATALOG: OnceLock<Value> = OnceLock::new();
+    let catalog = CATALOG.get_or_init(|| serde_json::from_str(include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/resources/deepseek_codex_models.json"))).expect("valid DeepSeek catalog"));
+    let template = catalog["models"].as_array()?.iter().find(|item| item["slug"] == template_id)?;
+    if is_known_deepseek_model(model_id) {
+        return Some(template.clone());
+    }
+    // Future models inherit only reasoning defaults, not a known model's
+    // context size, image support, tools, or execution capabilities.
+    let mut fallback = build_codex_client_model("cockpit-unknown-model", 0);
+    fallback["slug"] = json!(model_id.trim());
+    fallback["display_name"] = json!(model_id.trim());
+    fallback["description"] = json!(model_id.trim());
+    fallback["input_modalities"] = json!(["text"]);
+    fallback["supports_image_detail_original"] = json!(false);
+    fallback["supported_reasoning_levels"] = template["supported_reasoning_levels"].clone();
+    fallback["default_reasoning_level"] = template["default_reasoning_level"].clone();
+    Some(fallback)
+}
+
 fn display_name_for_model(model_id: &str) -> String {
     match model_id {
         "gpt-5-codex" => "GPT-5 Codex".to_string(),
@@ -580,7 +843,11 @@ fn display_name_for_model(model_id: &str) -> String {
         "gpt-5.4-mini" => "GPT-5.4 Mini".to_string(),
         "gpt-5.3-codex" => "GPT-5.3 Codex".to_string(),
         "gpt-5.3-codex-spark" => "GPT-5.3 Codex Spark".to_string(),
-        "gpt-6-astra" => "6 Astra".to_string(),
+        "gpt-6.1-sol" => "GPT-6.1 Sol".to_string(),
+        "gpt-6.1-terra" => "GPT-6.1 Terra".to_string(),
+        "gpt-6-astra" => "GPT-6 Astra".to_string(),
+        "gpt-6-sol" => "GPT-6 Sol".to_string(),
+        "gpt-6-luna" => "GPT-6 Luna".to_string(),
         "gpt-5.2" => "GPT-5.2".to_string(),
         "gpt-5.2-codex" => "GPT-5.2 Codex".to_string(),
         "gpt-5.1-codex-max" => "GPT-5.1 Codex Max".to_string(),
@@ -651,19 +918,126 @@ fn normalize_responses_input(obj: &mut Map<String, Value>) -> bool {
         }
         Value::Array(items) => {
             let mut changed = false;
-            for item in items {
+            changed |= normalize_responses_item_ids(items);
+            for item in items.iter_mut() {
                 changed |= normalize_responses_input_item(item);
             }
+            changed |= ensure_responses_call_ids(items);
             changed
         }
         Value::Object(_) => {
-            let mut item = input.clone();
-            normalize_responses_input_item(&mut item);
-            *input = Value::Array(vec![item]);
+            let item = input.clone();
+            let mut items = vec![item];
+            normalize_responses_item_ids(&mut items);
+            normalize_responses_input_item(&mut items[0]);
+            *input = Value::Array(items);
             true
         }
         _ => false,
     }
+}
+
+/// Repair item IDs written by providers that used the `function_call` prefix
+/// for a `custom_tool_call`. Official Responses validates the prefix against
+/// the item type when replaying a conversation, so this must happen before
+/// both direct official requests and gateway requests.
+fn normalize_responses_item_ids(items: &mut [Value]) -> bool {
+    // Reasoning IDs can be bound to encrypted_content by the upstream. Keep
+    // them opaque, including when the encrypted payload is absent. Reserve
+    // them before repairing other items so neither collision handling nor the
+    // replacement pass can change a reasoning ID or a reference to it.
+    let reasoning_ids: HashSet<String> = items
+        .iter()
+        .filter(|item| item.get("type").and_then(Value::as_str) == Some("reasoning"))
+        .filter_map(|item| item.get("id").and_then(Value::as_str))
+        .filter(|id| !id.is_empty())
+        .map(str::to_owned)
+        .collect();
+    let mut replacements = HashMap::new();
+    let mut used = reasoning_ids.clone();
+    for item in items.iter() {
+        let Some(obj) = item.as_object() else {
+            continue;
+        };
+        let Some(id) = obj.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        // If another item shares a reasoning ID, a global replacement would
+        // also corrupt that reasoning item. Leave ambiguous IDs untouched.
+        if id.is_empty() || reasoning_ids.contains(id) {
+            continue;
+        }
+        let Some(item_type) = obj.get("type").and_then(Value::as_str) else {
+            continue;
+        };
+        let prefix = match item_type {
+            "function_call" => "fc",
+            "custom_tool_call" => "ctc",
+            "custom_tool_call_output" => "ctco",
+            "message" => "msg",
+            _ => continue,
+        };
+        let mut candidate = if id.starts_with(&format!("{prefix}_")) {
+            id.to_string()
+        } else {
+            format!("{prefix}_{id}")
+        };
+        if candidate.chars().count() > CODEX_INPUT_ITEM_ID_LIMIT {
+            candidate = shorten_codex_item_id(&candidate, 0);
+        }
+        if used.contains(&candidate) {
+            for attempt in 1.. {
+                let shortened = shorten_codex_item_id(&candidate, attempt);
+                if used.insert(shortened.clone()) {
+                    candidate = shortened;
+                    break;
+                }
+            }
+        } else {
+            used.insert(candidate.clone());
+        }
+        if candidate != id {
+            replacements.insert(id.to_string(), candidate);
+        }
+    }
+
+    if replacements.is_empty() {
+        return false;
+    }
+    let mut changed = false;
+    for item in items.iter_mut() {
+        let Some(obj) = item.as_object_mut() else {
+            continue;
+        };
+        for key in ["id", "item_id"] {
+            let Some(value) = obj.get(key).and_then(Value::as_str).map(str::to_owned) else {
+                continue;
+            };
+            if let Some(replacement) = replacements.get(&value) {
+                obj.insert(key.to_string(), Value::String(replacement.clone()));
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
+fn shorten_codex_item_id(id: &str, attempt: usize) -> String {
+    let mut input = id.to_string();
+    if attempt > 0 {
+        input.push('\0');
+        input.push_str(&attempt.to_string());
+    }
+    let digest = Sha256::digest(input.as_bytes());
+    let suffix = format!(
+        "_{}",
+        digest[..8]
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    );
+    let prefix_len = CODEX_INPUT_ITEM_ID_LIMIT.saturating_sub(suffix.len());
+    id.chars().take(prefix_len).collect::<String>() + &suffix
 }
 
 fn normalize_responses_input_item(item: &mut Value) -> bool {
@@ -699,6 +1073,122 @@ fn normalize_responses_input_item(item: &mut Value) -> bool {
         changed |= normalize_message_content(content, &normalized_role);
     }
 
+    changed
+}
+
+fn responses_call_item_requires_id(item_type: &str) -> bool {
+    matches!(
+        item_type,
+        "function_call" | "custom_tool_call" | "tool_call" | "mcp_tool_call"
+    )
+}
+
+fn responses_call_output_requires_id(item_type: &str) -> bool {
+    matches!(
+        item_type,
+        "function_call_output"
+            | "custom_tool_call_output"
+            | "tool_call_output"
+            | "mcp_tool_call_output"
+    )
+}
+
+fn next_generated_call_id(prefix: &str, index: usize, used: &mut HashSet<String>) -> String {
+    let base = format!("{}_{}", prefix, index);
+    if used.insert(base.clone()) {
+        return base;
+    }
+    for suffix in 1.. {
+        let candidate = format!("{}_{}", base, suffix);
+        if used.insert(candidate.clone()) {
+            return candidate;
+        }
+    }
+    unreachable!("call id suffix space is unbounded")
+}
+
+fn response_item_non_empty_string<'a>(obj: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
+    obj.get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn responses_call_output_can_stand_alone(item_type: &str, obj: &Map<String, Value>) -> bool {
+    item_type == "function_call_output" && response_item_non_empty_string(obj, "name").is_some()
+}
+
+fn ensure_responses_call_ids(items: &mut Vec<Value>) -> bool {
+    let mut used = HashSet::new();
+    for item in items.iter() {
+        if let Some(call_id) = item
+            .as_object()
+            .and_then(|obj| response_item_non_empty_string(obj, "call_id"))
+        {
+            used.insert(call_id.to_string());
+        }
+    }
+
+    let mut pending: Vec<(String, Option<String>)> = Vec::new();
+    let mut drop_indices = Vec::new();
+    let mut changed = false;
+    for (index, item) in items.iter_mut().enumerate() {
+        let Some(obj) = item.as_object_mut() else {
+            continue;
+        };
+        let item_type = obj
+            .get("type")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let is_call = responses_call_item_requires_id(&item_type);
+        let is_output = responses_call_output_requires_id(&item_type);
+        if !is_call && !is_output {
+            continue;
+        }
+        let name = response_item_non_empty_string(obj, "name").map(ToOwned::to_owned);
+        let call_id = match response_item_non_empty_string(obj, "call_id") {
+            Some(call_id) => call_id.to_string(),
+            None => {
+                let generated = if is_call {
+                    next_generated_call_id("call_missing", index, &mut used)
+                } else {
+                    let matched = name
+                        .as_deref()
+                        .and_then(|name| {
+                            pending
+                                .iter()
+                                .position(|(_, pending_name)| pending_name.as_deref() == Some(name))
+                        })
+                        .or_else(|| (!pending.is_empty()).then_some(0));
+                    match matched {
+                        Some(position) => pending.remove(position).0,
+                        None if responses_call_output_can_stand_alone(&item_type, obj) => {
+                            continue;
+                        }
+                        None => {
+                            drop_indices.push(index);
+                            continue;
+                        }
+                    }
+                };
+                obj.insert("call_id".to_string(), Value::String(generated.clone()));
+                changed = true;
+                generated
+            }
+        };
+
+        if is_call {
+            pending.push((call_id, name));
+        } else if let Some(position) = pending.iter().position(|(id, _)| id == &call_id) {
+            pending.remove(position);
+        }
+    }
+    for index in drop_indices.into_iter().rev() {
+        items.remove(index);
+        changed = true;
+    }
     changed
 }
 
@@ -836,11 +1326,31 @@ fn remove_unsupported_responses_fields(obj: &mut Map<String, Value>) -> bool {
         changed |= obj.remove(key).is_some();
     }
 
-    if obj.get("service_tier").is_some()
-        && obj.get("service_tier").and_then(Value::as_str) != Some("priority")
-    {
-        obj.remove("service_tier");
-        changed = true;
+    if let Some(tier) = obj.get("service_tier") {
+        let normalized =
+            tier.as_str()
+                .and_then(|tier| match tier.trim().to_ascii_lowercase().as_str() {
+                    "fast" | "priority" => Some("priority"),
+                    "standard" | "default" => Some("default"),
+                    "flex" => Some("flex"),
+                    "auto" => Some("auto"),
+                    "ultrafast" => Some("ultrafast"),
+                    _ => None,
+                });
+        // Preserve explicit standard/other tiers until routing has selected the
+        // provider. Dropping them here lets a later Fast default replace them.
+        if let Some(normalized) = normalized {
+            if tier.as_str() != Some(normalized) {
+                obj.insert(
+                    "service_tier".to_string(),
+                    Value::String(normalized.to_string()),
+                );
+                changed = true;
+            }
+        } else {
+            obj.remove("service_tier");
+            changed = true;
+        }
     }
 
     changed
@@ -851,16 +1361,158 @@ mod tests {
     use super::*;
 
     #[test]
+    fn deepseek_relay_models_have_three_reasoning_levels() {
+        for id in ["deepseek-flash", "deepseek-v4-pro", "vendor/deepseek-v4-flash", "vendor/DeepSeek-V5-Pro", "deepseek-future"] {
+            let model = &build_codex_client_models_response(&[id.to_string()])["models"][0];
+            let levels: Vec<_> = model["supported_reasoning_levels"].as_array().unwrap().iter().map(|level| level["effort"].as_str().unwrap()).collect();
+            assert_eq!(levels, ["low", "high", "max"]);
+        }
+        assert!(deepseek_model_template("not-deepseek-v4-pro").is_none());
+        assert!(deepseek_model_template("deepseek-").is_none());
+        assert!(!is_known_deepseek_model("vendor/deepseek-v5-pro"));
+        assert!(is_known_deepseek_model("deepseek-v4-pro"));
+        let future = deepseek_model_template("vendor/deepseek-v5-pro").unwrap();
+        assert_eq!(future["input_modalities"], json!(["text"]));
+        assert_eq!(future["context_window"], DEFAULT_CONTEXT_WINDOW);
+        assert_eq!(future["multi_agent_version"], Value::Null);
+    }
+
+    fn model_template_for_test(slug: &str) -> Value {
+        let catalog = codex_client_model_catalog();
+        catalog["models"].as_array().expect("template models should be an array")
+            .iter().find(|model| model["slug"].as_str() == Some(slug))
+            .unwrap_or_else(|| panic!("missing model template: {slug}")).clone()
+    }
+
+    #[test]
+    fn startup_catalog_supplies_future_model_capabilities() {
+        let mut catalog = codex_client_model_catalog().as_ref().clone();
+        // 模板来源不绑定具体型号：兜底型号会随上游退役和更替。
+        let models = catalog["models"].as_array().unwrap();
+        let mut future = models
+            .iter()
+            .find(|model| model["slug"] == CODEX_MODEL_CATALOG_TEMPLATE_SLUG)
+            .or_else(|| models.first())
+            .unwrap()
+            .clone();
+        future["slug"] = json!("gpt-6.2-sol");
+        future["display_name"] = json!("GPT-6.2 Sol");
+        future["context_window"] = json!(512000);
+        future["max_context_window"] = json!(1024000);
+        future["default_reasoning_level"] = json!("low");
+        future["supported_reasoning_levels"] = json!([
+            {"effort": "low", "description": "Low"},
+            {"effort": "high", "description": "High"}
+        ]);
+        future["use_responses_lite"] = json!(true);
+        catalog["models"].as_array_mut().unwrap().push(future);
+        crate::modules::codex_model_catalog::with_test_catalog(catalog, || {
+            let response = build_codex_client_models_response(&["gpt-6.2-sol".into()]);
+            let model = &response["models"][0];
+            assert_eq!(model["display_name"], "GPT-6.2 Sol");
+            assert_eq!(model["context_window"], 512000);
+            assert_eq!(model["max_context_window"], 1024000);
+            assert_eq!(model["default_reasoning_level"], "low");
+            assert_eq!(model["supported_reasoning_levels"][1]["effort"], "high");
+            assert!(codex_model_uses_responses_lite("gpt-6.2-sol"));
+            assert!(managed_codex_model_ids().contains(&"gpt-6.2-sol".into()));
+        });
+    }
+
+    #[test]
+    fn deepseek_multi_agent_catalog_is_scoped_and_preserves_identity() {
+        for slug in [
+            "deepseek-flash",
+            "deepseek-v4-flash",
+            "deepseek-v4-pro",
+            "relay/deepseek-v4-pro",
+        ] {
+            let model = build_codex_client_model(slug, 0);
+            assert_eq!(model["slug"], json!(slug));
+            assert_eq!(model["multi_agent_version"], json!("v2"));
+        }
+        for slug in [
+            "gpt-5.5",
+            "gpt-5.6-luna",
+            "gpt-reserve",
+            "grok-4.6",
+            "glm-4.6",
+            "deepseek-custom",
+        ] {
+            let mut model = build_codex_client_model(slug, 0);
+            let before = model.clone();
+            apply_deepseek_multi_agent_capability(&mut model);
+            assert_eq!(model, before, "{slug}");
+        }
+    }
+
+    #[test]
+    fn grok_models_declare_multi_agent_capability() {
+        let catalog = build_codex_client_models_response(&[
+            "grok-4.7".into(),
+            "grok-4.6".into(),
+            "grok-4.5".into(),
+            "grok-4.3".into(),
+            "unknown-third-party".into(),
+        ]);
+        let models = catalog["models"].as_array().expect("models");
+        for slug in ["grok-4.7", "grok-4.6", "grok-4.5", "grok-4.3"] {
+            let model = models
+                .iter()
+                .find(|model| model["slug"] == json!(slug))
+                .unwrap_or_else(|| panic!("missing {slug}"));
+            assert_eq!(model["multi_agent_version"], json!("v2"), "{slug}");
+            assert_eq!(model["minimal_client_version"], json!("0.144.0"), "{slug}");
+        }
+        // 其它第三方模型仍保持模板默认值，避免误开协作能力。
+        let unknown = models
+            .iter()
+            .find(|model| model["slug"] == json!("unknown-third-party"))
+            .expect("unknown model");
+        assert_eq!(unknown["multi_agent_version"], Value::Null);
+        assert_eq!(unknown["minimal_client_version"], json!("0.124.0"));
+    }
+
+    #[test]
+    fn grok_47_has_known_context_and_reasoning_without_gpt_execution_modes() {
+        for slug in ["grok-4.7", "grok-4.7-latest"] {
+            let model = build_codex_client_model(slug, 0);
+            assert!(known_codex_model_template(slug).is_some());
+            assert_eq!(model["context_window"], 500_000);
+            assert_eq!(model["max_context_window"], 500_000);
+            assert_eq!(model["auto_compact_token_limit"], 450_000);
+            assert_eq!(model["default_reasoning_level"], "high");
+            assert_eq!(model["input_modalities"], json!(["text", "image"]));
+            let efforts = model["supported_reasoning_levels"].as_array().unwrap()
+                .iter().map(|level| level["effort"].as_str().unwrap()).collect::<Vec<_>>();
+            assert_eq!(efforts, ["low", "medium", "high", "xhigh"]);
+            assert_eq!(model["tool_mode"], Value::Null);
+            assert_eq!(model["use_responses_lite"], false);
+        }
+    }
+
+    #[test]
     fn routed_gpt_models_preserve_capabilities_and_dispatch_identity() {
-        for upstream in ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-luna"] {
+        for upstream in ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-luna", "gpt-6.1-terra"] {
             let routed = format!("cpa/{upstream}");
             let catalog = build_codex_client_models_response(&[upstream.into(), routed.clone()]);
-            for field in ["service_tiers", "additional_speed_tiers", "supported_reasoning_levels", "context_window"] {
-                assert_eq!(catalog["models"][0][field], catalog["models"][1][field], "{upstream}: {field}");
+            for field in [
+                "service_tiers",
+                "additional_speed_tiers",
+                "supported_reasoning_levels",
+                "context_window",
+            ] {
+                assert_eq!(
+                    catalog["models"][0][field], catalog["models"][1][field],
+                    "{upstream}: {field}"
+                );
             }
             assert_eq!(catalog["models"][1]["slug"], routed);
             assert_eq!(catalog["models"][1]["priority"], json!(1001));
-            assert_ne!(catalog["models"][0]["priority"], catalog["models"][1]["priority"]);
+            assert_ne!(
+                catalog["models"][0]["priority"],
+                catalog["models"][1]["priority"]
+            );
         }
         let catalog = build_codex_client_models_response(&["cpa/unknown-model".into()]);
         assert_eq!(catalog["models"][0]["service_tiers"], json!([]));
@@ -889,10 +1541,15 @@ mod tests {
 
     #[test]
     fn routed_gpt_models_keep_explicit_reasoning_selection() {
-        let catalog = build_codex_client_models_response_with_model_definitions_and_reasoning(&[
-            ("cpa/gpt-6-astra".into(), "CPA Astra".into(), Some(vec!["ultra".into()])),
-        ]);
-        assert_eq!(catalog["models"][0]["supported_reasoning_levels"][0]["effort"], "ultra");
+        let catalog = build_codex_client_models_response_with_model_definitions_and_reasoning(&[(
+            "cpa/gpt-6-astra".into(),
+            "CPA Astra".into(),
+            Some(vec!["ultra".into()]),
+        )]);
+        assert_eq!(
+            catalog["models"][0]["supported_reasoning_levels"][0]["effort"],
+            "ultra"
+        );
         assert_eq!(catalog["models"][0]["display_name"], "CPA Astra");
     }
 
@@ -911,9 +1568,14 @@ mod tests {
         let mut expected = before[1].clone();
         expected["slug"] = json!(CODEX_RESERVE_MODEL_ID);
         expected["visibility"] = json!("list");
-        expected["display_name"] = json!("Luna Reserve");
+        expected["display_name"] = json!(CODEX_RESERVE_DISPLAY_NAME);
         assert_eq!(models.last(), Some(&expected));
-        assert!(expected["auto_compact_token_limit"].is_null());
+        // 统一口径：Reserve 沿用 Luna 模板的上下文窗口，压缩阈值必须同时存在且为 90%。
+        let reserve_context = expected["context_window"].as_i64().expect("context window");
+        assert_eq!(
+            expected["auto_compact_token_limit"].as_i64(),
+            Some(derived_auto_compact_token_limit(reserve_context))
+        );
 
         let explicit = build_codex_client_models_response(&[CODEX_RESERVE_MODEL_ID.to_string()]);
         assert_eq!(explicit["models"][0], expected);
@@ -930,9 +1592,14 @@ mod tests {
         assert_eq!(custom["models"][1]["visibility"], "list");
 
         let mut catalog = build_codex_client_models_response(&[CODEX_RESERVE_MODEL_ID.to_string()]);
-        apply_model_context_overrides(&mut catalog, &[
-            (CODEX_RESERVE_MODEL_ID.to_string(), Some(516_000), Some(460_000))
-        ]);
+        apply_model_context_overrides(
+            &mut catalog,
+            &[(
+                CODEX_RESERVE_MODEL_ID.to_string(),
+                Some(516_000),
+                Some(460_000),
+            )],
+        );
         ensure_codex_reserve_fallback(&mut catalog);
         assert_eq!(catalog["models"][0]["context_window"], 516_000);
         assert_eq!(catalog["models"][0]["auto_compact_token_limit"], 460_000);
@@ -979,18 +1646,33 @@ mod tests {
     }
 
     #[test]
-    fn disables_parallel_tool_calls_for_responses_lite_models() {
-        let mut body = json!({
-            "model": "gpt-5.6-luna",
-            "input": "pong",
-            "parallel_tool_calls": true,
-        });
+    fn preserves_explicit_parallel_tool_calls_without_lite_request_marker() {
+        for model in ["gpt-5.6-luna", "gpt-5.4", "custom-model"] {
+            for parallel in [true, false] {
+                let mut body = json!({
+                    "model": model,
+                    "input": "pong",
+                    "parallel_tool_calls": parallel,
+                });
+                normalize_responses_body_for_codex(&mut body);
+                assert_eq!(
+                    body["parallel_tool_calls"],
+                    json!(parallel),
+                    "model={model}"
+                );
+                // Normalizing an already prepared request must not change it again.
+                assert!(!normalize_responses_body_for_codex(&mut body));
+            }
+        }
+    }
 
-        normalize_responses_body_for_codex(&mut body);
-        assert_eq!(
-            body.get("parallel_tool_calls").and_then(Value::as_bool),
-            Some(false)
-        );
+    #[test]
+    fn missing_parallel_tool_calls_keeps_default_unless_request_is_lite() {
+        for lite in [true, false] {
+            let mut body = json!({ "model": "gpt-5.6-sol", "input": "pong" });
+            normalize_responses_body_for_codex_with_lite(&mut body, lite);
+            assert_eq!(body["parallel_tool_calls"], json!(!lite));
+        }
     }
 
     #[test]
@@ -1062,7 +1744,13 @@ mod tests {
             }
         });
 
-        assert!(normalize_responses_body_for_codex(&mut body));
+        let mut standard = body.clone();
+        assert!(normalize_responses_body_for_codex(&mut standard));
+        for pointer in ["/tools/3", "/tools/7", "/input/0/tools/5"] {
+            assert_eq!(standard.pointer(pointer), body.pointer(pointer));
+        }
+
+        assert!(normalize_responses_body_for_codex_with_lite(&mut body, true));
         for pointer in ["/tools", "/tool_choice/tools", "/input/0/tools"] {
             assert_eq!(
                 body.pointer(pointer)
@@ -1073,7 +1761,7 @@ mod tests {
                             .filter_map(|tool| tool.get("type").and_then(Value::as_str))
                             .collect::<Vec<_>>()
                     }),
-                Some(vec!["function", "custom", "tool_search"]),
+                Some(vec!["function", "custom", "tool_search", "namespace"]),
                 "unexpected tools at {pointer}"
             );
         }
@@ -1215,6 +1903,249 @@ mod tests {
     }
 
     #[test]
+    fn repairs_mismatched_custom_tool_call_item_ids() {
+        let mut body = json!({
+            "model": "gpt-6-astra",
+            "input": [
+                {
+                    "type": "custom_tool_call",
+                    "id": "fc_legacy_0",
+                    "call_id": "call-legacy",
+                    "name": "apply_patch",
+                    "input": "patch"
+                },
+                {
+                    "type": "custom_tool_call_output",
+                    "id": "fc_legacy_output_0",
+                    "item_id": "fc_legacy_0",
+                    "call_id": "call-legacy",
+                    "output": "ok"
+                }
+            ]
+        });
+
+        assert!(normalize_responses_body_for_codex(&mut body));
+        assert_eq!(body["input"][0]["id"], "ctc_fc_legacy_0");
+        assert_eq!(body["input"][1]["id"], "ctco_fc_legacy_output_0");
+        assert_eq!(body["input"][1]["item_id"], "ctc_fc_legacy_0");
+    }
+
+    #[test]
+    fn preserves_reasoning_identity_when_replaying_responses() {
+        for id in [
+            format!("rs_{}", "x".repeat(80)),
+            "opaque-upstream-id".into(),
+        ] {
+            for encrypted in [true, false] {
+                let mut reasoning = json!({
+                    "type": "reasoning",
+                    "id": id,
+                    "summary": []
+                });
+                if encrypted {
+                    reasoning["encrypted_content"] = json!("opaque-encrypted-payload");
+                }
+                for input in [
+                    reasoning.clone(),
+                    json!([reasoning.clone(), reasoning.clone()]),
+                ] {
+                    let mut body = json!({"model": "gpt-5.4", "input": input});
+                    normalize_responses_body_for_codex(&mut body);
+                    for item in body["input"].as_array().unwrap() {
+                        assert_eq!(item, &reasoning);
+                    }
+                    let normalized = body.clone();
+                    normalize_responses_body_for_codex(&mut body);
+                    assert_eq!(body, normalized);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn protects_reasoning_ids_from_tool_replacements() {
+        // A tool ID repair must not rewrite a reasoning ID or a reference to it,
+        // even when an upstream has reused the same raw ID for both item types.
+        for reasoning_first in [true, false] {
+            let reasoning = json!({
+                "type": "reasoning",
+                "id": "fc_legacy",
+                "encrypted_content": "opaque-encrypted-payload",
+                "summary": []
+            });
+            let tool = json!({"type": "custom_tool_call", "id": "fc_legacy"});
+            let mut items = if reasoning_first {
+                vec![reasoning.clone(), tool]
+            } else {
+                vec![tool, reasoning.clone()]
+            };
+            items
+                .push(json!({"type": "item_reference", "id": "fc_legacy", "item_id": "fc_legacy"}));
+            items.push(json!({"type": "custom_tool_call", "id": "fc_other"}));
+
+            assert!(normalize_responses_item_ids(&mut items));
+            assert_eq!(items[if reasoning_first { 0 } else { 1 }], reasoning);
+            assert_eq!(items[2]["id"], "fc_legacy");
+            assert_eq!(items[2]["item_id"], "fc_legacy");
+            assert_eq!(items[3]["id"], "ctc_fc_other");
+        }
+    }
+
+    #[test]
+    fn reserves_reasoning_ids_before_repairing_tool_ids() {
+        let mut items = vec![
+            json!({"type": "custom_tool_call", "id": "fc_legacy"}),
+            json!({"type": "reasoning", "id": "ctc_fc_legacy", "encrypted_content": "opaque"}),
+            json!({"type": "custom_tool_call_output", "item_id": "fc_legacy"}),
+        ];
+        assert!(normalize_responses_item_ids(&mut items));
+        assert_eq!(items[1]["id"], "ctc_fc_legacy");
+        assert_ne!(items[0]["id"], items[1]["id"]);
+        assert_eq!(items[2]["item_id"], items[0]["id"]);
+    }
+
+    #[test]
+    fn shortens_long_and_colliding_response_item_ids() {
+        let long_id = format!("fc_{}", "x".repeat(80));
+        let mut body = json!({
+            "model": "gpt-6-astra",
+            "input": [
+                {"type": "function_call", "id": long_id, "call_id": "call-1"},
+                {"type": "function_call", "id": "fc_same", "call_id": "call-2"},
+                {"type": "function_call", "id": "same", "call_id": "call-3"}
+            ]
+        });
+
+        assert!(normalize_responses_body_for_codex(&mut body));
+        let items = body["input"].as_array().expect("input array");
+        let ids = items
+            .iter()
+            .map(|item| item["id"].as_str().expect("item id"))
+            .collect::<Vec<_>>();
+        assert!(ids.iter().all(|id| id.starts_with("fc_") && id.len() <= 64));
+        assert_eq!(ids.len(), ids.iter().collect::<HashSet<_>>().len());
+    }
+
+    #[test]
+    fn synthesizes_missing_call_ids_for_replayed_tool_items() {
+        let mut body = json!({
+            "model": "deepseek-v4-flash",
+            "input": [
+                {
+                    "type": "function_call",
+                    "name": "exec_command",
+                    "arguments": "{\"cmd\":\"pwd\"}"
+                },
+                {
+                    "type": "function_call_output",
+                    "output": "/workspace"
+                },
+                {
+                    "type": "custom_tool_call",
+                    "name": "apply_patch",
+                    "input": "*** Begin Patch"
+                },
+                {
+                    "type": "custom_tool_call_output",
+                    "output": "Done!"
+                },
+                {
+                    "type": "function_call",
+                    "call_id": "call_existing",
+                    "name": "lookup",
+                    "arguments": "{}"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_existing",
+                    "output": "ok"
+                }
+            ]
+        });
+
+        assert!(normalize_responses_body_for_codex(&mut body));
+        let input = body.get("input").and_then(Value::as_array).unwrap();
+        let first_call_id = input[0]
+            .get("call_id")
+            .and_then(Value::as_str)
+            .expect("function call id");
+        assert!(first_call_id.starts_with("call_missing"));
+        assert_eq!(
+            input[1].get("call_id").and_then(Value::as_str),
+            Some(first_call_id)
+        );
+        let custom_call_id = input[2]
+            .get("call_id")
+            .and_then(Value::as_str)
+            .expect("custom tool call id");
+        assert!(custom_call_id.starts_with("call_missing"));
+        assert_eq!(
+            input[3].get("call_id").and_then(Value::as_str),
+            Some(custom_call_id)
+        );
+        assert_eq!(
+            input[4].get("call_id").and_then(Value::as_str),
+            Some("call_existing")
+        );
+        assert_eq!(
+            input[5].get("call_id").and_then(Value::as_str),
+            Some("call_existing")
+        );
+    }
+
+    #[test]
+    fn drops_anonymous_orphan_outputs_while_preserving_paired_history() {
+        let mut body = json!({
+            "model": "deepseek-v4-flash",
+            "input": [
+                {"type": "message", "role": "user", "content": "continue"},
+                {"type": "function_call_output", "output": "orphan result"},
+                {"type": "function_call", "name": "exec_command", "arguments": "{}"},
+                {"type": "function_call_output", "output": "paired result"},
+                {"type": "function_call_output", "name": "heartbeat", "output": "keep standalone"}
+            ]
+        });
+
+        assert!(normalize_responses_body_for_codex(&mut body));
+        let input = body.get("input").and_then(Value::as_array).unwrap();
+        assert_eq!(input.len(), 4);
+        assert_eq!(
+            input[1].get("type").and_then(Value::as_str),
+            Some("function_call")
+        );
+        let call_id = input[1]
+            .get("call_id")
+            .and_then(Value::as_str)
+            .expect("synthesized call id");
+        assert_eq!(
+            input[2].get("call_id").and_then(Value::as_str),
+            Some(call_id)
+        );
+        assert_eq!(
+            input[3].get("name").and_then(Value::as_str),
+            Some("heartbeat")
+        );
+        assert!(input[3].get("call_id").is_none());
+    }
+
+    #[test]
+    fn preserves_existing_replay_input_items() {
+        let mut body = json!({
+            "model": "gpt-5.6-sol",
+            "input": [
+                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "continue"}]},
+                {"type": "function_call", "call_id": "old_unanswered", "name": "exec_command", "arguments": "{}"},
+                {"type": "function_call", "call_id": "old_answered", "name": "lookup", "arguments": "{}"},
+                {"type": "function_call_output", "call_id": "old_answered", "output": "ok"}
+            ]
+        });
+        let expected_input = body["input"].clone();
+
+        normalize_responses_body_for_codex(&mut body);
+        assert_eq!(body["input"], expected_input);
+    }
+
+    #[test]
     fn preserving_supported_call_namespaces_does_not_report_change() {
         for item_type in [
             "function_call",
@@ -1263,6 +2194,7 @@ mod tests {
         assert!(response.get("models").and_then(Value::as_array).is_some());
         assert!(response.get("object").is_none());
         assert!(response.get("data").is_none());
+
         assert_eq!(
             response.pointer("/models/0/slug").and_then(Value::as_str),
             Some("gpt-5.4")
@@ -1292,32 +2224,42 @@ mod tests {
     }
 
     #[test]
-    fn codex_spark_compatibility_model_is_visible_with_a_safe_catalog_fallback() {
+    fn codex_client_models_share_unified_compaction_hash() {
         let response = build_codex_client_models_response(&[
-            "gpt-5.3-codex".to_string(),
-            "gpt-5.3-codex-spark".to_string(),
+            "gpt-5.5".to_string(),
+            "gpt-5.6-sol".to_string(),
+            "gpt-6-astra".to_string(),
+            "deepseek-flash".to_string(),
+            "custom-third-party".to_string(),
         ]);
         let models = response
             .get("models")
             .and_then(Value::as_array)
             .expect("models should be an array");
-        let spark = models
-            .iter()
-            .find(|model| model.get("slug").and_then(Value::as_str) == Some("gpt-5.3-codex-spark"))
-            .expect("Spark should be visible to Codex clients");
+        assert_eq!(models.len(), 5);
+        for model in models {
+            assert_eq!(
+                model.get("comp_hash").and_then(Value::as_str),
+                Some(CODEX_CLIENT_COMP_HASH),
+                "model {:?} should share the unified compaction hash",
+                model.get("slug").and_then(Value::as_str)
+            );
+        }
+    }
 
-        assert_eq!(
-            spark.get("display_name").and_then(Value::as_str),
-            Some("GPT-5.3-Codex-Spark")
-        );
-        assert_eq!(
-            spark.get("visibility").and_then(Value::as_str),
-            Some("list")
-        );
-        assert_eq!(
-            spark.get("supported_in_api").and_then(Value::as_bool),
-            Some(true)
-        );
+    #[test]
+    fn codex_builtin_catalog_does_not_include_retired_templates() {
+        let catalog = codex_client_model_catalog();
+        let models = catalog["models"].as_array().unwrap();
+        assert!(models.iter().any(|model| model["slug"] == "gpt-6.1-sol"));
+        for model in models {
+            let slug = model["slug"].as_str().unwrap();
+            assert!(
+                !crate::modules::codex_wakeup::is_codex_model_before_5_5(slug)
+                    && !crate::modules::codex_account::is_retired_gpt55_model(slug),
+                "retired template {slug}"
+            );
+        }
     }
 
     #[test]
@@ -1325,7 +2267,11 @@ mod tests {
         assert_eq!(
             managed_codex_model_ids(),
             vec![
+                "gpt-6.1-sol",
                 "gpt-6-astra",
+                "gpt-6.1-terra",
+                "gpt-6-sol",
+                "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
                 "gpt-5.6-luna"
@@ -1346,6 +2292,7 @@ mod tests {
                 .iter()
                 .find(|model| model.get("slug").and_then(Value::as_str) == Some(slug))
                 .expect("5.6 model should exist");
+            let template = model_template_for_test(slug);
             let efforts = model
                 .get("supported_reasoning_levels")
                 .and_then(Value::as_array)
@@ -1371,11 +2318,11 @@ mod tests {
             );
             assert_eq!(
                 model.get("context_window").and_then(Value::as_i64),
-                Some(272_000)
+                Some(template["context_window"].as_i64().expect("template context window"))
             );
             assert_eq!(
                 model.get("max_context_window").and_then(Value::as_i64),
-                Some(921_000)
+                Some(template["max_context_window"].as_i64().expect("template maximum context window"))
             );
             assert_eq!(
                 model.get("tool_mode").and_then(Value::as_str),
@@ -1397,22 +2344,45 @@ mod tests {
     }
 
     #[test]
+    fn provider_metadata_overrides_do_not_replace_official_codex_defaults() {
+        let mut catalog = json!({
+            "models": [
+                {"slug":"gpt-5.6-sol","use_responses_lite":true,"visibility":"list"},
+                {"slug":"gpt-6.1-sol","use_responses_lite":true,"visibility":"list"},
+                {"slug":"codex-auto-review","use_responses_lite":true,"visibility":"hide"},
+                {"slug":"grok-4.7","use_responses_lite":true,"visibility":"list"}
+            ],
+            "model_overrides": [{"slug":"grok-4.7"}, {"slug":"grok-4.7-latest"}]
+        });
+        assert_eq!(managed_codex_model_ids_from_catalog(&catalog), ["gpt-6.1-sol", "gpt-5.6-sol"]);
+        catalog["model_overrides"].as_array_mut().unwrap().push(json!({"slug":"gpt-5.6-luna"}));
+        assert_eq!(managed_codex_model_ids_from_catalog(&catalog), ["gpt-5.6-luna"]);
+        assert!(known_codex_model_template("grok-4.7").is_some());
+    }
+
+    #[test]
     fn gpt_6_astra_preserves_official_catalog_limits_and_reasoning_levels() {
         let response = build_codex_client_models_response(&["gpt-6-astra".to_string()]);
+        let template = model_template_for_test("gpt-6-astra");
         let model = response
             .pointer("/models/0")
             .expect("Astra model should be present");
         assert_eq!(
             model.get("display_name").and_then(Value::as_str),
-            Some("6 Astra")
+            Some("GPT-6 Astra")
         );
         assert_eq!(
             model.get("context_window").and_then(Value::as_i64),
-            Some(1_050_000)
+            Some(template["context_window"].as_i64().expect("template context window"))
         );
         assert_eq!(
             model.get("max_context_window").and_then(Value::as_i64),
-            Some(1_050_000)
+            Some(template["max_context_window"].as_i64().expect("template maximum context window"))
+        );
+        // 上下文窗口和压缩阈值沿用模板中已声明的数值。
+        assert_eq!(
+            model.get("auto_compact_token_limit").and_then(Value::as_i64),
+            Some(template["auto_compact_token_limit"].as_i64().expect("template compact limit"))
         );
         assert_eq!(
             model.get("max_completion_tokens").and_then(Value::as_i64),
@@ -1448,14 +2418,139 @@ mod tests {
     }
 
     #[test]
+    fn gpt_6_1_sol_preserves_catalog_capabilities() {
+        let catalog = build_codex_client_models_response(&["gpt-6.1-sol".into()]);
+        let template = model_template_for_test("gpt-6.1-sol");
+        let model = &catalog["models"][0];
+        assert_eq!(model["slug"], "gpt-6.1-sol");
+        assert_eq!(model["display_name"], "GPT-6.1 Sol");
+        assert_eq!(model["context_window"], template["context_window"].as_i64().expect("template context window"));
+        assert_eq!(model["max_context_window"], template["max_context_window"].as_i64().expect("template maximum context window"));
+        assert_eq!(model["auto_compact_token_limit"], template["auto_compact_token_limit"].as_i64().expect("template compact limit"));
+        assert_eq!(model["default_reasoning_level"], "low");
+        assert_eq!(model["input_modalities"], json!(["text", "image"]));
+        assert!(model["supported_reasoning_levels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|level| level["effort"] == "ultra"));
+    }
+
+    #[test]
+    fn responses_normalization_preserves_explicit_ultra_selection() {
+        for model in ["gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-sol"] {
+            for lite in [false, true] {
+                let mut body = json!({
+                    "model": model,
+                    "input": "test",
+                    "reasoning": {"effort": "ultra", "summary": "auto"}
+                });
+                normalize_responses_body_for_codex_with_lite(&mut body, lite);
+                assert_eq!(body["model"], model);
+                assert_eq!(body["reasoning"], json!({"effort":"ultra", "summary":"auto"}));
+            }
+        }
+    }
+
+    #[test]
+    fn gpt_6_1_terra_supports_ultra_and_preserves_existing_capabilities() {
+        let catalog = build_codex_client_models_response(&["gpt-6.1-terra".into()]);
+        let model = &catalog["models"][0];
+        let luna = model_template_for_test("gpt-6-luna");
+        let efforts = model["supported_reasoning_levels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|level| level["effort"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(efforts, vec!["low", "medium", "high", "xhigh", "max", "ultra"]);
+        assert_eq!(model["slug"], "gpt-6.1-terra");
+        assert_eq!(model["display_name"], "GPT-6.1 Terra");
+        for field in [
+            "default_reasoning_level",
+            "context_window",
+            "max_context_window",
+            "auto_compact_token_limit",
+            "service_tiers",
+            "additional_speed_tiers",
+        ] {
+            assert_eq!(model[field], luna[field], "{field}");
+        }
+        for slug in ["gpt-6.1-terra", "cpa/gpt-6.1-terra"] {
+            let selected = build_codex_client_models_response_with_model_definitions_and_reasoning(&[(
+                slug.into(),
+                "GPT-6.1 Terra".into(),
+                Some(vec!["ultra".into()]),
+            )]);
+            let selected = &selected["models"][0];
+            assert_eq!(selected["supported_reasoning_levels"].as_array().unwrap().len(), 1);
+            assert_eq!(selected["supported_reasoning_levels"][0]["effort"], "ultra");
+            assert_eq!(selected["default_reasoning_level"], "ultra");
+        }
+    }
+
+    #[test]
+    fn gpt_6_sol_and_luna_preserve_official_catalog_limits_and_reasoning_levels() {
+        for (slug, official_name, fallback_name, priority, supports_ultra) in [
+            ("gpt-6-sol", "GPT-6 Sol", "GPT-6 Sol", 3, true),
+            ("gpt-6-luna", "GPT-6 Luna", "GPT-6 Luna", 4, false),
+        ] {
+            let response = build_codex_client_models_response(&[slug.to_string()]);
+            let model = response
+                .pointer("/models/0")
+                .expect("GPT-6 model should be present");
+            let template = model_template_for_test(slug);
+            assert_eq!(
+                model.get("display_name").and_then(Value::as_str),
+                Some(official_name)
+            );
+            assert_eq!(display_name_for_model(slug), fallback_name);
+            assert_eq!(
+                model.get("priority").and_then(Value::as_i64),
+                Some(priority)
+            );
+            assert_eq!(
+                model.get("context_window").and_then(Value::as_i64),
+                Some(template["context_window"].as_i64().expect("template context window"))
+            );
+            assert_eq!(
+                model.get("max_context_window").and_then(Value::as_i64),
+                Some(template["max_context_window"].as_i64().expect("template maximum context window"))
+            );
+            // 上下文窗口和压缩阈值沿用模板中已声明的数值。
+            assert_eq!(
+                model.get("auto_compact_token_limit").and_then(Value::as_i64),
+                Some(template["auto_compact_token_limit"].as_i64().expect("template compact limit")),
+                "{slug}"
+            );
+            let efforts = model
+                .get("supported_reasoning_levels")
+                .and_then(Value::as_array)
+                .expect("GPT-6 reasoning levels should exist")
+                .iter()
+                .filter_map(|level| level.get("effort").and_then(Value::as_str))
+                .collect::<Vec<_>>();
+            assert!(efforts.contains(&"max"), "{slug}: {efforts:?}");
+            assert_eq!(
+                efforts.contains(&"ultra"),
+                supports_ultra,
+                "{slug}: {efforts:?}"
+            );
+        }
+    }
+
+    #[test]
     fn gpt_6_astra_filters_reasoning_efforts_to_official_six_levels() {
-        let response = build_codex_client_models_response_with_model_definitions_and_reasoning(&[
-            (
+        let response =
+            build_codex_client_models_response_with_model_definitions_and_reasoning(&[(
                 "gpt-6-astra".to_string(),
                 "6 Astra".to_string(),
-                Some(vec!["low".to_string(), "ultra".to_string(), "max".to_string()]),
-            ),
-        ]);
+                Some(vec![
+                    "low".to_string(),
+                    "ultra".to_string(),
+                    "max".to_string(),
+                ]),
+            )]);
         let model = response
             .pointer("/models/0")
             .expect("Astra model should be present");
@@ -1466,7 +2561,7 @@ mod tests {
             .iter()
             .filter_map(|level| level.get("effort").and_then(Value::as_str))
             .collect::<Vec<_>>();
-        assert_eq!(efforts, vec!["low", "ultra", "max"]);
+        assert_eq!(efforts, vec!["low", "max", "ultra"]);
         assert_eq!(
             model.get("default_reasoning_level").and_then(Value::as_str),
             Some("low")
@@ -1507,9 +2602,17 @@ mod tests {
         assert_eq!(custom["description"], "Custom Model");
         assert_eq!(custom["context_window"], DEFAULT_CONTEXT_WINDOW);
         assert_eq!(custom["max_context_window"], DEFAULT_MAX_CONTEXT_WINDOW);
+        // 兜底不再声明 1M 上限；压缩阈值按统一口径派生为窗口的 90%。
+        assert_eq!(custom["max_context_window"], 272_000);
+        assert_eq!(custom["auto_compact_token_limit"], 244_800);
         assert_eq!(
-            custom["supported_reasoning_levels"],
-            base["supported_reasoning_levels"]
+            custom["supported_reasoning_levels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|level| level["effort"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["low", "medium", "high", "xhigh"]
         );
         assert_eq!(custom["input_modalities"], base["input_modalities"]);
         assert_eq!(custom["visibility"], "list");
@@ -1521,9 +2624,11 @@ mod tests {
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",
-            "gpt-5.5",
-            "gpt-5.4",
-            "gpt-5.4-mini",
+            "gpt-6.1-sol",
+            "gpt-6-astra",
+            "gpt-6.1-terra",
+            "gpt-6-sol",
+            "gpt-6-luna",
         ]
         .map(str::to_string);
         let response = build_codex_client_models_response(&model_ids);
@@ -1537,8 +2642,48 @@ mod tests {
 
         assert_eq!(
             priorities,
-            vec![Some(1), Some(2), Some(3), Some(7), Some(16), Some(23)]
+            vec![Some(5), Some(7), Some(8), Some(0), Some(1), Some(2), Some(3), Some(4)]
         );
+    }
+
+    #[test]
+    fn derived_auto_compact_limits_follow_ninety_percent_rule() {
+        for (window, expected) in [
+            (516_000, 464_400),
+            (1_000_000, 900_000),
+            (272_000, 244_800),
+            (128_000, 115_200),
+            (256_000, 230_400),
+            (1_048_576, 943_718),
+        ] {
+            assert_eq!(
+                derived_auto_compact_token_limit(window),
+                expected,
+                "window={window}"
+            );
+        }
+        assert_eq!(derived_auto_compact_token_limit(0), 0);
+        assert_eq!(derived_auto_compact_token_limit(-1), 0);
+        assert_eq!(AUTO_COMPACT_RATIO_PERCENT, 90);
+    }
+
+    #[test]
+    fn catalog_models_without_compact_limit_derive_ninety_percent() {
+        let mut catalog = json!({"models": [
+            {"slug": "windowless-model"},
+            {"slug": "official-model", "context_window": 272_000},
+            {"slug": "explicit-model", "context_window": 516_000, "auto_compact_token_limit": 460_000},
+            {"slug": "stale-model", "context_window": 100_000, "auto_compact_token_limit": 100_000},
+        ]});
+        assert!(ensure_client_model_auto_compact_limits(&mut catalog));
+        assert!(catalog["models"][0]
+            .get("auto_compact_token_limit")
+            .is_none());
+        assert_eq!(catalog["models"][1]["auto_compact_token_limit"], 244_800);
+        // 显式给出的（小于窗口的）阈值保持原样。
+        assert_eq!(catalog["models"][2]["auto_compact_token_limit"], 460_000);
+        // 大于等于窗口的无效阈值会被 90% 派生值替换。
+        assert_eq!(catalog["models"][3]["auto_compact_token_limit"], 90_000);
     }
 
     #[test]
@@ -1558,5 +2703,38 @@ mod tests {
                 .map(Vec::len),
             Some(0)
         );
+    }
+
+    #[test]
+    fn official_ultrafast_catalog_only_advertises_supported_models() {
+        let catalog = build_codex_client_models_response(&managed_codex_model_ids());
+        for slug in ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol"] {
+            let model = catalog["models"].as_array().unwrap().iter().find(|model| model["slug"] == slug).unwrap();
+            let expected = matches!(slug, "gpt-6.1-sol" | "gpt-6-astra");
+            assert_eq!(model["service_tiers"].as_array().unwrap().iter().any(|tier| tier["id"] == "ultrafast"), expected, "{slug}");
+            assert_eq!(model["additional_speed_tiers"].as_array().unwrap().iter().any(|tier| tier == "ultrafast"), expected, "{slug}");
+        }
+    }
+
+    #[test]
+    fn astra_catalog_keeps_current_native_tools_and_reasoning_update_capabilities() {
+        let response = build_codex_client_models_response(&["gpt-6-astra".into()]);
+        let model = &response["models"][0];
+        assert_eq!(
+            model["experimental_supported_tools"],
+            json!(["send_user_message_async", "clock"])
+        );
+        assert_eq!(model["multi_agent_reasoning_effort"], "xhigh");
+        assert_eq!(model["supports_reasoning_effort_updates"], true);
+        for slug in ["gpt-6-astra", "gpt-6-sol"] {
+            let catalog = build_codex_client_models_response(&[slug.into()]);
+            assert_eq!(catalog["models"][0]["node_repl_auto_review_required"], true);
+        }
+        assert_eq!(model["default_reasoning_level"], "medium");
+        assert!(model["service_tiers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tier| tier["id"] == "ultrafast"));
     }
 }

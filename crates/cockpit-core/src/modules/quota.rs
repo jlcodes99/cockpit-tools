@@ -19,15 +19,17 @@ const BACKOFF_BASE_MS: u64 = 500;
 const BACKOFF_MAX_MS: u64 = 4000;
 const ONBOARD_POLL_DELAY_MS: u64 = 500;
 const API_CACHE_DIR: &str = "cache/quota_api_v1_desktop";
-const API_CACHE_VERSION: u8 = 1;
+const API_CACHE_VERSION: u8 = 2;
 const API_CACHE_TTL_MS: i64 = 60_000;
-const DEFAULT_CLOUD_CODE_IDE_VERSION: &str = "1.20.5";
+const DEFAULT_CLOUD_CODE_IDE_VERSION: &str = "2.25.0";
+const DEFAULT_CLOUD_CODE_CL: &str = "1003475615";
 const DEFAULT_LOAD_CODE_ASSIST_UA_OS: &str = "windows";
 const DEFAULT_LOAD_CODE_ASSIST_UA_ARCH: &str = "amd64";
 const DEFAULT_GOOGLE_API_NODEJS_CLIENT_VERSION: &str = "10.3.0";
-const DEFAULT_CLOUD_CODE_USER_AGENT: &str = "antigravity/1.20.5 windows/amd64";
+const DEFAULT_CLOUD_CODE_USER_AGENT: &str =
+    "antigravity/2.25.0 (aidev_client; os_type=windows; arch=amd64; cl=1003475615)";
 const DEFAULT_LOAD_CODE_ASSIST_USER_AGENT: &str =
-    "antigravity/1.20.5 windows/amd64 google-api-nodejs-client/10.3.0";
+    "antigravity/2.25.0 windows/amd64 google-api-nodejs-client/10.3.0";
 const DEFAULT_X_GOOG_API_CLIENT_NODE_VERSION: &str = "22.21.1";
 
 #[derive(Debug, Clone, Default)]
@@ -39,10 +41,17 @@ pub struct QuotaCloudCodeContext {
 impl QuotaCloudCodeContext {
     pub fn from_token(token: &TokenData) -> Self {
         Self {
-            preferred_project_id: token.project_id.clone(),
+            preferred_project_id: valid_cloud_code_project_id(token.project_id.as_deref())
+                .map(str::to_string),
             is_gcp_tos: token.is_gcp_tos.unwrap_or(false),
         }
     }
+}
+
+fn valid_cloud_code_project_id(project_id: Option<&str>) -> Option<&str> {
+    project_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != "aicode-consumers")
 }
 
 fn env_var_trimmed(name: &str) -> Option<String> {
@@ -73,11 +82,31 @@ fn env_quality_is_insider_or_dev() -> bool {
     )
 }
 
+fn parse_semver_tuple(version: &str) -> Option<(u32, u32, u32)> {
+    let mut parts = version
+        .trim()
+        .trim_start_matches('v')
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|s| !s.is_empty());
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next().unwrap_or("0").parse().ok()?;
+    let patch = parts.next().unwrap_or("0").parse().ok()?;
+    Some((major, minor, patch))
+}
+
 fn official_antigravity_version_for_cloud_code() -> String {
     let version = crate::modules::wakeup_gateway::official_antigravity_app_version();
     let trimmed = version.trim();
     if trimmed.is_empty() {
         return DEFAULT_CLOUD_CODE_IDE_VERSION.to_string();
+    }
+    if let (Some(detected), Some(min_required)) = (
+        parse_semver_tuple(trimmed),
+        parse_semver_tuple(DEFAULT_CLOUD_CODE_IDE_VERSION),
+    ) {
+        if detected < min_required {
+            return DEFAULT_CLOUD_CODE_IDE_VERSION.to_string();
+        }
     }
     trimmed.to_string()
 }
@@ -165,7 +194,10 @@ fn build_cloud_code_user_agent() -> String {
     if ide_version.trim().is_empty() || os.trim().is_empty() || arch.trim().is_empty() {
         return DEFAULT_CLOUD_CODE_USER_AGENT.to_string();
     }
-    format!("antigravity/{} {}/{}", ide_version, os, arch)
+    format!(
+        "antigravity/{} (aidev_client; os_type={}; arch={}; cl={})",
+        ide_version, os, arch, DEFAULT_CLOUD_CODE_CL
+    )
 }
 
 fn load_code_assist_user_agent() -> String {
@@ -251,21 +283,43 @@ fn build_cloud_code_metadata(duet_project: Option<&str>) -> Value {
 }
 
 fn resolve_cloud_code_base_url(ctx: &QuotaCloudCodeContext) -> String {
-    // 与 Antigravity IDE.app 的 IYs(...) 选择顺序保持一致：override > gcpTos > internal(insider/dev) > daily
-    if let Some(override_url) = env_var_trimmed("ANTIGRAVITY_CLOUD_CODE_URL_OVERRIDE") {
-        return override_url;
+    select_cloud_code_base_url(
+        ctx,
+        env_var_trimmed("ANTIGRAVITY_CLOUD_CODE_URL_OVERRIDE").as_deref(),
+        env_bool("ANTIGRAVITY_IS_GOOGLE_INTERNAL"),
+        env_quality_is_insider_or_dev(),
+    )
+}
+
+fn select_cloud_code_base_url(
+    ctx: &QuotaCloudCodeContext,
+    override_url: Option<&str>,
+    is_google_internal: bool,
+    is_insider_or_dev: bool,
+) -> String {
+    // Preserve the host routing order: override > GCP ToS with project > internal > daily.
+    if let Some(override_url) = override_url
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return override_url.to_string();
     }
 
-    if ctx.is_gcp_tos {
+    if ctx.is_gcp_tos && valid_cloud_code_project_id(ctx.preferred_project_id.as_deref()).is_some()
+    {
         return CLOUD_CODE_PROD_BASE_URL.to_string();
     }
 
-    if env_bool("ANTIGRAVITY_IS_GOOGLE_INTERNAL") && env_quality_is_insider_or_dev() {
+    if is_google_internal && is_insider_or_dev {
         return CLOUD_CODE_AUTOPUSH_SANDBOX_BASE_URL.to_string();
     }
 
     CLOUD_CODE_DAILY_BASE_URL.to_string()
 }
+
+#[cfg(test)]
+#[path = "quota_cloud_code_routing_tests.rs"]
+mod cloud_code_routing_tests;
 
 fn header_value(headers: &reqwest::header::HeaderMap, name: reqwest::header::HeaderName) -> String {
     headers
@@ -382,10 +436,64 @@ struct QuotaInfo {
     reset_time: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuotaFetchError {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code: Option<u16>,
     pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_url: Option<String>,
+}
+
+pub fn parse_google_api_error(status: u16, text: &str) -> QuotaFetchError {
+    let mut message = if text.trim().is_empty() {
+        format!("API returned status {}", status)
+    } else {
+        text.to_string()
+    };
+    let mut reason: Option<String> = None;
+    let mut validation_url: Option<String> = None;
+
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(text) {
+        if let Some(err_obj) = val.get("error") {
+            if let Some(msg) = err_obj.get("message").and_then(|v| v.as_str()) {
+                message = msg.to_string();
+            }
+            if let Some(details) = err_obj.get("details").and_then(|v| v.as_array()) {
+                for detail in details {
+                    if reason.is_none() {
+                        if let Some(r) = detail.get("reason").and_then(|v| v.as_str()) {
+                            reason = Some(r.to_string());
+                        }
+                    }
+                    if validation_url.is_none() {
+                        if let Some(metadata) = detail.get("metadata") {
+                            if let Some(url) = metadata.get("validation_url").and_then(|v| v.as_str()) {
+                                validation_url = Some(url.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if reason.is_none() {
+        if message.contains("Verify your account") {
+            reason = Some("VALIDATION_REQUIRED".to_string());
+        } else if message.contains("Subscription required") {
+            reason = Some("SUBSCRIPTION_REQUIRED".to_string());
+        }
+    }
+
+    QuotaFetchError {
+        code: Some(status),
+        message,
+        reason,
+        validation_url,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -910,7 +1018,7 @@ fn build_quota_data_from_response(
                 .map(|f| (f * 100.0) as i32)
                 .unwrap_or(0);
             let reset_time = quota_info.reset_time.unwrap_or_default();
-            if name.contains("gemini") || name.contains("claude") {
+            if name.contains("gemini") || name.contains("claude") || name.contains("argon") || name.contains("gpt") {
                 quota_data.add_model(name, display_name, percentage, reset_time);
             }
         }
@@ -1042,17 +1150,10 @@ pub async fn fetch_quota_with_context(
                         let mut q = QuotaData::new();
                         q.is_forbidden = true;
                         q.subscription_tier = subscription_tier.clone();
-                        let message = if text.trim().is_empty() {
-                            "API returned 403 Forbidden".to_string()
-                        } else {
-                            text
-                        };
+                        let parsed_error = parse_google_api_error(status.as_u16(), &text);
                         return Ok(QuotaFetchResult {
                             quota: q,
-                            error: Some(QuotaFetchError {
-                                code: Some(status.as_u16()),
-                                message,
-                            }),
+                            error: Some(parsed_error),
                         });
                     }
 
@@ -1073,8 +1174,9 @@ pub async fn fetch_quota_with_context(
                     .map_err(|e| AppError::Unknown(format!("API 响应解析失败: {}", e)))?;
 
                 // Fetch retrieveUserQuotaSummary to get weekly and 5h buckets
-                let summary_url = format!("{}/v1internal:retrieveUserQuotaSummary", base_url);
                 let mut quota_summary_val: Option<serde_json::Value> = None;
+                let mut quota_summary_error: Option<QuotaFetchError> = None;
+                let summary_url = format!("{}/v1internal:retrieveUserQuotaSummary", base_url);
                 crate::modules::logger::log_info(&format!(
                     "[Quota] 发送 retrieveUserQuotaSummary, url: {}",
                     summary_url
@@ -1123,14 +1225,21 @@ pub async fn fetch_quota_with_context(
                             }
                         } else {
                             let err_text = res.text().await.unwrap_or_default();
-                            crate::modules::logger::log_error(&format!(
+                            crate::modules::logger::log_warn(&format!(
                                 "[Quota] retrieveUserQuotaSummary 请求未成功: {}, body: {}",
                                 status, err_text
                             ));
+                            let parsed = parse_google_api_error(status.as_u16(), &err_text);
+                            if parsed.reason.as_deref() == Some("VALIDATION_REQUIRED")
+                                || parsed.validation_url.is_some()
+                                || parsed.message.contains("Verify your account")
+                            {
+                                quota_summary_error = Some(parsed);
+                            }
                         }
                     }
                     Err(e) => {
-                        crate::modules::logger::log_error(&format!(
+                        crate::modules::logger::log_warn(&format!(
                             "[Quota] retrieveUserQuotaSummary 发送失败: {}",
                             e
                         ));
@@ -1156,7 +1265,7 @@ pub async fn fetch_quota_with_context(
 
                 return Ok(QuotaFetchResult {
                     quota: quota_data,
-                    error: None,
+                    error: quota_summary_error,
                 });
             }
             Err(e) => {

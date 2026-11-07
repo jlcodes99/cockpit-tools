@@ -25,6 +25,11 @@ pub struct CreditInfo {
 pub struct QuotaData {
     pub models: Vec<ModelQuota>,
     pub last_updated: i64,
+    /// Window summary failed; model-level data may still be current.
+    #[serde(default)]
+    pub quota_summary_stale: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_summary_updated_at: Option<i64>,
     #[serde(default)]
     pub is_forbidden: bool,
     /// 订阅等级 (FREE/PRO/ULTRA)
@@ -49,6 +54,8 @@ impl QuotaData {
         Self {
             models: Vec::new(),
             last_updated: chrono::Utc::now().timestamp(),
+            quota_summary_stale: false,
+            quota_summary_updated_at: None,
             is_forbidden: false,
             subscription_tier: None,
             credits: Vec::new(),

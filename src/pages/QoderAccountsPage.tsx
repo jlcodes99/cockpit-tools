@@ -24,6 +24,7 @@ import {
   X,
   Check,
 } from 'lucide-react';
+import { AccountLastUsed } from '../components/AccountLastUsed';
 import { confirm as confirmDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useTranslation } from 'react-i18next';
@@ -33,6 +34,7 @@ import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorM
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
+import { usePlatformAccountGroups } from '../hooks/usePlatformAccountGroups';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
 import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
@@ -88,6 +90,7 @@ import {
   removeAccountsOverviewFilterField,
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
+import { getLocalOffsetMinutes } from '../utils/localTimeZone';
 
 const QODER_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.qoder.flow_notice_collapsed';
 const QODER_FILTER_PERSISTENCE_SCOPE = normalizeAccountsOverviewScope('qoder');
@@ -165,13 +168,17 @@ function formatNumber(value: number | null | undefined): string {
 }
 
 function formatDateTime(value: number): string {
-  const date = new Date(value * 1000);
+  // 用系统真实时区偏移把 UTC 时间戳平移到本地墙上时间，再以 UTC 渲染，
+  // 绕开 WebView 默认/ICU 时区库回退 UTC 的问题（#时区）。
+  const offsetMin = getLocalOffsetMinutes();
+  const date = new Date(value * 1000 + offsetMin * 60000);
   return date.toLocaleString(undefined, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'UTC',
   });
 }
 
@@ -298,6 +305,7 @@ export function QoderAccountsPage() {
       : 'desc',
   );
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const grouping = usePlatformAccountGroups('qoder', () => setSelected(new Set()));
   const [showAddModal, setShowAddModal] = useState(false);
   const [addTab, setAddTab] = useState<'oauth' | 'token' | 'import'>('import');
 
@@ -755,9 +763,13 @@ export function QoderAccountsPage() {
       );
     }
 
+    if (grouping.activeGroupId) {
+      result = grouping.filterAccountsByGroup(result);
+    }
+
     result.sort(compareAccountsBySort);
     return result;
-  }, [accounts, compareAccountsBySort, filterTypes, isAbnormalAccount, searchQuery, tagFilter]);
+  }, [accounts, compareAccountsBySort, filterTypes, grouping, isAbnormalAccount, searchQuery, tagFilter]);
 
   const groupedAccounts = useMemo(() => {
     if (!groupByTag) return [] as Array<[string, QoderAccount[]]>;
@@ -1606,9 +1618,7 @@ export function QoderAccountsPage() {
             {renderQuotaSection(account)}
 
             <div className="card-footer">
-              <span className="card-date qoder-card-created-at" title={createdAtText}>
-                {updatedText}
-              </span>
+              <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDateTime} />
               <div className="card-actions">
                 <button
                   className="card-action-btn success"
@@ -1745,7 +1755,7 @@ export function QoderAccountsPage() {
                 {quota.resetText && <div className="quota-reset qoder-table-reset">{quota.resetText}</div>}
               </div>
             </td>
-            <td>{formatDateTime(account.created_at)}</td>
+            <td>{account.last_used > 0 ? formatDateTime(account.last_used) : '—'}</td>
             <td>
               <div className="action-buttons">
                 <button
@@ -2122,13 +2132,16 @@ export function QoderAccountsPage() {
             </div>
           </div>
 
-          {filteredAccounts.length > 0 && (
+          {(accounts.length > 0 || grouping.groups.length > 0) && (
             <AccountSelectionToolbar
               selectedCount={selected.size}
               allSelected={allSelected}
               disabled={paginatedIds.length === 0}
               onToggleSelectAll={toggleSelectAll}
               onClearSelection={() => setSelected(new Set())}
+              grouping={grouping}
+              accounts={accounts}
+              selectedIds={Array.from(selected)}
               actions={(
                 <button
                   className="btn btn-danger icon-only"

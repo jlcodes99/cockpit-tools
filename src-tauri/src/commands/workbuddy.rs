@@ -26,6 +26,33 @@ pub fn list_workbuddy_accounts() -> Result<Vec<WorkbuddyAccount>, String> {
 }
 
 #[tauri::command]
+pub async fn get_workbuddy_credit_packages(
+    account_id: String,
+    package_codes: Vec<String>,
+    expired: bool,
+    page: u32,
+    locale: String,
+) -> Result<serde_json::Value, String> {
+    let account = load_billing_account(account_id).await?;
+    workbuddy_oauth::fetch_credit_packages(&account, &package_codes, expired, page, &locale).await
+}
+
+#[tauri::command]
+pub async fn get_workbuddy_recent_credit_usage(
+    account_id: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    let account = load_billing_account(account_id).await?;
+    workbuddy_oauth::fetch_recent_credit_usage(&account).await
+}
+
+async fn load_billing_account(account_id: String) -> Result<WorkbuddyAccount, String> {
+    tauri::async_runtime::spawn_blocking(move || workbuddy_account::load_account(&account_id))
+        .await
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "WORKBUDDY_ACCOUNT_NOT_FOUND".to_string())
+}
+
+#[tauri::command]
 pub fn delete_workbuddy_account(account_id: String) -> Result<(), String> {
     workbuddy_account::remove_account(&account_id)
 }
@@ -42,7 +69,11 @@ pub fn import_workbuddy_from_json(json_content: String) -> Result<Vec<WorkbuddyA
 
 #[tauri::command]
 pub async fn import_workbuddy_from_local(app: AppHandle) -> Result<Vec<WorkbuddyAccount>, String> {
-    let mut local_payload = match workbuddy_account::import_payload_from_local()? {
+    let local_payload =
+        tauri::async_runtime::spawn_blocking(workbuddy_account::import_payload_from_local_prepared)
+            .await
+            .map_err(|error| format!("WorkBuddy 本机导入后台任务失败: {}", error))??;
+    let mut local_payload = match local_payload {
         Some(payload) => payload,
         None => return Err("未在本机 WorkBuddy 客户端中找到登录信息".to_string()),
     };
@@ -282,6 +313,7 @@ pub async fn inject_workbuddy_to_vscode(
     let account = workbuddy_account::load_account(&account_id)
         .ok_or_else(|| format!("WorkBuddy account not found: {}", account_id))?;
 
+
     if let Err(err) = crate::modules::workbuddy_instance::update_default_settings(
         Some(Some(account_id.clone())),
         None,
@@ -305,7 +337,12 @@ pub async fn inject_workbuddy_to_vscode(
                 logger::log_warn(&format!("WorkBuddy 默认实例启动失败：{}", err));
                 // 保持既有行为：即使应用路径异常，认证切换仍然落盘。由于此时无法
                 // 确认官方进程已退出，不在这里执行可能较慢的会话目录合并。
-                workbuddy_account::write_account_to_default_client(&account)?;
+                let account_to_write = account.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    workbuddy_account::write_account_to_default_client(&account_to_write)
+                })
+                .await
+                .map_err(|error| format!("WorkBuddy 账号切换后台任务失败: {}", error))??;
                 if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("APP_PATH_NOT_FOUND:") {
                     let _ = app.emit(
                         "app:path_missing",
@@ -319,6 +356,7 @@ pub async fn inject_workbuddy_to_vscode(
         }
     };
 
+    workbuddy_account::touch_last_used(&account_id)?;
     let _ = crate::modules::tray::update_tray_menu(&app);
 
     if let Some(err) = launch_warning {

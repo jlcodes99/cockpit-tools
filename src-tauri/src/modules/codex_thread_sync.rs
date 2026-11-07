@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -10,12 +9,16 @@ use serde_json::{json, Value as JsonValue};
 
 use crate::modules;
 
+#[path = "codex_session_rollout_reader.rs"]
+mod rollout_reader;
+
 const DEFAULT_INSTANCE_ID: &str = "__default__";
 const DEFAULT_INSTANCE_NAME: &str = "默认实例";
 const SESSION_INDEX_FILE: &str = "session_index.jsonl";
 const GLOBAL_STATE_FILE: &str = ".codex-global-state.json";
 const BACKUP_FILE_NAMES: [&str; 2] = [SESSION_INDEX_FILE, GLOBAL_STATE_FILE];
 const SESSION_DIRS: [&str; 2] = ["sessions", "archived_sessions"];
+static THREAD_SYNC_OPERATION: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -96,15 +99,10 @@ struct ThreadSyncWriteResult {
     metadata_rebuild_failed: bool,
 }
 
-#[derive(Debug, Clone)]
-struct RolloutMergeLine {
-    line: String,
-    timestamp_ms: Option<i128>,
-    source_rank: usize,
-    line_index: usize,
-}
-
 pub fn sync_threads_across_instances() -> Result<CodexInstanceThreadSyncSummary, String> {
+    let _operation = THREAD_SYNC_OPERATION
+        .try_lock()
+        .map_err(|_| thread_sync_error("codex.instance.errors.threadSyncBusy"))?;
     let instances = collect_instances()?;
     if instances.len() < 2 {
         return Err("至少需要两个 Codex 实例才能同步线程".to_string());
@@ -284,22 +282,36 @@ pub fn sync_threads_across_instances_if_all_stopped(
     if instances.len() < 2 {
         return Ok(None);
     }
+    let entries = modules::process::collect_codex_process_entries();
+    run_thread_sync_when_stopped(&instances, &entries, sync_threads_across_instances)
+}
 
-    let process_entries = modules::process::collect_codex_process_entries();
+fn run_thread_sync_when_stopped<T>(
+    instances: &[CodexSyncInstance],
+    process_entries: &[(u32, Option<String>)],
+    sync: impl FnOnce() -> Result<T, String>,
+) -> Result<Option<T>, String> {
+    if instances.len() < 2 {
+        return Ok(None);
+    }
+
     if instances
         .iter()
-        .any(|instance| is_instance_running(instance, &process_entries))
+        .any(|instance| is_instance_running(instance, process_entries))
     {
         return Ok(None);
     }
 
-    sync_threads_across_instances().map(Some)
+    sync().map(Some)
 }
 
 pub fn sync_sessions_to_instance(
     session_ids: Vec<String>,
     target_instance_id: String,
 ) -> Result<CodexInstanceTargetThreadSyncSummary, String> {
+    let _operation = THREAD_SYNC_OPERATION
+        .try_lock()
+        .map_err(|_| thread_sync_error("codex.instance.errors.threadSyncBusy"))?;
     let requested_ids = session_ids
         .into_iter()
         .map(|item| item.trim().to_string())
@@ -447,13 +459,20 @@ fn is_instance_running(
     instance: &CodexSyncInstance,
     process_entries: &[(u32, Option<String>)],
 ) -> bool {
-    let codex_home = instance.data_dir.to_str();
+    let codex_home = if instance.id == DEFAULT_INSTANCE_ID {
+        None
+    } else {
+        instance.data_dir.to_str()
+    };
     modules::process::resolve_codex_pid_from_entries(instance.last_pid, codex_home, process_entries)
         .is_some()
 }
 
 fn load_thread_snapshots(instance: &CodexSyncInstance) -> Result<Vec<ThreadSnapshot>, String> {
     let session_index_map = read_session_index_map(&instance.data_dir)?;
+    let current_heads = rollout_reader::current_heads(&instance.data_dir)?;
+    let display_context =
+        modules::codex_session_display::SessionDisplayContext::load(&instance.data_dir);
     let mut snapshots = Vec::new();
     for dir_name in SESSION_DIRS {
         let root_dir = instance.data_dir.join(dir_name);
@@ -467,10 +486,18 @@ fn load_thread_snapshots(instance: &CodexSyncInstance) -> Result<Vec<ThreadSnaps
             let Some(id) = session_meta_id(&session_meta) else {
                 continue;
             };
-            let freshness = build_thread_freshness(session_index_map.get(&id), &rollout_path);
-            let title = session_index_map
+            // A prior physical segment may have the same session id after a
+            // revert. Select the official current head, never merge its ancestor.
+            if current_heads
                 .get(&id)
-                .and_then(session_index_title)
+                .is_some_and(|head| !rollout_reader::same_storage_path(head, &rollout_path))
+            {
+                continue;
+            }
+            let freshness = build_thread_freshness(session_index_map.get(&id), &rollout_path);
+            let index_title = session_index_map.get(&id).and_then(session_index_title);
+            let title = display_context
+                .resolve_title(&id, index_title.as_deref())
                 .unwrap_or_else(|| id.clone());
             let updated_at = session_index_map
                 .get(&id)
@@ -528,7 +555,9 @@ fn list_rollout_files(root_dir: &Path) -> Result<Vec<PathBuf>, String> {
             .file_name()
             .and_then(|item| item.to_str())
             .unwrap_or_default();
-        if file_name.starts_with("rollout-") && file_name.ends_with(".jsonl") {
+        if file_name.starts_with("rollout-")
+            && (file_name.ends_with(".jsonl") || file_name.ends_with(".jsonl.zst"))
+        {
             result.push(path);
         }
     }
@@ -538,25 +567,32 @@ fn list_rollout_files(root_dir: &Path) -> Result<Vec<PathBuf>, String> {
 }
 
 fn read_rollout_session_meta(path: &Path) -> Result<Option<JsonValue>, String> {
-    let file = fs::File::open(path)
-        .map_err(|error| format!("打开 rollout 文件失败 ({}): {}", path.display(), error))?;
-    let reader = BufReader::new(file);
-    for line in reader.lines() {
-        let line =
-            line.map_err(|error| format!("读取 rollout 文件失败 ({}): {}", path.display(), error))?;
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let Ok(parsed) = serde_json::from_str::<JsonValue>(trimmed) else {
-            return Ok(None);
-        };
-        if parsed.get("type").and_then(JsonValue::as_str) == Some("session_meta") {
-            return Ok(Some(parsed));
-        }
-        return Ok(None);
+    rollout_reader::metadata(path)
+        .map_err(|error| format!("读取 rollout 文件失败 ({}): {}", path.display(), error))
+}
+
+fn rollout_storage_compressed(path: &Path) -> Result<bool, String> {
+    use std::io::Read;
+    if rollout_reader::is_compressed(path) {
+        return Ok(true);
     }
-    Ok(None)
+    let mut file = fs::File::open(path).map_err(|error| error.to_string())?;
+    let mut magic = [0; 4];
+    let count = file.read(&mut magic).map_err(|error| error.to_string())?;
+    Ok(count == magic.len() && magic == [0x28, 0xb5, 0x2f, 0xfd])
+}
+
+fn read_rollout_content(path: &Path) -> Result<String, String> {
+    if !rollout_storage_compressed(path)? {
+        return fs::read_to_string(path).map_err(|error| error.to_string());
+    }
+    // Decode a stable, bounded snapshot into private temporary storage. Never
+    // decompress in place or serialize parsed JSON: offsets address decoded
+    // bytes, including original whitespace, CRLF and UTF-8.
+    let staging = tempfile::tempdir().map_err(|error| error.to_string())?;
+    let materialized = staging.path().join("rollout.jsonl");
+    rollout_reader::materialize_bounded(path, &materialized).map_err(|error| error.to_string())?;
+    fs::read_to_string(materialized).map_err(|error| error.to_string())
 }
 
 fn session_meta_id(meta: &JsonValue) -> Option<String> {
@@ -601,15 +637,43 @@ fn sync_thread_plan_to_instance(
     plan_items: &[ThreadSyncPlanItem],
     workspace_snapshots: &[ThreadSnapshot],
 ) -> Result<ThreadSyncWriteResult, String> {
-    let backup_dir = backup_instance_files(&target.data_dir)?;
-    let target_provider =
-        modules::codex_session_visibility::read_history_visibility_provider_for_dir(
-            &target.data_dir,
-        )?;
+    sync_thread_plan_to_instance_with_rebuild(
+        target,
+        plan_items,
+        workspace_snapshots,
+        try_rebuild_thread_metadata,
+    )
+}
 
+fn sync_thread_plan_to_instance_with_rebuild(
+    target: &CodexSyncInstance,
+    plan_items: &[ThreadSyncPlanItem],
+    workspace_snapshots: &[ThreadSnapshot],
+    rebuild: impl FnOnce(&CodexSyncInstance) -> bool,
+) -> Result<ThreadSyncWriteResult, String> {
+    // Validate the whole target plan before publishing any file or backup.
+    let mut prepared = Vec::with_capacity(plan_items.len());
     for item in plan_items {
-        let target_rollout_path = copy_rollout_file_for_plan(item, &target.data_dir, &backup_dir)?;
-        rewrite_rollout_provider_for_target(&target_rollout_path, &target_provider)?;
+        let path = resolve_target_rollout_path(
+            &item.snapshot,
+            &target.data_dir,
+            item.existing_rollout_path.as_deref(),
+        )?;
+        let bytes = rollout_snapshot_bytes(&item.snapshot)?;
+        let action = validate_rollout_copy_target(&item.snapshot, &path, &bytes)?;
+        if matches!(action, RolloutCopyAction::Append(_)) {
+            ensure_append_target_stopped(target)?;
+        }
+        prepared.push((item, path, bytes, action));
+    }
+    let backup_dir = backup_instance_files(&target.data_dir)?;
+    for (item, path, bytes, action) in prepared {
+        if item.is_update {
+            backup_existing_rollout_file(&backup_dir, &target.data_dir, &path, &item.snapshot.id)?;
+        }
+        copy_prepared_rollout(&item.snapshot, &path, &bytes, action, || {
+            ensure_append_target_stopped(target)
+        })?;
     }
 
     let mut metadata_rebuild_failed = false;
@@ -619,7 +683,7 @@ fn sync_thread_plan_to_instance(
             .map(|item| item.snapshot.clone())
             .collect::<Vec<_>>();
         upsert_session_index_entries(&target.data_dir, &snapshots)?;
-        metadata_rebuild_failed = !try_rebuild_thread_metadata(target);
+        metadata_rebuild_failed = !rebuild(target);
     }
     update_global_state_thread_workspaces(&target.data_dir, workspace_snapshots)?;
     let _ = modules::backup_storage::prune_behavior_backups(
@@ -699,79 +763,21 @@ fn merge_thread_snapshots(snapshots: &[ThreadSnapshot]) -> Result<ThreadSnapshot
     Ok(merged)
 }
 
+// A line-wise union destroys byte offsets and can silently discard continuation
+// session_meta records. Only select an existing append-compatible byte stream.
 fn merge_rollout_contents(snapshots: &[ThreadSnapshot]) -> Result<String, String> {
-    let mut session_meta = None::<String>;
-    let mut seen_lines = HashSet::<String>::new();
-    let mut merged_lines = Vec::<RolloutMergeLine>::new();
-
-    for (source_rank, snapshot) in snapshots.iter().enumerate() {
-        let content = fs::read_to_string(&snapshot.rollout_path).map_err(|error| {
-            format!(
-                "读取 rollout 文件失败 ({}): {}",
-                snapshot.rollout_path.display(),
-                error
-            )
-        })?;
-
-        for (line_index, line) in content.lines().enumerate() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-
-            let parsed = serde_json::from_str::<JsonValue>(trimmed).ok();
-            if parsed
-                .as_ref()
-                .and_then(|value| value.get("type"))
-                .and_then(JsonValue::as_str)
-                == Some("session_meta")
-            {
-                if session_meta.is_none() {
-                    session_meta = Some(trimmed.to_string());
-                }
-                continue;
-            }
-
-            let key = rollout_line_dedupe_key(trimmed, parsed.as_ref());
-            if !seen_lines.insert(key) {
-                continue;
-            }
-
-            merged_lines.push(RolloutMergeLine {
-                line: trimmed.to_string(),
-                timestamp_ms: parsed.as_ref().and_then(parse_rollout_line_timestamp_ms),
-                source_rank,
-                line_index,
-            });
+    let mut longest = String::new();
+    for snapshot in snapshots {
+        let content = read_rollout_content(&snapshot.rollout_path)?;
+        if content.starts_with(&longest) {
+            longest = content;
+        } else if !longest.starts_with(&content) {
+            return Err(
+                "会话历史已分叉，无法在保留字节游标的情况下合并；请保留各实例原始历史".into(),
+            );
         }
     }
-
-    merged_lines.sort_by(|left, right| {
-        match (left.timestamp_ms, right.timestamp_ms) {
-            (Some(left_time), Some(right_time)) => left_time.cmp(&right_time),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => std::cmp::Ordering::Equal,
-        }
-        .then_with(|| left.source_rank.cmp(&right.source_rank))
-        .then_with(|| left.line_index.cmp(&right.line_index))
-    });
-
-    let mut output_lines = Vec::with_capacity(merged_lines.len() + 1);
-    if let Some(meta) = session_meta {
-        output_lines.push(meta);
-    }
-    output_lines.extend(merged_lines.into_iter().map(|line| line.line));
-
-    let mut output = output_lines.join("\n");
-    output.push('\n');
-    Ok(output)
-}
-
-fn rollout_line_dedupe_key(line: &str, parsed: Option<&JsonValue>) -> String {
-    parsed
-        .and_then(|value| serde_json::to_string(value).ok())
-        .unwrap_or_else(|| line.to_string())
+    Ok(longest)
 }
 
 fn rollout_content_activity_and_len(content: &str) -> (i128, u64) {
@@ -822,7 +828,7 @@ fn snapshot_rollout_matches(existing: &ThreadSnapshot, expected: &ThreadSnapshot
             || existing.freshness == expected.freshness;
     };
 
-    fs::read_to_string(&existing.rollout_path)
+    read_rollout_content(&existing.rollout_path)
         .map(|content| content == expected_content)
         .unwrap_or(false)
 }
@@ -841,8 +847,10 @@ fn build_thread_freshness(
     let index_activity_ms = session_index_entry
         .and_then(parse_session_index_updated_at_ms)
         .unwrap_or(0);
-    let (rollout_modified_ms, rollout_len) = rollout_file_metadata(rollout_path);
-    let rollout_activity_ms = rollout_file_activity_ms(rollout_path).unwrap_or(0);
+    let (rollout_modified_ms, stored_len) = rollout_file_metadata(rollout_path);
+    let (rollout_activity_ms, rollout_len) = read_rollout_content(rollout_path)
+        .map(|content| rollout_content_activity_and_len(&content))
+        .unwrap_or((0, stored_len));
     let activity_ms = index_activity_ms.max(rollout_activity_ms).max(
         if index_activity_ms == 0 && rollout_activity_ms == 0 {
             rollout_modified_ms
@@ -909,12 +917,6 @@ fn session_index_updated_at_text(entry: &JsonValue) -> Option<String> {
     .find_map(|value| value.as_str().map(str::trim))
     .filter(|value| !value.is_empty())
     .map(str::to_string)
-}
-
-fn rollout_file_activity_ms(path: &Path) -> Option<i128> {
-    let content = fs::read_to_string(path).ok()?;
-    let (activity_ms, _) = rollout_content_activity_and_len(&content);
-    (activity_ms > 0).then_some(activity_ms)
 }
 
 fn rollout_file_metadata(path: &Path) -> (i128, u64) {
@@ -1271,22 +1273,6 @@ fn merge_string_array(
     changed
 }
 
-fn copy_rollout_file_for_plan(
-    item: &ThreadSyncPlanItem,
-    target_root: &Path,
-    backup_dir: &Path,
-) -> Result<PathBuf, String> {
-    let target_path = resolve_target_rollout_path(
-        &item.snapshot,
-        target_root,
-        item.existing_rollout_path.as_deref(),
-    )?;
-    if item.is_update {
-        backup_existing_rollout_file(backup_dir, target_root, &target_path, &item.snapshot.id)?;
-    }
-    copy_rollout_file_to_path(&item.snapshot, &target_path)
-}
-
 fn resolve_target_rollout_path(
     snapshot: &ThreadSnapshot,
     target_root: &Path,
@@ -1308,68 +1294,198 @@ fn resolve_target_rollout_path(
                 snapshot.rollout_path.display()
             )
         })?;
-    Ok(target_root.join(relative_path))
+    let target = target_root.join(relative_path);
+    // New copies are standalone decoded streams. Retain .jsonl, never publish
+    // plaintext under .zst or compressed bytes under .jsonl.
+    Ok(if rollout_reader::is_compressed(&target) {
+        target.with_extension("")
+    } else {
+        target
+    })
 }
 
+fn rollout_snapshot_bytes(snapshot: &ThreadSnapshot) -> Result<Vec<u8>, String> {
+    match &snapshot.merged_rollout_content {
+        Some(content) => Ok(content.as_bytes().to_vec()),
+        None => read_rollout_content(&snapshot.rollout_path).map(String::into_bytes),
+    }
+}
+
+enum RolloutCopyAction {
+    Unchanged,
+    Create,
+    Append(Vec<u8>),
+}
+
+fn thread_sync_error(key: &str) -> String {
+    modules::i18n::translate(&modules::config::get_user_config().language, key, &[])
+}
+
+fn ensure_append_target_stopped(target: &CodexSyncInstance) -> Result<(), String> {
+    let entries = modules::process::collect_codex_process_entries();
+    if is_instance_running(target, &entries) {
+        return Err(thread_sync_error(
+            "codex.instance.errors.threadSyncTargetRunning",
+        ));
+    }
+    Ok(())
+}
+
+fn alternate_rollout_path(path: &Path) -> PathBuf {
+    if rollout_reader::is_compressed(path) {
+        path.with_extension("")
+    } else {
+        let mut name = path.as_os_str().to_os_string();
+        name.push(".zst");
+        PathBuf::from(name)
+    }
+}
+
+fn rollout_conflict() -> String {
+    "目标会话已有不同内容，无法安全覆盖字节寻址历史；请保留原始文件".into()
+}
+
+fn validate_rollout_copy_target(
+    _snapshot: &ThreadSnapshot,
+    target: &Path,
+    bytes: &[u8],
+) -> Result<RolloutCopyAction, String> {
+    modules::codex_session_import_paths::ensure_standalone_rollout(bytes)?;
+    // Treat plain/compressed names as the same physical head identity. Do not
+    // create a second conflicting version beside a compressed destination.
+    if fs::symlink_metadata(alternate_rollout_path(target)).is_ok() {
+        return Err(rollout_conflict());
+    }
+    if fs::symlink_metadata(target).is_ok() {
+        let compressed = rollout_storage_compressed(target)?;
+        let existing = read_rollout_content(target)?.into_bytes();
+        if existing == bytes {
+            return Ok(RolloutCopyAction::Unchanged);
+        }
+        if !compressed && !existing.is_empty() && bytes.starts_with(&existing) {
+            // Only plain targets admit a verbatim append. Never append decoded
+            // text into a zstd frame or recompress/replace an existing head.
+            return Ok(RolloutCopyAction::Append(existing));
+        }
+        return Err(rollout_conflict());
+    }
+    if rollout_reader::is_compressed(target) {
+        return Err(rollout_conflict());
+    }
+    Ok(RolloutCopyAction::Create)
+}
+
+#[cfg(test)]
 fn copy_rollout_file_to_path(
     snapshot: &ThreadSnapshot,
     target_path: &Path,
 ) -> Result<PathBuf, String> {
-    if let Some(content) = snapshot.merged_rollout_content.as_deref() {
-        let parent = target_path
-            .parent()
-            .ok_or_else(|| format!("无法解析目标 rollout 父目录: {}", target_path.display()))?;
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("创建 rollout 目录失败 ({}): {}", parent.display(), error))?;
-        if fs::read_to_string(target_path)
-            .map(|existing| existing == content)
-            .unwrap_or(false)
-        {
-            modules::codex_session_file_time::restore_modified_time(
-                target_path,
-                snapshot.rollout_modified_at,
-            )?;
+    let bytes = rollout_snapshot_bytes(snapshot)?;
+    let action = validate_rollout_copy_target(snapshot, target_path, &bytes)?;
+    // The low-level copy API has no instance context to authorize an append.
+    copy_prepared_rollout(snapshot, target_path, &bytes, action, || {
+        Err("追加会话前必须确认目标实例已停止".into())
+    })
+}
+
+fn copy_prepared_rollout(
+    snapshot: &ThreadSnapshot,
+    target_path: &Path,
+    bytes: &[u8],
+    action: RolloutCopyAction,
+    verify_stopped: impl Fn() -> Result<(), String>,
+) -> Result<PathBuf, String> {
+    use std::io::{Read, Seek, SeekFrom, Write};
+    match action {
+        RolloutCopyAction::Unchanged => return Ok(target_path.to_path_buf()),
+        RolloutCopyAction::Append(expected) => {
+            verify_stopped()?;
+            let metadata = fs::symlink_metadata(target_path).map_err(|e| e.to_string())?;
+            if !metadata.is_file() || metadata.file_type().is_symlink() {
+                return Err(thread_sync_error(
+                    "codex.instance.errors.threadSyncTargetReplaced",
+                ));
+            }
+            let mut options = fs::OpenOptions::new();
+            options.read(true).append(true);
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::fs::OpenOptionsExt;
+                options.share_mode(0);
+            }
+            let mut file = options.open(target_path).map_err(|e| e.to_string())?;
+            fs2::FileExt::try_lock_exclusive(&file)
+                .map_err(|_| thread_sync_error("codex.instance.errors.threadSyncFileBusy"))?;
+            let mut current = Vec::new();
+            file.read_to_end(&mut current).map_err(|e| e.to_string())?;
+            if current != expected {
+                return Err(thread_sync_error(
+                    "codex.instance.errors.threadSyncTargetChanged",
+                ));
+            }
+            verify_stopped()?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt;
+                let opened = file.metadata().map_err(|e| e.to_string())?;
+                let current_path = fs::symlink_metadata(target_path).map_err(|e| e.to_string())?;
+                if opened.dev() != current_path.dev()
+                    || opened.ino() != current_path.ino()
+                    || metadata.dev() != opened.dev()
+                    || metadata.ino() != opened.ino()
+                {
+                    return Err(thread_sync_error(
+                        "codex.instance.errors.threadSyncTargetReplaced",
+                    ));
+                }
+            }
+            // Process discovery can take time; revalidate after it, immediately
+            // before the append, while retaining the exclusive file lock.
+            file.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+            current.clear();
+            file.read_to_end(&mut current).map_err(|e| e.to_string())?;
+            if current != expected {
+                return Err(thread_sync_error(
+                    "codex.instance.errors.threadSyncTargetChanged",
+                ));
+            }
+            // O_APPEND never replaces/truncates existing bytes. On an I/O failure
+            // leave the written prefix and its backup intact; the next validated
+            // attempt appends only the remaining source bytes, without duplication.
+            file.write_all(&bytes[expected.len()..])
+                .map_err(|e| e.to_string())?;
+            file.sync_all().map_err(|e| e.to_string())?;
             return Ok(target_path.to_path_buf());
         }
-        modules::atomic_write::write_string_atomic(target_path, content).map_err(|error| {
-            format!(
-                "写入合并 rollout 文件失败 ({}): {}",
-                target_path.display(),
-                error
-            )
-        })?;
+        RolloutCopyAction::Create => {}
+    }
+    let parent = target_path.parent().ok_or("无法解析目标会话目录")?;
+    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    let staging = parent.join(format!(
+        ".cockpit-rollout-copy-{}.tmp",
+        uuid::Uuid::new_v4()
+    ));
+    let result = (|| {
+        let mut output = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&staging)
+            .map_err(|e| e.to_string())?;
+        output.write_all(bytes).map_err(|e| e.to_string())?;
+        output.flush().map_err(|e| e.to_string())?;
         modules::codex_session_file_time::restore_modified_time(
-            target_path,
+            &staging,
             snapshot.rollout_modified_at,
         )?;
-        return Ok(target_path.to_path_buf());
-    }
-
-    if paths_point_to_same_file(&snapshot.rollout_path, target_path) {
-        modules::codex_session_file_time::restore_modified_time(
-            target_path,
-            snapshot.rollout_modified_at,
-        )?;
-        return Ok(target_path.to_path_buf());
-    }
-
-    let parent = target_path
-        .parent()
-        .ok_or_else(|| format!("无法解析目标 rollout 父目录: {}", target_path.display()))?;
-    fs::create_dir_all(parent)
-        .map_err(|error| format!("创建 rollout 目录失败 ({}): {}", parent.display(), error))?;
-    fs::copy(&snapshot.rollout_path, &target_path).map_err(|error| {
-        format!(
-            "复制 rollout 文件失败 ({} -> {}): {}",
-            snapshot.rollout_path.display(),
-            target_path.display(),
-            error
-        )
-    })?;
-    modules::codex_session_file_time::restore_modified_time(
-        &target_path,
-        snapshot.rollout_modified_at,
-    )?;
+        if fs::symlink_metadata(alternate_rollout_path(target_path)).is_ok() {
+            return Err(rollout_conflict());
+        }
+        // Same-volume hard-link publication fails if a concurrent writer created
+        // the target. No rename/truncate can discard that writer's append.
+        fs::hard_link(&staging, target_path).map_err(|e| e.to_string())
+    })();
+    let _ = fs::remove_file(&staging);
+    result?;
     Ok(target_path.to_path_buf())
 }
 
@@ -1433,55 +1549,6 @@ fn sanitize_file_name(value: &str) -> String {
             _ => '_',
         })
         .collect()
-}
-
-fn rewrite_rollout_provider_for_target(
-    rollout_path: &Path,
-    target_provider: &str,
-) -> Result<(), String> {
-    let original_modified_at = modules::codex_session_file_time::read_modified_time(rollout_path);
-    let content = fs::read_to_string(rollout_path).map_err(|error| {
-        format!(
-            "读取目标 rollout 文件失败 ({}): {}",
-            rollout_path.display(),
-            error
-        )
-    })?;
-    let Some(newline_index) = content.find('\n') else {
-        return Ok(());
-    };
-    let first_line = &content[..newline_index];
-    let rest = &content[newline_index..];
-    let Ok(mut parsed) = serde_json::from_str::<JsonValue>(first_line) else {
-        return Ok(());
-    };
-    if parsed.get("type").and_then(JsonValue::as_str) != Some("session_meta") {
-        return Ok(());
-    }
-    let Some(payload) = parsed.get_mut("payload").and_then(JsonValue::as_object_mut) else {
-        return Ok(());
-    };
-    if payload.get("model_provider").and_then(JsonValue::as_str) == Some(target_provider) {
-        return Ok(());
-    }
-
-    payload.insert(
-        "model_provider".to_string(),
-        JsonValue::String(target_provider.to_string()),
-    );
-    let updated_first_line = serde_json::to_string(&parsed)
-        .map_err(|error| format!("序列化 rollout provider 元数据失败: {}", error))?;
-    let updated_content = format!("{}{}", updated_first_line, rest);
-    modules::atomic_write::write_string_atomic(rollout_path, &updated_content).map_err(
-        |error| {
-            format!(
-                "写入目标 rollout provider 元数据失败 ({}): {}",
-                rollout_path.display(),
-                error
-            )
-        },
-    )?;
-    modules::codex_session_file_time::restore_modified_time(rollout_path, original_modified_at)
 }
 
 fn format_timestamp(timestamp: i64) -> Option<String> {
@@ -1573,35 +1640,6 @@ mod tests {
     }
 
     #[test]
-    fn provider_rewrite_preserves_rollout_modified_time() {
-        let temp_dir = make_temp_dir("codex-thread-sync-mtime-provider-test");
-        let rollout_path = temp_dir.join("rollout-test.jsonl");
-        fs::write(
-            &rollout_path,
-            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"s1\",\"model_provider\":\"old\"}}\n{\"type\":\"event\"}\n",
-        )
-        .expect("write rollout");
-        let original_modified_at = UNIX_EPOCH + Duration::from_secs(1_720_000_000);
-        fs::File::open(&rollout_path)
-            .expect("open rollout")
-            .set_modified(original_modified_at)
-            .expect("set rollout mtime");
-
-        rewrite_rollout_provider_for_target(&rollout_path, "relay").expect("rewrite provider");
-
-        let content = fs::read_to_string(&rollout_path).expect("read rollout");
-        assert!(content.contains("\"model_provider\":\"relay\""));
-        assert_eq!(
-            fs::metadata(&rollout_path)
-                .expect("rollout metadata")
-                .modified()
-                .expect("rollout mtime"),
-            original_modified_at
-        );
-        fs::remove_dir_all(&temp_dir).expect("cleanup temp dir");
-    }
-
-    #[test]
     fn normalize_workspace_root_preserves_posix_paths() {
         assert_eq!(
             normalize_workspace_root("/Users/demo/project/").as_deref(),
@@ -1625,3 +1663,11 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "codex_thread_sync_stability_tests.rs"]
+mod stability_tests;
+
+#[cfg(test)]
+#[path = "codex_thread_sync_compressed_tests.rs"]
+mod compressed_tests;

@@ -1,3 +1,5 @@
+import { resolveCodexProviderCapabilityProfile } from "../utils/codexProviderGateway";
+import { openAIUsageBinding, isOpenAIOfficialUsageUrl, OPENAI_OFFICIAL_USAGE_BASE_URL, resolveAccountUsageBaseUrl } from '../utils/openaiOfficialUsage';
 import { invoke } from '@tauri-apps/api/core';
 import type { CodexAccount } from '../types/codex';
 import type {
@@ -23,11 +25,17 @@ import {
   type ModelProviderUsageSummary,
 } from './modelProviderUsageService';
 import { moveCodexProviderApiKey } from '../utils/codexModelProviderApiKeyMove';
+import { migrateCodexModelProviderVisionCapabilities } from '../utils/codexModelProviderVisionMigration';
+import { cloneCodexProviderModelConfig, type CodexProviderModelConfig } from '../utils/codexModelProviderKeyConfig';
+import { findCodexAccountsForModelProviderDeletion } from '../utils/codexModelProviderAccountSync';
 
-export interface CodexModelProviderApiKey {
+export interface CodexModelProviderApiKey extends CodexProviderModelConfig {
   id: string;
   name: string;
   apiKey: string;
+  /** OpenAI organization usage only; excluded from client/account credential snapshots. */
+  usageApiKey?: string;
+  usageKeyVersion?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -46,11 +54,16 @@ export interface CodexModelProvider {
   boundInstanceId?: string;
   website?: string;
   apiKeyUrl?: string;
+  authScheme?: 'x-api-key' | 'bearer';
   wireApi?: CodexProviderWireApi | null;
   supportsWebsockets: boolean;
   enableModePreference?: CodexProviderEnableModePreference;
   boundOauthAccountId?: string | null;
   apiKeys: CodexModelProviderApiKey[];
+  /** Explicit removals must survive background account-to-provider reconciliation. */
+  excludedApiKeyHashes?: string[];
+  /** Credential-free tombstone: account scans must respect an explicit provider removal. */
+  deletedAt?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -63,6 +76,7 @@ interface UpsertFromCredentialInput {
   providerName?: string | null;
   apiBaseUrl: string;
   apiKey: string;
+  usageApiKey?: string;
   apiKeyName?: string | null;
   sourceTag?: string | null;
   modelCatalog?: string[];
@@ -72,6 +86,7 @@ interface UpsertFromCredentialInput {
   visionRoutingModel?: string | null;
   website?: string | null;
   apiKeyUrl?: string | null;
+  authScheme?: 'x-api-key' | 'bearer';
   wireApi?: CodexProviderWireApi | null;
   supportsWebsockets?: boolean;
   integrationType?: 'sub2api' | 'new_api' | null;
@@ -80,6 +95,31 @@ interface UpsertFromCredentialInput {
 let providerIdCounter = 0;
 let keyIdCounter = 0;
 let cachedProviders: CodexModelProvider[] | null = null;
+let providerMutationTail: Promise<unknown> = Promise.resolve();
+
+function serializeProviderMutation<T>(operation: () => Promise<T>): Promise<T> {
+  const result = providerMutationTail.then(operation, operation);
+  providerMutationTail = result.catch(() => undefined);
+  return result;
+}
+
+function serializedProviderMutation<Args extends unknown[], Result>(
+  operation: (...args: Args) => Promise<Result>,
+): (...args: Args) => Promise<Result> {
+  return (...args) => serializeProviderMutation(() => operation(...args));
+}
+
+async function apiKeyFingerprint(apiKey: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(apiKey.trim()));
+  return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+async function allowExplicitApiKey(provider: CodexModelProvider, apiKey: string): Promise<void> {
+  if (!provider.excludedApiKeyHashes?.length) return;
+  const hash = await apiKeyFingerprint(apiKey);
+  provider.excludedApiKeyHashes = provider.excludedApiKeyHashes.filter((item) => item !== hash);
+}
+
 
 function createProviderId(): string {
   return `cmp_${Date.now()}_${++providerIdCounter}`;
@@ -98,7 +138,7 @@ function sanitizeApiKey(value: string): string {
 }
 
 function normalizeWireApi(value: unknown): CodexProviderWireApi | undefined {
-  return value === 'responses' || value === 'chat_completions' ? value : undefined;
+  return value === 'responses' || value === 'chat_completions' || value === 'anthropic' ? value : undefined;
 }
 
 function normalizeSupportsWebsockets(
@@ -240,7 +280,7 @@ function enforceDeepSeekProvider(provider: CodexModelProvider): boolean {
   }
 
   const wireApi = provider.wireApi;
-  if (wireApi !== 'responses' && wireApi !== 'chat_completions') {
+  if (wireApi !== 'responses' && wireApi !== 'chat_completions' && wireApi !== 'anthropic') {
     provider.wireApi = 'responses';
     changed = true;
   }
@@ -278,7 +318,7 @@ function enforceDeepSeekProvider(provider: CodexModelProvider): boolean {
       provider.modelCatalog = modelCatalog;
       changed = true;
     }
-  } else if (provider.wireApi === 'chat_completions') {
+  } else if (provider.wireApi === 'chat_completions' || provider.wireApi === 'anthropic') {
     // Chat Completions stays on gateway path.
     if (provider.enableModePreference === 'direct') {
       provider.enableModePreference = 'gateway';
@@ -301,7 +341,7 @@ function presetModelCatalogForBaseUrl(baseUrl: string): string[] | undefined {
     return normalizeModelCatalog(APIKEY_FUN_DEFAULT_MODEL_CATALOG);
   }
   return normalizeModelCatalog(
-    findCodexApiProviderPresetById(resolveCodexApiProviderPresetId(baseUrl))
+    findCodexApiProviderPresetById(isOpenAIOfficialUsageUrl(baseUrl) ? "openai_official" : resolveCodexApiProviderPresetId(baseUrl))
       ?.modelCatalog,
   );
 }
@@ -309,6 +349,7 @@ function presetModelCatalogForBaseUrl(baseUrl: string): string[] | undefined {
 export function normalizeCodexModelProviderBaseUrl(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
+  if (isOpenAIOfficialUsageUrl(trimmed)) return OPENAI_OFFICIAL_USAGE_BASE_URL;
   try {
     const parsed = new URL(trimmed);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
@@ -351,8 +392,21 @@ function cloneProviders(providers: CodexModelProvider[]): CodexModelProvider[] {
         )
       : undefined,
     visionRoutingModel: sanitizeName(provider.visionRoutingModel ?? '') || undefined,
-    apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey })),
+    apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey, ...cloneCodexProviderModelConfig(apiKey) })),
+    excludedApiKeyHashes: provider.excludedApiKeyHashes ? [...provider.excludedApiKeyHashes] : undefined,
   }));
+}
+
+function normalizeApiKeyModelConfig(value: CodexProviderModelConfig): CodexProviderModelConfig {
+  const config: CodexProviderModelConfig = {};
+  if (Array.isArray(value.modelCatalog)) config.modelCatalog = normalizeModelCatalog(value.modelCatalog) ?? [];
+  if (value.modelContextWindows !== undefined) {
+    config.modelContextWindows = normalizeModelContextWindows(value.modelContextWindows, config.modelCatalog ?? []) ?? {};
+  }
+  if (typeof value.supportsVision === 'boolean') config.supportsVision = value.supportsVision;
+  if (value.modelCapabilities !== undefined) config.modelCapabilities = normalizeModelCapabilities(value.modelCapabilities) ?? {};
+  if (value.visionRoutingModel !== undefined) config.visionRoutingModel = sanitizeName(value.visionRoutingModel ?? '') || null;
+  return config;
 }
 
 function toValidApiKeys(value: unknown, now: number): CodexModelProviderApiKey[] {
@@ -366,6 +420,9 @@ function toValidApiKeys(value: unknown, now: number): CodexModelProviderApiKey[]
       id: String((item as { id?: unknown }).id ?? createApiKeyId()),
       name: sanitizeName(String((item as { name?: unknown }).name ?? '')),
       apiKey: rawKey,
+      usageApiKey: typeof (item as CodexModelProviderApiKey).usageApiKey === 'string' ? sanitizeApiKey((item as CodexModelProviderApiKey).usageApiKey!) || undefined : undefined,
+      usageKeyVersion: typeof (item as CodexModelProviderApiKey).usageKeyVersion === 'number' ? (item as CodexModelProviderApiKey).usageKeyVersion : undefined,
+      ...normalizeApiKeyModelConfig(item as CodexProviderModelConfig),
       createdAt: Number((item as { createdAt?: unknown }).createdAt ?? now),
       updatedAt: Number((item as { updatedAt?: unknown }).updatedAt ?? now),
     });
@@ -419,6 +476,7 @@ function toValidProviderList(raw: unknown): CodexModelProvider[] {
       ),
       website: sanitizeName(String((item as { website?: unknown }).website ?? '')) || undefined,
       apiKeyUrl: sanitizeName(String((item as { apiKeyUrl?: unknown }).apiKeyUrl ?? '')) || undefined,
+      authScheme: (item as { authScheme?: unknown }).authScheme === 'bearer' ? 'bearer' : 'x-api-key',
       wireApi,
       supportsWebsockets: normalizeSupportsWebsockets(
         (item as { supportsWebsockets?: unknown }).supportsWebsockets,
@@ -430,6 +488,11 @@ function toValidProviderList(raw: unknown): CodexModelProvider[] {
       ),
       boundOauthAccountId,
       apiKeys: toValidApiKeys((item as { apiKeys?: unknown }).apiKeys, now),
+      excludedApiKeyHashes: Array.isArray((item as { excludedApiKeyHashes?: unknown }).excludedApiKeyHashes)
+        ? [...new Set(((item as { excludedApiKeyHashes: unknown[] }).excludedApiKeyHashes)
+            .filter((value): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)))]
+        : undefined,
+      deletedAt: Number((item as CodexModelProvider).deletedAt) > 0 ? Number((item as CodexModelProvider).deletedAt) : undefined,
       createdAt: Number((item as { createdAt?: unknown }).createdAt ?? now),
       updatedAt: Number((item as { updatedAt?: unknown }).updatedAt ?? now),
     });
@@ -477,15 +540,11 @@ async function saveProvidersToDisk(providers: CodexModelProvider[]): Promise<voi
 
 async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
   if (cachedProviders !== null) return cloneProviders(cachedProviders);
-  const loadResult = await loadProvidersFromDisk().catch(() => ({
-    providers: [],
-    removedImageGenerationSetting: false,
-    migratedSupportsWebsockets: false,
-  }));
+  const loadResult = await loadProvidersFromDisk();
   const loadedProviders = loadResult.providers;
   let loaded = loadedProviders.filter((provider) => {
     // 兼容清理：移除旧版本自动注入但未配置 API Key 的默认预设项
-    if (provider.id.startsWith('preset_') && provider.apiKeys.length === 0) {
+    if (!provider.deletedAt && provider.id.startsWith('preset_') && provider.apiKeys.length === 0) {
       return false;
     }
     return true;
@@ -493,13 +552,20 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
   const migration = migrateApiKeyFunProvider(loaded);
   loaded = migration.providers;
   let migratedDeepSeek = false;
+  let migratedVisionCapabilities = false;
   for (const provider of loaded) {
+    if (provider.deletedAt) continue;
     migratedDeepSeek = enforceDeepSeekProvider(provider) || migratedDeepSeek;
+    if (migrateCodexModelProviderVisionCapabilities(provider)) {
+      provider.updatedAt = Date.now();
+      migratedVisionCapabilities = true;
+    }
   }
   if (
     loaded.length !== loadedProviders.length ||
     migration.changed ||
     migratedDeepSeek ||
+    migratedVisionCapabilities ||
     loadResult.removedImageGenerationSetting ||
     loadResult.migratedSupportsWebsockets
   ) {
@@ -511,53 +577,83 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
 
 async function writeProviders(providers: CodexModelProvider[]): Promise<void> {
   const next = cloneProviders(providers);
-  cachedProviders = next;
   await saveProvidersToDisk(next);
+  cachedProviders = next;
 }
 
 export async function listCodexModelProviders(): Promise<CodexModelProvider[]> {
-  return ensureProvidersLoaded();
+  return serializeProviderMutation(async () => (await ensureProvidersLoaded()).filter(provider => !provider.deletedAt));
 }
 
-/** Merge API Key accounts into the provider key list without changing provider metadata. */
-export async function mergeCodexModelProviderApiKeysFromAccounts(
+/** Every account entry path converges here; existing provider settings remain authoritative. */
+export const mergeCodexModelProviderApiKeysFromAccounts = serializedProviderMutation(async function (
   accounts: CodexAccount[],
+  options?: { explicitImport?: boolean },
 ): Promise<CodexModelProvider[]> {
   const providers = await ensureProvidersLoaded();
+  const byEndpoint = new Map(providers.map(provider => [normalizeCodexModelProviderBaseUrl(provider.baseUrl), provider]));
   let changed = false;
   const now = Date.now();
-
-  for (const provider of providers) {
-    const providerBaseUrl = normalizeCodexModelProviderBaseUrl(provider.baseUrl);
-    const linkedAccounts = accounts.filter((account) => {
-      if ((account.auth_mode ?? '').toLowerCase() !== 'apikey') return false;
-      const accountBaseUrl = normalizeCodexModelProviderBaseUrl(account.api_base_url ?? '');
-      return (
-        (account.api_provider_id?.trim() === provider.id && provider.id.length > 0) ||
-        (providerBaseUrl !== null && accountBaseUrl === providerBaseUrl)
-      );
-    });
-
-    for (const account of linkedAccounts) {
-      const apiKey = sanitizeApiKey(account.openai_api_key ?? '');
-      if (!apiKey || provider.apiKeys.some((item) => sanitizeApiKey(item.apiKey) === apiKey)) {
-        continue;
-      }
-      provider.apiKeys.push({
-        id: createApiKeyId(),
-        name: sanitizeName(account.account_name ?? ''),
-        apiKey,
-        createdAt: now,
-        updatedAt: now,
-      });
-      provider.updatedAt = now;
+  for (const [index, account] of accounts.entries()) {
+    if (index > 0 && index % 100 === 0) await new Promise<void>(resolve => setTimeout(resolve, 0));
+    if ((account.auth_mode ?? '').trim().toLowerCase() !== 'apikey'
+      || account.api_provider_id === 'cockpit_chatgpt_plan' || account.upstream_grok_account_id?.trim()) continue;
+    const apiKey = sanitizeApiKey(account.openai_api_key ?? '');
+    const baseUrl = normalizeBaseUrlForStore(resolveAccountUsageBaseUrl(account));
+    const endpoint = normalizeCodexModelProviderBaseUrl(baseUrl);
+    if (!apiKey || !endpoint) continue;
+    let provider = byEndpoint.get(endpoint);
+    if (provider?.deletedAt) {
+      if (!options?.explicitImport) continue;
+      providers.splice(providers.indexOf(provider), 1);
+      byEndpoint.delete(endpoint);
+      provider = undefined;
+    }
+    if (!provider) {
+      const preset = findCodexApiProviderPresetById(isOpenAIOfficialUsageUrl(baseUrl) ? "openai_official" : resolveCodexApiProviderPresetId(baseUrl));
+      const wireApi = normalizeWireApi(account.api_wire_api) ?? resolveCodexProviderCapabilityProfile({ baseUrl }).wireApi;
+      provider = {
+        id: createProviderId(),
+        name: sanitizeName(account.api_provider_name ?? '') || preset?.name || deriveProviderNameFromBaseUrl(baseUrl),
+        baseUrl, wireApi,
+        authScheme: account.api_auth_scheme ?? 'x-api-key',
+        supportsWebsockets: normalizeSupportsWebsockets(account.api_supports_websockets, wireApi, baseUrl),
+        supportsVision: account.api_supports_vision === true,
+        modelCatalog: normalizeModelCatalog(account.api_model_catalog) ?? presetModelCatalogForBaseUrl(baseUrl),
+        modelContextWindows: normalizeModelContextWindows(account.api_model_context_windows, account.api_model_catalog ?? []),
+        modelCapabilities: account.api_model_vision_support ? Object.fromEntries(Object.entries(account.api_model_vision_support)
+          .map(([model, supportsVision]) => [model, { supportsVision }])) : undefined,
+        visionRoutingModel: account.api_vision_routing_model?.trim() || undefined,
+        boundOauthAccountId: account.bound_oauth_account_id?.trim() || undefined,
+        enableModePreference: 'auto', apiKeys: [], createdAt: now, updatedAt: now,
+      };
+      enforceDeepSeekProvider(provider);
+      providers.push(provider);
+      byEndpoint.set(endpoint, provider);
       changed = true;
     }
+    if (provider.apiKeys.some(item => sanitizeApiKey(item.apiKey) === apiKey)) continue;
+    if (provider.excludedApiKeyHashes?.length) {
+      if (options?.explicitImport) await allowExplicitApiKey(provider, apiKey);
+      else if (provider.excludedApiKeyHashes.includes(await apiKeyFingerprint(apiKey))) continue;
+    }
+    provider.apiKeys.push({
+      id: createApiKeyId(), name: sanitizeName(account.account_name ?? ''), apiKey,
+      ...normalizeApiKeyModelConfig({
+        modelCatalog: account.api_model_catalog, modelContextWindows: account.api_model_context_windows,
+        supportsVision: account.api_supports_vision,
+        modelCapabilities: account.api_model_vision_support ? Object.fromEntries(Object.entries(account.api_model_vision_support)
+          .map(([model, supportsVision]) => [model, { supportsVision }])) : undefined,
+        visionRoutingModel: account.api_vision_routing_model,
+      }),
+      createdAt: now, updatedAt: now,
+    });
+    provider.updatedAt = now;
+    changed = true;
   }
-
   if (changed) await writeProviders(providers);
-  return cloneProviders(providers);
-}
+  return cloneProviders(providers.filter(provider => !provider.deletedAt));
+});
 
 export function invalidateCodexModelProviderCache(): void {
   cachedProviders = null;
@@ -607,7 +703,7 @@ function ensureApiKeyOnProvider(
   });
 }
 
-export async function createCodexModelProvider(input: {
+export const createCodexModelProvider = serializedProviderMutation(async function (input: {
   name: string;
   baseUrl: string;
   sourceTag?: string;
@@ -619,6 +715,7 @@ export async function createCodexModelProvider(input: {
   boundInstanceId?: string;
   website?: string;
   apiKeyUrl?: string;
+  authScheme?: 'x-api-key' | 'bearer';
   wireApi?: CodexProviderWireApi;
   supportsWebsockets?: boolean;
   enableModePreference?: CodexProviderEnableModePreference;
@@ -626,13 +723,14 @@ export async function createCodexModelProvider(input: {
   boundOauthAccountId?: string | null;
   initialApiKey?: string;
   initialApiKeyName?: string;
+  initialUsageApiKey?: string;
 }): Promise<CodexModelProvider> {
   const name = sanitizeName(input.name);
   const baseUrl = normalizeBaseUrlForStore(input.baseUrl);
   const normalizedBaseUrl = normalizeCodexModelProviderBaseUrl(baseUrl);
   if (!name) throw new Error('PROVIDER_NAME_REQUIRED');
   if (!normalizedBaseUrl) throw new Error('PROVIDER_BASE_URL_INVALID');
-  const providers = await ensureProvidersLoaded();
+  const providers = (await ensureProvidersLoaded()).filter(item => !(item.deletedAt && normalizeCodexModelProviderBaseUrl(item.baseUrl) === normalizedBaseUrl));
   if (providers.some((item) => normalizeCodexModelProviderBaseUrl(item.baseUrl) === normalizedBaseUrl)) {
     throw new Error('PROVIDER_BASE_URL_EXISTS');
   }
@@ -659,6 +757,7 @@ export async function createCodexModelProvider(input: {
     boundInstanceId: normalizeBoundInstanceId(input.boundInstanceId),
     website: sanitizeName(input.website ?? '') || undefined,
     apiKeyUrl: sanitizeName(input.apiKeyUrl ?? '') || undefined,
+    authScheme: input.authScheme === 'bearer' ? 'bearer' : 'x-api-key',
     wireApi,
     supportsWebsockets: normalizeSupportsWebsockets(input.supportsWebsockets, wireApi, baseUrl),
     enableModePreference: normalizeEnableModePreference(input.enableModePreference),
@@ -670,13 +769,17 @@ export async function createCodexModelProvider(input: {
   enforceDeepSeekProvider(provider);
   if (input.initialApiKey) {
     ensureApiKeyOnProvider(provider, input.initialApiKey, input.initialApiKeyName);
+    if (input.initialUsageApiKey?.trim() && isOpenAIOfficialUsageUrl(baseUrl)) {
+      provider.apiKeys[0].usageApiKey = input.initialUsageApiKey.trim();
+      provider.apiKeys[0].usageKeyVersion = 1;
+    }
   }
   providers.push(provider);
   await writeProviders(providers);
   return { ...provider, apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey })) };
-}
+});
 
-export async function updateCodexModelProvider(
+export const updateCodexModelProvider = serializedProviderMutation(async function (
   providerId: string,
   patch: {
     name?: string;
@@ -690,16 +793,21 @@ export async function updateCodexModelProvider(
     boundInstanceId?: string | null;
     website?: string;
     apiKeyUrl?: string;
-    wireApi?: CodexProviderWireApi | null;
+    authScheme?: 'x-api-key' | 'bearer';
+  wireApi?: CodexProviderWireApi | null;
     supportsWebsockets?: boolean;
     enableModePreference?: CodexProviderEnableModePreference | null;
     integrationType?: 'sub2api' | 'new_api' | null;
     boundOauthAccountId?: string | null;
+    keyModelConfig?: { apiKeyId: string; config: CodexProviderModelConfig };
   },
 ): Promise<CodexModelProvider> {
   const providers = await ensureProvidersLoaded();
   const provider = providers.find((item) => item.id === providerId);
-  if (!provider) throw new Error('PROVIDER_NOT_FOUND');
+  if (!provider || provider.deletedAt) throw new Error('PROVIDER_NOT_FOUND');
+  const modelKey = patch.keyModelConfig
+    ? provider.apiKeys.find(key => key.id === patch.keyModelConfig!.apiKeyId) : undefined;
+  if (patch.keyModelConfig && !modelKey) throw new Error('API_KEY_NOT_FOUND');
 
   const nextName = patch.name === undefined ? provider.name : sanitizeName(patch.name);
   const nextBaseUrl =
@@ -712,6 +820,7 @@ export async function updateCodexModelProvider(
 
   const duplicated = providers.find(
     (item) =>
+      !item.deletedAt &&
       item.id !== providerId &&
       normalizeCodexModelProviderBaseUrl(item.baseUrl) === normalizedBaseUrl,
   );
@@ -769,6 +878,7 @@ export async function updateCodexModelProvider(
   if (patch.apiKeyUrl !== undefined) {
     provider.apiKeyUrl = sanitizeName(patch.apiKeyUrl) || undefined;
   }
+  if (patch.authScheme !== undefined) provider.authScheme = patch.authScheme;
   if (patch.wireApi !== undefined) {
     provider.wireApi =
       patch.wireApi === null ? undefined : normalizeWireApi(patch.wireApi);
@@ -797,50 +907,67 @@ export async function updateCodexModelProvider(
   }
   enforceDeepSeekProvider(provider);
   provider.updatedAt = Date.now();
-  await writeProviders(providers);
+  if (modelKey && patch.keyModelConfig) {
+    Object.assign(modelKey, normalizeApiKeyModelConfig(patch.keyModelConfig.config));
+    modelKey.updatedAt = provider.updatedAt;
+  }
+  await writeProviders(providers.filter(item => !item.deletedAt || normalizeCodexModelProviderBaseUrl(item.baseUrl) !== normalizedBaseUrl));
   return { ...provider, apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey })) };
-}
+});
 
-export async function addApiKeyToCodexModelProvider(
+export const addApiKeyToCodexModelProvider = serializedProviderMutation(async function (
   providerId: string,
   apiKey: string,
   apiKeyName?: string,
+  usageApiKey?: string,
 ): Promise<CodexModelProvider> {
   const providers = await ensureProvidersLoaded();
   const provider = providers.find((item) => item.id === providerId);
-  if (!provider) throw new Error('PROVIDER_NOT_FOUND');
+  if (!provider || provider.deletedAt) throw new Error('PROVIDER_NOT_FOUND');
   ensureApiKeyOnProvider(provider, apiKey, apiKeyName);
+  if (usageApiKey?.trim() && isOpenAIOfficialUsageUrl(provider.baseUrl)) {
+    const key = provider.apiKeys.find(item => item.apiKey.trim() === apiKey.trim())!;
+    key.usageApiKey = usageApiKey.trim();
+    key.usageKeyVersion = (key.usageKeyVersion ?? 0) + 1;
+  }
+  await allowExplicitApiKey(provider, apiKey);
   provider.updatedAt = Date.now();
   await writeProviders(providers);
-  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
-}
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
+});
 
-export async function removeApiKeyFromCodexModelProvider(
+export const removeApiKeyFromCodexModelProvider = serializedProviderMutation(async function (
   providerId: string,
   apiKeyId: string,
 ): Promise<CodexModelProvider> {
   const providers = await ensureProvidersLoaded();
   const provider = providers.find((item) => item.id === providerId);
-  if (!provider) throw new Error('PROVIDER_NOT_FOUND');
+  if (!provider || provider.deletedAt) throw new Error('PROVIDER_NOT_FOUND');
+  const removedKey = provider.apiKeys.find((item) => item.id === apiKeyId);
   const nextApiKeys = provider.apiKeys.filter((item) => item.id !== apiKeyId);
   if (nextApiKeys.length === provider.apiKeys.length) {
-    return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
+    return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
   }
   provider.apiKeys = nextApiKeys;
+  if (removedKey) {
+    provider.excludedApiKeyHashes = [...new Set([
+      ...(provider.excludedApiKeyHashes ?? []), await apiKeyFingerprint(removedKey.apiKey),
+    ])];
+  }
   provider.updatedAt = Date.now();
   await writeProviders(providers);
-  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
-}
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
+});
 
 /** Explicit rename for an existing provider API key (#1510). Does not rewrite key material. */
-export async function renameApiKeyOnCodexModelProvider(
+export const renameApiKeyOnCodexModelProvider = serializedProviderMutation(async function (
   providerId: string,
   apiKeyId: string,
   name: string,
 ): Promise<CodexModelProvider> {
   const providers = await ensureProvidersLoaded();
   const provider = providers.find((item) => item.id === providerId);
-  if (!provider) throw new Error('PROVIDER_NOT_FOUND');
+  if (!provider || provider.deletedAt) throw new Error('PROVIDER_NOT_FOUND');
   const apiKey = provider.apiKeys.find((item) => item.id === apiKeyId);
   if (!apiKey) throw new Error('API_KEY_NOT_FOUND');
 
@@ -849,11 +976,11 @@ export async function renameApiKeyOnCodexModelProvider(
   apiKey.updatedAt = now;
   provider.updatedAt = now;
   await writeProviders(providers);
-  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
-}
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
+});
 
 /** Replace the secret for an existing provider API key without changing its id. */
-export async function updateApiKeyOnCodexModelProvider(
+export const updateApiKeyOnCodexModelProvider = serializedProviderMutation(async function (
   providerId: string,
   apiKeyId: string,
   apiKey: string,
@@ -864,7 +991,7 @@ export async function updateApiKeyOnCodexModelProvider(
 
   const providers = await ensureProvidersLoaded();
   const provider = providers.find((item) => item.id === providerId);
-  if (!provider) throw new Error("PROVIDER_NOT_FOUND");
+  if (!provider || provider.deletedAt) throw new Error("PROVIDER_NOT_FOUND");
   const existing = provider.apiKeys.find((item) => item.id === apiKeyId);
   if (!existing) throw new Error("API_KEY_NOT_FOUND");
 
@@ -875,24 +1002,27 @@ export async function updateApiKeyOnCodexModelProvider(
 
   const now = Date.now();
   existing.apiKey = normalizedApiKey;
+  await allowExplicitApiKey(provider, normalizedApiKey);
   if (name !== undefined) {
     existing.name = sanitizeName(name);
   }
   existing.updatedAt = now;
   provider.updatedAt = now;
   await writeProviders(providers);
-  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
-}
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
+});
 
 export async function testCodexModelProviderConnection(input: {
   baseUrl: string;
   apiKey: string;
+  authScheme?: 'x-api-key' | 'bearer';
   wireApi?: CodexProviderWireApi | null;
 }): Promise<CodexLocalAccessTestResult> {
   return await invoke('codex_test_model_provider_connection', {
     baseUrl: input.baseUrl,
     apiKey: input.apiKey,
     wireApi: input.wireApi ?? null,
+    authScheme: input.authScheme ?? null,
   });
 }
 
@@ -903,6 +1033,7 @@ export interface CodexModelProviderChatTestTarget {
   apiKeyId?: string | null;
   apiKeyName?: string | null;
   apiKey: string;
+  authScheme?: 'x-api-key' | 'bearer';
   wireApi?: CodexProviderWireApi | null;
   modelCatalog?: string[];
 }
@@ -965,13 +1096,46 @@ export async function cancelCodexModelProviderChatTest(runId: string): Promise<b
   return await invoke('codex_cancel_model_provider_chat_test', { runId });
 }
 
+const officialUsageQueries = new Map<string, Promise<CodexModelProviderUsageSummary>>();
+
 export async function queryCodexModelProviderUsage(input: {
   baseUrl: string;
   apiKey: string;
+  usageApiKey?: string;
   integrationType?: 'sub2api' | 'new_api' | null;
 }): Promise<CodexModelProviderUsageSummary> {
-  return await queryModelProviderUsage(input);
+  if (!isOpenAIOfficialUsageUrl(input.baseUrl)) return await queryModelProviderUsage(input);
+  if (!input.usageApiKey?.trim()) throw new Error('OPENAI_USAGE_NOT_CONFIGURED');
+  const id = input.usageApiKey.trim();
+  const existing = officialUsageQueries.get(id);
+  if (existing) return await existing;
+  const pending = queryModelProviderUsage(input);
+  officialUsageQueries.set(id, pending);
+  try { return await pending; }
+  finally { if (officialUsageQueries.get(id) === pending) officialUsageQueries.delete(id); }
 }
+
+export const OPENAI_USAGE_CONFIG_CHANGED_EVENT = 'codex-openai-usage-config-changed';
+
+/** Query settings are account-specific; ordinary model edits never overwrite them. */
+export const updateCodexOpenAIUsageKey = serializedProviderMutation(async function (
+  providerId: string, apiKeyId: string, usageApiKey: string,
+  expected: { apiKey: string; usageApiKey?: string },
+): Promise<CodexModelProvider> {
+  const providers = await ensureProvidersLoaded();
+  const provider = providers.find(item => item.id === providerId && !item.deletedAt);
+  const key = provider?.apiKeys.find(item => item.id === apiKeyId);
+  if (!provider || !key || !isOpenAIOfficialUsageUrl(provider.baseUrl) ||
+      key.apiKey !== expected.apiKey || (key.usageApiKey ?? '') !== (expected.usageApiKey ?? '')) {
+    throw new Error('OPENAI_USAGE_CONFIG_CHANGED');
+  }
+  key.usageApiKey = sanitizeApiKey(usageApiKey) || undefined;
+  key.usageKeyVersion = (key.usageKeyVersion ?? 0) + 1;
+  key.updatedAt = provider.updatedAt = Date.now();
+  await writeProviders(providers);
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(OPENAI_USAGE_CONFIG_CHANGED_EVENT, { detail: { providerId, apiKeyId, binding: openAIUsageBinding(providerId, apiKeyId, key.usageKeyVersion) } }));
+  return cloneProviders([provider])[0];
+});
 
 export async function saveCodexModelProviderDetectedIntegrationType(
   providerId: string,
@@ -980,14 +1144,18 @@ export async function saveCodexModelProviderDetectedIntegrationType(
   return updateCodexModelProvider(providerId, { integrationType });
 }
 
-export async function deleteCodexModelProvider(providerId: string): Promise<void> {
+export const deleteCodexModelProvider = serializedProviderMutation(async function (providerId: string): Promise<void> {
   const providers = await ensureProvidersLoaded();
-  const next = providers.filter((item) => item.id !== providerId);
-  if (next.length === providers.length) return;
-  await writeProviders(next);
-}
+  const index = providers.findIndex(item => item.id === providerId && !item.deletedAt);
+  if (index < 0) return;
+  const previous = providers[index];
+  const now = Date.now();
+  providers[index] = { id: previous.id, name: previous.name, baseUrl: previous.baseUrl,
+    supportsWebsockets: false, apiKeys: [], createdAt: previous.createdAt, updatedAt: now, deletedAt: now };
+  await writeProviders(providers);
+});
 
-export async function upsertCodexModelProviderFromCredential(
+export const upsertCodexModelProviderFromCredential = serializedProviderMutation(async function (
   input: UpsertFromCredentialInput,
 ): Promise<CodexModelProvider> {
   const apiBaseUrl = normalizeBaseUrlForStore(input.apiBaseUrl);
@@ -1035,6 +1203,7 @@ export async function upsertCodexModelProviderFromCredential(
     provider.updatedAt = Date.now();
   }
 
+  delete provider.deletedAt;
   if (input.sourceTag !== undefined) {
     provider.sourceTag = sanitizeName(input.sourceTag ?? '') || undefined;
   }
@@ -1048,37 +1217,22 @@ export async function upsertCodexModelProviderFromCredential(
   if (moveResult === 'not_moved' || moveResult === 'name_conflict') {
     ensureApiKeyOnProvider(provider, apiKey, input.apiKeyName);
   }
+  await allowExplicitApiKey(provider, apiKey);
   provider.baseUrl = apiBaseUrl;
-  provider.modelCatalog =
-    normalizeModelCatalog(input.modelCatalog) ??
-    provider.modelCatalog ??
-    presetModelCatalogForBaseUrl(apiBaseUrl);
-  if (input.modelContextWindows !== undefined) {
-    provider.modelContextWindows = normalizeModelContextWindows(
-      input.modelContextWindows,
-      provider.modelCatalog ?? [],
-    );
-  } else {
-    provider.modelContextWindows = normalizeModelContextWindows(
-      provider.modelContextWindows,
-      provider.modelCatalog ?? [],
-    );
+  const key = provider.apiKeys.find((item) => sanitizeApiKey(item.apiKey) === apiKey)!;
+  if (input.usageApiKey !== undefined && isOpenAIOfficialUsageUrl(apiBaseUrl)) {
+    key.usageApiKey = sanitizeApiKey(input.usageApiKey) || undefined;
+    key.usageKeyVersion = (key.usageKeyVersion ?? 0) + 1;
   }
-  if (input.supportsVision !== undefined) {
-    provider.supportsVision = input.supportsVision === true;
-  }
-  if (input.modelCapabilities !== undefined) {
-    provider.modelCapabilities = normalizeModelCapabilities(input.modelCapabilities);
-  }
-  if (input.visionRoutingModel !== undefined) {
-    provider.visionRoutingModel = sanitizeName(input.visionRoutingModel ?? '') || undefined;
-  }
+  Object.assign(key, normalizeApiKeyModelConfig(input));
+  key.updatedAt = Date.now();
   if (input.website !== undefined) {
     provider.website = sanitizeName(input.website ?? '') || undefined;
   }
   if (input.apiKeyUrl !== undefined) {
     provider.apiKeyUrl = sanitizeName(input.apiKeyUrl ?? '') || undefined;
   }
+  if (input.authScheme !== undefined) provider.authScheme = input.authScheme;
   if (input.wireApi !== undefined) {
     provider.wireApi = normalizeWireApi(input.wireApi);
   }
@@ -1095,23 +1249,12 @@ export async function upsertCodexModelProviderFromCredential(
   enforceDeepSeekProvider(provider);
   provider.updatedAt = Date.now();
   await writeProviders(providers);
-  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
-}
-
-function normalizeOptionalForCompare(value?: string | null): string {
-  return value?.trim().toLowerCase() ?? '';
-}
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
+});
 
 export function countCodexModelProviderReferences(
   provider: CodexModelProvider,
   accounts: CodexAccount[],
 ): number {
-  const normalizedBaseUrl = normalizeCodexModelProviderBaseUrl(provider.baseUrl);
-  if (!normalizedBaseUrl) return 0;
-  return accounts.filter((account) => {
-    if ((account.auth_mode ?? '').toLowerCase() !== 'apikey') return false;
-    const accountBaseUrl = normalizeCodexModelProviderBaseUrl(account.api_base_url ?? '');
-    if (!accountBaseUrl || accountBaseUrl !== normalizedBaseUrl) return false;
-    return normalizeOptionalForCompare(account.openai_api_key).length > 0;
-  }).length;
+  return findCodexAccountsForModelProviderDeletion([provider], accounts).length;
 }

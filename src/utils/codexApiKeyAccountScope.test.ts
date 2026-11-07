@@ -33,7 +33,7 @@ test("includes a valid OAuth account that is outside the default service pool", 
   );
 });
 
-test("excludes provider-gateway accounts but keeps a persisted fixed scope visible", () => {
+test("keeps provider-gateway accounts selectable and preserves a persisted fixed scope", () => {
   const selected = selectCodexApiKeyScopeAccounts({
     restrictFreeAccounts: true,
     scopedAccountIds: ["provider-gateway-account"],
@@ -54,7 +54,7 @@ test("excludes provider-gateway accounts but keeps a persisted fixed scope visib
   );
 });
 
-test("excludes a provider-gateway account inferred from its upstream URL", () => {
+test("includes a provider account inferred from its upstream URL", () => {
   const selected = selectCodexApiKeyScopeAccounts({
     restrictFreeAccounts: true,
     scopedAccountIds: [],
@@ -71,7 +71,7 @@ test("excludes a provider-gateway account inferred from its upstream URL", () =>
 
   assert.deepEqual(
     selected.map((account) => account.id),
-    ["pro-account"],
+    ["pro-account", "provider-gateway-account"],
   );
 });
 

@@ -1,3 +1,6 @@
+import { useEffect, useRef, useState } from "react";
+import { useModalFocusTrap } from "../hooks/useModalFocusTrap";
+import { useEscCloseTopmost } from "../hooks/useEscClose";
 import {
   ArrowDown,
   ArrowDownWideNarrow,
@@ -20,6 +23,7 @@ import {
 import { isCodexOAuthBindingEligibleAccount } from "../utils/codexLocalAccessAccounts";
 import { parseCodexSwitchAuthFailure } from "../utils/codexSwitchAuthFailure";
 import type { CodexAccountsViewProps } from "./CodexAccountsView";
+import "./CodexOAuthBindingModal.css";
 
 /**
  * 账号级 OAuth 绑定弹框。
@@ -86,6 +90,36 @@ export function CodexOAuthBindingModal(props: CodexAccountsViewProps) {
     validateOAuthBindingQuotaReserveField,
   } = props;
 
+  const bindingDialogRef = useRef<HTMLDivElement>(null);
+  const reserveDialogRef = useRef<HTMLDivElement>(null);
+  const bindingOpen = Boolean(oauthBindingTargetActive);
+  const reserveOpen = Boolean(oauthBindingQuotaReserveEditorOpen && isLocalAccessOAuthBinding);
+  const [marginDraft, setMarginDraft] = useState("3");
+  const [marginError, setMarginError] = useState<string | null>(null);
+  const marginInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!reserveOpen) return;
+    setMarginDraft(String(oauthBindingQuotaReserve?.safetyMarginPercent ?? 3));
+    setMarginError(null);
+  }, [reserveOpen, oauthBindingQuotaReserve?.safetyMarginPercent]);
+  const confirmReserve = () => {
+    setOauthBindingQuotaReserveFieldErrors({});
+    setMarginError(null);
+    const margin = Number(marginDraft);
+    if (!/^\d+$/.test(marginDraft) || !Number.isInteger(margin) || margin < 1 || margin > 20) {
+      setMarginError(t("codex.localAccess.oauthBinding.safetyMarginInvalid"));
+      marginInputRef.current?.scrollIntoView({ block: "nearest" });
+      marginInputRef.current?.focus();
+      return;
+    }
+    setMarginError(null);
+    confirmOAuthBindingQuotaReserveEditor({ safetyMarginPercent: margin });
+  };
+  useModalFocusTrap(bindingDialogRef, bindingOpen, true, !reserveOpen);
+  useModalFocusTrap(reserveDialogRef, reserveOpen);
+  useEscCloseTopmost(bindingOpen && !reserveOpen && !oauthBindingSaving, closeOAuthBindingModal, bindingDialogRef);
+  useEscCloseTopmost(reserveOpen, closeOAuthBindingQuotaReserveEditor, reserveDialogRef);
+
   if (!oauthBindingTargetActive && !oauthBindingQuotaReserveEditorOpen) {
     return null;
   }
@@ -96,6 +130,12 @@ export function CodexOAuthBindingModal(props: CodexAccountsViewProps) {
         <div className="modal-overlay">
           <div
             className="modal-content codex-add-modal codex-oauth-binding-modal"
+            ref={bindingDialogRef}
+            role="dialog"
+            aria-modal={!reserveOpen}
+            aria-hidden={reserveOpen || undefined}
+            aria-label={t("codex.api.oauthBinding.title", "绑定 OAuth 账号")}
+            tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-header">
@@ -198,7 +238,7 @@ export function CodexOAuthBindingModal(props: CodexAccountsViewProps) {
                           {oauthBindingQuotaReserve && (
                             <button
                               type="button"
-                              className="btn btn-icon codex-oauth-binding-quota-edit"
+                              className="btn codex-oauth-binding-quota-summary"
                               onClick={openOAuthBindingQuotaReserveEditor}
                               disabled={oauthBindingSaving}
                               title={`${t(
@@ -213,6 +253,14 @@ export function CodexOAuthBindingModal(props: CodexAccountsViewProps) {
                                 "保留 OAuth 额度",
                               )}`}
                             >
+                              <span>
+                                {t("codex.instances.quota.hourly", "5小时")}{" "}
+                                <strong>{oauthBindingQuotaReserve.hourlyPercent}%</strong>
+                              </span>
+                              <span>
+                                {t("codex.instances.quota.weekly", "周")}{" "}
+                                <strong>{oauthBindingQuotaReserve.weeklyPercent}%</strong>
+                              </span>
                               <Pencil size={12} />
                             </button>
                           )}
@@ -489,6 +537,11 @@ export function CodexOAuthBindingModal(props: CodexAccountsViewProps) {
         <div className="modal-overlay codex-oauth-binding-quota-overlay">
           <div
             className="modal-content codex-add-modal codex-oauth-binding-quota-modal"
+            ref={reserveDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("codex.localAccess.oauthBinding.quotaReserveToggle", "保留 OAuth 额度")}
+            tabIndex={-1}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
@@ -603,6 +656,20 @@ export function CodexOAuthBindingModal(props: CodexAccountsViewProps) {
                     )}
                   </label>
                 </div>
+                <div className="codex-oauth-binding-protection">
+                  <p className="section-desc">{t("codex.localAccess.oauthBinding.strictReserveDesc")}</p>
+                  <label className="codex-oauth-binding-quota-field">
+                    <span>{t("codex.localAccess.oauthBinding.safetyMargin")}</span>
+                    <div className="codex-oauth-binding-quota-input-wrap">
+                      <input ref={marginInputRef} type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2}
+                        className={`codex-account-note-input${marginError ? " has-error" : ""}`}
+                        value={marginDraft} aria-invalid={Boolean(marginError)}
+                        onChange={(event) => { if (/^\d*$/.test(event.target.value)) { setMarginDraft(event.target.value); setMarginError(null); } }} />
+                      <span>{t("codex.localAccess.oauthBinding.safetyMarginUnit")}</span>
+                    </div>
+                    {marginError && <span className="codex-account-note-field-error">{marginError}</span>}
+                  </label>
+                </div>
                 <div className="api-key-edit-actions">
                   <button
                     type="button"
@@ -614,7 +681,7 @@ export function CodexOAuthBindingModal(props: CodexAccountsViewProps) {
                   <button
                     type="button"
                     className="btn btn-primary"
-                    onClick={confirmOAuthBindingQuotaReserveEditor}
+                    onClick={confirmReserve}
                   >
                     {t("common.confirm", "确认")}
                   </button>

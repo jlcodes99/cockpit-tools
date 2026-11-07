@@ -241,6 +241,7 @@ export function useCodexAccountOverviewMemberView({
         includeZeroQuota: true,
         includeExpired: true,
         pendingLabel: t("codex.pendingAuth.badge", "待授权"),
+        chatgptPlanLabel: t("chatgptPlan.title"),
         errorLabel: t("codex.filters.authError", "授权失败"),
         zeroQuotaLabel: t("codex.filters.zeroQuota", "0% 额度"),
         expiredLabel: t("codex.filters.expired", "已过期"),
@@ -272,6 +273,8 @@ export function useCodexAccountOverviewMemberView({
   );
 
   return {
+    activeGroupId,
+    compareAccounts,
     accounts: filteredAccounts,
     searchQuery,
     filterTypes,

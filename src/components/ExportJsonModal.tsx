@@ -1,11 +1,13 @@
 import { Check, Copy, Download, Eye, EyeOff, FolderOpen, X } from 'lucide-react';
-import { type ReactNode, useMemo } from 'react';
+import { type ReactNode, useId, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ModalErrorMessage } from './ModalErrorMessage';
-import { useEscClose } from '../hooks/useEscClose';
+import { useEscCloseTopmost } from '../hooks/useEscClose';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 
 interface ExportJsonModalProps {
   isOpen: boolean;
+  active?: boolean;
   title: string;
   jsonContent: string;
   customContent?: ReactNode;
@@ -69,6 +71,7 @@ export function maskJsonPreviewContent(jsonContent: string): string {
 export function ExportJsonModal(props: ExportJsonModalProps) {
   const {
     isOpen,
+    active = true,
     title,
     jsonContent,
     customContent,
@@ -89,7 +92,10 @@ export function ExportJsonModal(props: ExportJsonModalProps) {
     onCopySavedPath,
   } = props;
   const { t } = useTranslation();
-  useEscClose(isOpen, onClose);
+  const dialog = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useEscCloseTopmost(isOpen && active, onClose, dialog);
+  useModalFocusTrap(dialog, isOpen, true, active);
 
   const maskedContent = useMemo(() => {
     return maskJsonPreviewContent(jsonContent);
@@ -99,9 +105,11 @@ export function ExportJsonModal(props: ExportJsonModalProps) {
 
   return (
     <div className="modal-overlay">
-      <div className="modal export-json-modal" onClick={(event) => event.stopPropagation()}>
+      <div className="modal export-json-modal" ref={dialog} tabIndex={-1}
+        role="dialog" aria-modal="true" aria-labelledby={titleId}
+        onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
-          <h2>{title}</h2>
+          <h2 id={titleId}>{title}</h2>
           <button className="modal-close" onClick={onClose} aria-label={t('common.close', '关闭')}>
             <X />
           </button>

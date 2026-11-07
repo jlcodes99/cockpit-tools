@@ -782,6 +782,31 @@ async fn post_gateway_json(
     })
 }
 
+fn available_models_request(
+    client: &reqwest::Client,
+    token: &crate::models::token::TokenData,
+) -> reqwest::RequestBuilder {
+    let context = modules::quota::QuotaCloudCodeContext::from_token(token);
+    let base_url = modules::quota::resolve_cloud_code_base_url(&context);
+    let payload = context
+        .preferred_project_id
+        .map(|project| json!({ "project": project }))
+        .unwrap_or_else(|| json!({}));
+    client
+        .post(format!(
+            "{}{}",
+            base_url.trim_end_matches('/'),
+            FETCH_MODELS_PATH
+        ))
+        .bearer_auth(&token.access_token)
+        .header(
+            reqwest::header::USER_AGENT,
+            modules::quota::build_cloud_code_user_agent(),
+        )
+        .header(reqwest::header::ACCEPT_ENCODING, "gzip")
+        .json(&payload)
+}
+
 async fn resolve_requested_model_for_official_ls(
     account_id: &str,
     model: &str,
@@ -829,145 +854,122 @@ async fn resolve_requested_model_for_official_ls(
     };
 
     let client = crate::utils::http::create_client(15);
-    let payload = json!({});
     let mut last_error: Option<String> = None;
 
-    for base in CLOUD_CODE_BASE_URLS {
-        for attempt in 1..=DEFAULT_ATTEMPTS {
-            if is_wakeup_cancelled(cancel_rx) {
-                return Err(wakeup_cancelled_error());
-            }
-            let url = format!("{}{}", base, FETCH_MODELS_PATH);
-            let response = await_with_cancel(
-                cancel_rx,
-                client
-                    .post(&url)
-                    .bearer_auth(&token.access_token)
-                    .header(reqwest::header::USER_AGENT, USER_AGENT)
-                    .header(reqwest::header::CONTENT_TYPE, "application/json")
-                    .header(reqwest::header::ACCEPT_ENCODING, "gzip")
-                    .json(&payload)
-                    .send(),
-            )
-            .await?;
+    for attempt in 1..=DEFAULT_ATTEMPTS {
+        if is_wakeup_cancelled(cancel_rx) {
+            return Err(wakeup_cancelled_error());
+        }
+        let response =
+            await_with_cancel(cancel_rx, available_models_request(&client, &token).send()).await?;
 
-            match response {
-                Ok(res) => {
-                    let status = res.status();
-                    if status.is_success() {
-                        match await_with_cancel(cancel_rx, res.json::<AvailableModelsResponse>())
-                            .await?
-                        {
-                            Ok(parsed) => {
-                                if let Some(models) = extract_available_models_map(&parsed) {
-                                    if let Some(meta) = models.get(trimmed) {
-                                        if let Some(model_constant) = meta
-                                            .model_constant
-                                            .as_deref()
-                                            .map(str::trim)
-                                            .filter(|v| !v.is_empty())
-                                        {
-                                            if let Ok(num) = model_constant.parse::<i64>() {
-                                                crate::modules::logger::log_info(&format!(
-                                                    "[Wakeup] requestedModel 解析: {} -> modelConstant({})",
-                                                    trimmed, num
-                                                ));
-                                                return Ok(json!({ "model": num }));
-                                            }
-                                            if let Some(num) =
-                                                parse_codeium_model_enum_name(model_constant)
-                                            {
-                                                crate::modules::logger::log_info(&format!(
-                                                    "[Wakeup] requestedModel 解析: {} -> model({})（由 enum 名 {} 映射）",
-                                                    trimmed, num, model_constant
-                                                ));
-                                                return Ok(json!({ "model": num }));
-                                            }
-
-                                            last_error = Some(format!(
-                                                "requestedModel 严格模式解析失败（模型常量无法映射）: model={}, model_constant={}",
-                                                trimmed, model_constant
+        match response {
+            Ok(res) => {
+                let status = res.status();
+                if status.is_success() {
+                    match await_with_cancel(cancel_rx, res.json::<AvailableModelsResponse>())
+                        .await?
+                    {
+                        Ok(parsed) => {
+                            if let Some(models) = extract_available_models_map(&parsed) {
+                                if let Some(meta) = models.get(trimmed) {
+                                    if let Some(model_constant) = meta
+                                        .model_constant
+                                        .as_deref()
+                                        .map(str::trim)
+                                        .filter(|v| !v.is_empty())
+                                    {
+                                        if let Ok(num) = model_constant.parse::<i64>() {
+                                            crate::modules::logger::log_info(&format!(
+                                                "[Wakeup] requestedModel 解析: {} -> modelConstant({})",
+                                                trimmed, num
                                             ));
-                                        } else {
-                                            last_error = Some(format!(
-                                                "requestedModel 严格模式解析失败（模型缺少 model_constant）: model={}",
-                                                trimmed
-                                            ));
+                                            return Ok(json!({ "model": num }));
                                         }
+                                        if let Some(num) =
+                                            parse_codeium_model_enum_name(model_constant)
+                                        {
+                                            crate::modules::logger::log_info(&format!(
+                                                "[Wakeup] requestedModel 解析: {} -> model({})（由 enum 名 {} 映射）",
+                                                trimmed, num, model_constant
+                                            ));
+                                            return Ok(json!({ "model": num }));
+                                        }
+
+                                        last_error = Some(format!(
+                                            "requestedModel 严格模式解析失败（模型常量无法映射）: model={}, model_constant={}",
+                                            trimmed, model_constant
+                                        ));
                                     } else {
                                         last_error = Some(format!(
-                                            "requestedModel 严格模式解析失败（fetchAvailableModels 未返回该模型）: model={}",
+                                            "requestedModel 严格模式解析失败（模型缺少 model_constant）: model={}",
                                             trimmed
                                         ));
                                     }
                                 } else {
                                     last_error = Some(format!(
-                                        "requestedModel 严格模式解析失败（fetchAvailableModels 响应缺少 models）: model={}",
+                                        "requestedModel 严格模式解析失败（fetchAvailableModels 未返回该模型）: model={}",
                                         trimmed
                                     ));
                                 }
-                                break;
+                            } else {
+                                last_error = Some(format!(
+                                    "requestedModel 严格模式解析失败（fetchAvailableModels 响应缺少 models）: model={}",
+                                    trimmed
+                                ));
                             }
-                            Err(err) => {
-                                last_error = Some(format!("解析模型列表失败: {}", err));
-                            }
+                            break;
                         }
-                    } else {
-                        let text = await_with_cancel(cancel_rx, res.text())
-                            .await?
-                            .unwrap_or_default();
-                        let retryable = status == reqwest::StatusCode::TOO_MANY_REQUESTS
-                            || status.as_u16() >= 500;
-
-                        // 对 403 尝试解析 TOS_VIOLATION / VALIDATION_REQUIRED 并编码为结构化错误
-                        if status == reqwest::StatusCode::FORBIDDEN {
-                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&text) {
-                                let details = parsed.get("error").and_then(|e| e.get("details"));
-                                let appeal_url = extract_appeal_url_from_error_details(details);
-                                let validation_url =
-                                    extract_validation_url_from_error_details(details);
-                                let message = parsed
-                                    .get("error")
-                                    .and_then(|e| e.get("message"))
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or_default()
-                                    .to_string();
-
-                                let detail = GatewayTrajectoryErrorDetail {
-                                    message: if message.is_empty() {
-                                        format!("获取模型列表失败: {}", status)
-                                    } else {
-                                        message
-                                    },
-                                    error_code: Some(403),
-                                    validation_url,
-                                    appeal_url,
-                                    trajectory_id: None,
-                                    error_message_json: text.clone(),
-                                    step_json: String::new(),
-                                };
-                                last_error = Some(encode_wakeup_ui_error_payload(&detail));
-                                break;
-                            }
-                        }
-
-                        last_error = Some(format!("获取模型列表失败: {} - {}", status, text));
-                        if retryable && attempt < DEFAULT_ATTEMPTS {
-                            let delay = get_backoff_delay_ms(attempt + 1);
-                            if delay > 0 {
-                                sleep_with_cancel(
-                                    std::time::Duration::from_millis(delay),
-                                    cancel_rx,
-                                )
-                                .await?;
-                            }
-                            continue;
+                        Err(err) => {
+                            last_error = Some(format!("解析模型列表失败: {}", err));
                         }
                     }
-                }
-                Err(err) => {
-                    last_error = Some(format!("获取模型列表失败: {}", err));
-                    if attempt < DEFAULT_ATTEMPTS {
+                } else {
+                    let text = await_with_cancel(cancel_rx, res.text())
+                        .await?
+                        .unwrap_or_default();
+                    let retryable =
+                        status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.as_u16() >= 500;
+
+                    // 对 403 尝试解析 TOS_VIOLATION / VALIDATION_REQUIRED 并编码为结构化错误
+                    if status == reqwest::StatusCode::FORBIDDEN {
+                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&text) {
+                            let details = parsed.get("error").and_then(|e| e.get("details"));
+                            let appeal_url = extract_appeal_url_from_error_details(details);
+                            let validation_url = extract_validation_url_from_error_details(details)
+                                .map(|u| {
+                                    crate::modules::quota::format_google_validation_url(
+                                        &u,
+                                        &account.email,
+                                    )
+                                });
+                            let message = parsed
+                                .get("error")
+                                .and_then(|e| e.get("message"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or_default()
+                                .to_string();
+
+                            let detail = GatewayTrajectoryErrorDetail {
+                                message: if message.is_empty() {
+                                    format!("获取模型列表失败: {}", status)
+                                } else {
+                                    message
+                                },
+                                error_code: Some(403),
+                                validation_url,
+                                appeal_url,
+                                trajectory_id: None,
+                                error_message_json: text.clone(),
+                                step_json: String::new(),
+                            };
+                            last_error = Some(encode_wakeup_ui_error_payload(&detail));
+                            break;
+                        }
+                    }
+
+                    last_error = Some(format!("获取模型列表失败: {} - {}", status, text));
+                    if retryable && attempt < DEFAULT_ATTEMPTS {
                         let delay = get_backoff_delay_ms(attempt + 1);
                         if delay > 0 {
                             sleep_with_cancel(std::time::Duration::from_millis(delay), cancel_rx)
@@ -975,6 +977,17 @@ async fn resolve_requested_model_for_official_ls(
                         }
                         continue;
                     }
+                }
+            }
+            Err(err) => {
+                last_error = Some(format!("获取模型列表失败: {}", err));
+                if attempt < DEFAULT_ATTEMPTS {
+                    let delay = get_backoff_delay_ms(attempt + 1);
+                    if delay > 0 {
+                        sleep_with_cancel(std::time::Duration::from_millis(delay), cancel_rx)
+                            .await?;
+                    }
+                    continue;
                 }
             }
         }
@@ -1565,7 +1578,7 @@ async fn trigger_wakeup_via_client_gateway_once(
                 return Ok(parsed);
             }
 
-            if let Some(err) = extract_gateway_error_from_trajectory(&get_resp) {
+            if let Some(mut err) = extract_gateway_error_from_trajectory(&get_resp) {
                 if is_cascade_status_running(&last_status) {
                     if poll_idx == 0 || poll_idx % 8 == 0 {
                         crate::modules::logger::log_warn(&format!(
@@ -1583,6 +1596,12 @@ async fn trigger_wakeup_via_client_gateway_once(
                     )
                     .await?;
                     continue;
+                }
+
+                if let Some(ref u) = err.validation_url {
+                    if let Ok(account) = modules::load_account(account_id) {
+                        err.validation_url = Some(crate::modules::quota::format_google_validation_url(u, &account.email));
+                    }
                 }
 
                 if err.error_code == Some(403) {
@@ -1984,13 +2003,29 @@ fn build_models_from_available_models_response(
     let mut models = Vec::new();
     if let Some(entries) = extract_available_models_map(response) {
         let ordered_ids = extract_ordered_model_ids(response, entries);
+        let selectable_ids: HashSet<&str> = extract_agent_model_sorts(response)
+            .into_iter()
+            .flatten()
+            .filter_map(|sort| sort.groups.as_ref())
+            .flatten()
+            .filter_map(|group| group.model_ids.as_ref())
+            .flatten()
+            .map(|id| id.trim())
+            .filter(|id| entries.contains_key(*id))
+            .collect();
         for id in ordered_ids {
             if let Some(meta) = entries.get(&id) {
                 models.push(AvailableModel {
                     id: id.clone(),
                     display_name: meta.display_name.clone().unwrap_or_else(|| id.clone()),
                     model_constant: meta.model_constant.clone(),
-                    recommended: meta.recommended,
+                    // The client picker follows agentModelSorts. The models map also
+                    // contains retired and internal models still marked recommended.
+                    recommended: if selectable_ids.is_empty() {
+                        meta.recommended
+                    } else {
+                        Some(selectable_ids.contains(id.as_str()))
+                    },
                 });
             }
         }
@@ -2036,63 +2071,51 @@ fn build_local_fallback_models(accounts: &[crate::models::Account]) -> Vec<Avail
     result
 }
 
-async fn fetch_available_models_from_access_token(
-    access_token: &str,
+async fn fetch_available_models_for_token(
+    token: &crate::models::token::TokenData,
 ) -> Result<AvailableModelsResponse, String> {
-    let payload = json!({});
     let client = crate::utils::http::create_client(15);
     let mut last_error: Option<String> = None;
 
-    for base in CLOUD_CODE_BASE_URLS {
-        for attempt in 1..=DEFAULT_ATTEMPTS {
-            let url = format!("{}{}", base, FETCH_MODELS_PATH);
-            let response = client
-                .post(url)
-                .bearer_auth(access_token)
-                .header(reqwest::header::USER_AGENT, USER_AGENT)
-                .header(reqwest::header::CONTENT_TYPE, "application/json")
-                .header(reqwest::header::ACCEPT_ENCODING, "gzip")
-                .json(&payload)
-                .send()
-                .await;
+    for attempt in 1..=DEFAULT_ATTEMPTS {
+        let response = available_models_request(&client, token).send().await;
 
-            match response {
-                Ok(res) => {
-                    if res.status().is_success() {
-                        let parsed: AvailableModelsResponse = res
-                            .json()
-                            .await
-                            .map_err(|e| format!("解析模型列表失败: {}", e))?;
-                        return Ok(parsed);
-                    }
-                    if res.status() == reqwest::StatusCode::UNAUTHORIZED {
-                        return Err("Authorization expired".to_string());
-                    }
-                    if res.status() == reqwest::StatusCode::FORBIDDEN {
-                        return Err("Cloud Code access forbidden".to_string());
-                    }
-                    let status = res.status();
-                    let text = res.text().await.unwrap_or_default();
-                    let retryable =
-                        status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.as_u16() >= 500;
-                    last_error = Some(format!("获取模型列表失败: {} - {}", status, text));
-                    if retryable && attempt < DEFAULT_ATTEMPTS {
-                        let delay = get_backoff_delay_ms(attempt + 1);
-                        if delay > 0 {
-                            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
-                        }
-                        continue;
-                    }
+        match response {
+            Ok(res) => {
+                if res.status().is_success() {
+                    let parsed: AvailableModelsResponse = res
+                        .json()
+                        .await
+                        .map_err(|e| format!("解析模型列表失败: {}", e))?;
+                    return Ok(parsed);
                 }
-                Err(err) => {
-                    last_error = Some(format!("获取模型列表失败: {}", err));
-                    if attempt < DEFAULT_ATTEMPTS {
-                        let delay = get_backoff_delay_ms(attempt + 1);
-                        if delay > 0 {
-                            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
-                        }
-                        continue;
+                if res.status() == reqwest::StatusCode::UNAUTHORIZED {
+                    return Err("Authorization expired".to_string());
+                }
+                if res.status() == reqwest::StatusCode::FORBIDDEN {
+                    return Err("Cloud Code access forbidden".to_string());
+                }
+                let status = res.status();
+                let text = res.text().await.unwrap_or_default();
+                let retryable =
+                    status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.as_u16() >= 500;
+                last_error = Some(format!("获取模型列表失败: {} - {}", status, text));
+                if retryable && attempt < DEFAULT_ATTEMPTS {
+                    let delay = get_backoff_delay_ms(attempt + 1);
+                    if delay > 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
                     }
+                    continue;
+                }
+            }
+            Err(err) => {
+                last_error = Some(format!("获取模型列表失败: {}", err));
+                if attempt < DEFAULT_ATTEMPTS {
+                    let delay = get_backoff_delay_ms(attempt + 1);
+                    if delay > 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                    }
+                    continue;
                 }
             }
         }
@@ -2163,7 +2186,7 @@ pub async fn fetch_available_models() -> Result<Vec<AvailableModel>, String> {
             }
         };
 
-        match fetch_available_models_from_access_token(&token.access_token).await {
+        match fetch_available_models_for_token(&token).await {
             Ok(response) => {
                 let models = build_models_from_available_models_response(&response);
                 if !models.is_empty() {
@@ -2274,5 +2297,109 @@ mod tests {
         }));
 
         assert_eq!(model_ids(&response), ["alpha", "beta", "zeta"]);
+    }
+
+    #[test]
+    fn official_picker_excludes_retired_and_internal_models_but_preserves_metadata() {
+        let response: AvailableModelsResponse = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/antigravity-available-models.json"
+        ))
+        .unwrap();
+        let models = build_models_from_available_models_response(&response);
+        let expected = response.agent_model_sorts.as_ref().unwrap()[0]
+            .groups
+            .as_ref()
+            .unwrap()[0]
+            .model_ids
+            .as_ref()
+            .unwrap();
+        let selectable: Vec<&String> = models
+            .iter()
+            .filter(|model| model.recommended == Some(true))
+            .map(|model| &model.id)
+            .collect();
+        assert_eq!(selectable, expected.iter().collect::<Vec<_>>());
+        for (id, number) in [
+            ("gemini-3.8-flash-high", 1318),
+            ("gemini-3.8-flash-medium", 1319),
+            ("gemini-3.8-flash-low", 1320),
+            ("gemini-4-argon-high", 1417),
+            ("gemini-4-argon-medium", 1418),
+            ("gemini-4-argon-low", 1419),
+            ("claude-opus-5-5-low", 1400),
+            ("claude-opus-5-5-medium", 1401),
+            ("claude-opus-5-5-high", 1402),
+            ("claude-sonnet-5-5-low", 1403),
+            ("claude-sonnet-5-5-medium", 1404),
+            ("claude-sonnet-5-5-high", 1405),
+            ("gpt-oss-120b-medium", 342),
+        ] {
+            let model = models.iter().find(|model| model.id == id).unwrap();
+            let constant = model.model_constant.as_deref().unwrap();
+            assert_eq!(
+                parse_codeium_model_enum_name(constant),
+                Some(number),
+                "{id}"
+            );
+            assert_eq!(
+                parse_codeium_model_enum_name(constant.strip_prefix("MODEL_").unwrap()),
+                Some(number)
+            );
+        }
+        assert_eq!(
+            models
+                .iter()
+                .find(|model| model.id == "gemini-3-flash")
+                .unwrap()
+                .recommended,
+            Some(false)
+        );
+        assert_eq!(
+            models
+                .iter()
+                .find(|model| model.id == "gemini-3.8-flash-tiered")
+                .unwrap()
+                .recommended,
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn wakeup_model_requests_share_quota_routing_project_and_versioned_headers() {
+        for project in [Some(" project-123 "), Some("aicode-consumers"), None] {
+            let mut token = crate::models::token::TokenData::new(
+                "test-access".into(),
+                "test-refresh".into(),
+                3600,
+                None,
+                project.map(str::to_string),
+                None,
+            );
+            token.is_gcp_tos = Some(true);
+            let context = modules::quota::QuotaCloudCodeContext::from_token(&token);
+            let request = available_models_request(&reqwest::Client::new(), &token)
+                .build()
+                .unwrap();
+            let expected_url = format!(
+                "{}{}",
+                modules::quota::resolve_cloud_code_base_url(&context).trim_end_matches('/'),
+                FETCH_MODELS_PATH
+            );
+            assert_eq!(request.url().as_str(), expected_url);
+            assert_eq!(request.headers()[reqwest::header::ACCEPT_ENCODING], "gzip");
+            assert!(request.headers()[reqwest::header::USER_AGENT]
+                .to_str()
+                .unwrap()
+                .starts_with("antigravity/"));
+            let body: serde_json::Value =
+                serde_json::from_slice(request.body().unwrap().as_bytes().unwrap()).unwrap();
+            assert_eq!(
+                body,
+                context
+                    .preferred_project_id
+                    .map(|project| json!({ "project": project }))
+                    .unwrap_or_else(|| json!({}))
+            );
+        }
     }
 }

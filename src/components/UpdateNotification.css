@@ -2,8 +2,9 @@
   animation: updateFadeIn 0.2s ease;
 }
 
-.update-modal {
+.modal.update-modal {
   max-width: min(690px, calc(100vw - 56px));
+  max-height: calc(100vh - 32px);
   animation: updateSlideIn 0.2s ease;
 }
 

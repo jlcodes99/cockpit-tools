@@ -1,3 +1,9 @@
+import { resolveOpenAIUsageConfig, isOpenAIOfficialUsageUrl, resolveAccountUsageBaseUrl } from "../../utils/openaiOfficialUsage";
+import { useDialogSession } from "../../hooks/useDialogSession";
+import { useCodexPelicanStore } from "../../stores/useCodexPelicanStore";
+import { pelicanProviderTarget } from "./pelican/pelicanProviderModel";
+import { isValidProviderApiKeyUrl } from "../../utils/codexProviderApiKeyUrl";
+import { getCodexAccountQuotaError } from "../../utils/codexProxyRuntimeError";
 import {
   useCallback,
   useEffect,
@@ -8,7 +14,6 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
-import { homeDir, join } from "@tauri-apps/api/path";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { MultiSelectFilterOption } from "../MultiSelectFilterDropdown";
 import { useEscClose } from "../../hooks/useEscClose";
@@ -25,8 +30,8 @@ import type {
 } from "../../types/codexLocalAccess";
 import {
   addCodexAccountWithApiKey,
-  deleteCodexAccounts,
   getCurrentCodexAccount,
+  getCodexStoragePaths,
   listCodexAccounts,
   syncCodexApiKeyProviderAccounts,
   updateCodexAccountName,
@@ -70,6 +75,7 @@ import {
   renameApiKeyOnCodexModelProvider,
   updateApiKeyOnCodexModelProvider,
   queryCodexModelProviderUsage,
+  OPENAI_USAGE_CONFIG_CHANGED_EVENT,
   saveCodexModelProviderDetectedIntegrationType,
   testCodexModelProviderConnection,
   testCodexModelProviderChatBatch,
@@ -125,8 +131,12 @@ import {
   resolveCodexModelProviderAccountName,
   shouldSyncCodexModelProviderAccountName,
 } from "../../utils/codexModelProviderAccountName";
-import { findCodexAccountsReferencingModelProvider } from "../../utils/codexModelProviderAccountSync";
+import { resolveCodexModelProviderForApiKey } from "../../utils/codexModelProviderKeyConfig";
+import { buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider, findCodexAccountsForModelProviderDeletion } from "../../utils/codexModelProviderAccountSync";
+import { buildProviderModelVisionCapabilities } from "../../utils/codexModelProviderVision";
+import { isImageGenerationModelId, selectProviderBatchTestModelId } from "../../utils/codexTestModel";
 import { CodexModelProviderManagerView } from "./CodexModelProviderManagerView";
+import { CodexModelProviderEditor } from "./CodexModelProviderEditor";
 
 
 const DEFAULT_INSTANCE_ID = "__default__";
@@ -138,6 +148,10 @@ type InstanceSortDirection = "asc" | "desc";
 
 interface CodexModelProviderManagerProps {
   accounts: CodexAccount[];
+  active?: boolean;
+  initialProviders?: CodexModelProvider[];
+  editingAccountId?: string | null;
+  onAccountEditorClose?: () => void;
   onProvidersChanged?: (providers: CodexModelProvider[]) => void;
   onManageModelPresets?: () => void;
   /** 与账号总览共用同一套启动预览信息（供应商、模型列表、用量等）。 */
@@ -175,18 +189,6 @@ function parseModelCatalogText(value: string): string[] {
       models.push(model);
     });
   return models;
-}
-
-function parseVisionModelText(value: string): Record<string, { supportsVision: boolean }> {
-  const capabilities: Record<string, { supportsVision: boolean }> = {};
-  value
-    .split(/[\n,]+/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .forEach((model) => {
-      capabilities[model.toLowerCase()] = { supportsVision: true };
-    });
-  return capabilities;
 }
 
 /** 表单里的逐模型识图开关状态（含显式关闭）。 */
@@ -248,6 +250,7 @@ const PROVIDER_USAGE_CACHE_KEY = "agtools.codex.modelProviders.usage.cache.v1";
 
 type ProviderUsageState = {
   loading: boolean;
+  sourceBinding?: string;
   summary?: CodexModelProviderUsageSummary;
   error?: string;
   unavailable?: boolean;
@@ -265,6 +268,7 @@ function readProviderUsageCache(): Record<string, ProviderUsageState> {
       if (!value || typeof value !== "object") return;
       const item = value as {
         summary?: CodexModelProviderUsageSummary;
+        sourceBinding?: string;
         error?: string;
         unavailable?: boolean;
         updatedAt?: number;
@@ -272,6 +276,7 @@ function readProviderUsageCache(): Record<string, ProviderUsageState> {
       next[providerId] = {
         loading: false,
         summary: item.summary,
+        sourceBinding: item.sourceBinding,
         error: typeof item.error === "string" ? item.error : undefined,
         unavailable: item.unavailable === true,
         updatedAt:
@@ -296,6 +301,7 @@ function writeProviderUsageCache(value: Record<string, ProviderUsageState>): voi
             providerId,
             {
               summary: item.summary,
+              sourceBinding: item.sourceBinding,
               error: item.error,
               unavailable: item.unavailable === true,
               updatedAt: item.updatedAt,
@@ -323,16 +329,18 @@ function getAccountUsageForProviderApiKey(
     (account) =>
       isCodexApiKeyAccount(account) &&
       account.openai_api_key?.trim() === apiKey.apiKey.trim() &&
-      normalizeCodexModelProviderBaseUrl(account.api_base_url ?? "") ===
+      normalizeCodexModelProviderBaseUrl(resolveAccountUsageBaseUrl(account)) ===
         normalizedProviderBaseUrl,
   );
   if (!matchedAccount) return null;
 
   const accountUsage = readCodexApiKeyUsageCache()[matchedAccount.id];
   if (!accountUsage) return null;
+  if (isOpenAIOfficialUsageUrl(provider.baseUrl) && accountUsage.sourceBinding !== resolveOpenAIUsageConfig(provider, apiKey.apiKey)?.binding) return null;
   return {
     loading: false,
     summary: accountUsage.summary,
+    sourceBinding: accountUsage.sourceBinding,
     error: accountUsage.error,
     unavailable: accountUsage.unavailable,
     updatedAt: accountUsage.updatedAt,
@@ -392,18 +400,19 @@ interface ProviderFormState {
   modelContextWindowsDraft: Record<string, string>;
   supportsVision: boolean;
   visionModelText: string;
+  /** 已保存的显式值或用户操作；继承的默认值只用于显示。 */
   visionModelStates: Record<string, boolean>;
-  /** 打开表单时的识图开关快照：只保存用户真正改动过的模型，避免覆盖供应商级默认。 */
-  visionModelStatesBaseline: Record<string, boolean>;
   visionRoutingModel: string;
   website: string;
   apiKeyUrl: string;
   wireApi: CodexProviderWireApi;
+  authScheme: "x-api-key" | "bearer";
   supportsWebsockets: boolean;
   enableModePreference: CodexProviderEnableModePreference;
   integrationType: "sub2api" | "new_api" | "";
   newApiKeyName: string;
   newApiKey: string;
+  newUsageApiKey: string;
 }
 
 interface EditingApiKeyState {
@@ -423,16 +432,17 @@ const EMPTY_FORM: ProviderFormState = {
   supportsVision: false,
   visionModelText: "",
   visionModelStates: {},
-  visionModelStatesBaseline: {},
   visionRoutingModel: "",
   website: "",
   apiKeyUrl: "",
   wireApi: "responses",
+  authScheme: "x-api-key",
   supportsWebsockets: false,
   enableModePreference: "direct",
   integrationType: "",
   newApiKeyName: "",
   newApiKey: "",
+  newUsageApiKey: "",
 };
 
 interface SponsorProviderTemplate {
@@ -490,9 +500,9 @@ function resolveProviderApiKeyLabel(
 }
 
 const DEFAULT_PROVIDER_PREVIEW_PATHS: ProviderPreviewPaths = {
-  providerStorePath: "~/.antigravity_cockpit/codex_model_providers.json",
-  codexConfigPath: "~/.codex/config.toml",
-  codexAuthPath: "~/.codex/auth.json",
+  providerStorePath: "codex_model_providers.json",
+  codexConfigPath: "config.toml",
+  codexAuthPath: "auth.json",
 };
 
 function resolveDefaultProviderWireApi(
@@ -512,7 +522,7 @@ function resolveEnableModePreferenceForWireApi(
   wireApi: CodexProviderWireApi,
   _presetId?: string | null,
 ): CodexProviderEnableModePreference {
-  if (wireApi === "chat_completions") return "gateway";
+  if (wireApi === "chat_completions" || wireApi === "anthropic") return "gateway";
   return "direct";
 }
 
@@ -520,7 +530,7 @@ function resolveGatewayModeByWireApi(
   wireApi?: CodexProviderWireApi | null,
   _presetId?: string | null,
 ): "direct" | "gateway" {
-  if (wireApi === "chat_completions") return "gateway";
+  if (wireApi === "chat_completions" || wireApi === "anthropic") return "gateway";
   return "direct";
 }
 
@@ -530,46 +540,6 @@ function resolveProviderWireApi(provider: CodexModelProvider): CodexProviderWire
     baseUrl: provider.baseUrl,
     wireApi: provider.wireApi,
   }).wireApi;
-}
-
-const RESPONSES_NATIVE_CHAT_TEST_MODEL_PRIORITY = [
-  "gpt-5.5",
-  "gpt-5.4",
-  "gpt-5",
-  "gpt-4.1",
-  "gpt-4o",
-];
-
-function isImageGenerationModelId(modelId: string): boolean {
-  const lower = modelId.trim().toLowerCase();
-  return (
-    lower.startsWith("gpt-image") ||
-    lower.startsWith("dall-e") ||
-    lower.includes("image-gen")
-  );
-}
-
-function selectProviderBatchTestModelId(
-  wireApi: CodexProviderWireApi,
-  modelCatalog?: string[] | null,
-): string | null {
-  const models = (modelCatalog ?? [])
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
-  if (models.length === 0) return null;
-
-  if (wireApi === "responses") {
-    for (const preferred of RESPONSES_NATIVE_CHAT_TEST_MODEL_PRIORITY) {
-      const model = models.find(
-        (item) => item.toLowerCase() === preferred.toLowerCase(),
-      );
-      if (model) return model;
-    }
-    const textModel = models.find((item) => !isImageGenerationModelId(item));
-    if (textModel) return textModel;
-  }
-
-  return models[0] ?? null;
 }
 
 function formatDateTime(value: number): string {
@@ -600,6 +570,10 @@ function toProviderBatchTestRecordView(
 
 export function useCodexModelProviderManagerController({
   accounts,
+  active = true,
+  initialProviders,
+  editingAccountId,
+  onAccountEditorClose,
   onProvidersChanged,
   resolveLaunchPreviewSummary,
   resolveLaunchPreviewActions,
@@ -612,9 +586,17 @@ export function useCodexModelProviderManagerController({
     (state) => state.updateAccountInstanceAccess,
   );
   const fetchAccounts = useCodexAccountStore((state) => state.fetchAccounts);
+  const deleteAccounts = useCodexAccountStore((state) => state.deleteAccounts);
+  const [deletingProviderIds, setDeletingProviderIds] = useState<Set<string>>(new Set());
+  const deletingProviders = deletingProviderIds.size > 0;
+  const providerDeletionRef = useRef(false);
   const sponsorModule = useSponsorStore((state) => state.state.sponsorModule);
   const fetchSponsorState = useSponsorStore((state) => state.fetchState);
-  const [providers, setProviders] = useState<CodexModelProvider[]>([]);
+  const [providers, setProviders] = useState<CodexModelProvider[]>(initialProviders ?? []);
+  const [accountEditor, setAccountEditor] = useState<{ accountId: string; apiKeyId: string; syncModels: boolean } | null>(null);
+  const [editorModelKeyId, setEditorModelKeyId] = useState<string | null>(null);
+  const openedAccountEditorRef = useRef<string | null>(null);
+  useEffect(() => { if (initialProviders) setProviders(initialProviders); }, [initialProviders]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{
@@ -676,6 +658,7 @@ export function useCodexModelProviderManagerController({
     null,
   );
   const [providerOauthSaving, setProviderOauthSaving] = useState(false);
+  const [providerOauthError, setProviderOauthError] = useState("");
   const [providerOauthSelectedAccountId, setProviderOauthSelectedAccountId] =
     useState("");
   const [providerOauthSearchQuery, setProviderOauthSearchQuery] = useState("");
@@ -963,11 +946,15 @@ export function useCodexModelProviderManagerController({
     setLoading(true);
     setError(null);
     try {
-      const next = mergeAccounts
-        ? await mergeCodexModelProviderApiKeysFromAccounts(accounts)
-        : await listCodexModelProviders();
-      setProviders(next);
-      onProvidersChanged?.(next);
+      const loaded = await listCodexModelProviders();
+      setProviders(loaded);
+      setLoading(false);
+      onProvidersChanged?.(loaded);
+      if (mergeAccounts) {
+        const next = await mergeCodexModelProviderApiKeysFromAccounts(accounts);
+        setProviders(next);
+        onProvidersChanged?.(next);
+      }
     } catch (err) {
       setError(
         t("codex.modelProviders.loadFailed", {
@@ -979,6 +966,24 @@ export function useCodexModelProviderManagerController({
       setLoading(false);
     }
   }, [accounts, onProvidersChanged, t]);
+
+  const deleteProvidersAndAccounts = useCallback(async (
+    targets: CodexModelProvider[],
+    accountIds: string[],
+  ) => {
+    if (providerDeletionRef.current) return false;
+    providerDeletionRef.current = true;
+    setDeletingProviderIds(new Set(targets.map(provider => provider.id)));
+    try {
+      if (accountIds.length > 0) await deleteAccounts(accountIds);
+      for (const provider of targets) await deleteCodexModelProvider(provider.id);
+      await reloadProviders(false);
+      return true;
+    } finally {
+      providerDeletionRef.current = false;
+      setDeletingProviderIds(new Set());
+    }
+  }, [deleteAccounts, reloadProviders]);
 
   const reloadCurrentAccount = useCallback(async () => {
     try {
@@ -1006,8 +1011,9 @@ export function useCodexModelProviderManagerController({
   }, []);
 
   useEffect(() => {
+    if (!active && !editingAccountId) return;
     invalidateCodexModelProviderCache();
-    void reloadProviders();
+    void reloadProviders(active);
     void reloadCurrentAccount();
     void reloadLocalAccessState();
     void reloadCodexInstances();
@@ -1016,6 +1022,8 @@ export function useCodexModelProviderManagerController({
       .then((items) => setOauthAccounts(items.filter((item) => item.auth_mode !== "apikey")))
       .catch(() => setOauthAccounts([]));
   }, [
+    active,
+    editingAccountId,
     fetchSponsorState,
     reloadProviders,
     reloadCurrentAccount,
@@ -1092,21 +1100,15 @@ export function useCodexModelProviderManagerController({
 
     void (async () => {
       try {
-        const home = await homeDir();
-        const [providerStorePath, codexConfigPath, codexAuthPath] =
-          await Promise.all([
-            join(home, ".antigravity_cockpit", "codex_model_providers.json"),
-            join(home, ".codex", "config.toml"),
-            join(home, ".codex", "auth.json"),
-          ]);
+        const paths = await getCodexStoragePaths();
         if (cancelled) return;
         setPreviewPaths({
-          providerStorePath,
-          codexConfigPath,
-          codexAuthPath,
+          providerStorePath: paths.providerStorePath,
+          codexConfigPath: paths.configPath,
+          codexAuthPath: paths.authPath,
         });
       } catch {
-        // ignore path resolution failures and keep fallback preview paths
+        // Keep file names until the backend can report the actual configured paths.
       }
     })();
 
@@ -1345,7 +1347,8 @@ export function useCodexModelProviderManagerController({
     const models: string[] = [];
     for (const provider of providers) {
       if (!batchTestSelectedProviderIds.has(provider.id)) continue;
-      for (const raw of provider.modelCatalog ?? []) {
+      const effective = resolveCodexModelProviderForApiKey(provider, getSelectedProviderApiKey(provider)?.apiKey);
+      for (const raw of effective.modelCatalog ?? []) {
         const model = raw.trim();
         if (!model || isImageGenerationModelId(model)) continue;
         const key = model.toLowerCase();
@@ -1369,7 +1372,7 @@ export function useCodexModelProviderManagerController({
         label: t("codex.modelProviders.batchTest.modelCustom", "自定义模型…"),
       },
     ];
-  }, [batchTestSelectedProviderIds, providers, t]);
+  }, [batchTestSelectedProviderIds, providers, t, getSelectedProviderApiKey]);
 
   const resolvedBatchTestModel = useMemo(() => {
     if (batchTestModelId === "__custom__") {
@@ -1378,6 +1381,15 @@ export function useCodexModelProviderManagerController({
     const trimmed = batchTestModelId.trim();
     return trimmed || null;
   }, [batchTestModelCustom, batchTestModelId]);
+
+  const openProviderPelican = useCallback(() => {
+    const source = selectedProviderIds.size > 0
+      ? filteredProviders.filter((provider) => selectedProviderIds.has(provider.id)) : filteredProviders;
+    useCodexPelicanStore.getState().openProviders(source.flatMap((provider) => {
+      const target = pelicanProviderTarget(provider, getSelectedProviderApiKey(provider)?.id);
+      return target ? [target] : [];
+    }));
+  }, [filteredProviders, selectedProviderIds, getSelectedProviderApiKey]);
 
   const openBatchTestModal = useCallback(() => {
     const defaultSource =
@@ -1494,7 +1506,8 @@ export function useCodexModelProviderManagerController({
         apiKeyName: apiKey.name || provider.name,
         apiKey: apiKey.apiKey,
         wireApi: resolveProviderWireApi(provider),
-        modelCatalog: provider.modelCatalog ?? [],
+        authScheme: provider.authScheme,
+        modelCatalog: resolveCodexModelProviderForApiKey(provider, apiKey.apiKey).modelCatalog ?? [],
       };
     },
     [getSelectedProviderApiKey],
@@ -1625,6 +1638,8 @@ export function useCodexModelProviderManagerController({
     [selectedSponsorTemplateId, sponsorProviderTemplates],
   );
   const openCreateModal = useCallback(() => {
+    setAccountEditor(null);
+    setEditorModelKeyId(null);
     setNotice(null);
     setFormError(null);
     setExistingApiKeySearchQuery("");
@@ -1669,31 +1684,38 @@ export function useCodexModelProviderManagerController({
     });
   }, []);
 
-  const openEditModal = useCallback((provider: CodexModelProvider) => {
+  const openEditModal = useCallback((provider: CodexModelProvider, account?: CodexAccount) => {
     setNotice(null);
     setFormError(null);
     setExistingApiKeySearchQuery("");
     setEditingApiKey(null);
     const resolvedWireApi = resolveProviderWireApi(provider);
+    const selectedKey = account ? provider.apiKeys.find(key => key.apiKey.trim() === account.openai_api_key?.trim()) : undefined;
+    const modelConfig = selectedKey ? resolveCodexModelProviderForApiKey(provider, selectedKey.apiKey) : account ? {
+      ...provider, modelCatalog: account.api_model_catalog, modelContextWindows: account.api_model_context_windows,
+      supportsVision: account.api_supports_vision === true,
+      modelCapabilities: Object.fromEntries(Object.entries(account.api_model_vision_support ?? {}).map(([model, supportsVision]) => [model, { supportsVision }])),
+      visionRoutingModel: account.api_vision_routing_model ?? undefined,
+    } : provider;
+    setAccountEditor(account ? { accountId: account.id, apiKeyId: selectedKey?.id ?? "__new__", syncModels: account.api_sync_model_catalog_to_codex === true } : null);
+    setEditorModelKeyId(selectedKey?.id ?? (account ? "__new__" : null));
     setForm({
       providerId: provider.id,
       name: provider.name,
       baseUrl: provider.baseUrl,
-      modelCatalogText: (provider.modelCatalog ?? []).join("\n"),
+      modelCatalogText: (modelConfig.modelCatalog ?? []).join("\n"),
       modelContextWindowsDraft: contextWindowDraftsFromRecord(
-        provider.modelContextWindows,
-        provider.modelCatalog ?? [],
+        modelConfig.modelContextWindows,
+        modelConfig.modelCatalog ?? [],
       ),
-      supportsVision: provider.supportsVision === true,
-      visionModelText: visionModelTextFromCapabilities(provider.modelCapabilities),
-      visionModelStates: visionModelStatesFromCapabilities(provider.modelCapabilities),
-      visionModelStatesBaseline: visionModelStatesFromCapabilities(
-        provider.modelCapabilities,
-      ),
-      visionRoutingModel: provider.visionRoutingModel ?? "",
+      supportsVision: modelConfig.supportsVision === true,
+      visionModelText: visionModelTextFromCapabilities(modelConfig.modelCapabilities),
+      visionModelStates: visionModelStatesFromCapabilities(modelConfig.modelCapabilities),
+      visionRoutingModel: modelConfig.visionRoutingModel ?? "",
       website: provider.website ?? "",
       apiKeyUrl: provider.apiKeyUrl ?? "",
       wireApi: resolvedWireApi,
+      authScheme: provider.authScheme ?? "x-api-key",
       supportsWebsockets:
         resolvedWireApi === "responses" && provider.supportsWebsockets === true,
       enableModePreference:
@@ -1703,24 +1725,69 @@ export function useCodexModelProviderManagerController({
           resolveCodexApiProviderPresetId(provider.baseUrl),
         ),
       integrationType: provider.integrationType ?? "",
-      newApiKeyName: "",
-      newApiKey: "",
+      newApiKeyName: account && !selectedKey ? account.account_name ?? "" : "",
+      newApiKey: account && !selectedKey ? account.openai_api_key ?? "" : "",
+      newUsageApiKey: "",
     });
     setSelectedPresetId(resolveCodexApiProviderPresetId(provider.baseUrl));
     setSelectedSponsorTemplateId(null);
     setShowModal(true);
   }, []);
 
+  useEffect(() => {
+    if (!editingAccountId) { openedAccountEditorRef.current = null; return; }
+    if (openedAccountEditorRef.current === editingAccountId) return;
+    const account = accounts.find(item => item.id === editingAccountId);
+    if (!account) return;
+    openedAccountEditorRef.current = editingAccountId;
+    const baseUrl = resolveAccountUsageBaseUrl(account);
+    const provider = providers.find(item => normalizeCodexModelProviderBaseUrl(item.baseUrl) === normalizeCodexModelProviderBaseUrl(baseUrl));
+    if (provider) { openEditModal(provider, account); return; }
+    // An account without a saved provider opens immediately from its local snapshot.
+    openEditModal({
+      id: "", name: account.api_provider_name || account.account_name || baseUrl,
+      baseUrl, wireApi: account.api_wire_api ?? "responses", authScheme: account.api_auth_scheme ?? "x-api-key",
+      supportsWebsockets: account.api_supports_websockets === true, supportsVision: account.api_supports_vision === true,
+      modelCatalog: account.api_model_catalog, modelContextWindows: account.api_model_context_windows,
+      modelCapabilities: Object.fromEntries(Object.entries(account.api_model_vision_support ?? {}).map(([model, supportsVision]) => [model, { supportsVision }])),
+      visionRoutingModel: account.api_vision_routing_model ?? undefined,
+      apiKeys: [], createdAt: Date.now(), updatedAt: Date.now(),
+    }, account);
+    setForm(current => ({ ...current, providerId: null, newApiKey: account.openai_api_key ?? "", newApiKeyName: account.account_name ?? "" }));
+  }, [editingAccountId, accounts, providers, openEditModal]);
+
+  const selectEditorModelKey = useCallback((keyId: string) => {
+    if (!currentEditingProvider) return;
+    const key = currentEditingProvider.apiKeys.find(item => item.id === keyId);
+    const config = key ? resolveCodexModelProviderForApiKey(currentEditingProvider, key.apiKey) : currentEditingProvider;
+    setEditorModelKeyId(key?.id ?? (keyId === "__new__" ? "__new__" : null));
+    setFormError(null);
+    setForm(current => ({ ...current, modelCatalogText: (config.modelCatalog ?? []).join("\n"),
+      modelContextWindowsDraft: contextWindowDraftsFromRecord(config.modelContextWindows, config.modelCatalog ?? []),
+      supportsVision: config.supportsVision === true, visionModelText: visionModelTextFromCapabilities(config.modelCapabilities),
+      visionModelStates: visionModelStatesFromCapabilities(config.modelCapabilities), visionRoutingModel: config.visionRoutingModel ?? "" }));
+  }, [currentEditingProvider]);
+
+  const selectAccountEditorProvider = useCallback((providerId: string) => {
+    const provider = providers.find(item => item.id === providerId);
+    const account = accounts.find(item => item.id === accountEditor?.accountId);
+    if (provider && account) openEditModal(provider, { ...account,
+      openai_api_key: provider.apiKeys[0]?.apiKey ?? "", api_sync_model_catalog_to_codex: accountEditor?.syncModels });
+  }, [providers, accounts, accountEditor, openEditModal]);
+
   const closeModal = useCallback(() => {
     if (saving) return;
     setEditingApiKey(null);
     setShowModal(false);
     setFormError(null);
-  }, [saving]);
+    setAccountEditor(null);
+    onAccountEditorClose?.();
+  }, [saving, onAccountEditorClose]);
 
   useEscClose(showModal, closeModal);
 
   const mutateForm = useCallback((patch: Partial<ProviderFormState>) => {
+    setFormError(null);
     setForm((prev) => ({ ...prev, ...patch }));
   }, []);
 
@@ -1751,12 +1818,6 @@ export function useCodexModelProviderManagerController({
         supportsVision: false,
         visionModelText: (preset.visionModelCatalog ?? []).join("\n"),
         visionModelStates: Object.fromEntries(
-          (preset.visionModelCatalog ?? []).map((model) => [
-            model.trim().toLowerCase(),
-            true,
-          ]),
-        ),
-        visionModelStatesBaseline: Object.fromEntries(
           (preset.visionModelCatalog ?? []).map((model) => [
             model.trim().toLowerCase(),
             true,
@@ -2144,22 +2205,16 @@ export function useCodexModelProviderManagerController({
   ]);
 
   const handleDeleteBatchTestResults = useCallback(async () => {
-    if (batchTestDeleting || batchTestSession?.running) return;
+    if (batchTestDeleting || providerDeletionRef.current || batchTestSession?.running) return;
     const providerIds = Array.from(batchTestResultSelectedProviderIds);
     if (providerIds.length === 0) return;
     const providerIdSet = new Set(providerIds);
-    const linkedAccountIds = accounts
-      .filter(
-        (account) =>
-          isCodexApiKeyAccount(account) &&
-          !!account.api_provider_id &&
-          providerIdSet.has(account.api_provider_id),
-      )
-      .map((account) => account.id);
+    const targets = providers.filter(provider => providerIdSet.has(provider.id));
+    const linkedAccountIds = findCodexAccountsForModelProviderDeletion(targets, accounts);
     const confirmed = await confirmDialog(
       t("codex.modelProviders.batchTest.deleteConfirm", {
         defaultValue:
-          "确认删除选中的 {{providerCount}} 个供应商吗？会同时删除 {{accountCount}} 个精确关联的 Codex API Key 账号。",
+          "确认删除选中的 {{providerCount}} 个供应商及其关联的 {{accountCount}} 个账号吗？",
         providerCount: providerIds.length,
         accountCount: linkedAccountIds.length,
       }),
@@ -2175,16 +2230,7 @@ export function useCodexModelProviderManagerController({
     setBatchTestDeleting(true);
     setBatchTestError(null);
     try {
-      if (linkedAccountIds.length > 0) {
-        await deleteCodexAccounts(linkedAccountIds);
-        await emitAccountsChanged({
-          platformId: "codex",
-          reason: "delete",
-        });
-      }
-      for (const providerId of providerIds) {
-        await deleteCodexModelProvider(providerId);
-      }
+      if (!await deleteProvidersAndAccounts(targets, linkedAccountIds)) return;
       setSelectedProviderIds((previous) => {
         const next = new Set(previous);
         providerIds.forEach((providerId) => next.delete(providerId));
@@ -2212,7 +2258,6 @@ export function useCodexModelProviderManagerController({
           records: nextRecords,
         };
       });
-      await reloadProviders();
       setNotice({
         tone: "success",
         text: t("codex.modelProviders.batchTest.deleteSuccess", {
@@ -2234,11 +2279,12 @@ export function useCodexModelProviderManagerController({
     }
   }, [
     accounts,
+    providers,
+    deleteProvidersAndAccounts,
     batchTestDeleting,
     batchTestResultSelectedProviderIds,
     batchTestSession?.running,
     parseServiceError,
-    reloadProviders,
     t,
   ]);
 
@@ -2265,19 +2311,17 @@ export function useCodexModelProviderManagerController({
       );
       return;
     }
-    const modelCapabilities = parseVisionModelText(form.visionModelText);
-    // 逐模型开关：显式写入 true/false，关闭官方默认支持的模型时也能生效。
-    for (const [model, supportsVision] of Object.entries(form.visionModelStates)) {
-      const key = model.trim().toLowerCase();
-      if (!key) continue;
-      // 未操作过的关闭状态不写，交给供应商级默认值决定；已保存过的显式值原样保留。
-      const baseline = form.visionModelStatesBaseline[key];
-      if (baseline === undefined && !supportsVision) continue;
-      modelCapabilities[key] = { supportsVision };
-    }
+    const modelCapabilities = buildProviderModelVisionCapabilities(
+      form.visionModelText,
+      form.visionModelStates,
+      modelCatalog,
+      form.supportsVision,
+    );
     const visionRoutingModel = form.visionRoutingModel.trim();
-    const isCreate = !form.providerId;
-    const existingKeyCount = currentEditingProvider?.apiKeys.length ?? 0;
+    const providerToUpdate = currentEditingProvider ?? (accountEditor
+      ? providers.find(provider => normalizeCodexModelProviderBaseUrl(provider.baseUrl) === normalizedBaseUrl) : undefined);
+    const isCreate = !providerToUpdate;
+    const existingKeyCount = providerToUpdate?.apiKeys.length ?? 0;
 
     if (!name) {
       setFormError(
@@ -2294,7 +2338,11 @@ export function useCodexModelProviderManagerController({
       );
       return;
     }
-    if (isCreate && !newApiKey) {
+    if (!isValidProviderApiKeyUrl(form.apiKeyUrl)) {
+      setFormError(t("codex.modelProviders.validation.apiKeyUrlInvalid"));
+      return;
+    }
+    if ((isCreate || editorModelKeyId === "__new__") && !newApiKey) {
       setFormError(
         t(
           "codex.modelProviders.validation.apiKeyRequiredOnCreate",
@@ -2313,10 +2361,26 @@ export function useCodexModelProviderManagerController({
       return;
     }
 
+    const selectedAccountKey = providerToUpdate?.apiKeys.find(key => key.id === accountEditor?.apiKeyId);
+    if (accountEditor && !selectedAccountKey && !newApiKey) {
+      setFormError(t("codex.quickSwitch.validation.apiKeyRequired"));
+      return;
+    }
+    const modelConfig = { modelCatalog, modelContextWindows: parsedWindows.windows,
+      supportsVision: form.supportsVision, modelCapabilities, visionRoutingModel: visionRoutingModel || null };
+    const boundCatalog = selectedAccountKey && selectedAccountKey.id !== editorModelKeyId
+      ? selectedAccountKey.modelCatalog ?? (editorModelKeyId ? providerToUpdate?.modelCatalog : modelCatalog)
+      : accountEditor?.apiKeyId === "__new__" && editorModelKeyId && editorModelKeyId !== "__new__"
+        ? providerToUpdate?.modelCatalog : modelCatalog;
+    const effectiveWireApi = resolveCodexProviderCapabilityProfile({ baseUrl, wireApi: form.wireApi }).wireApi;
+    if (accountEditor?.syncModels && effectiveWireApi === "responses" && resolveCodexApiProviderPresetId(baseUrl) !== "openai_official" && !boundCatalog?.length) {
+      setFormError(t("codex.api.modelCatalog.syncRequiresModels"));
+      return;
+    }
     setSaving(true);
     try {
       let savedProvider: CodexModelProvider | null = null;
-      if (!form.providerId) {
+      if (!providerToUpdate) {
         savedProvider = await createCodexModelProvider({
           name,
           baseUrl,
@@ -2328,99 +2392,81 @@ export function useCodexModelProviderManagerController({
           visionRoutingModel,
           website: form.website,
           apiKeyUrl: form.apiKeyUrl,
-          wireApi: form.wireApi,
+          wireApi: effectiveWireApi,
+          authScheme: form.authScheme,
           supportsWebsockets: form.supportsWebsockets,
           enableModePreference: form.enableModePreference,
           integrationType: form.integrationType || undefined,
           initialApiKey: newApiKey || undefined,
           initialApiKeyName: form.newApiKeyName,
+          initialUsageApiKey: form.newUsageApiKey,
         });
       } else {
-        savedProvider = await updateCodexModelProvider(form.providerId, {
+        savedProvider = await updateCodexModelProvider(providerToUpdate.id, {
           name,
           baseUrl,
-          sourceTag: selectedSponsorTemplate?.id ?? null,
-          modelCatalog,
-          modelContextWindows: parsedWindows.windows,
-          supportsVision: form.supportsVision,
-          modelCapabilities,
-          visionRoutingModel,
+          sourceTag: selectedSponsorTemplate?.id ?? providerToUpdate.sourceTag ?? null,
+          ...(editorModelKeyId === "__new__" ? {} : editorModelKeyId ? { keyModelConfig: { apiKeyId: editorModelKeyId, config: modelConfig } } : modelConfig),
           website: form.website,
           apiKeyUrl: form.apiKeyUrl,
-          wireApi: form.wireApi,
+          wireApi: effectiveWireApi,
+          authScheme: form.authScheme,
           supportsWebsockets: form.supportsWebsockets,
           enableModePreference: form.enableModePreference,
           integrationType: form.integrationType || null,
         });
         if (newApiKey) {
           savedProvider = await addApiKeyToCodexModelProvider(
-            form.providerId,
+            providerToUpdate.id,
             newApiKey,
             form.newApiKeyName,
+            form.newUsageApiKey,
           );
-        }
-      }
-      if (savedProvider && newApiKey) {
-        try {
-          const usageSummary = await queryCodexModelProviderUsage({
-            baseUrl: savedProvider.baseUrl,
-            apiKey: newApiKey,
-            integrationType: savedProvider.integrationType ?? null,
-          });
-          setProviderUsageMap((previous) => ({
-            ...previous,
-            [savedProvider.id]: { loading: false, summary: usageSummary },
-          }));
-          if (
-            (usageSummary.mode === "sub2api" ||
-              usageSummary.mode === "new_api") &&
-            usageSummary.mode !== savedProvider.integrationType
-          ) {
-            await saveCodexModelProviderDetectedIntegrationType(
-              savedProvider.id,
-              usageSummary.mode,
-            );
+          if (editorModelKeyId === "__new__") {
+            const key = savedProvider.apiKeys.find(item => item.apiKey.trim() === newApiKey)!;
+            savedProvider = await updateCodexModelProvider(savedProvider.id, { keyModelConfig: { apiKeyId: key.id, config: modelConfig } });
+            setEditorModelKeyId(key.id);
           }
-        } catch (usageErr) {
-          console.warn("[CodexModelProviders] 额度类型探测失败", usageErr);
         }
       }
-      if (savedProvider && currentEditingProvider) {
+      // Keep the persisted provider available after a downstream sync failure so retry is idempotent.
+      setProviders(current => [...current.filter(item => item.id !== savedProvider!.id), savedProvider!]);
+      setForm(current => ({ ...current, providerId: savedProvider!.id, newApiKey: "", newApiKeyName: "", newUsageApiKey: "" }));
+      if (accountEditor) {
+        const key = savedProvider.apiKeys.find(item => item.id === accountEditor.apiKeyId)
+          ?? savedProvider.apiKeys.find(item => newApiKey && item.apiKey.trim() === newApiKey);
+        if (!key) throw new Error(t("codex.quickSwitch.validation.apiKeyRequired"));
+        setAccountEditor(current => current ? { ...current, apiKeyId: key.id } : null);
+        const snapshot = buildCodexModelProviderAccountSnapshot(savedProvider, key.name, key.apiKey);
+        await updateCodexApiKeyCredentials(accountEditor.accountId, key.apiKey, snapshot.apiBaseUrl,
+          snapshot.apiProviderMode, snapshot.apiProviderId, snapshot.apiProviderName, snapshot.apiModelCatalog,
+          snapshot.apiSupportsVision, snapshot.apiModelVisionSupport, snapshot.apiVisionRoutingModel,
+          snapshot.apiWireApi, snapshot.apiSupportsWebsockets,
+          accountEditor.syncModels && snapshot.apiWireApi === "responses" && snapshot.apiProviderMode !== "openai_builtin",
+          snapshot.accountName, snapshot.apiModelContextWindows, savedProvider.authScheme ?? "x-api-key");
+      }
+      if (savedProvider && providerToUpdate) {
         const linkedAccountIds = findCodexAccountsReferencingModelProvider(
-          currentEditingProvider,
+          providerToUpdate,
           accounts,
         );
         if (linkedAccountIds.length > 0) {
           const presetId = resolveCodexApiProviderPresetId(savedProvider.baseUrl);
           const isOpenAIOfficial = presetId === "openai_official";
           const wireApi = resolveProviderWireApi(savedProvider);
-          const updatedAccountCount = await syncCodexApiKeyProviderAccounts({
-            accountIds: linkedAccountIds,
-            apiBaseUrl: savedProvider.baseUrl,
-            apiProviderMode: isOpenAIOfficial ? "openai_builtin" : "custom",
-            apiProviderId:
-              presetId === CODEX_API_PROVIDER_CUSTOM_ID
-                ? savedProvider.id
-                : presetId,
-            apiProviderName: savedProvider.name,
-            apiModelCatalog: savedProvider.modelCatalog,
-            apiModelContextWindows: savedProvider.modelContextWindows,
-            apiWireApi: wireApi,
-            apiSupportsWebsockets:
-              !isOpenAIOfficial &&
-              wireApi === "responses" &&
-              savedProvider.supportsWebsockets === true,
-            apiSupportsVision: savedProvider.supportsVision === true,
-            apiModelVisionSupport: Object.fromEntries(
-              Object.entries(savedProvider.modelCapabilities ?? {}).map(
-                ([model, capability]) => [
-                  model,
-                  capability.supportsVision === true,
-                ],
-              ),
-            ),
-            apiVisionRoutingModel: savedProvider.visionRoutingModel,
-          });
+          let updatedAccountCount = 0;
+          for (const accountId of linkedAccountIds) {
+            if (accountId === accountEditor?.accountId) continue;
+            const account = accounts.find((item) => item.id === accountId);
+            if (!account) continue;
+            const key = savedProvider.apiKeys.find((item) => item.apiKey.trim() === account.openai_api_key?.trim());
+            updatedAccountCount += await syncCodexApiKeyProviderAccounts({
+              accountIds: [accountId],
+              ...buildCodexModelProviderAccountSnapshot(savedProvider, key?.name, account.openai_api_key),
+              apiProviderMode: isOpenAIOfficial ? "openai_builtin" : "custom",
+              apiWireApi: wireApi,
+            });
+          }
           if (updatedAccountCount > 0) {
             await emitAccountsChanged({
               platformId: "codex",
@@ -2429,19 +2475,22 @@ export function useCodexModelProviderManagerController({
           }
         }
       }
-      await reloadProviders();
+      await emitAccountsChanged({ platformId: "codex", reason: "provider-snapshot-sync" });
+      await fetchAccounts();
+      await reloadProviders(false);
+      setAccountEditor(null);
+      onAccountEditorClose?.();
       setShowModal(false);
       setForm(EMPTY_FORM);
       setFormError(null);
       setNotice({
         tone: "success",
-        text:
-          Object.keys(parsedWindows.windows).length > 0
-            ? `${t("codex.modelProviders.saveSuccess", "模型供应商已保存")} ${t(
-                "codex.api.modelCatalog.restartHint",
-                "模型目录已更新。若 Codex 正在运行，请重启后生效。",
-              )}`
-            : t("codex.modelProviders.saveSuccess", "模型供应商已保存"),
+        text: currentEditingProvider
+          ? `${t("codex.modelProviders.saveSuccess", "模型供应商已保存")} ${t(
+              "codex.modelProviders.settingsRestartHint",
+              "供应商配置已更新。若关联的 Codex 或 API 服务正在运行，请重启后生效。",
+            )}`
+          : t("codex.modelProviders.saveSuccess", "模型供应商已保存"),
       });
     } catch (err) {
       setFormError(parseServiceError(err));
@@ -2449,7 +2498,12 @@ export function useCodexModelProviderManagerController({
       setSaving(false);
     }
   }, [
+    accountEditor,
+    editorModelKeyId,
+    onAccountEditorClose,
+    fetchAccounts,
     accounts,
+    providers,
     currentEditingProvider,
     currentEditingProvider?.apiKeys.length,
     form,
@@ -2462,21 +2516,14 @@ export function useCodexModelProviderManagerController({
 
   const handleDeleteProvider = useCallback(
     async (provider: CodexModelProvider) => {
-      const referenceCount = providerReferenceMap.get(provider.id) ?? 0;
-      if (referenceCount > 0) {
-        setNotice({
-          tone: "error",
-          text: t("codex.modelProviders.deleteBlocked", {
-            defaultValue: "该供应商已被 {{count}} 个账号引用，禁止删除。",
-            count: referenceCount,
-          }),
-        });
-        return;
-      }
+      if (providerDeletionRef.current) return;
+      const linkedAccountIds = findCodexAccountsForModelProviderDeletion([provider], accounts);
       const confirmed = await confirmDialog(
-        t("codex.modelProviders.confirmDelete", {
-          defaultValue: "确认删除供应商「{{name}}」吗？",
+        t(linkedAccountIds.length > 0
+          ? "codex.modelProviders.confirmDeleteWithAccounts"
+          : "codex.modelProviders.confirmDelete", {
           name: provider.name,
+          count: linkedAccountIds.length,
         }),
         {
           title: t("common.confirm", "确认"),
@@ -2486,9 +2533,14 @@ export function useCodexModelProviderManagerController({
         },
       );
       if (!confirmed) return;
+      setNotice(null);
       try {
-        await deleteCodexModelProvider(provider.id);
-        await reloadProviders(false);
+        if (!await deleteProvidersAndAccounts([provider], linkedAccountIds)) return;
+        setSelectedProviderIds(previous => {
+          const next = new Set(previous);
+          next.delete(provider.id);
+          return next;
+        });
       } catch (err) {
         setNotice({
           tone: "error",
@@ -2499,25 +2551,28 @@ export function useCodexModelProviderManagerController({
         });
       }
     },
-    [parseServiceError, providerReferenceMap, reloadProviders, t],
+    [accounts, deleteProvidersAndAccounts, parseServiceError, t],
   );
 
   const handleDeleteApiKey = useCallback(
     async (provider: CodexModelProvider, apiKey: CodexModelProviderApiKey) => {
+      if (saving) return;
+      setFormError(null);
+      setNotice(null);
+      setSaving(true);
       try {
         await removeApiKeyFromCodexModelProvider(provider.id, apiKey.id);
-        await reloadProviders();
+        await reloadProviders(false);
       } catch (err) {
-        setNotice({
-          tone: "error",
-          text: t("codex.modelProviders.deleteApiKeyFailed", {
-            defaultValue: "删除 API Key 失败：{{error}}",
-            error: parseServiceError(err),
-          }),
-        });
+        setFormError(t("codex.modelProviders.deleteApiKeyFailed", {
+          defaultValue: "删除 API Key 失败：{{error}}",
+          error: parseServiceError(err),
+        }));
+      } finally {
+        setSaving(false);
       }
     },
-    [parseServiceError, reloadProviders, t],
+    [parseServiceError, reloadProviders, saving, t],
   );
 
   const handleSaveApiKeyEdit = useCallback(async () => {
@@ -2525,12 +2580,10 @@ export function useCodexModelProviderManagerController({
     const provider = providers.find((item) => item.id === editingApiKey.providerId);
     if (!provider) return;
 
+    setFormError(null);
     const nextApiKey = editingApiKey.apiKey.trim();
     if (!nextApiKey) {
-      setNotice({
-        tone: "error",
-        text: t("codex.modelProviders.validation.apiKeyRequired", "API Key 不能为空"),
-      });
+      setFormError(t("codex.modelProviders.validation.apiKeyRequired", "API Key 不能为空"));
       return;
     }
 
@@ -2550,16 +2603,17 @@ export function useCodexModelProviderManagerController({
         (account) =>
           isCodexApiKeyAccount(account) &&
           account.openai_api_key?.trim() === previousApiKey &&
-          normalizeCodexModelProviderBaseUrl(account.api_base_url ?? "") ===
+          normalizeCodexModelProviderBaseUrl(resolveAccountUsageBaseUrl(account)) ===
             normalizedProviderBaseUrl,
       );
       const presetId = resolveCodexApiProviderPresetId(savedProvider.baseUrl);
       const isOpenAIOfficial = presetId === "openai_official";
       const wireApi = resolveProviderWireApi(savedProvider);
-      const apiProviderMode = isOpenAIOfficial ? "openai_builtin" : "custom";
+      const inferredApiProviderMode = isOpenAIOfficial ? "openai_builtin" : "custom";
       const apiProviderId =
         presetId === CODEX_API_PROVIDER_CUSTOM_ID ? savedProvider.id : presetId;
       for (const account of linkedAccounts) {
+        const apiProviderMode = account.api_provider_mode ?? inferredApiProviderMode;
         await updateCodexApiKeyCredentials(
           account.id,
           nextApiKey,
@@ -2567,24 +2621,19 @@ export function useCodexModelProviderManagerController({
           apiProviderMode,
           apiProviderId,
           savedProvider.name,
-          savedProvider.modelCatalog,
-          savedProvider.supportsVision === true,
-          Object.fromEntries(
-            Object.entries(savedProvider.modelCapabilities ?? {}).map(
-              ([model, capability]) => [model, capability.supportsVision === true],
-            ),
-          ),
-          savedProvider.visionRoutingModel,
-          wireApi,
-          !isOpenAIOfficial &&
-            wireApi === "responses" &&
-            savedProvider.supportsWebsockets === true,
+          account.api_model_catalog,
+          account.api_supports_vision === true,
+          account.api_model_vision_support ?? {},
+          account.api_vision_routing_model ?? undefined,
+          account.api_wire_api ?? wireApi,
+          account.api_supports_websockets === true,
           account.api_sync_model_catalog_to_codex,
           account.account_name,
           account.api_model_context_windows,
+          savedProvider.authScheme,
         );
       }
-      await reloadProviders();
+      await reloadProviders(false);
       if (linkedAccounts.length > 0) {
         await emitAccountsChanged({
           platformId: "codex",
@@ -2612,7 +2661,7 @@ export function useCodexModelProviderManagerController({
               defaultValue: "更新 API Key 失败：{{error}}",
               error: raw.replace(/^Error:\s*/, ""),
             });
-      setNotice({ tone: "error", text: message });
+      setFormError(message);
     } finally {
       setSaving(false);
     }
@@ -2637,7 +2686,7 @@ export function useCodexModelProviderManagerController({
             isCodexApiKeyAccount(account) &&
             account.openai_api_key?.trim() === apiKey.apiKey.trim() &&
             (account.api_provider_id === provider.id ||
-              normalizeCodexModelProviderBaseUrl(account.api_base_url ?? "") ===
+              normalizeCodexModelProviderBaseUrl(resolveAccountUsageBaseUrl(account)) ===
                 normalizedProviderBaseUrl) &&
             shouldSyncCodexModelProviderAccountName(
               account.account_name,
@@ -2675,12 +2724,15 @@ export function useCodexModelProviderManagerController({
   );
 
   const handleBatchDeleteProviders = useCallback(async () => {
+    if (providerDeletionRef.current) return;
     const ids = Array.from(selectedProviderIds);
     if (ids.length === 0) return;
+    const targets = providers.filter(provider => selectedProviderIds.has(provider.id));
+    const linkedAccountIds = findCodexAccountsForModelProviderDeletion(targets, accounts);
     const confirmed = await confirmDialog(
-      t("codex.modelProviders.batchDeleteConfirm", {
-        defaultValue: "确定要删除选中的 {{count}} 个供应商吗？",
-        count: ids.length,
+      t("codex.modelProviders.batchTest.deleteConfirm", {
+        providerCount: targets.length,
+        accountCount: linkedAccountIds.length,
       }),
       {
         title: t("common.delete", "删除"),
@@ -2690,16 +2742,13 @@ export function useCodexModelProviderManagerController({
     if (!confirmed) return;
     setNotice(null);
     try {
-      for (const id of ids) {
-        await deleteCodexModelProvider(id);
-      }
+      if (!await deleteProvidersAndAccounts(targets, linkedAccountIds)) return;
       setSelectedProviderIds(new Set());
-      await reloadProviders();
       setNotice({
         tone: "success",
-        text: t("codex.modelProviders.batchDeleteSuccess", {
-          defaultValue: "已删除 {{count}} 个供应商",
-          count: ids.length,
+        text: t("codex.modelProviders.batchTest.deleteSuccess", {
+          providerCount: targets.length,
+          accountCount: linkedAccountIds.length,
         }),
       });
     } catch (err) {
@@ -2711,7 +2760,7 @@ export function useCodexModelProviderManagerController({
         }),
       });
     }
-  }, [deleteCodexModelProvider, parseServiceError, reloadProviders, selectedProviderIds, t]);
+  }, [accounts, providers, deleteProvidersAndAccounts, parseServiceError, selectedProviderIds, t]);
 
   const handleProviderInstanceChange = useCallback(
     async (provider: CodexModelProvider, instanceId: string) => {
@@ -2798,6 +2847,7 @@ export function useCodexModelProviderManagerController({
       buildCodexPlanFilterOptions(providerOauthTierCounts, {
         includeError: false,
         pendingLabel: t("codex.pendingAuth.badge", "待授权"),
+        chatgptPlanLabel: t("chatgptPlan.title"),
       }),
     [providerOauthTierCounts, t],
   );
@@ -2853,7 +2903,10 @@ export function useCodexModelProviderManagerController({
         splitValidityFilterValues(providerOauthFilterTypes);
       if (selectedTypes.size > 0) {
         result = result.filter((account) => {
-          if (selectedTypes.has("ERROR") && account.quota_error) return true;
+          if (
+            selectedTypes.has("ERROR") &&
+            getCodexAccountQuotaError(account.quota_error)
+          ) return true;
           return selectedTypes.has(resolvePlanKey(account));
         });
       }
@@ -2912,6 +2965,7 @@ export function useCodexModelProviderManagerController({
       boundOauthAccountId: string | null,
     ) => {
       setProviderOauthSaving(true);
+      setProviderOauthError("");
       setNotice(null);
       try {
         await updateCodexModelProvider(provider.id, {
@@ -2926,9 +2980,8 @@ export function useCodexModelProviderManagerController({
         });
         setProviderOauthPickerId(null);
       } catch (err) {
-        setNotice({
-          tone: "error",
-          text: boundOauthAccountId
+        setProviderOauthError(
+          boundOauthAccountId
             ? t("codex.api.oauthBinding.saveFailed", {
                 defaultValue: "OAuth 绑定失败：{{error}}",
                 error: parseServiceError(err),
@@ -2937,7 +2990,7 @@ export function useCodexModelProviderManagerController({
                 defaultValue: "解除 OAuth 绑定失败：{{error}}",
                 error: parseServiceError(err),
               }),
-        });
+        );
       } finally {
         setProviderOauthSaving(false);
       }
@@ -2945,30 +2998,16 @@ export function useCodexModelProviderManagerController({
     [parseServiceError, reloadProviders, t],
   );
 
-  useEffect(() => {
-    if (!providerOauthTarget) {
-      setProviderOauthSelectedAccountId("");
-      setProviderOauthSearchQuery("");
-      setProviderOauthFilterTypes([]);
-      setProviderOauthTagFilter([]);
-      setProviderOauthSortBy("last_used");
-      setProviderOauthSortDirection("desc");
-      return;
-    }
-    const bound = resolveBoundOAuthAccount(providerOauthTarget);
-    setProviderOauthSelectedAccountId(
-      bound && isOAuthBindingEligibleAccount(bound) ? bound.id : "",
-    );
+  useDialogSession(providerOauthTarget?.id ?? null, () => {
+    setProviderOauthError("");
+    // Keep the saved ID even when OAuth account metadata has not arrived yet.
+    setProviderOauthSelectedAccountId(providerOauthTarget?.boundOauthAccountId?.trim() ?? "");
     setProviderOauthSearchQuery("");
     setProviderOauthFilterTypes([]);
     setProviderOauthTagFilter([]);
     setProviderOauthSortBy("last_used");
     setProviderOauthSortDirection("desc");
-  }, [
-    isOAuthBindingEligibleAccount,
-    providerOauthTarget,
-    resolveBoundOAuthAccount,
-  ]);
+  });
 
   useEffect(() => {
     if (!providerOauthTarget) return;
@@ -2980,7 +3019,7 @@ export function useCodexModelProviderManagerController({
     providerOauthSortBy,
     providerOauthSortDirection,
     providerOauthTagFilter,
-    providerOauthTarget,
+    providerOauthTarget?.id,
   ]);
 
   const isCurrentProviderActive = useCallback(
@@ -3047,7 +3086,7 @@ export function useCodexModelProviderManagerController({
         if (!gatewayAccountIds.has(account.id)) return false;
         if (account.auth_mode !== "apikey") return false;
         return (
-          normalizeCodexModelProviderBaseUrl(account.api_base_url ?? "") ===
+          normalizeCodexModelProviderBaseUrl(resolveAccountUsageBaseUrl(account)) ===
           normalizedProviderBaseUrl
         );
       });
@@ -3071,6 +3110,7 @@ export function useCodexModelProviderManagerController({
       setNotice(null);
       setEnablingProviderId(provider.id);
       try {
+        const effective = resolveCodexModelProviderForApiKey(provider, apiKey.apiKey);
         const presetId = resolveCodexApiProviderPresetId(provider.baseUrl);
         const isOpenAIOfficial = presetId === "openai_official";
         const wireApi = resolveProviderWireApi(provider);
@@ -3080,20 +3120,21 @@ export function useCodexModelProviderManagerController({
           isOpenAIOfficial ? "openai_builtin" : "custom",
           presetId === CODEX_API_PROVIDER_CUSTOM_ID ? provider.id : presetId,
           provider.name,
-          provider.modelCatalog,
-          provider.supportsVision === true,
+          effective.modelCatalog,
+          effective.supportsVision === true,
           Object.fromEntries(
-            Object.entries(provider.modelCapabilities ?? {}).map(([model, capability]) => [
+            Object.entries(effective.modelCapabilities ?? {}).map(([model, capability]) => [
               model,
               capability.supportsVision === true,
             ]),
           ),
-          provider.visionRoutingModel,
+          effective.visionRoutingModel,
           undefined,
           wireApi,
           provider.supportsWebsockets,
           undefined,
-          provider.modelContextWindows,
+          effective.modelContextWindows,
+          effective.authScheme,
         );
         await updateCodexApiKeyBoundOAuthAccount(
           account.id,
@@ -3105,7 +3146,7 @@ export function useCodexModelProviderManagerController({
         await reloadCodexInstances();
         // 启用完成后进入与账号总览完全相同的 Codex 启动预览。
         setProviderLaunchPreview({
-          provider,
+          provider: effective,
           account,
           instanceId: instanceId || DEFAULT_CODEX_INSTANCE_ID,
           instanceName,
@@ -3150,6 +3191,7 @@ export function useCodexModelProviderManagerController({
             launchOptions.deepSeekAccessMode,
             null,
             launchOptions.imageGenerationAccountIds ?? [],
+            launchOptions.imageGenerationAccountModels ?? {},
           );
         }
         const presetId = resolveCodexApiProviderPresetId(preview.provider.baseUrl);
@@ -3222,6 +3264,7 @@ export function useCodexModelProviderManagerController({
           baseUrl: provider.baseUrl,
           apiKey: apiKey.apiKey,
           wireApi,
+          authScheme: provider.authScheme,
         });
         if (result.failure) {
           setNotice({
@@ -3236,7 +3279,7 @@ export function useCodexModelProviderManagerController({
             defaultValue:
               "供应商连接正常：{{protocol}}，{{model}}，{{latency}}。",
             protocol:
-              wireApi === "chat_completions"
+              wireApi === "anthropic" ? t("codex.modelProviders.wireApi.anthropic") : wireApi === "chat_completions"
                 ? t(
                     "codex.modelProviders.wireApi.chatCompletions",
                     "Chat Completions",
@@ -3267,14 +3310,22 @@ export function useCodexModelProviderManagerController({
     [formatProviderTestFailure, parseServiceError, t, testingProviderId],
   );
 
+  const providerUsageInFlight = useRef(new Set<string>());
   const refreshProviderUsage = useCallback(
     async (provider: CodexModelProvider, apiKey?: CodexModelProviderApiKey | null) => {
       if (!apiKey) return;
+      const usageConfig = resolveOpenAIUsageConfig(provider, apiKey.apiKey);
+      if (isOpenAIOfficialUsageUrl(provider.baseUrl) && !usageConfig) return;
+      const queryId = usageConfig ? `${provider.id}:${usageConfig.binding}` : provider.id;
+      if (providerUsageInFlight.current.has(queryId)) return;
+      providerUsageInFlight.current.add(queryId);
       setProviderUsageMap((previous) => ({
         ...previous,
         [provider.id]: {
           ...previous[provider.id],
           loading: true,
+          sourceBinding: usageConfig?.binding,
+          summary: previous[provider.id]?.sourceBinding === usageConfig?.binding ? previous[provider.id]?.summary : undefined,
           error: undefined,
           unavailable: false,
         },
@@ -3283,6 +3334,7 @@ export function useCodexModelProviderManagerController({
         const summary = await queryCodexModelProviderUsage({
           baseUrl: provider.baseUrl,
           apiKey: apiKey.apiKey,
+          usageApiKey: usageConfig?.apiKey,
           integrationType: provider.integrationType ?? null,
         });
         if (
@@ -3292,9 +3344,9 @@ export function useCodexModelProviderManagerController({
           await saveCodexModelProviderDetectedIntegrationType(provider.id, summary.mode);
           await reloadProviders();
         }
-        setProviderUsageMap((previous) => ({
+        setProviderUsageMap((previous) => previous[provider.id]?.sourceBinding !== usageConfig?.binding ? previous : ({
           ...previous,
-          [provider.id]: { loading: false, summary, updatedAt: Date.now() },
+          [provider.id]: { loading: false, sourceBinding: usageConfig?.binding, summary, updatedAt: Date.now() },
         }));
       } catch (err) {
         const errorMessage = parseServiceError(err);
@@ -3302,20 +3354,44 @@ export function useCodexModelProviderManagerController({
           errorMessage.includes("PROVIDER_USAGE_DETECT_FAILED") ||
           errorMessage.includes("PROVIDER_USAGE_HTTP_404") ||
           errorMessage.includes("PROVIDER_USAGE_TYPE_UNSUPPORTED");
-        setProviderUsageMap((previous) => ({
+        setProviderUsageMap((previous) => previous[provider.id]?.sourceBinding !== usageConfig?.binding ? previous : ({
           ...previous,
           [provider.id]: {
             loading: false,
-            summary: previous[provider.id]?.summary,
+            sourceBinding: usageConfig?.binding,
+            summary: previous[provider.id]?.sourceBinding === usageConfig?.binding ? previous[provider.id]?.summary : undefined,
             error: unavailable ? undefined : errorMessage,
             unavailable,
             updatedAt: Date.now(),
           },
         }));
+      } finally {
+        providerUsageInFlight.current.delete(queryId);
       }
     },
     [parseServiceError, reloadProviders],
   );
+
+  useEffect(() => {
+    const reload = (event: Event) => {
+      const { providerId, apiKeyId, binding } = (event as CustomEvent<{ providerId: string; apiKeyId: string; binding: string }>).detail;
+      const prefix = `${providerId}:${apiKeyId}:`;
+      void reloadProviders().then(() => setProviderUsageMap(previous => Object.fromEntries(
+        Object.entries(previous).map(([id, state]) => [id, state.sourceBinding?.startsWith(prefix) && state.sourceBinding !== binding ? { loading: false } : state]),
+      )));
+    };
+    window.addEventListener(OPENAI_USAGE_CONFIG_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(OPENAI_USAGE_CONFIG_CHANGED_EVENT, reload);
+  }, [reloadProviders]);
+
+  useEffect(() => {
+    for (const provider of providers) {
+      const key = getSelectedProviderApiKey(provider);
+      const config = key && resolveOpenAIUsageConfig(provider, key.apiKey);
+      const state = providerUsageMap[provider.id];
+      if (config && !state?.loading && state?.sourceBinding !== config.binding) void refreshProviderUsage(provider, key);
+    }
+  }, [providers, getSelectedProviderApiKey, providerUsageMap, refreshProviderUsage]);
 
   const refreshAllProviderUsage = useCallback(async () => {
     if (providerUsageRefreshingAll) return;
@@ -3610,6 +3686,8 @@ export function useCodexModelProviderManagerController({
     />
   ) : null;
   return {
+    accounts,
+    accountEditor, setAccountEditor, editorModelKeyId, selectEditorModelKey, selectAccountEditorProvider,
     apiKeyPickerProviderId,
     batchTestCancelling,
     batchTestDeleting,
@@ -3630,6 +3708,8 @@ export function useCodexModelProviderManagerController({
     currentEditingProvider,
     providerLaunchDialog,
     displayInstances,
+    deletingProviders,
+    deletingProviderIds,
     draggedProviderCustomSortId,
     editingApiKey,
     enablingProviderId,
@@ -3682,6 +3762,7 @@ export function useCodexModelProviderManagerController({
     mutateForm,
     notice,
     openBatchTestModal,
+    openProviderPelican,
     openCreateModal,
     openEditModal,
     parseModelCatalogText,
@@ -3704,6 +3785,7 @@ export function useCodexModelProviderManagerController({
     providerOauthHasExistingBinding,
     providerOauthPagination,
     providerOauthSaving,
+    providerOauthError,
     providerOauthSearchQuery,
     providerOauthSelectedAccountId,
     providerOauthSortBy,
@@ -3786,5 +3868,8 @@ export function useCodexModelProviderManagerController({
 /** 组合业务 Controller 与独立 View，保持原组件公开调用入口不变。 */
 export function CodexModelProviderManager(props: CodexModelProviderManagerProps) {
   const controller = useCodexModelProviderManagerController(props);
-  return <CodexModelProviderManagerView {...controller} />;
+  return <>
+    {(props.active ?? true) && <CodexModelProviderManagerView {...controller} />}
+    <CodexModelProviderEditor {...controller} />
+  </>;
 }

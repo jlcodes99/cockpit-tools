@@ -16,6 +16,7 @@
 }
 
 .codex-api-service-content {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -24,9 +25,20 @@
   padding-bottom: 32px;
 }
 
+.codex-api-service-page .page-tabs-row-with-leading .page-tabs {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.codex-api-service-page .page-tabs .filter-tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .codex-api-service-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 1.5fr);
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -44,6 +56,23 @@
 
 .codex-api-service-hero-main {
   min-width: 0;
+}
+
+.codex-api-service-hero-speed {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--codex-api-border-soft);
+}
+
+.codex-api-service-hero-speed .codex-speed-control {
+  width: 100%;
+  gap: 8px 12px;
+}
+
+.codex-api-service-hero-speed .codex-speed-control-hint {
+  flex: 1 1 260px;
+  max-width: none;
 }
 
 .codex-api-service-title-row {
@@ -87,6 +116,7 @@
 
 .codex-api-service-title-row h1 {
   min-width: 0;
+  white-space: nowrap;
   color: var(--text-primary);
   font-size: 14px;
   line-height: 1.2;
@@ -123,6 +153,12 @@
   border-color: color-mix(in srgb, var(--success) 24%, transparent);
   background: color-mix(in srgb, var(--success) 12%, transparent);
   color: #15803d;
+}
+
+.codex-api-service-pill.fast {
+  border-color: color-mix(in srgb, var(--primary) 30%, transparent);
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  color: var(--primary);
 }
 
 .codex-api-service-status.stopped,
@@ -1015,6 +1051,11 @@
   transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
 }
 
+.codex-api-service-key-card:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .codex-api-service-key-main {
   display: grid;
   grid-template-columns: minmax(180px, 0.9fr) minmax(260px, 1.25fr) minmax(78px, auto) minmax(122px, auto) auto;
@@ -1257,11 +1298,6 @@
 
 .codex-api-service-key-advanced-toggle[aria-expanded="true"] .codex-api-service-key-advanced-state svg {
   transform: rotate(180deg);
-}
-
-html[data-reduced-motion="true"] .codex-api-service-summary-card:hover,
-html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-expanded="true"] .codex-api-service-key-advanced-state svg {
-  transform: none;
 }
 
 .codex-api-service-key-policy {
@@ -2354,7 +2390,7 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
 
 .codex-api-service-log-filters {
   display: grid;
-  grid-template-columns: repeat(7, minmax(120px, 1fr)) auto;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   align-items: end;
   gap: 8px;
   min-width: 0;
@@ -2444,6 +2480,24 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
   white-space: nowrap;
 }
 
+.codex-api-service-log-model {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.codex-api-service-log-model-upstream {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .codex-api-service-log-row > div:last-child {
   flex-wrap: wrap;
 }
@@ -2458,6 +2512,15 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
 
 .codex-api-service-log-row .codex-api-service-log-error-detail {
   color: var(--danger);
+}
+
+.codex-api-service-log-row > div:last-child .codex-request-proxy-label {
+  display: inline-block;
+  min-width: 0;
+  max-width: min(24ch, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .codex-api-service-empty {
@@ -2922,4 +2985,17 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
   .codex-api-service-summary-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* The sidebar consumes width even when the native window is wider than 860px. */
+@container (max-width: 900px) {
+  .codex-api-service-hero { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .codex-api-service-hero-actions, .codex-api-service-head-actions { justify-content: flex-start; }
+  .codex-api-service-panel-head { flex-wrap: wrap; }
+  .codex-api-service-panel-head h2 { flex-basis: 100%; }
+}
+
+.codex-overload-attempt code {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }

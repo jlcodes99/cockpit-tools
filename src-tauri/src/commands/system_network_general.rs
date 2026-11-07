@@ -270,8 +270,11 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         ui_scale: user_config.ui_scale,
         auto_refresh_minutes: user_config.auto_refresh_minutes,
         codex_auto_refresh_minutes: user_config.codex_auto_refresh_minutes,
+        codex_auto_refresh_plan_types: user_config.codex_auto_refresh_plan_types,
         codex_sync_wsl: user_config.codex_sync_wsl,
         codex_app_ui_injection_enabled: user_config.codex_app_ui_injection_enabled,
+        codex_app_api_quota_compat_enabled: user_config.codex_app_api_quota_compat_enabled,
+        codex_app_native_predictions_enabled: user_config.codex_app_native_predictions_enabled,
         codex_oauth_app_version: user_config.codex_oauth_app_version,
         codex_wsl_config_dir: user_config.codex_wsl_config_dir,
         zed_auto_refresh_minutes: user_config.zed_auto_refresh_minutes,
@@ -287,6 +290,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         codebuddy_auto_refresh_minutes: user_config.codebuddy_auto_refresh_minutes,
         codebuddy_cn_auto_refresh_minutes: user_config.codebuddy_cn_auto_refresh_minutes,
         workbuddy_auto_refresh_minutes: user_config.workbuddy_auto_refresh_minutes,
+        minimax_code_auto_refresh_minutes: user_config.minimax_code_auto_refresh_minutes,
         qoder_auto_refresh_minutes: user_config.qoder_auto_refresh_minutes,
         zcode_auto_refresh_minutes: user_config.zcode_auto_refresh_minutes,
         trae_auto_refresh_minutes: user_config.trae_auto_refresh_minutes,
@@ -305,6 +309,8 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         remember_main_window_state: user_config.remember_main_window_state,
         startup_page: config::normalize_startup_page(&user_config.startup_page),
         floating_card_always_on_top: user_config.floating_card_always_on_top,
+        floating_card_minimal: user_config.floating_card_minimal,
+        floating_card_background_opacity: config::normalize_floating_card_background_opacity(user_config.floating_card_background_opacity),
         app_auto_launch_enabled,
         token_keeper_enabled: user_config.token_keeper_enabled,
         auto_import_from_local_enabled: user_config.auto_import_from_local_enabled,
@@ -388,6 +394,10 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         workbuddy_ai_app_path: modules::process::normalize_windows_user_facing_path(
             &user_config.workbuddy_ai_app_path,
         ),
+        minimax_code_app_path: modules::process::normalize_windows_user_facing_path(
+            &user_config.minimax_code_app_path,
+        ),
+        minimax_code_region: user_config.minimax_code_region,
         workbuddy_share_sessions_on_switch: user_config.workbuddy_share_sessions_on_switch,
         opencode_sync_on_switch: user_config.opencode_sync_on_switch,
         opencode_auth_overwrite_on_switch: user_config.opencode_auth_overwrite_on_switch,
@@ -397,6 +407,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         openclaw_auth_overwrite_on_switch: user_config.openclaw_auth_overwrite_on_switch,
         hermes_auth_overwrite_on_switch: user_config.hermes_auth_overwrite_on_switch,
         codex_launch_on_switch: user_config.codex_launch_on_switch,
+        codex_auto_restore_takeover_on_launch: user_config.codex_auto_restore_takeover_on_launch,
         antigravity_launch_on_switch: user_config.antigravity_launch_on_switch,
         codex_restart_specified_app_on_switch: user_config.codex_restart_specified_app_on_switch,
         codex_local_access_entry_visible: user_config.codex_local_access_entry_visible,
@@ -454,10 +465,12 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         trae_solo_cn_quota_alert_threshold: user_config.trae_solo_cn_quota_alert_threshold,
         workbuddy_quota_alert_enabled: user_config.workbuddy_quota_alert_enabled,
         workbuddy_quota_alert_threshold: user_config.workbuddy_quota_alert_threshold,
+        minimax_code_quota_alert_enabled: user_config.minimax_code_quota_alert_enabled,
+        minimax_code_quota_alert_threshold: user_config.minimax_code_quota_alert_threshold,
     };
 
     modules::logger::log_info(&format!(
-        "[StartupPerf][SystemCommand] get_general_config completed in {}ms: auto_refresh={}, codex={}, zed={}, ghcp={}, windsurf={}, kiro={}, cursor={}, codebuddy={}, codebuddy_cn={}, workbuddy={}, qoder={}, zcode={}, trae={}, auto_switch={}",
+        "[StartupPerf][SystemCommand] get_general_config completed in {}ms: auto_refresh={}, codex={}, zed={}, ghcp={}, windsurf={}, kiro={}, cursor={}, codebuddy={}, codebuddy_cn={}, workbuddy={}, minimax_code={}, qoder={}, zcode={}, trae={}, auto_switch={}",
         started.elapsed().as_millis(),
         result.auto_refresh_minutes,
         result.codex_auto_refresh_minutes,
@@ -469,6 +482,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         result.codebuddy_auto_refresh_minutes,
         result.codebuddy_cn_auto_refresh_minutes,
         result.workbuddy_auto_refresh_minutes,
+        result.minimax_code_auto_refresh_minutes,
         result.qoder_auto_refresh_minutes,
         result.zcode_auto_refresh_minutes,
         result.trae_auto_refresh_minutes,
@@ -624,6 +638,14 @@ pub fn patch_general_config(
         }
     }
 
+    if updates.contains_key("floating_card_minimal") || updates.contains_key("floating_card_background_opacity") {
+        use tauri::Emitter;
+        if let Err(err) = app.emit(modules::floating_card_window::FLOATING_CARD_APPEARANCE_CHANGED_EVENT,
+            modules::floating_card_window::FloatingCardAppearance::from(&new_config)) {
+            modules::logger::log_warn(&format!("[FloatingCard] 通用设置外观通知失败: {}", err));
+        }
+    }
+
     if language_changed {
         websocket::broadcast_language_changed(&new_config.language, "desktop");
         modules::sync_settings::write_sync_setting("language", &new_config.language);
@@ -684,13 +706,4 @@ pub fn codex_ssh_sync_current(id: String) -> Result<String, String> {
 #[tauri::command]
 pub fn codex_managed_lb_provider_id() -> String {
     "cockpit-codex-lb".to_string()
-}
-
-#[tauri::command]
-pub fn codebuddy_list_local_session_files(
-    limit: Option<u32>,
-) -> Result<Vec<modules::codebuddy_session_list::CodebuddySessionFileEntry>, String> {
-    Ok(modules::codebuddy_session_list::list_local_session_files(
-        limit.unwrap_or(100) as usize,
-    ))
 }

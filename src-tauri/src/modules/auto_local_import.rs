@@ -15,8 +15,8 @@ use crate::models::workbuddy::WorkbuddyOAuthCompletePayload;
 use crate::modules::{
     claude_account, codebuddy_account, codebuddy_cn_account, codebuddy_cn_oauth, codebuddy_oauth,
     codex_account, config, cursor_account, github_copilot_account, github_copilot_instance, import,
-    kiro_account, kiro_oauth, logger, qoder_account, trae_account, windsurf_account,
-    windsurf_oauth, workbuddy_account, workbuddy_oauth, zed_account,
+    kiro_account, kiro_oauth, logger, minimax_code_account, qoder_account, trae_account,
+    windsurf_account, windsurf_oauth, workbuddy_account, workbuddy_oauth, zed_account,
 };
 use serde::Serialize;
 
@@ -274,6 +274,17 @@ fn peek_workbuddy_identity() -> Option<String> {
     ])
 }
 
+fn peek_minimax_code_identity() -> Option<String> {
+    let payload = minimax_code_account::import_payload_from_local()
+        .ok()
+        .and_then(|payloads| payloads.into_iter().next())?;
+    identity_key(&[
+        Some(payload.email),
+        payload.uid,
+        token_prefix(&payload.access_token),
+    ])
+}
+
 fn peek_qoder_identity() -> Option<String> {
     let db_path = qoder_account::get_default_qoder_state_db_path()?;
     if !db_path.exists() {
@@ -386,10 +397,13 @@ async fn enrich_codebuddy_payload(
 
 fn import_antigravity() -> ImportFuture {
     Box::pin(async {
-        import::import_from_local_logic()
-            .await
-            .map(|_| true)
-            .map_err(|error| error.to_string())
+        // The macOS watcher peeks at the database and must import that same
+        // identity without prompting for Keychain access in the background.
+        #[cfg(target_os = "macos")]
+        let imported = import::import_from_local_state_db_logic().await;
+        #[cfg(not(target_os = "macos"))]
+        let imported = import::import_from_local_logic().await;
+        imported.map(|_| true)
     })
 }
 
@@ -514,8 +528,12 @@ async fn enrich_workbuddy_payload(
 
 fn import_workbuddy() -> ImportFuture {
     Box::pin(async {
-        let local_payload = workbuddy_account::import_payload_from_local()?
-            .ok_or_else(|| "未在本机 WorkBuddy 客户端中找到登录信息".to_string())?;
+        let local_payload = tauri::async_runtime::spawn_blocking(
+            workbuddy_account::import_payload_from_local_prepared,
+        )
+        .await
+        .map_err(|error| format!("WorkBuddy 本机导入后台任务失败: {}", error))??
+        .ok_or_else(|| "未在本机 WorkBuddy 客户端中找到登录信息".to_string())?;
         let access_token = local_payload.access_token.clone();
         let payload = enrich_workbuddy_payload(
             local_payload,
@@ -524,6 +542,25 @@ fn import_workbuddy() -> ImportFuture {
         )
         .await;
         workbuddy_account::upsert_account(payload).map(|_| true)
+    })
+}
+
+fn import_minimax_code() -> ImportFuture {
+    Box::pin(async {
+        let payloads = tauri::async_runtime::spawn_blocking(
+            minimax_code_account::import_payload_from_local,
+        )
+        .await
+        .map_err(|error| format!("MiniMax Code 本机导入后台任务失败: {}", error))??;
+        if payloads.is_empty() {
+            return Err("未在本机 MiniMax Code 客户端中找到登录信息".to_string());
+        }
+        let mut imported_any = false;
+        for payload in payloads {
+            minimax_code_account::upsert_account(payload)?;
+            imported_any = true;
+        }
+        Ok(imported_any)
     })
 }
 
@@ -604,6 +641,11 @@ fn platform_watchers() -> Vec<PlatformWatcher> {
             import_account: import_workbuddy,
         },
         PlatformWatcher {
+            platform: "minimaxcode",
+            peek_identity: peek_minimax_code_identity,
+            import_account: import_minimax_code,
+        },
+        PlatformWatcher {
             platform: "qoder",
             peek_identity: peek_qoder_identity,
             import_account: import_qoder,
@@ -661,6 +703,10 @@ fn collect_peek_decisions(mode: WatchMode) -> (u32, Vec<PeekDecision>) {
     let mut pending = Vec::new();
 
     for watcher in platform_watchers() {
+        let platform = if watcher.platform == "antigravity" { "antigravity_ide" } else { watcher.platform };
+        if mode == WatchMode::PollOnChange && !crate::modules::tray_layout::is_platform_enabled(platform) {
+            continue;
+        }
         let current_identity = (watcher.peek_identity)();
         let Some(current_identity) = current_identity else {
             if let Ok(mut state) = LAST_IDENTITIES.lock() {

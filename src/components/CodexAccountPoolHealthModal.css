@@ -3,7 +3,7 @@
   background: rgba(15, 23, 42, 0.62);
 }
 
-.codex-account-pool-health-modal {
+.modal.codex-account-pool-health-modal {
   width: min(760px, calc(100vw - 32px));
   max-height: min(720px, calc(100vh - 48px));
   display: flex;
@@ -45,7 +45,7 @@
 }
 
 .codex-account-pool-health-body {
-  min-height: 180px;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -203,6 +203,24 @@
   font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.codex-account-pool-health-request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.codex-account-pool-health-request > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.codex-account-pool-health-request > .btn {
+  flex-shrink: 0;
 }
 
 .codex-account-pool-health-empty {

@@ -20,7 +20,7 @@ test('Pelican subscription badges share overview declarations rather than copy s
   assert(!localCss.includes('.pelican-plan-badge'));
 });
 
-test('overview plan styling and user-selected variants do not alter raw subscription values', () => {
+test('Pelican uses overview Pro tier names and preserves other subscription values', () => {
   for (const plan of ['free', 'plus', 'team', 'enterprise', 'pro']) {
     const account = { id: 'test', auth_mode: 'oauth', plan_type: plan } as CodexAccount;
     const summary = pelicanAccountSummary(account);
@@ -28,7 +28,7 @@ test('overview plan styling and user-selected variants do not alter raw subscrip
     for (const style of ['default', 'outline', 'soft', 'mono'] as const) {
       const className = withCodexPlanBadgeStyle(summary.planClass, style);
       assert.equal(className, style === 'default' ? summary.planClass : `${summary.planClass} plan-badge-style-${style}`);
-      assert.equal(summary.plan, plan);
+      assert.equal(summary.plan, plan === 'pro' ? 'PRO 200' : plan);
     }
   }
 });

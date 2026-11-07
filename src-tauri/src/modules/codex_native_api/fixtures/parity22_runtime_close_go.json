@@ -1,0 +1,12 @@
+[
+  {
+    "code": 1009,
+    "name": "upstream_1009",
+    "reason": "message too big"
+  },
+  {
+    "code": 1009,
+    "name": "structured_413",
+    "reason": "fixture frame too large"
+  }
+]

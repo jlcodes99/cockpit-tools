@@ -86,27 +86,7 @@ pub fn get_default_kiro_user_data_dir() -> Result<PathBuf, String> {
 }
 
 pub fn get_default_instances_root_dir() -> Result<PathBuf, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join(".antigravity_cockpit/instances/kiro"));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let appdata =
-            std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
-        return Ok(PathBuf::from(appdata).join(".antigravity_cockpit\\instances\\kiro"));
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join(".antigravity_cockpit/instances/kiro"));
-    }
-
-    #[allow(unreachable_code)]
-    Err("Kiro 应用多开仅支持 macOS、Windows 和 Linux".to_string())
+    crate::modules::data_paths::managed_instances_root_dir("kiro")
 }
 
 pub fn get_instance_defaults() -> Result<InstanceDefaults, String> {
@@ -119,6 +99,9 @@ pub fn get_instance_defaults() -> Result<InstanceDefaults, String> {
 }
 
 pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, String> {
+    let directory_preexisted = std::path::Path::new(params.user_data_dir.trim()).exists();
+    let creation_mode = params.init_mode.clone().unwrap_or_else(|| "copy".to_string());
+    let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
     let _lock = KIRO_INSTANCE_STORE_LOCK
         .lock()
         .map_err(|_| "无法获取实例锁")?;
@@ -215,6 +198,9 @@ pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, 
         last_pid: None,
     };
 
+    crate::modules::instance_directory_ownership::record_creation(
+        std::path::Path::new(&instance.user_data_dir), &instance.id, &creation_mode, directory_preexisted,
+    )?;
     store.instances.push(instance.clone());
     save_instance_store(&store)?;
     Ok(instance)
@@ -260,6 +246,7 @@ pub fn update_instance(params: UpdateInstanceParams) -> Result<InstanceProfile, 
 }
 
 pub fn delete_instance(instance_id: &str) -> Result<(), String> {
+    let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
     let _lock = KIRO_INSTANCE_STORE_LOCK
         .lock()
         .map_err(|_| "无法获取实例锁")?;

@@ -47,6 +47,8 @@ export function parseDateTimeToEpoch(value: unknown): number | null {
  * 解析周期配额总量
  */
 export function parseCycleTotal(a: Record<string, unknown>): number {
+  const slice = currentResourceSlice(a);
+  if (slice) return Math.max(0, parseNumeric(slice.SlicePeriodCapacitySizePrecise) ?? 0);
   return (
     parseNumeric(a.CycleCapacitySizePrecise) ?? parseNumeric(a.CycleCapacitySize) ?? parseNumeric(a.CapacitySizePrecise) ?? parseNumeric(a.CapacitySize) ?? 0
   );
@@ -56,9 +58,17 @@ export function parseCycleTotal(a: Record<string, unknown>): number {
  * 解析周期配额剩余量
  */
 export function parseCycleRemain(a: Record<string, unknown>): number {
+  const slice = currentResourceSlice(a);
+  if (slice) return Math.max(0, parseNumeric(slice.SlicePeriodCapacityRemainPrecise) ?? 0);
   return (
     parseNumeric(a.CycleCapacityRemainPrecise) ?? parseNumeric(a.CycleCapacityRemain) ?? parseNumeric(a.CapacityRemainPrecise) ?? parseNumeric(a.CapacityRemain) ?? 0
   );
+}
+
+// WorkBuddy 5.9 requests a single day; capacity type 4 uses that day's slice.
+function currentResourceSlice(resource: Record<string, unknown>): Record<string, unknown> | null {
+  if (parseNumeric(resource.CapacityType) !== 4 || !Array.isArray(resource.SlicePeriodUsageDetails)) return null;
+  return asRecord(resource.SlicePeriodUsageDetails[0]);
 }
 
 /**
@@ -98,6 +108,8 @@ export function isProPackage(a: Record<string, unknown>): boolean {
 function normalizeCreditsResource(value: unknown): Record<string, unknown> | null {
   const resource = asRecord(value);
   if (!resource) return null;
+  // Paginated WorkBuddy resources already use the official Accounts schema.
+  if (typeof resource.PackageCode === 'string') return resource;
   const packageCode = resource.commodity_code ?? resource.commodityCode ?? resource.package_code ?? resource.packageCode;
   const packageName = resource.name ?? resource.package_name ?? resource.packageName;
   const total = parseNumeric(resource.total) ?? parseNumeric(resource.limit_num) ?? parseNumeric(resource.limitNum) ?? 0;

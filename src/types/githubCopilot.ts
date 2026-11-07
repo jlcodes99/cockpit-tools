@@ -17,6 +17,7 @@ export interface GitHubCopilotAccount {
   copilot_chat_enabled?: boolean | null;
   copilot_expires_at?: number | null;
   copilot_refresh_in?: number | null;
+  copilot_token_based_billing?: boolean | null;
   copilot_quota_snapshots?: unknown;
   copilot_quota_reset_date?: string | null;
   copilot_limited_user_quotas?: unknown;
@@ -26,6 +27,7 @@ export interface GitHubCopilotAccount {
 
   created_at: number;
   last_used: number;
+  last_switched_at?: number | null;
 
   // ---- 兼容旧 UI（从 Codex 页面复制而来） ----
   // 这些字段不会由后端直接返回，需要在前端做映射/派生。

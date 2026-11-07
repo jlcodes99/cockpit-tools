@@ -16,8 +16,8 @@ One Codex Desktop instance keeps one directly signed-in ChatGPT/Codex subscripti
 account, while selected models use configured third-party API accounts:
 
 ```text
-gpt-5.5          -> directly signed-in subscription OAuth
-cpa/gpt-5.5      -> CPA API, upstream model gpt-5.5
+gpt-5.6-sol          -> directly signed-in subscription OAuth
+cpa/gpt-5.6-sol      -> CPA API, upstream model gpt-5.6-sol
 cpa/grok-4.6     -> CPA API, upstream model grok-4.6
 deepseek/deepseek-v4-flash -> DeepSeek API
 ```
@@ -84,7 +84,7 @@ The design keeps exactly one official app-server.
 
 ### Confirmed reusable capabilities
 
-- Model IDs allow `/`, so names such as `cpa/gpt-5.5` pass Cockpit catalog
+- Model IDs allow `/`, so names such as `cpa/gpt-5.6-sol` pass Cockpit catalog
   validation.
 - The sidecar receives the actual selected model in request JSON.
 - Provider Gateway already supports model rewrite, request translation, streaming,
@@ -128,7 +128,7 @@ flowchart TD
   Desktop --> AppServer
   AppServer --> LocalProvider
   LocalProvider --> Router
-  Router -->|bare model: gpt-5.5| OAuth
+  Router -->|bare model: gpt-5.6-sol| OAuth
   OAuth --> Subscription
   Router -->|namespace: cpa/*, strip cpa/| Gateway
   Gateway --> CPA
@@ -216,7 +216,7 @@ Proposed manifest extension:
               "baseUrl": "https://cpa.example/v1",
               "apiKey": "secret",
               "wireApi": "responses",
-              "upstreamModels": ["gpt-5.5", "grok-4.6"]
+              "upstreamModels": ["gpt-5.6-sol", "grok-4.6"]
             }
           }
         ]
@@ -259,10 +259,10 @@ Examples:
 
 | Client model | Route | Upstream model |
 | --- | --- | --- |
-| `gpt-5.5` | OAuth subscription | `gpt-5.5` |
-| `cpa/gpt-5.5` | CPA Provider Gateway | `gpt-5.5` |
+| `gpt-5.6-sol` | OAuth subscription | `gpt-5.6-sol` |
+| `cpa/gpt-5.6-sol` | CPA Provider Gateway | `gpt-5.6-sol` |
 | `cpa/grok-4.6` | CPA Provider Gateway | `grok-4.6` |
-| `missing/gpt-5.5` | error | none |
+| `missing/gpt-5.6-sol` | error | none |
 
 Do not use heuristic routing such as "all GPT goes official". Namespace ownership
 is the routing contract.
@@ -308,8 +308,8 @@ Add a **来源** column:
 
 | 展示名 | 模型 ID | 来源 | 推理强度 | 上下文与压缩 |
 | --- | --- | --- | --- | --- |
-| 5.5 | `gpt-5.5` | 订阅 | 跟随官方 | 跟随模型 |
-| 5.5 CPA | `cpa/gpt-5.5` | CPA | 跟随官方 | 跟随模型 |
+| 5.6 Sol | `gpt-5.6-sol` | 订阅 | 跟随官方 | 跟随模型 |
+| 5.6 Sol CPA | `cpa/gpt-5.6-sol` | CPA | 跟随官方 | 跟随模型 |
 | Grok 4.6 CPA | `cpa/grok-4.6` | CPA | 跟随官方 | 516K/460K |
 
 When adding a model, use a source selector:
@@ -318,7 +318,7 @@ When adding a model, use a source selector:
 来源: [订阅 | API 渠道]
 
 订阅:
-  model ID = gpt-5.5
+  model ID = gpt-5.6-sol
 
 API 渠道:
   channel = CPA
@@ -490,7 +490,7 @@ shows:
 ### Go sidecar unit tests
 
 - bare official model resolves to OAuth;
-- `cpa/gpt-5.5` resolves to CPA and rewrites body model to `gpt-5.5`;
+- `cpa/gpt-5.6-sol` resolves to CPA and rewrites body model to `gpt-5.6-sol`;
 - third-party GPT never selects OAuth;
 - missing/disabled namespace returns `model_route_not_available`;
 - route catalogs are merged into `/v1/models` with namespaced IDs;
@@ -528,8 +528,8 @@ shows:
 Use a new isolated test instance. Do not modify the user's current default or CPA
 instances.
 
-1. `gpt-5.5` completes through the signed-in subscription account.
-2. `cpa/gpt-5.5` completes through CPA.
+1. `gpt-5.6-sol` completes through the signed-in subscription account.
+2. `cpa/gpt-5.6-sol` completes through CPA.
 3. `cpa/grok-4.6` completes through CPA.
 4. Route logs prove the selected route and upstream model for each request.
 5. Continue one conversation while switching models and verify history remains in

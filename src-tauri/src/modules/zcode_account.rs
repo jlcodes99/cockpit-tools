@@ -21,8 +21,8 @@ const CONFIG_FILE: &str = "config.json";
 const SETTINGS_FILE: &str = "setting.json";
 const DEVICE_MID_FILE: &str = "zcode_device_mid";
 const CREDENTIAL_PREFIX: &str = "enc:v1:";
-// 与当前官方 ZCode 3.10.2 保持一致；安装路径可读取时优先使用实际版本。
-const DEFAULT_APP_VERSION: &str = "3.10.2";
+// 与当前官方 ZCode 3.16.3 保持一致；安装路径可读取时优先使用实际版本。
+const DEFAULT_APP_VERSION: &str = "3.16.3";
 const BILLING_BALANCE_URL: &str = "https://zcode.z.ai/api/v1/zcode-plan/billing/balance";
 const ACTIVE_PROVIDER_KEY: &str = "oauth:active_provider";
 const ZCODE_JWT_KEY: &str = "zcodejwttoken";

@@ -1,4 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
+import { discoverCodexRemoteServices } from './codexRemoteServiceDiscovery';
+import { codexPathRecoveryKey, withCodexPathRecovery } from '../stores/useCodexPathRecoveryStore';
+import { presentProxyEnginePrerequisite, withProxyEnginePrerequisite } from '../utils/codexProxyEnginePrerequisite';
 import {
   CodexAccount,
   CodexAccountNoteUpdate,
@@ -10,14 +13,20 @@ import {
   CodexProviderWireApi,
   CodexQuickConfig,
   CodexExperimentalModelDefinition,
+  CodexModelConfigImportPreview,
+  CodexReasoningEffort,
   CodexQuota,
   CodexResetCreditsSnapshot,
 } from '../types/codex';
 import { normalizeCodexSwitchError } from '../utils/codexSwitchAuthFailure';
+import type { CodexOAuthProxyUse } from '../utils/codexOAuthReauthProxy';
+import { getCachedCodexLaunchPreviewConfig, rememberCodexLaunchPreviewConfig } from './codexLaunchPreviewConfigService';
 
 export interface CodexOAuthLoginStartResponse {
   loginId: string;
   authUrl: string;
+  /** 本次登录实际使用的出口；缺席表示走默认出口。 */
+  proxy?: CodexOAuthProxyUse;
 }
 
 export interface CodexDeviceAuthStartResponse {
@@ -29,7 +38,9 @@ export interface CodexDeviceAuthStartResponse {
 
 /** 列出所有 Codex 账号 */
 export async function listCodexAccounts(): Promise<CodexAccount[]> {
-  return await invoke('list_codex_accounts');
+  const accounts = await invoke<CodexAccount[]>('list_codex_accounts');
+  discoverCodexRemoteServices(accounts);
+  return accounts;
 }
 
 /** 获取当前激活的 Codex 账号 */
@@ -40,6 +51,16 @@ export async function getCurrentCodexAccount(): Promise<CodexAccount | null> {
 /** 获取当前 Codex config.toml 路径 */
 export async function getCodexConfigTomlPath(): Promise<string> {
   return await invoke('get_codex_config_toml_path');
+}
+
+export interface CodexStoragePaths {
+  providerStorePath: string;
+  configPath: string;
+  authPath: string;
+}
+
+export async function getCodexStoragePaths(): Promise<CodexStoragePaths> {
+  return await invoke('get_codex_storage_paths');
 }
 
 /** 打开当前 Codex config.toml */
@@ -89,6 +110,48 @@ export async function saveCodexModelCatalog(
   });
 }
 
+export async function getCodexModelReasoningEfforts(
+  models: CodexExperimentalModelDefinition[],
+  instanceId = '__default__',
+): Promise<Record<string, CodexReasoningEffort[]>> {
+  return await invoke('get_codex_model_reasoning_efforts', { models, instanceId });
+}
+
+export async function previewCodexModelConfigImport(input: {
+  instanceId: string;
+  jsonContent: string;
+  conflictStrategy?: 'keep_existing' | 'replace';
+}): Promise<CodexModelConfigImportPreview> {
+  return await invoke('preview_codex_model_config_import', {
+    ...input, conflictStrategy: input.conflictStrategy ?? 'keep_existing',
+  });
+}
+
+export async function importCodexModelConfig(input: {
+  instanceId: string;
+  jsonContent: string;
+  conflictStrategy?: 'keep_existing' | 'replace';
+  expectedRevision: string;
+}): Promise<CodexModelConfigImportPreview> {
+  const result = await invoke<CodexModelConfigImportPreview>('import_codex_model_config', {
+    ...input, conflictStrategy: input.conflictStrategy ?? 'keep_existing',
+  });
+  // A confirmed transaction can finish after its dialog closes. Update only its target cache.
+  const cached = getCachedCodexLaunchPreviewConfig(input.instanceId);
+  if (cached && result.committed > 0) {
+    rememberCodexLaunchPreviewConfig(input.instanceId, {
+      ...cached,
+      experimental_model_catalog_models: result.models,
+      experimental_model_catalog_default_model_id: result.defaultModelId,
+    });
+  }
+  return result;
+}
+
+export async function exportCodexModelConfig(instanceId: string): Promise<string> {
+  return await invoke('export_codex_model_config', { instanceId });
+}
+
 /** 获取 Codex 官方 App 速度配置 */
 export async function getCodexAppSpeedConfig(): Promise<CodexAppSpeedConfig> {
   return await invoke('get_codex_app_speed_config');
@@ -126,11 +189,6 @@ export async function forceRefreshCodexTokens(accountId: string): Promise<CodexA
   return await invoke<CodexAccount>('force_refresh_codex_tokens', { accountId });
 }
 
-/** 清除官方客户端登录页观测标识，不修改 Token 或远端授权状态。 */
-export async function clearClientAuthObservation(accountId: string): Promise<boolean> {
-  return await invoke<boolean>('codex_clear_client_auth_observation', { accountId });
-}
-
 /** 切换 Codex 账号 */
 export async function switchCodexAccount(
   accountId: string,
@@ -143,70 +201,96 @@ export async function switchCodexAccount(
   console.info('[Codex Switch][Service] invoke switch_codex_account started', {
     accountId,
   });
+  let attempted = false;
   try {
-    window.dispatchEvent(
-      new CustomEvent('codex-switch-progress', {
-        detail: {
-          type: 'start',
-          accountId,
-          stage: 'preparing',
-          progress: 4,
-          launchAfterSwitch: options?.launchAfterSwitch,
-        },
-      }),
-    );
-    if (options?.launchAfterSwitch === true) {
+    const reportStart = (launchAfterSwitch?: boolean) => {
       window.dispatchEvent(
-        new CustomEvent('codex:instance-launch-progress', {
+        new CustomEvent('codex-switch-progress', {
           detail: {
             type: 'start',
-            instanceId: '__default__',
-            instanceName: '',
-            isDefault: true,
             accountId,
-            operation: 'switch-and-start',
-            source: 'switch-service',
+            stage: 'preparing',
             progress: 4,
+            launchAfterSwitch,
           },
         }),
       );
-    }
-    const account = await invoke<CodexAccount>('switch_codex_account', {
+      if (launchAfterSwitch === true) {
+        window.dispatchEvent(
+          new CustomEvent('codex:instance-launch-progress', {
+            detail: {
+              type: 'start',
+              instanceId: '__default__',
+              instanceName: '',
+              isDefault: true,
+              accountId,
+              operation: 'switch-and-start',
+              source: 'switch-service',
+              progress: 4,
+            },
+          }),
+        );
+      }
+    };
+    const args = {
       accountId,
       autoRepairMode: null,
+      pathRecoveryManaged: true,
       reauthTokenGeneration:
         typeof options?.reauthTokenGeneration === 'number' ? options.reauthTokenGeneration : null,
       launchAfterSwitch:
         typeof options?.launchAfterSwitch === 'boolean' ? options.launchAfterSwitch : null,
-    });
-    window.dispatchEvent(
-      new CustomEvent('codex-switch-progress', {
-        detail: {
-          type: 'complete',
-          accountId,
-          stage: 'completed',
-          progress: 100,
+    };
+    let continuedWithoutDesktop = false;
+    const account = await withCodexPathRecovery(
+      () => {
+        attempted = true;
+        reportStart(options?.launchAfterSwitch);
+        return invoke<CodexAccount>('switch_codex_account', args);
+      },
+      {
+        key: codexPathRecoveryKey('switch_codex_account', args),
+        withoutDesktop: options?.launchAfterSwitch === false ? undefined : async () => {
+          attempted = true;
+          reportStart(false);
+          const result = await invoke<CodexAccount>('switch_codex_account', { ...args, launchAfterSwitch: false });
+          continuedWithoutDesktop = true;
+          return result;
         },
-      }),
+      },
     );
-    if (options?.launchAfterSwitch === true) {
+    if (attempted) {
       window.dispatchEvent(
-        new CustomEvent('codex:instance-launch-progress', {
+        new CustomEvent('codex-switch-progress', {
           detail: {
             type: 'complete',
-            instanceId: '__default__',
-            instanceName: '',
-            isDefault: true,
             accountId,
-            operation: 'switch-and-start',
+            stage: 'completed',
             progress: 100,
           },
         }),
       );
+      if (options?.launchAfterSwitch === true) {
+        window.dispatchEvent(
+          new CustomEvent('codex:instance-launch-progress', {
+            detail: {
+              type: continuedWithoutDesktop ? 'cancelled' : 'complete',
+              instanceId: '__default__',
+              instanceName: '',
+              isDefault: true,
+              accountId,
+              operation: 'switch-and-start',
+              progress: 100,
+            },
+          }),
+        );
+      }
     }
     return account;
   } catch (error) {
+    presentProxyEnginePrerequisite(error);
     if (String(error).includes('CODEX_START_CANCELLED')) {
+      if (!attempted) throw error;
       const cancelledPayload = {
         type: 'cancelled' as const,
         accountId,
@@ -230,6 +314,7 @@ export async function switchCodexAccount(
       throw error;
     }
     const normalizedError = normalizeCodexSwitchError(error);
+    if (!attempted) throw normalizedError;
     window.dispatchEvent(
       new CustomEvent('codex-switch-progress', {
         detail: {
@@ -316,8 +401,16 @@ export async function importCodexAccessTokenAccount(
   });
 }
 
-export async function importCodexFromLocal(): Promise<CodexAccount> {
-  return await invoke('import_codex_from_local');
+/**
+ * 从官方 Codex 本机凭据存储导入账号。
+ *
+ * `instanceId` 省略或为 `null` 时读取默认实例；传入多开实例 ID 时读取该实例的
+ * profile 目录（官方客户端按 `CODEX_HOME` 分别落盘凭据）。
+ */
+export async function importCodexFromLocal(
+  instanceId?: string | null,
+): Promise<CodexAccount> {
+  return await invoke('import_codex_from_local', { instanceId: instanceId ?? null });
 }
 
 /** 从 JSON 字符串导入账号 */
@@ -460,8 +553,15 @@ export async function refreshCodexQuotasBatch(
 }
 
 /** 新 OAuth 流程：开始登录 */
-export async function startCodexOAuthLogin(): Promise<CodexOAuthLoginStartResponse> {
-  return await invoke('codex_oauth_login_start');
+/** `reauthAccountId` 仅在未显式提供 `proxyUrl` 时用于解析该账号的生效出口。 */
+export async function startCodexOAuthLogin(
+  proxyUrl?: string,
+  reauthAccountId?: string,
+): Promise<CodexOAuthLoginStartResponse> {
+  return await invoke('codex_oauth_login_start', {
+    proxyUrl: proxyUrl ?? null,
+    reauthAccountId: reauthAccountId ?? null,
+  });
 }
 
 /** 官方 Codex device-auth 流程：返回设备码并在后端轮询授权结果 */
@@ -530,6 +630,7 @@ export async function addCodexAccountWithApiKey(
   apiSupportsWebsockets?: boolean,
   apiSyncModelCatalogToCodex?: boolean,
   apiModelContextWindows?: Record<string, number>,
+  apiAuthScheme?: "x-api-key" | "bearer",
 ): Promise<CodexAccount> {
   return await invoke('add_codex_account_with_api_key', {
     apiKey,
@@ -540,6 +641,7 @@ export async function addCodexAccountWithApiKey(
     apiModelCatalog: apiModelCatalog ?? null,
     apiSyncModelCatalogToCodex: apiSyncModelCatalogToCodex ?? null,
     apiWireApi: apiWireApi ?? null,
+    apiAuthScheme: apiAuthScheme ?? null,
     apiSupportsWebsockets: apiSupportsWebsockets ?? false,
     apiSupportsVision: apiSupportsVision ?? false,
     apiModelVisionSupport: apiModelVisionSupport ?? {},
@@ -554,6 +656,26 @@ export async function updateCodexAccountName(
   name: string,
 ): Promise<CodexAccount> {
   return await invoke('update_codex_account_name', { accountId, name });
+}
+
+/**
+ * 通过 Grok 平台账号添加 Codex 供应商账号。
+ *
+ * 账号本身不保存上游 API Key：运行态使用绑定的 Grok 账号 OAuth 令牌，
+ * 并由 Grok 账号的模型目录决定客户端可见模型。
+ */
+export async function addCodexAccountFromGrok(
+  grokAccountId: string,
+  options?: {
+    apiModelCatalog?: string[] | null;
+    accountName?: string | null;
+  },
+): Promise<CodexAccount> {
+  return await invoke('add_codex_account_from_grok', {
+    grokAccountId,
+    apiModelCatalog: options?.apiModelCatalog ?? null,
+    accountName: options?.accountName ?? null,
+  });
 }
 
 export async function updateCodexApiKeyCredentials(
@@ -572,6 +694,7 @@ export async function updateCodexApiKeyCredentials(
   apiSyncModelCatalogToCodex?: boolean,
   accountName?: string,
   apiModelContextWindows?: Record<string, number>,
+  apiAuthScheme?: "x-api-key" | "bearer",
 ): Promise<CodexAccount> {
   return await invoke('update_codex_api_key_credentials', {
     accountId,
@@ -583,6 +706,7 @@ export async function updateCodexApiKeyCredentials(
     apiModelCatalog: apiModelCatalog ?? null,
     apiSyncModelCatalogToCodex: apiSyncModelCatalogToCodex ?? null,
     apiWireApi: apiWireApi ?? null,
+    apiAuthScheme: apiAuthScheme ?? null,
     apiSupportsWebsockets: apiSupportsWebsockets ?? false,
     apiSupportsVision: apiSupportsVision ?? false,
     apiModelVisionSupport: apiModelVisionSupport ?? {},
@@ -601,6 +725,7 @@ export async function syncCodexApiKeyProviderAccounts(input: {
   apiModelCatalog?: string[];
   apiModelContextWindows?: Record<string, number>;
   apiWireApi: CodexProviderWireApi;
+  apiAuthScheme?: "x-api-key" | "bearer";
   apiSupportsWebsockets: boolean;
   apiSupportsVision: boolean;
   apiModelVisionSupport: Record<string, boolean>;
@@ -615,6 +740,7 @@ export async function syncCodexApiKeyProviderAccounts(input: {
     apiModelCatalog: input.apiModelCatalog ?? null,
     apiModelContextWindows: input.apiModelContextWindows ?? null,
     apiWireApi: input.apiWireApi,
+    apiAuthScheme: input.apiAuthScheme ?? null,
     apiSupportsWebsockets: input.apiSupportsWebsockets,
     apiSupportsVision: input.apiSupportsVision,
     apiModelVisionSupport: input.apiModelVisionSupport,
@@ -649,18 +775,33 @@ export async function updateCodexAccountTags(
   return await invoke('update_codex_account_tags', { accountId, tags });
 }
 
+export async function updateCodexAccountEgressProxy(
+  accountId: string,
+  egressProxyUrl: string | null,
+  disabled = false,
+): Promise<CodexAccount> {
+  const request = invoke<CodexAccount>('update_codex_account_egress_proxy', {
+    accountId,
+    egressProxyUrl,
+    disabled,
+  });
+  return egressProxyUrl ? withProxyEnginePrerequisite(request) : request;
+}
+
 
 export async function updateCodexAccountInstanceAccess(
   accountId: string,
   accessMode?: string | null,
   startupModel?: string | null,
   imageGenerationAccountIds?: string[] | null,
+  imageGenerationAccountModels?: Record<string, string> | null,
 ): Promise<CodexAccount> {
   return await invoke('update_codex_account_instance_access', {
     accountId,
     accessMode: accessMode ?? null,
     startupModel: startupModel ?? null,
     imageGenerationAccountIds: imageGenerationAccountIds ?? null,
+    imageGenerationAccountModels: imageGenerationAccountModels ?? null,
   });
 }
 

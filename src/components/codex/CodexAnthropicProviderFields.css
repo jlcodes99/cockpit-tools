@@ -1,0 +1,26 @@
+.codex-anthropic-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary) 5%, var(--bg-card));
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.codex-anthropic-hint svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--primary);
+}
+
+.codex-anthropic-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}

@@ -107,7 +107,7 @@ fn windows_updater_target_for_bundle(
 #[cfg(target_os = "linux")]
 mod imp {
     use super::{expand_updater_endpoint, LatestManifest, UpdateRuntimeInfo};
-    use crate::modules::{logger, update_checker};
+    use crate::modules::logger;
     use base64::Engine;
     use futures_util::StreamExt;
     use minisign_verify::{PublicKey, Signature};
@@ -120,8 +120,6 @@ mod imp {
     use url::Url;
 
     const UPDATE_PROGRESS_EVENT: &str = "update://linux-progress";
-    const ZH_SECTION_HEADER: &str = "## 更新日志（中文）";
-    const EN_SECTION_HEADER: &str = "## Changelog (English)";
     const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -212,13 +210,6 @@ mod imp {
         }
 
         let platform = manifest.resolve_platform(&platform_key)?;
-
-        let (release_notes, release_notes_zh) = split_release_notes(&manifest.notes);
-        update_checker::save_pending_update_notes(
-            manifest_version.clone(),
-            release_notes,
-            release_notes_zh,
-        )?;
 
         emit_progress(&app, &manifest_version, "download_started", Some(0));
         logger::log_info(&format!(
@@ -415,36 +406,6 @@ mod imp {
         std::str::from_utf8(&decoded)
             .map(|text| text.to_string())
             .map_err(|error| format!("Decoded updater value is not UTF-8: {}", error))
-    }
-
-    fn split_release_notes(notes: &str) -> (String, String) {
-        let normalized = notes.replace("\r\n", "\n").trim().to_string();
-        if normalized.is_empty() {
-            return (String::new(), String::new());
-        }
-
-        let zh_index = normalized.find(ZH_SECTION_HEADER);
-        let en_index = normalized.find(EN_SECTION_HEADER);
-
-        match (zh_index, en_index) {
-            (Some(zh_pos), Some(en_pos)) if zh_pos < en_pos => (
-                normalized[en_pos + EN_SECTION_HEADER.len()..]
-                    .trim()
-                    .to_string(),
-                normalized[zh_pos + ZH_SECTION_HEADER.len()..en_pos]
-                    .trim()
-                    .to_string(),
-            ),
-            (Some(zh_pos), Some(en_pos)) => (
-                normalized[en_pos + EN_SECTION_HEADER.len()..zh_pos]
-                    .trim()
-                    .to_string(),
-                normalized[zh_pos + ZH_SECTION_HEADER.len()..]
-                    .trim()
-                    .to_string(),
-            ),
-            _ => (normalized.clone(), normalized),
-        }
     }
 
     fn current_platform_key(kind: LinuxInstallKind) -> Result<String, String> {

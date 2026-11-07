@@ -730,6 +730,7 @@ pub fn upsert_account(payload: WorkbuddyOAuthCompletePayload) -> Result<Workbudd
         checkin_rewards: None,
         created_at,
         last_used: now,
+        last_switched_at: None,
         web_session_enabled: None,
     });
 
@@ -978,6 +979,7 @@ fn upsert_account_record_from_payload(
         checkin_rewards: None,
         created_at: now,
         last_used: now,
+        last_switched_at: None,
         web_session_enabled: None,
     };
     upsert_account_record(account)

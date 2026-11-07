@@ -1,3 +1,4 @@
+import { resolveAccountUsageBaseUrl, isOpenAIOfficialUsageUrl, OPENAI_OFFICIAL_USAGE_BASE_URL } from "./openaiOfficialUsage";
 import type {
   CodexAccount,
   CodexApiProviderMode,
@@ -6,10 +7,13 @@ import type {
 import type { CodexModelProvider } from "../services/codexModelProviderService";
 import {
   CODEX_API_PROVIDER_CUSTOM_ID,
+  DEEPSEEK_API_PROVIDER_ID,
   resolveCodexApiProviderPresetId,
 } from "./codexProviderPresets";
 import { resolveCodexProviderCapabilityProfile } from "./codexProviderGateway";
+import { resolveCodexModelProviderForApiKey } from "./codexModelProviderKeyConfig";
 import { resolveCodexModelProviderAccountName } from "./codexModelProviderAccountName";
+import { resolveProviderModelVisionState } from "./codexModelProviderVision";
 
 export interface CodexModelProviderReference {
   id: string;
@@ -24,6 +28,7 @@ export interface CodexModelProviderAccountSnapshot {
   apiModelCatalog?: string[];
   apiModelContextWindows?: Record<string, number>;
   apiWireApi: CodexProviderWireApi;
+  apiAuthScheme?: "x-api-key" | "bearer";
   apiSupportsWebsockets: boolean;
   apiSupportsVision: boolean;
   apiModelVisionSupport: Record<string, boolean>;
@@ -40,6 +45,7 @@ export function mergeCodexModelProviderCredentialInput(
     apiBaseUrl: string;
     apiKey: string;
     apiKeyName?: string | null;
+    usageApiKey?: string;
     sourceTag?: string | null;
     modelCatalog?: string[];
     modelContextWindows?: Record<string, number>;
@@ -49,10 +55,12 @@ export function mergeCodexModelProviderCredentialInput(
     website?: string | null;
     apiKeyUrl?: string | null;
     wireApi?: CodexProviderWireApi | null;
+    authScheme?: "x-api-key" | "bearer";
     supportsWebsockets?: boolean;
     integrationType?: "sub2api" | "new_api" | null;
   },
 ) {
+  provider = provider ? resolveCodexModelProviderForApiKey(provider, fallback.apiKey) : null;
   return {
     ...fallback,
     providerId: provider?.id ?? fallback.providerId,
@@ -77,8 +85,9 @@ export function mergeCodexModelProviderCredentialInput(
       resolveCodexProviderCapabilityProfile({
         baseUrl: provider?.baseUrl ?? fallback.apiBaseUrl,
       }).wireApi,
+    authScheme: fallback.authScheme ?? provider?.authScheme,
     supportsWebsockets:
-      provider?.supportsWebsockets ?? fallback.supportsWebsockets,
+      fallback.supportsWebsockets ?? provider?.supportsWebsockets,
     integrationType: provider?.integrationType ?? fallback.integrationType,
   };
 }
@@ -86,6 +95,7 @@ export function mergeCodexModelProviderCredentialInput(
 function normalizeBaseUrl(value?: string | null): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
+  if (isOpenAIOfficialUsageUrl(trimmed)) return OPENAI_OFFICIAL_USAGE_BASE_URL;
   try {
     const parsed = new URL(trimmed);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
@@ -109,7 +119,7 @@ export function findCodexAccountsReferencingModelProvider(
 
       const matchesId =
         providerId.length > 0 && account.api_provider_id?.trim() === providerId;
-      const accountBaseUrl = normalizeBaseUrl(account.api_base_url);
+      const accountBaseUrl = normalizeBaseUrl(resolveAccountUsageBaseUrl(account));
       const matchesBaseUrl =
         providerBaseUrl !== null && accountBaseUrl === providerBaseUrl;
       return matchesId || matchesBaseUrl;
@@ -117,31 +127,69 @@ export function findCodexAccountsReferencingModelProvider(
     .map((account) => account.id);
 }
 
+/** Deletion depends on local ownership, never on credential or account health. */
+export function findCodexAccountsForModelProviderDeletion(
+  providers: CodexModelProviderReference[],
+  accounts: CodexAccount[],
+): string[] {
+  const providerIds = new Set(providers.map(provider => provider.id.trim()).filter(Boolean));
+  const baseUrls = new Set(providers.map(provider => normalizeBaseUrl(provider.baseUrl)).filter(Boolean));
+  return accounts.filter(account => {
+    if ((account.auth_mode ?? "").trim().toLowerCase() !== "apikey") return false;
+    return providerIds.has(account.api_provider_id?.trim() ?? "")
+      || baseUrls.has(normalizeBaseUrl(resolveAccountUsageBaseUrl(account)));
+  }).map(account => account.id);
+}
+
 export function buildCodexModelProviderAccountSnapshot(
   provider: CodexModelProvider,
   apiKeyName?: string | null,
+  apiKey?: string | null,
 ): CodexModelProviderAccountSnapshot {
-  const presetId = resolveCodexApiProviderPresetId(provider.baseUrl);
+  provider = resolveCodexModelProviderForApiKey(provider, apiKey);
+  const presetId = isOpenAIOfficialUsageUrl(provider.baseUrl) ? "openai_official" : resolveCodexApiProviderPresetId(provider.baseUrl);
   const isOpenAI = presetId === "openai_official";
   const wireApi = provider.wireApi ?? "responses";
+  const visionStates = Object.fromEntries(
+    Object.entries(provider.modelCapabilities ?? {}).map(([model, capability]) => [
+      model.trim().toLowerCase(),
+      capability.supportsVision === true,
+    ]),
+  );
+  const modelVisionSupport = new Map<string, [string, boolean]>();
+  for (const [model, capability] of Object.entries(provider.modelCapabilities ?? {})) {
+    const key = model.trim().toLowerCase();
+    if (key) modelVisionSupport.set(key, [model, capability.supportsVision === true]);
+  }
+  if (presetId !== DEEPSEEK_API_PROVIDER_ID) {
+    for (const model of provider.modelCatalog ?? []) {
+      const key = model.trim().toLowerCase();
+      if (!key || modelVisionSupport.has(key)) continue;
+      modelVisionSupport.set(key, [
+        model,
+        resolveProviderModelVisionState(
+          model,
+          visionStates,
+          provider.supportsVision === true,
+        ),
+      ]);
+    }
+  }
 
   return {
     apiBaseUrl: provider.baseUrl,
-    apiProviderMode: "custom",
+    apiProviderMode: isOpenAI ? "openai_builtin" : "custom",
     apiProviderId:
       presetId === CODEX_API_PROVIDER_CUSTOM_ID ? provider.id : presetId,
     apiProviderName: provider.name,
     apiModelCatalog: provider.modelCatalog,
     apiModelContextWindows: provider.modelContextWindows,
     apiWireApi: wireApi,
+    apiAuthScheme: provider.authScheme,
     apiSupportsWebsockets:
       !isOpenAI && wireApi === "responses" && provider.supportsWebsockets === true,
     apiSupportsVision: provider.supportsVision === true,
-    apiModelVisionSupport: Object.fromEntries(
-      Object.entries(provider.modelCapabilities ?? {}).map(
-        ([model, capability]) => [model, capability.supportsVision === true],
-      ),
-    ),
+    apiModelVisionSupport: Object.fromEntries(modelVisionSupport.values()),
     apiVisionRoutingModel: provider.visionRoutingModel,
     accountName: resolveCodexModelProviderAccountName(provider.name, apiKeyName),
   };

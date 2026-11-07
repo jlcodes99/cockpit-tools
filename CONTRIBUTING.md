@@ -35,7 +35,6 @@ Run the automated checks that cover the area you changed before submitting a PR:
 - **Release script tests:** `npm run test:release`
 - **TypeScript typecheck:** `npm run typecheck`
 - **Core Rust library:** `npm run test:rust:core`
-- **Go sidecar:** `npm run test:go`
 
 The build matrix also runs targeted Tauri regression tests and platform builds.
 

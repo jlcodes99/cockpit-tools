@@ -63,16 +63,7 @@ fn build_desktop_gateway_account_id(api_key: &str, api_base_url: &str) -> String
 }
 
 fn normalize_desktop_gateway_auth_scheme(value: Option<&str>) -> String {
-    match value
-        .and_then(|item| normalize_non_empty(Some(item)))
-        .map(|item| item.to_ascii_lowercase().replace('_', "-"))
-        .as_deref()
-    {
-        Some("auto") => "auto".to_string(),
-        Some("x-api-key") => "x-api-key".to_string(),
-        Some("sso") => "sso".to_string(),
-        _ => "bearer".to_string(),
-    }
+    crate::modules::claude_desktop_gateway::normalize_auth_scheme(value)
 }
 
 fn normalize_api_provider_base_url(raw: Option<&str>) -> Result<Option<String>, String> {
@@ -476,6 +467,7 @@ fn derive_account_from_snapshots(
     );
     let now = now_ts_ms();
     let mut account = existing.unwrap_or_else(|| ClaudeAccount {
+        last_switched_at: None,
         id: id.clone(),
         email: email.clone(),
         auth_mode: ClaudeAuthMode::OAuth,
@@ -608,6 +600,7 @@ pub fn import_api_key(
         build_api_key_display_name(&api_key, account_name, api_provider_name.as_deref());
     let now = now_ts_ms();
     let mut account = load_account_file(&id).unwrap_or_else(|| ClaudeAccount {
+        last_switched_at: None,
         id: id.clone(),
         email: display_name.clone(),
         auth_mode: ClaudeAuthMode::ApiKey,
@@ -902,6 +895,7 @@ fn save_desktop_gateway(
     });
 
     let mut account = existing_account.unwrap_or_else(|| ClaudeAccount {
+        last_switched_at: None,
         id: id.clone(),
         email: display_name.clone(),
         auth_mode: ClaudeAuthMode::DesktopGateway,

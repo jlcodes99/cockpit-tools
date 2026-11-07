@@ -1,16 +1,11 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import type { VersionJumpInfo } from '../types/updater';
 import { X, Sparkles, PartyPopper } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useEscClose } from '../hooks/useEscClose';
 import { prependUpdaterReleaseHighlights } from '../utils/updaterReleaseNotes';
 import './UpdateNotification.css';
-
-interface VersionJumpInfo {
-  previous_version: string;
-  current_version: string;
-  release_notes: string;
-  release_notes_zh: string;
-}
 
 interface VersionJumpNotificationProps {
   info: VersionJumpInfo;
@@ -22,6 +17,21 @@ export const VersionJumpNotification: React.FC<VersionJumpNotificationProps> = (
   onClose,
 }) => {
   const { t, i18n } = useTranslation();
+  const [localNotes, setLocalNotes] = useState<{ release_notes: string; release_notes_zh: string } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    let pendingLoaded = false;
+    setLocalNotes(null);
+    type Notes = { release_notes: string; release_notes_zh: string };
+    void invoke<Notes>('get_bundled_release_notes', { version: info.current_version })
+      .then((notes) => { if (active && !pendingLoaded) setLocalNotes(notes); })
+      .catch((error) => { console.error('Failed to read bundled release notes:', error); });
+    void invoke<Notes | null>('get_pending_release_notes', { version: info.current_version })
+      .then((notes) => { if (active && notes) { pendingLoaded = true; setLocalNotes(notes); } })
+      .catch((error) => { console.error('Failed to read pending release notes:', error); });
+    return () => { active = false; };
+  }, [info.current_version]);
 
   useEscClose(true, onClose);
 
@@ -43,15 +53,15 @@ export const VersionJumpNotification: React.FC<VersionJumpNotificationProps> = (
 
   const releaseNotes = useMemo(() => {
     const isZh = i18n.language.startsWith('zh');
-    const notes = isZh && info.release_notes_zh
-      ? info.release_notes_zh
-      : info.release_notes;
+    const notes = isZh && localNotes?.release_notes_zh
+      ? localNotes.release_notes_zh
+      : localNotes?.release_notes || '';
     return prependUpdaterReleaseHighlights(
       info.current_version,
       notes,
       i18n.language,
     );
-  }, [info, i18n.language]);
+  }, [info.current_version, localNotes, i18n.language]);
 
   const formattedNotes = useMemo(() => {
     const formatStartedAt = performance.now();

@@ -1,4 +1,4 @@
-import type { CodexAccount } from "../types/codex";
+import { isCodexApiKeyAccount, type CodexAccount } from "../types/codex";
 
 const SWITCH_AUTH_REQUIRED_PREFIX = "CODEX_SWITCH_AUTH_REQUIRED:";
 const ACCESS_TOKEN_SAFETY_WINDOW_SECONDS = 5 * 60;
@@ -136,17 +136,18 @@ export function isCodexApiOnlyAccessTokenUsable(
 export function isCodexRefreshTokenReauthReason(reason?: string | null): boolean {
   const normalized = reason?.trim().toLowerCase() || "";
   if (!normalized) return false;
-  // refresh_token_reused 是一次刷新竞争结果，不代表当前账号或 access_token
-  // 已被服务端撤销；历史错误也不应重新触发账号级授权状态。
-  if (isCodexRefreshTokenReusedReason(normalized)) return false;
+  // Refresh races, regional policy and local proxy failures do not invalidate login.
+  if (isCodexRefreshTokenReusedReason(normalized) ||
+      normalized.includes("unsupported_country_region_territory") ||
+      /\bproxy_[a-z_]+\b/.test(normalized)) return false;
   return (
-    normalized.includes("refresh_token_expired") ||
-    normalized.includes("refresh_token_invalidated") ||
-    normalized.includes("invalid_grant") ||
+    /\b(?:refresh_token_expired|refresh_token_invalidated|token_invalidated|token_revoked|invalid_grant|invalid_refresh_token)\b/.test(normalized) ||
     normalized.includes("invalid refresh token") ||
-    ((normalized.includes("status=401") ||
-      normalized.includes("401 unauthorized")) &&
-      (normalized.includes("refresh") || normalized.includes("刷新")))
+    normalized.includes("authentication token has been invalidated") ||
+    normalized.includes("登录授权已被服务端撤销") ||
+    ((normalized.includes("status=401") || normalized.includes("401 unauthorized")) &&
+      !/proxy|certificate|\btls\b|\bssl\b/.test(normalized) &&
+      (normalized.includes("refresh") || normalized.includes("刷新") || normalized.includes("登录授权无效")))
   );
 }
 
@@ -189,7 +190,7 @@ export function isCodexIdTokenReauthReason(reason?: string | null): boolean {
 
 /**
  * 服务端明确撤销 Codex 授权时，账号进入最高优先级的终止状态。
- * 这类状态表示 refresh_token 无法恢复，不能再与“客户端需授权但 API 仍可用”并列展示。
+ * 这类状态表示 refresh_token 无法恢复，不能再与“凭据失效但 API 暂时可用”并列展示。
  */
 export function isCodexServerRevokedReauth(
   account?: CodexAccount | null,
@@ -209,6 +210,17 @@ export function isCodexServerRevokedReauth(
   );
 }
 
+/** 重新授权入口优先依据账号状态，不能依赖错误文案保留原始错误码。 */
+export function isCodexAccountReauthRequired(
+  account: CodexAccount,
+): boolean {
+  return (
+    !isCodexApiKeyAccount(account) &&
+    !isCodexRefreshTokenReusedAccount(account) &&
+    (account.requires_reauth === true || isCodexServerRevokedReauth(account))
+  );
+}
+
 export function isCodexRefreshTokenNoticeOnly(
   account?: CodexAccount | null,
   nowSeconds = Math.floor(Date.now() / 1000),
@@ -220,7 +232,7 @@ export function isCodexRefreshTokenNoticeOnly(
   );
 }
 
-export function isCodexClientReauthNoticeOnly(
+export function isCodexApiUsableReauthNotice(
   account?: CodexAccount | null,
   nowSeconds = Math.floor(Date.now() / 1000),
 ): boolean {

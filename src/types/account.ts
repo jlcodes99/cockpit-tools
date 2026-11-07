@@ -18,6 +18,7 @@ export interface Account {
     protected_models?: string[];
     created_at: number;
     last_used: number;
+  last_switched_at?: number | null;
 }
 
 export interface AccountNoteUpdate {
@@ -43,6 +44,8 @@ export interface TokenData {
 export interface QuotaData {
     models: ModelQuota[];
     last_updated: number;
+    quota_summary_stale?: boolean;
+    quota_summary_updated_at?: number;
     is_forbidden?: boolean;
     subscription_tier?: string;
     credits?: CreditInfo[];
@@ -60,6 +63,8 @@ export interface CreditInfo {
 export interface QuotaErrorInfo {
     code?: number;
     message: string;
+    reason?: string;
+    validation_url?: string;
     timestamp: number;
 }
 

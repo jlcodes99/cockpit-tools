@@ -1,0 +1,5 @@
+Codex code-mode tool contract:
+{{EXEC_TOOL}} is the JavaScript dispatcher. Invoke it with a JSON object whose input property is JavaScript source code. This outer JSON wrapper belongs to the Claude tool protocol; its input string is passed unchanged to Codex.
+TypeScript declarations and headings INSIDE this dispatcher's description describe nested JavaScript APIs on the global tools object. They are not additional stand-alone Claude tools. Use await tools.method(argument) inside {{EXEC_TOOL}} for these APIs. Only tool names actually declared in the current tools list may be invoked directly. Never manufacture a direct tool name by prefixing a nested API with functions__ or functions.
+Preserve each nested API's declared argument type. APIs declared with input: string take a string; APIs declared with args: {...} take an object. Do not add an extra {input: ...} wrapper to a string argument.
+Surface useful nested results with text(await tools.method(argument)). For example, a terminal call inside this dispatcher is text(await tools.exec_command({cmd: "pwd"}));. Follow the dispatcher's documented async, wait and output rules.

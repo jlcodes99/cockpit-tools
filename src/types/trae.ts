@@ -1,3 +1,5 @@
+import type { OfficialQuotaResource, QuotaCategoryGroup } from './codebuddy-suite';
+
 export interface TraeAccount {
   id: string;
   email: string;
@@ -27,6 +29,7 @@ export interface TraeAccount {
 
   created_at: number;
   last_used: number;
+  last_switched_at?: number | null;
 
   quota?: TraeQuota;
 }
@@ -65,7 +68,11 @@ export type TraeUsage = {
   payAsYouGoUsd?: number | null;
   usageExhausted?: boolean | null;
   /** CN 速通额度模型（premium_model_fast_*），与国际站 USD basic 额度不同 */
-  usageModel?: 'usd' | 'fast_request' | 'unknown';
+  usageModel?: 'usd' | 'fast_request' | 'credits' | 'unknown';
+  creditsUsed?: number | null;
+  creditsLimit?: number | null;
+  creditsRemaining?: number | null;
+  creditsUnlimited?: boolean;
   fastRequestAvailable?: number | null;
   fastRequestLimit?: number | null;
   fastRequestUsed?: number | null;
@@ -748,6 +755,12 @@ export function getTraeLoginProvider(account: TraeAccount): string | null {
   return normalizeTraeLoginProvider(rawProvider);
 }
 
+/** 账号展示标签：与账号列表主标签一致（昵称优先，邮箱兜底），全缺时退到 user_id/id（CN 邮箱为 NonPlainTextEmail，常取不到明文） */
+export function getTraeAccountDisplayLabel(account: TraeAccount): string {
+  const name = getTraeAccountDisplayName(account);
+  return name === 'unknown' ? account.user_id || account.id : name;
+}
+
 export function isTraeCnAccountPlatform(account: TraeAccount): boolean {
   const platformId = getTraeAccountPlatformId(account);
   return platformId === 'trae_cn' || platformId === 'trae_solo_cn';
@@ -825,11 +838,44 @@ function getCnEntitlementDetailFields(account: TraeAccount): {
   };
 }
 
+// TRAE 3.6 / CN 3.4: aggregate official credit buckets, independent of the
+// legacy USD and fast-request schemas. -1 is unlimited, missing stays unknown.
+function getTraeCreditsUsage(raw: unknown) {
+  const roots = collectUsageRoots(raw);
+  if (roots.some(root => root.code != null && toNumber(root.code) !== 0)) return null;
+  if (!roots.some(root => root.is_credits_billing === true)) return null;
+  let used = 0, limit = 0, remaining = 0;
+  let known = false, unlimited = false;
+  for (const pack of getUsagePacks(raw)) {
+    const cap = pickFirstNumber(getPackQuota(pack), ['credits_limit']);
+    const spent = pickFirstNumber(getPackUsage(pack), ['credits_amount']) ?? 0;
+    if (cap === -1) { known = true; unlimited = true; }
+    else if (cap != null && cap > 0) { known = true; limit += cap; remaining += Math.max(cap - spent, 0); }
+    if (cap != null && cap !== 0) used += spent;
+  }
+  return { used: known ? used : null, limit: known && !unlimited ? limit : null,
+    remaining: known && !unlimited ? remaining : null, unlimited };
+}
+
 export function getTraeUsage(account: TraeAccount): TraeUsage {
   const preferCn = isTraeCnAccountPlatform(account);
   const usageFromPackList = getUsageStatusFromPackList(account.trae_usage_raw, {
     preferCnSelection: preferCn,
   });
+  const credits = getTraeCreditsUsage(account.trae_usage_raw);
+  if (credits) {
+    return {
+      ...usageFromPackList,
+      usageModel: 'credits', spentUsd: null, totalUsd: null,
+      usedPercent: credits.limit != null && credits.limit > 0 && credits.used != null
+        ? Math.max(0, Math.min(100, credits.used / credits.limit * 100)) : null,
+      resetAt: usageFromPackList?.resetAt ?? account.plan_reset_at ?? null,
+      creditsUsed: credits.used, creditsLimit: credits.limit, creditsRemaining: credits.remaining,
+      creditsUnlimited: credits.unlimited,
+      payAsYouGoOpen: null, payAsYouGoUsd: null,
+      usageExhausted: !credits.unlimited && credits.remaining === 0,
+    };
+  }
   const cnDetail = preferCn
     ? getCnEntitlementDetailFields(account)
     : {
@@ -881,4 +927,140 @@ export function getTraeUsage(account: TraeAccount): TraeUsage {
 
 export function hasTraeQuotaData(account: TraeAccount): boolean {
   return account.trae_usage_raw != null;
+}
+
+/** CN 主套餐 product_type（对齐官方前端 eH 列表）；非套餐包（签到/邀请/月度赠送/加量）实际均为 type 2，统一归入奖励积分 */
+const TRAE_CN_CREDIT_PLAN_PRODUCT_TYPES = new Set<number>([
+  TRAE_PRODUCT_TYPE.FREE,
+  TRAE_PRODUCT_TYPE.PRO,
+  TRAE_PRODUCT_TYPE.PRO_PLUS,
+  TRAE_PRODUCT_TYPE.ULTRA,
+  TRAE_PRODUCT_TYPE.LITE,
+  TRAE_PRODUCT_TYPE.TRIAL,
+  TRAE_PRODUCT_TYPE.CN_EXPRESS,
+]);
+
+/** 积分口径与上游 getTraeCreditsUsage 对齐：不过滤包（is_hide / status=0 均计入总额） */
+function getPackCreditLimit(pack: Record<string, unknown>): number | null {
+  return pickFirstNumber(getPackQuota(pack), ['credits_limit']);
+}
+
+function getPackCreditUsed(pack: Record<string, unknown>): number {
+  return pickFirstNumber(getPackUsage(pack), ['credits_amount']) ?? 0;
+}
+
+function hasPackCreditEvidence(pack: Record<string, unknown>): boolean {
+  const usage = getPackUsage(pack);
+  const quota = getPackQuota(pack);
+  return (
+    (usage != null && Object.prototype.hasOwnProperty.call(usage, 'credits_amount')) ||
+    (quota != null && Object.prototype.hasOwnProperty.call(quota, 'credits_limit'))
+  );
+}
+
+function toTraeCreditResource(pack: Record<string, unknown>): OfficialQuotaResource {
+  const entitlementBase = pickNestedObject(pack, ['entitlement_base_info']);
+  const productType = getPackProductType(pack);
+  const limit = getPackCreditLimit(pack);
+  const used = getPackCreditUsed(pack);
+  const unlimited = limit === -1;
+  const total = unlimited ? -1 : (limit ?? 0);
+  const remain = unlimited ? -1 : Math.max(total - used, 0);
+  const usedPercent = unlimited || total <= 0 ? 0 : Math.max(0, Math.min(100, (used / total) * 100));
+  const remainPercent = unlimited ? null : total > 0 ? Math.max(0, Math.min(100, (remain / total) * 100)) : null;
+  const endTime = pickFirstNumber(entitlementBase, ['end_time']);
+  const expireAt = endTime != null && endTime > 0 ? endTime * 1000 : null;
+
+  return {
+    packageCode: productType != null ? String(productType) : null,
+    packageName:
+      pickFirstString(pack, ['display_desc']) ??
+      pickFirstString(entitlementBase, ['entitlement_id']) ??
+      pickFirstString(pack, ['entitlement_id']),
+    cycleStartTime: null,
+    cycleEndTime: null,
+    deductionEndTime: null,
+    expiredTime: null,
+    total,
+    remain,
+    used: unlimited ? 0 : used,
+    usedPercent,
+    remainPercent,
+    refreshAt: null,
+    expireAt,
+    isBasePackage:
+      productType != null && TRAE_CN_CREDIT_PLAN_PRODUCT_TYPES.has(productType),
+    unlimited,
+  };
+}
+
+function aggregateCreditGroups(
+  items: OfficialQuotaResource[],
+): Omit<QuotaCategoryGroup, 'key' | 'label' | 'items' | 'visible'> {
+  const unlimited = items.some((item) => item.unlimited);
+  const total = items.reduce((sum, r) => sum + r.total, 0);
+  const remain = items.reduce((sum, r) => sum + r.remain, 0);
+  const used = items.reduce((sum, r) => sum + r.used, 0);
+  const usedPercent = unlimited ? 0 : total > 0 ? Math.max(0, Math.min(100, (used / total) * 100)) : 0;
+  const remainPercent = unlimited ? null : total > 0 ? Math.max(0, Math.min(100, (remain / total) * 100)) : null;
+  const quotaClass =
+    remainPercent != null
+      ? remainPercent <= 10
+        ? 'critical'
+        : remainPercent <= 30
+          ? 'low'
+          : remainPercent <= 60
+            ? 'medium'
+            : 'high'
+      : 'high';
+  return {
+    total: unlimited ? -1 : total,
+    remain: unlimited ? -1 : remain,
+    used: unlimited ? 0 : used,
+    usedPercent,
+    remainPercent,
+    quotaClass,
+    unlimited,
+  };
+}
+
+/** CN 积分分组（会员积分 / 奖励积分），供 CodeBuddy 积分分组组件渲染 */
+export function getTraeCreditCategoryGroups(
+  account: TraeAccount,
+  t: (key: string, defaultValue?: string) => string,
+): QuotaCategoryGroup[] {
+  const packs = getUsagePacks(account.trae_usage_raw).filter(hasPackCreditEvidence);
+
+  const baseItems: OfficialQuotaResource[] = [];
+  const activityItems: OfficialQuotaResource[] = [];
+
+  for (const pack of packs) {
+    const productType = getPackProductType(pack);
+    const resource = toTraeCreditResource(pack);
+    if (productType != null && TRAE_CN_CREDIT_PLAN_PRODUCT_TYPES.has(productType)) {
+      baseItems.push(resource);
+    } else {
+      activityItems.push(resource);
+    }
+  }
+
+  const baseAgg = aggregateCreditGroups(baseItems);
+  const activityAgg = aggregateCreditGroups(activityItems);
+
+  return [
+    {
+      key: 'base',
+      label: t('trae.quota.creditsMember', '会员积分'),
+      ...baseAgg,
+      items: baseItems,
+      visible: baseAgg.unlimited || baseAgg.total > 0,
+    },
+    {
+      key: 'activity',
+      label: t('trae.quota.creditsBonus', '奖励积分'),
+      ...activityAgg,
+      items: activityItems,
+      visible: activityAgg.unlimited || activityAgg.total > 0,
+    },
+  ];
 }

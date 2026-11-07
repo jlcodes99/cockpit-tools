@@ -1,0 +1,42 @@
+.codex-official-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--border-color, #d8dfe8);
+  border-radius: 999px;
+  background: var(--bg-secondary, #eef1f5);
+  color: var(--text-secondary, #738096);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.codex-official-badge.is-active {
+  border-color: color-mix(in srgb, #13a889 36%, transparent);
+  background: color-mix(in srgb, #13a889 11%, var(--bg-primary, #fff));
+  color: #087c68;
+}
+[data-theme='dark'] .codex-official-badge.is-active {
+  color: #65dbc1;
+}
+.codex-official-badge.is-pending {
+  color: var(--warning, #b7791f);
+  border-color: color-mix(in srgb, var(--warning, #b7791f) 35%, transparent);
+}
+.codex-official-badge.is-invalid {
+  color: var(--danger, #dc3545);
+  background: color-mix(in srgb, var(--danger, #dc3545) 8%, var(--bg-primary, #fff));
+  border-color: color-mix(in srgb, var(--danger, #dc3545) 35%, transparent);
+}
+
+/* Existing footer actions are square; a translated badge needs intrinsic width. */
+.codex-official-add-action:has(.codex-official-badge) {
+  width: auto;
+  min-width: 32px;
+  gap: 4px;
+  padding-inline: 7px;
+}

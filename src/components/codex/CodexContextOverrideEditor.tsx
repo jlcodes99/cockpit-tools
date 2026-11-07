@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SingleSelectDropdown } from "../SingleSelectDropdown";
+import { deriveAutoCompactTokenLimitInput } from "../../utils/codexModelContext";
 
 export type CodexContextOverridePreset =
   | "official"
@@ -23,7 +24,7 @@ interface CodexContextOverrideEditorProps {
 const CONTEXT_PRESETS = {
   preset_516k: {
     contextWindow: "516000",
-    compactLimit: "460000",
+    compactLimit: "464400",
   },
   preset_1m: {
     contextWindow: "1000000",
@@ -62,7 +63,12 @@ export function CodexContextOverrideEditor({
   onChange,
 }: CodexContextOverrideEditorProps) {
   const { t } = useTranslation();
-  const preset = resolveCodexContextOverridePreset(
+  // Editing intent must not be inferred from numbers that may still match a preset.
+  const [customEditing, setCustomEditing] = useState(false);
+  useEffect(() => {
+    if (!enabled) setCustomEditing(false);
+  }, [enabled]);
+  const preset = enabled && customEditing ? "custom" : resolveCodexContextOverridePreset(
     enabled,
     contextWindow,
     compactLimit,
@@ -73,7 +79,7 @@ export function CodexContextOverrideEditor({
         value: "official",
         label: t("codex.contextOverride.followOfficial", "跟随官方"),
       },
-      { value: "preset_516k", label: "516K / 460K" },
+      { value: "preset_516k", label: "516K / 464K" },
       { value: "preset_1m", label: "1M / 900K" },
       {
         value: "custom",
@@ -84,6 +90,7 @@ export function CodexContextOverrideEditor({
   );
 
   const handlePresetChange = (nextPreset: string) => {
+    setCustomEditing(nextPreset === "custom");
     if (nextPreset === "official") {
       onChange({ enabled: false, contextWindow, compactLimit });
       return;
@@ -118,13 +125,23 @@ export function CodexContextOverrideEditor({
               min={1}
               step={1}
               value={contextWindow}
-              onChange={(event) =>
+              onChange={(event) => {
+                setCustomEditing(true);
+                const nextContextWindow = event.target.value;
+                // 自定义模式不允许压缩阈值留空：只填上下文时按 90% 派生，
+                // 用户显式填过的值（不等于旧派生值）保持不变。
+                const nextCompactLimit =
+                  compactLimit.trim() === "" ||
+                  compactLimit ===
+                    deriveAutoCompactTokenLimitInput(contextWindow)
+                    ? deriveAutoCompactTokenLimitInput(nextContextWindow)
+                    : compactLimit;
                 onChange({
                   enabled: true,
-                  contextWindow: event.target.value,
-                  compactLimit,
-                })
-              }
+                  contextWindow: nextContextWindow,
+                  compactLimit: nextCompactLimit,
+                });
+              }}
               disabled={disabled}
             />
           </label>
@@ -139,13 +156,19 @@ export function CodexContextOverrideEditor({
               step={1}
               value={compactLimit}
               placeholder={t("codex.contextOverride.automatic", "自动")}
-              onChange={(event) =>
+              onChange={(event) => {
+                setCustomEditing(true);
+                // 留空时回落到 90% 派生值，避免向下游透传空压缩阈值。
+                const rawCompactLimit = event.target.value;
                 onChange({
                   enabled: true,
                   contextWindow,
-                  compactLimit: event.target.value,
-                })
-              }
+                  compactLimit:
+                    rawCompactLimit.trim() === ""
+                      ? deriveAutoCompactTokenLimitInput(contextWindow)
+                      : rawCompactLimit,
+                });
+              }}
               disabled={disabled}
             />
           </label>

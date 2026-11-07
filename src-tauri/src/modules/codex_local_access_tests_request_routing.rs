@@ -1,6 +1,119 @@
 // Codex Local Access 测试：Usage extraction, routing, request conversion and WebSocket behavior。
 // 测试与生产实现共享 super 作用域，验证真实网关、持久化和请求协议行为。
     #[test]
+    fn gateway_preserves_parallel_setting_unless_request_has_lite_marker() {
+        for model in ["gpt-5.6-sol", "custom-model"] {
+            for lite in [true, false] {
+                for parallel in [true, false] {
+                    let request = ParsedRequest {
+                        method: "POST".to_string(),
+                        target: "/v1/responses".to_string(),
+                        headers: if lite {
+                            HashMap::from([(
+                                super::CODEX_RESPONSES_LITE_HEADER.to_string(),
+                                "true".to_string(),
+                            )])
+                        } else {
+                            HashMap::new()
+                        },
+                        body: serde_json::to_vec(&json!({
+                            "model": model,
+                            "input": "hello",
+                            "parallel_tool_calls": parallel,
+                            "tools": [{ "type": "function", "name": "lookup" }],
+                        }))
+                        .unwrap(),
+                    };
+                    let (prepared, _) = prepare_gateway_request(request).unwrap();
+                    let body: Value = serde_json::from_slice(&prepared.body).unwrap();
+                    assert_eq!(body["parallel_tool_calls"], json!(!lite && parallel));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn chat_completions_preserves_parallel_setting_and_lite_defaults() {
+        for model in ["gpt-5.6-sol", "custom-model"] {
+            for lite in [true, false] {
+                for parallel in [None, Some(true), Some(false)] {
+                    let mut body = json!({
+                        "model": model,
+                        "messages": [{ "role": "user", "content": "hello" }],
+                        "tools": [{ "type": "function", "function": { "name": "lookup" } }],
+                    });
+                    if let Some(parallel) = parallel {
+                        body["parallel_tool_calls"] = json!(parallel);
+                    }
+                    let request = ParsedRequest {
+                        method: "POST".to_string(),
+                        target: "/v1/chat/completions".to_string(),
+                        headers: if lite {
+                            HashMap::from([(
+                                super::CODEX_RESPONSES_LITE_HEADER.to_string(),
+                                "true".to_string(),
+                            )])
+                        } else {
+                            HashMap::new()
+                        },
+                        body: serde_json::to_vec(&body).unwrap(),
+                    };
+                    let (prepared, _) = prepare_gateway_request(request).unwrap();
+                    let mapped: Value = serde_json::from_slice(&prepared.body).unwrap();
+                    let expected = !lite && parallel.unwrap_or(model == "custom-model");
+                    assert_eq!(
+                        mapped["parallel_tool_calls"],
+                        json!(expected),
+                        "model={model}, lite={lite}, parallel={parallel:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ultrafast_default_is_injected_without_overriding_explicit_requests() {
+        let mut request = json!({"model": "gpt-5.6-sol"});
+        super::apply_default_service_tier_if_missing(&mut request, Some("ultrafast"));
+        assert_eq!(request["service_tier"], "ultrafast");
+
+        super::apply_default_service_tier_if_missing(&mut request, Some("priority"));
+        assert_eq!(request["service_tier"], "ultrafast");
+
+        let mut explicit = json!({"service_tier": "ultrafast"});
+        super::apply_default_service_tier_if_missing(&mut explicit, Some("priority"));
+        assert_eq!(explicit["service_tier"], "ultrafast");
+    }
+
+    #[test]
+    fn restored_fast_default_reaches_responses_compact_and_chat_without_overriding_client() {
+        for path in ["/v1/responses", "/v1/responses/compact", "/v1/chat/completions"] {
+            for configured_tier in [None, Some("priority"), Some("ultrafast")] {
+                for explicit in [None, Some("default"), Some("standard"), Some("fast"), Some("priority"), Some("flex"), Some("auto"), Some("ultrafast")] {
+                    let mut body = if path.contains("chat") {
+                        json!({"model":"custom-model", "messages":[{"role":"user", "content":"fixture"}]})
+                    } else {
+                        json!({"model":"custom-model", "input":"fixture"})
+                    };
+                    if let Some(tier) = explicit { body["service_tier"] = json!(tier); }
+                    let request = ParsedRequest {
+                        method: "POST".to_string(), target: path.to_string(),
+                        headers: HashMap::new(), body: serde_json::to_vec(&body).unwrap(),
+                    };
+                    let (prepared, _) = super::prepare_gateway_request_with_default_service_tier(request, configured_tier).unwrap();
+                    let forwarded: Value = serde_json::from_slice(&prepared.body).unwrap();
+                    let expected = match explicit {
+                        Some("fast") => Some("priority"),
+                        Some("standard") => Some("default"),
+                        _ => explicit.or(configured_tier),
+                    };
+                    assert_eq!(forwarded.get("service_tier").and_then(Value::as_str), expected, "{path} {configured_tier:?} {explicit:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn extracts_usage_from_codex_response_completed_payload() {
         let payload = json!({
             "type": "response.completed",
@@ -195,9 +308,12 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
     #[test]
     fn sidecar_response_failed_overrides_generic_request_failed() {
         let event = SidecarUsageEvent {
+            proxy_route: None,
             request_id: "req-1".to_string(),
             model: "gpt-5.4".to_string(),
             alias: String::new(),
+            requested_model: String::new(),
+            upstream_model: String::new(),
             account_id: "account-1".to_string(),
             account_email: "user@example.com".to_string(),
             api_key_id: "key-1".to_string(),
@@ -205,12 +321,16 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             client_instance_id: "instance-1".to_string(),
             request_kind: "text".to_string(),
             service_tier: None,
+            requested_service_tier: None,
+            response_service_tier: None,
             reasoning_effort: None,
             success: false,
             status: Some(200),
             error_category: Some("request_failed".to_string()),
             error_message: Some("stream error: stream disconnected before completion: stream closed before response.completed/response.done, last_event=response.failed".to_string()),
             latency_ms: 1754,
+            first_response_ms: None,
+            output_generation_ms: None,
             usage: SidecarUsageDetails::default(),
         };
 
@@ -218,6 +338,29 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             normalized_sidecar_error_category(&event).as_deref(),
             Some("upstream_response_failed")
         );
+    }
+
+    #[test]
+    fn typed_upstream_stream_failures_keep_their_category_and_are_not_client_cancellations() {
+        for (status, category, message) in [
+            (502, "upstream_stream_error", "unexpected EOF during chunk size line"),
+            (502, "upstream_stream_error", "connection reset by peer"),
+            (502, "incomplete_upstream_stream", "stream closed before response.completed"),
+            (408, "request_timeout", "read deadline exceeded"),
+            (504, "upstream_stream_timeout", "error decoding response body: timed out"),
+        ] {
+            let event: SidecarUsageEvent = serde_json::from_value(json!({
+                "success": false, "status": status, "errorCategory": category, "errorMessage": message,
+            })).unwrap();
+            assert!(!sidecar_usage_event_is_client_canceled(&event), "{category}: {message}");
+            assert_eq!(normalized_sidecar_error_category(&event).as_deref(), Some(category));
+            if status == 502 { assert!(!sidecar_usage_event_should_auto_restart(&event)); }
+        }
+        let canceled: SidecarUsageEvent = serde_json::from_value(json!({
+            "success": false, "status": 499, "errorCategory": "client_canceled", "errorMessage": "write tcp: broken pipe",
+        })).unwrap();
+        assert!(sidecar_usage_event_is_client_canceled(&canceled));
+        assert_eq!(normalized_sidecar_error_category(&canceled).as_deref(), Some("client_canceled"));
     }
 
     #[test]
@@ -235,6 +378,39 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
         assert_eq!(
             normalized_sidecar_error_category(&event).as_deref(),
             Some("gateway_context_canceled")
+        );
+    }
+
+    #[test]
+    fn sidecar_loopback_proxy_refusal_requests_automatic_restart() {
+        let event: SidecarUsageEvent = serde_json::from_value(json!({
+            "success": false,
+            "status": 502,
+            "errorCategory": "connection_lifecycle",
+            "errorMessage": "Post \"https://chatgpt.com/backend-api/codex/responses\": utls: dial upstream: socks connect tcp 127.0.0.1:58887->chatgpt.com:443: dial tcp 127.0.0.1:58887: connect: connection refused"
+        }))
+        .expect("loopback refusal event should deserialize");
+
+        assert!(
+            sidecar_usage_event_should_auto_restart(&event),
+            "a stale account tunnel port must rebuild the sidecar instead of failing forever"
+        );
+        assert!(!sidecar_usage_event_is_client_canceled(&event));
+    }
+
+    #[test]
+    fn sidecar_remote_refusal_does_not_request_automatic_restart() {
+        let event: SidecarUsageEvent = serde_json::from_value(json!({
+            "success": false,
+            "status": 502,
+            "errorCategory": "connection_lifecycle",
+            "errorMessage": "Post \"https://chatgpt.com/backend-api/codex/responses\": dial tcp 10.0.0.5:443: connect: connection refused"
+        }))
+        .expect("remote refusal event should deserialize");
+
+        assert!(
+            !sidecar_usage_event_should_auto_restart(&event),
+            "remote dial refusals are not a local gateway problem"
         );
     }
 
@@ -276,6 +452,8 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             CodexLocalAccessRequestKind::Text,
             None,
             sidecar_event.reasoning_effort.as_deref(),
+            None,
+            None,
             true,
             Some(200),
             None,
@@ -806,12 +984,12 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
     #[test]
     fn maps_snapshot_model_ids_to_supported_aliases() {
         assert_eq!(
-            resolve_supported_model_alias("gpt-5.4-2026-03-05"),
-            "gpt-5.4"
+            resolve_supported_model_alias("gpt-6.1-sol-2026-03-05"),
+            "gpt-6.1-sol"
         );
         assert_eq!(
-            resolve_supported_model_alias("GPT-5.4-Mini-2026-03-05"),
-            "gpt-5.4-mini"
+            resolve_supported_model_alias("GPT-6-LUNA-2026-03-05"),
+            "gpt-6-luna"
         );
         assert_eq!(
             resolve_supported_model_alias("custom-model-2026-03-05"),
@@ -941,11 +1119,13 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             "gpt-5.6-terra",
             "gpt-5.6-luna",
             "gpt-6-astra",
+            "gpt-6-sol",
+            "gpt-6-luna",
         ] {
             assert!(models.iter().any(|item| item == model));
         }
 
-        api_key.allowed_models = vec!["gpt-5.4".to_string()];
+        api_key.allowed_models = vec!["gpt-5.5".to_string()];
         let restricted = visible_codex_model_ids_for_api_key_with_supported_models(
             &collection,
             &api_key,
@@ -953,7 +1133,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             None,
             supported_codex_model_ids(),
         );
-        assert!(restricted.iter().any(|model| model == "gpt-5.4"));
+        assert!(!restricted.iter().any(|model| model == "gpt-5.5"));
         assert!(!restricted.iter().any(|model| model.starts_with("gpt-5.6-")));
     }
 
@@ -1010,6 +1190,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             id: "provider_gateway_account-1".to_string(),
             label: "Provider Gateway: DeepSeek".to_string(),
             provider_gateway: Some(CodexLocalAccessProviderGateway {
+        auth_scheme: None,
                 base_url: "https://api.deepseek.com/v1".to_string(),
                 api_key: "sk-test".to_string(),
                 upstream_model: "deepseek-v4-pro".to_string(),
@@ -1050,7 +1231,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             method: "POST".to_string(),
             target: "/v1/chat/completions".to_string(),
             headers: HashMap::new(),
-            body: br#"{"model":"GPT-5.4","stream":true,"messages":[{"role":"user","content":"hello"}]}"#
+            body: br#"{"model":"GPT-5.6-SOL","stream":true,"messages":[{"role":"user","content":"hello"}]}"#
                 .to_vec(),
         };
 
@@ -1060,7 +1241,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             serde_json::from_slice(&prepared.body).expect("mapped body should be json");
         assert_eq!(
             mapped_body.get("model").and_then(Value::as_str),
-            Some("gpt-5.4")
+            Some("gpt-5.6-sol")
         );
         assert!(mapped_body.get("input").is_some());
         assert_eq!(mapped_body.get("store"), Some(&Value::Bool(false)));
@@ -1073,7 +1254,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             mapped_body
                 .get("parallel_tool_calls")
                 .and_then(Value::as_bool),
-            Some(true)
+            Some(false)
         );
         assert_eq!(
             mapped_body
@@ -1091,7 +1272,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                 original_request_body: _,
             } => {
                 assert!(stream);
-                assert_eq!(requested_model, "gpt-5.4");
+                assert_eq!(requested_model, "gpt-5.6-sol");
             }
             _ => panic!("expected chat completions adapter"),
         }
@@ -1122,7 +1303,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
         let request = ParsedRequest {
             method: "POST".to_string(),
             target: "/v1/chat/completions".to_string(),
-            headers: HashMap::new(),
+            headers: HashMap::from([(super::CODEX_RESPONSES_LITE_HEADER.into(), "true".into())]),
             body: br#"{
                 "model":"gpt-5.6-sol",
                 "messages":[{"role":"user","content":"hello"}],
@@ -1160,7 +1341,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                         .filter_map(|tool| tool.get("type").and_then(Value::as_str))
                         .collect::<Vec<_>>()
                 }),
-            Some(vec!["function", "function", "custom", "tool_search"])
+            Some(vec!["function", "function", "custom", "tool_search", "namespace"])
         );
         assert!(mapped_body.get("tool_choice").is_none());
         assert!(mapped_body
@@ -1374,7 +1555,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             serde_json::from_slice(&prepared.body).expect("mapped body should be json");
         assert_eq!(
             mapped_body.get("model").and_then(Value::as_str),
-            Some("gpt-5.5")
+            Some("gpt-5.6-luna")
         );
         assert_eq!(
             mapped_body
@@ -1547,7 +1728,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             method: "POST".to_string(),
             target: "/v1/responses".to_string(),
             headers: HashMap::new(),
-            body: br#"{"model":"gpt-5.4-2026-03-05","input":"hello"}"#.to_vec(),
+            body: br#"{"model":"gpt-6.1-sol-2026-03-05","input":"hello"}"#.to_vec(),
         };
 
         let (prepared, adapter) = prepare_gateway_request(request).expect("request should map");
@@ -1555,7 +1736,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             serde_json::from_slice(&prepared.body).expect("mapped body should be json");
         assert_eq!(
             mapped_body.get("model").and_then(Value::as_str),
-            Some("gpt-5.4")
+            Some("gpt-6.1-sol")
         );
         assert_eq!(
             mapped_body.get("stream").and_then(Value::as_bool),
@@ -1767,7 +1948,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             target: "/v1/responses".to_string(),
             headers: HashMap::from([(
                 "x-openai-internal-codex-responses-lite".to_string(),
-                String::new(),
+                "true".to_string(),
             )]),
             body: br#"{
                 "model":"gpt-5.6-sol",
@@ -1803,7 +1984,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                     .filter_map(|tool| tool.get("type").and_then(Value::as_str))
                     .collect::<Vec<_>>()
             }),
-            Some(vec!["function", "function", "custom", "tool_search"])
+            Some(vec!["function", "function", "custom", "tool_search", "namespace"])
         );
         assert!(parsed
             .get("tools")
@@ -1971,11 +2152,21 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             Message::Text(payload.into()),
             Message::Binary(payload.as_bytes().to_vec().into()),
         ] {
+            assert_eq!(
+                filter_websocket_client_message(
+                    message.clone(),
+                    &account,
+                    CodexLocalAccessImageGenerationMode::Enabled,
+                    false,
+                )
+                .expect("standard WebSocket payload should pass through"),
+                message,
+            );
             let filtered = filter_websocket_client_message(
                 message,
                 &account,
                 CodexLocalAccessImageGenerationMode::Enabled,
-                false,
+                true,
             )
             .expect("Responses Lite WebSocket follow-up payload should filter");
             let parsed = match filtered {
@@ -1993,7 +2184,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                             .filter_map(|tool| tool.get("type").and_then(Value::as_str))
                             .collect::<Vec<_>>()
                     }),
-                Some(vec!["function", "custom", "tool_search"])
+                Some(vec!["function", "custom", "tool_search", "namespace"])
             );
             assert!(parsed.pointer("/response/tool_choice").is_none());
         }
@@ -2205,7 +2396,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             target: "/v1/chat/completions".to_string(),
             headers: HashMap::new(),
             body:
-                br#"{"model":"gpt-5.4-2026-03-05","messages":[{"role":"user","content":"hello"}]}"#
+                br#"{"model":"gpt-6.1-sol-2026-03-05","messages":[{"role":"user","content":"hello"}]}"#
                     .to_vec(),
         };
 
@@ -2214,14 +2405,14 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             serde_json::from_slice(&prepared.body).expect("mapped body should be json");
         assert_eq!(
             mapped_body.get("model").and_then(Value::as_str),
-            Some("gpt-5.4")
+            Some("gpt-6.1-sol")
         );
 
         match adapter {
             GatewayResponseAdapter::ChatCompletions {
                 requested_model, ..
             } => {
-                assert_eq!(requested_model, "gpt-5.4");
+                assert_eq!(requested_model, "gpt-6.1-sol");
             }
             _ => panic!("expected chat completions adapter"),
         }
@@ -2995,7 +3186,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
     }
 
     #[test]
-    fn deepseek_responses_api_key_accounts_are_not_eligible_for_local_access_pool() {
+    fn deepseek_responses_api_key_accounts_are_eligible_for_local_access_pool() {
         let mut account = CodexAccount::new_api_key(
             "deepseek-1".to_string(),
             "deepseek@example.com".to_string(),
@@ -3008,30 +3199,21 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         );
         account.api_wire_api = Some("responses".to_string());
 
-        assert!(!is_local_access_eligible_account(&account, false));
-        assert_eq!(
-            local_access_ineligible_reason(&account, false),
-            Some("deepseek_unsupported")
-        );
+        assert!(is_local_access_eligible_account(&account, false));
+        assert_eq!(local_access_ineligible_reason(&account, false), None);
         let (_, synced_ids, added_ids, skipped) = append_eligible_local_access_account_ids(
             &[],
             vec![account.id.clone()],
             &[account.clone()],
             false,
         );
-        assert!(synced_ids.is_empty());
-        assert!(added_ids.is_empty());
-        assert_eq!(
-            skipped
-                .iter()
-                .map(|item| (item.account_id.as_str(), item.reason.as_str()))
-                .collect::<Vec<_>>(),
-            vec![("deepseek-1", "deepseek_unsupported")]
-        );
+        assert_eq!(synced_ids, vec![account.id.clone()]);
+        assert_eq!(added_ids, vec![account.id]);
+        assert!(skipped.is_empty());
     }
 
     #[test]
-    fn chat_completions_api_key_accounts_are_not_eligible_for_local_access_pool() {
+    fn chat_completions_api_key_accounts_are_eligible_for_local_access_pool() {
         let mut account = CodexAccount::new_api_key(
             "api-1".to_string(),
             "api-key@example.com".to_string(),
@@ -3044,7 +3226,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         );
         account.api_wire_api = Some("chat_completions".to_string());
 
-        assert!(!is_local_access_eligible_account(&account, false));
+        assert!(is_local_access_eligible_account(&account, false));
     }
 
     #[test]
@@ -3061,7 +3243,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         );
         account.api_wire_api = Some("chat_completions".to_string());
 
-        assert!(!is_local_access_eligible_account(&account, false));
+        assert!(is_local_access_eligible_account(&account, false));
         assert!(is_provider_gateway_eligible_account(&account));
     }
 
@@ -3069,6 +3251,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         wire_api: &str,
     ) -> CodexModelProviderGatewayChatTestRequest {
         CodexModelProviderGatewayChatTestRequest {
+        auth_scheme: None,
             run_id: "run-1".to_string(),
             provider_id: "provider-1".to_string(),
             provider_name: "Provider".to_string(),
@@ -3097,6 +3280,11 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
     fn model_provider_direct_test_client_model_is_codex_visible() {
         let client_model = model_provider_direct_test_client_model();
 
+        assert_eq!(
+            client_model,
+            crate::modules::codex_wakeup::DEFAULT_WAKEUP_MODEL
+        );
+
         assert!(
             supported_codex_model_ids()
                 .iter()
@@ -3106,16 +3294,19 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
     }
 
     #[test]
-    fn supported_codex_models_include_official_and_compatibility_models() {
+    fn supported_codex_models_include_current_official_models() {
         let models = supported_codex_model_ids();
+        assert!(models.iter().all(|model| !crate::modules::codex_wakeup::is_codex_model_before_5_5(model)));
 
         for model_id in [
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",
             "gpt-6-astra",
-            "gpt-5.3-codex",
-            "gpt-5.3-codex-spark",
+            "gpt-6-sol",
+            "gpt-6-luna",
+            "gpt-6.1-sol",
+            "gpt-6.1-terra",
         ] {
             assert!(
                 models.iter().any(|model| model == model_id),
@@ -3125,19 +3316,18 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
     }
 
     #[test]
-    fn default_codex_models_include_compatibility_5_3_models() {
+    fn default_codex_models_exclude_retired_models() {
         assert_eq!(
             default_codex_model_ids(),
             vec![
+                "gpt-6.1-sol",
                 "gpt-6-astra",
+                "gpt-6.1-terra",
+                "gpt-6-sol",
+                "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
                 "gpt-5.6-luna",
-                "gpt-5.5",
-                "gpt-5.4",
-                "gpt-5.4-mini",
-                "gpt-5.3-codex",
-                "gpt-5.3-codex-spark",
             ]
         );
     }

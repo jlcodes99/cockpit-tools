@@ -5,6 +5,7 @@ use super::*;
 
     fn sample_account() -> TraeAccount {
         TraeAccount {
+            last_switched_at: None,
             id: "trae_test".to_string(),
             email: "lijie769328281@gmail.com".to_string(),
             user_id: Some("7463021402682639361".to_string()),
@@ -637,3 +638,11 @@ use super::*;
             Some("public-key")
         );
     }
+
+#[test]
+fn credit_billing_skips_legacy_dashboard_overwrite() {
+    assert!(!should_fetch_cn_entitlement_list(true, Some(&serde_json::json!({"data":{"is_credits_billing":true}}))));
+    assert!(should_fetch_cn_entitlement_list(true, Some(&serde_json::json!({"is_credits_billing":false}))));
+    assert!(should_fetch_cn_entitlement_list(true, None));
+    assert!(!should_fetch_cn_entitlement_list(false, None));
+}

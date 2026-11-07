@@ -95,6 +95,15 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     isOfficial: true,
   },
   {
+    id: DEEPSEEK_API_PROVIDER_ID,
+    name: "DeepSeek",
+    baseUrls: [DEEPSEEK_API_BASE_URL, `${DEEPSEEK_API_BASE_URL}/v1`],
+    modelCatalog: [...DEEPSEEK_CODEX_MODEL_CATALOG],
+    visionModelCatalog: [...DEEPSEEK_CODEX_VISION_MODEL_CATALOG],
+    website: "https://platform.deepseek.com/",
+    apiKeyUrl: "https://platform.deepseek.com/api_keys",
+  },
+  {
     id: "packycode",
     name: "PackyCode",
     baseUrls: [
@@ -234,15 +243,6 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     website: "https://www.crazyrouter.com",
     apiKeyUrl: "https://www.crazyrouter.com/register?aff=OZcm&ref=cc-switch",
     isPartner: true,
-  },
-  {
-    id: DEEPSEEK_API_PROVIDER_ID,
-    name: "DeepSeek",
-    baseUrls: [DEEPSEEK_API_BASE_URL, `${DEEPSEEK_API_BASE_URL}/v1`],
-    modelCatalog: [...DEEPSEEK_CODEX_MODEL_CATALOG],
-    visionModelCatalog: [...DEEPSEEK_CODEX_VISION_MODEL_CATALOG],
-    website: "https://platform.deepseek.com/",
-    apiKeyUrl: "https://platform.deepseek.com/api_keys",
   },
   {
     id: "moonshot",

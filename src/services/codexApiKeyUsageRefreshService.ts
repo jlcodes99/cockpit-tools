@@ -1,6 +1,8 @@
+import { resolveOpenAIUsageConfig, resolveAccountUsageBaseUrl, isOpenAIOfficialUsageAccount } from '../utils/openaiOfficialUsage';
 import type { CodexAccount } from '../types/codex';
 import {
   isCodexApiKeyUsageQueryEligible,
+  isApiKeyFunUsageAccount,
   isDeepSeekAccount,
 } from '../utils/codexDeepSeekAccess';
 import {
@@ -17,6 +19,7 @@ export const CODEX_API_KEY_USAGE_REFRESHED_EVENT = 'codex-api-key-usage-refreshe
 
 export type CodexApiKeyUsageState = {
   loading: boolean;
+  sourceBinding?: string;
   summary?: CodexModelProviderUsageSummary;
   error?: string;
   unavailable?: boolean;
@@ -37,6 +40,7 @@ export function readCodexApiKeyUsageCache(): Record<string, CodexApiKeyUsageStat
       next[accountId] = {
         loading: false,
         summary: item.summary,
+        sourceBinding: item.sourceBinding,
         error: typeof item.error === 'string' ? item.error : undefined,
         unavailable: item.unavailable === true,
         updatedAt:
@@ -63,6 +67,7 @@ export function writeCodexApiKeyUsageCache(
             accountId,
             {
               summary: item.summary,
+              sourceBinding: item.sourceBinding,
               error: item.error,
               unavailable: item.unavailable === true,
               updatedAt: item.updatedAt,
@@ -90,8 +95,8 @@ export async function refreshCodexApiKeyUsageForAccounts(
 ): Promise<void> {
   const initialCache = readCodexApiKeyUsageCache();
   const eligibleAccounts = accounts.filter((account) => {
-    if (!isUsageEligibleApiKey(account)) return false;
-    if (options?.force || isDeepSeekAccount(account)) return true;
+    if (!isUsageEligibleApiKey(account) && !initialCache[account.id]?.summary?.cockpit) return false;
+    if (options?.force || isDeepSeekAccount(account) || isOpenAIOfficialUsageAccount(account) || isApiKeyFunUsageAccount(account)) return true;
     return !initialCache[account.id]?.unavailable;
   });
   if (eligibleAccounts.length === 0) return;
@@ -102,23 +107,27 @@ export async function refreshCodexApiKeyUsageForAccounts(
   for (const account of eligibleAccounts) {
     const provider =
       findCodexModelProviderById(providers, account.api_provider_id) ??
-      findCodexModelProviderByBaseUrl(providers, account.api_base_url?.trim() ?? '');
-    const baseUrl = provider?.baseUrl.trim() || account.api_base_url?.trim() || '';
+      findCodexModelProviderByBaseUrl(providers, resolveAccountUsageBaseUrl(account));
+    const baseUrl = resolveAccountUsageBaseUrl(account, provider?.baseUrl);
     if (!baseUrl) continue;
     const apiKey = account.openai_api_key!.trim();
+    const usageConfig = resolveOpenAIUsageConfig(provider, apiKey);
+    if (isOpenAIOfficialUsageAccount(account, provider?.baseUrl) && !usageConfig) continue;
 
     try {
       const summary = await queryCodexModelProviderUsage({
         baseUrl,
         apiKey,
+        usageApiKey: usageConfig?.apiKey,
         integrationType: provider?.integrationType ?? null,
       });
-      updates[account.id] = { loading: false, summary, updatedAt: Date.now() };
+      updates[account.id] = { loading: false, sourceBinding: usageConfig?.binding, summary, updatedAt: Date.now() };
     } catch (error) {
       const unavailable = isModelProviderUsageUnavailableError(error);
       updates[account.id] = {
         loading: false,
-        summary: initialCache[account.id]?.summary,
+        sourceBinding: usageConfig?.binding,
+        summary: initialCache[account.id]?.sourceBinding === usageConfig?.binding ? initialCache[account.id]?.summary : undefined,
         error: unavailable ? undefined : String(error).replace(/^Error:\s*/, ''),
         unavailable,
         updatedAt: Date.now(),
@@ -129,13 +138,19 @@ export async function refreshCodexApiKeyUsageForAccounts(
   if (Object.keys(updates).length === 0) return;
 
   const latestCache = readCodexApiKeyUsageCache();
+  const latestProviders = await listCodexModelProviders();
   let changed = false;
   for (const [accountId, update] of Object.entries(updates)) {
+    const account = accounts.find(item => item.id === accountId);
+    if (update.sourceBinding && account) {
+      const provider = findCodexModelProviderByBaseUrl(latestProviders, resolveAccountUsageBaseUrl(account));
+      if (resolveOpenAIUsageConfig(provider, account.openai_api_key ?? '')?.binding !== update.sourceBinding) continue;
+    }
     const latest = latestCache[accountId];
     if ((latest?.updatedAt ?? 0) > (update.updatedAt ?? 0)) continue;
     latestCache[accountId] = {
       ...update,
-      summary: update.summary ?? latest?.summary,
+      summary: update.summary ?? (latest?.sourceBinding === update.sourceBinding ? latest?.summary : undefined),
     };
     changed = true;
   }

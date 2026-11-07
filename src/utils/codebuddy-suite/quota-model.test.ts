@@ -114,3 +114,13 @@ test('keeps unknown official package name and numeric cycle reset time', () => {
   assert.equal(model.resources[0].packageName, 'Future Package');
   assert.equal(model.resources[0].refreshAt, 1_800_000_000_000);
 });
+
+test('daily slice resources use the requested day instead of the full cycle', () => {
+  const model = getOfficialQuotaModel(account({ data: { resources: [{
+    Status: 0, PackageCode: PACKAGE_CODE.freeMonIntl, CapacityType: 4,
+    CycleCapacitySizePrecise: '3000', CycleCapacityRemainPrecise: '2500',
+    SlicePeriodUsageDetails: [{ SlicePeriodCapacitySizePrecise: '100', SlicePeriodCapacityRemainPrecise: '40' }],
+  }] } }));
+  assert.equal(model.resources[0].total, 100);
+  assert.equal(model.resources[0].remain, 40);
+});

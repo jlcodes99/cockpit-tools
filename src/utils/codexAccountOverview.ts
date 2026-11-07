@@ -1,8 +1,11 @@
+import { getCodexAccountQuotaError } from "./codexProxyRuntimeError";
 import type { TFunction } from "i18next";
 import type { CodexAccount } from "../types/codex";
 import {
   getCodexPlanFilterKey,
+  getCodexQuotaWindows,
   isCodexApiKeyAccount,
+  isCodexChatgptPlanAccount,
   isCodexNewApiAccount,
   isCodexPendingOAuthAccount,
 } from "../types/codex";
@@ -10,13 +13,18 @@ import type { CodexAccountGroup } from "../services/codexAccountGroupService";
 import { splitValidityFilterValues } from "./accountValidityFilter";
 import { compareCurrentAccountFirst } from "./currentAccountSort";
 import {
-  isCodexClientReauthNoticeOnly,
+  isCodexApiUsableReauthNotice,
   isCodexRefreshTokenReusedAccount,
 } from "./codexSwitchAuthFailure";
-import { normalizeAccountsOverviewScope } from "./accountsOverviewFilterPersistence";
+import {
+  normalizeAccountsOverviewScope,
+  readAccountsOverviewFilterField,
+  writeAccountsOverviewFilterField,
+} from "./accountsOverviewFilterPersistence";
 import {
   persistUserMemoryList,
   readUserMemoryList,
+  restoreUserMemoryList,
   USER_MEMORY_LISTS,
 } from "./userMemory";
 
@@ -55,6 +63,7 @@ export const CODEX_OVERVIEW_FILTER_FIELDS = {
 
 const CODEX_CUSTOM_SORT_ACTIVE_KEY =
   "agtools.codex.accounts.custom_sort_active.v1";
+export const CODEX_CUSTOM_SORT_RESTORED_EVENT = "codex:custom-sort-restored";
 
 export type CodexOverviewSortDirection = "asc" | "desc";
 
@@ -165,6 +174,7 @@ export function buildCodexPlanFilterOptions(
     includeZeroQuota?: boolean;
     includeExpired?: boolean;
     pendingLabel?: string;
+    chatgptPlanLabel?: string;
     errorLabel?: string;
     zeroQuotaLabel?: string;
     expiredLabel?: string;
@@ -195,7 +205,7 @@ export function buildCodexPlanFilterOptions(
       usedKeys.add(key);
       result.push({
         value: key,
-        label: `${key} (${getCodexPlanFilterCount(counts, key)})`,
+        label: `${key === 'CHATGPT_PLAN' ? options?.chatgptPlanLabel ?? 'ChatGPT' : key} (${getCodexPlanFilterCount(counts, key)})`,
       });
     });
 
@@ -299,10 +309,10 @@ export function isCodexOverviewAccountAbnormal(
   if (isCodexRefreshTokenReusedAccount(account)) return false;
   // refresh_token 失效只影响官方客户端切号。只要 access_token 仍在 API
   // 服务的安全有效期内，该账号就仍是可用账号，不应计入“授权失败”。
-  if (isCodexClientReauthNoticeOnly(account)) return false;
+  if (isCodexApiUsableReauthNotice(account)) return false;
   if (account.requires_reauth === true) return true;
 
-  const rawMessage = account.quota_error?.message?.trim() ?? "";
+  const rawMessage = getCodexAccountQuotaError(account.quota_error)?.message?.trim() ?? "";
   if (!rawMessage) return false;
   const lowerRawMessage = rawMessage.toLowerCase();
   const statusCode =
@@ -357,6 +367,14 @@ interface CodexOverviewComparatorOptions {
   resolveSubscriptionTimestamp: (account: CodexAccount) => number | null;
 }
 
+function getQuotaSortWindow(account: CodexAccount, weekly: boolean) {
+  if (isCodexChatgptPlanAccount(account)) return undefined;
+  return getCodexQuotaWindows(account.quota).find((window) => {
+    const minutes = window.windowMinutes ?? (window.id === 'secondary' ? 10_080 : 300);
+    return (minutes >= 10_079) === weekly;
+  });
+}
+
 export function createCodexOverviewAccountComparator({
   sortBy,
   sortDirection,
@@ -405,14 +423,8 @@ export function createCodexOverviewAccountComparator({
       return sortDirection === "desc" ? diff : -diff;
     }
     if (sortBy === "weekly_reset" || sortBy === "hourly_reset") {
-      const leftReset =
-        sortBy === "weekly_reset"
-          ? (left.quota?.weekly_reset_time ?? null)
-          : (left.quota?.hourly_reset_time ?? null);
-      const rightReset =
-        sortBy === "weekly_reset"
-          ? (right.quota?.weekly_reset_time ?? null)
-          : (right.quota?.hourly_reset_time ?? null);
+      const leftReset = getQuotaSortWindow(left, sortBy === "weekly_reset")?.resetTime ?? null;
+      const rightReset = getQuotaSortWindow(right, sortBy === "weekly_reset")?.resetTime ?? null;
       if (leftReset == null && rightReset == null) return 0;
       if (leftReset == null) return 1;
       if (rightReset == null) return -1;
@@ -431,14 +443,11 @@ export function createCodexOverviewAccountComparator({
         : leftExpiry - rightExpiry;
     }
 
-    const leftValue =
-      sortBy === "weekly"
-        ? (left.quota?.weekly_percentage ?? -1)
-        : (left.quota?.hourly_percentage ?? -1);
-    const rightValue =
-      sortBy === "weekly"
-        ? (right.quota?.weekly_percentage ?? -1)
-        : (right.quota?.hourly_percentage ?? -1);
+    const leftValue = getQuotaSortWindow(left, sortBy === "weekly")?.percentage;
+    const rightValue = getQuotaSortWindow(right, sortBy === "weekly")?.percentage;
+    if (leftValue == null && rightValue == null) return 0;
+    if (leftValue == null) return 1;
+    if (rightValue == null) return -1;
     return sortDirection === "desc"
       ? rightValue - leftValue
       : leftValue - rightValue;
@@ -456,6 +465,10 @@ interface FilterCodexOverviewAccountsOptions {
   resolveDisplayName: (account: CodexAccount) => string;
   compareAccounts: (left: CodexAccount, right: CodexAccount) => number;
   isAbnormalAccount?: (account: CodexAccount) => boolean;
+  resolveAccountId?: (account: CodexAccount) => string;
+  resolvePlanKey?: (account: CodexAccount) => string;
+  isZeroQuotaAccount?: (account: CodexAccount) => boolean;
+  isSubscriptionExpiredAccount?: (account: CodexAccount) => boolean;
 }
 
 export function filterAndSortCodexOverviewAccounts({
@@ -469,6 +482,10 @@ export function filterAndSortCodexOverviewAccounts({
   resolveDisplayName,
   compareAccounts,
   isAbnormalAccount = isCodexOverviewAccountAbnormal,
+  resolveAccountId = (account) => account.id,
+  resolvePlanKey = getCodexPlanFilterKey,
+  isZeroQuotaAccount = isCodexOverviewAccountZeroQuota,
+  isSubscriptionExpiredAccount = isCodexOverviewAccountSubscriptionExpired,
 }: FilterCodexOverviewAccountsOptions): CodexAccount[] {
   let result = [...accounts];
   if (searchQuery.trim()) {
@@ -488,9 +505,9 @@ export function filterAndSortCodexOverviewAccounts({
         const matchesSpecial =
           (selectedTypes.has("ERROR") && isAbnormalAccount(account)) ||
           (selectedTypes.has(CODEX_ZERO_QUOTA_FILTER_VALUE) &&
-            isCodexOverviewAccountZeroQuota(account)) ||
+            isZeroQuotaAccount(account)) ||
           (selectedTypes.has(CODEX_EXPIRED_FILTER_VALUE) &&
-            isCodexOverviewAccountSubscriptionExpired(account));
+            isSubscriptionExpiredAccount(account));
         const planKeys = Array.from(selectedTypes).filter(
           (key) =>
             key !== "ERROR" &&
@@ -500,7 +517,7 @@ export function filterAndSortCodexOverviewAccounts({
         if (planKeys.length === 0) {
           return matchesSpecial;
         }
-        const matchesPlan = selectedTypes.has(getCodexPlanFilterKey(account));
+        const matchesPlan = selectedTypes.has(resolvePlanKey(account));
         // Multi-select is OR across plan tiers and special status filters.
         return matchesPlan || matchesSpecial;
       });
@@ -529,7 +546,7 @@ export function filterAndSortCodexOverviewAccounts({
           }
         }
       }
-      result = result.filter((account) => groupAccountIds.has(account.id));
+      result = result.filter((account) => groupAccountIds.has(resolveAccountId(account)));
     }
   }
   if (activeGroupId) {
@@ -538,7 +555,7 @@ export function filterAndSortCodexOverviewAccounts({
       return [];
     }
     const scopedIds = new Set(scopedGroup.accountIds);
-    result = result.filter((account) => scopedIds.has(account.id));
+    result = result.filter((account) => scopedIds.has(resolveAccountId(account)));
   }
   result.sort(compareAccounts);
   return result;
@@ -566,4 +583,19 @@ export function writeCodexCustomSortActive(active: boolean): void {
   } catch {
     // ignore persistence failures
   }
+}
+
+export async function restoreCodexCustomSortOrder(accountIds: string[], active: boolean): Promise<void> {
+  await restoreUserMemoryList(USER_MEMORY_LISTS.codexCustomSort, accountIds);
+  const savedSort = readAccountsOverviewFilterField<string>(
+    CODEX_OVERVIEW_FILTER_SCOPE, CODEX_OVERVIEW_FILTER_FIELDS.sortBy, "created_at",
+  );
+  const sortBy = active ? "custom" : savedSort === "custom" ? "created_at" : savedSort;
+  writeAccountsOverviewFilterField(CODEX_OVERVIEW_FILTER_SCOPE, CODEX_OVERVIEW_FILTER_FIELDS.sortBy, sortBy);
+  if (readAccountsOverviewFilterField(CODEX_OVERVIEW_FILTER_SCOPE, CODEX_OVERVIEW_FILTER_FIELDS.sortBy, null) !== sortBy) {
+    throw new Error("codex_sort_mode_save_failed");
+  }
+  // Imports must surface failures instead of reporting that the mode was restored.
+  localStorage.setItem(CODEX_CUSTOM_SORT_ACTIVE_KEY, active ? "1" : "0");
+  window.dispatchEvent(new Event(CODEX_CUSTOM_SORT_RESTORED_EVENT));
 }

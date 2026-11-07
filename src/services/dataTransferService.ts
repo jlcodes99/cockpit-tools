@@ -1,4 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
+import { loadCodexTopLayoutPreference, normalizeCodexTopLayout, writeCodexTopLayoutPreference, type CodexTopLayoutPreference } from '../utils/codexTopLayoutPreferences';
+import { readCodexCustomSortActive, readCodexCustomSortOrder, restoreCodexCustomSortOrder } from '../utils/codexAccountOverview';
+import { hydrateUserMemory, mergeIdLists } from '../utils/userMemory';
 import {
   ACCOUNT_TRANSFER_SCHEMA,
   AccountTransferBundle,
@@ -21,6 +24,10 @@ import {
   getCodexAccountGroups,
   invalidateCodexGroupCache,
 } from './codexAccountGroupService';
+import {
+  getPlatformGroups,
+  invalidatePlatformGroupCache,
+} from './platformGroupService';
 import {
   CodexModelProvider,
   invalidateCodexModelProviderCache,
@@ -60,6 +67,7 @@ import * as qoderService from './qoderService';
 import * as zcodeService from './zcodeService';
 import * as traeService from './traeService';
 import * as workbuddyService from './workbuddyService';
+import * as minimaxCodeService from './minimaxCodeService';
 import type { InstanceLaunchMode } from '../types/instance';
 import type { ClaudeAccount } from '../types/claude';
 
@@ -82,6 +90,7 @@ const INSTANCE_PLATFORMS = [
   'zcode',
   'trae',
   'workbuddy',
+  'minimaxcode',
 ] as const;
 
 type InstancePlatform = (typeof INSTANCE_PLATFORMS)[number];
@@ -222,11 +231,17 @@ export interface DataTransferSelection {
   includeConfig: boolean;
 }
 
+interface ExportedCodexAccountSort {
+  active: boolean;
+  account_refs: DataTransferAccountRef[];
+}
+
 export interface DataTransferConfigBundle {
   user_config: ExportedUserConfig;
   group_settings: GroupSettings;
   account_groups: ExportedAccountGroup[];
   codex_account_groups: ExportedCodexAccountGroup[];
+  platform_account_groups?: Record<string, ExportedAccountGroup[]>;
   codex_model_providers: CodexModelProvider[];
   instance_stores: Partial<Record<InstancePlatform, ExportedInstanceStore>>;
   antigravity_wakeup: ExportedAntigravityWakeupState;
@@ -235,6 +250,8 @@ export interface DataTransferConfigBundle {
   verification_records?: unknown;
   verification_history?: unknown;
   platform_layout_config?: unknown;
+  codex_top_layout?: CodexTopLayoutPreference;
+  codex_account_sort?: ExportedCodexAccountSort;
   platform_layout_custom_icons?: unknown;
   compact_group_order?: unknown;
   compact_group_colors?: unknown;
@@ -305,6 +322,8 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   workbuddy: async () => (await workbuddyService.listWorkbuddyAccounts()) as unknown as TransferAccountRecord[],
   workbuddy_ai: async () =>
     (await workbuddyAiService.listWorkbuddyAiAccounts()) as unknown as TransferAccountRecord[],
+  minimaxcode: async () =>
+    (await minimaxCodeService.listMinimaxCodeAccounts()) as unknown as TransferAccountRecord[],
 };
 
 const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unknown[]>) | undefined> = {
@@ -329,6 +348,7 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   trae_solo_cn: traeService.importTraeFromJson,
   workbuddy: workbuddyService.importWorkbuddyFromJson,
   workbuddy_ai: workbuddyAiService.importWorkbuddyAiFromJson,
+  minimaxcode: minimaxCodeService.importMinimaxCodeFromJson,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -506,6 +526,7 @@ function buildAccountRef(platform: PlatformId, account: TransferAccountRecord): 
     case 'codebuddy':
     case 'codebuddy_cn':
     case 'workbuddy':
+    case 'minimaxcode':
       ref.email = normalizeString(account.email) ?? undefined;
       ref.uid = normalizeString(account.uid) ?? undefined;
       ref.domain = normalizeString(account.domain) ?? undefined;
@@ -590,6 +611,7 @@ function scoreAccountRef(ref: DataTransferAccountRef, account: TransferAccountRe
     case 'codebuddy':
     case 'codebuddy_cn':
     case 'workbuddy':
+    case 'minimaxcode':
       addStringScore(ref.uid, account.uid, 24);
       addStringScore(ref.email, account.email, 10);
       addStringScore(ref.domain, account.domain, 4);
@@ -1026,11 +1048,19 @@ function importCodexWakeupState(
 }
 
 async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransferConfigBundle> {
+  await hydrateUserMemory();
+  let codexTopLayout: CodexTopLayoutPreference;
+  try {
+    codexTopLayout = loadCodexTopLayoutPreference();
+  } catch {
+    throw new Error('codex_top_layout_read_failed');
+  }
   const [
     rawUserConfig,
     groupSettings,
     accountGroups,
     codexAccountGroups,
+    platformAccountGroups,
     codexModelProviders,
     codexWakeupState,
     codexWakeupCliStatus,
@@ -1040,6 +1070,27 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
     getGroupSettings(),
     getAccountGroups(),
     getCodexAccountGroups(),
+    (async () => {
+      const entries: Array<[string, ExportedAccountGroup[]]> = [];
+      for (const platform of ALL_PLATFORM_IDS) {
+        if (platform === 'antigravity' || platform === 'antigravity_ide' || platform === 'codex' || platform === 'codex_api_service') {
+          continue;
+        }
+        const groups = await getPlatformGroups(platform);
+        if (groups.length > 0) {
+          entries.push([
+            platform,
+            groups.map((g) => ({
+              id: g.id,
+              name: g.name,
+              createdAt: g.createdAt,
+              accountRefs: mapAccountIdsToRefs(platform, g.accountIds, registry),
+            })),
+          ]);
+        }
+      }
+      return Object.fromEntries(entries);
+    })(),
     listCodexModelProviders(),
     getCodexWakeupState(),
     getCodexWakeupCliStatus(),
@@ -1058,6 +1109,7 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
     group_settings: groupSettings,
     account_groups: exportAccountGroups(accountGroups, registry),
     codex_account_groups: exportCodexAccountGroups(codexAccountGroups, registry),
+    platform_account_groups: platformAccountGroups,
     codex_model_providers: codexModelProviders,
     instance_stores: Object.fromEntries(instanceStoreEntries) as Partial<
       Record<InstancePlatform, ExportedInstanceStore>
@@ -1075,6 +1127,13 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
     verification_records: safeGetLocalStorageItem('agtools.mfa.vault.v2'),
     verification_history: safeGetLocalStorageItem('agtools.mfa.vault.history'),
     platform_layout_config: safeGetLocalStorageItem('agtools.platform_layout.v1'),
+    codex_top_layout: codexTopLayout,
+    codex_account_sort: {
+      active: readCodexCustomSortActive(),
+      account_refs: mapAccountIdsToRefs('codex', mergeIdLists(
+        readCodexCustomSortOrder(), registry.byPlatform.codex.map(account => account.id),
+      ), registry).filter(ref => CODEX_SORT_IDENTITY_FIELDS.some(key => normalizeString(ref[key]))),
+    },
     platform_layout_custom_icons: safeGetLocalStorageItem('agtools.platform_layout.custom_icons.v1'),
     compact_group_order: safeGetLocalStorageItem('compactGroupOrder'),
     compact_group_colors: safeGetLocalStorageItem('compactGroupColors'),
@@ -1083,7 +1142,56 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
   };
 }
 
+function validateImportedCodexTopLayout(value: unknown): CodexTopLayoutPreference {
+  if (!isRecord(value) || !Array.isArray(value.order) || !value.order.every(tab => typeof tab === 'string')) {
+    throw new Error('codex_top_layout_invalid');
+  }
+  return normalizeCodexTopLayout(value);
+}
+
+const CODEX_SORT_IDENTITY_FIELDS = [
+  'email', 'userId', 'accountId', 'organizationId', 'apiProviderId', 'apiBaseUrl',
+] as const;
+
+function validateImportedCodexAccountSort(value: unknown): ExportedCodexAccountSort {
+  if (!isRecord(value) || typeof value.active !== 'boolean' || !Array.isArray(value.account_refs)
+    || !value.account_refs.every(ref => isRecord(ref) && ref.platform === 'codex'
+      && CODEX_SORT_IDENTITY_FIELDS.every(key => ref[key] === undefined || typeof ref[key] === 'string')
+      && CODEX_SORT_IDENTITY_FIELDS.some(key => normalizeString(ref[key])))) {
+    throw new Error('codex_account_sort_invalid');
+  }
+  return value as unknown as ExportedCodexAccountSort;
+}
+
+function resolveCodexSortOrder(sort: ExportedCodexAccountSort, registry: AccountRegistry) {
+  const ids: string[] = [];
+  let unresolved = 0;
+  const candidates = registry.byPlatform.codex.map(account => ({
+    id: account.id, ref: buildAccountRef('codex', account),
+  }));
+  for (const ref of sort.account_refs) {
+    // Require all exported identity hints to agree. A shared email/user must not
+    // make a missing team account resolve to the personal account instead.
+    const matches = candidates.filter(({ ref: candidateRef }) => candidateRef && CODEX_SORT_IDENTITY_FIELDS.every(key =>
+      !normalizeString(ref[key]) || stringEquals(ref[key], candidateRef[key]),
+    ));
+    if (matches.length !== 1) {
+      unresolved += 1;
+    } else {
+      ids.push(matches[0].id);
+    }
+  }
+  const localIds = new Set(registry.byPlatform.codex.map(account => account.id));
+  const localOrder = readCodexCustomSortOrder().filter(id => localIds.has(id));
+  return { ids: mergeIdLists(ids, mergeIdLists(localOrder, [...localIds])), unresolved };
+}
+
 async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<DataTransferConfigImportResult> {
+  // Validate before any writes. Older bundles intentionally retain the current layout.
+  const codexTopLayout = bundle.codex_top_layout === undefined ? undefined
+    : validateImportedCodexTopLayout(bundle.codex_top_layout);
+  const codexAccountSort = bundle.codex_account_sort === undefined ? undefined
+    : validateImportedCodexAccountSort(bundle.codex_account_sort);
   const registry = await loadAccountRegistry();
   let unresolvedAccountRefs = 0;
   let disabledTaskCount = 0;
@@ -1114,6 +1222,27 @@ async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<Dat
     data: JSON.stringify(codexAccountGroupsImport.groups, null, 2),
   });
   invalidateCodexGroupCache();
+
+  if (bundle.platform_account_groups) {
+    for (const [platform, exportedGroups] of Object.entries(bundle.platform_account_groups)) {
+      if (!Array.isArray(exportedGroups)) continue;
+      const restored = exportedGroups.map((group) => {
+        const resolved = resolveAccountRefsToIds(group.accountRefs, registry);
+        unresolvedAccountRefs += resolved.unresolved;
+        return {
+          id: group.id,
+          name: group.name,
+          createdAt: group.createdAt,
+          accountIds: resolved.ids,
+        };
+      });
+      await invoke('save_platform_account_groups', {
+        platform,
+        data: JSON.stringify(restored, null, 2),
+      });
+      invalidatePlatformGroupCache(platform);
+    }
+  }
 
   await invoke('save_codex_model_providers', {
     data: JSON.stringify(bundle.codex_model_providers, null, 2),
@@ -1182,6 +1311,24 @@ async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<Dat
   saveCurrentAccountRefreshMinutesMap(bundle.current_account_refresh_minutes);
   window.dispatchEvent(new Event('config-updated'));
   window.dispatchEvent(new Event('wakeup-tasks-updated'));
+  if (codexTopLayout !== undefined) {
+    try {
+      writeCodexTopLayoutPreference(codexTopLayout);
+    } catch {
+      // Other settings have already been applied; do not report a complete import.
+      throw new Error('codex_top_layout_import_failed');
+    }
+  }
+  if (codexAccountSort !== undefined) {
+    try {
+      await hydrateUserMemory();
+      const restored = resolveCodexSortOrder(codexAccountSort, registry);
+      unresolvedAccountRefs += restored.unresolved;
+      await restoreCodexCustomSortOrder(restored.ids, codexAccountSort.active);
+    } catch {
+      throw new Error('codex_account_sort_import_failed');
+    }
+  }
 
   return {
     applied: true,
@@ -1217,6 +1364,7 @@ function detectLegacyPlatform(value: unknown): PlatformId | null {
   const id = normalizeString(sample.id);
   if (id?.startsWith('codebuddy_cn_')) return 'codebuddy_cn';
   if (id?.startsWith('workbuddy_')) return 'workbuddy';
+  if (id?.startsWith('minimax_code_')) return 'minimaxcode';
   if (id?.startsWith('codebuddy_')) return 'codebuddy';
   if (
     id?.startsWith('zcode_') ||
@@ -1258,10 +1406,13 @@ function detectLegacyPlatform(value: unknown): PlatformId | null {
   }
   if ('uid' in sample || 'enterprise_id' in sample || 'dosage_notify_code' in sample) {
     if (stringContains(sample.domain, 'workbuddy')) return 'workbuddy';
+    if (stringContains(sample.domain, 'minimax')) return 'minimaxcode';
     if (stringContains(sample.domain, 'codebuddy.cn')) return 'codebuddy_cn';
     if (stringContains(sample.domain, 'codebuddy')) return 'codebuddy';
     return id?.startsWith('workbuddy_')
       ? 'workbuddy'
+      : id?.startsWith('minimax_code_')
+        ? 'minimaxcode'
       : id?.startsWith('codebuddy_cn_')
         ? 'codebuddy_cn'
         : 'codebuddy';

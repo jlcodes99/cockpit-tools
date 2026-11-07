@@ -12,6 +12,8 @@
  * 2. 同一个弹框根元素上，**最多只能有一个未加 `.modal.` 前缀的尺寸声明类**；
  *    需要压过共享类（例如 `.codex-add-modal`）时，把该弹框自己的尺寸规则写成
  *    `.modal.<自己的类>`（优先级 0,2,0，与加载顺序无关）。
+ * 3. 弹框正文禁止使用 `overflow: visible` 或 `max-height: none`，避免正文溢出
+ *    弹框裁剪区后把标题、关闭按钮或底部操作按钮推出视口。
  *
  * 解析说明：按花括号配对解析 CSS 块，递归进入 `@media` 等 at-rule，
  * 并逐个检查选择器列表（`.a, .b { … }`）里的每个类，避免漏检。
@@ -62,6 +64,15 @@ function hasSizeDeclaration(body) {
 
 function hasUnboundedMaxHeight(body) {
   return /(^|[;{\s])max-height\s*:\s*none/.test(body);
+}
+
+function hasVisibleOverflow(body) {
+  return /(^|[;{\s])overflow(?:-y)?\s*:\s*visible/.test(body);
+}
+
+function isDialogBodySelector(selector) {
+  return /(?:^|[\s>+~,.])\.[\w-]*(?:modal|dialog)(?:-body|__body)\b/.test(selector)
+    || /(?:^|[\s>+~,.])\.modal-body\b/.test(selector);
 }
 
 /** 读取与 `{` 配对的整段声明块内容。 */
@@ -209,15 +220,49 @@ function collectDialogRoots(sizedClasses) {
   });
 }
 
+function collectUnsafeDialogBodies() {
+  const risks = [];
+  for (const file of walk(path.join(repoRoot, "src"), [".css"])) {
+    const raw = fs
+      .readFileSync(file, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+    const relativeFile = path.relative(repoRoot, file);
+    for (const rule of parseStyleRules(raw)) {
+      const unsafeDeclarations = [];
+      if (hasVisibleOverflow(rule.body)) {
+        unsafeDeclarations.push("overflow: visible");
+      }
+      if (hasUnboundedMaxHeight(rule.body)) {
+        unsafeDeclarations.push("max-height: none");
+      }
+      if (unsafeDeclarations.length === 0) continue;
+
+      for (const part of rule.header.split(",")) {
+        const selector = part.trim();
+        if (!isDialogBodySelector(selector)) continue;
+        risks.push({
+          file: relativeFile,
+          classes: [selector],
+          reason: `弹框正文使用 ${unsafeDeclarations.join(" / ")}`,
+        });
+      }
+    }
+  }
+  return risks;
+}
+
 const sizedClasses = collectSizedClasses();
-const conflicts = collectDialogRoots(sizedClasses);
+const conflicts = [
+  ...collectDialogRoots(sizedClasses),
+  ...collectUnsafeDialogBodies(),
+];
 
 if (conflicts.length === 0) {
-  console.log("✅ 未发现弹框尺寸优先级冲突。");
+  console.log("✅ 未发现弹框尺寸或正文滚动风险。");
   process.exit(0);
 }
 
-console.log(`⚠️  发现 ${conflicts.length} 处弹框尺寸声明可能受 CSS 加载顺序影响：`);
+console.log(`⚠️  发现 ${conflicts.length} 处弹框尺寸或正文滚动风险：`);
 for (const conflict of conflicts) {
   console.log(`   - ${conflict.file}: ${conflict.classes.join(" + ")}（${conflict.reason}）`);
 }

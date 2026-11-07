@@ -70,7 +70,7 @@
         "logoUrl": "https://raw.githubusercontent.com/BigPizzaV3/CodexPlusPlus/main/docs/images/sponsor-apikey-fun.png",
         "url": "https://apikey.fan/register?aff=cockpit",
         "badge": "AI 中转",
-        "description": "APIKEY.FUN 面向开发者提供多模型 API 接入与中转服务，覆盖 Claude、OpenAI、Gemini 等常用模型，适合需要统一密钥、稳定调用和成本优化的工具链场景。",
+        "description": "APIKEY.FUN 面向开发者提供多模型 API 接入与中转服务，覆盖 Claude / ChatGPT / Grok / Gemini / 智谱 GLM / Kimi / DeepSeek 等平台（每平台一把密钥、按分组计价），适合在 Codex、Claude Code、Gemini CLI 等工具中统一配置使用。",
         "integration": {
           "enabled": true,
           "type": "sub2api",
@@ -97,15 +97,18 @@
         "locales": {
           "zh-CN": {
             "badge": "AI 中转",
-            "description": "APIKEY.FUN 面向开发者提供多模型 API 接入与中转服务，覆盖 Claude、OpenAI、Gemini 等常用模型，适合需要统一密钥、稳定调用和成本优化的工具链场景。"
+            "description": "APIKEY.FUN 面向开发者提供多模型 API 接入与中转服务，覆盖 Claude / ChatGPT / Grok / Gemini / 智谱 GLM / Kimi / DeepSeek 等平台（每平台一把密钥、按分组计价），适合在 Codex、Claude Code、Gemini CLI 等工具中统一配置使用。"
           },
           "en": {
             "badge": "AI Relay",
-            "description": "APIKEY.FUN provides multi-model API access and relay services for developers, covering popular models such as Claude, OpenAI, and Gemini. It fits workflows that need unified keys, stable calls, and better cost control."
+            "description": "APIKEY.FUN provides multi-model API relay services for developers, covering Claude / ChatGPT / Grok / Gemini / Zhipu GLM / Kimi / DeepSeek (one key per platform, group-based pricing) for Codex, Claude Code, Gemini CLI and more."
           },
           "en-US": {
             "badge": "AI Relay",
-            "description": "APIKEY.FUN provides multi-model API access and relay services for developers, covering popular models such as Claude, OpenAI, and Gemini. It fits workflows that need unified keys, stable calls, and better cost control."
+            "description": "APIKEY.FUN provides multi-model API relay services for developers, covering Claude / ChatGPT / Grok / Gemini / Zhipu GLM / Kimi / DeepSeek (one key per platform, group-based pricing) for Codex, Claude Code, Gemini CLI and more."
+          },
+          "zh-tw": {
+            "description": "APIKEY.FUN 為開發者提供多模型 API 接入與中轉服務，覆蓋 Claude / ChatGPT / Grok / Gemini / 智譜 GLM / Kimi / DeepSeek 等平台（每平台一把密鑰、依分組計價），適合在 Codex、Claude Code、Gemini CLI 等工具中統一設定使用。"
           }
         }
       }
@@ -113,72 +116,133 @@
   },
   "announcements": [
     {
-      "id": "codex-client-login-observation-2026-08-28",
+      "id": "apikey-fan-double11-2026",
       "type": "info",
       "priority": 100,
-      "title": "Codex 客户端登录状态检测与凭据刷新说明",
-      "summary": "官方 Codex 客户端最新版增加了新的登录状态检测，部分账号可能在使用一段时间后或者对话后被跳转到登录页面。经过持续排查和大量测试，Cockpit Tools 最新版已调整客户端监测、切号和凭据刷新流程，并与官方最新 OAuth 授权参数保持一致。",
-      "content": "官方 Codex 客户端最新版更新后，增加了一些新的登录状态检测。当客户端请求远端接口并收到特定结果时，部分账号可能在使用一段时间后或者对话后被跳转到登录页面。\n\n最近我们一直在研究这个问题，在不同账号、不同系统和多种使用场景上投入了大量时间和精力，进行了大量测试。期间也连续调整过好几个版本，根据当时的测试结果尝试了多套我们认为可行的认证和切号规则。但随着测试样本增加，最终仍没有找到一个适用于所有账号和环境的固定规律。\n\n同一组登录凭证在不同环境下也可能出现完全不同的结果。例如，同一个账号在我的 macOS 电脑上会退出登录，导入 Windows 后却可能正常使用、不再跳转登录页面。这也说明问题并不能仅通过某一个 Token 的本地状态或一条固定规则准确判断。\n\n另外，Cockpit Tools 最新版本的 OAuth 授权请求已与官方最新桌面客户端的内层授权流程保持一致，使用相同的官方授权端点和主要参数，包括 `client_id`、授权 scope、PKCE、`id_token_add_organizations=true`、`codex_cli_simplified_flow=true` 及 `originator=Codex Desktop`。官方使用的 `https://chatgpt.com/codex/desktop-auth` 属于桌面前端的外层包装，内层仍然是 `https://auth.openai.com/oauth/authorize`；Cockpit 直接使用同一内层 OAuth 协议完成授权。\n\n目前 Cockpit Tools 最新版本已经采用以下逻辑：\n\n1. 监听客户端实际登录状态\nCockpit 会监听 Codex 客户端是否真正跳转到登录页面。确认跳转后，只会给对应账号添加提示标记，由用户自行决定是否重新授权，不会强制阻止切号。\n\n2. 切号不再受本地 Token 到期信息强制限制\n切号不会再仅因为本地 id_token 等 Token 的过期时间而被拦截。\n\n3. 启动预览支持手动刷新登录凭证\n启动预览中增加了强制刷新功能，可以使用当前 refresh_token 获取新的登录凭证，同时检查该 refresh_token 是否仍然有效。刷新失败时，可以选择重新检测或重新授权。\n\n目前通过大量测试能够得到的阶段性结论是：refresh_token 失效不一定会直接导致客户端退出登录；但已经跳转到登录页面的账号，其 refresh_token 基本都已经失效。大部分账号在重新授权并获取新的登录信息后，可以恢复正常使用。\n\n不同系统、客户端版本和账号状态之间仍可能存在差异，因此目前无法承诺某一种规则能够覆盖所有情况。如果你发现了新的触发条件、账号表现或更可靠的处理方式，欢迎通过 GitHub 提交 Issue 或 Pull Request，帮助我们继续完善判断和处理方案。",
+      "title": "11.11: 11.11% top-up bonus for new and existing users | APIKEY.FAN",
+      "summary": "11.11: 11.11% top-up bonus for new and existing users! Cockpit’s official API relay partner, supporting Claude, ChatGPT, Gemini and other leading models.",
+      "content": "November 1–11: new and existing users receive an 11.11% bonus on top-ups!\n\nAPIKEY.FAN is Cockpit’s official API relay partner. It provides API access to leading models including Claude, ChatGPT and Gemini, which you can configure in tools such as Codex, Claude Code and Gemini CLI.\n\nIf you need model API access, visit the activity page to learn more.\n\nOffer period: November 1–11, 2026 (UTC+8)\nSee the activity page for participation details and terms.",
       "action": {
         "type": "url",
-        "target": "https://github.com/jlcodes99/cockpit-tools/issues/new",
-        "label": "提交反馈"
+        "target": "https://apikey.fan/activities/double11-2026?aff=COCKPIT",
+        "label": "View offer"
       },
       "targetVersions": "*",
       "targetLanguages": [
         "*"
       ],
-      "showOnce": true,
-      "popup": true,
-      "createdAt": "2026-08-28T13:00:00Z",
-      "expiresAt": null,
+      "showOnce": false,
+      "popup": false,
+      "createdAt": "2026-11-01T00:00:00+08:00",
+      "expiresAt": "2026-11-12T00:00:00+08:00",
       "locales": {
+        "zh-CN": {
+          "title": "双十一新老用户充值赠送 11.11%｜APIKEY.FAN",
+          "summary": "双十一新老用户充值赠送 11.11%！Cockpit 官方合作 API 中转站，支持 Claude、ChatGPT、Gemini 等主流模型。",
+          "content": "11 月 1 日—11 日，新老用户充值均可获赠 11.11%！\n\nAPIKEY.FAN 是 Cockpit 的官方合作 API 中转站，提供 Claude、ChatGPT、Gemini 等主流模型的 API 接入，可在 Codex、Claude Code、Gemini CLI 等工具中配置使用。\n\n有模型 API 使用需求的用户，可以前往活动页了解详情。\n\n活动时间：2026年11月1日—11日（北京时间）\n具体参与方式及规则以活动页为准。",
+          "actionLabel": "查看活动"
+        },
+        "zh-tw": {
+          "title": "雙十一新舊用戶儲值加贈 11.11%｜APIKEY.FAN",
+          "summary": "雙十一新舊用戶儲值加贈 11.11%！Cockpit 官方合作 API 中轉站，支援 Claude、ChatGPT、Gemini 等主流模型。",
+          "content": "11 月 1 日—11 日，新舊用戶儲值皆可獲贈 11.11%！\n\nAPIKEY.FAN 是 Cockpit 的官方合作 API 中轉站，提供 Claude、ChatGPT、Gemini 等主流模型的 API 存取，可在 Codex、Claude Code、Gemini CLI 等工具中設定使用。\n\n有模型 API 使用需求的用戶，可前往活動頁面了解詳情。\n\n活動期間：2026年11月1日—11日（UTC+8）\n具體參加方式及規則以活動頁面為準。",
+          "actionLabel": "查看活動"
+        },
         "en": {
-          "title": "Codex client sign-in observation and credential refresh",
-          "summary": "The latest official Codex client introduced new sign-in checks. Some accounts may be redirected to sign-in after being used for a while or after a conversation. Following extensive investigation and testing, the latest Cockpit Tools release updates client observation, switching, and credential refresh behavior while matching the latest official OAuth authorization parameters.",
-          "content": "The latest official Codex client introduced additional sign-in state checks. When the client receives certain results from remote requests, some accounts may be redirected to the sign-in page after being used for a while or after a conversation.\n\nWe have spent substantial time and effort investigating this issue across different accounts, operating systems, and usage scenarios, with extensive testing. Across several releases, we adjusted authentication and switching rules based on what the available results suggested at the time. As the test sample grew, however, we still could not identify one fixed trigger that applies to every account and environment.\n\nThe same credentials can behave completely differently across environments. For example, the same account may sign out on my macOS computer while continuing to work normally after being imported on Windows. This also shows that the outcome cannot be determined reliably from one local Token state or a single fixed rule.\n\nIn addition, the latest Cockpit Tools version uses the same inner OAuth authorization flow as the latest official desktop client, including the official authorization endpoint and main parameters such as `client_id`, authorization scopes, PKCE, `id_token_add_organizations=true`, `codex_cli_simplified_flow=true`, and `originator=Codex Desktop`. The official `https://chatgpt.com/codex/desktop-auth` URL is an outer wrapper used by the desktop front end; its inner authorization request still targets `https://auth.openai.com/oauth/authorize`. Cockpit uses that same inner OAuth protocol directly.\n\nThe latest Cockpit Tools version now uses the following logic:\n\n1. Observe the client's actual sign-in state\nCockpit observes whether the Codex client actually redirects to the sign-in page. If confirmed, it adds a notice to the matching account and lets you decide whether to reauthorize. It does not forcibly block account switching.\n\n2. Do not block switching solely because of local Token expiration\nAccount switching is no longer blocked only because a local id_token or another Token is shown as expired.\n\n3. Manually refresh credentials from launch preview\nLaunch preview can use the current refresh_token to obtain new credentials and check whether that refresh_token is still valid. If refresh fails, you can retry or reauthorize.\n\nOur findings from extensive testing so far are: an invalid refresh_token does not always cause the client to sign out, but accounts that have redirected to sign-in generally also have an invalid refresh_token. Most affected accounts return to normal after reauthorization obtains new credentials.\n\nBehavior can still vary by operating system, client version, and account state, so no single rule can currently be guaranteed to cover every case. If you discover a reproducible trigger or a more reliable approach, please submit a GitHub Issue or Pull Request to help us continue improving the detection and recovery flow.",
-          "actionLabel": "Send feedback"
+          "title": "11.11: 11.11% top-up bonus for new and existing users | APIKEY.FAN",
+          "summary": "11.11: 11.11% top-up bonus for new and existing users! Cockpit’s official API relay partner, supporting Claude, ChatGPT, Gemini and other leading models.",
+          "content": "November 1–11: new and existing users receive an 11.11% bonus on top-ups!\n\nAPIKEY.FAN is Cockpit’s official API relay partner. It provides API access to leading models including Claude, ChatGPT and Gemini, which you can configure in tools such as Codex, Claude Code and Gemini CLI.\n\nIf you need model API access, visit the activity page to learn more.\n\nOffer period: November 1–11, 2026 (UTC+8)\nSee the activity page for participation details and terms.",
+          "actionLabel": "View offer"
+        },
+        "ja": {
+          "title": "11.11：新規・既存ユーザーともにチャージで11.11%増額 | APIKEY.FAN",
+          "summary": "11.11：新規・既存ユーザーともにチャージで11.11%増額！Cockpit の公式提携 API 中継サービス。Claude、ChatGPT、Gemini などの主要モデルに対応。",
+          "content": "11月1日〜11日、新規・既存ユーザーともにチャージで11.11%増額！\n\nAPIKEY.FAN は Cockpit の公式提携 API 中継サービスです。Claude、ChatGPT、Gemini などの主要モデルへの API アクセスを提供し、Codex、Claude Code、Gemini CLI などのツールで設定して利用できます。\n\nモデルの API アクセスが必要な方は、キャンペーンページで詳細をご確認ください。\n\n開催期間：2026年11月1日〜11日（UTC+8）\n参加方法と条件はキャンペーンページをご確認ください。",
+          "actionLabel": "詳細を見る"
+        },
+        "ko": {
+          "title": "11.11 신규·기존 사용자 충전 시 11.11% 추가 지급 | APIKEY.FAN",
+          "summary": "11.11 신규·기존 사용자 충전 시 11.11% 추가 지급! Claude, ChatGPT, Gemini 등 주요 모델을 지원하는 Cockpit 공식 제휴 API 중계 서비스입니다.",
+          "content": "11월 1일~11일, 신규 및 기존 사용자 모두 충전 시 11.11%를 추가로 받습니다!\n\nAPIKEY.FAN은 Cockpit의 공식 제휴 API 중계 서비스입니다. Claude, ChatGPT, Gemini 등 주요 모델의 API를 제공하며 Codex, Claude Code, Gemini CLI 등의 도구에서 설정하여 사용할 수 있습니다.\n\n모델 API가 필요하다면 행사 페이지에서 자세한 내용을 확인하세요.\n\n행사 기간: 2026년 11월 1일~11일 (UTC+8)\n참여 방법과 조건은 행사 페이지를 확인하세요.",
+          "actionLabel": "행사 보기"
+        },
+        "de": {
+          "title": "11.11: 11,11 % Aufladebonus für neue und bestehende Nutzer | APIKEY.FAN",
+          "summary": "11.11: 11,11 % Aufladebonus für neue und bestehende Nutzer! Der offizielle API-Relay-Partner von Cockpit unterstützt Claude, ChatGPT, Gemini und weitere führende Modelle.",
+          "content": "Vom 1. bis 11. November erhalten neue und bestehende Nutzer 11,11 % Bonus auf Aufladungen!\n\nAPIKEY.FAN ist der offizielle API-Relay-Partner von Cockpit. Der Dienst bietet API-Zugang zu führenden Modellen wie Claude, ChatGPT und Gemini und lässt sich in Tools wie Codex, Claude Code und Gemini CLI einrichten.\n\nWenn Sie Modell-APIs nutzen möchten, finden Sie weitere Informationen auf der Aktionsseite.\n\nAktionszeitraum: 1.–11. November 2026 (UTC+8)\nTeilnahmebedingungen und weitere Einzelheiten stehen auf der Aktionsseite.",
+          "actionLabel": "Zur Aktion"
+        },
+        "fr": {
+          "title": "11.11 : 11,11 % de bonus sur les recharges pour tous les utilisateurs | APIKEY.FAN",
+          "summary": "11.11 : 11,11 % de bonus sur les recharges pour tous les utilisateurs! Le partenaire officiel de relais API de Cockpit prend en charge Claude, ChatGPT, Gemini et d’autres grands modèles.",
+          "content": "Du 1er au 11 novembre, les nouveaux utilisateurs comme les utilisateurs actuels reçoivent 11,11 % de bonus sur leurs recharges !\n\nAPIKEY.FAN est le partenaire officiel de relais API de Cockpit. Le service donne accès aux API de grands modèles comme Claude, ChatGPT et Gemini, à configurer dans des outils tels que Codex, Claude Code et Gemini CLI.\n\nSi vous avez besoin d’accéder aux API de ces modèles, consultez la page de l’offre pour en savoir plus.\n\nPériode : du 1er au 11 novembre 2026 (UTC+8)\nLes modalités de participation et les conditions figurent sur la page de l’offre.",
+          "actionLabel": "Voir l’offre"
+        },
+        "es": {
+          "title": "11.11: 11,11 % extra en recargas para usuarios nuevos y actuales | APIKEY.FAN",
+          "summary": "11.11: 11,11 % extra en recargas para usuarios nuevos y actuales! El socio oficial de retransmisión API de Cockpit admite Claude, ChatGPT, Gemini y otros modelos destacados.",
+          "content": "¡Del 1 al 11 de noviembre, los usuarios nuevos y actuales reciben un 11,11 % extra en sus recargas!\n\nAPIKEY.FAN es el socio oficial de retransmisión API de Cockpit. Ofrece acceso a las API de modelos destacados como Claude, ChatGPT y Gemini, que puedes configurar en herramientas como Codex, Claude Code y Gemini CLI.\n\nSi necesitas acceso a las API de estos modelos, visita la página de la promoción para obtener más información.\n\nPromoción: del 1 al 11 de noviembre de 2026 (UTC+8)\nConsulta la página de la promoción para conocer cómo participar y las condiciones.",
+          "actionLabel": "Ver oferta"
+        },
+        "it": {
+          "title": "11.11: bonus dell’11,11% sulle ricariche per utenti nuovi e già registrati | APIKEY.FAN",
+          "summary": "11.11: bonus dell’11,11% sulle ricariche per utenti nuovi e già registrati! Il partner ufficiale di inoltro API di Cockpit supporta Claude, ChatGPT, Gemini e altri modelli di punta.",
+          "content": "Dal 1° all’11 novembre, gli utenti nuovi e già registrati ricevono un bonus dell’11,11% sulle ricariche!\n\nAPIKEY.FAN è il partner ufficiale di inoltro API di Cockpit. Offre accesso alle API di modelli di punta come Claude, ChatGPT e Gemini, configurabili in strumenti quali Codex, Claude Code e Gemini CLI.\n\nSe hai bisogno di accedere alle API dei modelli, visita la pagina della promozione per saperne di più.\n\nPeriodo: 1–11 novembre 2026 (UTC+8)\nLe modalità di partecipazione e le condizioni sono disponibili nella pagina della promozione.",
+          "actionLabel": "Vedi offerta"
+        },
+        "pt-br": {
+          "title": "11.11: bônus de 11,11% nas recargas para usuários novos e atuais | APIKEY.FAN",
+          "summary": "11.11: bônus de 11,11% nas recargas para usuários novos e atuais! O parceiro oficial de retransmissão de API do Cockpit oferece Claude, ChatGPT, Gemini e outros modelos de destaque.",
+          "content": "De 1 a 11 de novembro, usuários novos e atuais recebem 11,11% de bônus nas recargas!\n\nAPIKEY.FAN é o parceiro oficial de retransmissão de API do Cockpit. Oferece acesso às APIs de modelos de destaque como Claude, ChatGPT e Gemini, que podem ser configuradas em ferramentas como Codex, Claude Code e Gemini CLI.\n\nSe você precisa acessar APIs de modelos, visite a página da promoção para saber mais.\n\nPeríodo: 1 a 11 de novembro de 2026 (UTC+8)\nConfira como participar e as condições na página da promoção.",
+          "actionLabel": "Ver oferta"
+        },
+        "ru": {
+          "title": "11.11: бонус 11,11% при пополнении для новых и действующих пользователей | APIKEY.FAN",
+          "summary": "11.11: бонус 11,11% при пополнении для новых и действующих пользователей! Официальный партнёр Cockpit по ретрансляции API поддерживает Claude, ChatGPT, Gemini и другие ведущие модели.",
+          "content": "С 1 по 11 ноября новые и действующие пользователи получают бонус 11,11% при пополнении!\n\nAPIKEY.FAN — официальный партнёр Cockpit по ретрансляции API. Сервис предоставляет доступ к API ведущих моделей, включая Claude, ChatGPT и Gemini, с возможностью настройки в Codex, Claude Code, Gemini CLI и других инструментах.\n\nЕсли вам нужен доступ к API моделей, подробности можно узнать на странице акции.\n\nСрок акции: 1–11 ноября 2026 года (UTC+8)\nПорядок участия и условия указаны на странице акции.",
+          "actionLabel": "К акции"
+        },
+        "pl": {
+          "title": "11.11: 11,11% bonusu do doładowań dla nowych i obecnych użytkowników | APIKEY.FAN",
+          "summary": "11.11: 11,11% bonusu do doładowań dla nowych i obecnych użytkowników! Oficjalny partner Cockpit świadczący usługi pośrednictwa API obsługuje Claude, ChatGPT, Gemini i inne czołowe modele.",
+          "content": "Od 1 do 11 listopada nowi i obecni użytkownicy otrzymują 11,11% bonusu do doładowań!\n\nAPIKEY.FAN to oficjalny partner Cockpit świadczący usługi pośrednictwa API. Zapewnia dostęp do API czołowych modeli, takich jak Claude, ChatGPT i Gemini, które można skonfigurować w narzędziach Codex, Claude Code, Gemini CLI i innych.\n\nJeśli potrzebujesz dostępu do API modeli, odwiedź stronę promocji, aby poznać szczegóły.\n\nTermin: 1–11 listopada 2026 r. (UTC+8)\nSposób udziału i warunki znajdziesz na stronie promocji.",
+          "actionLabel": "Zobacz ofertę"
+        },
+        "cs": {
+          "title": "11.11: bonus 11,11 % k dobití pro nové i stávající uživatele | APIKEY.FAN",
+          "summary": "11.11: bonus 11,11 % k dobití pro nové i stávající uživatele! Oficiální partner Cockpit pro zprostředkování API podporuje Claude, ChatGPT, Gemini a další přední modely.",
+          "content": "Od 1. do 11. listopadu získají noví i stávající uživatelé bonus 11,11 % k dobití!\n\nAPIKEY.FAN je oficiální partner Cockpit pro zprostředkování API. Poskytuje přístup k API předních modelů včetně Claude, ChatGPT a Gemini, které lze nastavit v nástrojích Codex, Claude Code, Gemini CLI a dalších.\n\nPokud potřebujete přístup k API modelů, podrobnosti najdete na stránce akce.\n\nObdobí akce: 1.–11. listopadu 2026 (UTC+8)\nZpůsob účasti a podmínky najdete na stránce akce.",
+          "actionLabel": "Zobrazit akci"
+        },
+        "tr": {
+          "title": "11.11: yeni ve mevcut kullanıcılara bakiye yüklemelerinde %11,11 bonus | APIKEY.FAN",
+          "summary": "11.11: yeni ve mevcut kullanıcılara bakiye yüklemelerinde %11,11 bonus! Cockpit’in resmi API aracı hizmet ortağı Claude, ChatGPT, Gemini ve diğer önde gelen modelleri destekler.",
+          "content": "1–11 Kasım arasında yeni ve mevcut kullanıcılar bakiye yüklemelerinde %11,11 bonus kazanır!\n\nAPIKEY.FAN, Cockpit’in resmi API aracı hizmet ortağıdır. Claude, ChatGPT ve Gemini gibi önde gelen modellerin API’lerine erişim sağlar; Codex, Claude Code, Gemini CLI ve benzeri araçlarda yapılandırılarak kullanılabilir.\n\nModel API erişimine ihtiyaç duyuyorsanız ayrıntılar için kampanya sayfasını ziyaret edin.\n\nKampanya dönemi: 1–11 Kasım 2026 (UTC+8)\nKatılım bilgileri ve koşullar kampanya sayfasında yer almaktadır.",
+          "actionLabel": "Kampanyayı gör"
+        },
+        "id": {
+          "title": "11.11: bonus isi ulang 11,11% untuk pengguna baru dan lama | APIKEY.FAN",
+          "summary": "11.11: bonus isi ulang 11,11% untuk pengguna baru dan lama! Mitra resmi perantara API Cockpit mendukung Claude, ChatGPT, Gemini, dan model unggulan lainnya.",
+          "content": "Pada 1–11 November, pengguna baru dan lama mendapat bonus isi ulang 11,11%!\n\nAPIKEY.FAN adalah mitra resmi perantara API Cockpit. Layanan ini menyediakan akses API ke model unggulan seperti Claude, ChatGPT, dan Gemini, yang dapat dikonfigurasi di alat seperti Codex, Claude Code, dan Gemini CLI.\n\nJika Anda memerlukan akses API model, kunjungi halaman promo untuk informasi selengkapnya.\n\nPeriode promo: 1–11 November 2026 (UTC+8)\nLihat cara berpartisipasi dan ketentuan di halaman promo.",
+          "actionLabel": "Lihat promo"
+        },
+        "vi": {
+          "title": "11.11: nạp tiền nhận thêm 11,11% cho người dùng mới và hiện tại | APIKEY.FAN",
+          "summary": "11.11: nạp tiền nhận thêm 11,11% cho người dùng mới và hiện tại! Đối tác trung chuyển API chính thức của Cockpit hỗ trợ Claude, ChatGPT, Gemini và các mô hình hàng đầu khác.",
+          "content": "Từ ngày 1 đến 11 tháng 11, người dùng mới và hiện tại đều được tặng thêm 11,11% khi nạp tiền!\n\nAPIKEY.FAN là đối tác trung chuyển API chính thức của Cockpit. Dịch vụ cung cấp quyền truy cập API của các mô hình hàng đầu như Claude, ChatGPT và Gemini, có thể cấu hình trong Codex, Claude Code, Gemini CLI và các công cụ khác.\n\nNếu bạn cần sử dụng API mô hình, hãy truy cập trang ưu đãi để tìm hiểu chi tiết.\n\nThời gian: 1–11 tháng 11 năm 2026 (UTC+8)\nCách tham gia và điều kiện được nêu trên trang ưu đãi.",
+          "actionLabel": "Xem ưu đãi"
+        },
+        "ar": {
+          "title": "عرض ١١.١١: مكافأة شحن ١١٫١١٪ للمستخدمين الجدد والحاليين | APIKEY.FAN",
+          "summary": "عرض ١١.١١: مكافأة شحن ١١٫١١٪ للمستخدمين الجدد والحاليين! شريك Cockpit الرسمي لخدمة ترحيل API يدعم Claude وChatGPT وGemini وغيرها من النماذج الرائدة.",
+          "content": "من ١ إلى ١١ نوفمبر، يحصل المستخدمون الجدد والحاليون على مكافأة ١١٫١١٪ عند شحن الرصيد!\n\nAPIKEY.FAN هو شريك Cockpit الرسمي لخدمة ترحيل API. يوفر الوصول إلى واجهات API لنماذج رائدة مثل Claude وChatGPT وGemini، ويمكن إعدادها للاستخدام في أدوات مثل Codex وClaude Code وGemini CLI.\n\nإذا كنت بحاجة إلى الوصول إلى واجهات API للنماذج، فتفضل بزيارة صفحة الفعالية لمعرفة التفاصيل.\n\nفترة العرض: ١–١١ نوفمبر ٢٠٢٦ (UTC+8)\nتجد طريقة المشاركة والشروط في صفحة الفعالية.",
+          "actionLabel": "عرض التفاصيل"
         },
         "en-US": {
-          "title": "Codex client sign-in observation and credential refresh",
-          "summary": "The latest official Codex client introduced new sign-in checks. Some accounts may be redirected to sign-in after being used for a while or after a conversation. Following extensive investigation and testing, the latest Cockpit Tools release updates client observation, switching, and credential refresh behavior while matching the latest official OAuth authorization parameters.",
-          "content": "The latest official Codex client introduced additional sign-in state checks. When the client receives certain results from remote requests, some accounts may be redirected to the sign-in page after being used for a while or after a conversation.\n\nWe have spent substantial time and effort investigating this issue across different accounts, operating systems, and usage scenarios, with extensive testing. Across several releases, we adjusted authentication and switching rules based on what the available results suggested at the time. As the test sample grew, however, we still could not identify one fixed trigger that applies to every account and environment.\n\nThe same credentials can behave completely differently across environments. For example, the same account may sign out on my macOS computer while continuing to work normally after being imported on Windows. This also shows that the outcome cannot be determined reliably from one local Token state or a single fixed rule.\n\nIn addition, the latest Cockpit Tools version uses the same inner OAuth authorization flow as the latest official desktop client, including the official authorization endpoint and main parameters such as `client_id`, authorization scopes, PKCE, `id_token_add_organizations=true`, `codex_cli_simplified_flow=true`, and `originator=Codex Desktop`. The official `https://chatgpt.com/codex/desktop-auth` URL is an outer wrapper used by the desktop front end; its inner authorization request still targets `https://auth.openai.com/oauth/authorize`. Cockpit uses that same inner OAuth protocol directly.\n\nThe latest Cockpit Tools version now uses the following logic:\n\n1. Observe the client's actual sign-in state\nCockpit observes whether the Codex client actually redirects to the sign-in page. If confirmed, it adds a notice to the matching account and lets you decide whether to reauthorize. It does not forcibly block account switching.\n\n2. Do not block switching solely because of local Token expiration\nAccount switching is no longer blocked only because a local id_token or another Token is shown as expired.\n\n3. Manually refresh credentials from launch preview\nLaunch preview can use the current refresh_token to obtain new credentials and check whether that refresh_token is still valid. If refresh fails, you can retry or reauthorize.\n\nOur findings from extensive testing so far are: an invalid refresh_token does not always cause the client to sign out, but accounts that have redirected to sign-in generally also have an invalid refresh_token. Most affected accounts return to normal after reauthorization obtains new credentials.\n\nBehavior can still vary by operating system, client version, and account state, so no single rule can currently be guaranteed to cover every case. If you discover a reproducible trigger or a more reliable approach, please submit a GitHub Issue or Pull Request to help us continue improving the detection and recovery flow.",
-          "actionLabel": "Send feedback"
-        }
-      }
-    },
-    {
-      "id": "codex-windows-login-switch-2026-08-29",
-      "type": "info",
-      "priority": 110,
-      "title": "Windows 用户切号跳转登录页问题说明",
-      "summary": "仅使用官方 ChatGPT 客户端也可能遇到切号后跳转登录页的问题。目前 Windows 更新到 ChatGPT 26.825 或更高版本后基本可以恢复。",
-      "content": "近期发现，仅使用官方 ChatGPT 客户端也可能在切换账号后跳转到登录页面，并非只有使用第三方工具才会出现。\n\n目前测试显示，Windows 用户将 ChatGPT 更新到 26.825 或更高版本后，登录跳转问题基本可以恢复。遇到类似问题的用户，建议及时更新官方客户端后再测试。macOS 目前仍可能出现类似问题。",
-      "action": {
-        "type": "url",
-        "target": "https://github.com/jlcodes99/cockpit-tools/issues/new",
-        "label": "提交反馈"
-      },
-      "targetVersions": "*",
-      "targetLanguages": [
-        "*"
-      ],
-      "showOnce": true,
-      "popup": true,
-      "createdAt": "2026-08-29T00:00:00Z",
-      "expiresAt": null,
-      "locales": {
-        "en": {
-          "title": "Windows users: sign-in redirect after account switching",
-          "summary": "The official ChatGPT client can also redirect to sign-in after switching accounts. On Windows, updating to ChatGPT 26.825 or later has generally restored normal behavior in current testing.",
-          "content": "We found that the official ChatGPT client can redirect to the sign-in page after switching accounts even when no third-party tool is used.\n\nCurrent testing shows that Windows users generally recover normal behavior after updating ChatGPT to 26.825 or later. If you encounter this issue, update the official client and test again. Similar behavior may still occur on macOS.",
-          "actionLabel": "Send feedback"
-        },
-        "en-US": {
-          "title": "Windows users: sign-in redirect after account switching",
-          "summary": "The official ChatGPT client can also redirect to sign-in after switching accounts. On Windows, updating to ChatGPT 26.825 or later has generally restored normal behavior in current testing.",
-          "content": "We found that the official ChatGPT client can redirect to the sign-in page after switching accounts even when no third-party tool is used.\n\nCurrent testing shows that Windows users generally recover normal behavior after updating ChatGPT to 26.825 or later. If you encounter this issue, update the official client and test again. Similar behavior may still occur on macOS.",
-          "actionLabel": "Send feedback"
+          "title": "11.11: 11.11% top-up bonus for new and existing users | APIKEY.FAN",
+          "summary": "11.11: 11.11% top-up bonus for new and existing users! Cockpit’s official API relay partner, supporting Claude, ChatGPT, Gemini and other leading models.",
+          "content": "November 1–11: new and existing users receive an 11.11% bonus on top-ups!\n\nAPIKEY.FAN is Cockpit’s official API relay partner. It provides API access to leading models including Claude, ChatGPT and Gemini, which you can configure in tools such as Codex, Claude Code and Gemini CLI.\n\nIf you need model API access, visit the activity page to learn more.\n\nOffer period: November 1–11, 2026 (UTC+8)\nSee the activity page for participation details and terms.",
+          "actionLabel": "View offer"
         }
       }
     }

@@ -76,3 +76,12 @@ test("persists the session usage range independently", () => {
   assert.equal(readCodexSessionUsageRange(storage), "month");
   assert.equal(storage.getItem(CODEX_SESSION_USAGE_RANGE_STORAGE_KEY), "month");
 });
+
+test("today is optional and persists without changing the seven-day default", () => {
+  const storage = new MemoryStorage();
+  assert.equal(readCodexSessionUsageRange(storage), "7d");
+  assert.equal(persistCodexSessionUsageRange("today", storage), true);
+  assert.equal(readCodexSessionUsageRange(storage), "today");
+  storage.setItem(CODEX_SESSION_USAGE_RANGE_STORAGE_KEY, "invalid");
+  assert.equal(readCodexSessionUsageRange(storage), "7d");
+});

@@ -22,6 +22,7 @@ export interface CursorAccount {
 
   created_at: number;
   last_used: number;
+  last_switched_at?: number | null;
 
   plan_type?: string;
   quota?: CursorQuota;
@@ -139,32 +140,11 @@ function isCursorEnterpriseAccount(account: CursorAccount): boolean {
 }
 
 function resolveCursorPlanLabel(account: CursorAccount): string {
-  const plan = getCursorPlanBadge(account);
-  const subscriptionStatus = (account.subscription_status || '')
-    .toLowerCase()
-    .trim();
-  const isTrialing = subscriptionStatus === 'trialing';
-
-  switch (plan) {
-    case 'ENTERPRISE':
-      return isCursorEnterpriseAccount(account) ? 'Enterprise' : 'Team';
-    case 'ULTRA':
-      return 'Ultra';
-    case 'PRO_PLUS':
-      return isTrialing ? 'Pro+ Trial' : 'Pro+';
-    case 'PRO':
-      return isTrialing ? 'Pro Trial' : 'Pro';
-    case 'FREE_TRIAL':
-      return 'Pro Trial';
-    case 'FREE':
-      return 'Free';
-    default:
-      return 'Unknown';
-  }
+  return account.membership_type?.trim() || account.plan_type?.trim() || 'Unknown';
 }
 
 export function getCursorPlanBadge(account: CursorAccount): CursorPlanBadge {
-  const membership = normalizeCursorMembershipType(account.membership_type);
+  const membership = normalizeCursorMembershipType(account.membership_type?.trim() || account.plan_type);
   switch (membership) {
     case 'free':
       return 'FREE';
@@ -197,8 +177,13 @@ export function getCursorPlanBadgeClass(
       return 'ultra';
     case 'enterprise':
       return account && !isCursorEnterpriseAccount(account) ? 'team' : 'enterprise';
+    case 'plus':
     case 'pro_plus':
       return 'plus';
+    case 'premium':
+      return 'pro';
+    case 'super':
+      return 'ultra';
     case 'pro':
     case 'free_trial':
       return 'pro';
@@ -282,6 +267,15 @@ function pickBoolean(obj: unknown, ...candidateKeys: string[]): boolean | null {
   return null;
 }
 
+function parseCursorResetAt(value: unknown): number | null {
+  const timestamp = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim()
+      ? (/^\d+$/.test(value.trim()) ? Number(value) : Date.parse(value))
+      : NaN;
+  return Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp / 1000) : null;
+}
+
 export function getCursorUsage(account: CursorAccount): CursorUsage {
   const raw = account.cursor_usage_raw;
   if (!raw || typeof raw !== 'object') {
@@ -358,13 +352,26 @@ export function getCursorUsage(account: CursorAccount): CursorUsage {
     typeof limitTypeRaw === 'string' && limitTypeRaw.trim()
       ? limitTypeRaw.trim().toLowerCase()
       : null;
-  const billingEndRaw =
-    rawObj.billingCycleEnd ?? rawObj.billing_cycle_end;
-  let resetAt: number | null = null;
-  if (typeof billingEndRaw === 'string' && billingEndRaw) {
-    const ts = new Date(billingEndRaw).getTime();
-    if (Number.isFinite(ts)) resetAt = Math.floor(ts / 1000);
-  }
+  const planInfo = getPath(raw, 'planInfo') ?? getPath(raw, 'plan_info');
+  const includedPeriod = getPath(planInfo, 'includedUsagePeriod') ??
+    getPath(planInfo, 'included_usage_period') ??
+    rawObj.includedUsagePeriod ?? rawObj.included_usage_period;
+  const period = typeof includedPeriod === 'string' ? includedPeriod.toLowerCase() : includedPeriod;
+  const membership = normalizeCursorMembershipType(account.membership_type || account.plan_type);
+  const includedResetAt = parseCursorResetAt(
+    getPath(planInfo, 'includedUsageResetsAt') ?? getPath(planInfo, 'included_usage_resets_at') ??
+    rawObj.includedUsageResetsAt ?? rawObj.included_usage_resets_at,
+  );
+  const isWeekly = period === 'weekly' || period === 'included_usage_period_weekly' || period === 2 ||
+    (period !== 'monthly' && period !== 'included_usage_period_monthly' && period !== 1 && (
+      membership.startsWith('unified_') ||
+      pickBoolean(raw, 'unifiedIncludedUsage', 'unified_included_usage') === true ||
+      includedResetAt !== null
+    ));
+  const resetAt = isWeekly ? includedResetAt : parseCursorResetAt(
+    rawObj.billingCycleEnd ?? rawObj.billing_cycle_end ??
+    getPath(planInfo, 'billingCycleEnd') ?? getPath(planInfo, 'billing_cycle_end'),
+  );
 
   const ratioPct =
     planUsed != null && planLimit != null && planLimit > 0

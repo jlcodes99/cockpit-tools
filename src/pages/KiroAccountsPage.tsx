@@ -1,3 +1,4 @@
+import { formatKiroImportError } from '../services/kiroImportErrors';
 import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import {
   Plus,
@@ -26,6 +27,7 @@ import {
   Lock,
   BookOpen,
 } from 'lucide-react';
+import { AccountLastUsed } from '../components/AccountLastUsed';
 import { useKiroAccountStore } from '../stores/useKiroAccountStore';
 import * as kiroService from '../services/kiroService';
 import { TagEditModal } from '../components/TagEditModal';
@@ -34,6 +36,7 @@ import { ModalErrorMessage } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
+import { usePlatformAccountGroups } from '../hooks/usePlatformAccountGroups';
 import {
   getKiroCreditsSummary,
   hasKiroQuotaData,
@@ -173,6 +176,8 @@ export function KiroAccountsPage() {
     currentAccountId,
     formatDate, normalizeTag,
   } = page;
+
+  const grouping = usePlatformAccountGroups('kiro', () => toggleSelectAll(Array.from(selected)));
 
   const handleSelectIdcLoginMethod = useCallback((method: 'builderId' | 'enterprise') => {
     setIdcLoginMethod(method);
@@ -505,6 +510,10 @@ export function KiroAccountsPage() {
   const filteredAccounts = useMemo(() => {
     let result = [...accounts];
 
+    if (grouping.activeGroupId) {
+      result = grouping.filterAccountsByGroup(result);
+    }
+
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter((account) => {
@@ -538,7 +547,7 @@ export function KiroAccountsPage() {
     result.sort(compareAccountsBySort);
 
     return result;
-  }, [accounts, compareAccountsBySort, filterTypes, isAbnormalAccount, normalizeTag, resolvePlanKey, resolvePresentation, searchQuery, tagFilter]);
+  }, [accounts, grouping.activeGroupId, grouping.filterAccountsByGroup, compareAccountsBySort, filterTypes, isAbnormalAccount, normalizeTag, resolvePlanKey, resolvePresentation, searchQuery, tagFilter]);
 
   const filteredIds = useMemo(() => filteredAccounts.map((account) => account.id), [filteredAccounts]);
   const exportSelectionCount = getScopedSelectedCount(filteredIds);
@@ -612,9 +621,11 @@ export function KiroAccountsPage() {
       const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
       const isSelected = selected.has(account.id);
       const isCurrent = currentAccountId === account.id;
-      const quotaError = account.quota_query_last_error?.trim();
+      const quotaError = account.quota_query_last_error?.trim()
+        ? formatKiroImportError(account.quota_query_last_error.trim(), t) : undefined;
       const hasQuotaData = hasKiroQuotaData(account);
-      const statusReason = presentation.accountStatusReason;
+      const statusReason = presentation.accountStatusReason
+        ? formatKiroImportError(presentation.accountStatusReason, t) : null;
       const isBanned = presentation.isBanned;
       const hasStatusError = presentation.hasStatusError;
       const bannedTitle = statusReason || t('accounts.status.forbidden_tooltip');
@@ -716,7 +727,7 @@ export function KiroAccountsPage() {
           </div>
 
           <div className="card-footer">
-            <span className="card-date">{formatDate(account.created_at)}</span>
+            <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDate} />
             <div className="card-actions">
               <button className="card-action-btn success" onClick={() => handleInjectToVSCode?.(account.id)} disabled={!!injecting || isBanned}
                 title={isBanned ? t('accounts.status.forbidden_msg') : t('kiro.injectToVSCode', '切换到 Kiro')}>
@@ -764,9 +775,11 @@ export function KiroAccountsPage() {
       const visibleTags = accountTags.slice(0, 3);
       const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
       const isCurrent = currentAccountId === account.id;
-      const quotaError = account.quota_query_last_error?.trim();
+      const quotaError = account.quota_query_last_error?.trim()
+        ? formatKiroImportError(account.quota_query_last_error.trim(), t) : undefined;
       const hasQuotaData = hasKiroQuotaData(account);
-      const statusReason = presentation.accountStatusReason;
+      const statusReason = presentation.accountStatusReason
+        ? formatKiroImportError(presentation.accountStatusReason, t) : null;
       const isBanned = presentation.isBanned;
       const hasStatusError = presentation.hasStatusError;
       const bannedTitle = statusReason || t('accounts.status.forbidden_tooltip');
@@ -927,7 +940,7 @@ export function KiroAccountsPage() {
           <MultiSelectFilterDropdown
             options={tierFilterOptions}
             selectedValues={filterTypes}
-            allLabel={`ALL (${tierSummary.all})`}
+            allLabel={t('common.shared.filter.all', '全部 ({{count}})', { count: tierSummary.all })}
             filterLabel={t('common.shared.filterLabel', '筛选')}
             clearLabel={t('accounts.clearFilter', '清空筛选')}
             emptyLabel={t('common.none', '暂无')}
@@ -1012,13 +1025,16 @@ export function KiroAccountsPage() {
         </div>
       </div>
 
-      {filteredAccounts.length > 0 && (
+      {(accounts.length > 0 || grouping.groups.length > 0) && (
         <AccountSelectionToolbar
           selectedCount={selected.size}
           allSelected={isAllPaginatedSelected}
           disabled={paginatedIds.length === 0}
           onToggleSelectAll={() => toggleSelectAll(paginatedIds)}
           onClearSelection={() => toggleSelectAll(Array.from(selected))}
+          grouping={grouping}
+          accounts={accounts}
+          selectedIds={Array.from(selected)}
           actions={(
             <button
               className="btn btn-danger icon-only"

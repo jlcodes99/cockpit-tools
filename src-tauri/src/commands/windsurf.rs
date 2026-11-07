@@ -51,8 +51,10 @@ async fn add_windsurf_account_from_password(
 }
 
 #[tauri::command]
-pub fn list_windsurf_accounts() -> Result<Vec<WindsurfAccount>, String> {
-    windsurf_account::list_accounts_checked()
+pub async fn list_windsurf_accounts() -> Result<Vec<WindsurfAccount>, String> {
+    tauri::async_runtime::spawn_blocking(windsurf_account::list_accounts_checked)
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -379,6 +381,7 @@ pub async fn inject_windsurf_to_vscode(
             }
         }
     };
+
 
     if let Some(err) = launch_warning {
         let _ = crate::modules::tray::update_tray_menu(&app);

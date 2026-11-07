@@ -94,7 +94,7 @@ fn quota_refresh_keeps_early_boxing_boundaries_and_async_commands() {
     }
     assert!(
         compact(command_body("run_codex_post_refresh_checks")).contains(
-            "Box::pin(switch_codex_account(app.clone(),target_id.clone(),None,None,None,)).await"
+            "Box::pin(switch_codex_account(app.clone(),target_id.clone(),None,None,None,None,)).await"
         )
     );
     let imported = compact(command_body("refresh_imported_codex_accounts"));

@@ -1,0 +1,9 @@
+.codex-key-budget-editor { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 12px; padding: 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); }
+.codex-key-budget-editor label { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 12px; }
+.codex-key-budget-editor input { appearance: none; font: inherit; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 8px 10px; min-width: 0; width: 100%; box-sizing: border-box; }
+.codex-key-budget-editor input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+.codex-key-budget-editor input:disabled { opacity: .5; cursor: not-allowed; }
+.codex-key-budget-editor input[aria-invalid="true"] { border-color: var(--danger, #dc2626); }
+.codex-key-budget-error { color: var(--danger, #dc2626); }
+.codex-key-budget-hint { grid-column: 1 / -1; margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.codex-key-budget-summary small { color: var(--text-secondary); font-size: 11px; }

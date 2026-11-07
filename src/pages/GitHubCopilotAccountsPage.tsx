@@ -25,8 +25,9 @@ import {
   Play,
   Eye,
   EyeOff,
-  BookOpen
+  BookOpen,
 } from 'lucide-react';
+import { AccountLastUsed } from '../components/AccountLastUsed';
 import { useGitHubCopilotAccountStore } from '../stores/useGitHubCopilotAccountStore';
 import * as githubCopilotService from '../services/githubCopilotService';
 import { TagEditModal } from '../components/TagEditModal';
@@ -35,6 +36,7 @@ import { ModalErrorMessage } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
+import { usePlatformAccountGroups } from '../hooks/usePlatformAccountGroups';
 import { buildGitHubCopilotAccountPresentation } from '../presentation/platformAccountPresentation';
 
 import { GitHubCopilotOverviewTabsHeader, GitHubCopilotTab } from '../components/GitHubCopilotOverviewTabsHeader';
@@ -157,6 +159,8 @@ export function GitHubCopilotAccountsPage() {
     currentAccountId,
     formatDate,
   } = page;
+
+  const grouping = usePlatformAccountGroups('github_copilot', () => toggleSelectAll(Array.from(selected)));
 
   useEffect(() => {
     if (!filterPersistenceEnabled) {
@@ -324,6 +328,10 @@ export function GitHubCopilotAccountsPage() {
   const filteredAccounts = useMemo(() => {
     let result = [...accounts];
 
+    if (grouping.activeGroupId) {
+      result = grouping.filterAccountsByGroup(result);
+    }
+    
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter((account) =>
@@ -352,7 +360,7 @@ export function GitHubCopilotAccountsPage() {
     result.sort(compareAccountsBySort);
 
     return result;
-  }, [accounts, compareAccountsBySort, filterTypes, isAbnormalAccount, normalizeTag, resolvePlanKey, resolvePresentation, searchQuery, tagFilter]);
+  }, [accounts, grouping.activeGroupId, grouping.filterAccountsByGroup, compareAccountsBySort, filterTypes, isAbnormalAccount, normalizeTag, resolvePlanKey, resolvePresentation, searchQuery, tagFilter]);
 
   const filteredIds = useMemo(() => filteredAccounts.map((account) => account.id), [filteredAccounts]);
   const exportSelectionCount = getScopedSelectedCount(filteredIds);
@@ -530,7 +538,7 @@ export function GitHubCopilotAccountsPage() {
           </div>
 
           <div className="card-footer">
-            <span className="card-date">{formatDate(account.created_at)}</span>
+            <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDate} />
             <div className="card-actions">
               <button
                 className="card-action-btn success"
@@ -906,7 +914,7 @@ export function GitHubCopilotAccountsPage() {
               { value: 'created_at', label: t('common.shared.sort.createdAt', '按创建时间') },
               { value: 'weekly', label: t('githubCopilot.sort.weekly', '按 Chat messages 使用量') },
               { value: 'hourly', label: t('githubCopilot.sort.hourly', '按 Inline Suggestions 使用量') },
-              { value: 'premium', label: t('githubCopilot.sort.premium', '按 Premium requests 使用量') },
+              { value: 'premium', label: t('common.shared.quota.usage') },
               { value: 'weekly_reset', label: t('githubCopilot.sort.weeklyReset', '按 Chat messages 重置时间') },
               { value: 'hourly_reset', label: t('githubCopilot.sort.hourlyReset', '按 Inline Suggestions 重置时间') },
             ]}
@@ -984,13 +992,16 @@ export function GitHubCopilotAccountsPage() {
         </div>
       </div>
 
-      {filteredAccounts.length > 0 && (
+      {(accounts.length > 0 || grouping.groups.length > 0) && (
         <AccountSelectionToolbar
           selectedCount={selected.size}
           allSelected={isAllPaginatedSelected}
           disabled={paginatedIds.length === 0}
           onToggleSelectAll={() => toggleSelectAll(paginatedIds)}
           onClearSelection={() => toggleSelectAll(Array.from(selected))}
+          grouping={grouping}
+          accounts={accounts}
+          selectedIds={Array.from(selected)}
           actions={(
             <button
               className="btn btn-danger icon-only"
@@ -1068,7 +1079,7 @@ export function GitHubCopilotAccountsPage() {
                 <th style={{ width: 140 }}>{t('common.shared.columns.plan', '订阅')}</th>
                 <th>{t('githubCopilot.columns.hourly', 'Inline Suggestions')}</th>
                 <th>{t('githubCopilot.columns.weekly', 'Chat messages')}</th>
-                <th>{t('githubCopilot.columns.premium', 'Premium requests')}</th>
+                <th>{t('common.shared.quota.usage')}</th>
                 <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', '操作')}</th>
               </tr>
             </thead>
@@ -1105,7 +1116,7 @@ export function GitHubCopilotAccountsPage() {
                 <th style={{ width: 140 }}>{t('common.shared.columns.plan', '订阅')}</th>
                 <th>{t('githubCopilot.columns.hourly', 'Inline Suggestions')}</th>
                 <th>{t('githubCopilot.columns.weekly', 'Chat messages')}</th>
-                <th>{t('githubCopilot.columns.premium', 'Premium requests')}</th>
+                <th>{t('common.shared.quota.usage')}</th>
                 <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', '操作')}</th>
               </tr>
             </thead>

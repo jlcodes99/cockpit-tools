@@ -1,0 +1,97 @@
+/* The shared proxy is one compact assignment, with configuration available on demand. */
+.codex-proxy-unified { min-width: 0; padding: 17px 18px; border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--border)); border-radius: 12px; background: color-mix(in srgb, var(--primary) 3%, var(--bg-card)); }
+.codex-proxy-unified-bar { display: flex; align-items: center; gap: 14px; }
+.codex-proxy-unified-bar-icon { display: grid; place-items: center; flex: 0 0 42px; height: 42px; border-radius: 12px; background: var(--bg-secondary); color: var(--text-muted); }
+.codex-proxy-unified-bar-icon.active { background: var(--primary-light); color: var(--primary); }
+.codex-proxy-unified-bar-copy { flex: 1 1 auto; min-width: 0; }
+.codex-proxy-unified-bar-copy > div { display: flex; align-items: baseline; gap: 14px; }
+.codex-proxy-unified-bar-copy h2 { flex: 0 0 auto; margin: 0; color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+.codex-proxy-unified-bar-copy strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.codex-proxy-unified-bar-copy p { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 7px 0 0; color: var(--text-secondary); font-size: 11px; line-height: 1.6; }
+.codex-proxy-unified-bar-copy p > span { color: var(--text-muted); }
+.codex-proxy-unified-bar-actions { display: flex; flex: 0 0 auto; gap: 8px; }
+.codex-proxy-unified-bar-actions .btn { white-space: nowrap; }
+.codex-proxy-unified-warning { display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; padding: 10px 12px; border: 1px solid color-mix(in srgb, #d97706 30%, var(--border)); border-radius: 8px; background: color-mix(in srgb, #f59e0b 7%, var(--bg-card)); }
+.codex-proxy-unified-warning svg { flex: 0 0 auto; color: #b45309; }
+.codex-proxy-unified-warning p { margin: 0; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.codex-proxy-unified-warning.is-removed { border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); background: color-mix(in srgb, var(--danger) 6%, var(--bg-card)); }
+.codex-proxy-unified-warning.is-removed svg { color: var(--danger); }
+.codex-proxy-unified-test { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.codex-proxy-unified-probe { display: inline-flex; align-items: center; gap: 6px; color: #047857; font-size: 12px; overflow-wrap: anywhere; }
+[data-theme="dark"] .codex-proxy-unified-probe { color: #6ee7b7; }
+.codex-proxy-unified-notice { margin: 10px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.codex-proxy-unified-accounts-notice { border-color: color-mix(in srgb, var(--primary) 24%, var(--border)); background: var(--primary-light); }
+.codex-proxy-unified-badge { flex: 0 0 auto; padding: 1px 5px; border: 1px solid color-mix(in srgb, var(--primary) 26%, var(--border)); border-radius: 5px; background: var(--primary-light); color: var(--primary); font-size: 10px; font-weight: 600; line-height: 1.5; white-space: nowrap; }
+
+/* Dialog: one semantic sizing class, viewport-bounded, body scrolls internally (rules 35-36). */
+.codex-proxy-unified-overlay { padding: 24px; overflow-y: auto; align-items: safe center; }
+.modal.codex-proxy-unified-dialog {
+  --bg-card: var(--bg-surface);
+  width: min(560px, calc(100vw - 48px));
+  max-width: 560px;
+  height: auto;
+  max-height: min(640px, calc(100vh - 48px));
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 28px 90px #0003;
+}
+.codex-proxy-unified-dialog .modal-header,
+.codex-proxy-unified-dialog .modal-footer { flex: 0 0 auto; padding: 14px 20px; }
+.codex-proxy-unified-dialog .modal-header { background: radial-gradient(ellipse at 100% 0, #3154a4 0, transparent 58%), linear-gradient(115deg, #18253f, #213862); border-bottom: 1px solid #344e83; color: #f5f8ff; }
+.codex-proxy-unified-dialog .modal-header .btn-secondary { background: #afcaff14; border-color: #b4ceff50; color: #e5efff; }
+.codex-proxy-unified-dialog .modal-header .btn-secondary:hover:not(:disabled) { background: #afcaff30; border-color: #b4ceff90; color: #fff; }
+.codex-proxy-unified-dialog .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px 20px; overscroll-behavior: contain; }
+.codex-proxy-unified-dialog .modal-footer { justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border); background: var(--bg-card); }
+.codex-proxy-unified-dialog .btn {
+  appearance: none; display: inline-flex; justify-content: center; align-items: center; gap: 8px;
+  min-height: 36px; padding: 8px 13px; border-radius: 9px; font-family: inherit; font-size: 13px; font-weight: 500; line-height: 1.4;
+  background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); cursor: pointer;
+}
+.codex-proxy-unified-dialog .btn:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--primary); }
+.codex-proxy-unified-dialog .btn:disabled { opacity: .5; cursor: not-allowed; }
+.codex-proxy-unified-dialog .btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.codex-proxy-unified-dialog .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.codex-proxy-unified-dialog .btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 88%, #000); border-color: color-mix(in srgb, var(--primary) 88%, #000); }
+.codex-proxy-unified-dialog .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.codex-proxy-unified-dialog .btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 88%, #000); border-color: color-mix(in srgb, var(--danger) 88%, #000); }
+.codex-proxy-unified-dialog .codex-proxy-unified-dialog-close { flex-shrink: 0; padding: 8px; }
+.codex-proxy-unified-dialog-heading { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.codex-proxy-unified-dialog-heading > div { min-width: 0; }
+.codex-proxy-unified-dialog-heading h2 { margin: 0; font-size: 17px; font-weight: 650; color: #fff; }
+.codex-proxy-unified-dialog-heading p { margin: 3px 0 0; color: #c5d5f2; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.codex-proxy-unified-dialog-icon { display: grid; place-items: center; flex: 0 0 42px; height: 42px; border: 1px solid #b4ceff35; border-radius: 12px; background: #afcaff14; color: #c1d6ff; }
+.codex-proxy-unified-dialog-message { margin: 0; font-size: 13px; line-height: 1.7; color: var(--text-primary); overflow-wrap: anywhere; }
+
+
+/* The picker shares the confirmation dialog's controls, with its own semantic size. */
+.modal.codex-proxy-unified-editor {
+  --bg-card: var(--bg-surface);
+  width: min(640px, calc(100vw - 40px)); max-width: 640px; max-height: calc(100vh - 40px); height: auto; min-height: 0;
+  display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 16px;
+  background: var(--bg-card); color: var(--text-primary); box-shadow: 0 24px 80px #0003;
+}
+.codex-proxy-unified-editor .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 0 0 auto; padding: 18px 22px; border-bottom: 1px solid var(--border); }
+.codex-proxy-unified-editor h2 { margin: 0; font-size: 17px; }
+.codex-proxy-unified-editor .modal-header p { margin: 5px 0 0; font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
+.codex-proxy-unified-editor .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 20px 22px; overscroll-behavior: contain; }
+.codex-proxy-unified-editor .modal-footer { display: flex; justify-content: flex-end; gap: 10px; flex: 0 0 auto; padding: 14px 22px; border-top: 1px solid var(--border); }
+.codex-proxy-unified-editor .codex-proxy-field { font-size: 12px; }
+.codex-proxy-unified-editor .btn { appearance: none; display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 35px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); font-family: inherit; font-size: 12px; font-weight: 500; line-height: 1.4; cursor: pointer; }
+.codex-proxy-unified-editor .btn:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--primary); }
+.codex-proxy-unified-editor .btn:disabled { opacity: .45; cursor: not-allowed; }
+.codex-proxy-unified-editor .btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.codex-proxy-unified-editor .btn-primary { border-color: var(--primary); background: var(--primary); color: #fff; }
+.codex-proxy-unified-editor .btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 88%, #000); }
+.codex-proxy-unified-editor .btn-primary:disabled { background: var(--primary); color: #fff; opacity: .45; }
+@container (max-width: 700px) {
+  .codex-proxy-unified-bar { flex-wrap: wrap; gap: 10px; }
+  .codex-proxy-unified-bar-copy { flex-basis: calc(100% - 56px); }
+  .codex-proxy-unified-bar-copy > div { flex-wrap: wrap; gap: 4px 10px; }
+  .codex-proxy-unified-bar-actions { padding-left: 56px; }
+}

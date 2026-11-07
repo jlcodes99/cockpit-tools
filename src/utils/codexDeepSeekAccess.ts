@@ -1,3 +1,4 @@
+import { isOpenAIOfficialUsageAccount } from './openaiOfficialUsage';
 import type { CodexAccount } from "../types/codex";
 import {
   buildCodexProviderGatewayBindId,
@@ -95,6 +96,17 @@ export function isDeepSeekAccount(
   );
 }
 
+export function isApiKeyFunUsageAccount(account: Pick<CodexAccount, "api_base_url">): boolean {
+  try {
+    const url = new URL((account.api_base_url || "").trim());
+    return url.protocol === "https:" && !url.port && !url.username && !url.password &&
+      ["api.apikey.fan", "api.apikey.fun"].includes(url.hostname.toLowerCase()) &&
+      ["", "/", "/v1", "/v1/"].includes(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
 export function isCodexApiKeyUsageQueryEligible(
   account: CodexAccount,
 ): boolean {
@@ -104,7 +116,7 @@ export function isCodexApiKeyUsageQueryEligible(
     !isCodexNewApiAccount(account) &&
     (!isCodexChatCompletionsApiKeyAccount(account) ||
       isDeepSeekAccount(account) ||
-      tokenPlan) &&
+      tokenPlan || isOpenAIOfficialUsageAccount(account) || isApiKeyFunUsageAccount(account)) &&
     Boolean(account.openai_api_key?.trim())
   );
 }
@@ -118,10 +130,10 @@ export function shouldShowCodexApiKeyUsagePanel(
   }
   const deepseek = isDeepSeekAccount(account);
   const tokenPlan = isCodexTokenPlanAccount(account);
-  if (isCodexChatCompletionsApiKeyAccount(account) && !deepseek && !tokenPlan) {
+  if (isCodexChatCompletionsApiKeyAccount(account) && !deepseek && !tokenPlan && !isOpenAIOfficialUsageAccount(account) && !isApiKeyFunUsageAccount(account)) {
     return false;
   }
-  return !hideRelayQuota || deepseek || tokenPlan;
+  return !hideRelayQuota || deepseek || tokenPlan || isOpenAIOfficialUsageAccount(account);
 }
 
 export function isDeepSeekResponsesAccount(
@@ -131,7 +143,7 @@ export function isDeepSeekResponsesAccount(
     return false;
   }
   const wire = (account.api_wire_api || "responses").trim().toLowerCase();
-  return wire !== "chat_completions";
+  return wire === "responses";
 }
 
 export function resolveDeepSeekAccessMode(

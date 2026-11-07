@@ -15,7 +15,11 @@ const ELECTRON_PERSISTED_ATOM_STATE_KEY: &str = "electron-persisted-atom-state";
 const HAS_USER_CHANGED_SERVICE_TIER_KEY: &str = "has-user-changed-service-tier";
 const FAST_SERVICE_TIER: &str = "fast";
 const PRIORITY_SERVICE_TIER: &str = "priority";
-const FLEX_SERVICE_TIER: &str = "flex";
+const ULTRAFAST_SERVICE_TIER: &str = "ultrafast";
+/// 官方“标准”档位在 config.toml 顶层 `service_tier` 里显式写 `default`。
+const DEFAULT_SERVICE_TIER: &str = "default";
+/// 官方桌面端当前写入档位的顶层键（`config/batchWrite` → `service_tier`）。
+const TOP_LEVEL_SERVICE_TIER_KEY: &str = "service_tier";
 
 #[derive(serde::Deserialize, serde::Serialize)]
 struct AppSpeedPreference {
@@ -39,10 +43,9 @@ fn get_global_state_path_for_dir(base_dir: &Path) -> PathBuf {
 }
 
 fn normalize_service_tier_speed(value: Option<&str>) -> CodexAppSpeed {
-    match value {
-        Some(FAST_SERVICE_TIER) | Some(PRIORITY_SERVICE_TIER) | Some(FLEX_SERVICE_TIER) => {
-            CodexAppSpeed::Fast
-        }
+    match value.map(str::trim) {
+        Some(FAST_SERVICE_TIER) | Some(PRIORITY_SERVICE_TIER) => CodexAppSpeed::Fast,
+        Some(ULTRAFAST_SERVICE_TIER) => CodexAppSpeed::Ultrafast,
         _ => CodexAppSpeed::Standard,
     }
 }
@@ -61,45 +64,66 @@ fn read_desktop_service_tier_from_doc(doc: &Document) -> Option<&str> {
         .and_then(|item| item.as_str())
 }
 
+/// Profile overrides the root tier; older desktop clients use the desktop key.
+fn read_effective_service_tier_from_doc(doc: &Document) -> Option<&str> {
+    doc.get("profile")
+        .and_then(|item| item.as_str())
+        .and_then(|profile| {
+            doc.get("profiles")?
+                .get(profile)?
+                .get(TOP_LEVEL_SERVICE_TIER_KEY)
+        })
+        .and_then(|item| item.as_str())
+        .or_else(|| {
+            doc.get(TOP_LEVEL_SERVICE_TIER_KEY)
+                .and_then(|item| item.as_str())
+                .or_else(|| read_desktop_service_tier_from_doc(doc))
+        })
+}
+
 fn read_config_toml(path: &Path) -> Result<Document, String> {
     crate::modules::codex_config_format::load_codex_config_doc(path)
 }
 
-fn read_global_state_json(path: &Path) -> Result<Map<String, Value>, String> {
+// None means existing state cannot be safely updated. Never replace it or its
+// recovery backup with an empty object just to sync a legacy speed preference.
+fn read_global_state_json(path: &Path) -> Result<Option<Map<String, Value>>, String> {
     let content = match fs::read_to_string(path) {
         Ok(content) => content,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Map::new()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            let backup_path = PathBuf::from(format!("{}.bak", path.to_string_lossy()));
+            if backup_path
+                .try_exists()
+                .map_err(|err| format!("读取 Codex 全局状态失败: {}", err))?
+            {
+                crate::modules::logger::log_warn(&format!(
+                    "Codex 全局状态缺失但备份仍在，保留备份并跳过旧版速度同步: path={}",
+                    path.display()
+                ));
+                return Ok(None);
+            }
+            return Ok(Some(Map::new()));
+        }
         Err(err) => return Err(format!("读取 Codex 全局状态失败: {}", err)),
     };
-    if content.trim().is_empty() {
-        return Ok(Map::new());
-    }
-    let value = match serde_json::from_str::<Value>(&content) {
-        Ok(value) => value,
-        Err(error) => {
-            match crate::modules::atomic_write::quarantine_file(path, "invalid-json") {
-                Ok(Some(backup_path)) => crate::modules::logger::log_warn(&format!(
-                    "Codex 全局状态解析失败，已隔离并使用空状态: path={}, backup={}, error={}",
-                    path.display(),
-                    backup_path.display(),
-                    error
-                )),
-                Ok(None) => crate::modules::logger::log_warn(&format!(
-                    "Codex 全局状态解析失败，文件已不存在，使用空状态: path={}, error={}",
-                    path.display(),
-                    error
-                )),
-                Err(backup_error) => crate::modules::logger::log_warn(&format!(
-                    "Codex 全局状态解析失败，隔离失败，使用空状态: path={}, parse_error={}, backup_error={}",
-                    path.display(),
-                    error,
-                    backup_error
-                )),
-            }
-            return Ok(Map::new());
+    match serde_json::from_str::<Value>(&content) {
+        Ok(Value::Object(state)) => Ok(Some(state)),
+        Ok(_) => {
+            crate::modules::logger::log_warn(&format!(
+                "Codex 全局状态顶层不是对象，保留原文件和备份并跳过旧版速度同步: path={}",
+                path.display()
+            ));
+            Ok(None)
         }
-    };
-    Ok(value.as_object().cloned().unwrap_or_default())
+        Err(error) => {
+            crate::modules::logger::log_warn(&format!(
+                "Codex 全局状态不是有效 JSON 对象，保留原文件和备份并跳过旧版速度同步: path={}, error={}",
+                path.display(),
+                error
+            ));
+            Ok(None)
+        }
+    }
 }
 
 fn write_global_state_json(path: &Path, state: &Map<String, Value>) -> Result<(), String> {
@@ -124,20 +148,26 @@ fn write_global_state_json(path: &Path, state: &Map<String, Value>) -> Result<()
 }
 
 fn legacy_service_tier_value(speed: &CodexAppSpeed) -> Value {
-    match speed {
-        CodexAppSpeed::Fast => Value::String(PRIORITY_SERVICE_TIER.to_string()),
-        CodexAppSpeed::Standard => Value::Null,
-    }
+    speed
+        .service_tier()
+        .map(|tier| Value::String(tier.to_string()))
+        .unwrap_or(Value::Null)
 }
 
-fn sync_legacy_service_tier_state(base_dir: &Path, speed: &CodexAppSpeed) -> Result<(), String> {
+fn sync_legacy_service_tier_state(base_dir: &Path, speed: &CodexAppSpeed) -> Result<bool, String> {
     let path = get_global_state_path_for_dir(base_dir);
-    let mut state = read_global_state_json(&path)?;
+    let Some(mut state) = read_global_state_json(&path)? else {
+        return Ok(false);
+    };
     let atoms = state
         .entry(ELECTRON_PERSISTED_ATOM_STATE_KEY.to_string())
         .or_insert_with(|| Value::Object(Map::new()));
     if !atoms.is_object() {
-        *atoms = Value::Object(Map::new());
+        crate::modules::logger::log_warn(&format!(
+            "Codex persisted atom 状态不是对象，保留原文件和备份并跳过旧版速度同步: path={}",
+            path.display()
+        ));
+        return Ok(false);
     }
     let atoms = atoms
         .as_object_mut()
@@ -150,16 +180,26 @@ fn sync_legacy_service_tier_state(base_dir: &Path, speed: &CodexAppSpeed) -> Res
         HAS_USER_CHANGED_SERVICE_TIER_KEY.to_string(),
         Value::Bool(true),
     );
-    write_global_state_json(&path, &state)
+    write_global_state_json(&path, &state)?;
+    Ok(true)
 }
 
 fn read_official_app_speed_config_from_config_toml(
     path: &Path,
 ) -> Result<CodexAppSpeedConfig, String> {
     let doc = read_config_toml(path)?;
+    let fast_disabled = doc
+        .get("features")
+        .and_then(|item| item.get("fast_mode"))
+        .and_then(|item| item.as_bool())
+        == Some(false);
     Ok(build_config_with_config_path(
         path,
-        normalize_service_tier_speed(read_desktop_service_tier_from_doc(&doc)),
+        if fast_disabled {
+            CodexAppSpeed::Standard
+        } else {
+            normalize_service_tier_speed(read_effective_service_tier_from_doc(&doc))
+        },
     ))
 }
 
@@ -169,6 +209,10 @@ fn read_official_app_speed_config() -> Result<CodexAppSpeedConfig, String> {
 
 fn read_preferred_speed() -> Result<Option<CodexAppSpeed>, String> {
     let path = get_preference_path()?;
+    read_preferred_speed_from_path(&path)
+}
+
+fn read_preferred_speed_from_path(path: &Path) -> Result<Option<CodexAppSpeed>, String> {
     let content = match fs::read_to_string(&path) {
         Ok(content) => content,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -207,6 +251,10 @@ fn read_preferred_speed() -> Result<Option<CodexAppSpeed>, String> {
 
 fn write_preferred_speed(speed: &CodexAppSpeed) -> Result<(), String> {
     let path = get_preference_path()?;
+    write_preferred_speed_to_path(&path, speed)
+}
+
+fn write_preferred_speed_to_path(path: &Path, speed: &CodexAppSpeed) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| format!("创建配置目录失败: {}", err))?;
     }
@@ -226,14 +274,7 @@ fn build_config_with_speed(path: &Path, speed: CodexAppSpeed) -> CodexAppSpeedCo
 }
 
 pub fn get_app_speed_config() -> Result<CodexAppSpeedConfig, String> {
-    let official = read_official_app_speed_config()?;
-    if let Some(speed) = read_preferred_speed()? {
-        return Ok(build_config_with_speed(
-            Path::new(&official.global_state_path),
-            speed,
-        ));
-    }
-    Ok(official)
+    read_official_app_speed_config()
 }
 
 pub fn get_app_speed_config_for_dir(base_dir: &Path) -> Result<CodexAppSpeedConfig, String> {
@@ -246,8 +287,17 @@ fn write_app_speed_for_config_toml_path(
 ) -> Result<CodexAppSpeedConfig, String> {
     let mut doc = read_config_toml(&path)?;
 
-    match speed {
-        CodexAppSpeed::Standard => {
+    match desktop_service_tier_value(&speed) {
+        Some(tier) => {
+            if doc.get(DESKTOP_SECTION_KEY).is_none() {
+                doc[DESKTOP_SECTION_KEY] = toml_edit::table();
+            }
+            let desktop = doc[DESKTOP_SECTION_KEY]
+                .as_table_mut()
+                .ok_or("config.toml 中 desktop 不是合法表结构")?;
+            desktop[DESKTOP_DEFAULT_SERVICE_TIER_KEY] = value(tier);
+        }
+        None => {
             if let Some(desktop) = doc
                 .get_mut(DESKTOP_SECTION_KEY)
                 .and_then(|item| item.as_table_mut())
@@ -255,15 +305,45 @@ fn write_app_speed_for_config_toml_path(
                 let _ = desktop.remove(DESKTOP_DEFAULT_SERVICE_TIER_KEY);
             }
         }
-        CodexAppSpeed::Fast => {
-            if doc.get(DESKTOP_SECTION_KEY).is_none() {
-                doc[DESKTOP_SECTION_KEY] = toml_edit::table();
-            }
-            let desktop = doc[DESKTOP_SECTION_KEY]
-                .as_table_mut()
-                .ok_or("config.toml 中 desktop 不是合法表结构")?;
-            desktop[DESKTOP_DEFAULT_SERVICE_TIER_KEY] = value(PRIORITY_SERVICE_TIER);
+    }
+    // 官方桌面端通过 `config/batchWrite` 写顶层 `service_tier`（无 profile 时），
+    // 标准档写 `default`；这里与官方落盘规则保持一致。
+    doc[TOP_LEVEL_SERVICE_TIER_KEY] = value(top_level_service_tier_value(&speed));
+    // Official batchWrite targets the selected profile. A profile tier takes
+    // precedence over the root tier when the client/CLI loads configuration.
+    if let Some(profile) = doc
+        .get("profile")
+        .and_then(|item| item.as_str())
+        .map(str::to_owned)
+    {
+        if doc.get("profiles").is_none() {
+            doc["profiles"] = toml_edit::table();
         }
+        let profiles = doc["profiles"]
+            .as_table_like_mut()
+            .ok_or("config.toml 中 profiles 不是合法表结构")?;
+        if profiles.get(&profile).is_none() {
+            profiles.insert(&profile, toml_edit::table());
+        }
+        let selected = profiles
+            .get_mut(&profile)
+            .and_then(|item| item.as_table_like_mut())
+            .ok_or("config.toml 中当前 profile 不是合法表结构")?;
+        selected.insert(
+            TOP_LEVEL_SERVICE_TIER_KEY,
+            value(top_level_service_tier_value(&speed)),
+        );
+    }
+    if speed != CodexAppSpeed::Standard {
+        // An explicit accelerated tier must work even after fast_mode was disabled.
+        // Standard changes only the tier, leaving the official picker available.
+        if doc.get("features").is_none() {
+            doc["features"] = toml_edit::table();
+        }
+        let features = doc["features"]
+            .as_table_like_mut()
+            .ok_or("config.toml 中 features 不是合法表结构")?;
+        features.insert("fast_mode", value(true));
     }
 
     let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
@@ -276,6 +356,16 @@ fn write_app_speed_for_config_toml_path(
     Ok(build_config_with_config_path(&path, speed))
 }
 
+/// 旧客户端读取的 `[desktop] default-service-tier` 取值；标准档删除该键。
+fn desktop_service_tier_value(speed: &CodexAppSpeed) -> Option<&'static str> {
+    speed.service_tier()
+}
+
+/// 官方桌面端顶层 `service_tier` 取值：标准档显式写 `default`。
+fn top_level_service_tier_value(speed: &CodexAppSpeed) -> &'static str {
+    desktop_service_tier_value(speed).unwrap_or(DEFAULT_SERVICE_TIER)
+}
+
 fn write_app_speed_for_base_dir(
     base_dir: &Path,
     speed: CodexAppSpeed,
@@ -284,7 +374,12 @@ fn write_app_speed_for_base_dir(
         get_config_toml_path_for_dir(base_dir),
         speed.clone(),
     )?;
-    sync_legacy_service_tier_state(base_dir, &speed)?;
+    if !sync_legacy_service_tier_state(base_dir, &speed)? {
+        crate::modules::logger::log_warn(&format!(
+            "Codex 速度设置已保存到 config.toml；全局状态异常，未同步旧版速度字段: path={}",
+            base_dir.display()
+        ));
+    }
     Ok(config)
 }
 
@@ -300,16 +395,15 @@ pub fn write_app_speed_for_dir(
 }
 
 pub fn get_api_service_app_speed_config() -> Result<CodexAppSpeedConfig, String> {
-    let official = read_official_app_speed_config()?;
     Ok(build_config_with_speed(
-        Path::new(&official.global_state_path),
+        &get_preference_path()?,
         read_preferred_speed()?.unwrap_or_default(),
     ))
 }
 
 pub fn save_api_service_app_speed(speed: CodexAppSpeed) -> Result<CodexAppSpeedConfig, String> {
     write_preferred_speed(&speed)?;
-    write_official_app_speed(speed)
+    Ok(build_config_with_speed(&get_preference_path()?, speed))
 }
 
 pub fn apply_api_service_speed_to_official_state() -> Result<CodexAppSpeedConfig, String> {
@@ -321,15 +415,319 @@ pub fn apply_api_service_speed_to_official_state() -> Result<CodexAppSpeedConfig
 mod tests {
     use super::{
         get_app_speed_config_for_dir, normalize_service_tier_speed,
-        read_desktop_service_tier_from_doc, sync_legacy_service_tier_state,
-        write_app_speed_for_config_toml_path, DESKTOP_DEFAULT_SERVICE_TIER_KEY,
-        DESKTOP_SECTION_KEY, ELECTRON_PERSISTED_ATOM_STATE_KEY, GLOBAL_STATE_FILE,
-        HAS_USER_CHANGED_SERVICE_TIER_KEY,
+        read_desktop_service_tier_from_doc, read_effective_service_tier_from_doc,
+        sync_legacy_service_tier_state, write_app_speed_for_config_toml_path,
+        DESKTOP_DEFAULT_SERVICE_TIER_KEY, DESKTOP_SECTION_KEY, ELECTRON_PERSISTED_ATOM_STATE_KEY,
+        GLOBAL_STATE_FILE, HAS_USER_CHANGED_SERVICE_TIER_KEY, TOP_LEVEL_SERVICE_TIER_KEY,
     };
     use crate::models::codex::CodexAppSpeed;
     use std::fs;
     use std::path::{Path, PathBuf};
     use toml_edit::Document;
+
+    #[test]
+    fn all_speed_choices_round_trip_profile_and_preference_without_changing_defaults() {
+        let dir = unique_temp_dir("codex-three-speed-choices");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        let pref = dir.join("speed.json");
+        assert_eq!(CodexAppSpeed::default(), CodexAppSpeed::Standard);
+        assert_eq!(super::read_preferred_speed_from_path(&pref).unwrap(), None);
+        assert_eq!(
+            get_app_speed_config_for_dir(&dir).unwrap().speed,
+            CodexAppSpeed::Standard
+        );
+        assert!(!path.exists());
+        let state_path = dir.join(GLOBAL_STATE_FILE);
+        let mut expected_state = serde_json::json!({
+            "local-projects": {"project-1": {
+                "id": "project-1", "name": "Project", "rootPaths": ["/project"],
+                "createdAt": 10, "updatedAt": 20
+            }},
+            "thread-project-assignments": {"thread-1": {
+                "projectKind": "local", "projectId": "project-1"
+            }},
+            "app-server-project-id-by-legacy-project-id-by-host": {
+                "local:synthetic": {"project-1": "server-1"}
+            },
+            "project-order": ["project-1"],
+            "electron-persisted-atom-state": {"theme": "dark"},
+            "unknown-field": {"preserve": [1, null, true]}
+        });
+        fs::write(&state_path, expected_state.to_string()).unwrap();
+        for (speed, tier) in [
+            (CodexAppSpeed::Ultrafast, "ultrafast"),
+            (CodexAppSpeed::Fast, "priority"),
+            (CodexAppSpeed::Standard, "default"),
+        ] {
+            fs::write(&path, "profile = 'work'\n[features]\nfast_mode = false\njs_repl = true\n[profiles.work]\nmodel = 'custom-model'\n[profiles.other]\nservice_tier = 'flex'\n").unwrap();
+            super::write_app_speed_for_dir(&dir, speed.clone()).unwrap();
+            super::write_preferred_speed_to_path(&pref, &speed).unwrap();
+            assert_eq!(
+                super::read_preferred_speed_from_path(&pref).unwrap(),
+                Some(speed.clone())
+            );
+            assert_eq!(get_app_speed_config_for_dir(&dir).unwrap().speed, speed);
+            let doc = fs::read_to_string(&path)
+                .unwrap()
+                .parse::<Document>()
+                .unwrap();
+            assert_eq!(doc["service_tier"].as_str(), Some(tier));
+            assert_eq!(doc["profiles"]["work"]["service_tier"].as_str(), Some(tier));
+            assert_eq!(
+                doc["profiles"]["other"]["service_tier"].as_str(),
+                Some("flex")
+            );
+            assert_eq!(
+                doc["profiles"]["work"]["model"].as_str(),
+                Some("custom-model")
+            );
+            assert_eq!(doc["features"]["js_repl"].as_bool(), Some(true));
+            assert_eq!(
+                doc["features"]["fast_mode"].as_bool(),
+                Some(speed != CodexAppSpeed::Standard)
+            );
+            expected_state[ELECTRON_PERSISTED_ATOM_STATE_KEY][DESKTOP_DEFAULT_SERVICE_TIER_KEY] =
+                super::legacy_service_tier_value(&speed);
+            expected_state[ELECTRON_PERSISTED_ATOM_STATE_KEY][HAS_USER_CHANGED_SERVICE_TIER_KEY] =
+                serde_json::json!(true);
+            let state: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&state_path).unwrap()).unwrap();
+            assert_eq!(state, expected_state);
+        }
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn malformed_global_state_and_backups_survive_speed_changes() {
+        for content in [
+            "",
+            " \n\t",
+            r#"{"local-projects":{"project-1":{}}"#,
+            "null",
+            "[]",
+            "42",
+            r#""unexpected""#,
+            r#"{"local-projects":{"project-1":{}},"electron-persisted-atom-state":null}"#,
+            r#"{"local-projects":{"project-1":{}},"electron-persisted-atom-state":[]}"#,
+            r#"{"local-projects":{"project-1":{}},"electron-persisted-atom-state":"unexpected"}"#,
+        ] {
+            for has_backup in [false, true] {
+                let dir = unique_temp_dir("codex-speed-preserve-invalid-state");
+                fs::create_dir_all(&dir).unwrap();
+                let state = dir.join(GLOBAL_STATE_FILE);
+                let backup = dir.join(format!("{GLOBAL_STATE_FILE}.bak"));
+                let older_backup = dir.join(format!("{GLOBAL_STATE_FILE}.bak.bak"));
+                let backup_content =
+                    r#"{"local-projects":{"recoverable-project":{"name":"Keep"}}}"#;
+                fs::write(&state, content).unwrap();
+                if has_backup {
+                    fs::write(&backup, backup_content).unwrap();
+                    fs::write(&older_backup, "older recovery data").unwrap();
+                }
+                assert!(!sync_legacy_service_tier_state(&dir, &CodexAppSpeed::Fast).unwrap());
+                for speed in [
+                    CodexAppSpeed::Standard,
+                    CodexAppSpeed::Fast,
+                    CodexAppSpeed::Ultrafast,
+                ] {
+                    let saved = super::write_app_speed_for_dir(&dir, speed.clone()).unwrap();
+                    assert_eq!(saved.speed, speed);
+                    assert_eq!(get_app_speed_config_for_dir(&dir).unwrap().speed, speed);
+                    assert_eq!(fs::read(&state).unwrap(), content.as_bytes());
+                    if has_backup {
+                        assert_eq!(fs::read_to_string(&backup).unwrap(), backup_content);
+                        assert_eq!(
+                            fs::read_to_string(&older_backup).unwrap(),
+                            "older recovery data"
+                        );
+                    } else {
+                        assert!(!backup.exists());
+                    }
+                }
+                fs::remove_dir_all(dir).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn missing_global_state_with_backup_is_not_recreated_by_speed_sync() {
+        let dir = unique_temp_dir("codex-speed-preserve-missing-state-backup");
+        fs::create_dir_all(&dir).unwrap();
+        let backup = dir.join(format!("{GLOBAL_STATE_FILE}.bak"));
+        let backup_content = r#"{"local-projects":{"recoverable-project":{"name":"Keep"}}}"#;
+        fs::write(&backup, backup_content).unwrap();
+
+        assert!(!sync_legacy_service_tier_state(&dir, &CodexAppSpeed::Fast).unwrap());
+        super::write_app_speed_for_dir(&dir, CodexAppSpeed::Fast).unwrap();
+
+        assert_eq!(
+            get_app_speed_config_for_dir(&dir).unwrap().speed,
+            CodexAppSpeed::Fast
+        );
+        assert!(!dir.join(GLOBAL_STATE_FILE).exists());
+        assert_eq!(fs::read_to_string(&backup).unwrap(), backup_content);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn new_and_valid_global_state_still_accept_speed_sync() {
+        for content in [None, Some("{}"), Some(r#"{"local-projects":{}}"#)] {
+            let dir = unique_temp_dir("codex-speed-initialize-state");
+            fs::create_dir_all(&dir).unwrap();
+            let state = dir.join(GLOBAL_STATE_FILE);
+            if let Some(content) = content {
+                fs::write(&state, content).unwrap();
+            }
+            assert!(sync_legacy_service_tier_state(&dir, &CodexAppSpeed::Fast).unwrap());
+            let saved: serde_json::Value =
+                serde_json::from_slice(&fs::read(&state).unwrap()).unwrap();
+            assert_eq!(
+                saved[ELECTRON_PERSISTED_ATOM_STATE_KEY][DESKTOP_DEFAULT_SERVICE_TIER_KEY],
+                "priority"
+            );
+            assert_eq!(
+                saved[ELECTRON_PERSISTED_ATOM_STATE_KEY][HAS_USER_CHANGED_SERVICE_TIER_KEY],
+                true
+            );
+            if content.is_some_and(|content| content.contains("local-projects")) {
+                assert_eq!(saved["local-projects"], serde_json::json!({}));
+            }
+            fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    #[test]
+    fn global_state_read_errors_are_not_treated_as_malformed_json() {
+        let dir = unique_temp_dir("codex-speed-state-read-error");
+        fs::create_dir_all(dir.join(GLOBAL_STATE_FILE)).unwrap();
+        assert!(super::write_app_speed_for_dir(&dir, CodexAppSpeed::Fast).is_err());
+        assert!(dir.join(GLOBAL_STATE_FILE).is_dir());
+        assert!(!dir.join(format!("{GLOBAL_STATE_FILE}.bak")).exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn fast_choice_survives_profile_readback_and_standard_clears_it() {
+        let path = unique_temp_path("codex-speed-active-profile");
+        fs::write(
+            &path,
+            r#"
+profile = "work"
+service_tier = "default"
+[features]
+fast_mode = false
+js_repl = true
+[profiles.work]
+service_tier = "default"
+model = "custom-model"
+[profiles.other]
+service_tier = "flex"
+"#,
+        )
+        .unwrap();
+        write_app_speed_for_config_toml_path(path.clone(), CodexAppSpeed::Fast).unwrap();
+        let saved = fs::read_to_string(&path)
+            .unwrap()
+            .parse::<Document>()
+            .unwrap();
+        assert_eq!(
+            read_effective_service_tier_from_doc(&saved),
+            Some("priority")
+        );
+        assert_eq!(saved["features"]["fast_mode"].as_bool(), Some(true));
+        assert_eq!(saved["features"]["js_repl"].as_bool(), Some(true));
+        assert_eq!(
+            saved["profiles"]["other"]["service_tier"].as_str(),
+            Some("flex")
+        );
+        assert_eq!(
+            saved["profiles"]["work"]["model"].as_str(),
+            Some("custom-model")
+        );
+        write_app_speed_for_config_toml_path(path.clone(), CodexAppSpeed::Standard).unwrap();
+        let saved = fs::read_to_string(&path)
+            .unwrap()
+            .parse::<Document>()
+            .unwrap();
+        assert_eq!(
+            read_effective_service_tier_from_doc(&saved),
+            Some("default")
+        );
+        assert_eq!(saved["service_tier"].as_str(), Some("default"));
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn profile_tier_takes_precedence_and_invalid_tables_do_not_destroy_config() {
+        let doc = "profile = 'work'\nservice_tier = 'priority'\n[profiles.work]\nservice_tier = 'default'\n".parse::<Document>().unwrap();
+        assert_eq!(read_effective_service_tier_from_doc(&doc), Some("default"));
+        let path = unique_temp_path("codex-speed-invalid-profile");
+        for original in ["profile = 'work'\nprofiles = 42\n", "features = 42\n"] {
+            fs::write(&path, original).unwrap();
+            assert!(
+                write_app_speed_for_config_toml_path(path.clone(), CodexAppSpeed::Fast).is_err()
+            );
+            assert_eq!(fs::read_to_string(&path).unwrap(), original);
+        }
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn api_preference_persists_separately_from_client_account_speed() {
+        let dir = unique_temp_dir("codex-api-speed-separation");
+        fs::create_dir_all(&dir).unwrap();
+        let pref = dir.join("codex_api_service_speed.json");
+        let config = dir.join("config.toml");
+        assert_eq!(
+            super::read_preferred_speed_from_path(&pref)
+                .unwrap()
+                .unwrap_or_default(),
+            CodexAppSpeed::Standard
+        );
+        fs::write(&config, "service_tier = 'default'\n").unwrap();
+        super::write_preferred_speed_to_path(&pref, &CodexAppSpeed::Fast).unwrap();
+        assert_eq!(
+            super::read_preferred_speed_from_path(&pref).unwrap(),
+            Some(CodexAppSpeed::Fast)
+        );
+        assert_eq!(
+            fs::read_to_string(&config).unwrap(),
+            "service_tier = 'default'\n"
+        );
+        write_app_speed_for_config_toml_path(config.clone(), CodexAppSpeed::Standard).unwrap();
+        assert_eq!(
+            super::read_preferred_speed_from_path(&pref).unwrap(),
+            Some(CodexAppSpeed::Fast)
+        );
+        super::write_preferred_speed_to_path(&pref, &CodexAppSpeed::Standard).unwrap();
+        assert_eq!(
+            super::read_preferred_speed_from_path(&pref).unwrap(),
+            Some(CodexAppSpeed::Standard)
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn disabled_fast_feature_is_not_reported_as_effective_fast() {
+        let dir = unique_temp_dir("codex-speed-disabled-feature");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("config.toml"),
+            "service_tier = 'priority'\n[features]\nfast_mode = false\n",
+        )
+        .unwrap();
+        assert_eq!(
+            get_app_speed_config_for_dir(&dir).unwrap().speed,
+            CodexAppSpeed::Standard
+        );
+        super::write_app_speed_for_dir(&dir, CodexAppSpeed::Fast).unwrap();
+        assert_eq!(
+            get_app_speed_config_for_dir(&dir).unwrap().speed,
+            CodexAppSpeed::Fast
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn normalizes_official_desktop_service_tier_values() {
@@ -344,11 +742,19 @@ mod tests {
         );
         assert_eq!(
             normalize_service_tier_speed(Some("flex")),
-            CodexAppSpeed::Fast
+            CodexAppSpeed::Standard
         );
         assert_eq!(
             normalize_service_tier_speed(Some("default")),
             CodexAppSpeed::Standard
+        );
+        assert_eq!(
+            normalize_service_tier_speed(Some("ultrafast")),
+            CodexAppSpeed::Ultrafast
+        );
+        assert_eq!(
+            normalize_service_tier_speed(Some(" ultrafast ")),
+            CodexAppSpeed::Ultrafast
         );
     }
 
@@ -362,6 +768,35 @@ default-service-tier = "priority"
         .expect("parse config");
 
         assert_eq!(read_desktop_service_tier_from_doc(&doc), Some("priority"));
+    }
+
+    #[test]
+    fn prefers_top_level_service_tier_over_desktop_key() {
+        let doc = r#"
+service_tier = "ultrafast"
+
+[desktop]
+default-service-tier = "priority"
+"#
+        .parse::<Document>()
+        .expect("parse config");
+
+        assert_eq!(
+            read_effective_service_tier_from_doc(&doc),
+            Some("ultrafast")
+        );
+    }
+
+    #[test]
+    fn falls_back_to_desktop_service_tier_without_top_level_key() {
+        let doc = r#"
+[desktop]
+default-service-tier = "priority"
+"#
+        .parse::<Document>()
+        .expect("parse config");
+
+        assert_eq!(read_effective_service_tier_from_doc(&doc), Some("priority"));
     }
 
     #[test]
@@ -385,6 +820,52 @@ appearanceTheme = "system"
         assert_eq!(
             doc[DESKTOP_SECTION_KEY][DESKTOP_DEFAULT_SERVICE_TIER_KEY].as_str(),
             Some("priority")
+        );
+        assert_eq!(doc[TOP_LEVEL_SERVICE_TIER_KEY].as_str(), Some("priority"));
+
+        let _ = fs::remove_file(config_path);
+    }
+
+    #[test]
+    fn ultrafast_preferences_round_trip_without_downgrading_config_keys() {
+        let config_path = unique_temp_path("codex-speed-ultrafast");
+        fs::write(
+            &config_path,
+            r#"
+service_tier = "ultrafast"
+
+[desktop]
+default-service-tier = "ultrafast"
+appearanceTheme = "system"
+"#,
+        )
+        .expect("write config");
+
+        let preference: super::AppSpeedPreference =
+            serde_json::from_str(r#"{"speed":"ultrafast"}"#).expect("read legacy preference");
+        assert_eq!(preference.speed, CodexAppSpeed::Ultrafast);
+        assert_eq!(
+            serde_json::to_value(&preference).expect("serialize preference"),
+            serde_json::json!({"speed": "ultrafast"})
+        );
+        let config = write_app_speed_for_config_toml_path(config_path.clone(), preference.speed)
+            .expect("write speed");
+        let content = fs::read_to_string(&config_path).expect("read config");
+        let doc = content.parse::<Document>().expect("parse config");
+
+        assert_eq!(config.speed, CodexAppSpeed::Ultrafast);
+        assert_eq!(doc[TOP_LEVEL_SERVICE_TIER_KEY].as_str(), Some("ultrafast"));
+        assert_eq!(
+            doc[DESKTOP_SECTION_KEY][DESKTOP_DEFAULT_SERVICE_TIER_KEY].as_str(),
+            Some("ultrafast")
+        );
+        assert_eq!(
+            doc[DESKTOP_SECTION_KEY]["appearanceTheme"].as_str(),
+            Some("system")
+        );
+        assert_eq!(
+            read_effective_service_tier_from_doc(&doc),
+            Some("ultrafast")
         );
 
         let _ = fs::remove_file(config_path);
@@ -415,6 +896,7 @@ appearanceTheme = "system"
             .expect("desktop table")
             .get(DESKTOP_DEFAULT_SERVICE_TIER_KEY)
             .is_none());
+        assert_eq!(doc[TOP_LEVEL_SERVICE_TIER_KEY].as_str(), Some("default"));
 
         let _ = fs::remove_file(config_path);
     }
@@ -439,6 +921,54 @@ default-service-tier = "priority"
             config.global_state_path,
             base_dir.join("config.toml").to_string_lossy()
         );
+
+        let _ = fs::remove_dir_all(base_dir);
+    }
+
+    #[test]
+    fn preserves_ultrafast_in_service_tier_global_state() {
+        let base_dir = unique_temp_dir("codex-speed-ultrafast-global-state");
+        fs::create_dir_all(&base_dir).expect("create base dir");
+        let global_state_path = base_dir.join(GLOBAL_STATE_FILE);
+        fs::write(
+            &global_state_path,
+            r#"{"electron-persisted-atom-state":{"default-service-tier":"ultrafast"},"other":1}"#,
+        )
+        .expect("write global state");
+
+        let speed: CodexAppSpeed = serde_json::from_str(r#""ultrafast""#).expect("legacy speed");
+        sync_legacy_service_tier_state(&base_dir, &speed).expect("sync service tier");
+
+        let content = fs::read_to_string(&global_state_path).expect("read global state");
+        let state: serde_json::Value = serde_json::from_str(&content).expect("parse state");
+        assert_eq!(state["other"], 1);
+        assert_eq!(
+            state[ELECTRON_PERSISTED_ATOM_STATE_KEY][DESKTOP_DEFAULT_SERVICE_TIER_KEY],
+            "ultrafast"
+        );
+        assert_eq!(
+            state[ELECTRON_PERSISTED_ATOM_STATE_KEY][HAS_USER_CHANGED_SERVICE_TIER_KEY],
+            true
+        );
+
+        let _ = fs::remove_dir_all(base_dir);
+    }
+
+    #[test]
+    fn reads_ultrafast_profile_app_speed() {
+        let base_dir = unique_temp_dir("codex-speed-profile-ultrafast");
+        fs::create_dir_all(&base_dir).expect("create base dir");
+        fs::write(
+            base_dir.join("config.toml"),
+            r#"
+service_tier = "ultrafast"
+"#,
+        )
+        .expect("write config");
+
+        let config = get_app_speed_config_for_dir(&base_dir).expect("read speed");
+
+        assert_eq!(config.speed, CodexAppSpeed::Ultrafast);
 
         let _ = fs::remove_dir_all(base_dir);
     }

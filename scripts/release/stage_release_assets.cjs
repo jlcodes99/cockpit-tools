@@ -9,6 +9,7 @@ const PLATFORM_PATTERNS = {
     /\.msi\.zip(?:\.sig)?$/i,
     /-setup\.exe(?:\.sig)?$/i,
     /-setup\.nsis\.zip(?:\.sig)?$/i,
+    /[_-]x64-portable\.zip(?:\.sig)?$/i,
   ],
   macos: [/\.dmg$/i, /\.app\.tar\.gz(?:\.sig)?$/i],
   linux: [/\.AppImage(?:\.sig)?$/, /\.deb(?:\.sig)?$/i, /\.rpm(?:\.sig)?$/i],

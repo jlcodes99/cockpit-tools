@@ -1,8 +1,48 @@
-//! Codex/ChatGPT renderer 的 Cockpit Tools API 服务可选额度显示注入。
+//! Codex/ChatGPT renderer 的 Cockpit Tools 额度显示与语音创建接入。
+//!
+//! 以下注入共用同一套 loopback CDP 通道：
+//! - API 服务绑定：底栏自适应胶囊中的额度、会话输出速度与缓存命中率；
+//! - DeepSeek 账号绑定（网关列出 / CDP 注入 / 直连官方）：该账号的余额。
+//! - API 服务及混合模型路由：前端语音创建请求转入实例网关。
 //!
 //! 该模块只连接实例自己的 loopback CDP 端口，不修改官方 app.asar，
-//! 也不修改官方额度或速度逻辑。额度以独立的小字段显示在 composer 操作栏下方。
+//! 也不修改官方额度或速度逻辑。输出速度与缓存命中率在后台读取真实请求记录，
+//! 严格关联当前聊天、实例、API Key、所选模型与速度档位。
 
+#[path = "codex_app_injection_recent_account.rs"]
+mod recent_account;
+
+#[path = "codex_app_injection_usage.rs"]
+mod usage;
+
+#[path = "codex_app_injection_output_speed.rs"]
+mod output_speed;
+
+#[path = "codex_app_injection_dialog_data.rs"]
+mod dialog_data;
+#[path = "codex_app_injection_remote.rs"]
+mod remote_view;
+
+pub(crate) fn remote_key_session_metrics(conn: &rusqlite::Connection, key: &str,
+    query: &crate::modules::codex_remote_service::KeyQuery) -> Result<serde_json::Value, String> {
+    output_speed::key_session_metrics(conn,key,query.thread_id.as_deref().ok_or("session requires threadId")?,
+        query.instance_id.as_deref(),query.installation_id.as_deref(),query.model.as_deref(),query.service_tier.as_deref())
+}
+
+#[path = "codex_app_injection_pool.rs"]
+mod pool;
+
+#[path = "codex_app_injection_live.rs"]
+mod live;
+
+#[path = "codex_app_injection_binding.rs"]
+mod binding;
+
+use crate::commands::codex::{
+    codex_model_provider_deepseek_balance_url, query_deepseek_balance_snapshot,
+    DeepSeekBalanceSnapshot,
+};
+use crate::models::codex::CodexAccount;
 use crate::modules::{
     app_lifecycle, codex_account, codex_local_access, codex_quota, config, i18n, logger,
 };
@@ -21,7 +61,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Instant, UNIX_EPOCH};
 #[cfg(not(target_os = "macos"))]
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tokio::sync::Mutex as TokioMutex;
 use tokio::task::JoinSet;
 use tokio::time::{timeout, Duration};
@@ -32,8 +72,19 @@ use toml_edit::Document;
 const CDP_CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 const INJECTION_INTERVAL: Duration = Duration::from_secs(2);
 const QUOTA_REFRESH_INTERVAL: Duration = Duration::from_secs(15);
+/// DeepSeek 余额变化很慢，保持较长的刷新间隔，避免无谓的上游请求。
+const DEEPSEEK_BALANCE_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
+const DEEPSEEK_BALANCE_QUERY_TIMEOUT: Duration = Duration::from_secs(8);
+/// 绑定账号有变更（模型列表、接入方式等）时最多延迟这么久生效，避免每 2 秒读取账号文件。
+const DEEPSEEK_ACCOUNT_CACHE_TTL: Duration = Duration::from_secs(15);
+/// 页面读不到当前模型时，用实例 config.toml 兜底刷新的最小间隔，避免每轮都读文件。
+const MODEL_RESYNC_INTERVAL: Duration = Duration::from_secs(10);
+/// 新文档脚本按「脚本种类 | CDP target」记录，同一实例可同时运行多套注入。
+const QUOTA_SCRIPT_KIND: &str = "api-service-quota";
+const DEEPSEEK_MODEL_SCRIPT_KIND: &str = "deepseek-model-picker";
+const DEEPSEEK_BALANCE_SCRIPT_KIND: &str = "deepseek-balance";
+const VOICE_SCRIPT_KIND: &str = "voice-create";
 const AUTH_DIAGNOSTIC_INTERVAL: Duration = Duration::from_secs(5);
-const AUTH_IDENTITY_RETRY_INTERVAL: Duration = Duration::from_secs(30);
 const AUTH_NETWORK_DIAGNOSTIC_INTERVAL: Duration = Duration::from_secs(30);
 const AUTH_SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(1);
 const AUTH_NETWORK_CAPTURE_WINDOW: Duration = Duration::from_secs(4);
@@ -81,16 +132,18 @@ fn new_document_scripts() -> &'static Mutex<HashSet<String>> {
     INSTALLED.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
-fn should_install_new_document_script(websocket_url: &str) -> bool {
+/// 同一个 CDP target 可能同时跑多套注入脚本（DeepSeek 模型列表 + 余额），
+/// 因此“已安装新文档脚本”按 `脚本标识|websocket` 记录，避免互相顶掉。
+fn should_install_new_document_script(install_key: &str) -> bool {
     let Ok(installed) = new_document_scripts().lock() else {
         return true;
     };
-    !installed.contains(websocket_url)
+    !installed.contains(install_key)
 }
 
-fn mark_new_document_script_installed(websocket_url: &str) {
+fn mark_new_document_script_installed(install_key: &str) {
     if let Ok(mut installed) = new_document_scripts().lock() {
-        installed.insert(websocket_url.to_string());
+        installed.insert(install_key.to_string());
     }
 }
 
@@ -156,9 +209,8 @@ pub fn enabled_for_app() -> bool {
     config::get_user_config().codex_app_ui_injection_enabled
 }
 
-/// 实例级 CDP 只读观察始终开启；它记录官方客户端实际是否进入登录页，
-/// 不注入脚本、不拦截事件，也不改变官方认证状态机。
-fn auth_observation_enabled(bind_account_id: Option<&str>) -> bool {
+/// 只读诊断用于排障与官方明确的设备限制反馈；页面信号不产生账号认证状态。
+fn auth_diagnostics_enabled(bind_account_id: Option<&str>) -> bool {
     observed_oauth_account_id(bind_account_id).is_some()
 }
 
@@ -166,7 +218,8 @@ pub fn supports_bind_account(bind_account_id: Option<&str>) -> bool {
     bind_account_id.is_some_and(crate::modules::codex_instance::is_api_service_bind_account_id)
 }
 
-pub fn bind_uses_deepseek_cdp_injection(bind_account_id: Option<&str>) -> bool {
+/// 绑定账号是否选择了「CDP 注入」（官方 DeepSeek 与第三方供应商同一语义）。
+pub fn bind_uses_cdp_model_injection(bind_account_id: Option<&str>) -> bool {
     let Some(bind) = bind_account_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -179,18 +232,58 @@ pub fn bind_uses_deepseek_cdp_injection(bind_account_id: Option<&str>) -> bool {
     let account_id = crate::modules::codex_instance::parse_provider_gateway_bind_account_id(bind)
         .unwrap_or_else(|| bind.to_string());
     crate::modules::codex_account::load_account(&account_id).is_some_and(|account| {
-        crate::modules::codex_account::account_uses_deepseek_cdp_injection(&account)
+        crate::modules::codex_account::account_uses_cdp_model_injection(&account)
     })
+}
+
+/// 绑定账号（含 `__provider_gateway__:` 前缀）对应的 API Key 供应商账号。
+fn bound_api_key_account(bind_account_id: Option<&str>) -> Option<CodexAccount> {
+    let account_id = bind_account_id_value(bind_account_id)?;
+    let account = crate::modules::codex_account::load_account(&account_id)?;
+    account.is_api_key_auth().then_some(account)
+}
+
+/// 绑定账号（含 `__provider_gateway__:` 前缀）对应的 DeepSeek 账号。
+///
+/// DeepSeek 的余额注入与接入方式无关：网关列出、CDP 注入、直连官方都要显示，
+/// 因此这里只解析绑定账号本身，不看 `api_instance_access_mode`。
+fn deepseek_bound_account(bind_account_id: Option<&str>) -> Option<CodexAccount> {
+    let account_id = bind_account_id_value(bind_account_id)?;
+    let account = crate::modules::codex_account::load_account(&account_id)?;
+    crate::modules::codex_account::is_deepseek_account(&account).then_some(account)
+}
+
+/// DeepSeek 余额接口地址；非官方 host（第三方中转）返回 `None`，此时不注入余额。
+fn deepseek_balance_endpoint(account: &CodexAccount) -> Option<String> {
+    let base_url = account
+        .api_base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    codex_model_provider_deepseek_balance_url(base_url)
+        .ok()
+        .flatten()
+}
+
+fn bind_uses_deepseek_balance_injection(bind_account_id: Option<&str>) -> bool {
+    deepseek_bound_account(bind_account_id)
+        .is_some_and(|account| deepseek_balance_endpoint(&account).is_some())
 }
 
 pub fn should_enable_injection(bind_account_id: Option<&str>) -> bool {
     (enabled_for_app() && supports_bind_account(bind_account_id))
-        || bind_uses_deepseek_cdp_injection(bind_account_id)
+        || (enabled_for_app() && bound_api_key_account(bind_account_id)
+            .is_some_and(|account| crate::modules::codex_remote_service::for_routing_account(&account).is_some()))
+        || bind_uses_cdp_model_injection(bind_account_id)
+        || (enabled_for_app() && bind_uses_deepseek_balance_injection(bind_account_id))
 }
 
-/// 额度注入、认证页面观察和 DeepSeek 模型适配都依赖实例自己的 loopback CDP。
+/// API 服务订阅提示、可选增强、认证观察、额度与模型适配共用实例的 loopback CDP。
 pub fn should_enable_cdp(bind_account_id: Option<&str>) -> bool {
-    auth_observation_enabled(bind_account_id) || should_enable_injection(bind_account_id)
+    supports_bind_account(bind_account_id)
+        || auth_diagnostics_enabled(bind_account_id)
+        || should_enable_injection(bind_account_id)
+        || crate::modules::codex_app_enhancements::enabled()
 }
 
 fn observed_oauth_account_id(bind_account_id: Option<&str>) -> Option<String> {
@@ -295,50 +388,6 @@ async fn observe_profile_oauth_identity(
             account_id: fallback_account_id,
             reason: "official_identity_read_timeout",
         },
-    }
-}
-
-fn log_profile_oauth_identity_observation(
-    instance_id: &str,
-    profile_key: &str,
-    observation: &ProfileOAuthIdentityObservation,
-) {
-    match observation {
-        ProfileOAuthIdentityObservation::Matched {
-            account_id,
-            observed,
-        } => logger::log_codex_auth_diagnostic(&format!(
-            "[Codex Auth Identity] matched: instance_id={}, profile={}, account_id={}, observed_account_id={}, observed_user_id={}, observed_email={}, observed_organization_id={}",
-            instance_id,
-            profile_key,
-            account_id,
-            observed.account_id.as_deref().unwrap_or(""),
-            observed.user_id.as_deref().unwrap_or(""),
-            observed.email,
-            observed.organization_id.as_deref().unwrap_or(""),
-        )),
-        ProfileOAuthIdentityObservation::Mismatched {
-            account_id,
-            observed,
-        } => logger::log_warn(&format!(
-            "[Codex Auth Identity] profile identity mismatched: instance_id={}, profile={}, expected_account_id={}, observed_account_id={}, observed_user_id={}, observed_email={}, observed_organization_id={}",
-            instance_id,
-            profile_key,
-            account_id,
-            observed.account_id.as_deref().unwrap_or(""),
-            observed.user_id.as_deref().unwrap_or(""),
-            observed.email,
-            observed.organization_id.as_deref().unwrap_or(""),
-        )),
-        ProfileOAuthIdentityObservation::Unknown { account_id, reason } => {
-            logger::log_codex_auth_diagnostic(&format!(
-                "[Codex Auth Identity] unknown: instance_id={}, profile={}, expected_account_id={}, reason={}",
-                instance_id,
-                profile_key,
-                account_id.as_deref().unwrap_or(""),
-                reason,
-            ));
-        }
     }
 }
 
@@ -463,7 +512,8 @@ pub fn restore_running_profiles(app: AppHandle) -> Result<usize, String> {
             }
             continue;
         };
-        let injection_enabled = should_enable_injection(bind_account_id.as_deref());
+        let injection_enabled =
+            should_enable_profile_injection(&profile_dir, bind_account_id.as_deref());
         start_for_profile(
             app.clone(),
             instance_id.clone(),
@@ -473,12 +523,12 @@ pub fn restore_running_profiles(app: AppHandle) -> Result<usize, String> {
         );
         restored += 1;
         logger::log_codex_auth_diagnostic(&format!(
-            "[Codex Auth CDP] restored_running_instance: instance_id={}, pid={}, port={}, injection_enabled={}, auth_observation_enabled={}",
+            "[Codex Auth CDP] restored_running_instance: instance_id={}, pid={}, port={}, injection_enabled={}, auth_diagnostics_enabled={}",
             instance_id,
             pid,
             port,
             injection_enabled,
-            auth_observation_enabled(bind_account_id.as_deref()),
+            auth_diagnostics_enabled(bind_account_id.as_deref()),
         ));
     }
 
@@ -486,6 +536,7 @@ pub fn restore_running_profiles(app: AppHandle) -> Result<usize, String> {
 }
 
 pub fn stop_for_profile(profile_dir: &Path) {
+    crate::modules::codex_app_enhancements::stop_for_profile(profile_dir);
     stop_auth_diagnostics_for_profile(profile_dir);
     stop_injection_for_profile(profile_dir);
 }
@@ -509,6 +560,7 @@ fn stop_auth_diagnostics_for_profile(profile_dir: &Path) {
 }
 
 pub fn stop_all() {
+    crate::modules::codex_app_enhancements::stop_all();
     if let Ok(mut items) = runtimes().lock() {
         for (_, runtime) in items.drain() {
             runtime.task.abort();
@@ -564,8 +616,39 @@ pub fn start_for_profile(
     port: Option<u16>,
     bind_account_id: Option<String>,
 ) {
+    start_profile(app, instance_id, profile_dir, port, bind_account_id, false);
+}
+
+/// Only the unified launch transaction may arm first-document adaptation.
+pub fn start_for_launched_profile(
+    app: AppHandle,
+    instance_id: String,
+    profile_dir: PathBuf,
+    port: Option<u16>,
+    bind_account_id: Option<String>,
+) {
+    start_profile(app, instance_id, profile_dir, port, bind_account_id, true);
+}
+
+fn start_profile(
+    app: AppHandle,
+    instance_id: String,
+    profile_dir: PathBuf,
+    port: Option<u16>,
+    bind_account_id: Option<String>,
+    fresh_launch: bool,
+) {
     let Some(port) = port else { return };
-    if auth_observation_enabled(bind_account_id.as_deref()) {
+    crate::modules::codex_app_enhancements::start_for_profile(
+        profile_dir.clone(),
+        instance_id.clone(),
+        port,
+        fresh_launch,
+        bind_account_id
+            .as_deref()
+            .is_some_and(crate::modules::codex_instance::is_api_service_bind_account_id),
+    );
+    if auth_diagnostics_enabled(bind_account_id.as_deref()) {
         start_auth_diagnostics_for_profile(
             app.clone(),
             &instance_id,
@@ -574,7 +657,7 @@ pub fn start_for_profile(
             bind_account_id.as_deref(),
         );
     }
-    if !should_enable_injection(bind_account_id.as_deref()) {
+    if !should_enable_profile_injection(&profile_dir, bind_account_id.as_deref()) {
         return;
     }
     stop_injection_for_profile(&profile_dir);
@@ -594,6 +677,7 @@ struct ProfileGatewayConfig {
     base_url: String,
     api_key: String,
     provider_name: String,
+    managed_voice: bool,
 }
 
 fn read_profile_gateway_config(profile_dir: &Path) -> Option<ProfileGatewayConfig> {
@@ -633,7 +717,188 @@ fn read_profile_gateway_config(profile_dir: &Path) -> Option<ProfileGatewayConfi
         base_url,
         api_key,
         provider_name,
+        managed_voice: codex_local_access::has_managed_voice_gateway_config(&config_text),
     })
+}
+
+fn should_enable_profile_injection(profile_dir: &Path, bind_account_id: Option<&str>) -> bool {
+    if should_enable_injection(bind_account_id) {
+        return true;
+    }
+    if !enabled_for_app() {
+        return false;
+    }
+    match codex_local_access::profile_uses_mixed_model_gateway(profile_dir) {
+        Ok(enabled) => enabled,
+        Err(_) => {
+            logger::log_warn("[Codex Voice] 无法读取实例的混合模型路由状态，未启动语音接入");
+            false
+        }
+    }
+}
+
+fn voice_injection_script(
+    profile_dir: &Path,
+    bind_account_id: Option<&str>,
+) -> Result<Option<String>, String> {
+    if !enabled_for_app() {
+        return Ok(None);
+    }
+    if !supports_bind_account(bind_account_id)
+        && !codex_local_access::profile_uses_mixed_model_gateway(profile_dir)
+            .map_err(|_| "无法读取实例的混合模型路由状态".to_string())?
+    {
+        return Ok(None);
+    }
+    let gateway = read_profile_gateway_config(profile_dir)
+        .ok_or_else(|| "无法读取实例网关配置".to_string())?;
+    if !gateway.managed_voice {
+        return Ok(None);
+    }
+    let mut endpoint =
+        reqwest::Url::parse(&gateway.base_url).map_err(|_| "实例网关地址无效".to_string())?;
+    if !matches!(endpoint.scheme(), "http" | "https")
+        || !endpoint.username().is_empty()
+        || endpoint.password().is_some()
+        || endpoint.query().is_some()
+        || endpoint.fragment().is_some()
+        || endpoint.path().trim_end_matches('/') != "/v1"
+    {
+        return Ok(None);
+    }
+    endpoint.set_path("/v1/live");
+    let config_json =
+        json!({ "endpoint": endpoint.as_str(), "apiKey": gateway.api_key }).to_string();
+    Ok(Some(
+        VOICE_INSTALL_SCRIPT.replace("__COCKPIT_VOICE_CONFIG__", &config_json),
+    ))
+}
+
+const VOICE_INSTALL_SCRIPT: &str = r#"(() => {
+  if (location.protocol !== "app:" || location.host !== "-" || typeof MessagePort === "undefined") return false;
+  const key = Symbol.for("cockpit.voice.transport");
+  if (globalThis[key]) return MessagePort.prototype.postMessage === globalThis[key];
+  const config = __COCKPIT_VOICE_CONFIG__;
+  const original = MessagePort.prototype.postMessage;
+  const wrapper = function(...args) {
+    const forward = () => Reflect.apply(original, this, args);
+    const message = args[0];
+    if (!Array.isArray(message) || message[0] !== "push") return forward();
+    const operation = message[1];
+    if (!Array.isArray(operation) || operation[0] !== "pipeline") return forward();
+    const path = operation[2], params = operation[3];
+    if (!Array.isArray(path) || path[path.length - 1] !== "fetch" || !Array.isArray(params)) return forward();
+    const request = params[1];
+    if (!request || typeof request !== "object" || String(request.method).toUpperCase() !== "POST" || typeof request.body !== "string") return forward();
+    let headers;
+    try { headers = new Headers(request.headers); } catch { return forward(); }
+    const alpha = headers.get("OpenAI-Alpha") || "";
+    if (!alpha.split(/[;,\s]+/).some(value => /^quicksilver=.+$/.test(value))) return forward();
+    let body;
+    try { body = JSON.parse(request.body); } catch { return forward(); }
+    if (!body || typeof body.sdp !== "string" || !body.sdp.trim() || !body.session || typeof body.session !== "object" || Array.isArray(body.session)) return forward();
+    const target = request.url;
+    const validTarget = typeof target === "string" && target.startsWith("/") && !target.startsWith("//") && !/[\\#\u0000-\u0020\u007f]/.test(target);
+    const allowed = new Set(["content-type", "openai-alpha", "thread-id", "session-id", "x-session-id", "x-codex-turn-metadata", "originator"]);
+    const nextHeaders = {};
+    headers.forEach((value, name) => { if (allowed.has(name.toLowerCase())) nextHeaders[name] = value; });
+    nextHeaders.Authorization = "Bearer " + config.apiKey;
+    // Let the gateway reject an invalid target without aborting the shared RPC connection.
+    nextHeaders["X-Cockpit-Voice-Target"] = validTarget ? target : "";
+    const nextRequest = { ...request, url: config.endpoint, headers: nextHeaders };
+    delete nextRequest.expectedIdentity;
+    const nextParams = params.slice(); nextParams[1] = nextRequest;
+    const nextOperation = operation.slice(); nextOperation[3] = nextParams;
+    const nextMessage = message.slice(); nextMessage[1] = nextOperation;
+    const nextArgs = args.slice(); nextArgs[0] = nextMessage;
+    return Reflect.apply(original, this, nextArgs);
+  };
+  MessagePort.prototype.postMessage = wrapper;
+  globalThis[key] = wrapper;
+  return true;
+})()"#;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InjectionBadgeKind {
+    CodexQuota,
+    GrokQuota,
+    DeepSeekBalance,
+}
+
+impl InjectionBadgeKind {
+    fn as_js_str(self) -> &'static str {
+        match self {
+            Self::CodexQuota => "codex",
+            Self::GrokQuota => "grok",
+            Self::DeepSeekBalance => "deepseek",
+        }
+    }
+}
+
+fn read_profile_selected_model(profile_dir: &Path) -> Option<String> {
+    let config_text = fs::read_to_string(profile_dir.join("config.toml")).ok()?;
+    let document = config_text.parse::<Document>().ok()?;
+    normalize_injection_model_slug(document.get("model")?.as_str().unwrap_or(""))
+}
+
+fn normalize_injection_model_slug(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.contains("deepseek") {
+        return Some(
+            if lower.contains("vision") {
+                "deepseek-v4-flash-vision-exp"
+            } else if lower.contains("pro") {
+                "deepseek-v4-pro"
+            } else if lower.contains("v4.1") || lower.contains("v4-1") {
+                "deepseek-flash"
+            } else if lower.contains("v4-flash") || lower.contains("v4.flash") {
+                "deepseek-v4-flash"
+            } else {
+                "deepseek-flash"
+            }
+            .to_string(),
+        );
+    }
+    if lower.contains("grok") {
+        for official in crate::modules::codex_account::GROK_CODEX_MODELS {
+            let needle = official.to_ascii_lowercase();
+            let compact = needle.replace('.', "");
+            if lower.contains(&needle) || lower.replace('.', "").contains(&compact) {
+                return Some((*official).to_string());
+            }
+        }
+        return Some((*crate::modules::codex_account::GROK_CODEX_MODELS.first()?).to_string());
+    }
+    let slug = lower
+        .split_whitespace()
+        .next()
+        .unwrap_or(&lower)
+        .trim_matches(|ch: char| {
+            !ch.is_ascii_alphanumeric() && ch != '-' && ch != '.' && ch != '_'
+        });
+    if slug.is_empty() {
+        None
+    } else {
+        Some(slug.to_string())
+    }
+}
+
+fn injection_badge_kind_for_model(model: Option<&str>) -> InjectionBadgeKind {
+    let Some(model) = model.map(str::trim).filter(|value| !value.is_empty()) else {
+        return InjectionBadgeKind::CodexQuota;
+    };
+    let lower = model.to_ascii_lowercase();
+    if lower.contains("deepseek") {
+        InjectionBadgeKind::DeepSeekBalance
+    } else if lower.contains("grok") {
+        InjectionBadgeKind::GrokQuota
+    } else {
+        InjectionBadgeKind::CodexQuota
+    }
 }
 
 fn local_quota_url(base_url: &str) -> Option<String> {
@@ -658,28 +923,56 @@ fn local_quota_url(base_url: &str) -> Option<String> {
 #[serde(rename_all = "camelCase")]
 struct QuotaPlanSummary {
     plan: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    official: bool,
     count: i64,
     weekly_remaining_percent: Option<i64>,
     five_hour_remaining_percent: Option<i64>,
 }
 
+/// API 服务账号池里可查官方余额的 DeepSeek 账号汇总（按币种统计金额及贡献账号数）。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InjectionBalanceLine {
+    currency: Option<String>,
+    total_balance: f64,
+    account_count: usize,
+}
+
+/// API 服务账号池里的 Grok 共享额度或旧 GrokBuild 额度。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InjectionGrokQuotaLine {
+    product: String,
+    count: i64,
+    remaining_percent: i64,
+}
+
 #[derive(Debug, Deserialize, Default, Clone)]
 #[serde(rename_all = "camelCase")]
 struct QuotaResponse {
+    #[serde(default)]
+    remote: Option<Value>,
     weekly_remaining_percent: Option<i64>,
     five_hour_remaining_percent: Option<i64>,
+    weekly_capacity_percent: Option<i64>,
+    five_hour_capacity_percent: Option<i64>,
     account_count: Option<i64>,
     available_account_count: Option<i64>,
     abnormal_account_count: Option<i64>,
     cooldown_account_count: Option<i64>,
+    #[serde(default)]
     plans: Vec<QuotaPlanSummary>,
 }
 
 impl QuotaResponse {
     fn empty_pool() -> Self {
         Self {
+            remote: None,
             weekly_remaining_percent: Some(0),
             five_hour_remaining_percent: Some(0),
+            weekly_capacity_percent: Some(0),
+            five_hour_capacity_percent: Some(0),
             account_count: Some(0),
             available_account_count: Some(0),
             abnormal_account_count: Some(0),
@@ -700,8 +993,13 @@ impl QuotaResponse {
 async fn fetch_quota(
     client: &Client,
     gateway: Option<&ProfileGatewayConfig>,
+    remote: bool,
 ) -> Option<QuotaResponse> {
     let gateway = gateway?;
+    if remote {
+        let remote = crate::modules::codex_remote_service::discover(&gateway.base_url, &gateway.api_key, true).await.ok()??;
+        return Some(QuotaResponse { remote: serde_json::to_value(remote).ok(), ..Default::default() });
+    }
     let url = local_quota_url(&gateway.base_url)?;
     let response = client
         .get(url)
@@ -720,6 +1018,175 @@ async fn fetch_quota(
         .map(QuotaResponse::normalize_empty_pool)
 }
 
+/// 查询绑定账号的 DeepSeek 余额；失败时保留上一次的有效快照，不清空已显示的额度。
+async fn fetch_deepseek_balance(
+    client: &Client,
+    account: &CodexAccount,
+) -> Option<DeepSeekBalanceSnapshot> {
+    let url = deepseek_balance_endpoint(account)?;
+    let api_key = account
+        .openai_api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    match query_deepseek_balance_snapshot(client, &url, api_key).await {
+        Ok(snapshot) => Some(snapshot),
+        Err(error) => {
+            logger::log_warn(&format!(
+                "[Codex App Injection] DeepSeek 余额查询失败: {}",
+                error
+            ));
+            None
+        }
+    }
+}
+
+/// API 服务账号池里的 Grok 额度汇总：共享池或旧 GrokBuild，多账号取最优剩余额度。
+///
+/// 数据来自 Cockpit 本地保存的 Grok 平台账号额度（账号保活会定期刷新），
+/// 因此这里不发额外网络请求；池里没有 Grok 账号时返回空列表，弹框不显示该行。
+#[path = "codex_app_injection_grok_quota.rs"]
+mod grok_quota;
+
+async fn api_service_grok_quota_lines(locale: &str) -> Option<Vec<InjectionGrokQuotaLine>> {
+    let state = codex_local_access::get_local_access_state().await.ok()?;
+    let Some(collection) = state.collection else {
+        return Some(Vec::new());
+    };
+    let shared_label = i18n::translate(locale, "grok.quota.sharedPool", &[]);
+    match tauri::async_runtime::spawn_blocking(move || {
+        let mut grouped: std::collections::BTreeMap<String, (i64, i64)> =
+            std::collections::BTreeMap::new();
+        for account_id in collection.account_ids {
+            let Some(account) = codex_account::load_account(&account_id) else {
+                return None;
+            };
+            if !codex_account::is_grok_upstream_provider(&account) {
+                continue;
+            }
+            let Some(grok_account_id) = account
+                .upstream_grok_account_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            else {
+                continue;
+            };
+            let Some(grok_account) = crate::modules::grok_account::load_account(grok_account_id)
+            else {
+                return None;
+            };
+            let Some(quota) = grok_account.quota else {
+                continue;
+            };
+            for (product, remaining_percent) in grok_quota::quota_lines(&quota, &shared_label) {
+                let entry = grouped.entry(product).or_insert((0, remaining_percent));
+                entry.0 += 1;
+                entry.1 = entry.1.max(remaining_percent);
+            }
+        }
+        Some(
+            grouped
+                .into_iter()
+                .map(
+                    |(product, (count, remaining_percent))| InjectionGrokQuotaLine {
+                        product,
+                        count,
+                        remaining_percent,
+                    },
+                )
+                .collect(),
+        )
+    })
+    .await
+    {
+        Ok(lines) => lines,
+        Err(error) => {
+            logger::log_warn(&format!(
+                "[Codex App Injection] Grok 额度读取任务失败: {}",
+                error
+            ));
+            None
+        }
+    }
+}
+
+/// API 服务账号池里的 DeepSeek 官方余额汇总（按币种合并成一行），供点击弹框显示。
+///
+/// - 池里没有可查余额的账号：返回空列表，选中 DeepSeek 时展示未知余额；
+/// - 池里账号全部查询失败：返回 `None`，保留上一次的有效结果。
+async fn fetch_api_service_balance_lines(client: &Client) -> Option<Vec<InjectionBalanceLine>> {
+    let state = codex_local_access::get_local_access_state().await.ok()?;
+    let collection = state.collection?;
+    let accounts = tauri::async_runtime::spawn_blocking(move || {
+        let mut accounts = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for account_id in collection.account_ids {
+            if !seen.insert(account_id.clone()) {
+                continue;
+            }
+            let Some(account) = codex_account::load_account(&account_id) else {
+                continue;
+            };
+            if deepseek_balance_endpoint(&account).is_some() {
+                accounts.push(account);
+            }
+        }
+        accounts
+    })
+    .await
+    .ok()?;
+    if accounts.is_empty() {
+        return Some(Vec::new());
+    }
+    let mut tasks = JoinSet::new();
+    for account in accounts {
+        let client = client.clone();
+        tasks.spawn(async move {
+            let snapshot = fetch_deepseek_balance(&client, &account).await?;
+            Some((account.id, snapshot))
+        });
+    }
+    let mut snapshots = Vec::new();
+    while let Some(result) = tasks.join_next().await {
+        if let Ok(Some(snapshot)) = result {
+            snapshots.push(snapshot);
+        }
+    }
+    aggregate_api_service_balances(snapshots)
+}
+
+fn aggregate_api_service_balances(
+    snapshots: impl IntoIterator<Item = (String, DeepSeekBalanceSnapshot)>,
+) -> Option<Vec<InjectionBalanceLine>> {
+    let mut totals: Vec<InjectionBalanceLine> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (account_id, snapshot) in snapshots {
+        let Some(total_balance) = snapshot.total_balance else {
+            continue;
+        };
+        if !total_balance.is_finite() || !seen.insert((account_id, snapshot.currency.clone())) {
+            continue;
+        }
+        match totals
+            .iter_mut()
+            .find(|line| line.currency == snapshot.currency)
+        {
+            Some(line) => {
+                line.total_balance += total_balance;
+                line.account_count += 1;
+            }
+            None => totals.push(InjectionBalanceLine {
+                currency: snapshot.currency,
+                total_balance,
+                account_count: 1,
+            }),
+        }
+    }
+    totals.sort_by(|a, b| a.currency.cmp(&b.currency));
+    (!totals.is_empty()).then_some(totals)
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct CdpTarget {
     #[serde(rename = "id", default)]
@@ -735,6 +1202,10 @@ struct CdpTarget {
 #[derive(Debug, Clone, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct AuthPageSnapshot {
+    #[serde(skip)]
+    device_limit_observed: bool,
+    #[serde(skip)]
+    device_limit_account_id: Option<String>,
     #[serde(default)]
     route: String,
     #[serde(default)]
@@ -795,6 +1266,7 @@ impl AuthDiagnosticObservation {
     fn login_signal(&self) -> bool {
         self.login_route || self.login_ui_signal
     }
+
 }
 
 fn is_official_login_route(route: &str) -> bool {
@@ -850,8 +1322,7 @@ fn deepseek_model_injection_script(
     payload: &serde_json::Value,
     handled_selected_model: Option<&str>,
 ) -> String {
-    let payload =
-        serde_json::to_string(payload).unwrap_or_else(|_| "{\"models\":[]}".to_string());
+    let payload = serde_json::to_string(payload).unwrap_or_else(|_| "{\"models\":[]}".to_string());
     let handled =
         serde_json::to_string(&handled_selected_model).unwrap_or_else(|_| "null".to_string());
     format!(
@@ -913,8 +1384,8 @@ fn deepseek_model_injection_script(
         // depending on release, and a missing value would hide image input.
         item.inputModalities = modalities;
         item.input_modalities = modalities;
-        item.supportsImageDetailOriginal = supportsImage;
-        item.supports_image_detail_original = supportsImage;
+        item.supportsImageDetailOriginal = false;
+        item.supports_image_detail_original = false;
       }};
       const listMethods = {{ "model/list": true, "list-models-for-host": true }};
       const writeMethods = {{
@@ -1147,84 +1618,63 @@ fn deepseek_model_injection_script(
     )
 }
 
-fn injection_script(
-    provider_name: &str,
-    quota: &QuotaResponse,
+include!("codex_app_injection_statusline.rs");
+include!("codex_app_injection_usage_poll.rs");
+include!("codex_app_injection_dialog_poll.rs");
+
+/// DeepSeek 账号余额徽标：与 API 服务额度徽标同位置、同交互，但只展示账号余额。
+///
+/// 独立的 `window.__cockpitDeepSeekBalance` 命名空间与 `data-cockpit-deepseek-balance*`
+/// 标记，避免与 CDP 模式下的模型列表注入脚本互相覆盖渲染函数。
+fn deepseek_balance_injection_script(
     locale: &str,
+    balance: Option<&DeepSeekBalanceSnapshot>,
     refresh_in_progress: bool,
     handled_refresh_token: Option<&str>,
 ) -> String {
-    let provider = serde_json::to_string(provider_name).unwrap_or_else(|_| "\"Codex\"".to_string());
-    let weekly = quota.weekly_remaining_percent;
-    let five_hour = quota.five_hour_remaining_percent;
-    let account_count = quota.account_count;
-    let available_account_count = quota.available_account_count.or(account_count);
-    let abnormal_account_count = quota.abnormal_account_count.unwrap_or(0);
-    let cooldown_account_count = quota.cooldown_account_count.unwrap_or(0);
-    let plans = serde_json::to_string(&quota.plans).unwrap_or_else(|_| "[]".to_string());
-    let weekly = serde_json::to_string(&weekly).unwrap_or_else(|_| "null".to_string());
-    let five_hour = serde_json::to_string(&five_hour).unwrap_or_else(|_| "null".to_string());
-    let account_count_value =
-        serde_json::to_string(&account_count).unwrap_or_else(|_| "null".to_string());
-    let available_account_count_value =
-        serde_json::to_string(&available_account_count).unwrap_or_else(|_| "null".to_string());
-    let abnormal_account_count_value =
-        serde_json::to_string(&abnormal_account_count).unwrap_or_else(|_| "0".to_string());
-    let cooldown_account_count_value =
-        serde_json::to_string(&cooldown_account_count).unwrap_or_else(|_| "0".to_string());
-    let account_pool_label = serde_json::to_string(&i18n::translate(
+    let balance = serde_json::to_string(&balance).unwrap_or_else(|_| "null".to_string());
+    let balance_label = serde_json::to_string(&i18n::translate(
         locale,
-        "settings.general.codexAppUiInjectionPoolLabel",
+        "codex.modelProviders.usage.fields.balance",
         &[],
     ))
-    .unwrap_or_else(|_| "\"Accounts\"".to_string());
-    let weekly_label = serde_json::to_string(&i18n::translate(
+    .unwrap_or_else(|_| "\"Balance\"".to_string());
+    let account_balance_label = serde_json::to_string(&i18n::translate(
         locale,
-        "settings.general.codexAppUiInjectionWeeklyLabel",
+        "codex.modelProviders.usage.accountBalance",
         &[],
     ))
-    .unwrap_or_else(|_| "\"Weekly\"".to_string());
-    let five_hour_label = serde_json::to_string(&i18n::translate(
+    .unwrap_or_else(|_| "\"Account Balance\"".to_string());
+    let total_balance_label = serde_json::to_string(&i18n::translate(
         locale,
-        "settings.general.codexAppUiInjectionFiveHourLabel",
+        "codex.modelProviders.usage.fields.totalBalance",
         &[],
     ))
-    .unwrap_or_else(|_| "\"5h\"".to_string());
-    let account_pool_title = serde_json::to_string(&i18n::translate(
+    .unwrap_or_else(|_| "\"Total balance\"".to_string());
+    let granted_balance_label = serde_json::to_string(&i18n::translate(
         locale,
-        "codex.localAccess.accountPoolHealth.title",
+        "codex.modelProviders.usage.fields.grantedBalance",
         &[],
     ))
-    .unwrap_or_else(|_| "\"Account Pool\"".to_string());
-    let quota_empty_label = serde_json::to_string(&i18n::translate(
+    .unwrap_or_else(|_| "\"Granted balance\"".to_string());
+    let topped_up_balance_label = serde_json::to_string(&i18n::translate(
         locale,
-        "codex.localAccess.quotaPool.empty",
+        "codex.modelProviders.usage.fields.toppedUpBalance",
         &[],
     ))
-    .unwrap_or_else(|_| "\"No quota stats yet\"".to_string());
-    let available_text = {
-        let available = available_account_count.unwrap_or(0).to_string();
-        let total = account_count.unwrap_or(0).to_string();
-        serde_json::to_string(&i18n::translate(
-            locale,
-            "codex.localAccess.accountPoolHealth.availableRatio",
-            &[("available", available.as_str()), ("total", total.as_str())],
-        ))
-        .unwrap_or_else(|_| "\"Available\"".to_string())
-    };
-    let issue_text = {
-        let abnormal = abnormal_account_count.to_string();
-        let cooldown = cooldown_account_count.to_string();
-        serde_json::to_string(&i18n::translate(
-            locale,
-            "codex.localAccess.accountPoolHealth.issueSummary",
-            &[
-                ("abnormal", abnormal.as_str()),
-                ("cooldown", cooldown.as_str()),
-            ],
-        ))
-        .unwrap_or_else(|_| "\"Issues\"".to_string())
-    };
+    .unwrap_or_else(|_| "\"Topped-up balance\"".to_string());
+    let available_label = serde_json::to_string(&i18n::translate(
+        locale,
+        "codex.localAccess.healthAvailable",
+        &[],
+    ))
+    .unwrap_or_else(|_| "\"Available\"".to_string());
+    let unavailable_label = serde_json::to_string(&i18n::translate(
+        locale,
+        "codex.localAccess.healthUnavailable",
+        &[],
+    ))
+    .unwrap_or_else(|_| "\"Unavailable\"".to_string());
     let refresh_label =
         serde_json::to_string(&i18n::translate(locale, "common.shared.refreshQuota", &[]))
             .unwrap_or_else(|_| "\"Refresh quota\"".to_string());
@@ -1233,129 +1683,147 @@ fn injection_script(
     let refresh_in_progress = if refresh_in_progress { "true" } else { "false" };
     let handled_refresh_token =
         serde_json::to_string(&handled_refresh_token).unwrap_or_else(|_| "null".to_string());
+    let badge_layout = include_str!("codex_app_injection_layout.js");
+    let usage_metrics = include_str!("codex_app_injection_usage.js");
     format!(
         r#"(() => {{
-      const providerName = {provider};
-      const weeklyPercent = {weekly};
-      const fiveHourPercent = {five_hour};
-      const accountCount = {account_count_value};
-      const availableAccountCount = {available_account_count_value};
-      const abnormalAccountCount = {abnormal_account_count_value};
-      const cooldownAccountCount = {cooldown_account_count_value};
-      const plans = {plans};
-      const accountPoolLabel = {account_pool_label};
-      const weeklyLabel = {weekly_label};
-      const fiveHourLabel = {five_hour_label};
-      const accountPoolTitle = {account_pool_title};
-      const quotaEmptyLabel = {quota_empty_label};
-      const availableText = {available_text};
-      const issueText = {issue_text};
+      const balance = {balance};
+      const balanceLabel = {balance_label};
+      const accountBalanceLabel = {account_balance_label};
+      const totalBalanceLabel = {total_balance_label};
+      const grantedBalanceLabel = {granted_balance_label};
+      const toppedUpBalanceLabel = {topped_up_balance_label};
+      const availableLabel = {available_label};
+      const unavailableLabel = {unavailable_label};
       const refreshLabel = {refresh_label};
       const closeLabel = {close_label};
       const refreshInProgress = {refresh_in_progress};
       const handledRefreshToken = {handled_refresh_token};
       const hostHeartbeatTimeoutMs = 8000;
-      const root = window.__cockpitCodexInjection || (window.__cockpitCodexInjection = {{}});
+      const badgeLayout = {badge_layout};
+      const usageMetrics = {usage_metrics};
+      const root = window.__cockpitDeepSeekBalance || (window.__cockpitDeepSeekBalance = {{}});
       root.hostHeartbeatAt = Date.now();
       root.hostAvailable = true;
-      root.providerName = providerName;
-      root.weeklyPercent = weeklyPercent;
-      root.fiveHourPercent = fiveHourPercent;
+      root.hasBalance = Boolean(balance);
+      // 余额注入运行期间不再叠加 API 服务额度徽章：清掉切换绑定后残留的宿主、定时器与
+      // 额度脚本专属状态，共享命名空间里的模型注入字段保持不变。
+      const staleQuotaRoot = window.__cockpitCodexInjection;
+      if (staleQuotaRoot) {{
+        if (staleQuotaRoot.watchdogTimer) window.clearInterval(staleQuotaRoot.watchdogTimer);
+        if (staleQuotaRoot.observer) staleQuotaRoot.observer.disconnect();
+        if (staleQuotaRoot.resizeHandler) window.removeEventListener('resize', staleQuotaRoot.resizeHandler);
+        if (staleQuotaRoot.scrollHandler) window.removeEventListener('scroll', staleQuotaRoot.scrollHandler, true);
+        if (staleQuotaRoot.keyHandler) window.removeEventListener('keydown', staleQuotaRoot.keyHandler);
+        if (staleQuotaRoot.focusHandler) window.removeEventListener('focusin', staleQuotaRoot.focusHandler);
+        if (staleQuotaRoot.outsidePointerHandler) window.removeEventListener('pointerdown', staleQuotaRoot.outsidePointerHandler, true);
+        badgeLayout.disconnect(staleQuotaRoot);
+        for (const key of ['keyHandler', 'focusHandler', 'outsidePointerHandler', 'statuslineVersion', 'layoutCard', 'card', 'threadId', 'usageState', 'poolState', 'lastTrigger', 'lastTriggerIndex', 'refreshError', 'refreshResultKey']) delete staleQuotaRoot[key];
+        delete staleQuotaRoot.watchdogTimer;
+        delete staleQuotaRoot.observer;
+        delete staleQuotaRoot.resizeHandler;
+        delete staleQuotaRoot.layoutObserver;
+        delete staleQuotaRoot.layoutNodes;
+        delete staleQuotaRoot.scrollHandler;
+        delete staleQuotaRoot.render;
+        delete staleQuotaRoot.scheduleRender;
+        delete staleQuotaRoot.renderScheduled;
+        delete staleQuotaRoot.providerName;
+        delete staleQuotaRoot.weeklyPercent;
+        delete staleQuotaRoot.fiveHourPercent;
+        delete staleQuotaRoot.refreshRequestToken;
+        delete staleQuotaRoot.refreshing;
+        delete staleQuotaRoot.quotaDetailsOpen;
+        delete staleQuotaRoot.layoutFooter;
+        delete staleQuotaRoot.layoutPermissions;
+        delete staleQuotaRoot.visibleModelFooter;
+      }}
+      document.querySelectorAll('[data-cockpit-quota-footer], [data-cockpit-quota-details]').forEach((node) => node.remove());
       const pendingRefreshToken = typeof root.refreshRequestToken === 'string' && root.refreshRequestToken !== handledRefreshToken
         ? root.refreshRequestToken
         : null;
       root.refreshing = refreshInProgress || Boolean(pendingRefreshToken);
       if (handledRefreshToken && root.refreshRequestToken === handledRefreshToken) root.refreshRequestToken = null;
+      const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[char]));
+      const currencySymbol = (code) => {{
+        const key = String(code || '').toUpperCase();
+        if (key === 'CNY' || key === 'RMB') return '¥';
+        if (key === 'USD') return '$';
+        if (key === 'EUR') return '€';
+        return '';
+      }};
+      const formatMoney = (value, currency) => {{
+        if (!Number.isFinite(value)) return '—';
+        const symbol = currencySymbol(currency);
+        const amount = Number(value).toFixed(2);
+        return symbol ? symbol + amount : (currency ? amount + ' ' + String(currency) : amount);
+      }};
       const render = () => {{
-        let host = document.querySelector('[data-cockpit-quota-footer]');
-        const permissions = document.querySelector('[data-composer-navigation-target="permissions"]');
-        const footer = permissions?.closest('._footer_1qb5a_2') || permissions?.parentElement?.parentElement?.parentElement;
-        if (!footer || !permissions) {{
+        let host = document.querySelector('[data-cockpit-deepseek-balance]');
+        let details = document.querySelector('[data-cockpit-deepseek-balance-details]');
+        const card = usageMetrics.visibleCard(root.card);
+        const footer = card?.querySelector('[class*="_ComposerLayoutFooter_"], [class*="_footer_"]') || card;
+        const permissions = footer && [...footer.querySelectorAll('[data-composer-navigation-target="permissions"]')].find((node) => node.getClientRects().length > 0);
+        if (root.card !== card) root.detailsOpen = false;
+        root.card = card;
+        if (!permissions || !footer || !balance) {{
           if (host) host.style.display = 'none';
-          const details = document.querySelector('[data-cockpit-quota-details]');
           if (details) details.style.display = 'none';
-          root.quotaDetailsOpen = false;
-          if (root.layoutObserver) root.layoutObserver.disconnect();
-          root.layoutFooter = null;
-          root.layoutPermissions = null;
+          root.detailsOpen = false;
+          badgeLayout.disconnect(root);
           return;
         }}
         if (!host) {{
           host = document.createElement('div');
-          host.setAttribute('data-cockpit-quota-footer', 'true');
+          host.setAttribute('data-cockpit-deepseek-balance', 'true');
+          document.body.appendChild(host);
         }}
-        if (host.parentElement !== document.body) document.body.appendChild(host);
-        if ('ResizeObserver' in window) {{
-          if (!root.layoutObserver) root.layoutObserver = new ResizeObserver(() => root.scheduleRender());
-          if (root.layoutFooter !== footer || root.layoutPermissions !== permissions) {{
-            root.layoutObserver.disconnect();
-            root.layoutObserver.observe(footer);
-            if (permissions !== footer) root.layoutObserver.observe(permissions);
-            root.layoutFooter = footer;
-            root.layoutPermissions = permissions;
-          }}
-        }}
-        const footerRect = footer.getBoundingClientRect();
-        const permissionsRect = permissions.getBoundingClientRect();
-        host.style.cssText = 'position:fixed;transform:translate(-50%,-50%);z-index:2;display:flex;align-items:center;justify-content:center;gap:6px;color:var(--color-token-text-secondary,#737373);font-size:12px;line-height:1;white-space:nowrap;pointer-events:none;';
-        host.style.left = Math.round(footerRect.left + footerRect.width / 2) + 'px';
-        host.style.top = Math.round(permissionsRect.top + permissionsRect.height / 2) + 'px';
-        const badgeStyle = 'display:inline-flex;align-items:center;gap:6px;height:24px;border:1px solid var(--color-token-border-subtle,rgba(127,127,127,.20));border-radius:999px;padding:0 9px;background:var(--color-token-main-surface-primary,rgba(127,127,127,.10));color:inherit;font:inherit;box-shadow:0 1px 2px rgba(0,0,0,.08);backdrop-filter:blur(8px);font-weight:500;cursor:pointer;pointer-events:auto;';
-        const escapeHtml = (value) => String(value ?? '').replace(/[&<>\"']/g, (char) => ({{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}}[char]));
-        const formatPercent = (value) => Number.isFinite(value) ? Math.round(value) + '%' : '—';
-        const renderPlan = (plan) => {{
-          const weekly = formatPercent(plan.weeklyRemainingPercent);
-          const fiveHour = formatPercent(plan.fiveHourRemainingPercent);
-          const planKey = String(plan.plan || '').toUpperCase();
-          const planColor = planKey.includes('PLUS') ? '#8b5cf6' : (planKey.includes('TEAM') || planKey.includes('BUSINESS')) ? '#3b82f6' : planKey.includes('API_KEY') ? '#a3a3a3' : '#10b981';
-          const metrics = [];
-          if (Number.isFinite(plan.weeklyRemainingPercent)) metrics.push('<span style="display:inline-flex;align-items:center;gap:4px;"><i style="width:5px;height:5px;border-radius:999px;background:#10b981;"></i>' + escapeHtml(weeklyLabel) + ' ' + escapeHtml(weekly) + '</span>');
-          if (Number.isFinite(plan.fiveHourRemainingPercent)) metrics.push('<span style="display:inline-flex;align-items:center;gap:4px;"><i style="width:5px;height:5px;border-radius:999px;background:#3b82f6;"></i>' + escapeHtml(fiveHourLabel) + ' ' + escapeHtml(fiveHour) + '</span>');
-          const quotaHtml = metrics.length ? metrics.join('<span style="opacity:.35;">·</span>') : '<span style="opacity:.72;">' + escapeHtml(quotaEmptyLabel) + '</span>';
-          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:9px;padding:6px 0;border-bottom:1px solid var(--color-token-border-subtle,rgba(127,127,127,.10));"><span style="display:inline-flex;align-items:center;gap:6px;color:var(--color-token-text-secondary,#737373);font-weight:500;white-space:nowrap;"><i style="width:6px;height:6px;border-radius:999px;background:' + planColor + ';box-shadow:0 0 0 2px rgba(127,127,127,.10);"></i>' + escapeHtml(plan.plan) + ' <small style="font:inherit;opacity:.62;">' + Math.max(0, Math.round(plan.count || 0)) + '</small></span><span style="display:inline-flex;align-items:center;gap:5px;color:var(--color-token-text-secondary,#737373);text-align:right;white-space:nowrap;">' + quotaHtml + '</span></div>';
-        }};
-        const detailCardStyle = 'position:fixed;z-index:4;width:min(260px,calc(100vw - 24px));box-sizing:border-box;padding:9px 11px;border:1px solid var(--color-token-border-subtle,rgba(127,127,127,.16));border-radius:10px;background:var(--color-token-main-surface-primary,#fff);color:var(--color-token-text-secondary,#737373);box-shadow:0 4px 14px rgba(0,0,0,.09);font-family:inherit;font-size:12px;line-height:1.3;letter-spacing:normal;pointer-events:auto;';
-        const fields = [];
-        if (Number.isFinite(accountCount) && accountCount >= 0) fields.push('<button type="button" data-cockpit-quota-open style="' + badgeStyle + '"><span style="width:6px;height:6px;border-radius:999px;background:#8b5cf6;box-shadow:0 0 0 2px rgba(139,92,246,.14)"></span>' + accountPoolLabel + ' ' + Math.round(accountCount) + '</button>');
-        if (Number.isFinite(fiveHourPercent)) fields.push('<button type="button" data-cockpit-quota-open style="' + badgeStyle + '"><span style="width:6px;height:6px;border-radius:999px;background:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,.14)"></span>' + fiveHourLabel + ' ' + Math.round(fiveHourPercent) + '%</button>');
-        if (Number.isFinite(weeklyPercent)) fields.push('<button type="button" data-cockpit-quota-open style="' + badgeStyle + '"><span style="width:6px;height:6px;border-radius:999px;background:#10b981;box-shadow:0 0 0 2px rgba(16,185,129,.14)"></span>' + weeklyLabel + ' ' + Math.round(weeklyPercent) + '%</button>');
-        if (fields.length) fields.push('<button type="button" data-cockpit-quota-refresh style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:1px solid var(--color-token-border-subtle,rgba(127,127,127,.20));border-radius:999px;padding:0;background:var(--color-token-main-surface-primary,rgba(127,127,127,.10));color:inherit;box-shadow:0 1px 2px rgba(0,0,0,.08);backdrop-filter:blur(8px);cursor:pointer;pointer-events:auto;transition:color .15s ease,border-color .15s ease,background .15s ease,opacity .15s ease"><svg data-cockpit-quota-refresh-icon viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6v5h-5"></path><path d="M4 18v-5h5"></path><path d="M6.1 9a7 7 0 0 1 11.6-2.6L20 11"></path><path d="M4 13l2.3 4.6A7 7 0 0 0 17.9 15"></path></svg></button>');
-        const nextHtml = fields.join('');
-        if (host.innerHTML !== nextHtml) host.innerHTML = nextHtml;
-        host.style.display = fields.length ? 'flex' : 'none';
-        let details = document.querySelector('[data-cockpit-quota-details]');
         if (!details) {{
           details = document.createElement('div');
-          details.setAttribute('data-cockpit-quota-details', 'true');
+          details.setAttribute('data-cockpit-deepseek-balance-details', 'true');
           document.body.appendChild(details);
         }}
-        details.style.cssText = detailCardStyle;
-        details.style.left = Math.round(footerRect.left + footerRect.width / 2) + 'px';
+        const permissionsRect = permissions.getBoundingClientRect();
+        host.style.cssText = 'position:fixed;transform:translate(-50%,-50%);z-index:2;display:flex;align-items:center;justify-content:center;gap:6px;width:max-content;color:var(--color-token-text-secondary,#737373);font-size:12px;line-height:1;white-space:nowrap;pointer-events:none;';
+        const badgeStyle = 'display:inline-flex;align-items:center;gap:6px;height:24px;border:1px solid var(--color-token-border-subtle,rgba(127,127,127,.20));border-radius:999px;padding:0 9px;background:var(--color-token-main-surface-primary,rgba(127,127,127,.10));color:inherit;font:inherit;box-shadow:0 1px 2px rgba(0,0,0,.08);backdrop-filter:blur(8px);font-weight:500;cursor:pointer;pointer-events:auto;';
+        const currency = balance.currency || null;
+        const totalText = formatMoney(balance.totalBalance, currency);
+        const badgeHtml = '<button type="button" data-cockpit-deepseek-balance-open style="' + badgeStyle + '"><span style="width:6px;height:6px;border-radius:999px;background:#3b82f6"></span>' + escapeHtml(balanceLabel) + ' ' + escapeHtml(totalText) + '</button>'
+          + '<button type="button" data-cockpit-deepseek-balance-refresh title="' + escapeHtml(refreshLabel) + '" aria-label="' + escapeHtml(refreshLabel) + '" style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:1px solid var(--color-token-border-subtle,rgba(127,127,127,.20));border-radius:999px;padding:0;background:var(--color-token-main-surface-primary,rgba(127,127,127,.10));color:inherit;box-shadow:0 1px 2px rgba(0,0,0,.08);backdrop-filter:blur(8px);cursor:pointer;pointer-events:auto;"><svg data-cockpit-deepseek-balance-refresh-icon viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6v5h-5"></path><path d="M4 18v-5h5"></path><path d="M6.1 9a7 7 0 0 1 11.6-2.6L20 11"></path><path d="M4 13l2.3 4.6A7 7 0 0 0 17.9 15"></path></svg></button>';
+        if (host.innerHTML !== badgeHtml) host.innerHTML = badgeHtml;
+        const placement = badgeLayout.place(root, host, footer, permissions);
+        if (!placement) root.detailsOpen = false;
+        const badgeAnchorLeft = placement ? placement.left : 0;
+        const row = (label, value) => '<div style="display:flex;align-items:center;justify-content:space-between;gap:9px;padding:6px 0;border-bottom:1px solid var(--color-token-border-subtle,rgba(127,127,127,.10));"><span style="color:var(--color-token-text-secondary,#737373);font-weight:500;white-space:nowrap;">' + escapeHtml(label) + '</span><span style="color:var(--color-token-text-secondary,#737373);text-align:right;white-space:nowrap;">' + escapeHtml(value) + '</span></div>';
+        details.style.cssText = 'position:fixed;z-index:4;width:min(240px,calc(100vw - 24px));box-sizing:border-box;padding:9px 11px;border:1px solid var(--color-token-border-subtle,rgba(127,127,127,.16));border-radius:10px;background:var(--color-token-main-surface-primary,#fff);color:var(--color-token-text-secondary,#737373);box-shadow:0 4px 14px rgba(0,0,0,.09);font-family:inherit;font-size:12px;line-height:1.3;letter-spacing:normal;pointer-events:auto;';
+        details.style.left = badgeAnchorLeft + 'px';
         details.style.top = Math.max(12, Math.round(permissionsRect.top - 2)) + 'px';
         details.style.transform = 'translate(-50%,-100%)';
-        details.style.display = root.quotaDetailsOpen ? 'block' : 'none';
-        if (root.quotaDetailsOpen) {{
-          const planRows = plans.map(renderPlan).join('');
-          const detailsHtml = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 4px;padding-bottom:6px;border-bottom:1px solid var(--color-token-border-subtle,rgba(127,127,127,.10));"><span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--color-token-text-secondary,#737373);"><i style="width:6px;height:6px;border-radius:999px;background:#8b5cf6;box-shadow:0 0 0 2px rgba(139,92,246,.12);"></i>' + escapeHtml(accountPoolTitle) + '</span><button type="button" data-cockpit-quota-close aria-label="' + escapeHtml(closeLabel) + '" title="' + escapeHtml(closeLabel) + '" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:0;border-radius:4px;background:transparent;color:var(--color-token-text-secondary,#737373);font:inherit;font-size:14px;line-height:1;cursor:pointer;padding:0;opacity:.72;">×</button></div>' + '<div>' + (planRows || '<div style="padding:6px 0;color:var(--color-token-text-secondary,#737373);opacity:.72;">' + escapeHtml(quotaEmptyLabel) + '</div>') + '</div>' + '<div style="display:flex;justify-content:space-between;gap:10px;padding-top:7px;color:var(--color-token-text-secondary,#737373);font-size:11px;opacity:.78;"><span>' + escapeHtml(availableText) + '</span><span>' + escapeHtml(issueText) + '</span></div>';
+        details.style.display = root.detailsOpen ? 'block' : 'none';
+        if (root.detailsOpen) {{
+          const detailsHtml = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 4px;padding-bottom:6px;border-bottom:1px solid var(--color-token-border-subtle,rgba(127,127,127,.10));"><span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--color-token-text-secondary,#737373);"><i style="width:6px;height:6px;border-radius:999px;background:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,.12);"></i>' + escapeHtml(accountBalanceLabel) + '</span><button type="button" data-cockpit-deepseek-balance-close aria-label="' + escapeHtml(closeLabel) + '" title="' + escapeHtml(closeLabel) + '" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:0;border-radius:4px;background:transparent;color:var(--color-token-text-secondary,#737373);font:inherit;font-size:14px;line-height:1;cursor:pointer;padding:0;opacity:.72;">×</button></div>'
+            + '<div>'
+            + row(totalBalanceLabel, totalText)
+            + row(grantedBalanceLabel, formatMoney(balance.grantedBalance, currency))
+            + row(toppedUpBalanceLabel, formatMoney(balance.toppedUpBalance, currency))
+            + '</div>'
+            + '<div style="display:flex;justify-content:space-between;gap:10px;padding-top:7px;font-size:11px;opacity:.78;"><span>' + escapeHtml(balance.isAvailable ? availableLabel : unavailableLabel) + '</span><span>' + escapeHtml(currency || '') + '</span></div>';
           if (details.innerHTML !== detailsHtml) details.innerHTML = detailsHtml;
         }}
-        host.querySelectorAll('[data-cockpit-quota-open]').forEach((button) => {{
-          button.onclick = () => {{ root.quotaDetailsOpen = !root.quotaDetailsOpen; root.render(); }};
-        }});
-        const closeButton = details.querySelector('[data-cockpit-quota-close]');
-        if (closeButton) closeButton.onclick = () => {{ root.quotaDetailsOpen = false; root.render(); }};
-        const refreshButton = host.querySelector('[data-cockpit-quota-refresh]');
+        const openButton = host.querySelector('[data-cockpit-deepseek-balance-open]');
+        if (openButton) openButton.onclick = () => {{ root.detailsOpen = !root.detailsOpen; root.render(); }};
+        const closeButton = details.querySelector('[data-cockpit-deepseek-balance-close]');
+        if (closeButton) closeButton.onclick = () => {{ root.detailsOpen = false; root.render(); }};
+        const refreshButton = host.querySelector('[data-cockpit-deepseek-balance-refresh]');
         if (refreshButton) {{
           const refreshDisabled = root.refreshing || root.hostAvailable === false;
-          refreshButton.title = refreshLabel;
-          refreshButton.setAttribute('aria-label', refreshLabel);
           refreshButton.disabled = refreshDisabled;
-          refreshButton.style.cursor = root.refreshing ? 'wait' : (root.hostAvailable === false ? 'not-allowed' : 'pointer');
+          refreshButton.style.cursor = refreshDisabled ? 'not-allowed' : 'pointer';
           refreshButton.style.opacity = root.refreshing ? '.7' : (root.hostAvailable === false ? '.45' : '1');
-          const refreshIcon = refreshButton.querySelector('[data-cockpit-quota-refresh-icon]');
+          const refreshIcon = refreshButton.querySelector('[data-cockpit-deepseek-balance-refresh-icon]');
           if (refreshIcon) refreshIcon.style.animation = root.refreshing ? 'cockpit-quota-spin .8s linear infinite' : 'none';
           refreshButton.onclick = () => {{
-            if (root.refreshing || root.hostAvailable === false) return;
+            if (refreshDisabled) return;
             root.refreshRequestToken = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
             root.refreshing = true;
             root.render();
@@ -1372,14 +1840,22 @@ fn injection_script(
         root.resizeHandler = () => root.scheduleRender();
         window.addEventListener('resize', root.resizeHandler, {{passive:true}});
       }}
+      if (!root.scrollHandler) {{
+        root.scrollHandler = () => root.scheduleRender();
+        window.addEventListener('scroll', root.scrollHandler, {{passive:true,capture:true}});
+      }}
+      if (!root.focusHandler) {{
+        root.focusHandler = () => root.scheduleRender();
+        window.addEventListener('focusin', root.focusHandler);
+      }}
       if (!root.observer) {{
         root.observer = new MutationObserver((mutations) => {{
-          const host = document.querySelector('[data-cockpit-quota-footer]');
-          const details = document.querySelector('[data-cockpit-quota-details]');
+          const host = document.querySelector('[data-cockpit-deepseek-balance]');
+          const details = document.querySelector('[data-cockpit-deepseek-balance-details]');
           if (host && mutations.every((mutation) => mutation.target === host || host.contains(mutation.target) || (details && (mutation.target === details || details.contains(mutation.target))))) return;
           root.scheduleRender();
         }});
-        root.observer.observe(document.documentElement, {{childList:true,subtree:true}});
+        root.observer.observe(document.documentElement, {{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','data-state','data-dictation-view']}});
       }}
       if (!document.querySelector('[data-cockpit-quota-style]')) {{
         const style = document.createElement('style');
@@ -1418,33 +1894,59 @@ fn selected_model_from_cdp_response(value: &Value) -> Option<String> {
     value
         .pointer("/result/result/value/selectedModel")
         .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| {
-            value.eq_ignore_ascii_case("deepseek-flash")
-                || value.eq_ignore_ascii_case("deepseek-v4-flash")
-                || value.eq_ignore_ascii_case("deepseek-v4-pro")
-        })
-        .map(|value| value.to_ascii_lowercase())
+        .and_then(normalize_injection_model_slug)
 }
 
 #[derive(Debug, Default)]
 struct InjectionEvalResult {
     refresh_request_token: Option<String>,
     selected_model: Option<String>,
+    thread_id: Option<String>,
+    dialog_request: Option<dialog_data::DialogQuery>,
+    usage_selection: Option<output_speed::OutputSpeedSelection>,
 }
 
-async fn evaluate_target(target: &CdpTarget, script: &str) -> Option<InjectionEvalResult> {
+fn usage_selection_from_cdp_response(value: &Value) -> Option<output_speed::OutputSpeedSelection> {
+    let selected = value
+        .pointer("/result/result/value/usageSelection")?
+        .as_object()?;
+    let model = selected
+        .get("model")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|model| {
+            !model.is_empty() && model.len() <= 256 && !model.chars().any(char::is_control)
+        })
+        .map(str::to_string);
+    let service_tier = selected
+        .get("serviceTier")
+        .and_then(Value::as_str)
+        .and_then(output_speed::normalize_service_tier);
+    // Explicit null represents an unconfirmed native selection. It must not
+    // fall back to the previous model/tier while the picker is changing.
+    Some(output_speed::OutputSpeedSelection {
+        model,
+        service_tier,
+    })
+}
+
+async fn evaluate_target(
+    target: &CdpTarget,
+    script: &str,
+    script_kind: &str,
+) -> Option<InjectionEvalResult> {
     if target.target_type != "page" && target.target_type != "webview" {
         return None;
     }
     let Some(websocket_url) = target.websocket_url.as_deref() else {
         return None;
     };
+    let install_key = format!("{}|{}", script_kind, websocket_url);
     let Ok(Ok((mut socket, _))) = timeout(CDP_CONNECT_TIMEOUT, connect_async(websocket_url)).await
     else {
         return None;
     };
-    let install_on_new_document = should_install_new_document_script(websocket_url);
+    let install_on_new_document = should_install_new_document_script(&install_key);
     if install_on_new_document {
         let enable_page = socket
             .send(Message::Text(
@@ -1476,7 +1978,33 @@ async fn evaluate_target(target: &CdpTarget, script: &str) -> Option<InjectionEv
         if !install {
             return None;
         }
-        mark_new_document_script_installed(websocket_url);
+        if script_kind == VOICE_SCRIPT_KIND {
+            timeout(CDP_CONNECT_TIMEOUT, async {
+                while let Some(message) = socket.next().await {
+                    let Ok(Message::Text(text)) = message else {
+                        continue;
+                    };
+                    let Ok(value) = serde_json::from_str::<Value>(&text) else {
+                        continue;
+                    };
+                    if value.get("error").is_some() {
+                        return None;
+                    }
+                    if value.get("id").and_then(Value::as_u64) == Some(1) {
+                        value
+                            .pointer("/result/identifier")
+                            .and_then(Value::as_str)
+                            .filter(|identifier| !identifier.is_empty())?;
+                        return Some(());
+                    }
+                }
+                None
+            })
+            .await
+            .ok()
+            .flatten()?;
+        }
+        mark_new_document_script_installed(&install_key);
     }
     if !socket
         .send(Message::Text(
@@ -1502,9 +2030,28 @@ async fn evaluate_target(target: &CdpTarget, script: &str) -> Option<InjectionEv
                 continue;
             };
             if value.get("id").and_then(Value::as_i64) == Some(2) {
+                if script_kind == VOICE_SCRIPT_KIND
+                    && (value.get("error").is_some()
+                        || value.pointer("/result/exceptionDetails").is_some()
+                        || value
+                            .pointer("/result/result/value")
+                            .and_then(Value::as_bool)
+                            != Some(true))
+                {
+                    return None;
+                }
                 return Some(InjectionEvalResult {
                     refresh_request_token: refresh_request_token_from_cdp_response(&value),
                     selected_model: selected_model_from_cdp_response(&value),
+                    usage_selection: usage_selection_from_cdp_response(&value),
+                    dialog_request: value
+                        .pointer("/result/result/value/dialogRequest")
+                        .and_then(dialog_data::parse_query),
+                    thread_id: value
+                        .pointer("/result/result/value/threadId")
+                        .and_then(Value::as_str)
+                        .filter(|id| uuid::Uuid::parse_str(id).is_ok())
+                        .map(str::to_string),
                 });
             }
         }
@@ -1849,6 +2396,29 @@ fn cdp_auth_signal(value: &Value) -> Option<&'static str> {
     None
 }
 
+fn confirmed_device_limit_subject(
+    before: &ProfileOAuthIdentityObservation, after: &ProfileOAuthIdentityObservation, request_account: Option<&str>,
+) -> Option<String> {
+    if before != after { return None; }
+    match after {
+        ProfileOAuthIdentityObservation::Matched { account_id, observed }
+            if request_account.is_some() && request_account == observed.account_id.as_deref() => Some(account_id.clone()),
+        _ => None,
+    }
+}
+
+fn official_device_limit_response(url: &str, response: &Value) -> bool {
+    let Ok(url) = url::Url::parse(url) else { return false; };
+    let official = url.scheme() == "https" && match url.host_str() {
+        Some("auth.openai.com") => url.path().starts_with("/api/accounts/") || url.path() == "/oauth/token",
+        Some("chatgpt.com") => url.path().starts_with("/backend-api/accounts/check"),
+        _ => false,
+    };
+    official && response.pointer("/result/base64Encoded").and_then(Value::as_bool) != Some(true)
+        && response.pointer("/result/body").and_then(Value::as_str)
+            .is_some_and(crate::modules::codex_device_restrictions::explicit_message)
+}
+
 async fn monitor_cdp_target(
     instance_id: &str,
     profile_key: &str,
@@ -1879,6 +2449,9 @@ async fn monitor_cdp_target(
         return None;
     };
 
+    let mut device_limit_observed = false;
+    let mut device_limit_account_id = None;
+    let mut request_accounts: HashMap<String, String> = HashMap::new();
     let mut next_command_id = 100i64;
     let mut pending_body_requests: HashMap<i64, (String, String)> = HashMap::new();
     let mut body_candidates: HashMap<String, (String, u64)> = HashMap::new();
@@ -1988,6 +2561,12 @@ async fn monitor_cdp_target(
                     .cloned()
                     .and_then(|result| serde_json::from_value::<AuthPageSnapshot>(result).ok());
             } else if let Some((request_id, url)) = pending_body_requests.remove(&command_id) {
+                // Only structured errors from official authentication endpoints; never
+                // console output, chat text or the absence of login UI.
+                if official_device_limit_response(&url, &value) {
+                    device_limit_observed = true;
+                    device_limit_account_id = request_accounts.get(&request_id).cloned();
+                }
                 let body =
                     cdp_body_preview(&value).unwrap_or_else(|| "body_unavailable=true".to_string());
                 let auth_signal = cdp_auth_signal(&value).unwrap_or("none");
@@ -2020,6 +2599,13 @@ async fn monitor_cdp_target(
                     .to_string();
                 let request = params.get("request").cloned().unwrap_or_else(|| json!({}));
                 let url = request.get("url").and_then(Value::as_str).unwrap_or("");
+                if request_accounts.len() < 64 {
+                    if let Some(id) = request.get("headers").and_then(Value::as_object).and_then(|headers|
+                        headers.iter().find(|(name, _)| name.eq_ignore_ascii_case("chatgpt-account-id"))
+                            .and_then(|(_, value)| value.as_str()).filter(|id| id.len() <= 160)) {
+                        request_accounts.insert(request_id.clone(), id.to_owned());
+                    }
+                }
                 request_started.insert(request_id.clone(), Instant::now());
                 logger::log_codex_auth_diagnostic(&format!(
                     "[Codex Auth Network] request: instance_id={}, profile={}, target_id={}, request_id={}, type={}, method={}, url={}, has_post_data={}, headers={}",
@@ -2281,6 +2867,11 @@ async fn monitor_cdp_target(
             _ => {}
         }
     }
+    if device_limit_observed {
+        let snapshot = snapshot.get_or_insert_with(AuthPageSnapshot::default);
+        snapshot.device_limit_observed = true;
+        snapshot.device_limit_account_id = device_limit_account_id;
+    }
     if let Some(snapshot) = snapshot.as_ref() {
         logger::log_codex_auth_diagnostic(&format!(
             "[Codex Auth CDP] target_snapshot: instance_id={}, profile={}, target_id={}, target_type={}, target_url={}, physical_url={}, route={}, route_source={}, title={}, ready_state={}, official_login_route={}, login_signal={}, login_ui_signal={}, login_ui_markers={:?}",
@@ -2421,7 +3012,7 @@ fn auth_diagnostic_observation(
 }
 
 async fn run_auth_diagnostic_loop(
-    app: AppHandle,
+    _app: AppHandle,
     instance_id: String,
     profile_key: String,
     profile_dir: PathBuf,
@@ -2429,17 +3020,9 @@ async fn run_auth_diagnostic_loop(
     bind_account_id: Option<String>,
 ) {
     let client = Client::new();
-    // 监测任务由实例进程启动后立即创建；记录该时刻作为本次客户端启动时间。
-    let launch_started_at = chrono::Utc::now().timestamp();
-    let mut launch_recorded = false;
     let mut previous: Option<AuthDiagnosticObservation> = None;
     let mut previous_app_server: Option<AppServerDiagnosticObservation> = None;
-    let mut previous_profile_identity: Option<ProfileOAuthIdentityObservation> = None;
-    let mut last_identity_check_at: Option<Instant> = None;
-    let mut last_identity_status: Option<String> = None;
     let mut last_network_diagnostic_at: Option<Instant> = None;
-    let mut login_streak = 0u8;
-    let mut available_streak = 0u8;
     loop {
         if app_lifecycle::is_shutdown_started() {
             return;
@@ -2480,7 +3063,7 @@ async fn run_auth_diagnostic_loop(
                 port,
             ));
         }
-        // 认证状态使用轻量快照高频检查，避免每轮都打开 Network/Log 事件流。
+        // 轻量快照只用于诊断日志，不判断或写入账号的授权状态。
         let mut snapshot_tasks = JoinSet::new();
         for target in targets.iter().cloned() {
             let instance_id = instance_id.clone();
@@ -2561,8 +3144,22 @@ async fn run_auth_diagnostic_loop(
             for target in targets.iter().cloned() {
                 let instance_id = instance_id.clone();
                 let profile_key = profile_key.clone();
+                let profile_dir = profile_dir.clone();
+                let bind_account_id = bind_account_id.clone();
                 tauri::async_runtime::spawn(async move {
-                    let _ = monitor_cdp_target(&instance_id, &profile_key, &target).await;
+                    let started = crate::modules::codex_device_restrictions::now();
+                    let before = observe_profile_oauth_identity(profile_dir.clone(), bind_account_id.clone()).await;
+                    let result = monitor_cdp_target(&instance_id, &profile_key, &target).await;
+                    if let Some(snapshot) = result.filter(|snapshot| snapshot.device_limit_observed) {
+                        let after = observe_profile_oauth_identity(profile_dir, bind_account_id).await;
+                        // A stable auth.json alone does not identify a different account
+                        // being entered in a sign-in page. Require request identity too.
+                        let subject = confirmed_device_limit_subject(&before, &after, snapshot.device_limit_account_id.as_deref())
+                            .unwrap_or_else(|| format!("login:desktop-{instance_id}"));
+                        crate::modules::codex_device_restrictions::observe(subject,
+                            crate::modules::codex_device_restrictions::DESKTOP, "official_auth_response",
+                            Some(instance_id), started, true).await;
+                    }
                 });
             }
         }
@@ -2612,231 +3209,134 @@ async fn run_auth_diagnostic_loop(
             previous = Some(observation.clone());
         }
 
-        let mut stable_status = None;
-        if observation.login_signal() {
-            login_streak = login_streak.saturating_add(1);
-            available_streak = 0;
-            if login_streak >= 2 {
-                stable_status = Some(("login_required", true));
-            }
-        } else if observation.cdp_available {
-            available_streak = available_streak.saturating_add(1);
-            login_streak = 0;
-            if available_streak >= 2 {
-                stable_status = Some(("available", false));
-            }
-        }
-
-        logger::log_codex_auth_diagnostic(&format!(
-            "[Codex Auth CDP] status_evaluation: instance_id={}, profile={}, bind_account_id={}, route={}, cdp_available={}, target_count={}, login_route={}, login_ui_signal={}, login_streak={}, available_streak={}, stable_status={}",
-            instance_id,
-            profile_key,
-            bind_account_id.as_deref().unwrap_or(""),
-            observation.route,
-            observation.cdp_available,
-            observation.target_count,
-            observation.login_route,
-            observation.login_ui_signal,
-            login_streak,
-            available_streak,
-            stable_status
-                .as_ref()
-                .map(|(status, _)| *status)
-                .unwrap_or("none"),
-        ));
-
-        if let Some((status, login_redirect)) = stable_status {
-            let status_changed = last_identity_status.as_deref() != Some(status);
-            let retry_due = last_identity_check_at
-                .map(|checked_at| checked_at.elapsed() >= AUTH_IDENTITY_RETRY_INTERVAL)
-                .unwrap_or(true);
-            if !status_changed && !retry_due {
-                tokio::time::sleep(AUTH_DIAGNOSTIC_INTERVAL).await;
-                continue;
-            }
-            last_identity_check_at = Some(Instant::now());
-            last_identity_status = Some(status.to_string());
-            logger::log_codex_auth_diagnostic(&format!(
-                "[Codex Auth Identity] persistence_attempt: instance_id={}, profile={}, status={}, login_redirect={}, reason=status_stable",
-                instance_id, profile_key, status, login_redirect,
-            ));
-            let identity =
-                observe_profile_oauth_identity(profile_dir.clone(), bind_account_id.clone()).await;
-            if previous_profile_identity.as_ref() != Some(&identity) {
-                log_profile_oauth_identity_observation(&instance_id, &profile_key, &identity);
-                previous_profile_identity = Some(identity.clone());
-            }
-            if let ProfileOAuthIdentityObservation::Matched { account_id, .. } = identity {
-                if !launch_recorded {
-                    match codex_account::record_client_launch(
-                        &account_id,
-                        &instance_id,
-                        launch_started_at,
-                    )
-                    .await
-                    {
-                        Ok(()) => {
-                            launch_recorded = true;
-                            let _ = app.emit(
-                                "accounts:changed",
-                                json!({
-                                    "platformId": "codex",
-                                    "accountId": account_id,
-                                    "reason": "client-auth-launch",
-                                    "instanceId": instance_id,
-                                }),
-                            );
-                            logger::log_codex_auth_diagnostic(&format!(
-                                "[Codex Auth Identity] launch_time_recorded: instance_id={}, profile={}, account_id={}, launched_at={}",
-                                instance_id, profile_key, account_id, launch_started_at,
-                            ));
-                        }
-                        Err(error) => logger::log_warn(&format!(
-                            "[Codex Auth Identity] failed to record launch time: instance_id={}, profile={}, account_id={}, error={}",
-                            instance_id, profile_key, account_id, error,
-                        )),
-                    }
-                }
-                match codex_account::update_client_auth_observation(
-                    &account_id,
-                    &instance_id,
-                    status,
-                    login_redirect,
-                )
-                .await
-                {
-                    Ok(()) => {
-                        logger::log_codex_auth_diagnostic(&format!(
-                            "[Codex Auth Identity] persistence_succeeded: instance_id={}, profile={}, account_id={}, status={}, login_redirect={}",
-                            instance_id, profile_key, account_id, status, login_redirect,
-                        ));
-                        // 仅在状态发生变化时通知前端，避免 30 秒重试周期反复触发账号列表刷新。
-                        if status_changed {
-                            let _ = app.emit(
-                                "accounts:changed",
-                                json!({
-                                    "platformId": "codex",
-                                    "accountId": account_id,
-                                    "reason": "client-auth-observation",
-                                    "status": status,
-                                    "loginRedirect": login_redirect,
-                                    "instanceId": instance_id,
-                                }),
-                            );
-                            logger::log_codex_auth_diagnostic(&format!(
-                                "[Codex Auth Identity] frontend_sync_emitted: instance_id={}, profile={}, account_id={}, status={}, login_redirect={}",
-                                instance_id, profile_key, account_id, status, login_redirect,
-                            ));
-                        }
-                    }
-                    Err(error) => logger::log_warn(&format!(
-                        "[Codex Auth Identity] failed to persist observation: instance_id={}, profile={}, account_id={}, status={}, error={}",
-                        instance_id, profile_key, account_id, status, error,
-                    )),
-                }
-            }
-        }
-
         tokio::time::sleep(AUTH_DIAGNOSTIC_INTERVAL).await;
     }
 }
 
-async fn api_service_quota_refresh_targets() -> Result<Option<(usize, Vec<String>)>, String> {
-    let state = codex_local_access::get_local_access_state().await?;
-    let Some(collection) = state.collection else {
-        return Ok(None);
-    };
-    if collection.account_ids.is_empty() {
-        return Ok(Some((0, Vec::new())));
-    }
-    let mut existing_account_count = 0;
-    let mut target_ids = Vec::new();
-    for account_id in collection.account_ids {
-        let Some(account) = codex_account::load_account(&account_id) else {
-            continue;
-        };
-        existing_account_count += 1;
-        if codex_quota::supports_quota_refresh(&account) {
-            target_ids.push(account_id);
-        }
-    }
-    if existing_account_count == 0 {
-        // Account files can be briefly unavailable while Cockpit atomically
-        // refreshes or rewrites them. Do not turn that transient read miss
-        // into a real empty pool in the injected UI.
-        return Ok(None);
-    }
-    Ok(Some((existing_account_count, target_ids)))
-}
-
-async fn api_service_account_pool_is_empty() -> Result<Option<bool>, String> {
-    let state = codex_local_access::get_local_access_state().await?;
-    Ok(state
-        .collection
-        .map(|collection| collection.account_ids.is_empty()))
-}
-
-async fn refresh_api_service_quota_pool(
-    app: &AppHandle,
-) -> Result<Option<(i32, usize)>, String> {
-    let Some((existing_account_count, target_ids)) = api_service_quota_refresh_targets().await? else {
-        return Ok(None);
-    };
-    if existing_account_count == 0 {
-        return Ok(Some((0, 0)));
-    }
-    if target_ids.is_empty() {
-        return Err("API 服务账号池暂无可刷新的额度".to_string());
-    }
-    let total = target_ids.len();
-    let success_count = crate::commands::codex::refresh_codex_quotas_batch(
-        app.clone(),
-        target_ids,
-        Some(true),
-        Some(false),
-    )
-    .await?;
-    if success_count <= 0 {
-        return Err("API 服务账号池额度刷新失败".to_string());
-    }
-    Ok(Some((success_count, total)))
-}
-
-async fn run_quota_refresh_singleflight(app: &AppHandle) -> Result<Option<(i32, usize)>, String> {
-    let lock = quota_refresh_lock();
-    match lock.try_lock() {
-        Ok(_guard) => refresh_api_service_quota_pool(app).await,
-        Err(_) => {
-            let _guard = lock.lock().await;
-            let Some((existing_account_count, _)) = api_service_quota_refresh_targets().await? else {
-                return Ok(None);
-            };
-            Ok((existing_account_count == 0).then_some((0, 0)))
-        }
-    }
-}
+include!("codex_app_injection_quota.rs");
 
 async fn run_injection_loop(
     app: AppHandle,
-    _instance_id: String,
+    instance_id: String,
     profile_dir: PathBuf,
     port: u16,
     bind_account_id: Option<String>,
 ) {
+    // 语音配置只在注入任务启动时读取一次。
+    let voice_script = match voice_injection_script(&profile_dir, bind_account_id.as_deref()) {
+        Ok(script) => script,
+        Err(error) => {
+            logger::log_warn(&format!(
+                "[Codex Voice] 读取启动配置失败: instance_id={}, error={}",
+                instance_id, error
+            ));
+            None
+        }
+    };
     let client = Client::new();
+    // 余额接口是上游网络请求，必须自带超时，不能让注入循环被拖住。
+    let balance_client = Client::builder()
+        .timeout(DEEPSEEK_BALANCE_QUERY_TIMEOUT)
+        .build()
+        .unwrap_or_else(|_| Client::new());
     let mut last_quota_at = Instant::now() - QUOTA_REFRESH_INTERVAL;
+    let mut last_balance_at = Instant::now() - DEEPSEEK_BALANCE_REFRESH_INTERVAL;
+    let mut last_api_service_balance_at = Instant::now() - DEEPSEEK_BALANCE_REFRESH_INTERVAL;
     let mut quota = QuotaResponse::default();
+    let mut balance: Option<DeepSeekBalanceSnapshot> = None;
+    let mut api_service_balance_lines: Vec<InjectionBalanceLine> = Vec::new();
+    let mut api_service_grok_lines: Vec<InjectionGrokQuotaLine> = Vec::new();
     let mut handled_refresh_token: Option<String> = None;
+    let mut handled_balance_token: Option<String> = None;
+    let mut deepseek_account_cache: Option<CodexAccount> = None;
+    let mut deepseek_account_at = Instant::now() - DEEPSEEK_ACCOUNT_CACHE_TTL;
+    let mut observed_model = read_profile_selected_model(&profile_dir);
+    let mut last_model_resync_at = Instant::now() - MODEL_RESYNC_INTERVAL;
     let mut refresh_tasks = JoinSet::new();
+    let mut quota_fetch_tasks = JoinSet::new();
+    let mut balance_fetch_tasks = JoinSet::new();
+    let mut quota_fetch_due = true;
+    let mut quota_snapshot_pending = false;
+    let mut balance_fetch_due = true;
+    let mut balance_snapshot_pending = false;
+    let mut snapshot_wait_started: Option<Instant> = None;
+    let mut usage_poller = InjectionUsagePoller::new(&profile_dir);
+    let mut pool_poller = pool::PoolPoller::default();
+    let mut binding_poller = binding::BindingPoller::new(&profile_dir);
+    let live_dialog = live::LiveDialogBridge::new(&profile_dir);
+    let mut quota_refresh_error: Option<&str> = None;
+    let mut voice_failure_logged = false;
     loop {
         if app_lifecycle::is_shutdown_started() {
             tokio::time::sleep(Duration::from_millis(50)).await;
             continue;
         }
-        let mut refresh_finished = false;
+        if let Some(script) = &voice_script {
+            let targets = query_targets(&client, port).await;
+            let mut failed = false;
+            for target in targets.iter().filter(|target| is_codex_app_target(target)) {
+                failed |= evaluate_target(target, script, VOICE_SCRIPT_KIND)
+                    .await
+                    .is_none();
+            }
+            if failed && !voice_failure_logged {
+                logger::log_warn(&format!("[Codex Voice] 页面接入失败: instance_id={}, reason=cdp_install_or_evaluation_failed", instance_id));
+            }
+            voice_failure_logged = failed;
+        }
         let mut refreshed_empty_pool = false;
+        let mut usage_state = usage_poller.collect();
+        if let Some(state) = usage_state.as_object_mut() {
+            state.insert("__dialog".into(), live_dialog.collect());
+            state.insert("__binding".into(), binding_poller.collect());
+        }
+        if let Some(result) = quota_fetch_tasks.try_join_next() {
+            // A completed manual refresh supersedes a fetch already in flight.
+            // Discard that old snapshot and keep loading until the follow-up fetch.
+            let value = result.ok().flatten();
+            if value.is_none() && !quota_fetch_due {
+                logger::log_warn("[Codex App Injection] 额度快照更新失败，保留缓存");
+            }
+            finish_quota_snapshot(
+                value,
+                quota_fetch_due,
+                &mut quota,
+                &mut quota_snapshot_pending,
+                &mut quota_refresh_error,
+            );
+        }
+        if let Some(result) = balance_fetch_tasks.try_join_next() {
+            if !balance_fetch_due {
+                if let Ok((lines, grok_lines)) = result {
+                    if let Some(lines) = lines {
+                        api_service_balance_lines = lines;
+                    } else if balance_snapshot_pending && quota_refresh_error.is_none() {
+                        quota_refresh_error = Some("refreshFailed");
+                    }
+                    if let Some(lines) = grok_lines {
+                        api_service_grok_lines = lines;
+                    } else if balance_snapshot_pending && quota_refresh_error.is_none() {
+                        quota_refresh_error = Some("refreshFailed");
+                    }
+                } else if balance_snapshot_pending && quota_refresh_error.is_none() {
+                    quota_refresh_error = Some("refreshFailed");
+                }
+                balance_snapshot_pending = false;
+            }
+        }
         if let Some(result) = refresh_tasks.try_join_next() {
-            refresh_finished = true;
+            quota_fetch_due = true;
+            quota_snapshot_pending = true;
+            balance_fetch_due = true;
+            balance_snapshot_pending = true;
+            snapshot_wait_started = Some(Instant::now());
+            quota_refresh_error = match &result {
+                Ok(Ok(Some((success_count, total)))) if (*success_count as usize) < *total => {
+                    Some("refreshPartial")
+                }
+                Ok(Err(_)) | Err(_) => Some("refreshFailed"),
+                _ => None,
+            };
             match result {
                 Ok(Ok(Some((0, 0)))) => {
                     refreshed_empty_pool = true;
@@ -2867,124 +3367,347 @@ async fn run_injection_loop(
                 )),
             }
         }
+        if (quota_snapshot_pending || balance_snapshot_pending)
+            && snapshot_wait_started
+                .is_some_and(|started| started.elapsed() >= Duration::from_secs(20))
+        {
+            // Keep stalled workers single-flight, but never leave the user's
+            // refresh button permanently loading while disk/state locks wait.
+            quota_snapshot_pending = false;
+            balance_snapshot_pending = false;
+            quota_refresh_error = Some("refreshFailed");
+            snapshot_wait_started = None;
+            logger::log_warn("[Codex App Injection] 刷新快照等待超时，保留缓存和后台单飞任务");
+        }
         let locale = config::get_user_config().language;
-        let deepseek_cdp = bind_uses_deepseek_cdp_injection(bind_account_id.as_deref());
-        if deepseek_cdp {
-            let account_id = bind_account_id_value(bind_account_id.as_deref());
-            let account = account_id
-                .as_deref()
-                .and_then(crate::modules::codex_account::load_account);
-            let payload = account
-                .as_ref()
-                .map(crate::modules::codex_account::deepseek_injection_model_payload)
-                .unwrap_or_else(|| serde_json::json!({ "models": [] }));
-            let script = deepseek_model_injection_script(
-                &locale,
-                &payload,
-                handled_refresh_token.as_deref(),
-            );
-            let targets = query_targets(&client, port).await;
-            let mut pending_model = None;
-            for target in &targets {
-                if let Some(result) = evaluate_target(target, &script).await {
-                    if let Some(model) = result.selected_model {
-                        if handled_refresh_token.as_deref() != Some(model.as_str()) {
-                            pending_model = Some(model);
+        // DeepSeek 绑定（网关列出 / CDP 注入 / 直连官方）统一在底部显示账号余额；
+        // 只有 CDP 接入方式才需要额外的模型列表注入；官方 DeepSeek 仍额外注入余额。
+        if deepseek_account_at.elapsed() >= DEEPSEEK_ACCOUNT_CACHE_TTL {
+            deepseek_account_at = Instant::now();
+            // 账号文件短暂读取失败时保留上一份快照，不因为一次读取失败就撤掉余额。
+            if let Some(account) = bound_api_key_account(bind_account_id.as_deref()) {
+                deepseek_account_cache = Some(account);
+            }
+        }
+        // 只有「CDP 模型注入」或「可查官方余额」时才需要进入注入分支：
+        // 第三方中转没有官方余额接口，只做模型清单注入。
+        let remote_account = deepseek_account_cache.as_ref().filter(|account| crate::modules::codex_remote_service::for_routing_account(account).is_some());
+        let deepseek_account = deepseek_account_cache.as_ref().filter(|account| {
+            crate::modules::codex_account::account_uses_cdp_model_injection(account)
+                || deepseek_balance_endpoint(account).is_some()
+        });
+        if let Some(deepseek_account) = deepseek_account {
+            let deepseek_cdp =
+                crate::modules::codex_account::account_uses_cdp_model_injection(deepseek_account);
+            if deepseek_cdp {
+                let account_id = Some(deepseek_account.id.clone());
+                let payload = crate::modules::codex_account::provider_injection_model_payload(
+                    deepseek_account,
+                );
+                let script = deepseek_model_injection_script(
+                    &locale,
+                    &payload,
+                    handled_refresh_token.as_deref(),
+                );
+                let targets = query_targets(&client, port).await;
+                let mut pending_model = None;
+                for target in &targets {
+                    if let Some(result) =
+                        evaluate_target(target, &script, DEEPSEEK_MODEL_SCRIPT_KIND).await
+                    {
+                        if let Some(model) = result.selected_model {
+                            if handled_refresh_token.as_deref() != Some(model.as_str()) {
+                                pending_model = Some(model);
+                            }
                         }
                     }
                 }
-            }
-            if let (Some(account_id), Some(model)) = (account_id, pending_model) {
-                let profile_dir = profile_dir.clone();
-                let applied_model = model.clone();
-                match tauri::async_runtime::spawn_blocking(move || {
-                    crate::modules::codex_account::apply_deepseek_cdp_startup_model(
-                        &account_id,
-                        &applied_model,
-                        &profile_dir,
-                    )
-                })
-                .await
-                {
-                    Ok(Ok(_)) => {
-                        handled_refresh_token = Some(model.clone());
-                        logger::log_info(&format!(
-                            "[Codex App Injection] DeepSeek CDP 已切换启动模型: model={}",
-                            model
-                        ));
+                if let (Some(account_id), Some(model)) = (account_id, pending_model) {
+                    let profile_dir = profile_dir.clone();
+                    let applied_model = model.clone();
+                    match tauri::async_runtime::spawn_blocking(move || {
+                        crate::modules::codex_account::apply_deepseek_cdp_startup_model(
+                            &account_id,
+                            &applied_model,
+                            &profile_dir,
+                        )
+                    })
+                    .await
+                    {
+                        Ok(Ok(_)) => {
+                            handled_refresh_token = Some(model.clone());
+                            observed_model = Some(model.clone());
+                            logger::log_info(&format!(
+                                "[Codex App Injection] DeepSeek CDP 已切换启动模型: model={}",
+                                model
+                            ));
+                        }
+                        Ok(Err(error)) => logger::log_warn(&format!(
+                            "[Codex App Injection] DeepSeek CDP 切换模型失败: {}",
+                            error
+                        )),
+                        Err(error) => logger::log_warn(&format!(
+                            "[Codex App Injection] DeepSeek CDP 切换模型任务异常: {}",
+                            error
+                        )),
                     }
-                    Ok(Err(error)) => logger::log_warn(&format!(
-                        "[Codex App Injection] DeepSeek CDP 切换模型失败: {}",
-                        error
-                    )),
-                    Err(error) => logger::log_warn(&format!(
-                        "[Codex App Injection] DeepSeek CDP 切换模型任务异常: {}",
-                        error
-                    )),
                 }
             }
+            if enabled_for_app() && remote_account.is_none() {
+                if last_balance_at.elapsed() >= DEEPSEEK_BALANCE_REFRESH_INTERVAL {
+                    if let Some(value) =
+                        fetch_deepseek_balance(&balance_client, deepseek_account).await
+                    {
+                        balance = Some(value);
+                    }
+                    last_balance_at = Instant::now();
+                }
+                let script = deepseek_balance_injection_script(
+                    &locale,
+                    balance.as_ref(),
+                    false,
+                    handled_balance_token.as_deref(),
+                );
+                let targets = query_targets(&client, port).await;
+                let mut pending_refresh_token = None;
+                for target in &targets {
+                    if let Some(result) =
+                        evaluate_target(target, &script, DEEPSEEK_BALANCE_SCRIPT_KIND).await
+                    {
+                        if let Some(token) = result.refresh_request_token {
+                            if handled_balance_token.as_deref() != Some(token.as_str()) {
+                                pending_refresh_token = Some(token);
+                            }
+                        }
+                    }
+                }
+                if let Some(token) = pending_refresh_token {
+                    handled_balance_token = Some(token);
+                    if let Some(value) =
+                        fetch_deepseek_balance(&balance_client, deepseek_account).await
+                    {
+                        balance = Some(value);
+                    }
+                    last_balance_at = Instant::now();
+                    // 立刻重绘一次，让刷新按钮结束 loading 状态。
+                    let refreshed_script = deepseek_balance_injection_script(
+                        &locale,
+                        balance.as_ref(),
+                        false,
+                        handled_balance_token.as_deref(),
+                    );
+                    for target in &targets {
+                        let _ = evaluate_target(
+                            target,
+                            &refreshed_script,
+                            DEEPSEEK_BALANCE_SCRIPT_KIND,
+                        )
+                        .await;
+                    }
+                }
+            }
+            if remote_account.is_none() {
+                tokio::time::sleep(INJECTION_INTERVAL).await;
+                continue;
+            }
+        }
+        if (!supports_bind_account(bind_account_id.as_deref()) && remote_account.is_none())
+            || (remote_account.is_some() && !enabled_for_app()) {
             tokio::time::sleep(INJECTION_INTERVAL).await;
             continue;
         }
-        if refresh_finished || last_quota_at.elapsed() >= QUOTA_REFRESH_INTERVAL {
-            let gateway = read_profile_gateway_config(&profile_dir);
-            if let Some(value) = fetch_quota(&client, gateway.as_ref()).await {
-                let value_is_empty = value.account_count == Some(0);
-                let confirmed_empty = if value_is_empty {
-                    api_service_account_pool_is_empty()
+        if refreshed_empty_pool {
+            quota = QuotaResponse::empty_pool();
+        }
+        if (quota_fetch_due || last_quota_at.elapsed() >= QUOTA_REFRESH_INTERVAL)
+            && quota_fetch_tasks.is_empty()
+        {
+            quota_fetch_due = false;
+            last_quota_at = Instant::now();
+            let client = client.clone();
+            let profile = profile_dir.clone();
+            let remote_account = remote_account.cloned();
+            quota_fetch_tasks.spawn(async move {
+                let gateway = tauri::async_runtime::spawn_blocking(move || {
+                    read_profile_gateway_config(&profile)
+                })
+                .await
+                .ok()
+                .flatten();
+                let remote = remote_account.is_some();
+                // Discover through the profile's actual hop. This also primes
+                // the same endpoint identity used by dialog/speed readers.
+                let gateway = gateway.or_else(||remote_account.and_then(|account| Some(ProfileGatewayConfig {
+                    base_url: account.api_base_url?, api_key: account.openai_api_key?,
+                    provider_name: "Cockpit Tools".into(), managed_voice: false,
+                })));
+                let value = fetch_quota(&client, gateway.as_ref(), remote).await?;
+                if value.account_count == Some(0)
+                    && !api_service_account_pool_is_empty()
                         .await
                         .ok()
                         .flatten()
                         .unwrap_or(false)
-                } else {
-                    false
-                };
-                if !value_is_empty || confirmed_empty || refreshed_empty_pool {
-                    quota = value;
+                {
+                    return None;
                 }
+                Some(value)
+            });
+        }
+        // Slow balance requests must never delay the usage status line or its heartbeat.
+        if remote_account.is_none() && (balance_fetch_due
+            || last_api_service_balance_at.elapsed() >= DEEPSEEK_BALANCE_REFRESH_INTERVAL
+        ) {
+            if balance_fetch_tasks.is_empty() {
+                let client = balance_client.clone();
+                let locale = locale.clone();
+                balance_fetch_tasks.spawn(async move {
+                    tokio::join!(
+                        fetch_api_service_balance_lines(&client),
+                        api_service_grok_quota_lines(&locale)
+                    )
+                });
+                balance_fetch_due = false;
+                last_api_service_balance_at = Instant::now();
             }
-            if refreshed_empty_pool {
-                quota = QuotaResponse::empty_pool();
-            }
-            last_quota_at = Instant::now();
         }
         let gateway = read_profile_gateway_config(&profile_dir);
+        if let Some(state) = usage_state.as_object_mut() {
+            if let Some(remote) = &quota.remote { state.insert("__remoteService".into(), remote.clone()); }
+            state.insert(
+                "__accountPool".into(),
+                pool_poller.collect(gateway.as_ref()),
+            );
+        }
         let provider_name = gateway
             .as_ref()
             .map(|value| value.provider_name.as_str())
             .unwrap_or("Codex");
+        if observed_model.is_none() {
+            observed_model = read_profile_selected_model(&profile_dir);
+        }
+        let badge_kind = injection_badge_kind_for_model(observed_model.as_deref());
         let script = injection_script(
             provider_name,
             &quota,
             &locale,
-            !refresh_tasks.is_empty(),
+            !refresh_tasks.is_empty() || quota_snapshot_pending || balance_snapshot_pending,
             handled_refresh_token.as_deref(),
+            &api_service_balance_lines,
+            &api_service_grok_lines,
+            badge_kind,
+            observed_model.as_deref(),
+            &usage_state,
+            quota_refresh_error,
         );
         let targets = query_targets(&client, port).await;
+        live_dialog.reconcile(&targets, port);
         let mut refresh_request_token = None;
+        let mut visible_model = None;
+        let mut model_reported = false;
+        let mut visible_threads = Vec::new();
+        let mut dialog_requests = Vec::new();
         for target in &targets {
-            if let Some(result) = evaluate_target(target, &script).await {
+            if let Some(result) = evaluate_target(target, &script, QUOTA_SCRIPT_KIND).await {
+                if !live_dialog.ready(target) {
+                    if let Some(query) = result.dialog_request {
+                        dialog_requests.push(query);
+                    }
+                }
+                if let Some(thread_id) = result.thread_id {
+                    visible_threads.push((
+                        thread_id,
+                        result
+                            .usage_selection
+                            .unwrap_or_else(|| binding_poller.selection()),
+                    ));
+                }
                 if let Some(token) = result.refresh_request_token {
                     if handled_refresh_token.as_deref() != Some(token.as_str()) {
                         refresh_request_token = Some(token);
                     }
                 }
+                if result.selected_model.is_some() {
+                    visible_model = result.selected_model;
+                }
+            }
+        }
+        usage_poller.request_with_selection(visible_threads);
+        live_dialog.request(dialog_requests);
+        if let Some(model) = visible_model {
+            model_reported = true;
+            if observed_model.as_deref() != Some(model.as_str()) {
+                observed_model = Some(model);
+                let next_kind = injection_badge_kind_for_model(observed_model.as_deref());
+                if next_kind != badge_kind {
+                    let switched_script = injection_script(
+                        provider_name,
+                        &quota,
+                        &locale,
+                        !refresh_tasks.is_empty()
+                            || quota_snapshot_pending
+                            || balance_snapshot_pending,
+                        handled_refresh_token.as_deref(),
+                        &api_service_balance_lines,
+                        &api_service_grok_lines,
+                        next_kind,
+                        observed_model.as_deref(),
+                        &usage_state,
+                        quota_refresh_error,
+                    );
+                    for target in &targets {
+                        let _ = evaluate_target(target, &switched_script, QUOTA_SCRIPT_KIND).await;
+                    }
+                }
+            }
+        }
+        // 页面读不到模型名（选择器展开、界面尚未渲染完）时，用实例 config.toml 的
+        // 已选模型兜底刷新，避免底部徽章长期停在切换前的模型上。
+        if !model_reported && last_model_resync_at.elapsed() >= MODEL_RESYNC_INTERVAL {
+            last_model_resync_at = Instant::now();
+            if let Some(model) = read_profile_selected_model(&profile_dir) {
+                observed_model = Some(model);
             }
         }
         if let Some(token) = refresh_request_token.filter(|_| refresh_tasks.is_empty()) {
             handled_refresh_token = Some(token);
+            if remote_account.is_some() {
+                quota_fetch_due = true;
+                quota_snapshot_pending = true;
+                snapshot_wait_started = Some(Instant::now());
+                quota_refresh_error = None;
+                continue;
+            }
+            pool_poller.refresh();
+            quota_refresh_error = None;
+            // 手动刷新同时把余额与 Grok 额度快照请求一次，点刷新不会只更新账号池。
+            balance_fetch_due = true;
+            let refreshing_kind = injection_badge_kind_for_model(observed_model.as_deref());
             let refreshing_script = injection_script(
                 provider_name,
                 &quota,
                 &locale,
                 true,
                 handled_refresh_token.as_deref(),
+                &api_service_balance_lines,
+                &api_service_grok_lines,
+                refreshing_kind,
+                observed_model.as_deref(),
+                &usage_state,
+                quota_refresh_error,
             );
             for target in &targets {
-                let _ = evaluate_target(target, &refreshing_script).await;
+                let _ = evaluate_target(target, &refreshing_script, QUOTA_SCRIPT_KIND).await;
             }
             let app = app.clone();
-            refresh_tasks.spawn(async move { run_quota_refresh_singleflight(&app).await });
+            refresh_tasks.spawn(async move {
+                timeout(
+                    Duration::from_secs(120),
+                    run_quota_refresh_singleflight(&app),
+                )
+                .await
+                .unwrap_or_else(|_| Err("API 服务额度刷新超时".to_string()))
+            });
         }
         tokio::time::sleep(INJECTION_INTERVAL).await;
     }
@@ -2992,576 +3715,5 @@ async fn run_injection_loop(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        app_server_auth_file_snapshot, auth_diagnostic_error_signal, auth_diagnostic_observation,
-        build_launch_args, cdp_auth_signal, cdp_body_preview, cdp_console_auth_signal,
-        deepseek_model_injection_script, has_login_route_markers, injection_script,
-        is_auth_diagnostic_url, is_codex_app_target, is_official_login_route,
-        is_safe_cdp_websocket_url, refresh_request_token_from_cdp_response,
-        remote_debugging_port_from_command_line, sanitize_cdp_headers,
-        selected_model_from_cdp_response, should_capture_cdp_response_body, supports_bind_account,
-        AuthPageSnapshot, CdpTarget, QuotaPlanSummary, QuotaResponse, AUTH_DIAGNOSTIC_SCRIPT,
-    };
-    use crate::models::codex::{CodexAccount, CodexTokens};
-    use crate::modules::codex_account::{
-        compare_official_oauth_identity, CodexOfficialOAuthIdentity,
-        CodexOfficialOAuthIdentityMatch,
-    };
-    use serde_json::json;
-
-    #[test]
-    fn disabled_keeps_launch_args() {
-        let args = vec!["--foo".to_string(), "bar".to_string()];
-        let plan = build_launch_args(&args, false).expect("plan");
-        assert_eq!(plan.args, args);
-        assert_eq!(plan.port, None);
-    }
-
-    #[test]
-    fn enabled_replaces_debug_flags_with_loopback_port() {
-        let args = vec![
-            "--remote-debugging-port=9333".to_string(),
-            "--remote-debugging-address".to_string(),
-            "0.0.0.0".to_string(),
-            "--foo".to_string(),
-        ];
-        let plan = build_launch_args(&args, true).expect("plan");
-        assert!(plan.port.is_some());
-        assert!(!plan.args.iter().any(|value| value.contains("9333")));
-        assert!(plan
-            .args
-            .iter()
-            .any(|value| value == "--remote-debugging-address=127.0.0.1"));
-    }
-
-    #[test]
-    fn only_api_service_binding_supports_quota_injection() {
-        assert!(supports_bind_account(Some("__api_service__")));
-        assert!(!supports_bind_account(Some("api-key-account")));
-        assert!(!supports_bind_account(Some(
-            "__provider_gateway__:custom-provider"
-        )));
-        assert!(!supports_bind_account(None));
-    }
-
-    #[test]
-    fn deepseek_script_controls_official_picker_and_returns_pending_model() {
-        let payload = json!({
-            "selectedModel": "deepseek-v4-flash",
-            "models": [
-                { "id": "deepseek-v4-flash", "name": "DeepSeek-V4-Flash", "vision": true },
-                { "id": "deepseek-v4-pro", "name": "DeepSeek-V4-Pro", "vision": false }
-            ],
-            "shells": { "gpt-5.5": "deepseek-v4-flash", "gpt-5.4": "deepseek-v4-pro" }
-        });
-        let script = deepseek_model_injection_script("zh-cn", &payload, None);
-        assert!(script.contains("deepseek-v4-flash"));
-        assert!(script.contains("deepseek-v4-pro"));
-        assert!(script.contains("gpt-5.5"));
-        assert!(script.contains("gpt-5.4"));
-        assert!(script.contains("item.model = official"));
-        assert!(script.contains("list-models-for-host"));
-        assert!(script.contains("model/list"));
-        assert!(script.contains("deepseek-official-picker"));
-        assert!(script.contains("const reasoningLevels = [\"low\", \"high\", \"max\"]"));
-        assert!(script.contains("supported_reasoning_levels = levels"));
-        assert!(script.contains("supportedReasoningEfforts = levels"));
-        assert!(script.contains("applyVisionMetadata"));
-        assert!(script.contains("item.input_modalities = modalities"));
-        assert!(script.contains("item.supports_image_detail_original = supportsImage"));
-        assert!(script.contains("\"vision\":true"));
-        // 模型列表判定必须严格，否则会把队列/线程等 data 数组当成模型列表改写。
-        assert!(script.contains("typeof item.slug !== \"string\""));
-        assert!(script.contains("typeof item.display_name === \"string\""));
-        // 只有显式切模型才回写默认模型，发消息时的 model 字段不算切换。
-        assert!(script.contains("const switchMethods"));
-        assert!(script.contains("if (reportable) reportSelected(params.model)"));
-        // 不得再引用已删除的 flashId/proId（会导致脚本每次执行抛异常）。
-        assert!(!script.contains("flashId"));
-        assert!(!script.contains("proId"));
-        assert!(!script.contains("[\"low\", \"medium\", \"high\", \"xhigh\"]"));
-        assert!(script.contains("staleBar"));
-        assert!(!script.contains("data-cockpit-deepseek-model"));
-        assert!(script.contains("pendingSelectedModel"));
-        let parsed = selected_model_from_cdp_response(&json!({
-            "result": { "result": { "value": { "selectedModel": "deepseek-v4-pro" } } }
-        }));
-        assert_eq!(parsed.as_deref(), Some("deepseek-v4-pro"));
-    }
-
-    #[test]
-    fn parses_remote_debugging_port_from_running_process_command_line() {
-        assert_eq!(
-            remote_debugging_port_from_command_line(
-                "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT --remote-debugging-address=127.0.0.1 --remote-debugging-port=64404"
-            ),
-            Some(64404)
-        );
-        assert_eq!(
-            remote_debugging_port_from_command_line(
-                r#"C:\Program Files\ChatGPT\ChatGPT.exe --remote-debugging-port "9333""#
-            ),
-            Some(9333)
-        );
-    }
-
-    #[test]
-    fn rejects_missing_or_invalid_remote_debugging_port() {
-        assert_eq!(
-            remote_debugging_port_from_command_line("ChatGPT --remote-debugging-address=127.0.0.1"),
-            None
-        );
-        assert_eq!(
-            remote_debugging_port_from_command_line("ChatGPT --remote-debugging-port=0"),
-            None
-        );
-        assert_eq!(
-            remote_debugging_port_from_command_line("ChatGPT --remote-debugging-port=70000"),
-            None
-        );
-    }
-
-    #[test]
-    fn custom_script_renders_weekly_and_optional_five_hour_fields() {
-        let script = injection_script(
-            "Provider",
-            &QuotaResponse {
-                weekly_remaining_percent: Some(1387),
-                five_hour_remaining_percent: Some(100),
-                account_count: Some(14),
-                available_account_count: Some(12),
-                abnormal_account_count: Some(2),
-                cooldown_account_count: Some(0),
-                plans: vec![QuotaPlanSummary {
-                    plan: "PLUS".to_string(),
-                    count: 14,
-                    weekly_remaining_percent: Some(1387),
-                    five_hour_remaining_percent: Some(100),
-                }],
-            },
-            "zh-cn",
-            false,
-            None,
-        );
-        assert!(script.contains("const accountPoolLabel = \"账号\""));
-        assert!(script.contains("const accountCount = 14"));
-        assert!(script.contains("const weeklyLabel = \"周\""));
-        assert!(script.contains("const fiveHourLabel = \"5h\""));
-        assert!(script.contains("data-cockpit-quota-footer"));
-        assert!(script.contains("document.body.appendChild(host)"));
-        assert!(script.contains("position:fixed"));
-        assert!(script.contains("footerRect.left + footerRect.width / 2"));
-        assert!(script.contains("permissionsRect.top + permissionsRect.height / 2"));
-        assert!(script.contains("justify-content:center"));
-        assert!(script.contains("host.innerHTML !== nextHtml"));
-        assert!(script.contains("mutations.every"));
-        assert!(script.contains("new ResizeObserver"));
-        assert!(script.contains("window.addEventListener('resize'"));
-        assert!(script.contains("requestAnimationFrame"));
-        assert!(script.contains("root.render()"));
-        assert!(script.contains("data-cockpit-quota-refresh"));
-        assert!(script.contains("data-cockpit-quota-open"));
-        assert!(script.contains("data-cockpit-quota-details"));
-        assert!(script.contains("data-cockpit-quota-close"));
-        assert!(script.contains("const plans = [{\"plan\":\"PLUS\",\"count\":14"));
-        assert!(script.contains("const availableText = \"可用 12/14\""));
-        assert!(script.contains("const issueText = \"异常 2 · 冷却 0\""));
-        assert!(script.contains("var(--color-token-main-surface-primary"));
-        assert!(script.contains("var(--color-token-text-secondary"));
-        assert!(script.contains("const planColor"));
-        assert!(script.contains("background:#10b981"));
-        assert!(script.contains("background:#3b82f6"));
-        assert!(script.contains("root.quotaDetailsOpen"));
-        assert!(script.contains("details.innerHTML !== detailsHtml"));
-        assert!(script.contains("details.contains(mutation.target)"));
-        assert!(!script.contains("modal-overlay"));
-        assert!(!script.contains("common.shared.refreshQuota"));
-        assert!(script.contains("root.refreshRequestToken"));
-        assert!(script.contains("cockpit-quota-spin"));
-        assert!(script.contains("pointer-events:auto"));
-        assert!(script.contains("root.hostHeartbeatAt = Date.now()"));
-        assert!(script.contains("root.watchdogTimer"));
-        assert!(script.contains("hostHeartbeatTimeoutMs = 8000"));
-        assert!(script.contains("root.refreshRequestToken = null"));
-        assert!(!script.contains("footer.appendChild(host)"));
-        assert!(!script.contains("justify-content:flex-end"));
-        assert!(!script.contains("grid-row:3"));
-        assert!(!script.contains("min-height:18px"));
-        assert!(!script.contains("data-cockpit-fast-mode"));
-        assert!(!script.contains("Debugger"));
-    }
-
-    #[test]
-    fn five_hour_only_quota_is_not_relabelled_as_weekly() {
-        let script = injection_script(
-            "Provider",
-            &QuotaResponse {
-                weekly_remaining_percent: None,
-                five_hour_remaining_percent: Some(63),
-                account_count: Some(2),
-                ..QuotaResponse::default()
-            },
-            "zh-cn",
-            false,
-            None,
-        );
-        assert!(script.contains("const weeklyPercent = null"));
-        assert!(script.contains("const fiveHourPercent = 63"));
-    }
-
-    #[test]
-    fn empty_pool_quota_renders_zero_account_and_windows() {
-        let quota = QuotaResponse::empty_pool();
-        assert_eq!(quota.account_count, Some(0));
-        assert_eq!(quota.five_hour_remaining_percent, Some(0));
-        assert_eq!(quota.weekly_remaining_percent, Some(0));
-
-        let script = injection_script("Provider", &quota, "zh-cn", false, None);
-        assert!(script.contains("const accountCount = 0"));
-        assert!(script.contains("const fiveHourPercent = 0"));
-        assert!(script.contains("const weeklyPercent = 0"));
-        assert!(script.contains("accountCount >= 0"));
-    }
-
-    #[test]
-    fn empty_pool_response_normalizes_missing_window_values_to_zero() {
-        let quota = QuotaResponse {
-            weekly_remaining_percent: None,
-            five_hour_remaining_percent: None,
-            account_count: Some(0),
-            ..QuotaResponse::default()
-        }
-        .normalize_empty_pool();
-
-        assert_eq!(quota.account_count, Some(0));
-        assert_eq!(quota.five_hour_remaining_percent, Some(0));
-        assert_eq!(quota.weekly_remaining_percent, Some(0));
-    }
-
-    #[test]
-    fn cdp_response_extracts_refresh_request_token() {
-        let response = json!({
-            "id": 1,
-            "result": {
-                "result": {
-                    "type": "object",
-                    "value": {"refreshRequestToken": "request-123"}
-                }
-            }
-        });
-        assert_eq!(
-            refresh_request_token_from_cdp_response(&response).as_deref(),
-            Some("request-123")
-        );
-        assert!(refresh_request_token_from_cdp_response(&json!({"id": 1})).is_none());
-    }
-
-    #[test]
-    fn auth_diagnostic_cdp_websocket_must_be_loopback_and_same_port() {
-        assert!(is_safe_cdp_websocket_url(
-            "ws://127.0.0.1:9333/devtools/page/1",
-            9333
-        ));
-        assert!(is_safe_cdp_websocket_url(
-            "ws://[::1]:9333/devtools/page/1",
-            9333
-        ));
-        assert!(!is_safe_cdp_websocket_url(
-            "ws://192.168.1.2:9333/devtools/page/1",
-            9333
-        ));
-        assert!(!is_safe_cdp_websocket_url(
-            "ws://127.0.0.1:9444/devtools/page/1",
-            9333
-        ));
-    }
-
-    #[test]
-    fn auth_diagnostic_observation_only_reports_safe_page_state() {
-        let target = CdpTarget {
-            target_id: "page-1".to_string(),
-            target_type: "page".to_string(),
-            url: "app://-/index.html".to_string(),
-            websocket_url: Some("ws://127.0.0.1:9333/devtools/page/1".to_string()),
-        };
-        let snapshot = AuthPageSnapshot {
-            route: "/login".to_string(),
-            title: "ChatGPT".to_string(),
-            ready_state: "complete".to_string(),
-            ..AuthPageSnapshot::default()
-        };
-        let observed = auth_diagnostic_observation(&[target], Some(snapshot));
-
-        assert!(observed.cdp_available);
-        assert_eq!(observed.target_count, 1);
-        assert_eq!(observed.route, "/login");
-        assert!(observed.login_signal());
-    }
-
-    #[test]
-    fn auth_diagnostic_requires_route_or_complete_login_ui_signal() {
-        assert!(!AUTH_DIAGNOSTIC_SCRIPT.contains("innerText"));
-        assert!(!AUTH_DIAGNOSTIC_SCRIPT.contains("loginText"));
-        assert!(is_official_login_route("/login"));
-        assert!(is_official_login_route("/login/"));
-        assert!(!is_official_login_route("/auth/login"));
-        assert!(!is_official_login_route("/index.html"));
-        assert!(has_login_route_markers(&[
-            "login_title".to_string(),
-            "login_primary_action".to_string(),
-        ]));
-        assert!(!has_login_route_markers(&["login_title".to_string()]));
-        let target = CdpTarget {
-            target_id: "page-1".to_string(),
-            target_type: "page".to_string(),
-            url: "app://-/index.html".to_string(),
-            websocket_url: Some("ws://127.0.0.1:9333/devtools/page/1".to_string()),
-        };
-        let normal_page = AuthPageSnapshot {
-            route: "/index.html".to_string(),
-            title: "Sign in to ChatGPT".to_string(),
-            ready_state: "complete".to_string(),
-            ..AuthPageSnapshot::default()
-        };
-        let observed = auth_diagnostic_observation(&[target], Some(normal_page));
-        assert!(!observed.login_signal());
-
-        let login_page = AuthPageSnapshot {
-            route: "/index.html".to_string(),
-            login_ui_signal: true,
-            login_ui_markers: vec![
-                "login_title".to_string(),
-                "login_primary_action".to_string(),
-            ],
-            ..AuthPageSnapshot::default()
-        };
-        let observed = auth_diagnostic_observation(&[], Some(login_page));
-        assert!(observed.login_signal());
-        assert!(observed.login_ui_signal);
-    }
-
-    #[test]
-    fn auth_diagnostic_ignores_non_codex_targets() {
-        let codex_target = CdpTarget {
-            target_id: "codex".to_string(),
-            target_type: "page".to_string(),
-            url: "app://-/index.html".to_string(),
-            websocket_url: None,
-        };
-        let external_target = CdpTarget {
-            target_id: "external".to_string(),
-            target_type: "page".to_string(),
-            url: "https://chatgpt.com/auth/login".to_string(),
-            websocket_url: None,
-        };
-        assert!(is_codex_app_target(&codex_target));
-        assert!(!is_codex_app_target(&external_target));
-    }
-
-    #[test]
-    fn auth_diagnostic_profile_identity_uses_account_id_before_email() {
-        let mut account = CodexAccount::new(
-            "local-account".to_string(),
-            "expected@example.com".to_string(),
-            CodexTokens {
-                id_token: String::new(),
-                access_token: String::new(),
-                refresh_token: None,
-            },
-        );
-        account.account_id = Some("chatgpt-account".to_string());
-        account.user_id = Some("chatgpt-user".to_string());
-
-        let matching = CodexOfficialOAuthIdentity {
-            email: "different@example.com".to_string(),
-            user_id: Some("chatgpt-user".to_string()),
-            account_id: Some("chatgpt-account".to_string()),
-            organization_id: None,
-        };
-        assert_eq!(
-            compare_official_oauth_identity(&matching, &account),
-            CodexOfficialOAuthIdentityMatch::Matched
-        );
-
-        let mismatched = CodexOfficialOAuthIdentity {
-            account_id: Some("other-account".to_string()),
-            ..matching.clone()
-        };
-        assert_eq!(
-            compare_official_oauth_identity(&mismatched, &account),
-            CodexOfficialOAuthIdentityMatch::Mismatched
-        );
-
-        let incomplete = CodexOfficialOAuthIdentity {
-            email: "expected@example.com".to_string(),
-            user_id: None,
-            account_id: None,
-            organization_id: None,
-        };
-        assert_eq!(
-            compare_official_oauth_identity(&incomplete, &account),
-            CodexOfficialOAuthIdentityMatch::Unknown
-        );
-    }
-
-    #[test]
-    fn auth_network_diagnostics_redact_credentials_and_queries() {
-        assert_eq!(
-            super::sanitize_cdp_url(
-                "https://auth.openai.com/oauth/token?client_secret=secret&code=oauth-code"
-            ),
-            "https://auth.openai.com/oauth/token?<redacted-query>"
-        );
-        let headers = sanitize_cdp_headers(Some(&json!({
-            "authorization": "Bearer secret",
-            "cookie": "session=secret",
-            "x-api-key": "secret-api-key",
-            "session_token": "secret-session-token",
-            "x-request-id": "request-1"
-        })));
-        assert_eq!(headers["authorization"], "<redacted>");
-        assert_eq!(headers["cookie"], "<redacted>");
-        assert_eq!(headers["x-api-key"], "<redacted>");
-        assert_eq!(headers["session_token"], "<redacted>");
-        assert_eq!(headers["x-request-id"], "request-1");
-    }
-
-    #[test]
-    fn auth_network_diagnostics_extract_redacted_json_error_body() {
-        let body = json!({
-            "error": "refresh_token_reused",
-            "access_token": "eyJsecret",
-            "message": "reauth required"
-        });
-        let response = json!({
-            "result": {"body": serde_json::to_string(&body).expect("body")}
-        });
-        let preview = cdp_body_preview(&response).expect("preview");
-        assert!(preview.contains("refresh_token_reused"));
-        assert!(preview.contains("<redacted>"));
-        assert!(!preview.contains("eyJsecret"));
-    }
-
-    #[test]
-    fn auth_network_diagnostics_matches_official_relogin_signals() {
-        let invalid_refresh = json!({
-            "result": {"body": r#"{"error":{"code":"invalid_refresh_token","message":"Invalid refresh token."}}"#}
-        });
-        assert_eq!(
-            cdp_auth_signal(&invalid_refresh),
-            Some("invalid_refresh_token")
-        );
-
-        let auth_error = json!({
-            "result": {"body": r#"{"data":{"reason":"cloudRequirements","errorCode":"Auth"}}"#}
-        });
-        assert_eq!(cdp_auth_signal(&auth_error), Some("auth_error_code"));
-
-        let relogin = json!({
-            "result": {"body": r#"{"data":{"reason":"cloudConfigBundle","action":"relogin"}}"#}
-        });
-        assert_eq!(cdp_auth_signal(&relogin), Some("relogin_action"));
-
-        let normal = json!({
-            "result": {"body": r#"{"data":{"reason":"cloudRequirements"}}"#}
-        });
-        assert_eq!(cdp_auth_signal(&normal), None);
-    }
-
-    #[test]
-    fn auth_network_diagnostics_marks_relevant_endpoints() {
-        assert!(is_auth_diagnostic_url(
-            "https://chatgpt.com/backend-api/cloudRequirements"
-        ));
-        assert!(is_auth_diagnostic_url(
-            "https://auth.openai.com/oauth/token"
-        ));
-        assert!(!is_auth_diagnostic_url("https://example.com/assets/app.js"));
-    }
-
-    #[test]
-    fn auth_network_diagnostics_captures_auth_body_even_for_success_status() {
-        assert!(should_capture_cdp_response_body(
-            "https://chatgpt.com/backend-api/cloudRequirements",
-            200
-        ));
-        assert!(should_capture_cdp_response_body(
-            "https://chatgpt.com/backend-api/conversations",
-            401
-        ));
-        assert!(!should_capture_cdp_response_body(
-            "https://chatgpt.com/backend-api/conversations",
-            200
-        ));
-    }
-
-    #[test]
-    fn auth_diagnostic_extracts_only_known_official_error_signals() {
-        assert_eq!(
-            auth_diagnostic_error_signal("401 Unauthorized: invalid_refresh_token"),
-            Some("invalid_refresh_token")
-        );
-        assert_eq!(
-            auth_diagnostic_error_signal("Invalid refresh token."),
-            Some("invalid_refresh_token")
-        );
-        assert_eq!(
-            auth_diagnostic_error_signal("auth_status_result nullReason=auth_token_missing"),
-            Some("auth_token_missing")
-        );
-        assert_eq!(
-            auth_diagnostic_error_signal("no_token_attached"),
-            Some("no_token_attached")
-        );
-        assert_eq!(
-            auth_diagnostic_error_signal("requiresOpenaiAuth=true"),
-            Some("requiresOpenaiAuth")
-        );
-        assert_eq!(auth_diagnostic_error_signal("ordinary 401 response"), None);
-        assert_eq!(auth_diagnostic_error_signal("ERR_SSL_PROTOCOL_ERROR"), None);
-    }
-
-    #[test]
-    fn auth_diagnostic_reads_console_argument_values_without_logging_them() {
-        let params = json!({
-            "args": [
-                {"type": "string", "value": "app_server_connection.auth_status_result"},
-                {"type": "string", "value": "code=invalid_refresh_token"}
-            ]
-        });
-        assert_eq!(
-            cdp_console_auth_signal(&params),
-            Some("invalid_refresh_token")
-        );
-
-        let nested = json!({
-            "args": [{"type": "object", "description": "{\"requiresOpenaiAuth\":true}"}]
-        });
-        assert_eq!(cdp_console_auth_signal(&nested), Some("requiresOpenaiAuth"));
-        assert_eq!(
-            cdp_console_auth_signal(&json!({"args": [{"value": "Bearer eyJsecret"}]})),
-            None
-        );
-    }
-
-    #[test]
-    fn app_server_auth_snapshot_never_contains_auth_contents() {
-        let directory = std::env::temp_dir().join(format!(
-            "cockpit-codex-app-server-diagnostic-{}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&directory).expect("create diagnostic directory");
-        std::fs::write(
-            directory.join("auth.json"),
-            r#"{"access_token":"secret-access","refresh_token":"secret-refresh"}"#,
-        )
-        .expect("write diagnostic auth");
-
-        let snapshot = app_server_auth_file_snapshot(&directory);
-        assert!(snapshot.starts_with("exists=true,size="));
-        assert!(snapshot.contains("sha256="));
-        assert!(!snapshot.contains("secret-access"));
-        assert!(!snapshot.contains("secret-refresh"));
-        let _ = std::fs::remove_dir_all(directory);
-    }
+    include!("codex_app_injection_tests.rs");
 }

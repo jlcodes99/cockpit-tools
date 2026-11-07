@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useDropdownPanelPlacement } from '../hooks/useDropdownPanelPlacement';
+import { useEscCloseTopmost } from '../hooks/useEscClose';
 import './AccountFilterDropdown.css';
 
 export interface SingleSelectFilterOption {
@@ -28,6 +29,10 @@ export function SingleSelectFilterDropdown({
 }: SingleSelectFilterDropdownProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  useEscCloseTopmost(open, () => {
+    setOpen(false);
+    rootRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+  }, rootRef);
   const { panelPlacement, panelRef, scrollContainerStyle } = useDropdownPanelPlacement(
     rootRef,
     open,

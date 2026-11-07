@@ -1,0 +1,102 @@
+{
+  "agentModelSorts": [
+    {
+      "displayName": "Recommended",
+      "groups": [
+        {
+          "modelIds": [
+            "gemini-4-argon-medium",
+            "gemini-4-argon-high",
+            "gemini-4-argon-low",
+            "gemini-3.8-flash-high",
+            "gemini-3.8-flash-medium",
+            "gemini-3.8-flash-low",
+            "claude-opus-5-5-low",
+            "claude-opus-5-5-medium",
+            "claude-opus-5-5-high",
+            "claude-sonnet-5-5-low",
+            "claude-sonnet-5-5-medium",
+            "claude-sonnet-5-5-high",
+            "gpt-oss-120b-medium"
+          ]
+        }
+      ]
+    }
+  ],
+  "models": {
+    "gemini-4-argon-medium": {
+      "displayName": "Gemini 4 Argon (Medium)",
+      "model": "MODEL_PLACEHOLDER_M418",
+      "recommended": true
+    },
+    "gemini-4-argon-high": {
+      "displayName": "Gemini 4 Argon (High)",
+      "model": "MODEL_PLACEHOLDER_M417",
+      "recommended": true
+    },
+    "gemini-4-argon-low": {
+      "displayName": "Gemini 4 Argon (Low)",
+      "model": "MODEL_PLACEHOLDER_M419",
+      "recommended": true
+    },
+    "gemini-3.8-flash-high": {
+      "displayName": "Gemini 3.8 Flash (High)",
+      "model": "MODEL_PLACEHOLDER_M318",
+      "recommended": true
+    },
+    "gemini-3.8-flash-medium": {
+      "displayName": "Gemini 3.8 Flash (Medium)",
+      "model": "MODEL_PLACEHOLDER_M319",
+      "recommended": true
+    },
+    "gemini-3.8-flash-low": {
+      "displayName": "Gemini 3.8 Flash (Low)",
+      "model": "MODEL_PLACEHOLDER_M320",
+      "recommended": true
+    },
+    "claude-opus-5-5-low": {
+      "displayName": "Claude Opus 5.5 (Low)",
+      "model": "MODEL_PLACEHOLDER_M400",
+      "recommended": true
+    },
+    "claude-opus-5-5-medium": {
+      "displayName": "Claude Opus 5.5 (Medium)",
+      "model": "MODEL_PLACEHOLDER_M401",
+      "recommended": true
+    },
+    "claude-opus-5-5-high": {
+      "displayName": "Claude Opus 5.5 (High)",
+      "model": "MODEL_PLACEHOLDER_M402",
+      "recommended": true
+    },
+    "claude-sonnet-5-5-low": {
+      "displayName": "Claude Sonnet 5.5 (Low)",
+      "model": "MODEL_PLACEHOLDER_M403",
+      "recommended": true
+    },
+    "claude-sonnet-5-5-medium": {
+      "displayName": "Claude Sonnet 5.5 (Medium)",
+      "model": "MODEL_PLACEHOLDER_M404",
+      "recommended": true
+    },
+    "claude-sonnet-5-5-high": {
+      "displayName": "Claude Sonnet 5.5 (High)",
+      "model": "MODEL_PLACEHOLDER_M405",
+      "recommended": true
+    },
+    "gpt-oss-120b-medium": {
+      "displayName": "GPT-OSS 120B (Medium)",
+      "model": "MODEL_OPENAI_GPT_OSS_120B_MEDIUM",
+      "recommended": true
+    },
+    "gemini-3-flash": {
+      "displayName": "Gemini 3 Flash",
+      "model": "MODEL_PLACEHOLDER_M18",
+      "recommended": true
+    },
+    "gemini-3.8-flash-tiered": {
+      "model": "MODEL_PLACEHOLDER_M322",
+      "recommended": true
+    }
+  }
+}

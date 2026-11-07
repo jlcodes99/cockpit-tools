@@ -121,6 +121,7 @@ test("keeps last official startup model or falls back to Flash", () => {
   );
   assert.equal(
     resolveDeepSeekStartupModel({ api_startup_model: "gpt-5.5" }),
+    // 官方新名 `deepseek-flash` 与 DeepSeek 模型目录（DEEPSEEK_CODEX_MODEL_CATALOG）保持一致。
     "deepseek-flash",
   );
   assert.equal(
@@ -140,6 +141,16 @@ test("DeepSeek Chat Completions accounts can query usage", () => {
     })),
     true,
   );
+});
+
+test("APIKEY.FUN Anthropic accounts can query and display usage", () => {
+  const relay = account({ auth_mode: "apikey", api_base_url: "https://api.apikey.fan", api_wire_api: "anthropic", openai_api_key: "test" });
+  assert.equal(isCodexApiKeyUsageQueryEligible(relay), true);
+  assert.equal(shouldShowCodexApiKeyUsagePanel(relay), true);
+  assert.equal(shouldShowCodexApiKeyUsagePanel(relay, true), false);
+  const other = { ...relay, api_base_url: "https://other.example" };
+  assert.equal(isCodexApiKeyUsageQueryEligible(other), false);
+  assert.equal(shouldShowCodexApiKeyUsagePanel(other), false);
 });
 
 test("DeepSeek Responses accounts can query usage", () => {

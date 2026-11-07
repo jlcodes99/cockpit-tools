@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Cockpit Tools",
-  "version": "1.3.53",
+  "version": "1.3.80",
   "identifier": "com.jlcodes.cockpit-tools",
   "build": {
     "beforeDevCommand": "node scripts/prepare-tauri.cjs && npm run dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "node scripts/prepare-tauri.cjs && npm run build",
     "frontendDist": "../dist"
   },
@@ -50,9 +50,6 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
-    "externalBin": [
-      "../sidecars/cockpit-cliproxy/bin/cockpit-cliproxy"
-    ],
     "windows": {
       "nsis": {
         "installMode": "currentUser",
@@ -86,6 +83,7 @@
       "../src/assets/icons/cursor-menu.png": "native-menu-icons/cursor-menu.png",
       "../src/assets/icons/github-copilot.svg": "native-menu-icons/github-copilot.svg",
       "../src/assets/icons/kiro-menu.png": "native-menu-icons/kiro-menu.png",
+      "../src/assets/icons/minimax-code.png": "native-menu-icons/minimax-code.png",
       "../src/assets/icons/qoder.png": "native-menu-icons/qoder.png",
       "../src/assets/icons/trae.png": "native-menu-icons/trae.png",
       "../src/assets/icons/trae-cn.png": "native-menu-icons/trae-cn.png",
@@ -94,10 +92,12 @@
       "../src/assets/icons/windsurf.svg": "native-menu-icons/windsurf.svg",
       "../src/assets/icons/workbuddy.png": "native-menu-icons/workbuddy.png",
       "../src/assets/icons/zed.png": "native-menu-icons/zed.png",
-      "../src/assets/icons/zcode.png": "native-menu-icons/zcode.png"
+      "../src/assets/icons/zcode.png": "native-menu-icons/zcode.png",
+      "../resources/codex/LICENSE.CLIProxyAPI": "licenses/CLIProxyAPI.txt"
     },
     "macOS": {
       "bundleName": "Cockpit Tools",
+      "hardenedRuntime": true,
       "infoPlist": "Info.plist"
     }
   },

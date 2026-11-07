@@ -11,6 +11,7 @@ import {
 import { useEscClose } from '../../hooks/useEscClose';
 import type { CodexExperimentalModelDefinition, CodexQuickConfig } from '../../types/codex';
 import { getCodexExperimentalModelErrorMessage } from '../../utils/codexExperimentalModel';
+import { resolveStoredCompactLimitInput } from '../../utils/codexModelContext';
 import { CodexContextManagementControl } from './CodexContextManagementControl';
 import { CodexContextOverrideEditor } from './CodexContextOverrideEditor';
 import { CodexExperimentalModelEditor } from './CodexExperimentalModelEditor';
@@ -40,7 +41,13 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
         config.detected_auto_compact_token_limit !== undefined,
     );
     setContextWindow(config.detected_model_context_window?.toString() ?? '');
-    setCompactLimit(config.detected_auto_compact_token_limit?.toString() ?? '');
+    // 存量配置里压缩阈值缺失、等于或超过上下文时按 90% 归一，避免带出非法配对。
+    setCompactLimit(
+      resolveStoredCompactLimitInput(
+        config.detected_model_context_window,
+        config.detected_auto_compact_token_limit,
+      ),
+    );
     setCatalogEnabled(config.experimental_model_catalog_enabled);
     setModels(config.experimental_model_catalog_models);
     setDefaultModelId(config.experimental_model_catalog_default_model_id ?? null);

@@ -271,6 +271,10 @@ pub async fn inject_github_copilot_to_vscode(
         "GitHub Copilot 账号切换完成: {}",
         account.github_login
     ));
+    if opencode_updated {
+    github_copilot_account::touch_last_used(&account_id)?;
+    }
+
     let _ = crate::modules::tray::update_tray_menu(&app);
     if let Some(err) = launch_warning {
         Ok(format!("切换完成，但 VS Code 启动失败: {}", err))

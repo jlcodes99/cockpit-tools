@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, Fragment } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import {
   Plus,
   RefreshCw,
@@ -24,13 +25,16 @@ import {
   Eye,
   EyeOff,
   BookOpen,
+  CalendarCheck,
 } from 'lucide-react';
+import { AccountLastUsed } from '../components/AccountLastUsed';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
+import { usePlatformAccountGroups } from '../hooks/usePlatformAccountGroups';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import {
   PlatformOverviewTab,
@@ -48,6 +52,7 @@ import {
   getTraeAccountDisplayEmail,
   getTraeAccountDisplayName,
   getTraeAccountPlatformId,
+  getTraeCreditCategoryGroups,
   getTraeLoginProvider,
   getTraePlanBadge,
   getTraePlanBadgeClass,
@@ -57,6 +62,9 @@ import {
   isTraeCnAccountPlatform,
   TRAE_PRODUCT_TYPE,
 } from '../types/trae';
+import { CodeBuddyQuotaCategoryList } from '../components/codebuddy/CodeBuddyQuotaCategoryList';
+import { TraeCheckinModal } from '../components/codebuddy-suite/TraeCheckinModal';
+import { TRAE_AUTO_CHECKIN_ACCOUNTS_CHANGED_EVENT } from '../services/traeAutoCheckinService';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 import {
   buildValidAccountsFilterOption,
@@ -169,9 +177,11 @@ function getTraeAccountSwitchLabel(account: TraeAccount): string {
 
 export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps) {
   const platformConfig = TRAE_PLATFORM_PAGE_CONFIG[platformId];
+  const isCnPlatform = platformId === 'trae_cn' || platformId === 'trae_solo_cn';
   const filterPersistenceScopeSeed = platformConfig.platformKey;
   const targetFilterPersistenceScope = normalizeAccountsOverviewScope(filterPersistenceScopeSeed);
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
+  const [showCheckinModal, setShowCheckinModal] = useState(false);
   const [filterTypes, setFilterTypes] = useState<string[]>(() =>
     readAccountsOverviewFilterPersistenceEnabled(targetFilterPersistenceScope)
       ? readAccountsOverviewFilterStringArray(targetFilterPersistenceScope, FILTER_TYPES_FIELD)
@@ -392,6 +402,8 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
     normalizeTag,
   } = page;
 
+  const grouping = usePlatformAccountGroups(platformId, () => toggleSelectAll(Array.from(selected)));
+
   useEffect(() => {
     if (!filterPersistenceEnabled) {
       removeAccountsOverviewFilterField(filterPersistenceScope, FILTER_TYPES_FIELD);
@@ -415,6 +427,33 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
 
   const accounts = platformAccounts;
   const loading = store.loading;
+  const fetchAccounts = store.fetchAccounts;
+
+  // 后台自动签到成功后会刷新额度：重取账号列表，避免积分停在旧值
+  useEffect(() => {
+    if (!isCnPlatform) {
+      return;
+    }
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen(TRAE_AUTO_CHECKIN_ACCOUNTS_CHANGED_EVENT, () => {
+      void fetchAccounts();
+    })
+      .then((stopListening) => {
+        if (disposed) {
+          stopListening();
+        } else {
+          unlisten = stopListening;
+        }
+      })
+      .catch((err) => {
+        console.warn('[TraeAutoCheckin] 监听后台签到完成事件失败:', err);
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [fetchAccounts, isCnPlatform]);
 
   const isAbnormalAccount = useCallback(
     (account: TraeAccount) => (account.status || '').toLowerCase() === 'error',
@@ -491,6 +530,9 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
 
   const filteredAccounts = useMemo(() => {
     let result = [...accounts];
+    if (grouping.activeGroupId) {
+      result = grouping.filterAccountsByGroup(result);
+    }
     const query = searchQuery.trim().toLowerCase();
 
     if (query) {
@@ -529,7 +571,7 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
 
     result.sort(compareAccountsBySort);
     return result;
-  }, [accounts, compareAccountsBySort, filterTypes, isAbnormalAccount, normalizeTag, searchQuery, tagFilter]);
+  }, [accounts, grouping.activeGroupId, grouping.filterAccountsByGroup, compareAccountsBySort, filterTypes, isAbnormalAccount, normalizeTag, searchQuery, tagFilter]);
 
   const filteredIds = useMemo(() => filteredAccounts.map((account) => account.id), [filteredAccounts]);
   const exportSelectionCount = getScopedSelectedCount(filteredIds);
@@ -598,6 +640,22 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
         typeof usage.usedPercent === 'number' && Number.isFinite(usage.usedPercent)
           ? Math.max(0, Math.min(100, Math.round(usage.usedPercent)))
           : null;
+
+      if (usage.usageModel === 'credits') {
+        const limit = usage.creditsUnlimited
+          ? t('common.shared.quota.unlimited') : formatNumber(usage.creditsLimit);
+        const known = usage.creditsUsed != null;
+        return {
+          percentage, percentageText: usage.creditsUnlimited ? t('common.shared.quota.unlimited') : percentage == null ? '--' : `${percentage}%`,
+          quotaClass: computeQuotaClass(percentage),
+          costText: `${t('common.shared.columns.credits')}: ${formatNumber(usage.creditsUsed)} / ${limit}`,
+          statusText: !known ? t('trae.quota.statusUnknown') : usage.usageExhausted
+            ? t('trae.quota.statusExhaustedFree') : t('trae.quota.statusSynced'),
+          statusTone: !known ? 'unknown' : usage.usageExhausted ? 'warning' : 'normal',
+          resetText: usage.resetAt ? t('trae.quota.resetAt', { date: formatTraeResetAt(usage.resetAt) }) : t('trae.quota.resetUnknown'),
+          bonusText: '', packageText: '', payAsYouGoText: '',
+        };
+      }
 
       const isFreePlan = (usage.identityStr ?? account.plan_type ?? '')
         .trim()
@@ -838,13 +896,48 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
     [t],
   );
 
+  const isCnAccount = useCallback(
+    (account: TraeAccount) =>
+      platformId === 'trae_cn' ||
+      platformId === 'trae_solo_cn' ||
+      isTraeCnAccountPlatform(account),
+    [platformId],
+  );
+
+  const formatTraeCreditDateTime = useCallback((timeMs: number | null) => {
+    if (timeMs == null || !Number.isFinite(timeMs)) return '';
+    return formatTraeResetAt(Math.floor(timeMs / 1000));
+  }, []);
+
+  // CN 积分账号按 CodeBuddy CN 的积分分组组件渲染；CN 遗留 fast_request/unknown 及国际站沿用紧凑配额卡
+  const renderAccountQuota = useCallback(
+    (account: TraeAccount, variant: 'card' | 'table') => {
+      if (isCnAccount(account) && getTraeUsage(account).usageModel === 'credits') {
+        return (
+          <CodeBuddyQuotaCategoryList
+            groups={getTraeCreditCategoryGroups(
+              account,
+              t as (key: string, defaultValue?: string) => string,
+            )}
+            formatNumber={formatNumber}
+            formatDateTime={formatTraeCreditDateTime}
+          />
+        );
+      }
+      if (!hasTraeQuotaData(account)) {
+        return <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>;
+      }
+      return renderCompactQuota(resolveQuotaSummary(account), variant);
+    },
+    [formatTraeCreditDateTime, isCnAccount, renderCompactQuota, resolveQuotaSummary, t],
+  );
+
   const renderGridCards = useCallback(
     (items: TraeAccount[], groupKey?: string) =>
       items.map((account) => {
         const displayName = resolveDisplayName(account);
         const displayEmail = resolveDisplayEmail(account);
         const showDisplayEmail = displayEmail !== 'unknown' && displayEmail !== displayName;
-        const quota = resolveQuotaSummary(account);
         const planLabel = resolvePlanLabel(account);
         const planClass = getTraePlanBadgeClass(planLabel);
         const accountTags = (account.tags || []).map((tag) => tag.trim()).filter(Boolean);
@@ -857,7 +950,6 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
         const signedInWithText = resolveSignedInWithText(account);
         const userIdText = account.user_id || '--';
         const quotaError = account.quota_query_last_error?.trim();
-        const hasQuotaData = hasTraeQuotaData(account);
 
         return (
           <div
@@ -919,15 +1011,11 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
             )}
 
             <div className="ghcp-quota-section">
-              {hasQuotaData ? (
-                renderCompactQuota(quota, 'card')
-              ) : (
-                <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
-              )}
+              {renderAccountQuota(account, 'card')}
             </div>
 
             <div className="card-footer">
-              <span className="card-date">{formatDate(account.created_at)}</span>
+              <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDate} />
               <div className="card-actions">
                 <button
                   className="card-action-btn success"
@@ -991,12 +1079,11 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
       maskAccountText,
       openTagModal,
       refreshing,
-      renderCompactQuota,
+      renderAccountQuota,
       resolveDisplayName,
       resolveDisplayEmail,
       resolveSignedInWithText,
       resolvePlanLabel,
-      resolveQuotaSummary,
       resolveSingleExportBaseName,
       selected,
       t,
@@ -1010,7 +1097,6 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
         const displayName = resolveDisplayName(account);
         const displayEmail = resolveDisplayEmail(account);
         const showDisplayEmail = displayEmail !== 'unknown' && displayEmail !== displayName;
-        const quota = resolveQuotaSummary(account);
         const planLabel = resolvePlanLabel(account);
         const planClass = getTraePlanBadgeClass(planLabel);
         const accountTags = (account.tags || []).map((tag) => tag.trim()).filter(Boolean);
@@ -1022,7 +1108,6 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
         const signedInWithText = resolveSignedInWithText(account);
         const userIdText = account.user_id || '--';
         const quotaError = account.quota_query_last_error?.trim();
-        const hasQuotaData = hasTraeQuotaData(account);
 
         return (
           <tr key={groupKey ? `${groupKey}-${account.id}` : account.id} className={isCurrent ? 'current' : ''}>
@@ -1086,13 +1171,9 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
               </div>
             </td>
             <td>
-              {hasQuotaData ? (
-                renderCompactQuota(quota, 'table')
-              ) : (
-                <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
-              )}
+              {renderAccountQuota(account, 'table')}
             </td>
-            <td>{formatDate(account.created_at)}</td>
+            <td>{account.last_used > 0 ? formatDate(account.last_used) : '—'}</td>
             <td className="sticky-action-cell table-action-cell">
               <div className="action-buttons">
                 <button
@@ -1157,12 +1238,11 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
       maskAccountText,
       openTagModal,
       refreshing,
-      renderCompactQuota,
+      renderAccountQuota,
       resolveDisplayName,
       resolveDisplayEmail,
       resolveSignedInWithText,
       resolvePlanLabel,
-      resolveQuotaSummary,
       resolveSingleExportBaseName,
       selected,
       t,
@@ -1400,6 +1480,17 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
               >
                 <Plus size={14} />
               </button>
+              {isCnPlatform && (
+                <button
+                  className="btn btn-secondary icon-only"
+                  onClick={() => setShowCheckinModal(true)}
+                  disabled={accounts.length === 0}
+                  title={t('trae.checkin.modalTitle', '每日签到')}
+                  aria-label={t('trae.checkin.modalTitle', '每日签到')}
+                >
+                  <CalendarCheck size={14} />
+                </button>
+              )}
               <button
                 className="btn btn-secondary icon-only"
                 onClick={handleRefreshAll}
@@ -1455,13 +1546,16 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
             </div>
           </div>
 
-          {filteredAccounts.length > 0 && (
+          {(accounts.length > 0 || grouping.groups.length > 0) && (
             <AccountSelectionToolbar
               selectedCount={selected.size}
               allSelected={isAllPaginatedSelected}
               disabled={paginatedIds.length === 0}
               onToggleSelectAll={() => toggleSelectAll(paginatedIds)}
               onClearSelection={() => toggleSelectAll(Array.from(selected))}
+              grouping={grouping}
+              accounts={accounts}
+              selectedIds={Array.from(selected)}
               actions={(
                 <button
                   className="btn btn-danger icon-only"
@@ -1957,6 +2051,17 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
             onClose={() => setShowTagModal(null)}
             onSave={handleSaveTags}
           />
+
+          {isCnPlatform && showCheckinModal && (
+            <TraeCheckinModal
+              accounts={accounts}
+              platformLabel={platformConfig.platformKey}
+              onClose={() => setShowCheckinModal(false)}
+              onCheckinComplete={() => {
+                void store.fetchAccounts();
+              }}
+            />
+          )}
         </>
       )}
 

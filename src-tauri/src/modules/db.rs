@@ -69,7 +69,7 @@ pub fn inject_token_to_path(
     )
 }
 
-/// 推导账号的 is_gcp_tos 属性（优先使用 token 中的显式字段，若缺失则通过配额层级做静态推断兜底）
+/// 推导账号的 is_gcp_tos 属性（优先使用 token 中的显式字段，若缺失则通过配额层级返回的 is_gcp_tos 判定）
 pub fn resolve_account_is_gcp_tos(account: &Account) -> Option<bool> {
     if let Some(is_gcp_tos) = account.token.is_gcp_tos {
         return Some(is_gcp_tos);
@@ -78,33 +78,25 @@ pub fn resolve_account_is_gcp_tos(account: &Account) -> Option<bool> {
         if let Some(is_gcp_tos) = quota.is_gcp_tos {
             return Some(is_gcp_tos);
         }
-        if quota.tier_id.as_deref() == Some("standard-tier")
-            || quota.subscription_tier.as_deref() == Some("standard-tier")
-        {
-            return Some(true);
-        }
     }
     None
 }
 
-/// 推导账号的 project_id 属性（优先 token，其次 quota，若属于 GCP ToS 账号则兜底为 "aicode-consumers"）
+/// 推导账号的 project_id 属性（优先 token，其次 quota；无合法项目则返回 None，严格过滤无效的 aicode-consumers）
 pub fn resolve_account_project_id(account: &Account) -> Option<String> {
     if let Some(ref project_id) = account.token.project_id {
         let trimmed = project_id.trim();
-        if !trimmed.is_empty() {
+        if !trimmed.is_empty() && trimmed != "aicode-consumers" {
             return Some(trimmed.to_string());
         }
     }
     if let Some(ref quota) = account.quota {
         if let Some(ref project_id) = quota.project_id {
             let trimmed = project_id.trim();
-            if !trimmed.is_empty() {
+            if !trimmed.is_empty() && trimmed != "aicode-consumers" {
                 return Some(trimmed.to_string());
             }
         }
-    }
-    if resolve_account_is_gcp_tos(account) == Some(true) {
-        return Some("aicode-consumers".to_string());
     }
     None
 }
@@ -236,20 +228,37 @@ fn inject_unified_oauth_token(
 }
 
 fn inject_user_status(conn: &Connection, email: &str) -> Result<(), String> {
-    // 检查是否已存在 userStatus；如果已存在完整配置，绝不覆盖，避免抹掉已缓存的模型与特性
-    let existing_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM ItemTable WHERE key = 'antigravityUnifiedStateSync.userStatus'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
+    const USER_STATUS_KEY: &str = "antigravityUnifiedStateSync.userStatus";
 
-    if existing_count > 0 {
+    // 检查是否已存在 userStatus；如果已存在且属于同一个账号，绝不覆盖，避免抹掉已缓存的模型与特性
+    let existing: Option<Vec<u8>> = conn
+        .query_row(
+            "SELECT CAST(value AS BLOB) FROM ItemTable WHERE key = ?",
+            [USER_STATUS_KEY],
+            |row| row.get::<_, Option<Vec<u8>>>(0),
+        )
+        .optional()
+        .map_err(|error| format!("读取 UserStatus 失败: {error}"))?
+        .flatten();
+
+    if let Some(existing) = existing {
+        let existing_email = general_purpose::STANDARD
+            .decode(existing.as_slice())
+            .ok()
+            .and_then(|topic| protobuf::extract_email_from_unified_user_status(&topic));
+
+        if existing_email
+            .as_deref()
+            .is_none_or(|previous| previous.eq_ignore_ascii_case(email))
+        {
+            crate::modules::logger::log_info(
+                "antigravityUnifiedStateSync.userStatus 保留现有缓存，由 Language Server 动态同步",
+            );
+            return Ok(());
+        }
         crate::modules::logger::log_info(
-            "antigravityUnifiedStateSync.userStatus 已存在，保留完整配置由 Language Server 动态同步",
+            "antigravityUnifiedStateSync.userStatus 属于上一个账号，按新账号重建",
         );
-        return Ok(());
     }
 
     let payload = protobuf::create_minimal_user_status_payload(email);
@@ -257,7 +266,7 @@ fn inject_user_status(conn: &Connection, email: &str) -> Result<(), String> {
     let topic_b64 = general_purpose::STANDARD.encode(topic);
     conn.execute(
         "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
-        ["antigravityUnifiedStateSync.userStatus", &topic_b64],
+        [USER_STATUS_KEY, &topic_b64],
     )
     .map_err(|e| format!("写入 UserStatus 失败: {}", e))?;
     Ok(())
@@ -323,6 +332,45 @@ mod tests {
     }
 
     #[test]
+    fn test_inject_user_status_replaces_state_from_previous_account() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE ItemTable(key TEXT PRIMARY KEY, value BLOB);")
+            .unwrap();
+
+        inject_user_status(&conn, "first@example.com").unwrap();
+        assert_eq!(
+            read_user_status_email(&conn).as_deref(),
+            Some("first@example.com")
+        );
+
+        // 同一账号重复注入：保留已缓存的完整配置
+        inject_user_status(&conn, "first@example.com").unwrap();
+        assert_eq!(
+            read_user_status_email(&conn).as_deref(),
+            Some("first@example.com")
+        );
+
+        // IDE/Cockpit databases can store the base64 as TEXT or BLOB.
+        inject_user_status(&conn, "second@example.com").unwrap();
+        assert_eq!(read_user_status_email(&conn).as_deref(), Some("second@example.com"));
+        conn.execute_batch("UPDATE ItemTable SET value = CAST(value AS BLOB);").unwrap();
+        inject_user_status(&conn, "third@example.com").unwrap();
+        assert_eq!(read_user_status_email(&conn).as_deref(), Some("third@example.com"));
+    }
+
+    fn read_user_status_email(conn: &Connection) -> Option<String> {
+        let value: Vec<u8> = conn
+            .query_row(
+                "SELECT CAST(value AS BLOB) FROM ItemTable WHERE key = 'antigravityUnifiedStateSync.userStatus'",
+                [],
+                |row| row.get(0),
+            )
+            .ok()?;
+        let topic = general_purpose::STANDARD.decode(value.as_slice()).ok()?;
+        protobuf::extract_email_from_unified_user_status(&topic)
+    }
+
+    #[test]
     fn test_resolve_account_is_gcp_tos_from_token() {
         let acc_true = make_test_account(Some(true), None);
         assert_eq!(resolve_account_is_gcp_tos(&acc_true), Some(true));
@@ -341,12 +389,12 @@ mod tests {
         let mut quota_tier = QuotaData::new();
         quota_tier.tier_id = Some("standard-tier".to_string());
         let acc_tier = make_test_account(None, Some(quota_tier));
-        assert_eq!(resolve_account_is_gcp_tos(&acc_tier), Some(true));
+        assert_eq!(resolve_account_is_gcp_tos(&acc_tier), None);
 
         let mut quota_sub = QuotaData::new();
         quota_sub.subscription_tier = Some("standard-tier".to_string());
         let acc_sub = make_test_account(None, Some(quota_sub));
-        assert_eq!(resolve_account_is_gcp_tos(&acc_sub), Some(true));
+        assert_eq!(resolve_account_is_gcp_tos(&acc_sub), None);
 
         let mut quota_free = QuotaData::new();
         quota_free.tier_id = Some("free-tier".to_string());
@@ -373,14 +421,16 @@ mod tests {
             Some("quota-project".to_string())
         );
 
-        // 3. GCP ToS 账号自动兜底 aicode-consumers
-        let acc_tos = make_test_account(Some(true), None);
-        assert_eq!(
-            resolve_account_project_id(&acc_tos),
-            Some("aicode-consumers".to_string())
-        );
+        // 3. 过滤历史脏数据 aicode-consumers
+        let mut acc_dirty = make_test_account(Some(true), None);
+        acc_dirty.token.project_id = Some("aicode-consumers".to_string());
+        assert_eq!(resolve_account_project_id(&acc_dirty), None);
 
-        // 4. 普通非 GCP ToS 个人账号返回 None
+        // 4. GCP ToS 账号若无真实项目 ID 也返回 None，绝不凭空捏造假项目
+        let acc_tos = make_test_account(Some(true), None);
+        assert_eq!(resolve_account_project_id(&acc_tos), None);
+
+        // 5. 普通非 GCP ToS 个人账号返回 None
         let acc_personal = make_test_account(Some(false), None);
         assert_eq!(resolve_account_project_id(&acc_personal), None);
     }

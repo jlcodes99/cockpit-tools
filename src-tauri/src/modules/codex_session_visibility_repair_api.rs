@@ -52,6 +52,7 @@ fn acquire_session_visibility_repair_lock() -> Result<MutexGuard<'static, ()>, S
 pub enum CodexSessionVisibilityRepairMode {
     Quick,
     Deep,
+    History,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -134,7 +135,7 @@ pub struct CodexSessionVisibilityRepairInstanceList {
     pub instances: Vec<CodexSessionVisibilityRepairInstanceOption>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexSessionVisibilityRepairItem {
     pub instance_id: String,
@@ -153,9 +154,11 @@ pub struct CodexSessionVisibilityRepairItem {
     pub metadata_rebuild_failed: bool,
     pub backup_dir: Option<String>,
     pub running: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub history_projection_count: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexSessionVisibilityRepairSummary {
     pub instance_count: usize,
@@ -175,6 +178,11 @@ pub struct CodexSessionVisibilityRepairSummary {
     pub items: Vec<CodexSessionVisibilityRepairItem>,
     pub backup_dirs: Vec<String>,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub history_projection_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_project_recovery: Option<local_projects::Counts>,
+    pub local_project_recovery_deferred: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -189,16 +197,10 @@ struct CodexSyncInstance {
 struct RolloutProviderChange {
     relative_path: PathBuf,
     absolute_path: PathBuf,
-    updated_content: Option<RolloutProviderUpdate>,
     target_modified_at: Option<SystemTime>,
     source_modified_at: Option<SystemTime>,
     source_size: u64,
-}
-
-#[derive(Debug, Clone)]
-enum RolloutProviderUpdate {
-    FullContent(String),
-    FirstLine(String),
+    source_identity: RolloutTimestampIdentity,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -207,7 +209,6 @@ struct CodexSessionVisibilityRepairOptions {
     dry_run: bool,
     repair_rollout: bool,
     repair_referenced_rollouts: bool,
-    rewrite_all_session_meta: bool,
     sqlite_scope: SqliteRepairScope,
     repair_sqlite_timestamps: bool,
     collect_rollout_thread_facts: bool,
@@ -232,6 +233,7 @@ struct RepairTargetSelection {
     target_provider: Option<String>,
     session_ids: Option<HashSet<String>>,
     instance_ids: Option<HashSet<String>>,
+    prepare_desktop_projects: bool,
 }
 
 impl RepairTargetSelection {
@@ -260,6 +262,7 @@ impl RepairTargetSelection {
             .filter(|value| !value.is_empty())
             .collect::<HashSet<_>>();
         Ok(Self {
+            prepare_desktop_projects: false,
             target_provider,
             session_ids: if session_ids.is_empty() {
                 None
@@ -311,7 +314,6 @@ impl CodexSessionVisibilityRepairOptions {
             dry_run: false,
             repair_rollout: false,
             repair_referenced_rollouts: true,
-            rewrite_all_session_meta: matches!(mode, CodexSessionVisibilityRepairMode::Deep),
             sqlite_scope: SqliteRepairScope::OfficialStateDbs,
             repair_sqlite_timestamps: false,
             collect_rollout_thread_facts: false,
@@ -331,7 +333,6 @@ impl CodexSessionVisibilityRepairOptions {
             dry_run: false,
             repair_rollout: true,
             repair_referenced_rollouts: false,
-            rewrite_all_session_meta: true,
             sqlite_scope: SqliteRepairScope::AllSessionDbs,
             repair_sqlite_timestamps: false,
             collect_rollout_thread_facts: true,
@@ -349,6 +350,10 @@ impl CodexSessionVisibilityRepairOptions {
         match mode {
             CodexSessionVisibilityRepairMode::Quick => Self::official_state_db_only(mode),
             CodexSessionVisibilityRepairMode::Deep => Self::full_provider_migration(),
+            CodexSessionVisibilityRepairMode::History => Self {
+                repair_referenced_rollouts: false,
+                ..Self::official_state_db_only(mode)
+            },
         }
     }
 
@@ -404,6 +409,7 @@ struct SessionIndexReconcileResult {
 
 #[derive(Debug, Clone, Copy, Default)]
 struct RepairSingleInstanceResult {
+    changed_rollout_files: usize,
     updated_sqlite_rows: usize,
     updated_sqlite_timestamp_rows: usize,
     added_session_index_entries: usize,
@@ -474,6 +480,7 @@ pub fn repair_session_visibility_quick_for_instance(
     instance_id: &str,
     instance_name: &str,
     data_dir: &Path,
+    launch_desktop: bool,
 ) -> Result<CodexSessionVisibilityRepairSummary, String> {
     let _repair_guard = acquire_session_visibility_repair_lock()?;
     let started = std::time::Instant::now();
@@ -483,20 +490,25 @@ pub fn repair_session_visibility_quick_for_instance(
         instance_name,
         data_dir.display()
     ));
-    let result = repair_session_visibility_for_instances_with_options(
-        CodexSessionVisibilityRepairOptions::for_auto_repair_mode(
-            CodexSessionVisibilityAutoRepairMode::Current,
-        ),
-        None,
-        None,
-        RepairTargetSelection::default(),
-        vec![CodexSyncInstance {
-            id: instance_id.to_string(),
-            name: instance_name.to_string(),
-            data_dir: data_dir.to_path_buf(),
-            last_pid: None,
-        }],
-    );
+    let result = with_launch_visibility_budget(LAUNCH_VISIBILITY_REPAIR_BUDGET, || {
+        repair_session_visibility_for_instances_with_options(
+            CodexSessionVisibilityRepairOptions::for_auto_repair_mode(
+                CodexSessionVisibilityAutoRepairMode::Current,
+            ),
+            None,
+            None,
+            RepairTargetSelection {
+                prepare_desktop_projects: launch_desktop,
+                ..Default::default()
+            },
+            vec![CodexSyncInstance {
+                id: instance_id.to_string(),
+                name: instance_name.to_string(),
+                data_dir: data_dir.to_path_buf(),
+                last_pid: None,
+            }],
+        )
+    });
     match &result {
         Ok(summary) => modules::logger::log_info(&format!(
             "[Codex Session Visibility] launch-target quick repair finished: instance_id={}, mutated_instances={}, rollout_files={}, sqlite_rows={}, elapsed_ms={}",
@@ -581,6 +593,8 @@ pub fn repair_session_visibility_across_instances_with_target(
     dry_run: bool,
 ) -> Result<CodexSessionVisibilityRepairSummary, String> {
     let options = CodexSessionVisibilityRepairOptions::for_mode(mode).with_dry_run(dry_run);
+    let target_provider = (mode != CodexSessionVisibilityRepairMode::History)
+        .then_some(target_provider).flatten();
     let selection = RepairTargetSelection::from_inputs(target_provider, session_ids, instance_ids)?;
     repair_session_visibility_across_instances_with_options(
         options,
@@ -620,17 +634,25 @@ fn repair_session_visibility_across_instances_with_options(
     )
 }
 
-fn repair_session_visibility_for_instances_with_options(
+fn repair_provider_visibility_for_instances_with_options(
     options: CodexSessionVisibilityRepairOptions,
     run_id: Option<String>,
     progress_reporter: ProgressReporter<'_>,
     selection: RepairTargetSelection,
     instances: Vec<CodexSyncInstance>,
 ) -> Result<CodexSessionVisibilityRepairSummary, String> {
+    if options.mode == CodexSessionVisibilityRepairMode::History {
+        return repair_history_projections_for_instances(options, run_id, progress_reporter, selection, instances);
+    }
     if instances.is_empty() {
         return Err("未找到要修复的 Codex 实例".to_string());
     }
-    let process_entries = modules::process::collect_codex_process_entries();
+    let process_entries = if launch_visibility_budget().is_some() {
+        modules::process::collect_codex_launch_maintenance_process_entries()?
+    } else {
+        modules::process::collect_codex_process_entries()
+    };
+    check_launch_visibility_budget("process_snapshot")?;
     let mut items = Vec::with_capacity(instances.len());
     let mut backup_dirs = Vec::new();
     let mut mutated_instance_count = 0usize;
@@ -661,6 +683,7 @@ fn repair_session_visibility_for_instances_with_options(
     );
 
     for (index, instance) in instances.iter().enumerate() {
+        check_launch_visibility_budget("scan_instance")?;
         let current_instance = index + 1;
         report_repair_progress(
             progress_reporter,
@@ -804,6 +827,7 @@ fn repair_session_visibility_for_instances_with_options(
                 metadata_rebuild_failed: false,
                 backup_dir: None,
                 running,
+                history_projection_count: None,
             });
             continue;
         }
@@ -843,6 +867,7 @@ fn repair_session_visibility_for_instances_with_options(
                 metadata_rebuild_failed,
                 backup_dir: None,
                 running,
+                history_projection_count: None,
             });
             continue;
         }
@@ -899,16 +924,23 @@ fn repair_session_visibility_for_instances_with_options(
         let repaired = match repaired {
             Ok(value) => value,
             Err(error) => {
-                let restore_result = restore_instance_files_from_backup(
-                    &instance.data_dir,
-                    &backup_dir,
-                    sqlite_rows_to_update > 0
-                        || sqlite_timestamp_rows_to_update > 0
-                        || catalog_scan.total() > 0,
-                );
+                let restore_result = without_launch_visibility_budget(|| {
+                    restore_instance_files_from_backup(
+                        &instance.data_dir,
+                        &backup_dir,
+                        sqlite_rows_to_update > 0
+                            || sqlite_timestamp_rows_to_update > 0
+                            || catalog_scan.total() > 0,
+                    )
+                });
                 if let Err(restore_error) = restore_result {
+                    let code = if launch_visibility_budget().is_some() {
+                        format!("{LAUNCH_VISIBILITY_ROLLBACK_FAILED}: ")
+                    } else {
+                        String::new()
+                    };
                     return Err(format!(
-                        "修复实例历史会话可见性失败 ({}): {}；自动回滚也失败: {}；备份目录: {}",
+                        "{code}修复实例历史会话可见性失败 ({}): {}；自动回滚也失败: {}；备份目录: {}",
                         instance.name,
                         error,
                         restore_error,
@@ -924,9 +956,7 @@ fn repair_session_visibility_for_instances_with_options(
             }
         };
 
-        let applied_rollout_count = rollout_changes
-            .len()
-            .saturating_sub(repaired.skipped_rollout_files);
+        let applied_rollout_count = repaired.changed_rollout_files;
         let instance_mutated = applied_rollout_count > 0
             || repaired.updated_sqlite_rows > 0
             || repaired.updated_sqlite_timestamp_rows > 0
@@ -986,10 +1016,14 @@ fn repair_session_visibility_for_instances_with_options(
             metadata_rebuild_failed,
             backup_dir: Some(backup_dir_string),
             running,
+            history_projection_count: None,
         });
     }
 
-    if !options.dry_run {
+    // Backup retention is maintenance, not a precondition for launching a
+    // repaired instance. A large legacy backup tree must not delay this path.
+    if !options.dry_run && launch_visibility_budget().is_none()
+        && !instances.iter().any(|instance| local_projects::has_pending(&instance.data_dir)) {
         report_repair_progress(
             progress_reporter,
             &run_id,
@@ -1063,6 +1097,9 @@ fn repair_session_visibility_for_instances_with_options(
         items,
         backup_dirs,
         message,
+        history_projection_count: None,
+        local_project_recovery: None,
+        local_project_recovery_deferred: false,
     };
     report_repair_progress(
         progress_reporter,
@@ -1286,6 +1323,7 @@ fn repair_single_instance(
     options: CodexSessionVisibilityRepairOptions,
     selection: &RepairTargetSelection,
 ) -> Result<RepairSingleInstanceResult, String> {
+    check_launch_visibility_budget("before_write_instance")?;
     let placeholder_instance = CodexSyncInstance {
         id: String::new(),
         name: String::new(),
@@ -1324,6 +1362,7 @@ fn repair_single_instance_with_progress(
     instance_index: usize,
     total_instances: usize,
 ) -> Result<RepairSingleInstanceResult, String> {
+    check_launch_visibility_budget("before_write_instance")?;
     let rollout_facts = if options.collect_rollout_thread_facts {
         collect_rollout_thread_facts(data_dir, selection)?
     } else {
@@ -1356,8 +1395,10 @@ fn repair_single_instance_with_progress(
         CatalogRepairCounts::default()
     };
     let rollout_total = rollout_changes.len();
+    let mut changed_rollout_files = 0usize;
     let mut skipped_rollout_files = 0usize;
     for (rollout_index, change) in rollout_changes.iter().enumerate() {
+        check_launch_visibility_budget("write_rollout_timestamps")?;
         report_repair_progress(
             progress_reporter,
             run_id,
@@ -1376,10 +1417,14 @@ fn repair_single_instance_with_progress(
             rollout_total,
             Some(instance),
         );
-        if !rewrite_rollout_provider(change)? {
+        check_launch_visibility_budget("write_rollout_timestamps")?;
+        if normalize_rollout_timestamp(change)? {
+            changed_rollout_files += 1;
+        } else {
             skipped_rollout_files += 1;
         }
     }
+    check_launch_visibility_budget("finish_write_instance")?;
     let sqlite_timestamp_rows_updated = if update_sqlite_timestamps {
         report_repair_progress(
             progress_reporter,
@@ -1416,6 +1461,7 @@ fn repair_single_instance_with_progress(
         0
     };
     Ok(RepairSingleInstanceResult {
+        changed_rollout_files,
         updated_sqlite_rows: sqlite_rows_updated + catalog_repairs.updated_rows,
         updated_sqlite_timestamp_rows: sqlite_timestamp_rows_updated,
         added_session_index_entries: session_index_result.added_entries,
@@ -1507,7 +1553,7 @@ fn build_summary_message(
     };
 
     format!(
-        "已为 {} 个实例修复历史会话：校正 {} 个会话文件，更新 {} 条 SQLite 记录，校正 {} 条 SQLite 时间记录{}{}{}{}{}{}{}",
+        "已为 {} 个实例修复历史会话：校正 {} 个会话文件时间，更新 {} 条 SQLite 记录，校正 {} 条 SQLite 时间记录{}{}{}{}{}{}{}",
         mutated_instance_count,
         changed_rollout_file_count,
         updated_sqlite_row_count,
@@ -1578,7 +1624,7 @@ fn build_dry_run_summary_message(
     };
 
     format!(
-        "预览将为 {} 个实例修复历史会话：校正 {} 个会话文件，更新 {} 条 SQLite 记录，校正 {} 条 SQLite 时间记录{}{}{}{}{}",
+        "预览将为 {} 个实例修复历史会话：校正 {} 个会话文件时间，更新 {} 条 SQLite 记录，校正 {} 条 SQLite 时间记录{}{}{}{}{}",
         mutated_instance_count,
         changed_rollout_file_count,
         updated_sqlite_row_count,

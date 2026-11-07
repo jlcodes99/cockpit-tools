@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildCodexAccountWindowStatQueries,
+  estimateCodexWindowFullCostUsd,
   formatCodexCompactNumber,
   formatCodexWindowCostAmount,
   formatCodexWindowStatsText,
@@ -114,4 +115,34 @@ test("renders Sub2API window_stats fields and hides empty usage", () => {
     }),
     false,
   );
+});
+
+test("scales the window cost to a full quota window", () => {
+  const stats = {
+    requestCount: 21,
+    inputTokens: 300_000,
+    cachedInputTokens: 0,
+    outputTokens: 7_600,
+    totalTokens: 307_600,
+    estimatedCostUsd: 0.56,
+  };
+
+  // 百分比是「剩余可用比例」：剩余 96% 即已消耗 4%，$0.56 / 4% ≈ $14.00。
+  const estimate = estimateCodexWindowFullCostUsd(stats, 96);
+  assert.ok(estimate != null && Math.abs(estimate - 14) < 1e-9);
+  assert.equal(formatCodexWindowCostAmount(estimate as number), "14.00");
+
+  // 剩余 99%（已消耗 1%）时按同一口径放大。
+  const thinEstimate = estimateCodexWindowFullCostUsd(stats, 99);
+  assert.ok(thinEstimate != null && Math.abs(thinEstimate - 56) < 1e-9);
+  // 额度已用尽：满额价值就是累计费用本身。
+  assert.equal(estimateCodexWindowFullCostUsd(stats, 0), 0.56);
+
+  // 还没消耗、缺百分比、没有费用时不折算，调用方据此隐藏这一项。
+  assert.equal(estimateCodexWindowFullCostUsd(stats, 100), null);
+  assert.equal(estimateCodexWindowFullCostUsd(stats, 99.5), null);
+  assert.equal(estimateCodexWindowFullCostUsd(stats, null), null);
+  assert.equal(estimateCodexWindowFullCostUsd(stats, undefined), null);
+  assert.equal(estimateCodexWindowFullCostUsd({ estimatedCostUsd: 0 }, 96), null);
+  assert.equal(estimateCodexWindowFullCostUsd(null, 96), null);
 });

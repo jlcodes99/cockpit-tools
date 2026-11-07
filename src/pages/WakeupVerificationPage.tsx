@@ -15,6 +15,7 @@ import {
   collectAntigravityQuotaModelKeys,
   filterAntigravityModelOptions,
   getAntigravityModelDisplayName,
+  getPreferredAntigravityWakeupModelId,
   type AntigravityModelOption,
 } from '../utils/antigravityModels';
 import {
@@ -27,6 +28,7 @@ import {
   type AccountFilterType,
 } from '../utils/accountFilters';
 import { getAntigravityTierBadge } from '../utils/account';
+import { formatGoogleValidationUrl } from '../utils/googleValidationUrl';
 import { getAccountGroups, type AccountGroup } from '../services/accountGroupService';
 import {
   isPrivacyModeEnabledByDefault,
@@ -379,22 +381,10 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
     [availableModels, quotaModelKeys],
   );
 
-  const preferredDefaultModelId = useMemo(() => {
-    if (filteredModels.length === 0) {
-      return '';
-    }
-    const flashModel = filteredModels.find((model) => {
-      const displayName = (
-        model.displayName ||
-        getAntigravityModelDisplayName(model.id) ||
-        model.id
-      )
-        .trim()
-        .toLowerCase();
-      return displayName.includes('flash');
-    });
-    return flashModel?.id || filteredModels[0].id;
-  }, [filteredModels]);
+  const preferredDefaultModelId = useMemo(
+    () => getPreferredAntigravityWakeupModelId(filteredModels),
+    [filteredModels],
+  );
 
   const modelNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -1155,19 +1145,20 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
 
   const renderValidationActions = (item: WakeupVerificationStateItem) => {
     if (!item.validationUrl) return null;
+    const formattedUrl = formatGoogleValidationUrl(item.validationUrl, item.accountEmail);
     return (
       <div className="verification-inline-actions">
         <button
           type="button"
           className="btn btn-secondary btn-sm"
-          onClick={() => openValidationUrl(item.validationUrl!)}
+          onClick={() => openValidationUrl(formattedUrl)}
         >
           {t('wakeup.errorUi.completeVerification')}
         </button>
         <button
           type="button"
           className="btn btn-secondary btn-sm"
-          onClick={() => copyText(item.validationUrl!)}
+          onClick={() => copyText(formattedUrl)}
         >
           {t('wakeup.errorUi.copyValidationUrl')}
         </button>

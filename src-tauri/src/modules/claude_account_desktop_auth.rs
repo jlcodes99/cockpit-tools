@@ -339,16 +339,36 @@ fn quit_claude_desktop_for_profile_write() -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 fn quit_claude_desktop_for_profile_write() -> Result<(), String> {
-    let target_dir = get_default_claude_desktop_user_data_dir()?
-        .to_string_lossy()
-        .to_string();
+    let target_dir = get_default_claude_desktop_user_data_dir()?;
+    let target_dir_arg = target_dir.to_string_lossy().to_string();
     logger::log_info("[Claude] closing configured Claude Desktop before profile write");
-    crate::modules::claude_instance::close_claude(&[target_dir], 8)?;
-    if is_claude_desktop_running() {
-        return Err("Claude is still running, cannot safely write login state. Please quit Claude and retry.".to_string());
+    crate::modules::claude_instance::close_claude(&[target_dir_arg], 8)?;
+
+    // 进程名单会过滤 Electron 子进程（持有 Network\Cookies 的正是它们），所以这里不能只信
+    // is_claude_desktop_running()，必须由登录态文件本身确认已经释放。
+    if wait_for_desktop_profile_release(&target_dir, 12, 250) && !is_claude_desktop_running() {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        return Ok(());
     }
-    std::thread::sleep(std::time::Duration::from_millis(300));
-    Ok(())
+
+    // Store / MSIX 版路径容易漏判，按包路径结束仍占用的 claude.exe 后再复检。
+    logger::log_warn("[Claude] 登录态文件仍被占用，按 Store 包路径结束 Claude Desktop 进程后重试");
+    match crate::modules::claude_instance::force_close_windows_claude_desktop_processes(8) {
+        Ok(count) => logger::log_info(&format!(
+            "[Claude] 已结束 Store 版 Claude Desktop 进程: count={}",
+            count
+        )),
+        Err(error) => logger::log_warn(&format!(
+            "[Claude] 结束 Store 版 Claude Desktop 进程失败: {}",
+            error
+        )),
+    }
+    if wait_for_desktop_profile_release(&target_dir, 16, 250) && !is_claude_desktop_running() {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        return Ok(());
+    }
+
+    Err("Claude 仍在运行或登录态文件被占用，无法安全写入登录态。请完全退出 Claude Desktop（含托盘与后台进程）后重试。".to_string())
 }
 
 #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
@@ -409,6 +429,7 @@ fn import_desktop_profile_snapshot(
     let now = now_ts_ms();
     let desktop_profile = desktop_profile_metadata_json(&metadata, &snapshot_dir, now);
     let mut account = ClaudeAccount {
+        last_switched_at: None,
         id: id.clone(),
         email: label,
         auth_mode: ClaudeAuthMode::DesktopOAuth,
@@ -521,12 +542,30 @@ pub fn sync_cli_account_from_config_dir_if_same(
     config_dir: &Path,
 ) -> Result<Option<ClaudeAccount>, String> {
     let existing = load_account(account_id).ok_or_else(|| "Claude 账号不存在".to_string())?;
-    if existing.auth_mode == ClaudeAuthMode::DesktopOAuth {
+    if !matches!(
+        existing.auth_mode,
+        ClaudeAuthMode::OAuth | ClaudeAuthMode::SetupToken
+    ) {
         return Ok(None);
     }
 
-    let credentials_raw = read_claude_code_credentials(config_dir);
+    let credentials_raw = read_claude_code_credentials_for_sync(config_dir)?;
     if credentials_oauth(&credentials_raw).is_none() {
+        return Ok(None);
+    }
+    let existing = load_account(account_id).ok_or_else(|| "Claude 账号不存在".to_string())?;
+    if !matches!(
+        existing.auth_mode,
+        ClaudeAuthMode::OAuth | ClaudeAuthMode::SetupToken
+    ) {
+        return Ok(None);
+    }
+    if !should_sync_cli_oauth_credentials(existing.claude_credentials_raw.as_ref(), &credentials_raw)
+    {
+        logger::log_info(&format!(
+            "[Claude CLI] 保留账号凭证：实例凭证为空、较旧或无法确认更新，account_id={}",
+            account_id
+        ));
         return Ok(None);
     }
     let config_path = get_claude_code_global_config_path(config_dir)?;
@@ -559,7 +598,14 @@ pub fn sync_cli_account_from_config_dir_if_same(
         account_id,
         config_dir.display()
     ));
-    save_account_and_index(incoming).map(Some)
+    update_oauth_account_if_current(account_id, &existing.claude_credentials_raw, |current| {
+        *current = derive_account_from_snapshots(
+            incoming.claude_credentials_raw.clone().unwrap_or(Value::Null),
+            incoming.claude_config_raw.clone().unwrap_or(Value::Null),
+            Some(current.clone()),
+        )?;
+        Ok(())
+    }).map(Some)
 }
 
 pub fn start_desktop_login(
@@ -653,7 +699,7 @@ pub fn open_desktop_verification_window(account_id: &str) -> Result<(), String> 
         .and_then(|value| normalize_non_empty(Some(value)))
         .map(PathBuf::from)
         .ok_or_else(|| "Claude 账号缺少 profile 快照".to_string())?;
-    ensure_desktop_profile_logged_in(&profile_dir)?;
+    ensure_desktop_verification_profile(&profile_dir)?;
     let status_file = profile_dir.join("claude_desktop_verification_status.json");
     let export_file = desktop_auth_export_path(&profile_dir);
     let _ = remove_path_if_exists(&status_file);
@@ -1499,145 +1545,6 @@ fn plan_from_capability_list(caps: &[String], is_enterprise: bool) -> Option<Str
     None
 }
 
-/// 是否企业版：对齐官方 oauth/profile 分支，看 organization.organization_type === "claude_enterprise"。
-fn is_enterprise_from_profile(profile: &Value) -> bool {
-    let Some(endpoints) = profile.get("endpoints") else {
-        return false;
-    };
-    let direct_paths: &[&[&str]] = &[
-        &["accountProfile", "organization", "organization_type"],
-        &["account", "organization", "organization_type"],
-        &[
-            "bootstrapAppStart",
-            "activeOrganization",
-            "organization_type",
-        ],
-        &[
-            "bootstrapAppStart",
-            "active_organization",
-            "organization_type",
-        ],
-        &["bootstrapAppStart", "organization", "organization_type"],
-    ];
-    for path in direct_paths {
-        if let Some(value) = read_string_path(endpoints, path) {
-            if value.eq_ignore_ascii_case("claude_enterprise") {
-                return true;
-            }
-        }
-    }
-    let memberships_paths: &[&[&str]] = &[
-        &["bootstrapAppStart", "account", "memberships"],
-        &["accountProfile", "account", "memberships"],
-        &["account", "account", "memberships"],
-        &["account", "memberships"],
-    ];
-    for path in memberships_paths {
-        let mut current = endpoints;
-        let mut ok = true;
-        for key in *path {
-            match current.get(*key) {
-                Some(next) => current = next,
-                None => {
-                    ok = false;
-                    break;
-                }
-            }
-        }
-        if !ok {
-            continue;
-        }
-        let Some(memberships) = current.as_array() else {
-            continue;
-        };
-        for membership in memberships {
-            if let Some(org_type) = membership
-                .get("organization")
-                .and_then(|org| read_string_path(org, &["organization_type"]))
-            {
-                if org_type.eq_ignore_ascii_case("claude_enterprise") {
-                    return true;
-                }
-            }
-        }
-    }
-    false
-}
-
-fn infer_desktop_plan_from_capabilities(profile: &Value) -> Option<String> {
-    let endpoints = profile.get("endpoints")?;
-    let is_enterprise = is_enterprise_from_profile(profile);
-
-    // 1) accountProfile.organization.capabilities
-    let direct_paths: &[&[&str]] = &[
-        &["accountProfile", "organization", "capabilities"],
-        &["account", "organization", "capabilities"],
-        &["bootstrapAppStart", "activeOrganization", "capabilities"],
-        &["bootstrapAppStart", "active_organization", "capabilities"],
-        &["bootstrapAppStart", "organization", "capabilities"],
-    ];
-    for path in direct_paths {
-        let mut current = endpoints;
-        let mut ok = true;
-        for key in *path {
-            match current.get(*key) {
-                Some(next) => current = next,
-                None => {
-                    ok = false;
-                    break;
-                }
-            }
-        }
-        if ok {
-            let caps = capability_strings(Some(current));
-            if let Some(plan) = plan_from_capability_list(&caps, is_enterprise) {
-                return Some(plan);
-            }
-        }
-    }
-
-    // 2) bootstrapAppStart.account.memberships[*].organization.capabilities
-    let memberships_paths: &[&[&str]] = &[
-        &["bootstrapAppStart", "account", "memberships"],
-        &["accountProfile", "account", "memberships"],
-        &["account", "account", "memberships"],
-        &["account", "memberships"],
-    ];
-    for path in memberships_paths {
-        let mut current = endpoints;
-        let mut ok = true;
-        for key in *path {
-            match current.get(*key) {
-                Some(next) => current = next,
-                None => {
-                    ok = false;
-                    break;
-                }
-            }
-        }
-        if !ok {
-            continue;
-        }
-        let Some(memberships) = current.as_array() else {
-            continue;
-        };
-        let mut all_caps: Vec<String> = Vec::new();
-        for membership in memberships {
-            let caps = capability_strings(
-                membership
-                    .get("organization")
-                    .and_then(|org| org.get("capabilities")),
-            );
-            all_caps.extend(caps);
-        }
-        if let Some(plan) = plan_from_capability_list(&all_caps, is_enterprise) {
-            return Some(plan);
-        }
-    }
-
-    None
-}
-
 fn is_desktop_plan_placeholder(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
@@ -1786,6 +1693,10 @@ fn slim_organization_object(org: &Value) -> Value {
         "organization_type",
         "rate_limit_tier",
         "capabilities",
+        "plan_display_name",
+        "planDisplayName",
+        "paidAccountTier",
+        "subscription_type",
     ] {
         if let Some(v) = obj.get(key) {
             slim.insert(key.to_string(), v.clone());
@@ -1811,6 +1722,9 @@ fn slim_account_object(value: &Value) -> Option<Value> {
         "uuid",
         "full_name",
         "display_name",
+        "paidAccountTier",
+        "planDisplayName",
+        "plan_display_name",
     ] {
         if let Some(v) = obj.get(key) {
             slim.insert(key.to_string(), v.clone());
@@ -1833,10 +1747,16 @@ fn slim_account_profile_payload(value: &Value) -> Option<Value> {
         "uuid",
         "full_name",
         "display_name",
+        "paidAccountTier",
+        "planDisplayName",
+        "plan_display_name",
     ] {
         if let Some(v) = obj.get(key) {
             slim.insert(key.to_string(), v.clone());
         }
+    }
+    if let Some(memberships) = obj.get("memberships").and_then(Value::as_array) {
+        slim.insert("memberships".to_string(), Value::Array(memberships.iter().map(slim_membership_entry).collect()));
     }
     if let Some(org) = obj.get("organization") {
         slim.insert("organization".to_string(), slim_organization_object(org));
@@ -1853,6 +1773,9 @@ fn slim_account_profile_payload(value: &Value) -> Option<Value> {
 fn slim_bootstrap_payload(value: &Value) -> Option<Value> {
     let obj = value.as_object()?;
     let mut slim = serde_json::Map::new();
+    for key in ["paidAccountTier", "planDisplayName", "plan_display_name"] {
+        if let Some(value) = obj.get(key) { slim.insert(key.to_string(), value.clone()); }
+    }
     for org_key in ["activeOrganization", "active_organization", "organization"] {
         if let Some(org) = obj.get(org_key) {
             slim.insert(org_key.to_string(), slim_organization_object(org));
@@ -1873,7 +1796,7 @@ fn slim_bootstrap_payload(value: &Value) -> Option<Value> {
 /// 生成可安全写入 claude_usage_raw / 导出的 webProfile 瘦身副本。
 fn slim_web_profile_for_storage(profile: &Value) -> Value {
     let mut slim = serde_json::Map::new();
-    for key in ["version", "fetchContext", "fetchedAt"] {
+    for key in ["version", "fetchContext", "fetchedAt", "lastActiveOrg"] {
         if let Some(v) = profile.get(key) {
             slim.insert(key.to_string(), v.clone());
         }
@@ -2336,154 +2259,11 @@ fn desktop_web_profile_summary(profile: &Value) -> Value {
         ],
     )
     .or_else(|| find_string_by_key(profile, &["account_uuid", "accountUuid"]));
-    let organization_uuid = first_string_path_candidates(
-        Some(profile),
-        &[
-            &["endpoints", "accountProfile", "organization", "uuid"],
-            &["endpoints", "account", "organization", "uuid"],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "activeOrganization",
-                "uuid",
-            ],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "active_organization",
-                "uuid",
-            ],
-            &["endpoints", "bootstrapAppStart", "organization", "uuid"],
-        ],
-    )
-    .or_else(|| find_string_by_key(profile, &["organization_uuid", "organizationUuid"]));
-    let organization_name = first_string_path_candidates(
-        Some(profile),
-        &[
-            &["endpoints", "accountProfile", "organization", "name"],
-            &[
-                "endpoints",
-                "accountProfile",
-                "organization",
-                "display_name",
-            ],
-            &["endpoints", "account", "organization", "name"],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "activeOrganization",
-                "name",
-            ],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "active_organization",
-                "name",
-            ],
-            &["endpoints", "bootstrapAppStart", "organization", "name"],
-        ],
-    )
-    .or_else(|| find_string_by_key(profile, &["organization_name", "organizationName"]));
-    let raw_plan = first_string_path_candidates(
-        Some(profile),
-        &[
-            &["endpoints", "subscriptionDetails", "plan_type"],
-            &["endpoints", "subscriptionDetails", "planType"],
-            &["endpoints", "subscriptionDetails", "plan"],
-            &["endpoints", "subscriptionDetails", "tier"],
-            &["endpoints", "subscriptionDetails", "subscription_type"],
-            &["endpoints", "subscriptionDetails", "subscriptionType"],
-            &[
-                "endpoints",
-                "subscriptionDetails",
-                "subscription",
-                "plan_type",
-            ],
-            &[
-                "endpoints",
-                "subscriptionDetails",
-                "subscription",
-                "planType",
-            ],
-            &["endpoints", "subscriptionDetails", "subscription", "plan"],
-            &["endpoints", "subscriptionDetails", "subscription", "tier"],
-            &["endpoints", "organizationUsage", "plan_type"],
-            &["endpoints", "organizationUsage", "planType"],
-            &["endpoints", "organizationUsage", "subscription_type"],
-            &["endpoints", "organizationUsage", "subscriptionType"],
-            &[
-                "endpoints",
-                "accountProfile",
-                "organization",
-                "rate_limit_tier",
-            ],
-            &[
-                "endpoints",
-                "accountProfile",
-                "organization",
-                "organization_type",
-            ],
-            &[
-                "endpoints",
-                "accountProfile",
-                "organization",
-                "billing_type",
-            ],
-            &["endpoints", "account", "organization", "rate_limit_tier"],
-            &["endpoints", "account", "organization", "organization_type"],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "activeOrganization",
-                "rate_limit_tier",
-            ],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "activeOrganization",
-                "organization_type",
-            ],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "active_organization",
-                "rate_limit_tier",
-            ],
-            &[
-                "endpoints",
-                "bootstrapAppStart",
-                "active_organization",
-                "organization_type",
-            ],
-        ],
-    )
-    .or_else(|| {
-        find_string_by_key(
-            profile,
-            &[
-                "rate_limit_tier",
-                "rateLimitTier",
-                "subscription_type",
-                "subscriptionType",
-                "billing_type",
-                "billingType",
-                "organization_type",
-                "organizationType",
-                "plan_type",
-                "planType",
-                "plan_name",
-                "planName",
-                "subscription_tier",
-                "subscriptionTier",
-                "plan",
-                "tier",
-            ],
-        )
-    });
-    // 严格对齐官方：仅 capabilities 识别、OAuth profile organization_type 识别。
-    // 拿不到时返回 None，与官方 "没值则不显示" 一致。
-    let plan_type = infer_desktop_plan_from_capabilities(profile)
-        .or_else(|| normalize_desktop_plan_value(raw_plan.clone()));
+    let organization = desktop_plan_organization(profile);
+    let organization_uuid = read_string_path(profile, &["lastActiveOrg"])
+        .or_else(|| organization.and_then(|org| read_string_path(org, &["uuid"])));
+    let organization_name = organization.and_then(|org| read_string_path(org, &["name"]));
+    let (plan_type, raw_plan) = desktop_plan_from_profile(profile);
     json!({
         "fetchedAt": read_string_path(profile, &["fetchedAt"]),
         "email": email,
@@ -2932,25 +2712,31 @@ fn claude_code_keychain_account_name() -> String {
 }
 
 #[cfg(target_os = "macos")]
-fn read_claude_code_keychain_credentials(config_dir: &Path) -> Option<Value> {
+fn read_claude_code_keychain_credentials(config_dir: &Path) -> Result<Option<Value>, String> {
     let service = claude_code_keychain_service_name(config_dir);
     let account = claude_code_keychain_account_name();
-    let output = std::process::Command::new("security")
-        .args([
+    let output = crate::modules::process_timeout::output_with_timeout(
+        std::process::Command::new("security").args([
             "find-generic-password",
             "-a",
             account.as_str(),
             "-w",
             "-s",
             service.as_str(),
-        ])
-        .output()
-        .ok()?;
+        ]),
+        Duration::from_secs(3),
+    )
+    .map_err(|error| format!("读取 Claude Code Keychain 失败: {}", error))?;
+    if output.status.code() == Some(44) {
+        return Ok(None);
+    }
     if !output.status.success() {
-        return None;
+        return Err(format!("读取 Claude Code Keychain 失败: {}", output.status));
     }
     let text = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str(text.trim()).ok()
+    serde_json::from_str(text.trim())
+        .map(Some)
+        .map_err(|error| format!("解析 Claude Code Keychain 失败: {}", error))
 }
 
 #[cfg(target_os = "macos")]
@@ -2963,8 +2749,8 @@ fn write_claude_code_keychain_credentials(
     let content = serde_json::to_string(credentials)
         .map_err(|e| format!("序列化 Claude Code Keychain credentials 失败: {}", e))?;
     let hex_content = hex_encode(content.as_bytes());
-    let output = std::process::Command::new("security")
-        .args([
+    let output = crate::modules::process_timeout::output_with_timeout(
+        std::process::Command::new("security").args([
             "add-generic-password",
             "-U",
             "-a",
@@ -2973,9 +2759,10 @@ fn write_claude_code_keychain_credentials(
             service.as_str(),
             "-X",
             hex_content.as_str(),
-        ])
-        .output()
-        .map_err(|e| format!("调用 macOS Keychain 失败: {}", e))?;
+        ]),
+        Duration::from_secs(3),
+    )
+    .map_err(|e| format!("调用 macOS Keychain 失败: {}", e))?;
     if output.status.success() {
         return Ok(());
     }
@@ -2995,15 +2782,16 @@ fn write_claude_code_keychain_credentials(
 fn delete_claude_code_keychain_credentials(config_dir: &Path) {
     let service = claude_code_keychain_service_name(config_dir);
     let account = claude_code_keychain_account_name();
-    let _ = std::process::Command::new("security")
-        .args([
+    let _ = crate::modules::process_timeout::output_with_timeout(
+        std::process::Command::new("security").args([
             "delete-generic-password",
             "-a",
             account.as_str(),
             "-s",
             service.as_str(),
-        ])
-        .output();
+        ]),
+        Duration::from_secs(3),
+    );
 }
 
 fn read_plaintext_claude_code_credentials(config_dir: &Path) -> Option<Value> {
@@ -3014,7 +2802,7 @@ fn read_plaintext_claude_code_credentials(config_dir: &Path) -> Option<Value> {
 
 fn read_claude_code_credentials(config_dir: &Path) -> Value {
     #[cfg(target_os = "macos")]
-    if let Some(value) = read_claude_code_keychain_credentials(config_dir) {
+    if let Ok(Some(value)) = read_claude_code_keychain_credentials(config_dir) {
         return value;
     }
     read_plaintext_claude_code_credentials(config_dir).unwrap_or_else(|| json!({}))
@@ -3134,7 +2922,7 @@ pub fn inject_to_claude_config(account_id: &str, config_dir: Option<&Path>) -> R
         quit_claude_desktop_for_profile_write()?;
         let _backup_dir = backup_current_desktop_profile(&target_dir)?;
         restore_default_desktop_gateway_official_config()?;
-        restore_desktop_profile_snapshot(&snapshot_dir, &target_dir)?;
+        restore_desktop_profile_snapshot(&snapshot_dir, &target_dir, account.account_uuid.as_deref())?;
         restore_default_desktop_gateway_official_config()?;
 
         let mut updated = account.clone();
@@ -3154,9 +2942,10 @@ pub fn inject_to_claude_config(account_id: &str, config_dir: Option<&Path>) -> R
     clear_api_key_env_from_claude_code_settings(&config_dir_path)?;
     inject_oauth_account_to_claude_code(&account, config_dir)?;
 
-    let mut updated = account.clone();
-    updated.last_used = now_ts_ms();
-    save_account_and_index(updated)?;
+    update_oauth_account_if_current(account_id, &account.claude_credentials_raw, |current| {
+        current.last_used = now_ts_ms();
+        Ok(())
+    })?;
     Ok(())
 }
 
@@ -3258,7 +3047,7 @@ pub fn update_account_tags(account_id: &str, tags: Vec<String>) -> Result<Claude
             .filter(|tag| !tag.is_empty())
             .collect(),
     );
-    save_account_and_index(account)
+    save_account_and_index_locked(account)
 }
 
 pub fn update_account_plan(
@@ -3272,7 +3061,7 @@ pub fn update_account_plan(
     account.plan_type = plan_type
         .and_then(|value| normalize_non_empty(Some(value)))
         .map(|value| value.to_string());
-    save_account_and_index(account)
+    save_account_and_index_locked(account)
 }
 
 pub fn update_account_note(account_id: &str, note: Option<&str>) -> Result<ClaudeAccount, String> {
@@ -3283,7 +3072,7 @@ pub fn update_account_note(account_id: &str, note: Option<&str>) -> Result<Claud
     account.account_note = note
         .and_then(|value| normalize_non_empty(Some(value)))
         .map(|value| value.to_string());
-    save_account_and_index(account)
+    save_account_and_index_locked(account)
 }
 
 fn usage_to_quota(raw: &Value) -> ClaudeQuota {
@@ -3441,6 +3230,9 @@ async fn request_usage(access_token: &str) -> Result<Value, String> {
 }
 
 pub async fn refresh_account_quota(account_id: &str) -> Result<ClaudeAccount, String> {
+    let Some(_refresh_guard) = ClaudeQuotaRefreshGuard::acquire(account_id) else {
+        return load_account(account_id).ok_or_else(|| "Claude 账号不存在".to_string());
+    };
     let mut account = load_account(account_id).ok_or_else(|| "Claude 账号不存在".to_string())?;
     if matches!(
         account.auth_mode,
@@ -3540,8 +3332,19 @@ pub async fn refresh_account_quota(account_id: &str) -> Result<ClaudeAccount, St
     if token_is_expired(&credentials) {
         match refresh_oauth_credentials(&credentials).await {
             Ok(Some(refreshed)) => {
+                // Persist rotated credentials before the separate usage request can
+                // fail or time out, and update bound CLI instances off the async runtime.
+                account = update_oauth_account_if_current(
+                    account_id, &account.claude_credentials_raw, |current| {
+                        current.claude_credentials_raw = Some(refreshed.clone());
+                        Ok(())
+                    },
+                )?;
+                if account.claude_credentials_raw.as_ref() != Some(&refreshed) {
+                    return Ok(account);
+                }
                 credentials = refreshed;
-                account.claude_credentials_raw = Some(credentials.clone());
+                schedule_cli_oauth_credential_sync(&account.id);
             }
             Ok(None) => {}
             Err(error) => {
@@ -3551,7 +3354,7 @@ pub async fn refresh_account_quota(account_id: &str) -> Result<ClaudeAccount, St
                     timestamp: now_ts(),
                 });
                 account.usage_updated_at = Some(now_ts_ms());
-                return save_account_and_index(account);
+                return save_oauth_quota_result(&account);
             }
         }
     }
@@ -3563,7 +3366,7 @@ pub async fn refresh_account_quota(account_id: &str) -> Result<ClaudeAccount, St
             timestamp: now_ts(),
         });
         account.usage_updated_at = Some(now_ts_ms());
-        return save_account_and_index(account);
+        return save_oauth_quota_result(&account);
     };
 
     match request_usage(&access_token).await {
@@ -3588,7 +3391,9 @@ pub async fn refresh_account_quota(account_id: &str) -> Result<ClaudeAccount, St
             account.usage_updated_at = Some(now_ts_ms());
         }
     }
-    save_account_and_index(account)
+    let account = save_oauth_quota_result(&account)?;
+    schedule_cli_oauth_credential_sync(&account.id);
+    Ok(account)
 }
 
 pub async fn refresh_all_quotas() -> Result<Vec<(String, Result<ClaudeAccount, String>)>, String> {

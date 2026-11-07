@@ -1,0 +1,39 @@
+{
+  "version": "1.14.1",
+  "assetBaseUrl": "https://github.com/SagerNet/sing-box/releases/download/v1.14.1/",
+  "digestSource": "https://github.com/SagerNet/sing-box/releases/expanded_assets/v1.14.1",
+  "sourceUrl": "https://github.com/SagerNet/sing-box/tree/v1.14.1",
+  "distributionApproved": false,
+  "assets": {
+    "x86_64-apple-darwin": {
+      "file": "sing-box-1.14.1-darwin-amd64.tar.gz",
+      "sha256": "b34381b047106fe84895df14f7aaae06f3182130b728006944deb0d59d8590c3",
+      "size": 31462673
+    },
+    "aarch64-apple-darwin": {
+      "file": "sing-box-1.14.1-darwin-arm64.tar.gz",
+      "sha256": "b9024642ef7b4848252df5469b7f60ef3c18bb5e217a16a0934f0174f8ad11b4",
+      "size": 29151741
+    },
+    "x86_64-unknown-linux-gnu": {
+      "file": "sing-box-1.14.1-linux-amd64.tar.gz",
+      "sha256": "12cb2816b52febb356f6a885b740cc8758c3f30b8ae0ca8edba80f0d2d35343f",
+      "size": 31664335
+    },
+    "aarch64-unknown-linux-gnu": {
+      "file": "sing-box-1.14.1-linux-arm64.tar.gz",
+      "sha256": "6060b42fa84c5dcaeae1799af7f61b0f1ae4855d9d5ddc9e02baba17154b3ae2",
+      "size": 29086816
+    },
+    "x86_64-pc-windows-msvc": {
+      "file": "sing-box-1.14.1-windows-amd64.zip",
+      "sha256": "5197f16d492d93202dc623622149a6ed040f8eca263128f91d603f2b901baa89",
+      "size": 32841719
+    },
+    "aarch64-pc-windows-msvc": {
+      "file": "sing-box-1.14.1-windows-arm64.zip",
+      "sha256": "58852d744056b76d1da08ad57e0f93e86fff11df49ab26a026ea4af3da840980",
+      "size": 29407945
+    }
+  }
+}

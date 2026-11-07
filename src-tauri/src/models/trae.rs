@@ -50,10 +50,15 @@ pub struct TraeAccount {
 
     pub created_at: i64,
     pub last_used: i64,
+    /// Last successful credential switch; absent for historical/imported accounts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_switched_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraeAccountSummary {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_identity: Option<crate::modules::account_query_identity::QueryIdentity>,
     pub id: String,
     pub email: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -122,6 +127,7 @@ pub struct TraeImportPayload {
 impl TraeAccount {
     pub fn summary(&self) -> TraeAccountSummary {
         TraeAccountSummary {
+            query_identity: Some(crate::modules::trae_account::query_identity(self)),
             id: self.id.clone(),
             email: self.email.clone(),
             user_id: self.user_id.clone(),

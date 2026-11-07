@@ -52,6 +52,11 @@ function readLocal(): string | null {
   catch (error) { reportError(error); return null; }
 }
 
+/** Use only after hydration; an existing layout includes explicit empty selections. */
+export function hasSavedPlatformLayout(): boolean {
+  return layout(readLocal()) != null;
+}
+
 function writeLocal(value: string): void {
   try { localStorage.setItem(PLATFORM_LAYOUT_KEY, value); }
   catch (error) { reportError(error); }

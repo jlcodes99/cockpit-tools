@@ -164,7 +164,7 @@
 .codex-batch-import-progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #2563eb, #0ea5e9);
+  background: linear-gradient(90deg, var(--primary), color-mix(in srgb, var(--primary) 70%, white));
   transition: width 180ms ease;
 }
 
@@ -266,6 +266,7 @@
 }
 
 .codex-batch-import-check-toggle {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -277,8 +278,13 @@
 
 .codex-batch-import-check-toggle input {
   position: absolute;
+  top: 50%;
+  left: 0;
   width: 1px;
   height: 1px;
+  margin: 0;
+  padding: 0;
+  border: 0;
   opacity: 0;
   pointer-events: none;
 }
@@ -306,7 +312,7 @@
 }
 
 .codex-batch-import-check-toggle input:checked + .codex-batch-import-check-switch {
-  background: #2563eb;
+  background: var(--primary);
 }
 
 .codex-batch-import-check-toggle input:checked + .codex-batch-import-check-switch::after {
@@ -328,6 +334,7 @@
 }
 
 .codex-import-api-service-toggle {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -358,9 +365,15 @@
 }
 
 .codex-import-api-service-toggle input {
+  /* Keep the focus target inside the visible row in scrollable dialogs. */
   position: absolute;
+  top: 50%;
+  right: 12px;
   width: 1px;
   height: 1px;
+  margin: 0;
+  padding: 0;
+  border: 0;
   opacity: 0;
   pointer-events: none;
 }

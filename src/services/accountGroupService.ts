@@ -1,6 +1,6 @@
 /**
  * 账号分组服务
- * 数据通过 Tauri 命令持久化到磁盘 (~/.antigravity_cockpit/account_groups.json)
+ * 数据通过 Tauri 命令持久化到磁盘 (~/.cockpit_tools/account_groups.json)
  * 内存中维护一份缓存避免频繁 IO
  */
 
@@ -43,7 +43,7 @@ function cloneGroups(groups: AccountGroup[]): AccountGroup[] {
   }));
 }
 
-function parseGroups(raw: string): AccountGroup[] {
+export function parseAccountGroups(raw: string): AccountGroup[] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -88,7 +88,7 @@ function parseGroups(raw: string): AccountGroup[] {
 async function loadGroupsFromDisk(): Promise<AccountGroup[]> {
   try {
     const raw: string = await invoke('load_account_groups');
-    return parseGroups(raw);
+    return parseAccountGroups(raw);
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('[AccountGroups]')) {
       throw error;
@@ -190,16 +190,21 @@ export function addAccountsToGroup(groupId: string, accountIds: string[]): Promi
   return enqueue(() => assignAccountsToGroupInternal(groupId, accountIds));
 }
 
+export function setGroupAccounts(groupId: string, accountIds: string[]): Promise<AccountGroup | null> {
+  return enqueue(async () => {
+    const groups = await loadGroups();
+    const group = groups.find((g) => g.id === groupId);
+    if (!group) return null;
+    group.accountIds = Array.from(new Set(accountIds));
+    await saveGroups(groups);
+    return group;
+  });
+}
+
 async function assignAccountsToGroupInternal(groupId: string, accountIds: string[]): Promise<AccountGroup | null> {
   const groups = await loadGroups();
   const group = groups.find((g) => g.id === groupId);
   if (!group) return null;
-  const targetIds = new Set(accountIds);
-
-  for (const currentGroup of groups) {
-    if (currentGroup.id === groupId) continue;
-    currentGroup.accountIds = currentGroup.accountIds.filter((id) => !targetIds.has(id));
-  }
 
   const existing = new Set(group.accountIds);
   for (const id of accountIds) {
@@ -273,7 +278,29 @@ export function moveAccountsBetweenGroups(
   });
 }
 
+/** 手动重排分组顺序并持久化 */
+export function reorderGroups(orderedGroupIds: string[]): Promise<AccountGroup[]> {
+  return enqueue(async () => {
+    const groups = await loadGroups();
+    const groupMap = new Map(groups.map((g) => [g.id, g]));
+    const reordered: AccountGroup[] = [];
+    for (const id of orderedGroupIds) {
+      const g = groupMap.get(id);
+      if (g) {
+        reordered.push(g);
+        groupMap.delete(id);
+      }
+    }
+    for (const remaining of groupMap.values()) {
+      reordered.push(remaining);
+    }
+    await saveGroups(reordered);
+    return cloneGroups(reordered);
+  });
+}
+
 /** 使缓存失效，下次 getAccountGroups 时重新从磁盘读取 */
 export function invalidateCache(): void {
   cachedGroups = null;
 }
+

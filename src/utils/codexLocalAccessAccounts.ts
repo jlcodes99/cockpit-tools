@@ -1,11 +1,25 @@
 import {
   isCodexApiKeyAccount,
+  isCodexChatgptPlanAccount,
   isCodexAgentIdentityAccount,
   isCodexEffectiveFreePlan,
   isCodexPendingOAuthAccount,
   isCodexWebSessionAccount,
   type CodexAccount,
 } from '../types/codex.ts';
+import type { CodexLocalAccessImageGenerationPolicy } from '../types/codexLocalAccess';
+import { getCodexServiceEndpoint } from './chatgptPlanOverview';
+
+/** Plan grants cannot enable hosted image generation, even in a stale draft. */
+export function resolveCodexMemberImagePolicy(
+  account: CodexAccount,
+  configured?: CodexLocalAccessImageGenerationPolicy,
+  official = false,
+): CodexLocalAccessImageGenerationPolicy {
+  account = getCodexServiceEndpoint(account);
+  if (official || isCodexChatgptPlanAccount(account)) return 'disabled';
+  return configured ?? (isCodexApiKeyAccount(account) ? 'disabled' : 'inherit');
+}
 
 const CHAT_COMPLETIONS_PROVIDER_HOSTS = [
   "api.deepseek.com",
@@ -42,27 +56,16 @@ const CHAT_COMPLETIONS_PROVIDER_HOSTS = [
 ];
 
 export type CodexLocalAccessAccountIneligibleReason =
-  | "chat_completions_api_key"
-  | "deepseek_unsupported"
   | "free_restricted"
   | "pending_oauth"
   | "web_session_quota_only";
-
-function isDeepSeekApiServiceAccount(account: CodexAccount): boolean {
-  const providerId = (account.api_provider_id || "").trim().toLowerCase();
-  if (providerId === "deepseek") {
-    return true;
-  }
-  const baseUrl = (account.api_base_url || "").trim().toLowerCase();
-  return baseUrl.includes("api.deepseek.com");
-}
 
 export function isCodexChatCompletionsApiKeyAccount(account: CodexAccount): boolean {
   if (!isCodexApiKeyAccount(account)) {
     return false;
   }
   const wireApi = (account.api_wire_api || "").trim();
-  if (wireApi === "chat_completions") {
+  if (wireApi === "chat_completions" || wireApi === "anthropic") {
     return true;
   }
   if (wireApi === "responses") {
@@ -89,6 +92,7 @@ export function getCodexLocalAccessAccountIneligibleReason(
   account: CodexAccount,
   restrictFreeAccounts: boolean,
 ): CodexLocalAccessAccountIneligibleReason | null {
+  account = getCodexServiceEndpoint(account);
   // Pending / incomplete OAuth accounts cannot serve API traffic.
   if (isCodexPendingOAuthAccount(account)) {
     return "pending_oauth";
@@ -96,12 +100,6 @@ export function getCodexLocalAccessAccountIneligibleReason(
   // ChatGPT Web Session: quota view only, never join API service.
   if (isCodexWebSessionAccount(account)) {
     return "web_session_quota_only";
-  }
-  if (isCodexChatCompletionsApiKeyAccount(account)) {
-    return "chat_completions_api_key";
-  }
-  if (isDeepSeekApiServiceAccount(account)) {
-    return "deepseek_unsupported";
   }
   if (
     restrictFreeAccounts &&
@@ -149,6 +147,7 @@ export function filterCodexLocalAccessAccountIds(
   accountIds: string[],
   accounts: CodexAccount[],
   restrictFreeAccounts: boolean,
+  retainedPausedIds: readonly string[] = [],
 ): string[] {
   const accountById = new Map(accounts.map((account) => [account.id, account]));
   const seen = new Set<string>();
@@ -156,7 +155,8 @@ export function filterCodexLocalAccessAccountIds(
 
   for (const accountId of accountIds) {
     const account = accountById.get(accountId);
-    if (!account || !isCodexLocalAccessEligibleAccount(account, restrictFreeAccounts)) {
+    // Retaining a paused member is separate from admitting a new usable account.
+    if (!retainedPausedIds.includes(accountId) && (!account || !isCodexLocalAccessEligibleAccount(account, restrictFreeAccounts))) {
       continue;
     }
     if (!seen.has(accountId)) {
@@ -173,6 +173,7 @@ export function resolveCodexLocalAccessInitialAccountIds(
   accounts: CodexAccount[],
   restrictFreeAccounts: boolean,
   accountsLoaded: boolean,
+  retainedPausedIds: readonly string[] = [],
 ): string[] {
   if (!accountsLoaded) {
     return Array.from(new Set(accountIds));
@@ -181,6 +182,7 @@ export function resolveCodexLocalAccessInitialAccountIds(
     accountIds,
     accounts,
     restrictFreeAccounts,
+    retainedPausedIds,
   );
 }
 

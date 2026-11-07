@@ -173,22 +173,30 @@ pub async fn inject_qoder_account(app: AppHandle, account_id: String) -> Result<
         account_id
     ));
 
-    let account = qoder_account::load_account(&account_id)
-        .ok_or_else(|| format!("Qoder 账号不存在: {}", account_id))?;
+    let switch_id = account_id.clone();
+    let account = tauri::async_runtime::spawn_blocking(move || {
+        let account_id = switch_id;
+        let account = qoder_account::load_account(&account_id)
+            .ok_or_else(|| format!("Qoder 账号不存在: {}", account_id))?;
 
-    qoder_account::inject_to_qoder(&account_id)?;
-    crate::modules::provider_current_state::set_current_account_id(
-        "qoder",
-        Some(account_id.as_str()),
-    )?;
+        qoder_account::inject_to_qoder(&account_id)?;
+        crate::modules::provider_current_state::set_current_account_id(
+            "qoder",
+            Some(account_id.as_str()),
+        )?;
 
-    if let Err(err) = crate::modules::qoder_instance::update_default_settings(
-        Some(Some(account_id.clone())),
-        None,
-        Some(false),
-    ) {
-        logger::log_warn(&format!("更新 Qoder 默认实例绑定账号失败: {}", err));
-    }
+        if let Err(err) = crate::modules::qoder_instance::update_default_settings(
+            Some(Some(account_id.clone())),
+            None,
+            Some(false),
+        ) {
+            logger::log_warn(&format!("更新 Qoder 默认实例绑定账号失败: {}", err));
+        }
+
+        Ok::<_, String>(account)
+    })
+    .await
+    .map_err(|error| format!("QODER_SWITCH_WORKER_FAILED: {}", error))??;
 
     let launch_warning = match crate::commands::qoder_instance::qoder_start_instance(
         "__default__".to_string(),

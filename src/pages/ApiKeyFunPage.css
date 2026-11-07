@@ -164,6 +164,9 @@ html[data-theme="dark"] .apikey-fun-page {
 }
 
 .apikey-fun-page .apikey-fun-register-btn {
+  appearance: none;
+  font-family: inherit;
+  line-height: 1.4;
   border: 0;
   min-height: 40px;
   padding: 0 18px;
@@ -193,6 +196,13 @@ html[data-theme="dark"] .apikey-fun-page {
   transform: translateY(0);
 }
 
+.apikey-fun-page .apikey-fun-register-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 /* 仪表盘双栏布局 */
 .apikey-fun-dashboard-grid {
   display: grid;
@@ -200,6 +210,8 @@ html[data-theme="dark"] .apikey-fun-page {
   gap: 20px;
   align-items: start;
 }
+
+
 
 .apikey-fun-main-col {
   display: flex;

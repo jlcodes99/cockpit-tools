@@ -1,0 +1,3 @@
+The nested tools.apply_patch API specifically takes the patch STRING. A valid dispatcher input example is: text(await tools.apply_patch("*** Begin Patch\n*** Add File: outputs/example.txt\n+hello\n*** End Patch"));
+Do not call tools.apply_patch({input: "..."}). When apply_patch has no separate declaration in the native tools list, do not emit a stand-alone apply_patch or functions__apply_patch tool call.
+Use the Codex patch format: *** Begin Patch, then *** Add File: path / *** Update File: path / *** Delete File: path, then *** End Patch. Every content line for Add File starts with +; an Add File block has no +++ file header and no @@ hunk header. Update File uses @@ with context lines prefixed by a space, removed lines by -, and added lines by +.

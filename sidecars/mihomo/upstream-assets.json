@@ -1,0 +1,39 @@
+{
+  "version": "1.19.33",
+  "assetBaseUrl": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.33/",
+  "digestSource": "https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/v1.19.33",
+  "sourceUrl": "https://github.com/MetaCubeX/mihomo/tree/v1.19.33",
+  "distributionApproved": false,
+  "assets": {
+    "x86_64-apple-darwin": {
+      "file": "mihomo-darwin-amd64-v1-v1.19.33.gz",
+      "sha256": "61f979d6aae3deffe4e3895161349c3d9189149eef88c5aceb7c6d4a7270a78d",
+      "size": 22333945
+    },
+    "aarch64-apple-darwin": {
+      "file": "mihomo-darwin-arm64-v1.19.33.gz",
+      "sha256": "060b64b0f2c9a310831db0fe4adb2878de67bfa606c311813c1f13966aa504b6",
+      "size": 20784157
+    },
+    "x86_64-unknown-linux-gnu": {
+      "file": "mihomo-linux-amd64-v1-v1.19.33.gz",
+      "sha256": "8ec92e7b2fdc6b853ba00156bab7e4e965c8b0d843b8c4ac8ab98795f02ad524",
+      "size": 22893964
+    },
+    "aarch64-unknown-linux-gnu": {
+      "file": "mihomo-linux-arm64-v1.19.33.gz",
+      "sha256": "ba408b317080ee265c46cb923a50018c1b82cbd708551cdd46a1e3e307396187",
+      "size": 20824326
+    },
+    "x86_64-pc-windows-msvc": {
+      "file": "mihomo-windows-amd64-v1-v1.19.33.zip",
+      "sha256": "fb0b960eff568459502d4ebe53e9cca203053d86ec9024fe935f19615d74d9aa",
+      "size": 22543530
+    },
+    "aarch64-pc-windows-msvc": {
+      "file": "mihomo-windows-arm64-v1.19.33.zip",
+      "sha256": "a2a26869a14634c49f3fbcecc593b498ed8591fbdd7616b24475b3d60b148da3",
+      "size": 20212418
+    }
+  }
+}

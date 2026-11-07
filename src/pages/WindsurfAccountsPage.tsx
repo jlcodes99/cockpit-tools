@@ -25,6 +25,7 @@ import {
   Mail,
   BookOpen,
 } from 'lucide-react';
+import { AccountLastUsed } from '../components/AccountLastUsed';
 import { useWindsurfAccountStore } from '../stores/useWindsurfAccountStore';
 import * as windsurfService from '../services/windsurfService';
 import { TagEditModal } from '../components/TagEditModal';
@@ -33,6 +34,7 @@ import { ModalErrorMessage } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
+import { usePlatformAccountGroups } from '../hooks/usePlatformAccountGroups';
 import {
   getWindsurfCreditsSummary,
   getWindsurfOfficialUsageMode,
@@ -388,6 +390,8 @@ export function WindsurfAccountsPage() {
     currentAccountId,
     formatDate, normalizeTag,
   } = page;
+
+  const grouping = usePlatformAccountGroups('windsurf', () => toggleSelectAll(Array.from(selected)));
 
   useEffect(() => {
     if (!filterPersistenceEnabled) {
@@ -874,7 +878,7 @@ export function WindsurfAccountsPage() {
       const summary = resolveQuotaSummary(account);
       const items: WindsurfOfficialUsagePanelItem[] = [];
 
-      if (summary.dailyUsedPercent != null) {
+      if (!summary.hideDaily && summary.dailyUsedPercent != null) {
         const label = t('windsurf.usageSummary.dailyQuota', 'Daily quota usage');
         const value = formatQuotaUsagePercent(summary.dailyUsedPercent);
         const detail = summary.dailyResetAt
@@ -895,7 +899,7 @@ export function WindsurfAccountsPage() {
         });
       }
 
-      if (summary.weeklyUsedPercent != null) {
+      if (!summary.hideWeekly && summary.weeklyUsedPercent != null) {
         const label = t('windsurf.usageSummary.weeklyQuota', 'Weekly quota usage');
         const value = formatQuotaUsagePercent(summary.weeklyUsedPercent);
         const detail = summary.weeklyResetAt
@@ -984,6 +988,14 @@ export function WindsurfAccountsPage() {
       }
 
       const mode = resolveUsageMode(account);
+      if (mode === 'acu') {
+        const items = resolvePresentation(account).quotaItems.map(item => ({
+          key: item.key, label: item.label, value: item.valueText ?? '--', detail: '',
+          title: `${item.label}: ${item.valueText ?? '--'}`, progressPercent: item.progressPercent,
+          quotaClass: item.quotaClass, showProgress: item.showProgress,
+        }));
+        return { mode, headline: '', note: items.length ? '' : t('common.shared.quota.noData'), items, title: items.map(item => item.title).join(' | ') };
+      }
       if (mode === 'quota') {
         const items = buildQuotaDisplayItems(account);
         return {
@@ -1010,7 +1022,7 @@ export function WindsurfAccountsPage() {
         title: [headline, ...items.map((item) => item.title)].join(' | '),
       };
     },
-    [buildCreditsDisplayItems, buildQuotaDisplayItems, formatCreditValue, resolveCreditsSummary, resolveUsageMode, t],
+    [buildCreditsDisplayItems, buildQuotaDisplayItems, formatCreditValue, resolveCreditsSummary, resolveUsageMode, resolvePresentation, t],
   );
 
   // ─── Tier filter ────────────────────────────────────────────────────
@@ -1088,6 +1100,9 @@ export function WindsurfAccountsPage() {
 
   const filteredAccounts = useMemo(() => {
     let result = [...accounts];
+    if (grouping.activeGroupId) {
+      result = grouping.filterAccountsByGroup(result);
+    }
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter((account) => resolvePresentation(account).displayName.toLowerCase().includes(query));
@@ -1107,7 +1122,7 @@ export function WindsurfAccountsPage() {
     }
     result.sort(compareAccountsBySort);
     return result;
-  }, [accounts, compareAccountsBySort, filterTypes, isAbnormalAccount, normalizeTag, resolvePlanKey, resolvePresentation, searchQuery, tagFilter]);
+  }, [accounts, grouping.activeGroupId, grouping.filterAccountsByGroup, compareAccountsBySort, filterTypes, isAbnormalAccount, normalizeTag, resolvePlanKey, resolvePresentation, searchQuery, tagFilter]);
 
   const filteredIds = useMemo(() => filteredAccounts.map((account) => account.id), [filteredAccounts]);
   const exportSelectionCount = getScopedSelectedCount(filteredIds);
@@ -1224,7 +1239,7 @@ export function WindsurfAccountsPage() {
           {renderUsagePanel(usagePanel)}
           {renderPlanDetails(cycleDisplay)}
           <div className="card-footer">
-            <span className="card-date">{formatDate(account.created_at)}</span>
+            <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDate} />
             <div className="card-actions">
               <button className="card-action-btn success" onClick={() => handleInjectToVSCode?.(account.id)} disabled={!!injecting} title={t('windsurf.injectToVSCode', '切换到 Windsurf')}>
                 {injecting === account.id ? <RefreshCw size={14} className="loading-spinner" /> : <Play size={14} />}
@@ -1352,7 +1367,7 @@ export function WindsurfAccountsPage() {
           <MultiSelectFilterDropdown
             options={tierFilterOptions}
             selectedValues={filterTypes}
-            allLabel={`ALL (${tierCounts.all})`}
+            allLabel={t('common.shared.filter.all', '全部 ({{count}})', { count: tierCounts.all })}
             filterLabel={t('common.shared.filterLabel', '筛选')}
             clearLabel={t('accounts.clearFilter', '清空筛选')}
             emptyLabel={t('common.none', '暂无')}
@@ -1427,13 +1442,16 @@ export function WindsurfAccountsPage() {
         </div>
       </div>
 
-      {filteredAccounts.length > 0 && (
+      {(accounts.length > 0 || grouping.groups.length > 0) && (
         <AccountSelectionToolbar
           selectedCount={selected.size}
           allSelected={isAllPaginatedSelected}
           disabled={paginatedIds.length === 0}
           onToggleSelectAll={() => toggleSelectAll(paginatedIds)}
           onClearSelection={() => toggleSelectAll(Array.from(selected))}
+          grouping={grouping}
+          accounts={accounts}
+          selectedIds={Array.from(selected)}
           actions={(
             <button
               className="btn btn-danger icon-only"

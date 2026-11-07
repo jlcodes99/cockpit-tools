@@ -473,9 +473,18 @@ pub fn load_account(account_id: &str) -> Option<TraeAccount> {
 
 fn save_account_file(account: &TraeAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
-    let content = crate::modules::secure_account_storage::serialize_account_file("trae", account)?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
+    crate::modules::account_query_identity::invalidate_before_write(&get_accounts_index_path()?,&account.id,&query_identity(account))?;
+    crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "trae", account)
         .map_err(|e| format!("保存 Trae 账号失败: {}", e))
+}
+
+// Record credential-switch success separately from refresh activity.
+pub fn touch_last_used(account_id: &str) -> Result<(), String> {
+    let mut account = load_account(account_id)
+        .ok_or_else(|| format!("Trae account not found: {}", account_id))?;
+    account.last_switched_at = Some(now_ts());
+    save_account_file(&account)?;
+    Ok(())
 }
 
 fn delete_account_file(account_id: &str) -> Result<(), String> {
@@ -1393,6 +1402,7 @@ fn runtime_payload_matches_account_platform(
 }
 
 pub fn list_accounts() -> Vec<TraeAccount> {
+    schedule_identity_maintenance();
     let index = load_account_index();
     index
         .accounts
@@ -1402,6 +1412,7 @@ pub fn list_accounts() -> Vec<TraeAccount> {
 }
 
 pub fn list_accounts_checked() -> Result<Vec<TraeAccount>, String> {
+    schedule_identity_maintenance();
     let index = load_account_index_checked()?;
     Ok(index
         .accounts
@@ -1427,18 +1438,14 @@ pub fn upsert_account(payload: TraeImportPayload) -> Result<TraeAccount, String>
     let account_id = index
         .accounts
         .iter()
-        .filter_map(|summary| load_account(summary.id.as_str()))
-        .find(|account| {
-            if resolve_account_platform_kind(account) != incoming_platform {
-                return false;
-            }
-            account_matches_import_identity(
-                account,
+        .find(|summary| {
+            summary_matches_payload(
+                summary, incoming_platform,
                 normalized_user_id.as_deref(),
                 normalized_email.as_deref(),
             )
         })
-        .map(|account| account.id)
+        .map(|summary| summary.id.clone())
         .unwrap_or(generated_id);
 
     let existing = load_account(&account_id);
@@ -1446,6 +1453,7 @@ pub fn upsert_account(payload: TraeImportPayload) -> Result<TraeAccount, String>
     let created_at = existing.as_ref().map(|item| item.created_at).unwrap_or(now);
 
     let mut account = existing.unwrap_or(TraeAccount {
+        last_switched_at: None,
         id: account_id.clone(),
         email: normalize_email_from_payload(&payload),
         user_id: normalized_user_id,

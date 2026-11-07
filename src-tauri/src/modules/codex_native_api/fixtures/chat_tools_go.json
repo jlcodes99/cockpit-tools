@@ -1,0 +1,775 @@
+[
+  {
+    "name": "flat_custom_text",
+    "input": {
+      "model": "fixture",
+      "messages": [
+        {
+          "role": "user",
+          "content": "text"
+        }
+      ],
+      "tools": [
+        {
+          "type": "custom",
+          "name": "raw_tool",
+          "description": "keep 250ms cipher",
+          "format": {
+            "type": "text"
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "custom",
+        "name": "raw_tool"
+      }
+    },
+    "expected": {
+      "tool_choice": {
+        "type": "custom",
+        "name": "raw_tool"
+      },
+      "tools": [
+        {
+          "type": "custom",
+          "name": "raw_tool",
+          "description": "keep 250ms cipher",
+          "format": {
+            "type": "text"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "flat_custom_grammar",
+    "input": {
+      "model": "fixture",
+      "messages": [
+        {
+          "role": "user",
+          "content": "text"
+        }
+      ],
+      "tools": [
+        {
+          "type": "custom",
+          "name": "grammar_tool",
+          "format": {
+            "type": "grammar",
+            "syntax": "lark",
+            "definition": "start: \"cipher\""
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "custom",
+        "name": "grammar_tool"
+      }
+    },
+    "expected": {
+      "tool_choice": {
+        "type": "custom",
+        "name": "grammar_tool"
+      },
+      "tools": [
+        {
+          "type": "custom",
+          "name": "grammar_tool",
+          "format": {
+            "type": "grammar",
+            "syntax": "lark",
+            "definition": "start: \"cipher\""
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "builtin_web_search",
+    "input": {
+      "model": "fixture",
+      "messages": [
+        {
+          "role": "user",
+          "content": "text"
+        }
+      ],
+      "tools": [
+        {
+          "type": "web_search",
+          "search_context_size": "low",
+          "filters": {
+            "allowed_domains": [
+              "example.invalid"
+            ]
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "web_search"
+      }
+    },
+    "expected": {
+      "tool_choice": {
+        "type": "web_search"
+      },
+      "tools": [
+        {
+          "type": "web_search",
+          "search_context_size": "low",
+          "filters": {
+            "allowed_domains": [
+              "example.invalid"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "builtin_image_generation",
+    "input": {
+      "model": "fixture",
+      "messages": [
+        {
+          "role": "user",
+          "content": "text"
+        }
+      ],
+      "tools": [
+        {
+          "type": "image_generation",
+          "quality": "high",
+          "output_format": "png"
+        }
+      ],
+      "tool_choice": {
+        "type": "image_generation"
+      }
+    },
+    "expected": {
+      "tool_choice": {
+        "type": "image_generation"
+      },
+      "tools": [
+        {
+          "type": "image_generation",
+          "quality": "high",
+          "output_format": "png"
+        }
+      ]
+    }
+  },
+  {
+    "name": "namespace_and_client_tool_search",
+    "input": {
+      "model": "fixture",
+      "messages": [
+        {
+          "role": "user",
+          "content": "text"
+        }
+      ],
+      "tools": [
+        {
+          "type": "namespace",
+          "name": "ns",
+          "tools": [
+            {
+              "type": "function",
+              "name": "nested",
+              "parameters": {
+                "type": "object"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tool_search",
+          "execution": "client"
+        }
+      ],
+      "tool_choice": {
+        "type": "namespace",
+        "name": "ns"
+      }
+    },
+    "expected": {
+      "tool_choice": {
+        "type": "namespace",
+        "name": "ns"
+      },
+      "tools": [
+        {
+          "type": "namespace",
+          "name": "ns",
+          "tools": [
+            {
+              "type": "function",
+              "name": "nested",
+              "parameters": {
+                "type": "object"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tool_search",
+          "execution": "client"
+        }
+      ]
+    }
+  },
+  {
+    "name": "mixed_function_custom_builtin",
+    "input": {
+      "model": "fixture",
+      "messages": [
+        {
+          "role": "user",
+          "content": "text"
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "f",
+            "parameters": {
+              "type": "object"
+            },
+            "description": "function"
+          }
+        },
+        {
+          "type": "custom",
+          "name": "c",
+          "format": {
+            "type": "text"
+          }
+        },
+        {
+          "type": "web_search"
+        }
+      ],
+      "tool_choice": "auto"
+    },
+    "expected": {
+      "tool_choice": "auto",
+      "tools": [
+        {
+          "type": "function",
+          "name": "f",
+          "description": "function",
+          "parameters": {
+            "type": "object"
+          },
+          "strict": false
+        },
+        {
+          "type": "custom",
+          "name": "c",
+          "format": {
+            "type": "text"
+          }
+        },
+        {
+          "type": "web_search"
+        }
+      ]
+    }
+  },
+  {
+    "name": "allowed_tools_flat",
+    "input": {
+      "model": "fixture",
+      "messages": [
+        {
+          "role": "user",
+          "content": "text"
+        }
+      ],
+      "tools": [
+        {
+          "type": "web_search"
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "f",
+            "parameters": {
+              "type": "object"
+            }
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "allowed_tools",
+        "mode": "auto",
+        "tools": [
+          {
+            "type": "web_search"
+          },
+          {
+            "type": "function",
+            "name": "f"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "tool_choice": {
+        "type": "allowed_tools",
+        "mode": "auto",
+        "tools": [
+          {
+            "type": "web_search"
+          },
+          {
+            "type": "function",
+            "name": "f"
+          }
+        ]
+      },
+      "tools": [
+        {
+          "type": "web_search"
+        },
+        {
+          "type": "function",
+          "name": "f",
+          "parameters": {
+            "type": "object"
+          },
+          "strict": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "allowed_tools_no_mode",
+    "input": {
+      "model": "fixture",
+      "messages": [
+        {
+          "role": "user",
+          "content": "text"
+        }
+      ],
+      "tools": [
+        {
+          "type": "web_search"
+        }
+      ],
+      "tool_choice": {
+        "type": "allowed_tools",
+        "tools": [
+          {
+            "type": "web_search"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "tool_choice": {
+        "type": "allowed_tools",
+        "tools": [
+          {
+            "type": "web_search"
+          }
+        ]
+      },
+      "tools": [
+        {
+          "type": "web_search"
+        }
+      ]
+    }
+  },
+  {
+    "name": "custom_function_history",
+    "input": {
+      "model": "fixture",
+      "tools": [
+        {
+          "type": "custom",
+          "name": "apply_patch",
+          "format": {
+            "type": "text"
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "apply_patch"
+        }
+      },
+      "messages": [
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "call_fixture",
+              "type": "function",
+              "function": {
+                "name": "apply_patch",
+                "arguments": "raw 250ms cipher"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "call_fixture",
+          "content": "done"
+        }
+      ]
+    },
+    "expected": {
+      "input": [
+        {
+          "type": "custom_tool_call",
+          "call_id": "call_fixture",
+          "name": "apply_patch",
+          "input": "raw 250ms cipher"
+        },
+        {
+          "type": "custom_tool_call_output",
+          "call_id": "call_fixture",
+          "output": "done"
+        }
+      ],
+      "tool_choice": {
+        "type": "custom",
+        "name": "apply_patch"
+      },
+      "tools": [
+        {
+          "type": "custom",
+          "name": "apply_patch",
+          "format": {
+            "type": "text"
+          }
+        }
+      ]
+    },
+    "history": true
+  },
+  {
+    "name": "ambiguous_custom_function_history",
+    "input": {
+      "model": "fixture",
+      "tools": [
+        {
+          "type": "custom",
+          "name": "apply_patch",
+          "format": {
+            "type": "text"
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "apply_patch",
+            "parameters": {
+              "type": "object"
+            }
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "apply_patch"
+        }
+      },
+      "messages": [
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "call_fixture",
+              "type": "function",
+              "function": {
+                "name": "apply_patch",
+                "arguments": "raw 250ms cipher"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "call_fixture",
+          "content": "done"
+        }
+      ]
+    },
+    "expected": {
+      "input": [
+        {
+          "type": "function_call",
+          "call_id": "call_fixture",
+          "name": "apply_patch",
+          "arguments": "raw 250ms cipher"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "call_fixture",
+          "output": "done"
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "name": "apply_patch"
+      },
+      "tools": [
+        {
+          "type": "custom",
+          "name": "apply_patch",
+          "format": {
+            "type": "text"
+          }
+        },
+        {
+          "type": "function",
+          "name": "apply_patch",
+          "parameters": {
+            "type": "object"
+          },
+          "strict": false
+        }
+      ]
+    },
+    "history": true
+  },
+  {
+    "name": "long_prefix_collision",
+    "input": {
+      "model": "fixture",
+      "messages": [],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxa",
+            "parameters": {
+              "type": "object"
+            }
+          }
+        },
+        {
+          "type": "custom",
+          "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxb",
+          "format": {
+            "type": "text"
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "parameters": {
+              "type": "object"
+            }
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxa"
+        }
+      }
+    },
+    "expected": {
+      "tool_choice": {
+        "type": "function",
+        "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "tools": [
+        {
+          "type": "function",
+          "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "parameters": {
+            "type": "object"
+          },
+          "strict": false
+        },
+        {
+          "type": "custom",
+          "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_1",
+          "format": {
+            "type": "text"
+          }
+        },
+        {
+          "type": "function",
+          "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_2",
+          "parameters": {
+            "type": "object"
+          },
+          "strict": false
+        }
+      ]
+    },
+    "roundtrip": true,
+    "expected_names": [
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxa",
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxb",
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    ]
+  },
+  {
+    "name": "mcp_last_segment_collision",
+    "input": {
+      "model": "fixture",
+      "messages": [],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "mcp__serverserverserverserverserverserverserverserverserverserverserverserverserverserverserverserverserverserverserverserver__lookup",
+            "parameters": {
+              "type": "object"
+            }
+          }
+        },
+        {
+          "type": "custom",
+          "name": "mcp__secondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecond__lookup",
+          "format": {
+            "type": "text"
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "mcp__serverserverserverserverserverserverserverserverserverserverserverserverserverserverserverserverserverserverserverserver__lookup"
+        }
+      }
+    },
+    "expected": {
+      "tool_choice": {
+        "type": "function",
+        "name": "mcp__lookup"
+      },
+      "tools": [
+        {
+          "type": "function",
+          "name": "mcp__lookup",
+          "parameters": {
+            "type": "object"
+          },
+          "strict": false
+        },
+        {
+          "type": "custom",
+          "name": "mcp__lookup_1",
+          "format": {
+            "type": "text"
+          }
+        }
+      ]
+    },
+    "roundtrip": true,
+    "expected_names": [
+      "mcp__serverserverserverserverserverserverserverserverserverserverserverserverserverserverserverserverserverserverserverserver__lookup",
+      "mcp__secondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecondsecond__lookup"
+    ]
+  },
+  {
+    "name": "sanitized_name_collision",
+    "input": {
+      "model": "fixture",
+      "messages": [],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "foo.bar",
+            "parameters": {
+              "type": "object"
+            }
+          }
+        },
+        {
+          "type": "custom",
+          "name": "foo/bar",
+          "format": {
+            "type": "text"
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "foo_bar",
+            "parameters": {
+              "type": "object"
+            }
+          }
+        },
+        {
+          "type": "custom",
+          "name": "工具 name",
+          "format": {
+            "type": "text"
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "foo.bar"
+        }
+      }
+    },
+    "expected": {
+      "tool_choice": {
+        "type": "function",
+        "name": "foo_bar"
+      },
+      "tools": [
+        {
+          "type": "function",
+          "name": "foo_bar",
+          "parameters": {
+            "type": "object"
+          },
+          "strict": false
+        },
+        {
+          "type": "custom",
+          "name": "foo_bar_1",
+          "format": {
+            "type": "text"
+          }
+        },
+        {
+          "type": "function",
+          "name": "foo_bar_2",
+          "parameters": {
+            "type": "object"
+          },
+          "strict": false
+        },
+        {
+          "type": "custom",
+          "name": "___name",
+          "format": {
+            "type": "text"
+          }
+        }
+      ]
+    },
+    "roundtrip": true,
+    "expected_names": [
+      "foo.bar",
+      "foo/bar",
+      "foo_bar",
+      "工具 name"
+    ]
+  }
+]

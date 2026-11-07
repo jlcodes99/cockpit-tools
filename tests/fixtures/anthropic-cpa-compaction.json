@@ -1,0 +1,6 @@
+{
+  "capsule": "cpa-ag-compact-v1:AAECAwQFBgcICQoLJE-T0TEvNv2LcVJx5XGZuv_zMl7Wrbq4lYJEWXZNYYz-kq1qw-i-Dy_3sP2Kv996Seo8OVe33brZu7Kzp2-epB_r-6IU6f9fIdMPO_hu_IDJ3hoR5_G7Sz8ldd8B_NbOHksvWDO0b3UVsNjM_PZyxnpWcKtuZh6z14yrombPeICbaAK_7Keg1dTa",
+  "model": "claude-sonnet-4-6",
+  "source": "router-for-me/CLIProxyAPI@9717e325",
+  "summary": "Preserve the user goal, tool results and remaining work."
+}

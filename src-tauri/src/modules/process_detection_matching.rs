@@ -1347,10 +1347,13 @@ fn get_managed_codex_windows_app_user_data_dir(codex_home: &str) -> Option<Strin
 #[cfg(target_os = "windows")]
 fn get_default_codex_windows_app_user_data_dirs(default_codex_home: &str) -> HashSet<String> {
     let mut dirs = HashSet::new();
-    if let Some(app_dir) = get_default_codex_windows_app_user_data_dir() {
-        let normalized = normalize_path_for_compare(&app_dir);
-        if !normalized.is_empty() {
-            dirs.insert(normalized);
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let base = std::path::PathBuf::from(appdata).join("Codex");
+        for app_dir in [base.clone(), base.join("web").join("Codex")] {
+            let normalized = normalize_path_for_compare(&app_dir.to_string_lossy());
+            if !normalized.is_empty() {
+                dirs.insert(normalized);
+            }
         }
     }
     if let Some(app_dir) = get_managed_codex_windows_app_user_data_dir(default_codex_home) {
@@ -1441,7 +1444,8 @@ fn collect_codex_windows_resource_process_pids() -> Vec<u32> {
             continue;
         }
         let (resolved_exe, _) = resolve_windows_process_exe_for_match(process);
-        if resolved_exe.as_deref() != Some(expected.as_str()) {
+        let resolved_exe = resolved_exe.unwrap_or_default();
+        if !is_matching_codex_windows_exe(&resolved_exe, &expected) {
             continue;
         }
         let args_line = process
@@ -3269,6 +3273,312 @@ pub fn resolve_workbuddy_pid_from_entries(
 pub fn resolve_workbuddy_pid(last_pid: Option<u32>, user_data_dir: Option<&str>) -> Option<u32> {
     let entries = collect_workbuddy_process_entries();
     resolve_workbuddy_pid_from_entries(last_pid, user_data_dir, &entries)
+}
+
+/// MiniMax Code 进程探测。
+///
+/// exe 路径用于识别进程；每个托管实例启动时带独立的 `--user-data-dir`
+/// （`<data root>/electron-user-data`），Electron 子进程会把它打印在命令行上，因此
+/// 进程条目里的目录字段是**按实例关闭**的唯一可靠句柄。Electron 主进程本身不带该参数
+/// （命令行为 `"…\MiniMax Code.exe"`），所以它的目录为 `None`。
+pub fn collect_minimax_code_process_entries() -> Vec<(u32, Option<String>)> {
+    let expected_launch = match resolve_minimax_code_launch_path() {
+        Ok(path) => normalize_path_for_compare(path.to_string_lossy().as_ref()),
+        Err(err) => {
+            crate::modules::logger::log_warn(&format!(
+                "[MiniMax Code Probe] 启动路径未配置或无效，跳过进程探测：{}",
+                err
+            ));
+            return Vec::new();
+        }
+    };
+    if expected_launch.is_empty() {
+        return Vec::new();
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let entries = collect_minimax_code_process_entries_from_powershell(&expected_launch);
+        if !entries.is_empty() {
+            return entries;
+        }
+        crate::modules::logger::log_warn(
+            "[MiniMax Code Probe] PowerShell 探测为空，回退 sysinfo 探测",
+        );
+        return collect_minimax_code_process_entries_from_sysinfo_fallback(&expected_launch);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // macOS 没有 PowerShell/sysinfo 的 Windows 专用路径，用 `ps` 读取命令行。
+        let mut entries = Vec::new();
+        let output = Command::new("ps").args(["-axo", "pid,command"]).output();
+        if let Ok(output) = output {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let expected_lower = expected_launch.to_lowercase();
+            for line in stdout.lines().skip(1) {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                let mut parts = line.splitn(2, |ch: char| ch.is_whitespace());
+                let pid_str = parts.next().unwrap_or("").trim();
+                let cmdline = parts.next().unwrap_or("").trim();
+                let pid = match pid_str.parse::<u32>() {
+                    Ok(value) => value,
+                    Err(_) => continue,
+                };
+                let lower = cmdline.to_lowercase();
+                if lower.contains("crashpad_handler") || is_helper_command_line(&lower) {
+                    continue;
+                }
+                if lower != expected_lower && !lower.starts_with(&format!("{expected_lower} ")) {
+                    continue;
+                }
+                let dir = extract_user_data_dir_from_command_line(cmdline).and_then(|value| {
+                    let normalized = normalize_path_for_compare(&value);
+                    if normalized.is_empty() {
+                        None
+                    } else {
+                        Some(normalized)
+                    }
+                });
+                entries.push((pid, dir));
+            }
+        }
+        entries.sort_by_key(|(pid, _)| *pid);
+        entries.dedup_by(|a, b| a.0 == b.0);
+        entries
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let mut entries = Vec::new();
+        if let Ok(proc_entries) = std::fs::read_dir("/proc") {
+            for entry in proc_entries.flatten() {
+                let file_name = entry.file_name();
+                let pid_str = file_name.to_string_lossy();
+                if !pid_str.chars().all(|ch| ch.is_ascii_digit()) {
+                    continue;
+                }
+                let pid = match pid_str.parse::<u32>() {
+                    Ok(value) => value,
+                    Err(_) => continue,
+                };
+                let cmdline = match std::fs::read(format!("/proc/{}/cmdline", pid)) {
+                    Ok(value) => value,
+                    Err(_) => continue,
+                };
+                if cmdline.is_empty() {
+                    continue;
+                }
+                let cmdline_str = String::from_utf8_lossy(&cmdline).replace('\0', " ");
+                let cmd_lower = cmdline_str.to_lowercase();
+                let exe_path = std::fs::read_link(format!("/proc/{}/exe", pid))
+                    .ok()
+                    .and_then(|p| p.to_str().map(|s| s.to_lowercase()))
+                    .unwrap_or_default();
+                if !cmd_lower.contains("minimax") && !exe_path.contains("minimax code") {
+                    continue;
+                }
+                if is_helper_command_line(&cmd_lower) {
+                    continue;
+                }
+                let dir = extract_user_data_dir_from_command_line(&cmdline_str).and_then(
+                    |value| {
+                        let normalized = normalize_path_for_compare(&value);
+                        if normalized.is_empty() {
+                            None
+                        } else {
+                            Some(normalized)
+                        }
+                    },
+                );
+                entries.push((pid, dir));
+            }
+        }
+        entries.sort_by_key(|(pid, _)| *pid);
+        entries.dedup_by(|a, b| a.0 == b.0);
+        entries
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        let _ = expected_launch;
+        Vec::new()
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn minimax_code_process_name_from_exe(expected_exe_path: &str) -> String {
+    Path::new(expected_exe_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("MiniMax Code.exe")
+        .to_string()
+}
+
+#[cfg(target_os = "windows")]
+fn collect_minimax_code_process_entries_from_powershell(
+    expected_exe_path: &str,
+) -> Vec<(u32, Option<String>)> {
+    let mut entries = Vec::new();
+    let process_name = minimax_code_process_name_from_exe(expected_exe_path);
+    let script =
+        build_windows_path_filtered_process_probe_script(&process_name, expected_exe_path);
+    let output = powershell_output_with_timeout(
+        &["-NoProfile", "-Command", &script],
+        WINDOWS_PROCESS_PROBE_TIMEOUT,
+    );
+    let output = match output {
+        Ok(value) => value,
+        Err(err) => {
+            if err.kind() == std::io::ErrorKind::TimedOut {
+                crate::modules::logger::log_warn(
+                    "[MiniMax Code Probe] PowerShell 进程探测超时（5s）",
+                );
+            } else {
+                crate::modules::logger::log_warn(&format!(
+                    "[MiniMax Code Probe] PowerShell 进程探测失败：{}",
+                    err
+                ));
+            }
+            return entries;
+        }
+    };
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        crate::modules::logger::log_warn(&format!(
+            "[MiniMax Code Probe] PowerShell 进程探测返回非 0 状态：{}, stderr={}",
+            output.status,
+            stderr.trim()
+        ));
+        return entries;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut parts = line.splitn(2, '|');
+        let pid_str = parts.next().unwrap_or("").trim();
+        let cmdline = parts.next().unwrap_or("").trim();
+        let pid = match pid_str.parse::<u32>() {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let lower = cmdline.to_lowercase();
+        if is_helper_command_line(&lower) || lower.contains("crashpad_handler") {
+            continue;
+        }
+        // Electron 主进程不带 data root，但子进程带 `--user-data-dir`。
+        // 它是我们唯一能拿到的 per-instance 句柄，用于按实例关闭。
+        let dir = extract_user_data_dir_from_command_line(cmdline).and_then(|value| {
+            let normalized = normalize_path_for_compare(&value);
+            if normalized.is_empty() {
+                None
+            } else {
+                Some(normalized)
+            }
+        });
+        entries.push((pid, dir));
+    }
+    entries.sort_by_key(|(pid, _)| *pid);
+    entries.dedup_by(|a, b| a.0 == b.0);
+    entries
+}
+
+#[cfg(target_os = "windows")]
+fn collect_minimax_code_process_entries_from_sysinfo_fallback(
+    expected_exe_path: &str,
+) -> Vec<(u32, Option<String>)> {
+    let expected = normalize_path_for_compare(expected_exe_path);
+    if expected.is_empty() {
+        return Vec::new();
+    }
+    let expected_file_name = Path::new(expected_exe_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("MiniMax Code.exe")
+        .to_ascii_lowercase();
+
+    let mut entries: Vec<(u32, Option<String>)> = Vec::new();
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing()
+            .with_exe(UpdateKind::OnlyIfNotSet)
+            .with_cmd(UpdateKind::OnlyIfNotSet),
+    );
+    let current_pid = std::process::id();
+
+    for (pid, process) in system.processes() {
+        let pid_u32 = pid.as_u32();
+        if pid_u32 == current_pid {
+            continue;
+        }
+        let name = process.name().to_string_lossy().to_lowercase();
+        let exe_path = process
+            .exe()
+            .and_then(|value| value.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        let args_line = process
+            .cmd()
+            .iter()
+            .map(|arg| arg.to_string_lossy().to_lowercase())
+            .collect::<Vec<String>>()
+            .join(" ");
+
+        let is_minimax_code = name == expected_file_name
+            || exe_path.ends_with(&format!("\\{}", expected_file_name))
+            || exe_path.ends_with("\\minimax code.exe");
+        if !is_minimax_code
+            || is_helper_command_line(&args_line)
+            || args_line.contains("crashpad_handler")
+        {
+            continue;
+        }
+
+        match resolve_windows_process_exe_for_match(process) {
+            (Some(actual), _) if normalize_path_for_compare(&actual) == expected => {
+                let dir = extract_user_data_dir(process.cmd()).and_then(|value| {
+                    let normalized = normalize_path_for_compare(&value);
+                    if normalized.is_empty() {
+                        None
+                    } else {
+                        Some(normalized)
+                    }
+                });
+                entries.push((pid_u32, dir));
+            }
+            _ => continue,
+        }
+    }
+
+    entries.sort_by_key(|(pid, _)| *pid);
+    entries.dedup_by(|a, b| a.0 == b.0);
+    if entries.is_empty() {
+        crate::modules::logger::log_info(&format!(
+            "[MiniMax Code Probe] sysinfo 回退探测未匹配到进程；expected={}, candidates=0",
+            expected
+        ));
+    }
+    entries
+}
+
+/// Resolve only processes belonging to the selected data directory. A process
+/// without a managed directory belongs to the default instance. Stored PIDs
+/// are hints and must still appear in that instance's current process set.
+pub fn resolve_minimax_code_pid(last_pid: Option<u32>, user_data_dir: Option<&str>) -> Option<u32> {
+    let entries = collect_minimax_code_process_entries();
+    let default_dir = crate::modules::minimax_code_instance::get_default_minimax_code_user_data_dir().ok()?;
+    let target = normalize_path_for_compare(user_data_dir.unwrap_or(default_dir.to_str()?));
+    let matches = minimax_code_pids_for_user_data_dirs(&entries, &[target]);
+    last_pid.filter(|pid| matches.contains(pid)).or_else(|| matches.first().copied())
 }
 
 fn get_default_codebuddy_user_data_dir_for_os() -> Option<String> {

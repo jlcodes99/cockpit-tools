@@ -1,8 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRefreshSafeDraft } from "../hooks/useRefreshSafeDraft";
+import { CodexSessionIdentityMappingControl } from "./codex/CodexSessionIdentityMappingControl";
+import { CodexMemberAccessMode } from './codex/CodexMemberAccessMode';
+import { canChooseCodexServiceAuthorization } from '../utils/codexAccountServiceNavigation';
+import { useCodexServiceMemberDraft } from "../hooks/useCodexServiceMemberDraft";
+import { chatGptPlanErrorKey } from "../services/chatgptPlanService";
+import { useChatGptPlanOverview } from "../hooks/useChatGptPlanOverview";
+import { useCodexMemberAuthorizationSync } from "../hooks/useCodexMemberAuthorizationSync";
+import { codexServiceDisplayRows, codexServiceRelatedEndpointIds, getCodexServicePlanFilterKey, toggleCodexServiceDisplaySelection, codexServiceOriginalAccounts } from "../utils/chatgptPlanOverview";
+import { CODEX_ACCOUNT_SERVICE_APPLIED, type CodexAccountServiceApplied } from "../utils/codexAccountServiceNavigation";
+import { CodexServiceMemberAuthorization } from "./codex/CodexServiceMemberAuthorization";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatCodexGatewayModeError } from "../utils/codexGatewayError";
 import {
   Activity,
   Bug,
   Check,
+  ChevronDown,
   CircleAlert,
   Copy,
   Eye,
@@ -26,10 +39,14 @@ import { listen } from "@tauri-apps/api/event";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import type { CodexAccount } from "../types/codex";
+import {
+  isGrokApiKeyAccount,
+  type GrokAccount,
+} from "../types/grok";
+import { listGrokAccounts } from "../services/grokService";
 import type { CodexAccountGroup } from "../services/codexAccountGroupService";
 import type {
   CodexLocalAccessAddressKind,
-  CodexLocalAccessAccountHealth,
   CodexLocalAccessChatMessage,
   CodexLocalAccessChatStreamEvent,
   CodexLocalAccessCustomRoutingRule,
@@ -40,7 +57,9 @@ import type {
   CodexLocalAccessStatsWindow,
   CodexLocalAccessUsageStats,
 } from "../types/codexLocalAccess";
-import { getCodexPlanFilterKey, isCodexApiKeyAccount } from "../types/codex";
+import { buildCodexServiceMemberView, filterCodexServiceMemberView } from "../utils/codexServiceMemberView";
+import { aggregateCodexServiceAccountStats } from "../utils/codexServiceAccountStats";
+import { CodexOfficialAuthorizationEntry } from "./codex/CodexOfficialAuthorizationEntry";
 import { scrollElementTo } from "../utils/reducedMotion";
 import {
   buildCodexAccountPresentation,
@@ -56,17 +75,19 @@ import {
   incrementCodexPlanFilterCount,
 } from "../utils/codexAccountOverview";
 import {
+  formatCodexQuotaPoolPlanLabel,
   formatCodexQuotaPoolPercent,
   formatCodexQuotaPoolWindowLabel,
   summarizeCodexQuotaPool,
-  type CodexQuotaPoolItem,
 } from "../utils/codexQuotaPool";
 import {
   getCodexLocalAccessAccountIneligibleReason,
   isCodexLocalAccessEligibleAccount,
   resolveCodexLocalAccessInitialAccountIds,
+  resolveCodexMemberImagePolicy,
 } from "../utils/codexLocalAccessAccounts";
 import { isBlockingCodexAccountQuotaError } from "../utils/codexQuotaError";
+import { CODEX_LOCAL_ACCESS_STATUS_KEYS, resolveCodexLocalAccessRuntimeStatus } from "../utils/codexLocalAccessStatus";
 import { AccountTagFilterDropdown } from "./AccountTagFilterDropdown";
 import { CodexAccountPoolHealthModal } from "./CodexAccountPoolHealthModal";
 import {
@@ -74,7 +95,12 @@ import {
   type MultiSelectFilterOption,
 } from "./MultiSelectFilterDropdown";
 import { SingleSelectDropdown } from "./SingleSelectDropdown";
-import { CodexImageModelConfig } from "./CodexImageModelConfig";
+import { CodexImageModelSelect } from "./CodexImageModelConfig";
+import { CodexRequestPayloadSetting } from "./codex/CodexRequestPayloadSetting";
+import { CodexOverloadRetrySetting } from "./codex/CodexOverloadRetrySetting";
+import { CodexMemberImagePolicy } from "./codex/CodexMemberImagePolicy";
+import { CodexImageForwardConfig } from "./CodexImageForwardConfig";
+import { buildGrokMemberRowAccounts, CodexGrokBuildQuotaChip, selectCodexLocalAccessMemberRows } from "./codex/codexGrokMemberRows";
 import { PaginationControls } from "./PaginationControls";
 import { CodexStatsRangePicker } from "./CodexStatsRangePicker";
 import { queryCodexLocalAccessStats } from "../services/codexLocalAccessService";
@@ -91,6 +117,29 @@ import {
   buildPaginationPageSizeStorageKey,
   usePagination,
 } from "../hooks/usePagination";
+import {
+  CUSTOM_ROUTING_PRIORITY_MIN,
+  CUSTOM_ROUTING_PRIORITY_MAX,
+  CUSTOM_ROUTING_WEIGHT_MIN,
+  CUSTOM_ROUTING_WEIGHT_MAX,
+  areSetsEqual,
+  buildLocalAccessSummaryStats,
+  buildLocalAccessRoutingStrategyOptions,
+  createTestChatMessage,
+  formatCompactNumber,
+  formatLatencyMs,
+  formatQuotaPoolLabel,
+  formatRequestResultDetail as formatLocalAccessRequestResultDetail,
+  normalizeAccessScope,
+  normalizeCustomRoutingPriority,
+  normalizeCustomRoutingWeight,
+  resolveAccountUsagePriority,
+  summarizeAccountPoolHealth,
+  summarizeQuotaPoolsByPlan,
+  type AccountUsagePriority,
+  type CustomRoutingDraftRule,
+  type TestChatMessage,
+} from "./codex/codexLocalAccessModalModel";
 import "./GroupAccountPickerModal.css";
 import "./CodexLocalAccessModal.css";
 
@@ -98,6 +147,8 @@ const LOCAL_ACCESS_MEMBER_PAGE_SIZE_OPTIONS = [50, 100, 200] as const;
 
 export interface CodexLocalAccessMemberViewConfig {
   accounts: CodexAccount[];
+  activeGroupId?: string | null;
+  compareAccounts?: (left: CodexAccount, right: CodexAccount) => number;
   searchQuery: string;
   filterTypes: string[];
   tagFilter: string[];
@@ -119,12 +170,20 @@ interface CodexLocalAccessModalProps {
   isOpen: boolean;
   mode: "panel" | "members";
   state: CodexLocalAccessState | null;
+  onStateChange: (state: CodexLocalAccessState) => void;
   addressKind: CodexLocalAccessAddressKind;
   addressOptions: Array<{ value: string; label: string }>;
   onAddressKindChange: (value: string) => void;
   accounts: CodexAccount[];
   accountsLoaded: boolean;
   accountGroups: CodexAccountGroup[];
+  /**
+   * 把 Grok 平台（已登录）账号加入 API 服务集合。
+   *
+   * 宿主负责创建/复用绑定的供应商账号并刷新账号列表，返回对应的 Codex 账号 ID；
+   * 未提供该回调时成员弹框不展示 Grok 平台分组。
+   */
+  onAddGrokMember?: (grokAccountId: string) => Promise<CodexAccount | null>;
   memberView?: CodexLocalAccessMemberViewConfig;
   initialSelectedIds: string[];
   maskAccountText: (value?: string | null) => string;
@@ -135,9 +194,11 @@ interface CodexLocalAccessModalProps {
     restrictFreeAccounts: boolean;
     backupAccountIds: string[];
     preferredAccountIds: string[];
+    sessionIdentityMappingEnabled: boolean;
     sessionAffinity: boolean;
     sessionAffinityTtlMs: number;
     imageGenerationAccountPolicies: Record<string, CodexLocalAccessImageGenerationPolicy>;
+    officialAccountBindings: Record<string, string>;
   }) => Promise<unknown> | unknown;
   onClearStats: () => Promise<unknown> | unknown;
   onRefreshStats: () => Promise<unknown> | unknown;
@@ -156,6 +217,12 @@ interface CodexLocalAccessModalProps {
   ) => Promise<unknown> | unknown;
   onUpdateDebugLogs: (debugLogs: boolean) => Promise<unknown> | unknown;
   onUpdateImageGenerationModel: (model: string) => Promise<unknown> | unknown;
+  onUpdateImageGenerationMainModel: (model: string | null) => Promise<unknown> | unknown;
+  /** 保存 API 服务的生图来源（OAuth 或支持当前图片模型的 API Key 账号）。 */
+  onUpdateImageGenerationAccounts: (
+    accountIds: string[],
+    models: Record<string, string>,
+  ) => Promise<unknown> | unknown;
   onRotateApiKey: () => Promise<unknown> | unknown;
   onRestartSidecar: () => Promise<unknown> | unknown;
   onKillPort: () => Promise<unknown> | unknown;
@@ -176,163 +243,8 @@ interface CodexLocalAccessModalProps {
 
 type CopyableField = "apiPortUrl" | "baseUrl" | "apiKey" | "modelId";
 
-interface AccountPoolHealthSummary {
-  total: number;
-  available: number;
-  abnormal: number;
-  cooldown: number;
-  missing: number;
-  authError: number;
-  quotaLimited: number;
-}
-
-interface CustomRoutingDraftRule {
-  priority: number;
-  weight: number;
-  isBackup: boolean;
-  isPreferred: boolean;
-}
-
-type AccountUsagePriority = "lowest" | "normal" | "highest";
-
-interface TestChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  latencyMs?: number | null;
-  failureTitle?: string;
-  failureDetail?: string;
-}
-
 const CODEX_LOCAL_ACCESS_STATS_RANGE_STORAGE_KEY =
   "agtools.codex.local_access.stats_range.v1";
-const CUSTOM_ROUTING_PRIORITY_MIN = 0;
-const CUSTOM_ROUTING_PRIORITY_MAX = 100;
-const CUSTOM_ROUTING_WEIGHT_MIN = 1;
-const CUSTOM_ROUTING_WEIGHT_MAX = 100;
-const ABNORMAL_ACCOUNT_FAILURE_CATEGORIES = new Set([
-  "auth_unavailable",
-  "auth_refresh_failed",
-  "account_prepare_failed",
-]);
-
-function normalizeAccessScope(value: string): CodexLocalAccessScope {
-  return value === "lan" ? "lan" : "localhost";
-}
-
-function clampInteger(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.min(max, Math.max(min, Math.round(value)));
-}
-
-function normalizeCustomRoutingPriority(value: number): number {
-  return clampInteger(
-    value,
-    CUSTOM_ROUTING_PRIORITY_MIN,
-    CUSTOM_ROUTING_PRIORITY_MAX,
-  );
-}
-
-function normalizeCustomRoutingWeight(value: number): number {
-  return clampInteger(
-    value,
-    CUSTOM_ROUTING_WEIGHT_MIN,
-    CUSTOM_ROUTING_WEIGHT_MAX,
-  );
-}
-
-function resolveAccountUsagePriority(
-  rule?: Pick<CustomRoutingDraftRule, "isBackup" | "isPreferred"> | null,
-): AccountUsagePriority {
-  if (rule?.isPreferred) return "highest";
-  if (rule?.isBackup) return "lowest";
-  return "normal";
-}
-
-function formatCompactNumber(value: number): string {
-  return new Intl.NumberFormat("en", {
-    notation: value >= 1000 ? "compact" : "standard",
-    maximumFractionDigits: value >= 1000 ? 1 : 0,
-  }).format(value || 0);
-}
-
-function formatLatencyMs(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return "--";
-  if (value >= 1000) return `${(value / 1000).toFixed(2)}s`;
-  return `${Math.round(value)}ms`;
-}
-
-function formatUsdCost(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return "$0.00";
-  if (value < 0.000001) return "<$0.000001";
-  if (value < 0.01) return `$${value.toFixed(6)}`;
-  if (value < 1) return `$${value.toFixed(4)}`;
-  return `$${value.toFixed(2)}`;
-}
-
-function createTestChatMessage(
-  role: TestChatMessage["role"],
-  content: string,
-  extra: Partial<Omit<TestChatMessage, "id" | "role" | "content">> = {},
-): TestChatMessage {
-  return {
-    id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    role,
-    content,
-    ...extra,
-  };
-}
-
-function formatQuotaPoolLabel(
-  baseLabel: string,
-  pool: CodexQuotaPoolItem,
-  weeklyLabel: string,
-): string {
-  const quotaText = pool.windows
-    .map(
-      (window) =>
-        `${formatCodexQuotaPoolWindowLabel(window.label, weeklyLabel)} ${formatCodexQuotaPoolPercent(window.percentage)}`,
-    )
-    .join(" · ");
-  return quotaText ? `${baseLabel} · ${quotaText}` : baseLabel;
-}
-
-function summarizeQuotaPoolsByPlan(
-  accounts: CodexAccount[],
-): Record<string, CodexQuotaPoolItem> {
-  const accountsByPlan: Record<string, CodexAccount[]> = {};
-  accounts.forEach((account) => {
-    const planKey = getCodexPlanFilterKey(account);
-    (accountsByPlan[planKey] ??= []).push(account);
-  });
-  return Object.fromEntries(
-    Object.entries(accountsByPlan).map(([planKey, planAccounts]) => [
-      planKey,
-      summarizeCodexQuotaPool(planAccounts).all,
-    ]),
-  );
-}
-
-function areSetsEqual(left: Set<string>, right: Set<string>): boolean {
-  if (left.size !== right.size) return false;
-  for (const value of left) {
-    if (!right.has(value)) return false;
-  }
-  return true;
-}
-
-function isAbnormalAccountFailure(
-  health?: CodexLocalAccessAccountHealth,
-): boolean {
-  return Boolean(
-    health &&
-    ((health.schedulerAvailable === false && !health.cooldowns.length) ||
-      (health.consecutiveFailures >= 3 &&
-        health.lastFailureCategory &&
-        ABNORMAL_ACCOUNT_FAILURE_CATEGORIES.has(health.lastFailureCategory))),
-  );
-}
-
 export function CodexLocalAccessModal({
   isOpen,
   mode,
@@ -343,6 +255,7 @@ export function CodexLocalAccessModal({
   accounts,
   accountsLoaded,
   accountGroups,
+  onAddGrokMember,
   memberView,
   initialSelectedIds,
   maskAccountText,
@@ -358,6 +271,8 @@ export function CodexLocalAccessModal({
   onUpdateUpstreamProxyConfig,
   onUpdateDebugLogs,
   onUpdateImageGenerationModel,
+  onUpdateImageGenerationMainModel,
+  onUpdateImageGenerationAccounts,
   onRotateApiKey,
   onRestartSidecar,
   onKillPort,
@@ -365,26 +280,47 @@ export function CodexLocalAccessModal({
   onRecoverAccounts,
   healthActionBusy,
   onStreamTestMessage,
-  saving,
+  saving: externalSaving,
   testing,
   starting,
   portCleanupBusy,
   sidecarRestarting,
 }: CodexLocalAccessModalProps) {
   const { t } = useTranslation();
+  const saving = externalSaving;
+  const collection = state?.collection ?? null;
+  const localAccessStatus = resolveCodexLocalAccessRuntimeStatus(state?.collection, state);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filterTypes, setFilterTypes] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [groupFilter, setGroupFilter] = useState<string[]>([]);
   const [restrictFreeAccounts, setRestrictFreeAccounts] = useState(true);
+  const [sessionIdentityMappingEnabled, setSessionIdentityMappingEnabled] = useState(true);
   const [sessionAffinity, setSessionAffinity] = useState(true);
   const [sessionAffinityTtlSeconds, setSessionAffinityTtlSeconds] =
     useState("3600");
   const [sessionAffinityTtlError, setSessionAffinityTtlError] = useState("");
   const [imageGenerationPolicies, setImageGenerationPolicies] = useState<Record<string, CodexLocalAccessImageGenerationPolicy>>({});
   const [membersDraftDirty, setMembersDraftDirty] = useState(false);
+  const modalSessionRef = useRef<CodexLocalAccessModalProps["mode"] | null>(null);
+  const [memberSavePending, setMemberSavePending] = useState(false);
+  const memberSaveInFlight = useRef(false);
+  const memberSaveEpoch = useRef(0);
+  useEffect(() => {
+    memberSaveEpoch.current++;
+    memberSaveInFlight.current = false;
+    setMemberSavePending(false);
+  }, [isOpen, mode]);
+  const [officialAccountBindings, setOfficialAccountBindings] = useState<Record<string, string>>({});
+  // 跨平台成员：Grok 平台已登录账号（默认与 Codex 一起展示）。
+  const [grokMemberAccounts, setGrokMemberAccounts] = useState<GrokAccount[]>([]);
+  const [grokMemberLoading, setGrokMemberLoading] = useState(false);
+  const [grokMemberError, setGrokMemberError] = useState("");
+  const [grokMemberBusyId, setGrokMemberBusyId] = useState("");
+  const [platformFilter, setPlatformFilter] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const errorAreaRef = useRef<HTMLDivElement>(null);
   const [notice, setNotice] = useState("");
   const [testDialogOpen, setTestDialogOpen] = useState(false);
   const [healthModalOpen, setHealthModalOpen] = useState(false);
@@ -394,8 +330,8 @@ export function CodexLocalAccessModal({
   );
   const [testChatInput, setTestChatInput] = useState("");
   const [testDialogError, setTestDialogError] = useState("");
-  const [portInput, setPortInput] = useState("");
-  const [upstreamProxyDraftUrl, setUpstreamProxyDraftUrl] = useState("");
+  const [portInput, setPortInput] = useRefreshSafeDraft(collection?.port ? String(collection.port) : "");
+  const [upstreamProxyDraftUrl, setUpstreamProxyDraftUrl] = useRefreshSafeDraft(collection?.upstreamProxyUrl ?? "");
   const [keyVisible, setKeyVisible] = useState(false);
   const [copiedField, setCopiedField] = useState<CopyableField | null>(null);
   const [selectedModelId, setSelectedModelId] = useState("");
@@ -432,7 +368,6 @@ export function CodexLocalAccessModal({
   const sessionAffinityTtlInputRef = useRef<HTMLInputElement | null>(null);
   const testChatScrollRef = useRef<HTMLDivElement | null>(null);
 
-  const collection = state?.collection ?? null;
   const apiPortUrl = state?.apiPortUrl ?? "";
   const baseUrl = state?.baseUrl ?? "";
   const displayBaseUrl =
@@ -477,85 +412,34 @@ export function CodexLocalAccessModal({
           (selectedTotals.successCount / selectedTotals.requestCount) * 100,
         )
       : 0;
-  const formatRequestResultDetail = (
-    usage?: CodexLocalAccessUsageStats | null,
-  ) =>
-    t("codex.localAccess.stats.requestsDetail", {
-      success: formatCompactNumber(usage?.successCount ?? 0),
-      failed: formatCompactNumber(
-        Math.max(
-          (usage?.failureCount ?? 0) -
-            (usage?.clientCanceledCount ?? 0) -
-            (usage?.upstreamResponseFailedCount ?? 0) -
-            (usage?.streamIncompleteCount ?? 0),
-          0,
-        ),
-      ),
-      canceled: formatCompactNumber(usage?.clientCanceledCount ?? 0),
-      upstreamFailed: formatCompactNumber(
-        usage?.upstreamResponseFailedCount ?? 0,
-      ),
-      incomplete: formatCompactNumber(usage?.streamIncompleteCount ?? 0),
-      defaultValue:
-        "成功 {{success}} / 失败 {{failed}} / 取消 {{canceled}} / 上游失败 {{upstreamFailed}} / 流未完成 {{incomplete}}",
-    });
+  const formatRequestResultDetail = (usage?: CodexLocalAccessUsageStats | null) =>
+    formatLocalAccessRequestResultDetail(t, usage);
   const testDialogBusy = testDialogRunning || testing;
   const actionBusy = saving || testing || starting || portCleanupBusy;
-  const membersInteractionDisabled = actionBusy || !accountsLoaded;
+  useEffect(() => {
+    if (!error && (!state?.lastError || actionBusy)) return;
+    errorAreaRef.current?.scrollIntoView({ block: "nearest" });
+    errorAreaRef.current?.focus({ preventScroll: true });
+  }, [error, state?.lastError, actionBusy]);
+
   const summaryStats = useMemo(
-    () => [
-      {
-        key: "requests",
-        label: t("codex.localAccess.stats.requests", "总请求数"),
-        value: formatCompactNumber(selectedTotals?.requestCount ?? 0),
-        detail: formatRequestResultDetail(selectedTotals),
-      },
-      {
-        key: "tokens",
-        label: t("codex.localAccess.stats.tokens", "总 Token 数"),
-        value: formatCompactNumber(selectedTotals?.totalTokens ?? 0),
-        detail: t("codex.localAccess.stats.tokensDetail", {
-          input: formatCompactNumber(selectedTotals?.inputTokens ?? 0),
-          output: formatCompactNumber(selectedTotals?.outputTokens ?? 0),
-          defaultValue: "输入 {{input}} / 输出 {{output}}",
-        }),
-      },
-      {
-        key: "specialTokens",
-        label: t("codex.localAccess.stats.specialTokens", "缓存 / 思考"),
-        value: formatCompactNumber(
-          (selectedTotals?.cachedTokens ?? 0) +
-            (selectedTotals?.reasoningTokens ?? 0),
-        ),
-        detail: t("codex.localAccess.stats.specialTokensDetail", {
-          cached: formatCompactNumber(selectedTotals?.cachedTokens ?? 0),
-          reasoning: formatCompactNumber(selectedTotals?.reasoningTokens ?? 0),
-          defaultValue: "缓存 {{cached}} / 思考 {{reasoning}}",
-        }),
-      },
-      {
-        key: "cost",
-        label: t("codex.localAccess.stats.estimatedCost", "估算价值"),
-        value: formatUsdCost(selectedTotals?.estimatedCostUsd ?? 0),
-        detail: t(
-          "codex.localAccess.stats.estimatedCostDetail",
-          "按当前请求价格快照累计",
-        ),
-      },
-      {
-        key: "latency",
-        label: t("codex.localAccess.stats.avgLatency", "平均延迟"),
-        value: formatLatencyMs(avgLatencyMs),
-        detail: t("codex.localAccess.stats.successRate", {
-          rate: successRate,
-          defaultValue: "成功率 {{rate}}%",
-        }),
-      },
-    ],
+    () => buildLocalAccessSummaryStats(t, selectedTotals, avgLatencyMs, successRate),
     [avgLatencyMs, selectedTotals, successRate, t],
   );
 
-  const localAccessAccounts = useMemo(() => accounts, [accounts]);
+  const planGrants = useChatGptPlanOverview(collection?.accountIds, collection?.officialAccountBindings);
+  const { addMembers: addMemberRows, prepareSave: prepareMemberSave, chooseMode: chooseMemberMode, modeFor: memberModeFor, busy: memberJoinBusy } = useCodexServiceMemberDraft({
+    active: isOpen && mode === "members", accounts, collection, selected, setSelected, grants: planGrants.accounts, bindings: officialAccountBindings,
+    setBindings: setOfficialAccountBindings,
+    markDirty: () => setMembersDraftDirty(true),
+    reportError: (failure) => setError(t(chatGptPlanErrorKey(failure))),
+    clearError: () => setError(""),
+  });
+  const membersInteractionDisabled =
+    actionBusy || memberSavePending || memberJoinBusy || !accountsLoaded || Boolean(grokMemberBusyId);
+  const completeLocalAccessAccounts = useMemo(() => codexServiceOriginalAccounts(accounts, collection?.accountIds), [accounts, collection?.accountIds]);
+  const localAccessAccounts = completeLocalAccessAccounts;
+  useCodexMemberAuthorizationSync(isOpen && mode === "members", collection, setSelected, setImageGenerationPolicies, setCustomRoutingDraft);
   const quotaPoolSummary = useMemo(
     () => summarizeCodexQuotaPool(localAccessAccounts),
     [localAccessAccounts],
@@ -564,79 +448,52 @@ export function CodexLocalAccessModal({
     const accountIds = new Set(collection?.accountIds ?? []);
     return summarizeCodexQuotaPool(
       localAccessAccounts.filter((account) => accountIds.has(account.id)),
+      { sourceAccounts: accounts, grants: planGrants.accounts, displaySourceIds: planGrants.displaySourceIds },
     );
-  }, [collection?.accountIds, localAccessAccounts]);
-  const accountPoolHealthSummary = useMemo<AccountPoolHealthSummary>(() => {
-    const accountById = new Map(
-      localAccessAccounts.map((account) => [account.id, account]),
-    );
-    const healthById = new Map(
-      (state?.accountHealth ?? []).map((health) => [health.accountId, health]),
-    );
-    const poolUnavailableAccountIds = new Set<string>();
-    (state?.accountPoolHealth ?? []).forEach((pool) => {
-      const statuses = (pool.accountStatuses ?? []).filter((member) =>
-        member.accountId.trim(),
-      );
-      if (statuses.length === 0) {
-        (collection?.accountIds ?? []).forEach((accountId) =>
-          poolUnavailableAccountIds.add(accountId),
-        );
-        return;
-      }
-      statuses
-        .filter((member) => !member.available)
-        .forEach((member) => poolUnavailableAccountIds.add(member.accountId.trim()));
-    });
-    const summary: AccountPoolHealthSummary = {
-      total: collection?.accountIds.length ?? 0,
-      available: 0,
-      abnormal: 0,
-      cooldown: 0,
-      missing: 0,
-      authError: 0,
-      quotaLimited: 0,
-    };
-
-    (collection?.accountIds ?? []).forEach((accountId) => {
-      const account = accountById.get(accountId);
-      const health = healthById.get(accountId);
-      if (!account) {
-        summary.missing += 1;
-        summary.abnormal += 1;
-        return;
-      }
-      if (health?.cooldowns?.length) {
-        summary.cooldown += 1;
-        return;
-      }
-      if (isBlockingCodexAccountQuotaError(account)) {
-        summary.quotaLimited += 1;
-        return;
-      }
-      if (isAbnormalAccountFailure(health)) {
-        summary.authError += 1;
-        summary.abnormal += 1;
-        return;
-      }
-      if (health && !health.available) {
-        return;
-      }
-      if (poolUnavailableAccountIds.has(accountId)) {
-        return;
-      }
-      summary.available += 1;
-    });
-
-    return summary;
-  }, [
-    collection?.accountIds,
-    localAccessAccounts,
-    state?.accountHealth,
-    state?.accountPoolHealth,
-  ]);
+  }, [collection?.accountIds, localAccessAccounts, accounts, planGrants.accounts, planGrants.displaySourceIds]);
+  const accountPoolHealthSummary = useMemo(
+    () => summarizeAccountPoolHealth(localAccessAccounts, collection?.accountIds ?? [], state),
+    [
+      collection?.accountIds,
+      localAccessAccounts,
+      state?.accountHealth,
+      state?.accountPoolHealth,
+      state?.recoverySuppressedAccountIds,
+      collection?.pausedAccountIds,
+      collection?.officialAccountBindings,
+      state?.serviceMembers,
+    ],
+  );
   const initialRestrictFreeAccounts = collection?.restrictFreeAccounts ?? true;
+  const initialSessionIdentityMappingEnabled = collection?.sessionIdentityMappingEnabled ?? true;
   const initialSessionAffinity = collection?.sessionAffinity ?? true;
+  useEffect(() => {
+    if (!isOpen || mode !== "members") return;
+    const applied = (event: Event) => {
+      const detail = (event as CustomEvent<CodexAccountServiceApplied>).detail;
+      if (!detail || !Array.isArray(detail.relatedIds) || !Array.isArray(detail.selectedIds)) return;
+      const related = new Set(detail.relatedIds);
+      setMembersDraftDirty(true);
+      setSelected((previous) => new Set([...previous].filter((id) => !related.has(id)).concat(detail.selectedIds)));
+      setImageGenerationPolicies((previous) => {
+        const next = { ...previous };
+        const prior = detail.relatedIds.map((id) => previous[id]).find((policy) => policy !== undefined);
+        detail.relatedIds.forEach((id) => delete next[id]);
+        detail.selectedIds.forEach((id) => { next[id] = id.startsWith("chatgpt_plan_") ? "disabled" : prior ?? "inherit"; });
+        return next;
+      });
+      setCustomRoutingDraft((previous) => {
+        const next = { ...previous };
+        const prior = detail.relatedIds.map((id) => previous[id]).find(Boolean);
+        detail.relatedIds.forEach((id) => delete next[id]);
+        if (prior) detail.selectedIds.forEach((id) => { next[id] = prior; });
+        return next;
+      });
+    };
+    window.addEventListener(CODEX_ACCOUNT_SERVICE_APPLIED, applied);
+    return () => window.removeEventListener(CODEX_ACCOUNT_SERVICE_APPLIED, applied);
+  }, [isOpen, mode]);
+
   const initialSessionAffinityTtlSeconds = Math.round(
     (collection?.sessionAffinityTtlMs ?? 60 * 60 * 1000) / 1000,
   );
@@ -644,15 +501,18 @@ export function CodexLocalAccessModal({
     () =>
       resolveCodexLocalAccessInitialAccountIds(
         initialSelectedIds,
-        localAccessAccounts,
+        completeLocalAccessAccounts,
         initialRestrictFreeAccounts,
         accountsLoaded,
+        collection?.pausedAccountIds?.filter((id) => collection.accountIds.includes(id)),
       ),
     [
       accountsLoaded,
       initialSelectedIds,
       initialRestrictFreeAccounts,
-      localAccessAccounts,
+      completeLocalAccessAccounts,
+      collection?.pausedAccountIds,
+      collection?.accountIds,
     ],
   );
 
@@ -663,38 +523,23 @@ export function CodexLocalAccessModal({
   }, [isOpen, mode]);
 
   useEffect(() => {
-    if (!isOpen) return;
-    const shouldResetMembersDraft = mode !== "members" || !membersDraftDirty;
+    if (!isOpen) {
+      modalSessionRef.current = null;
+      return;
+    }
+    // 后台状态/额度刷新只同步未编辑的数据，不能重置当前弹框会话。
+    const isNewSession = modalSessionRef.current !== mode;
+    modalSessionRef.current = mode;
+    const shouldResetMembersDraft = isNewSession ||
+      ((mode !== "members" || !membersDraftDirty) && !customRoutingOpen);
     if (shouldResetMembersDraft) {
-      setQuery("");
       setSelected(new Set(normalizedInitialSelectedIds));
-      setFilterTypes([]);
-      setTagFilter([]);
-      setGroupFilter([]);
       setRestrictFreeAccounts(initialRestrictFreeAccounts);
+      setSessionIdentityMappingEnabled(initialSessionIdentityMappingEnabled);
       setSessionAffinity(initialSessionAffinity);
       setSessionAffinityTtlSeconds(String(initialSessionAffinityTtlSeconds));
       setImageGenerationPolicies(collection?.imageGenerationAccountPolicies ?? {});
-    }
-    setSessionAffinityTtlError("");
-    setError("");
-    setNotice("");
-    setTestDialogOpen(false);
-    setTestDialogRunning(false);
-    setTestChatMessages([]);
-    setTestChatInput("");
-    setTestDialogError("");
-    setKeyVisible(false);
-    setCopiedField(null);
-    setPortInput(collection?.port ? String(collection.port) : "");
-    setUpstreamProxyDraftUrl(collection?.upstreamProxyUrl ?? "");
-    setCustomRoutingOpen(false);
-    setCustomRoutingQuery("");
-    setCustomRoutingFilterTypes([]);
-    setCustomRoutingTagFilter([]);
-    setCustomRoutingError("");
-    setCustomRoutingSelected(new Set());
-    if (shouldResetMembersDraft) {
+      setOfficialAccountBindings(collection?.officialAccountBindings ?? {});
       setCustomRoutingDraft(() => {
         const ruleMap = new Map(
           (collection?.customRoutingRules ?? []).map((rule) => [
@@ -719,20 +564,45 @@ export function CodexLocalAccessModal({
         return next;
       });
     }
+    if (!isNewSession) return;
+    setQuery("");
+    setFilterTypes([]);
+    setTagFilter([]);
+    setGroupFilter([]);
+    setSessionAffinityTtlError("");
+    setError("");
+    setNotice("");
+    setTestDialogOpen(false);
+    setTestDialogRunning(false);
+    setTestChatMessages([]);
+    setTestChatInput("");
+    setTestDialogError("");
+    setKeyVisible(false);
+    setCopiedField(null);
+    setPortInput(collection?.port ? String(collection.port) : "");
+    setUpstreamProxyDraftUrl(collection?.upstreamProxyUrl ?? "");
+    setCustomRoutingOpen(false);
+    setCustomRoutingQuery("");
+    setCustomRoutingFilterTypes([]);
+    setCustomRoutingTagFilter([]);
+    setCustomRoutingError("");
+    setCustomRoutingSelected(new Set());
     setCustomRoutingBulkPriority("10");
     setCustomRoutingBulkWeight("1");
     if (mode === "members") {
-      window.setTimeout(() => {
+      const timer = window.setTimeout(() => {
         searchInputRef.current?.focus();
       }, 0);
+      return () => window.clearTimeout(timer);
     }
   }, [
     collection?.accountIds,
-    collection?.apiKeys,
     collection?.customRoutingRules,
-    collection?.port,
-    collection?.upstreamProxyUrl,
+    collection?.imageGenerationAccountPolicies,
+    collection?.officialAccountBindings,
+    customRoutingOpen,
     initialRestrictFreeAccounts,
+    initialSessionIdentityMappingEnabled,
     initialSessionAffinity,
     initialSessionAffinityTtlSeconds,
     isOpen,
@@ -806,55 +676,14 @@ export function CodexLocalAccessModal({
     return Array.from(next).sort((left, right) => left.localeCompare(right));
   }, [localAccessAccounts]);
 
-  const groupIdsByAccountId = useMemo(() => {
-    const next = new Map<string, Set<string>>();
-    accountGroups.forEach((group) => {
-      group.accountIds.forEach((accountId) => {
-        const current = next.get(accountId) ?? new Set<string>();
-        current.add(group.id);
-        next.set(accountId, current);
-      });
-    });
-    return next;
-  }, [accountGroups]);
-
-  const groupNameByAccountId = useMemo(() => {
-    const next = new Map<string, string[]>();
-    accountGroups.forEach((group) => {
-      group.accountIds.forEach((accountId) => {
-        const current = next.get(accountId) ?? [];
-        current.push(group.name);
-        next.set(accountId, current);
-      });
-    });
-    return next;
-  }, [accountGroups]);
-
-  const groupFilterOptions = useMemo<MultiSelectFilterOption[]>(
-    () =>
-      accountGroups
-        .map((group) => ({
-          value: group.id,
-          label: `${group.name} (${group.accountIds.length})`,
-        }))
-        .sort((left, right) => left.label.localeCompare(right.label)),
-    [accountGroups],
-  );
-
-  const tierCounts = useMemo(() => {
-    const counts = createCodexPlanFilterCounts(localAccessAccounts.length);
-    localAccessAccounts.forEach((account) => {
-      if (!isBlockingCodexAccountQuotaError(account)) {
-        counts.VALID += 1;
-      }
-      const tier = getCodexPlanFilterKey(account);
-      incrementCodexPlanFilterCount(counts, tier);
-      if (isBlockingCodexAccountQuotaError(account)) {
-        counts.ERROR += 1;
-      }
-    });
-    return counts;
-  }, [localAccessAccounts]);
+  const serviceMemberView = useMemo(() => buildCodexServiceMemberView({
+    accounts: localAccessAccounts, sourceAccounts: accounts, groups: accountGroups,
+    memberIds: collection?.accountIds ?? [], accountHealth: state?.accountHealth, officialAccountBindings: collection?.officialAccountBindings,
+  }), [localAccessAccounts, accounts, accountGroups, collection?.accountIds, collection?.officialAccountBindings, state?.accountHealth]);
+  const groupFilterOptions = useMemo<MultiSelectFilterOption[]>(() => serviceMemberView.groups
+    .map((group) => ({ value: group.id, label: `${group.name} (${group.accountIds.length})` }))
+    .sort((left, right) => left.label.localeCompare(right.label)), [serviceMemberView]);
+  const tierCounts = serviceMemberView.counts;
 
   const quotaPoolByPlan = useMemo(
     () => summarizeQuotaPoolsByPlan(localAccessAccounts),
@@ -880,7 +709,13 @@ export function CodexLocalAccessModal({
     () =>
       buildCodexPlanFilterOptions(tierCounts, {
         includeValid: true,
+        includeZeroQuota: true,
+        includeExpired: true,
+        errorLabel: t("codex.filters.authError"),
+        zeroQuotaLabel: t("codex.filters.zeroQuota"),
+        expiredLabel: t("codex.filters.expired"),
         pendingLabel: t("codex.pendingAuth.badge", "待授权"),
+        chatgptPlanLabel: t("chatgptPlan.title"),
         validOption: buildValidAccountsFilterOption(t, tierCounts.VALID),
       }).map((option) => {
         const pool = quotaPoolByPlan[option.value];
@@ -906,122 +741,105 @@ export function CodexLocalAccessModal({
   const memberFilterTypes = memberView?.filterTypes ?? filterTypes;
   const memberTagFilter = memberView?.tagFilter ?? tagFilter;
   const memberGroupFilter = memberView?.groupFilter ?? groupFilter;
-  const memberTierFilterOptions =
-    memberView?.tierFilterOptions ?? tierFilterOptions;
-  const memberTierFilterAllLabel =
-    memberView?.tierFilterAllLabel ?? allTierFilterLabel;
-  const memberAvailableTags = memberView?.availableTags ?? availableTags;
-  const memberGroupFilterOptions =
-    memberView?.groupFilterOptions ?? groupFilterOptions;
+  const memberTierFilterOptions = tierFilterOptions;
+  const memberTierFilterAllLabel = allTierFilterLabel;
+  const memberAvailableTags = availableTags;
+  const memberGroupFilterOptions = groupFilterOptions;
 
-  const visibleAccounts = useMemo(() => {
-    if (memberView) {
-      return memberView.accounts;
-    }
+  // 平台筛选：默认全部平台（Codex + Grok），后续可继续追加平台。
+  const platformFilterActive =
+    platformFilter.length > 0 && platformFilter.length < 2;
+  const showCodexPlatform =
+    !platformFilterActive || platformFilter.includes("codex");
+  const showGrokPlatform =
+    !platformFilterActive || platformFilter.includes("grok");
 
-    const queryText = query.trim().toLowerCase();
-    const sorted = [...localAccessAccounts].sort((a, b) => {
-      const aName = buildCodexAccountPresentation(
-        a,
-        t,
-      ).displayName.toLowerCase();
-      const bName = buildCodexAccountPresentation(
-        b,
-        t,
-      ).displayName.toLowerCase();
-      return aName.localeCompare(bName);
+  // Grok 平台账号：仅 OAuth(订阅) 账号可作为 API 服务上游，API Key 账号不在此处展示。
+  const grokMemberCandidates = useMemo(
+    () => grokMemberAccounts.filter((account) => !isGrokApiKeyAccount(account)),
+    [grokMemberAccounts],
+  );
+  // grok account id -> 绑定它的 Codex 供应商账号 ID（已加入集合时用于勾选反查）。
+  const grokMemberBindingByAccountId = useMemo(() => {
+    const map = new Map<string, string>();
+    accounts.forEach((account) => {
+      const grokAccountId = account.upstream_grok_account_id?.trim();
+      if (grokAccountId && !map.has(grokAccountId)) {
+        map.set(grokAccountId, account.id);
+      }
     });
-    const selectedTags = new Set(tagFilter.map(normalizeTag));
-    const selectedGroups = new Set(groupFilter);
+    return map;
+  }, [accounts]);
+
+  /**
+   * Grok 平台账号在成员列表里的行数据（与 Codex 账号同一列表、同一套交互）。
+   *
+   * 行 ID 使用 `grok:` 前缀与真实 Codex 账号区分；勾选后由宿主创建绑定的
+   * 供应商账号，选中的始终是真实账号 ID。
+   */
+  const grokMemberRowAccounts = useMemo(() => {
+    if (mode !== "members" || !onAddGrokMember || !showGrokPlatform) {
+      return [] as CodexAccount[];
+    }
     const { requireValidAccounts, selectedTypes } =
-      splitValidityFilterValues(filterTypes);
-
-    return sorted.filter((account) => {
-      const presentation = buildCodexAccountPresentation(account, t);
-      const displayName = presentation.displayName.toLowerCase();
-      const groupNames = (groupNameByAccountId.get(account.id) ?? [])
-        .join(" ")
-        .toLowerCase();
-      const matchesQuery =
-        !queryText ||
-        displayName.includes(queryText) ||
-        groupNames.includes(queryText);
-      if (!matchesQuery) return false;
-
-      if (selectedTags.size > 0) {
-        const accountTags = (account.tags || []).map(normalizeTag);
-        if (!accountTags.some((tag) => selectedTags.has(tag))) {
-          return false;
-        }
-      }
-
-      if (selectedGroups.size > 0) {
-        const accountGroupIds = groupIdsByAccountId.get(account.id);
-        if (
-          !accountGroupIds ||
-          !Array.from(accountGroupIds).some((id) => selectedGroups.has(id))
-        ) {
-          return false;
-        }
-      }
-
-      if (
-        requireValidAccounts &&
-        isBlockingCodexAccountQuotaError(account)
-      ) {
-        return false;
-      }
-
-      if (selectedTypes.size > 0) {
-        const planKey = getCodexPlanFilterKey(account);
-        const matchesType = Array.from(selectedTypes).some((type) => {
-          if (type === "ERROR") {
-            return isBlockingCodexAccountQuotaError(account);
-          }
-          return type === planKey;
-        });
-        if (!matchesType) {
-          return false;
-        }
-      }
-
-      return true;
+      splitValidityFilterValues(memberFilterTypes);
+    return buildGrokMemberRowAccounts({
+      accounts: grokMemberCandidates,
+      searchQuery: memberSearchQuery,
+      tagFilterActive: memberTagFilter.length > 0,
+      groupFilterActive: memberGroupFilter.length > 0,
+      requireValidAccounts,
+      selectedTypes,
     });
   }, [
-    filterTypes,
-    groupFilter,
-    groupIdsByAccountId,
-    groupNameByAccountId,
-    localAccessAccounts,
-    memberView,
-    query,
-    t,
-    tagFilter,
+    grokMemberCandidates,
+    memberFilterTypes,
+    memberGroupFilter,
+    memberSearchQuery,
+    memberTagFilter,
+    mode,
+    onAddGrokMember,
+    showGrokPlatform,
   ]);
 
-  const visibleSelectableAccounts = useMemo(
-    () =>
-      visibleAccounts.filter((account) => {
-        const ineligibleReason = getCodexLocalAccessAccountIneligibleReason(
-          account,
-          restrictFreeAccounts,
-        );
-        // Keep unsupported accounts visible so users know why they cannot join.
-        if (
-          ineligibleReason === "chat_completions_api_key" ||
-          ineligibleReason === "deepseek_unsupported" ||
-          ineligibleReason === "pending_oauth" ||
-          ineligibleReason === "web_session_quota_only"
-        ) {
-          return true;
-        }
-        if (isCodexLocalAccessEligibleAccount(account, restrictFreeAccounts)) {
-          return true;
-        }
-        return selected.has(account.id);
-      }),
-    [restrictFreeAccounts, selected, visibleAccounts],
-  );
+  /** 行 ID -> Grok 平台账号（成员列表里 Grok 行与 Codex 行共用同一张表）。 */
+  const grokMemberRowAccountById = useMemo(() => {
+    const map = new Map<string, GrokAccount>();
+    grokMemberRowAccounts.forEach((row) => {
+      const grokAccountId = row.upstream_grok_account_id?.trim();
+      if (!grokAccountId) {
+        return;
+      }
+      const source = grokMemberCandidates.find(
+        (candidate) => candidate.id === grokAccountId,
+      );
+      if (source) {
+        map.set(row.id, source);
+      }
+    });
+    return map;
+  }, [grokMemberCandidates, grokMemberRowAccounts]);
+
+  const visibleAccounts = useMemo(() => filterCodexServiceMemberView(serviceMemberView, {
+    searchQuery: memberSearchQuery, filterTypes: memberFilterTypes, tagFilter: memberTagFilter,
+    groupFilter: memberGroupFilter, activeGroupId: memberView?.activeGroupId,
+    resolveDisplayName: (account) => buildCodexAccountPresentation(account, t).displayName,
+    compareAccounts: memberView?.compareAccounts ?? ((left, right) =>
+      buildCodexAccountPresentation(left, t).displayName.toLowerCase().localeCompare(
+        buildCodexAccountPresentation(right, t).displayName.toLowerCase())),
+  }), [serviceMemberView, memberSearchQuery, memberFilterTypes, memberTagFilter, memberGroupFilter,
+    memberView?.activeGroupId, memberView?.compareAccounts, t]);
+
+  const visibleSelectableAccounts = selectCodexLocalAccessMemberRows({
+    codexAccounts: visibleAccounts,
+    grokRows: grokMemberRowAccounts,
+    grokAccounts: grokMemberCandidates,
+    manageGrok: Boolean(onAddGrokMember),
+    showCodexPlatform,
+    showGrokPlatform,
+    restrictFreeAccounts,
+    selected,
+  });
   const memberPagination = usePagination({
     items: visibleSelectableAccounts,
     storageKey: buildPaginationPageSizeStorageKey("CodexLocalAccessMembers"),
@@ -1049,13 +867,26 @@ export function CodexLocalAccessModal({
     [restrictFreeAccounts, visibleSelectableAccounts],
   );
 
+  /** 行是否已被选中：Grok 行按绑定的供应商账号 ID 判断。 */
+  const isMemberRowSelected = useCallback(
+    (account: CodexAccount) => {
+      const grokRowAccount = grokMemberRowAccountById.get(account.id);
+      if (!grokRowAccount) {
+        return codexServiceRelatedEndpointIds(account, completeLocalAccessAccounts).some((id) => selected.has(id));
+      }
+      const boundAccountId = grokMemberBindingByAccountId.get(grokRowAccount.id);
+      return Boolean(boundAccountId && selected.has(boundAccountId));
+    },
+    [grokMemberBindingByAccountId, grokMemberRowAccountById, completeLocalAccessAccounts, selected],
+  );
+
   const selectedVisibleCount = useMemo(
     () =>
       visibleEnabledAccounts.reduce(
-        (count, account) => count + (selected.has(account.id) ? 1 : 0),
+        (count, account) => count + (isMemberRowSelected(account) ? 1 : 0),
         0,
       ),
-    [selected, visibleEnabledAccounts],
+    [isMemberRowSelected, visibleEnabledAccounts],
   );
 
   const allVisibleSelected =
@@ -1134,57 +965,48 @@ export function CodexLocalAccessModal({
     () =>
       !areSetsEqual(selected, new Set(normalizedInitialSelectedIds)) ||
       restrictFreeAccounts !== (collection?.restrictFreeAccounts ?? true) ||
+      sessionIdentityMappingEnabled !== initialSessionIdentityMappingEnabled ||
       sessionAffinity !== initialSessionAffinity ||
       sessionAffinityTtlSeconds !== String(initialSessionAffinityTtlSeconds) ||
       !areSetsEqual(currentBackupAccountIds, initialBackupAccountIds) ||
       !areSetsEqual(currentPreferredAccountIds, initialPreferredAccountIds) ||
+      JSON.stringify(officialAccountBindings) !== JSON.stringify(collection?.officialAccountBindings ?? {}) ||
       JSON.stringify(imageGenerationPolicies) !==
         JSON.stringify(collection?.imageGenerationAccountPolicies ?? {}),
     [
       collection?.restrictFreeAccounts,
       currentBackupAccountIds,
       currentPreferredAccountIds,
+      initialSessionIdentityMappingEnabled,
       initialSessionAffinity,
       initialSessionAffinityTtlSeconds,
       initialBackupAccountIds,
       initialPreferredAccountIds,
       normalizedInitialSelectedIds,
       restrictFreeAccounts,
+      sessionIdentityMappingEnabled,
       sessionAffinity,
       sessionAffinityTtlSeconds,
       selected,
       imageGenerationPolicies,
+      officialAccountBindings,
+      collection?.officialAccountBindings,
     ],
   );
 
-  const allStatsByAccountId = useMemo(() => {
-    const next = new Map<
-      string,
-      NonNullable<CodexLocalAccessState["stats"]>["accounts"][number]
-    >();
-    stats?.accounts.forEach((item) => next.set(item.accountId, item));
-    return next;
-  }, [stats?.accounts]);
-
-  const windowStatsByAccountId = useMemo(() => {
-    const next = new Map<
-      string,
-      NonNullable<CodexLocalAccessState["stats"]>["accounts"][number]
-    >();
-    selectedStatsWindow?.accounts.forEach((item) =>
-      next.set(item.accountId, item),
-    );
-    return next;
-  }, [selectedStatsWindow?.accounts]);
+  const allStatsByAccountId = useMemo(
+    () => aggregateCodexServiceAccountStats(stats?.accounts ?? [], accounts, planGrants.accounts, planGrants.displaySourceIds),
+    [stats?.accounts, accounts, planGrants.accounts, planGrants.displaySourceIds],
+  );
+  const windowStatsByAccountId = useMemo(
+    () => aggregateCodexServiceAccountStats(selectedStatsWindow?.accounts ?? [], accounts, planGrants.accounts, planGrants.displaySourceIds),
+    [selectedStatsWindow?.accounts, accounts, planGrants.accounts, planGrants.displaySourceIds],
+  );
 
   const currentMemberStats = useMemo(() => {
     const currentIds = collection?.accountIds ?? [];
-    return currentIds
-      .map((accountId) => {
-        const account = localAccessAccounts.find(
-          (item) => item.id === accountId,
-        );
-        if (!account) return null;
+    return codexServiceDisplayRows(localAccessAccounts.filter((account) => currentIds.includes(account.id)))
+      .map((account) => {
         const presentation = buildCodexAccountPresentation(account, t);
         const accountStats = windowStatsByAccountId.get(account.id);
         return {
@@ -1202,55 +1024,7 @@ export function CodexLocalAccessModal({
   }, [collection?.accountIds, localAccessAccounts, t, windowStatsByAccountId]);
 
   const routingStrategyOptions = useMemo(
-    () =>
-      [
-        {
-          value: "auto",
-          label: t("codex.localAccess.routingStrategy.auto", "自动（推荐）"),
-        },
-        {
-          value: "quota_high_first",
-          label: t(
-            "codex.localAccess.routingStrategy.quotaHighFirst",
-            "优先高配额",
-          ),
-        },
-        {
-          value: "quota_low_first",
-          label: t(
-            "codex.localAccess.routingStrategy.quotaLowFirst",
-            "优先低配额",
-          ),
-        },
-        {
-          value: "plan_high_first",
-          label: t(
-            "codex.localAccess.routingStrategy.planHighFirst",
-            "优先高订阅",
-          ),
-        },
-        {
-          value: "plan_low_first",
-          label: t(
-            "codex.localAccess.routingStrategy.planLowFirst",
-            "优先低订阅",
-          ),
-        },
-        {
-          value: "expiry_soon_first",
-          label: t(
-            "codex.localAccess.routingStrategy.expirySoonFirst",
-            "优先近到期",
-          ),
-        },
-        {
-          value: "custom",
-          label: t("codex.localAccess.routingStrategy.custom", "自定义"),
-        },
-      ] satisfies Array<{
-        value: CodexLocalAccessRoutingStrategy;
-        label: string;
-      }>,
+    () => buildLocalAccessRoutingStrategyOptions(t),
     [t],
   );
   const memberPriorityOptions = useMemo(
@@ -1267,14 +1041,6 @@ export function CodexLocalAccessModal({
         value: "highest",
         label: t("codex.localAccess.memberPriorityHighest", "最高"),
       },
-    ],
-    [t],
-  );
-  const imageGenerationPolicyOptions = useMemo(
-    () => [
-      { value: "inherit", label: t("codex.localAccess.imagePolicy.inherit", "生图：自动") },
-      { value: "enabled", label: t("codex.localAccess.imagePolicy.enabled", "生图：启用") },
-      { value: "disabled", label: t("codex.localAccess.imagePolicy.disabled", "生图：禁用") },
     ],
     [t],
   );
@@ -1317,9 +1083,77 @@ export function CodexLocalAccessModal({
   };
 
   const localAccessAccountById = useMemo(
-    () => new Map(localAccessAccounts.map((account) => [account.id, account])),
-    [localAccessAccounts],
+    () => new Map(completeLocalAccessAccounts.map((account) => [account.id, account])),
+    [completeLocalAccessAccounts],
   );
+
+  useEffect(() => {
+    if (!isOpen || mode !== "members" || !onAddGrokMember) {
+      return;
+    }
+    let cancelled = false;
+    setGrokMemberLoading(true);
+    setGrokMemberError("");
+    void listGrokAccounts()
+      .then((list) => {
+        if (!cancelled) {
+          setGrokMemberAccounts(list);
+        }
+      })
+      .catch((loadError) => {
+        if (!cancelled) {
+          setGrokMemberError(String(loadError).replace(/^Error:\s*/, ""));
+          setGrokMemberAccounts([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setGrokMemberLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, mode, onAddGrokMember]);
+
+  const handleToggleGrokMember = async (
+    grokAccount: GrokAccount,
+    nextChecked: boolean,
+  ) => {
+    const boundAccountId = grokMemberBindingByAccountId.get(grokAccount.id);
+    if (!nextChecked) {
+      if (boundAccountId) {
+        setSelected((previous) => {
+          const next = new Set(previous);
+          next.delete(boundAccountId);
+          return next;
+        });
+      }
+      setMembersDraftDirty(true);
+      return;
+    }
+    if (boundAccountId) {
+      setSelected((previous) => new Set(previous).add(boundAccountId));
+      setMembersDraftDirty(true);
+      return;
+    }
+    if (!onAddGrokMember) {
+      return;
+    }
+    setGrokMemberBusyId(grokAccount.id);
+    setGrokMemberError("");
+    try {
+      const bound = await onAddGrokMember(grokAccount.id);
+      if (bound) {
+        setSelected((previous) => new Set(previous).add(bound.id));
+        setMembersDraftDirty(true);
+      }
+    } catch (addError) {
+      setGrokMemberError(String(addError).replace(/^Error:\s*/, ""));
+    } finally {
+      setGrokMemberBusyId("");
+    }
+  };
 
   const customRoutingRuleByAccountId = useMemo(() => {
     const next = new Map<string, CustomRoutingDraftRule>();
@@ -1363,7 +1197,7 @@ export function CodexLocalAccessModal({
       if (!isBlockingCodexAccountQuotaError(account)) {
         counts.VALID += 1;
       }
-      const tier = getCodexPlanFilterKey(account);
+      const tier = getCodexServicePlanFilterKey(account);
       incrementCodexPlanFilterCount(counts, tier);
       if (isBlockingCodexAccountQuotaError(account)) {
         counts.ERROR += 1;
@@ -1396,6 +1230,7 @@ export function CodexLocalAccessModal({
       buildCodexPlanFilterOptions(customRoutingTierCounts, {
         includeValid: true,
         pendingLabel: t("codex.pendingAuth.badge", "待授权"),
+        chatgptPlanLabel: t("chatgptPlan.title"),
         validOption: buildValidAccountsFilterOption(
           t,
           customRoutingTierCounts.VALID,
@@ -1451,7 +1286,7 @@ export function CodexLocalAccessModal({
       }
 
       if (selectedTypes.size > 0) {
-        const planKey = getCodexPlanFilterKey(account);
+        const planKey = getCodexServicePlanFilterKey(account);
         const matchesType = Array.from(selectedTypes).some((type) => {
           if (type === "ERROR") {
             return isBlockingCodexAccountQuotaError(account);
@@ -1504,35 +1339,39 @@ export function CodexLocalAccessModal({
     }
   };
 
-  const runAction = async (task: () => Promise<void>, successText: string) => {
+  const runAction = async (task: () => Promise<void | boolean>, successText: string) => {
     setError("");
     setNotice("");
     try {
-      await task();
-      setNotice(successText);
+      const completed = await task();
+      if (completed !== false) setNotice(successText);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
   };
 
-  const toggleSelectAllVisible = () => {
-    if (membersInteractionDisabled || visibleEnabledAccounts.length === 0) {
+  const toggleSelectAllVisible = async () => {
+    if (membersInteractionDisabled || visibleEnabledAccounts.length === 0) return;
+    const codexRows = visibleEnabledAccounts.filter((account) => !grokMemberRowAccountById.has(account.id));
+    const grokRows = visibleEnabledAccounts.map((account) => grokMemberRowAccountById.get(account.id)).filter((account): account is GrokAccount => Boolean(account));
+    if (allVisibleSelected) {
+      setMembersDraftDirty(true);
+      setSelected((prev) => {
+        const next = new Set(prev);
+        codexRows.forEach((account) => codexServiceRelatedEndpointIds(account, completeLocalAccessAccounts).forEach((id) => next.delete(id)));
+        grokRows.forEach((account) => { const id = grokMemberBindingByAccountId.get(account.id); if (id) next.delete(id); });
+        return next;
+      });
       return;
     }
+    const ids = await addMemberRows(codexRows);
     setMembersDraftDirty(true);
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (allVisibleSelected) {
-        for (const account of visibleEnabledAccounts) {
-          next.delete(account.id);
-        }
-      } else {
-        for (const account of visibleEnabledAccounts) {
-          next.add(account.id);
-        }
-      }
-      return next;
-    });
+    setSelected((prev) => new Set([...prev, ...ids]));
+    for (const grokAccount of grokRows) {
+      const id = grokMemberBindingByAccountId.get(grokAccount.id);
+      if (id) setSelected((prev) => new Set(prev).add(id));
+      else await handleToggleGrokMember(grokAccount, true);
+    }
   };
 
   const handleToggleRestrictFreeAccounts = async () => {
@@ -1566,30 +1405,22 @@ export function CodexLocalAccessModal({
     setSessionAffinity(true);
   };
 
-  const toggleSelect = (accountId: string) => {
+  const toggleSelect = async (accountId: string) => {
     if (membersInteractionDisabled) return;
     const account = localAccessAccountById.get(accountId);
     if (!account) return;
-    const isSelectionBlocked =
-      !isCodexLocalAccessEligibleAccount(account, restrictFreeAccounts) &&
-      !selected.has(accountId);
-    if (isSelectionBlocked) {
+    if (isMemberRowSelected(account)) {
+      setMembersDraftDirty(true);
+      setSelected((prev) => toggleCodexServiceDisplaySelection(account, completeLocalAccessAccounts, prev, false));
       return;
     }
-    setMembersDraftDirty(true);
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(accountId)) {
-        next.delete(accountId);
-      } else {
-        next.add(accountId);
-      }
-      return next;
-    });
+    if (!isCodexLocalAccessEligibleAccount(account, restrictFreeAccounts)) return;
+    const ids = await addMemberRows([account]);
+    if (ids.length) { setMembersDraftDirty(true); setSelected((prev) => new Set([...prev, ...ids])); }
   };
 
   const handleSaveMembers = async () => {
-    if (!accountsLoaded) return;
+    if (!accountsLoaded || memberSaveInFlight.current) return;
     setError("");
     setNotice("");
     setSessionAffinityTtlError("");
@@ -1610,8 +1441,17 @@ export function CodexLocalAccessModal({
       requestAnimationFrame(() => sessionAffinityTtlInputRef.current?.focus());
       return;
     }
+    const saveEpoch = memberSaveEpoch.current;
+    memberSaveInFlight.current = true;
+    setMemberSavePending(true);
     try {
+      // Official membership is persisted before account metadata is refreshed.
+      // Never silently drop the new endpoint while its store refresh is pending.
+      if ([...selected].some((id) => id.startsWith("chatgpt_plan_") && !localAccessAccountById.has(id))) {
+        throw new Error(t("chatgptPlan.officialFlow.memberSyncPending"));
+      }
       const filtered = Array.from(selected).filter((accountId) => {
+        if (collection?.pausedAccountIds?.includes(accountId) && collection.accountIds.includes(accountId)) return true;
         const account = localAccessAccountById.get(accountId);
         if (!account) return false;
         return isCodexLocalAccessEligibleAccount(account, restrictFreeAccounts);
@@ -1630,28 +1470,37 @@ export function CodexLocalAccessModal({
           false;
         return isPreferred;
       });
+      const preparedBindings = await prepareMemberSave(filtered, officialAccountBindings);
+      if (!preparedBindings) return;
       await onSaveAccounts({
         accountIds: filtered,
         restrictFreeAccounts,
         backupAccountIds,
         preferredAccountIds,
+        sessionIdentityMappingEnabled,
         sessionAffinity,
         sessionAffinityTtlMs: parsedSessionAffinityTtlSeconds * 1000,
+        officialAccountBindings: preparedBindings,
         imageGenerationAccountPolicies: Object.fromEntries(
           filtered.map((accountId) => [
             accountId,
-            imageGenerationPolicies[accountId] ??
-              (isCodexApiKeyAccount(
-                localAccessAccountById.get(accountId) as CodexAccount,
-              )
-                ? "disabled"
-                : "inherit"),
+            resolveCodexMemberImagePolicy(
+              localAccessAccountById.get(accountId) as CodexAccount,
+              imageGenerationPolicies[accountId],
+            ),
           ]),
         ),
       });
-      onClose();
+      if (memberSaveEpoch.current === saveEpoch) onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (memberSaveEpoch.current !== saveEpoch) return;
+      const message = String(err).replace(/^Error:\s*/, "");
+      setError(message.startsWith("CHATGPT_PLAN_") ? t(chatGptPlanErrorKey(err)) : message);
+    } finally {
+      if (memberSaveEpoch.current === saveEpoch) {
+        memberSaveInFlight.current = false;
+        setMemberSavePending(false);
+      }
     }
   };
 
@@ -1759,35 +1608,28 @@ export function CodexLocalAccessModal({
     });
   };
 
-  const updateMemberUsagePriority = (
-    accountId: string,
-    usagePriority: AccountUsagePriority,
-  ) => {
+  const updateMemberUsagePriority = async (accountId: string, usagePriority: AccountUsagePriority) => {
     if (membersInteractionDisabled) return;
-    if (!selected.has(accountId)) {
-      setMembersDraftDirty(true);
-      setSelected((prev) => {
-        const next = new Set(prev);
-        next.add(accountId);
-        return next;
-      });
-    }
-    const current = customRoutingDraft[accountId] ??
-      customRoutingRuleByAccountId.get(accountId) ?? {
-        priority: CUSTOM_ROUTING_PRIORITY_MIN,
-        weight: CUSTOM_ROUTING_WEIGHT_MIN,
-        isBackup: false,
-        isPreferred: false,
-      };
+    const account = localAccessAccountById.get(accountId);
+    if (!account) return;
+    const checked = isMemberRowSelected(account);
+    if (!checked && !isCodexLocalAccessEligibleAccount(account, restrictFreeAccounts)) return;
+    const ids = checked
+      ? codexServiceRelatedEndpointIds(account, completeLocalAccessAccounts).filter((id) => selected.has(id))
+      : await addMemberRows([account]);
+    if (!ids.length) return;
     setMembersDraftDirty(true);
-    setCustomRoutingDraft((prev) => ({
-      ...prev,
-      [accountId]: {
-        ...current,
-        isBackup: usagePriority === "lowest",
-        isPreferred: usagePriority === "highest",
-      },
-    }));
+    if (!checked) setSelected((prev) => new Set([...prev, ...ids]));
+    setCustomRoutingDraft((prev) => {
+      const next = { ...prev };
+      for (const id of ids) {
+        const current = prev[id] ?? customRoutingRuleByAccountId.get(id) ?? {
+          priority: CUSTOM_ROUTING_PRIORITY_MIN, weight: CUSTOM_ROUTING_WEIGHT_MIN, isBackup: false, isPreferred: false,
+        };
+        next[id] = { ...current, isBackup: usagePriority === "lowest", isPreferred: usagePriority === "highest" };
+      }
+      return next;
+    });
   };
 
   const applyCustomRoutingBatch = () => {
@@ -2037,7 +1879,8 @@ export function CodexLocalAccessModal({
   const handleToggleEnabled = async () => {
     await runAction(
       async () => {
-        await onToggleEnabled();
+        const completed = await onToggleEnabled();
+        if (completed === false) return false;
       },
       collection?.enabled
         ? t("codex.localAccess.disabledSuccess", "API 服务已停用")
@@ -2176,7 +2019,7 @@ export function CodexLocalAccessModal({
         <div
           className={`modal codex-local-access-modal${
             isMembersMode
-              ? " codex-local-access-modal-members group-account-picker-modal"
+              ? " codex-local-access-modal-members"
               : " codex-local-access-modal-panel"
           }`}
           onClick={(event) => event.stopPropagation()}
@@ -2196,14 +2039,10 @@ export function CodexLocalAccessModal({
                   <div className="codex-local-access-header-badges">
                     <span
                       className={`codex-local-access-status ${
-                        state?.running ? "running" : "stopped"
+                        localAccessStatus
                       }`}
                     >
-                      {collection?.enabled
-                        ? state?.running
-                          ? t("codex.localAccess.statusRunning", "运行中")
-                          : t("codex.localAccess.statusStopped", "未运行")
-                        : t("codex.localAccess.statusDisabled", "已停用")}
+                      {t(CODEX_LOCAL_ACCESS_STATUS_KEYS[localAccessStatus])}
                     </span>
                     <span className="codex-local-access-subtle-badge">
                       {accessScopeBadge}
@@ -2414,11 +2253,12 @@ export function CodexLocalAccessModal({
             </button>
           </div>
 
-          <div className="modal-body codex-local-access-modal-body">
-            {state?.lastError && (
+          {(error || (state?.lastError && !actionBusy)) && (
+            <div className="codex-local-access-error-area" role="alert" ref={errorAreaRef} tabIndex={-1}>
+            {state?.lastError && !error && !actionBusy && (
               <div className="codex-local-access-inline-error codex-local-access-inline-error-with-action">
                 <CircleAlert size={14} />
-                <span>{state.lastError}</span>
+                <span>{formatCodexGatewayModeError(t, state.lastError)}</span>
                 {collection && (
                   <>
                     <button
@@ -2454,10 +2294,14 @@ export function CodexLocalAccessModal({
             {error && (
               <div className="codex-local-access-inline-error">
                 <CircleAlert size={14} />
-                <span>{error}</span>
+                <span>{formatCodexGatewayModeError(t, error)}</span>
               </div>
             )}
 
+            </div>
+          )}
+
+          <div className="modal-body codex-local-access-modal-body">
             {notice && (
               <div className="codex-local-access-inline-success">
                 <Check size={14} />
@@ -2593,7 +2437,7 @@ export function CodexLocalAccessModal({
                         className="codex-local-access-quota-pool-card"
                       >
                         <span className="codex-local-access-quota-pool-plan">
-                          {item.key} ({item.count})
+                          {formatCodexQuotaPoolPlanLabel(item, t('chatgptPlan.officialFlow.badge'), { pending: t('chatgptPlan.officialFlow.bindingChecking'), invalid: t('chatgptPlan.officialFlow.bindingInvalid') })} ({item.count})
                         </span>
                         {item.windows.map((window) => (
                           <span
@@ -2901,14 +2745,38 @@ export function CodexLocalAccessModal({
                       ) : null}
 
                       {collection ? (
-                        <CodexImageModelConfig
-                          model={collection.imageGenerationModel}
+                        <CodexImageForwardConfig
+                          accounts={accounts}
+                          accountIds={collection.imageGenerationAccountIds}
+                          imageGenerationModel={collection.imageGenerationModel}
+                          accountModels={collection.imageGenerationAccountModels}
                           disabled={saving || testing || starting}
-                          onSave={onUpdateImageGenerationModel}
+                          maskAccountText={maskAccountText}
+                          onSave={onUpdateImageGenerationAccounts}
+                          imageModelControl={
+                            <CodexImageModelSelect
+                              model={collection.imageGenerationModel} models={collection.imageGenerationModels} deletedModels={collection.imageGenerationDeletedModels} catalogUpdatedAt={collection.updatedAt}
+                              mainModel={collection.imageGenerationMainModel}
+                              disabled={saving || testing || starting}
+                              onSave={onUpdateImageGenerationModel}
+                              onSaveMainModel={onUpdateImageGenerationMainModel}
+                            />
+                          }
                         />
                       ) : null}
                     </div>
                   ) : null}
+                  <details className="codex-local-access-payload-details">
+                    <summary className="codex-local-access-section-title">
+                      <Bug size={16} />
+                      <span>{t("codex.requestDiagnostics.recordPayloads")}</span>
+                      <ChevronDown size={16} className="codex-local-access-payload-chevron" />
+                    </summary>
+                    <div className="codex-local-access-payload-details-body">
+                      <CodexRequestPayloadSetting />
+                    </div>
+                  </details>
+                  <CodexOverloadRetrySetting />
                 </section>
 
                 <section className="codex-local-access-section codex-local-access-section-surface codex-local-access-account-stats-section">
@@ -3057,6 +2925,17 @@ export function CodexLocalAccessModal({
                         </small>
                       )}
                     </div>
+                    <CodexSessionIdentityMappingControl
+                      compact
+                      checked={sessionIdentityMappingEnabled}
+                      disabled={membersInteractionDisabled}
+                      onChange={(enabled) => {
+                        setError("");
+                        setNotice("");
+                        setMembersDraftDirty(true);
+                        setSessionIdentityMappingEnabled(enabled);
+                      }}
+                    />
                     {collection && (
                       <>
                         <div className="codex-local-access-member-routing">
@@ -3096,6 +2975,7 @@ export function CodexLocalAccessModal({
                   </div>
                 </div>
 
+                <div className="codex-official-member-hint"><p>{t("chatgptPlan.officialFlow.addListHint")}</p><CodexOfficialAuthorizationEntry disabled={membersInteractionDisabled} />{memberJoinBusy && <span role="status">{t("common.processing")}</span>}</div>
                 <div className="group-account-toolbar">
                   <div className="group-account-search">
                     <Search size={16} className="group-account-search-icon" />
@@ -3114,6 +2994,37 @@ export function CodexLocalAccessModal({
                     />
                   </div>
                   <div className="group-account-picker-filters">
+                    {onAddGrokMember && (
+                      <MultiSelectFilterDropdown
+                        options={[
+                          { value: "codex", label: "Codex" },
+                          { value: "grok", label: "Grok" },
+                        ]}
+                        selectedValues={platformFilter}
+                        allLabel={t(
+                          "codex.localAccess.memberPlatformAll",
+                          "全部平台",
+                        )}
+                        filterLabel={t(
+                          "codex.localAccess.memberPlatformLabel",
+                          "平台",
+                        )}
+                        clearLabel={t("accounts.clearFilter", "清空筛选")}
+                        emptyLabel={t("common.none", "暂无")}
+                        ariaLabel={t(
+                          "codex.localAccess.memberPlatformLabel",
+                          "平台",
+                        )}
+                        onToggleValue={(value) =>
+                          setPlatformFilter((prev) =>
+                            prev.includes(value)
+                              ? prev.filter((item) => item !== value)
+                              : [...prev, value],
+                          )
+                        }
+                        onClear={() => setPlatformFilter([])}
+                      />
+                    )}
                     <MultiSelectFilterDropdown
                       options={memberTierFilterOptions}
                       selectedValues={memberFilterTypes}
@@ -3212,14 +3123,18 @@ export function CodexLocalAccessModal({
                     <div className="group-account-empty">
                       {t("common.loading", "加载中...")}
                     </div>
-                  ) : localAccessAccounts.length === 0 ? (
+                  ) : localAccessAccounts.length === 0 &&
+                    grokMemberRowAccounts.length === 0 &&
+                    !grokMemberLoading ? (
                     <div className="group-account-empty">
                       {t(
                         "codex.localAccess.modal.empty",
                         "暂无可加入的 Codex 账号",
                       )}
                     </div>
-                  ) : visibleSelectableAccounts.length === 0 ? (
+                  ) : visibleSelectableAccounts.length === 0 &&
+                    grokMemberRowAccounts.length === 0 &&
+                    !grokMemberLoading ? (
                     <div className="group-account-empty">
                       {t("common.shared.noMatch.title", "没有匹配的账号")}
                     </div>
@@ -3234,28 +3149,33 @@ export function CodexLocalAccessModal({
                           account,
                           restrictFreeAccounts,
                         );
-                      const isChatCompletionsApiKeyUnsupported =
-                        ineligibleReason === "chat_completions_api_key";
-                      const isDeepSeekUnsupported =
-                        ineligibleReason === "deepseek_unsupported";
                       const isPendingOauthUnsupported =
                         ineligibleReason === "pending_oauth";
                       const isWebSessionUnsupported =
                         ineligibleReason === "web_session_quota_only";
                       const isJoinUnsupported =
-                        isChatCompletionsApiKeyUnsupported ||
-                        isDeepSeekUnsupported ||
-                        isPendingOauthUnsupported ||
-                        isWebSessionUnsupported;
-                      const isChecked =
-                        !isJoinUnsupported && selected.has(account.id);
+                        isPendingOauthUnsupported || isWebSessionUnsupported;
+                      const grokRowAccount = grokMemberRowAccountById.get(
+                        account.id,
+                      );
+                      const grokBoundAccountId = grokRowAccount
+                        ? grokMemberBindingByAccountId.get(grokRowAccount.id)
+                        : undefined;
+                      const rowAccountId = grokBoundAccountId ?? account.id;
+                      const isChecked = isMemberRowSelected(account);
+                      const grokRowBusy =
+                        Boolean(grokRowAccount) &&
+                        grokMemberBusyId === grokRowAccount?.id;
                       const usagePriority = resolveAccountUsagePriority(
-                        customRoutingDraft[account.id] ??
-                          customRoutingRuleByAccountId.get(account.id),
+                        customRoutingDraft[rowAccountId] ??
+                          customRoutingRuleByAccountId.get(rowAccountId),
                       );
                       const accountStats = allStatsByAccountId.get(
-                        account.id,
+                        rowAccountId,
                       )?.usage;
+                      const grokQuotaChip = grokRowAccount ? (
+                        <CodexGrokBuildQuotaChip t={t} account={grokRowAccount} />
+                      ) : null;
 
                       return (
                         <div
@@ -3267,15 +3187,25 @@ export function CodexLocalAccessModal({
                             className="codex-local-access-member-select"
                             checked={isChecked}
                             disabled={
-                              membersInteractionDisabled || isJoinUnsupported
+                              membersInteractionDisabled ||
+                              (isJoinUnsupported && !isChecked) ||
+                              grokRowBusy
                             }
-                            onChange={() => toggleSelect(account.id)}
+                            onChange={() =>
+                              grokRowAccount
+                                ? void handleToggleGrokMember(
+                                    grokRowAccount,
+                                    !isChecked,
+                                  )
+                                : toggleSelect(account.id)
+                            }
                             aria-label={maskAccountText(
                               presentation.displayName,
                             )}
                           />
                           <div className="group-account-main">
                             <div className="codex-local-access-member-mainline">
+                              <div className="codex-member-identity-slot">
                               <button
                                 type="button"
                                 className="group-account-email"
@@ -3283,12 +3213,24 @@ export function CodexLocalAccessModal({
                                   presentation.displayName,
                                 )}
                                 disabled={
-                                  membersInteractionDisabled || isJoinUnsupported
+                                  membersInteractionDisabled ||
+                                  (isJoinUnsupported && !isChecked) ||
+                                  grokRowBusy
                                 }
-                                onClick={() => toggleSelect(account.id)}
+                                onClick={() =>
+                                  grokRowAccount
+                                    ? void handleToggleGrokMember(
+                                        grokRowAccount,
+                                        !isChecked,
+                                      )
+                                    : toggleSelect(account.id)
+                                }
                               >
                                 {maskAccountText(presentation.displayName)}
                               </button>
+                                {!grokRowAccount && canChooseCodexServiceAuthorization(account) && <CodexMemberAccessMode value={memberModeFor(rowAccountId)} disabled={membersInteractionDisabled}
+                                  onChange={(value) => { void chooseMemberMode(rowAccountId, value); }} />}
+                              </div>
                               <span
                                 className="codex-local-access-member-priority-slot"
                                 title={t(
@@ -3315,10 +3257,15 @@ export function CodexLocalAccessModal({
                                         "codex.localAccess.memberPriorityLabel",
                                         "优先级",
                                       )}
-                                      disabled={membersInteractionDisabled}
+                                      disabled={
+                                        membersInteractionDisabled ||
+                                        grokRowBusy ||
+                                        (Boolean(grokRowAccount) &&
+                                          !grokBoundAccountId)
+                                      }
                                       onChange={(value) =>
                                         updateMemberUsagePriority(
-                                          account.id,
+                                          rowAccountId,
                                           value as AccountUsagePriority,
                                         )
                                       }
@@ -3326,28 +3273,22 @@ export function CodexLocalAccessModal({
                                   </>
                                 ) : null}
                               </span>
+                              <CodexServiceMemberAuthorization account={account} accounts={accounts} grants={planGrants.accounts} memberIds={collection?.accountIds ?? []} pausedAccountIds={collection?.pausedAccountIds} />
                               <span className="codex-local-access-member-plan">
                                 {!isJoinUnsupported && (
-                                  <SingleSelectDropdown
-                                    value={
-                                      imageGenerationPolicies[account.id] ??
-                                      (isCodexApiKeyAccount(account)
-                                        ? "disabled"
-                                        : "inherit")
+                                  <CodexMemberImagePolicy
+                                    account={account}
+                                    official={memberModeFor(rowAccountId) === "official"}
+                                    value={imageGenerationPolicies[rowAccountId]}
+                                    disabled={
+                                      membersInteractionDisabled ||
+                                      grokRowBusy ||
+                                      (Boolean(grokRowAccount) && !grokBoundAccountId)
                                     }
-                                    options={imageGenerationPolicyOptions}
-                                    className="codex-local-access-member-image-policy-dropdown"
-                                    menuClassName="codex-local-access-member-image-policy-menu"
-                                    menuWidth={120}
-                                    ariaLabel={t(
-                                      "codex.localAccess.imagePolicy.label",
-                                      "生图策略",
-                                    )}
-                                    disabled={membersInteractionDisabled}
                                     onChange={(value) =>
                                       setImageGenerationPolicies((prev) => ({
                                         ...prev,
-                                        [account.id]: value as CodexLocalAccessImageGenerationPolicy,
+                                        [rowAccountId]: value,
                                       }))
                                     }
                                   />
@@ -3355,7 +3296,9 @@ export function CodexLocalAccessModal({
                                 <span
                                   className={`tier-badge ${presentation.planClass}`}
                                 >
-                                  {presentation.planLabel}
+                                  {grokRowAccount
+                                    ? t("codex.grokAdd.tab", "Grok 账号")
+                                    : presentation.planLabel}
                                 </span>
                               </span>
                               <span className="codex-local-access-member-metric">
@@ -3365,22 +3308,6 @@ export function CodexLocalAccessModal({
                                 })}
                               </span>
                               <span className="codex-local-access-member-trailing">
-                                {isChatCompletionsApiKeyUnsupported && (
-                                  <span className="codex-local-access-member-unsupported">
-                                    {t(
-                                      "codex.localAccess.modal.chatApiKeyUnsupported",
-                                      "Chat Completions 协议不支持加入 API 服务",
-                                    )}
-                                  </span>
-                                )}
-                                {isDeepSeekUnsupported && (
-                                  <span className="codex-local-access-member-unsupported">
-                                    {t(
-                                      "codex.localAccess.modal.deepseekUnsupported",
-                                      "DeepSeek 暂不支持加入",
-                                    )}
-                                  </span>
-                                )}
                                 {isPendingOauthUnsupported && (
                                   <span className="codex-local-access-member-unsupported">
                                     {t(
@@ -3397,7 +3324,8 @@ export function CodexLocalAccessModal({
                                     )}
                                   </span>
                                 )}
-                                {renderQuotaPreview(presentation, 2)}
+                                {grokQuotaChip ??
+                                  renderQuotaPreview(presentation, 2)}
                               </span>
                             </div>
                           </div>
@@ -3406,6 +3334,11 @@ export function CodexLocalAccessModal({
                     })
                   )}
                 </div>
+                {grokMemberError && (
+                  <div className="group-account-empty codex-local-access-grok-member-error">
+                    {grokMemberError}
+                  </div>
+                )}
                 {visibleSelectableAccounts.length > 0 && (
                   <PaginationControls
                     totalItems={memberPagination.totalItems}
@@ -3440,7 +3373,9 @@ export function CodexLocalAccessModal({
                   onClick={() => void handleSaveMembers()}
                   disabled={membersInteractionDisabled || !selectionDirty}
                 >
-                  {saving
+                  {memberJoinBusy
+                    ? t("common.processing")
+                    : saving || memberSavePending
                     ? t("common.saving")
                     : t("codex.localAccess.modal.save", "保存集合")}
                 </button>
@@ -4001,9 +3936,14 @@ export function CodexLocalAccessModal({
       <CodexAccountPoolHealthModal
         isOpen={healthModalOpen}
         accountIds={collection?.accountIds ?? []}
+        pausedAccountIds={collection?.pausedAccountIds}
+        officialAccountBindings={collection?.officialAccountBindings}
         accounts={accounts}
         accountHealth={state?.accountHealth ?? []}
         accountPoolHealth={state?.accountPoolHealth ?? []}
+        recoverySuppressedAccountIds={
+          state?.recoverySuppressedAccountIds ?? []
+        }
         actionBusy={healthActionBusy}
         maskAccountText={(value) => maskAccountText(value)}
         onClose={() => setHealthModalOpen(false)}

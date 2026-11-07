@@ -1,6 +1,6 @@
-import { ReactNode, useMemo } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Clock3, FolderOpen, Github, Layers, Server } from 'lucide-react';
+import { Clock3, FolderOpen, Github, Globe2, Layers, MoreHorizontal, PanelTop, Server } from 'lucide-react';
 import { CodexIcon } from '../icons/CodexIcon';
 import { ClaudeIcon } from '../icons/ClaudeIcon';
 import { WindsurfIcon } from '../icons/WindsurfIcon';
@@ -11,6 +11,7 @@ import { CodebuddyIcon } from '../icons/CodebuddyIcon';
 import { QoderIcon } from '../icons/QoderIcon';
 import { TraeCnIcon, TraeIcon, TraeSoloCnIcon, TraeSoloIcon } from '../icons/TraeIcon';
 import { WorkbuddyIcon } from '../icons/WorkbuddyIcon';
+import { MinimaxCodeIcon } from '../icons/MinimaxCodeIcon';
 import { ZedIcon } from '../icons/ZedIcon';
 import { ZcodeIcon } from '../icons/ZcodeIcon';
 import { ManualHelpIconButton } from '../ManualHelpIconButton';
@@ -29,7 +30,9 @@ export type PlatformOverviewTab =
   | 'wakeup'
   | 'instances'
   | 'sessions'
-  | 'providers';
+  | 'providers'
+  | 'proxy'
+  | 'top-layout';
 export type PlatformOverviewHeaderId =
   | 'codex'
   | 'claude'
@@ -48,13 +51,16 @@ export type PlatformOverviewHeaderId =
   | 'trae_cn'
   | 'trae_solo_cn'
   | 'workbuddy'
-  | 'workbuddy_ai';
+  | 'workbuddy_ai'
+  | 'minimaxcode';
 
-interface PlatformOverviewTabsHeaderProps {
+interface PlatformOverviewTabsHeaderProps<T extends string> {
   platform: PlatformOverviewHeaderId;
-  active: PlatformOverviewTab;
-  onTabChange?: (tab: PlatformOverviewTab) => void;
-  tabs?: PlatformOverviewTab[];
+  active: T;
+  onTabChange?: (tab: T) => void;
+  tabs?: T[];
+  tabPlacement?: Partial<Record<T, 'top' | 'more'>>;
+  pageRegistry?: { id: T; label: string; icon: ReactNode }[];
 }
 
 interface PlatformOverviewConfig {
@@ -63,7 +69,7 @@ interface PlatformOverviewConfig {
 }
 
 interface TabSpec {
-  key: PlatformOverviewTab;
+  key: string;
   label: string;
   icon: ReactNode;
 }
@@ -141,15 +147,23 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
     platformLabel: 'WorkBuddy AI',
     overviewIcon: <WorkbuddyIcon className="tab-icon" />,
   },
+  minimaxcode: {
+    platformLabel: 'MiniMax Code',
+    overviewIcon: <MinimaxCodeIcon className="tab-icon" />,
+  },
 };
 
-export function PlatformOverviewTabsHeader({
+export function PlatformOverviewTabsHeader<T extends string = PlatformOverviewTab>({
   platform,
   active,
   onTabChange,
   tabs,
-}: PlatformOverviewTabsHeaderProps) {
+  tabPlacement,
+  pageRegistry,
+}: PlatformOverviewTabsHeaderProps<T>) {
   const { t } = useTranslation();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement | null>(null);
   const { platformGroups } = usePlatformLayoutStore();
   const remoteHiddenPlatformIds = useRemoteConfigStore((state) => state.hiddenPlatformIds);
   const config = CONFIGS[platform];
@@ -193,9 +207,9 @@ export function PlatformOverviewTabsHeader({
       }),
     [switchablePlatforms, currentGroup, t],
   );
-  const tabOrder: PlatformOverviewTab[] =
+  const tabOrder: string[] =
     tabs && tabs.length > 0 ? tabs : ['overview', 'instances'];
-  const tabLabels: Record<PlatformOverviewTab, TabSpec> = {
+  const tabLabels: Record<string, TabSpec> = {
     overview: {
       key: 'overview',
       label: t('overview.title', '账号总览'),
@@ -224,21 +238,60 @@ export function PlatformOverviewTabsHeader({
       label: t('codex.modelProviders.tab', '模型供应商'),
       icon: <Server className="tab-icon" />,
     },
+    proxy: {
+      key: 'proxy',
+      label: t('codex.proxy.management'),
+      icon: <Globe2 className="tab-icon" />,
+    },
+    'top-layout': {
+      key: 'top-layout',
+      label: t('codex.more.topLayoutTitle'),
+      icon: <PanelTop className="tab-icon" />,
+    },
   };
-  const tabSpecs: TabSpec[] = tabOrder.map((tab) => tabLabels[tab]);
+  const registry = pageRegistry ? Object.fromEntries(pageRegistry.map(page => [page.id, { key: page.id, label: page.label, icon: page.icon }])) : tabLabels;
+  const tabSpecs: TabSpec[] = tabOrder.flatMap((tab) => registry[tab] ? [registry[tab]] : []);
+  const visibleTabSpecs = tabSpecs.filter(
+    (tab) => tabPlacement?.[tab.key as T] !== 'more',
+  );
+  const moreTabSpecs = tabSpecs.filter(
+    (tab) => tabPlacement?.[tab.key as T] === 'more',
+  );
+  const hasMoreMenu = moreTabSpecs.length > 0 || platform === 'codex';
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (target && !moreRef.current?.contains(target)) {
+        setMoreOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMoreOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [moreOpen]);
 
   return (
     <>
       <div className="page-top-strip">
         <div className="page-top-strip-left">
           <span className="page-top-strip-label">
-            {t('settings.general.account', 'Accounts')}
+            {t('settings.general.accountManagement', 'Account')}
           </span>
           <ManualHelpIconButton className="platform-header-help" />
         </div>
         <div className="page-top-strip-right-placeholder" aria-hidden="true" />
       </div>
-      <div className="page-tabs-row page-tabs-center page-tabs-row-with-leading">
+      <div className={`page-tabs-row page-tabs-center page-tabs-row-with-leading${platform === 'codex' ? ' codex-page-navigation' : ''}`}>
         <div className="page-tabs-leading">
           <PlatformGroupSwitcher
             currentPlatformId={currentPlatformId}
@@ -247,18 +300,58 @@ export function PlatformOverviewTabsHeader({
             currentGroupId={currentGroup?.id ?? null}
           />
         </div>
-        <div className="page-tabs filter-tabs">
-          {tabSpecs.map((tab) => (
+        {visibleTabSpecs.length > 0 ? (
+          <div className="page-tabs filter-tabs">
+            {visibleTabSpecs.map((tab) => (
+              <button
+                key={tab.key}
+                className={`filter-tab${active === tab.key ? ' active' : ''}${tab.key.startsWith('plugin:') ? ' plugin-nav-tab' : ''}`}
+                title={tab.label}
+                onClick={() => onTabChange?.(tab.key as T)}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {hasMoreMenu ? (
+          <div className="page-tabs-trailing" ref={moreRef}>
             <button
-              key={tab.key}
-              className={`filter-tab${active === tab.key ? ' active' : ''}`}
-              onClick={() => onTabChange?.(tab.key)}
+              type="button"
+              className={`page-more-trigger${moreOpen ? ' is-open' : ''}${moreTabSpecs.some((tab) => tab.key === active) ? ' is-active' : ''}`}
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              disabled={moreTabSpecs.length === 0}
+              onClick={() => setMoreOpen((previous) => !previous)}
             >
-              {tab.icon}
-              <span>{tab.label}</span>
+              <MoreHorizontal size={18} />
+              <span>{t('codex.more.title', '更多')}</span>
             </button>
-          ))}
-        </div>
+            {moreOpen ? (
+              <div className="page-more-menu" role="menu">
+                {moreTabSpecs.map((tab) => (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    key={tab.key}
+                    className={`page-more-menu-item${active === tab.key ? ' active' : ''}${tab.key.startsWith('plugin:') ? ' plugin-nav-tab' : ''}`}
+                    title={tab.label}
+                    onClick={() => {
+                      onTabChange?.(tab.key as T);
+                      setMoreOpen(false);
+                    }}
+                  >
+                    {tab.icon}
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="page-tabs-trailing-placeholder" aria-hidden="true" />
+        )}
       </div>
     </>
   );

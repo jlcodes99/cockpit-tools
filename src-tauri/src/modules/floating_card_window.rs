@@ -13,6 +13,20 @@ use crate::modules::{config, i18n, logger, main_window_state, process_memory};
 pub const FLOATING_CARD_WINDOW_LABEL: &str = "floating-card";
 pub const INSTANCE_FLOATING_CARD_WINDOW_LABEL_PREFIX: &str = "instance-floating-card-";
 pub const FLOATING_CARD_CONTEXT_CHANGED_EVENT: &str = "floating-card:context-changed";
+pub const FLOATING_CARD_APPEARANCE_CHANGED_EVENT: &str = "floating-card:appearance-changed";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FloatingCardAppearance {
+    pub minimal: bool,
+    pub background_opacity: f64,
+}
+
+impl From<&config::UserConfig> for FloatingCardAppearance {
+    fn from(value: &config::UserConfig) -> Self {
+        Self { minimal: value.floating_card_minimal, background_opacity: config::normalize_floating_card_background_opacity(value.floating_card_background_opacity) }
+    }
+}
 const MAIN_WINDOW_LABEL: &str = "main";
 const FLOATING_CARD_DEFAULT_MARGIN: i32 = 20;
 const INSTANCE_FLOATING_CARD_WINDOW_OFFSET_STEP: i32 = 28;
@@ -126,6 +140,10 @@ fn clone_floating_card_window_config(
     config.label = label.to_string();
     config.create = false;
     config.visible = false;
+    if crate::modules::config::get_user_config().floating_card_minimal {
+        config.height = 110.0;
+        config.min_height = Some(110.0);
+    }
     Ok(config)
 }
 

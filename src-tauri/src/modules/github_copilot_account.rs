@@ -84,10 +84,17 @@ fn load_account_file(account_id: &str) -> Option<GitHubCopilotAccount> {
 
 fn save_account_file(account: &GitHubCopilotAccount) -> Result<(), String> {
     let path = get_accounts_dir()?.join(format!("{}.json", account.id));
-    let content =
-        crate::modules::secure_account_storage::serialize_account_file("github_copilot", account)?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
+    crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "github_copilot", account)
         .map_err(|e| format!("保存账号失败: {}", e))
+}
+
+// Record credential-switch success separately from refresh activity.
+pub fn touch_last_used(account_id: &str) -> Result<(), String> {
+    let mut account = load_account(account_id)
+        .ok_or_else(|| format!("GitHub Copilot account not found: {}", account_id))?;
+    account.last_switched_at = Some(now_ts());
+    save_account_file(&account)?;
+    Ok(())
 }
 
 fn persist_quota_query_error(account_id: &str, message: &str) {
@@ -320,6 +327,7 @@ pub fn upsert_account(
     let created_at = existing.as_ref().map(|acc| acc.created_at).unwrap_or(now);
 
     let mut account = existing.unwrap_or(GitHubCopilotAccount {
+        last_switched_at: None,
         id: account_id.clone(),
         github_login: payload.github_login.clone(),
         github_id: payload.github_id,
@@ -334,6 +342,7 @@ pub fn upsert_account(
         copilot_chat_enabled: payload.copilot_chat_enabled,
         copilot_expires_at: payload.copilot_expires_at,
         copilot_refresh_in: payload.copilot_refresh_in,
+        copilot_token_based_billing: payload.copilot_token_based_billing,
         copilot_quota_snapshots: payload.copilot_quota_snapshots.clone(),
         copilot_quota_reset_date: payload.copilot_quota_reset_date.clone(),
         copilot_limited_user_quotas: payload.copilot_limited_user_quotas.clone(),
@@ -357,6 +366,7 @@ pub fn upsert_account(
     account.copilot_chat_enabled = payload.copilot_chat_enabled;
     account.copilot_expires_at = payload.copilot_expires_at;
     account.copilot_refresh_in = payload.copilot_refresh_in;
+    account.copilot_token_based_billing = payload.copilot_token_based_billing;
     account.copilot_quota_snapshots = payload.copilot_quota_snapshots;
     account.copilot_quota_reset_date = payload.copilot_quota_reset_date;
     account.copilot_limited_user_quotas = payload.copilot_limited_user_quotas;
@@ -386,6 +396,7 @@ async fn refresh_account_token_once(account_id: &str) -> Result<GitHubCopilotAcc
     account.copilot_chat_enabled = bundle.chat_enabled;
     account.copilot_expires_at = bundle.expires_at;
     account.copilot_refresh_in = bundle.refresh_in;
+    account.copilot_token_based_billing = bundle.token_based_billing;
     account.copilot_quota_snapshots = bundle.quota_snapshots;
     account.copilot_quota_reset_date = bundle.quota_reset_date;
     account.copilot_limited_user_quotas = bundle.limited_user_quotas;
@@ -925,6 +936,7 @@ mod tests {
 
     fn account_with_snapshots(snapshots: serde_json::Value) -> GitHubCopilotAccount {
         GitHubCopilotAccount {
+            last_switched_at: None,
             id: "ghcp_test".to_string(),
             github_login: "tester".to_string(),
             github_id: 1,
@@ -939,6 +951,7 @@ mod tests {
             copilot_chat_enabled: Some(true),
             copilot_expires_at: None,
             copilot_refresh_in: None,
+            copilot_token_based_billing: None,
             copilot_quota_snapshots: Some(snapshots),
             copilot_quota_reset_date: Some("2026-07-01".to_string()),
             copilot_limited_user_quotas: None,

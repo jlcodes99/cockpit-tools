@@ -13,6 +13,7 @@ import * as zcodeService from './zcodeService';
 import * as traeService from './traeService';
 import * as workbuddyService from './workbuddyService';
 import * as workbuddyAiService from './workbuddyAiService';
+import * as minimaxCodeService from './minimaxCodeService';
 import * as zedService from './zedService';
 import type { ClaudeAccount } from '../types/claude';
 
@@ -133,6 +134,11 @@ const PLATFORM_ADAPTERS: Partial<Record<PlatformId, TransferAdapter>> = {
     listAccounts: workbuddyAiService.listWorkbuddyAiAccounts,
     exportAccounts: workbuddyAiService.exportWorkbuddyAiAccounts,
     importFromJson: workbuddyAiService.importWorkbuddyAiFromJson,
+  },
+  minimaxcode: {
+    listAccounts: minimaxCodeService.listMinimaxCodeAccounts,
+    exportAccounts: minimaxCodeService.exportMinimaxCodeAccounts,
+    importFromJson: minimaxCodeService.importMinimaxCodeFromJson,
   },
 };
 

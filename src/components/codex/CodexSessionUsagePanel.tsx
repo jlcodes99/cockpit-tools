@@ -1,3 +1,4 @@
+import { buildCodexSessionUsageQuery as buildUsageQuery } from '../../utils/codexSessionUsageQuery';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { confirm as confirmDialog } from '@tauri-apps/plugin-dialog';
@@ -34,28 +35,6 @@ import {
   readCodexSessionUsageRange,
   type CodexSessionUsageRange as UsageRange,
 } from '../../utils/codexStatsRangePreference';
-
-function startOfLocalDay(value: Date): Date {
-  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
-}
-
-function buildUsageQuery(range: UsageRange, instanceId: string): CodexSessionUsageQuery {
-  const now = new Date();
-  const toTimestamp = Math.floor(now.getTime() / 1000);
-  let fromTimestamp: number | null = null;
-  if (range === '7d') {
-    fromTimestamp = Math.floor(startOfLocalDay(now).getTime() / 1000) - 6 * 24 * 60 * 60;
-  } else if (range === '30d') {
-    fromTimestamp = Math.floor(startOfLocalDay(now).getTime() / 1000) - 29 * 24 * 60 * 60;
-  } else if (range === 'month') {
-    fromTimestamp = Math.floor(new Date(now.getFullYear(), now.getMonth(), 1).getTime() / 1000);
-  }
-  return {
-    fromTimestamp,
-    toTimestamp,
-    instanceId: instanceId || null,
-  };
-}
 
 function TokenAmount({
   value,
@@ -100,11 +79,13 @@ function UsageBreakdownTable({
   emptyLabel,
   keyLabel,
   lang,
+  showEstimatedCost = false,
 }: {
   rows: CodexSessionUsageBreakdownRow[];
   emptyLabel: string;
   keyLabel: string;
   lang: string;
+  showEstimatedCost?: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -118,12 +99,13 @@ function UsageBreakdownTable({
             <th>{t('codex.sessionUsage.tables.output', '输出 Tokens')}</th>
             <th>{t('codex.sessionUsage.tables.total', '合计 Tokens')}</th>
             <th>{t('codex.sessionUsage.tables.requests', '请求')}</th>
+            {showEstimatedCost ? <th>{t('codex.sessionUsage.cards.cost')}</th> : null}
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={6}>{emptyLabel}</td>
+              <td colSpan={showEstimatedCost ? 7 : 6}>{emptyLabel}</td>
             </tr>
           ) : (
             rows.map((row) => (
@@ -142,6 +124,9 @@ function UsageBreakdownTable({
                   <TokenAmount value={row.totalTokens} lang={lang} />
                 </td>
                 <td>{formatSessionUsageCount(row.requestCount)}</td>
+                {showEstimatedCost ? <td title={row.estimatedCostUsd == null ? t('codex.sessionUsage.costUnavailable') : undefined}>
+                  {row.estimatedCostUsd == null ? '—' : formatSessionUsageCostUsd(row.estimatedCostUsd)}
+                </td> : null}
               </tr>
             ))
           )}
@@ -319,6 +304,7 @@ export function CodexSessionUsagePanel({
   }, [t]);
 
   const runSync = useCallback(async (rebuild: boolean) => {
+    const syncQuery = buildUsageQuery(range, instanceId);
     const version = ++requestVersionRef.current;
     setSyncing(true);
     if (rebuild) {
@@ -328,14 +314,14 @@ export function CodexSessionUsagePanel({
     try {
       const result = await codexInstanceService.syncSessionUsage({
         rebuild,
-        query,
+        query: syncQuery,
       });
       if (version === requestVersionRef.current) {
         if (result.report) {
           setReport(result.report);
         } else {
-          const nextReport = await codexInstanceService.querySessionUsage(query);
-          setReport(nextReport);
+          const nextReport = await codexInstanceService.querySessionUsage(syncQuery);
+          if (version === requestVersionRef.current) setReport(nextReport);
         }
         if (result.errors.length > 0) {
           setError(result.errors[0]);
@@ -357,7 +343,7 @@ export function CodexSessionUsagePanel({
         setLoading(false);
       }
     }
-  }, [query, t]);
+  }, [instanceId, range, t]);
 
   useEffect(() => {
     void loadCached(query);
@@ -388,6 +374,7 @@ export function CodexSessionUsagePanel({
 
   const rangeOptions = useMemo<SingleSelectOption[]>(
     () => [
+      { value: 'today', label: t('codex.sessionUsage.range.today') },
       { value: '7d', label: t('codex.sessionUsage.range.7d', '近 7 天') },
       { value: '30d', label: t('codex.sessionUsage.range.30d', '近 30 天') },
       { value: 'month', label: t('codex.sessionUsage.range.month', '本月') },
@@ -653,10 +640,14 @@ export function CodexSessionUsagePanel({
             <h4>{t('codex.sessionUsage.tables.day', '按日期')}</h4>
             <UsageBreakdownTable
               rows={report?.byDay ?? []}
+              showEstimatedCost
               keyLabel={t('codex.sessionUsage.tables.dayName', '日期')}
               emptyLabel={t('codex.sessionUsage.empty.title', '还没有会话用量')}
               lang={lang}
             />
+            {(report?.byDay ?? []).some((row) => row.estimatedCostUsd == null) ? (
+              <p className="codex-session-usage__hint">{t('codex.sessionUsage.costUnavailable')}</p>
+            ) : null}
           </section>
         </>
       )}

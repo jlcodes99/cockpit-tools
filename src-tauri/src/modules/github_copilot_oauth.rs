@@ -88,6 +88,7 @@ struct CopilotTokenResponse {
 #[derive(Debug, Deserialize)]
 struct CopilotUserInfoResponse {
     copilot_plan: Option<String>,
+    token_based_billing: Option<bool>,
     quota_snapshots: Option<serde_json::Value>,
     quota_reset_date: Option<String>,
 }
@@ -99,6 +100,7 @@ pub struct CopilotTokenBundle {
     pub chat_enabled: Option<bool>,
     pub expires_at: Option<i64>,
     pub refresh_in: Option<i64>,
+    pub token_based_billing: Option<bool>,
     pub quota_snapshots: Option<serde_json::Value>,
     pub quota_reset_date: Option<String>,
     pub limited_user_quotas: Option<serde_json::Value>,
@@ -641,6 +643,7 @@ async fn fetch_copilot_token(
         chat_enabled: payload.chat_enabled,
         expires_at: payload.expires_at,
         refresh_in: payload.refresh_in,
+        token_based_billing: user_info.as_ref().and_then(|info| info.token_based_billing),
         quota_snapshots: user_info
             .as_ref()
             .and_then(|info| info.quota_snapshots.clone()),
@@ -765,6 +768,7 @@ pub async fn complete_login(login_id: &str) -> Result<GitHubCopilotOAuthComplete
         copilot_chat_enabled: copilot.chat_enabled,
         copilot_expires_at: copilot.expires_at,
         copilot_refresh_in: copilot.refresh_in,
+        copilot_token_based_billing: copilot.token_based_billing,
         copilot_quota_snapshots: copilot.quota_snapshots,
         copilot_quota_reset_date: copilot.quota_reset_date,
         copilot_limited_user_quotas: copilot.limited_user_quotas,
@@ -883,6 +887,7 @@ pub async fn build_payload_from_github_access_token(
         copilot_chat_enabled: copilot.chat_enabled,
         copilot_expires_at: copilot.expires_at,
         copilot_refresh_in: copilot.refresh_in,
+        copilot_token_based_billing: copilot.token_based_billing,
         copilot_quota_snapshots: copilot.quota_snapshots,
         copilot_quota_reset_date: copilot.quota_reset_date,
         copilot_limited_user_quotas: copilot.limited_user_quotas,

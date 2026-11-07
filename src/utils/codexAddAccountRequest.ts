@@ -1,13 +1,20 @@
+import type { CodexLocalAccessOAuthQuotaReserve } from '../types/codexLocalAccess';
+
 export const CODEX_OPEN_ADD_ACCOUNT_EVENT = 'codex-open-add-account';
 export const CODEX_SUITE_ENSURE_MOUNTED_EVENT = 'codex-suite-ensure-mounted';
 
-export type CodexAddAccountTab = 'oauth' | 'token' | 'apikey' | 'import';
+export type CodexAddAccountTab =
+  | 'oauth'
+  | 'token'
+  | 'apikey'
+  | 'import'
+  | 'tempLogin';
 
 /** OAuth 重新授权成功后，继续完成原绑定目标所需的上下文。 */
 export type CodexOAuthBindingRetryDetail = {
   targetKind: 'local_access' | 'api_key_account';
   targetAccountId?: string;
-  quotaReserve?: { hourlyPercent: number; weeklyPercent: number } | null;
+  quotaReserve?: CodexLocalAccessOAuthQuotaReserve | null;
 };
 
 export type CodexOpenAddAccountDetail = {
@@ -47,7 +54,7 @@ export function requestCodexOpenAddAccount(detail: CodexOpenAddAccountDetail = {
         quotaReserve: detail.retryOAuthBinding.quotaReserve ?? null,
       }
     : undefined;
-  const tab = detail.tab ?? 'oauth';
+  const tab = detail.tab ?? 'tempLogin';
   const normalized = {
     autoJoinApiService,
     targetAccountId,

@@ -188,6 +188,49 @@
   background: transparent;
 }
 
+.account-last-used {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 4px;
+}
+.account-last-used svg {
+  flex-shrink: 0;
+}
+
+.account-last-used .alu-select {
+  display: inline-flex;
+  align-items: center;
+  max-width: 220px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: none;
+  padding: 3px 16px 3px 2px;
+  border-radius: 4px;
+  line-height: 1.4;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 7px center, right 3px center;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+}
+.account-last-used .alu-select:hover {
+  border-color: var(--border-color);
+}
+.account-last-used .alu-select:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.account-last-used .alu-select:focus {
+  outline: none;
+  border-color: var(--accent-color, #3b82f6);
+  border-radius: 4px;
+}
+
 /* Minimalist Action Bar - No Background */
 .card-actions {
   display: flex;
@@ -703,7 +746,8 @@
   border-color: rgba(255,255,255,0.05);
 }
 
-[data-theme="dark"] .quota-compact-bar-track {
+[data-theme="dark"] .quota-compact-bar-track,
+[data-theme="dark"] .card-quota-grid .codex-quota-mini-track {
   background: rgba(255,255,255,0.1);
 }
 
@@ -722,28 +766,16 @@
   color: #94a3b8;
 }
 
-/* Custom quota columns layout for Antigravity */
-.card-quota-grid .quota-column,
-.quota-grid .quota-column {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.card-quota-grid .quota-column-title,
-.quota-grid .quota-column-title {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 2px;
-}
-
+/* Single-column mini quota rows layout for Antigravity (aligned with Codex) */
 .accounts-page .card-quota-grid,
 .accounts-page .quota-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr !important;
-  gap: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.accounts-page .account-table .codex-quota-mini-list {
+  min-width: 220px;
 }
 
 /* Custom Sort Modal Styles (added for Antigravity custom sorting) */

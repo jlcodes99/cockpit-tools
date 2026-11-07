@@ -16,6 +16,7 @@ export type ProviderCurrentPlatform =
   | 'workbuddy'
   | 'workbuddy_ai'
   | 'github_copilot'
+  | 'minimaxcode'
   | 'zed';
 
 export async function getProviderCurrentAccountId(

@@ -1,0 +1,32 @@
+.codex-device-restrictions {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+.codex-device-restriction-actions, .codex-device-restriction-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.codex-device-restriction-body {
+  max-height: min(50vh, 480px);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.codex-device-restriction-body p, .codex-device-restriction-row small {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.codex-device-restriction-row {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border-color);
+}
+.codex-device-restriction-heading { font-size: 13px; }
+.codex-device-restriction-body .codex-device-restriction-error { color: var(--danger-color, #d14343); }
+.codex-device-restriction-badge { white-space: nowrap; flex-shrink: 0; }

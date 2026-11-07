@@ -129,7 +129,7 @@ export function CodexServicePanelModal({
             {connectionExtra}
           </section>
 
-          <section className="cockpit-api-summary-grid compact">
+          {coreMetrics.length > 0 && <section className="cockpit-api-summary-grid compact">
             {coreMetrics.map((item) => (
               <div
                 className="cockpit-api-stat-card cockpit-api-stat-card-center"
@@ -140,7 +140,7 @@ export function CodexServicePanelModal({
                 {item.meta ? <small>{item.meta}</small> : null}
               </div>
             ))}
-          </section>
+          </section>}
 
           <section className="cockpit-api-panel-section">
             <div className="cockpit-api-section-head">

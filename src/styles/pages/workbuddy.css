@@ -229,3 +229,254 @@
     grid-template-columns: 1fr;
   }
 }
+
+.workbuddy-credits-overlay {
+  padding: 16px;
+}
+
+.modal.workbuddy-credits-dialog {
+  max-width: 620px;
+  height: min(560px, calc(100vh - 32px));
+  max-height: calc(100vh - 32px);
+}
+
+.workbuddy-credits-dialog .modal-header,
+.workbuddy-credits-dialog .modal-footer {
+  flex: 0 0 auto;
+}
+
+.workbuddy-credits-dialog .modal-footer {
+  flex-wrap: wrap;
+}
+
+.workbuddy-credits-dialog .modal-close {
+  flex-shrink: 0;
+}
+
+.workbuddy-credits-heading {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workbuddy-credits-dialog .modal-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.workbuddy-credits-tabs,
+.workbuddy-credit-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.workbuddy-credits-tabs {
+  margin-block: 8px 12px;
+}
+
+.workbuddy-credit-line {
+  justify-content: space-between;
+}
+
+.workbuddy-credits-summary,
+.workbuddy-credit-entry {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.workbuddy-credit-entry {
+  padding: 8px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  overflow-wrap: anywhere;
+}
+
+.workbuddy-credit-entry > .btn {
+  justify-self: start;
+}
+
+.workbuddy-credit-muted {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.workbuddy-credit-expiry {
+  color: var(--warning);
+  font-size: 12px;
+}
+
+.workbuddy-credit-track {
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.workbuddy-credit-track > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.workbuddy-credit-usage {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.workbuddy-credit-usage th,
+.workbuddy-credit-usage td {
+  padding: 8px 6px;
+  text-align: start;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.workbuddy-credit-usage th:first-child {
+  width: 50%;
+}
+
+.workbuddy-credit-request {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workbuddy-credit-balance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-width: 0;
+}
+
+.workbuddy-credit-balance-value {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.workbuddy-credit-balance-value strong {
+  color: var(--text-primary);
+  font-size: 25px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.btn.workbuddy-credit-link {
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 2px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: none;
+  white-space: normal;
+  text-align: start;
+}
+
+.btn.workbuddy-credit-link svg {
+  flex-shrink: 0;
+}
+
+.btn.workbuddy-credit-link:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.btn.workbuddy-credit-link:disabled {
+  opacity: .5;
+}
+
+.workbuddy-credits-compact {
+  gap: 0;
+  padding: 0 0 2px;
+}
+
+.workbuddy-credits-compact .workbuddy-credit-balance {
+  padding-block: 2px 9px;
+}
+
+.workbuddy-credits-compact .workbuddy-credit-entry {
+  padding: 7px 0;
+  gap: 4px;
+  border: 0;
+  border-top: 1px solid var(--border-light);
+  border-radius: 0;
+  background: transparent;
+}
+
+.workbuddy-credit-group {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.workbuddy-credit-group strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.workbuddy-credit-group svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.workbuddy-credit-entry[data-kind="benefit"] .workbuddy-credit-group svg,
+.workbuddy-credit-entry[data-kind="planBonus"] .workbuddy-credit-group svg {
+  color: var(--warning);
+}
+
+.workbuddy-credits-compact .workbuddy-credit-track {
+  height: 3px;
+}
+
+.workbuddy-credit-results {
+  min-block-size: 132px;
+  align-content: start;
+}
+
+.workbuddy-credit-empty,
+.workbuddy-credit-usage td.workbuddy-credit-empty {
+  padding: 24px 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+
+.btn.workbuddy-credit-tab {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: transparent;
+  white-space: normal;
+  text-align: start;
+}
+
+.btn.workbuddy-credit-tab:hover:not(:disabled),
+.btn.workbuddy-credit-tab[aria-pressed="true"] {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.btn.workbuddy-credit-tab[aria-pressed="true"] {
+  border-color: var(--border-light);
+  font-weight: 600;
+}
+
+.btn.workbuddy-credit-tab:disabled {
+  opacity: .5;
+}

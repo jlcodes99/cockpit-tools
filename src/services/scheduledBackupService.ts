@@ -10,6 +10,8 @@ export const AUTO_BACKUP_STATE_CHANGED_EVENT = 'auto-backup-state-changed';
 export const BACKUP_DIRECTORY_MIGRATION_PROGRESS_EVENT = 'backup-directory-migration-progress';
 
 const AUTO_BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const BACKUP_LOAD_TIMEOUT_MS = 15_000;
+const pendingBackupReads = new Map<string, Promise<unknown>>();
 
 export interface AutoBackupSettings {
   enabled: boolean;
@@ -56,6 +58,7 @@ export interface BackupDirectoryMigrationPreview {
   file_count: number;
   size_bytes: number;
   sources: BackupMigrationSourceSummary[];
+  source_error: string | null;
 }
 
 export type BackupDirectoryMigrationPhase =
@@ -113,6 +116,7 @@ export interface ManagedBackupResult {
 }
 
 function dispatchAutoBackupStateChanged() {
+  pendingBackupReads.clear();
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new Event(AUTO_BACKUP_STATE_CHANGED_EVENT));
 }
@@ -255,6 +259,36 @@ export async function updateAutoBackupLastRun(lastBackupAt: string | null): Prom
 
 export async function listAutoBackupFiles(): Promise<AutoBackupFileEntry[]> {
   return invoke<AutoBackupFileEntry[]>('list_auto_backup_files');
+}
+
+// A failed file list or usage scan must not discard successfully loaded settings.
+export async function getAutoBackupState() {
+  const [settings, files, usage] = await Promise.allSettled([
+    boundedBackupRead('settings', getAutoBackupSettings),
+    boundedBackupRead('files', listAutoBackupFiles),
+    boundedBackupRead('usage', getBackupUsage),
+  ]);
+  return { settings, files, usage };
+}
+
+function boundedBackupRead<T>(key: string, read: () => Promise<T>): Promise<T> {
+  let pending = pendingBackupReads.get(key) as Promise<T> | undefined;
+  if (!pending) {
+    pending = read();
+    pendingBackupReads.set(key, pending);
+    const release = () => {
+      if (pendingBackupReads.get(key) === pending) pendingBackupReads.delete(key);
+    };
+    void pending.then(release, release);
+  }
+  // Keep the underlying operation single-flight even after the UI times out.
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('backup_load_timeout')), BACKUP_LOAD_TIMEOUT_MS);
+    pending.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); },
+    );
+  });
 }
 
 export async function readAutoBackupFile(fileName: string): Promise<string> {

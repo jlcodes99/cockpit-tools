@@ -1,0 +1,266 @@
+/* Palettes are local to each skin; all ordinary account states remain shared. */
+.codex-accounts-page .codex-account-card.codex-card-skin-yunmoor {
+  --provider-skin-accent: #5367b8;
+  --provider-skin-border: #b3c4eb;
+  --provider-skin-surface: #f7f9ff;
+  --provider-skin-mist: rgba(139, 175, 235, 0.24);
+  --provider-skin-moon: rgba(181, 199, 243, 0.28);
+  --provider-skin-shadow: 67 90 154;
+}
+
+[data-theme="dark"] .codex-accounts-page .codex-account-card.codex-card-skin-yunmoor {
+  --provider-skin-accent: #b2c7ff;
+  --provider-skin-border: #425783;
+  --provider-skin-surface: #182642;
+  --provider-skin-mist: rgba(99, 126, 210, 0.24);
+  --provider-skin-moon: rgba(140, 169, 230, 0.14);
+}
+
+.codex-accounts-page .codex-account-card.codex-card-skin-ahzm {
+  --provider-skin-accent: #247866;
+  --provider-skin-border: #a4cfc1;
+  --provider-skin-surface: #f2faf5;
+  --provider-skin-mist: rgba(91, 188, 152, 0.2);
+  --provider-skin-shadow: 30 98 78;
+  --ahzm-gold: #a17d35;
+}
+
+[data-theme="dark"] .codex-accounts-page .codex-account-card.codex-card-skin-ahzm {
+  --provider-skin-accent: #91dec4;
+  --provider-skin-border: #356457;
+  --provider-skin-surface: #122e2b;
+  --provider-skin-mist: rgba(49, 166, 136, 0.18);
+  --ahzm-gold: #d6b875;
+}
+
+.codex-accounts-page .codex-account-card.codex-card-skin-apikey-fun {
+  --provider-skin-accent: #866124;
+  --provider-skin-border: #d4bb82;
+  --provider-skin-surface: #fff7e6;
+  --provider-skin-base: #fffdfa;
+  --provider-skin-mist: rgba(212, 177, 98, 0.19);
+  --provider-skin-shadow: 125 92 35;
+  --apikey-fun-gold: #dfbd75;
+  --apikey-fun-badge-bg: #433726;
+  --apikey-fun-badge-text: #ffe4ac;
+}
+
+[data-theme="dark"] .codex-accounts-page .codex-account-card.codex-card-skin-apikey-fun {
+  --provider-skin-accent: #e5c789;
+  --provider-skin-border: #796341;
+  --provider-skin-surface: #29251e;
+  --provider-skin-base: #17191e;
+  --provider-skin-mist: rgba(193, 151, 74, 0.16);
+  --apikey-fun-gold: #f0cf8f;
+  --apikey-fun-badge-bg: #3e3323;
+  --apikey-fun-badge-text: #ffe6b1;
+}
+
+/* Endpoint-specific skins are scoped to overview cards; tables and dialogs keep their own surfaces. */
+.codex-accounts-page .codex-account-card:is(.codex-card-skin-yunmoor, .codex-card-skin-ahzm, .codex-card-skin-apikey-fun),
+[data-theme="dark"] .codex-accounts-page .codex-account-card:is(.codex-card-skin-yunmoor, .codex-card-skin-ahzm, .codex-card-skin-apikey-fun) {
+  position: relative;
+  isolation: isolate;
+  border-color: var(--provider-skin-border);
+  background:
+    radial-gradient(ellipse at 100% 0%, var(--provider-skin-mist), transparent 62%),
+    linear-gradient(155deg, var(--provider-skin-surface), var(--provider-skin-base, var(--bg-card)) 72%);
+  box-shadow: 0 8px 28px rgb(var(--provider-skin-shadow) / 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* Decorative layers stay inside the card and never capture actions or clip dropdowns. */
+.codex-accounts-page .codex-account-card.codex-card-skin-yunmoor::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at calc(100% - 59px) 73px, var(--provider-skin-moon) 0 30px, transparent 31px),
+    radial-gradient(ellipse at 12% 90%, var(--provider-skin-mist), transparent 54%);
+}
+
+.codex-accounts-page .codex-account-card.codex-card-skin-yunmoor::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  top: 38px;
+  right: 18px;
+  width: min(164px, 55%);
+  height: 64px;
+  border: 1px solid color-mix(in srgb, var(--provider-skin-accent) 18%, transparent);
+  border-radius: 50%;
+  transform: rotate(-22deg);
+}
+
+.codex-accounts-page .codex-account-card:is(.codex-card-skin-yunmoor, .codex-card-skin-ahzm, .codex-card-skin-apikey-fun):hover {
+  border-color: var(--provider-skin-accent);
+  box-shadow: 0 12px 32px rgb(var(--provider-skin-shadow) / 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.codex-accounts-page .codex-account-card:is(.codex-card-skin-yunmoor, .codex-card-skin-ahzm, .codex-card-skin-apikey-fun):is(.current, .selected) {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-light), 0 10px 30px rgb(var(--provider-skin-shadow) / 0.18);
+}
+
+.codex-accounts-page .codex-account-card:is(.codex-card-skin-yunmoor, .codex-card-skin-ahzm, .codex-card-skin-apikey-fun).selected {
+  background:
+    linear-gradient(var(--primary-light), var(--primary-light)),
+    linear-gradient(155deg, var(--provider-skin-surface), var(--provider-skin-base, var(--bg-card)));
+}
+
+.codex-accounts-page .codex-account-card:is(.codex-card-skin-yunmoor, .codex-card-skin-ahzm, .codex-card-skin-apikey-fun) .account-email:not(input) {
+  color: var(--provider-skin-accent);
+}
+
+.codex-accounts-page .codex-account-card:is(.codex-card-skin-yunmoor, .codex-card-skin-ahzm, .codex-card-skin-apikey-fun) .tier-badge {
+  color: var(--provider-skin-accent);
+  background: color-mix(in srgb, var(--provider-skin-accent) 12%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--provider-skin-accent) 32%, transparent);
+}
+
+.codex-accounts-page .codex-account-card:is(.codex-card-skin-yunmoor, .codex-card-skin-ahzm, .codex-card-skin-apikey-fun) .card-footer {
+  border-color: color-mix(in srgb, var(--provider-skin-accent) 20%, transparent);
+}
+
+.codex-accounts-page .codex-account-card:is(.codex-card-skin-yunmoor, .codex-card-skin-ahzm, .codex-card-skin-apikey-fun) .codex-api-key-usage-panel,
+[data-theme="dark"] .codex-accounts-page .codex-account-card:is(.codex-card-skin-yunmoor, .codex-card-skin-ahzm, .codex-card-skin-apikey-fun) .codex-api-key-usage-panel {
+  background: color-mix(in srgb, var(--provider-skin-surface) 80%, transparent);
+  border-color: color-mix(in srgb, var(--provider-skin-accent) 22%, transparent);
+}
+
+.codex-accounts-page :is(.codex-card-skin-yunmoor, .codex-card-skin-ahzm, .codex-card-skin-apikey-fun) .card-action-btn:not(.danger):not(.success):not(.active) {
+  color: var(--provider-skin-accent);
+  background: color-mix(in srgb, var(--provider-skin-accent) 10%, var(--bg-card));
+}
+
+.codex-accounts-page :is(.codex-card-skin-yunmoor, .codex-card-skin-ahzm, .codex-card-skin-apikey-fun) .card-action-btn:not(.danger):not(.success):not(.active):hover:not(:disabled) {
+  background: color-mix(in srgb, var(--provider-skin-accent) 22%, var(--bg-card));
+}
+
+.codex-accounts-page :is(.codex-card-skin-yunmoor, .codex-card-skin-ahzm, .codex-card-skin-apikey-fun) .card-action-btn:not(.danger):not(.success):not(.active):disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.codex-accounts-page :is(.codex-card-skin-yunmoor, .codex-card-skin-ahzm, .codex-card-skin-apikey-fun) .card-action-btn:focus-visible {
+  outline: 2px solid var(--provider-skin-accent);
+  outline-offset: -2px;
+}
+
+/* A quiet gilt lattice and a tilted crystal distinguish AHZM from the lunar skin. */
+.codex-accounts-page .codex-account-card.codex-card-skin-ahzm::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  inset: 0;
+  border-radius: inherit;
+  background-image:
+    linear-gradient(35deg, transparent 49%, color-mix(in srgb, var(--ahzm-gold) 12%, transparent) 50%, transparent 51%),
+    linear-gradient(145deg, transparent 49%, color-mix(in srgb, var(--provider-skin-accent) 12%, transparent) 50%, transparent 51%);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse at top right, #000, transparent 68%);
+}
+
+.codex-accounts-page .codex-account-card.codex-card-skin-ahzm::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  top: 52px;
+  right: 30px;
+  width: min(74px, 24%);
+  aspect-ratio: 1;
+  border: 1px solid color-mix(in srgb, var(--ahzm-gold) 28%, transparent);
+  border-radius: 16px;
+  transform: rotate(35deg);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--ahzm-gold) 8%, transparent), transparent);
+  box-shadow:
+    0 0 0 9px color-mix(in srgb, var(--ahzm-gold) 4%, transparent),
+    0 0 38px var(--provider-skin-mist);
+}
+
+/* APIKEY.FUN uses PRO 500's seven-second sheen/sparkle cadence without a subscription class. */
+.codex-accounts-page .codex-account-card.codex-card-skin-apikey-fun::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(90deg, transparent, var(--apikey-fun-gold), transparent) center top / 78% 1px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180' fill='none' stroke='%23c99c43' stroke-width='2'%3E%3Ccircle cx='90' cy='90' r='72' opacity='.22'/%3E%3Ccircle cx='90' cy='90' r='61' opacity='.14'/%3E%3Cpath d='M62 97a22 22 0 1 1 36 17l-12 12h-10v10H66v10H51v-15l28-28' stroke-linecap='round' stroke-linejoin='round' opacity='.25'/%3E%3Ccircle cx='87' cy='83' r='5' opacity='.25'/%3E%3Cpath d='M90 8v10M90 162v10M8 90h10M162 90h10' opacity='.24'/%3E%3C/svg%3E") right 18px bottom 64px / min(180px, 52%) auto no-repeat,
+    radial-gradient(circle at calc(100% - 42px) 91px, var(--apikey-fun-gold) 0 1px, transparent 2px),
+    radial-gradient(circle at calc(100% - 72px) 63px, color-mix(in srgb, var(--apikey-fun-gold) 50%, transparent) 0 1px, transparent 2px),
+    radial-gradient(ellipse at 5% 100%, var(--provider-skin-mist), transparent 55%);
+}
+
+.codex-accounts-page .codex-account-card.codex-card-skin-apikey-fun .account-email:not(input) {
+  color: var(--provider-skin-accent);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.codex-accounts-page .codex-account-card.codex-card-skin-apikey-fun::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(110deg, transparent 40%, rgba(255, 233, 178, 0.025) 46%, rgba(255, 233, 178, 0.075) 50%, rgba(255, 233, 178, 0.025) 54%, transparent 60%);
+  background-size: 250% 100%;
+  background-position: 95% 0;
+  opacity: 0;
+  animation: var(--apikey-fun-sheen, codex-pro-500-sheen 7s ease-in-out infinite);
+}
+
+.codex-accounts-page .codex-account-card.codex-card-skin-apikey-fun .tier-badge {
+  position: relative;
+  isolation: isolate;
+  background: var(--apikey-fun-badge-bg);
+  color: var(--apikey-fun-badge-text);
+  border: 1px solid var(--apikey-fun-gold);
+  box-shadow: inset 0 1px 0 rgba(255, 235, 189, 0.2), 0 1px 5px rgb(var(--provider-skin-shadow) / 0.16);
+}
+
+.codex-accounts-page .codex-account-card.codex-card-skin-apikey-fun .tier-badge::before {
+  content: '';
+  display: block;
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(110deg, transparent 43%, rgba(255, 244, 216, 0.1) 48%, rgba(255, 244, 216, 0.3) 50%, rgba(255, 244, 216, 0.1) 52%, transparent 57%);
+  background-size: 250% 100%;
+  background-position: 95% 0;
+  opacity: 0;
+  animation: var(--apikey-fun-sheen, codex-pro-500-sheen 7s ease-in-out infinite);
+}
+
+.codex-accounts-page .codex-account-card.codex-card-skin-apikey-fun .tier-badge::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  top: 1px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  background: #fff3d5;
+  clip-path: polygon(50% 0%, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0% 50%, 38% 38%);
+  opacity: 0.18;
+  animation: var(--apikey-fun-sparkle, codex-pro-500-sparkle 7s ease-in-out infinite);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .codex-accounts-page .codex-card-skin-apikey-fun {
+    --apikey-fun-sheen: none;
+    --apikey-fun-sparkle: none;
+  }
+}

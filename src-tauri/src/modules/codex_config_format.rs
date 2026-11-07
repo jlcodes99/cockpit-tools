@@ -236,28 +236,6 @@ fn strip_utf8_bom(content: &str) -> (&str, bool) {
     }
 }
 
-fn contains_toml_unicode_escape(value: &str) -> bool {
-    let chars = value.chars().collect::<Vec<_>>();
-    let mut index = 0usize;
-    while index + 1 < chars.len() {
-        if chars[index] == '\\' && matches!(chars[index + 1], 'u' | 'U') {
-            let expected_len = if chars[index + 1] == 'u' { 4 } else { 8 };
-            if chars
-                .iter()
-                .skip(index + 2)
-                .take(expected_len)
-                .filter(|ch| ch.is_ascii_hexdigit())
-                .count()
-                == expected_len
-            {
-                return true;
-            }
-        }
-        index += 1;
-    }
-    false
-}
-
 fn is_table_header_line(trimmed_line: &str) -> bool {
     trimmed_line.starts_with('[')
 }
@@ -272,12 +250,12 @@ fn header_parses_as_toml_table(trimmed_line: &str) -> bool {
         .is_ok()
 }
 
+/// 只有「残缺头部」和「无法作为 TOML 表解析」才算不安全。
+/// `[projects.'E:\中文项目\店铺管理']` 这类含非 ASCII 的合法路径（Codex 自己的写法，单引号字面量）
+/// 以及带 `\uXXXX` 转义的合法写法都必须保留，不能仅因为不是 ASCII 就整段删除。
 fn is_unsafe_projects_header(trimmed_line: &str) -> bool {
     is_projects_table_header(trimmed_line)
-        && (!trimmed_line.contains(']')
-            || !trimmed_line.is_ascii()
-            || contains_toml_unicode_escape(trimmed_line)
-            || !header_parses_as_toml_table(trimmed_line))
+        && (!trimmed_line.contains(']') || !header_parses_as_toml_table(trimmed_line))
 }
 
 fn remove_project_sections(content: &str, aggressive: bool) -> (String, bool) {
@@ -541,21 +519,33 @@ features = true
     }
 
     #[test]
-    fn parse_removes_non_ascii_project_sections() {
-        let input = "model = \"gpt-5\"\n\n[projects.'C:\\Users\\demo\\赚钱']\ntrust_level = \"trusted\"\n\n[mcp_servers.demo]\ncommand = \"node\"\n";
+    fn parse_keeps_non_ascii_project_sections() {
+        let input = "model = \"gpt-5\"\n\n[projects.'E:\\中文项目\\店铺管理']\ntrust_level = \"trusted\"\n\n[mcp_servers.demo]\ncommand = \"node\"\n";
         let (doc, changed) = parse_codex_config_doc(input).expect("parse config");
         let output = doc.to_string();
 
-        assert!(changed);
+        assert!(!changed);
         assert!(output.contains("model = \"gpt-5\""));
         assert!(output.contains("[mcp_servers.demo]"));
-        assert!(!output.contains("[projects."));
-        assert!(!output.contains("trust_level"));
+        assert!(output.contains("[projects."));
+        assert!(output.contains("trust_level = \"trusted\""));
     }
 
     #[test]
-    fn parse_removes_unicode_escape_project_sections() {
+    fn parse_keeps_unicode_escape_project_sections() {
         let input = "model = \"gpt-5\"\n\n[projects.\"C:\\\\Users\\\\demo\\\\GitHub\\u8d5a\\u94b1\"]\ntrust_level = \"trusted\"\n";
+        let (doc, changed) = parse_codex_config_doc(input).expect("parse config");
+        let output = doc.to_string();
+
+        assert!(!changed);
+        assert!(output.contains("model = \"gpt-5\""));
+        assert!(output.contains("[projects."));
+        assert!(output.contains("trust_level = \"trusted\""));
+    }
+
+    #[test]
+    fn parse_removes_project_sections_with_unescaped_backslash_header() {
+        let input = "model = \"gpt-5\"\n\n[projects.\"C:\\Users\\demo\\repo\"]\ntrust_level = \"trusted\"\n";
         let (doc, changed) = parse_codex_config_doc(input).expect("parse config");
         let output = doc.to_string();
 
@@ -608,6 +598,24 @@ features = true
         assert!(backup.contains("[features]"));
         assert!(backup.contains("memories = true"));
         assert!(backup.contains("model = \"gpt-5\""));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sanitize_keeps_non_ascii_project_trust_entries_on_disk() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let config_path = dir.join("config.toml");
+        let backup_path = dir.join("config.toml.bak");
+        let input =
+            "model = \"gpt-5\"\n\n[projects.'E:\\中文项目\\店铺管理']\ntrust_level = \"trusted\"\n";
+        fs::write(&config_path, input).expect("write config");
+        fs::write(&backup_path, input).expect("write backup");
+
+        assert!(!sanitize_codex_config_toml_file(&config_path).expect("sanitize config"));
+
+        assert_eq!(fs::read_to_string(&config_path).expect("read config"), input);
+        assert_eq!(fs::read_to_string(&backup_path).expect("read backup"), input);
         let _ = fs::remove_dir_all(&dir);
     }
 

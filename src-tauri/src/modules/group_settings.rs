@@ -2,7 +2,7 @@
 //!
 //! 管理模型分组设置，与插件端共享同一份配置文件
 //!
-//! 文件路径: ~/.antigravity_cockpit/group_settings.json
+//! 文件路径: ~/.cockpit_tools/group_settings.json
 //!
 //! 设计说明:
 //! - 两端使用同一个 modelId (API 返回的 models Key)
@@ -74,6 +74,24 @@ impl Default for GroupSettings {
         let mut group_mappings = HashMap::new();
         let mut group_names = HashMap::new();
 
+        // Additive defaults preserve existing user mappings and legacy groups.
+        group_mappings.insert("gemini-4-argon".into(), "g4_argon".into());
+        group_mappings.insert("gemini-4-argon-medium".into(), "g4_argon".into());
+        group_mappings.insert("gemini-4-argon-high".into(), "g4_argon".into());
+        group_mappings.insert("argon:weekly".into(), "g4_argon".into());
+        group_mappings.insert("gemini-argon-wtu-weekly".into(), "g4_argon".into());
+        group_mappings.insert("gemini-3.8-flash".into(), "g3_flash".into());
+        group_mappings.insert("gemini-3.8-flash-low".into(), "g3_flash".into());
+        group_mappings.insert("gemini-3.8-flash-medium".into(), "g3_flash".into());
+        group_mappings.insert("gemini-3.8-flash-high".into(), "g3_flash".into());
+        group_mappings.insert("MODEL_PLACEHOLDER_M318".into(), "g3_flash".into());
+        group_mappings.insert("claude-opus-5-5".into(), "claude_45".into());
+        group_mappings.insert("claude-opus-5-5-medium".into(), "claude_45".into());
+        group_mappings.insert("claude-opus-5-5-high".into(), "claude_45".into());
+        group_mappings.insert("claude-sonnet-5-5".into(), "claude_45".into());
+        group_mappings.insert("claude-sonnet-5-5-medium".into(), "claude_45".into());
+        group_mappings.insert("claude-sonnet-5-5-high".into(), "claude_45".into());
+        group_names.insert("g4_argon".into(), "Gemini 4 Argon".into());
         // Claude 4.5 分组
         group_mappings.insert(
             "claude-opus-4-5-thinking".to_string(),
@@ -104,6 +122,7 @@ impl Default for GroupSettings {
         group_names.insert("g3_flash".to_string(), GROUP_NAME_GEMINI_FLASH.to_string());
 
         let group_order = vec![
+            "g4_argon".to_string(),
             "claude_45".to_string(),
             "g3_pro".to_string(),
             "g3_flash".to_string(),
@@ -237,6 +256,33 @@ fn get_group_settings_path() -> PathBuf {
     get_shared_dir().join(GROUP_SETTINGS_FILE)
 }
 
+fn merge_default_groups(settings: &mut GroupSettings, defaults: &GroupSettings) {
+    // 兼容增量升级：补齐缺失的默认映射/名称/排序，保留用户自定义配置
+    for (model_id, group_id) in &defaults.group_mappings {
+        settings
+            .group_mappings
+            .entry(model_id.clone())
+            .or_insert_with(|| group_id.clone());
+    }
+
+    for (group_id, group_name) in &defaults.group_names {
+        settings
+            .group_names
+            .entry(group_id.clone())
+            .or_insert_with(|| group_name.clone());
+    }
+
+    if settings.group_order.is_empty() {
+        settings.group_order = defaults.group_order.clone();
+    } else {
+        for group_id in &defaults.group_order {
+            if !settings.group_order.contains(group_id) {
+                settings.group_order.push(group_id.clone());
+            }
+        }
+    }
+}
+
 /// 读取分组配置
 pub fn load_group_settings() -> GroupSettings {
     let path = get_group_settings_path();
@@ -275,30 +321,7 @@ pub fn load_group_settings() -> GroupSettings {
             };
             let original_settings = settings.clone();
 
-            // 兼容增量升级：补齐缺失的默认映射/名称/排序，保留用户自定义配置
-            for (model_id, group_id) in &default_settings.group_mappings {
-                settings
-                    .group_mappings
-                    .entry(model_id.clone())
-                    .or_insert_with(|| group_id.clone());
-            }
-
-            for (group_id, group_name) in &default_settings.group_names {
-                settings
-                    .group_names
-                    .entry(group_id.clone())
-                    .or_insert_with(|| group_name.clone());
-            }
-
-            if settings.group_order.is_empty() {
-                settings.group_order = default_settings.group_order.clone();
-            } else {
-                for group_id in &default_settings.group_order {
-                    if !settings.group_order.contains(group_id) {
-                        settings.group_order.push(group_id.clone());
-                    }
-                }
-            }
+            merge_default_groups(&mut settings, &default_settings);
 
             migrate_legacy_group_names(&mut settings);
             remove_deprecated_groups(&mut settings);
@@ -365,6 +388,7 @@ mod tests {
         assert_eq!(
             settings.group_order,
             vec![
+                "g4_argon".to_string(),
                 "claude_45".to_string(),
                 "g3_pro".to_string(),
                 "g3_flash".to_string(),
@@ -453,5 +477,31 @@ mod tests {
         let groups = settings.get_ordered_groups(Some(4));
         assert_eq!(groups.len(), 4);
         assert_eq!(groups, vec!["a", "b", "c", "d"]);
+    }
+}
+
+#[cfg(test)]
+mod model_upgrade_tests {
+    use super::*;
+    #[test]
+    fn new_defaults_preserve_saved_groups_and_custom_mapping() {
+        let mut saved = GroupSettings::default();
+        saved.group_order = vec!["claude_45".into(), "g3_pro".into(), "g3_flash".into()];
+        saved.group_names.remove("g4_argon");
+        saved
+            .group_mappings
+            .insert("gemini-4-argon".into(), "my-group".into());
+        merge_default_groups(&mut saved, &GroupSettings::default());
+        assert_eq!(
+            saved.group_order,
+            vec!["claude_45", "g3_pro", "g3_flash", "g4_argon"]
+        );
+        assert_eq!(saved.group_mappings["gemini-4-argon"], "my-group");
+        assert_eq!(saved.group_mappings["claude-sonnet-5-5-high"], "claude_45");
+        assert_eq!(saved.group_mappings["gemini-3.8-flash-high"], "g3_flash");
+        assert_eq!(saved.group_mappings["gemini-3-pro-high"], "g3_pro");
+        let once = saved.clone();
+        merge_default_groups(&mut saved, &GroupSettings::default());
+        assert_eq!(saved, once);
     }
 }

@@ -1,0 +1,25 @@
+.api-relay-campaign-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: #ffedd5;
+  color: #9a3412;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.nav-item .api-relay-campaign-badge.icon-badge {
+  position: absolute;
+  top: -3px;
+  right: -7px;
+}
+
+.nav-item .api-relay-campaign-badge.with-label { order: 1; margin-left: auto; }
+.side-nav-classic-collapsed .nav-item .api-relay-campaign-badge.icon-badge { top: 0; right: 0; }
+[data-theme="dark"] .api-relay-campaign-badge { background: #431407; color: #fdba74; }

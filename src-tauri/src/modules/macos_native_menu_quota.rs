@@ -275,7 +275,13 @@
 
     fn visible_platforms() -> Vec<PlatformId> {
         let layout = modules::tray_layout::load_tray_layout();
-        let visible = sanitize_platform_list(&layout.tray_platform_ids);
+        // 被禁用的平台不出现在 macOS 原生菜单中（隐藏只影响显示，由 tray 菜单处理）
+        let visible: Vec<PlatformId> = sanitize_platform_list(&layout.tray_platform_ids)
+            .into_iter()
+            .filter(|platform| {
+                modules::tray_layout::is_platform_enabled(platform.as_str())
+            })
+            .collect();
         let visible_set: HashSet<PlatformId> = visible.iter().copied().collect();
 
         let mut groups_by_id: HashMap<String, modules::tray_layout::TrayLayoutGroup> =
@@ -486,6 +492,7 @@
             | PlatformId::TraeCn
             | PlatformId::TraeSoloCn => "#4f46e5",
             PlatformId::Workbuddy => "#2fa36a",
+            PlatformId::MinimaxCode => "#3b82f6",
         }
     }
 
@@ -1307,6 +1314,12 @@
 
     fn normalize_antigravity_model_for_match(value: &str) -> String {
         let normalized = value.trim().to_lowercase();
+        if normalized.starts_with("gemini-4-argon") || matches!(normalized.as_str(), "argon:weekly" | "gemini-argon-wtu-weekly") {
+            return "gemini-4-argon".into();
+        }
+        if normalized.starts_with("gemini-3.8-flash") { return "gemini-3.8-flash".into(); }
+        if normalized.starts_with("claude-sonnet-5-5") { return "claude-sonnet-5-5".into(); }
+        if normalized.starts_with("claude-opus-5-5") { return "claude-opus-5-5".into(); }
         if normalized.is_empty() {
             return normalized;
         }

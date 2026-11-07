@@ -2,8 +2,13 @@
    Account Group Modal
    ============================================ */
 
-.account-group-modal {
-  max-width: 480px;
+.modal.account-group-modal {
+  max-width: 560px;
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .account-group-modal .modal-body {
@@ -11,7 +16,8 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-height: 60vh;
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
 }
 
@@ -24,6 +30,7 @@
 
 .group-create-row input {
   flex: 1;
+  min-width: 0;
   height: 36px;
   padding: 0 12px;
   border-radius: 10px;
@@ -70,6 +77,44 @@
   border-color: var(--border-hover);
 }
 
+.group-modal-item.is-dragging {
+  opacity: 0.45;
+  border-style: dashed;
+  border-color: var(--primary);
+  background: var(--bg-hover);
+}
+
+.group-modal-item.drop-target {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.group-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 28px;
+  color: var(--text-muted);
+  cursor: grab;
+  border-radius: 6px;
+  opacity: 0.55;
+  transition: opacity 0.15s, color 0.15s, background-color 0.15s;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.group-drag-handle:hover {
+  opacity: 1;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.group-drag-handle:active {
+  cursor: grabbing;
+}
+
 .group-modal-item-main {
   display: flex;
   align-items: center;
@@ -111,6 +156,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 8px 12px 10px;
   border-top: 1px solid var(--border);
@@ -244,6 +290,11 @@ body.theme-light .group-modal-item-meta {
 }
 
 .group-modal-item .group-action-btn {
+  appearance: none;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
   width: 28px;
   height: 28px;
   border-radius: 8px;
@@ -263,10 +314,35 @@ body.theme-light .group-modal-item-meta {
   border-color: var(--border);
 }
 
+.group-modal-item .group-action-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .group-modal-item .group-action-btn.danger:hover {
   background: rgba(239, 68, 68, 0.1);
   color: var(--danger);
   border-color: rgba(239, 68, 68, 0.3);
+}
+
+.group-modal-item .group-action-btn.add-btn {
+  width: auto;
+  height: 28px;
+  padding: 0 10px;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  color: var(--primary);
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.group-modal-item .group-action-btn.add-btn:hover {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: var(--primary);
 }
 
 /* 重命名编辑 */
@@ -299,13 +375,19 @@ body.theme-light .group-modal-item-meta {
 }
 
 /* 添加到分组弹窗 */
-.add-to-group-modal {
+.modal.add-to-group-modal {
   max-width: 380px;
+  width: min(380px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .add-to-group-modal .modal-body {
   padding: 16px 20px;
-  max-height: 50vh;
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -319,6 +401,11 @@ body.theme-light .group-modal-item-meta {
 }
 
 .add-to-group-item {
+  appearance: none;
+  font: inherit;
+  color: var(--text-primary);
+  width: 100%;
+  text-align: left;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -330,7 +417,7 @@ body.theme-light .group-modal-item-meta {
   transition: all 0.15s ease;
 }
 
-.add-to-group-item:hover {
+.add-to-group-item:hover:not(:disabled) {
   border-color: var(--primary);
   background: rgba(59, 130, 246, 0.06);
 }
@@ -358,6 +445,8 @@ body.theme-light .group-modal-item-meta {
 
 /* 弹窗内错误提示 */
 .group-modal-error {
+  flex-shrink: 0;
+  overflow-wrap: anywhere;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -436,4 +525,52 @@ body.theme-light .group-modal-item-meta {
   border-color: var(--primary) !important;
   color: var(--primary) !important;
   background: rgba(59, 130, 246, 0.08) !important;
+}
+
+.modal.account-group-modal .modal-header,
+.modal.account-group-modal .modal-footer,
+.modal.add-to-group-modal .modal-header {
+  flex-shrink: 0;
+}
+
+.group-field-error {
+  color: var(--danger, #ef4444);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.group-create-row input[aria-invalid='true'],
+.group-rename-input[aria-invalid='true'] {
+  border-color: var(--danger, #ef4444);
+}
+
+.group-create-row input:disabled,
+.group-rename-input:disabled,
+.group-quota-custom-field:disabled,
+.add-to-group-item:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.add-to-group-item:focus-visible,
+.group-modal-item .group-action-btn:focus-visible,
+.group-quota-custom-field:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 540px) {
+  .group-modal-item-main {
+    flex-wrap: wrap;
+  }
+
+  .group-modal-item .group-info {
+    min-width: 100px;
+  }
+
+  .group-modal-item .group-actions {
+    margin-left: auto;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
 }

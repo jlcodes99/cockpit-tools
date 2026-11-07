@@ -49,6 +49,7 @@ export interface KiroAccount {
 
   created_at: number;
   last_used: number;
+  last_switched_at?: number | null;
 
   // 兼容复制自 Windsurf 页面的字段（可选）
   github_login?: string;

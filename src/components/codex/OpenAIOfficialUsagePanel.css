@@ -1,0 +1,55 @@
+.openai-official-usage-note {
+  width: 100%;
+  margin: 6px 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.openai-official-usage.detailed .codex-daily-usage-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.openai-official-usage-label { font-size: 11px; color: var(--text-secondary); }
+.openai-usage-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.openai-usage-actions .btn { font-size: 11px; padding: 4px 8px; max-width: 100%; }
+.openai-usage-overlay { z-index: 10050; overflow-y: auto; align-items: safe center; }
+.modal.openai-usage-settings-modal {
+  width: min(520px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.openai-usage-settings-modal .modal-header,
+.openai-usage-settings-modal .modal-footer { flex-shrink: 0; }
+.openai-usage-settings-modal .modal-body { min-height: 0; overflow-y: auto; }
+.openai-usage-settings-modal .modal-footer { flex-wrap: wrap; gap: 8px; }
+.openai-usage-key-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.openai-usage-key-field label { font-weight: 500; font-size: 13px; }
+.openai-usage-key-input { display: flex; align-items: stretch; gap: 6px; }
+.openai-usage-key-input .form-input { flex: 1; min-width: 0; }
+.openai-usage-key-input input[aria-invalid="true"] { border-color: var(--danger, #ef4444); }
+.openai-usage-field-error { color: var(--danger, #ef4444); font-size: 12px; margin: 0; }
+.openai-usage-key-field .openai-official-usage-note { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
+.openai-usage-create-link { display: inline-flex; align-items: center; gap: 5px; color: var(--primary); font-size: 12px; }
+.openai-usage-optional { margin-top: 12px; }
+.openai-usage-optional > summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; padding: 8px 0; }
+.openai-usage-key-input .form-input {
+  appearance: none;
+  font: inherit;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  outline: none;
+}
+.openai-usage-key-input .form-input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-light); }
+.openai-usage-key-input .form-input:disabled { opacity: 0.6; cursor: not-allowed; }
+.openai-usage-key-input .form-input[aria-invalid="true"] { border-color: var(--danger); }
+.openai-usage-key-field .openai-official-usage-note { text-align: start; }
+.openai-usage-settings-modal .btn, .openai-usage-actions .btn, .openai-usage-key-input .btn { font-family: inherit; line-height: 1.4; }

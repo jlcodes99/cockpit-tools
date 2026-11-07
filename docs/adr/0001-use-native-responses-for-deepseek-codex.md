@@ -8,7 +8,7 @@ For the **official DeepSeek preset** (`api.deepseek.com`):
 2. **Chat Completions remains available** when the user explicitly selects it (no hard lock).
 3. Responses stays native, but the instance provider gateway **only rewrites the model name**:
    - Picker `display_name` is `DeepSeek-V4-Flash` / `Pro`.
-   - Catalog `slug` uses official Codex whitelist shells `gpt-5.5` / `gpt-5.4`.
+   - Catalog `slug` uses official Codex whitelist shells `gpt-5.6-luna` / `gpt-5.6-sol`.
    - The sidecar replaces that slug with `deepseek-v4-flash` / `pro` and forwards the Responses body unchanged.
    - Cockpit writes `cockpit-provider-model-catalog.json` into the **target instance `CODEX_HOME`**.
    - Official DeepSeek tool metadata is overlaid onto the Codex client-model shape.
@@ -22,7 +22,7 @@ The user wants native Responses without a local remapping gateway. Official slug
 
 ## Consequences
 
-- Desktop / multi-instance start uses a per-instance provider gateway sidecar only to rewrite `gpt-5.5` / `gpt-5.4` → `deepseek-v4-flash` / `pro`.
+- Desktop / multi-instance start uses a per-instance provider gateway sidecar only to rewrite `gpt-5.6-luna` / `gpt-5.6-sol` → `deepseek-v4-flash` / `pro`.
 - Enabling from 模型供应商 onto a non-default instance writes `{instance_dir}/cockpit-provider-model-catalog.json`.
 - Chat Completions still uses the instance provider gateway for protocol conversion.
 - Existing DeepSeek accounts with explicit Chat Completions are **not** auto-migrated away from Chat.

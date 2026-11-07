@@ -1,0 +1,63 @@
+/* 「官方登录」页签：步骤列表与说明文案。只使用项目既有设计令牌，不新增控件样式。 */
+.codex-temp-login-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.codex-temp-login-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.codex-temp-login-step.active {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  color: var(--primary);
+}
+
+.codex-temp-login-step.done {
+  color: var(--text-primary);
+}
+
+.codex-temp-login-step-index {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  font-size: 11px;
+}
+
+.codex-temp-login-step.active .codex-temp-login-step-index {
+  background: color-mix(in srgb, var(--primary) 18%, var(--bg-tertiary));
+}
+
+.codex-temp-login-step-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-temp-login-hint,
+.codex-temp-login-note {
+  margin: 0;
+}
+
+.codex-temp-login-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+}

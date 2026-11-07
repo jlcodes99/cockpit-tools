@@ -76,6 +76,7 @@ lazy_static::lazy_static! {
 #[derive(Debug, Clone)]
 enum ProtoFieldValue {
     Varint(u64),
+    Fixed64(u64),
     Bytes(Vec<u8>),
 }
 
@@ -1813,6 +1814,14 @@ fn parse_proto_fields(
                     .push(ProtoFieldValue::Varint(value));
                 offset = next;
             }
+            1 => {
+                let bytes = data.get(new_offset..new_offset + 8)
+                    .ok_or_else(|| "protobuf fixed64 out of bounds".to_string())?;
+                fields.entry(field_no).or_default().push(ProtoFieldValue::Fixed64(
+                    u64::from_le_bytes(bytes.try_into().unwrap()),
+                ));
+                offset = new_offset + 8;
+            }
             2 => {
                 let (len, content_offset) = crate::utils::protobuf::read_varint(data, new_offset)?;
                 let len = len as usize;
@@ -1891,12 +1900,37 @@ fn parse_auth1_plan_status_proto_response(proto_bytes: &[u8]) -> Result<Value, S
     let daily_reset_at = proto_first_varint(&plan_status_fields, 17).map(|value| value as i64);
     let weekly_reset_at = proto_first_varint(&plan_status_fields, 18).map(|value| value as i64);
 
-    let mut plan_status_json = json!({
-        "planInfo": {
-            "planName": plan_name,
-            "billingStrategy": "BILLING_STRATEGY_QUOTA"
+    let mut plan_info = json!({"planName": plan_name});
+    if let Some(fields) = plan_info_fields.as_ref() {
+        if let Some(strategy) = proto_first_varint(fields, 35) {
+            let name = match strategy {
+                1 => Some("BILLING_STRATEGY_CREDITS"),
+                2 => Some("BILLING_STRATEGY_QUOTA"),
+                3 => Some("BILLING_STRATEGY_ACU"),
+                _ => None,
+            };
+            if let Some(name) = name { plan_info["billingStrategy"] = json!(name); }
         }
-    });
+        for (number, key) in [(12, "monthlyPromptCredits"), (13, "monthlyFlowCredits")] {
+            if let Some(value) = proto_first_varint(fields, number) { plan_info[key] = json!(value); }
+        }
+        for (number, key) in [(36, "hideDailyQuota"), (37, "hideWeeklyQuota")] {
+            if let Some(value) = proto_first_varint(fields, number) { plan_info[key] = json!(value != 0); }
+        }
+    }
+    // Older responses can omit the strategy, but quota fields still establish the mode.
+    if plan_info.get("billingStrategy").is_none() && (daily_remaining.is_some() || weekly_remaining.is_some()) {
+        plan_info["billingStrategy"] = json!("BILLING_STRATEGY_QUOTA");
+    }
+    let mut plan_status_json = json!({"planInfo": plan_info});
+    for (number, key) in [(8, "availablePromptCredits"), (9, "availableFlowCredits"), (4, "availableFlexCredits"), (7, "usedFlexCredits"), (5, "usedFlowCredits"), (6, "usedPromptCredits")] {
+        if let Some(value) = proto_first_varint(&plan_status_fields, number) { plan_status_json[key] = json!(value); }
+    }
+    for (number, key) in [(19, "acuConsumed"), (20, "acuLimit"), (21, "dollarsConsumed"), (22, "dollarsLimit")] {
+        if let Some(value) = plan_status_fields.get(&number).and_then(|items| items.iter().find_map(|item| {
+            match item { ProtoFieldValue::Fixed64(bits) => Some(f64::from_bits(*bits)), _ => None }
+        })).filter(|value| value.is_finite()) { plan_status_json[key] = json!(value); }
+    }
     if let Some(obj) = plan_status_json.as_object_mut() {
         if let Some(v) = daily_remaining {
             obj.insert("dailyQuotaRemainingPercent".to_string(), json!(v));
@@ -2352,4 +2386,60 @@ pub async fn refresh_payload_for_account(
     }
 
     build_payload_from_token(&account.github_access_token).await
+}
+
+#[cfg(test)]
+mod plan_status_compat_tests {
+    use super::*;
+    use crate::utils::protobuf::{encode_len_delim_field, encode_string_field, encode_varint, encode_varint_field};
+
+    fn double_field(number: u32, value: f64) -> Vec<u8> {
+        let mut bytes = encode_varint(((number << 3) | 1) as u64);
+        bytes.extend_from_slice(&value.to_le_bytes());
+        bytes
+    }
+
+    #[test]
+    fn decodes_official_acu_limits_without_relabeling_as_quota() {
+        let mut info = encode_string_field(2, "Custom plan");
+        info.extend(encode_varint_field(35, 3));
+        info.extend(encode_varint_field(36, 1));
+        let mut status = encode_len_delim_field(1, &info);
+        for (number, value) in [(19, 2.5), (20, 10.0), (21, 1.25), (22, 5.0)] {
+            status.extend(double_field(number, value));
+        }
+        let value = parse_auth1_plan_status_proto_response(&encode_len_delim_field(1, &status)).unwrap();
+        let status = &value["planStatus"];
+        assert_eq!(status["planInfo"]["billingStrategy"], "BILLING_STRATEGY_ACU");
+        assert_eq!(status["planInfo"]["planName"], "Custom plan");
+        assert_eq!(status["planInfo"]["hideDailyQuota"], true);
+        assert_eq!(status["acuConsumed"], 2.5);
+        assert_eq!(status["acuLimit"], 10.0);
+        assert_eq!(status["dollarsConsumed"], 1.25);
+        assert_eq!(status["dollarsLimit"], 5.0);
+        assert!(status.get("dailyQuotaRemainingPercent").is_none());
+    }
+
+    #[test]
+    fn preserves_credits_and_does_not_fabricate_missing_billing_mode() {
+        let mut info = encode_varint_field(35, 1);
+        info.extend(encode_varint_field(12, 500));
+        let mut status = encode_len_delim_field(1, &info);
+        status.extend(encode_varint_field(8, 300));
+        let value = parse_auth1_plan_status_proto_response(&encode_len_delim_field(1, &status)).unwrap();
+        assert_eq!(value["planStatus"]["planInfo"]["billingStrategy"], "BILLING_STRATEGY_CREDITS");
+        assert_eq!(value["planStatus"]["availablePromptCredits"], 300);
+        assert_eq!(value["planStatus"]["planInfo"]["monthlyPromptCredits"], 500);
+        let value = parse_auth1_plan_status_proto_response(&encode_len_delim_field(1, &[])).unwrap();
+        assert!(value["planStatus"]["planInfo"].get("billingStrategy").is_none());
+    }
+
+    #[test]
+    fn rejects_truncated_doubles_and_omits_nonfinite_usage() {
+        let mut field = double_field(19, 1.0);
+        field.pop();
+        assert!(parse_proto_fields(&field).is_err());
+        let value = parse_auth1_plan_status_proto_response(&encode_len_delim_field(1, &double_field(19, f64::NAN))).unwrap();
+        assert!(value["planStatus"].get("acuConsumed").is_none());
+    }
 }

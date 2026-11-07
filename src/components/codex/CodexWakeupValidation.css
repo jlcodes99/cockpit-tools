@@ -1,0 +1,10 @@
+.codex-wakeup-field-error {
+  color: var(--danger-color, #dc2626);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.codex-wakeup-modal [aria-invalid="true"] {
+  border-color: var(--danger-color, #dc2626);
+}

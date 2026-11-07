@@ -315,6 +315,7 @@ pub async fn inject_codebuddy_to_vscode(
             }
         };
 
+
     let _ = crate::modules::tray::update_tray_menu(&app);
 
     if let Some(err) = launch_warning {

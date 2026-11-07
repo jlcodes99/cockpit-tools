@@ -708,11 +708,6 @@
   color: var(--primary);
 }
 
-html[data-reduced-motion="true"] .platform-group-switcher-trigger:hover,
-html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platform-group-switcher-trigger-caret {
-  transform: none;
-}
-
 .platform-group-switcher-dropdown {
   position: fixed;
   top: 0;
@@ -1105,7 +1100,8 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
   background: var(--bg-secondary);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   box-shadow: var(--shadow-sm);
 }
 
@@ -1194,7 +1190,37 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
   min-width: 0;
 }
 
+.codex-speed-control {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.codex-speed-control-hint {
+  flex-basis: 100%;
+  max-width: 340px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.codex-account-card .codex-card-bottom > .codex-speed-control {
+  justify-self: end;
+}
+
+.codex-launch-preview-summary-controls > .codex-speed-control {
+  margin-right: 12px;
+  align-self: center;
+  flex-shrink: 0;
+}
+
 .codex-speed-trigger {
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit;
   height: 22px;
   display: inline-flex;
   align-items: center;
@@ -1226,7 +1252,7 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
 }
 
-.codex-speed-trigger.fast {
+.codex-speed-trigger:is(.fast, .ultrafast) {
   color: #7a4b00;
   border-color: rgba(217, 119, 6, 0.24);
   background: linear-gradient(180deg, rgba(255, 250, 241, 0.98), rgba(252, 240, 220, 0.94));
@@ -1235,8 +1261,8 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
     inset 0 1px 0 rgba(255, 255, 255, 0.68);
 }
 
-.codex-speed-trigger.fast:hover:not(:disabled),
-.codex-speed-trigger.fast.open {
+.codex-speed-trigger:is(.fast, .ultrafast):hover:not(:disabled),
+.codex-speed-trigger:is(.fast, .ultrafast).open {
   border-color: rgba(217, 119, 6, 0.42);
   background: linear-gradient(180deg, rgba(255, 247, 232, 1), rgba(250, 232, 204, 0.96));
 }
@@ -1258,13 +1284,16 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
 .codex-speed-menu {
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-card) 90%, var(--bg-secondary));
-  backdrop-filter: blur(12px);
+  /* Dropdowns are solid surfaces; translucent card tokens let the page bleed through. */
+  background: var(--bg-surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   box-shadow:
     0 12px 28px rgba(15, 23, 42, 0.12),
     0 1px 0 rgba(255, 255, 255, 0.72) inset;
   padding: 6px;
-  overflow: hidden;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
 }
 
 .codex-speed-menu-title {
@@ -1287,6 +1316,12 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
 }
 
 .codex-speed-option {
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
   width: 100%;
   min-height: 42px;
   border: 1px solid transparent;
@@ -1314,6 +1349,11 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
 
 .codex-speed-option:hover {
   background: color-mix(in srgb, var(--primary) 6%, var(--bg-secondary));
+}
+
+.codex-speed-option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .codex-speed-option.active {
@@ -1360,7 +1400,7 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
   line-height: 1.2;
 }
 
-[data-theme="dark"] .codex-speed-trigger.fast {
+[data-theme="dark"] .codex-speed-trigger:is(.fast, .ultrafast) {
   color: #fbbf24;
   border-color: rgba(251, 191, 36, 0.28);
   background: rgba(251, 191, 36, 0.12);
@@ -2026,7 +2066,8 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
 
 .platform-layout-bulk-header-right {
   display: grid;
-  grid-template-columns: max-content max-content max-content 32px;
+  /* 启用 / 侧边栏 / 仪表盘 / 菜单栏 + 编辑列 */
+  grid-template-columns: max-content max-content max-content max-content 32px;
   align-items: center;
   justify-content: end;
   gap: 10px;
@@ -2045,7 +2086,7 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--text-secondary);
 }
 
@@ -2206,7 +2247,8 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
   margin-left: auto;
   min-width: 0;
   display: grid;
-  grid-template-columns: max-content max-content max-content 32px;
+  /* 与表头保持相同列顺序：启用 / 侧边栏 / 仪表盘 / 菜单栏 + 编辑 */
+  grid-template-columns: max-content max-content max-content max-content 32px;
   align-items: center;
   justify-content: end;
   gap: 10px;
@@ -2214,7 +2256,8 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
 }
 
 .platform-layout-controls-grid.is-child-grid {
-  grid-template-columns: max-content max-content 32px 32px;
+  /* 启用 / 默认平台 / 菜单栏显示 + 编辑、删除两个图标按钮 */
+  grid-template-columns: max-content max-content max-content 32px 32px;
   gap: 8px;
   opacity: 0.95;
 }
@@ -2271,6 +2314,16 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
 
 .platform-layout-toggle.is-disabled input {
   pointer-events: none;
+}
+
+.platform-layout-enable-placeholder {
+  visibility: hidden;
+}
+
+.platform-layout-checkbox-placeholder {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
 }
 
 .platform-layout-toggle input[type="checkbox"],
@@ -2732,7 +2785,7 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
 @media (max-width: 1100px) {
   .platform-layout-bulk-header-right,
   .platform-layout-controls-grid {
-    grid-template-columns: max-content max-content max-content 30px;
+    grid-template-columns: max-content max-content max-content max-content 30px;
   }
 }
 
@@ -2754,7 +2807,7 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
   .platform-layout-controls-grid {
     width: 100%;
     min-width: 0;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     justify-content: stretch;
   }
 

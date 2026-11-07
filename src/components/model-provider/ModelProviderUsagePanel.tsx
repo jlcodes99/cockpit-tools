@@ -27,6 +27,7 @@ export function ModelProviderUsagePanel({
   const { t } = useTranslation();
   const usageMode = resolveModelProviderUsageMode(summary ?? undefined);
   const isSupportedUsage =
+    usageMode === 'cockpit' ||
     usageMode === 'sub2api' ||
     usageMode === 'new_api' ||
     usageMode === 'token_plan';

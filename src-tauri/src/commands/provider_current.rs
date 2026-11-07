@@ -50,6 +50,10 @@ fn resolve_provider_current_account_id(platform: &str) -> Result<Option<String>,
             let accounts = crate::modules::workbuddy_ai_account::list_accounts();
             Ok(crate::modules::workbuddy_ai_account::resolve_current_account_id(&accounts))
         }
+        "minimaxcode" => {
+            let accounts = crate::modules::minimax_code_account::list_accounts();
+            Ok(crate::modules::minimax_code_account::resolve_current_account_id(&accounts))
+        }
         "github_copilot" | "github-copilot" | "ghcp" => {
             let accounts = crate::modules::github_copilot_account::list_accounts();
             Ok(crate::modules::github_copilot_account::resolve_current_account_id(&accounts))
@@ -128,6 +132,7 @@ mod tests {
             "trae_cn",
             "trae_solo_cn",
             "workbuddy",
+            "minimaxcode",
             "github_copilot",
             "github-copilot",
             "ghcp",

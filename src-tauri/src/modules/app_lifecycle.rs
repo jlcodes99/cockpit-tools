@@ -54,6 +54,7 @@ pub fn install_system_shutdown_listener() -> Result<(), String> {
                     "[Lifecycle] Windows 正在关闭，停止后台注入并禁止创建新子进程",
                 );
                 crate::modules::codex_app_injection::stop_all();
+                crate::modules::codex_proxy_engine::shutdown_all();
             }
         })
         .map_err(|error| format!("启动 Windows 关机清理线程失败: {}", error))?;

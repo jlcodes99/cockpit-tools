@@ -6,7 +6,10 @@ import { useTranslation } from 'react-i18next';
 import type { Page } from '../types/navigation';
 import type { Announcement, AnnouncementAction } from '../types/announcement';
 import { useAnnouncementStore } from '../stores/useAnnouncementStore';
-import { useEscClose } from '../hooks/useEscClose';
+import { useEscCloseTopmost } from '../hooks/useEscClose';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
+import { useApiKeyFunCampaign } from '../hooks/useApiKeyFunCampaign';
+import { APIKEY_FUN_CAMPAIGN, filterApiKeyFunCampaignAnnouncement, isApiKeyFunCampaignActive } from '../utils/apiKeyFunCampaign';
 import './AnnouncementCenter.css';
 
 interface AnnouncementCenterProps {
@@ -94,7 +97,12 @@ function AnnouncementSurface({
   autoRefresh,
 }: AnnouncementSurfaceProps) {
   const { t } = useTranslation();
-  const announcementState = useAnnouncementStore((state) => state.state);
+  const rawAnnouncementState = useAnnouncementStore((state) => state.state);
+  const campaignActive = useApiKeyFunCampaign();
+  const announcementState = useMemo(
+    () => filterApiKeyFunCampaignAnnouncement(rawAnnouncementState, campaignActive),
+    [rawAnnouncementState, campaignActive],
+  );
   const loading = useAnnouncementStore((state) => state.loading);
   const fetchState = useAnnouncementStore((state) => state.fetchState);
   const markAsRead = useAnnouncementStore((state) => state.markAsRead);
@@ -106,8 +114,15 @@ function AnnouncementSurface({
 
   const [listOpen, setListOpen] = useState(false);
   const [detailAnnouncement, setDetailAnnouncement] = useState<Announcement | null>(null);
+  const campaignDetailInactive = detailAnnouncement?.id === APIKEY_FUN_CAMPAIGN.id && !campaignActive;
   const [detailFromList, setDetailFromList] = useState(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const listDialog = useRef<HTMLDivElement>(null);
+  const detailDialog = useRef<HTMLDivElement>(null);
+  const imageDialog = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(listDialog, listOpen, true, !detailAnnouncement && !imagePreviewUrl);
+  useModalFocusTrap(detailDialog, Boolean(detailAnnouncement), true, !imagePreviewUrl);
+  useModalFocusTrap(imageDialog, Boolean(imagePreviewUrl));
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const [handledPopupId, setHandledPopupId] = useState<string | null>(null);
   const [popupRetryRevision, setPopupRetryRevision] = useState(0);
@@ -242,8 +257,10 @@ function AnnouncementSurface({
     }
   };
 
-  useEscClose(!!detailAnnouncement, () => void closeDetail(false));
-  useEscClose(listOpen && !detailAnnouncement, () => setListOpen(false));
+  useEscCloseTopmost(!!detailAnnouncement && !imagePreviewUrl, () => void closeDetail(false), detailDialog);
+  useEscCloseTopmost(listOpen && !detailAnnouncement && !imagePreviewUrl, () => setListOpen(false), listDialog);
+
+  useEscCloseTopmost(Boolean(imagePreviewUrl), () => setImagePreviewUrl(null), imageDialog);
 
   const handleAnnouncementClick = async (announcement: Announcement) => {
     if (announcementState.unreadIds.includes(announcement.id)) {
@@ -255,6 +272,7 @@ function AnnouncementSurface({
   };
 
   const runAction = async (action: AnnouncementAction) => {
+    if (detailAnnouncement?.id === APIKEY_FUN_CAMPAIGN.id && !isApiKeyFunCampaignActive()) return;
     if (action.type === 'tab') {
       const targetPage = TAB_TARGET_PAGE_MAP[action.target];
       if (targetPage) {
@@ -340,7 +358,7 @@ function AnnouncementSurface({
       {listOpen &&
         renderInBody(
           <div className="modal-overlay announcement-modal-overlay">
-            <div className="modal announcement-list-modal" onClick={(event) => event.stopPropagation()}>
+            <div ref={listDialog} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t('announcement.title')} className="modal announcement-list-modal" onClick={(event) => event.stopPropagation()}>
               <div className="modal-header">
                 <h2>{t('announcement.title', '公告')}</h2>
                 <button className="modal-close" onClick={() => setListOpen(false)} aria-label={t('common.close', '关闭')}>
@@ -407,7 +425,7 @@ function AnnouncementSurface({
       {detailAnnouncement &&
         renderInBody(
           <div className="modal-overlay announcement-modal-overlay">
-            <div className="modal announcement-detail-modal" onClick={(event) => event.stopPropagation()}>
+            <div ref={detailDialog} tabIndex={-1} role="dialog" aria-modal="true" aria-label={detailAnnouncement.title} className="modal announcement-detail-modal" onClick={(event) => event.stopPropagation()}>
               <div className="modal-header">
                 <div className="announcement-detail-header-left">
                   {detailFromList ? (
@@ -427,7 +445,9 @@ function AnnouncementSurface({
 
               <div className="modal-body announcement-detail-body">
                 <div className="announcement-detail-time">{formatTimeAgo(detailAnnouncement.createdAt, translateText)}</div>
-                <div className="announcement-detail-content">{detailAnnouncement.content}</div>
+                <div className="announcement-detail-content">
+                  {campaignDetailInactive ? t('apiKeyFun.campaign.inactive') : detailAnnouncement.content}
+                </div>
 
                 {detailAnnouncement.images && detailAnnouncement.images.length > 0 && (
                   <div className="announcement-images-grid">
@@ -474,6 +494,7 @@ function AnnouncementSurface({
                 {detailAnnouncement.action ? (
                   <button
                     className="btn btn-primary"
+                    disabled={campaignDetailInactive}
                     onClick={() => {
                       void runAction(detailAnnouncement.action as AnnouncementAction);
                     }}
@@ -489,7 +510,7 @@ function AnnouncementSurface({
       {imagePreviewUrl &&
         renderInBody(
           <div className="announcement-image-preview-overlay">
-            <div className="announcement-image-preview-wrapper">
+            <div ref={imageDialog} tabIndex={-1} role="dialog" aria-modal="true" aria-label={detailAnnouncement?.title || t('announcement.title')} className="announcement-image-preview-wrapper">
               <button
                 type="button"
                 className="announcement-image-preview-close"

@@ -1,0 +1,191 @@
+.modal.codex-provider-modal:not(.codex-account-dialog) {
+  width: min(920px, calc(100vw - 48px));
+  max-width: 920px;
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border));
+  box-shadow:
+    0 24px 64px -8px rgba(14, 165, 233, 0.12),
+    0 12px 24px -8px rgba(0, 0, 0, 0.06);
+}
+
+/* Codex account dialogs share the provider editor width, including the
+   platform-wide account-add class whose legacy rule is narrower. */
+.modal-content.codex-provider-modal.platform-account-add-modal,
+.modal.codex-provider-modal.platform-account-add-modal {
+  width: min(920px, calc(100vw - 48px));
+  max-width: 920px;
+}
+
+[data-theme="dark"] .modal.codex-provider-modal:not(.codex-account-dialog) {
+  box-shadow:
+    0 24px 64px -8px rgba(2, 6, 23, 0.6),
+    0 12px 24px -8px rgba(2, 6, 23, 0.4),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05);
+}
+
+.codex-provider-modal .modal-header {
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--primary) 12%, var(--border-light));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--primary) 4%, transparent),
+    transparent
+  );
+}
+
+.codex-provider-modal .form-input {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 10px;
+}
+
+.codex-provider-modal .form-input:focus {
+  background: var(--bg-card);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent);
+  transform: translateY(-1px);
+}
+
+.codex-provider-key-edit-fields {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.codex-provider-key-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.codex-provider-key-input .form-input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+}
+
+.codex-provider-key-input .btn {
+  flex-shrink: 0;
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+}
+
+.codex-provider-key-edit-actions {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.codex-provider-modal .form-row.two-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.codex-provider-wire-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+}
+
+.codex-provider-wire-segmented button {
+  min-width: 0;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.codex-provider-wire-segmented button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 7%, var(--bg-card));
+  color: var(--primary);
+}
+
+.codex-provider-wire-segmented button.active {
+  border-color: color-mix(in srgb, var(--primary) 34%, transparent);
+  background: var(--bg-card);
+  color: var(--primary);
+  box-shadow: 0 6px 14px -8px rgba(14, 165, 233, 0.45);
+}
+
+.codex-provider-wire-segmented button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.codex-provider-modal .modal-body {
+  max-height: min(70vh, 720px);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.codex-provider-modal .modal-header,
+.codex-provider-modal .modal-footer {
+  flex-shrink: 0;
+}
+
+.codex-provider-save-button .codex-provider-save-button-label {
+  display: grid;
+  place-items: center;
+}
+
+.codex-provider-save-button .codex-provider-save-button-label > span {
+  grid-area: 1 / 1;
+}
+
+.codex-provider-save-button
+  .codex-provider-save-button-label
+  > span[aria-hidden="true"] {
+  visibility: hidden;
+}
+
+.codex-provider-label-with-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.codex-provider-inline-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  color: var(--text-tertiary);
+  cursor: help;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease;
+}
+
+.codex-provider-inline-help:hover {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  color: var(--primary);
+}
+
+@media (max-width: 960px) {
+  .modal.codex-provider-modal:not(.codex-account-dialog) {
+    width: min(860px, calc(100vw - 32px));
+    max-width: 860px;
+  }
+}

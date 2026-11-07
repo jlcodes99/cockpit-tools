@@ -1,6 +1,6 @@
 //! Bounded subprocess helpers for registry/keychain probes that must not hang UI.
 
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::process::{Command, Output, Stdio};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -12,16 +12,50 @@ use std::time::{Duration, Instant};
 /// If a descendant holds an inherited pipe after the parent exits, join is aborted
 /// when `timeout` elapses (reader threads are detached).
 pub fn output_with_timeout(command: &mut Command, timeout: Duration) -> io::Result<Output> {
+    output_with_optional_input_timeout(command, None, timeout)
+}
+
+/// Like `output_with_timeout`, but send input to stdin and close it on completion.
+/// The input writer shares the same deadline and cannot block process monitoring.
+pub fn output_with_input_timeout(
+    command: &mut Command,
+    input: &[u8],
+    timeout: Duration,
+) -> io::Result<Output> {
+    output_with_optional_input_timeout(command, Some(input.to_vec()), timeout)
+}
+
+fn output_with_optional_input_timeout(
+    command: &mut Command,
+    input: Option<Vec<u8>>,
+    timeout: Duration,
+) -> io::Result<Output> {
     let program = command.get_program().to_string_lossy().into_owned();
     let spawn_guard = crate::modules::app_lifecycle::acquire_process_spawn_guard(&program)?;
     command
-        .stdin(Stdio::null())
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
 
     let child = command.spawn();
     drop(spawn_guard);
     let mut child = child?;
+    let stdin_writer = input.and_then(|input| {
+        child
+            .stdin
+            .take()
+            .map(|mut pipe| std::thread::spawn(move || pipe.write_all(&input)))
+    });
     let stdout_reader = child.stdout.take().map(|mut pipe| {
         std::thread::spawn(move || {
             let mut output = Vec::new();
@@ -47,6 +81,7 @@ pub fn output_with_timeout(command: &mut Command, timeout: Duration) -> io::Resu
                     // still hold an inherited pipe, and the timeout path must stay bounded.
                     drop(stdout_reader);
                     drop(stderr_reader);
+                    drop(stdin_writer);
                     return Err(io::Error::new(
                         io::ErrorKind::TimedOut,
                         format!("process timed out after {:?}", timeout),
@@ -59,13 +94,15 @@ pub fn output_with_timeout(command: &mut Command, timeout: Duration) -> io::Resu
                 let _ = child.wait();
                 drop(stdout_reader);
                 drop(stderr_reader);
+                drop(stdin_writer);
                 return Err(error);
             }
         }
     };
 
-    let stdout = join_reader_with_deadline(stdout_reader, deadline)?;
-    let stderr = join_reader_with_deadline(stderr_reader, deadline)?;
+    join_with_deadline(stdin_writer, deadline)?;
+    let stdout = join_with_deadline(stdout_reader, deadline)?;
+    let stderr = join_with_deadline(stderr_reader, deadline)?;
 
     Ok(Output {
         status,
@@ -74,20 +111,18 @@ pub fn output_with_timeout(command: &mut Command, timeout: Duration) -> io::Resu
     })
 }
 
-fn join_reader_with_deadline(
-    reader: Option<JoinHandle<io::Result<Vec<u8>>>>,
+fn join_with_deadline<T: Default>(
+    reader: Option<JoinHandle<io::Result<T>>>,
     deadline: Instant,
-) -> io::Result<Vec<u8>> {
+) -> io::Result<T> {
     let Some(handle) = reader else {
-        return Ok(Vec::new());
+        return Ok(T::default());
     };
     loop {
         if handle.is_finished() {
             return handle
                 .join()
-                .map_err(|_| {
-                    io::Error::new(io::ErrorKind::Other, "process output reader panicked")
-                })?
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "process pipe worker panicked"))?
                 .map_err(|error| error);
         }
         if Instant::now() >= deadline {
@@ -95,7 +130,7 @@ fn join_reader_with_deadline(
             drop(handle);
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
-                "process output drain timed out",
+                "process pipe drain timed out",
             ));
         }
         std::thread::sleep(Duration::from_millis(20));
@@ -152,5 +187,29 @@ mod tests {
             .expect("large output command");
         assert!(output.status.success());
         assert!(output.stdout.len() >= 100_000);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sends_stdin_and_closes_pipe() {
+        let mut command = Command::new("cat");
+        let input = b"credential payload\n";
+        let output = output_with_input_timeout(&mut command, input, Duration::from_secs(2))
+            .expect("stdin command");
+        assert!(output.status.success());
+        assert_eq!(output.stdout, input);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn blocked_stdin_writer_does_not_prevent_timeout() {
+        let mut command = Command::new("sleep");
+        command.arg("5");
+        let input = vec![b'x'; 1_000_000];
+        let start = Instant::now();
+        let error = output_with_input_timeout(&mut command, &input, Duration::from_millis(200))
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        assert!(start.elapsed() < Duration::from_secs(2));
     }
 }

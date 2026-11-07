@@ -1,3 +1,8 @@
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
+import { codexPathRecoveryKey, withCodexPathRecovery } from '../stores/useCodexPathRecoveryStore';
+import { isCodexLaunchCancelled } from '../utils/codexLaunchCancellation';
+import { codexLaunchExcludedPids, isCodexLaunchUnconfirmed } from "../utils/codexLaunchConfirmation";
+import { useCodexLaunchConfirmation } from "./useCodexLaunchConfirmation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -13,7 +18,6 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import * as codexInstanceService from "../services/codexInstanceService";
-import * as codexService from "../services/codexService";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
 import { useCodexAccountStore } from "../stores/useCodexAccountStore";
 import { useCodexInstanceStore } from "../stores/useCodexInstanceStore";
@@ -22,6 +26,7 @@ import type {
   CodexInstanceRuntimeOwner,
 } from "../utils/codexInstanceLaunchConflict";
 import { conciseCodexCredentialFailure } from "../utils/codexCredentialProgress";
+import { presentProxyEnginePrerequisite, proxyEnginePrerequisiteKey } from "../utils/codexProxyEnginePrerequisite";
 import { requestCodexOpenAddAccount } from "../utils/codexAddAccountRequest";
 import type { CodexSwitchAuthFailure } from "../utils/codexSwitchAuthFailure";
 import { parseCodexSwitchAuthFailure } from "../utils/codexSwitchAuthFailure";
@@ -29,6 +34,7 @@ import { presentWindowsOperationError } from "../utils/windowsOperationDialog";
 import { parseWindowsOperationError } from "../utils/windowsOperationError";
 import {
   mapCodexSwitchProgressToLaunch,
+  codexLaunchErrorKey,
   type CodexLaunchOperation,
   type CodexLaunchStepId,
   type CodexLaunchStepStatus,
@@ -44,6 +50,7 @@ type LaunchStatus =
   | "completed"
   | "cancelled"
   | "auth-required"
+  | "unconfirmed"
   | "error";
 
 interface LaunchProgressPayload {
@@ -88,6 +95,7 @@ interface LaunchProgressState {
   operation?: CodexLaunchOperation;
   cancelled?: boolean;
   source?: "switch-service";
+  excludedPids?: number[];
 }
 
 const STEP_IDS: LaunchStepId[] = [
@@ -141,12 +149,22 @@ export function CodexInstanceLaunchProgressModal() {
     let unlistenSwitch: (() => void) | undefined;
     const applyPayload = (payload: LaunchProgressPayload) => {
       if (disposed || !payload.instanceId) return;
+      const prerequisiteKey = payload.type === "error" ? proxyEnginePrerequisiteKey(payload.error) : null;
+      if (prerequisiteKey) {
+        presentProxyEnginePrerequisite(payload.error);
+        payload = { ...payload, error: t(prerequisiteKey) };
+      }
+      const lifecycleKey = payload.type === "error" ? codexLaunchErrorKey(payload.error) : null;
+      if (lifecycleKey) payload = { ...payload, error: t(lifecycleKey) };
+      if (payload.type === "complete") setActionError(null);
       setState((previous) => {
+        if ((payload.type === "cancelled" || payload.cancelled === true)
+          && previous?.instanceId !== payload.instanceId) return previous;
         if (payload.type === "start") {
           setActionError(null);
           setRetryBusy(null);
           if (
-            previous?.operation === "switch-and-start" &&
+            previous?.status === "running" && previous.operation === "switch-and-start" &&
             payload.instanceId === "__default__" &&
             payload.operation === "switch-and-start" &&
             payload.source !== "switch-service" &&
@@ -192,7 +210,10 @@ export function CodexInstanceLaunchProgressModal() {
             ...base,
             progress: 100,
             status: "completed",
-            steps,
+            steps: steps.map((step) => step.id === "startClient"
+              ? { ...step, status: "completed", details: { ...step.details, error: undefined } } : step),
+            error: undefined,
+            authFailure: null,
           };
         }
         if (payload.type === "cancelled" || payload.cancelled === true) {
@@ -207,11 +228,12 @@ export function CodexInstanceLaunchProgressModal() {
           const authFailure =
             payload.authFailure ?? parseCodexSwitchAuthFailure(payload.error);
           const isAuthRequired = authFailure !== null;
+          const unconfirmed = isCodexLaunchUnconfirmed(payload.error);
           const markedSteps = steps.map((step) =>
             step.status === "running"
               ? {
                   ...step,
-                  status: isAuthRequired
+                  status: isAuthRequired || unconfirmed
                     ? ("warning" as const)
                     : ("error" as const),
                   details: {
@@ -223,9 +245,10 @@ export function CodexInstanceLaunchProgressModal() {
           );
           return {
             ...base,
-            status: isAuthRequired ? "auth-required" : "error",
+            status: unconfirmed ? "unconfirmed" : isAuthRequired ? "auth-required" : "error",
+            excludedPids: unconfirmed ? codexLaunchExcludedPids(payload.error) : undefined,
             steps: markedSteps,
-            error: payload.error || t("common.failed", "失败"),
+            error: unconfirmed ? undefined : payload.error || t("common.failed", "失败"),
             authFailure,
             canRetry: payload.canRetry ?? base.canRetry,
             transferConflictingAccount:
@@ -286,6 +309,15 @@ export function CodexInstanceLaunchProgressModal() {
       unlistenSwitch?.();
     };
   }, [t]);
+
+  const confirmation = useCodexLaunchConfirmation(state?.status === "unconfirmed" ? state : null, (target) => {
+    setActionError(null);
+    setState((previous) => previous !== target ? previous : {
+      ...previous, status: "completed", progress: 100, error: undefined, authFailure: null,
+      steps: previous.steps.map((step) => step.id === "startClient"
+        ? { ...step, status: "completed", details: {} } : step),
+    });
+  });
 
   useEffect(() => {
     if (state?.status !== "completed") return;
@@ -355,14 +387,9 @@ export function CodexInstanceLaunchProgressModal() {
   const account = accountId
     ? accounts.find((item) => item.id === accountId)
     : null;
-  const accountLabel = account?.account_name || account?.email || accountId;
+  const accountLabel = resolveCodexAccountDisplayName(account ?? { id: accountId ?? "" }, t("common.apiKeyAccount"));
   const authReason = authFailure
-    ? authFailure.reasonCode === "client_login_required"
-      ? t(
-          "codex.switchAuth.apiOnlyDescription",
-          "官方客户端上次运行时检测到需要登录，请重新授权后再启动。",
-        )
-      : authFailure.reasonCode === "refresh_token_expired"
+    ? authFailure.reasonCode === "refresh_token_expired"
         ? t("codex.authError.refreshTokenExpired")
         : authFailure.reasonCode === "refresh_token_invalidated"
           ? t("codex.authError.refreshTokenInvalidated")
@@ -387,7 +414,7 @@ export function CodexInstanceLaunchProgressModal() {
           return [t("instances.accountLease.detail.noOAuthAccount")];
         }
         const lines = step.details.accountEmail
-          ? [String(step.details.accountEmail)]
+          ? [resolveCodexAccountDisplayName(account ?? { id: accountId ?? "", email: String(step.details.accountEmail) }, t("common.apiKeyAccount"))]
           : [t("instances.accountLease.detail.checkingAccount")];
         const accessExpiry = optionalTimestamp(
           step.details.accessTokenExpiresAt,
@@ -462,8 +489,10 @@ export function CodexInstanceLaunchProgressModal() {
         ];
       }
       case "writeProfile":
-        return [t("instances.accountLease.detail.profileReady")];
+        return [t("instances.accountLease.detail.profileReady"),
+          ...(step.details.sessionMaintenanceDeferred ? [t("codex.launchConfirmation.maintenanceDeferred")] : [])];
       case "startClient":
+        if (state.status === "unconfirmed") return [t("codex.launchConfirmation.description")];
         return step.details.launchMode === "cli"
           ? [t("instances.accountLease.detail.cliPrepared")]
           : [t("instances.accountLease.detail.startingClient")];
@@ -480,8 +509,10 @@ export function CodexInstanceLaunchProgressModal() {
   };
   const title = authFailure
     ? authFailure.apiOnlyAvailable
-      ? t("codex.switchAuth.apiOnlyTitle")
+      ? t("codex.authError.badge")
       : t("codex.switchAuth.reauthorizeTitle")
+    : state.status === "unconfirmed"
+      ? t("codex.launchConfirmation.title")
     : state.status === "conflict"
       ? t("instances.accountLease.conflictTitle")
       : state.status === "completed"
@@ -498,10 +529,13 @@ export function CodexInstanceLaunchProgressModal() {
     if (owner.managed) {
       await codexInstanceService.openInstanceWindow(owner.instanceId);
     } else {
-      await invoke("codex_focus_runtime_owner", {
+      const args = {
         pid: owner.pid,
         userDataDir: owner.userDataDir,
         isDefault: owner.isDefault,
+      };
+      await withCodexPathRecovery(() => invoke("codex_focus_runtime_owner", args), {
+        key: codexPathRecoveryKey("codex_focus_runtime_owner", args),
       });
     }
   };
@@ -511,6 +545,7 @@ export function CodexInstanceLaunchProgressModal() {
     try {
       await performLocateOwner();
     } catch (error) {
+      if (isCodexLaunchCancelled(error)) return;
       if (
         presentWindowsOperationError({
           error,
@@ -545,6 +580,7 @@ export function CodexInstanceLaunchProgressModal() {
       await performTransferAccount();
     } catch (error) {
       setActionBusy(null);
+      if (isCodexLaunchUnconfirmed(error)) return;
       if (
         presentWindowsOperationError({
           error,
@@ -582,7 +618,9 @@ export function CodexInstanceLaunchProgressModal() {
         );
       }
     } catch (error) {
-      setActionError(String(error).replace(/^Error:\s*/, ""));
+      if (isCodexLaunchUnconfirmed(error)) return;
+      const errorKey = codexLaunchErrorKey(error);
+      setActionError(errorKey ? t(errorKey) : String(error).replace(/^Error:\s*/, ""));
     } finally {
       setRetryBusy(null);
     }
@@ -641,37 +679,15 @@ export function CodexInstanceLaunchProgressModal() {
         new CustomEvent("codex:instance-launch-transferred", { detail: { instance } }),
       );
     } catch (error) {
-      setActionError(String(error).replace(/^Error:\s*/, ""));
+      if (isCodexLaunchUnconfirmed(error)) return;
+      const errorKey = codexLaunchErrorKey(error);
+      setActionError(errorKey ? t(errorKey) : String(error).replace(/^Error:\s*/, ""));
     } finally {
       setRetryBusy(null);
     }
   };
 
-  const clearClientAuthObservation = async () => {
-    if (
-      apiActionBusy ||
-      retryBusy ||
-      authFailure?.reasonCode !== "client_login_required" ||
-      !accountId
-    ) {
-      return;
-    }
-    setActionError(null);
-    setApiActionBusy(true);
-    try {
-      await codexService.clearClientAuthObservation(accountId);
-      await useCodexAccountStore.getState().fetchAccounts();
-      setState(null);
-    } catch (error) {
-      setActionError(
-        t("codex.switchAuth.clearClientAuthFailed", {
-          error: String(error).replace(/^Error:\s*/, ""),
-        }),
-      );
-    } finally {
-      setApiActionBusy(false);
-    }
-  };
+
   const selectOtherAccount = () => {
     const instanceId = state.instanceId;
     setState(null);
@@ -743,7 +759,7 @@ export function CodexInstanceLaunchProgressModal() {
         <div className="codex-switch-progress-header">
           <div
             className={`codex-switch-progress-icon ${
-              state.status === "auth-required"
+              state.status === "auth-required" || state.status === "unconfirmed"
                 ? "warning"
                 : state.status === "error"
                   ? "error"
@@ -756,6 +772,7 @@ export function CodexInstanceLaunchProgressModal() {
           >
             {state.status === "error" ||
             state.status === "conflict" ||
+            state.status === "unconfirmed" ||
             state.status === "auth-required" ? (
               state.status === "error" && !isApiOnlyAuthFailure ? (
                 <X size={19} />
@@ -793,7 +810,7 @@ export function CodexInstanceLaunchProgressModal() {
           </div>
           <div className="codex-switch-progress-track">
             <div
-              className={`codex-switch-progress-bar ${state.status === "auth-required" ? "warning" : state.status === "error" ? "error" : ""}`}
+              className={`codex-switch-progress-bar ${state.status === "auth-required" || state.status === "unconfirmed" ? "warning" : state.status === "error" ? "error" : ""}`}
               style={{ width: `${state.progress}%` }}
             />
           </div>
@@ -820,11 +837,11 @@ export function CodexInstanceLaunchProgressModal() {
           <div className="codex-switch-step-list">
             {state.steps.map((step) => {
               const detailLines = stepDetails(step);
+              const failureValue = step.details.error || state.error;
+              const failureKey = codexLaunchErrorKey(failureValue);
               const failure =
                 step.status === "error"
-                  ? conciseCodexCredentialFailure(
-                      step.details.error || state.error,
-                    )
+                  ? failureKey ? t(failureKey) : conciseCodexCredentialFailure(failureValue)
                   : null;
               const renderedDetailLines =
                 failure && !detailLines.some((line) => line.includes(failure))
@@ -862,11 +879,16 @@ export function CodexInstanceLaunchProgressModal() {
               );
             })}
           </div>
+          {state.status === "unconfirmed" && confirmation.error && (
+            <div className="codex-switch-progress-error" role="alert">
+              {t(`codex.launchConfirmation.${confirmation.error}`)}
+            </div>
+          )}
           {authFailure && (
             <div className="codex-switch-auth-summary">
               <p>
                 {authFailure.apiOnlyAvailable
-                  ? t("codex.switchAuth.apiOnlyDescription")
+                  ? t("codex.switchAuth.apiTokenUsableDescription")
                   : t("codex.switchAuth.reauthorizeDescription")}
               </p>
               <div className="codex-switch-auth-reason" role="alert">
@@ -924,6 +946,17 @@ export function CodexInstanceLaunchProgressModal() {
           </div>
         )}
 
+        {state.status === "unconfirmed" && (
+          <div className="codex-switch-progress-footer codex-instance-launch-footer">
+            <button type="button" className="btn btn-secondary" onClick={() => setState(null)}>
+              {t("common.close")}
+            </button>
+            <button type="button" className="btn btn-primary" onClick={() => void confirmation.check()} disabled={confirmation.checking}>
+              {confirmation.checking && <RefreshCw size={14} className="loading-spinner" />}
+              {t("codex.launchConfirmation.check")}
+            </button>
+          </div>
+        )}
         {state.status === "error" && !authFailure && (
           <div className="codex-switch-progress-footer codex-instance-launch-footer">
                 <button
@@ -978,18 +1011,6 @@ export function CodexInstanceLaunchProgressModal() {
                     {apiActionBusy
                       ? t("common.loading", "加载中...")
                       : t("codex.localAccess.entryAction", "添加至 API 服务")}
-                  </button>
-                )}
-                {authFailure.reasonCode === "client_login_required" && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => void clearClientAuthObservation()}
-                    disabled={apiActionBusy || retryBusy !== null}
-                  >
-                    {apiActionBusy
-                      ? t("common.loading", "加载中...")
-                      : t("codex.switchAuth.clearClientAuth", "清除异常标识")}
                   </button>
                 )}
                 <button

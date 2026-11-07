@@ -1,0 +1,38 @@
+.codex-picker.codex-picker-native { gap: 14px; padding: 16px; background: var(--bg-card); border-radius: 14px; min-width: 0; }
+.codex-picker-native .codex-picker-row { gap: 10px; align-items: stretch; min-width: 0; }
+.codex-picker-native .codex-picker-icon-button { align-self: flex-end; width: 42px; min-width: 42px; height: 44px; min-height: 44px; padding: 0; display: inline-flex; justify-content: center; align-items: center; border-radius: 10px; }
+.codex-picker-current { display: flex; gap: 12px; align-items: center; padding: 13px 14px; border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--primary) 5%, var(--bg-card)); min-width: 0; }
+.codex-picker-current-icon { color: var(--primary); flex-shrink: 0; }
+.codex-picker-current-content { flex: 1; min-width: 0; }
+.codex-picker-current-caption { display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 5px; }
+.codex-picker-live-node { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.codex-picker-live-node + .codex-picker-live-node { margin-top: 8px; }
+.codex-picker-live-node > div { flex: 1; min-width: 0; }
+.codex-picker-live-node strong { display: block; font-size: 14px; font-weight: 650; line-height: 1.5; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-primary); }
+.codex-picker-live-node small { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; color: var(--text-secondary); font-size: 11px; margin-top: 4px; }
+.codex-picker-protocol-tag { border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; line-height: 1.4; white-space: nowrap; }
+.codex-picker-fixed { display: inline-flex; gap: 3px; align-items: center; }
+.codex-picker-native .codex-picker-badge { font-size: 11px; padding: 3px 8px; }
+.codex-picker-issue-card { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; border: 1px solid var(--border); border-radius: 10px; padding: 12px; color: var(--text-secondary); font-size: 12px; min-width: 0; }
+.codex-picker-issue-card > svg { flex-shrink: 0; color: var(--primary); margin-top: 1px; }
+.codex-picker-issue-card > div { flex: 1; min-width: min(200px, 100%); }
+.codex-picker-issue-card strong { color: var(--text-primary); font-size: 12px; }
+.codex-picker-issue-card p { margin: 5px 0 0; line-height: 1.6; overflow-wrap: anywhere; }
+.codex-picker-issue-card ul, .codex-picker-issue-details ul { margin: 7px 0 0; padding-inline-start: 18px; max-height: 140px; overflow-y: auto; overscroll-behavior: contain; overflow-wrap: anywhere; }
+.codex-picker-issue-card li + li, .codex-picker-issue-details li + li { margin-top: 5px; }
+.codex-picker-issue-card.is-permission { background: color-mix(in srgb, #d89412 6%, var(--bg-card)); }
+.codex-picker-issue-card.is-permission > svg { color: #b57b16; }
+.codex-picker-issue-details { border: 1px solid var(--border); padding: 10px 12px; border-radius: 9px; font-size: 12px; min-width: 0; color: var(--text-secondary); }
+.codex-picker-issue-details summary, .codex-picker-help summary { cursor: pointer; width: fit-content; line-height: 1.5; }
+.codex-picker-issue-details summary:focus-visible, .codex-picker-help summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 3px; }
+.codex-picker-issue-details li > strong { font-weight: 600; display: block; color: var(--text-primary); }
+.codex-picker-issue-details li > span { display: block; margin-top: 2px; }
+.codex-picker-issue-details p, .codex-picker-help p { line-height: 1.6; overflow-wrap: anywhere; margin: 7px 0 0; }
+.codex-picker-footer { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px; }
+.codex-picker-help { flex: 1; min-width: min(220px, 100%); color: var(--text-secondary); font-size: 11px; }
+@media (max-width: 560px) {
+  .codex-picker.codex-picker-native { padding: 11px; }
+  .codex-picker-current { padding: 10px; gap: 8px; }
+  .codex-picker-current-icon { display: none; }
+  .codex-picker-issue-card > .btn { max-width: 100%; white-space: normal; }
+}

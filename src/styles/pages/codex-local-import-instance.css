@@ -1,0 +1,103 @@
+/* 「获取本地账号」多实例选择弹框：叠加在添加账号弹框之上，独立层级与滚动约束。 */
+.codex-local-import-instance-overlay {
+  /* 固定高于 .modal-overlay 的基础层级，避免叠加时依赖弹框渲染顺序。 */
+  z-index: 10010;
+}
+
+.codex-local-import-instance-modal {
+  width: min(460px, calc(100vw - 32px));
+}
+
+.codex-local-import-instance-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.codex-local-import-instance-modal__hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.codex-local-import-instance-modal__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 46vh;
+  overflow: auto;
+}
+
+.codex-local-import-instance-modal__busy {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.codex-local-import-instance-modal__option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.codex-local-import-instance-modal__option:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  background: var(--bg-tertiary);
+  color: var(--primary);
+}
+
+.codex-local-import-instance-modal__option:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.codex-local-import-instance-modal__option:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.codex-local-import-instance-modal__option-name {
+  grid-column: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.codex-local-import-instance-modal__option-dir {
+  grid-column: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.codex-local-import-instance-modal__option-badge {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 11px;
+}

@@ -105,6 +105,8 @@ const CLAUDE_DESKTOP_PROFILE_ITEMS: &[&str] = &[
     "Preferences",
     "Cookies",
     "Cookies-journal",
+    "Cookies-wal",
+    "Cookies-shm",
     "Network",
     "DIPS",
     "DIPS-wal",
@@ -117,6 +119,7 @@ const CLAUDE_DESKTOP_PROFILE_ITEMS: &[&str] = &[
     "Service Worker",
     "ant-did",
     "config.json",
+    "config.json.bak",
     CLAUDE_DESKTOP_CONFIG_FILE_NAME,
 ];
 static CLAUDE_ACCOUNT_INDEX_LOCK: std::sync::LazyLock<Mutex<()>> =
@@ -401,9 +404,7 @@ fn save_index(index: &ClaudeAccountIndex) -> Result<(), String> {
 
 fn write_account_file(account: &ClaudeAccount) -> Result<(), String> {
     let path = account_file_path(&account.id)?;
-    let content =
-        crate::modules::secure_account_storage::serialize_account_file("claude", account)?;
-    atomic_write::write_string_atomic(&path, &content)
+    crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "claude", account)
 }
 
 fn migrate_legacy_apikey_fun_urls(account: &mut ClaudeAccount) -> bool {
@@ -481,6 +482,14 @@ fn load_account_file(account_id: &str) -> Option<ClaudeAccount> {
 
 pub fn load_account(account_id: &str) -> Option<ClaudeAccount> {
     load_account_file(account_id)
+}
+
+pub fn touch_last_used(account_id: &str) -> Result<(), String> {
+    let mut account = load_account(account_id)
+        .ok_or_else(|| format!("Account not found: {}", account_id))?;
+    account.last_switched_at = Some(now_ts());
+    save_account_and_index(account)?;
+    Ok(())
 }
 
 pub fn list_accounts() -> Vec<ClaudeAccount> {
@@ -635,6 +644,7 @@ fn merge_desktop_account_fields(base: &ClaudeAccount, incoming: &ClaudeAccount) 
     }
     merged.created_at = merged.created_at.min(incoming.created_at);
     merged.last_used = merged.last_used.max(incoming.last_used);
+    merged.last_switched_at = merged.last_switched_at.max(incoming.last_switched_at);
     merged
 }
 
@@ -841,6 +851,11 @@ fn save_account_and_index(mut account: ClaudeAccount) -> Result<ClaudeAccount, S
             ));
         }
     }
+    let _lock = CLAUDE_ACCOUNT_INDEX_LOCK.lock().map_err(|_| "无法获取 Claude 账号锁")?;
+    save_account_and_index_locked(account)
+}
+
+fn save_account_and_index_locked(mut account: ClaudeAccount) -> Result<ClaudeAccount, String> {
     slim_claude_account_snapshots(&mut account);
     write_account_file(&account)?;
     let mut index = load_index()?;
@@ -1023,6 +1038,11 @@ pub fn get_default_claude_desktop_user_data_dir() -> Result<PathBuf, String> {
         if !trimmed.is_empty() {
             return Ok(PathBuf::from(trimmed));
         }
+    }
+
+    #[cfg(target_os = "windows")]
+    if let Some(profile) = crate::modules::claude_instance::windows_store_desktop_profile_dir() {
+        return Ok(profile);
     }
 
     let data_dir = dirs::data_dir().ok_or_else(|| "无法获取系统应用数据目录".to_string())?;

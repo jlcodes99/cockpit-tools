@@ -24,6 +24,8 @@ import { getPlatformLabel, renderPlatformIcon } from '../../utils/platformMeta';
 import { useAntigravityRuntimeTarget } from '../../hooks/useAntigravityRuntimeTarget';
 import { setAntigravityRuntimeTargetFromPlatform } from '../../utils/antigravityRuntimeTarget';
 import { useRemoteConfigStore } from '../../stores/useRemoteConfigStore';
+import { useApiKeyFunCampaign } from '../../hooks/useApiKeyFunCampaign';
+import './SideNavCampaign.css';
 
 interface SideNavProps {
   page: Page;
@@ -79,6 +81,7 @@ const PAGE_PLATFORM_MAP: Partial<Record<Page, PlatformId>> = {
   'trae-solo-cn': 'trae_solo_cn',
   workbuddy: 'workbuddy',
   'workbuddy-ai': 'workbuddy_ai',
+  minimaxcode: 'minimaxcode',
 };
 
 const APP_DISPLAY_NAME =
@@ -145,6 +148,7 @@ export function SideNav({
   onOpenLogViewer,
 }: SideNavProps) {
   const { t } = useTranslation();
+  const campaignActive = useApiKeyFunCampaign();
   const { showModal } = useGlobalModal();
   const [flyingRockets, setFlyingRockets] = useState<FlyingRocket[]>([]);
   const [showMore, setShowMore] = useState(false);
@@ -790,6 +794,9 @@ export function SideNav({
                 >
                   <span className="side-nav-more-item-icon">{renderEntryIcon(entry, 16)}</span>
                   <span className="side-nav-more-item-label">{entry.label}</span>
+                  {entry.kind === 'api-relay' && campaignActive && (
+                    <span className="api-relay-campaign-badge">{t('apiKeyFun.campaign.badge')}</span>
+                  )}
                   {entry.hidden && (
                     <span className="side-nav-more-item-badge">
                       {t('platformLayout.hiddenBadge', '已隐藏')}
@@ -960,9 +967,14 @@ export function SideNav({
               key={entry.id}
               className={`nav-item ${active ? 'active' : ''}`}
               onClick={() => navigateToEntry(entry)}
-              title={entry.label}
+              title={entry.kind === 'api-relay' && campaignActive ? `${entry.label} · ${t('apiKeyFun.campaign.title')}` : entry.label}
             >
               {renderEntryIcon(entry, isClassicLayout ? classicMainIconSize : 20)}
+              {entry.kind === 'api-relay' && campaignActive && (
+                <span className={`api-relay-campaign-badge ${showClassicLabels ? 'with-label' : 'icon-badge'}`}>
+                  {t('apiKeyFun.campaign.badge')}
+                </span>
+              )}
               {showClassicLabels ? (
                 <span className="nav-item-text">{entry.label}</span>
               ) : !isClassicLayout ? (

@@ -1,10 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
+import { codexRemoteBinding } from '../utils/codexRemoteBinding';
 
 export type ModelProviderUsageIntegrationType = 'sub2api' | 'new_api';
 export type ModelProviderUsageMode =
   | ModelProviderUsageIntegrationType
   | 'deepseek'
-  | 'token_plan';
+  | 'token_plan'
+  | 'cockpit'
+  | 'openai_official';
 
 export interface ModelProviderModel {
   id: string;
@@ -17,12 +20,15 @@ export interface ModelProviderModelsResult {
 }
 
 export interface ModelProviderUsageSummary {
+  cockpit?: import('../types/codexRemoteService').CodexRemoteConnection | null;
+  sourceBinding?: string;
   mode?: string | null;
   isValid?: boolean | null;
   status?: string | null;
   planName?: string | null;
   remaining?: number | null;
   balance?: number | null;
+  /** Empty string explicitly means the source did not identify its unit. */
   unit?: string | null;
   quotaUnlimited?: boolean | null;
   quotaLimit?: number | null;
@@ -112,17 +118,22 @@ export function buildUsageBaseUrlCandidates(baseUrl: string): string[] {
 export async function queryModelProviderUsage(input: {
   baseUrl: string;
   apiKey: string;
+  /** Only used for OpenAI organization usage; never replaces the model credential. */
+  usageApiKey?: string;
   integrationType?: ModelProviderUsageIntegrationType | null;
 }): Promise<ModelProviderUsageSummary> {
   const candidates = buildUsageBaseUrlCandidates(input.baseUrl);
   let lastError: unknown = null;
   for (const baseUrl of candidates) {
     try {
-      return await invoke('codex_query_model_provider_usage', {
+      const summary = await invoke<ModelProviderUsageSummary>('codex_query_model_provider_usage', {
         baseUrl,
         apiKey: input.apiKey,
+        usageApiKey: input.usageApiKey ?? null,
         integrationType: input.integrationType ?? null,
       });
+      if (summary.cockpit) summary.sourceBinding = await codexRemoteBinding(input.baseUrl, input.apiKey);
+      return summary;
     } catch (error) {
       lastError = error;
       if (!isModelProviderUsageUnavailableError(error)) {
@@ -136,10 +147,14 @@ export async function queryModelProviderUsage(input: {
 export async function listModelProviderModels(input: {
   baseUrl: string;
   apiKey: string;
+  wireApi?: string;
+  authScheme?: "x-api-key" | "bearer";
 }): Promise<ModelProviderModelsResult> {
   return await invoke('codex_list_model_provider_models', {
     baseUrl: input.baseUrl,
     apiKey: input.apiKey,
+    wireApi: input.wireApi ?? null,
+    authScheme: input.authScheme ?? null,
   });
 }
 
@@ -156,11 +171,13 @@ export function resolveModelProviderUsageMode(
   summary?: ModelProviderUsageSummary,
 ): ModelProviderUsageMode | null {
   if (!summary) return null;
+  if (summary.cockpit) return 'cockpit';
   if (
     summary.mode === 'new_api' ||
     summary.mode === 'sub2api' ||
     summary.mode === 'deepseek' ||
-    summary.mode === 'token_plan'
+    summary.mode === 'token_plan' ||
+    summary.mode === 'openai_official'
   ) {
     return summary.mode;
   }
@@ -193,11 +210,12 @@ export function formatModelProviderUsageMoney(
   unit?: string | null,
 ): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
-  const normalizedUnit = unit?.trim() || 'USD';
+  const normalizedUnit = unit === '' ? '' : unit?.trim() || 'USD';
   if (normalizedUnit === '%') {
     return `${Math.round(value)}%`;
   }
   const formatted = value.toFixed(value >= 100 ? 0 : 2);
+  if (normalizedUnit === '') return formatted;
   if (normalizedUnit === 'USD') return `$${formatted}`;
   if (normalizedUnit === 'CNY') return `¥${formatted}`;
   return `${formatted} ${normalizedUnit}`;

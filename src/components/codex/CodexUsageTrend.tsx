@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type MouseEvent } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { CodexLocalAccessStatsWindow } from "../../types/codexLocalAccess";
 import { formatSessionUsageTokensShort } from "../../utils/codexSessionUsageFormat";
@@ -35,11 +35,11 @@ function formatMetricValue(value: number, metric: UsageTrendMetric, lang: string
   return formatSessionUsageTokensShort(value, lang, 2);
 }
 
-function formatBucketLabel(timestamp: number, hourly: boolean, lang: string): string {
+function formatBucketLabel(timestamp: number, hourly: boolean, lang: string, timeZone?: string): string {
   const date = new Date(timestamp);
   return hourly
-    ? date.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })
-    : date.toLocaleDateString(lang, { month: "numeric", day: "numeric" });
+    ? date.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit", timeZone })
+    : date.toLocaleDateString(lang, { month: "numeric", day: "numeric", timeZone });
 }
 
 function buildSmoothPath(points: Array<{ x: number; y: number }>): string {
@@ -69,6 +69,7 @@ export function CodexUsageTrend({
   metrics = ["totalTokens", "requestCount", "estimatedCostUsd"],
   labels,
   hourly: hourlyOverride,
+  timeZone,
 }: {
   statsWindow?: CodexLocalAccessStatsWindow | null;
   points?: UsageTrendPoint[];
@@ -77,12 +78,17 @@ export function CodexUsageTrend({
   metrics?: UsageTrendMetric[];
   labels?: Partial<Record<UsageTrendMetric, string>>;
   hourly?: boolean;
+  timeZone?: string;
 }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.resolvedLanguage || i18n.language || "zh-CN";
   const chartId = useId().replace(/:/g, "");
   const [metric, setMetric] = useState<UsageTrendMetric>("totalTokens");
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const chartWrapRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [tooltipLeft, setTooltipLeft] = useState(0);
   const trend = suppliedPoints ?? statsWindow?.trend ?? [];
   const hourly = hourlyOverride ?? statsWindow?.trendHourly ?? false;
 
@@ -150,17 +156,36 @@ export function CodexUsageTrend({
     (index) => PLOT.top + (index / 2) * (CHART_HEIGHT - PLOT.top - PLOT.bottom),
   );
   const hoveredPoint = hoveredIndex === null ? null : points[hoveredIndex] ?? null;
-  const tooltipX = hoveredPoint
-    ? Math.min(CHART_WIDTH - 132, Math.max(PLOT.left + 132, hoveredPoint.x))
-    : 0;
-  const tooltipStyle = hoveredPoint
-    ? { left: `${(tooltipX / CHART_WIDTH) * 100}%` }
-    : undefined;
+  const hoveredX = hoveredPoint?.x;
+  useLayoutEffect(() => {
+    const svg = svgRef.current;
+    const wrap = chartWrapRef.current;
+    if (!svg || !wrap || hoveredX === undefined) return;
+    const updateTooltipPosition = () => {
+      const matrix = svg.getScreenCTM();
+      const bounds = wrap.getBoundingClientRect();
+      if (!matrix || bounds.width === 0) return;
+      const point = svg.createSVGPoint();
+      point.x = hoveredX;
+      // Project into the HTML container, including SVG letterboxing and UI zoom.
+      const localX = (point.matrixTransform(matrix).x - bounds.left) * wrap.clientWidth / bounds.width;
+      const halfWidth = (tooltipRef.current?.offsetWidth ?? 0) / 2 + 8;
+      setTooltipLeft(Math.max(halfWidth, Math.min(wrap.clientWidth - halfWidth, localX)));
+    };
+    updateTooltipPosition();
+    const observer = new ResizeObserver(updateTooltipPosition);
+    observer.observe(wrap);
+    return () => observer.disconnect();
+  }, [hoveredX]);
   const handleChartMove = (event: MouseEvent<SVGRectElement>) => {
     const svg = event.currentTarget.ownerSVGElement;
     if (!svg || points.length === 0) return;
-    const bounds = svg.getBoundingClientRect();
-    const relativeX = ((event.clientX - bounds.left) / bounds.width) * CHART_WIDTH;
+    const matrix = svg.getScreenCTM();
+    if (!matrix) return;
+    const pointer = svg.createSVGPoint();
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+    const relativeX = pointer.matrixTransform(matrix.inverse()).x;
     const fraction = (relativeX - PLOT.left) / (CHART_WIDTH - PLOT.left - PLOT.right);
     setHoveredIndex(Math.round(Math.max(0, Math.min(1, fraction)) * (points.length - 1)));
   };
@@ -204,8 +229,9 @@ export function CodexUsageTrend({
           {emptyLabel ?? t("codex.apiService.usage.trendEmpty", "所选时间范围暂无请求记录")}
         </div>
       ) : (
-        <div className="codex-usage-trend__chart-wrap">
+        <div ref={chartWrapRef} className="codex-usage-trend__chart-wrap">
           <svg
+            ref={svgRef}
             className="codex-usage-trend__chart"
             viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
             role="img"
@@ -264,7 +290,7 @@ export function CodexUsageTrend({
                     onFocus={() => setHoveredIndex(point.index)}
                     onBlur={() => setHoveredIndex(null)}
                   >
-                    <title>{`${formatBucketLabel(point.point.bucketStart, hourly, lang)} · ${formatMetricValue(point.value, metric, lang)}`}</title>
+                    <title>{`${formatBucketLabel(point.point.bucketStart, hourly, lang, timeZone)} · ${formatMetricValue(point.value, metric, lang)}`}</title>
                   </circle>
                 ) : null}
                 {valueLabels.has(point.index) ? (
@@ -285,7 +311,7 @@ export function CodexUsageTrend({
                 ) : null}
                 {axisIndexes.has(point.index) ? (
                   <text className="codex-usage-trend__axis-label" x={point.x} y={CHART_HEIGHT - 21} textAnchor="middle">
-                    {formatBucketLabel(point.point.bucketStart, hourly, lang)}
+                    {formatBucketLabel(point.point.bucketStart, hourly, lang, timeZone)}
                   </text>
                 ) : null}
                 {axisIndexes.has(point.index) ? (
@@ -297,8 +323,8 @@ export function CodexUsageTrend({
             ))}
           </svg>
           {hoveredPoint ? (
-            <div className="codex-usage-trend__tooltip" role="status" style={tooltipStyle}>
-              <strong>{formatBucketLabel(hoveredPoint.point.bucketStart, hourly, lang)}</strong>
+            <div ref={tooltipRef} className="codex-usage-trend__tooltip" role="status" style={{ left: tooltipLeft }}>
+              <strong>{formatBucketLabel(hoveredPoint.point.bucketStart, hourly, lang, timeZone)}</strong>
               <div>
                 <span>{labels?.totalTokens ?? t("codex.localAccess.stats.tokens", "总 Token 数")}</span>
                 <b>{formatMetricValue(hoveredPoint.point.usage.totalTokens, "totalTokens", lang)}</b>

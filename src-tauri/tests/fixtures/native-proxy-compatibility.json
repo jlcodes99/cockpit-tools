@@ -1,0 +1,326 @@
+{
+  "proxies": [
+    {
+      "name": "fixture-ss",
+      "type": "ss",
+      "server": "localhost",
+      "port": 443,
+      "cipher": "aes-128-gcm",
+      "password": "fixture-password",
+      "plugin": "obfs",
+      "plugin-opts": {
+        "mode": "http",
+        "host": "localhost"
+      },
+      "template-metadata": {
+        "source": "synthetic-regression",
+        "label": "ignored-native-metadata",
+        "subscription-path": "/template",
+        "description-file": "ignored-template-metadata"
+      }
+    },
+    {
+      "name": "fixture-ssr",
+      "type": "ssr",
+      "server": "localhost",
+      "port": 443,
+      "cipher": "aes-128-cfb",
+      "password": "fixture-password",
+      "obfs": "http_simple",
+      "obfs-param": "localhost",
+      "protocol": "auth_sha1_v4",
+      "protocol-param": "",
+      "template-metadata": {
+        "source": "synthetic-regression",
+        "label": "ignored-native-metadata",
+        "subscription-path": "/template",
+        "description-file": "ignored-template-metadata"
+      }
+    },
+    {
+      "name": "fixture-socks5",
+      "type": "socks5",
+      "server": "localhost",
+      "port": 443,
+      "username": "fixture-user",
+      "password": "fixture-password",
+      "udp": true,
+      "template-metadata": {
+        "source": "synthetic-regression",
+        "label": "ignored-native-metadata",
+        "subscription-path": "/template",
+        "description-file": "ignored-template-metadata"
+      }
+    },
+    {
+      "name": "fixture-http",
+      "type": "http",
+      "server": "localhost",
+      "port": "443",
+      "username": "fixture-user",
+      "password": "fixture-password",
+      "tls": true,
+      "sni": "localhost",
+      "headers": {
+        "User-Agent": "fixture-client"
+      },
+      "template-metadata": {
+        "source": "synthetic-regression",
+        "label": "ignored-native-metadata",
+        "subscription-path": "/template",
+        "description-file": "ignored-template-metadata"
+      }
+    },
+    {
+      "name": "fixture-vmess",
+      "type": "vmess",
+      "server": "localhost",
+      "port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "alterId": 64,
+      "cipher": "auto",
+      "tls": true,
+      "servername": "localhost",
+      "network": "ws",
+      "ws-opts": {
+        "path": "/fixture",
+        "headers": {
+          "Host": "localhost"
+        },
+        "max-early-data": 1024,
+        "early-data-header-name": "Sec-WebSocket-Protocol"
+      },
+      "template-metadata": {
+        "source": "synthetic-regression",
+        "label": "ignored-native-metadata",
+        "subscription-path": "/template",
+        "description-file": "ignored-template-metadata"
+      }
+    },
+    {
+      "name": "fixture-vless",
+      "type": "vless",
+      "server": "localhost",
+      "port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "alterId": 0,
+      "cipher": "auto",
+      "tls": true,
+      "servername": "localhost",
+      "flow": "xtls-rprx-vision",
+      "client-fingerprint": "chrome",
+      "reality-opts": {
+        "public-key": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+        "short-id": "abcdef01"
+      },
+      "template-metadata": {
+        "source": "synthetic-regression",
+        "label": "ignored-native-metadata",
+        "subscription-path": "/template",
+        "description-file": "ignored-template-metadata"
+      }
+    },
+    {
+      "name": "fixture-trojan",
+      "type": "trojan",
+      "server": "localhost",
+      "port": 443,
+      "password": "fixture-password",
+      "sni": "localhost",
+      "network": "grpc",
+      "grpc-opts": {
+        "grpc-service-name": "fixture"
+      },
+      "alpn": [
+        "h2"
+      ],
+      "template-metadata": {
+        "source": "synthetic-regression",
+        "label": "ignored-native-metadata",
+        "subscription-path": "/template",
+        "description-file": "ignored-template-metadata"
+      }
+    },
+    {
+      "name": "fixture-hysteria",
+      "type": "hysteria",
+      "server": "localhost",
+      "port": 443,
+      "auth-str": "fixture-password",
+      "up": 50,
+      "down": 100,
+      "protocol": "udp",
+      "sni": "localhost",
+      "alpn": [
+        "h3"
+      ],
+      "obfs": "fixture-obfs",
+      "template-metadata": {
+        "source": "synthetic-regression",
+        "label": "ignored-native-metadata",
+        "subscription-path": "/template",
+        "description-file": "ignored-template-metadata"
+      }
+    },
+    {
+      "name": "fixture-hysteria2",
+      "type": "hysteria2",
+      "server": "localhost",
+      "port": 443,
+      "password": "fixture-password",
+      "sni": "localhost",
+      "up": 50,
+      "down": 100,
+      "obfs": "salamander",
+      "obfs-password": "fixture-obfs",
+      "ports": "20000-20002,30000",
+      "hop-interval": "30-60",
+      "udp": true,
+      "template-metadata": {
+        "source": "synthetic-regression",
+        "label": "ignored-native-metadata",
+        "subscription-path": "/template",
+        "description-file": "ignored-template-metadata"
+      }
+    },
+    {
+      "name": "fixture-tuic",
+      "type": "tuic",
+      "server": "localhost",
+      "port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "password": "fixture-password",
+      "congestion-controller": "bbr",
+      "udp-relay-mode": "native",
+      "sni": "localhost",
+      "alpn": [
+        "h3"
+      ],
+      "reduce-rtt": true,
+      "template-metadata": {
+        "source": "synthetic-regression",
+        "label": "ignored-native-metadata",
+        "subscription-path": "/template",
+        "description-file": "ignored-template-metadata"
+      }
+    },
+    {
+      "name": "fixture-wireguard",
+      "type": "wireguard",
+      "server": "localhost",
+      "port": 443,
+      "ip": "10.0.0.2",
+      "private-key": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
+      "public-key": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
+      "pre-shared-key": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
+      "mtu": 1280,
+      "udp": true,
+      "template-metadata": {
+        "source": "synthetic-regression",
+        "label": "ignored-native-metadata",
+        "subscription-path": "/template",
+        "description-file": "ignored-template-metadata"
+      }
+    },
+    {
+      "name": "fixture-ssh",
+      "type": "ssh",
+      "server": "localhost",
+      "port": 443,
+      "username": "fixture-user",
+      "password": "fixture-password",
+      "host-key": [
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFo2DNnN9/2gA2XevTlTzSSeYpVHqlQ0Yr+L4VeDXEsR"
+      ],
+      "host-key-algorithms": [
+        "ssh-ed25519"
+      ],
+      "template-metadata": {
+        "source": "synthetic-regression",
+        "label": "ignored-native-metadata",
+        "subscription-path": "/template",
+        "description-file": "ignored-template-metadata"
+      }
+    },
+    {
+      "name": "fixture-snell",
+      "type": "snell",
+      "server": "localhost",
+      "port": 443,
+      "psk": "fixture-password",
+      "version": 3,
+      "udp": true,
+      "obfs-opts": {
+        "mode": "http",
+        "host": "localhost"
+      },
+      "template-metadata": {
+        "source": "synthetic-regression",
+        "label": "ignored-native-metadata",
+        "subscription-path": "/template",
+        "description-file": "ignored-template-metadata"
+      }
+    },
+    {
+      "name": "fixture-anytls",
+      "type": "anytls",
+      "server": "localhost",
+      "port": 443,
+      "password": "fixture-password",
+      "sni": "localhost",
+      "alpn": [
+        "h2"
+      ],
+      "idle-session-check-interval": 30,
+      "idle-session-timeout": 60,
+      "min-idle-session": 1,
+      "template-metadata": {
+        "source": "synthetic-regression",
+        "label": "ignored-native-metadata",
+        "subscription-path": "/template",
+        "description-file": "ignored-template-metadata"
+      }
+    },
+    {
+      "name": "fixture-mieru",
+      "type": "mieru",
+      "server": "localhost",
+      "username": "fixture-user",
+      "password": "fixture-password",
+      "transport": "TCP",
+      "multiplexing": "MULTIPLEXING_LOW",
+      "port-range": "20000-20002",
+      "template-metadata": {
+        "source": "synthetic-regression",
+        "label": "ignored-native-metadata",
+        "subscription-path": "/template",
+        "description-file": "ignored-template-metadata"
+      }
+    }
+  ],
+  "proxy-groups": [
+    {
+      "name": "fixture-all",
+      "type": "url-test",
+      "url": "http://127.0.0.1:9/health",
+      "interval": 300,
+      "proxies": [
+        "fixture-ss",
+        "fixture-ssr",
+        "fixture-socks5",
+        "fixture-http",
+        "fixture-vmess",
+        "fixture-vless",
+        "fixture-trojan",
+        "fixture-hysteria",
+        "fixture-hysteria2",
+        "fixture-tuic",
+        "fixture-wireguard",
+        "fixture-ssh",
+        "fixture-snell",
+        "fixture-anytls",
+        "fixture-mieru"
+      ]
+    }
+  ]
+}

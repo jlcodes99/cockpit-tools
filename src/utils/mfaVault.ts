@@ -9,6 +9,13 @@ export interface MfaRecord {
   time: number;
 }
 
+export type MfaSortField = 'accountName' | 'time';
+export type MfaSortDirection = 'asc' | 'desc';
+export type MfaSortState = {
+  field: MfaSortField;
+  direction: MfaSortDirection;
+};
+
 export interface ParsedMfaCredential {
   accountName: string;
   secret: string;
@@ -109,6 +116,20 @@ export function normalizeStrictBase32(raw: string): string | null {
   if (!cleaned) return null;
   if (!/^[A-Z2-7]+=*$/.test(cleaned)) return null;
   return cleaned;
+}
+
+export function splitMfaAccountName(raw: string): { issuer: string; account: string } {
+  const name = raw.trim();
+  const separator = name.indexOf(':');
+  if (separator > 0 && name.slice(separator + 1).trim()) {
+    return { issuer: name.slice(0, separator).trim(), account: name.slice(separator + 1).trim() };
+  }
+  return { issuer: '', account: name };
+}
+
+export function filterMfaRecords(records: readonly MfaRecord[], query: string): MfaRecord[] {
+  const term = query.trim().toLocaleLowerCase();
+  return records.filter(record => record.accountName.toLocaleLowerCase().includes(term));
 }
 
 function buildAccountDisplayName(issuer: string, label: string): string {
@@ -264,6 +285,60 @@ function buildMfaTotp(rawSecret: string): OTPAuth.TOTP | null {
   }
 }
 
+export function exportGoogleAuthenticatorMigrationUris(
+  records: readonly MfaRecord[],
+): Array<{ uri: string; count: number }> {
+  if (records.length === 0) return [];
+  const batchId = crypto.getRandomValues(new Uint32Array(1))[0] & 0x7fffffff;
+  const entries = records.map(record => {
+    if (record.accountName.length > 2000 || record.secret.length > 2000) {
+      throw new Error('mfaVault.migrationRecordTooLarge');
+    }
+    let totp: OTPAuth.TOTP | null = null;
+    try {
+      const rawSecret = record.secret.trim();
+      if (rawSecret.startsWith('otpauth:')) {
+        const parsed = OTPAuth.URI.parse(rawSecret);
+        if (parsed instanceof OTPAuth.TOTP) totp = parsed;
+      } else if (normalizeStrictBase32(rawSecret)) {
+        totp = buildMfaTotp(rawSecret);
+      }
+    } catch { totp = null; }
+    if (!totp || totp.secret.bytes.length === 0) throw new Error('mfaVault.migrationInvalidRecord');
+    // The existing vault stores 30-second, six-digit SHA1 credentials.
+    // Reject settings the vault cannot round-trip instead of changing their codes.
+    if (totp.algorithm !== 'SHA1' || totp.digits !== 6 || totp.period !== 30) {
+      throw new Error('mfaVault.migrationUnsupportedParameters');
+    }
+    const { issuer } = splitMfaAccountName(record.accountName);
+    return { secret: totp.secret.bytes, name: record.accountName.trim(), issuer, algorithm: 1, digits: 1, type: 2 };
+  });
+  const encode = (otpParameters: typeof entries, batchIndex: number, batchSize: number) => {
+    const payload = googleAuthenticatorMigrationPayloadType.encode({
+      otpParameters, version: 1, batchIndex, batchSize, batchId,
+    }).finish();
+    const data = btoa(Array.from(payload, byte => String.fromCharCode(byte)).join(''));
+    return `otpauth-migration://offline?${new URLSearchParams({ data })}`;
+  };
+  const batches: Array<typeof entries> = [];
+  let batch: typeof entries = [];
+  for (const entry of entries) {
+    // Reserve the largest metadata values before final batch counts are known.
+    if (encode([entry], entries.length, entries.length).length > 1500) {
+      throw new Error('mfaVault.migrationRecordTooLarge');
+    }
+    const candidate = [...batch, entry];
+    if (candidate.length > 10 || encode(candidate, entries.length, entries.length).length > 1500) {
+      batches.push(batch);
+      batch = [entry];
+    } else {
+      batch = candidate;
+    }
+  }
+  if (batch.length) batches.push(batch);
+  return batches.map((items, index) => ({ uri: encode(items, index, batches.length), count: items.length }));
+}
+
 export function getMfaOtpToken(secret: string): string {
   const totp = buildMfaTotp(secret);
   if (!totp) return '';
@@ -308,6 +383,30 @@ export function normalizeMfaRecord(raw: unknown): MfaRecord | null {
     remark: typeof item.remark === 'string' ? item.remark : '',
     time: Number.isFinite(timeRaw) ? timeRaw : Date.now(),
   };
+}
+
+const mfaAccountNameCollator = new Intl.Collator('zh-CN', {
+  numeric: true,
+  sensitivity: 'base',
+});
+
+export function sortMfaRecords(records: readonly MfaRecord[], sort: MfaSortState): MfaRecord[] {
+  const direction = sort.direction === 'asc' ? 1 : -1;
+  return records
+    .map((record, index) => ({ record, index, accountName: record.accountName.trim() }))
+    .sort((a, b) => {
+      if (sort.field === 'accountName' && !!a.accountName !== !!b.accountName) {
+        return a.accountName ? -1 : 1;
+      }
+
+      const nameComparison = mfaAccountNameCollator.compare(a.accountName, b.accountName);
+      const timeComparison = a.record.time - b.record.time;
+      const comparison = sort.field === 'accountName'
+        ? nameComparison || timeComparison
+        : timeComparison || nameComparison;
+      return (comparison || a.index - b.index) * direction;
+    })
+    .map(({ record }) => record);
 }
 
 export function dedupeMfaRecordsBySecret(records: MfaRecord[]): MfaRecord[] {

@@ -50,6 +50,7 @@ const PROVIDER_PAGE_PLATFORM_MAP: Record<string, PlatformId> = {
   workbuddy: 'workbuddy',
   workbuddy_ai: 'workbuddy_ai',
   workbuddyai: 'workbuddy_ai',
+  minimaxcode: 'minimaxcode',
 };
 
 function normalizePlatformKey(value: string): string {
@@ -118,6 +119,7 @@ export function resolvePlatformIdFromPage(page: Page | string): PlatformId | nul
     normalized === 'wakeup' ||
     normalized === 'verification' ||
     normalized === '2fa' ||
+    normalized === 'proxies' ||
     normalized === 'instances'
   ) {
     return null;

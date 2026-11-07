@@ -1,0 +1,137 @@
+.modal.codex-official-guide {
+  width: min(960px, calc(100vw - 32px));
+  max-width: 960px;
+  min-width: 0;
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 18px; overflow: hidden;
+}
+.codex-official-guide-overlay { overflow-y: auto; align-items: safe center; }
+.codex-official-guide .modal-body { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; min-height: 0; display: flex; flex-direction: column; gap: 18px; padding: 24px; }
+/* The body owns scrolling; bordered lists must retain their full content height. */
+.codex-official-guide .modal-body > * { flex: 0 0 auto; }
+.codex-official-guide .modal-header, .codex-official-guide .modal-footer { flex-shrink: 0; }
+.codex-official-guide .modal-header { align-items: flex-start; gap: 16px; }
+.codex-official-guide .modal-header h2 { margin: 0; font-size: 20px; }
+.codex-official-guide .modal-header p { margin: 8px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.codex-official-mode-tabs { display: flex; flex: 0 0 auto; gap: 8px; padding: 16px 24px 0; }
+.codex-official-mode-tabs > .btn { flex: 1; min-width: 0; justify-content: center; gap: 8px; padding: 11px 12px; white-space: normal; overflow-wrap: anywhere; text-align: center; }
+.codex-official-mode-tabs > .btn > svg { flex-shrink: 0; }
+.codex-official-mode-tabs > .btn.is-active { color: var(--primary); background: color-mix(in srgb, var(--primary) 9%, var(--bg-surface)); border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); box-shadow: inset 0 -2px var(--primary); }
+.codex-official-mode-tabs > .btn.is-active:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 14%, var(--bg-surface)); }
+.codex-official-mode-tabs > .btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.codex-official-mode-tabs > .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.codex-official-benefit { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--primary) 5%, transparent); }
+.codex-official-benefit > svg { flex-shrink: 0; margin-top: 2px; color: var(--primary); }
+.codex-official-benefit strong { font-size: 14px; }
+.codex-official-benefit p { margin: 7px 0; font-size: 13px; line-height: 1.7; color: var(--text-secondary); }
+.codex-official-benefit small { font-size: 12px; line-height: 1.6; color: var(--text-secondary); display: block; }
+.codex-official-rows { list-style: none; padding: 0; margin: 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.codex-official-row { display: flex; flex-direction: column; align-items: stretch; gap: 16px; padding: 15px 16px; }
+.codex-official-row-heading { display: flex; align-items: center; gap: 16px; }
+.codex-official-row + .codex-official-row { border-top: 1px solid var(--border); }
+.codex-official-account { flex: 1; min-width: 0; }
+.codex-official-account > strong { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; }
+.codex-official-account > div { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 7px; color: var(--text-secondary); font-size: 12px; }
+.codex-official-account .codex-official-member { color: var(--primary); }
+.codex-official-row-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; max-width: 48%; }
+.codex-official-row-actions .btn { white-space: normal; }
+.codex-official-guide.is-management .codex-official-row { flex-direction: column; align-items: stretch; gap: 14px; padding: 18px 20px; }
+.codex-official-guide.is-management .codex-official-account { flex: 1; }
+.codex-official-guide.is-management .codex-official-account > strong { white-space: normal; overflow-wrap: anywhere; }
+.codex-official-guide.is-management .codex-official-row-actions { max-width: 48%; justify-content: flex-end; align-items: center; gap: 10px; }
+.codex-official-guide.is-management .codex-official-row-actions > .btn { flex: 0 0 auto; max-width: 100%; min-height: 34px; overflow-wrap: anywhere; }
+.codex-official-complete { display: inline-flex; align-items: center; gap: 5px; color: #12856e; font-size: 12px; }
+.codex-official-checked-at, .codex-official-check-failure { display: block; margin-top: 7px; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; color: var(--text-muted); }
+.codex-official-check-failure { color: var(--warning, #b7791f); }
+.codex-official-authorization-state[data-state='used'] { color: #12856e; }
+.codex-official-authorization-state[data-state='reauthorize'], .codex-official-authorization-state[data-state='invalid'] { color: var(--danger, #dc3545); }
+.codex-official-authorization-state[data-state='pending'] { color: var(--warning, #b7791f); }
+.codex-official-management-hint { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.codex-official-notice { padding: 12px 14px; border-radius: 12px; color: #12856e; background: color-mix(in srgb, #13a889 9%, var(--bg-surface)); font-size: 12px; line-height: 1.6; }
+.codex-official-notice.is-warning { color: var(--warning, #b7791f); background: color-mix(in srgb, var(--warning, #b7791f) 9%, var(--bg-surface)); }
+.codex-official-confirm { padding: 16px; border: 1px solid color-mix(in srgb, var(--danger, #dc3545) 30%, var(--border)); border-radius: 12px; background: var(--bg-secondary); }
+.codex-official-confirm h3 { margin: 0 0 8px; font-size: 15px; }
+.codex-official-confirm strong, .codex-official-confirm p { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.codex-official-confirm p { color: var(--text-secondary); margin: 8px 0 14px; }
+.codex-official-confirm > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.codex-official-loading { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--text-secondary); font-size: 13px; }
+.codex-official-spin { animation: codex-official-spin 1s linear infinite; }
+@keyframes codex-official-spin { to { transform: rotate(360deg); } }
+@media (max-width: 600px) {
+  .codex-official-guide .modal-body { padding: 16px; }
+  .codex-official-mode-tabs { padding: 12px 16px 0; }
+  .codex-official-mode-tabs > .btn { padding: 9px 8px; font-size: 12px; }
+  .codex-official-row { flex-wrap: wrap; gap: 12px; }
+  .codex-official-account { flex-basis: 100%; }
+  .codex-official-row-actions { max-width: 100%; }
+  .codex-official-guide .modal-footer { flex-wrap: wrap; }
+}
+@media (max-height: 600px) {
+  .codex-official-guide .modal-header, .codex-official-guide .modal-footer { padding-top: 10px; padding-bottom: 10px; }
+  .codex-official-mode-tabs { padding-top: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .codex-official-spin { animation: none; } }
+
+.codex-official-source-summary { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.codex-official-source-summary strong { display: block; margin-top: 5px; color: var(--text-primary); font-weight: 600; }
+.codex-official-account > small { display: block; margin-top: 4px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.codex-official-detail-actions, .codex-official-access-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.codex-official-detail-actions > .btn, .codex-official-access-actions > .btn { white-space: normal; overflow-wrap: anywhere; }
+.codex-official-access-actions > .btn.is-active, .codex-official-release-option.is-active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 9%, var(--bg-surface)); color: var(--primary); }
+.codex-official-access-actions > .btn.is-active:hover:not(:disabled), .codex-official-release-option.is-active:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 14%, var(--bg-surface)); }
+.codex-official-confirm .codex-official-release-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0 16px; }
+.codex-official-release-option { display: flex; flex-direction: column; align-items: flex-start; text-align: start; padding: 12px; white-space: normal; }
+.codex-official-release-option span { font-size: 12px; font-weight: 400; line-height: 1.6; margin-top: 6px; color: var(--text-secondary); }
+@media (max-width: 600px) {
+  .codex-official-row-heading { flex-wrap: wrap; }
+  .codex-official-guide.is-management .codex-official-row-actions { max-width: 100%; }
+  .codex-official-confirm .codex-official-release-options { grid-template-columns: 1fr; }
+}
+
+
+/* Keep explicit management actions visible at narrow viewport sizes. */
+.modal.codex-official-guide > .codex-official-guide-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 16px 24px;
+  padding: 14px 24px;
+  background: color-mix(in srgb, var(--bg-secondary) 45%, var(--bg-surface));
+}
+.codex-official-guide-footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.codex-official-guide-footer-actions > .btn {
+  appearance: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  flex: 0 0 auto;
+  align-self: center;
+  min-width: 88px;
+  min-height: 36px;
+  max-width: 100%;
+  padding: 7px 16px;
+  border-radius: 9px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-shadow: none;
+}
+.codex-official-guide-footer-actions > .btn-secondary { background: var(--bg-surface); color: var(--text-secondary); }
+.codex-official-guide-footer-actions > .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); box-shadow: none; }
+.codex-official-guide-footer-actions > .btn:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; transform: none; }
+@media (max-width: 600px) {
+  .modal.codex-official-guide > .codex-official-guide-footer { grid-template-columns: minmax(0, 1fr); padding: 12px 16px; gap: 12px; }
+}
+@media (max-height: 600px) {
+  .modal.codex-official-guide > .codex-official-guide-footer { padding-block: 10px; }
+}

@@ -1,0 +1,32 @@
+{
+  "model": "claude-opus-5-5",
+  "input": [
+    {
+      "type": "additional_tools",
+      "role": "developer",
+      "tools": [
+        {
+          "type": "namespace",
+          "name": "functions",
+          "tools": [
+            {
+              "type": "custom",
+              "name": "exec",
+              "description": "Run JavaScript code to orchestrate/compose tool calls. All nested tools are available on the global `tools` object. Accepts raw JavaScript source text, not JSON or markdown.\n### `apply_patch`\nThe apply_patch tool can edit files. This is a FREEFORM tool, so do not wrap the patch in JSON.\nexec tool declaration:\ndeclare const tools: { apply_patch(input: string): Promise<unknown>; };\n### `exec_command`\ndeclare const tools: { exec_command(args: { cmd: string; }): Promise<unknown>; };",
+              "format": { "type": "grammar", "syntax": "lark", "definition": "start: /[\\s\\S]+/" }
+            },
+            {
+              "type": "function",
+              "name": "wait",
+              "parameters": { "type": "object", "properties": { "cell_id": { "type": "string" } }, "required": ["cell_id"] }
+            }
+          ]
+        }
+      ]
+    },
+    { "role": "developer", "content": "Use apply_patch for file edits. Follow the actual tool declarations and their argument types." },
+    { "role": "user", "content": "Create outputs/probe.txt containing hello. Make one tool call and do not run tests." }
+  ],
+  "reasoning": { "effort": "medium" },
+  "max_output_tokens": 1800
+}

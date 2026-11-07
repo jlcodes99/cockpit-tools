@@ -1,0 +1,13 @@
+.codex-daily-usage-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.codex-daily-usage-note {
+  margin: 4px 0;
+  width: 100%;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  text-align: center;
+}

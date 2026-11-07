@@ -9,6 +9,8 @@ export interface WindowsOperationDialogRequest {
   retry?: () => void | Promise<void>;
   manualContinue?: () => void | Promise<void>;
   authorize?: () => void | Promise<void>;
+  /** 修复性操作（如重新检测 Codex 路径），成功后自动重试原操作。 */
+  repair?: () => void | Promise<void>;
   openTarget?: () => void | Promise<void>;
   onResolved?: () => void | Promise<void>;
 }
@@ -40,6 +42,7 @@ export interface PresentWindowsOperationErrorOptions {
   summary?: string;
   retry?: () => void | Promise<void>;
   manualContinue?: () => void | Promise<void>;
+  repair?: () => void | Promise<void>;
   openTarget?: () => void | Promise<void>;
   onResolved?: () => void | Promise<void>;
 }

@@ -5,11 +5,8 @@ export const APIKEY_FUN_DIRECT_ENDPOINT = 'https://slb.apikey.fan';
 export const APIKEY_FUN_SOURCE_TAG = 'apikey_fun';
 const APIKEY_FUN_LEGACY_PROVIDER_BASE_URL = 'https://api.apikey.fun/v1';
 export const APIKEY_FUN_DEFAULT_MODEL_CATALOG = [
-  'gpt-5.5',
-  'gpt-5.4',
-  'gpt-5.4-mini',
-  'gpt-5.3-codex',
-  'gpt-5.2',
+  'gpt-6.1-sol',
+  'gpt-5.6-sol',
   'claude-sonnet-4-5',
   'claude-sonnet-4-5-thinking',
   'claude-opus-4-6-thinking',
@@ -80,7 +77,7 @@ export function normalizeApiKeyFunProviderBaseUrl(value?: string | null): string
 
 export function resolveApiKeyFunWireApi(
   baseUrl?: string | null,
-  wireApi?: 'responses' | 'chat_completions' | null,
-): 'responses' | 'chat_completions' | null {
+  wireApi?: 'responses' | 'chat_completions' | 'anthropic' | null,
+): 'responses' | 'chat_completions' | 'anthropic' | null {
   return isApiKeyFunProviderBaseUrl(baseUrl) ? 'responses' : wireApi ?? null;
 }

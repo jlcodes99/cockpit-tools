@@ -1,6 +1,8 @@
 use crate::modules::linux_updater::{self, UpdateRuntimeInfo};
 use crate::modules::logger;
-use crate::modules::update_checker::{self, ReleaseHistoryItem, UpdateSettings, VersionJumpInfo};
+use crate::modules::update_checker::{
+    self, ReleaseHistoryItem, ReleaseNotes, UpdateSettings, VersionJumpInfo,
+};
 use std::time::Instant;
 
 /// Check if we should check for updates (based on interval settings)
@@ -87,16 +89,6 @@ pub fn patch_update_settings(
     })
 }
 
-/// Save release notes for a downloaded/pending update
-#[tauri::command]
-pub fn save_pending_update_notes(
-    version: String,
-    release_notes: String,
-    release_notes_zh: String,
-) -> Result<(), String> {
-    update_checker::save_pending_update_notes(version, release_notes, release_notes_zh)
-}
-
 /// Check if a version jump occurred (for post-update changelog display)
 #[tauri::command]
 pub fn check_version_jump() -> Result<Option<VersionJumpInfo>, String> {
@@ -122,13 +114,49 @@ pub fn check_version_jump() -> Result<Option<VersionJumpInfo>, String> {
     result
 }
 
-/// Read release history from changelog files
+/// Read the changelog bundled with the application.
 #[tauri::command]
-pub fn get_release_history(
+pub async fn get_release_history(
     locale: Option<String>,
     limit: Option<usize>,
 ) -> Result<Vec<ReleaseHistoryItem>, String> {
-    update_checker::get_release_history(locale.as_deref(), limit)
+    tokio::task::spawn_blocking(move || {
+        update_checker::get_local_release_history(locale.as_deref(), limit)
+    })
+    .await
+    .map_err(|error| error.to_string())
+}
+
+/// Return bundled notes immediately while installation-time notes are read separately.
+#[tauri::command]
+pub async fn get_bundled_release_notes(version: String) -> Result<ReleaseNotes, String> {
+    tokio::task::spawn_blocking(move || update_checker::get_bundled_release_notes(&version))
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn get_pending_release_notes(version: String) -> Result<Option<ReleaseNotes>, String> {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        tokio::task::spawn_blocking(move || update_checker::get_pending_release_notes(&version)),
+    )
+    .await
+    .map_err(|_| "Local update notes read timed out".to_string())?
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn save_pending_update_notes(
+    version: String,
+    release_notes: String,
+    release_notes_zh: String,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        update_checker::save_pending_update_notes(version, release_notes, release_notes_zh)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 /// Write updater lifecycle logs from frontend into app.log

@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { X, Tag, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { globalRenameTag, globalDeleteTag } from '../utils/globalTagOperations';
-import { useEscClose } from '../hooks/useEscClose';
+import { useEscCloseTopmost } from '../hooks/useEscClose';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import { useEnterConfirm } from '../hooks/useEnterConfirm';
+import { ModalErrorMessage } from './ModalErrorMessage';
 import './TagEditModal.css';
 
 interface TagEditModalProps {
@@ -45,17 +47,22 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
   const [globalRenamingTag, setGlobalRenamingTag] = useState<string | null>(null);
   const [globalDeleteConfirm, setGlobalDeleteConfirm] = useState<string | null>(null);
   const [globalDeleteError, setGlobalDeleteError] = useState('');
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const confirmRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
   const normalizedInitialTags = useMemo(() => normalizeTagList(initialTags), [initialTags]);
   const initialNotesValue = initialNotes ?? '';
   const initialTagsSignature = normalizedInitialTags.join('\u0001');
   const effectiveResetKey = resetKey ?? `${initialTagsSignature}\u0002${initialNotesValue}`;
 
   // ESC closes nested confirm first; only then closes the main modal.
-  useEscClose(isOpen && !globalDeleteConfirm, onClose);
-  useEscClose(!!globalDeleteConfirm && !saving, () => {
+  useEscCloseTopmost(isOpen && !globalDeleteConfirm && !saving, onClose, dialogRef);
+  useEscCloseTopmost(!!globalDeleteConfirm && !saving, () => {
     setGlobalDeleteConfirm(null);
     setGlobalDeleteError('');
-  });
+  }, confirmRef);
+  useModalFocusTrap(dialogRef, isOpen, true, !globalDeleteConfirm);
+  useModalFocusTrap(confirmRef, !!globalDeleteConfirm);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -145,6 +152,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
 
   const handleSave = async () => {
     if (saving) return;
+    setError('');
     const { nextTags, error: saveError } = buildTagsForSave();
     if (saveError) {
       setError(saveError);
@@ -230,14 +238,14 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
 
   return (
     <>
-    <div className="modal-overlay">
-      <div className="modal tag-edit-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onKeyDown={(event) => event.stopPropagation()}>
+      <div ref={dialogRef} className="modal tag-edit-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2 className="tag-edit-title">
+          <h2 id={titleId} className="tag-edit-title">
             <Tag size={18} />
             {t('accounts.tagModal.title', '账户标签')}
           </h2>
-          <button className="modal-close" onClick={onClose} aria-label={t('common.close', '关闭')}>
+          <button className="modal-close" onClick={onClose} disabled={saving} aria-label={t('common.close', '关闭')}>
             <X size={18} />
           </button>
         </div>
@@ -445,7 +453,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
             </div>
           </div>
           )}
-          {error && <div className="tag-edit-error">{error}</div>}
+          <ModalErrorMessage message={error} position="bottom" className="tag-edit-error" />
         </div>
         <div className="modal-footer tag-edit-footer">
           <button className="btn btn-secondary" onClick={onClose} disabled={saving}>
@@ -459,9 +467,11 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
     </div>
 
     {globalDeleteConfirm && (
-      <div className="modal-overlay tag-global-delete-confirm-overlay">
+      <div className="modal-overlay tag-global-delete-confirm-overlay" onKeyDown={(event) => event.stopPropagation()}>
         <div
+          ref={confirmRef}
           className="modal tag-global-delete-confirm-modal"
+          tabIndex={-1}
           role="dialog"
           aria-modal="true"
           aria-labelledby="tag-global-delete-confirm-title"
@@ -482,11 +492,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
             </button>
           </div>
           <div className="modal-body">
-            {globalDeleteError && (
-              <div className="tag-edit-error" role="alert">
-                {globalDeleteError}
-              </div>
-            )}
+            <ModalErrorMessage message={globalDeleteError} className="tag-edit-error" />
             <p>
               {t('accounts.tagModal.confirmGlobalDelete', {
                 targetTag: globalDeleteConfirm,

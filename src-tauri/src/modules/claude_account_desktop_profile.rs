@@ -1,5 +1,9 @@
 // Claude 账号模块：Desktop profile discovery, cookies and local profile metadata。
 // 通过 include! 保持原 modules::claude_account 作用域和私有调用关系。
+fn is_desktop_session_cookie(name: &str) -> bool {
+    matches!(name, "sessionKey" | "sessionKeyV2" | "sessionKeyV3")
+}
+
 fn desktop_account_display_name(account_name: Option<&str>) -> String {
     if let Some(name) = normalize_non_empty(account_name) {
         return name;
@@ -54,18 +58,17 @@ fn cookies_db_has_required_desktop_session(cookies_path: &Path) -> Result<bool, 
     if !cookies_path.exists() {
         return Ok(false);
     }
-    let conn = Connection::open_with_flags(cookies_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|e| {
-            format!(
-                "读取 Claude Cookies 失败: path={}, error={}",
-                cookies_path.display(),
-                e
-            )
-        })?;
+    let conn = open_desktop_cookie_snapshot(cookies_path).map_err(|e| {
+        format!(
+            "读取 Claude Cookies 失败: path={}, error={}",
+            cookies_path.display(),
+            e
+        )
+    })?;
     let count: i64 = conn
         .query_row(
-            "select count(distinct name) from cookies \
-             where name in ('sessionKey', 'lastActiveOrg') \
+            "select count(distinct case when name in ('sessionKey', 'sessionKeyV2', 'sessionKeyV3') then 'session' else name end) from cookies \
+             where name in ('sessionKey', 'sessionKeyV2', 'sessionKeyV3', 'lastActiveOrg') \
              and (host_key like '%claude.ai' or host_key like '%claude.com') \
              and (length(value) > 0 or length(encrypted_value) > 0)",
             [],
@@ -127,7 +130,7 @@ fn desktop_profile_metadata_from_export(
     source: &str,
 ) -> ClaudeDesktopProfileMetadata {
     let session_key = export.cookies.iter().find(|cookie| {
-        cookie.name == "sessionKey"
+        is_desktop_session_cookie(&cookie.name)
             && !cookie.value.is_empty()
             && is_claude_cookie_domain(&cookie.domain)
     });
@@ -154,14 +157,13 @@ fn desktop_profile_metadata_from_cookies_db(
     source: &str,
 ) -> Result<ClaudeDesktopProfileMetadata, String> {
     let cookies_path = desktop_cookies_path(profile_dir);
-    let conn = Connection::open_with_flags(&cookies_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|e| {
-            format!(
-                "读取 Claude Cookies 失败: path={}, error={}",
-                cookies_path.display(),
-                e
-            )
-        })?;
+    let conn = open_desktop_cookie_snapshot(&cookies_path).map_err(|e| {
+        format!(
+            "读取 Claude Cookies 失败: path={}, error={}",
+            cookies_path.display(),
+            e
+        )
+    })?;
     let mut stmt = conn
         .prepare(
             "select name, value, coalesce(length(encrypted_value), 0), expires_utc from cookies \
@@ -192,7 +194,7 @@ fn desktop_profile_metadata_from_cookies_db(
             continue;
         }
         cookie_names.insert(name.clone());
-        if name == "sessionKey" {
+        if is_desktop_session_cookie(&name) {
             has_session_key = true;
             session_expires_at = chromium_cookie_expires_utc_to_unix_ms(expires_utc);
         } else if name == "lastActiveOrg" {
@@ -619,14 +621,13 @@ fn read_decrypted_desktop_cookie_export(
         return Err(format!("Claude Cookies 不存在: {}", cookies_path.display()));
     }
     let password = read_claude_safe_storage_password()?;
-    let conn = Connection::open_with_flags(&cookies_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|e| {
-            format!(
-                "读取 Claude Cookies 失败: path={}, error={}",
-                cookies_path.display(),
-                e
-            )
-        })?;
+    let conn = open_desktop_cookie_snapshot(&cookies_path).map_err(|e| {
+        format!(
+            "读取 Claude Cookies 失败: path={}, error={}",
+            cookies_path.display(),
+            e
+        )
+    })?;
     let mut stmt = conn
         .prepare(
             "select host_key, path, name, value, encrypted_value, expires_utc, is_secure, is_httponly \
@@ -747,7 +748,7 @@ fn ensure_desktop_auth_export_logged_in(
     export: &ClaudeDesktopAuthCookieExport,
 ) -> Result<(), String> {
     let has_session_key = export.cookies.iter().any(|cookie| {
-        cookie.name == "sessionKey"
+        is_desktop_session_cookie(&cookie.name)
             && !cookie.value.is_empty()
             && is_claude_cookie_domain(&cookie.domain)
     });
@@ -1290,6 +1291,7 @@ async fn fetch_desktop_web_profile_with_cookies(
         "fetchedAt".to_string(),
         Value::String(chrono::Utc::now().to_rfc3339()),
     );
+    result.insert("lastActiveOrg".to_string(), Value::String(last_active_org));
     result.insert("endpoints".to_string(), Value::Object(endpoints));
     if !errors.is_empty() {
         result.insert("errors".to_string(), Value::Object(errors));
@@ -1474,13 +1476,15 @@ fn copy_path_overwrite(src: &Path, dst: &Path) -> Result<(), String> {
             })?;
         }
         remove_path_if_exists(dst)?;
-        fs::copy(src, dst).map_err(|e| {
-            format!(
+        crate::modules::profile_file_copy::copy_profile_file(src, dst).map_err(|e| {
+            let error = format!(
                 "复制文件失败: from={}, to={}, error={}",
                 src.display(),
                 dst.display(),
                 e
-            )
+            );
+            logger::log_warn(&format!("[Claude Profile] {}", error));
+            error
         })?;
     }
     Ok(())
@@ -1498,192 +1502,16 @@ fn copy_desktop_profile_snapshot(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn merge_desktop_config_token(
-    snapshot_config_path: &Path,
-    target_config_path: &Path,
-) -> Result<(), String> {
-    if !snapshot_config_path.exists() {
-        return Ok(());
-    }
-    let snapshot = read_config_file(snapshot_config_path)?.unwrap_or_else(|| json!({}));
-    let Some(token_cache) = snapshot.get("oauth:tokenCache").cloned() else {
-        return Ok(());
-    };
-    let mut target = read_config_file(target_config_path)?.unwrap_or_else(|| json!({}));
-    if !target.is_object() {
-        target = json!({});
-    }
-    let object = target
-        .as_object_mut()
-        .ok_or_else(|| "Claude config.json 结构非法".to_string())?;
-    object.insert("oauth:tokenCache".to_string(), token_cache);
-    write_config_file(target_config_path, &target)
-}
-
-fn restore_desktop_profile_snapshot(snapshot_dir: &Path, target_dir: &Path) -> Result<(), String> {
-    if !snapshot_dir.exists() {
-        return Err(format!("Claude 快照目录不存在: {}", snapshot_dir.display()));
-    }
-    fs::create_dir_all(target_dir).map_err(|e| format!("创建 Claude profile 目录失败: {}", e))?;
-    for item in CLAUDE_DESKTOP_PROFILE_ITEMS {
-        let source = snapshot_dir.join(item);
-        if !source.exists() {
-            continue;
-        }
-        if *item == "config.json" {
-            merge_desktop_config_token(&source, &target_dir.join(item))?;
-        } else {
-            copy_path_overwrite(&source, &target_dir.join(item))?;
-        }
-    }
-    Ok(())
-}
-
-fn build_desktop_gateway_provider_config(account: &ClaudeAccount) -> Result<Value, String> {
-    if account.auth_mode != ClaudeAuthMode::DesktopGateway {
-        return Err("账号不是 Claude Gateway 类型".to_string());
-    }
-    let connection_mode = crate::modules::claude_desktop_gateway::normalize_connection_mode(
-        account.desktop_gateway_connection_mode.as_deref(),
-    );
-    let (base_url, api_key, auth_scheme) = if connection_mode == "local_mapping" {
-        let endpoint = crate::modules::claude_desktop_gateway::ensure_gateway_for_account(account)?;
-        (endpoint.base_url, endpoint.api_key, "bearer".to_string())
-    } else {
-        let api_key = account
-            .api_key
-            .as_deref()
-            .and_then(|value| normalize_non_empty(Some(value)))
-            .ok_or_else(|| "Claude Gateway 账号缺少 API Key".to_string())?;
-        let base_url = account
-            .api_base_url
-            .as_deref()
-            .and_then(|value| normalize_non_empty(Some(value)))
-            .ok_or_else(|| "Claude Gateway 账号缺少 Base URL".to_string())?;
-        let auth_scheme =
-            normalize_desktop_gateway_auth_scheme(account.desktop_gateway_auth_scheme.as_deref());
-        (
-            base_url,
-            api_key.to_string(),
-            if auth_scheme == "auto" {
-                "bearer".to_string()
-            } else {
-                auth_scheme
-            },
-        )
-    };
-    let credential_kind = account
-        .desktop_gateway_credential_kind
-        .as_deref()
-        .and_then(|value| normalize_non_empty(Some(value)))
-        .unwrap_or_else(|| "static".to_string());
-    if credential_kind != "static" {
-        return Err("当前仅支持 static Gateway API Key".to_string());
-    }
-    let mut config = json!({
-        "coworkEgressAllowedHosts": ["*"],
-        "disableDeploymentModeChooser": true,
-        "inferenceProvider": "gateway",
-        "inferenceGatewayBaseUrl": base_url,
-        "inferenceGatewayApiKey": api_key,
-        "inferenceGatewayAuthScheme": auth_scheme,
-    });
-    if let Some(models) = account
-        .desktop_gateway_models
-        .as_ref()
-        .filter(|items| !items.is_empty())
-    {
-        let mapping_meta = crate::modules::claude_desktop_gateway::normalize_model_mappings(
-            account.desktop_gateway_model_mappings.clone(),
-        )
-        .unwrap_or_default()
-        .into_iter()
-        .map(|mapping| (mapping.desktop_model.to_ascii_lowercase(), mapping))
-        .collect::<BTreeMap<_, _>>();
-        config["inferenceModels"] = Value::Array(
-            models
-                .iter()
-                .filter_map(|model| {
-                    let name = normalize_non_empty(Some(model))?;
-                    let mut item = json!({ "name": name.clone() });
-                    if let Some(mapping) = mapping_meta.get(&name.to_ascii_lowercase()) {
-                        if let Some(label_override) = mapping
-                            .label_override
-                            .as_deref()
-                            .and_then(|value| normalize_non_empty(Some(value)))
-                        {
-                            item["labelOverride"] = Value::String(label_override);
-                        }
-                        if mapping.supports_1m.unwrap_or(false) {
-                            item["supports1m"] = Value::Bool(true);
-                        }
-                    }
-                    Some(item)
-                })
-                .collect(),
-        );
-    }
-    Ok(config)
-}
-
-fn is_claude_desktop_gateway_config(value: &Value) -> bool {
-    value
-        .get("inferenceProvider")
-        .and_then(Value::as_str)
-        .is_some_and(|provider| provider.eq_ignore_ascii_case("gateway"))
-        || value
-            .get("deploymentMode")
-            .and_then(Value::as_str)
-            .is_some_and(|mode| mode.eq_ignore_ascii_case("3p"))
-}
-
-fn write_desktop_deployment_mode(config_path: &Path, mode: &str) -> Result<(), String> {
-    if let Some(parent) = config_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| {
-            format!(
-                "创建 Claude Desktop 配置目录失败: path={}, error={}",
-                parent.display(),
-                e
-            )
-        })?;
-    }
-    let mut config = read_config_file(config_path)?.unwrap_or_else(|| json!({}));
-    if !config.is_object() {
-        config = json!({});
-    }
-    let object = config
-        .as_object_mut()
-        .ok_or_else(|| "Claude Desktop 配置结构非法".to_string())?;
-    object.insert(
-        "deploymentMode".to_string(),
-        Value::String(mode.to_string()),
-    );
-    write_config_file(config_path, &config)
-}
-
-fn config_library_gateway_ids(config_library_dir: &Path) -> Result<BTreeSet<String>, String> {
+fn desktop_gateway_managed_config_ids() -> Result<BTreeSet<String>, String> {
     let mut ids = BTreeSet::new();
-    if !config_library_dir.exists() {
-        return Ok(ids);
-    }
-    for entry in fs::read_dir(config_library_dir).map_err(|e| {
-        format!(
-            "读取 Claude configLibrary 失败: path={}, error={}",
-            config_library_dir.display(),
-            e
-        )
-    })? {
-        let entry = entry.map_err(|e| format!("读取 Claude configLibrary 项失败: {}", e))?;
-        let path = entry.path();
-        if path.file_name().and_then(|value| value.to_str()) == Some("_meta.json")
-            || path.extension().and_then(|value| value.to_str()) != Some("json")
-        {
-            continue;
-        }
-        if let Some(config) = read_config_file(&path)? {
-            if is_claude_desktop_gateway_config(&config) {
-                if let Some(stem) = path.file_stem().and_then(|value| value.to_str()) {
-                    ids.insert(stem.to_string());
+    for summary in load_index()?.accounts {
+        if let Some(account) = load_account_file(&summary.id) {
+            if account.auth_mode != ClaudeAuthMode::DesktopGateway {
+                continue;
+            }
+            if let Some(id) = account.desktop_gateway_config_id {
+                if uuid::Uuid::parse_str(&id).is_ok() {
+                    ids.insert(id);
                 }
             }
         }
@@ -1691,142 +1519,42 @@ fn config_library_gateway_ids(config_library_dir: &Path) -> Result<BTreeSet<Stri
     Ok(ids)
 }
 
-fn remove_gateway_configs_from_config_library(config_library_dir: &Path) -> Result<(), String> {
-    if !config_library_dir.exists() {
-        return Ok(());
-    }
-    let mut gateway_ids = config_library_gateway_ids(config_library_dir)?;
-    let meta_path = config_library_dir.join("_meta.json");
-    let mut meta = read_config_file(&meta_path)?.unwrap_or_else(|| json!({}));
-    if let Some(entries) = meta.get("entries").and_then(Value::as_array) {
-        for entry in entries {
-            let is_gateway_entry = entry
-                .get("provider")
-                .and_then(Value::as_str)
-                .is_some_and(|provider| provider.eq_ignore_ascii_case("gateway"));
-            if is_gateway_entry {
-                if let Some(id) = entry.get("id").and_then(Value::as_str) {
-                    gateway_ids.insert(id.to_string());
-                }
-            }
-        }
-    }
-
-    for id in &gateway_ids {
-        remove_path_if_exists(&config_library_dir.join(format!("{}.json", id)))?;
-    }
-
-    if meta.is_object() {
-        let object = meta
-            .as_object_mut()
-            .ok_or_else(|| "Claude configLibrary 元数据结构非法".to_string())?;
-        let mut entries = object
-            .get("entries")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        entries.retain(|entry| {
-            let id_removed = entry
-                .get("id")
-                .and_then(Value::as_str)
-                .map(|id| gateway_ids.contains(id))
-                .unwrap_or(false);
-            let provider_gateway = entry
-                .get("provider")
-                .and_then(Value::as_str)
-                .is_some_and(|provider| provider.eq_ignore_ascii_case("gateway"));
-            !id_removed && !provider_gateway
-        });
-
-        let should_clear_applied = object
-            .get("appliedId")
-            .and_then(Value::as_str)
-            .map(|id| gateway_ids.contains(id))
-            .unwrap_or(false);
-        if should_clear_applied {
-            if let Some(next_id) = entries
-                .iter()
-                .find_map(|entry| entry.get("id").and_then(Value::as_str))
-            {
-                object.insert("appliedId".to_string(), Value::String(next_id.to_string()));
-            } else {
-                object.remove("appliedId");
-            }
-        }
-        object.insert("entries".to_string(), Value::Array(entries));
-        write_config_file(&meta_path, &meta)?;
-    }
-
-    Ok(())
-}
-
 fn remove_desktop_gateway_profile_config(target_dir: &Path) -> Result<(), String> {
-    let desktop_config_path = target_dir.join(CLAUDE_DESKTOP_CONFIG_FILE_NAME);
-    if let Some(config) = read_config_file(&desktop_config_path)? {
-        if is_claude_desktop_gateway_config(&config) {
-            remove_path_if_exists(&desktop_config_path)?;
-        }
-    }
-
-    let config_library_dir = target_dir.join(CLAUDE_DESKTOP_CONFIG_LIBRARY_DIR);
-    remove_gateway_configs_from_config_library(&config_library_dir)?;
-    Ok(())
+    crate::modules::claude_desktop_gateway_config::remove_managed(
+        &target_dir.join(CLAUDE_DESKTOP_CONFIG_LIBRARY_DIR),
+        &[target_dir.join(CLAUDE_DESKTOP_CONFIG_FILE_NAME)],
+        &desktop_gateway_managed_config_ids()?,
+    )
 }
 
 fn write_desktop_gateway_config_library(
     account: &ClaudeAccount,
     config_library_dir: &Path,
+    deployment_paths: &[PathBuf],
 ) -> Result<String, String> {
     let config_id = account
         .desktop_gateway_config_id
         .as_deref()
-        .filter(|value| UUID_RE.is_match(value))
+        .filter(|value| uuid::Uuid::parse_str(value).is_ok())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    let account_name = account.email.trim();
-    let entry_name = if account_name.is_empty() {
-        "Default"
-    } else {
-        account_name
-    };
-    fs::create_dir_all(&config_library_dir)
-        .map_err(|e| format!("创建 Claude Gateway configLibrary 失败: {}", e))?;
-    remove_gateway_configs_from_config_library(config_library_dir)?;
-    let meta_path = config_library_dir.join("_meta.json");
-    let mut meta = read_config_file(&meta_path)?.unwrap_or_else(|| json!({}));
-    if !meta.is_object() {
-        meta = json!({});
-    }
-    let object = meta
-        .as_object_mut()
-        .ok_or_else(|| "Claude configLibrary 元数据结构非法".to_string())?;
-    let mut entries = object
-        .get("entries")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    entries.retain(|entry| entry.get("id").and_then(Value::as_str) != Some(config_id.as_str()));
-    entries.push(json!({
-        "id": config_id.clone(),
-        "name": entry_name,
-    }));
-    object.insert("appliedId".to_string(), Value::String(config_id.clone()));
-    object.insert("entries".to_string(), Value::Array(entries));
-    write_config_file(&meta_path, &meta)?;
-    write_config_file(
-        &config_library_dir.join(format!("{}.json", config_id)),
-        &build_desktop_gateway_provider_config(account)?,
+    let mut known_ids = desktop_gateway_managed_config_ids()?;
+    known_ids.insert(config_id.clone());
+    crate::modules::claude_desktop_gateway_config::apply_account(
+        config_library_dir,
+        deployment_paths,
+        &config_id,
+        account,
+        &known_ids,
     )?;
     Ok(config_id)
 }
 
 fn write_desktop_gateway_profile(account: &ClaudeAccount, target_dir: &Path) -> Result<(), String> {
-    fs::create_dir_all(target_dir)
-        .map_err(|e| format!("创建 Claude Gateway profile 失败: {}", e))?;
-    write_desktop_deployment_mode(&target_dir.join(CLAUDE_DESKTOP_CONFIG_FILE_NAME), "3p")?;
     let config_id = write_desktop_gateway_config_library(
         account,
         &target_dir.join(CLAUDE_DESKTOP_CONFIG_LIBRARY_DIR),
+        &[target_dir.join(CLAUDE_DESKTOP_CONFIG_FILE_NAME)],
     )?;
     validate_desktop_deployment_mode(&target_dir.join(CLAUDE_DESKTOP_CONFIG_FILE_NAME), "3p")?;
     validate_desktop_gateway_meta(
@@ -1840,9 +1568,14 @@ fn write_desktop_gateway_profile(account: &ClaudeAccount, target_dir: &Path) -> 
 
 fn write_default_desktop_gateway_profile(account: &ClaudeAccount) -> Result<(), String> {
     let paths = get_default_claude_desktop_gateway_config_paths()?;
-    write_desktop_deployment_mode(&paths.normal_config_path, "3p")?;
-    write_desktop_deployment_mode(&paths.threep_config_path, "3p")?;
-    let config_id = write_desktop_gateway_config_library(account, &paths.config_library_dir)?;
+    let config_id = write_desktop_gateway_config_library(
+        account,
+        &paths.config_library_dir,
+        &[
+            paths.normal_config_path.clone(),
+            paths.threep_config_path.clone(),
+        ],
+    )?;
     validate_desktop_deployment_mode(&paths.normal_config_path, "3p")?;
     validate_desktop_deployment_mode(&paths.threep_config_path, "3p")?;
     validate_desktop_gateway_meta(&paths.config_library_meta_path(), &config_id)?;
@@ -1859,9 +1592,14 @@ fn write_default_desktop_gateway_profile(account: &ClaudeAccount) -> Result<(), 
 
 fn restore_default_desktop_gateway_official_config() -> Result<(), String> {
     let paths = get_default_claude_desktop_gateway_config_paths()?;
-    write_desktop_deployment_mode(&paths.normal_config_path, "1p")?;
-    write_desktop_deployment_mode(&paths.threep_config_path, "1p")?;
-    remove_gateway_configs_from_config_library(&paths.config_library_dir)?;
+    crate::modules::claude_desktop_gateway_config::remove_managed(
+        &paths.config_library_dir,
+        &[
+            paths.normal_config_path.clone(),
+            paths.threep_config_path.clone(),
+        ],
+        &desktop_gateway_managed_config_ids()?,
+    )?;
     validate_desktop_deployment_mode(&paths.normal_config_path, "1p")?;
     validate_desktop_deployment_mode(&paths.threep_config_path, "1p")?;
     Ok(())
@@ -1887,7 +1625,7 @@ pub fn restore_desktop_account_to_profile(
         let _backup_dir = backup_current_desktop_profile(target_dir)?;
     }
     remove_desktop_gateway_profile_config(target_dir)?;
-    restore_desktop_profile_snapshot(&snapshot_dir, target_dir)?;
+    restore_desktop_profile_snapshot(&snapshot_dir, target_dir, account.account_uuid.as_deref())?;
     remove_desktop_gateway_profile_config(target_dir)?;
 
     let mut updated = account.clone();
@@ -1920,17 +1658,117 @@ fn backup_current_desktop_profile(target_dir: &Path) -> Result<Option<PathBuf>, 
     if !target_dir.exists() {
         return Ok(None);
     }
+    ensure_desktop_profile_ready_for_backup(target_dir)?;
     let backup_dir = crate::modules::backup_storage::behavior_backup_dir(
         "claude",
         &crate::modules::backup_storage::scope_for_path(target_dir),
         &format!("{}", now_ts_ms()),
     )?;
-    copy_desktop_profile_snapshot(target_dir, &backup_dir)?;
+    if let Err(error) = copy_desktop_profile_snapshot(target_dir, &backup_dir) {
+        // 备份期间被重新抢占（Claude 启动、进程退出竞态）时同样给出可读原因，而不是底层 os error。
+        if let Some((path, locked_error)) = find_locked_desktop_profile_path(target_dir) {
+            return Err(format!(
+                "Claude 仍在运行或登录态文件被占用，无法备份当前账号，请完全退出 Claude Desktop 后重试: file={}, error={}, copy_error={}",
+                path.display(),
+                locked_error,
+                error
+            ));
+        }
+        return Err(error);
+    }
     let _ = crate::modules::backup_storage::prune_behavior_backups(
         "claude",
         &crate::modules::backup_storage::scope_for_path(target_dir),
     );
     Ok(Some(backup_dir))
+}
+
+/// Chromium 独占锁定、且最能代表「Claude Desktop 是否真的退出」的文件。
+///
+/// 只放体积很小的 SQLite / LevelDB 文件；整目录复制仍由快照流程负责。
+const CLAUDE_DESKTOP_LOCK_SENSITIVE_PATHS: &[&str] = &[
+    "Network/Cookies",
+    "Network/Cookies-journal",
+    "Local Storage/leveldb/LOCK",
+    "Session Storage/LOCK",
+];
+
+/// 用与备份完全相同的复制路径探测独占锁：复制到临时文件成功才算解锁。
+///
+/// 不能用 `File::open` 之类的宽松探测代替——Windows 上 Chromium 允许共享读，
+/// 真正会失败的是复制（`CopyFileEx`），只有走同一条路径才能反映备份的真实结果。
+fn find_locked_desktop_profile_path(target_dir: &Path) -> Option<(PathBuf, String)> {
+    for (index, relative) in CLAUDE_DESKTOP_LOCK_SENSITIVE_PATHS.iter().enumerate() {
+        let source = target_dir.join(relative);
+        if !source.is_file() {
+            continue;
+        }
+        let probe_path = std::env::temp_dir().join(format!(
+            "cockpit-claude-profile-probe-{}-{}-{}",
+            std::process::id(),
+            now_ts_ms(),
+            index
+        ));
+        let result = crate::modules::profile_file_copy::copy_profile_file(&source, &probe_path);
+        let _ = fs::remove_file(&probe_path);
+        if let Err(error) = result {
+            return Some((source, error.to_string()));
+        }
+    }
+    None
+}
+
+fn wait_for_desktop_profile_release(target_dir: &Path, attempts: usize, interval_ms: u64) -> bool {
+    for _ in 0..attempts {
+        if find_locked_desktop_profile_path(target_dir).is_none() {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(interval_ms));
+    }
+    find_locked_desktop_profile_path(target_dir).is_none()
+}
+
+/// 备份前确认 Claude Desktop 已经真正退出登录态文件。
+///
+/// Windows 上 Store / MSIX 版进程探测很容易漏掉持有 `Network\Cookies` 的子进程，漏判后
+/// 备份会用 `os error 32` 直接中止整次切号。这里改为由文件本身说话：先探测，必要时按 Store
+/// 包路径结束仍占用的进程并复检；仍被占用时返回可读错误，明确要求用户退出 Claude。
+fn ensure_desktop_profile_ready_for_backup(target_dir: &Path) -> Result<(), String> {
+    let Some(locked) = find_locked_desktop_profile_path(target_dir) else {
+        return Ok(());
+    };
+    logger::log_warn(&format!(
+        "[Claude] 备份前检测到登录态文件被占用: file={}, error={}",
+        locked.0.display(),
+        locked.1
+    ));
+
+    #[cfg(target_os = "windows")]
+    {
+        match crate::modules::claude_instance::force_close_windows_claude_desktop_processes(8) {
+            Ok(count) if count > 0 => logger::log_info(&format!(
+                "[Claude] 已结束仍占用登录态的 Store 版 Claude Desktop 进程: count={}",
+                count
+            )),
+            Ok(_) => {}
+            Err(error) => logger::log_warn(&format!(
+                "[Claude] 结束 Store 版 Claude Desktop 进程失败: {}",
+                error
+            )),
+        }
+    }
+
+    // 正在退出的进程通常几百毫秒内释放句柄；Windows 上更强的兜底已在上一步执行。
+    if wait_for_desktop_profile_release(target_dir, 8, 250) {
+        return Ok(());
+    }
+
+    let (path, error) = find_locked_desktop_profile_path(target_dir).unwrap_or(locked);
+    Err(format!(
+        "Claude 仍在运行或登录态文件被占用，无法备份当前账号，请完全退出 Claude Desktop 后重试: file={}, error={}",
+        path.display(),
+        error
+    ))
 }
 
 fn get_desktop_auth_resource_dir() -> Option<PathBuf> {

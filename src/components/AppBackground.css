@@ -1,0 +1,7 @@
+/* Isolate just the optional canvas; all existing cards and controls keep their own styles. */
+.app-container:has(> .app-background-layer) { isolation: isolate; }
+.app-background-layer { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+.app-background-surface { position: absolute; inset: 0; overflow: hidden; background: var(--bg-primary); pointer-events: none; }
+.app-background-image { position: absolute; inset: -24px; background-size: cover; background-repeat: no-repeat; }
+.app-background-shade { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.12); }
+[data-theme="dark"] .app-background-shade { background: rgba(3, 7, 18, 0.5); }

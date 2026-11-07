@@ -1,7 +1,10 @@
+import { createCodexAutomaticQuotaRefreshPredicate } from '../utils/codexAutoRefreshPlanScope';
+import { listenSafely as listen } from "../utils/tauriEventListener";
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { type UnlistenFn } from "@tauri-apps/api/event";
 import { useAccountStore } from '../stores/useAccountStore';
+import { isPlatformDisabled } from '../stores/usePlatformLayoutStore';
 import { useCodexAccountStore } from '../stores/useCodexAccountStore';
 import { useClaudeAccountStore } from '../stores/useClaudeAccountStore';
 import { useGitHubCopilotAccountStore } from '../stores/useGitHubCopilotAccountStore';
@@ -12,6 +15,7 @@ import { useGrokAccountStore } from '../stores/useGrokAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
+import { useMinimaxCodeAccountStore } from '../stores/useMinimaxCodeAccountStore';
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
@@ -24,6 +28,7 @@ import { getGrokAccountDisplayEmail } from '../types/grok';
 import { getClaudeAccountDisplayEmail } from '../types/claude';
 import { getCodebuddyAccountDisplayEmail } from '../types/codebuddy';
 import { getWorkbuddyAccountDisplayEmail } from '../types/workbuddy';
+import { getMinimaxCodeAccountDisplayEmail } from '../types/minimaxCode';
 import { getQoderAccountDisplayEmail } from '../types/qoder';
 import { getZcodeAccountDisplayEmail } from '../types/zcode';
 import {
@@ -43,6 +48,7 @@ import {
   type AutoRefreshSchedulerTask,
 } from '../utils/autoRefreshScheduler';
 import { CURRENT_ACCOUNT_CHANGED_EVENT } from '../utils/accountSyncEvents';
+import { getAntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget';
 import { refreshCodexApiKeyUsageForAccounts } from '../services/codexApiKeyUsageRefreshService';
 import * as codexService from '../services/codexService';
 import {
@@ -51,13 +57,13 @@ import {
   getCodexInheritPlatformQuotaRefreshAccountIds,
   resolveCodexGroupQuotaAutoRefreshMinutes,
 } from '../services/codexAccountGroupService';
-import { isCodexApiKeyAccount, isCodexNewApiAccount } from '../types/codex';
 
 interface GeneralConfig {
   language: string;
   theme: string;
   auto_refresh_minutes: number;
   codex_auto_refresh_minutes: number;
+  codex_auto_refresh_plan_types?: string[];
   claude_auto_refresh_minutes: number;
   codex_sync_wsl: boolean;
   codex_wsl_config_dir: string;
@@ -69,6 +75,7 @@ interface GeneralConfig {
   codebuddy_auto_refresh_minutes: number;
   codebuddy_cn_auto_refresh_minutes: number;
   workbuddy_auto_refresh_minutes: number;
+  minimax_code_auto_refresh_minutes: number;
   qoder_auto_refresh_minutes: number;
   zcode_auto_refresh_minutes: number;
   trae_auto_refresh_minutes: number;
@@ -198,6 +205,7 @@ function getCurrentAccountEmails(): Record<CurrentAccountRefreshPlatform, string
     codebuddy: getProviderEmail(useCodebuddyAccountStore, getCodebuddyAccountDisplayEmail),
     codebuddy_cn: getProviderEmail(useCodebuddyCnAccountStore, getCodebuddyAccountDisplayEmail),
     workbuddy: getProviderEmail(useWorkbuddyAccountStore, getWorkbuddyAccountDisplayEmail),
+    minimaxcode: getProviderEmail(useMinimaxCodeAccountStore, getMinimaxCodeAccountDisplayEmail),
     qoder: getProviderEmail(useQoderAccountStore, getQoderAccountDisplayEmail),
     zcode: getProviderEmail(useZcodeAccountStore, getZcodeAccountDisplayEmail),
     trae: getTraeProviderEmail('trae'),
@@ -242,6 +250,9 @@ export function useAutoRefresh() {
   const refreshAllWorkbuddyTokens = useWorkbuddyAccountStore((state) => state.refreshAllTokens);
   const fetchCurrentWorkbuddyAccountId = useWorkbuddyAccountStore((state) => state.fetchCurrentAccountId);
   const refreshWorkbuddyToken = useWorkbuddyAccountStore((state) => state.refreshToken);
+  const refreshAllMinimaxCodeTokens = useMinimaxCodeAccountStore((state) => state.refreshAllTokens);
+  const fetchCurrentMinimaxCodeAccountId = useMinimaxCodeAccountStore((state) => state.fetchCurrentAccountId);
+  const refreshMinimaxCodeToken = useMinimaxCodeAccountStore((state) => state.refreshToken);
   const refreshAllQoderTokens = useQoderAccountStore((state) => state.refreshAllTokens);
   const fetchCurrentQoderAccountId = useQoderAccountStore((state) => state.fetchCurrentAccountId);
   const refreshQoderToken = useQoderAccountStore((state) => state.refreshToken);
@@ -276,6 +287,8 @@ export function useAutoRefresh() {
   const codebuddyCnCurrentRefreshingRef = useRef(false);
   const workbuddyRefreshingRef = useRef(false);
   const workbuddyCurrentRefreshingRef = useRef(false);
+  const minimaxcodeRefreshingRef = useRef(false);
+  const minimaxcodeCurrentRefreshingRef = useRef(false);
   const qoderRefreshingRef = useRef(false);
   const qoderCurrentRefreshingRef = useRef(false);
   const zcodeRefreshingRef = useRef(false);
@@ -409,6 +422,7 @@ export function useAutoRefresh() {
 
           const currentRefreshMinutesMap = loadCurrentAccountRefreshMinutesMap();
           const currentAccountEmails = getCurrentAccountEmails();
+          const eligibleCodexQuotaAccount = createCodexAutomaticQuotaRefreshPredicate(config.codex_auto_refresh_plan_types);
           const runProviderCurrentRefresh = async (
             fetchCurrentProviderAccountId: () => Promise<string | null>,
             refreshProviderToken: (accountId: string) => Promise<void>,
@@ -462,7 +476,7 @@ export function useAutoRefresh() {
                 if (!useAccountStore.getState().currentAccount?.id) {
                   return;
                 }
-                await invoke('refresh_current_quota');
+                await invoke('refresh_current_quota', { runtimeTarget: getAntigravityRuntimeTarget() });
                 await fetchAccounts();
                 await fetchCurrentAccount();
               },
@@ -479,10 +493,7 @@ export function useAutoRefresh() {
                   // 平台间隔只刷「继承平台 + 未分组」；自定义间隔分组由独立任务负责
                   const accounts = useCodexAccountStore.getState().accounts;
                   const refreshableIds = accounts
-                    .filter(
-                      (account) =>
-                        !isCodexApiKeyAccount(account) || isCodexNewApiAccount(account),
-                    )
+                    .filter(eligibleCodexQuotaAccount)
                     .map((account) => account.id);
                   const inheritIds =
                     await getCodexInheritPlatformQuotaRefreshAccountIds(refreshableIds);
@@ -662,6 +673,23 @@ export function useAutoRefresh() {
               },
             },
             {
+              key: 'minimaxcode',
+              label: 'MiniMax Code',
+              intervalMinutes: config.minimax_code_auto_refresh_minutes,
+              currentMinutes: resolveCurrentMinutes('minimaxcode', currentAccountEmails.minimaxcode, currentRefreshMinutesMap),
+              fullRefreshingRef: minimaxcodeRefreshingRef,
+              currentRefreshingRef: minimaxcodeCurrentRefreshingRef,
+              runFullRefresh: async () => {
+                await refreshAllMinimaxCodeTokens();
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(
+                  fetchCurrentMinimaxCodeAccountId,
+                  refreshMinimaxCodeToken,
+                );
+              },
+            },
+            {
               key: 'qoder',
               label: 'Qoder',
               intervalMinutes: config.qoder_auto_refresh_minutes,
@@ -785,6 +813,8 @@ export function useAutoRefresh() {
                 key: `full:${descriptor.key}`,
                 label: `${descriptor.label} 全量刷新`,
                 intervalMs: minutesToMs(descriptor.intervalMinutes),
+                // 平台被禁用时跳过一切活动（隐藏只影响显示）
+                shouldSkip: () => isPlatformDisabled(descriptor.key),
                 run: () =>
                   executeWithGuard(
                     descriptor.fullRefreshingRef,
@@ -803,7 +833,8 @@ export function useAutoRefresh() {
                 key: `current:${descriptor.key}`,
                 label: `${descriptor.label} 当前账号刷新`,
                 intervalMs: minutesToMs(descriptor.currentMinutes),
-                shouldSkip: () => descriptor.fullRefreshingRef.current,
+                shouldSkip: () =>
+                  descriptor.fullRefreshingRef.current || isPlatformDisabled(descriptor.key),
                 run: () =>
                   executeWithGuard(
                     descriptor.currentRefreshingRef,
@@ -833,13 +864,21 @@ export function useAutoRefresh() {
               key: `full:codex-group:${minutes}`,
               label: `Codex 分组自定义刷新 (${minutes}m)`,
               intervalMs: minutesToMs(minutes),
+              // 平台被禁用时跳过一切活动（隐藏只影响显示）
+              shouldSkip: () => isPlatformDisabled('codex'),
               run: () =>
                 executeWithGuard(
                   codexRefreshingRef,
                   async () => {
                     try {
-                      // 自定义分组任务目标明确，不因「不刷新」外的策略再过滤
-                      await codexService.refreshCodexQuotasBatch(uniqueIds, {
+                      // 自定义间隔遵守同一套餐筛选；手动刷新与当前账号任务不受影响
+                      const accountById = new Map(useCodexAccountStore.getState().accounts.map((account) => [account.id, account]));
+                      const eligibleIds = uniqueIds.filter((id) => {
+                        const account = accountById.get(id);
+                        return account && eligibleCodexQuotaAccount(account);
+                      });
+                      if (eligibleIds.length === 0) return;
+                      await codexService.refreshCodexQuotasBatch(eligibleIds, {
                         respectGroupQuotaRefresh: false,
                         background: true,
                       });
@@ -898,6 +937,7 @@ export function useAutoRefresh() {
     fetchTraeAccounts,
     fetchCurrentWindsurfAccountId,
     fetchCurrentWorkbuddyAccountId,
+    fetchCurrentMinimaxCodeAccountId,
     fetchCurrentZedAccountId,
     fetchAccounts,
     refreshAllCodebuddyCnTokens,
@@ -912,6 +952,7 @@ export function useAutoRefresh() {
     refreshAllZcodeTokens,
     refreshAllWindsurfTokens,
     refreshAllWorkbuddyTokens,
+    refreshAllMinimaxCodeTokens,
     refreshAllZedTokens,
     refreshCodebuddyCnToken,
     refreshCodebuddyToken,
@@ -925,6 +966,7 @@ export function useAutoRefresh() {
     refreshTraeToken,
     refreshWindsurfToken,
     refreshWorkbuddyToken,
+    refreshMinimaxCodeToken,
     refreshZedToken,
     stopScheduler,
   ]);

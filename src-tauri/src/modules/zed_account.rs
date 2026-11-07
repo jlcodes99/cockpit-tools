@@ -224,9 +224,17 @@ pub fn load_stored_account(account_id: &str) -> Option<ZedStoredAccount> {
 
 fn save_stored_account_file(account: &ZedStoredAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.public_account.id.as_str())?;
-    let content = crate::modules::secure_account_storage::serialize_account_file("zed", account)?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
+    crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "zed", account)
         .map_err(|e| format!("保存账号失败: {}", e))
+}
+
+// Record credential-switch success separately from refresh activity.
+pub fn touch_last_used(account_id: &str) -> Result<(), String> {
+    let mut account = load_stored_account(account_id)
+        .ok_or_else(|| format!("Zed account not found: {}", account_id))?;
+    account.public_account.last_switched_at = Some(now_ts());
+    upsert_account_record(account, false, false)?;
+    Ok(())
 }
 
 fn delete_account_file(account_id: &str) -> Result<(), String> {
@@ -807,6 +815,7 @@ fn build_stored_account_from_bundle(
 
     Ok(ZedStoredAccount {
         public_account: ZedAccount {
+        last_switched_at: None,
             id: build_account_id(&resolved_user_id),
             user_id: resolved_user_id,
             github_login,

@@ -4,6 +4,7 @@ import {
   buildUsageBaseUrlCandidates,
   formatModelProviderUsageMoney,
   resolveNewApiQuotaSnapshot,
+  resolveModelProviderUsageMode,
   type ModelProviderUsageSummary,
 } from "./modelProviderUsageService.ts";
 
@@ -96,4 +97,19 @@ test("new_api quota ignores malformed numeric details", () => {
 
 test("token plan percentages render without currency decimals", () => {
   assert.equal(formatModelProviderUsageMoney(72, "%"), "72%");
+});
+
+test("official usage stays a spend summary instead of falling back to a relay balance", () => {
+  const usage = summary({ mode: 'openai_official', totalCost: 2, todayRequests: 4 });
+  assert.equal(resolveModelProviderUsageMode(usage), 'openai_official');
+  assert.equal(usage.balance, undefined);
+  assert.equal(usage.quotaRemaining, undefined);
+});
+
+test("new-api amounts without a reported unit do not acquire a dollar sign", () => {
+  assert.equal(formatModelProviderUsageMoney(45.2, ""), "45.20");
+  assert.equal(formatModelProviderUsageMoney(0, ""), "0.00");
+  assert.equal(formatModelProviderUsageMoney(45.2, "CNY"), "¥45.20");
+  assert.equal(formatModelProviderUsageMoney(45.2, "USD"), "$45.20");
+  assert.equal(formatModelProviderUsageMoney(45.2), "$45.20");
 });

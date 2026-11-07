@@ -343,6 +343,22 @@ pub async fn import_from_local_logic() -> Result<models::Account, String> {
 /// 从本地 Antigravity IDE 客户端导入当前账号
 #[cfg(not(target_os = "windows"))]
 pub async fn import_from_local_logic() -> Result<models::Account, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let credential = tokio::task::spawn_blocking(|| {
+            if !crate::commands::system::antigravity_ide_uses_shared_credentials() {
+                return Ok(None);
+            }
+            modules::antigravity_credential::read_antigravity_system_credential()?
+                .map(Some)
+                .ok_or_else(|| "未找到 Antigravity Keychain 凭据，请确保 Antigravity IDE 客户端已登录".to_string())
+        })
+        .await
+        .map_err(|error| format!("读取 Antigravity 登录状态失败: {error}"))??;
+        if let Some(credential) = credential {
+            return import_from_refresh_token(credential.refresh_token, "Antigravity Keychain").await;
+        }
+    }
     import_from_local_state_db_logic().await
 }
 
@@ -389,7 +405,7 @@ async fn import_from_refresh_token(
     Ok(account)
 }
 
-async fn import_from_local_state_db_logic() -> Result<models::Account, String> {
+pub(super) async fn import_from_local_state_db_logic() -> Result<models::Account, String> {
     use base64::{engine::general_purpose, Engine as _};
 
     modules::logger::log_info("开始从本地 Antigravity IDE 客户端导入...");

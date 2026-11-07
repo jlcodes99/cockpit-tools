@@ -4,12 +4,6 @@
   gap: 14px;
 }
 
-.modal.codex-api-key-launch-dialog {
-  width: min(900px, calc(100vw - 40px));
-  max-width: 900px;
-  max-height: min(900px, calc(100vh - 40px));
-}
-
 .codex-api-key-launch-dialog .modal-body {
   overflow-y: auto;
 }

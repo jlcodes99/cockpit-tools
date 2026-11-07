@@ -27,6 +27,7 @@ export interface UpdateCheckResult {
 }
 
 interface UpdateNotificationProps {
+  visible?: boolean;
   updateInfo?: UpdateInfo | null;
   checking?: boolean;
   onClose: () => void;
@@ -45,6 +46,7 @@ interface UpdateNotificationProps {
 
 export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
   updateInfo = null,
+  visible = true,
   checking = false,
   onClose,
   onRestartUpdate,
@@ -61,7 +63,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
 }) => {
   const { t, i18n } = useTranslation();
 
-  useEscClose(true, onClose);
+  useEscClose(visible, onClose);
 
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);

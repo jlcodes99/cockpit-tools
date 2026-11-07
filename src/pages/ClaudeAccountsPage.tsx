@@ -35,6 +35,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import { AccountLastUsed } from '../components/AccountLastUsed';
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -43,6 +44,7 @@ import type { TFunction } from 'i18next';
 import md5 from 'blueimp-md5';
 import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorMessage';
 import { ExportJsonModal } from '../components/ExportJsonModal';
+import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
 import { ManualHelpIconButton } from '../components/ManualHelpIconButton';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { SingleSelectDropdown } from '../components/SingleSelectDropdown';
@@ -55,6 +57,7 @@ import { useEscClose } from '../hooks/useEscClose';
 import { useEnterConfirm } from '../hooks/useEnterConfirm';
 import { useExportJsonModal } from '../hooks/useExportJsonModal';
 import { useLaunchTerminalOptions } from '../hooks/useLaunchTerminalOptions';
+import { usePlatformAccountGroups } from '../hooks/usePlatformAccountGroups';
 import { getProviderCurrentAccountId, type ProviderCurrentPlatform } from '../services/providerCurrentAccountService';
 import {
   isModelProviderUsageUnavailableError,
@@ -577,7 +580,7 @@ function normalizeClaudeDesktopGatewayMappings(
       desktopModel,
       upstreamModel,
       labelOverride: upstreamModel,
-      ...(mapping.supports1m === true ? { supports1m: true } : {}),
+      ...(typeof mapping.supports1m === 'boolean' ? { supports1m: mapping.supports1m } : {}),
     });
   });
   return result;
@@ -820,6 +823,10 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
   const [currentAccountId, setCurrentAccountId] = useState<string | null>(null);
   const [tagAccountId, setTagAccountId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+  const grouping = usePlatformAccountGroups('claude_manager', clearSelection);
   const [editingAccountNoteId, setEditingAccountNoteId] = useState<string | null>(null);
   const [editingAccountNoteValue, setEditingAccountNoteValue] = useState('');
   const [savingAccountNote, setSavingAccountNote] = useState(false);
@@ -1094,7 +1101,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
 
   const filteredAccounts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return [...currentSubPlatformAccounts]
+    let result = [...currentSubPlatformAccounts]
       .filter((account) => {
         if (!query) return true;
         return [
@@ -1106,17 +1113,22 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
           account.account_note ?? '',
           ...(account.tags || []),
         ].some((value) => value.toLowerCase().includes(query));
-      })
-      .sort((a, b) => {
-        const currentFirstDiff = compareCurrentAccountFirst(
-          a.id,
-          b.id,
-          currentAccountId,
-        );
-        if (currentFirstDiff !== 0) return currentFirstDiff;
-        return (b.last_used || b.created_at) - (a.last_used || a.created_at);
       });
-  }, [searchQuery, currentSubPlatformAccounts, currentAccountId]);
+
+    if (grouping.activeGroupId) {
+      result = grouping.filterAccountsByGroup(result);
+    }
+
+    return result.sort((a, b) => {
+      const currentFirstDiff = compareCurrentAccountFirst(
+        a.id,
+        b.id,
+        currentAccountId,
+      );
+      if (currentFirstDiff !== 0) return currentFirstDiff;
+      return (b.last_used || b.created_at) - (a.last_used || a.created_at);
+    });
+  }, [searchQuery, currentSubPlatformAccounts, grouping, currentAccountId]);
 
   const filteredIds = useMemo(
     () => filteredAccounts.map((account) => account.id),
@@ -1210,10 +1222,6 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
       return next;
     });
   }, [filteredIds]);
-
-  const clearSelection = useCallback(() => {
-    setSelectedIds(new Set());
-  }, []);
 
   const openAddModal = () => {
     resetAddModalState(activeSubPlatform);
@@ -2533,7 +2541,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
             isCliSubPlatform
               ? isDesktopRuntime
                   ? t('claude.desktopOAuth.cliUnsupported', 'Claude 账号不能启动 Claude Code CLI')
-                  : t('claude.cli.quickLaunch', 'CLI 启动')
+                  : t('common.cliQuickLaunch', 'CLI 启动')
               : isApiKey
                 ? t('claude.apiKey.switchDisabled', 'API Key 账号不能写入本地登录态')
                 : isDesktopGateway
@@ -2800,7 +2808,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
       <div className="page-top-strip">
         <div className="page-top-strip-left">
           <span className="page-top-strip-label">
-            {t('settings.general.account', 'Accounts')}
+            {t('settings.general.accountManagement', 'Account')}
           </span>
           <ManualHelpIconButton className="platform-header-help" />
         </div>
@@ -2956,6 +2964,41 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
             </div>
           </div>
 
+          {(subPlatformAccountsCount > 0 || grouping.groups.length > 0) && (
+            <AccountSelectionToolbar
+              selectedCount={selectedVisibleIds.length}
+              allSelected={isAllFilteredSelected}
+              disabled={filteredIds.length === 0}
+              onToggleSelectAll={toggleSelectAllFiltered}
+              onClearSelection={clearSelection}
+              grouping={grouping}
+              accounts={currentSubPlatformAccounts}
+              selectedIds={selectedVisibleIds}
+              actions={(
+                <>
+                  {selectedExportableIds.length > 0 && (
+                    <button
+                      className="btn btn-secondary icon-only"
+                      onClick={() => void handleExport(selectedExportableIds)}
+                      disabled={exportModal.preparing}
+                      title={`${t('common.shared.export.title', '导出')} (${selectedExportableIds.length})`}
+                    >
+                      <Upload size={14} />
+                    </button>
+                  )}
+                  <button
+                    className="btn btn-danger icon-only"
+                    onClick={openBatchDeleteConfirm}
+                    disabled={selectedDeletableIds.length === 0}
+                    title={`${t('common.delete', '删除')} (${selectedDeletableIds.length})`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </>
+              )}
+            />
+          )}
+
           {store.loading && store.accounts.length === 0 ? (
             <div className="loading-container">
               <RefreshCw size={24} className="loading-spinner" />
@@ -2983,57 +3026,6 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
             </div>
           ) : (
             <>
-              <div className="codex-overview-selection-bar">
-                <div className="codex-overview-selection-left">
-                  <label className="codex-overview-select-all">
-                    <input
-                      type="checkbox"
-                      checked={isAllFilteredSelected}
-                      onChange={toggleSelectAllFiltered}
-                    />
-                    <span>{t('common.selectAll', '全选')}</span>
-                  </label>
-                  {selectedVisibleIds.length > 0 && (
-                    <>
-                      <span className="codex-overview-selected-count">
-                        {t('claude.selection.selected', '已选 {{count}}', {
-                          count: selectedVisibleIds.length,
-                        })}
-                      </span>
-                      <button
-                        type="button"
-                        className="codex-overview-clear-selection-btn"
-                        onClick={clearSelection}
-                      >
-                        {t('messages.clearSelection', '取消选择')}
-                      </button>
-                    </>
-                  )}
-                </div>
-                {selectedVisibleIds.length > 0 && (
-                  <div className="codex-overview-selection-actions">
-                    {selectedExportableIds.length > 0 && (
-                      <button
-                        className="btn btn-secondary icon-only"
-                        onClick={() => void handleExport(selectedExportableIds)}
-                        disabled={exportModal.preparing}
-                        title={`${t('common.shared.export.title', '导出')} (${selectedExportableIds.length})`}
-                      >
-                        <Upload size={14} />
-                      </button>
-                    )}
-                    <button
-                      className="btn btn-danger icon-only"
-                      onClick={openBatchDeleteConfirm}
-                      disabled={selectedDeletableIds.length === 0}
-                      title={`${t('common.delete', '删除')} (${selectedDeletableIds.length})`}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                )}
-              </div>
-
               {viewMode === 'grid' ? (
                 <div className="codex-accounts-grid">
                   {filteredAccounts.map((account) => {
@@ -3135,7 +3127,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                           renderQuotaSummary(account, 'card')
                         )}
                         <div className="codex-card-bottom">
-                          <span className="card-date">{formatDate(account.created_at)}</span>
+                          <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDate} />
                           <div className="card-footer">
                             {renderAccountActions(account, 'card')}
                           </div>
@@ -3229,7 +3221,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                             </td>
                             <td>{isProviderAccount ? null : renderPlanControl(account)}</td>
                             <td>{isProviderAccount ? renderApiKeyStatsPanel(account) : renderQuotaSummary(account, 'table')}</td>
-                            <td>{formatDate(account.created_at)}</td>
+                            <td>{account.last_used > 0 ? formatDate(account.last_used) : '—'}</td>
                             <td className="sticky-action-cell table-action-cell">
                               {renderAccountActions(account, 'table')}
                             </td>

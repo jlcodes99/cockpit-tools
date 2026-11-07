@@ -1,3 +1,4 @@
+import { isCodexLaunchCancelled } from '../utils/codexLaunchCancellation';
 import {
   useCallback,
   useEffect,
@@ -8,6 +9,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { preflightCodexProxyInstance } from "../services/codexProxyEngineService";
+import { proxyEnginePrerequisiteKey } from "../utils/codexProxyEnginePrerequisite";
 import {
   Plus,
   Play,
@@ -202,6 +205,7 @@ interface InstancesManagerProps<TAccount extends AccountLike> {
     | "trae_cn"
     | "trae_solo_cn"
     | "workbuddy"
+    | "minimax_code"
     | "zcode";
   onInstanceStarted?: (instance: InstanceProfile) => void | Promise<void>;
   onBeforeStart?: (instance: InstanceProfile) => boolean | Promise<boolean>;
@@ -601,6 +605,8 @@ const resolveFloatingCardPlatformId = (
       return "github-copilot";
     case "claude":
       return "claude_manager";
+    case "minimax_code":
+      return "minimaxcode";
     default:
       return appType;
   }
@@ -666,7 +672,7 @@ export function InstancesManager<TAccount extends AccountLike>({
   const [formPath, setFormPath] = useState("");
   const [formWorkingDir, setFormWorkingDir] = useState("");
   const [formExtraArgs, setFormExtraArgs] = useState("");
-  const [formInitMode, setFormInitMode] = useState<InstanceInitMode>("copy");
+  const [formInitMode, setFormInitMode] = useState<InstanceInitMode>("empty");
   const [formLaunchMode, setFormLaunchMode] =
     useState<InstanceLaunchMode>("app");
   const [formAppSpeed, setFormAppSpeed] = useState<CodexAppSpeed>("standard");
@@ -693,6 +699,7 @@ export function InstancesManager<TAccount extends AccountLike>({
   const [formCodexQuickConfigError, setFormCodexQuickConfigError] = useState<
     string | null
   >(null);
+  const formModelManagementSession = useRef(0);
   const [formCodexOpenConfigLoading, setFormCodexOpenConfigLoading] =
     useState(false);
   const [formCopySourceInstanceId, setFormCopySourceInstanceId] = useState("");
@@ -730,6 +737,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     [stoppingInstanceIds],
   );
   const isGrokApp = appType === "grok";
+  const canBindBeforeInitialization = isGrokApp || appType === "minimax_code";
   const supportsInstanceInitialization = !isGrokApp;
   const isCodexApp = appType === "codex";
   const isClaudeApp = appType === "claude";
@@ -1065,11 +1073,12 @@ export function InstancesManager<TAccount extends AccountLike>({
   }, [defaultRoot, editing, formName, pathAuto, formInitMode]);
 
   const resetForm = (showRoot = false) => {
+    formModelManagementSession.current += 1;
     setFormName("");
     setFormPath(showRoot && defaultRoot ? defaultRoot : "");
     setFormWorkingDir("");
     setFormExtraArgs("");
-    setFormInitMode(isGrokApp ? "empty" : "copy");
+    setFormInitMode("empty");
     setFormLaunchMode(isCliOnlyApp ? "cli" : "app");
     setFormAppSpeed("standard");
     setFormBindAccountId("");
@@ -1117,14 +1126,14 @@ export function InstancesManager<TAccount extends AccountLike>({
 
   useEffect(() => {
     if (editing) return;
-    if (formInitMode === "empty") {
+    if (formInitMode === "empty" && !canBindBeforeInitialization) {
       setFormBindAccountId("");
       return;
     }
     if (!formCopySourceInstanceId) {
       setFormCopySourceInstanceId(defaultInstanceId);
     }
-  }, [defaultInstanceId, editing, formCopySourceInstanceId, formInitMode]);
+  }, [defaultInstanceId, editing, formCopySourceInstanceId, formInitMode, canBindBeforeInitialization]);
 
   useEffect(() => {
     if (!isAccountAllowedForLaunchMode || !formBindAccountId) return;
@@ -1140,6 +1149,7 @@ export function InstancesManager<TAccount extends AccountLike>({
   ]);
 
   const openEditModal = (instance: InstanceProfile) => {
+    formModelManagementSession.current += 1;
     setOpenInlineMenuId(null);
     setEditing(instance);
     setFormName(
@@ -1219,6 +1229,26 @@ export function InstancesManager<TAccount extends AccountLike>({
     resetForm();
     setEditing(null);
   };
+
+  const handleFormModelCatalogEnabledChange = useCallback(async (enabled: boolean) => {
+    if (!showModal || !editing || actionLoading === editing.id) return;
+    if (enabled) {
+      if (!formCodexQuickConfig?.experimental_model_catalog_available) return;
+      const session = formModelManagementSession.current;
+      const confirmed = await confirmDialog(
+        t("codex.modelManagement.enableConfirmDescription"),
+        {
+          title: t("codex.modelManagement.enableConfirmTitle", "开启模型管理？"),
+          okLabel: t("codex.modelManagement.enableConfirmAction", "开启并配置"),
+          cancelLabel: t("common.cancel", "取消"),
+          kind: "warning",
+        },
+      );
+      if (!confirmed || session !== formModelManagementSession.current) return;
+    }
+    setFormCodexQuickConfigError(null);
+    setFormExperimentalModelCatalogEnabled(enabled);
+  }, [actionLoading, editing, formCodexQuickConfig, showModal, t]);
 
   const clearDeleteConfirm = useCallback(() => {
     setDeleteConfirmInstance(null);
@@ -1345,6 +1375,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     let nextExperimentalModels = formExperimentalModels;
     let nextExperimentalModelCatalogEnabled =
       formExperimentalModelCatalogEnabled;
+    let routingEnabledForSave = formModelRoutingEnabled;
     if (isCodexApp && formModelRoutingEnabled) {
       if (
         editing &&
@@ -1378,15 +1409,19 @@ export function InstancesManager<TAccount extends AccountLike>({
         isApiServiceBindId(formBindAccountId) ||
         Boolean(parseProviderGatewayBindAccountId(formBindAccountId))
       ) {
-        setFormError(
-          t(
+        // 绑定账号不是可直接登录的 OAuth 订阅账号：路由自动关闭（渠道配置保留），
+        // 不能用路由拦住这次保存或后续启动。
+        setMessage({
+          text: t(
             "instances.form.modelRouting.oauthRequired",
             "混合模型路由需要绑定一个直接登录的 OAuth 订阅账号。",
           ),
-        );
-        setFormErrorTick((prev) => prev + 1);
-        return;
+        });
+        setFormModelRoutingEnabled(false);
+        routingEnabledForSave = false;
       }
+      if (routingEnabledForSave) {
+      // 仍然启用路由时才校验路由配置；绑定账号不支持路由时只保存关闭状态。
       if (formModelRoutes.length === 0) {
         setFormError(
           t(
@@ -1463,7 +1498,7 @@ export function InstancesManager<TAccount extends AccountLike>({
         accounts,
         true,
       );
-      nextExperimentalModelCatalogEnabled = true;
+      }
     } else if (editing && isCodexApp && editing.modelRouting?.enabled) {
       nextModelRouting = buildCodexModelRoutingValue(false, formModelRoutes);
       nextExperimentalModels = syncExperimentalModelsWithRouting(
@@ -1473,7 +1508,7 @@ export function InstancesManager<TAccount extends AccountLike>({
         false,
       );
     }
-    if (editing && isCodexApp && !formModelRoutingEnabled) {
+    if (editing && isCodexApp && !routingEnabledForSave) {
       nextModelRouting = buildCodexModelRoutingValue(false, formModelRoutes);
     }
     const nextCatalog = resolveRoutingCatalog(
@@ -1544,7 +1579,7 @@ export function InstancesManager<TAccount extends AccountLike>({
           updatePayload.name = formName.trim();
         }
         const canEditBind =
-          isGrokApp || !(editing.initialized === false && !isEditingDefault);
+          canBindBeforeInitialization || !(editing.initialized === false && !isEditingDefault);
         if (canEditBind) {
           const nextBindId = resolveBindAccountValue(formBindAccountId);
           if (nextBindId !== (editing.bindAccountId ?? null)) {
@@ -1571,6 +1606,8 @@ export function InstancesManager<TAccount extends AccountLike>({
           await updateInstance(updatePayload);
         }
         if (restartAfterSave) {
+          // Preserve the running client when its configured proxy engine is not ready.
+          if (isCodexApp) await preflightCodexProxyInstance(editing.id);
           try {
             await stopInstance(editing.id);
             await startInstance(editing.id);
@@ -1619,7 +1656,7 @@ export function InstancesManager<TAccount extends AccountLike>({
           initMode: isGrokApp ? "empty" : formInitMode,
           launchMode: nextLaunchMode,
           appSpeed: isCodexApp ? formAppSpeed : undefined,
-          bindAccountId: isCreateEmpty
+          bindAccountId: isCreateEmpty && !canBindBeforeInitialization
             ? null
             : resolveBindAccountValue(formBindAccountId),
           modelRouting: nextModelRouting,
@@ -1638,7 +1675,7 @@ export function InstancesManager<TAccount extends AccountLike>({
           );
         }
         setMessage({
-          text: isCreateEmpty
+          text: isCreateEmpty && !canBindBeforeInitialization
             ? t(
                 "instances.messages.emptyCreated",
                 "空白实例已创建，请先启动一次后再绑定账号",
@@ -1648,7 +1685,8 @@ export function InstancesManager<TAccount extends AccountLike>({
       }
       closeModal();
     } catch (e) {
-      setFormError(getCodexExperimentalModelErrorMessage(t, e) ?? String(e));
+      const prerequisite = proxyEnginePrerequisiteKey(e);
+      setFormError(prerequisite ? t(prerequisite) : getCodexExperimentalModelErrorMessage(t, e) ?? String(e));
       setFormErrorTick((prev) => prev + 1);
     } finally {
       setActionLoading(null);
@@ -1687,6 +1725,7 @@ export function InstancesManager<TAccount extends AccountLike>({
   );
 
   const handleMissingPathError = (error: unknown, instanceId?: string) => {
+    if (isCodexApp && isCodexLaunchCancelled(error)) return true;
     const message = String(error ?? "");
     const missingPathPrefix = "APP_PATH_NOT_FOUND:";
     const multiInstanceExePrefix = "CLAUDE_MULTI_INSTANCE_REQUIRES_EXE:";
@@ -1725,25 +1764,6 @@ export function InstancesManager<TAccount extends AccountLike>({
     window.dispatchEvent(
       new CustomEvent("app-path-missing", { detail: { app, retry } }),
     );
-    return true;
-  };
-
-  const handleCodexManagedStoreLaunchError = (error: unknown) => {
-    const message = String(error ?? "").replace(/^Error:\s*/, "");
-    const prefix = "CODEX_MANAGED_STORE_LAUNCH_UNSAFE:";
-    if (appType !== "codex" || !message.startsWith(prefix)) {
-      return false;
-    }
-
-    const detail = message.slice(prefix.length).trim();
-    setMessage({
-      text: t(
-        "instances.messages.codexManagedStoreLaunchUnsafe",
-        "Windows Store 无法可靠传递实例目录，已阻止打开默认账号。请将该实例的启动方式切换为 CLI 后重试。详情：{{detail}}",
-        { detail },
-      ),
-      tone: "error",
-    });
     return true;
   };
 
@@ -1816,6 +1836,7 @@ export function InstancesManager<TAccount extends AccountLike>({
         }
         return "started";
       } catch (e) {
+        if (isCodexApp && isCodexLaunchCancelled(e)) return "failed";
         if (isCodexApp && isCodexInstanceAccountConflict(e)) {
           return "failed";
         }
@@ -1831,9 +1852,6 @@ export function InstancesManager<TAccount extends AccountLike>({
         }
         if (handleMissingPathError(e, instance.id)) {
           return "missing-path";
-        }
-        if (handleCodexManagedStoreLaunchError(e)) {
-          return "failed";
         }
         const retryStart = async () => {
           const startedInstance = await startInstance(instance.id);
@@ -1868,7 +1886,6 @@ export function InstancesManager<TAccount extends AccountLike>({
     },
     [
       handleMissingPathError,
-      handleCodexManagedStoreLaunchError,
       isCodexApp,
       markInstanceStarting,
       onBeforeStart,
@@ -2004,6 +2021,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     setRunningNoticeInstance(null);
     setActionLoading(target.id);
     try {
+      if (isCodexApp) await preflightCodexProxyInstance(target.id);
       await stopInstance(target.id);
       const latest = await refreshInstances();
       const refreshedTarget = latest.find((item) => item.id === target.id) || {
@@ -2017,7 +2035,8 @@ export function InstancesManager<TAccount extends AccountLike>({
       if (handleMissingPathError(e, target.id)) {
         return;
       }
-      setMessage({ text: String(e), tone: "error" });
+      const prerequisite = proxyEnginePrerequisiteKey(e);
+      setMessage({ text: prerequisite ? t(prerequisite) : String(e), tone: "error" });
     } finally {
       setRestartingAll(false);
       setActionLoading(null);
@@ -2513,6 +2532,22 @@ export function InstancesManager<TAccount extends AccountLike>({
 
   const handleFormAccountChange = (nextId: string | null) => {
     setFormBindAccountId(resolveBindAccountValue(nextId) ?? "");
+    if (!isCodexApp || !formModelRoutingEnabled) return;
+    // 混合模型路由只在绑定可直接登录的 OAuth 订阅账号时生效。
+    // 换成普通账号 / API Key 账号 / API 服务时自动关闭路由（渠道配置保留），
+    // 不能因为路由拦住普通的账号切换与实例启动。
+    const nextAccount = nextId
+      ? accounts.find((item) => item.id === nextId) ?? null
+      : null;
+    if (!nextAccount || nextAccount.auth_mode === "apikey") {
+      setFormModelRoutingEnabled(false);
+      setMessage({
+        text: t(
+          "instances.form.modelRouting.oauthRequired",
+          "混合模型路由需要绑定一个直接登录的 OAuth 订阅账号。",
+        ),
+      });
+    }
   };
 
   const handleInitGuideStart = async () => {
@@ -2537,7 +2572,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     instance: InstanceProfile,
     nextId: string | null,
   ) => {
-    if (!isGrokApp && instance.initialized === false) {
+    if (!canBindBeforeInitialization && instance.initialized === false) {
       setInitGuideInstance(instance);
       return;
     }
@@ -2743,7 +2778,7 @@ export function InstancesManager<TAccount extends AccountLike>({
               isApiService: accountIsApiService,
             } = resolveAccount(instance);
             const accountDisabledByInit =
-              !isGrokApp &&
+              !canBindBeforeInitialization &&
               !instance.isDefault &&
               instance.initialized === false;
             const isInstanceStarting = startingInstanceIdSet.has(instance.id);
@@ -3098,7 +3133,7 @@ export function InstancesManager<TAccount extends AccountLike>({
               <p className="form-hint">
                 {t(
                   "instances.delete.message",
-                  "确认删除实例 {{name}}？将移除配置并删除实例目录。",
+                  "确认删除实例 {{name}}？将移除实例记录，并将受管实例目录移入回收站；自定义目录和受保护目录会保留。",
                   {
                     name: deleteConfirmInstance.name,
                   },
@@ -3270,7 +3305,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                       </span>
                     </label>
                   </div>
-                  {formInitMode === "empty" && (
+                  {formInitMode === "empty" && !canBindBeforeInitialization && (
                     <div className="instance-init-note">
                       {t(
                         "instances.form.emptyInitHint",
@@ -3451,7 +3486,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                       ? `（${t("instances.form.optional", "可选")}）`
                       : ""}
                   </label>
-                  {supportsInstanceInitialization &&
+                  {!canBindBeforeInitialization &&
                   formInitMode === "empty" ? (
                     <>
                       {renderFormAccountSelect({
@@ -3480,7 +3515,7 @@ export function InstancesManager<TAccount extends AccountLike>({
               ) : (
                 <div className="form-group">
                   <label>{t("instances.form.bindAccount", "绑定账号")}</label>
-                  {!isGrokApp &&
+                  {!canBindBeforeInitialization &&
                   editing?.initialized === false &&
                   !editing.isDefault ? (
                     <>
@@ -3534,7 +3569,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                       setFormModelRoutingEnabled(enabled);
                       const catalog = resolveRoutingCatalog(
                         syncExperimentalModelsWithRouting(formExperimentalModels, formModelRoutes, accounts, enabled),
-                        enabled || formExperimentalModelCatalogEnabled,
+                        formExperimentalModelCatalogEnabled,
                         formExperimentalDefaultModelId,
                       );
                       setFormExperimentalModelCatalogEnabled(catalog.enabled);
@@ -3637,6 +3672,14 @@ export function InstancesManager<TAccount extends AccountLike>({
                               ? t("codex.modelManagement.enabledDescription")
                               : t("codex.modelManagement.disabledDescription")}
                           </p>
+                          {formModelRoutingEnabled && (
+                            <p className="form-hint">
+                              {t(
+                                "codex.modelManagement.routingManagedHint",
+                                "混合模型路由只在实例运行时临时使用这份模型目录，停止后自动恢复；它不会改动这里的开关状态。",
+                              )}
+                            </p>
+                          )}
                           {formExperimentalModelUnavailableMessage && (
                             <div className="form-error instance-codex-experimental-model__error">
                               {formExperimentalModelUnavailableMessage}
@@ -3648,36 +3691,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                             id="instance-codex-experimental-model-catalog"
                             type="checkbox"
                             checked={formExperimentalModelCatalogEnabled}
-                            onChange={(event) => {
-                              setFormCodexQuickConfigError(null);
-                              const enabled = event.target.checked;
-                              if (enabled) {
-                                void confirmDialog(
-                                  t(
-                                    "codex.modelManagement.enableConfirmDescription",
-                                    "开启后，Codex 将以这里配置的模型目录为准。你可以添加、删除和调整模型，但模型列表不会再自动跟随官方变化。",
-                                  ),
-                                  {
-                                    title: t(
-                                      "codex.modelManagement.enableConfirmTitle",
-                                      "开启模型管理？",
-                                    ),
-                                    okLabel: t(
-                                      "codex.modelManagement.enableConfirmAction",
-                                      "开启并配置",
-                                    ),
-                                    cancelLabel: t("common.cancel", "取消"),
-                                    kind: "warning",
-                                  },
-                                ).then((confirmed) => {
-                                  if (confirmed) {
-                                    setFormExperimentalModelCatalogEnabled(true);
-                                  }
-                                });
-                                return;
-                              }
-                              setFormExperimentalModelCatalogEnabled(false);
-                            }}
+                            onChange={(event) => void handleFormModelCatalogEnabledChange(event.target.checked)}
                             disabled={
                               actionLoading === editing.id ||
                               (!formExperimentalModelCatalogEnabled &&
@@ -3687,8 +3701,9 @@ export function InstancesManager<TAccount extends AccountLike>({
                           <span className="instance-codex-experimental-model__switch-track" />
                         </label>
                       </div>
-                      {formExperimentalModelCatalogEnabled && (
+                      {(formExperimentalModelCatalogEnabled || formModelRoutingEnabled) && (
                         <CodexExperimentalModelEditor
+                          instanceId={editing.id}
                           models={formExperimentalModels}
                           defaultModelId={formExperimentalDefaultModelId}
                           mode="summary"
@@ -3713,7 +3728,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                               toggleRouteModelInRoutes(prevRoutes, addedId, accounts, "add"),
                             );
                           }}
-                          disabled={actionLoading === editing.id}
+                          disabled={actionLoading === editing.id || !formExperimentalModelCatalogEnabled}
                         />
                       )}
                       {formCodexQuickConfigError && (

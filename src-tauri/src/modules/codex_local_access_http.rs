@@ -237,6 +237,11 @@ fn apply_explicit_context_windows_to_client_models(
         if let Some(object) = model.as_object_mut() {
             object.insert("context_window".to_string(), json!(window));
             object.insert("max_context_window".to_string(), json!(window));
+            // 统一口径：写窗口时必须同时写压缩阈值（90%），避免目录里出现半边配置。
+            object.insert(
+                "auto_compact_token_limit".to_string(),
+                json!(codex_protocol::derived_auto_compact_token_limit(window)),
+            );
         }
     }
     catalog
@@ -551,6 +556,11 @@ fn resolve_upstream_target(target: &str) -> Result<String, String> {
 
 fn account_upstream_base_url(account: &CodexAccount) -> String {
     if !account.is_api_key_auth() {
+        // Test-only loopback target for the real account-scoped background path.
+        #[cfg(test)]
+        if let Ok(base) = std::env::var("CODEX_BACKGROUND_TEST_SERVER") {
+            return base;
+        }
         return UPSTREAM_CODEX_BASE_URL.to_string();
     }
 
@@ -2247,7 +2257,6 @@ async fn send_upstream_request_with_authorization_url(
 ) -> Result<reqwest::Response, String> {
     let method =
         Method::from_bytes(method.as_bytes()).map_err(|e| format!("不支持的请求方法: {}", e))?;
-    let client = upstream_http_client(upstream_proxy_url, connect_timeout)?;
     let upstream_body = build_account_scoped_upstream_body(
         target,
         body,
@@ -2255,13 +2264,23 @@ async fn send_upstream_request_with_authorization_url(
         image_generation_mode,
         request_kind,
     )?;
+    let (client, upstream_body, headers) = prepare_direct_account_transport(
+        account,
+        url,
+        headers,
+        upstream_body.as_ref(),
+        authorization,
+        upstream_proxy_url,
+        connect_timeout,
+    )
+    .await?;
     let max_send_retries = timeouts.upstream_send_retry_attempts as usize;
     for retry_attempt in 0..=max_send_retries {
         let mut request = client.request(method.clone(), url);
 
         let session_id =
-            header_value(headers, "session-id").or_else(|| header_value(headers, "session_id"));
-        for (name, value) in headers {
+            header_value(&headers, "session-id").or_else(|| header_value(&headers, "session_id"));
+        for (name, value) in &headers {
             if matches!(
                 name.as_str(),
                 "authorization"
@@ -2303,19 +2322,20 @@ async fn send_upstream_request_with_authorization_url(
         if !headers.contains_key("accept") {
             request = request.header(
                 ACCEPT,
-                if is_stream_request(headers, upstream_body.as_ref()) {
+                if is_stream_request(&headers, upstream_body.as_ref()) {
                     "text/event-stream"
                 } else {
                     "application/json"
                 },
             );
         }
-        request = request.header("Connection", "Keep-Alive");
+        // HTTP/1.1 pools keep connections alive by default; an explicit
+        // Connection header is forbidden when ALPN negotiates HTTP/2.
         if !headers.contains_key("content-type") && !upstream_body.is_empty() {
             request = request.header(CONTENT_TYPE, "application/json");
         }
         if !upstream_body.is_empty() {
-            request = request.body(upstream_body.as_ref().to_vec());
+            request = request.body(upstream_body.clone());
         }
 
         match request.send().await {

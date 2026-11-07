@@ -1,0 +1,91 @@
+.codex-session-identity-mapping {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.codex-session-identity-mapping > label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.codex-session-identity-mapping > label > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.codex-session-identity-mapping input[type="checkbox"] {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 1.5px solid var(--border-strong, var(--border));
+  border-radius: 6px;
+  background: var(--bg-surface);
+  cursor: pointer;
+}
+
+.codex-session-identity-mapping input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background: var(--primary) url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3.5 8.2 6.6 11.2 12.6 4.8' fill='none' stroke='white' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px 14px no-repeat;
+}
+
+.codex-session-identity-mapping input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.codex-session-identity-mapping input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.codex-session-identity-mapping-compact {
+  flex: 0 1 300px;
+  max-width: 100%;
+}
+
+.codex-session-identity-confirm-overlay {
+  z-index: 11000;
+  overflow-y: auto;
+  align-items: safe center;
+}
+
+.modal.codex-session-identity-confirm {
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.codex-session-identity-confirm .modal-header,
+.codex-session-identity-confirm .modal-footer {
+  flex-shrink: 0;
+}
+
+.codex-session-identity-confirm .modal-header h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.codex-session-identity-confirm .modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.codex-session-identity-confirm .modal-body p {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.codex-session-identity-confirm .modal-body p:last-child {
+  margin-bottom: 0;
+}

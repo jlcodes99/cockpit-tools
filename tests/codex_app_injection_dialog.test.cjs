@@ -1,0 +1,366 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const test = require('node:test');
+
+const source = fs.readFileSync(path.join(__dirname, '../src-tauri/src/modules/codex_app_injection_dialog.js'), 'utf8');
+const labels = JSON.parse(fs.readFileSync(path.join(__dirname, '../src/locales/en.json'), 'utf8'));
+const usageLabels = { ...labels.common.codexUsage,
+  remoteGatewayName: labels.common.apiBudget.gatewayName,
+  remoteKeyScope: labels.common.apiBudget.keyScope,
+  remoteUpgradeRequired: labels.common.apiBudget.upgradeRequired,
+  remotePreparing: labels.common.apiBudget.preparing,
+  requestId: labels.common.requestId,
+  imageGeneration: labels.codex.localAccess.requestKind.imageGeneration,
+  imageEdit: labels.codex.localAccess.requestKind.imageEdit,
+  requestTier: labels.codex.apiService.logs.requestedTier,
+  responseTier: labels.codex.apiService.logs.responseTier,
+  legacyTier: labels.codex.apiService.logs.legacyTier,
+  tierHint: labels.codex.apiService.logs.serviceTierHint,
+  tierFast: labels.codex.speed.fast, tierUltrafast: labels.codex.speed.ultrafast,
+  tierStandard: labels.codex.speed.standard, tierAuto: labels.codex.contextOverride.automatic,
+  tierUnknown: labels.common.requestProxy.unknown,
+};
+const thread = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+const row = (id, extra = {}) => ({ id, timestamp: 1792545981000, accountDisplayName: 'user@example.com',
+  model: 'gpt-6.1-sol', reasoningEffort: 'high', success: true, httpStatus: 200,
+  inputTokens: 1000, outputTokens: 214, cachedTokens: 700, totalTokens: 1214,
+  outputGenerationMs: 3240, latencyMs: 14140, firstResponseMs: 10910, ...extra });
+
+test('remote logs stay in the Key view, hide private route fields and page in place', () => {
+  const h = harness();
+  h.root.usageState.__remoteService = { product: 'cockpit-tools', keyLabel: 'B' };
+  h.action('tab', 'logs');
+  h.respond({ requests: { rows: [row(1, { requestId: 'public-request-1', upstreamModel: 'private-upstream' })], nextCursor: 'remote-cursor' } });
+  assert.ok(h.details.innerHTML.includes(usageLabels.requestId));
+  assert.ok(h.details.innerHTML.includes('public-request-1'));
+  assert.ok(!h.details.innerHTML.includes('user@example.com'));
+  assert.ok(!h.details.innerHTML.includes('private-upstream'));
+  h.action('more');
+  const query = h.api.query(h.root);
+  assert.equal(query.view, 'logs');
+  assert.equal(query.cursor, 'remote-cursor');
+  h.respond({ requests: { rows: [row(2, { requestId: 'public-request-2' })], nextCursor: null } });
+  assert.equal(h.root.dialogState.rows.length, 2);
+  h.action('scope', 'service');
+  assert.ok(h.details.innerHTML.includes(usageLabels.remoteKeyScope));
+});
+
+test('remote failures distinguish unsupported services, preparing data and network failures', () => {
+  for (const [reason, label] of [ ['remote_unsupported', 'remoteUpgradeRequired'], ['statistics_preparing', 'remotePreparing'], ['remote_unreachable', 'dataFailed'] ]) {
+    const h = harness();
+    h.root.usageState.__remoteService = { product: 'cockpit-tools' };
+    h.respond({ available: false, unavailableReason: reason });
+    assert.ok(h.details.innerHTML.includes(usageLabels[label]), reason);
+    const token = h.api.query(h.root).requestToken;
+    h.advance(2001);
+    assert.equal(h.api.query(h.root).requestToken !== token, reason !== 'remote_unsupported');
+  }
+});
+
+test('image requests have explicit operation labels without text reasoning or speed mode rows', () => {
+  for (const [kind,labelKey] of [['image_generation','imageGeneration'],['image_edit','imageEdit']]) {
+    const h=harness();h.root.usageState.__remoteService={product:'cockpit-tools'};
+    h.action('tab','logs');
+    h.respond({requests:{rows:[row(1,{model:'gpt-image-2.5',requestKind:kind,reasoningEffort:null})]}});
+    assert.ok(h.details.innerHTML.includes('gpt-image-2.5'));
+    assert.ok(h.details.innerHTML.includes(usageLabels[labelKey]));
+    assert.ok(!h.details.innerHTML.includes(usageLabels.requestTier.split('{{')[0]));
+  }
+});
+
+function harness() {
+  let now = 1792546000000;
+  class Clock extends Date { static now() { return now; } }
+  const dispatched = [];
+  const window = { __cockpitUsageRequest: (value) => dispatched.push(JSON.parse(value)) };
+  const context = { Date: Clock, window, usageLabels, missingLabel: '—', closeLabel: 'Close',
+    plans: [], balanceLines: [], grokLines: [], accountCount: 0, availableAccountCount: 0,
+    abnormalAccountCount: 0, cooldownAccountCount: 0, accountPoolLabel: 'Accounts', balanceLabel: 'Balance',
+    grokEmptyLabel: 'No Grok quota', quotaOverviewLabel: 'Quota', planLabel: 'Plan', fiveHourLabel: '5h',
+    weeklyLabel: 'Week', quotaEmptyLabel: 'No quota', officialLabel: 'Official', document: { activeElement: null } };
+  const api = vm.runInNewContext(source, context);
+  const buttons = [ ['tab','overview'], ['tab','logs'], ['scope','chat'], ['scope','service'],
+    ['period','today'], ['period','week'], ['more',null], ['retry',null] ].map(([action,value]) => ({
+      disabled: false, getAttribute: (key) => key === 'data-cockpit-dialog-action' ? action : key === 'data-value' ? value : null,
+      focus() {}, action, value,
+    }));
+  const body = { scrollTop: 0 };
+  const details = { innerHTML: '', contains: () => false,
+    querySelector: (selector) => selector === '.cockpit-usage-body' || selector === '.request-scroll' ? body
+      : buttons.find((button) => selector.includes(`"${button.action}"`) && (!button.value || selector.includes(`"${button.value}"`))) || null,
+    querySelectorAll: () => buttons,
+  };
+  const input = { badgeKind: 'codex', averageSpeed: '29 tok/s', averageCache: '74%', speed: '66 tok/s', cache: '74%', formatMoney: () => '—', shortProductLabel: String };
+  const root = { threadId: thread, quotaDetailsOpen: true, hostAvailable: true,
+    usageState: { __binding: { binding: 'service-key-instance' } } };
+  root.render = () => api.render(root, details, input);
+  const respond = (patch = {}, query = api.query(root)) => {
+    root.usageState.__dialog = { [query.requestToken]: { ...query, available: true, ...patch } };
+    api.query(root);
+    root.render();
+  };
+  const action = (name, value) => { root.render(); buttons.find((button) => button.action === name && (value == null || button.value === value)).onclick(); };
+  return { api, root, details, input, dispatched, respond, action, advance: (ms) => { now += ms; } };
+}
+
+test('first query dispatches immediately once and old binding responses cannot populate a new binding', () => {
+  const h = harness();
+  const query = h.api.query(h.root);
+  assert.equal(h.dispatched.length, 1);
+  assert.equal(query.binding, 'service-key-instance');
+  h.api.query(h.root);
+  assert.equal(h.dispatched.length, 1);
+  h.respond({ binding: 'former-key', summary: { requests: 1 } }, query);
+  assert.equal(h.root.dialogState.summary, null);
+  h.respond({ summary: { requests: 2 } }, query);
+  assert.equal(h.root.dialogState.summary.requests, 2);
+  h.root.usageState.__binding.binding = 'new-key';
+  const next = h.api.query(h.root);
+  assert.notEqual(next.requestToken, query.requestToken);
+  assert.equal(h.root.dialogState.rows.length, 0);
+  h.respond({ ...query, summary: { requests: 1 } }, next);
+  assert.equal(h.root.dialogState.summary, null);
+});
+
+test('tab switches and refresh failures retain verified rows, while a successful empty query clears them', () => {
+  const h = harness();
+  h.action('tab', 'logs');
+  h.respond({ requests: { rows: [row(1)], nextCursor: 'next' } });
+  h.action('tab', 'overview');
+  h.action('tab', 'logs');
+  assert.equal(h.root.dialogState.rows.length, 1);
+  h.respond({ error: true });
+  assert.equal(h.root.dialogState.rows.length, 1);
+  assert.ok(h.details.innerHTML.includes(usageLabels.dataFailed));
+  h.action('retry');
+  h.respond({ available: false, unavailableReason: 'service_unavailable', requests: { rows: [] } });
+  assert.equal(h.root.dialogState.rows.length, 1);
+  assert.ok(h.details.innerHTML.includes(usageLabels.serviceUnavailable));
+  h.action('retry');
+  h.respond({ requests: { rows: [], nextCursor: null } });
+  assert.equal(h.root.dialogState.rows.length, 0);
+  assert.ok(h.details.innerHTML.includes(usageLabels.noRequests));
+});
+
+test('scope snapshots never mix chat rows with all-service rows and restore instantly on return', () => {
+  const h = harness();
+  h.action('tab', 'logs');
+  h.respond({ requests: { rows: [row(1)] } });
+  h.action('scope', 'service');
+  assert.equal(h.root.dialogState.rows.length, 0);
+  h.respond({ requests: { rows: [row(2), row(3)] } });
+  h.action('scope', 'chat');
+  assert.deepEqual(Array.from(h.root.dialogState.rows, (item) => item.id), [1]);
+  h.action('scope', 'service');
+  assert.deepEqual(Array.from(h.root.dialogState.rows, (item) => item.id), [2, 3]);
+});
+
+test('new thread discards rows and late results even when service binding did not change', () => {
+  const h = harness();
+  h.action('tab', 'logs');
+  const old = h.api.query(h.root);
+  h.respond({ requests: { rows: [row(1)] } });
+  h.root.threadId = 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff';
+  const next = h.api.query(h.root);
+  assert.equal(h.root.dialogState.rows.length, 0);
+  h.respond({ ...old, requests: { rows: [row(2)] } }, next);
+  assert.equal(h.root.dialogState.rows.length, 0);
+});
+
+test('view more opens host logs with the selected scope even without another page', () => {
+  const h = harness();
+  h.action('tab', 'logs');
+  h.respond({ requests: { rows: [row(1)], nextCursor: null } });
+  h.action('more');
+  let query = h.api.query(h.root);
+  assert.equal(query.view, 'openLogs');
+  assert.equal(query.scope, 'chat');
+  assert.equal(query.threadId, thread);
+  assert.equal(query.cursor, null);
+  h.respond({});
+  h.action('scope', 'service');
+  h.respond({ requests: { rows: [], nextCursor: null } });
+  h.action('more');
+  query = h.api.query(h.root);
+  assert.equal(query.view, 'openLogs');
+  assert.equal(query.scope, 'service');
+  assert.equal(query.cursor, null);
+});
+
+test('missing replies time out with retry feedback without replacing existing rows by empty data', () => {
+  const h = harness();
+  h.action('tab', 'logs');
+  h.respond({ requests: { rows: [row(1)] } });
+  h.api.refresh(h.root);
+  h.advance(10001);
+  h.root.render();
+  assert.equal(h.root.dialogState.error, true);
+  assert.equal(h.root.dialogState.rows.length, 1);
+  assert.ok(h.details.innerHTML.includes(usageLabels.dataFailed));
+});
+
+test('transient failures retry with backoff, preserve verified statistics and resume refresh after recovery', () => {
+  const h = harness();
+  h.respond({ summary: { requests: 37 } });
+  h.api.refresh(h.root);
+  const failed = h.api.query(h.root);
+  h.respond({ error: true }, failed);
+  h.advance(1999);
+  assert.equal(h.api.query(h.root).requestToken, failed.requestToken);
+  h.advance(1);
+  const retry = h.api.query(h.root);
+  assert.notEqual(retry.requestToken, failed.requestToken);
+  assert.equal(h.root.dialogState.summary.requests, 37);
+  assert.equal(h.root.dialogState.error, false);
+  const count = h.dispatched.length;
+  h.advance(3000);
+  h.api.query(h.root);
+  assert.equal(h.dispatched.length, count, 'an in-flight retry is not duplicated');
+  h.respond({ summary: { requests: 38 } }, retry);
+  h.advance(5001);
+  assert.notEqual(h.api.query(h.root).requestToken, retry.requestToken);
+  assert.equal(h.root.dialogState.summary.requests, 38);
+  h.respond({ error: true });
+  const nextFailure = h.api.query(h.root);
+  h.advance(2000);
+  assert.notEqual(h.api.query(h.root).requestToken, nextFailure.requestToken, 'success resets backoff');
+});
+
+test('automatic retries stop after three attempts and manual retry starts a new bounded recovery', () => {
+  const h = harness();
+  let pending = h.api.query(h.root);
+  for (const delay of [2000, 5000, 10000]) {
+    h.respond({ error: true }, pending);
+    h.advance(delay - 1);
+    assert.equal(h.api.query(h.root).requestToken, pending.requestToken);
+    h.advance(1);
+    const retry = h.api.query(h.root);
+    assert.notEqual(retry.requestToken, pending.requestToken);
+    pending = retry;
+  }
+  h.respond({ error: true }, pending);
+  h.advance(60000);
+  assert.equal(h.api.query(h.root).requestToken, pending.requestToken);
+  assert.equal(h.root.dialogState.error, true);
+  h.action('retry');
+  const manual = h.api.query(h.root);
+  assert.notEqual(manual.requestToken, pending.requestToken);
+  h.respond({ error: true }, manual);
+  h.advance(2000);
+  assert.notEqual(h.api.query(h.root).requestToken, manual.requestToken);
+});
+
+test('navigation failures stay in the dialog and retry only on an explicit click', () => {
+  const h = harness();
+  h.action('tab', 'logs');
+  h.respond({ requests: { rows: [row(1)], nextCursor: null } });
+  h.action('more');
+  const failed = h.api.query(h.root);
+  h.advance(10001);
+  h.api.query(h.root);
+  h.advance(60000);
+  assert.equal(h.api.query(h.root).requestToken, failed.requestToken);
+  assert.equal(h.root.dialogState.rows.length, 1);
+  assert.equal(h.root.dialogState.error, true);
+  h.action('retry');
+  const retry = h.api.query(h.root);
+  assert.notEqual(retry.requestToken, failed.requestToken);
+  assert.equal(retry.view, 'openLogs');
+  h.respond({});
+  assert.equal(h.root.dialogState.error, false);
+});
+
+test('service outages retry finitely while unlinked sessions and invalid schemas wait for manual action', () => {
+  for (const reason of ['service_unavailable', 'unlinked_session', 'schema_unavailable', 'binding_changed']) {
+    const h = harness();
+    let pending = h.api.query(h.root);
+    h.respond({ available: false, unavailableReason: reason }, pending);
+    if (reason === 'service_unavailable') {
+      for (const delay of [2000, 5000, 10000]) {
+        h.advance(delay);
+        const retry = h.api.query(h.root);
+        assert.notEqual(retry.requestToken, pending.requestToken);
+        h.root.render();
+        assert.ok(!h.details.innerHTML.includes(usageLabels.serviceUnavailable), 'resubmission clears the old error');
+        h.respond({ available: false, unavailableReason: reason }, retry);
+        pending = retry;
+      }
+    }
+    h.advance(60000);
+    assert.equal(h.api.query(h.root).requestToken, pending.requestToken, reason);
+  }
+});
+
+test('host disconnection pauses retries and reconnection starts a fresh read without opening the main window', () => {
+  const h = harness();
+  h.respond({ summary: { requests: 37 } });
+  h.api.refresh(h.root);
+  const failed = h.api.query(h.root);
+  h.respond({ error: true }, failed);
+  h.root.hostAvailable = false;
+  h.api.query(h.root);
+  const count = h.dispatched.length;
+  h.advance(60000);
+  assert.equal(h.api.query(h.root), null);
+  assert.equal(h.dispatched.length, count);
+  h.root.hostAvailable = true;
+  const retry = h.api.query(h.root);
+  assert.notEqual(retry.requestToken, failed.requestToken);
+  assert.equal(h.root.dialogState.summary.requests, 37);
+  h.respond({ summary: { requests: 38 } }, retry);
+  assert.equal(h.root.dialogState.summary.requests, 38);
+});
+
+test('closing the dialog cancels retry work and switching binding rejects late recovery replies', () => {
+  const h = harness();
+  const old = h.api.query(h.root);
+  h.respond({ error: true }, old);
+  h.root.quotaDetailsOpen = false;
+  h.api.cancel(h.root);
+  const count = h.dispatched.length;
+  h.advance(60000);
+  assert.equal(h.api.query(h.root), null);
+  assert.equal(h.dispatched.length, count);
+  h.root.quotaDetailsOpen = true;
+  h.root.usageState.__binding.binding = 'another-service';
+  const next = h.api.query(h.root);
+  assert.notEqual(next.requestToken, old.requestToken);
+  h.respond({ ...old, summary: { requests: 999 } }, next);
+  assert.equal(h.root.dialogState.summary, null);
+});
+
+test('unlinked chat and unavailable service have different messages, neither claims an empty successful query', () => {
+  const h = harness();
+  h.action('tab', 'logs');
+  h.respond({ available: false, unavailableReason: 'unlinked_session' });
+  assert.ok(h.details.innerHTML.includes(usageLabels.unlinkedSession));
+  assert.ok(!h.details.innerHTML.includes(usageLabels.noRequests));
+  h.action('retry');
+  h.respond({ available: false, unavailableReason: 'service_unavailable' });
+  assert.ok(h.details.innerHTML.includes(usageLabels.serviceUnavailable));
+  assert.ok(!h.details.innerHTML.includes(usageLabels.noRequests));
+});
+
+test('tiers show explicit requested aliases separately from raw response, retain legacy provenance and escape content', () => {
+  const h = harness();
+  h.action('tab', 'logs');
+  h.respond({ requests: { rows: [
+    row(1, { requestedServiceTier: 'FAST', responseServiceTier: 'default' }),
+    row(2, { serviceTier: 'priority' }),
+    row(3, { requestedServiceTier: 'auto', serviceTierAdaptation: { requestedTier: 'priority', sentTier: 'default', reason: 'official_default_only' } }),
+    row(4, { requestedServiceTier: '<script>bad()</script>', responseServiceTier: 'priority' }),
+  ] } });
+  const html = h.details.innerHTML;
+  assert.ok(html.includes(usageLabels.requestTier.replace('{{tier}}', usageLabels.tierFast)));
+  assert.ok(html.includes(usageLabels.responseTier.replace('{{tier}}', 'default')));
+  assert.ok(html.includes(usageLabels.legacyTier.replace('{{tier}}', 'priority')));
+  assert.ok(html.includes(usageLabels.tierAdjusted));
+  assert.ok(html.includes(usageLabels.tierUnknown));
+  assert.ok(html.includes('high'));
+  assert.ok(!html.includes('<script>bad()'));
+  h.action('tab', 'overview');
+  assert.ok(h.details.innerHTML.includes(usageLabels.averageSpeed));
+  assert.ok(h.details.innerHTML.includes('29'));
+});

@@ -1,0 +1,18 @@
+.minimax-credit-summary { display: grid; gap: 10px; min-width: 0; }
+.minimax-credit-total { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.minimax-credit-total > span { font-size: 12px; color: var(--text-secondary); }
+.minimax-credit-total > strong { font-size: 27px; font-weight: 650; line-height: 1.25; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.minimax-plan-status { margin: 0; font-size: 12px; color: var(--text-secondary); }
+.minimax-credit-breakdown { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding-top: 12px; border-top: 1px solid var(--border-light); }
+.minimax-credit-breakdown > div { display: grid; gap: 6px; min-width: 0; }
+.minimax-credit-breakdown span { font-size: 11px; color: var(--text-secondary); }
+.minimax-credit-breakdown b { font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.minimax-credit-error { display: flex; align-items: flex-start; gap: 6px; padding: 8px; border-radius: 8px; background: var(--bg-tertiary); color: var(--danger-color, #c65b24); font-size: 12px; }
+.minimax-credit-error svg { flex-shrink: 0; }
+.minimax-credit-error small { display: block; margin-top: 4px; overflow-wrap: anywhere; }
+.minimax-credit-summary.compact { gap: 4px; }
+.minimax-credit-summary.compact .minimax-credit-total > strong { font-size: 16px; }
+.minimax-code-accounts-page .ghcp-account-card .card-footer { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.minimax-code-accounts-page .ghcp-account-card .account-last-used { min-width: 0; }
+.minimax-code-accounts-page .ghcp-account-card .card-actions { justify-content: flex-end; }
+.minimax-code-accounts-page .ghcp-account-card .alu-select { max-width: 100%; }

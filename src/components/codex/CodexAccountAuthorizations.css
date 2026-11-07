@@ -1,0 +1,4 @@
+.codex-account-authorizations { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; font-size: 12px; margin-block: 6px; }
+.codex-account-authorizations .group-account-badge { appearance: none; font-family: inherit; cursor: pointer; max-width: 100%; }
+.codex-account-authorizations .group-account-badge:disabled { cursor: not-allowed; opacity: .45; }
+.codex-account-authorizations .group-account-badge:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }

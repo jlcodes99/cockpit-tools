@@ -55,6 +55,7 @@ type CodexInstanceStoreState = InstanceStoreState & {
     importFilePath: string,
     targetInstanceId: string,
     sessionIds: string[],
+    cwdMappings: Record<string, string>,
     transferId?: string | null,
   ) => Promise<CodexSessionImportSummary>;
   openSessionLocation: (
@@ -176,12 +177,14 @@ const importSessions = async (
   importFilePath: string,
   targetInstanceId: string,
   sessionIds: string[],
+  cwdMappings: Record<string, string>,
   transferId?: string | null,
 ): Promise<CodexSessionImportSummary> => {
   const summary = await codexInstanceService.importSessions(
     importFilePath,
     targetInstanceId,
     sessionIds,
+    cwdMappings,
     transferId,
   );
   await typedBaseStore.getState().fetchInstances();

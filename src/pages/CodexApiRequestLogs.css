@@ -1,0 +1,302 @@
+.codex-request-log-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.codex-request-log-toolbar .codex-output-speed-summary {
+  margin-bottom: 0;
+}
+
+.codex-request-log-column-picker {
+  position: relative;
+  margin-left: auto;
+}
+
+.codex-request-log-column-options {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  min-width: 180px;
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--codex-api-border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  box-shadow: var(--codex-api-shadow);
+}
+
+.codex-request-log-column-option {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.codex-request-log-column-option:hover,
+.codex-request-log-column-option:focus-visible {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.codex-request-log-column-option:focus-visible,
+.codex-request-log-scroll:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.codex-request-log-column-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.codex-request-log-column-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+.codex-request-log-column-check.checked {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+}
+
+.codex-request-log-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--codex-api-border-soft);
+  border-radius: var(--radius-lg);
+}
+
+.codex-request-log-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.codex-request-log-table th,
+.codex-request-log-table td {
+  padding: 12px 14px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--codex-api-border-soft);
+}
+
+.codex-request-log-table th {
+  background: var(--codex-api-surface-soft);
+  color: var(--text-primary);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-request-log-table td {
+  background: var(--codex-api-surface-strong);
+}
+
+.codex-request-log-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.codex-request-log-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--bg-surface) 94%, var(--primary) 6%);
+}
+
+.codex-request-log-table .numeric {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.codex-request-log-table .codex-request-log-actions {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--bg-surface);
+  text-align: center;
+  box-shadow: -1px 0 0 var(--codex-api-border-soft);
+}
+
+.codex-request-log-model,
+.codex-request-log-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 4px;
+}
+
+.codex-request-log-model strong {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-request-log-upstream,
+.codex-request-log-id {
+  font-family: var(--font-mono);
+}
+
+.codex-request-log-truncate,
+.codex-request-log-table .codex-request-proxy-label {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-request-log-time {
+  white-space: nowrap;
+}
+
+.codex-request-log-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.codex-request-log-tags .codex-api-service-pill {
+  max-width: 100%;
+  padding: 2px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-request-log-speed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 22px;
+  max-width: 100%;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-secondary) 84%, var(--bg-card));
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.codex-request-log-speed svg {
+  flex-shrink: 0;
+}
+
+.codex-request-log-speed.adjusted {
+  min-width: 0;
+  height: auto;
+  min-height: 22px;
+  padding-block: 3px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+.codex-request-log-speed:is(.fast, .ultrafast) {
+  color: #7a4b00;
+  border-color: rgba(217, 119, 6, 0.24);
+  background: linear-gradient(180deg, rgba(255, 250, 241, 0.98), rgba(252, 240, 220, 0.94));
+  box-shadow: 0 1px 2px rgba(146, 64, 14, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+}
+
+[data-theme="dark"] .codex-request-log-speed:is(.fast, .ultrafast) {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.28);
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.codex-request-log-error {
+  color: var(--danger);
+}
+
+.codex-request-log-label {
+  color: var(--text-muted);
+}
+
+.codex-request-log-token-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px 10px;
+}
+
+.codex-request-log-token-grid > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.codex-request-log-token-total {
+  color: var(--text-muted);
+}
+
+.codex-request-log-performance {
+  align-items: stretch;
+}
+
+.codex-request-log-performance > span:not(.codex-output-speed) {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.codex-request-log-token-grid .codex-request-log-label,
+.codex-request-log-performance .codex-request-log-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-request-log-token-value,
+.codex-request-log-performance > span > span:last-child {
+  flex-shrink: 0;
+}
+
+.codex-request-log-actions .btn {
+  min-width: 0;
+  max-width: 100%;
+}

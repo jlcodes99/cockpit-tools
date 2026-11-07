@@ -3,7 +3,7 @@ use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 
 use crate::models::trae::{TraeAccount, TraeOAuthStartResponse};
-use crate::modules::{logger, trae_account, trae_oauth};
+use crate::modules::{logger, trae_account, trae_auto_checkin, trae_oauth};
 
 fn resolve_trae_refresh_protection_map(
     accounts: &[TraeAccount],
@@ -12,8 +12,10 @@ fn resolve_trae_refresh_protection_map(
 }
 
 #[tauri::command]
-pub fn list_trae_accounts() -> Result<Vec<TraeAccount>, String> {
-    trae_account::list_accounts_checked()
+pub async fn list_trae_accounts() -> Result<Vec<TraeAccount>, String> {
+    tauri::async_runtime::spawn_blocking(trae_account::list_accounts_checked)
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -500,8 +502,8 @@ pub async fn inject_trae_account(
 #[tauri::command]
 pub async fn get_trae_checkin_status(
     account_id: String,
-    device_id: String,
 ) -> Result<trae_account::CheckinStatusResult, String> {
+    let device_id = trae_auto_checkin::ensure_device_id_persisted(&account_id)?;
     trae_account::get_trae_checkin_status(&account_id, &device_id).await
 }
 
@@ -509,7 +511,37 @@ pub async fn get_trae_checkin_status(
 #[tauri::command]
 pub async fn claim_trae_checkin(
     account_id: String,
-    device_id: String,
 ) -> Result<trae_account::CheckinStatusResult, String> {
+    let device_id = trae_auto_checkin::ensure_device_id_persisted(&account_id)?;
     trae_account::claim_trae_checkin(&account_id, &device_id).await
+}
+
+// ============ 自动签到命令 ============
+
+#[tauri::command]
+pub fn get_trae_auto_checkin_config() -> Result<trae_auto_checkin::TraeAutoCheckinConfig, String> {
+    trae_auto_checkin::get_config_checked()
+}
+
+#[tauri::command]
+pub fn save_trae_auto_checkin_config(
+    config: trae_auto_checkin::TraeAutoCheckinConfig,
+) -> Result<(), String> {
+    trae_auto_checkin::save_config(&config)
+}
+
+#[tauri::command]
+pub fn get_trae_auto_checkin_logs(
+) -> Result<Vec<trae_auto_checkin::TraeAutoCheckinLogRecord>, String> {
+    trae_auto_checkin::get_logs_checked()
+}
+
+#[tauri::command]
+pub fn clear_trae_auto_checkin_logs() -> Result<(), String> {
+    trae_auto_checkin::save_logs(&[])
+}
+
+#[tauri::command]
+pub async fn run_trae_auto_checkin_now(app: AppHandle, force: bool) -> Result<String, String> {
+    trae_auto_checkin::run_trae_auto_checkin_cycle_if_needed(&app, force).await
 }

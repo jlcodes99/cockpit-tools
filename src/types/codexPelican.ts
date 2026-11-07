@@ -5,7 +5,21 @@ export const CODEX_PELICAN_MAX_CONCURRENCY = 10;
 export type CodexPelicanStatus = 'running' | 'cancelling' | 'completed' | 'cancelled' | 'interrupted';
 export type CodexPelicanItemStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
 
+export interface CodexPelicanProviderTarget {
+  providerId: string;
+  apiKeyId: string;
+  model: string;
+}
+
+export interface CodexPelicanProviderSource extends CodexPelicanProviderTarget {
+  providerName: string;
+  apiKeyName: string;
+  baseUrl: string;
+  wireApi: string;
+}
+
 export interface CodexPelicanItem {
+  provider?: CodexPelicanProviderSource;
   id: string;
   accountId: string;
   accountEmail: string;
@@ -16,8 +30,17 @@ export interface CodexPelicanItem {
   hasHtml: boolean;
   error?: string;
   usage?: unknown;
+  quota?: CodexPelicanQuotaUsage;
   responseModel?: string;
   responseId?: string;
+}
+
+export interface CodexPelicanQuotaUsage {
+  consumedPercent?: number;
+  beforeRemainingPercent?: number;
+  remainingPercent?: number;
+  windowMinutes?: number;
+  resetAt?: number;
 }
 
 export interface CodexPelicanBatch {
@@ -37,6 +60,7 @@ export interface CodexPelicanBatch {
 }
 
 export interface CodexPelicanRequest {
+  providerTargets?: CodexPelicanProviderTarget[];
   accountIds: string[];
   prompt: string;
   model: string;

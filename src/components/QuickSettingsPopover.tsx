@@ -1,3 +1,8 @@
+import { CodexAppEnhancementSettings } from './codex/CodexAppEnhancementSettings';
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
+import { CodexRefreshPlanScopeControl } from './CodexRefreshPlanScopeControl';
+import { CodexRequestPayloadSetting } from './codex/CodexRequestPayloadSetting';
+import { CodexOverloadRetrySetting } from './codex/CodexOverloadRetrySetting';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
@@ -80,6 +85,7 @@ interface GeneralConfig {
   ui_scale: number;
   auto_refresh_minutes: number;
   codex_auto_refresh_minutes: number;
+  codex_auto_refresh_plan_types?: string[];
   claude_auto_refresh_minutes: number;
   codex_sync_wsl: boolean;
   codex_app_ui_injection_enabled?: boolean;
@@ -102,6 +108,7 @@ interface GeneralConfig {
   trae_cn_auto_refresh_minutes: number;
   trae_solo_cn_auto_refresh_minutes: number;
   workbuddy_auto_refresh_minutes: number;
+  minimax_code_auto_refresh_minutes: number;
   zed_auto_refresh_minutes: number;
   close_behavior: string;
   minimize_behavior?: 'dock_and_tray' | 'tray_only';
@@ -138,6 +145,7 @@ interface GeneralConfig {
   workbuddy_ai_app_path: string;
   workbuddy_app_path: string;
   workbuddy_share_sessions_on_switch: boolean;
+  minimax_code_app_path: string;
   zed_app_path: string;
   opencode_sync_on_switch: boolean;
   opencode_auth_overwrite_on_switch: boolean;
@@ -147,6 +155,7 @@ interface GeneralConfig {
   openclaw_auth_overwrite_on_switch: boolean;
   hermes_auth_overwrite_on_switch?: boolean;
   codex_launch_on_switch: boolean;
+  codex_auto_restore_takeover_on_launch: boolean;
   antigravity_launch_on_switch: boolean;
   codex_restart_specified_app_on_switch: boolean;
   codex_local_access_entry_visible: boolean;
@@ -200,6 +209,8 @@ interface GeneralConfig {
   trae_solo_cn_quota_alert_threshold: number;
   workbuddy_quota_alert_enabled: boolean;
   workbuddy_quota_alert_threshold: number;
+  minimax_code_quota_alert_enabled: boolean;
+  minimax_code_quota_alert_threshold: number;
   zed_quota_alert_enabled: boolean;
   zed_quota_alert_threshold: number;
 }
@@ -222,6 +233,7 @@ export type QuickSettingsType =
   | 'trae_cn'
   | 'trae_solo_cn'
   | 'workbuddy'
+  | 'minimaxcode'
   | 'zed';
 
 type AppPathTarget =
@@ -242,6 +254,7 @@ type AppPathTarget =
   | 'trae_cn'
   | 'trae_solo_cn'
   | 'workbuddy'
+  | 'minimaxcode'
   | 'zed';
 
 type QuotaAlertEnabledKey =
@@ -261,6 +274,7 @@ type QuotaAlertEnabledKey =
   | 'trae_cn_quota_alert_enabled'
   | 'trae_solo_cn_quota_alert_enabled'
   | 'workbuddy_quota_alert_enabled'
+  | 'minimax_code_quota_alert_enabled'
   | 'zed_quota_alert_enabled';
 type QuotaAlertThresholdKey =
   | 'quota_alert_threshold'
@@ -279,6 +293,7 @@ type QuotaAlertThresholdKey =
   | 'trae_cn_quota_alert_threshold'
   | 'trae_solo_cn_quota_alert_threshold'
   | 'workbuddy_quota_alert_threshold'
+  | 'minimax_code_quota_alert_threshold'
   | 'zed_quota_alert_threshold';
 type CodexWindowThresholdKey =
   | 'codex_auto_switch_primary_threshold'
@@ -329,6 +344,8 @@ const getAppPathKeyForTarget = (target: AppPathTarget): keyof GeneralConfig => {
       return 'trae_solo_cn_app_path';
     case 'workbuddy':
       return 'workbuddy_app_path';
+    case 'minimaxcode':
+      return 'minimax_code_app_path';
     case 'zed':
       return 'zed_app_path';
   }
@@ -379,6 +396,8 @@ const getCurrentAccountRefreshPlatformForType = (
       return 'trae_solo_cn';
     case 'workbuddy':
       return 'workbuddy';
+    case 'minimaxcode':
+      return 'minimaxcode';
     case 'zed':
       return 'zed';
   }
@@ -502,11 +521,11 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     () =>
       codexAccounts.map((account) => ({
         id: account.id,
-        label: account.email,
-        searchableText: account.email,
+        label: resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")),
+        searchableText: [resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")), account.email, account.api_base_url].join(" "),
         tags: account.tags || [],
       })),
-    [codexAccounts],
+    [codexAccounts, t],
   );
   const codexScopeGroups = useMemo(
     () =>
@@ -780,6 +799,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     }
   };
 
+  useEffect(() => {
+    if (!isOpen || type !== 'codex') return;
+    const reload = () => { void loadConfig(); };
+    window.addEventListener('config-updated', reload);
+    return () => window.removeEventListener('config-updated', reload);
+  }, [isOpen, type]);
+
   const getRefreshKeyForType = (t: QuickSettingsType): keyof GeneralConfig => {
     switch (t) {
       case 'antigravity': return 'auto_refresh_minutes';
@@ -799,6 +825,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'trae_cn': return 'trae_cn_auto_refresh_minutes';
       case 'trae_solo_cn': return 'trae_solo_cn_auto_refresh_minutes';
       case 'workbuddy': return 'workbuddy_auto_refresh_minutes';
+      case 'minimaxcode': return 'minimax_code_auto_refresh_minutes';
       case 'zed': return 'zed_auto_refresh_minutes';
       default: return 'auto_refresh_minutes';
     }
@@ -976,6 +1003,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           return 'TRAE SOLO CN';
         case 'workbuddy':
           return 'WorkBuddy';
+        case 'minimaxcode':
+          return 'MiniMax Code';
         case 'zed':
           return 'Zed';
       }
@@ -1051,6 +1080,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return 'trae_solo_cn_quota_alert_enabled';
       case 'workbuddy':
         return 'workbuddy_quota_alert_enabled';
+      case 'minimaxcode':
+        return 'minimax_code_quota_alert_enabled';
       case 'zed':
         return 'zed_quota_alert_enabled';
       default:
@@ -1090,6 +1121,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return 'trae_solo_cn_quota_alert_threshold';
       case 'workbuddy':
         return 'workbuddy_quota_alert_threshold';
+      case 'minimaxcode':
+        return 'minimax_code_quota_alert_threshold';
       case 'zed':
         return 'zed_quota_alert_threshold';
       default:
@@ -1129,6 +1162,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'trae_solo_cn':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'workbuddy':
+        return t('quickSettings.refreshInterval', '配额自动刷新');
+      case 'minimaxcode':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'zed':
         return t('quickSettings.refreshInterval', '配额自动刷新');
@@ -1175,6 +1210,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return config.trae_solo_cn_app_path;
       case 'workbuddy':
         return config.workbuddy_app_path;
+      case 'minimaxcode':
+        return config.minimax_code_app_path;
       case 'zed':
         return config.zed_app_path;
       default:
@@ -1218,6 +1255,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return t('quickSettings.traeSoloCn.appPath', 'TRAE SOLO CN 路径');
       case 'workbuddy':
         return t('quickSettings.workbuddy.appPath', 'WorkBuddy 路径');
+      case 'minimaxcode':
+        return t('quickSettings.minimaxCode.appPath', 'MiniMax Code 路径');
       case 'zed':
         return t('quickSettings.zed.appPath', 'Zed 路径');
     }
@@ -1259,6 +1298,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return 'trae_solo_cn';
       case 'workbuddy':
         return 'workbuddy';
+      case 'minimaxcode':
+        return 'minimaxcode';
       case 'zed':
         return 'zed';
     }
@@ -1568,7 +1609,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 <div className="qs-row">
                   <div className="qs-row-label">
                     <span>
-                      primary_window ({t('codex.quota.hourly', '5小时配额')}) {t('quickSettings.quotaAlert.threshold', '预警阈值')}
+                      {t('codex.thresholds.shortCycle')} {t('quickSettings.quotaAlert.threshold', '预警阈值')}
                     </span>
                   </div>
                   <div className="qs-row-control">
@@ -1618,7 +1659,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 <div className="qs-row">
                   <div className="qs-row-label">
                     <span>
-                      secondary_window ({t('codex.quota.weekly', '周配额')}) {t('quickSettings.quotaAlert.threshold', '预警阈值')}
+                      {t('codex.thresholds.weekly')} {t('quickSettings.quotaAlert.threshold', '预警阈值')}
                     </span>
                   </div>
                   <div className="qs-row-control">
@@ -1721,13 +1762,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
               {isCodexAlert && (
                 <>
                   <div>
-                    {t(
-                      'quickSettings.codexWindow.primaryWindowMeaning',
-                      'primary_window 一般指 5 小时配额；免费用户下 primary_window 可能对应周配额，不同订阅可能不同。'
-                    )}
+                    {t('codex.thresholds.windowHint')}
                   </div>
                   <div>
-                    {`primary_window <= ${codexQuotaAlertPrimaryThresholdValue}% OR secondary_window <= ${codexQuotaAlertSecondaryThresholdValue}%`}
+                    {t('codex.thresholds.rule', {
+                      shortCycle: codexQuotaAlertPrimaryThresholdValue,
+                      weekly: codexQuotaAlertSecondaryThresholdValue,
+                    })}
                   </div>
                 </>
               )}
@@ -1770,6 +1811,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
             <button className="qs-error-close" onClick={() => setError(null)} aria-label={t('common.close')}>
               <X size={12} />
             </button>
+          </div>
+        )}
+
+        {!config && !error && (
+          <div className="qs-loading" role="status" aria-live="polite">
+            <span className="loading-spinner" aria-hidden="true" />
+            <span>{t('common.loading', '加载中...')}</span>
           </div>
         )}
 
@@ -1861,6 +1909,15 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 </div>
               </div>
             )}
+            {type === 'codex' && config && (
+              <div className="qs-section">
+                <CodexRefreshPlanScopeControl value={config.codex_auto_refresh_plan_types}
+                  onChange={(value) => void saveConfig({ codex_auto_refresh_plan_types: value })} />
+                <CodexRequestPayloadSetting />
+                <CodexOverloadRetrySetting />
+                <CodexAppEnhancementSettings variant="quick" onError={setError} />
+              </div>
+            )}
             {type === 'codex' && (
               <div className="qs-section">
                 <div className="qs-row">
@@ -1918,10 +1975,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                   </div>
                 </div>
                 <div className="qs-hint">
-                  {t(
-                    'settings.general.codexAppUiInjectionDesc',
-                    '重启 Codex 实例后，在输入框下方显示 Cockpit Tools API 服务的账号数、周额度和 5h 额度。需保持 Cockpit Tools 在后台运行；完全退出或网络不可用时，额度不会继续刷新。',
-                  )}
+                  {t('settings.general.codexAppUiInjectionDesc')}
                 </div>
                 <div className="qs-row" style={{ marginTop: 8 }}>
                   <div className="qs-row-label">
@@ -2303,6 +2357,17 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         '切换账号后自动启动或重启 Codex App',
                       )}
                     </div>
+                    <div className="qs-row">
+                      <div className="qs-row-label"><span>{t('settings.general.codexAutoRestoreTakeoverOnLaunch')}</span></div>
+                      <div className="qs-row-control">
+                        <label className="qs-switch">
+                          <input type="checkbox" checked={config.codex_auto_restore_takeover_on_launch}
+                            onChange={(event) => saveConfig({ codex_auto_restore_takeover_on_launch: event.target.checked })} />
+                          <span className="qs-switch-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+                    <div className="qs-hint">{t('settings.general.codexAutoRestoreTakeoverOnLaunchDesc')}</div>
                   </>
                 )}
                 {type === 'antigravity' && config && (
@@ -2792,7 +2857,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       <div className="qs-row">
                         <div className="qs-row-label">
                           <span>
-                            primary_window ({t('codex.quota.hourly', '5小时配额')}) {t('quickSettings.autoSwitch.threshold', '切号阈值')}
+                            {t('codex.thresholds.shortCycle')} {t('quickSettings.autoSwitch.threshold', '切号阈值')}
                           </span>
                         </div>
                         <div className="qs-row-control">
@@ -2842,7 +2907,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       <div className="qs-row">
                         <div className="qs-row-label">
                           <span>
-                            secondary_window ({t('codex.quota.weekly', '周配额')}) {t('quickSettings.autoSwitch.threshold', '切号阈值')}
+                            {t('codex.thresholds.weekly')} {t('quickSettings.autoSwitch.threshold', '切号阈值')}
                           </span>
                         </div>
                         <div className="qs-row-control">
@@ -2921,13 +2986,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                           '当任意模型配额低于阈值时，自动切换到配额最高的账号。'
                         )}
                         <div>
-                          {t(
-                            'quickSettings.codexWindow.primaryWindowMeaning',
-                            'primary_window 一般指 5 小时配额；免费用户下 primary_window 可能对应周配额，不同订阅可能不同。'
-                          )}
+                          {t('codex.thresholds.windowHint')}
                         </div>
 	                        <div>
-	                          {`primary_window <= ${codexAutoSwitchPrimaryThresholdValue}% OR secondary_window <= ${codexAutoSwitchSecondaryThresholdValue}%`}
+                          {t('codex.thresholds.rule', {
+                            shortCycle: codexAutoSwitchPrimaryThresholdValue,
+                            weekly: codexAutoSwitchSecondaryThresholdValue,
+                          })}
 	                        </div>
 		                </div>
 	                    </div>

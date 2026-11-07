@@ -6,15 +6,17 @@ import {
   resolveCodexApiProviderPresetId,
 } from "./codexProviderPresets.ts";
 
-export type CodexProviderWireApi = "responses" | "chat_completions";
+export type CodexProviderWireApi = "responses" | "chat_completions" | "anthropic";
 export type CodexProviderEnableMode = "direct" | "gateway";
 export type CodexProviderEnableModePreference = "auto" | CodexProviderEnableMode;
 export type CodexProviderAdapterProfile =
   | "openai_responses_native"
-  | "openai_chat_completions_bridge";
+  | "openai_chat_completions_bridge"
+  | "anthropic_messages_bridge";
 export type CodexProviderGatewayStrategy =
   | "passthrough"
-  | "responses_to_chat_completions";
+  | "responses_to_chat_completions"
+  | "responses_to_anthropic";
 
 export interface CodexProviderCapabilities {
   responses: boolean;
@@ -35,6 +37,17 @@ export interface CodexProviderCapabilityProfile {
   requiresGateway: boolean;
   supportsDirect: boolean;
   capabilities: CodexProviderCapabilities;
+}
+
+/** Whether the editable provider defaults are preserved by the backend. */
+export function canConfigureCodexProviderVision(input: {
+  presetId?: string | null;
+  wireApi: CodexProviderWireApi;
+}): boolean {
+  if (input.wireApi !== "responses") return true;
+  const presetId = input.presetId?.trim() ?? "";
+  if (presetId === DEEPSEEK_API_PROVIDER_ID) return false;
+  return findCodexApiProviderPresetById(presetId)?.isOfficial !== true;
 }
 
 const CHAT_COMPLETIONS_PRESET_IDS = new Set([
@@ -77,9 +90,11 @@ export function resolveCodexProviderCapabilityProfile(input: {
   const presetId =
     input.presetId?.trim() || resolveCodexApiProviderPresetId(input.baseUrl);
   const inferredChatCompletions = CHAT_COMPLETIONS_PRESET_IDS.has(presetId);
-  // DeepSeek defaults to Responses for official Codex setup, but explicit Chat Completions remains allowed.
+  let officialDeepSeek = false;
+  try { officialDeepSeek = new URL(input.baseUrl?.trim() || '').hostname.toLowerCase() === 'api.deepseek.com'; } catch { /* incomplete URL */ }
   const wireApi =
-    input.wireApi === "responses" || input.wireApi === "chat_completions"
+    officialDeepSeek ? "responses" :
+    input.wireApi === "responses" || input.wireApi === "chat_completions" || input.wireApi === "anthropic"
       ? input.wireApi
       : presetId === DEEPSEEK_API_PROVIDER_ID
         ? "responses"
@@ -87,19 +102,19 @@ export function resolveCodexProviderCapabilityProfile(input: {
           ? "chat_completions"
           : "responses";
 
-  if (wireApi === "chat_completions") {
+  if (wireApi !== "responses") {
     return {
-      wireApi: "chat_completions",
-      adapterProfile: "openai_chat_completions_bridge",
-      gatewayStrategy: "responses_to_chat_completions",
+      wireApi,
+      adapterProfile: wireApi === "anthropic" ? "anthropic_messages_bridge" : "openai_chat_completions_bridge",
+      gatewayStrategy: wireApi === "anthropic" ? "responses_to_anthropic" : "responses_to_chat_completions",
       defaultEnableMode: "gateway",
       requiresGateway: true,
       supportsDirect: false,
       capabilities: {
         responses: false,
-        chatCompletions: true,
+        chatCompletions: wireApi === "chat_completions",
         tools: true,
-        reasoning: false,
+        reasoning: wireApi === "anthropic",
         streamUsage: true,
         hotSwitch: true,
         requestLogs: true,

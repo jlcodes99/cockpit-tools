@@ -1,0 +1,8 @@
+.codex-api-service-pill.codex-request-log-fallback {
+  justify-content: flex-start;
+  gap: 4px;
+  white-space: normal;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.codex-request-log-fallback svg { flex-shrink: 0; }
