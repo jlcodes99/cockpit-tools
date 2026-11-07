@@ -161,6 +161,68 @@ fn projectless_api_key_start_does_not_invent_onboarding_completion() {
 }
 
 #[test]
+fn same_instance_switch_keeps_distinct_projects_sharing_roots_and_their_threads() {
+    let f = Fixture::new();
+    let db = Connection::open(f.home().join("state_5.sqlite")).unwrap();
+    db.execute_batch("INSERT INTO projects VALUES('second','Second','{}');
+        INSERT INTO projects VALUES('third','Third','{}');
+        INSERT INTO projects VALUES('cloud','Cloud','{\"chatGptBacking\":{}}');
+        INSERT INTO threads VALUES('second-chat','unused','cli','second',1);
+        INSERT INTO threads VALUES('third-chat','unused','cli','third',1);
+        INSERT INTO threads VALUES('cloud-chat','unused','cli','cloud',1);").unwrap();
+    for id in ["second", "third", "cloud"] {
+        db.execute("INSERT INTO project_roots VALUES(?1,?2,0)", [id, &f.root]).unwrap();
+    }
+    drop(db);
+    let host = format!("local:{}", f.home().display());
+    let mut state = f.local("legacy");
+    state["local-projects"]["second-legacy"] = json!({"id":"second-legacy","name":"Second","rootPaths":[f.root]});
+    state[MAP][&host]["second-legacy"] = json!("second");
+    // An already-native project ID is also authoritative without a legacy map.
+    state["local-projects"]["third"] = json!({"id":"third","name":"Third","rootPaths":[f.root]});
+    state["project-order"] = json!(["third", "legacy", "second-legacy"]);
+    state[SCOPES] = json!({"owner":"a","inactive":{}});
+    state[ATOMS] = json!({"private-a":true,"electron:onboarding-projectless-completed":true});
+    f.write(&state);
+    for owner in [Some("b"), None, Some("a"), Some("b"), None] {
+        prepare(f.home(), owner).unwrap();
+        let booted = native_start(f.state(), owner);
+        assert_eq!(booted["local-projects"], state["local-projects"]);
+        assert_eq!(booted["project-order"], state["project-order"]);
+        for (thread, project) in [("chat", "legacy"), ("second-chat", "second-legacy"), ("third-chat", "third")] {
+            assert_eq!(booted[ASSIGN][thread]["projectId"], project);
+            assert_eq!(booted[HOSTS][thread], "local");
+        }
+        assert!(booted[ASSIGN].get("cloud-chat").is_none());
+        assert!(booted[ASSIGN].get("child").is_none());
+        assert_eq!(booted["local-projects"].as_object().unwrap().len(), 3);
+        f.write(&booted);
+        assert!(!prepare(f.home(), owner).unwrap(), "repeat launch: {owner:?}");
+    }
+}
+
+#[test]
+fn duplicate_roots_without_identity_do_not_guess_or_restore_deleted_projects() {
+    let f = Fixture::new();
+    let db = Connection::open(f.home().join("state_5.sqlite")).unwrap();
+    db.execute_batch("INSERT INTO projects VALUES('second','Second','{}');").unwrap();
+    db.execute("INSERT INTO project_roots VALUES('second',?1,0)", [&f.root]).unwrap();
+    drop(db);
+    let host = format!("local:{}", f.home().display());
+    let mut globals = f.local("legacy");
+    globals.as_object_mut().unwrap().remove(MAP);
+    f.write(&json!({SCOPES:{"owner":null,"inactive":{"a":{"globals":globals,"atoms":{}}}}}));
+    prepare(f.home(), Some("b")).unwrap();
+    assert!(f.state()["local-projects"].as_object().is_none_or(|p| p.is_empty()));
+    globals[MAP] = json!({&host:{"legacy":"server"}});
+    globals["app-server-pending-project-deletions-by-host"] = json!({&host:{"legacy":{"projectId":"server"}}});
+    f.write(&json!({SCOPES:{"owner":null,"inactive":{"a":{"globals":globals,"atoms":{}}}}}));
+    prepare(f.home(), Some("b")).unwrap();
+    assert!(f.state()["local-projects"].as_object().is_none_or(|p| p.is_empty()));
+    assert!(f.state()[ASSIGN].as_object().is_none_or(|p| p.is_empty()));
+}
+
+#[test]
 fn account_project_switch_recovers_archived_groups_after_native_startup() {
     let f = Fixture::new();
     let mut old = f.local("legacy");

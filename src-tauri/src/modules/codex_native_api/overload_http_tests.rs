@@ -6,6 +6,7 @@ use futures_util::StreamExt;
 struct SingleHost {
     inner: FixtureHost,
     revoke_on_refresh: bool,
+    first_refresh_error: Option<&'static str>,
     allow_alternates: bool,
     alternates_after_refresh: bool,
     refreshes: AtomicUsize,
@@ -35,13 +36,17 @@ impl Host for SingleHost {
                 ));
             }
             if request.preferred_account_id.is_some() {
-                self.refreshes.fetch_add(1, Ordering::SeqCst);
+                let refresh = self.refreshes.fetch_add(1, Ordering::SeqCst);
                 if self.revoke_on_refresh {
                     return Err(ServiceError::new(
                         403,
                         "account_not_allowed",
                         "Access revoked",
                     ));
+                }
+                if let Some(code) = self.first_refresh_error.filter(|_| refresh == 0) {
+                    let status = if code == "account_busy" { 429 } else { 503 };
+                    return Err(ServiceError::new(status, code, "Temporarily unavailable"));
                 }
             }
             if !alternatives_allowed { request.preferred_account_id = Some("0".into()); }
@@ -77,6 +82,7 @@ struct Scenario {
     failures: usize,
     delayed: bool,
     revoke: bool,
+    first_refresh_error: Option<&'static str>,
     total_timeout: Duration,
     hang_retry: bool,
     http_status: u16,
@@ -94,6 +100,7 @@ impl Default for Scenario {
             failures: 1,
             delayed: true,
             revoke: false,
+            first_refresh_error: None,
             total_timeout: Duration::from_secs(5),
             hang_retry: false,
             http_status: 200,
@@ -134,6 +141,7 @@ async fn fixture(
             reports: Mutex::new(vec![]),
         },
         revoke_on_refresh: case.revoke,
+        first_refresh_error: case.first_refresh_error,
         allow_alternates: case.allow_alternates,
         alternates_after_refresh: case.alternates_after_refresh,
         refreshes: AtomicUsize::new(0),
@@ -333,10 +341,13 @@ async fn capacity_does_not_replay_execution_input_faults_long_retry_after_or_rev
         ..Default::default()
     });
     cases.push(Scenario { error: json!({"type":"error","error":{"code":"quota_exceeded","type":"service_unavailable_error"}}), ..Default::default() });
-    cases.push(Scenario {
-        revoke: true,
-        ..Default::default()
-    });
+    for continuous in [false, true] {
+        cases.push(Scenario {
+            revoke: true,
+            continuous,
+            ..Default::default()
+        });
+    }
     cases.push(Scenario {
         total_timeout: Duration::from_millis(600),
         ..Default::default()
@@ -518,4 +529,28 @@ async fn continuous_capacity_cancels_backoff_when_client_disconnects() {
     task.abort();
     assert_eq!(host.inner.calls[0].load(Ordering::SeqCst), 1);
     assert_eq!(*host.overload_outcomes.lock().unwrap(), ["cancelled"]);
+}
+
+#[tokio::test]
+async fn continuous_capacity_reselects_the_same_owner_after_temporary_contention() {
+    for code in ["account_busy", "account_cooling"] {
+        let (host, mut handle, task, _temp) = fixture(Scenario {
+            continuous: true,
+            first_refresh_error: Some(code),
+            http_status: 503,
+            delayed: false,
+            ..Default::default()
+        }).await;
+        let response = client().post(format!("http://{}/v1/responses", handle.addr))
+            .bearer_auth("fixture").json(&input(true)).send().await.unwrap();
+        let text = response.text().await.unwrap();
+        assert!(text.contains("completed") && !text.contains(code), "{text}");
+        assert_eq!(host.refreshes.load(Ordering::SeqCst), 2);
+        let sent = host.inner.requests.lock().unwrap().clone();
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[0].0, sent[1].0);
+        assert_eq!(sent[0].2, sent[1].2);
+        handle.shutdown(Duration::from_secs(2)).await.unwrap();
+        task.abort();
+    }
 }

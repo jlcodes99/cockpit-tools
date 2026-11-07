@@ -182,10 +182,12 @@ async fn run(
     }
     let mut turn_deadline = execution.total_deadline;
     let mut pending_messages = VecDeque::<String>::new();
+    let mut heartbeat = ClientHeartbeat::new(policy.websocket_heartbeat);
     let opened = match while_connected(
         &state,
         &mut socket,
         &mut pending_messages,
+        &mut heartbeat,
         turn_deadline,
         transport_bridge::open(
             &state,
@@ -235,7 +237,6 @@ async fn run(
     let mut reused_hold_deadline = tokio::time::Instant::now();
     let mut client_deadline = tokio::time::Instant::now() + policy.websocket_idle_timeout;
     let mut upstream_deadline = client_deadline;
-    let mut heartbeat_deadline = tokio::time::Instant::now() + policy.websocket_heartbeat;
     let result: Result<(), ServiceError> = Box::pin(async {
         loop {
             let mut stop = state.stop.clone();
@@ -272,8 +273,7 @@ async fn run(
                         timed_client_until(&state, turn_deadline.instant(), client_sink.send(Message::Text(text.into()))).await?;
                     }
                 },
-                _ = deadline::sleep_until(heartbeat_deadline), if !policy.websocket_heartbeat.is_zero() => {
-                    heartbeat_deadline = tokio::time::Instant::now() + policy.websocket_heartbeat;
+                _ = heartbeat.tick() => {
                     if let Some(sink) = &mut upstream_sink {
                         let result = timed_until(&state, active.then_some(turn_deadline).and_then(Deadline::instant), sink.send(UpstreamMessage::Ping(Vec::new().into()))).await;
                         retain_after_write_loss(result, &mut upstream_stream)?;
@@ -427,7 +427,7 @@ async fn run(
                                         if let Err(error) = tracker.check_quota_before_send() {
                                             let switched = if may_move_idle_turn {
                                                 while_split_connected(
-                                                    &state, &mut client_sink, &mut client_stream, &mut pending_messages,
+                                                    &state, &mut client_sink, &mut client_stream, &mut pending_messages, &mut heartbeat,
                                                     turn_deadline, None,
                                                     retry_local_quota_opening(&state, &mut prepared, &mut tracker, turn_deadline, &error),
                                                 ).await?
@@ -454,7 +454,7 @@ async fn run(
                                             tracker.diagnostic_request_id(), reconnect_reason);
                                         if let Some(sink) = &mut upstream_sink { let _ = tokio::time::timeout(std::time::Duration::from_secs(1), sink.close()).await; }
                                         let opened = while_split_connected(
-                                            &state, &mut client_sink, &mut client_stream, &mut pending_messages,
+                                            &state, &mut client_sink, &mut client_stream, &mut pending_messages, &mut heartbeat,
                                             turn_deadline, None,
                                             transport_bridge::open(&state, &caller, &mut prepared, &mut tracker, &policy, turn_deadline, &mut history),
                                         ).await;
@@ -740,7 +740,7 @@ async fn run(
                                         tracker.field_compat.commit_reasoning(&mut prepared);
                                         tracker.attempt_result(400, false, Some(tracker.field_compat.reason()));
                                         if let Some(sink) = &mut upstream_sink { let _ = tokio::time::timeout(std::time::Duration::from_secs(1), sink.close()).await; }
-                                        let opened = while_split_connected(&state, &mut client_sink, &mut client_stream, &mut pending_messages, turn_deadline, None,
+                                        let opened = while_split_connected(&state, &mut client_sink, &mut client_stream, &mut pending_messages, &mut heartbeat, turn_deadline, None,
                                             transport_bridge::open_with_retries(&state, &caller, &mut prepared, &mut tracker, &policy, turn_deadline, &mut history, std::mem::take(&mut opening_retries))).await?;
                                         upstream_sink = opened.sink; upstream_stream = opened.stream;
                                         upstream_http = opened.http; upstream_local = opened.local; connection_identity = opened.identity;
@@ -757,7 +757,7 @@ async fn run(
                                         tracker.routed(&caller, &prepared.route, &requested_model);
                                         tracker.track_rebuild(prepared.binding.rebuild_abort_handle());
                                         if let Some(sink) = &mut upstream_sink { let _ = tokio::time::timeout(std::time::Duration::from_secs(1), sink.close()).await; }
-                                        let opened = while_split_connected(&state, &mut client_sink, &mut client_stream, &mut pending_messages, turn_deadline, None,
+                                        let opened = while_split_connected(&state, &mut client_sink, &mut client_stream, &mut pending_messages, &mut heartbeat, turn_deadline, None,
                                             transport_bridge::open(&state, &caller, &mut prepared, &mut tracker, &policy, turn_deadline, &mut history)).await?;
                                         upstream_sink = opened.sink; upstream_stream = opened.stream;
                                         upstream_http = opened.http; upstream_local = opened.local; connection_identity = opened.identity;
@@ -778,7 +778,7 @@ async fn run(
                                     // account budget as well, rather than restart socket counters.
                                     let retry = if !upstream_http && continuation::rejection(&event) {
                                         if !active || interrupt_pending.is_some() { false } else {
-                                            while_split_connected(&state, &mut client_sink, &mut client_stream, &mut pending_messages, turn_deadline, None,
+                                            while_split_connected(&state, &mut client_sink, &mut client_stream, &mut pending_messages, &mut heartbeat, turn_deadline, None,
                                                 continuation::recover(&state, &mut prepared, &mut tracker, &event, turn_deadline, "reused_socket")).await?
                                         }
                                     } else {
@@ -791,7 +791,7 @@ async fn run(
                                             }
                                         });
                                         if policy.continuous_overload_retry && super::overload::event(&event) {
-                                            while_split_connected(&state, &mut client_sink, &mut client_stream, &mut pending_messages,
+                                            while_split_connected(&state, &mut client_sink, &mut client_stream, &mut pending_messages, &mut heartbeat,
                                                 turn_deadline, response_id.as_deref(), recovery).await?
                                         } else {
                                             recovery.await?
@@ -804,7 +804,7 @@ async fn run(
                                         } else { policy.clone() };
                                         let attempts = tracker.upstream_attempt_count();
                                         let reopened = while_split_connected(&state, &mut client_sink, &mut client_stream,
-                                            &mut pending_messages, turn_deadline,
+                                            &mut pending_messages, &mut heartbeat, turn_deadline,
                                             if policy.continuous_overload_retry && super::overload::event(&event) { response_id.as_deref() } else { None },
                                             transport_bridge::open_with_retries(&state, &caller, &mut prepared, &mut tracker, &recovery_policy, turn_deadline, &mut history, std::mem::take(&mut opening_retries))).await;
                                         let opened = match reopened {
@@ -822,6 +822,7 @@ async fn run(
                                         reused_handshake.clear();
                                         reused_events = 0; reused_bytes = 0;
                                         reused_hold_deadline = tokio::time::Instant::now();
+                                        upstream_deadline = tokio::time::Instant::now() + policy.websocket_idle_timeout;
                                         continue;
                                     }
                                 }
@@ -935,10 +936,30 @@ async fn run(
     let _ = tokio::time::timeout(std::time::Duration::from_secs(1), client_sink.close()).await;
 }
 
+struct ClientHeartbeat {
+    interval: std::time::Duration,
+    next: tokio::time::Instant,
+}
+
+impl ClientHeartbeat {
+    fn new(interval: std::time::Duration) -> Self {
+        Self { interval, next: tokio::time::Instant::now() + interval }
+    }
+
+    async fn tick(&mut self) {
+        if self.interval.is_zero() {
+            std::future::pending::<()>().await;
+        }
+        tokio::time::sleep_until(self.next).await;
+        self.next = tokio::time::Instant::now() + self.interval;
+    }
+}
+
 fn while_connected<'a, T: Send + 'a>(
     state: &'a AppState,
     socket: &'a mut WebSocket,
     pending: &'a mut VecDeque<String>,
+    heartbeat: &'a mut ClientHeartbeat,
     deadline: Deadline,
     future: impl std::future::Future<Output = Result<T, ServiceError>> + Send + 'a,
 ) -> futures_util::future::BoxFuture<'a, Result<T, ServiceError>> {
@@ -947,6 +968,7 @@ fn while_connected<'a, T: Send + 'a>(
     loop {
         tokio::select! {
             result = &mut future => return result,
+            _ = heartbeat.tick() => timed_client_until(state, deadline.instant(), socket.send(Message::Ping(Vec::new().into()))).await?,
             next = socket.recv() => match next {
                 Some(Ok(Message::Ping(value))) => timed_until(state, deadline.instant(), socket.send(Message::Pong(value))).await?,
                 Some(Ok(Message::Pong(_))) => {},
@@ -1062,6 +1084,7 @@ fn while_split_connected<'a, T: Send + 'a>(
     sink: &'a mut futures_util::stream::SplitSink<WebSocket, Message>,
     stream: &'a mut futures_util::stream::SplitStream<WebSocket>,
     pending: &'a mut VecDeque<String>,
+    heartbeat: &'a mut ClientHeartbeat,
     deadline: Deadline,
     interrupt_target: Option<&'a str>,
     future: impl std::future::Future<Output = Result<T, ServiceError>> + Send + 'a,
@@ -1071,6 +1094,7 @@ fn while_split_connected<'a, T: Send + 'a>(
     loop {
         tokio::select! {
             result = &mut future => return result,
+            _ = heartbeat.tick() => timed_client_until(state, deadline.instant(), sink.send(Message::Ping(Vec::new().into()))).await?,
             next = stream.next() => match next {
                 Some(Ok(Message::Ping(value))) => timed_until(state, deadline.instant(), sink.send(Message::Pong(value))).await?,
                 Some(Ok(Message::Pong(_))) => {},
@@ -1655,8 +1679,16 @@ async fn retry_opening_failure(
         }
     }
     if let Some(route) = &failed_route {
-        if super::overload::retry_same(state,prepared,tracker,wait.max(error.retry_after),deadline,policy).await? {
-            if policy.continuous_overload_retry { retries.credentials = 0; }
+        if let Some(recovery) = super::overload::retry(state,prepared,tracker,wait.max(error.retry_after),deadline,policy).await? {
+            if policy.continuous_overload_retry {
+                retries.credentials = usize::from(recovery == super::overload::RetryRoute::Alternate);
+            }
+            if recovery == super::overload::RetryRoute::Alternate {
+                retries.send = 0;
+                retries.status = 0;
+                retries.bootstrap = 0;
+                retries.refreshed = false;
+            }
             return Ok(true);
         }
         super::retry::note_failed_route(state,route,503,wait,error.credential_scope,Some(&error.message),deadline).await?;

@@ -24,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- **Codex API startup**: Preserve completed onboarding and local projects when starting API Service or API Key profiles without OAuth through Cockpit on macOS and Windows, including projectless profiles. Keep genuine first-run onboarding and restore account-specific state when returning to OAuth.
+- **Codex API startup**: Preserve completed onboarding and local projects when starting API Service or API Key profiles without OAuth through Cockpit on macOS and Windows, including projectless profiles. Keep local projects and conversation membership across account switches within the same instance, including distinct projects that share directories. Keep genuine first-run onboarding and restore account-specific state when returning to OAuth.
 
 - **Codex history order**: Full history repair preserves recent activity order when rebuilding the local conversation list and corrects entries that earlier repairs sorted by last update time.
 - **Codex API quota cooldowns**: Clear stale quota cooldowns after a refresh confirms usable allowance, while keeping newer limits and non-quota cooldowns. [#3030](https://github.com/jlcodes99/cockpit-tools/pull/3030) · [@thinker1008-commits](https://github.com/thinker1008-commits)
@@ -34,6 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Codex model image input**: Preserve the routed image input capability when saving a custom catalog, taking over a profile, or rebuilding a managed catalog, honoring each model’s settings. [#3035](https://github.com/jlcodes99/cockpit-tools/issues/3035)
 
 - **Codex API routing**: Skip accounts that enter cooldown while a request waits for a concurrency slot, release their slots and use eligible backups without restarting the wait budget. Preserve continuation ownership and return a retryable error when no account is available.
+
+- **Codex API capacity recovery**: Keep safely retryable requests waiting through temporary account cooldowns or concurrency limits, and check for available backup accounts again. Keep the client WebSocket alive while waiting so the original conversation can resume without another message.
 
 - **Codex API compatibility**: Preserve output budgets, normalize invalid item-ID characters, clean output-only metadata on WebSocket replay and restore the caller’s original instructions in responses. HTTP continuations stop repeating a previous forced tool choice when the current request omits it. Unsupported forced hosted images on native Lite routes now return an actionable error while retaining the selected model and protocol. Reduce copying of long histories and streamed tool arguments, and keep image-input support separate from Codex-only original-detail metadata.
 

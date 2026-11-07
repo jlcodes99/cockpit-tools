@@ -59,6 +59,7 @@ struct TestHost {
     oauth: AtomicBool,
     passthrough: AtomicBool,
     removed_a: AtomicBool,
+    capacity_recovery_checks: Mutex<Option<usize>>,
     local_quota_preparation_denied: Mutex<Vec<String>>,
     local_quota_send_denied: Mutex<Vec<String>>,
     local_quota_send_checks: Mutex<Vec<String>>,
@@ -92,6 +93,19 @@ impl Host for TestHost {
     ) -> BoxFuture<'a, Result<Route, ServiceError>> {
         Box::pin(async move {
             self.selections.lock().unwrap().push(request.clone());
+            {
+                let mut recovery = self.capacity_recovery_checks.lock().unwrap();
+                if let Some(checks) = recovery.as_mut() {
+                    if *checks < 2 && request.excluded_account_ids.iter().any(|id| id == "a") {
+                        *checks += 1;
+                        return Err(ServiceError::new(503, "no_available_account", "Backup is still unavailable"));
+                    }
+                    if *checks == 2 && request.preferred_account_id.as_deref() == Some("a") {
+                        *checks += 1;
+                        return Err(ServiceError::new(429, "account_busy", "Original account is busy"));
+                    }
+                }
+            }
             let account = if let Some(preferred) = request.preferred_account_id.as_deref() {
                 if preferred == "a" && self.removed_a.load(Ordering::SeqCst) {
                     return Err(ServiceError::new(
@@ -166,8 +180,11 @@ impl Host for TestHost {
     }
     fn execution_policy(&self) -> BoxFuture<'_, Result<ExecutionPolicy, ServiceError>> {
         Box::pin(async {
+            let continuous = self.capacity_recovery_checks.lock().unwrap().is_some();
             Ok(ExecutionPolicy {
                 account_switch_rebuild: self.enabled.load(Ordering::SeqCst),
+                continuous_overload_retry: continuous,
+                websocket_heartbeat: if continuous { Duration::from_millis(100) } else { Duration::ZERO },
                 credential_retries: 0,
                 status_retries: 0,
                 send_retries: 0,
@@ -377,6 +394,7 @@ impl Fixture {
             oauth: AtomicBool::new(false),
             passthrough: AtomicBool::new(false),
             removed_a: AtomicBool::new(false),
+            capacity_recovery_checks: Mutex::new(None),
             local_quota_preparation_denied: Mutex::new(vec![]),
             local_quota_send_denied: Mutex::new(vec![]),
             local_quota_send_checks: Mutex::new(vec![]),
@@ -924,6 +942,59 @@ async fn context_rebuild_only_replays_tool_history_after_call_and_result_are_pai
         fixture.assert_owner("a-root", "a");
         fixture.finish().await;
     }
+}
+
+#[tokio::test]
+async fn context_rebuild_websocket_keeps_tool_turn_connected_until_backup_recovers() {
+    let call = json!({"type":"function_call","name":"lookup","call_id":"synthetic-lookup","arguments":"{}","status":"completed"});
+    let result = json!({"type":"function_call_output","call_id":"synthetic-lookup","output":"synthetic result"});
+    let fixture = Fixture::new(
+        true,
+        vec![Step::Complete("a-root", Some(call.clone())), Step::SseOverload],
+        vec![Step::Complete("b-recovered", None)],
+    ).await;
+    fixture.host.passthrough.store(true, Ordering::SeqCst);
+    *fixture.host.capacity_recovery_checks.lock().unwrap() = Some(0);
+    let mut socket = fixture.socket().await;
+    let user_message = message("user", "run lookup");
+    ws_send(&mut socket, body(vec![user_message.clone()], None, true)).await;
+    assert_eq!(ws_event(&mut socket, "response.completed").await["response"]["id"], "a-root");
+    ws_send(&mut socket, body(vec![result.clone()], Some("a-root"), true)).await;
+
+    let (response, heartbeats) = tokio::time::timeout(Duration::from_secs(5), async {
+        let mut heartbeats = 0;
+        loop {
+            match socket.next().await.unwrap().unwrap() {
+                Message::Ping(_) => {
+                    if fixture.sent().len() == 2 {
+                        heartbeats += 1;
+                    }
+                    socket.flush().await.unwrap();
+                }
+                Message::Text(text) => {
+                    let event: Value = serde_json::from_str(&text).unwrap();
+                    match event["type"].as_str() {
+                        Some("error" | "response.failed") => panic!("Unexpected WS error: {event}"),
+                        Some("response.completed") => break (event, heartbeats),
+                        _ => {}
+                    }
+                }
+                Message::Close(frame) => panic!("Client connection closed during recovery: {frame:?}"),
+                _ => {}
+            }
+        }
+    }).await.unwrap();
+    assert_eq!(response["response"]["id"], "b-recovered");
+    assert!(heartbeats >= 2, "Expected heartbeats while the original request waited");
+    assert_eq!(*fixture.host.capacity_recovery_checks.lock().unwrap(), Some(3));
+    let sent = fixture.sent();
+    assert_eq!(sent.iter().map(|item| item.account.as_str()).collect::<Vec<_>>(), ["a", "a", "b"]);
+    assert_fresh(&sent[1], &sent[2], json!([
+        user_message, message("assistant", "answer-a-root"), call, result
+    ]));
+    socket.close(None).await.unwrap();
+    drop(socket);
+    fixture.finish().await;
 }
 
 #[tokio::test]

@@ -92,7 +92,12 @@ async fn send_inner(
     let mut refreshed = false;
     // Selection can skip incompatible candidates without dispatching anything.
     // Only replacements of actual upstream attempts consume this budget.
-    let mut credential_attempts = 0;
+    let mut credential_attempts = if tracker.overload.continuous() {
+        // A WebSocket-to-HTTP reopen can start partway through a pool round.
+        prepared.request.excluded_account_ids.len()
+    } else {
+        0
+    };
     let mut send_attempts = 0u8;
     let mut status_attempts = 0u8;
     let mut open_attempts = 1u8;
@@ -793,9 +798,17 @@ async fn send_inner(
             }
         }
         if let Some(route) = &failed_route {
-            if super::overload::retry_same(state,prepared,tracker,wait,deadline,policy).await? {
+            if let Some(recovery) = super::overload::retry(state,prepared,tracker,wait,deadline,policy).await? {
                 drop(response);
-                if policy.continuous_overload_retry { credential_attempts = 0; }
+                if policy.continuous_overload_retry {
+                    credential_attempts = usize::from(recovery == super::overload::RetryRoute::Alternate);
+                }
+                if recovery == super::overload::RetryRoute::Alternate {
+                    send_attempts = 0;
+                    status_attempts = 0;
+                    open_attempts = 1;
+                    refreshed = false;
+                }
                 continue;
             }
             note_failed_route(state,route,503,wait,credential_scope,failure_message.as_deref(),deadline).await?;
@@ -1249,7 +1262,7 @@ pub(super) async fn recover_before_output(
         tracing::info!(target: "codex_api", "[NativeAPI][recovery] request_id={} result=blocked switch_allowed={} accounts_used={} credential_limit={}", tracker.diagnostic_request_id(), can_switch_account(prepared), used, policy.credential_retries);
     }
     if overload {
-        if super::overload::retry_same(state,prepared,tracker,wait,deadline,policy).await? { return Ok(true); }
+        if super::overload::retry(state,prepared,tracker,wait,deadline,policy).await?.is_some() { return Ok(true); }
         note_failed_route(state,&failed_route,503,wait,scope,message.as_deref(),deadline).await?;
     }
     Ok(false)
@@ -1259,13 +1272,9 @@ pub(super) fn remaining_credential_policy(
     prepared:&Prepared, tracker:&RequestTracker, policy:&ExecutionPolicy,
 ) -> ExecutionPolicy {
     let mut remaining=policy.clone();
-    if policy.credential_retries!=0 {
-        let used = if tracker.overload.continuous() {
-            prepared.request.excluded_account_ids.len()
-        } else {
-            let accounts = tracker.upstream_account_ids();
-            accounts.len().saturating_sub(usize::from(accounts.contains(&prepared.route.account_id)))
-        };
+    if policy.credential_retries!=0 && !tracker.overload.continuous() {
+        let accounts = tracker.upstream_account_ids();
+        let used = accounts.len().saturating_sub(usize::from(accounts.contains(&prepared.route.account_id)));
         remaining.credential_retries=usize::from(policy.credential_retries).saturating_sub(used).max(1).min(u16::MAX as usize) as u16;
     }
     remaining

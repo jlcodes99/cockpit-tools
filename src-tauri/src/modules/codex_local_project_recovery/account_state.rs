@@ -174,22 +174,38 @@ fn local_view(
         .collect::<Vec<_>>();
     for (project, roots) in registry {
         check()?;
-        if root_counts[&roots] != 1 || blocked.contains(project.id.as_str()) {
+        if blocked.contains(project.id.as_str()) {
             continue;
         }
         let mut candidates = Vec::new();
         let mut ambiguous = false;
         for (source, index) in sources.iter().zip(&by_source) {
-            let mut matches = index
-                .get(&roots)
-                .into_iter()
-                .flatten()
-                .copied()
-                .filter(|(id, _)| {
-                    source[MAP][&host]
-                        .get(*id)
-                        .is_none_or(|mapped| mapped.as_str() == Some(project.id.as_str()))
-                });
+            // Stable registry IDs distinguish different projects using the same
+            // directories. Only infer an identity from roots when it is unique.
+            let entries = index.get(&roots).into_iter().flatten().copied();
+            let explicit = entries
+                .clone()
+                .filter(|(id, _)| match source[MAP][&host].get(*id) {
+                    Some(mapped) => mapped.as_str() == Some(project.id.as_str()),
+                    None => *id == project.id,
+                })
+                .collect::<Vec<_>>();
+            if explicit.len() > 1 {
+                ambiguous = true;
+                break;
+            }
+            if let Some(entry) = explicit.first() {
+                candidates.push(*entry);
+                continue;
+            }
+            if root_counts[&roots] != 1 {
+                continue;
+            }
+            let mut matches = entries.filter(|(id, _)| {
+                source[MAP][&host]
+                    .get(*id)
+                    .is_none_or(|mapped| mapped.as_str() == Some(project.id.as_str()))
+            });
             if let Some(first) = matches.next() {
                 if matches.next().is_some() {
                     ambiguous = true;
@@ -209,7 +225,11 @@ fn local_view(
                 .first()
                 .and_then(|source| source["local-projects"].get(legacy))
                 .is_some_and(|entry| {
-                    cloud(entry) || root_key(root_set(&entry["rootPaths"])) != roots
+                    cloud(entry)
+                        || root_key(root_set(&entry["rootPaths"])) != roots
+                        || sources[0][MAP][&host]
+                            .get(legacy)
+                            .is_some_and(|mapped| mapped.as_str() != Some(project.id.as_str()))
                 })
         {
             continue;
