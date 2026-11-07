@@ -34,7 +34,7 @@ jobs:
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Validate updater signing configuration
         env:
@@ -233,16 +233,10 @@ jobs:
         with:
           key: windows-release
 
-      - name: 🐹 Go setup
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: sidecars/cockpit-cliproxy/go.mod
-          cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
-
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
@@ -370,16 +364,10 @@ jobs:
         with:
           key: macos-aarch64-release
 
-      - name: 🐹 Go setup
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: sidecars/cockpit-cliproxy/go.mod
-          cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
-
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
@@ -488,16 +476,10 @@ jobs:
         with:
           key: macos-x86_64-release
 
-      - name: 🐹 Go setup
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: sidecars/cockpit-cliproxy/go.mod
-          cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
-
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
@@ -607,16 +589,10 @@ jobs:
         with:
           key: macos-universal-release
 
-      - name: 🐹 Go setup
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: sidecars/cockpit-cliproxy/go.mod
-          cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
-
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
@@ -706,16 +682,10 @@ jobs:
         with:
           key: linux-${{ matrix.label }}-release
 
-      - name: 🐹 Go setup
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: sidecars/cockpit-cliproxy/go.mod
-          cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
-
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
@@ -821,7 +791,7 @@ jobs:
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: 📥 Download release metadata
         uses: actions/download-artifact@v4
