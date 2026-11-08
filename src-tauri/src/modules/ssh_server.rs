@@ -2,20 +2,24 @@ use crate::models::codex::CodexAccount;
 use crate::models::ssh_server::{
     SshAuthConfig, SshCodexSyncResult, SshCodexSyncStatus, SshServer, SshServerStore,
 };
-use crate::modules::{account, atomic_write, codex_account, logger};
+use crate::modules::{account, codex_account, logger};
 use base64::{engine::general_purpose::STANDARD, Engine};
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::time::Duration;
 use tokio::process::Command;
 use uuid::Uuid;
 
+#[path = "ssh_server_store.rs"]
+mod store;
+#[path = "ssh_server_batch.rs"]
+mod batch;
+pub use crate::models::ssh_server::SshServerList;
+
 #[path = "ssh_server_process.rs"]
 mod process;
 
 const SSH_SERVERS_FILE: &str = "ssh_servers.json";
-const STORE_VERSION: &str = "1";
 /// TCP/SSH 握手超时（传给 OpenSSH ConnectTimeout）
 const CONNECTION_TIMEOUT_SECS: u64 = 12;
 /// 测连整段命令墙钟超时
@@ -35,12 +39,6 @@ fn ensure_current_sync_account(account: &CodexAccount) -> Result<(), String> {
     } else {
         Err("ssh_sync_superseded: a newer Codex account is active".into())
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SshServerList {
-    pub selected_server_id: Option<String>,
-    pub servers: Vec<SshServer>,
 }
 
 fn now_timestamp() -> i64 {
@@ -209,93 +207,49 @@ fn normalize_server(
 }
 
 pub fn load_store() -> Result<SshServerStore, String> {
-    let path = store_path()?;
-    if !path.exists() {
-        return Ok(SshServerStore::default());
-    }
-    let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read SSH servers store: {}", e))?;
-    let mut store: SshServerStore = atomic_write::parse_json_with_auto_restore(&path, &content)
-        .map_err(|e| format!("Failed to parse SSH servers store: {}", e))?;
-    if store.version.trim().is_empty() {
-        store.version = STORE_VERSION.to_string();
-    }
-    if let Some(selected_id) = store.selected_server_id.clone() {
-        if !store.servers.iter().any(|server| server.id == selected_id) {
-            store.selected_server_id = None;
-        }
-    }
-    Ok(store)
+    store::load(&store_path()?)
 }
 
+#[cfg(test)]
 fn save_store(store: &SshServerStore) -> Result<(), String> {
     let path = store_path()?;
     let content = serde_json::to_string_pretty(store)
         .map_err(|e| format!("Failed to serialize SSH servers store: {}", e))?;
-    atomic_write::write_string_atomic(&path, &content)
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
 }
 
 pub fn list_servers() -> Result<SshServerList, String> {
-    let store = load_store()?;
-    Ok(SshServerList {
-        selected_server_id: store.selected_server_id,
-        servers: store.servers,
-    })
+    Ok(load_store()?.into())
 }
 
 pub fn upsert_server(server: SshServer) -> Result<SshServerList, String> {
-    let mut store = load_store()?;
-    store.version = STORE_VERSION.to_string();
-    let existing_index = store.servers.iter().position(|item| item.id == server.id);
-    let existing = existing_index.and_then(|index| store.servers.get(index));
-    let server = normalize_server(server, existing)?;
-    if let Some(index) = existing_index {
-        store.servers[index] = server;
-    } else {
-        store.servers.push(server);
-    }
-    save_store(&store)?;
-    list_servers()
+    store::update(&store_path()?, |store| {
+        let existing_index = store.servers.iter().position(|item| item.id == server.id);
+        let existing = existing_index.and_then(|index| store.servers.get(index));
+        let server = normalize_server(server, existing)?;
+        // Saving another auto-sync server adds it without replacing prior targets.
+        store.selected_server_ids.retain(|id| id != &server.id);
+        if server.sync_on_codex_switch { store.selected_server_ids.push(server.id.clone()); }
+        if let Some(index) = existing_index { store.servers[index] = server; }
+        else { store.servers.push(server); }
+        Ok(())
+    })
 }
 
 pub fn delete_server(server_id: &str) -> Result<SshServerList, String> {
-    let mut store = load_store()?;
     let server_id = server_id.trim();
-    store.servers.retain(|server| server.id != server_id);
-    if store.selected_server_id.as_deref() == Some(server_id) {
-        store.selected_server_id = None;
-    }
-    save_store(&store)?;
-    list_servers()
+    store::update(&store_path()?, |store| {
+        store.servers.retain(|server| server.id != server_id);
+        Ok(())
+    })
 }
 
-pub fn select_server(server_id: Option<String>) -> Result<SshServerList, String> {
-    let mut store = load_store()?;
-    let selected = server_id.and_then(|value| {
-        let trimmed = value.trim().to_string();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed)
-        }
-    });
-    if let Some(selected_id) = selected.as_deref() {
-        if !store.servers.iter().any(|server| server.id == selected_id) {
-            return Err(format!("SSH server not found: {}", selected_id));
-        }
-    }
-    store.selected_server_id = selected;
-    save_store(&store)?;
-    list_servers()
+pub fn select_servers(server_ids: Vec<String>) -> Result<SshServerList, String> {
+    store::select(&store_path()?, server_ids)
 }
 
-fn selected_server_from_store(store: &SshServerStore) -> Option<SshServer> {
-    let selected_id = store.selected_server_id.as_deref()?;
-    store
-        .servers
-        .iter()
-        .find(|server| server.id == selected_id)
-        .cloned()
+pub fn set_server_selected(server_id: &str, selected: bool) -> Result<SshServerList, String> {
+    store::set_selected(&store_path()?, server_id, selected)
 }
 
 /// OpenSSH 参数：非交互、握手超时与私钥 IdentitiesOnly，避免 agent 里一堆 key 拖慢/超时。
@@ -586,17 +540,16 @@ fn persist_sync_status(
     server_id: &str,
     status: SshCodexSyncStatus,
 ) -> Result<SshCodexSyncResult, String> {
-    let mut store = load_store()?;
-    let index = store
-        .servers
-        .iter()
-        .position(|server| server.id == server_id)
-        .ok_or_else(|| format!("SSH server not found: {}", server_id))?;
-    store.servers[index].last_sync = Some(status.clone());
-    store.servers[index].updated_at = now_timestamp();
-    let result = result_from_status(&store.servers[index], status);
-    save_store(&store)?;
-    Ok(result)
+    let list = store::update(&store_path()?, |store| {
+        let server = store.servers.iter_mut().find(|server| server.id == server_id)
+            .ok_or_else(|| format!("SSH server not found: {server_id}"))?;
+        server.last_sync = Some(status.clone());
+        server.updated_at = now_timestamp();
+        Ok(())
+    })?;
+    let server = list.servers.iter().find(|server| server.id == server_id)
+        .ok_or_else(|| format!("SSH server not found: {server_id}"))?;
+    Ok(result_from_status(server, status))
 }
 
 async fn sync_account_to_server(server: SshServer, account: &CodexAccount) -> SshCodexSyncResult {
@@ -680,33 +633,33 @@ pub async fn sync_current_account_to_server(
             .cloned()
             .ok_or_else(|| format!("SSH server not found: {}", server_id))?
     } else {
-        selected_server_from_store(&store)
+        if store.selected_server_ids.len() != 1 {
+            return Err("ssh_target_required: specify one SSH server for manual sync".into());
+        }
+        store.servers.iter().find(|s| store.selected_server_ids.contains(&s.id)).cloned()
             .ok_or_else(|| "ssh_not_configured: no selected SSH server".to_string())?
     };
     Ok(sync_account_to_server(server, &account).await)
 }
 
-pub async fn sync_selected_server_after_codex_switch(
+pub async fn sync_selected_servers_after_codex_switch(
     account: &CodexAccount,
-) -> Option<SshCodexSyncResult> {
+    publish: impl FnMut(SshCodexSyncResult),
+) {
     let _guard = ACCOUNT_SYNC_LOCK.lock().await;
-    ensure_current_sync_account(account).ok()?;
+    if ensure_current_sync_account(account).is_err() { return; }
     let store = match load_store() {
         Ok(store) => store,
         Err(error) => {
             logger::log_warn(&format!("[Codex SSH] 读取 SSH 服务器配置失败: {}", error));
-            return None;
+            return;
         }
     };
-    let Some(server) = selected_server_from_store(&store) else {
-        return None;
-    };
-    if !server.sync_on_codex_switch {
-        return None;
-    }
-    let result = sync_account_to_server(server, account).await;
-    ensure_current_sync_account(account).ok()?;
-    Some(result)
+    batch::run(store::switch_targets(&store),
+        || ensure_current_sync_account(account).is_ok(),
+        |server| load_store().is_ok_and(|latest|
+            store::switch_targets(&latest).iter().any(|target| target.id == server.id)),
+        |server| sync_account_to_server(server, account), publish).await;
 }
 
 #[cfg(test)]
@@ -851,8 +804,8 @@ mod tests {
             last_sync: None,
         };
         let store = SshServerStore {
-            version: STORE_VERSION.to_string(),
-            selected_server_id: Some(server.id.clone()),
+            version: "2".to_string(),
+            selected_server_ids: vec![server.id.clone()],
             servers: vec![server.clone()],
         };
         save_store(&store).expect("write live SSH server store");

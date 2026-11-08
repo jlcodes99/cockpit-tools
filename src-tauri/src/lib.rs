@@ -1340,7 +1340,8 @@ pub fn run() {
             commands::ssh_server::list_ssh_servers,
             commands::ssh_server::upsert_ssh_server,
             commands::ssh_server::delete_ssh_server,
-            commands::ssh_server::select_ssh_server,
+            commands::ssh_server::select_ssh_servers,
+            commands::ssh_server::set_ssh_server_selected,
             commands::ssh_server::test_ssh_server_connection,
             commands::ssh_server::sync_current_codex_account_to_ssh_server,
             // CodeBuddy CN Commands
