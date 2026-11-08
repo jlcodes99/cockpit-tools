@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- **WorkBuddy AI client launch**: The WorkBuddy AI accounts page gains a **Launch client** button that starts the international WorkBuddy AI executable from the path configured in Settings → General, with clear errors when the path is unset or missing. Accounts, OAuth authorization and auth-file switching keep working as before.
+- **WorkBuddy AI client launch**: Switching a WorkBuddy AI account now launches the international client automatically, matching the domestic WorkBuddy behavior; launch failures are reported without losing the written credentials. The accounts page also gains a **Launch client** button that starts the configured executable on demand, with clear errors when the path is unset or missing.
 
 ## [1.3.53] - 2026-09-19
 

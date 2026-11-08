@@ -286,7 +286,24 @@ pub async fn inject_workbuddy_ai_to_vscode(
     workbuddy_ai_account::set_current_account_id(Some(account_id.as_str()))?;
     workbuddy_ai_account::write_account_to_default_client(&account)?;
     let _ = crate::modules::tray::update_tray_menu(&app);
-    Ok(format!("切换完成：{}", account.email))
+
+    // 与国内版 WorkBuddy 的切号行为对齐：切号后自动拉起客户端；
+    // 启动失败不影响已写入的登录凭据，只把原因带回给用户。
+    let launch_warning = match crate::modules::process::start_workbuddy_ai_client() {
+        Ok(_) => None,
+        Err(err) => {
+            crate::modules::logger::log_warn(&format!(
+                "[WorkBuddy AI Switch] 切号完成但启动失败：account_id={}, error={}",
+                account.id, err
+            ));
+            Some(err)
+        }
+    };
+
+    Ok(match launch_warning {
+        Some(err) => format!("切换完成，但 WorkBuddy AI 启动失败：{}", err),
+        None => format!("切换完成：{}", account.email),
+    })
 }
 
 #[tauri::command]
