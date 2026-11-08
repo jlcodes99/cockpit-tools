@@ -7,6 +7,12 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [1.3.81] - 2026-11-08
+
+### Added
+
+- **WorkBuddy AI client launch**: The WorkBuddy AI accounts page gains a **Launch client** button that starts the international WorkBuddy AI executable from the path configured in Settings → General, with clear errors when the path is unset or missing. Accounts, OAuth authorization and auth-file switching keep working as before.
+
 ## [1.3.53] - 2026-09-19
 
 ### Fixed
