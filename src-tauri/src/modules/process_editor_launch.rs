@@ -1238,7 +1238,8 @@ pub fn start_workbuddy_ai_client() -> Result<u32, String> {
 
     #[cfg(target_os = "macos")]
     {
-        let pid = spawn_open_app_with_options(&launch_path, &[], true)
+        let launch_path_str = launch_path.to_string_lossy();
+        let pid = spawn_open_app_with_options(&launch_path_str, &[], true)
             .map_err(|e| format!("启动 WorkBuddy AI 失败：{}", e))?;
         crate::modules::logger::log_info(&format!(
             "[WorkBuddy AI Start] 客户端启动命令已发送 pid={} path={}",
