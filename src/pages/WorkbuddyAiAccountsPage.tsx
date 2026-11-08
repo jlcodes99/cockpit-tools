@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Play } from 'lucide-react';
 import { PlatformOverviewTabsHeader } from '../components/platform/PlatformOverviewTabsHeader';
 import { useWorkbuddyAiAccountStore } from '../stores/useWorkbuddyAiAccountStore';
 import * as workbuddyAiService from '../services/workbuddyAiService';
@@ -67,7 +70,30 @@ const workbuddyAiPlatformConfig: CodebuddySuiteAccountsPlatformConfig<WorkbuddyA
 };
 
 export function WorkbuddyAiAccountsPage() {
+  const { t } = useTranslation();
   const store = useWorkbuddyAiAccountStore();
+  const [startingClient, setStartingClient] = useState(false);
+  const [startClientMessage, setStartClientMessage] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
+
+  const handleStartClient = async () => {
+    if (startingClient) return;
+    setStartingClient(true);
+    setStartClientMessage(null);
+    try {
+      await workbuddyAiService.startWorkbuddyAiClient();
+      setStartClientMessage({
+        text: t('workbuddyAi.startClient.success', '客户端已启动，若未弹出请检查任务栏'),
+        tone: 'ok',
+      });
+    } catch (error) {
+      setStartClientMessage({
+        text: String(error) || t('workbuddyAi.startClient.failed', '启动失败'),
+        tone: 'error',
+      });
+    } finally {
+      setStartingClient(false);
+    }
+  };
   const page = useProviderAccountsPage<WorkbuddyAccount>({
     platformKey: 'WorkBuddy AI',
     oauthLogPrefix: 'WorkbuddyAiOAuth',
@@ -107,6 +133,48 @@ export function WorkbuddyAiAccountsPage() {
   return (
     <div className="ghcp-accounts-page workbuddy-ai-accounts-page">
       <PlatformOverviewTabsHeader platform="workbuddy_ai" active="overview" tabs={['overview']} />
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '10px 20px 0',
+        }}
+      >
+        <button
+          type="button"
+          onClick={handleStartClient}
+          disabled={startingClient}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 14px',
+            borderRadius: 8,
+            border: '1px solid rgba(127,127,127,0.35)',
+            background: 'transparent',
+            color: 'inherit',
+            cursor: startingClient ? 'wait' : 'pointer',
+            fontSize: 13,
+          }}
+        >
+          <Play size={14} />
+          {startingClient
+            ? t('workbuddyAi.startClient.starting', '正在启动…')
+            : t('workbuddyAi.startClient.label', '启动客户端')}
+        </button>
+        {startClientMessage && (
+          <span
+            style={{
+              fontSize: 12,
+              color: startClientMessage.tone === 'error' ? '#e5534b' : 'inherit',
+              opacity: startClientMessage.tone === 'error' ? 1 : 0.75,
+            }}
+          >
+            {startClientMessage.text}
+          </span>
+        )}
+      </div>
       <CodebuddySuiteAccountsSharedView
         accounts={store.accounts}
         loading={store.loading}

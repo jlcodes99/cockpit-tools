@@ -1193,6 +1193,85 @@ pub fn start_workbuddy_default_with_args_with_new_window(
     }
 }
 
+/// 启动 WorkBuddy AI（国际版）客户端：使用设置中配置的可执行文件路径。
+pub fn start_workbuddy_ai_client() -> Result<u32, String> {
+    let configured = config::get_user_config()
+        .workbuddy_ai_app_path
+        .trim()
+        .to_string();
+    if configured.is_empty() {
+        return Err(
+            "WorkBuddy AI 启动路径未配置，请先在 设置 → 通用 中选择 WorkBuddy AI 可执行文件"
+                .to_string(),
+        );
+    }
+    let launch_path = std::path::PathBuf::from(&configured);
+    if !launch_path.is_file() {
+        return Err(format!(
+            "WorkBuddy AI 启动路径无效或文件不存在: {}",
+            launch_path.display()
+        ));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+
+        let mut cmd = Command::new(&launch_path);
+        if should_detach_child() {
+            cmd.creation_flags(0x08000000 | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+            cmd.stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+        } else {
+            cmd.creation_flags(0x08000000);
+        }
+        let child = spawn_command_with_trace(&mut cmd)
+            .map_err(|e| format!("启动 WorkBuddy AI 失败：{}", e))?;
+        crate::modules::logger::log_info(&format!(
+            "[WorkBuddy AI Start] 客户端启动命令已发送 pid={} path={}",
+            child.id(),
+            launch_path.display()
+        ));
+        return Ok(child.id());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let pid = spawn_open_app_with_options(&launch_path, &[], true)
+            .map_err(|e| format!("启动 WorkBuddy AI 失败：{}", e))?;
+        crate::modules::logger::log_info(&format!(
+            "[WorkBuddy AI Start] 客户端启动命令已发送 pid={} path={}",
+            pid,
+            launch_path.display()
+        ));
+        return Ok(pid);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let mut cmd = Command::new(&launch_path);
+        if should_detach_child() {
+            cmd.stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+        }
+        let child = spawn_detached_unix(&mut cmd)
+            .map_err(|e| format!("启动 WorkBuddy AI 失败：{}", e))?;
+        crate::modules::logger::log_info(&format!(
+            "[WorkBuddy AI Start] 客户端启动命令已发送 pid={} path={}",
+            child.id(),
+            launch_path.display()
+        ));
+        return Ok(child.id());
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        Err("WorkBuddy AI 启动仅支持 macOS、Windows 和 Linux".to_string())
+    }
+}
+
 pub fn start_qoder_with_args_with_new_window(
     user_data_dir: &str,
     extra_args: &[String],

@@ -58,6 +58,10 @@ export async function updateWorkbuddyAiAccountTags(accountId: string, tags: stri
   return await invoke('update_workbuddy_ai_account_tags', { accountId, tags });
 }
 
+export async function startWorkbuddyAiClient(): Promise<number> {
+  return await invoke('workbuddy_ai_start_client');
+}
+
 export async function injectWorkbuddyAiToVSCode(accountId: string): Promise<string> {
   return await invoke('inject_workbuddy_ai_to_vscode', { accountId });
 }

@@ -288,3 +288,13 @@ pub async fn inject_workbuddy_ai_to_vscode(
     let _ = crate::modules::tray::update_tray_menu(&app);
     Ok(format!("切换完成：{}", account.email))
 }
+
+#[tauri::command]
+pub async fn workbuddy_ai_start_client() -> Result<u32, String> {
+    let result = crate::modules::process::start_workbuddy_ai_client();
+    crate::modules::logger::log_info(&format!(
+        "[WorkBuddy AI Command] 启动客户端请求完成: ok={}",
+        result.is_ok()
+    ));
+    result
+}

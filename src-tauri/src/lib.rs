@@ -1394,6 +1394,7 @@ pub fn run() {
             commands::workbuddy_ai::workbuddy_ai_oauth_open_fresh_browser,
             commands::workbuddy_ai::workbuddy_ai_oauth_login_complete,
             commands::workbuddy_ai::workbuddy_ai_oauth_login_cancel,
+            commands::workbuddy_ai::workbuddy_ai_start_client,
             commands::workbuddy_ai::add_workbuddy_ai_account_with_token,
             commands::workbuddy_ai::update_workbuddy_ai_account_tags,
             commands::workbuddy_ai::get_workbuddy_ai_accounts_index_path,
