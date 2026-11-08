@@ -260,8 +260,23 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          set -euo pipefail
-          npx tauri build --ci
+          set -uo pipefail
+          # Bundler tool downloads (WiX/NSIS/linuxdeploy) hit intermittent
+          # GitHub asset 5xx during the storage outage. Rust artifacts are
+          # incremental, so a retry re-runs only the bundling stage.
+          status=0
+          for attempt in 1 2 3 4; do
+            npx tauri build --ci
+            status=$?
+            if [ "$status" -eq 0 ]; then
+              break
+            fi
+            if [ "$attempt" -eq 4 ]; then
+              exit "$status"
+            fi
+            echo "Build attempt $attempt failed (exit $status); retrying in 90s..."
+            sleep 90
+          done
 
       - name: 📥 Download release metadata
         uses: actions/download-artifact@v4
@@ -709,8 +724,23 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          set -euo pipefail
-          npx tauri build --ci
+          set -uo pipefail
+          # Bundler tool downloads (WiX/NSIS/linuxdeploy) hit intermittent
+          # GitHub asset 5xx during the storage outage. Rust artifacts are
+          # incremental, so a retry re-runs only the bundling stage.
+          status=0
+          for attempt in 1 2 3 4; do
+            npx tauri build --ci
+            status=$?
+            if [ "$status" -eq 0 ]; then
+              break
+            fi
+            if [ "$attempt" -eq 4 ]; then
+              exit "$status"
+            fi
+            echo "Build attempt $attempt failed (exit $status); retrying in 90s..."
+            sleep 90
+          done
 
       - name: 📥 Download release metadata
         uses: actions/download-artifact@v4
