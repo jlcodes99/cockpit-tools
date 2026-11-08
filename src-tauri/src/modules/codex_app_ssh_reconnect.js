@@ -30,6 +30,7 @@
       finished = true;
       clearTimeout(timer);
       window.removeEventListener("message", receive);
+      if (!result.ok && operations.get(request.hostId) === entry) operations.delete(request.hostId);
       resolve(result);
     };
     const send = message => {
@@ -64,7 +65,9 @@
     window.addEventListener("message", receive);
     // Set before dispatch: native state events may precede the bridge ACK.
     operations.set(request.hostId, entry);
-    send({ type: "codex-app-server-restart", hostId: request.hostId, intent: "reconnect" });
+    // Reconnecting the transport alone reuses a daemon with cached old auth.
+    // The native restart path also recreates that host's app-server process.
+    send({ type: "codex-app-server-restart", hostId: request.hostId, intent: "restart", killCodexProcess: true });
   });
   return entry.promise;
 })()

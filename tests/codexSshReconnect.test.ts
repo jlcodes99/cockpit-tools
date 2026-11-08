@@ -38,7 +38,8 @@ test('native reconnect waits for a new connected event and verifies the new acco
   const result=Promise.resolve(f.run()).then(value=>{settled=true;return value;});
   await settlePromises();
   assert.equal(f.calls[0].type,'codex-app-server-restart');
-  assert.equal(f.calls[0].intent,'reconnect');
+  assert.equal(f.calls[0].intent,'restart');
+  assert.equal(f.calls[0].killCodexProcess,true);
   assert.equal(settled,false,'IPC enqueue acknowledgement is not a refreshed connection');
   f.emit({type:'codex-app-server-connection-changed',hostId:'ssh-other',state:'connected'});
   f.emit({type:'codex-app-server-connection-changed',hostId:'ssh-fixture',state:'connected',isSnapshot:true});
@@ -100,4 +101,16 @@ test('a newer switch retires the old waiter, and API key mode rejects a stale Ch
   const local=fixture();
   assert.equal((await local.run({hostId:'local'})).reason,'bridge_unavailable');
   assert.equal(local.calls.length,0);
+});
+
+test('a startup host that becomes ready can retry the same operation identity',async()=>{
+  const options={missingHost:true};
+  const f=fixture(options);
+  assert.equal((await f.run()).reason,'not_ready');
+  options.missingHost=false;
+  const retry=Promise.resolve(f.run());
+  f.emit({type:'codex-app-server-connection-changed',hostId:'ssh-fixture',state:'restarting'});
+  f.emit({type:'codex-app-server-connection-changed',hostId:'ssh-fixture',state:'connected'});
+  assert.equal((await retry).ok,true);
+  assert.equal(f.calls.filter(call=>call.type==='codex-app-server-restart').length,2);
 });

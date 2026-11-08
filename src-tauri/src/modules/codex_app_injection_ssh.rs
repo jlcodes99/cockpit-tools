@@ -110,7 +110,7 @@ async fn desktop_availability(
         .unwrap_or(DesktopAvailability::Starting))
 }
 
-fn request_script(host: &str, account: &CodexAccount) -> String {
+fn request_script(host: &str, account: &CodexAccount, request_id: &str) -> String {
     let oauth = !account.is_api_key_auth()
         && !account.is_agent_identity_auth()
         && !account.is_web_session_auth();
@@ -121,7 +121,7 @@ fn request_script(host: &str, account: &CodexAccount) -> String {
     } else {
         None
     };
-    let request = json!({"hostId":host,"requestId":uuid::Uuid::new_v4().to_string(),
+    let request = json!({"hostId":host,"requestId":request_id,
         "email":oauth.then_some(&account.email),"authKind":auth_kind,
         "accountId":account.account_id,"timeoutMs":30000});
     SCRIPT.replace("__COCKPIT_SSH_RECONNECT__", &request.to_string())
@@ -133,6 +133,7 @@ async fn try_refresh(
     profile: &Path,
     server: &SshServer,
     account: &CodexAccount,
+    request_id: &str,
 ) -> Result<bool, String> {
     let targets = query_targets(client, port).await;
     if !targets.iter().any(is_codex_app_target) {
@@ -141,7 +142,7 @@ async fn try_refresh(
     let Some(host) = matching_host(profile, server).await? else {
         return Ok(false);
     };
-    let script = request_script(&host, account);
+    let script = request_script(&host, account, request_id);
     for target in targets.iter().filter(|target| is_codex_app_target(target)) {
         ensure_current_target(account)?;
         let Some(url) = target.websocket_url.as_deref() else {
@@ -152,7 +153,13 @@ async fn try_refresh(
                 tokio::time::sleep(Duration::from_millis(250)).await;
             }
         };
-        let value = transport::evaluate(url, &script, cancelled).await?;
+        let value = match transport::evaluate(url, &script, cancelled).await {
+            Ok(value) => value,
+            // Startup overlays and old renderers can disappear during a switch.
+            // Re-query the native pages and reuse the same request identity.
+            Err(reason) if transport::retryable(&reason) => continue,
+            Err(reason) => return Err(reason),
+        };
         if value["ok"] == true {
             return Ok(true);
         }
@@ -177,6 +184,7 @@ pub(super) async fn refresh(
             .no_proxy()
             .build()
             .map_err(|_| "bridge_unavailable")?;
+        let request_id = uuid::Uuid::new_v4().to_string();
         loop {
             if !current(account) {
                 return Err("ssh_sync_superseded".into());
@@ -185,7 +193,7 @@ pub(super) async fn refresh(
                 DesktopAvailability::Absent => return Ok(false),
                 DesktopAvailability::Starting => {}
                 DesktopAvailability::Ready(port) => {
-                    if try_refresh(&client, port, &profile, server, account).await? {
+                    if try_refresh(&client, port, &profile, server, account, &request_id).await? {
                         return Ok(true);
                     }
                 }
