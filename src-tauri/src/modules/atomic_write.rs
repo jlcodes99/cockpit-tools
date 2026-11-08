@@ -331,6 +331,26 @@ pub(crate) fn replace_secret_string_if_matches(
     expected: Option<&str>,
     replacement: Option<&str>,
 ) -> Result<bool, String> {
+    replace_string_if_matches_internal(path, expected, replacement, write_secret_string_atomic_internal)
+}
+
+/// Conditional ordinary-file replacement, including absent files, without
+/// creating, replacing or removing the application's own recovery backup.
+pub(crate) fn replace_string_if_matches(
+    path: &Path,
+    expected: Option<&str>,
+    replacement: Option<&str>,
+) -> Result<bool, String> {
+    replace_string_if_matches_internal(path, expected, replacement,
+        |path, content| write_string_atomic_internal(path, content, false))
+}
+
+fn replace_string_if_matches_internal(
+    path: &Path,
+    expected: Option<&str>,
+    replacement: Option<&str>,
+    write: impl FnOnce(&Path, &str) -> Result<(), String>,
+) -> Result<bool, String> {
     let lock = path_write_lock(path)?;
     let _guard = lock.lock().map_err(|_| "文件写入锁已损坏".to_string())?;
     let current = match fs::read_to_string(path) {
@@ -340,7 +360,7 @@ pub(crate) fn replace_secret_string_if_matches(
     };
     if current.as_deref() != expected { return Ok(false); }
     match replacement {
-        Some(content) => write_secret_string_atomic_internal(path, content)?,
+        Some(content) => write(path, content)?,
         None => match fs::remove_file(path) {
             Ok(()) => {},
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
@@ -449,7 +469,7 @@ pub fn parse_json_with_auto_restore<T: DeserializeOwned>(
 mod tests {
     use super::{
         build_backup_path, quarantine_file, remove_file_if_hash_matches, remove_file_locked,
-        restore_from_backup, write_secret_string_atomic, write_string_atomic,
+        replace_string_if_matches, restore_from_backup, write_secret_string_atomic, write_string_atomic,
         write_string_atomic_if_hash_matches,
     };
     use sha2::{Digest, Sha256};
@@ -549,6 +569,24 @@ mod tests {
         })
         .expect("reject deleted write"));
         assert!(!path.exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn conditional_ordinary_replace_keeps_native_backup_and_newer_edits() {
+        let dir = make_temp_dir("atomic_native_config_cas");
+        let path = dir.join("config.json");
+        let backup = build_backup_path(&path).unwrap();
+        fs::write(&backup, "native backup").unwrap();
+        assert!(replace_string_if_matches(&path, None, Some("initial")).unwrap());
+        assert!(!replace_string_if_matches(&path, None, Some("unexpected")).unwrap());
+        assert!(replace_string_if_matches(&path, Some("initial"), Some("updated")).unwrap());
+        assert!(!replace_string_if_matches(&path, Some("initial"), None).unwrap());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "updated");
+        assert_eq!(fs::read_to_string(&backup).unwrap(), "native backup");
+        assert!(replace_string_if_matches(&path, Some("updated"), None).unwrap());
+        assert!(!path.exists());
+        assert_eq!(fs::read_to_string(&backup).unwrap(), "native backup");
         let _ = fs::remove_dir_all(dir);
     }
 
