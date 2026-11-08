@@ -5,7 +5,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tokio::time::timeout;
 
-pub(super) async fn output(
+pub(crate) async fn output(
     mut command: Command,
     duration: Duration,
     payload: Option<String>,

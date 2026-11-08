@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadHookModule, settlePromises } from '../../../tests/helpers/reactHookHarness';
+import { sshSyncSucceeded } from '../../utils/sshSyncStatus';
 
 function nodes(tree: any): any[] {
   if (Array.isArray(tree)) return tree.flatMap(nodes);
@@ -26,6 +27,7 @@ function fixture(file: string, exportName: string) {
     '@tauri-apps/api/event':{listen:async()=>()=>{}},
     '../../stores/useSshServerStore':{useSshServerStore:(selector?:any)=>selector?selector(state):state},
     './CodexSshSyncModal':{CodexSshSyncModal:()=>null},
+    '../../utils/sshSyncStatus':{sshSyncSucceeded},
   });
   const component=module.exports[exportName];
   return {state, module, render:()=>module.render(()=>component({embedded:true}))};
@@ -61,5 +63,16 @@ test('the settings switch counts all automatic targets and clears all on disable
   await settlePromises();
   assert.equal(nodes(s.module.flush()).find(node=>node.type==='input'&&node.props.type==='checkbox').props.checked,false);
   assert.equal(s.state.selectedServerIds.length,0);
+  s.module.unmount();
+});
+
+test('a successful file write with a failed client refresh stays visible on its server card',()=>{
+  const s=fixture('./CodexSshServersPanel.tsx','CodexSshServersPanel');
+  s.state.servers[0].last_sync={verified:true,error:'ssh_connection_refresh_failed: account_mismatch'};
+  const tree=s.render();
+  const status=nodes(tree).find(node=>String(node.props.className).includes('codex-ssh-panel__sync-status'));
+  assert.ok(status.props.className.includes('is-fail'));
+  assert.ok(status.props.children.includes('鉴权已同步'));
+  assert.ok(status.props.children.includes('重试'));
   s.module.unmount();
 });

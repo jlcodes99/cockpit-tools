@@ -1428,8 +1428,8 @@ async fn switch_codex_account_internal(
     let ssh_sync_account = account.clone();
     tauri::async_runtime::spawn(async move {
         let started = Instant::now();
-        crate::modules::ssh_server::sync_selected_servers_after_codex_switch(&ssh_sync_account, |ssh_sync| {
-            if ssh_sync.verified {
+        crate::modules::ssh_server::sync_selected_servers_after_codex_switch(&ssh_sync_account, launch_after_switch, |ssh_sync| {
+            if ssh_sync.verified && ssh_sync.error.is_none() {
                 logger::log_info(&format!(
                     "[Codex SSH] 切号后同步成功: server_id={}, verified={}, elapsed_ms={}",
                     ssh_sync.server_id, ssh_sync.verified, started.elapsed().as_millis()

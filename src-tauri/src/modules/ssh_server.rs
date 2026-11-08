@@ -19,6 +19,12 @@ pub use crate::models::ssh_server::SshServerList;
 #[path = "ssh_server_process.rs"]
 mod process;
 
+pub(crate) use process::output as command_output;
+
+pub(crate) fn has_auto_sync_targets() -> bool {
+    load_store().is_ok_and(|state| !store::switch_targets(&state).is_empty())
+}
+
 const SSH_SERVERS_FILE: &str = "ssh_servers.json";
 /// TCP/SSH 握手超时（传给 OpenSSH ConnectTimeout）
 const CONNECTION_TIMEOUT_SECS: u64 = 12;
@@ -26,8 +32,6 @@ const CONNECTION_TIMEOUT_SECS: u64 = 12;
 const TEST_COMMAND_TIMEOUT_SECS: u64 = 20;
 /// 读写同步脚本墙钟超时
 const SYNC_TIMEOUT_SECS: u64 = 45;
-/// 远端 app-server reload 墙钟超时（略放宽；失败不阻断已校验写入）
-const APP_SERVER_RELOAD_TIMEOUT_SECS: u64 = 20;
 static ACCOUNT_SYNC_LOCK: LazyLock<tokio::sync::Mutex<()>> =
     LazyLock::new(|| tokio::sync::Mutex::new(()));
 
@@ -453,75 +457,6 @@ done
     Ok(())
 }
 
-/// 远端刷新 Codex app-server：daemon restart 必须有硬超时，避免整段 SSH 被挂死。
-fn reload_app_server_script() -> &'static str {
-    r#"set +e
-# 1) 优先 daemon restart，但限制 5s，防止 codex CLI 卡住拖垮同步
-if command -v codex >/dev/null 2>&1; then
-  if command -v timeout >/dev/null 2>&1; then
-    timeout 5 codex app-server daemon restart >/dev/null 2>&1
-    rc=$?
-  else
-    codex app-server daemon restart >/dev/null 2>&1
-    rc=$?
-  fi
-  if [ "${rc:-1}" -eq 0 ]; then
-    printf 'daemon-restarted\n'
-    exit 0
-  fi
-fi
-
-# 2) 尝试结束仍在跑的 app-server（没有则直接成功）
-pids="$(ps -u "$(id -u)" -o pid= -o args= 2>/dev/null | awk '
-/codex app-server --listen/ || /codex app-server proxy/ { print $1 }
-' || true)"
-pids="$(printf '%s\n' "$pids" | tr -s '[:space:]' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-if [ -z "$pids" ]; then
-  printf 'no-app-server\n'
-  exit 0
-fi
-
-# shellcheck disable=SC2086
-kill -TERM $pids 2>/dev/null || true
-sleep 1
-for pid in $pids; do
-  if kill -0 "$pid" 2>/dev/null; then
-    kill -KILL "$pid" 2>/dev/null || true
-  fi
-done
-printf 'app-server-terminated\n'
-exit 0
-"#
-}
-
-async fn reload_remote_codex_app_server(server: &SshServer) -> Result<(), String> {
-    let output = run_ssh(
-        server,
-        APP_SERVER_RELOAD_TIMEOUT_SECS,
-        &["sh", "-s"],
-        Some(reload_app_server_script().to_string()),
-    )
-    .await
-    .map_err(|e| format!("ssh_remote_app_server_reload_failed: {}", sanitize_error(e)))?;
-
-    let status = output
-        .lines()
-        .map(str::trim)
-        .find(|line| !line.is_empty())
-        .unwrap_or("");
-    if matches!(
-        status,
-        "daemon-restarted" | "app-server-terminated" | "no-app-server"
-    ) {
-        Ok(())
-    } else {
-        Err(format!(
-            "ssh_remote_app_server_reload_failed: unexpected reload response: {}",
-            sanitize_error(status)
-        ))
-    }
-}
-
 fn result_from_status(server: &SshServer, status: SshCodexSyncStatus) -> SshCodexSyncResult {
     SshCodexSyncResult {
         server_id: server.id.clone(),
@@ -552,7 +487,7 @@ fn persist_sync_status(
     Ok(result_from_status(server, status))
 }
 
-async fn sync_account_to_server(server: SshServer, account: &CodexAccount) -> SshCodexSyncResult {
+async fn sync_account_to_server(server: SshServer, account: &CodexAccount, wait_for_desktop: bool) -> SshCodexSyncResult {
     let synced_at = now_timestamp();
     let sync_attempt = async {
         ensure_current_sync_account(account)?;
@@ -565,26 +500,29 @@ async fn sync_account_to_server(server: SshServer, account: &CodexAccount) -> Ss
         // 鉴权落盘 + 校验是硬条件
         upload_and_verify_bundle(&server, &bundle).await?;
         ensure_current_sync_account(account)?;
-        // reload 是软条件：远端没 codex / 进程卡死 / 超时不应把已成功写入判失败
-        if let Err(reload_error) = reload_remote_codex_app_server(&server).await {
-            logger::log_warn(&format!(
-                "[Codex SSH] 远端 app-server 刷新失败（鉴权已写入）: server_id={}, error={}",
-                server.id, reload_error
-            ));
-        }
-        Ok::<_, String>(bundle)
+        let refresh_error = match crate::modules::codex_app_injection::refresh_ssh_connection(
+            &server, account, wait_for_desktop,
+        ).await {
+            Ok(true) => {
+                logger::log_info(&format!("[Codex SSH] 客户端连接已重连并确认账号: server_id={}", server.id));
+                None
+            }
+            Ok(false) => None, // No running Desktop connection to refresh.
+            Err(error) => Some(format!("ssh_connection_refresh_failed: {}", sanitize_error(error))),
+        };
+        Ok::<_, String>((bundle, refresh_error))
     }
     .await;
 
     let status = match sync_attempt {
-        Ok(bundle) => SshCodexSyncStatus {
+        Ok((bundle, refresh_error)) => SshCodexSyncStatus {
             account_id: bundle.account_id,
             account_email: bundle.account_email,
             token_generation: bundle.token_generation,
             bundle_hash: bundle.bundle_hash,
             synced_at,
             verified: true,
-            error: None,
+            error: refresh_error,
         },
         Err(error) => SshCodexSyncStatus {
             account_id: account.id.clone(),
@@ -639,11 +577,12 @@ pub async fn sync_current_account_to_server(
         store.servers.iter().find(|s| store.selected_server_ids.contains(&s.id)).cloned()
             .ok_or_else(|| "ssh_not_configured: no selected SSH server".to_string())?
     };
-    Ok(sync_account_to_server(server, &account).await)
+    Ok(sync_account_to_server(server, &account, false).await)
 }
 
 pub async fn sync_selected_servers_after_codex_switch(
     account: &CodexAccount,
+    wait_for_desktop: bool,
     publish: impl FnMut(SshCodexSyncResult),
 ) {
     let _guard = ACCOUNT_SYNC_LOCK.lock().await;
@@ -659,7 +598,7 @@ pub async fn sync_selected_servers_after_codex_switch(
         || ensure_current_sync_account(account).is_ok(),
         |server| load_store().is_ok_and(|latest|
             store::switch_targets(&latest).iter().any(|target| target.id == server.id)),
-        |server| sync_account_to_server(server, account), publish).await;
+        |server| sync_account_to_server(server, account, wait_for_desktop), publish).await;
 }
 
 #[cfg(test)]
@@ -751,17 +690,6 @@ mod tests {
         assert!(args
             .windows(2)
             .any(|w| w[0] == "-i" && w[1] == "/tmp/id_test"));
-    }
-
-    #[test]
-    fn app_server_reload_script_restarts_or_terminates_codex_app_server() {
-        let script = reload_app_server_script();
-        assert!(script.contains("codex app-server daemon restart"));
-        assert!(script.contains("timeout 5 codex app-server daemon restart"));
-        assert!(script.contains("codex app-server --listen"));
-        assert!(script.contains("codex app-server proxy"));
-        assert!(script.contains("no-app-server"));
-        assert!(!script.contains("pkill"));
     }
 
     #[test]

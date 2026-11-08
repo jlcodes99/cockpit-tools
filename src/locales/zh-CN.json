@@ -5403,6 +5403,7 @@
       "syncNow": "立即同步",
       "connectionOk": "连接成功",
       "syncVerified": "SSH 已校验同步成功",
+      "connectionRefreshFailed": "鉴权已同步，但 SSH 连接刷新未完成，请稍后重试。",
       "syncFailed": "SSH 同步失败",
       "syncedAs": "已同步 {{email}} · {{time}}",
       "neverSynced": "尚未同步",

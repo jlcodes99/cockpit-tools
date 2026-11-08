@@ -5403,6 +5403,7 @@
       "syncNow": "Sync now",
       "connectionOk": "Connected",
       "syncVerified": "SSH sync verified",
+      "connectionRefreshFailed": "Auth synced, but the SSH connection refresh did not finish. Please retry later.",
       "syncFailed": "SSH sync failed",
       "syncedAs": "Synced {{email}} · {{time}}",
       "neverSynced": "Not synced yet",

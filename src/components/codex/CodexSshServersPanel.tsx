@@ -14,11 +14,13 @@ import {
   X,
 } from 'lucide-react';
 import { useSshServerStore } from '../../stores/useSshServerStore';
+import { sshSyncSucceeded } from '../../utils/sshSyncStatus';
 import type {
   SshAuthConfig,
   SshCodexSyncResult,
   SshServer,
   SshServerDraft,
+  SshCodexSyncStatus,
 } from '../../types/sshServer';
 
 interface FormState {
@@ -110,6 +112,13 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
     text: string;
   } | null>(null);
 
+  const syncMessage = (sync: SshCodexSyncStatus) => {
+    if (sync.verified && sync.error) {
+      return t('codex.ssh.connectionRefreshFailed', '鉴权已同步，但 SSH 连接刷新未完成，请稍后重试。');
+    }
+    return sync.error ?? t('codex.ssh.syncFailed', 'SSH 同步失败');
+  };
+
   useEffect(() => {
     void fetchServers();
   }, [fetchServers]);
@@ -120,11 +129,10 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
     listen<SshCodexSyncResult>('codex:ssh-sync-result', (event) => {
       applySyncResult(event.payload);
       setLocalMessage({
-        kind: event.payload.verified ? 'success' : 'warning',
-        text: `${event.payload.server_name}: ${event.payload.verified
+        kind: sshSyncSucceeded(event.payload) ? 'success' : 'warning',
+        text: `${event.payload.server_name}: ${sshSyncSucceeded(event.payload)
           ? t('codex.ssh.syncVerified', 'SSH 已校验同步成功')
-          : event.payload.error ??
-            t('codex.ssh.syncFailed', '本地切号成功，但 SSH 同步失败')}`,
+          : syncMessage(event.payload)}`,
       });
     }).then((dispose) => {
       if (disposed) {
@@ -187,10 +195,10 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
     try {
       const result = await syncNow(serverId);
       setLocalMessage({
-        kind: result.verified ? 'success' : 'warning',
-        text: result.verified
+        kind: sshSyncSucceeded(result) ? 'success' : 'warning',
+        text: sshSyncSucceeded(result)
           ? t('codex.ssh.syncVerified', 'SSH 已校验同步成功')
-          : result.error ?? t('codex.ssh.syncFailed', 'SSH 同步失败'),
+          : syncMessage(result),
       });
     } catch (err) {
       setLocalMessage({ kind: 'error', text: String(err) });
@@ -511,17 +519,16 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
 
                     <div
                       className={`codex-ssh-panel__sync-status${
-                        sync?.verified ? ' is-ok' : sync ? ' is-fail' : ''
+                        sync && sshSyncSucceeded(sync) ? ' is-ok' : sync ? ' is-fail' : ''
                       }`}
                     >
                       {sync
-                        ? sync.verified
+                        ? sshSyncSucceeded(sync)
                           ? t('codex.ssh.syncedAs', '已同步 {{email}} · {{time}}', {
                               email: sync.account_email,
                               time: formatSyncTime(sync.synced_at),
                             })
-                          : sync.error ??
-                            t('codex.ssh.syncFailed', 'SSH 同步失败')
+                          : syncMessage(sync)
                         : t('codex.ssh.neverSynced', '尚未同步')}
                     </div>
                   </button>
@@ -590,13 +597,12 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
       {lastSyncResult && selectedServerIds.includes(lastSyncResult.server_id) && (
         <div
           className={`codex-ssh-panel__footer${
-            lastSyncResult.verified ? ' is-ok' : ' is-fail'
+            sshSyncSucceeded(lastSyncResult) ? ' is-ok' : ' is-fail'
           }`}
         >
-          {lastSyncResult.verified
+          {sshSyncSucceeded(lastSyncResult)
             ? t('codex.ssh.latestVerified', '最近一次 SSH 同步已校验通过')
-            : lastSyncResult.error ??
-              t('codex.ssh.syncFailed', 'SSH 同步失败')}
+            : syncMessage(lastSyncResult)}
         </div>
       )}
     </div>

@@ -23,6 +23,17 @@ mod dialog_data;
 #[path = "codex_app_injection_remote.rs"]
 mod remote_view;
 
+#[path = "codex_app_injection_ssh.rs"]
+mod ssh_reconnect;
+
+pub(crate) async fn refresh_ssh_connection(
+    server: &crate::models::ssh_server::SshServer,
+    account: &CodexAccount,
+    wait_for_desktop: bool,
+) -> Result<bool, String> {
+    ssh_reconnect::refresh(server, account, wait_for_desktop).await
+}
+
 pub(crate) fn remote_key_session_metrics(conn: &rusqlite::Connection, key: &str,
     query: &crate::modules::codex_remote_service::KeyQuery) -> Result<serde_json::Value, String> {
     output_speed::key_session_metrics(conn,key,query.thread_id.as_deref().ok_or("session requires threadId")?,
@@ -284,6 +295,7 @@ pub fn should_enable_cdp(bind_account_id: Option<&str>) -> bool {
         || auth_diagnostics_enabled(bind_account_id)
         || should_enable_injection(bind_account_id)
         || crate::modules::codex_app_enhancements::enabled()
+        || crate::modules::ssh_server::has_auto_sync_targets()
 }
 
 fn observed_oauth_account_id(bind_account_id: Option<&str>) -> Option<String> {
