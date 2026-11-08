@@ -1421,24 +1421,31 @@ async fn switch_codex_account_internal(
 
     apply_codex_switch_auth_projections(&account, &user_config);
 
-    // Full #1404: optional auto SSH sync after switch (hash-verified remote projection + app-server reload).
-    if let Some(ssh_sync) =
-        crate::modules::ssh_server::sync_selected_server_after_codex_switch(&account).await
-    {
-        if ssh_sync.verified {
-            logger::log_info(&format!(
-                "[Codex SSH] 切号后同步成功: server_id={}, account={}, verified={}",
-                ssh_sync.server_id, ssh_sync.account_email, ssh_sync.verified
-            ));
-        } else {
-            logger::log_warn(&format!(
-                "[Codex SSH] 切号后同步失败: server_id={}, error={}",
-                ssh_sync.server_id,
-                ssh_sync.error.clone().unwrap_or_default()
-            ));
+    // SSH projection is a follow-up. Do not delay local launch by several SSH
+    // round trips or by an offline server's timeout. The worker serializes
+    // remote writes and drops queued accounts superseded by a newer switch.
+    let ssh_sync_app = app.clone();
+    let ssh_sync_account = account.clone();
+    tauri::async_runtime::spawn(async move {
+        let started = Instant::now();
+        if let Some(ssh_sync) =
+            crate::modules::ssh_server::sync_selected_server_after_codex_switch(&ssh_sync_account).await
+        {
+            if ssh_sync.verified {
+                logger::log_info(&format!(
+                    "[Codex SSH] 切号后同步成功: server_id={}, verified={}, elapsed_ms={}",
+                    ssh_sync.server_id, ssh_sync.verified, started.elapsed().as_millis()
+                ));
+            } else {
+                logger::log_warn(&format!(
+                    "[Codex SSH] 切号后同步失败: server_id={}, error={}",
+                    ssh_sync.server_id,
+                    ssh_sync.error.clone().unwrap_or_default()
+                ));
+            }
+            let _ = ssh_sync_app.emit("codex:ssh-sync-result", &ssh_sync);
         }
-        let _ = app.emit("codex:ssh-sync-result", &ssh_sync);
-    }
+    });
 
     emit_codex_switch_step(
         &app,

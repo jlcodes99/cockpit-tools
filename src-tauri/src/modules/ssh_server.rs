@@ -6,12 +6,13 @@ use crate::modules::{account, atomic_write, codex_account, logger};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::process::Stdio;
+use std::sync::LazyLock;
 use std::time::Duration;
-use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
-use tokio::time::timeout;
 use uuid::Uuid;
+
+#[path = "ssh_server_process.rs"]
+mod process;
 
 const SSH_SERVERS_FILE: &str = "ssh_servers.json";
 const STORE_VERSION: &str = "1";
@@ -23,6 +24,18 @@ const TEST_COMMAND_TIMEOUT_SECS: u64 = 20;
 const SYNC_TIMEOUT_SECS: u64 = 45;
 /// 远端 app-server reload 墙钟超时（略放宽；失败不阻断已校验写入）
 const APP_SERVER_RELOAD_TIMEOUT_SECS: u64 = 20;
+static ACCOUNT_SYNC_LOCK: LazyLock<tokio::sync::Mutex<()>> =
+    LazyLock::new(|| tokio::sync::Mutex::new(()));
+
+fn ensure_current_sync_account(account: &CodexAccount) -> Result<(), String> {
+    if codex_account::get_current_account().is_some_and(|current| {
+        current.id == account.id && current.token_generation == account.token_generation
+    }) {
+        Ok(())
+    } else {
+        Err("ssh_sync_superseded: a newer Codex account is active".into())
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SshServerList {
@@ -324,11 +337,6 @@ async fn run_ssh(
     let mut command = Command::new("ssh");
     command.args(build_ssh_args(server, connect_timeout));
     command.args(remote_args);
-    command.stdout(Stdio::piped());
-    command.stderr(Stdio::piped());
-    if stdin_payload.is_some() {
-        command.stdin(Stdio::piped());
-    }
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
@@ -336,26 +344,7 @@ async fn run_ssh(
         command.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let mut child = command
-        .spawn()
-        .map_err(|e| format!("ssh_binary_missing: {}", e))?;
-    if let Some(payload) = stdin_payload {
-        let mut stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| "ssh_connection_failed: stdin unavailable".to_string())?;
-        stdin
-            .write_all(payload.as_bytes())
-            .await
-            .map_err(|e| format!("ssh_connection_failed: {}", e))?;
-        // 尽快关闭 stdin，避免远端 sh -s 一直等 EOF
-        drop(stdin);
-    }
-
-    let output = timeout(Duration::from_secs(timeout_secs), child.wait_with_output())
-        .await
-        .map_err(|_| "ssh_connection_failed: SSH command timed out".to_string())?
-        .map_err(|e| format!("ssh_connection_failed: {}", e))?;
+    let output = process::output(command, Duration::from_secs(timeout_secs), stdin_payload).await?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -613,13 +602,16 @@ fn persist_sync_status(
 async fn sync_account_to_server(server: SshServer, account: &CodexAccount) -> SshCodexSyncResult {
     let synced_at = now_timestamp();
     let sync_attempt = async {
+        ensure_current_sync_account(account)?;
         validate_server(&server)?;
         let existing_config = read_remote_config_toml(&server).await?;
+        ensure_current_sync_account(account)?;
         let bundle =
             codex_account::build_projection_bundle_for_remote(account, existing_config.as_deref())
                 .map_err(|e| format!("codex_bundle_failed: {}", sanitize_error(e)))?;
         // 鉴权落盘 + 校验是硬条件
         upload_and_verify_bundle(&server, &bundle).await?;
+        ensure_current_sync_account(account)?;
         // reload 是软条件：远端没 codex / 进程卡死 / 超时不应把已成功写入判失败
         if let Err(reload_error) = reload_remote_codex_app_server(&server).await {
             logger::log_warn(&format!(
@@ -652,6 +644,11 @@ async fn sync_account_to_server(server: SshServer, account: &CodexAccount) -> Ss
         },
     };
 
+    // A switch may finish while SSH is in flight. The next serialized worker
+    // will write the current credentials; never publish the older status.
+    if ensure_current_sync_account(account).is_err() {
+        return result_from_status(&server, status);
+    }
     match persist_sync_status(&server.id, status.clone()) {
         Ok(result) => result,
         Err(error) => {
@@ -667,6 +664,7 @@ async fn sync_account_to_server(server: SshServer, account: &CodexAccount) -> Ss
 pub async fn sync_current_account_to_server(
     server_id: Option<String>,
 ) -> Result<SshCodexSyncResult, String> {
+    let _guard = ACCOUNT_SYNC_LOCK.lock().await;
     let account = codex_account::get_current_account()
         .ok_or_else(|| "codex_bundle_failed: no current Codex account".to_string())?;
     let store = load_store()?;
@@ -691,6 +689,8 @@ pub async fn sync_current_account_to_server(
 pub async fn sync_selected_server_after_codex_switch(
     account: &CodexAccount,
 ) -> Option<SshCodexSyncResult> {
+    let _guard = ACCOUNT_SYNC_LOCK.lock().await;
+    ensure_current_sync_account(account).ok()?;
     let store = match load_store() {
         Ok(store) => store,
         Err(error) => {
@@ -704,7 +704,9 @@ pub async fn sync_selected_server_after_codex_switch(
     if !server.sync_on_codex_switch {
         return None;
     }
-    Some(sync_account_to_server(server, account).await)
+    let result = sync_account_to_server(server, account).await;
+    ensure_current_sync_account(account).ok()?;
+    Some(result)
 }
 
 #[cfg(test)]
