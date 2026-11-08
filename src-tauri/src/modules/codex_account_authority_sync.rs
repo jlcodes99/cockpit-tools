@@ -733,15 +733,17 @@ fn sync_account_from_live_authority_sources_with_entries(
     process_entries: &[(u32, Option<String>)],
 ) -> Result<bool, String> {
     let default_home = get_codex_home();
-    let mut dirs = process_entries
-        .iter()
-        .map(|(_, runtime_home)| {
-            runtime_home
-                .as_deref()
-                .map(PathBuf::from)
-                .unwrap_or_else(|| default_home.clone())
-        })
-        .collect::<Vec<_>>();
+    // Windows process entries can contain Electron's --user-data-dir rather
+    // than CODEX_HOME. Keep the official default auth store as a candidate even
+    // when every process has a non-empty (but unrelated) Electron profile path.
+    // Runtime selection still enforces account identity and credential freshness.
+    let mut dirs = vec![default_home.clone()];
+    dirs.extend(process_entries.iter().map(|(_, runtime_home)| {
+        runtime_home
+            .as_deref()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| default_home.clone())
+    }));
     let mut seen = HashSet::new();
     dirs.retain(|dir| seen.insert(dir.to_string_lossy().to_string()));
     let changed = sync_account_from_runtime_authority_dirs(&account.id, &dirs)?;

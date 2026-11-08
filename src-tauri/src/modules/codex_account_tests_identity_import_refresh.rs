@@ -4003,6 +4003,104 @@ fn runtime_snapshot_freshness_prefers_latest_official_refresh() {
 }
 
 #[test]
+fn live_authority_sync_reads_default_auth_with_electron_process_entries() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
+    let env = TestEnvGuard::new("codex-live-authority-electron-profile-test");
+    let mut account = seed_oauth_account(make_codex_tokens(
+        "demo@example.com",
+        "acc-current",
+        "org-current",
+        "stored",
+        "rt-stored",
+    ));
+    let generation = account.token_generation;
+    let mut official_tokens = make_codex_tokens(
+        "demo@example.com",
+        "acc-current",
+        "org-current",
+        "official",
+        "rt-official",
+    );
+    official_tokens.access_token = make_jwt(serde_json::json!({
+        "exp": 4_102_448_400i64,
+        "https://api.openai.com/auth": { "chatgpt_account_id": "acc-current" }
+    }));
+    write_oauth_auth_file(&env.codex_home(), &official_tokens, "acc-current");
+    let official_auth_before = fs::read(env.codex_home().join("auth.json")).unwrap();
+    let electron_dir = env.home_dir.join("AppData/Roaming/Codex/web/Codex");
+    fs::create_dir_all(&electron_dir).unwrap();
+    let entries = vec![(123, Some(electron_dir.to_string_lossy().into_owned()))];
+
+    assert!(
+        super::sync_account_from_live_authority_sources_with_entries(&mut account, &entries,)
+            .expect("sync official credentials despite Electron profile path")
+    );
+    let persisted = load_account(&account.id).expect("load synced account");
+    assert_eq!(account.tokens.access_token, official_tokens.access_token);
+    assert_eq!(persisted.tokens.access_token, official_tokens.access_token);
+    assert_eq!(
+        persisted.tokens.refresh_token,
+        official_tokens.refresh_token
+    );
+    assert_eq!(persisted.token_generation, generation + 1);
+    assert_eq!(
+        fs::read(env.codex_home().join("auth.json")).unwrap(),
+        official_auth_before,
+        "adopting runtime credentials must not rotate the official auth store"
+    );
+}
+
+#[test]
+fn live_authority_sync_rejects_unrelated_or_older_default_credentials() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
+    for unrelated in [true, false] {
+        let env = TestEnvGuard::new("codex-live-authority-default-guards-test");
+        let mut account = seed_oauth_account(make_codex_tokens(
+            "demo@example.com",
+            "acc-current",
+            "org-current",
+            "stored",
+            "rt-stored",
+        ));
+        let original_access = account.tokens.access_token.clone();
+        let original_refresh = account.tokens.refresh_token.clone();
+        let mut rejected_tokens = make_codex_tokens(
+            if unrelated {
+                "other@example.com"
+            } else {
+                "demo@example.com"
+            },
+            "acc-current",
+            "org-current",
+            "rejected",
+            "rt-rejected",
+        );
+        rejected_tokens.access_token = make_jwt(serde_json::json!({
+            "exp": if unrelated { 4_102_448_400i64 } else { 4_102_441_200i64 },
+            "https://api.openai.com/auth": { "chatgpt_account_id": "acc-current" }
+        }));
+        write_oauth_auth_file(&env.codex_home(), &rejected_tokens, "acc-current");
+        let entries = vec![(
+            123,
+            Some(env.home_dir.join("electron").to_string_lossy().into_owned()),
+        )];
+
+        assert!(
+            !super::sync_account_from_live_authority_sources_with_entries(&mut account, &entries,)
+                .expect("ignore unrelated or older default credentials")
+        );
+        let persisted = load_account(&account.id).expect("load unchanged account");
+        assert_eq!(account.tokens.access_token, original_access);
+        assert_eq!(persisted.tokens.access_token, original_access);
+        assert_eq!(persisted.tokens.refresh_token, original_refresh);
+    }
+}
+
+#[test]
 fn runtime_authority_sync_writes_only_the_newest_running_profile() {
     let _lock = crate::modules::test_support::env_lock()
         .lock()

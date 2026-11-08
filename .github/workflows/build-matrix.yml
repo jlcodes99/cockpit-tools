@@ -220,6 +220,7 @@ jobs:
         run: |
           cargo test instance_configuration_save --lib
           cargo test quick_config_catalog_only_context_preservation --lib
+          cargo test live_authority_sync_ --lib --locked -- --test-threads=1
           cargo test claude_desktop_gateway --lib --locked
 
       - name: "🧪 Test core Rust library"
