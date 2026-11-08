@@ -651,3 +651,123 @@ fn removed_ssh_hosts_do_not_reappear_from_other_account_archives() {
         assert!(!prepare(f.home(), owner).unwrap());
     }
 }
+
+fn add_remote_catalog(f: &Fixture) {
+    fs::create_dir_all(f.home().join("sqlite")).unwrap();
+    let db = Connection::open(f.home().join("sqlite/codex-dev.db")).unwrap();
+    db.execute_batch("CREATE TABLE local_thread_catalog(host_id TEXT,thread_id TEXT,project_id TEXT,cwd TEXT,source_kind TEXT,source_detail TEXT);
+        INSERT INTO local_thread_catalog VALUES('ssh','remote-chat',NULL,'/before','vscode',NULL);
+        INSERT INTO local_thread_catalog VALUES('other-host','wrong-host',NULL,'/before','vscode',NULL);
+        INSERT INTO local_thread_catalog VALUES('ssh','child',NULL,'/before','subagent',NULL);
+        INSERT INTO local_thread_catalog VALUES('ssh','wrong-directory',NULL,'/elsewhere','vscode',NULL);").unwrap();
+}
+
+#[test]
+fn discovered_ssh_alias_restores_bookmarks_order_and_verified_thread_memberships() {
+    let f = Fixture::new();
+    add_remote_catalog(&f);
+    let mut archived = state_with_ssh(&f);
+    archived["project-order"] = json!(["bookmark", "legacy"]);
+    for id in ["remote-chat", "wrong-host", "child", "wrong-directory"] {
+        archived[ASSIGN][id] = json!({"projectKind":"remote","projectId":"bookmark"});
+        archived[HOSTS][id] = json!("ssh");
+    }
+    let mut state = f.local("legacy");
+    state[SCOPES] = json!({"owner":"current","inactive":{
+        "old":{"globals":scoped_globals(&archived),"atoms":{}}
+    }});
+    // Real Desktop discovery records resolve SSH aliases later; hostname and
+    // identity are null. The previous build consequently saved an empty marker.
+    state["codex-managed-remote-connections"] = json!([
+        {"hostId":"ssh","alias":"work","hostname":null,"identity":null,"source":"discovered","sshPort":null}
+    ]);
+    state["cockpit-shared-ssh-hosts-v1"] = json!([]);
+    f.write(&state);
+    for owner in [Some("next"), None, Some("old")] {
+        prepare(f.home(), owner).unwrap();
+        let booted = native_start(f.state(), owner);
+        assert_eq!(booted["remote-projects"][0]["id"], "bookmark");
+        assert!(booted["project-order"].as_array().unwrap().contains(&json!("bookmark")));
+        assert_eq!(booted[ASSIGN]["remote-chat"], json!({"projectKind":"remote","projectId":"bookmark"}));
+        assert_eq!(booted[HOSTS]["remote-chat"], "ssh");
+        for id in ["wrong-host", "child", "wrong-directory"] {
+            assert_ne!(booted[ASSIGN][id]["projectKind"], "remote");
+        }
+        assert_eq!(booted[ASSIGN]["chat"]["projectKind"], "local");
+        f.write(&booted);
+        assert!(!prepare(f.home(), owner).unwrap());
+    }
+}
+
+#[test]
+fn adding_an_alias_host_does_not_restore_deleted_projects_on_initialized_hosts() {
+    let f = Fixture::new();
+    let mut archived = state_with_ssh(&f);
+    archived["remote-projects"].as_array_mut().unwrap().push(json!({
+        "id":"new-project","hostId":"new-ssh","label":"New","remotePath":"/new"
+    }));
+    archived["project-order"] = json!(["bookmark","new-project"]);
+    let mut state = f.local("legacy");
+    state[SCOPES] = json!({"owner":"current","inactive":{
+        "old":{"globals":scoped_globals(&archived),"atoms":{}}
+    }});
+    state["codex-managed-remote-connections"] = json!([
+        {"hostId":"ssh","alias":"existing","hostname":null,"source":"discovered"},
+        {"hostId":"new-ssh","alias":"new","hostname":null,"source":"discovered"}
+    ]);
+    state["cockpit-shared-ssh-hosts-v1"] = json!(["ssh"]);
+    state["remote-projects"] = json!([]);
+    f.write(&state);
+    prepare(f.home(), Some("next")).unwrap();
+    let booted = native_start(f.state(), Some("next"));
+    assert_eq!(booted["remote-projects"].as_array().unwrap().len(), 1);
+    assert_eq!(booted["remote-projects"][0]["id"], "new-project");
+    assert!(!booted["project-order"].as_array().unwrap().contains(&json!("bookmark")));
+}
+
+#[test]
+fn legacy_ssh_project_ids_for_the_same_bookmark_share_one_group() {
+    let f = Fixture::new();
+    add_remote_catalog(&f);
+    let mut current = state_with_ssh(&f);
+    current["project-order"] = json!(["legacy", "bookmark"]);
+    let mut old = scoped_globals(&current);
+    old["remote-projects"][0]["id"] = json!("older-id");
+    old["project-order"] = json!(["older-id"]);
+    old[ASSIGN]["remote-chat"] = json!({"projectKind":"remote","projectId":"older-id"});
+    old[HOSTS]["remote-chat"] = json!("ssh");
+    current[SCOPES]["inactive"]["old"] = json!({"globals":old,"atoms":{}});
+    f.write(&current);
+    prepare(f.home(), Some("next")).unwrap();
+    let booted = native_start(f.state(), Some("next"));
+    assert_eq!(booted["remote-projects"].as_array().unwrap().len(), 1);
+    assert_eq!(booted["remote-projects"][0]["id"], "bookmark");
+    assert_eq!(booted[ASSIGN]["remote-chat"]["projectId"], "bookmark");
+    assert!(!booted["project-order"].as_array().unwrap().contains(&json!("older-id")));
+}
+
+#[test]
+fn deleting_a_restored_ssh_project_removes_its_order_and_memberships() {
+    let f = Fixture::new();
+    add_remote_catalog(&f);
+    let mut state = state_with_ssh(&f);
+    state["project-order"] = json!(["bookmark", "legacy"]);
+    state[ASSIGN]["remote-chat"] = json!({"projectKind":"remote","projectId":"bookmark"});
+    state[HOSTS]["remote-chat"] = json!("ssh");
+    f.write(&state);
+    prepare(f.home(), Some("b")).unwrap();
+    let mut current = native_start(f.state(), Some("b"));
+    assert_eq!(current[ASSIGN]["remote-chat"]["projectKind"], "remote");
+    current["remote-projects"] = json!([]);
+    f.write(&current);
+    for owner in [Some("b"), Some("a"), None] {
+        prepare(f.home(), owner).unwrap();
+        let booted = native_start(f.state(), owner);
+        assert!(booted["remote-projects"].as_array().unwrap().is_empty());
+        assert!(!booted["project-order"].as_array().unwrap().contains(&json!("bookmark")));
+        assert!(booted[ASSIGN].get("remote-chat").is_none());
+        assert!(booted[HOSTS].get("remote-chat").is_none());
+        assert_eq!(booted[ASSIGN]["chat"]["projectKind"], "local");
+        f.write(&booted);
+    }
+}

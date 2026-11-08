@@ -401,7 +401,8 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
             return Err("CODEX_PROJECT_ACCOUNT_STATE_UNSUPPORTED".into());
         }
     }
-    let ssh_state = ssh::shared_state(&before, &sources)?;
+    let mut ssh_state = ssh::shared_state(&before, &sources)?;
+    ssh::verify_threads(home, &mut ssh_state)?;
     // Account-state restoration also carries the native onboarding flags. It
     // must run for projectless profiles, before a project database exists.
     if let Some(primary) = project_database(home)? {
