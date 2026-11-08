@@ -14,6 +14,21 @@ const PROJECT_ORDER: &str = "project-order";
 #[path = "account_state_ssh_threads.rs"]
 mod threads;
 
+#[path = "account_state_ssh_startup.rs"]
+mod startup;
+
+pub(super) fn prepare_startup(home: &Path, state: &Value) -> bool {
+    match startup::prepare(home, state) {
+        Ok(changed) => changed,
+        Err(error) => {
+            crate::modules::logger::log_warn(&format!(
+                "[Codex SSH] 自动重连启动配置未更新，保留原配置: {error}"
+            ));
+            false
+        }
+    }
+}
+
 pub(super) struct SharedState {
     // Keep removed identities too: any account can still hold their old data.
     known_hosts: BTreeSet<String>,

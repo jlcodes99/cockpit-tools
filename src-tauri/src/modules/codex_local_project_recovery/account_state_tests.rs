@@ -327,6 +327,138 @@ fn ssh_auto_connect_survives_api_key_start_without_a_project_database() {
     assert_eq!(booted["selected-remote-host-id"], "ssh");
 }
 
+// Desktop discovers SSH before account globals return. Its native startup
+// config then refreshes the catalog and actively connects configured aliases.
+fn native_startup_ssh_aliases(home: &Path, prepared: Value) -> Vec<String> {
+    let mut booting = prepared;
+    native_select(&mut booting, None);
+    let config = fs::read(home.join("codex-app/config.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        .unwrap_or_else(|| json!({}));
+    config["remoteConnections"].as_array().into_iter().flatten()
+        .filter_map(|entry| entry["sshAlias"].as_str())
+        .filter(|alias| booting["codex-managed-remote-connections"].as_array().into_iter().flatten()
+            .any(|host| host["alias"] == *alias
+                && booting["remote-connection-auto-connect-by-host-id"][host["hostId"].as_str().unwrap()] != false))
+        .map(str::to_string).collect()
+}
+
+#[test]
+fn switching_accounts_queues_enabled_ssh_aliases_during_native_startup() {
+    let f = Fixture::new();
+    let mut state = f.local("legacy");
+    state[SCOPES] = json!({"owner":"a","inactive":{}});
+    state["codex-managed-remote-connections"] = json!([
+        {"hostId":"ssh-on","alias":"enabled","hostname":null},
+        {"hostId":"ssh-off","alias":"disabled","hostname":null},
+        {"hostId":"ssh-unused","alias":"unused","hostname":null}
+    ]);
+    state["remote-connection-auto-connect-by-host-id"] = json!({"ssh-on":true,"ssh-off":false});
+    f.write(&state);
+    for owner in [Some("b"), Some("a"), None] {
+        prepare(f.home(), owner).unwrap();
+        assert_eq!(native_startup_ssh_aliases(f.home(), f.state()), vec!["enabled"],
+            "restoring the flag after discovery must also schedule a real connection");
+        f.write(&native_start(f.state(), owner));
+    }
+}
+
+#[test]
+fn ssh_startup_removes_disabled_owned_aliases_and_preserves_user_configuration() {
+    let f = Fixture::new();
+    let config_path = f.home().join("codex-app/config.json");
+    fs::create_dir_all(config_path.parent().unwrap()).unwrap();
+    let user_config = json!({"version":1,"remoteConnectionMaxRetryAttempts":4,
+        "sshConnectTimeoutSeconds":9,"remoteConnections":[
+            {"sshAlias":"admin","projects":[{"remotePath":"/admin","label":"Team"}]}
+        ]});
+    fs::write(&config_path, serde_json::to_vec(&user_config).unwrap()).unwrap();
+    let existing_backup = config_path.with_extension("json.bak");
+    fs::write(&existing_backup, b"existing native backup").unwrap();
+    let mut state = f.local("legacy");
+    state[SCOPES] = json!({"owner":"a","inactive":{}});
+    state["codex-managed-remote-connections"] = json!([
+        {"hostId":"ssh","alias":"resume","hostname":null},
+        {"hostId":"admin-host","alias":"admin","hostname":null}
+    ]);
+    state["remote-connection-auto-connect-by-host-id"] = json!({"ssh":true,"admin-host":true});
+    f.write(&state);
+    prepare(f.home(), Some("b")).unwrap();
+    let configured: Value = serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+    assert_eq!(configured["remoteConnections"].as_array().unwrap().len(), 2);
+    assert_eq!(configured["remoteConnections"][0], user_config["remoteConnections"][0]);
+    assert_eq!(fs::read(&existing_backup).unwrap(), b"existing native backup");
+    let booted = native_start(f.state(), Some("b"));
+    f.write(&booted);
+    assert!(!prepare(f.home(), Some("b")).unwrap(), "startup writes are idempotent");
+
+    let mut disconnected = f.state();
+    disconnected["remote-connection-auto-connect-by-host-id"]["ssh"] = json!(false);
+    f.write(&disconnected);
+    prepare(f.home(), Some("a")).unwrap();
+    let after_disable: Value = serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+    assert_eq!(after_disable, user_config, "only Cockpit's added startup entry is removed");
+
+    let mut removed = f.state();
+    removed["codex-managed-remote-connections"] = json!([]);
+    f.write(&removed);
+    prepare(f.home(), Some("b")).unwrap();
+    let after_remove: Value = serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+    assert_eq!(after_remove, user_config, "existing administrator entries remain user-owned");
+}
+
+#[test]
+fn same_account_and_unscoped_starts_reconcile_ssh_startup_entries() {
+    let f = Fixture::new();
+    let mut state = f.local("legacy");
+    state["codex-managed-remote-connections"] = json!([
+        {"hostId":"ssh","alias":"resume","hostname":null}
+    ]);
+    state["remote-connection-auto-connect-by-host-id"] = json!({"ssh":true});
+    f.write(&state);
+    assert!(prepare(f.home(), None).unwrap());
+    assert_eq!(native_startup_ssh_aliases(f.home(), f.state()), vec!["resume"]);
+    assert!(!prepare(f.home(), None).unwrap());
+    state["codex-managed-remote-connections"] = json!([]);
+    f.write(&state);
+    assert!(prepare(f.home(), None).unwrap());
+    assert!(native_startup_ssh_aliases(f.home(), f.state()).is_empty());
+}
+
+#[test]
+fn ssh_startup_keeps_adopted_entries_and_leaves_unsupported_files_untouched() {
+    let f = Fixture::new();
+    let mut state = f.local("legacy");
+    state["codex-managed-remote-connections"] = json!([
+        {"hostId":"ssh","alias":"resume","hostname":null}
+    ]);
+    state["remote-connection-auto-connect-by-host-id"] = json!({"ssh":true});
+    f.write(&state);
+    prepare(f.home(), None).unwrap();
+    let path = f.home().join("codex-app/config.json");
+    let mut adopted: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    adopted["remoteConnections"][0]["projects"] = json!([{"remotePath":"/team"}]);
+    fs::write(&path, serde_json::to_vec(&adopted).unwrap()).unwrap();
+    state["remote-connection-auto-connect-by-host-id"]["ssh"] = json!(false);
+    f.write(&state);
+    prepare(f.home(), None).unwrap();
+    assert_eq!(serde_json::from_slice::<Value>(&fs::read(&path).unwrap()).unwrap(), adopted);
+
+    state["remote-connection-auto-connect-by-host-id"]["ssh"] = json!(true);
+    f.write(&state);
+    let journal = f.home().join("codex-app/.cockpit-ssh-startup.json");
+    let original_journal = fs::read(&journal).unwrap();
+    for raw in [r#"{"version":2,"remoteConnections":[]}"#, "broken-json",
+        r#"{"version":null,"remoteConnections":[]}"#,
+        r#"{"version":1,"remoteConnections":[{"sshAlias":"admin","projects":[{"remotePath":"/team","label":null}]}]}"#] {
+        fs::write(&path, raw).unwrap();
+        prepare(f.home(), None).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), raw.as_bytes());
+        assert_eq!(fs::read(&journal).unwrap(), original_journal);
+    }
+}
+
 #[test]
 fn desktop_launch_restores_archived_groups_before_optional_catalog_scan_defers() {
     let f = Fixture::new();

@@ -351,7 +351,7 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
     // Older/unscoped state is handled by the existing recovery path. Its
     // top-level preferences do not identify an owner that we can archive.
     if before.get(SCOPES).is_none() && before.get(PARKED).is_none() {
-        return Ok(false);
+        return Ok(ssh::prepare_startup(home, &before));
     }
     let mut after = before.clone();
     if before.get(SCOPES).is_some() && before.get(PARKED).is_some() {
@@ -446,7 +446,7 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
         after[PARKED] = scopes;
     }
     if after == before {
-        return Ok(false);
+        return Ok(ssh::prepare_startup(home, &after));
     }
     let expected_hash: [u8; 32] = Sha256::digest(&bytes).into();
     let content = serde_json::to_string(&after).map_err(|e| e.to_string())?;
@@ -463,6 +463,7 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
     )? {
         return Err("CODEX_PROJECT_CHANGED".into());
     }
+    ssh::prepare_startup(home, &after);
     Ok(true)
 }
 
