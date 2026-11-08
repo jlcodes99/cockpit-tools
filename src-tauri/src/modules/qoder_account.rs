@@ -1056,6 +1056,16 @@ fn ensure_default_state_db_path() -> Result<PathBuf, String> {
 }
 
 pub fn import_from_local() -> Result<Option<QoderAccount>, String> {
+    // 新版 Qoder（com.qoder.app.stable 布局）优先从 auth.v1.dat 读取当前登录。
+    if let Some(user_info_raw) = crate::modules::qoder_auth_v2::read_local_user_info_snapshot()? {
+        let account = upsert_account_from_snapshot(user_info_raw, None, None)?;
+        logger::log_info(&format!(
+            "[Qoder Account] 从本地导入成功: id={}, email={}, source=com.qoder.app.stable/auth.v1.dat",
+            account.id, account.email
+        ));
+        return Ok(Some(account));
+    }
+
     let db_path = ensure_default_state_db_path()?;
     let Some(snapshot) = read_snapshot_from_state_db_path(&db_path)? else {
         return Ok(None);
@@ -1163,6 +1173,10 @@ fn verify_injected_account_matches(db_path: &Path, account: &QoderAccount) -> Re
 }
 
 pub fn inject_to_qoder(account_id: &str) -> Result<(), String> {
+    // 新版 Qoder（com.qoder.app.stable 布局）凭据在 auth.v1.dat，优先走新链路。
+    if crate::modules::qoder_auth_v2::inject_account_if_new_layout(account_id)? {
+        return Ok(());
+    }
     let db_path = ensure_default_state_db_path()?;
     inject_to_qoder_at_path(&db_path, account_id)
 }
@@ -1171,6 +1185,11 @@ pub fn inject_to_qoder_for_user_data_dir(
     user_data_dir: &str,
     account_id: &str,
 ) -> Result<(), String> {
+    // 默认实例启动时传入的是旧布局目录，但安装的客户端可能是新版：
+    // 新版客户端只读 auth.v1.dat，检测到新布局时以它为准。
+    if crate::modules::qoder_auth_v2::inject_account_if_new_layout(account_id)? {
+        return Ok(());
+    }
     let db_path = ensure_state_db_path_for_user_data_dir(user_data_dir)?;
     inject_to_qoder_at_path(&db_path, account_id)
 }

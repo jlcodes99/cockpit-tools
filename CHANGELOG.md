@@ -7,6 +7,13 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [1.3.82] - 2026-11-08
+
+### Fixed
+
+- **New Qoder client support**: Account switching, instance launch and local import now target the redesigned Qoder client (`com.qoder.app.stable` data layout), writing credentials to its `auth.v1.dat` safe-storage file with read-back verification and atomic writes. Previously, launching through the tool failed with "VS Code Local State not found" after updating to the new client. Legacy VS Code-style installs keep using the original injection path.
+- **Qoder refresh error diagnostics**: Failed OpenAPI calls now include the server's error code and message (for example expired-token responses) instead of only `body_len`, making auth failures self-explanatory in logs and toasts.
+
 ## [1.3.81] - 2026-11-08
 
 ### Added

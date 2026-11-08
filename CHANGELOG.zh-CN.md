@@ -7,6 +7,13 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [1.3.82] - 2026-11-08
+
+### 修复
+
+- **适配新版 Qoder 客户端**：切号、实例启动与本地导入现在支持重新设计后的 Qoder 客户端（`com.qoder.app.stable` 数据布局），凭据写入其 `auth.v1.dat`（safeStorage）并带回读校验与原子写。此前更新新版客户端后，通过工具启动会报「VS Code Local State not found」。旧版布局仍走原有注入链路。
+- **Qoder 刷新错误可诊断**：OpenAPI 请求失败时带出服务端错误码与信息（如 token 过期），不再只显示 `body_len`，日志与提示一眼可读。
+
 ## [1.3.81] - 2026-11-08
 
 ### 新增

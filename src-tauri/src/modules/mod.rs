@@ -136,6 +136,7 @@ pub mod provider_current_state;
 pub mod provider_token_keeper;
 pub mod qoder_account;
 pub mod qoder_instance;
+pub mod qoder_auth_v2;
 pub mod qoder_oauth;
 pub mod quota;
 pub mod quota_cache;

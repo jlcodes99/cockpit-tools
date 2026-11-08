@@ -1114,6 +1114,25 @@ pub fn read_qoder_secret_storage_value_by_db_path(
     read_secret_storage_value_by_db_path_and_mode(db_path, db_key, SafeStorageReadMode::QoderOnly)
 }
 
+/// 解密独立 safeStorage 密文（新版 Qoder `auth.v1.dat` 等非 state.vscdb 的
+/// 独立 .dat 文件）。密钥按 data_root 定位：Windows 取 `<data_root>/Local State`
+/// 的 os_crypt.encrypted_key，macOS 走 Qoder Safe Storage 钥匙串。
+pub(crate) fn decrypt_safe_storage_bytes(
+    encrypted: &[u8],
+    data_root: &Path,
+) -> Result<Vec<u8>, String> {
+    decrypt_secret_payload_with_mode(encrypted, Some(data_root), SafeStorageReadMode::QoderOnly)
+}
+
+/// 用 data_root 的 safeStorage 密钥加密明文，返回可直接写入 .dat 的密文
+/// （Windows: `v10` 前缀 + AES-256-GCM）。
+pub(crate) fn encrypt_safe_storage_bytes(
+    plaintext: &[u8],
+    data_root: &Path,
+) -> Result<Vec<u8>, String> {
+    encrypt_secret_payload_with_mode(plaintext, None, Some(data_root), SafeStorageReadMode::QoderOnly)
+}
+
 fn load_existing_sessions(
     existing_encrypted_value: Option<&str>,
     data_root: Option<&Path>,

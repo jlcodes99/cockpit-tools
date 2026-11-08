@@ -593,10 +593,11 @@ async fn poll_device_token_once(
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
+        let body_len = body.len();
+        let detail = summarize_openapi_error_body(&body);
         return Err(format!(
-            "轮询 Qoder device token 失败: status={}, body_len={}",
-            status,
-            body.len()
+            "轮询 Qoder device token 失败: status={}, body_len={}, {}",
+            status, body_len, detail
         ));
     }
 
@@ -613,6 +614,33 @@ async fn poll_device_token_once(
         return Ok(Some(payload));
     }
     Ok(None)
+}
+
+/// 把 OpenAPI 错误响应压成一行可读摘要：JSON 信封取 code/message，
+/// 其他响应只保留首行预览，避免整页 HTML 进入错误信息与日志。
+fn summarize_openapi_error_body(body: &str) -> String {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return "body=<empty>".to_string();
+    }
+    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+        let code = value.get("code").and_then(Value::as_str);
+        let message = value.get("message").and_then(Value::as_str);
+        if code.is_some() || message.is_some() {
+            return format!(
+                "code={}, message={}",
+                code.unwrap_or("<none>"),
+                message.unwrap_or("<none>")
+            );
+        }
+    }
+    let first_line = trimmed.lines().next().unwrap_or("");
+    let preview: String = first_line
+        .chars()
+        .take(120)
+        .filter(|ch| !ch.is_control())
+        .collect();
+    format!("body_preview={}", preview)
 }
 
 async fn fetch_openapi_json(
@@ -640,11 +668,11 @@ async fn fetch_openapi_json(
     let status = response.status();
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
+        let body_len = body.len();
+        let detail = summarize_openapi_error_body(&body);
         return Err(format!(
-            "请求 Qoder OpenAPI 失败 ({}): status={}, body_len={}",
-            path,
-            status,
-            body.len()
+            "请求 Qoder OpenAPI 失败 ({}): status={}, body_len={}, {}",
+            path, status, body_len, detail
         ));
     }
     response
@@ -1490,5 +1518,31 @@ mod tests {
         assert_eq!(headers["Cosy-MachineHostname"], "machine-hostname");
         assert_eq!(headers["Cosy-MachineOS"], "aarch64_darwin");
         assert_eq!(headers["Cosy-ClientType"], "0");
+    }
+
+    #[test]
+    fn summarizes_openapi_error_envelope_code_and_message() {
+        let body = "{\n\t\"code\": \"TOKEN_EXPIRED\",\n\t\"message\": \"access token expired\",\n\t\"timestamp\": \"1794137236898\"\n}";
+        assert_eq!(
+            summarize_openapi_error_body(body),
+            "code=TOKEN_EXPIRED, message=access token expired"
+        );
+    }
+
+    #[test]
+    fn summarizes_openapi_error_body_fallbacks() {
+        assert_eq!(summarize_openapi_error_body("   \n\t "), "body=<empty>");
+        assert_eq!(
+            summarize_openapi_error_body("<html>blocked</html>"),
+            "body_preview=<html>blocked</html>"
+        );
+        let long_html = format!("<html>{}</html>", "x".repeat(300));
+        let summarized = summarize_openapi_error_body(&long_html);
+        assert!(summarized.starts_with("body_preview=<html>"));
+        assert!(summarized.chars().count() <= "body_preview=".len() + 120);
+        assert_eq!(
+            summarize_openapi_error_body("{\"success\": false}"),
+            "body_preview={\"success\": false}"
+        );
     }
 }
