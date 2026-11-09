@@ -134,6 +134,52 @@ fn explicit_identity_presence_including_invalid_values_always_wins() {
 }
 
 #[test]
+fn conversation_id_header_presence_suppresses_fallback_without_reinterpreting_values() {
+    let original = headers();
+    assert!(
+        parse(b"{}", Some(("caller", &original)))
+            .unwrap()
+            .1
+            .is_some(),
+        "absence must retain the ordinary fallback"
+    );
+    for name in ["conversation_id", "Conversation_ID", "CONVERSATION_ID"] {
+        for value in [
+            b"explicit-conversation".to_vec(),
+            Vec::new(),
+            b"invalid\tidentity".to_vec(),
+            vec![0xff],
+            vec![b'x'; 4097],
+        ] {
+            let mut headers = original.clone();
+            headers.insert(
+                axum::http::header::HeaderName::from_bytes(name.as_bytes()).unwrap(),
+                HeaderValue::from_bytes(&value).unwrap(),
+            );
+            let before = headers.clone();
+            for raw in [br#"{"model":"m","input":[]}"#.as_slice(), b"{", b"{} {}"] {
+                match (
+                    serde_json::from_slice::<Value>(raw),
+                    parse(raw, Some(("caller", &headers))),
+                ) {
+                    (Ok(expected), Ok((actual, fallback))) => {
+                        assert_eq!(actual, expected);
+                        assert!(fallback.is_none(), "{name}: {value:?}");
+                    }
+                    (Err(expected), Err(actual)) => {
+                        assert_eq!(actual.to_string(), expected.to_string())
+                    }
+                    (expected, actual) => {
+                        panic!("changed native parsing: {expected:?} / {actual:?}")
+                    }
+                }
+            }
+            assert_eq!(headers, before, "explicit headers must remain untouched");
+        }
+    }
+}
+
+#[test]
 fn duplicate_decoded_keys_suppress_fallback_but_preserve_native_values() {
     let headers = headers();
     for body in [

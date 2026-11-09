@@ -35,6 +35,7 @@ fn candidate_session<'a>(caller: &str, headers: &'a HeaderMap) -> Option<&'a str
         "session_id",
         "thread-id",
         "thread_id",
+        "conversation_id",
         "x-codex-parent-thread-id",
         "x-codex-turn-state",
         "x-codex-turn-metadata",

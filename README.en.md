@@ -326,6 +326,8 @@ On HTTP Responses, Chat Completions and Completions endpoints, an unambiguous
 Session/Thread fallback only when explicit identity or continuation is absent.
 Existing Session ID Mapping and continuation ownership checks remain in charge;
 the header is not authentication, an account selector or a cache-hit guarantee.
+An explicit `conversation_id` header, case-insensitively and even when empty or
+invalid, suppresses this fallback without changing native validation or errors.
 Duplicate/ambiguous identity inputs disable only the fallback, preserving native
 validation. WebSockets, compact and unrelated API endpoints are unchanged. No
 additional setting is required.

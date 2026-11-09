@@ -234,6 +234,125 @@ async fn opencode_session_large_body_reaches_native_ingress_without_losing_conti
 }
 
 #[tokio::test]
+async fn opencode_session_conversation_id_header_presence_wins_in_both_mapping_modes() {
+    for mapping in [true, false] {
+        let (mut handle, host, source, task, _dir) =
+            identity_fixture(WireApi::Responses, false, false).await;
+        handle.set_session_identity_mapping_enabled(mapping);
+        let body = json!({"model":"m","input":"original payload"});
+        for _ in 0..2 {
+            session_success(
+                session_request(&handle, "/v1/responses")
+                    .header("x-opencode-session", "header-precedence")
+                    .json(&body),
+            )
+            .await;
+        }
+        let mut count = 2;
+        for name in ["conversation_id", "Conversation_ID", "CONVERSATION_ID"] {
+            for value in ["explicit-conversation", ""] {
+                // Compare native unlabeled ingress with repeated labeled requests.
+                for label in [None, Some("header-precedence"), Some("header-precedence")] {
+                    let mut request = session_request(&handle, "/v1/responses").header(name, value);
+                    if let Some(label) = label {
+                        request = request.header("x-opencode-session", label);
+                    }
+                    session_success(request.json(&body)).await;
+                    count += 1;
+                }
+            }
+        }
+        let contexts = captured(&host, count).await;
+        let seen = source.seen.lock().unwrap().clone();
+        assert_eq!(seen.len(), count);
+        assert_session_pair(&seen[0], &seen[1], true);
+        for (context, record) in contexts.iter().zip(&seen) {
+            assert_sent(context, record, None, None);
+            assert_eq!(record.body["input"], body["input"]);
+        }
+        for (records, contexts) in seen[2..].chunks_exact(3).zip(contexts[2..].chunks_exact(3)) {
+            for index in [1, 2] {
+                assert_eq!(
+                    records[0].headers.get("conversation_id"),
+                    records[index].headers.get("conversation_id")
+                );
+                let native = contexts[0].routing_identity.as_ref().unwrap();
+                let labeled = contexts[index].routing_identity.as_ref().unwrap();
+                assert_ne!(
+                    native.session_id, labeled.session_id,
+                    "explicit presence must not establish an OpenCode root"
+                );
+                assert_ne!(native.thread_id, labeled.thread_id);
+            }
+            if mapping {
+                assert_session_pair(&records[1], &records[2], false);
+            } else {
+                for record in records {
+                    assert!(!record.headers.contains_key("session-id"));
+                    assert!(!record.headers.contains_key("thread-id"));
+                }
+            }
+        }
+        handle.shutdown(Duration::from_secs(2)).await.unwrap();
+        task.abort();
+    }
+}
+
+#[tokio::test]
+async fn opencode_session_conversation_id_invalid_header_keeps_native_errors_in_both_mapping_modes()
+{
+    for mapping in [true, false] {
+        let (mut handle, _host, source, task, _dir) =
+            identity_fixture(WireApi::Responses, false, false).await;
+        handle.set_session_identity_mapping_enabled(mapping);
+        for value in ["invalid\tidentity".to_owned(), "x".repeat(4097)] {
+            let mut native_result = None;
+            for label in [None, Some("must-not-repair-explicit-identity")] {
+                let before = source.seen.lock().unwrap().len();
+                let mut request = session_request(&handle, "/v1/responses")
+                    .header("Conversation_ID", value.as_str());
+                if let Some(label) = label {
+                    request = request.header("x-opencode-session", label);
+                }
+                let response = request
+                    .json(&json!({"model":"m","input":[]}))
+                    .send()
+                    .await
+                    .unwrap();
+                let status = response.status();
+                let body: Value = response.json().await.unwrap();
+                let result = (status, body.pointer("/error/code").cloned());
+                if let Some(native) = &native_result {
+                    assert_eq!(
+                        &result, native,
+                        "the label must not alter native validation"
+                    );
+                } else {
+                    native_result = Some(result);
+                }
+                let seen = source.seen.lock().unwrap();
+                if mapping {
+                    assert_eq!(status, 400);
+                    assert_eq!(body["error"]["code"], "invalid_protocol_identity");
+                    assert_eq!(seen.len(), before, "invalid identity must not dispatch");
+                } else if status.is_success() {
+                    // OFF deliberately keeps native passthrough semantics;
+                    // the fallback must not manufacture identity or new errors.
+                    assert_eq!(seen.len(), before + 1);
+                    assert!(!seen.last().unwrap().headers.contains_key("session-id"));
+                    assert!(!seen.last().unwrap().headers.contains_key("thread-id"));
+                    assert_eq!(seen.last().unwrap().headers["conversation_id"], value);
+                } else {
+                    assert_eq!(seen.len(), before);
+                }
+            }
+        }
+        handle.shutdown(Duration::from_secs(2)).await.unwrap();
+        task.abort();
+    }
+}
+
+#[tokio::test]
 async fn opencode_session_explicit_canonical_legacy_and_metadata_identity_take_precedence() {
     let (mut handle, host, source, task, _dir) =
         identity_fixture(WireApi::Responses, false, false).await;
