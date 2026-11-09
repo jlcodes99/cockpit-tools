@@ -524,3 +524,13 @@ pub async fn run_workbuddy_auto_checkin_now(
     )
     .await
 }
+
+#[tauri::command]
+pub async fn probe_workbuddy_model(
+    account_id: String,
+    model: String,
+    keep_conversation: Option<bool>,
+) -> Result<workbuddy_oauth::WorkbuddyModelProbeResult, String> {
+    let account = load_billing_account(account_id).await?;
+    workbuddy_oauth::probe_model(&account, &model, keep_conversation.unwrap_or(false)).await
+}

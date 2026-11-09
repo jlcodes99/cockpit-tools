@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Crosshair } from 'lucide-react';
 import { PlatformOverviewTabsHeader, PlatformOverviewTab } from '../components/platform/PlatformOverviewTabsHeader';
 import { WorkbuddyInstancesContent } from './WorkbuddyInstancesPage';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
@@ -19,6 +19,7 @@ import { CodebuddySuiteAccountsSharedView, type CodebuddySuiteAccountsPlatformCo
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 import { WorkbuddyCreditsDialog, WorkbuddyCreditsSummary } from '../components/codebuddy-suite/WorkbuddyCredits';
 import { getWorkbuddyCredits } from '../utils/workbuddyCredits';
+import { WorkbuddyModelProbeModal } from '../components/workbuddy/WorkbuddyModelProbeModal';
 
 const WORKBUDDY_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.workbuddy.flow_notice_collapsed';
 const WORKBUDDY_CURRENT_ACCOUNT_ID_KEY = 'agtools.workbuddy.current_account_id';
@@ -81,6 +82,7 @@ const workbuddyPlatformConfig: CodebuddySuiteAccountsPlatformConfig<WorkbuddyAcc
 export function WorkbuddyAccountsPage() {
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
   const [creditAccountId, setCreditAccountId] = useState<string | null>(null);
+  const [probeOpen, setProbeOpen] = useState(false);
   const store = useWorkbuddyAccountStore();
 
   const page = useProviderAccountsPage<WorkbuddyAccount>({
@@ -151,6 +153,16 @@ export function WorkbuddyAccountsPage() {
 
   return (
     <div className={`ghcp-accounts-page ${workbuddyPlatformConfig.pageClassName}`}>
+      <div className="page-toolbar workbuddy-probe-toolbar">
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => setProbeOpen(true)}
+        >
+          <Crosshair size={14} aria-hidden="true" />
+          {page.t('workbuddy.modelProbe.open', '探测模型可用性')}
+        </button>
+      </div>
       <PlatformOverviewTabsHeader
         platform="workbuddy"
         active={activeTab}
@@ -176,6 +188,13 @@ export function WorkbuddyAccountsPage() {
           account={creditAccount}
           accountLabel={page.maskAccountText(getWorkbuddyAccountDisplayEmail(creditAccount))}
           onClose={() => setCreditAccountId(null)}
+        />
+      )}
+      {probeOpen && (
+        <WorkbuddyModelProbeModal
+          accounts={store.accounts}
+          currentAccountId={store.currentAccountId}
+          onClose={() => setProbeOpen(false)}
         />
       )}
     </div>

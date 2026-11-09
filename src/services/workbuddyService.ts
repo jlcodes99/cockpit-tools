@@ -142,3 +142,27 @@ export async function closeWorkbuddyWebview(accountId: string): Promise<void> {
 export async function listWorkbuddyWebviewSessions(): Promise<WorkviewSessionInfo[]> {
   return await invoke('list_workbuddy_webview_sessions');
 }
+
+export type WorkbuddyModelProbeStatus = 'available' | 'rate_limited' | 'error' | 'unknown';
+
+export interface WorkbuddyModelProbeResult {
+  status: WorkbuddyModelProbeStatus;
+  httpStatus: number | null;
+  conversationId: string | null;
+  message: string;
+  rawSnippet: string;
+  keepConversation: boolean;
+}
+
+/**
+ *  probing 某个 WorkBuddy 账号对指定模型的可用性：
+ *  向对话接口发送一条最小对话，根据返回判定 available / rate_limited / error。
+ *  keepConversation=false 时探针会尽量删除测试会话，避免留下垃圾会话。
+ */
+export async function probeWorkbuddyModel(
+  accountId: string,
+  model: string,
+  keepConversation: boolean,
+): Promise<WorkbuddyModelProbeResult> {
+  return await invoke('probe_workbuddy_model', { accountId, model, keepConversation });
+}

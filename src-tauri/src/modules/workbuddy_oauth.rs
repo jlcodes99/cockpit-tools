@@ -1388,6 +1388,125 @@ pub async fn build_payload_from_token(
     })
 }
 
+/// 探测指定 WorkBuddy 账号对某个模型的可用性。
+///
+/// 通过向对话接口发送一条最小对话（单个极短 user 消息），根据返回的 HTTP 状态 / 错误文案
+/// 判断是否被限流。探测只发送极少量 token，并在 `keep_conversation` 为 false 时尽力删除测试会话。
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbuddyModelProbeResult {
+    /// available | rate_limited | error | unknown
+    pub status: String,
+    pub http_status: Option<u16>,
+    pub conversation_id: Option<String>,
+    pub message: String,
+    pub raw_snippet: String,
+    pub keep_conversation: bool,
+}
+
+pub async fn probe_model(
+    account: &crate::models::workbuddy::WorkbuddyAccount,
+    model: &str,
+    keep_conversation: bool,
+) -> Result<WorkbuddyModelProbeResult, String> {
+    let client = build_client()?;
+    let url = format!("{}/console/as/conversations", WORKBUDDY_API_ENDPOINT);
+
+    let body = serde_json::json!({
+        "model": model,
+        "historyMode": "session-load",
+        "messages": [{ "role": "user", "content": "hi" }]
+    });
+
+    let mut req = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", account.access_token))
+        .header("X-No-User-Id", "true")
+        .header("X-No-Enterprise-Id", "true")
+        .header("X-No-Department-Info", "true")
+        .json(&body);
+    if let Some(d) = &account.domain {
+        req = req.header("X-Domain", d);
+    }
+
+    let resp = req.send().await.map_err(|e| format!("探测请求失败: {}", e))?;
+    let http_status = resp.status().as_u16();
+    let text = resp.text().await.unwrap_or_default();
+
+    let (status, message, conversation_id) = classify_conversation_probe(http_status, &text);
+
+    // 若不保留会话，尝试删除（尽力而为，忽略失败）
+    if !keep_conversation {
+        if let Some(cid) = &conversation_id {
+            let del_url = format!("{}/console/as/conversations/{}", WORKBUDDY_API_ENDPOINT, cid);
+            let mut del = client
+                .delete(&del_url)
+                .header("Authorization", format!("Bearer {}", account.access_token));
+            if let Some(d) = &account.domain {
+                del = del.header("X-Domain", d);
+            }
+            let _ = del.send().await;
+        }
+    }
+
+    let raw_snippet: String = text.chars().take(800).collect();
+
+    Ok(WorkbuddyModelProbeResult {
+        status,
+        http_status: Some(http_status),
+        conversation_id,
+        message,
+        raw_snippet,
+        keep_conversation,
+    })
+}
+
+fn classify_conversation_probe(http_status: u16, text: &str) -> (String, String, Option<String>) {
+    if http_status == 429 {
+        return (
+            "rate_limited".to_string(),
+            "模型当前被限流（HTTP 429）".to_string(),
+            None,
+        );
+    }
+
+    if (200..300).contains(&http_status) {
+        let conversation_id = serde_json::from_str::<serde_json::Value>(text)
+            .ok()
+            .and_then(|v| {
+                v.get("id")
+                    .and_then(|x| x.as_str())
+                    .or_else(|| v.get("data").and_then(|d| d.get("id")).and_then(|x| x.as_str()))
+                    .map(|s| s.to_string())
+            });
+
+        let rate_limited = text.contains("数量已经达到上限")
+            || text.contains("已经达到上限")
+            || text.contains("quota")
+            || text.contains("rate limit")
+            || text.contains("exceed");
+        if rate_limited {
+            (
+                "rate_limited".to_string(),
+                "模型当前被限流（响应包含额度用尽信息）".to_string(),
+                conversation_id,
+            )
+        } else {
+            (
+                "available".to_string(),
+                "模型可用：已收到正常响应".to_string(),
+                conversation_id,
+            )
+        }
+    } else {
+        (
+            "error".to_string(),
+            format!("请求返回非预期状态码 {}", http_status),
+            None,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

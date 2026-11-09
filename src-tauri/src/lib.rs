@@ -1394,6 +1394,7 @@ pub fn run() {
             commands::workbuddy::get_workbuddy_auto_checkin_logs,
             commands::workbuddy::clear_workbuddy_auto_checkin_logs,
             commands::workbuddy::run_workbuddy_auto_checkin_now,
+            commands::workbuddy::probe_workbuddy_model,
             // MiniMax Code Commands
             commands::minimax_code::list_minimax_code_accounts,
             commands::minimax_code::delete_minimax_code_account,
