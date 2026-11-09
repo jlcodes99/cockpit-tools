@@ -66,7 +66,7 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
   | "handleAddLocalAccessAccount"
   | "handleExportByIds"
   | "handleHideLocalAccessEntry"
-  | "handleKillLocalAccessPort"
+  | "openLocalAccessPortRecovery"
   | "handleLaunchCodexCli"
   | "handleLaunchLocalAccessCli"
   | "handleQuickRefreshLocalAccessQuota"
@@ -180,7 +180,7 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
     handleAddLocalAccessAccount,
     handleExportByIds,
     handleHideLocalAccessEntry,
-    handleKillLocalAccessPort,
+    openLocalAccessPortRecovery,
     handleLaunchCodexCli,
     handleLaunchLocalAccessCli,
     handleQuickRefreshLocalAccessQuota,
@@ -993,13 +993,13 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
         if (localAccessState?.lastError) {
           actions.push({
             id: "clear-port",
-            label: t("codex.localAccess.killPortAction", "清理端口"),
+            label: t("codex.localAccess.portRecoveryTitle"),
             description: summarizeCodexQuotaErrorMessage(
               localAccessState.lastError,
             ),
-            actionLabel: t("codex.localAccess.killPortAction", "清理端口"),
+            actionLabel: t("codex.localAccess.portRecoveryTitle"),
             onAction: async () => {
-              await handleKillLocalAccessPort();
+              openLocalAccessPortRecovery();
             },
           });
         }

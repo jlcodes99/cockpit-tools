@@ -239,6 +239,11 @@ pub async fn codex_local_access_kill_port() -> Result<CodexLocalAccessPortCleanu
 }
 
 #[tauri::command]
+pub async fn codex_local_access_change_random_port() -> Result<CodexLocalAccessState, String> {
+    codex_local_access::change_random_local_access_port().await
+}
+
+#[tauri::command]
 pub async fn codex_local_access_update_port(port: u16) -> Result<CodexLocalAccessState, String> {
     codex_local_access::update_local_access_port(port).await
 }
@@ -529,6 +534,11 @@ async fn codex_local_access_activate_internal(
         activate_started.elapsed().as_millis(),
         flow_started.elapsed().as_millis()
     ));
+    let user_config = config::get_user_config();
+    let launch_after_switch = launch_after_switch.unwrap_or(user_config.codex_launch_on_switch);
+    if !launch_after_switch {
+        preserve_codex_local_projects_after_switch(target_instance_id.clone(), codex_home.clone()).await;
+    }
     let api_service_speed = codex_speed::get_api_service_app_speed_config()?.speed;
     let speed_started = Instant::now();
     if launch_target.is_default {
@@ -601,11 +611,9 @@ async fn codex_local_access_activate_internal(
         flow_started.elapsed().as_millis()
     ));
 
-    let user_config = config::get_user_config();
-
     logger::log_info("API 服务启动模式下跳过 OpenCode / OpenClaw OAuth 同步");
 
-    if launch_after_switch.unwrap_or(user_config.codex_launch_on_switch) {
+    if launch_after_switch {
         let launch_started = Instant::now();
         #[cfg(target_os = "macos")]
         if launch_target.is_default && process::is_codex_running() {

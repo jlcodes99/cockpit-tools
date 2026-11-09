@@ -561,46 +561,19 @@ fn parse_session_index_updated_at_ms(entry: &JsonValue) -> Option<i128> {
     .find_map(parse_timestamp_ms)
 }
 
-fn parse_rollout_line_timestamp_ms(value: &JsonValue) -> Option<i128> {
-    value
-        .get("timestamp")
-        .or_else(|| value.get("time"))
-        .or_else(|| value.get("created_at"))
-        .or_else(|| value.get("createdAt"))
-        .and_then(parse_timestamp_ms)
-        .or_else(|| {
-            value
-                .get("payload")
-                .and_then(|payload| {
-                    payload
-                        .get("timestamp")
-                        .or_else(|| payload.get("time"))
-                        .or_else(|| payload.get("created_at"))
-                        .or_else(|| payload.get("createdAt"))
-                })
-                .and_then(parse_timestamp_ms)
-        })
-}
-
 fn rollout_file_activity_ms(path: &Path) -> Option<i128> {
-    let content = fs::read_to_string(path).ok()?;
-    content
-        .lines()
-        .filter_map(|line| serde_json::from_str::<JsonValue>(line.trim()).ok())
-        .filter_map(|value| parse_rollout_line_timestamp_ms(&value))
-        .max()
+    read_rollout_summary(path).ok().flatten()?.activity_ms
 }
 
 fn resolve_target_modified_at_ms(
     session_id: Option<&str>,
     session_index_map: &HashMap<String, JsonValue>,
-    rollout_path: &Path,
+    activity: Option<i128>,
     fallback_ms: Option<i128>,
 ) -> Option<i128> {
     let indexed = session_id
         .and_then(|id| session_index_map.get(id))
         .and_then(parse_session_index_updated_at_ms);
-    let activity = rollout_file_activity_ms(rollout_path);
     match (indexed, activity) {
         (Some(indexed), Some(activity))
             if (indexed - activity).abs() > SESSION_INDEX_ACTIVITY_DRIFT_MS =>

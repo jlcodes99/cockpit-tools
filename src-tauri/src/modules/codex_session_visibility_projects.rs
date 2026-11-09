@@ -1,5 +1,5 @@
 // Project recovery composes with the existing quick/deep pipeline. There is no
-// separate repair mode, switch-time scanner or frontend notice.
+// separate repair mode or switch-time history scan.
 const QUICK_PROJECT_REPAIR_BUDGET: Duration = Duration::from_millis(500);
 
 fn quick_project_repair_budget(data_dir: &Path) -> Duration {
@@ -307,6 +307,7 @@ fn repair_session_visibility_for_instances_with_options(
         )
         .map_err(|error| format!("{error}; completed_backups={:?}", summary.backup_dirs))?;
         summary.history_projection_count = history.history_projection_count;
+        summary.history_repair_warning = history.history_repair_warning;
         for source in history.items {
             if let Some(item) = summary
                 .items
@@ -376,10 +377,9 @@ fn repair_session_visibility_for_instances_with_options(
     Ok(summary)
 }
 
-// The unified start transaction already holds the profile lease. Resolve the
-// renderer owner from the credentials actually written to this profile, then
-// update its state only while the matching Desktop instance is stopped.
-fn prepare_local_project_account_state_for_launch(instance: &CodexSyncInstance) -> Result<bool, String> {
+// Switch and launch both hold the profile mutation lease. Resolve the owner
+// from the committed credentials and only write while the Desktop is stopped.
+fn prepare_local_project_account_state(instance: &CodexSyncInstance) -> Result<bool, String> {
     check_launch_visibility_budget("read_project_owner")?;
     if local_projects::has_pending(&instance.data_dir) {
         return Err("CODEX_PROJECT_PENDING_RECOVERY".into());
@@ -390,7 +390,25 @@ fn prepare_local_project_account_state_for_launch(instance: &CodexSyncInstance) 
     verify_project_recovery_stopped(instance)?;
     let prepared = local_projects::account_state::prepare(&instance.data_dir, owner.as_deref())?;
     if prepared {
-        modules::logger::log_info("[Codex Local Projects] prepared account-scoped local groups for launch");
+        modules::logger::log_info(&format!(
+            "[Codex Local Projects] prepared account-scoped local groups: instance_id={}",
+            instance.id,
+        ));
     }
     Ok(prepared)
+}
+
+pub(crate) fn prepare_desktop_project_state_after_switch(
+    instance_id: &str,
+    data_dir: &Path,
+) -> Result<bool, String> {
+    let instance = CodexSyncInstance {
+        id: instance_id.to_string(),
+        name: instance_id.to_string(),
+        data_dir: data_dir.to_path_buf(),
+        last_pid: None,
+    };
+    with_launch_visibility_budget(quick_project_repair_budget(data_dir), || {
+        prepare_local_project_account_state(&instance)
+    })
 }

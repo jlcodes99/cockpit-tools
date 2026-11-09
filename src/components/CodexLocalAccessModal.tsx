@@ -225,7 +225,7 @@ interface CodexLocalAccessModalProps {
   ) => Promise<unknown> | unknown;
   onRotateApiKey: () => Promise<unknown> | unknown;
   onRestartSidecar: () => Promise<unknown> | unknown;
-  onKillPort: () => Promise<unknown> | unknown;
+  onRequestPortRecovery: () => void;
   onToggleEnabled: () => Promise<unknown> | unknown;
   onRecoverAccounts: (accountIds: string[]) => Promise<void>;
   healthActionBusy: boolean;
@@ -275,7 +275,7 @@ export function CodexLocalAccessModal({
   onUpdateImageGenerationAccounts,
   onRotateApiKey,
   onRestartSidecar,
-  onKillPort,
+  onRequestPortRecovery,
   onToggleEnabled,
   onRecoverAccounts,
   healthActionBusy,
@@ -1835,15 +1835,6 @@ export function CodexLocalAccessModal({
     );
   };
 
-  const handleKillPort = async () => {
-    await runAction(
-      async () => {
-        await onKillPort();
-      },
-      t("codex.localAccess.killPortSuccessUnknown", "API 服务端口已清理"),
-    );
-  };
-
   const handleRestartSidecar = async () => {
     const confirmed = await confirmDialog(
       t(
@@ -2276,7 +2267,7 @@ export function CodexLocalAccessModal({
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm codex-local-access-inline-action"
-                      onClick={() => void handleKillPort()}
+                      onClick={onRequestPortRecovery}
                       disabled={actionBusy}
                     >
                       {portCleanupBusy ? (
@@ -2284,7 +2275,7 @@ export function CodexLocalAccessModal({
                       ) : (
                         <Wrench size={14} />
                       )}
-                      {t("codex.localAccess.killPortAction", "清理端口")}
+                      {t("codex.localAccess.portRecoveryTitle")}
                     </button>
                   </>
                 )}

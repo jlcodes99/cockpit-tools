@@ -1,0 +1,29 @@
+.modal-overlay.codex-port-recovery-overlay {
+  z-index: 10120;
+  padding: 16px;
+}
+
+.modal.codex-port-recovery-modal .modal-body {
+  min-height: 0;
+  overflow-wrap: anywhere;
+}
+
+.codex-port-recovery-modal .modal-body > p:first-child {
+  margin-top: 0;
+}
+
+.codex-port-recovery-options {
+  display: grid;
+  gap: 14px;
+}
+
+.codex-port-recovery-options .btn {
+  max-width: 100%;
+  white-space: normal;
+  text-align: start;
+}
+
+.codex-port-recovery-options p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+}

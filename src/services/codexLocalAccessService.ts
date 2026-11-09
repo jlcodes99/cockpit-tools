@@ -206,6 +206,10 @@ export async function killCodexLocalAccessPort(): Promise<CodexLocalAccessPortCl
   return await invoke("codex_local_access_kill_port");
 }
 
+export async function changeCodexLocalAccessToRandomPort(): Promise<CodexLocalAccessState> {
+  return await invoke("codex_local_access_change_random_port");
+}
+
 export async function updateCodexLocalAccessPort(
   port: number,
 ): Promise<CodexLocalAccessState> {

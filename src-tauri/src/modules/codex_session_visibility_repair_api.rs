@@ -161,6 +161,8 @@ pub struct CodexSessionVisibilityRepairItem {
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexSessionVisibilityRepairSummary {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub history_repair_warning: Option<String>,
     pub instance_count: usize,
     pub mutated_instance_count: usize,
     pub changed_rollout_file_count: usize,
@@ -499,7 +501,7 @@ pub fn repair_session_visibility_quick_for_instance(
         // workspace and SSH state before optional history maintenance can use up
         // the budget or hit a quick-scan limit. Failure here must stop the launch.
         let prepared = launch_desktop
-            && prepare_local_project_account_state_for_launch(&instance).map_err(|error| {
+            && prepare_local_project_account_state(&instance).map_err(|error| {
                 format!("CODEX_DESKTOP_STATE_PREPARATION_FAILED: {error}")
             })?;
         let mut summary = repair_session_visibility_for_instances_with_options(
@@ -1109,6 +1111,7 @@ fn repair_provider_visibility_for_instances_with_options(
         backup_dirs,
         message,
         history_projection_count: None,
+        history_repair_warning: None,
         local_project_recovery: None,
         local_project_recovery_deferred: false,
     };

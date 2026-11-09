@@ -1,7 +1,11 @@
-//! Bridge Codex Desktop's account-scoped renderer state at a stopped launch.
+//! Bridge Codex Desktop's account-scoped renderer state while the profile is stopped.
 //! Only projects and user threads verified in this profile's SQLite registry are
 //! shared. Configured SSH workspaces follow this machine's connection settings;
 //! cloud state and account atoms stay in their original scope.
+use super::super::{
+    configure_launch_visibility_connection, launch_visibility_budget,
+    with_launch_visibility_budget, LAUNCH_VISIBILITY_TIMEOUT, QUICK_PROJECT_REPAIR_BUDGET,
+};
 use super::*;
 use sha2::{Digest, Sha256};
 
@@ -98,18 +102,15 @@ fn local_view(
     home: &Path,
     sources: &[&Value],
     projects: &[Project],
-    threads: &[Thread],
+    db: &Connection,
 ) -> Result<Value, String> {
     let host = format!("local:{}", home.display());
-    let mut view = json!({});
     let mut recovered = BTreeMap::new();
     let mut mapping = BTreeMap::new();
     let mut aliases = HashMap::new();
     let mut server_to_legacy = HashMap::new();
     let mut blocked = HashSet::new();
     let mut by_source = Vec::new();
-    let mut nonlocal_threads = HashSet::new();
-    let mut explicit_assignments = HashMap::new();
     for source in sources {
         check()?;
         if let Some(deletions) =
@@ -135,26 +136,6 @@ fn local_view(
             }
         }
         by_source.push(index);
-        if let Some(hosts) = source[HOSTS].as_object() {
-            nonlocal_threads.extend(hosts.iter().filter_map(|(id, host)| {
-                host.as_str()
-                    .is_some_and(|host| host != "local")
-                    .then_some(id.as_str())
-            }));
-        }
-        if let Some(assignments) = source[ASSIGN].as_object() {
-            for (id, assignment) in assignments {
-                if assignment["projectKind"]
-                    .as_str()
-                    .is_some_and(|kind| kind != "local")
-                {
-                    nonlocal_threads.insert(id.as_str());
-                }
-                explicit_assignments
-                    .entry(id.as_str())
-                    .or_insert(assignment);
-            }
-        }
     }
     // The live SQLite registry verifies a saved local project's identity. Do
     // not stat workspace paths (which can be network mounts) on the launch path.
@@ -266,8 +247,88 @@ fn local_view(
             order.push(json!(id));
         }
     }
+    let mut view = if recovered.is_empty() {
+        json!({})
+    } else {
+        with_thread_recovery_budget(db, || {
+            local_thread_view(db, sources, &recovered, &aliases, &server_to_legacy)
+        })?
+    };
     view["project-order"] = json!(order);
     view[MAP] = json!({ &host: mapping });
+    set_map(&mut view, "local-projects", recovered);
+    Ok(view)
+}
+
+fn with_thread_recovery_budget(
+    db: &Connection,
+    recover: impl FnOnce() -> Result<Value, String>,
+) -> Result<Value, String> {
+    let Some(parent) = launch_visibility_budget() else {
+        return recover();
+    };
+    let remaining = parent
+        .deadline
+        .saturating_duration_since(std::time::Instant::now());
+    // Reserve time to write the project and SSH state if the thread scan is slow.
+    let budget = (remaining / 2).min(QUICK_PROJECT_REPAIR_BUDGET);
+    match with_launch_visibility_budget(budget, || {
+        configure_launch_visibility_connection(db)?;
+        let view = recover()?;
+        check()?;
+        Ok(view)
+    }) {
+        Err(error) if error.starts_with(LAUNCH_VISIBILITY_TIMEOUT) => {
+            crate::modules::logger::log_warn(
+                "[Codex Local Projects] bounded thread membership recovery deferred",
+            );
+            Ok(json!({}))
+        }
+        result => result,
+    }
+}
+
+#[derive(Default)]
+struct ThreadMemberships<'a> {
+    nonlocal: HashSet<&'a str>,
+    explicit: HashMap<&'a str, &'a Value>,
+}
+
+fn saved_thread_memberships<'a>(sources: &[&'a Value]) -> Result<ThreadMemberships<'a>, String> {
+    let mut memberships = ThreadMemberships::default();
+    for source in sources {
+        for (id, host) in source[HOSTS].as_object().into_iter().flatten() {
+            check()?;
+            if host.as_str().is_some_and(|host| host != "local") {
+                memberships.nonlocal.insert(id.as_str());
+            }
+        }
+        for (id, assignment) in source[ASSIGN].as_object().into_iter().flatten() {
+            check()?;
+            if assignment["projectKind"]
+                .as_str()
+                .is_some_and(|kind| kind != "local")
+            {
+                memberships.nonlocal.insert(id.as_str());
+            }
+            memberships
+                .explicit
+                .entry(id.as_str())
+                .or_insert(assignment);
+        }
+    }
+    Ok(memberships)
+}
+
+fn local_thread_view(
+    db: &Connection,
+    sources: &[&Value],
+    recovered: &BTreeMap<String, Value>,
+    aliases: &HashMap<&str, &str>,
+    server_to_legacy: &HashMap<&str, &str>,
+) -> Result<Value, String> {
+    let threads = threads_with_limit(db, None)?;
+    let memberships = saved_thread_memberships(sources)?;
     let ungrouped = sources
         .first()
         .map(|source| projectless(source))
@@ -276,13 +337,14 @@ fn local_view(
     let mut hosts = BTreeMap::new();
     for thread in threads.iter().filter(|thread| thread.root) {
         check()?;
-        if nonlocal_threads.contains(thread.id.as_str()) || ungrouped.contains(&thread.id) {
+        if memberships.nonlocal.contains(thread.id.as_str()) || ungrouped.contains(&thread.id) {
             continue;
         }
         let legacy = if let Some(server) = &thread.project {
             server_to_legacy.get(server.as_str())
         } else {
-            explicit_assignments
+            memberships
+                .explicit
                 .get(thread.id.as_str())
                 .filter(|assignment| assignment["projectKind"] == "local")
                 .and_then(|assignment| assignment["projectId"].as_str())
@@ -301,7 +363,7 @@ fn local_view(
             hosts.insert(thread.id.clone(), json!("local"));
         }
     }
-    set_map(&mut view, "local-projects", recovered);
+    let mut view = json!({});
     set_map(&mut view, ASSIGN, assignments);
     set_map(&mut view, HOSTS, hosts);
     Ok(view)
@@ -408,11 +470,10 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
     if let Some(primary) = project_database(home)? {
         let db = open(&home.join(primary), false)?;
         db.execute_batch("BEGIN").map_err(|e| e.to_string())?;
-        // Required owner transitions must not inherit optional quick-scan row
-        // limits. The launch deadline still bounds every read and iteration.
+        // Project visibility depends on the registry. Read thread memberships
+        // within a separate budget so they cannot block restoring the groups.
         let projects = projects_with_limit(&db, None)?;
-        let threads = threads_with_limit(&db, None)?;
-        let view = local_view(home, &sources, &projects, &threads)?;
+        let view = local_view(home, &sources, &projects, &db)?;
         // Finish the read transaction before writing the renderer state.
         drop(db);
         merge_local(&mut target["globals"], &view);

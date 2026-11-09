@@ -543,6 +543,7 @@ export function CodexSessionVisibilityRepairModal({
       );
       if (runIdRef.current !== runId) return;
       setPreviewSummary(summary);
+      setError(summary.historyRepairWarning ?? null);
       if (isHistoryRepair && summary.items?.length) {
         const refreshedRunning = new Map(
           summary.items
@@ -630,6 +631,7 @@ export function CodexSessionVisibilityRepairModal({
           ? summary.message
           : formatCodexSessionVisibilityRepairMessage(summary, t),
       );
+      setError(summary.historyRepairWarning ?? null);
       setEncryptedContentWarningVisible(
         Boolean(summary.encryptedContentWarning),
       );

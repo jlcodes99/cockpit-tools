@@ -35,8 +35,8 @@ fn repair_history_projections_for_instances(
         history_projection_count: Some(0),
         ..Default::default()
     };
-    // Validate every selected instance before the first mutation. A malformed
-    // chain in a later instance must not turn a failed preview into a partial repair.
+    // Validate every selected instance before the first mutation. Missing sources
+    // are reported separately; other scan failures still abort before any writes.
     let mut plans = Vec::with_capacity(instances.len());
     // Running state is informational; SQLite transactions and source checks
     // protect the repair without requiring the desktop client or CLI to stop.
@@ -60,7 +60,15 @@ fn repair_history_projections_for_instances(
         plans.push((plan, running));
     }
     let mut total = 0;
+    let mut skipped = Vec::new();
     for (index, (instance, (plan, running))) in instances.iter().zip(plans).enumerate() {
+        for (id, missing) in &plan.skipped_sources {
+            skipped.push(format!("{}: {id} → {missing}", instance.name));
+            modules::logger::log_warn(&format!(
+                "[Codex History Index] instance_id={}, skipped_source={id}, missing_source={missing}",
+                instance.id,
+            ));
+        }
         let candidates = plan.candidate_count();
         let mut backup_dir = None;
         if candidates > 0 && !options.dry_run {
@@ -128,6 +136,12 @@ fn repair_history_projections_for_instances(
         ));
     }
     summary.history_projection_count = Some(total);
+    if !skipped.is_empty() {
+        summary.history_repair_warning = Some(history_repair_message(
+            "historySkippedSources",
+            &[("count", &skipped.len().to_string()), ("details", &skipped.join("\n"))],
+        ));
+    }
     summary.message = history_repair_message(
         if total == 0 {
             "historyNoChanges"

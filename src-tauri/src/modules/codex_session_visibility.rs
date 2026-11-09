@@ -8,6 +8,7 @@ mod local_projects;
 include!("codex_session_visibility_projects.rs");
 include!("codex_session_visibility_launch_budget.rs");
 include!("codex_session_visibility_instance_discovery.rs");
+include!("codex_session_visibility_rollout_scan.rs");
 include!("codex_session_visibility_catalog.rs");
 include!("codex_session_visibility_sqlite_repair.rs");
 include!("codex_session_visibility_backup.rs");

@@ -732,16 +732,18 @@ fn sync_account_from_live_authority_sources_with_entries(
     account: &mut CodexAccount,
     process_entries: &[(u32, Option<String>)],
 ) -> Result<bool, String> {
+    if process_entries.is_empty() {
+        return Ok(false);
+    }
     let default_home = get_codex_home();
-    let mut dirs = process_entries
-        .iter()
-        .map(|(_, runtime_home)| {
-            runtime_home
-                .as_deref()
-                .map(PathBuf::from)
-                .unwrap_or_else(|| default_home.clone())
-        })
-        .collect::<Vec<_>>();
+    // An Electron --user-data-dir in the process list does not identify the
+    // official auth store. Include the default home alongside explicit profiles.
+    let mut dirs = vec![default_home];
+    dirs.extend(
+        process_entries
+            .iter()
+            .filter_map(|(_, runtime_home)| runtime_home.as_deref().map(PathBuf::from)),
+    );
     let mut seen = HashSet::new();
     dirs.retain(|dir| seen.insert(dir.to_string_lossy().to_string()));
     let changed = sync_account_from_runtime_authority_dirs(&account.id, &dirs)?;

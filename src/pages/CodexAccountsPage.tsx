@@ -135,7 +135,6 @@ export function useCodexAccountsPageController() {
     localAccessHealthActionBusy,
     localAccessHideSubmitting,
     localAccessModalMode,
-    localAccessPortKilling,
     localAccessSaving,
     localAccessSidecarRestarting,
     localAccessStarting,
@@ -443,7 +442,9 @@ export function useCodexAccountsPageController() {
     handleClearLocalAccessStats,
     handleEnterGroup,
     handleExecuteLocalAccessLaunchPreview,
-    handleKillLocalAccessPort,
+    openLocalAccessPortRecovery,
+    portRecoveryDialog,
+    localAccessPortKilling,
     handleLeaveGroup,
     handleLocalAccessAddressKindChange,
     handleQuickAddAccountsToGroup,
@@ -747,7 +748,8 @@ export function useCodexAccountsPageController() {
     handleFetchApiModelCatalog,
     handleImportFromFiles,
     handleImportFromLocal,
-    handleKillLocalAccessPort,
+    openLocalAccessPortRecovery,
+    portRecoveryDialog,
     handleEnterGroup,
     handleLeaveGroup,
     handleLocalAccessAddressKindChange,
@@ -1074,5 +1076,5 @@ export function useCodexAccountsPageController() {
 /** 组合业务 Controller 与独立 View，保持原组件公开调用入口不变。 */
 export function CodexAccountsPage() {
   const controller = useCodexAccountsPageController();
-  return <CodexAccountsView {...controller} />;
+  return <><CodexAccountsView {...controller} />{controller.portRecoveryDialog}</>;
 }

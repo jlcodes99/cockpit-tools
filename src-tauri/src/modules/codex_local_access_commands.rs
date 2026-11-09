@@ -1554,41 +1554,29 @@ pub async fn restart_local_access_sidecar() -> Result<CodexLocalAccessState, Str
     snapshot_state().await
 }
 
-pub async fn kill_local_access_port_processes() -> Result<CodexLocalAccessPortCleanupResult, String>
-{
-    if let Err(err) = ensure_runtime_loaded_without_start().await {
-        logger::log_codex_api_warn(&format!(
-            "[CodexLocalAccess] 清理端口前加载配置失败: {}",
-            err
-        ));
-        return Err(err);
-    }
-
+pub async fn kill_local_access_port_processes() -> Result<CodexLocalAccessPortCleanupResult, String> {
+    ensure_runtime_loaded_without_start().await?;
+    let lifecycle = gateway_lifecycle_lock().lock().await;
     let collection = {
         let runtime = gateway_runtime().lock().await;
         runtime.collection.clone()
     }
     .ok_or_else(|| "API 服务集合尚未创建".to_string())?;
 
-    stop_gateway().await;
-
-    let config_path = sidecar_config_path(&local_access_sidecar_dir()?);
-    let cleanup_result =
-        cleanup_managed_sidecar_port_processes(collection.port, config_path).await?;
-    let killed_count = match cleanup_result {
-        Ok(count) => count as u32,
-        Err(error) => {
-            logger::log_codex_api_warn(&format!(
-                "[CodexLocalAccess] 未清理非本实例端口进程，将继续尝试启动并准备随机端口兜底: port={}, error={}",
-                collection.port, error
-            ));
-            0
-        }
-    };
-
-    if collection.enabled {
-        ensure_gateway_matches_runtime().await?;
+    {
+        let _stop_request = GatewayStopRequestGuard::begin();
+        advance_gateway_lifecycle_generation();
+        stop_gateway_locked_checked("explicit_port_cleanup").await.1?;
     }
+    let config_path = sidecar_config_path(&local_access_sidecar_dir()?);
+    let killed_count =
+        cleanup_managed_sidecar_port_processes(collection.port, config_path).await?? as u32;
+    if local_access_gateway_should_run(&collection) {
+        ensure_gateway_matches_runtime_once_locked().await?;
+    } else {
+        wait_for_gateway_port_release(bind_host_for_collection(&collection), collection.port).await?;
+    }
+    drop(lifecycle);
 
     let state = snapshot_state().await?;
     Ok(CodexLocalAccessPortCleanupResult {
@@ -1597,15 +1585,40 @@ pub async fn kill_local_access_port_processes() -> Result<CodexLocalAccessPortCl
     })
 }
 
+pub async fn change_random_local_access_port() -> Result<CodexLocalAccessState, String> {
+    ensure_runtime_loaded_without_start().await?;
+    let lifecycle = gateway_lifecycle_lock().lock().await;
+    let (bind_host, previous_port) = {
+        let runtime = gateway_runtime().lock().await;
+        let collection = runtime
+            .collection
+            .as_ref()
+            .ok_or_else(|| "本地接入集合尚未创建".to_string())?;
+        (bind_host_for_collection(collection).to_owned(), collection.port)
+    };
+    let port = allocate_random_local_port_excluding(&bind_host, Some(previous_port))?;
+    persist_recovered_local_access_port(port).await?;
+    let result = ensure_gateway_matches_runtime_once_locked().await;
+    if let Err(error) = &result {
+        gateway_runtime().lock().await.last_error = Some(error.clone());
+    }
+    drop(lifecycle);
+    emit_local_access_state_updated();
+    result?;
+    ensure_local_access_profile_takeovers_from_runtime().await?;
+    snapshot_state().await
+}
+
 pub async fn update_local_access_port(port: u16) -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded_without_start().await?;
+    let lifecycle = gateway_lifecycle_lock().lock().await;
 
     let maybe_collection = {
         let runtime = gateway_runtime().lock().await;
         runtime.collection.clone()
     };
 
-    let Some(mut collection) = maybe_collection else {
+    let Some(collection) = maybe_collection else {
         return Err("本地接入集合尚未创建".to_string());
     };
 
@@ -1615,17 +1628,12 @@ pub async fn update_local_access_port(port: u16) -> Result<CodexLocalAccessState
         Some(collection.port),
     )?;
     if collection.port == port {
+        drop(lifecycle);
         return snapshot_state().await;
     }
 
-    collection.port = port;
-    collection.updated_at = now_ms();
-    save_collection_to_disk(&collection)?;
-
-    {
-        let mut runtime = gateway_runtime().lock().await;
-        sync_runtime_collection(&mut runtime, collection);
-    }
+    persist_recovered_local_access_port(port).await?;
+    drop(lifecycle);
 
     ensure_gateway_matches_runtime().await?;
     snapshot_state().await

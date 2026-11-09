@@ -259,8 +259,8 @@ fn collect_rollout_provider_changes(
         }
         let rollout_paths = list_rollout_files(&root_dir)?;
         for rollout_path in rollout_paths {
-            let Some(content) = read_rollout_text(&rollout_path)? else { continue; };
-            let rewrite = scan_rollout_session_meta_providers(&content)?;
+            let Some(scan) = read_rollout_summary(&rollout_path)? else { continue; };
+            let rewrite = scan.provider_facts();
             if rewrite.session_meta_count == 0 {
                 continue;
             }
@@ -289,7 +289,7 @@ fn collect_rollout_provider_changes(
             let target_modified_at = resolve_target_modified_at_ms(
                 session_id.as_deref(),
                 &session_index_map,
-                &rollout_path,
+                scan.activity_ms,
                 fallback_modified_ms,
             )
             .and_then(modules::codex_session_file_time::system_time_from_unix_millis);
@@ -527,16 +527,11 @@ struct RolloutProviderRewrite {
     providers: HashSet<String>,
 }
 
+#[cfg(test)]
 fn scan_rollout_session_meta_providers(content: &str) -> Result<RolloutProviderRewrite, String> {
-    let mut facts = RolloutProviderRewrite::default();
-    for line in content.lines() {
-        if let Ok(record) = serde_json::from_str::<JsonValue>(line) {
-            if record.get("type").and_then(JsonValue::as_str) == Some("session_meta") {
-                scan_session_meta_record(&record, &mut facts);
-            }
-        }
-    }
-    Ok(facts)
+    scan_rollout_summary(content.as_bytes())
+        .map(|scan| scan.provider_facts())
+        .map_err(|error| error.to_string())
 }
 
 fn scan_rollout_first_session_meta_provider(path: &Path) -> Result<RolloutProviderRewrite, String> {
@@ -625,25 +620,6 @@ fn read_first_line(path: &Path) -> Result<Option<(String, String)>, String> {
     Ok(Some((line, separator.to_string())))
 }
 
-fn read_rollout_text(path: &Path) -> Result<Option<String>, String> {
-    match fs::read_to_string(path) {
-        Ok(content) => Ok(Some(content)),
-        Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
-            modules::logger::log_warn(&format!(
-                "跳过非 UTF-8 Codex rollout 文件 ({}): {}",
-                path.display(),
-                error
-            ));
-            Ok(None)
-        }
-        Err(error) => Err(format!(
-            "读取 rollout 文件失败 ({}): {}",
-            path.display(),
-            error
-        )),
-    }
-}
-
 fn parse_session_meta_record(first_line: &str) -> Option<JsonValue> {
     if first_line.trim().is_empty() {
         return None;
@@ -694,63 +670,34 @@ fn collect_rollout_thread_facts(
             continue;
         }
         for rollout_path in list_rollout_files(&root_dir)? {
-            let Some(content) = read_rollout_text(&rollout_path)? else {
+            let Some(scan) = read_rollout_summary(&rollout_path)? else {
                 continue;
             };
-            let has_user_event =
-                content.contains("\"user_message\"") || content.contains("\"user_input\"");
-            let contains_encrypted_content = content.contains("encrypted_content");
             let mut file_providers = HashSet::new();
-            for line in content.lines() {
-                let Ok(record) = serde_json::from_str::<JsonValue>(line.trim()) else {
-                    continue;
-                };
-                if record.get("type").and_then(JsonValue::as_str) != Some("session_meta") {
-                    continue;
-                }
-                let Some(payload) = record.get("payload").and_then(JsonValue::as_object) else {
-                    continue;
-                };
-                let Some(thread_id) = payload
-                    .get("id")
-                    .or_else(|| payload.get("session_id"))
-                    .and_then(JsonValue::as_str)
-                    .map(str::to_string)
-                else {
-                    continue;
-                };
+            for record in scan.metadata {
+                let Some(payload) = record.payload else { continue; };
+                let Some(thread_id) = payload.thread_id().map(str::to_owned) else { continue; };
                 if !selection.includes_session_id(&thread_id) {
                     continue;
                 }
-                if payload
-                    .get("source")
-                    .is_some_and(source_value_marks_non_root_agent)
-                {
+                if payload.is_non_root() {
                     facts.subagent_thread_ids.insert(thread_id.clone());
                     continue;
                 }
-                if let Some(provider) = payload
-                    .get("model_provider")
-                    .and_then(JsonValue::as_str)
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                {
+                if let Some(provider) = payload.provider() {
                     file_providers.insert(provider.to_string());
                 }
-                if has_user_event {
+                if scan.markers.has_user_event {
                     facts.user_event_thread_ids.insert(thread_id.clone());
                 }
                 if !projectless_thread_ids.contains(&thread_id) {
-                    if let Some(cwd) = payload
-                        .get("cwd")
-                        .and_then(JsonValue::as_str)
-                        .and_then(to_desktop_workspace_path)
+                    if let Some(cwd) = payload.cwd.as_str().and_then(to_desktop_workspace_path)
                     {
                         facts.cwd_by_thread_id.entry(thread_id).or_insert(cwd);
                     }
                 }
             }
-            if contains_encrypted_content {
+            if scan.markers.contains_encrypted_content {
                 for provider in file_providers {
                     *facts.encrypted_content_counts.entry(provider).or_insert(0) += 1;
                 }

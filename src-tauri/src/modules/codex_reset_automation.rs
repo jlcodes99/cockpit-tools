@@ -11,6 +11,7 @@ use tauri::{AppHandle, Emitter};
 
 const FILE: &str = "codex_reset_automation.json";
 const EVENT: &str = "codex:reset-automation-updated";
+const AUTOMATIC_COOLDOWN_MS: i64 = 30 * 60 * 1_000;
 static STORAGE: Mutex<()> = Mutex::new(());
 static ACTIVE: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 static APP: OnceLock<AppHandle> = OnceLock::new();
@@ -69,7 +70,26 @@ struct Document {
     accounts: HashMap<String, AccountRule>,
     pending: HashMap<String, Pending>,
     last_evidence: HashMap<String, String>,
+    last_automatic_success_ms: Option<HashMap<String, i64>>,
     records: Vec<Record>,
+}
+impl Document {
+    fn automatic_successes_mut(&mut self) -> &mut HashMap<String, i64> {
+        // Older journals have only the bounded activity history. Seed once from
+        // confirmed successes that can still be within the cooldown.
+        self.last_automatic_success_ms.get_or_insert_with(|| {
+            let cutoff = chrono::Utc::now().timestamp_millis() - AUTOMATIC_COOLDOWN_MS;
+            let mut successes = HashMap::<String, i64>::new();
+            for row in &self.records {
+                let at = row.at.saturating_mul(1_000);
+                if row.status == "success" && is_automatic_reason(&row.reason) && at > cutoff {
+                    let latest = successes.entry(row.account_id.clone()).or_insert(at);
+                    *latest = (*latest).max(at);
+                }
+            }
+            successes
+        })
+    }
 }
 #[derive(Clone, Serialize)]
 pub struct View {
@@ -113,6 +133,7 @@ fn update_at<T>(
 ) -> Result<T, String> {
     let _guard = STORAGE.lock().map_err(|_| message("storageError"))?;
     let mut d = read(path)?;
+    d.automatic_successes_mut();
     d.revision = d
         .revision
         .checked_add(1)
@@ -230,6 +251,16 @@ fn effective<'a>(d: &'a Document, id: &str) -> Option<&'a Rule> {
         Some(AccountRule::Custom { rule }) => rule,
     };
     (rule.enabled && (rule.expiry_enabled || rule.quota_enabled)).then_some(rule)
+}
+fn automatic_rule<'a>(d: &'a Document, id: &str, now_ms: i64) -> Option<&'a Rule> {
+    let last_success = d.last_automatic_success_ms.as_ref()?.get(id);
+    if last_success.is_some_and(|at| now_ms.saturating_sub(*at) < AUTOMATIC_COOLDOWN_MS) {
+        return None;
+    }
+    effective(d, id)
+}
+fn is_automatic_reason(reason: &str) -> bool {
+    matches!(reason, "expiry" | "quota")
 }
 fn trigger(
     rule: &Rule,
@@ -369,6 +400,10 @@ fn finish_redemption(
     }
     let result = result.and_then(ResetCreditConsumeOutcome::into_result);
     if result.is_ok() {
+        if is_automatic_reason(&pending.reason) {
+            d.automatic_successes_mut()
+                .insert(id.into(), chrono::Utc::now().timestamp_millis());
+        }
         if let Some(e) = &pending.evidence {
             d.last_evidence.insert(id.into(), e.clone());
         }
@@ -435,7 +470,9 @@ async fn check_account(id: &str) -> Result<(), String> {
             return Ok(None);
         };
         let d = read(&path()?)?;
-        let Some(rule) = effective(&d, &id_owned).cloned() else {
+        let Some(rule) =
+            automatic_rule(&d, &id_owned, chrono::Utc::now().timestamp_millis()).cloned()
+        else {
             return Ok(None);
         };
         let account =
@@ -509,6 +546,9 @@ pub async fn run(app: AppHandle) {
                         .any(|r| matches!(r, AccountRule::Custom { rule } if rule.enabled))
                 {
                     return Ok(Vec::new());
+                }
+                if d.last_automatic_success_ms.is_none() {
+                    update(|_| Ok(()))?;
                 }
                 Ok(codex_account::load_account_index()
                     .accounts

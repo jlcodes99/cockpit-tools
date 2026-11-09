@@ -502,6 +502,71 @@ fn desktop_launch_rejects_unrestorable_renderer_state_before_history_writes() {
 }
 
 #[test]
+fn switch_without_launch_preserves_projects_with_large_catalog_and_history() {
+    use base64::Engine as _;
+
+    let f = Fixture::new();
+    let db = Connection::open(f.home().join("state_5.sqlite")).unwrap();
+    db.execute_batch(
+        "WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<300)
+         INSERT INTO projects SELECT 'extra-'||x,'Extra','{}' FROM n;
+         WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<2100)
+         INSERT INTO threads SELECT 'extra-'||x,cwd,source,project_id,has_user_event
+         FROM n JOIN threads ON id='chat';
+         ALTER TABLE threads ADD COLUMN model_provider TEXT DEFAULT 'openai';",
+    )
+    .unwrap();
+    let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+        br#"{"https://api.openai.com/auth":{"chatgpt_user_id":"user-b","chatgpt_account_id":"account-b"}}"#,
+    );
+    let auth = json!({"tokens":{"access_token":format!("e30.{token}.fixture")}});
+    fs::write(f.home().join("config.toml"), "cli_auth_credentials_store = 'file'\n").unwrap();
+    fs::write(f.home().join("auth.json"), serde_json::to_vec(&auth).unwrap()).unwrap();
+    let owner = format!("{:x}", Sha256::digest(br#"["user-b","account-b"]"#));
+    let original = json!({
+        SCOPES:{"owner":"previous","inactive":{}},
+        "local-projects":f.local("legacy")["local-projects"],
+        "project-order":["legacy"],
+        MAP:f.local("legacy")[MAP],
+        ASSIGN:f.local("legacy")[ASSIGN],
+        "remote-projects":{"remote-a":{"name":"Previous account only"}}
+    });
+    f.write(&original);
+
+    assert!(
+        crate::modules::codex_session_visibility::prepare_desktop_project_state_after_switch(
+            "test-pure-switch",
+            f.home(),
+        ).unwrap()
+    );
+    let after_native_start = native_start(f.state(), Some(&owner));
+    assert_eq!(after_native_start["local-projects"]["legacy"]["name"], "My project");
+    assert_eq!(after_native_start["project-order"], json!(["legacy"]));
+    assert!(after_native_start.get("remote-projects").is_none());
+    assert_eq!(
+        after_native_start[SCOPES]["inactive"]["previous"]["globals"][ASSIGN]["chat"]["projectId"],
+        "legacy"
+    );
+    assert_eq!(
+        db.query_row("SELECT project_id FROM threads WHERE id='chat'", [], |row| row.get::<_, String>(0))
+            .unwrap(),
+        "server"
+    );
+
+    f.write(&original);
+    let launch = crate::modules::codex_session_visibility::repair_session_visibility_quick_for_instance(
+        "test-switch-and-start",
+        "Fixture",
+        f.home(),
+        true,
+    )
+    .unwrap();
+    assert!(launch.local_project_recovery_deferred);
+    assert_eq!(launch.mutated_instance_count, 1);
+    assert_eq!(native_start(f.state(), Some(&owner))["project-order"], json!(["legacy"]));
+}
+
+#[test]
 fn account_project_switch_api_key_roundtrip_preserves_oauth_archive_without_leaking_it() {
     let f = Fixture::new();
     let mut state = f.local("legacy");
@@ -698,7 +763,10 @@ fn large_history_does_not_block_account_state_preparation() {
         assert_eq!(db.query_row("SELECT count(*) FROM threads", [], |r| r.get::<_, i64>(0)).unwrap(), 2049);
         drop(db);
         for owner in [Some("a"), Some("b"), None] {
-            prepare(f.home(), owner).unwrap();
+            with_launch_visibility_budget(std::time::Duration::from_secs(5), || {
+                prepare(f.home(), owner)
+            })
+            .unwrap();
             let booted = native_start(f.state(), owner);
             assert_eq!(booted[ASSIGN]["chat"]["projectId"], "legacy");
             assert_eq!(booted[ASSIGN].get("extra-2046").is_some(), project.is_some());
@@ -720,6 +788,38 @@ fn large_project_registry_does_not_block_account_state_preparation() {
     let booted = native_start(f.state(), Some("b"));
     assert_eq!(booted["local-projects"].as_object().unwrap().len(), 1);
     assert_eq!(booted[ASSIGN]["chat"]["projectId"], "legacy");
+}
+
+#[test]
+fn slow_history_does_not_block_local_and_ssh_project_restoration() {
+    let f = Fixture::new();
+    let original = state_with_ssh(&f);
+    f.write(&original);
+    let db = Connection::open(f.home().join("state_5.sqlite")).unwrap();
+    // Synthesize a history whose ordered scan cannot finish within the launch
+    // budget, without generating or writing millions of fixture rows.
+    db.execute_batch(
+        "ALTER TABLE threads RENAME TO fixture_threads;
+         CREATE VIEW threads AS
+         WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<1000000000)
+         SELECT id,cwd,source,project_id,has_user_event FROM fixture_threads
+         UNION ALL SELECT 'extra-'||x,'unused','cli','server',1 FROM n;",
+    )
+    .unwrap();
+    drop(db);
+
+    with_launch_visibility_budget(std::time::Duration::from_secs(2), || {
+        prepare(f.home(), Some("b"))
+    })
+    .unwrap();
+    let booted = native_start(f.state(), Some("b"));
+    assert_eq!(booted["local-projects"], original["local-projects"]);
+    assert_eq!(booted["remote-projects"], original["remote-projects"]);
+    assert!(booted.get(ASSIGN).is_none());
+    assert_eq!(
+        booted[SCOPES]["inactive"]["a"]["globals"][ASSIGN],
+        original[ASSIGN]
+    );
 }
 
 #[test]

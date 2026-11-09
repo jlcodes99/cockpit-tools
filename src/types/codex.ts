@@ -454,6 +454,7 @@ export interface CodexSessionVisibilityRepairProgress {
 }
 
 export interface CodexSessionVisibilityRepairSummary {
+  historyRepairWarning?: string | null;
   instanceCount: number;
   mutatedInstanceCount: number;
   changedRolloutFileCount: number;

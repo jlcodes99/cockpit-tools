@@ -81,7 +81,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
   | "handleEnterGroup"
   | "handleExportByIds"
   | "handleHideLocalAccessEntry"
-  | "handleKillLocalAccessPort"
+  | "openLocalAccessPortRecovery"
   | "handleLaunchCodexCli"
   | "handleLaunchLocalAccessCli"
   | "handleLocalAccessAddressKindChange"
@@ -227,7 +227,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
     handleDelete,
     handleExportByIds,
     handleHideLocalAccessEntry,
-    handleKillLocalAccessPort,
+    openLocalAccessPortRecovery,
     handleLaunchCodexCli,
     handleLaunchLocalAccessCli,
     handleLocalAccessAddressKindChange,
@@ -1564,9 +1564,9 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                   <button
                     type="button"
                     className="folder-icon-btn codex-local-access-error-action"
-                    onClick={() => void handleKillLocalAccessPort()}
-                    title={t("codex.localAccess.killPortAction")}
-                    aria-label={t("codex.localAccess.killPortAction")}
+                    onClick={openLocalAccessPortRecovery}
+                    title={t("codex.localAccess.portRecoveryTitle")}
+                    aria-label={t("codex.localAccess.portRecoveryTitle")}
                     disabled={localAccessBusy || !localAccessCollection}
                   >
                     {localAccessPortKilling ? (
