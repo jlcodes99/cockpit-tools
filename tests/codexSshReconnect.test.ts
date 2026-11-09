@@ -184,6 +184,52 @@ test('permanent account read failures remain errors', async () => {
   assert.equal(f.listeners.size, 0);
 });
 
+test('verification retries native request errors without depending on their text', async () => {
+  for (const error of [
+    { code: -32000, message: 'client-disconnected' },
+    { code: -32603, message: 'Internal error while replacing the connection' },
+  ]) {
+    const f = fixture({ manualRead: true });
+    const result = Promise.resolve(f.run({ timeoutMs: 2000 }));
+    f.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'restarting' });
+    f.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'connected' });
+    const firstId = f.calls.at(-1).request.id;
+    f.emit({ type: 'mcp-response', hostId: 'ssh-fixture', message: { id: firstId, error } });
+    await new Promise(resolve => setTimeout(resolve, 300));
+    assert.equal(f.reads(), 2, 'the verification deadline must allow another idempotent read');
+    const retryId = f.calls.at(-1).request.id;
+    assert.notEqual(retryId, firstId);
+    f.emit({ type: 'mcp-response', hostId: 'ssh-fixture', message: { id: retryId,
+      result: { account: { type: 'chatgpt', email: 'new@example.invalid' } } } });
+    assert.equal((await result).ok, true);
+    assert.equal(f.calls.filter(call => call.type === 'codex-app-server-restart').length, 1);
+    assert.equal(f.listeners.size, 0);
+    assert.equal(f.timers.size, 0);
+  }
+});
+
+test('a repeated native read failure remains a failure with bounded redacted diagnostics', async () => {
+  const f = fixture({ manualRead: true });
+  const result = Promise.resolve(f.run({ timeoutMs: 650 }));
+  f.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'restarting' });
+  f.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'connected' });
+  const message = 'client-disconnected user@example.invalid eyJhbGciOiJub25lIn0.eyJzdWIiOiIxIn0.signature access_token=secret ' + 'x'.repeat(800);
+  const failRead = () => f.emit({ type: 'mcp-response', hostId: 'ssh-fixture',
+    message: { id: f.calls.at(-1).request.id, error: { code: -32000, message } } });
+  failRead();
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(f.reads(), 2);
+  failRead();
+  const failure = await result;
+  assert.equal(failure.reason, 'account_read_failed');
+  assert.equal(failure.readError.code, -32000);
+  assert.ok(failure.readError.message.startsWith('client-disconnected'));
+  assert.ok(failure.readError.message.length <= 512);
+  assert.doesNotMatch(failure.readError.message, /user@example|eyJ|secret/);
+  assert.equal(f.listeners.size, 0);
+  assert.equal(f.timers.size, 0);
+});
+
 test('transient read retries keep the original deadline and stop when superseded', async () => {
   const timed = fixture({ manualRead: true });
   const timedResult = Promise.resolve(timed.run({ timeoutMs: 100 }));
@@ -191,7 +237,7 @@ test('transient read retries keep the original deadline and stop when superseded
   timed.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'connected' });
   timed.emit({ type: 'mcp-response', hostId: 'ssh-fixture',
     message: { id: timed.calls.at(-1).request.id, error: { code: -32000, message: 'not-connected' } } });
-  assert.equal((await timedResult).reason, 'timeout');
+  assert.equal((await timedResult).reason, 'account_read_failed');
   assert.equal(timed.timers.size, 0);
   await new Promise(resolve => setTimeout(resolve, 300));
   assert.equal(timed.reads(), 1);

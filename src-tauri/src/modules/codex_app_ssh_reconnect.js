@@ -22,9 +22,17 @@
     if (request.accountId && account?.accountId && account.accountId !== request.accountId) return "account_mismatch";
     return !value || !account && value.requiresOpenaiAuth !== false ? "account_unavailable" : null;
   };
+  const readErrorDetails = error => ({
+    code: typeof error.code === "number" && Number.isFinite(error.code) ? error.code : null,
+    message: String(error.message || "Native account read failed")
+      .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "<email>")
+      .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "<token>")
+      .replace(/\b(access_token|refresh_token|id_token|authorization|OPENAI_API_KEY)\b["'\s:=]+(?:Bearer\s+)?[^\s"',}]+/gi, "$1=<redacted>")
+      .replace(/\bsk-[A-Za-z0-9_-]+\b/g, "<key>").slice(0, 512),
+  });
   entry.promise = new Promise(resolve => {
     let finished = false, connecting = false, connected = false, reading = false;
-    let readId = null, readSequence = 0, retryTimer = null;
+    let readId = null, readSequence = 0, retryTimer = null, lastReadError = null;
     const complete = result => {
       if (finished) return;
       finished = true;
@@ -70,22 +78,24 @@
       if (data.type === "codex-app-server-connection-changed" && data.isSnapshot !== true) connectionChanged(data);
       if (reading && data.type === "mcp-response" && data.message?.id === readId) {
         if (data.message.error) {
-          // Native login and IPC handoff can invalidate a read after connected.
-          // Retry that read within this operation's deadline, with a fresh ID.
+          // The native bridge wraps arbitrary transport exceptions as read errors.
+          // Verification is bounded by the deadline, not by exception wording.
           const error = data.message.error;
-          if (error.code === -32000 && /^(App server account changed|Codex app-server is not available|not-connected|not-initialized|connection-reset|connection-closed)$/i.test(error.message || "")) {
-            reading = false;
-            readId = null;
-            retryTimer = setTimeout(readAccount, 250);
-            return;
-          }
-          return complete({ ok: false, reason: "account_read_failed" });
+          lastReadError = readErrorDetails(error);
+          if ([-32600, -32601, -32602].includes(error.code))
+            return complete({ ok: false, reason: "account_read_failed", readError: lastReadError });
+          reading = false;
+          readId = null;
+          retryTimer = setTimeout(readAccount, 250);
+          return;
         }
         const reason = accountFailure(data.message.result);
         complete(reason ? { ok: false, reason } : { ok: true });
       }
     };
-    const timer = setTimeout(() => complete({ ok: false, reason: "timeout" }),
+    const timer = setTimeout(() => complete(lastReadError
+      ? { ok: false, reason: "account_read_failed", readError: lastReadError }
+      : { ok: false, reason: "timeout" }),
       Math.max(100, Math.min(30000, request.timeoutMs || 30000)));
     entry.cancel = () => complete({ ok: false, reason: "superseded" });
     window.addEventListener("message", receive);

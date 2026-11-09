@@ -167,6 +167,12 @@ async fn try_refresh(
             .as_str()
             .unwrap_or("bridge_invalid_response");
         if !matches!(reason, "bridge_unavailable" | "not_ready") {
+            if let Some(error) = value.get("readError") {
+                crate::modules::logger::log_warn(&format!(
+                    "[Codex SSH] 原生账号核验失败: code={}, message={}",
+                    error["code"], error["message"]
+                ));
+            }
             return Err(reason.to_string());
         }
     }
