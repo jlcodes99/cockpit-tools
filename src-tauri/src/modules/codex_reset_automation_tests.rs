@@ -243,6 +243,32 @@ fn same_card_snapshot_is_stable_and_history_is_bounded() {
 }
 
 #[test]
+fn success_record_survives_other_accounts_failed_retries() {
+    let mut d = Document::default();
+    record(&mut d, "target", "expiry", "success", None);
+    for _ in 0..150 {
+        record(
+            &mut d,
+            "noisy",
+            "check",
+            "failed",
+            Some("nothing to reset".into()),
+        );
+    }
+    assert_eq!(d.records.len(), 100);
+    assert_eq!(
+        d.records
+            .iter()
+            .filter(|record| record.status == "success")
+            .count(),
+        1
+    );
+    let survivor = d.records.last().unwrap();
+    assert_eq!(survivor.account_id, "target");
+    assert_eq!(survivor.status, "success");
+}
+
+#[test]
 fn failed_or_interrupted_redemption_reuses_request_id_and_success_rearms_only_on_new_cards() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join(FILE);

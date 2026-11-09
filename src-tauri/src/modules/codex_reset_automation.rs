@@ -11,6 +11,7 @@ use tauri::{AppHandle, Emitter};
 
 const FILE: &str = "codex_reset_automation.json";
 const EVENT: &str = "codex:reset-automation-updated";
+const MAX_RECORDS: usize = 100;
 static STORAGE: Mutex<()> = Mutex::new(());
 static ACTIVE: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 static APP: OnceLock<AppHandle> = OnceLock::new();
@@ -296,7 +297,26 @@ fn record(d: &mut Document, id: &str, reason: &str, status: &str, detail: Option
             detail,
         },
     );
-    d.records.truncate(100);
+    trim_records(&mut d.records);
+}
+
+/// Keep the journal bounded at [`MAX_RECORDS`] entries without letting
+/// routine failures evict a successful redemption: a success record is the
+/// audit evidence for a consumed reset card, so trimming drops the oldest
+/// non-success entry first and only falls back to the oldest success once
+/// every retained entry is one.
+fn trim_records(records: &mut Vec<Record>) {
+    while records.len() > MAX_RECORDS {
+        match records
+            .iter()
+            .rposition(|record| record.status != "success")
+        {
+            Some(oldest_non_success) => {
+                records.remove(oldest_non_success);
+            }
+            None => records.truncate(MAX_RECORDS),
+        }
+    }
 }
 pub(crate) struct Lease(String);
 impl Drop for Lease {
