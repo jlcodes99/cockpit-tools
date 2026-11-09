@@ -431,18 +431,44 @@ pub(crate) fn filter_responses_lite_tools(body: &mut Value) -> bool {
         .is_some_and(filter_responses_lite_tools_in_object)
 }
 
-fn responses_lite_tool_allowed(tool: &Value) -> bool {
-    match tool
+/// Rewrite a `tool_search` declaration whose execution is missing or
+/// `server` to client execution, so the Lite filter keeps it instead of
+/// silently dropping it. Deferred MCP namespaces are only loadable through
+/// `tool_search`, so dropping it breaks them even though the namespace
+/// declarations themselves survive (see #3012). Returns `true` when the
+/// execution was rewritten.
+fn rewrite_tool_search_execution_to_client(tool: &mut Map<String, Value>) -> bool {
+    let execution = tool.get("execution").and_then(Value::as_str);
+    if execution.is_some_and(|execution| execution.trim().eq_ignore_ascii_case("client")) {
+        return false;
+    }
+    if execution.is_none()
+        || execution.is_some_and(|execution| execution.trim().eq_ignore_ascii_case("server"))
+    {
+        tool.insert("execution".to_string(), Value::String("client".to_string()));
+        return true;
+    }
+    false
+}
+
+fn normalize_responses_lite_tool(tool: &mut Value) -> bool {
+    let tool_type = tool
         .get("type")
         .and_then(Value::as_str)
-        .map(|tool_type| tool_type.trim().to_ascii_lowercase())
-        .as_deref()
-    {
+        .map(|tool_type| tool_type.trim().to_ascii_lowercase());
+    match tool_type.as_deref() {
         Some("function" | "custom" | "namespace") => true,
-        Some("tool_search") => tool
-            .get("execution")
-            .and_then(Value::as_str)
-            .is_some_and(|execution| execution.trim().eq_ignore_ascii_case("client")),
+        Some("tool_search") => {
+            if tool
+                .get("execution")
+                .and_then(Value::as_str)
+                .is_some_and(|execution| execution.trim().eq_ignore_ascii_case("client"))
+            {
+                return true;
+            }
+            tool.as_object_mut()
+                .is_some_and(rewrite_tool_search_execution_to_client)
+        }
         _ => false,
     }
 }
@@ -452,8 +478,23 @@ fn filter_responses_lite_tool_array(value: &mut Value) -> (bool, bool) {
         return (false, false);
     };
     let before = tools.len();
-    tools.retain(responses_lite_tool_allowed);
-    (tools.len() != before, !tools.is_empty())
+    let mut rewritten = false;
+    tools.retain_mut(|tool| {
+        let execution_before = tool
+            .get("execution")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let kept = normalize_responses_lite_tool(tool);
+        let execution_after = tool
+            .get("execution")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        if kept && execution_before != execution_after {
+            rewritten = true;
+        }
+        kept
+    });
+    (rewritten || tools.len() != before, !tools.is_empty())
 }
 
 fn filter_responses_lite_tool_choice(choice: &mut Value) -> (bool, bool) {
@@ -476,11 +517,15 @@ fn filter_responses_lite_tool_choice(choice: &mut Value) -> (bool, bool) {
     match choice_type.as_deref() {
         Some("function" | "custom" | "namespace") => return (false, true),
         Some("tool_search") => {
-            let client_executed = choice_object
+            if choice_object
                 .get("execution")
                 .and_then(Value::as_str)
-                .is_some_and(|execution| execution.trim().eq_ignore_ascii_case("client"));
-            return (false, client_executed);
+                .is_some_and(|execution| execution.trim().eq_ignore_ascii_case("client"))
+            {
+                return (false, true);
+            }
+            let rewritten = rewrite_tool_search_execution_to_client(choice_object);
+            return (rewritten, rewritten);
         }
         _ => {}
     }
@@ -1751,7 +1796,37 @@ mod tests {
         }
 
         assert!(normalize_responses_body_for_codex_with_lite(&mut body, true));
-        for pointer in ["/tools", "/tool_choice/tools", "/input/0/tools"] {
+        assert_eq!(
+            body.pointer("/tools")
+                .and_then(Value::as_array)
+                .map(|tools| {
+                    tools
+                        .iter()
+                        .filter_map(|tool| tool.get("type").and_then(Value::as_str))
+                        .collect::<Vec<_>>()
+                }),
+            Some(vec![
+                "function",
+                "custom",
+                "tool_search",
+                "tool_search",
+                "tool_search",
+                "namespace"
+            ]),
+            "unexpected tools at /tools"
+        );
+        // A `tool_search` without an execution mode, or one marked `server`,
+        // is rewritten to client execution instead of being dropped, so the
+        // deferred MCP namespaces it loads stay reachable (see #3012).
+        for pointer in ["/tools/3", "/tools/4"] {
+            assert_eq!(
+                body.pointer(&format!("{pointer}/execution"))
+                    .and_then(Value::as_str),
+                Some("client"),
+                "unexpected execution at {pointer}"
+            );
+        }
+        for pointer in ["/tool_choice/tools", "/input/0/tools"] {
             assert_eq!(
                 body.pointer(pointer)
                     .and_then(Value::as_array)
@@ -1780,6 +1855,82 @@ mod tests {
         assert_eq!(
             body.get("input").and_then(Value::as_array).map(Vec::len),
             Some(2)
+        );
+    }
+
+    #[test]
+    fn responses_lite_rewrites_tool_search_execution_to_client() {
+        let mut body = json!({
+            "model": "gpt-5.6-sol",
+            "input": [
+                {
+                    "type": "additional_tools",
+                    "tools": [
+                        {"type": "tool_search"},
+                        {"type": "tool_search", "execution": "server"}
+                    ]
+                }
+            ],
+            "tools": [
+                {"type": "tool_search"},
+                {"type": "tool_search", "execution": "server"},
+                {"type": "tool_search", "execution": "client"}
+            ],
+            "tool_choice": {
+                "type": "allowed_tools",
+                "mode": "auto",
+                "tools": [
+                    {"type": "tool_search"},
+                    {"type": "tool_search", "execution": "server"}
+                ]
+            },
+            "response": {
+                "tools": [
+                    {"type": "tool_search", "execution": "server"}
+                ],
+                "tool_choice": {"type": "tool_search", "execution": "server"}
+            }
+        });
+
+        assert!(normalize_responses_body_for_codex_with_lite(
+            &mut body, true
+        ));
+
+        let tools = body
+            .pointer("/tools")
+            .and_then(Value::as_array)
+            .expect("top-level tools should survive the Lite filter");
+        assert_eq!(tools.len(), 3, "unexpected top-level tools");
+        assert!(tools.iter().all(|tool| {
+            tool.get("type").and_then(Value::as_str) == Some("tool_search")
+                && tool.get("execution").and_then(Value::as_str) == Some("client")
+        }));
+
+        for pointer in ["/tool_choice/tools", "/input/0/tools"] {
+            let tools = body
+                .pointer(pointer)
+                .and_then(Value::as_array)
+                .expect("tools should survive the Lite filter");
+            assert_eq!(tools.len(), 2, "unexpected tools at {pointer}");
+            assert!(tools
+                .iter()
+                .all(|tool| { tool.get("execution").and_then(Value::as_str) == Some("client") }));
+        }
+
+        assert_eq!(
+            body.pointer("/response/tools/0/execution")
+                .and_then(Value::as_str),
+            Some("client")
+        );
+        assert_eq!(
+            body.pointer("/response/tool_choice/type")
+                .and_then(Value::as_str),
+            Some("tool_search")
+        );
+        assert_eq!(
+            body.pointer("/response/tool_choice/execution")
+                .and_then(Value::as_str),
+            Some("client")
         );
     }
 
