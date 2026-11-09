@@ -1473,28 +1473,19 @@ fn renderer_project_owner_from_auth(
     let access = tokens["access_token"]
         .as_str()
         .and_then(decode_jwt_payload_value);
-    let id = tokens["id_token"]
-        .as_str()
-        .and_then(decode_jwt_payload_value);
-    let user = access
+    let Some(claims) = access
         .as_ref()
-        .and_then(|v| v["https://api.openai.com/auth"]["chatgpt_user_id"].as_str())
-        .or_else(|| {
-            id.as_ref()
-                .and_then(|v| v["https://api.openai.com/auth"]["chatgpt_user_id"].as_str())
-        });
-    let account = tokens["account_id"]
+        .and_then(|value| value.get("https://api.openai.com/auth"))
+    else {
+        return Ok(None);
+    };
+    // Both desktop builds derive the renderer principal from these access-token claims.
+    let user = claims["user_id"]
         .as_str()
-        .filter(|v| !v.is_empty())
-        .or_else(|| {
-            access
-                .as_ref()
-                .and_then(|v| v["https://api.openai.com/auth"]["chatgpt_account_id"].as_str())
-        })
-        .or_else(|| {
-            id.as_ref()
-                .and_then(|v| v["https://api.openai.com/auth"]["chatgpt_account_id"].as_str())
-        });
+        .or_else(|| claims["chatgpt_user_id"].as_str());
+    let account = claims["chatgpt_account_id"]
+        .as_str()
+        .or_else(|| claims["account_id"].as_str());
     Ok(match (user, account) {
         (Some(user), Some(account)) if !user.is_empty() && !account.is_empty() => {
             let identity = serde_json::to_vec(&serde_json::json!([user, account]))
@@ -1508,29 +1499,44 @@ fn renderer_project_owner_from_auth(
 #[cfg(test)]
 mod account_project_switch_identity_tests {
     use super::*;
-    fn token(user: &str, account: &str) -> String {
-        let claims = serde_json::json!({"https://api.openai.com/auth":{
-            "chatgpt_user_id":user,"chatgpt_account_id":account}});
+    fn token(identity: serde_json::Value) -> String {
+        let claims = serde_json::json!({"https://api.openai.com/auth":identity});
         format!(
             "e30.{}.sig",
             URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims).unwrap())
         )
     }
     #[test]
-    fn account_project_switch_uses_projected_oauth_identity_not_key_label() {
+    fn account_project_switch_prefers_official_access_token_claims_when_fields_conflict() {
         let auth = serde_json::json!({"auth_mode":"chatgpt","tokens":{
-            "access_token":token("user-one","original-account"),
-            "account_id":"selected-workspace"
+            "access_token":token(serde_json::json!({
+                "user_id":"user-one","chatgpt_user_id":"legacy-user",
+                "chatgpt_account_id":"token-workspace","account_id":"legacy-workspace"
+            })),
+            "id_token":token(serde_json::json!({
+                "user_id":"id-token-user","chatgpt_account_id":"id-token-workspace"
+            })),
+            "account_id":"projected-workspace"
         }});
-        let expected = format!(
-            "{:x}",
-            Sha256::digest(
-                serde_json::to_vec(&serde_json::json!(["user-one", "selected-workspace"])).unwrap()
-            )
-        );
         assert_eq!(
             renderer_project_owner_from_auth(&auth).unwrap(),
-            Some(Some(expected))
+            Some(Some(format!(
+                "{:x}",
+                Sha256::digest(br#"["user-one","token-workspace"]"#)
+            )))
+        );
+    }
+    #[test]
+    fn account_project_switch_accepts_user_id_without_chatgpt_user_id() {
+        let auth = serde_json::json!({"tokens":{
+            "access_token":token(serde_json::json!({"user_id":"user","account_id":"workspace"}))
+        }});
+        assert_eq!(
+            renderer_project_owner_from_auth(&auth).unwrap(),
+            Some(Some(format!(
+                "{:x}",
+                Sha256::digest(br#"["user","workspace"]"#)
+            )))
         );
     }
     #[test]
@@ -1549,10 +1555,13 @@ mod account_project_switch_identity_tests {
             .unwrap(),
             None
         );
-        let auth = serde_json::json!({"tokens":{"id_token":token("user","account")}});
-        assert!(renderer_project_owner_from_auth(&auth)
-            .unwrap()
-            .flatten()
-            .is_some());
+        let auth = serde_json::json!({"tokens":{
+            "access_token":token(serde_json::json!({"user_id":"user"})),
+            "id_token":token(serde_json::json!({
+                "user_id":"user","chatgpt_account_id":"workspace"
+            })),
+            "account_id":"workspace"
+        }});
+        assert_eq!(renderer_project_owner_from_auth(&auth).unwrap(), None);
     }
 }

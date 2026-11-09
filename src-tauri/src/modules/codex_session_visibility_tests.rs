@@ -12,6 +12,31 @@ use super::*;
         assert_eq!(facts.session_meta_count, 1);
     }
 
+    #[test]
+    fn deep_repair_reads_split_markers_and_timestamps_without_loading_payloads() {
+        use std::io::Read;
+
+        let header = b"{\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-1\",\"model_provider\":\"relay\"}}\n";
+        let event = "{\"payload\":{\"type\":\"user_message\",\"text\":\"🙂\",\"encrypted_content\":\"value\",\"createdAt\":1700000000000}}\n";
+        let event = event.as_bytes();
+        let emoji_split = event.iter().position(|&byte| byte == 0xf0).unwrap() + 2;
+        let marker_split = event
+            .windows(b"encrypted".len())
+            .position(|part| part == b"encrypted")
+            .unwrap()
+            + 4;
+        let input = header
+            .as_slice()
+            .chain(&event[..emoji_split])
+            .chain(&event[emoji_split..marker_split])
+            .chain(&event[marker_split..]);
+        let scan = scan_rollout_summary(input).unwrap();
+        assert_eq!(scan.provider_facts().thread_id.as_deref(), Some("thread-1"));
+        assert!(scan.markers.has_user_event);
+        assert!(scan.markers.contains_encrypted_content);
+        assert_eq!(scan.activity_ms, Some(1700000000000));
+    }
+
     fn make_temp_dir(prefix: &str) -> PathBuf {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)

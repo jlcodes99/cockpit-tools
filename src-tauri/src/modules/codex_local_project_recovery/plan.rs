@@ -71,11 +71,14 @@ fn projects_with_limit(db: &Connection, limit: Option<usize>) -> Result<Vec<Proj
         ))
         .map_err(|e| e.to_string())?;
     for project in &mut result {
-        project.roots = statement
-            .query_map([&project.id], |r| r.get(0))
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<String>, _>>()
-            .map_err(|e| e.to_string())?;
+        check()?;
+        for root in statement
+            .query_map([&project.id], |row| row.get(0))
+            .map_err(|error| error.to_string())?
+        {
+            check()?;
+            project.roots.push(root.map_err(|error| error.to_string())?);
+        }
         if limit.is_some() && project.roots.len() > 32 {
             return Err("CODEX_PROJECT_QUICK_LIMIT".into());
         }

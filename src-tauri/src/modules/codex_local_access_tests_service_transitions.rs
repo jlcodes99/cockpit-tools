@@ -9,6 +9,40 @@ fn disable_restores_profiles_even_when_gateway_shutdown_fails() {
     assert_eq!(result, Err("port still occupied".to_string()));
 }
 
+#[tokio::test]
+async fn port_recovery_preserves_an_unrelated_listener_and_switches_to_a_new_port() {
+    let _env_lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _env = LocalAccessTestDataGuard::new("local-access-port-recovery");
+    let occupied = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let original_port = occupied.local_addr().unwrap().port();
+    super::with_chatgpt_plan_test_runtime(|| async {
+        let mut original = test_local_access_collection(Vec::new());
+        original.port = original_port;
+        super::save_collection_to_disk(&original).unwrap();
+        {
+            let mut runtime = super::gateway_runtime().lock().await;
+            runtime.loaded = true;
+            runtime.collection = Some(original.clone());
+        }
+        assert!(super::kill_local_access_port_processes().await.is_err());
+        assert_eq!(super::load_collection_from_disk().unwrap().unwrap().port, original_port);
+
+        let result = super::change_random_local_access_port().await;
+        let running = super::gateway_runtime().lock().await.running;
+        super::stop_gateway().await;
+
+        let new = result.unwrap().collection.unwrap();
+        assert_ne!(new.port, original_port);
+        assert!(running);
+        assert_eq!(new.api_key, original.api_key);
+        assert_eq!(new.account_ids, original.account_ids);
+        assert_eq!(super::load_collection_from_disk().unwrap().unwrap().port, new.port);
+        assert!(std::net::TcpStream::connect(("127.0.0.1", original_port)).is_ok());
+    }).await;
+}
+
 #[test]
 fn disable_preserves_both_shutdown_and_profile_restore_failures() {
     let result = super::finish_local_access_disable(Err("port still occupied".to_string()), || {

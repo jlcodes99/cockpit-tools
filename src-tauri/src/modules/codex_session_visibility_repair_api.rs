@@ -161,6 +161,8 @@ pub struct CodexSessionVisibilityRepairItem {
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexSessionVisibilityRepairSummary {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub history_repair_warning: Option<String>,
     pub instance_count: usize,
     pub mutated_instance_count: usize,
     pub changed_rollout_file_count: usize,
@@ -1098,6 +1100,7 @@ fn repair_provider_visibility_for_instances_with_options(
         backup_dirs,
         message,
         history_projection_count: None,
+        history_repair_warning: None,
         local_project_recovery: None,
         local_project_recovery_deferred: false,
     };

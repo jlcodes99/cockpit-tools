@@ -43,7 +43,7 @@ fn quota(value: i32) -> crate::models::codex::CodexQuota {
 }
 
 #[test]
-fn quota_merge_preserves_concurrent_user_edits_and_subscription_work_cannot_restore_old_quota() {
+fn quota_and_subscription_writes_preserve_each_others_results() {
     let _lock = crate::modules::test_support::env_lock()
         .lock()
         .unwrap_or_else(|e| e.into_inner());
@@ -58,9 +58,11 @@ fn quota_merge_preserves_concurrent_user_edits_and_subscription_work_cannot_rest
     assert_eq!(committed.account_note, edited.account_note);
     assert!(committed.egress_proxy_disabled);
     let mut maintenance = committed.clone();
-    maintenance.subscription_active_until = Some("2030-01-01".into());
+    maintenance.subscription_active_until = Some("2030-01-01T00:00:00Z".into());
+    maintenance.subscription_query_last_attempt_at = Some(100);
+    maintenance.subscription_query_last_success_at = Some(101);
     let next = save_refreshed_quota(&committed, quota(25), None, Instant::now()).unwrap();
-    save_quota_subscription_maintenance(&committed, &maintenance).unwrap();
+    save_subscription_refresh(&committed, &maintenance).unwrap();
     let stored = load_account(&original.id).unwrap();
     assert_eq!(stored.quota.unwrap().hourly_percentage, 25);
     assert_eq!(stored.usage_updated_at, next.usage_updated_at);
@@ -69,6 +71,12 @@ fn quota_merge_preserves_concurrent_user_edits_and_subscription_work_cannot_rest
         maintenance.subscription_active_until
     );
     assert_eq!(stored.tokens.access_token, original.tokens.access_token);
+
+    // A credential or quota path writing a snapshot loaded before the lookup
+    // must keep the newer subscription date and its source metadata.
+    let saved = save_account_preserving_egress_proxy(&next).unwrap();
+    assert_eq!(saved.subscription_active_until, maintenance.subscription_active_until);
+    assert_eq!(saved.subscription_query_last_success_at, Some(101));
 }
 
 #[test]

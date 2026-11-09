@@ -1,3 +1,4 @@
+import { useCodexLocalAccessPortRecovery } from "../components/codex/CodexLocalAccessPortRecovery";
 import { summarizeAccountPoolHealth } from "../components/codex/codexLocalAccessModalModel";
 import { reuseCodexServiceJoin } from "../utils/codexServiceJoin";
 import { listChatGptPlanAccounts, chatGptPlanErrorKey } from "../services/chatgptPlanService";
@@ -73,7 +74,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
   | "localAccessHealthActionBusy"
   | "localAccessHideSubmitting"
   | "localAccessLaunchCurrent"
-  | "localAccessPortKilling"
   | "localAccessRefreshing"
   | "localAccessSaving"
   | "localAccessSidecarRestarting"
@@ -105,7 +105,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
   | "setLocalAccessLaunchCurrent"
   | "setLocalAccessLaunchPreviewOpen"
   | "setLocalAccessModalMode"
-  | "setLocalAccessPortKilling"
   | "setLocalAccessRefreshing"
   | "setLocalAccessSaving"
   | "setLocalAccessSidecarRestarting"
@@ -150,7 +149,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
     localAccessHealthActionBusy,
     localAccessHideSubmitting,
     localAccessLaunchCurrent,
-    localAccessPortKilling,
     localAccessRefreshing,
     localAccessSaving,
     localAccessSidecarRestarting,
@@ -182,7 +180,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
     setLocalAccessLaunchCurrent,
     setLocalAccessLaunchPreviewOpen,
     setLocalAccessModalMode,
-    setLocalAccessPortKilling,
     setLocalAccessRefreshing,
     setLocalAccessSaving,
     setLocalAccessSidecarRestarting,
@@ -713,6 +710,14 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
       localAccessScope === "lan"
         ? t("codex.localAccess.accessScopeLanShort", "本机+局域网")
         : t("codex.localAccess.accessScopeLocalhostShort", "仅本机");
+    const {
+      requestPortRecovery: openLocalAccessPortRecovery,
+      portRecoveryDialog,
+      portRecoveryBusy: localAccessPortKilling,
+    } = useCodexLocalAccessPortRecovery(localAccessCollection?.port, (state, text) => {
+      setLocalAccessState(state);
+      setMessage({ text });
+    });
     const localAccessBusy =
       localAccessSaving ||
       localAccessStarting ||
@@ -1549,48 +1554,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
       }
     }, [setMessage, t]);
   
-    const handleKillLocalAccessPort = useCallback(async () => {
-      if (!localAccessCollection) return;
-      const confirmed = await confirmDialog(
-        t("codex.localAccess.killPortConfirmMessage", {
-          port: localAccessCollection.port,
-          defaultValue:
-            "将强制结束占用本机 {{port}} 端口的其他进程，然后重新启动 API 服务。确认继续吗？",
-        }),
-        {
-          title: t("codex.localAccess.killPortTitle", "清理 API 服务端口"),
-          kind: "warning",
-          okLabel: t("codex.localAccess.killPortAction", "清理端口"),
-          cancelLabel: t("common.cancel", "取消"),
-        },
-      );
-      if (!confirmed) return;
-  
-      setLocalAccessPortKilling(true);
-      try {
-        const result = await codexLocalAccessService.killCodexLocalAccessPort();
-        setLocalAccessState(result.state);
-        setMessage({
-          text:
-            result.killedCount > 0
-              ? t("codex.localAccess.killPortSuccess", {
-                  count: result.killedCount,
-                  defaultValue: "端口已清理（结束 {{count}} 个进程）",
-                })
-              : t(
-                  "codex.localAccess.killPortSuccessNone",
-                  "端口已检查，未发现外部占用进程",
-                ),
-        });
-        return result.state;
-      } catch (error) {
-        console.error("Failed to kill local access port:", error);
-        throw new Error(String(error).replace(/^Error:\s*/, ""));
-      } finally {
-        setLocalAccessPortKilling(false);
-      }
-    }, [localAccessCollection, setMessage, t]);
-  
     const handleRestartLocalAccessSidecar = useCallback(async () => {
       setLocalAccessSidecarRestarting(true);
       try {
@@ -1989,7 +1952,9 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
     handleEnterGroup,
     handleExecuteLocalAccessLaunchPreview,
     handleHideLocalAccessEntry,
-    handleKillLocalAccessPort,
+    openLocalAccessPortRecovery,
+    portRecoveryDialog,
+    localAccessPortKilling,
     handleLeaveGroup,
     handleLocalAccessAddressKindChange,
     handleQuickAddAccountsToGroup,

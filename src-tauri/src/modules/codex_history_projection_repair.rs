@@ -26,6 +26,8 @@ pub(crate) struct Plan {
     sources: HashMap<String, files::Evidence>,
     selected_paths: Vec<(String, String)>,
     candidates: Vec<Checkpoint>,
+    // Requested/projected ID and missing source ID. Their existing indexes are retained.
+    pub(crate) skipped_sources: Vec<(String, String)>,
 }
 
 impl Plan {
@@ -47,14 +49,12 @@ struct Checkpoint {
 
 struct Budget {
     started: Instant,
-    bytes: u64,
 }
 
 impl Budget {
     fn new() -> Self {
         Self {
             started: Instant::now(),
-            bytes: 0,
         }
     }
 
@@ -63,18 +63,6 @@ impl Budget {
             return Err(error(
                 "LIMIT",
                 "history scan exceeded its time budget; select fewer sessions",
-            ));
-        }
-        Ok(())
-    }
-
-    fn consume(&mut self, bytes: usize) -> Result<(), String> {
-        self.check()?;
-        self.bytes = self.bytes.saturating_add(bytes as u64);
-        if self.bytes > 2 * 1024 * 1024 * 1024 {
-            return Err(error(
-                "LIMIT",
-                "history scan exceeded its byte budget; select fewer sessions",
             ));
         }
         Ok(())
@@ -132,6 +120,7 @@ pub(crate) fn scan(
             sources: HashMap::new(),
             selected_paths: vec![],
             candidates: vec![],
+            skipped_sources: vec![],
         });
     }
     let db = database(&profile, HISTORY_DB, false)?;
@@ -139,28 +128,36 @@ pub(crate) fn scan(
     let db_identity = files::identity(&history_path)?;
     let registry = files::registry(&profile, &budget)?;
     let mut roots = Vec::new();
-    let mut selected_paths = Vec::new();
+    let mut selected_sources = Vec::new();
+    let mut skipped_sources = Vec::new();
     if let Some(selected) = selected_session_ids {
         let state = database(&profile, STATE_DB, false)?;
         let mut selected = selected.iter().collect::<Vec<_>>();
         selected.sort();
         for id in selected {
             budget.check()?;
-            let path: String = state
+            let path: Option<String> = state
                 .query_row(
                     "SELECT rollout_path FROM threads WHERE id=?1",
                     [id],
                     |row| row.get(0),
                 )
-                .map_err(|_| {
-                    error(
-                        "SOURCE_MISSING",
-                        format!("selected session {id} has no rollout path"),
-                    )
-                })?;
-            let physical = files::selected_source(&profile, &path, &registry)?;
-            roots.push(physical);
-            selected_paths.push((id.to_owned(), path));
+                .optional()
+                .map_err(|e| error("DATABASE", e))?;
+            let Some(path) = path else {
+                skipped_sources.push((id.clone(), id.clone()));
+                continue;
+            };
+            let physical = match files::selected_source(&profile, &path, &registry) {
+                Ok(id) => id,
+                Err(files::SourceError::Missing(missing)) => {
+                    skipped_sources.push((id.clone(), missing));
+                    continue;
+                }
+                Err(files::SourceError::Invalid(error)) => return Err(error),
+            };
+            roots.push(physical.clone());
+            selected_sources.push((id.to_owned(), path, physical));
         }
     } else {
         let mut stmt = db.prepare("SELECT thread_id FROM thread_history_projection_state ORDER BY thread_id LIMIT 100001").map_err(|e| error("DATABASE", e))?;
@@ -177,16 +174,28 @@ pub(crate) fn scan(
     roots.dedup();
     let mut sources = HashMap::new();
     for (index, id) in roots.iter().enumerate() {
-        files::load_chain(
+        match files::load_chain(
             id,
             &registry,
             &mut sources,
             &mut HashSet::new(),
             &mut budget,
-        )?;
+        ) {
+            Ok(()) => {}
+            Err(files::SourceError::Missing(missing)) => {
+                skipped_sources.push((id.clone(), missing));
+            }
+            Err(files::SourceError::Invalid(error)) => return Err(error),
+        }
         on_progress(index + 1, roots.len());
         std::thread::yield_now();
     }
+    // Only repairable chains participate in the transaction's selection checks.
+    let selected_paths = selected_sources
+        .into_iter()
+        .filter(|(_, _, physical)| sources.contains_key(physical))
+        .map(|(id, path, _)| (id, path))
+        .collect();
     let mut candidates = Vec::new();
     for (id, source) in &sources {
         budget.check()?;
@@ -227,6 +236,7 @@ pub(crate) fn scan(
         sources,
         selected_paths,
         candidates,
+        skipped_sources,
     })
 }
 

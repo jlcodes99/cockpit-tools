@@ -140,7 +140,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     handleCustomSortDragStart,
     handleDismissBatchImportTask,
     handleExport,
-    handleKillLocalAccessPort,
+    openLocalAccessPortRecovery,
     handleEnterGroup,
     handleLeaveGroup,
     handleLocalAccessAddressKindChange,
@@ -3026,7 +3026,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
             }
             onRotateApiKey={handleRotateLocalAccessApiKey}
             onRestartSidecar={handleRestartLocalAccessSidecar}
-            onKillPort={handleKillLocalAccessPort}
+            onRequestPortRecovery={openLocalAccessPortRecovery}
             onToggleEnabled={handleToggleLocalAccessEnabled}
             onRecoverAccounts={handleRecoverLocalAccessAccounts}
             healthActionBusy={localAccessHealthActionBusy}
