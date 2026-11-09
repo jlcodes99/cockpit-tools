@@ -943,6 +943,7 @@ async fn update_sidecar_account_health_from_values(
     }
     if success {
         health.consecutive_failures = 0;
+        health.failure_suspended_until_ms = None;
         health.last_success_at = Some(now);
         health.last_failure_at = None;
         health.last_failure_status = None;
@@ -959,6 +960,7 @@ async fn update_sidecar_account_health_from_values(
     }
 
     health.consecutive_failures = health.consecutive_failures.saturating_add(1);
+    stamp_failure_suspension(health);
     health.last_failure_at = Some(now);
     health.last_failure_status = status;
     health.last_failure_category = error_category

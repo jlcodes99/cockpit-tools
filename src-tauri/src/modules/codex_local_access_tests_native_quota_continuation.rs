@@ -213,6 +213,7 @@ async fn native_quota_snapshot_wait_covers_both_quota_windows_and_memory_cooling
             until: Instant::now() + Duration::from_secs(180),
             quota: true,
             backoff_level: 0,
+            consecutive_failures: 0,
             reason: "quota",
         },
     );
@@ -320,6 +321,7 @@ async fn native_quota_snapshot_disable_cooling_does_not_disable_real_quota() {
             until: Instant::now() + Duration::from_secs(180),
             quota: true,
             backoff_level: 0,
+            consecutive_failures: 0,
             reason: "quota",
         },
     );
@@ -349,6 +351,7 @@ async fn native_quota_snapshot_unknown_reset_is_not_replaced_by_finite_memory_co
             until: Instant::now() + Duration::from_secs(60),
             quota: false,
             backoff_level: 0,
+            consecutive_failures: 0,
             reason: "transient_upstream",
         },
     );

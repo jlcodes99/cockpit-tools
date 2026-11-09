@@ -1158,6 +1158,7 @@ async fn mark_account_success(account: &CodexAccount, request_kind: CodexLocalAc
         .or_default();
     health.email = account.email.clone();
     health.consecutive_failures = 0;
+    health.failure_suspended_until_ms = None;
     health.last_success_at = Some(now);
     health.last_failure_at = None;
     health.last_failure_status = None;
@@ -1184,6 +1185,7 @@ async fn mark_account_failure(
         .or_default();
     health.email = account.email.clone();
     health.consecutive_failures = health.consecutive_failures.saturating_add(1);
+    stamp_failure_suspension(health);
     health.last_failure_at = Some(now);
     health.last_failure_status = status;
     health.last_failure_category = category.map(str::to_string);

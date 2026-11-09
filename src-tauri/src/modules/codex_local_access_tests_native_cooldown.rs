@@ -74,6 +74,7 @@ fn native_connection_failures_do_not_cool_accounts_or_shorten_existing_cooldown(
             until,
             quota: true,
             backoff_level: 1,
+            consecutive_failures: 0,
             reason: "quota",
         },
     );
@@ -284,6 +285,7 @@ async fn native_cooldown_wait_is_scoped_and_initial_selection_waits_only_within_
                 until,
                 quota: false,
                 backoff_level: 0,
+                consecutive_failures: 0,
                 reason: "transient_upstream",
             },
         );
@@ -318,6 +320,7 @@ async fn native_cooldown_wait_can_be_cancelled_without_holding_selection_or_stat
             until: Instant::now() + Duration::from_millis(500),
             quota: false,
             backoff_level: 0,
+            consecutive_failures: 0,
             reason: "transient_upstream",
         },
     );

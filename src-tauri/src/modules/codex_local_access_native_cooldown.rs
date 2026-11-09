@@ -11,6 +11,8 @@ struct NativeCooldown {
     recorded_at: Instant,
     quota: bool,
     backoff_level: u8,
+    /// Consecutive non-quota failures (5xx / 502 / 503); reset on success.
+    consecutive_failures: u8,
     reason: &'static str,
 }
 
@@ -122,7 +124,14 @@ fn native_upsert_cooldown(
         let duration = match status {
             401 | 402 | 403 => Duration::from_secs(1800),
             404 => Duration::from_secs(12 * 3600),
-            _ => Duration::from_secs(60),
+            _ => {
+                // 3rd consecutive 5xx (502/503/…) suspends the account for
+                // 10 minutes so the rest of the pool serves this model.
+                const MAX_CONSECUTIVE_FAILURES: u8 = 3;
+                const SUSPEND_SECS: u64 = 600;
+                let failures = previous.map_or(1, |state| state.consecutive_failures.saturating_add(1));
+                if failures >= MAX_CONSECUTIVE_FAILURES { Duration::from_secs(SUSPEND_SECS) } else { Duration::from_secs(60) }
+            }
         };
         (now + duration, false)
     };
@@ -138,6 +147,7 @@ fn native_upsert_cooldown(
             recorded_at: now,
             quota: quota || retain_quota,
             backoff_level,
+            consecutive_failures: if quota { 0 } else { previous.map_or(1, |state| state.consecutive_failures.saturating_add(1)) },
             reason: if quota || retain_quota {
                 "quota"
             } else {
@@ -180,7 +190,7 @@ fn native_upsert_transient_rate_limit(
     let until = now.checked_add(retry_after.unwrap_or(Duration::from_secs(1)))
         .unwrap_or_else(|| now + Duration::from_secs(10 * 365 * 86400));
     let until = states.get(&key).map_or(until, |state| state.until.max(until));
-    states.insert(key, NativeCooldown { until, recorded_at: now, quota: false, backoff_level: 0, reason: "transient_rate_limit" });
+    states.insert(key, NativeCooldown { until, recorded_at: now, quota: false, backoff_level: 0, consecutive_failures: 0, reason: "transient_rate_limit" });
 }
 
 fn native_upsert_challenge_cooldown(
@@ -210,6 +220,7 @@ fn native_upsert_challenge_cooldown(
             recorded_at: now,
             quota: false,
             backoff_level: level.saturating_add(u8::from(delay < Duration::from_secs(1800))),
+            consecutive_failures: 0,
             reason: "cloudflare_challenge",
         },
     );

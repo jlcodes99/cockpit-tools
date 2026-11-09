@@ -842,6 +842,8 @@ struct RuntimeAccountHealth {
     last_failure_message: Option<String>,
     image_generation_status: CodexLocalAccessImageGenerationStatus,
     image_generation_checked_at: Option<i64>,
+    // Set when the account hit 3 consecutive failures; blocks routing for 10 min.
+    failure_suspended_until_ms: Option<i64>,
     sidecar_scheduler_available: Option<bool>,
     sidecar_scheduler_reason: Option<String>,
     sidecar_scheduler_next_retry_at: Option<i64>,
@@ -2532,11 +2534,32 @@ fn account_failure_category_blocks_routing(category: Option<&str>) -> bool {
     )
 }
 
+// After 3 consecutive failures, suspend routing to this account for 10 minutes.
+// The window is stored on the health entry; success clears it.
+const CONSECUTIVE_FAILURE_SUSPEND_MS: i64 = 10 * 60 * 1000;
+const CONSECUTIVE_FAILURE_THRESHOLD: u32 = 3;
+
+fn stamp_failure_suspension(health: &mut RuntimeAccountHealth) {
+    if health.consecutive_failures >= CONSECUTIVE_FAILURE_THRESHOLD {
+        let until = now_ms() + CONSECUTIVE_FAILURE_SUSPEND_MS;
+        if health.failure_suspended_until_ms.map_or(true, |prev| until > prev) {
+            health.failure_suspended_until_ms = Some(until);
+        }
+    }
+}
+
 fn account_health_blocks_routing(health: Option<&RuntimeAccountHealth>) -> bool {
     health
         .map(|item| {
-            item.consecutive_failures >= 3
-                && account_failure_category_blocks_routing(item.last_failure_category.as_deref())
+            // New rule: any 3 consecutive failures suspend the account for 10 minutes.
+            let suspended = item
+                .failure_suspended_until_ms
+                .map(|until| until > now_ms())
+                .unwrap_or(false);
+            suspended
+                // Legacy rule: persistent auth-style categories block routing.
+                || (item.consecutive_failures >= 3
+                    && account_failure_category_blocks_routing(item.last_failure_category.as_deref()))
         })
         .unwrap_or(false)
 }

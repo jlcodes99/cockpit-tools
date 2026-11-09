@@ -21,6 +21,7 @@ fn native_test_set_owner_cooldown(host: &NativeHostBridge, delay: Duration) {
             until: Instant::now() + delay,
             quota: false,
             backoff_level: 0,
+            consecutive_failures: 0,
             reason: "transient_upstream",
         },
     );

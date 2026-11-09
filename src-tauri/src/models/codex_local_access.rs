@@ -232,6 +232,10 @@ fn default_session_affinity_ttl_ms() -> i64 {
     60 * 60 * 1000
 }
 
+fn default_max_retry_credentials() -> u16 {
+    4
+}
+
 fn default_max_retry_interval_ms() -> u64 {
     3 * 1000
 }
@@ -757,7 +761,7 @@ pub struct CodexLocalAccessCollection {
     pub session_affinity_default_enabled_migrated: bool,
     #[serde(default)]
     pub responses_websockets_enabled: bool,
-    #[serde(default)]
+    #[serde(default = "default_max_retry_credentials")]
     pub max_retry_credentials: u16,
     #[serde(default = "default_max_retry_interval_ms")]
     pub max_retry_interval_ms: u64,
