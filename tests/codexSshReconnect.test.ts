@@ -4,9 +4,19 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { settlePromises } from './helpers/reactHookHarness';
 
-function fixture(options: {stale?:boolean; fail?:boolean; closed?:boolean; missingHost?:boolean; apiKey?:boolean}={}) {
+function fixture(options: {stale?:boolean; fail?:boolean; closed?:boolean; missingHost?:boolean; apiKey?:boolean; manualRead?:boolean}={}) {
   const listeners=new Set<(event:any)=>void>();
   const calls:any[]=[];
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  const startTimer = (callback: () => void, delay: number) => {
+    const timer = setTimeout(() => { timers.delete(timer); callback(); }, delay);
+    timers.add(timer);
+    return timer;
+  };
+  const stopTimer = (timer: ReturnType<typeof setTimeout>) => {
+    clearTimeout(timer);
+    timers.delete(timer);
+  };
   let reads=0;
   const emit=(data:any)=>listeners.forEach(listener=>listener({data}));
   const request={hostId:'ssh-fixture',requestId:'fixture-request',email:'new@example.invalid',timeoutMs:200};
@@ -20,6 +30,7 @@ function fixture(options: {stale?:boolean; fail?:boolean; closed?:boolean; missi
       if(options.missingHost)throw new Error('Connection for host ID fixture not found');
       if(message.type==='mcp-request'){
         reads++;
+        if(options.manualRead)return;
         queueMicrotask(()=>emit({type:'mcp-response',hostId:'ssh-fixture',message:{id:message.request.id,
           result:options.apiKey?{account:{type:'apiKey'},requiresOpenaiAuth:false}
             :{account:{type:'chatgpt',email:options.stale?'old@example.invalid':'new@example.invalid'}}}}));
@@ -28,8 +39,8 @@ function fixture(options: {stale?:boolean; fail?:boolean; closed?:boolean; missi
   };
   if(options.closed)delete root.electronBridge;
   const run=(overrides:Record<string,unknown>={})=>runInNewContext(source.replace('__COCKPIT_SSH_RECONNECT__',JSON.stringify({...request,...overrides})),
-    {window:root,location:{protocol:'app:',host:'-'},setTimeout,clearTimeout,Promise});
-  return {run,calls,emit,listeners,reads:()=>reads};
+    {window:root,location:{protocol:'app:',host:'-'},setTimeout:startTimer,clearTimeout:stopTimer,Promise});
+  return {run,calls,emit,listeners,timers,reads:()=>reads};
 }
 
 test('native reconnect waits for a new connected event and verifies the new account',async()=>{
@@ -113,4 +124,90 @@ test('a startup host that becomes ready can retry the same operation identity',a
   f.emit({type:'codex-app-server-connection-changed',hostId:'ssh-fixture',state:'connected'});
   assert.equal((await retry).ok,true);
   assert.equal(f.calls.filter(call=>call.type==='codex-app-server-restart').length,2);
+});
+
+test('native auth handoff retries only account reads and ignores replies from the retired read', async () => {
+  const f = fixture({ manualRead: true });
+  let settled = false;
+  const result = Promise.resolve(f.run({ timeoutMs: 2000 })).then(value => {
+    settled = true;
+    return value;
+  });
+  f.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'restarting' });
+  f.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'connected' });
+  const firstId = f.calls.at(-1).request.id;
+  f.emit({ type: 'mcp-response', hostId: 'ssh-fixture',
+    message: { id: firstId, error: { code: -32000, message: 'App server account changed' } } });
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(settled, false, 'a transient native auth handoff must keep waiting for verification');
+  assert.equal(f.reads(), 2);
+  const retryId = f.calls.at(-1).request.id;
+  assert.notEqual(retryId, firstId);
+  f.emit({ type: 'mcp-response', hostId: 'ssh-fixture', message: { id: firstId,
+    result: { account: { type: 'chatgpt', email: 'old@example.invalid' } } } });
+  f.emit({ type: 'mcp-response', hostId: 'ssh-fixture', message: { id: retryId,
+    result: { account: { type: 'chatgpt', email: 'new@example.invalid' } } } });
+  assert.equal((await result).ok, true);
+  assert.equal(f.calls.filter(call => call.type === 'codex-app-server-restart').length, 1);
+  assert.equal(f.listeners.size, 0);
+});
+
+test('a connection replacement retires its pending account read until the new connection is ready', async () => {
+  const f = fixture({ manualRead: true });
+  const result = Promise.resolve(f.run({ timeoutMs: 2000 }));
+  f.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'restarting' });
+  f.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'connected' });
+  const firstId = f.calls.at(-1).request.id;
+  f.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'disconnected' });
+  f.emit({ type: 'mcp-response', hostId: 'ssh-fixture',
+    message: { id: firstId, error: { code: -32000, message: 'Codex app-server is not available' } } });
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(f.reads(), 1, 'a disconnected host must wait for its next connected event');
+  f.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'connecting' });
+  f.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'connected' });
+  assert.equal(f.reads(), 2);
+  f.emit({ type: 'mcp-response', hostId: 'ssh-fixture', message: { id: f.calls.at(-1).request.id,
+    result: { account: { type: 'chatgpt', email: 'new@example.invalid' } } } });
+  assert.equal((await result).ok, true);
+  assert.equal(f.listeners.size, 0);
+});
+
+test('permanent account read failures remain errors', async () => {
+  const f = fixture({ manualRead: true });
+  const result = Promise.resolve(f.run());
+  f.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'restarting' });
+  f.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'connected' });
+  f.emit({ type: 'mcp-response', hostId: 'ssh-fixture',
+    message: { id: f.calls.at(-1).request.id, error: { code: -32602, message: 'Invalid params' } } });
+  assert.equal((await result).reason, 'account_read_failed');
+  assert.equal(f.reads(), 1);
+  assert.equal(f.listeners.size, 0);
+});
+
+test('transient read retries keep the original deadline and stop when superseded', async () => {
+  const timed = fixture({ manualRead: true });
+  const timedResult = Promise.resolve(timed.run({ timeoutMs: 100 }));
+  timed.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'restarting' });
+  timed.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'connected' });
+  timed.emit({ type: 'mcp-response', hostId: 'ssh-fixture',
+    message: { id: timed.calls.at(-1).request.id, error: { code: -32000, message: 'not-connected' } } });
+  assert.equal((await timedResult).reason, 'timeout');
+  assert.equal(timed.timers.size, 0);
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(timed.reads(), 1);
+  assert.equal(timed.listeners.size, 0);
+
+  const cancelled = fixture({ manualRead: true });
+  const first = Promise.resolve(cancelled.run({ timeoutMs: 2000 }));
+  cancelled.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'restarting' });
+  cancelled.emit({ type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'connected' });
+  cancelled.emit({ type: 'mcp-response', hostId: 'ssh-fixture',
+    message: { id: cancelled.calls.at(-1).request.id, error: { code: -32000, message: 'App server account changed' } } });
+  const second = Promise.resolve(cancelled.run({ requestId: 'replacement', timeoutMs: 100 }));
+  assert.equal((await first).reason, 'superseded');
+  assert.equal((await second).reason, 'timeout');
+  assert.equal(cancelled.timers.size, 0);
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(cancelled.reads(), 1);
+  assert.equal(cancelled.listeners.size, 0);
 });
