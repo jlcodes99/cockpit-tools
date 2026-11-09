@@ -111,6 +111,37 @@ test('history repair ignores pending providers and passes only the selected inst
   app.h.unmount();
 });
 
+test('partial history results show missing sources inside the dialog and clear them before retry', async () => {
+  const app = harness();
+  await settlePromises();
+  const warning = 'Missing history: affected-id → missing-source-id';
+  app.execute(async (request) => ({
+    message: request.dryRun ? 'One repair available' : 'One index repaired',
+    historyProjectionCount: 1,
+    historyRepairWarning: warning,
+  }));
+  app.button('preview').props.onClick();
+  await settlePromises();
+  assert.equal(app.error.message, warning);
+  assert.ok(app.rendered().some((node) => contains(node, 'One repair available')));
+  assert.equal(app.button('confirmRepair').props.disabled, false);
+  app.button('confirmRepair').props.onClick();
+  await settlePromises();
+  assert.equal(app.error.message, warning);
+  assert.ok(app.rendered().some((node) => contains(node, 'One index repaired')));
+  assert.equal(app.closed(), 0);
+  assert.equal(app.repaired.length, 1);
+  const pending = deferred<any>();
+  app.execute(() => pending.promise);
+  app.button('start').props.onClick();
+  app.h.flush();
+  assert.equal(app.error.message, null);
+  pending.resolve({ message: 'No pending repairs', historyProjectionCount: 0 });
+  await settlePromises();
+  assert.equal(app.error.message, null);
+  app.h.unmount();
+});
+
 for (const rejectBeforeSwitch of [false, true]) {
   test(`history mode clears or ignores provider failures (${rejectBeforeSwitch ? 'existing' : 'late'})`, async () => {
     const app = harness({ repairKind: 'visibility' });

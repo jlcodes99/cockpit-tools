@@ -1,5 +1,5 @@
 // Project recovery composes with the existing quick/deep pipeline. There is no
-// separate repair mode, switch-time scanner or frontend notice.
+// separate repair mode or switch-time history scan.
 const QUICK_PROJECT_REPAIR_BUDGET: Duration = Duration::from_millis(500);
 
 fn project_recovery_message(key: &str, args: &[(&str, &str)]) -> String {
@@ -139,6 +139,13 @@ fn repair_session_visibility_for_instances_with_options(
             report(progress);
         }
     };
+    // Launch selects a single stopped profile. Prepare its account-scoped
+    // project registry before optional session work can exhaust the launch budget.
+    let mut desktop_preparation = if selection.prepare_desktop_projects {
+        instances.first().map(prepare_local_project_account_state)
+    } else {
+        None
+    };
     let mut summary = repair_provider_visibility_for_instances_with_options(
         options,
         run_id.clone(),
@@ -146,6 +153,12 @@ fn repair_session_visibility_for_instances_with_options(
         selection.clone(),
         instances.clone(),
     )?;
+    if matches!(&desktop_preparation, Some(Ok(true))) {
+        summary.updated_global_state_entry_count += 1;
+        if let Some(item) = summary.items.first_mut() {
+            item.updated_global_state_entry_count += 1;
+        }
+    }
     let mut totals = local_projects::Counts::default();
     for (index, instance) in instances.iter().enumerate() {
         report_repair_progress(
@@ -174,11 +187,7 @@ fn repair_session_visibility_for_instances_with_options(
             if local_projects::has_pending(&instance.data_dir) {
                 return Err("CODEX_PROJECT_PENDING_RECOVERY".into());
             }
-            let prepared = if selection.prepare_desktop_projects {
-                prepare_local_project_account_state_for_launch(instance)?
-            } else {
-                false
-            };
+            desktop_preparation.take().transpose()?;
             let Some(plan) = local_projects::scan_for_repair(
                 &instance.data_dir,
                 selection.session_ids(),
@@ -188,7 +197,7 @@ fn repair_session_visibility_for_instances_with_options(
                 return Ok(None);
             };
             let changed = plan.changed();
-            let state_changes = plan.state_changes() + usize::from(prepared);
+            let state_changes = plan.state_changes();
             let mut backup_dir = None;
             if changed && !options.dry_run {
                 // A launch already owns the profile lease. A manual quick repair
@@ -223,7 +232,7 @@ fn repair_session_visibility_for_instances_with_options(
                 local_projects::apply(&plan, &backup)?;
                 backup_dir = Some(backup.to_string_lossy().into_owned());
             }
-            Ok(Some((plan.counts, state_changes, changed || prepared, backup_dir)))
+            Ok(Some((plan.counts, state_changes, changed, backup_dir)))
         });
         let outcome = match result {
             Ok(outcome) => outcome,
@@ -298,6 +307,7 @@ fn repair_session_visibility_for_instances_with_options(
         )
         .map_err(|error| format!("{error}; completed_backups={:?}", summary.backup_dirs))?;
         summary.history_projection_count = history.history_projection_count;
+        summary.history_repair_warning = history.history_repair_warning;
         for source in history.items {
             if let Some(item) = summary
                 .items
@@ -367,18 +377,43 @@ fn repair_session_visibility_for_instances_with_options(
     Ok(summary)
 }
 
-// The unified start transaction already holds the profile lease. Resolve the
-// renderer owner from the credentials actually written to this profile, then
-// update its state only while the matching Desktop instance is stopped.
-fn prepare_local_project_account_state_for_launch(instance: &CodexSyncInstance) -> Result<bool, String> {
-    check_launch_visibility_budget("read_project_owner")?;
-    let Some(owner) = modules::codex_account::desktop_renderer_project_owner(&instance.data_dir)? else {
-        return Ok(false);
-    };
-    verify_project_recovery_stopped(instance)?;
-    let prepared = local_projects::account_state::prepare(&instance.data_dir, owner.as_deref())?;
-    if prepared {
-        modules::logger::log_info("[Codex Local Projects] prepared account-scoped local groups for launch");
-    }
-    Ok(prepared)
+// Switch and launch both hold the profile mutation lease. Resolve the owner
+// from the committed credentials and only write while the Desktop is stopped.
+fn prepare_local_project_account_state(instance: &CodexSyncInstance) -> Result<bool, String> {
+    let budget = launch_visibility_budget().map_or(QUICK_PROJECT_REPAIR_BUDGET, |parent| {
+        parent
+            .deadline
+            .saturating_duration_since(std::time::Instant::now())
+            .min(QUICK_PROJECT_REPAIR_BUDGET)
+    });
+    with_launch_visibility_budget(budget, || {
+        check_launch_visibility_budget("read_project_owner")?;
+        if local_projects::has_pending(&instance.data_dir) {
+            return Err("CODEX_PROJECT_PENDING_RECOVERY".into());
+        }
+        let Some(owner) = modules::codex_account::desktop_renderer_project_owner(&instance.data_dir)? else {
+            return Ok(false);
+        };
+        verify_project_recovery_stopped(instance)?;
+        let prepared = local_projects::account_state::prepare(&instance.data_dir, owner.as_deref())?;
+        if prepared {
+            modules::logger::log_info(&format!(
+                "[Codex Local Projects] prepared account-scoped local groups: instance_id={}",
+                instance.id,
+            ));
+        }
+        Ok(prepared)
+    })
+}
+
+pub(crate) fn prepare_desktop_project_state_after_switch(
+    instance_id: &str,
+    data_dir: &Path,
+) -> Result<bool, String> {
+    prepare_local_project_account_state(&CodexSyncInstance {
+        id: instance_id.to_string(),
+        name: instance_id.to_string(),
+        data_dir: data_dir.to_path_buf(),
+        last_pid: None,
+    })
 }

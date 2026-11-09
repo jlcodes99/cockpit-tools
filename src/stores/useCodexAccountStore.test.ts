@@ -6,6 +6,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { deferred, settlePromises } from '../../tests/helpers/reactHookHarness';
 import { mergeCodexQuotaUpdate } from '../utils/codexQuotaSync';
+import { mergeCodexSubscriptionUpdate } from '../utils/codexSubscriptionSync';
 
 function setup(options: { missing?: boolean; fail?: boolean; failAfterCommit?: boolean; deferCurrent?: boolean } = {}) {
   let lists = 0, currents = 0, switches = 0;
@@ -35,6 +36,7 @@ function setup(options: { missing?: boolean; fail?: boolean; failAfterCommit?: b
     '../utils/coalescedWriter': { createCoalescedWriter: () => ({ schedule() {}, flush() {} }) },
     '../utils/codexProfileRefresh': {},
     '../utils/codexQuotaSync': { mergeCodexQuotaUpdate },
+    '../utils/codexSubscriptionSync': { mergeCodexSubscriptionUpdate },
   };
   const source = readFileSync(new URL('./useCodexAccountStore.ts', import.meta.url), 'utf8')
     .replace('import.meta.env.VITE_COCKPIT_TOOLS_PROFILE', "''");
@@ -95,4 +97,32 @@ test('confirmed newer quota updates survive the initial authoritative list and t
   assert.equal(returned.quota.hourly_percentage, 42);
   assert.equal(s.store.getState().accounts.find((account: any) => account.id === 'a').quota.weekly_percentage, 43);
   assert.equal(s.store.getState().currentAccount, returned);
+});
+
+
+test('a background subscription result updates the matching account and survives an older account read', async () => {
+  const s = setup();
+  await s.store.getState().fetchAccounts();
+  const original = s.store.getState().accounts[0];
+  s.store.getState().applySubscriptionUpdate({
+    id: 'a',
+    previous_account_id: null,
+    account_id: null,
+    organization_id: null,
+    token_generation: 2,
+    plan_type: 'plus',
+    usage_updated_at: null,
+    subscription_active_until: '2030-01-01T14:23:45Z',
+    subscription_query_last_attempt_at: 100,
+    subscription_query_last_success_at: 101,
+    subscription_query_last_error: null,
+  });
+  assert.equal(s.counts().lists, 1, 'the event should update the existing account without reloading the list');
+  assert.equal(s.store.getState().accounts[0].subscription_active_until, '2030-01-01T14:23:45Z');
+  assert.equal(s.store.getState().accounts[0].quota, original.quota);
+
+  await s.store.getState().fetchAccounts();
+  assert.equal(s.store.getState().accounts[0].subscription_active_until, '2030-01-01T14:23:45Z');
+  s.store.getState().applyAccountSnapshot({ ...original, token_generation: 3 });
+  assert.equal(s.store.getState().accounts[0].subscription_active_until, undefined);
 });

@@ -1090,6 +1090,23 @@ async fn disable_default_model_routing_for_non_oauth_switch() {
     }
 }
 
+async fn preserve_codex_local_projects_after_switch(instance_id: String, data_dir: PathBuf) {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        codex_session_visibility::prepare_desktop_project_state_after_switch(&instance_id, &data_dir)
+            .map_err(|error| format!("instance_id={instance_id}, error={error}"))
+    })
+    .await;
+    match result {
+        Ok(Ok(_)) => {}
+        Ok(Err(error)) => logger::log_warn(&format!(
+            "[Codex Local Projects] bounded switch preparation deferred: {error}"
+        )),
+        Err(error) => logger::log_warn(&format!(
+            "[Codex Local Projects] switch preparation task failed: {error}"
+        )),
+    }
+}
+
 async fn switch_codex_account_internal(
     app: AppHandle,
     account_id: String,
@@ -1324,6 +1341,13 @@ async fn switch_codex_account_internal(
             return Err(formatted_error);
         }
     };
+    if !launch_after_switch {
+        preserve_codex_local_projects_after_switch(
+            crate::commands::codex_instance::DEFAULT_INSTANCE_ID.to_string(),
+            codex_account::get_codex_home(),
+        )
+        .await;
+    }
     if is_reauth_handoff {
         let quota_account_id = account.id.clone();
         tokio::spawn(async move {
@@ -1999,7 +2023,7 @@ pub async fn refresh_codex_subscription_info(
     app: AppHandle,
     account_id: String,
 ) -> Result<CodexAccount, String> {
-    let result = codex_quota::refresh_account_subscription_info(&account_id, true).await;
+    let result = Box::pin(codex_quota::refresh_account_subscription_info(&account_id)).await;
     if result.is_ok() {
         let _ = crate::modules::tray::update_tray_menu(&app);
     }

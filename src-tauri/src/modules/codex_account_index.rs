@@ -1024,9 +1024,23 @@ pub(crate) fn save_account_preserving_egress_proxy(
     let current = load_account_with_summary(&account.id, None)?
         .ok_or_else(|| format!("账号已删除或无法读取，拒绝后台写回: account_id={}", account.id))?;
     let mut merged = account.clone();
+    // Token snapshots may carry an older entitlement. A completed subscription
+    // query remains authoritative for the same workspace, including during a
+    // concurrent quota or official credential write.
+    if current.subscription_query_last_success_at.is_some()
+        && current.subscription_active_until.is_some()
+        && subscription_workspace_unchanged(&current, &merged)
+    {
+        merged.subscription_active_until = current.subscription_active_until.clone();
+        merged.subscription_query_last_attempt_at = current.subscription_query_last_attempt_at;
+        merged.subscription_query_last_success_at = current.subscription_query_last_success_at;
+        merged.subscription_query_next_retry_at = current.subscription_query_next_retry_at;
+        merged.subscription_query_last_error = current.subscription_query_last_error.clone();
+    }
     merged.egress_proxy_url = current.egress_proxy_url;
     merged.egress_proxy_disabled = current.egress_proxy_disabled;
     save_account_with_tombstone_guard(&merged)?;
+    sync_token_subscription_index(current.subscription_active_until.as_deref(), &merged);
     Ok(merged)
 }
 

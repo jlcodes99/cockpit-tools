@@ -1,3 +1,4 @@
+import { useCodexLocalAccessPortRecovery } from "../components/codex/CodexLocalAccessPortRecovery";
 import { CODEX_REQUEST_LOGS_NAVIGATION, takeCodexRequestLogsNavigation } from "../utils/codexRequestLogsNavigation";
 import { useRefreshSafeDraft, useRefreshSafeRecordDraft } from "../hooks/useRefreshSafeDraft";
 import { useSampledRevision } from "../hooks/useSampledRevision";
@@ -725,7 +726,6 @@ export function useCodexApiServicePageController() {
   );
   const [testChatInput, setTestChatInput] = useState("");
   const [testDialogError, setTestDialogError] = useState("");
-  const [portKilling, setPortKilling] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   useEffect(() => {
@@ -1878,37 +1878,15 @@ export function useCodexApiServicePageController() {
     );
   };
 
-  const handleKillPort = async () => {
-    setPortKilling(true);
+  const {
+    requestPortRecovery: openPortRecovery,
+    portRecoveryDialog,
+    portRecoveryBusy: portKilling,
+  } = useCodexLocalAccessPortRecovery(collection?.port, (next, message) => {
+    setState(next);
     setError("");
-    setNotice("");
-    try {
-      const result = await codexLocalAccessService.killCodexLocalAccessPort();
-      setState(result.state);
-      setNotice(
-        t("codex.localAccess.killPortSuccessUnknown", "API 服务端口已清理"),
-      );
-    } catch (err) {
-      const retryKillPort = async () => {
-        const result = await codexLocalAccessService.killCodexLocalAccessPort();
-        setState(result.state);
-      };
-      if (
-        presentWindowsOperationError({
-          error: err,
-          operation: "stop_process",
-          summary: t("codex.localAccess.killPortTitle", "清理 API 服务端口"),
-          retry: retryKillPort,
-          manualContinue: retryKillPort,
-        })
-      ) {
-        return;
-      }
-      setError(String(err).replace(/^Error:\s*/, ""));
-    } finally {
-      setPortKilling(false);
-    }
-  };
+    setNotice(message);
+  });
 
   const { restarting: sidecarRestarting, restart: handleRestartSidecar } = useCodexApiServiceRestart({
     t, onState: setState, onError: setError, onNotice: setNotice,
@@ -3677,7 +3655,8 @@ export function useCodexApiServicePageController() {
     handleCustomStatsRangeApply,
     handleDeleteApiKey,
     handleDeleteTimeoutPreset,
-    handleKillPort,
+    openPortRecovery,
+    portRecoveryDialog,
     handleOpenAccountModelMappings,
     handleOpenAccountModelRules,
     handleOpenAddAccount,
@@ -3873,7 +3852,7 @@ export function useCodexApiServicePageController() {
 /** 组合业务 Controller 与独立 View，保持原组件公开调用入口不变。 */
 export function CodexApiServicePage() {
   const controller = useCodexApiServicePageController();
-  return <CodexApiServiceView {...controller} />;
+  return <><CodexApiServiceView {...controller} />{controller.portRecoveryDialog}</>;
 }
 
 export default CodexApiServicePage;

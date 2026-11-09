@@ -61,36 +61,35 @@ pub(crate) fn save_refreshed_quota(
     Ok(current)
 }
 
-pub(crate) fn save_quota_subscription_maintenance(
+pub(crate) fn save_subscription_refresh(
     original: &CodexAccount,
     refreshed: &CodexAccount,
-) -> Result<(), String> {
+) -> Result<CodexAccount, String> {
     let _guard = CODEX_ACCOUNT_MUTATION_LOCK
         .lock()
         .map_err(|_| "CODEX_QUOTA_WRITE_LOCK_POISONED".to_string())?;
     let mut current =
         load_account(&original.id).ok_or_else(|| "CODEX_STALE_ACCOUNT".to_string())?;
-    if !quota_request_identity_matches(&current, original) {
+    if !quota_request_identity_matches(&current, original)
+        || current.subscription_active_until != original.subscription_active_until
+        || current.subscription_query_last_attempt_at != original.subscription_query_last_attempt_at
+    {
         return Err("CODEX_STALE_QUOTA_REQUEST".to_string());
     }
-    if original.account_id.is_some() && refreshed.account_id != original.account_id {
-        return Err("CODEX_QUOTA_IDENTITY_MISMATCH".to_string());
+    let previous_plan = current.plan_type.clone();
+    let previous_error = current.subscription_query_last_error.clone();
+    current.account_id = refreshed.account_id.clone();
+    if current.plan_type == original.plan_type {
+        current.plan_type = refreshed.plan_type.clone();
     }
-    // Subscription enrichment must never write an older quota or credentials back.
-    macro_rules! merge { ($($field:ident),+) => { $(
-        if current.$field == original.$field { current.$field = refreshed.$field.clone(); }
-    )+ }; }
-    merge!(
-        account_id,
-        plan_type,
-        subscription_active_until,
-        subscription_query_last_attempt_at,
-        subscription_query_last_success_at,
-        subscription_query_next_retry_at,
-        subscription_query_last_error
-    );
+    current.subscription_active_until = refreshed.subscription_active_until.clone();
+    current.subscription_query_last_attempt_at = refreshed.subscription_query_last_attempt_at;
+    current.subscription_query_last_success_at = refreshed.subscription_query_last_success_at;
+    current.subscription_query_next_retry_at = refreshed.subscription_query_next_retry_at;
+    current.subscription_query_last_error = refreshed.subscription_query_last_error.clone();
+
     save_account_with_tombstone_guard(&current)?;
-    if current.plan_type != original.plan_type
+    if current.plan_type != previous_plan
         || current.subscription_active_until != original.subscription_active_until
     {
         update_account_plan_type_in_index(
@@ -99,7 +98,14 @@ pub(crate) fn save_quota_subscription_maintenance(
             &current.subscription_active_until,
         )?;
     }
-    Ok(())
+    if current.plan_type != previous_plan
+        || current.subscription_active_until != original.subscription_active_until
+        || current.subscription_query_last_error != previous_error
+        || current.account_id != original.account_id
+    {
+        super::codex_subscription_refresh::publish(original, &current);
+    }
+    Ok(current)
 }
 
 pub(crate) fn save_quota_sync_failure(

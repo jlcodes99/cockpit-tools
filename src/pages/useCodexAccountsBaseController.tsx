@@ -187,7 +187,6 @@ export function useCodexAccountsBaseController() {
       string | null
     >(null);
     const [localAccessRefreshing, setLocalAccessRefreshing] = useState(false);
-    const [localAccessPortKilling, setLocalAccessPortKilling] = useState(false);
     const [localAccessSidecarRestarting, setLocalAccessSidecarRestarting] =
       useState(false);
     const [showLocalAccessHideConfirm, setShowLocalAccessHideConfirm] =
@@ -2806,7 +2805,6 @@ export function useCodexAccountsBaseController() {
     localAccessKeyVisible,
     localAccessLaunchCurrent,
     localAccessModalMode,
-    localAccessPortKilling,
     localAccessRefreshing,
     localAccessSaving,
     localAccessSidecarRestarting,
@@ -2919,7 +2917,6 @@ export function useCodexAccountsBaseController() {
     setLocalAccessKeyVisible,
     setLocalAccessLaunchCurrent,
     setLocalAccessModalMode,
-    setLocalAccessPortKilling,
     setLocalAccessRefreshing,
     setLocalAccessSaving,
     setLocalAccessSidecarRestarting,

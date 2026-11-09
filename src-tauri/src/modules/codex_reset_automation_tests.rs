@@ -243,6 +243,67 @@ fn same_card_snapshot_is_stable_and_history_is_bounded() {
 }
 
 #[test]
+fn automatic_success_cools_both_triggers_for_one_account_even_after_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    let success_at = update_at(&file, |d| {
+        d.public_rule.enabled = true;
+        let pending = begin_redemption(d, "a", "owner-a", "expiry", Some("two-cards".into()));
+        finish_redemption(d, "a", &pending, Ok(ResetCreditConsumeOutcome::Reset))?;
+        let success_at = d.last_automatic_success_ms.as_ref().unwrap()["a"];
+
+        let manual = begin_redemption(d, "a", "owner-a", "manual", None);
+        assert_eq!(manual.reason, "manual");
+        finish_redemption(d, "a", &manual, Ok(ResetCreditConsumeOutcome::Reset))?;
+        for _ in 0..100 {
+            record(d, "b", "quota", "failed", None);
+        }
+        Ok(success_at)
+    })
+    .unwrap();
+
+    let restored = read(&file).unwrap();
+    assert!(restored.records.iter().all(|row| row.account_id == "b"));
+    assert_eq!(
+        restored.last_automatic_success_ms.as_ref().unwrap()["a"],
+        success_at
+    );
+    let before_end = success_at + AUTOMATIC_COOLDOWN_MS - 1;
+    assert!(automatic_rule(&restored, "a", before_end).is_none());
+    assert!(automatic_rule(&restored, "b", before_end).is_some());
+    assert!(automatic_rule(&restored, "a", before_end + 1).is_some());
+}
+
+#[test]
+fn existing_journal_seeds_cooldown_once_from_recent_automatic_successes() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    let now = chrono::Utc::now().timestamp();
+    let legacy = serde_json::json!({
+        "public_rule": { "enabled": true },
+        "records": [
+            { "id": "1", "account_id": "a", "at": now, "reason": "quota", "status": "success" },
+            { "id": "2", "account_id": "b", "at": now, "reason": "manual", "status": "success" },
+            { "id": "3", "account_id": "c", "at": now, "reason": "expiry", "status": "failed" },
+            { "id": "4", "account_id": "d", "at": now - 3600, "reason": "expiry", "status": "success" }
+        ]
+    });
+    std::fs::write(&file, legacy.to_string()).unwrap();
+
+    update_at(&file, |_| Ok(())).unwrap();
+    let restored = read(&file).unwrap();
+    assert_eq!(restored.records.len(), 4);
+    assert_eq!(
+        restored.last_automatic_success_ms.as_ref().unwrap(),
+        &HashMap::from([("a".to_owned(), now * 1_000)])
+    );
+    assert!(automatic_rule(&restored, "a", now * 1_000).is_none());
+    for id in ["b", "c", "d"] {
+        assert!(automatic_rule(&restored, id, now * 1_000).is_some());
+    }
+}
+
+#[test]
 fn failed_or_interrupted_redemption_reuses_request_id_and_success_rearms_only_on_new_cards() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join(FILE);
@@ -260,6 +321,11 @@ fn failed_or_interrupted_redemption_reuses_request_id_and_success_rearms_only_on
         finish_redemption(d, "a", &pending, Err("response lost".into()))
     })
     .unwrap();
+    assert!(read(&file)
+        .unwrap()
+        .last_automatic_success_ms
+        .unwrap()
+        .is_empty());
     let resumed = update_at(&file, |d| {
         Ok(begin_redemption(d, "a", "owner-a", "manual", None))
     })
@@ -401,7 +467,8 @@ fn confirmed_no_op_keeps_card_evidence_available_and_allows_a_new_attempt() {
         assert_eq!(d.records[0].status, "failed");
         assert!(d.records[0].detail.is_some());
         assert!(!d.last_evidence.contains_key("a"));
-        let next = begin_redemption(&mut d, "a", "identity", "manual", None);
+        assert!(d.automatic_successes_mut().is_empty());
+        let next = begin_redemption(&mut d, "a", "identity", "expiry", None);
         assert_ne!(next.request_id, pending.request_id);
         finish_redemption(
             &mut d,
@@ -412,5 +479,6 @@ fn confirmed_no_op_keeps_card_evidence_available_and_allows_a_new_attempt() {
         .unwrap();
         assert_eq!(d.records[0].status, "success");
         assert!(!d.pending.contains_key("a"));
+        assert!(d.automatic_successes_mut().contains_key("a"));
     }
 }

@@ -22,12 +22,26 @@ fn request_ordered_account_ids(
 }
 
 fn allocate_random_local_port(bind_host: &str) -> Result<u16, String> {
+    allocate_random_local_port_excluding(bind_host, None)
+}
+
+fn allocate_random_local_port_excluding(
+    bind_host: &str,
+    excluded_port: Option<u16>,
+) -> Result<u16, String> {
     let listener =
         StdTcpListener::bind((bind_host, 0)).map_err(|e| format!("分配本地接入端口失败: {}", e))?;
-    listener
+    let port = listener
         .local_addr()
         .map(|addr| addr.port())
-        .map_err(|e| format!("读取本地接入端口失败: {}", e))
+        .map_err(|e| format!("读取本地接入端口失败: {}", e))?;
+    if Some(port) == excluded_port {
+        // Keep the first listener alive while the OS chooses a different port.
+        let replacement = allocate_random_local_port(bind_host);
+        drop(listener);
+        return replacement;
+    }
+    Ok(port)
 }
 
 fn configured_initial_local_access_port() -> Option<u16> {

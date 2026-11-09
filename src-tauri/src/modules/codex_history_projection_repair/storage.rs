@@ -586,7 +586,7 @@ pub(super) fn backup(
         if count == 0 {
             break;
         }
-        budget.consume(count)?;
+        budget.check()?;
         hash.update(&buffer[..count]);
     }
     let mut checksum = create_private(&directory.join("history-projection.sqlite.sha256"))?;

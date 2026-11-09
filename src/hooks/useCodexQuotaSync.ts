@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useCodexAccountStore } from '../stores/useCodexAccountStore';
 import { loadAccountRefreshOverrides } from '../utils/currentAccountRefresh';
 import type { CodexQuotaUpdate } from '../utils/codexQuotaSync';
+import type { CodexSubscriptionUpdate } from '../utils/codexSubscriptionSync';
 import { subscribeTauriEvent } from '../utils/tauriEventListener';
 
 export function useCodexQuotaSync() {
@@ -10,6 +11,10 @@ export function useCodexQuotaSync() {
     const unsubscribe = subscribeTauriEvent<CodexQuotaUpdate>('codex:quota-updated', (event) => {
       useCodexAccountStore.getState().applyQuotaUpdate(event.payload);
     });
+    const stopSubscriptionUpdates = subscribeTauriEvent<CodexSubscriptionUpdate>(
+      'codex:subscription-updated',
+      ({ payload }) => useCodexAccountStore.getState().applySubscriptionUpdate(payload),
+    );
     let disposed = false;
     let inFlight = false;
     let queued = false;
@@ -34,6 +39,7 @@ export function useCodexQuotaSync() {
     return () => {
       disposed = true;
       unsubscribe();
+      stopSubscriptionUpdates();
       window.removeEventListener('config-updated', syncOverrides);
       window.removeEventListener('storage', syncOverrides);
     };

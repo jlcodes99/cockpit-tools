@@ -4,7 +4,7 @@ fn local_access_test_data_guards_keep_one_shared_lock_through_cleanup() {
         (include_str!("codex_local_access_tests_key_recovery.rs"), 10),
         (
             include_str!("codex_local_access_tests_service_transitions.rs"),
-            1,
+            2,
         ),
         (
             include_str!("codex_local_access_tests_inbound_key_recovery.rs"),

@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.3.81] - 2026-11-09
+
+### Fixed
+
+- **Codex project visibility after switching**: Keep verified local projects in the same instance when switching accounts and opening ChatGPT manually. Restore project groups before optional conversation maintenance so large histories no longer prevent the groups from appearing. Match the official macOS and Windows clients when identifying the OAuth user and workspace for project ownership.
+- **Codex subscription expiry**: Refresh OAuth subscription expiry hourly while Cockpit Tools is running, including before the previous expiry. Accounts use the expiry minute and second to stagger checks, with a fixed per-account slot when the expiry is unknown.
+- **Codex reset-card automation**: Wait 30 minutes after each successful automatic redemption before using another card on the same account, including after restarting Cockpit Tools. [#3050](https://github.com/jlcodes99/cockpit-tools/issues/3050)
+- **Codex history index repair**: Missing session files or ancestor history no longer block unrelated repairs across the selected instances. Keep affected data intact and report the affected IDs and missing sources in both preview and repair results.
+- **Large Codex session logs**: Preview and repair history indexes without fixed log, record, or total read size limits. Scan session logs in chunks without loading their full contents into memory.
+- **Codex credential sync**: Pick up newer credentials from the default official auth store even when process detection reports the desktop UI profile path. [#3052](https://github.com/jlcodes99/cockpit-tools/pull/3052)
+- **Codex API Service port recovery**: Keep the current port and try to free it, or switch to a random available port from the error dialog. If cleanup fails, choose another port directly from the same dialog.
+
 ## [1.3.80] - 2026-11-07
 
 ### Added

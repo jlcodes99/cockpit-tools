@@ -167,11 +167,26 @@ mod tests {
 
     #[test]
     fn local_history_excludes_unreleased_and_honors_locale_and_limit() {
+        fn sections(item: &ReleaseHistoryItem) -> [&[String]; 5] {
+            [
+                &item.highlights,
+                &item.added,
+                &item.changed,
+                &item.fixed,
+                &item.removed,
+            ]
+        }
+
         let en = get_local_release_history(Some("en"), Some(1));
         let zh = get_local_release_history(Some("zh-CN"), Some(1));
         assert_eq!(en.len(), 1);
+        assert_eq!(zh.len(), 1);
         assert_eq!(en[0].version, super::super::CURRENT_VERSION);
         assert_eq!(en[0].version, zh[0].version);
-        assert_ne!(en[0].added, zh[0].added);
+        let en_sections = sections(&en[0]);
+        let zh_sections = sections(&zh[0]);
+        assert!(en_sections.iter().any(|section| !section.is_empty()));
+        assert!(zh_sections.iter().any(|section| !section.is_empty()));
+        assert_ne!(en_sections, zh_sections);
     }
 }

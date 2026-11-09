@@ -478,6 +478,7 @@ pub fn run() {
 
             tauri::async_runtime::spawn(modules::codex_proxy_catalog::auto_refresh_loop());
             tauri::async_runtime::spawn(modules::codex_reset_automation::run(app.handle().clone()));
+            tauri::async_runtime::spawn(modules::codex_subscription_refresh::run());
             tauri::async_runtime::spawn(modules::codex_proxy_desktop_router::restore_on_startup());
 
             // 启动 WebSocket 服务（使用 Tauri 的 async runtime）
@@ -1230,6 +1231,7 @@ pub fn run() {
             commands::codex::codex_local_access_prepare_restart,
             commands::codex::codex_local_access_restart_sidecar,
             commands::codex::codex_local_access_kill_port,
+            commands::codex::codex_local_access_change_random_port,
             commands::codex::codex_local_access_update_port,
             commands::codex::codex_local_access_update_routing_strategy,
             commands::codex::codex_local_access_update_custom_routing,
