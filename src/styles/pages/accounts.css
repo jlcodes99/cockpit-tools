@@ -204,6 +204,13 @@
   position: relative;
   /* .card-date 默认 0.7 透明；下拉菜单会被整体压透明、背景透出卡片文字，这里单独还原 */
   opacity: 1;
+  /* 去掉 .card-date 在暗色下的 5% 白底（时间区出现一层色块，与卡片不协调） */
+  background: transparent;
+}
+
+.account-last-used.card-date,
+[data-theme="dark"] .card-date.account-last-used {
+  background: transparent;
 }
 
 .account-last-used .alu-trigger {
