@@ -1471,21 +1471,19 @@ pub async fn probe_model(
                         &api_url,
                         &session_token,
                         &session_id,
+                        model,
                         account.enterprise_id.as_deref(),
                         45,
                     )
                     .await;
                     if let Some(err) = outcome.error {
-                        let lowered = err.to_lowercase();
-                        let limited = err.contains("上限")
-                            || err.contains("限流")
-                            || err.contains("额度")
-                            || lowered.contains("quota")
-                            || lowered.contains("rate limit")
-                            || lowered.contains("exceed")
-                            || lowered.contains("too many");
-                        status = if limited { "rate_limited" } else { "error" }.to_string();
-                        message = if limited {
+                        status = if looks_rate_limited(&err) {
+                            "rate_limited"
+                        } else {
+                            "error"
+                        }
+                        .to_string();
+                        message = if status == "rate_limited" {
                             format!("模型被限流：{}", err)
                         } else {
                             format!("模型调用失败：{}", err)
@@ -1641,11 +1639,81 @@ struct AcpOutcome {
 }
 
 /// 读取 ACP SSE 流：累积 agent_message_chunk 的文本，捕获错误事件与限流文案。
+/// 统一的限流文案判定（服务端文案可能只有 "429 超出频率限制"，不含 quota 等字样）。
+fn looks_rate_limited(text: &str) -> bool {
+    let low = text.to_lowercase();
+    text.contains("上限")
+        || text.contains("限流")
+        || text.contains("额度")
+        || text.contains("频率限制")
+        || text.contains("使用量已超出")
+        || text.contains("429")
+        || low.contains("quota")
+        || low.contains("rate limit")
+        || low.contains("exceed")
+        || low.contains("too many")
+}
+
+/// 扫描 ACP POST 响应（JSON 或 SSE 行）里的错误/限流文案。
+/// 限流通常在 `session/prompt` 的响应里，包在
+/// `result._meta["codebuddy.ai/errorMessage"]` 的嵌套 JSON 字符串中。
+fn parse_acp_post_error(body: &str) -> Option<String> {
+    for line in body.lines() {
+        let payload = line.strip_prefix("data:").unwrap_or(line).trim();
+        if payload.is_empty() || payload.starts_with(':') || payload == "[DONE]" {
+            continue;
+        }
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
+            // 优先取客户端同款的错误展示文案（嵌套 JSON 字符串）。
+            if let Some(raw) = value
+                .get("result")
+                .and_then(|r| r.get("_meta"))
+                .and_then(|m| m.get("codebuddy.ai/errorMessage"))
+                .and_then(|v| v.as_str())
+            {
+                let cleaned = serde_json::from_str::<serde_json::Value>(raw)
+                    .ok()
+                    .and_then(|inner| {
+                        inner
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                    })
+                    .unwrap_or_else(|| raw.to_string());
+                return Some(cleaned);
+            }
+            if let Some(err) = value.get("error") {
+                let msg = err
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(payload)
+                    .to_string();
+                return Some(msg);
+            }
+            // 业务错误码：code != 0 且带 message/msg
+            let code = value.get("code").and_then(|v| v.as_i64()).unwrap_or(0);
+            let msg = value
+                .get("message")
+                .or_else(|| value.get("msg"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if code != 0 && !msg.is_empty() && !msg.eq_ignore_ascii_case("ok") {
+                return Some(format!("code={} {}", code, msg));
+            }
+        }
+        if looks_rate_limited(payload) {
+            return Some(truncate_chars(payload, 300));
+        }
+    }
+    None
+}
+
 async fn read_acp_reply(
     client: &reqwest::Client,
     api_url: &str,
     session_token: &str,
     session_id: &str,
+    model: &str,
     enterprise_id: Option<&str>,
     timeout_secs: u64,
 ) -> AcpOutcome {
@@ -1749,51 +1817,82 @@ async fn read_acp_reply(
                 match client.post(&url).headers(h).json(&body).send().await {
                     Ok(r) => {
                         let status = r.status().as_u16();
+                        let response_text = r.text().await.unwrap_or_default();
                         if !(200..300).contains(&status) {
-                            let t = r.text().await.unwrap_or_default();
-                            return Err(format!("{} HTTP {}: {}", method, status, truncate_chars(&t, 200)));
+                            return Err(format!(
+                                "{} HTTP {}: {}",
+                                method,
+                                status,
+                                truncate_chars(&response_text, 200)
+                            ));
                         }
-                        // 吞掉响应体（可能很长），只看状态
-                        let _ = r.text().await.unwrap_or_default();
-                        Ok(())
+                        Ok(response_text)
                     }
                     Err(e) => Err(format!("{} 请求失败: {}", method, e)),
                 }
             }
         };
 
-        if let Err(e) = send(
-            "initialize",
-            1,
-            serde_json::json!({ "protocolVersion": 1, "clientCapabilities": {} }),
-        )
-        .await
-        {
-        }
-        if let Err(e) = send(
-            "session/load",
-            2,
-            serde_json::json!({ "sessionId": session_id, "cwd": "/", "mcpServers": [] }),
-        )
-        .await
-        {
-        }
-        if let Err(e) = send(
-            "session/prompt",
-            3,
-            serde_json::json!({
-                "sessionId": session_id,
-                "prompt": [{ "type": "text", "text": "Reply with OK." }]
-            }),
-        )
-        .await
-        {
-            outcome.error = Some(format!("发送 prompt 失败: {}", e));
-            return;
+        // 客户端 bootstrap 序列：initialize → session/load → session/set_model → session/prompt。
+        // 少了 set_model，沙箱会用默认模型跑，探测结果就与所选模型无关（永远 OK）。
+        let mut prompt_response = String::new();
+        let calls: [(&'static str, u64, serde_json::Value); 4] = [
+            (
+                "initialize",
+                1,
+                serde_json::json!({ "protocolVersion": 1, "clientCapabilities": {} }),
+            ),
+            (
+                "session/load",
+                2,
+                serde_json::json!({ "sessionId": session_id, "cwd": "/", "mcpServers": [] }),
+            ),
+            (
+                "session/set_model",
+                3,
+                serde_json::json!({ "sessionId": session_id, "modelId": model }),
+            ),
+            (
+                "session/prompt",
+                4,
+                serde_json::json!({
+                    "sessionId": session_id,
+                    "prompt": [{ "type": "text", "text": "Reply with OK." }]
+                }),
+            ),
+        ];
+        for (method, id, params) in calls {
+            match send(method, id, params).await {
+                Ok(response_text) => {
+                    if outcome.raw.len() < 3000 {
+                        outcome.raw.push_str(&format!(
+                            "[{}] {}\n",
+                            method,
+                            truncate_chars(&response_text, 600)
+                        ));
+                    }
+                    if let Some(err) = parse_acp_post_error(&response_text) {
+                        outcome.error = Some(format!("{}: {}", method, err));
+                        return;
+                    }
+                    if method == "session/prompt" {
+                        prompt_response = response_text;
+                    }
+                }
+                Err(e) => {
+                    outcome.error = Some(e);
+                    return;
+                }
+            }
         }
 
         let mut stream = resp.bytes_stream();
         let mut buffer = String::new();
+        // prompt 响应本身也可能直接是 SSE（而不是走 GET 流），一并解析。
+        if !prompt_response.is_empty() {
+            buffer.push_str(&prompt_response);
+            buffer.push('\n');
+        }
         while let Some(chunk) = stream.next().await {
             let Ok(bytes) = chunk else { break };
             buffer.push_str(&String::from_utf8_lossy(&bytes));
@@ -2088,9 +2187,25 @@ fn classify_conversation_probe(http_status: u16, text: &str) -> (String, String,
     }
 
     if (200..300).contains(&http_status) {
-        let conversation_id = serde_json::from_str::<serde_json::Value>(text)
-            .ok()
-            .and_then(|v| {
+        let parsed = serde_json::from_str::<serde_json::Value>(text).ok();
+        // 服务端可能 HTTP 200 但业务码非 0（例如额度/限流），必须拦下。
+        if let Some(v) = &parsed {
+            let code = v.get("code").and_then(|x| x.as_i64()).unwrap_or(0);
+            let msg = v
+                .get("msg")
+                .or_else(|| v.get("message"))
+                .and_then(|x| x.as_str())
+                .unwrap_or("");
+            if code != 0 && !msg.is_empty() && !msg.eq_ignore_ascii_case("ok") {
+                let limited = looks_rate_limited(&format!("{} {}", msg, text));
+                return (
+                    if limited { "rate_limited" } else { "error" }.to_string(),
+                    format!("服务端返回 code={} {}", code, msg),
+                    None,
+                );
+            }
+        }
+        let conversation_id = parsed.as_ref().and_then(|v| {
                 v.get("id")
                     .and_then(|x| x.as_str())
                     .or_else(|| v.get("data").and_then(|d| d.get("id")).and_then(|x| x.as_str()))

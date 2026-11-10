@@ -244,7 +244,7 @@ export function WorkbuddyModelProbeModal({ accounts, currentAccountId, onClose }
             <span className="wb-probe-cloud-note">
               {t(
                 'workbuddy.modelProbe.pickerNote',
-                '「对话选择器」为客户端实际可见的模型与计费倍率；更多模型可在输入框手输 ID（搜索提示含完整云端目录）。',
+                '「对话选择器」为服务端实时下发的模型与计费倍率；更多模型可在输入框手输 ID。探测会真实发送一条极短消息，可能产生极少额度消耗。',
               )}
             </span>
             {cloudStatus === 'loaded' && (
