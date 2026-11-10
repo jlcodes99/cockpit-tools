@@ -701,3 +701,29 @@
   max-height: 180px;
   overflow: auto;
 }
+
+/* 卡片底部的积分到期提示（把积分明细里的「包含即将到期的积分」外置） */
+.workbuddy-credit-expiring-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--warning, #f59e0b);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.workbuddy-credit-expiring-hint:hover {
+  background: var(--bg-hover);
+  text-decoration: underline;
+}
+
+.workbuddy-credit-expiring-hint svg {
+  flex-shrink: 0;
+}

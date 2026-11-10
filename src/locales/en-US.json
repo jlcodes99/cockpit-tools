@@ -2343,9 +2343,11 @@
     "lastSwitchTime": "Switch time",
     "neverSwitched": "Never switched",
     "refreshTime": "Refresh time",
+    "creditsExpire": "Credit expiry",
     "lastSwitchTimeFull": "Switch time: {{time}}",
     "refreshTimeFull": "Refresh time: {{time}}",
-    "toggleTimeMode": "Toggle switch / refresh time"
+    "creditsExpireFull": "Expiry: {{time}}",
+    "toggleTimeMode": "Toggle switch / refresh / credit expiry time"
   },
   "overview": {
     "title": "Overview",
@@ -7643,6 +7645,7 @@
       "nearestExpiry": "Earliest expiry {{time}}",
       "nextRefresh": "Next refresh {{time}}",
       "expiring": "Includes credits expiring soon",
+      "expiringHintTitle": "View credits expiring soon",
       "valid": "Valid",
       "expired": "Expired",
       "expiresAt": "Expires {{time}}",

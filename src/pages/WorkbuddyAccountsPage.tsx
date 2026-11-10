@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronRight, Crosshair } from 'lucide-react';
+import { ChevronRight, Crosshair, Sparkles } from 'lucide-react';
 import { PlatformOverviewTabsHeader, PlatformOverviewTab } from '../components/platform/PlatformOverviewTabsHeader';
 import { WorkbuddyInstancesContent } from './WorkbuddyInstancesPage';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
@@ -18,7 +18,7 @@ import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessio
 import { CodebuddySuiteAccountsSharedView, type CodebuddySuiteAccountsPlatformConfig } from '../components/codebuddy-suite/CodebuddySuiteAccountsSharedView';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 import { WorkbuddyCreditsDialog, WorkbuddyCreditsSummary } from '../components/codebuddy-suite/WorkbuddyCredits';
-import { getWorkbuddyCredits } from '../utils/workbuddyCredits';
+import { getWorkbuddyCredits, getWorkbuddyCreditsExpireAt, hasWorkbuddyExpiringCredits } from '../utils/workbuddyCredits';
 import { WorkbuddyModelProbeModal } from '../components/workbuddy/WorkbuddyModelProbeModal';
 
 const WORKBUDDY_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.workbuddy.flow_notice_collapsed';
@@ -148,6 +148,23 @@ export function WorkbuddyAccountsPage() {
         {page.t('workbuddy.credits.details')} <ChevronRight size={13} aria-hidden="true" />
       </button>
     ),
+    // 卡片时间区旁的「到期」入口：把积分明细里的「包含即将到期的积分」提示外置。
+    getCreditsExpireAt: (account) =>
+      account.enterprise_id ? null : getWorkbuddyCreditsExpireAt(account),
+    renderCardFooterHint: (account) => {
+      if (account.enterprise_id || !hasWorkbuddyExpiringCredits(account)) return null;
+      return (
+        <button
+          type="button"
+          className="workbuddy-credit-expiring-hint"
+          onClick={() => setCreditAccountId(account.id)}
+          title={page.t('workbuddy.credits.expiringHintTitle', '查看即将到期的积分明细')}
+        >
+          <Sparkles size={12} aria-hidden="true" />
+          {page.t('workbuddy.credits.expiring', '包含即将到期的积分')}
+        </button>
+      );
+    },
   }), [page.t]);
   const creditAccount = store.accounts.find((account) => account.id === creditAccountId);
 

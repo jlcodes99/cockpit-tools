@@ -2111,7 +2111,11 @@
     },
     "lastSwitchTime": "Переключение",
     "neverSwitched": "Ещё не переключали",
+    "creditsExpire": "Срок действия кредитов",
+
     "refreshTime": "Обновление",
+    "creditsExpireFull": "Истекает: {{time}}",
+
     "lastSwitchTimeFull": "Переключение: {{time}}",
     "refreshTimeFull": "Обновление: {{time}}",
     "toggleTimeMode": "Показать время переключения или обновления"
@@ -7284,6 +7288,8 @@
       "nearestExpiry": "Ближайшее истечение {{time}}",
       "nextRefresh": "Следующее обновление {{time}}",
       "expiring": "Часть баллов скоро сгорит",
+
+      "expiringHintTitle": "Показать кредиты с истекающим сроком",
       "valid": "Действуют",
       "expired": "Истекли",
       "expiresAt": "Действует до {{time}}",

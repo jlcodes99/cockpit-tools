@@ -2111,7 +2111,11 @@
     },
     "lastSwitchTime": "Lần chuyển",
     "neverSwitched": "Chưa từng chuyển",
+    "creditsExpire": "Thời hạn tín dụng",
+
     "refreshTime": "Lần làm mới",
+    "creditsExpireFull": "Hết hạn: {{time}}",
+
     "lastSwitchTimeFull": "Lần chuyển: {{time}}",
     "refreshTimeFull": "Lần làm mới: {{time}}",
     "toggleTimeMode": "Hiển thị thời gian chuyển hoặc làm mới"
@@ -7284,6 +7288,8 @@
       "nearestExpiry": "Hết hạn gần nhất {{time}}",
       "nextRefresh": "Lần làm mới tiếp theo {{time}}",
       "expiring": "Có điểm sắp hết hạn",
+
+      "expiringHintTitle": "Xem chi tiết tín dụng sắp hết hạn",
       "valid": "Còn hạn",
       "expired": "Hết hạn",
       "expiresAt": "Hết hạn lúc {{time}}",

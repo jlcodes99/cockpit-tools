@@ -2111,7 +2111,11 @@
     },
     "lastSwitchTime": "Přepnutí",
     "neverSwitched": "Dosud nepřepnuto",
+    "creditsExpire": "Platnost kreditů",
+
     "refreshTime": "Obnovení",
+    "creditsExpireFull": "Platnost: {{time}}",
+
     "lastSwitchTimeFull": "Přepnutí: {{time}}",
     "refreshTimeFull": "Obnovení: {{time}}",
     "toggleTimeMode": "Zobrazit čas přepnutí nebo obnovení"
@@ -7284,6 +7288,8 @@
       "nearestExpiry": "Nejbližší konec {{time}}",
       "nextRefresh": "Další obnova {{time}}",
       "expiring": "Obsahuje brzy končící kredity",
+
+      "expiringHintTitle": "Zobrazit podrobnosti o brzy vypršících kreditech",
       "valid": "Platné",
       "expired": "Vypršelé",
       "expiresAt": "Vyprší {{time}}",

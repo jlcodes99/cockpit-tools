@@ -2035,8 +2035,12 @@
     },
     "lastSwitchTime": "Switch time",
     "neverSwitched": "Never switched",
+    "creditsExpire": "Credit expiry",
+
     "refreshTime": "Refresh time",
     "refreshTimeFull": "Refresh time: {{time}}",
+    "creditsExpireFull": "Expiry: {{time}}",
+
     "lastSwitchTimeFull": "Switch time: {{time}}",
     "toggleTimeMode": "Toggle switch / refresh time",
     "columns": {
@@ -7643,6 +7647,8 @@
       "nearestExpiry": "Earliest expiry {{time}}",
       "nextRefresh": "Next refresh {{time}}",
       "expiring": "Includes credits expiring soon",
+
+      "expiringHintTitle": "View credits expiring soon",
       "valid": "Valid",
       "expired": "Expired",
       "expiresAt": "Expires {{time}}",

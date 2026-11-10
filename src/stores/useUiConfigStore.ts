@@ -2,10 +2,10 @@ import { create } from "zustand";
 
 const UI_CONFIG_STORAGE_KEY = "agtools.ui_config.v1";
 
-export type TimeDisplayMode = "switch" | "refresh";
+export type TimeDisplayMode = "switch" | "refresh" | "expire";
 
 export interface UiConfigState {
-  /** 账号卡片时间区域显示内容：'switch' 切换时间（默认），'refresh' 刷新时间 */
+  /** 账号卡片时间区域显示内容：'switch' 切换时间（默认），'refresh' 刷新时间，'expire' 积分到期时间 */
   timeDisplayMode: TimeDisplayMode;
   setTimeDisplayMode: (value: TimeDisplayMode) => void;
   /**
@@ -30,6 +30,9 @@ function loadUiConfig(): { timeDisplayMode: TimeDisplayMode } {
     const parsed = JSON.parse(raw) as PersistedUiConfig;
     if (parsed.timeDisplayMode === "refresh") {
       return { timeDisplayMode: "refresh" };
+    }
+    if (parsed.timeDisplayMode === "expire") {
+      return { timeDisplayMode: "expire" };
     }
     if (parsed.timeDisplayMode === "switch") {
       return { timeDisplayMode: "switch" };

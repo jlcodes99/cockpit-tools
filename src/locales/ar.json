@@ -2158,7 +2158,11 @@
     },
     "lastSwitchTime": "وقت التبديل",
     "neverSwitched": "لم يُبدّل بعد",
+    "creditsExpire": "وقت انتهاء صلاحية النقاط",
+
     "refreshTime": "وقت التحديث",
+    "creditsExpireFull": "تاريخ الانتهاء: {{time}}",
+
     "lastSwitchTimeFull": "التبديل: {{time}}",
     "refreshTimeFull": "التحديث: {{time}}",
     "toggleTimeMode": "عرض وقت التبديل أو التحديث"
@@ -7331,6 +7335,8 @@
       "nearestExpiry": "أقرب انتهاء {{time}}",
       "nextRefresh": "التجديد التالي {{time}}",
       "expiring": "رصيد ينتهي قريبًا",
+
+      "expiringHintTitle": "عرض تفاصيل النقاط التي تنتهي قريبًا",
       "valid": "ساري",
       "expired": "منتهي",
       "expiresAt": "ينتهي {{time}}",

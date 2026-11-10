@@ -612,10 +612,11 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   <select
                     className="settings-select"
                     value={timeDisplayMode}
-                    onChange={(e) => setTimeDisplayMode(e.target.value as "switch" | "refresh")}
+                    onChange={(e) => setTimeDisplayMode(e.target.value as "switch" | "refresh" | "expire")}
                   >
                     <option value="switch">{t('accounts.lastSwitchTime', '切换时间')}</option>
                     <option value="refresh">{t('accounts.refreshTime', '刷新时间')}</option>
+                    <option value="expire">{t('accounts.creditsExpire', '积分到期时间')}</option>
                   </select>
                 </div>
               </div>

@@ -175,6 +175,10 @@ export interface CodebuddySuiteAccountsPlatformConfig<
   hasQuotaData: (account: TAccount, groups: QuotaCategoryGroup[]) => boolean;
   renderQuotaSummary?: (account: TAccount) => ReactNode;
   renderQuotaAction?: (account: TAccount) => ReactNode;
+  /** 积分到期时间（用于卡片时间区的「到期时间」选项）；不实现则该项不显示 */
+  getCreditsExpireAt?: (account: TAccount) => number | null;
+  /** 卡片底部时间区旁的提示（如「包含即将到期的积分」） */
+  renderCardFooterHint?: (account: TAccount) => ReactNode;
   usagePrefix: string;
   quotaPrefix: string;
   tableUsageClassName: string;
@@ -756,7 +760,9 @@ export function CodebuddySuiteAccountsSharedView<
               createdAt={account.created_at}
               formatDate={formatDate}
               refreshAt={getAccountQuotaUpdatedAtMs(account)}
+              expireAt={platformConfig.getCreditsExpireAt?.(account) ?? null}
             />
+            {platformConfig.renderCardFooterHint?.(account)}
             <div className="card-actions">
               <button
                 className="card-action-btn success"
@@ -878,6 +884,7 @@ export function CodebuddySuiteAccountsSharedView<
               createdAt={account.created_at}
               formatDate={formatDate}
               refreshAt={getAccountQuotaUpdatedAtMs(account)}
+              expireAt={platformConfig.getCreditsExpireAt?.(account) ?? null}
             />
           </td>
           <td className="sticky-action-cell table-action-cell">

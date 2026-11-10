@@ -2111,7 +2111,11 @@
     },
     "lastSwitchTime": "전환 시간",
     "neverSwitched": "전환 이력 없음",
+    "creditsExpire": "크레딧 만료 시간",
+
     "refreshTime": "새로고침 시간",
+    "creditsExpireFull": "만료: {{time}}",
+
     "lastSwitchTimeFull": "전환 시간: {{time}}",
     "refreshTimeFull": "새로고침 시간: {{time}}",
     "toggleTimeMode": "전환 시간과 새로고침 시간 전환"
@@ -7284,6 +7288,8 @@
       "nearestExpiry": "가장 빠른 만료 {{time}}",
       "nextRefresh": "다음 갱신 {{time}}",
       "expiring": "곧 만료되는 크레딧 포함",
+
+      "expiringHintTitle": "곧 만료되는 크레딧 상세 보기",
       "valid": "유효",
       "expired": "만료",
       "expiresAt": "만료 {{time}}",

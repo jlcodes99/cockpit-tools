@@ -2111,7 +2111,11 @@
     },
     "lastSwitchTime": "Kontowechsel",
     "neverSwitched": "Noch nie gewechselt",
+    "creditsExpire": "Ablaufdatum der Credits",
+
     "refreshTime": "Aktualisierung",
+    "creditsExpireFull": "Ablauf: {{time}}",
+
     "lastSwitchTimeFull": "Kontowechsel: {{time}}",
     "refreshTimeFull": "Aktualisierung: {{time}}",
     "toggleTimeMode": "Wechsel- oder Aktualisierungszeit anzeigen"
@@ -7284,6 +7288,8 @@
       "nearestExpiry": "Nächster Ablauf {{time}}",
       "nextRefresh": "Nächste Erneuerung {{time}}",
       "expiring": "Guthaben läuft bald ab",
+
+      "expiringHintTitle": "Details zu bald ablaufenden Credits anzeigen",
       "valid": "Gültig",
       "expired": "Abgelaufen",
       "expiresAt": "Läuft ab am {{time}}",

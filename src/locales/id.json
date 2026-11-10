@@ -2158,7 +2158,11 @@
     },
     "lastSwitchTime": "Pergantian",
     "neverSwitched": "Belum pernah beralih",
+    "creditsExpire": "Waktu kedaluwarsa kredit",
+
     "refreshTime": "Pembaruan",
+    "creditsExpireFull": "Kedaluwarsa: {{time}}",
+
     "lastSwitchTimeFull": "Pergantian: {{time}}",
     "refreshTimeFull": "Pembaruan: {{time}}",
     "toggleTimeMode": "Tampilkan waktu pergantian atau pembaruan"
@@ -7459,6 +7463,8 @@
       "nearestExpiry": "Kedaluwarsa berikutnya {{time}}",
       "nextRefresh": "Pembaruan berikutnya {{time}}",
       "expiring": "Termasuk kredit yang akan segera kedaluwarsa",
+
+      "expiringHintTitle": "Lihat detail kredit yang segera kedaluwarsa",
       "valid": "Berlaku",
       "expired": "Kedaluwarsa",
       "expiresAt": "Kedaluwarsa {{time}}",

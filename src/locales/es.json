@@ -2111,7 +2111,11 @@
     },
     "lastSwitchTime": "Cambio",
     "neverSwitched": "Sin cambios previos",
+    "creditsExpire": "Caducidad de créditos",
+
     "refreshTime": "Actualización",
+    "creditsExpireFull": "Caducidad: {{time}}",
+
     "lastSwitchTimeFull": "Cambio: {{time}}",
     "refreshTimeFull": "Actualización: {{time}}",
     "toggleTimeMode": "Mostrar hora del cambio o de actualización"
@@ -7284,6 +7288,8 @@
       "nearestExpiry": "Próximo vencimiento {{time}}",
       "nextRefresh": "Próxima renovación {{time}}",
       "expiring": "Hay créditos que vencen pronto",
+
+      "expiringHintTitle": "Ver detalles de los créditos que caducan pronto",
       "valid": "Vigentes",
       "expired": "Vencidos",
       "expiresAt": "Vence el {{time}}",

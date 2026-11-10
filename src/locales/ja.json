@@ -2111,7 +2111,11 @@
     },
     "lastSwitchTime": "切替時刻",
     "neverSwitched": "切替履歴なし",
+    "creditsExpire": "クレジット有効期限",
+
     "refreshTime": "更新時刻",
+    "creditsExpireFull": "有効期限：{{time}}",
+
     "lastSwitchTimeFull": "切替：{{time}}",
     "refreshTimeFull": "更新：{{time}}",
     "toggleTimeMode": "切替時刻と更新時刻を切り替える"
@@ -7284,6 +7288,8 @@
       "nearestExpiry": "直近の有効期限 {{time}}",
       "nextRefresh": "次回更新 {{time}}",
       "expiring": "まもなく期限切れのクレジットを含む",
+
+      "expiringHintTitle": "まもなく期限切れのクレジット詳細を表示",
       "valid": "有効",
       "expired": "期限切れ",
       "expiresAt": "有効期限 {{time}}",

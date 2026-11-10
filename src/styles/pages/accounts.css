@@ -199,36 +199,82 @@
   flex-shrink: 0;
 }
 
-.account-last-used .alu-select {
+/* 自定义时间下拉：不用原生 <select>，弹出层跟随应用主题（原生弹出层在暗色下是白的）。 */
+.account-last-used {
+  position: relative;
+}
+
+.account-last-used .alu-trigger {
   display: inline-flex;
   align-items: center;
-  max-width: 220px;
+  gap: 4px;
+  max-width: 240px;
+  padding: 3px 4px;
   border: 1px solid transparent;
+  border-radius: 4px;
   background: transparent;
   color: inherit;
   font-size: inherit;
   font-family: inherit;
-  cursor: pointer;
-  appearance: none;
-  padding: 3px 16px 3px 2px;
-  border-radius: 4px;
   line-height: 1.4;
-  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
-  background-position: right 7px center, right 3px center;
-  background-size: 4px 4px;
-  background-repeat: no-repeat;
+  cursor: pointer;
 }
-.account-last-used .alu-select:hover {
+
+.account-last-used .alu-trigger > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-last-used .alu-trigger > svg {
+  opacity: 0.6;
+}
+
+.account-last-used .alu-trigger:hover,
+.account-last-used .alu-trigger.open {
   border-color: var(--border-color);
 }
-.account-last-used .alu-select:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-.account-last-used .alu-select:focus {
+
+.account-last-used .alu-trigger:focus-visible {
   outline: none;
   border-color: var(--accent-color, #3b82f6);
-  border-radius: 4px;
+}
+
+.account-last-used .alu-menu {
+  position: absolute;
+  left: 16px;
+  bottom: calc(100% + 4px);
+  z-index: 40;
+  display: flex;
+  min-width: 210px;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-md, 0 12px 24px rgba(0, 0, 0, 0.35));
+}
+
+.account-last-used .alu-menu-item {
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.account-last-used .alu-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.account-last-used .alu-menu-item.active {
+  color: var(--accent-color, #3b82f6);
+  font-weight: 600;
 }
 
 /* Minimalist Action Bar - No Background */

@@ -93,8 +93,25 @@ export function getWorkbuddyCredits(account: WorkbuddyAccount, now = Date.now())
   return { left, groups };
 }
 
-export function readWorkbuddyCreditPackage(raw: Record<string, unknown>, expired = false) {
-  const capacity = parseNumeric(raw.CapacitySizePrecise) ?? 0;
+/**
+ * 最近一笔积分的到期时间（仅赠送/活动等有到期概念的积分组）。
+ * 用于账号卡片时间区的「到期时间」选项；没有到期概念时返回 null。
+ */
+export function getWorkbuddyCreditsExpireAt(account: WorkbuddyAccount, now = Date.now()): number | null {
+  const { groups } = getWorkbuddyCredits(account, now);
+  const dates = groups
+    .filter((group) => group.usesExpiry)
+    .map((group) => group.time)
+    .filter((time): time is number => time != null && time > 0);
+  return dates.length ? Math.min(...dates) : null;
+}
+
+/** 是否存在 3 天内即将到期的积分（与积分明细里「包含即将到期的积分」提示一致）。 */
+export function hasWorkbuddyExpiringCredits(account: WorkbuddyAccount, now = Date.now()): boolean {
+  return getWorkbuddyCredits(account, now).groups.some((group) => group.expiring);
+}
+
+export function readWorkbuddyCreditPackage(raw: Record<string, unknown>, expired = false) {  const capacity = parseNumeric(raw.CapacitySizePrecise) ?? 0;
   const total = capacity > 0 ? capacity : Math.max(0, parseNumeric(raw.CycleCapacitySizePrecise) ?? 0);
   const usedValue = capacity > 0 ? raw.CapacityUsedPrecise : raw.CycleCapacityUsedPrecise;
   const remainValue = capacity > 0 ? raw.CapacityRemainPrecise : raw.CycleCapacityRemainPrecise;

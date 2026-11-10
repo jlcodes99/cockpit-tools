@@ -2111,7 +2111,11 @@
     },
     "lastSwitchTime": "切換時間",
     "neverSwitched": "尚未切換",
+    "creditsExpire": "點數到期時間",
+
     "refreshTime": "更新時間",
+    "creditsExpireFull": "到期時間：{{time}}",
+
     "lastSwitchTimeFull": "切換時間：{{time}}",
     "refreshTimeFull": "更新時間：{{time}}",
     "toggleTimeMode": "切換顯示切換或更新時間"
@@ -7284,6 +7288,8 @@
       "nearestExpiry": "最近到期時間 {{time}}",
       "nextRefresh": "下次更新時間 {{time}}",
       "expiring": "包含即將到期的點數",
+
+      "expiringHintTitle": "查看即將到期的點數明細",
       "valid": "有效期限內",
       "expired": "已過期",
       "expiresAt": "到期時間 {{time}}",

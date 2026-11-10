@@ -2111,7 +2111,11 @@
     },
     "lastSwitchTime": "Changement",
     "neverSwitched": "Aucun changement",
+    "creditsExpire": "Expiration des crédits",
+
     "refreshTime": "Actualisation",
+    "creditsExpireFull": "Expiration : {{time}}",
+
     "lastSwitchTimeFull": "Changement : {{time}}",
     "refreshTimeFull": "Actualisation : {{time}}",
     "toggleTimeMode": "Afficher le changement ou l’actualisation"
@@ -7284,6 +7288,8 @@
       "nearestExpiry": "Expiration la plus proche {{time}}",
       "nextRefresh": "Prochain renouvellement {{time}}",
       "expiring": "Des crédits expirent bientôt",
+
+      "expiringHintTitle": "Afficher les détails des crédits bientôt expirés",
       "valid": "Valides",
       "expired": "Expirés",
       "expiresAt": "Expire {{time}}",

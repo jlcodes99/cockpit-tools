@@ -2111,7 +2111,11 @@
     },
     "lastSwitchTime": "Değiştirme",
     "neverSwitched": "Henüz değiştirilmedi",
+    "creditsExpire": "Kredi son kullanma süresi",
+
     "refreshTime": "Yenileme",
+    "creditsExpireFull": "Son kullanma: {{time}}",
+
     "lastSwitchTimeFull": "Değiştirme: {{time}}",
     "refreshTimeFull": "Yenileme: {{time}}",
     "toggleTimeMode": "Değiştirme veya yenileme zamanını göster"
@@ -7284,6 +7288,8 @@
       "nearestExpiry": "İlk sona erme {{time}}",
       "nextRefresh": "Sonraki yenileme {{time}}",
       "expiring": "Bazı krediler yakında sona eriyor",
+
+      "expiringHintTitle": "Yakında sona erecek kredi ayrıntılarını görüntüle",
       "valid": "Geçerli",
       "expired": "Süresi dolmuş",
       "expiresAt": "Bitiş {{time}}",
