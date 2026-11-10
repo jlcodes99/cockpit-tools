@@ -606,7 +606,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               <div className="settings-row">
                 <div className="row-label">
                   <div className="row-title">{t('settings.general.timeDisplayMode', '时间显示')}</div>
-                  <div className="row-desc">{t('settings.general.timeDisplayModeDesc', '账号卡片与列表中的时间区域显示内容（默认切换时间）')}</div>
+                  <div className="row-desc">{t('settings.general.timeDisplayModeDesc', '账号卡片与列表中的时间区域显示内容（默认上次切换时间）')}</div>
                 </div>
                 <div className="row-control">
                   <select
@@ -614,9 +614,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     value={timeDisplayMode}
                     onChange={(e) => setTimeDisplayMode(e.target.value as "switch" | "refresh" | "expire")}
                   >
-                    <option value="switch">{t('accounts.lastSwitchTime', '切换时间')}</option>
+                    <option value="switch">{t('accounts.lastSwitchTime', '上次切换时间')}</option>
                     <option value="refresh">{t('accounts.refreshTime', '刷新时间')}</option>
-                    <option value="expire">{t('accounts.creditsExpire', '积分到期时间')}</option>
+                    <option value="expire">{t('accounts.creditsExpire', '下次积分到期')}</option>
                   </select>
                 </div>
               </div>

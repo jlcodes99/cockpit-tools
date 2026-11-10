@@ -1649,7 +1649,7 @@
         "nativePredictionsDesc": "Generate next-message suggestions with the current conversation’s API provider and model. Uses additional API credits; restart Codex after saving."
       },
       "timeDisplayMode": "Time display",
-      "timeDisplayModeDesc": "What to show in the time area of account cards/lists (default: switch time)"
+      "timeDisplayModeDesc": "What to show in the time area of account cards/lists (default: last switch time)"
     },
     "tabs": {
       "general": "General",
@@ -2340,14 +2340,14 @@
     "plan": {
       "personal": "Personal"
     },
-    "lastSwitchTime": "Switch time",
+    "lastSwitchTime": "Last switch time",
     "neverSwitched": "Never switched",
     "refreshTime": "Refresh time",
-    "creditsExpire": "Credit expiry",
-    "lastSwitchTimeFull": "Switch time: {{time}}",
+    "creditsExpire": "Next credits expiry",
+    "lastSwitchTimeFull": "Last switch: {{time}}",
     "refreshTimeFull": "Refresh time: {{time}}",
-    "creditsExpireFull": "Expiry: {{time}}",
-    "toggleTimeMode": "Toggle switch / refresh / credit expiry time"
+    "creditsExpireFull": "Next credits expiry: {{time}}",
+    "toggleTimeMode": "Toggle last switch / refresh / next credits expiry"
   },
   "overview": {
     "title": "Overview",

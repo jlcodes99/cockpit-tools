@@ -57,7 +57,7 @@ export function AccountLastUsed({
     if (switched) {
       list.push({
         mode: "switch",
-        label: t("accounts.lastSwitchTimeFull", "切换时间：{{time}}", {
+        label: t("accounts.lastSwitchTimeFull", "上次切换时间：{{time}}", {
           time: formatDate(lastSwitchedAt!),
         }),
         enabled: true,
@@ -66,7 +66,7 @@ export function AccountLastUsed({
     if (hasExpire) {
       list.push({
         mode: "expire",
-        label: t("accounts.creditsExpireFull", "到期时间：{{time}}", {
+        label: t("accounts.creditsExpireFull", "下次积分到期：{{time}}", {
           time: formatDate(expireAt as number),
         }),
         enabled: true,
@@ -110,7 +110,7 @@ export function AccountLastUsed({
         type="button"
         className={`alu-trigger${open ? " open" : ""}`}
         onClick={() => setOpen((value) => !value)}
-        title={t("accounts.toggleTimeMode", "切换显示 切换时间 / 刷新时间 / 积分到期时间")}
+        title={t("accounts.toggleTimeMode", "切换显示 上次切换时间 / 刷新时间 / 下次积分到期")}
         aria-haspopup="listbox"
         aria-expanded={open}
       >

@@ -2109,14 +2109,14 @@
     "plan": {
       "personal": "個人"
     },
-    "lastSwitchTime": "切換時間",
+    "lastSwitchTime": "上次切換時間",
     "neverSwitched": "尚未切換",
-    "creditsExpire": "點數到期時間",
+    "creditsExpire": "下次點數到期",
 
     "refreshTime": "更新時間",
-    "creditsExpireFull": "到期時間：{{time}}",
+    "creditsExpireFull": "下次點數到期：{{time}}",
 
-    "lastSwitchTimeFull": "切換時間：{{time}}",
+    "lastSwitchTimeFull": "上次切換時間：{{time}}",
     "refreshTimeFull": "更新時間：{{time}}",
     "toggleTimeMode": "切換顯示切換或更新時間"
   },
