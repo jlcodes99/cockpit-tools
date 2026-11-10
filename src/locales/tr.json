@@ -6580,6 +6580,14 @@
       "localDesc": "Yerelde oturum açılmış oturumlardan Devin hesaplarını içe aktar.",
       "localClient": "Yerel Devin'ten içe aktar"
     },
+    "probeNotice": {
+
+      "until": "{{model}} {{time}} tarihine kadar kullanılamıyor",
+
+      "unavailable": "{{model}} geçici olarak kullanılamıyor"
+
+    },
+
     "credits": {
       "title": "Planı",
       "renewMonthly": "Krediler her ay yenilenir",

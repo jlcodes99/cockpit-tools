@@ -6580,6 +6580,14 @@
       "localDesc": "ローカルでログイン済みのセッションから Devin アカウントをインポート。",
       "localClient": "ローカル Devin からインポート"
     },
+    "probeNotice": {
+
+      "until": "{{model}} は {{time}} まで利用できません",
+
+      "unavailable": "{{model}} は一時的に利用できません"
+
+    },
+
     "credits": {
       "title": "プラン",
       "renewMonthly": "クレジットは毎月更新されます",

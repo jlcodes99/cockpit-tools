@@ -6580,6 +6580,14 @@
       "localDesc": "Importovat účty Devin z místně přihlášených relací.",
       "localClient": "Import z místního Devin"
     },
+    "probeNotice": {
+
+      "until": "{{model}} nedostupné do {{time}}",
+
+      "unavailable": "{{model}} dočasně nedostupné"
+
+    },
+
     "credits": {
       "title": "Tarif",
       "renewMonthly": "Kredity se obnovují každý měsíc",

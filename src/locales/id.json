@@ -6727,6 +6727,14 @@
       "localDesc": "Impor data akun Devin dari berkas JSON.",
       "localClient": "Impor dari Devin lokal"
     },
+    "probeNotice": {
+
+      "until": "{{model}} tidak tersedia hingga {{time}}",
+
+      "unavailable": "{{model}} sementara tidak tersedia"
+
+    },
+
     "credits": {
       "title": "Plan​",
       "renewMonthly": "Kredit diperbarui setiap bulan",

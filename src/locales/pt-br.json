@@ -6580,6 +6580,14 @@
       "localDesc": "Importe dados de contas do Devin de um arquivo JSON.",
       "localClient": "Importar do Devin local"
     },
+    "probeNotice": {
+
+      "until": "{{model}} indisponível até {{time}}",
+
+      "unavailable": "{{model}} temporariamente indisponível"
+
+    },
+
     "credits": {
       "title": "Plano",
       "renewMonthly": "Os créditos são renovados todo mês",

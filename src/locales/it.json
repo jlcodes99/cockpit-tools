@@ -6580,6 +6580,14 @@
       "localDesc": "Importa account Devin da sessioni locali con accesso.",
       "localClient": "Importa da Devin locale"
     },
+    "probeNotice": {
+
+      "until": "{{model}} non disponibile fino a {{time}}",
+
+      "unavailable": "{{model}} temporaneamente non disponibile"
+
+    },
+
     "credits": {
       "title": "Piano",
       "renewMonthly": "I crediti si rinnovano ogni mese",

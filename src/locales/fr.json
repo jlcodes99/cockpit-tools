@@ -6580,6 +6580,14 @@
       "localDesc": "Importer des comptes Devin depuis des sessions locales connectées.",
       "localClient": "Importer depuis Devin local"
     },
+    "probeNotice": {
+
+      "until": "{{model}} indisponible jusqu'à {{time}}",
+
+      "unavailable": "{{model}} temporairement indisponible"
+
+    },
+
     "credits": {
       "title": "Forfait",
       "renewMonthly": "Les crédits sont renouvelés chaque mois",

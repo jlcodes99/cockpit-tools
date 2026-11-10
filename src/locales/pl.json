@@ -6580,6 +6580,14 @@
       "localDesc": "Importuj konta Devin z lokalnie zalogowanych sesji.",
       "localClient": "Importuj z lokalnego Devin"
     },
+    "probeNotice": {
+
+      "until": "{{model}} niedostępny do {{time}}",
+
+      "unavailable": "{{model}} tymczasowo niedostępny"
+
+    },
+
     "credits": {
       "title": "Plan​",
       "renewMonthly": "Kredyty odnawiają się co miesiąc",

@@ -6580,6 +6580,14 @@
       "localDesc": "Nhập tài khoản Devin từ các phiên đăng nhập cục bộ.",
       "localClient": "Nhập từ Devin cục bộ"
     },
+    "probeNotice": {
+
+      "until": "{{model}} không khả dụng đến {{time}}",
+
+      "unavailable": "{{model}} tạm thời không khả dụng"
+
+    },
+
     "credits": {
       "title": "Gói",
       "renewMonthly": "Tín dụng được làm mới mỗi tháng",

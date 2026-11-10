@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { ChevronRight, Crosshair, Sparkles } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, ChevronRight, Crosshair, Sparkles, X } from 'lucide-react';
 import { PlatformOverviewTabsHeader, PlatformOverviewTab } from '../components/platform/PlatformOverviewTabsHeader';
 import { WorkbuddyInstancesContent } from './WorkbuddyInstancesPage';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
@@ -19,10 +19,22 @@ import { CodebuddySuiteAccountsSharedView, type CodebuddySuiteAccountsPlatformCo
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 import { WorkbuddyCreditsDialog, WorkbuddyCreditsSummary } from '../components/codebuddy-suite/WorkbuddyCredits';
 import { getWorkbuddyCredits, getWorkbuddyCreditsExpireAt, hasWorkbuddyExpiringCredits } from '../utils/workbuddyCredits';
+import {
+  dismissWorkbuddyProbeRecord,
+  getWorkbuddyProbeRecords,
+  subscribeWorkbuddyProbeStatus,
+} from '../utils/workbuddyProbeStatus';
 import { WorkbuddyModelProbeModal } from '../components/workbuddy/WorkbuddyModelProbeModal';
 
 const WORKBUDDY_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.workbuddy.flow_notice_collapsed';
 const WORKBUDDY_CURRENT_ACCOUNT_ID_KEY = 'agtools.workbuddy.current_account_id';
+
+/** 受限提示里的短时间格式：MM/DD HH:mm */
+function formatProbeTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 const workbuddyPlatformConfig: CodebuddySuiteAccountsPlatformConfig<WorkbuddyAccount> = {
   pageClassName: 'workbuddy-accounts-page',
@@ -83,7 +95,12 @@ export function WorkbuddyAccountsPage() {
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
   const [creditAccountId, setCreditAccountId] = useState<string | null>(null);
   const [probeOpen, setProbeOpen] = useState(false);
+  const [probeAccountId, setProbeAccountId] = useState<string | null>(null);
+  const [probeVersion, setProbeVersion] = useState(0);
   const store = useWorkbuddyAccountStore();
+
+  // 探测结果变化时刷新卡片上的受限标识
+  useEffect(() => subscribeWorkbuddyProbeStatus(() => setProbeVersion((v) => v + 1)), []);
 
   const page = useProviderAccountsPage<WorkbuddyAccount>({
     platformKey: 'WorkBuddy',
@@ -165,7 +182,56 @@ export function WorkbuddyAccountsPage() {
         </button>
       );
     },
-  }), [page.t]);
+    // 每张卡片操作栏里的探测入口：点一下直接带上该账号打开探测弹窗
+    renderCardActionExtra: (account) => (
+      <button
+        type="button"
+        className="card-action-btn"
+        onClick={() => {
+          setProbeAccountId(account.id);
+          setProbeOpen(true);
+        }}
+        title={page.t('workbuddy.modelProbe.title', '探测模型可用性')}
+      >
+        <Crosshair size={14} />
+      </button>
+    ),
+    // 卡片内的模型受限标识（切号前一眼确认）：可点 × 关闭
+    renderCardNotice: (account) => {
+      const records = getWorkbuddyProbeRecords(account.id);
+      if (records.length === 0) return null;
+      return (
+        <div className="wb-probe-notice">
+          {records.slice(0, 2).map((record) => (
+            <div key={record.model} className={`wb-probe-notice-item ${record.status}`}>
+              <AlertTriangle size={12} aria-hidden="true" />
+              <span title={record.message}>
+                {record.resetAt
+                  ? page.t('workbuddy.probeNotice.until', '{{model}} 不可用至 {{time}}', {
+                      model: record.model,
+                      time: formatProbeTime(record.resetAt),
+                    })
+                  : page.t('workbuddy.probeNotice.unavailable', '{{model}} 暂不可用', {
+                      model: record.model,
+                    })}
+              </span>
+              <button
+                type="button"
+                className="wb-probe-notice-close"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  dismissWorkbuddyProbeRecord(record.accountId, record.model);
+                }}
+                title={page.t('common.close', '关闭')}
+              >
+                <X size={12} aria-hidden="true" />
+              </button>
+            </div>
+          ))}
+        </div>
+      );
+    },
+  }), [page.t, probeVersion]);
   const creditAccount = store.accounts.find((account) => account.id === creditAccountId);
 
   return (
@@ -210,8 +276,11 @@ export function WorkbuddyAccountsPage() {
       {probeOpen && (
         <WorkbuddyModelProbeModal
           accounts={store.accounts}
-          currentAccountId={store.currentAccountId}
-          onClose={() => setProbeOpen(false)}
+          currentAccountId={probeAccountId ?? store.currentAccountId}
+          onClose={() => {
+            setProbeOpen(false);
+            setProbeAccountId(null);
+          }}
         />
       )}
     </div>

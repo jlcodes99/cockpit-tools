@@ -6580,6 +6580,14 @@
       "localDesc": "從本機已登入的會話匯入 Devin 帳號。",
       "localClient": "從本機 Devin 匯入"
     },
+    "probeNotice": {
+
+      "until": "{{model}} 無法使用至 {{time}}",
+
+      "unavailable": "{{model}} 暫時無法使用"
+
+    },
+
     "credits": {
       "title": "方案",
       "renewMonthly": "積分每月自動重置",

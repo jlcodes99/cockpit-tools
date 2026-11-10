@@ -6909,6 +6909,14 @@
       "localDesc": "从 JSON 文件导入 Devin 账号数据。",
       "localClient": "从本机 Devin 导入"
     },
+    "probeNotice": {
+
+      "until": "{{model}} 不可用至 {{time}}",
+
+      "unavailable": "{{model}} 暂不可用"
+
+    },
+
     "credits": {
       "title": "计划",
       "renewMonthly": "积分每月自动重置",

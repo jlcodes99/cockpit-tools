@@ -727,3 +727,57 @@
 .workbuddy-credit-expiring-hint svg {
   flex-shrink: 0;
 }
+
+/* 卡片内的模型受限标识（切号前一眼确认，可点 × 关闭） */
+.wb-probe-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wb-probe-notice-item {
+  --notice-color: var(--danger, #ef4444);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--notice-color) 30%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--notice-color) 10%, transparent);
+  color: var(--notice-color);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.wb-probe-notice-item.error {
+  --notice-color: var(--warning, #f59e0b);
+}
+
+.wb-probe-notice-item > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-probe-notice-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.65;
+  cursor: pointer;
+}
+
+.wb-probe-notice-close:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--notice-color, var(--danger, #ef4444)) 16%, transparent);
+}

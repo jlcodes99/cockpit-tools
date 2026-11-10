@@ -179,6 +179,10 @@ export interface CodebuddySuiteAccountsPlatformConfig<
   getCreditsExpireAt?: (account: TAccount) => number | null;
   /** 卡片底部时间区旁的提示（如「包含即将到期的积分」） */
   renderCardFooterHint?: (account: TAccount) => ReactNode;
+  /** 卡片内、配额区上方的提示条（如模型受限警示） */
+  renderCardNotice?: (account: TAccount) => ReactNode;
+  /** 卡片操作按钮组里的额外按钮（如单账号探测） */
+  renderCardActionExtra?: (account: TAccount) => ReactNode;
   usagePrefix: string;
   quotaPrefix: string;
   tableUsageClassName: string;
@@ -750,6 +754,7 @@ export function CodebuddySuiteAccountsSharedView<
               )}
             </div>
           )}
+          {platformConfig.renderCardNotice?.(account)}
           <div className="ghcp-quota-section">
             {renderQuotaQuerySection(account, "card")}
           </div>
@@ -815,6 +820,7 @@ export function CodebuddySuiteAccountsSharedView<
                   )}
                 </button>
               )}
+              {platformConfig.renderCardActionExtra?.(account)}
               <button
                 className="card-action-btn danger"
                 onClick={() => handleDelete(account.id)}

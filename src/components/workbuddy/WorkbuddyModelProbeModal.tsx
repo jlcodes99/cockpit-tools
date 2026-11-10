@@ -31,6 +31,11 @@ import {
   type WorkbuddyModelProbeResult,
 } from '../../services/workbuddyService';
 import { WORKBUDDY_MODEL_GROUPS, type WorkbuddyModelOption } from '../../utils/workbuddyModels';
+import {
+  clearWorkbuddyProbeRecord,
+  parseProbeResetAt,
+  setWorkbuddyProbeRecord,
+} from '../../utils/workbuddyProbeStatus';
 
 interface WorkbuddyModelProbeModalProps {
   accounts: WorkbuddyAccount[];
@@ -142,7 +147,21 @@ export function WorkbuddyModelProbeModal({ accounts, currentAccountId, onClose }
     if (!canRun) return;
     setState({ kind: 'running' });
     try {
-      const result = await probeWorkbuddyModel(accountId, model.trim(), keepConversation);
+      const probeModel = model.trim();
+      const result = await probeWorkbuddyModel(accountId, probeModel, keepConversation);
+      // 结果落到本地：不可用记到账号卡片，可用则清除旧记录。
+      if (result.status === 'rate_limited' || result.status === 'error') {
+        setWorkbuddyProbeRecord({
+          accountId,
+          model: probeModel,
+          status: result.status,
+          message: result.message,
+          resetAt: parseProbeResetAt(result.message),
+          checkedAt: Date.now(),
+        });
+      } else if (result.status === 'available') {
+        clearWorkbuddyProbeRecord(accountId, probeModel);
+      }
       setState({ kind: 'done', result });
     } catch (err) {
       setState({ kind: 'failed', error: err instanceof Error ? err.message : String(err) });

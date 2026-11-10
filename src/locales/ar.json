@@ -6627,6 +6627,14 @@
       "localDesc": "استيراد بيانات حسابات Devin من ملف JSON.",
       "localClient": "استيراد من Devin المحلي"
     },
+    "probeNotice": {
+
+      "until": "{{model}} غير متاح حتى {{time}}",
+
+      "unavailable": "{{model}} غير متاح مؤقتًا"
+
+    },
+
     "credits": {
       "title": "الباقة",
       "renewMonthly": "تتجدد الاعتمادات كل شهر",

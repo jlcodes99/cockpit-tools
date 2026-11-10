@@ -6580,6 +6580,14 @@
       "localDesc": "Импортировать аккаунты Devin из локальных вошедших сессий.",
       "localClient": "Импорт из локального Devin"
     },
+    "probeNotice": {
+
+      "until": "{{model}} недоступен до {{time}}",
+
+      "unavailable": "{{model}} временно недоступен"
+
+    },
+
     "credits": {
       "title": "Тариф",
       "renewMonthly": "Кредиты обновляются каждый месяц",

@@ -6580,6 +6580,14 @@
       "localDesc": "로컬에 로그인된 세션에서 Devin 계정을 가져오기.",
       "localClient": "로컬 Devin에서 가져오기"
     },
+    "probeNotice": {
+
+      "until": "{{model}}은(는) {{time}}까지 사용할 수 없습니다",
+
+      "unavailable": "{{model}}을(를) 일시적으로 사용할 수 없습니다"
+
+    },
+
     "credits": {
       "title": "플랜",
       "renewMonthly": "크레딧은 매월 갱신됩니다",

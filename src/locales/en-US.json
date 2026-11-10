@@ -6909,6 +6909,14 @@
       "localDesc": "Import Devin account data from a JSON file.",
       "localClient": "Import from local Devin"
     },
+    "probeNotice": {
+
+      "until": "{{model}} unavailable until {{time}}",
+
+      "unavailable": "{{model}} temporarily unavailable"
+
+    },
+
     "credits": {
       "title": "Plan",
       "renewMonthly": "Credits renew every month",
