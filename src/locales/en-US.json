@@ -2342,12 +2342,12 @@
     },
     "lastSwitchTime": "Last switch time",
     "neverSwitched": "Never switched",
-    "refreshTime": "Refresh time",
+    "refreshTime": "Data refresh time",
     "creditsExpire": "Next credits expiry",
     "lastSwitchTimeFull": "Last switch: {{time}}",
-    "refreshTimeFull": "Refresh time: {{time}}",
+    "refreshTimeFull": "Data refresh time: {{time}}",
     "creditsExpireFull": "Next credits expiry: {{time}}",
-    "toggleTimeMode": "Toggle last switch / refresh / next credits expiry"
+    "toggleTimeMode": "Toggle last switch / data refresh / next credits expiry"
   },
   "overview": {
     "title": "Overview",

@@ -2037,12 +2037,12 @@
     "neverSwitched": "Never switched",
     "creditsExpire": "Next credits expiry",
 
-    "refreshTime": "Refresh time",
-    "refreshTimeFull": "Refresh time: {{time}}",
+    "refreshTime": "Data refresh time",
+    "refreshTimeFull": "Data refresh time: {{time}}",
     "creditsExpireFull": "Next credits expiry: {{time}}",
 
     "lastSwitchTimeFull": "Last switch: {{time}}",
-    "toggleTimeMode": "Toggle last switch / refresh / credits expiry",
+    "toggleTimeMode": "Toggle last switch / data refresh / next credits expiry",
     "columns": {
       "email": "Email",
       "subscription": "Subscription",

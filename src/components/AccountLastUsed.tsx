@@ -48,7 +48,7 @@ export function AccountLastUsed({
     if (hasRefresh) {
       list.push({
         mode: "refresh",
-        label: t("accounts.refreshTimeFull", "刷新时间：{{time}}", {
+        label: t("accounts.refreshTimeFull", "数据刷新时间：{{time}}", {
           time: formatDate(refreshAt as number),
         }),
         enabled: true,

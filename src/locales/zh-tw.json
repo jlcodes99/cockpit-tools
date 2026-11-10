@@ -2113,12 +2113,12 @@
     "neverSwitched": "尚未切換",
     "creditsExpire": "下次點數到期",
 
-    "refreshTime": "更新時間",
+    "refreshTime": "資料更新時間",
     "creditsExpireFull": "下次點數到期：{{time}}",
 
     "lastSwitchTimeFull": "上次切換時間：{{time}}",
-    "refreshTimeFull": "更新時間：{{time}}",
-    "toggleTimeMode": "切換顯示切換或更新時間"
+    "refreshTimeFull": "資料更新時間：{{time}}",
+    "toggleTimeMode": "切換顯示上次切換時間 / 資料更新時間 / 下次點數到期"
   },
   "overview": {
     "title": "帳號總覽",
