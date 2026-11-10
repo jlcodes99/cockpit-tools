@@ -7,8 +7,25 @@ fn host_result(namespace: &str, name: &str) -> Value {
 
 #[test]
 fn host_results_survive_admission_wire_normalization_restart_and_account_switch() {
-    for namespace in ["codex_app", "codex_tui"] {
-        for name in ["create_thread", "send_message_to_thread"] {
+    for (namespace, names) in [
+        (
+            "codex_app",
+            &["create_thread", "send_message_to_thread"][..],
+        ),
+        (
+            "codex_tui",
+            &["create_thread", "send_message_to_thread"][..],
+        ),
+        (
+            "agent",
+            &[
+                "codex_apps_open_page",
+                "codex_apps_selected_page_part_1_of_1",
+                "codex_apps_selected_page_part_2_of_3",
+            ][..],
+        ),
+    ] {
+        for &name in names {
             for empty_id in [false, true] {
                 for output in [
                     json!("Original host result\nwith exact whitespace.  "),
@@ -69,8 +86,13 @@ fn host_results_survive_admission_wire_normalization_restart_and_account_switch(
 
 #[test]
 fn host_results_do_not_admit_unknown_malformed_or_conflicting_history() {
-    for namespace in ["codex_app", "codex_tui"] {
-        let base = host_result(namespace, "create_thread");
+    for (namespace, name) in [
+        ("codex_app", "create_thread"),
+        ("codex_tui", "create_thread"),
+        ("agent", "codex_apps_open_page"),
+        ("agent", "codex_apps_selected_page_part_1_of_1"),
+    ] {
+        let base = host_result(namespace, name);
         let mut invalid = Vec::new();
         for (field, value) in [
             ("type", json!("custom_tool_call_output")),
@@ -78,7 +100,12 @@ fn host_results_do_not_admit_unknown_malformed_or_conflicting_history() {
             ("namespace", json!(" codex_app ")),
             ("namespace", json!(" codex_tui ")),
             ("name", json!("unknown")),
-            ("name", json!(format!("{namespace}__create_thread"))),
+            ("name", json!(format!("{namespace}__{name}"))),
+            ("name", json!("codex_apps_selected_page_part_0_of_2")),
+            ("name", json!("codex_apps_selected_page_part_2_of_1")),
+            ("name", json!("codex_apps_selected_page_part_01_of_2")),
+            ("name", json!("codex_apps_selected_page_part_+1_of_2")),
+            ("name", json!("codex_apps_selected_page_part_1_of_2_extra")),
             ("call_id", json!("stale-call")),
             ("call_id", json!(" ")),
             ("call_id", json!(null)),
@@ -104,12 +131,12 @@ fn host_results_do_not_admit_unknown_malformed_or_conflicting_history() {
         invalid.push(vec![
             json!({"type":"function_call_output","output":"ordinary anonymous result"}),
         ]);
-        let call = json!({"type":"function_call","namespace":namespace,"name":"create_thread","call_id":"real-call","arguments":"{}"});
+        let call = json!({"type":"function_call","namespace":namespace,"name":name,"call_id":"real-call","arguments":"{}"});
         let mut paired = base;
         paired["call_id"] = json!("real-call");
         invalid.push(vec![call.clone(), paired.clone(), paired.clone()]);
         invalid.push(vec![paired.clone(), call.clone()]);
-        invalid.push(vec![call.clone(), host_result(namespace, "create_thread")]);
+        invalid.push(vec![call.clone(), host_result(namespace, name)]);
         assert!(super::super::rebuild::paired_tools(&[call, paired]));
         for items in invalid {
             let body = json!({"input":items});

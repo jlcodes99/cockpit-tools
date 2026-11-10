@@ -6,6 +6,69 @@ fn host_result(namespace: &str, name: &str) -> Value {
 }
 
 #[tokio::test]
+async fn page_context_results_rebuild_a_cooling_owner_without_losing_history() {
+    for streaming in [false, true] {
+        let cipher = json!({"type":"reasoning","id":"page-reasoning-a","summary":[],"encrypted_content":"original-page-cipher-a"});
+        let fixture = Fixture::new(
+            true,
+            vec![Step::Complete("page-a", Some(cipher.clone()))],
+            vec![Step::Complete("page-b", None)],
+        )
+        .await;
+        let context = [
+            ("codex_apps_open_page", "{\"page_id\":null}"),
+            (
+                "codex_apps_selected_page_part_1_of_2",
+                "Companion Page snapshot part 1 of 2:\n  original first part  ",
+            ),
+            (
+                "codex_apps_selected_page_part_2_of_2",
+                "Companion Page snapshot part 2 of 2:\n  original second part  ",
+            ),
+        ];
+        let mut input = vec![
+            message("user", "original task"),
+            json!({"type":"custom_tool_call","name":"exec","call_id":"page-real-call","input":"read original file"}),
+        ];
+        input.extend(context.map(|(name, output)| {
+            json!({"type":"function_call_output","namespace":"agent","name":name,"output":output})
+        }));
+        input.push(json!({"type":"custom_tool_call_output","call_id":"page-real-call","output":"original file contents"}));
+        let first = body(input.clone(), None, streaming);
+        let response = fixture.post(&first, None).await;
+        assert_eq!(response.status(), 200);
+        assert!(response.text().await.unwrap().contains("page-a"));
+        input.extend(
+            completed("page-a", Some(cipher))["output"]
+                .as_array()
+                .unwrap()
+                .clone(),
+        );
+        input.push(message("user", "continue after the owner starts cooling"));
+        fixture.host.cooling_a.store(true, Ordering::SeqCst);
+        let follow = body(input.clone(), None, streaming);
+        let unchanged = follow.clone();
+        let response = tokio::time::timeout(Duration::from_secs(2), fixture.post(&follow, None))
+            .await
+            .expect("a ready backup must not wait for the original owner's multi-day cooldown");
+        let status = response.status();
+        let output = response.text().await.unwrap();
+        assert_eq!(status, 200, "{output}");
+        assert!(output.contains("page-b"));
+        let sent = fixture.sent();
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[0].account, "a");
+        assert_eq!(sent[1].account, "b");
+        assert_fresh(&sent[0], &sent[1], json!(input));
+        assert_eq!(follow, unchanged);
+        fixture.assert_owner("page-a", "a");
+        assert_eq!(fixture.active().unwrap().0, "b");
+        assert!(fixture.host.failures.lock().unwrap().is_empty());
+        fixture.finish().await;
+    }
+}
+
+#[tokio::test]
 async fn host_results_continue_after_quota_failure_and_restart_without_losing_history() {
     for namespace in ["codex_app", "codex_tui"] {
         for streaming in [false, true] {

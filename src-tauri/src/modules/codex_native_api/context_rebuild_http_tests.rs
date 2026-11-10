@@ -59,6 +59,7 @@ struct TestHost {
     oauth: AtomicBool,
     passthrough: AtomicBool,
     removed_a: AtomicBool,
+    cooling_a: AtomicBool,
     capacity_recovery_checks: Mutex<Option<usize>>,
     local_quota_preparation_denied: Mutex<Vec<String>>,
     local_quota_send_denied: Mutex<Vec<String>>,
@@ -107,6 +108,14 @@ impl Host for TestHost {
                 }
             }
             let account = if let Some(preferred) = request.preferred_account_id.as_deref() {
+                if preferred == "a" && self.cooling_a.load(Ordering::SeqCst) {
+                    return Err(ServiceError::new(
+                        503,
+                        "account_cooling",
+                        "Synthetic pinned owner is cooling",
+                    )
+                    .with_retry_after(Some(Duration::from_secs(234_657))));
+                }
                 if preferred == "a" && self.removed_a.load(Ordering::SeqCst) {
                     return Err(ServiceError::new(
                         503,
@@ -394,6 +403,7 @@ impl Fixture {
             oauth: AtomicBool::new(false),
             passthrough: AtomicBool::new(false),
             removed_a: AtomicBool::new(false),
+            cooling_a: AtomicBool::new(false),
             capacity_recovery_checks: Mutex::new(None),
             local_quota_preparation_denied: Mutex::new(vec![]),
             local_quota_send_denied: Mutex::new(vec![]),
