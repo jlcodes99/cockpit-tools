@@ -2243,54 +2243,6 @@ fn classify_conversation_probe(http_status: u16, text: &str) -> (String, String,
 mod tests {
     use super::*;
 
-    /// 真机探测校验（默认忽略，手动运行）：
-    /// cargo test -p cockpit-tools --lib workbuddy_live_probe -- --ignored --nocapture
-    /// 只发少量最小请求（每端点每模型一次），用于校准探测接口契约。
-    #[tokio::test]
-    #[ignore = "live API test; run explicitly with --ignored"]
-    async fn workbuddy_live_probe() {
-        let ids = [
-            "workbuddy_cc82f761fff784aeff1d8bb5880b02af",
-            "workbuddy_bf490da3590fc824ae884632bef53519",
-        ];
-        for id in ids {
-            let Some(account) = crate::modules::workbuddy_account::load_account(id) else {
-                println!("== account {} 未能加载（存储解密失败或不存在）", id);
-                continue;
-            };
-            println!(
-                "== account {} uid={:?} enterprise={:?} domain={:?} token_len={}",
-                id,
-                account.uid,
-                account.enterprise_id,
-                account.domain,
-                account.access_token.len()
-            );
-            match fetch_cloud_models(&account).await {
-                Ok(models) => {
-                    println!("picker models ({}):", models.len());
-                    for m in &models {
-                        println!(
-                            "  {:<32} {:<24} {:>8} images={}",
-                            m.id,
-                            m.name.as_deref().unwrap_or(""),
-                            m.credits.as_deref().unwrap_or(""),
-                            m.supports_images
-                        );
-                    }
-                }
-                Err(e) => println!("picker models error: {}", e),
-            }
-            match probe_model(&account, "hy3", false).await {
-                Ok(r) => println!(
-                    "probe hy3: status={} http={:?} conv={:?}\n  msg={}\n  raw={}",
-                    r.status, r.http_status, r.conversation_id, r.message, r.raw_snippet
-                ),
-                Err(e) => println!("probe hy3 error: {}", e),
-            }
-        }
-    }
-
     fn personal_account() -> crate::models::workbuddy::WorkbuddyAccount {
         serde_json::from_value(json!({
             "id": "workbuddy_fixture", "email": "待识别账号 4", "uid": "personal-user",
