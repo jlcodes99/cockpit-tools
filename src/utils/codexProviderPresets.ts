@@ -74,6 +74,28 @@ export const OPENCODE_GO_CODEX_MODEL_CATALOG = [
   "gpt-5.6-luna",
   "grok-4.5",
 ] as const;
+export const UBERLLM_API_PROVIDER_ID = "uberllm";
+export const UBERLLM_API_BASE_URL = "https://api.uberllm.dev/v1";
+/** UberLLM models with tool calls, served over its Responses API. */
+export const UBERLLM_CODEX_MODEL_CATALOG = [
+  "deepseek/deepseek-v4.1-flash",
+  "deepseek/deepseek-v4-pro",
+  "z-ai/glm-5.3",
+  "z-ai/glm-5.2",
+  "moonshotai/kimi-k3",
+  "qwen/qwen3-coder-next",
+  "minimax/minimax-m3",
+  "anthropic/claude-sonnet-4.6",
+  "openai/gpt-5.6-luna",
+] as const;
+/** UberLLM catalog models whose published input modalities include images. */
+export const UBERLLM_CODEX_VISION_MODEL_CATALOG = [
+  "deepseek/deepseek-v4.1-flash",
+  "moonshotai/kimi-k3",
+  "minimax/minimax-m3",
+  "anthropic/claude-sonnet-4.6",
+  "openai/gpt-5.6-luna",
+] as const;
 
 const COCKPIT_API_HIDDEN_BASE_URLS = [COCKPIT_API_BASE_URL] as const;
 
@@ -216,6 +238,15 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     modelCatalog: [...OPENCODE_GO_CODEX_MODEL_CATALOG],
     website: "https://opencode.ai/",
     apiKeyUrl: "https://opencode.ai/auth",
+  },
+  {
+    id: UBERLLM_API_PROVIDER_ID,
+    name: "UberLLM",
+    baseUrls: [UBERLLM_API_BASE_URL],
+    modelCatalog: [...UBERLLM_CODEX_MODEL_CATALOG],
+    visionModelCatalog: [...UBERLLM_CODEX_VISION_MODEL_CATALOG],
+    website: "https://uberllm.dev/",
+    apiKeyUrl: "https://uberllm.dev/signup",
   },
   {
     id: "aicodemirror",

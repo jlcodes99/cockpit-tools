@@ -7,6 +7,8 @@ import {
   MINIMAX_EN_API_PROVIDER_ID,
   OPENCODE_GO_API_BASE_URL,
   OPENCODE_GO_API_PROVIDER_ID,
+  UBERLLM_API_BASE_URL,
+  UBERLLM_API_PROVIDER_ID,
   codexApiProviderPresetVisionSupport,
   findCodexApiProviderPresetByBaseUrl,
   findCodexApiProviderPresetById,
@@ -55,6 +57,35 @@ test("OpenCode Go preset exposes DeepSeek models and its chat-completions transp
   });
   assert.equal(profile.wireApi, "chat_completions");
   assert.equal(profile.requiresGateway, true);
+});
+
+test("UberLLM preset uses its native Responses API directly", () => {
+  const preset = findCodexApiProviderPresetByBaseUrl("https://api.uberllm.dev/v1/");
+
+  assert.ok(preset);
+  assert.equal(preset.id, UBERLLM_API_PROVIDER_ID);
+  assert.equal(preset.baseUrls[0], UBERLLM_API_BASE_URL);
+  assert.ok(preset.modelCatalog?.includes("deepseek/deepseek-v4.1-flash"));
+  assert.ok(preset.modelCatalog?.includes("z-ai/glm-5.3"));
+
+  const profile = resolveCodexProviderCapabilityProfile({
+    presetId: UBERLLM_API_PROVIDER_ID,
+    baseUrl: UBERLLM_API_BASE_URL,
+  });
+  assert.equal(profile.wireApi, "responses");
+  assert.equal(profile.supportsDirect, true);
+  assert.equal(profile.requiresGateway, false);
+});
+
+test("UberLLM preset declares image input only for its vision-capable models", () => {
+  const support = codexApiProviderPresetVisionSupport(
+    findCodexApiProviderPresetById(UBERLLM_API_PROVIDER_ID),
+  );
+
+  assert.equal(support["deepseek/deepseek-v4.1-flash"], true);
+  assert.equal(support["anthropic/claude-sonnet-4.6"], true);
+  assert.equal(support["deepseek/deepseek-v4-pro"], undefined);
+  assert.equal(support["z-ai/glm-5.3"], undefined);
 });
 
 test("DeepSeek keeps its native Responses default", () => {
