@@ -666,3 +666,38 @@
   color: var(--text-secondary);
 }
 
+
+.wb-probe-cloud-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.wb-probe-cloud-error {
+  color: var(--warning, #d97706);
+}
+
+.wb-probe-reply {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+}
+
+.wb-probe-reply-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.wb-probe-reply pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  max-height: 180px;
+  overflow: auto;
+}

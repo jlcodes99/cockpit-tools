@@ -150,6 +150,8 @@ export interface WorkbuddyModelProbeResult {
   httpStatus: number | null;
   conversationId: string | null;
   message: string;
+  /** 模型实际回复内容（可用时会有值） */
+  reply: string;
   rawSnippet: string;
   keepConversation: boolean;
 }
@@ -165,4 +167,38 @@ export async function probeWorkbuddyModel(
   keepConversation: boolean,
 ): Promise<WorkbuddyModelProbeResult> {
   return await invoke('probe_workbuddy_model', { accountId, model, keepConversation });
+}
+
+export interface WorkbuddyCloudModel {
+  id: string;
+  name: string | null;
+  /** 计费倍率（如 "x0.15"），对应客户端 credits 字段 */
+  credits: string | null;
+  description: string | null;
+  supportsImages: boolean;
+  isDefault: boolean;
+}
+
+/**
+ * 拉取对话选择器的实时模型列表（对齐客户端 ModelsService.getTeamsModels）。
+ * 企业账号用真实 enterpriseId，个人账号服务端按字面量 `personal` 处理。
+ */
+export async function fetchWorkbuddyCloudModels(accountId: string): Promise<WorkbuddyCloudModel[]> {
+  return await invoke('fetch_workbuddy_cloud_models', { accountId });
+}
+
+export interface WorkbuddyCatalogModel {
+  model: string;
+  displayName: string | null;
+  providerId: string | null;
+  supportsReasoning: boolean;
+  supportsImages: boolean;
+  recommended: boolean;
+}
+
+/**
+ * 拉取云端最新模型目录（官方静态配置 CDN，无需鉴权，tencent 自营组）。
+ */
+export async function fetchWorkbuddyCloudCatalog(): Promise<WorkbuddyCatalogModel[]> {
+  return await invoke('fetch_workbuddy_cloud_catalog');
 }

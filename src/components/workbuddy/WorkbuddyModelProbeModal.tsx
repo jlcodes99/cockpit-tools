@@ -8,7 +8,7 @@
  * - 默认测试后销毁测试会话（可在「保留会话」里改）
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   X,
@@ -23,8 +23,14 @@ import {
 } from 'lucide-react';
 import type { WorkbuddyAccount } from '../../types/workbuddy';
 import { getWorkbuddyAccountDisplayEmail } from '../../types/workbuddy';
-import { probeWorkbuddyModel, type WorkbuddyModelProbeResult } from '../../services/workbuddyService';
-import { WORKBUDDY_SUGGESTED_MODELS } from '../../utils/workbuddyModels';
+import {
+  fetchWorkbuddyCloudModels,
+  getWorkbuddyRecentCreditUsage,
+  probeWorkbuddyModel,
+  type WorkbuddyCloudModel,
+  type WorkbuddyModelProbeResult,
+} from '../../services/workbuddyService';
+import { WORKBUDDY_MODEL_GROUPS, type WorkbuddyModelOption } from '../../utils/workbuddyModels';
 
 interface WorkbuddyModelProbeModalProps {
   accounts: WorkbuddyAccount[];
@@ -65,6 +71,67 @@ export function WorkbuddyModelProbeModal({ accounts, currentAccountId, onClose }
   const [model, setModel] = useState<string>('');
   const [keepConversation, setKeepConversation] = useState<boolean>(false);
   const [state, setState] = useState<ProbeState>({ kind: 'idle' });
+  const [recentModels, setRecentModels] = useState<string[]>([]);
+  const [cloudModels, setCloudModels] = useState<WorkbuddyCloudModel[]>([]);
+  const [cloudStatus, setCloudStatus] = useState<'loading' | 'loaded' | 'empty' | 'error'>('loading');
+
+  // 云端模型目录（企业账号）：优先云端，失败/无企业则回退内置目录。
+  useEffect(() => {
+    let cancelled = false;
+    setCloudModels([]);
+    if (!accountId) return;
+    setCloudStatus('loading');
+    fetchWorkbuddyCloudModels(accountId)
+      .then((rows) => {
+        if (cancelled) return;
+        setCloudModels(rows);
+        setCloudStatus(rows.length > 0 ? 'loaded' : 'empty');
+      })
+      .catch(() => {
+        if (!cancelled) setCloudStatus('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId]);
+
+  // 该账号最近实际调用过的模型（credits 用量接口返回的真实模型 ID），作为候选并入目录。
+  useEffect(() => {
+    let cancelled = false;
+    setRecentModels([]);
+    if (!accountId) return;
+    getWorkbuddyRecentCreditUsage(accountId)
+      .then((rows) => {
+        if (cancelled) return;
+        const ids = Array.from(
+          new Set(rows.map((r) => r.model).filter((m): m is string => typeof m === 'string' && m.length > 0)),
+        );
+        setRecentModels(ids.slice(0, 12));
+      })
+      .catch(() => {
+        /* 拉不到最近用量就只用内置目录，不打扰用户 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId]);
+
+  const datalistOptions = useMemo<WorkbuddyModelOption[]>(() => {
+    // 云端实时列表（客户端对话选择器同源）置顶，带计费倍率
+    const cloud = cloudModels.map((m) => ({
+      id: m.id,
+      label: `${m.name ?? m.id}${m.credits ? ` · ${m.credits}` : ''}`,
+    }));
+    const cloudIds = new Set(cloud.map((m) => m.id));
+    const recent = recentModels
+      .filter((id) => !cloudIds.has(id))
+      .map((id) => ({ id, label: t('workbuddy.modelProbe.recentSuffix', '{{id}}（最近使用）', { id }) }));
+    const recentIds = new Set(recent.map((m) => m.id));
+    const builtin = WORKBUDDY_MODEL_GROUPS.flatMap((g) => g.options).filter(
+      (m) => !cloudIds.has(m.id) && !recentIds.has(m.id),
+    );
+    return [...cloud, ...recent, ...builtin];
+  }, [cloudModels, recentModels, t]);
 
   const canRun = useMemo(
     () => accountId.length > 0 && model.trim().length > 0 && state.kind !== 'running',
@@ -107,7 +174,7 @@ export function WorkbuddyModelProbeModal({ accounts, currentAccountId, onClose }
           <p className="wb-probe-hint">
             {t(
               'workbuddy.modelProbe.hint',
-              '向所选账号的对话接口发送一条极短消息（如 “hi”），据此判断该模型当前是否可用、是否被限流。仅消耗极少 token。',
+              '向所选账号真实发送一条极短消息（"Reply with OK."），读取模型的实际回复内容；创建会话成功但收不到回复或被限流都会如实标出。',
             )}
           </p>
 
@@ -129,6 +196,36 @@ export function WorkbuddyModelProbeModal({ accounts, currentAccountId, onClose }
 
           <label className="wb-probe-field">
             <span className="wb-probe-label">{t('workbuddy.modelProbe.model', '模型')}</span>
+            <select
+              className="wb-probe-select"
+              value=""
+              onChange={(e) => {
+                if (e.target.value) setModel(e.target.value);
+              }}
+              disabled={state.kind === 'running'}
+            >
+              <option value="">{t('workbuddy.modelProbe.pickFromCatalog', '— 从模型目录选择 —')}</option>
+              {cloudModels.length > 0 && (
+                <optgroup label={t('workbuddy.modelProbe.pickerGroup', '对话选择器（云端实时）')}>
+                  {cloudModels.map((m) => (
+                    <option key={`cloud-${m.id}`} value={m.id}>
+                      {m.name ?? m.id}
+                      {m.credits ? ` · ${m.credits}` : ''}
+                      {m.isDefault ? t('workbuddy.modelProbe.defaultSuffix', '（默认）') : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {recentModels.length > 0 && (
+                <optgroup label={t('workbuddy.modelProbe.recentGroup', '最近使用')}>
+                  {recentModels.map((id) => (
+                    <option key={`recent-${id}`} value={id}>
+                      {id}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
             <input
               className="wb-probe-input"
               list="wb-model-suggestions"
@@ -138,12 +235,35 @@ export function WorkbuddyModelProbeModal({ accounts, currentAccountId, onClose }
               disabled={state.kind === 'running'}
             />
             <datalist id="wb-model-suggestions">
-              {WORKBUDDY_SUGGESTED_MODELS.map((m) => (
+              {datalistOptions.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
                 </option>
               ))}
             </datalist>
+            <span className="wb-probe-cloud-note">
+              {t(
+                'workbuddy.modelProbe.pickerNote',
+                '「对话选择器」为客户端实际可见的模型与计费倍率；更多模型可在输入框手输 ID（搜索提示含完整云端目录）。',
+              )}
+            </span>
+            {cloudStatus === 'loaded' && (
+              <span className="wb-probe-cloud-note">
+                {t('workbuddy.modelProbe.cloudLoaded', '已加载对话选择器实时模型（{{count}} 个）。', {
+                  count: cloudModels.length,
+                })}
+              </span>
+            )}
+            {cloudStatus === 'empty' && (
+              <span className="wb-probe-cloud-note">
+                {t('workbuddy.modelProbe.cloudEmpty', '云端模型列表为空，可在输入框直接手输模型 ID。')}
+              </span>
+            )}
+            {cloudStatus === 'error' && (
+              <span className="wb-probe-cloud-note wb-probe-cloud-error">
+                {t('workbuddy.modelProbe.cloudError', '云端模型列表获取失败，可在输入框直接手输模型 ID。')}
+              </span>
+            )}
           </label>
 
           <label className="wb-probe-checkbox">
@@ -197,10 +317,22 @@ export function WorkbuddyModelProbeModal({ accounts, currentAccountId, onClose }
                       : t('workbuddy.modelProbe.discarded', '已销毁测试会话')}
                   </span>
                 </div>
+                {state.result.reply && (
+                  <div className="wb-probe-reply">
+                    <span className="wb-probe-reply-label">
+                      {t('workbuddy.modelProbe.replyLabel', '模型回复')}
+                    </span>
+                    <pre>{state.result.reply}</pre>
+                  </div>
+                )}
                 {state.result.rawSnippet && (
                   <details className="wb-probe-raw">
                     <summary>{t('workbuddy.modelProbe.raw', '原始响应片段')}</summary>
-                    <pre>{state.result.rawSnippet}</pre>
+                    <pre>
+                      {state.result.rawSnippet.trim()
+                        ? state.result.rawSnippet
+                        : state.result.message}
+                    </pre>
                   </details>
                 )}
               </div>

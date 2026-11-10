@@ -534,3 +534,16 @@ pub async fn probe_workbuddy_model(
     let account = load_billing_account(account_id).await?;
     workbuddy_oauth::probe_model(&account, &model, keep_conversation.unwrap_or(false)).await
 }
+
+#[tauri::command]
+pub async fn fetch_workbuddy_cloud_models(
+    account_id: String,
+) -> Result<Vec<workbuddy_oauth::WorkbuddyCloudModel>, String> {
+    let account = load_billing_account(account_id).await?;
+    workbuddy_oauth::fetch_cloud_models(&account).await
+}
+
+#[tauri::command]
+pub async fn fetch_workbuddy_cloud_catalog() -> Result<Vec<workbuddy_oauth::WorkbuddyCatalogModel>, String> {
+    workbuddy_oauth::fetch_cloud_catalog().await
+}

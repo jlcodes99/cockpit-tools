@@ -5,11 +5,10 @@ use crate::models::workbuddy::{WorkbuddyOAuthCompletePayload, WorkbuddyOAuthStar
 use crate::modules::logger;
 
 const WORKBUDDY_API_ENDPOINT: &str = "https://copilot.tencent.com";
+/// 对话（chat）接口所在的应用面端点（客户端 web 应用基址）。
+const WORKBUDDY_WEB_ENDPOINT: &str = "https://www.workbuddy.cn";
 const WORKBUDDY_API_PREFIX: &str = "/v2/plugin";
 const WORKBUDDY_PLATFORM: &str = "workbuddy";
-// WorkBuddy 与 CodeBuddy 共用同一网关校验，缺少 User-Agent 会返回 403 / code=10085。
-const WORKBUDDY_HTTP_USER_AGENT: &str =
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const OAUTH_TIMEOUT_SECONDS: u64 = 600;
 const OAUTH_POLL_INTERVAL_MS: u64 = 1500;
 /// 企业版套餐代码（本地标识，用于前端识别企业用量资源）
@@ -44,14 +43,13 @@ fn generate_login_id() -> String {
     )
 }
 
-const UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
-                  (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36";
+const UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) \
+                  WorkBuddy/5.9.3 Chrome/138.0.7204.251 Electron/37.10.3 Safari/537.36";
 
 fn build_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .user_agent(UA)
         .timeout(std::time::Duration::from_secs(30))
-        .user_agent(WORKBUDDY_HTTP_USER_AGENT)
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败:{}", e))
 }
@@ -1400,6 +1398,8 @@ pub struct WorkbuddyModelProbeResult {
     pub http_status: Option<u16>,
     pub conversation_id: Option<String>,
     pub message: String,
+    /// 模型实际回复内容（可用时会有值）
+    pub reply: String,
     pub raw_snippet: String,
     pub keep_conversation: bool,
 }
@@ -1410,35 +1410,114 @@ pub async fn probe_model(
     keep_conversation: bool,
 ) -> Result<WorkbuddyModelProbeResult, String> {
     let client = build_client()?;
-    let url = format!("{}/console/as/conversations", WORKBUDDY_API_ENDPOINT);
 
+    // 对齐客户端 CloudAgentProvider.create 的真实契约：
+    // POST /console/as/conversations/（尾斜杠），body = {prompt, model, plugins:[...]}，
+    // 不是 {messages:[...]}。用极短 prompt 让模型真实回一句，便于读取实际回复。
     let body = serde_json::json!({
+        "prompt": "Reply with OK.",
         "model": model,
-        "historyMode": "session-load",
-        "messages": [{ "role": "user", "content": "hi" }]
+        "plugins": [{ "name": "weixinpay", "marketplace": "codebuddy-builtin" }]
     });
 
-    let mut req = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", account.access_token))
-        .header("X-No-User-Id", "true")
-        .header("X-No-Enterprise-Id", "true")
-        .header("X-No-Department-Info", "true")
-        .json(&body);
-    if let Some(d) = &account.domain {
-        req = req.header("X-Domain", d);
+    // 对齐客户端已验证的鉴权头：Bearer + X-User-Id（+ 企业头）。
+    // 注意不能带 X-No-User-Id 等匿名头——它们在客户端只与 X-No-Authorization
+    // 搭配用于免鉴权接口，混用会导致网关 403 access_denied。
+    let headers = billing_headers(
+        &account.access_token,
+        account.uid.as_deref(),
+        account.enterprise_id.as_deref(),
+        account.domain.as_deref(),
+        "zh",
+    )?;
+
+    // 对话接口在客户端走 www.workbuddy.cn（web 应用面）；copilot.tencent.com 是
+    // 计费/plugin 面。先打主端点，403/404 时回退备用端点再试一次。
+    let endpoints = [WORKBUDDY_WEB_ENDPOINT, WORKBUDDY_API_ENDPOINT];
+    let mut used_endpoint = WORKBUDDY_WEB_ENDPOINT;
+    let mut http_status = 0u16;
+    let mut text = String::new();
+    for base in endpoints {
+        let url = format!("{}/console/as/conversations/", base);
+        let resp = client
+            .post(&url)
+            .headers(headers.clone())
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("探测请求失败: {}", e))?;
+        http_status = resp.status().as_u16();
+        text = resp.text().await.unwrap_or_default();
+        used_endpoint = base;
+        let retriable = http_status == 403 || http_status == 404;
+        if !(retriable && base != endpoints[endpoints.len() - 1]) {
+            break;
+        }
     }
 
-    let resp = req.send().await.map_err(|e| format!("探测请求失败: {}", e))?;
-    let http_status = resp.status().as_u16();
-    let text = resp.text().await.unwrap_or_default();
+    let (mut status, mut message, conversation_id) = classify_conversation_probe(http_status, &text);
 
-    let (status, message, conversation_id) = classify_conversation_probe(http_status, &text);
+    // 创建会话只代表"请求被接受"。真实是否可用要看模型能否真的回出内容：
+    // 1) GET /console/as/conversations/{id}/session 取沙箱 apiUrl + 会话 token
+    // 2) 连 {apiUrl}/acp SSE，读 agent_message_chunk（助手回复文本）
+    // 流中出现额度/限流错误则判 rate_limited。
+    let mut reply = String::new();
+    if status == "available" {
+        if let Some(cid) = &conversation_id {
+            match fetch_conversation_session(&client, cid, account).await {
+                Ok((api_url, session_token, session_id)) => {
+                    let outcome = read_acp_reply(
+                        &client,
+                        &api_url,
+                        &session_token,
+                        &session_id,
+                        account.enterprise_id.as_deref(),
+                        45,
+                    )
+                    .await;
+                    if let Some(err) = outcome.error {
+                        let lowered = err.to_lowercase();
+                        let limited = err.contains("上限")
+                            || err.contains("限流")
+                            || err.contains("额度")
+                            || lowered.contains("quota")
+                            || lowered.contains("rate limit")
+                            || lowered.contains("exceed")
+                            || lowered.contains("too many");
+                        status = if limited { "rate_limited" } else { "error" }.to_string();
+                        message = if limited {
+                            format!("模型被限流：{}", err)
+                        } else {
+                            format!("模型调用失败：{}", err)
+                        };
+                    } else if outcome.text.trim().is_empty() {
+                        status = "unknown".to_string();
+                        message = "已创建会话，但未在超时内收到模型回复内容".to_string();
+                    } else {
+                        reply = outcome.text.trim().to_string();
+                        message = format!("模型可用，已回复：{}", truncate_chars(&reply, 80));
+                    }
+                    if !outcome.raw.is_empty() {
+                        // 保留创建会话响应原文，并附上流里的有效事件，便于排查。
+                        text = format!(
+                            "{}\n\n[ACP 事件]\n{}",
+                            truncate_chars(&text, 600),
+                            truncate_chars(&outcome.raw, 1200)
+                        );
+                    }
+                }
+                Err(e) => {
+                    status = "unknown".to_string();
+                    message = format!("已创建会话，但获取会话凭据失败：{}", e);
+                }
+            }
+        }
+    }
 
-    // 若不保留会话，尝试删除（尽力而为，忽略失败）
+    // 若不保留会话，尝试删除（尽力而为，忽略失败；用打通的那个端点）
     if !keep_conversation {
         if let Some(cid) = &conversation_id {
-            let del_url = format!("{}/console/as/conversations/{}", WORKBUDDY_API_ENDPOINT, cid);
+            let del_url = format!("{}/console/as/conversations/{}", used_endpoint, cid);
             let mut del = client
                 .delete(&del_url)
                 .header("Authorization", format!("Bearer {}", account.access_token));
@@ -1449,16 +1528,543 @@ pub async fn probe_model(
         }
     }
 
-    let raw_snippet: String = text.chars().take(800).collect();
+    let raw_snippet: String = text.chars().take(1200).collect();
 
     Ok(WorkbuddyModelProbeResult {
         status,
         http_status: Some(http_status),
         conversation_id,
         message,
+        reply,
         raw_snippet,
         keep_conversation,
     })
+}
+
+fn truncate_chars(value: &str, max: usize) -> String {
+    let mut out: String = value.chars().take(max).collect();
+    if value.chars().count() > max {
+        out.push('…');
+    }
+    out
+}
+
+/// 取会话的沙箱地址与会话 token（对齐客户端 getSandboxInfo）。
+async fn fetch_conversation_session(
+    client: &reqwest::Client,
+    conversation_id: &str,
+    account: &crate::models::workbuddy::WorkbuddyAccount,
+) -> Result<(String, String, String), String> {
+    let headers = billing_headers(
+        &account.access_token,
+        account.uid.as_deref(),
+        account.enterprise_id.as_deref(),
+        account.domain.as_deref(),
+        "zh",
+    )?;
+
+    let endpoints = [WORKBUDDY_WEB_ENDPOINT, WORKBUDDY_API_ENDPOINT];
+    let mut last_err = String::new();
+    for base in endpoints {
+        let url = format!(
+            "{}/console/as/conversations/{}/session",
+            base,
+            urlencoding::encode(conversation_id)
+        );
+        let resp = match client.get(&url).headers(headers.clone()).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                last_err = format!("请求失败: {}", e);
+                continue;
+            }
+        };
+        let http_status = resp.status().as_u16();
+        let body = resp.text().await.unwrap_or_default();
+        if !(200..300).contains(&http_status) {
+            last_err = format!("HTTP {}: {}", http_status, truncate_chars(&body, 200));
+            continue;
+        }
+        let parsed: serde_json::Value =
+            serde_json::from_str(&body).map_err(|e| format!("解析失败: {}", e))?;
+        let data = parsed.get("data").filter(|d| d.is_object()).unwrap_or(&parsed);
+        // ACP 端点优先取 link / endpoint（客户端 acp 连接用它们），
+        // 退而取 e2b 沙箱地址（文件系统用途，未必可连 ACP）。
+        let pick = |key: &str| {
+            data.get(key)
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .filter(|s| !s.is_empty())
+        };
+        let api_url = pick("link")
+            .or_else(|| pick("endpoint"))
+            .or_else(|| {
+                data.get("e2bDataEndpoint")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
+            .or_else(|| {
+                data.get("e2bEndpoint")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.replace("/v2", "/console"))
+            })
+            .map(|s| s.replace("http://", "https://"))
+            .unwrap_or_default();
+        let token = data
+            .get("token")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        if api_url.is_empty() || token.is_empty() {
+            last_err = format!(
+                "会话凭据不完整: api_url={:?} token_len={} raw={}",
+                api_url,
+                token.len(),
+                truncate_chars(&body, 300)
+            );
+            continue;
+        }
+        let session_id = data
+            .get("sessionId")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or(conversation_id)
+            .to_string();
+        return Ok((api_url, token, session_id));
+    }
+    Err(last_err)
+}
+
+struct AcpOutcome {
+    text: String,
+    error: Option<String>,
+    raw: String,
+}
+
+/// 读取 ACP SSE 流：累积 agent_message_chunk 的文本，捕获错误事件与限流文案。
+async fn read_acp_reply(
+    client: &reqwest::Client,
+    api_url: &str,
+    session_token: &str,
+    session_id: &str,
+    enterprise_id: Option<&str>,
+    timeout_secs: u64,
+) -> AcpOutcome {
+    use futures_util::StreamExt;
+
+    let mut outcome = AcpOutcome {
+        text: String::new(),
+        error: None,
+        raw: String::new(),
+    };
+
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Ok(value) = format!("Bearer {}", session_token).parse() {
+        headers.insert("Authorization", value);
+    }
+    headers.insert(
+        "Accept",
+        reqwest::header::HeaderValue::from_static("text/event-stream"),
+    );
+    if let Some(eid) = enterprise_id {
+        if let Ok(value) = eid.parse() {
+            headers.insert("X-Enterprise-Id", value);
+        }
+    }
+
+    let base = api_url.trim_end_matches('/').to_string();
+    let mut attempts: Vec<(String, bool)> = Vec::new();
+    if base.ends_with("/acp") {
+        attempts.push((base.clone(), false));
+    }
+    attempts.push((format!("{}/acp", base), false));
+    attempts.push((format!("{}/acp/bootstrap", base), true));
+
+    let deadline = std::time::Duration::from_secs(timeout_secs);
+
+    let read_future = async {
+        let mut resp = None;
+        let mut last_err = String::new();
+        for (url, is_post) in attempts {
+            let request = if is_post {
+                client
+                    .post(&url)
+                    .headers(headers.clone())
+                    .header("Content-Type", "application/json")
+                    .body("{}")
+            } else {
+                client.get(&url).headers(headers.clone())
+            };
+            match request.send().await {
+                Ok(r) => {
+                    let status = r.status().as_u16();
+                    if (200..300).contains(&status) {
+                        resp = Some(r);
+                        break;
+                    }
+                    if status == 404 || status == 405 {
+                        last_err = format!("{} -> HTTP {}", url, status);
+                        continue;
+                    }
+                    let body = r.text().await.unwrap_or_default();
+                    outcome.error = Some(format!(
+                        "ACP HTTP {}: {}",
+                        status,
+                        truncate_chars(&body, 300)
+                    ));
+                    return;
+                }
+                Err(e) => {
+                    last_err = format!("{} 连接失败: {}", url, e);
+                }
+            }
+        }
+        let Some(resp) = resp else {
+            outcome.error = Some(format!("无法连接 ACP 端点（{}）", last_err));
+            return;
+        };
+
+        // ACP 连接 ID：后续 JSON-RPC 请求要带上。
+        let connection_id = resp
+            .headers()
+            .get("Acp-Connection-Id")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let acp_url = resp.url().to_string();
+        // 按 ACP 协议握手并发送 prompt（与客户端 AcpClient 相同的方法序列）。
+        let send = |method: &'static str, id: u64, params: serde_json::Value| {
+            let client = client.clone();
+            let url = acp_url.clone();
+            let mut h = headers.clone();
+            h.insert("Content-Type", "application/json".parse().unwrap());
+            h.insert("Accept", "application/json, text/event-stream".parse().unwrap());
+            if let Some(cid) = &connection_id {
+                if let Ok(v) = cid.parse() {
+                    h.insert("Acp-Connection-Id", v);
+                }
+            }
+            async move {
+                let body = serde_json::json!({
+                    "jsonrpc": "2.0", "id": id, "method": method, "params": params
+                });
+                match client.post(&url).headers(h).json(&body).send().await {
+                    Ok(r) => {
+                        let status = r.status().as_u16();
+                        if !(200..300).contains(&status) {
+                            let t = r.text().await.unwrap_or_default();
+                            return Err(format!("{} HTTP {}: {}", method, status, truncate_chars(&t, 200)));
+                        }
+                        // 吞掉响应体（可能很长），只看状态
+                        let _ = r.text().await.unwrap_or_default();
+                        Ok(())
+                    }
+                    Err(e) => Err(format!("{} 请求失败: {}", method, e)),
+                }
+            }
+        };
+
+        if let Err(e) = send(
+            "initialize",
+            1,
+            serde_json::json!({ "protocolVersion": 1, "clientCapabilities": {} }),
+        )
+        .await
+        {
+        }
+        if let Err(e) = send(
+            "session/load",
+            2,
+            serde_json::json!({ "sessionId": session_id, "cwd": "/", "mcpServers": [] }),
+        )
+        .await
+        {
+        }
+        if let Err(e) = send(
+            "session/prompt",
+            3,
+            serde_json::json!({
+                "sessionId": session_id,
+                "prompt": [{ "type": "text", "text": "Reply with OK." }]
+            }),
+        )
+        .await
+        {
+            outcome.error = Some(format!("发送 prompt 失败: {}", e));
+            return;
+        }
+
+        let mut stream = resp.bytes_stream();
+        let mut buffer = String::new();
+        while let Some(chunk) = stream.next().await {
+            let Ok(bytes) = chunk else { break };
+            buffer.push_str(&String::from_utf8_lossy(&bytes));
+            while let Some(pos) = buffer.find('\n') {
+                let line: String = buffer.drain(..=pos).collect();
+                let line = line.trim_end();
+                let Some(payload) = line.strip_prefix("data:") else {
+                    continue;
+                };
+                let payload = payload.trim();
+                if payload.is_empty() || payload == "[DONE]" {
+                    continue;
+                }
+                // 只保留有效 data 事件（心跳是 `:` 注释，不进 raw，避免片段显示一片空白）。
+                if outcome.raw.len() < 3000 {
+                    outcome.raw.push_str(&truncate_chars(payload, 600));
+                    outcome.raw.push('\n');
+                }
+                let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) else {
+                    continue;
+                };
+                if let Some(err) = value.get("error") {
+                    let msg = err
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(payload)
+                        .to_string();
+                    outcome.error = Some(msg);
+                    return;
+                }
+                let update = value
+                    .get("params")
+                    .and_then(|p| p.get("update"))
+                    .or_else(|| value.get("update"));
+                let Some(update) = update else { continue };
+                let kind = update
+                    .get("sessionUpdate")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                if kind == "agent_message_chunk"
+                    || kind == "agentMessageChunk"
+                    || kind == "agent_message"
+                {
+                    if let Some(content) = update.get("content") {
+                        let ctype = content
+                            .get("type")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("text");
+                        if ctype == "text" {
+                            if let Some(t) = content.get("text").and_then(|v| v.as_str()) {
+                                outcome.text.push_str(t);
+                            }
+                        }
+                    }
+                } else if kind == "error" {
+                    let msg = update
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("agent error")
+                        .to_string();
+                    outcome.error = Some(msg);
+                    return;
+                }
+                // 拿到一段回复即可提前结束（省时省 token）
+                if !outcome.text.trim().is_empty() {
+                    return;
+                }
+            }
+        }
+    };
+
+    let _ = tokio::time::timeout(deadline, read_future).await;
+    outcome
+}
+
+/// 对话选择器模型条目（来自客户端 ModelsService.getTeamsModels 同源接口）。
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbuddyCloudModel {
+    pub id: String,
+    pub name: Option<String>,
+    /// 计费倍率（如 "x0.15"），对应客户端 credits 字段
+    pub credits: Option<String>,
+    pub description: Option<String>,
+    pub supports_images: bool,
+    pub is_default: bool,
+}
+
+/// 拉取对话选择器的实时模型列表。
+///
+/// 对齐客户端 ModelsService.getTeamsModels：
+/// GET /console/enterprises/{enterpriseId|personal}/models，
+/// 企业账号用真实 enterpriseId，个人账号用字面量 `personal`。
+/// 响应 body（或 body.data）含 models: [{id, name, credits, descriptionZh, ...}]。
+pub async fn fetch_cloud_models(
+    account: &crate::models::workbuddy::WorkbuddyAccount,
+) -> Result<Vec<WorkbuddyCloudModel>, String> {
+    let scope = account
+        .enterprise_id
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or("personal")
+        .to_string();
+    let client = build_client()?;
+    let headers = billing_headers(
+        &account.access_token,
+        account.uid.as_deref(),
+        account.enterprise_id.as_deref(),
+        account.domain.as_deref(),
+        "zh",
+    )?;
+
+    let endpoints = [WORKBUDDY_WEB_ENDPOINT, WORKBUDDY_API_ENDPOINT];
+    let mut last_err = String::new();
+    for base in endpoints {
+        let url = format!("{}/console/enterprises/{}/models", base, scope);
+        let resp = match client.get(&url).headers(headers.clone()).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                last_err = format!("请求失败: {}", e);
+                continue;
+            }
+        };
+        let http_status = resp.status().as_u16();
+        let text = resp.text().await.unwrap_or_default();
+        if !(200..300).contains(&http_status) {
+            let snippet: String = text.chars().take(200).collect();
+            last_err = format!("HTTP {}: {}", http_status, snippet);
+            continue;
+        }
+
+        let parsed: serde_json::Value = match serde_json::from_str(&text) {
+            Ok(v) => v,
+            Err(e) => {
+                last_err = format!("解析失败: {}", e);
+                continue;
+            }
+        };
+        // 客户端: t.data ?? t，即 body.data 优先，其次 body 本身
+        let payload = parsed.get("data").filter(|d| d.is_object()).unwrap_or(&parsed);
+        let models = payload
+            .get("models")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        let mut out: Vec<WorkbuddyCloudModel> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for entry in models {
+            let id = entry
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            if id.is_empty() || !seen.insert(id.clone()) {
+                continue;
+            }
+            out.push(WorkbuddyCloudModel {
+                id,
+                name: entry
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                credits: entry
+                    .get("credits")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                description: entry
+                    .get("descriptionZh")
+                    .or_else(|| entry.get("description"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                supports_images: entry
+                    .get("supportsImages")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
+                is_default: entry
+                    .get("isDefault")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
+            });
+        }
+        return Ok(out);
+    }
+    Err(last_err)
+}
+
+/// 云端模型目录条目（来自官方静态配置 CDN，无需鉴权）。
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbuddyCatalogModel {
+    pub model: String,
+    pub display_name: Option<String>,
+    pub provider_id: Option<String>,
+    pub supports_reasoning: bool,
+    pub supports_images: bool,
+    pub recommended: bool,
+}
+
+/// WorkBuddy 官方云端模型目录（客户端 custom-model 设置面板使用的同一份配置）。
+const WORKBUDDY_CUSTOM_MODEL_SETTINGS_URL: &str =
+    "https://static.workbuddy.cn/connectors-config-v2/custom-model/customModelSettings.json";
+
+/// 拉取云端最新模型目录。
+///
+/// 数据源是官方静态配置（HTTP 缓存中发现的 `customModelSettings.json`），
+/// `modelOptions` 含全部套餐的模型；这里只保留 tencent 自营组（providerId 以
+/// tencent- 开头）并按 model 去重（保留 order 最小的条目）。
+pub async fn fetch_cloud_catalog() -> Result<Vec<WorkbuddyCatalogModel>, String> {
+    let client = build_client()?;
+    let resp = client
+        .get(WORKBUDDY_CUSTOM_MODEL_SETTINGS_URL)
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| format!("获取云端模型目录失败: {}", e))?;
+    let http_status = resp.status().as_u16();
+    let text = resp.text().await.unwrap_or_default();
+    if !(200..300).contains(&http_status) {
+        return Err(format!("云端模型目录 HTTP {}", http_status));
+    }
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("解析云端模型目录失败: {}", e))?;
+    let entries = parsed
+        .get("modelOptions")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut models: Vec<WorkbuddyCatalogModel> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for entry in entries {
+        let provider_id = entry
+            .get("providerId")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        if !provider_id.starts_with("tencent") {
+            continue;
+        }
+        let model = entry
+            .get("model")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        if model.is_empty() || !seen.insert(model.clone()) {
+            continue;
+        }
+        models.push(WorkbuddyCatalogModel {
+            model,
+            display_name: entry
+                .get("displayName")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            provider_id: Some(provider_id),
+            supports_reasoning: entry
+                .get("supportsReasoning")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            supports_images: entry
+                .get("supportsImages")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            recommended: entry
+                .get("recommended")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+        });
+    }
+    Ok(models)
 }
 
 fn classify_conversation_probe(http_status: u16, text: &str) -> (String, String, Option<String>) {
@@ -1466,6 +2072,17 @@ fn classify_conversation_probe(http_status: u16, text: &str) -> (String, String,
         return (
             "rate_limited".to_string(),
             "模型当前被限流（HTTP 429）".to_string(),
+            None,
+        );
+    }
+
+    if http_status == 401 || http_status == 403 {
+        return (
+            "error".to_string(),
+            format!(
+                "鉴权被拒（HTTP {}）：token 或鉴权头未被接受，请重新登录该账号后重试",
+                http_status
+            ),
             None,
         );
     }
@@ -1510,6 +2127,54 @@ fn classify_conversation_probe(http_status: u16, text: &str) -> (String, String,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 真机探测校验（默认忽略，手动运行）：
+    /// cargo test -p cockpit-tools --lib workbuddy_live_probe -- --ignored --nocapture
+    /// 只发少量最小请求（每端点每模型一次），用于校准探测接口契约。
+    #[tokio::test]
+    #[ignore = "live API test; run explicitly with --ignored"]
+    async fn workbuddy_live_probe() {
+        let ids = [
+            "workbuddy_cc82f761fff784aeff1d8bb5880b02af",
+            "workbuddy_bf490da3590fc824ae884632bef53519",
+        ];
+        for id in ids {
+            let Some(account) = crate::modules::workbuddy_account::load_account(id) else {
+                println!("== account {} 未能加载（存储解密失败或不存在）", id);
+                continue;
+            };
+            println!(
+                "== account {} uid={:?} enterprise={:?} domain={:?} token_len={}",
+                id,
+                account.uid,
+                account.enterprise_id,
+                account.domain,
+                account.access_token.len()
+            );
+            match fetch_cloud_models(&account).await {
+                Ok(models) => {
+                    println!("picker models ({}):", models.len());
+                    for m in &models {
+                        println!(
+                            "  {:<32} {:<24} {:>8} images={}",
+                            m.id,
+                            m.name.as_deref().unwrap_or(""),
+                            m.credits.as_deref().unwrap_or(""),
+                            m.supports_images
+                        );
+                    }
+                }
+                Err(e) => println!("picker models error: {}", e),
+            }
+            match probe_model(&account, "hy3", false).await {
+                Ok(r) => println!(
+                    "probe hy3: status={} http={:?} conv={:?}\n  msg={}\n  raw={}",
+                    r.status, r.http_status, r.conversation_id, r.message, r.raw_snippet
+                ),
+                Err(e) => println!("probe hy3 error: {}", e),
+            }
+        }
+    }
 
     fn personal_account() -> crate::models::workbuddy::WorkbuddyAccount {
         serde_json::from_value(json!({
