@@ -1,0 +1,11 @@
+
+running 7 tests
+test modules::codex_native_api::codex_wire::tests::agent_browser_host_malformed_ids_remain_untouched_for_identity_validation ... ok
+test modules::codex_native_api::codex_wire::tests::agent_browser_host_results_never_consume_pending_tool_ids_on_http_or_websocket_wire ... ok
+test modules::codex_native_api::context_rebuild_http_tests::agent_browser_tests::agent_browser_checkpoint_with_pending_custom_call_rebuilds_result_only_delta_on_b ... ok
+test modules::codex_native_api::context_rebuild_http_tests::agent_browser_tests::agent_browser_host_history_keeps_a_rebuild_plan_and_bypasses_a_cooling_owner ... ok
+test modules::codex_native_api::context_rebuild_http_tests::agent_browser_tests::agent_browser_host_history_switches_a_to_b_after_http_and_sse_quota_exhaustion ... ok
+test modules::codex_native_api::responses_host_results::agent_browser_tests::agent_browser_host_envelopes_and_page_part_boundaries_are_exact ... ok
+test modules::codex_native_api::responses_host_results::agent_browser_tests::agent_browser_host_results_keep_real_tool_pairing_and_payload_validation ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 4652 filtered out; finished in 0.38s

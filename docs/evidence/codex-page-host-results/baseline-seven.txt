@@ -1,0 +1,59 @@
+
+running 7 tests
+test modules::codex_native_api::codex_wire::tests::agent_browser_host_malformed_ids_remain_untouched_for_identity_validation ... FAILED
+test modules::codex_native_api::codex_wire::tests::agent_browser_host_results_never_consume_pending_tool_ids_on_http_or_websocket_wire ... FAILED
+test modules::codex_native_api::context_rebuild_http_tests::agent_browser_tests::agent_browser_checkpoint_with_pending_custom_call_rebuilds_result_only_delta_on_b ... FAILED
+test modules::codex_native_api::context_rebuild_http_tests::agent_browser_tests::agent_browser_host_history_keeps_a_rebuild_plan_and_bypasses_a_cooling_owner ... FAILED
+test modules::codex_native_api::context_rebuild_http_tests::agent_browser_tests::agent_browser_host_history_switches_a_to_b_after_http_and_sse_quota_exhaustion ... FAILED
+test modules::codex_native_api::responses_host_results::agent_browser_tests::agent_browser_host_envelopes_and_page_part_boundaries_are_exact ... FAILED
+test modules::codex_native_api::responses_host_results::agent_browser_tests::agent_browser_host_results_keep_real_tool_pairing_and_payload_validation ... ok
+
+failures:
+
+---- modules::codex_native_api::codex_wire::tests::agent_browser_host_malformed_ids_remain_untouched_for_identity_validation stdout ----
+
+thread 'modules::codex_native_api::codex_wire::tests::agent_browser_host_malformed_ids_remain_untouched_for_identity_validation' (test process) panicked at src-tauri\src\modules\codex_native_api\codex_wire_tests.rs:46:13:
+assertion `left == right` failed: The wire layer must not turn a malformed host ID into an unrelated real ID
+  left: Array [Object {"arguments": String("{}"), "call_id": String("real-call"), "name": String("read_file"), "type": String("function_call")}, Object {"call_id": String("real-call"), "name": String("codex_apps_open_page"), "namespace": String("agent"), "output": String("Synthetic host observation"), "type": String("function_call_output")}, Object {"call_id": String("real-call"), "output": String("Original ordinary result"), "type": String("function_call_output")}]
+ right: Array [Object {"arguments": String("{}"), "call_id": String("real-call"), "name": String("read_file"), "type": String("function_call")}, Object {"call_id": Null, "name": String("codex_apps_open_page"), "namespace": String("agent"), "output": String("Synthetic host observation"), "type": String("function_call_output")}, Object {"call_id": String("real-call"), "output": String("Original ordinary result"), "type": String("function_call_output")}]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- modules::codex_native_api::codex_wire::tests::agent_browser_host_results_never_consume_pending_tool_ids_on_http_or_websocket_wire stdout ----
+
+thread 'modules::codex_native_api::codex_wire::tests::agent_browser_host_results_never_consume_pending_tool_ids_on_http_or_websocket_wire' (test process) panicked at src-tauri\src\modules\codex_native_api\codex_wire_tests.rs:30:13:
+assertion `left == right` failed: websocket=false, empty_id=false
+  left: Array [Object {"arguments": String("{}"), "call_id": String("real-function"), "name": String("read_file"), "type": String("function_call")}, Object {"call_id": String("real-function"), "name": String("codex_apps_open_page"), "namespace": String("agent"), "output": String("Synthetic page\n  preserve whitespace  "), "type": String("function_call_output")}, Object {"call_id": String("real-custom"), "input": String("fixture"), "name": String("custom_read"), "type": String("custom_tool_call")}, Object {"call_id": String("real-custom"), "name": String("codex_apps_selected_page_part_1_of_1"), "namespace": String("agent"), "output": String("Synthetic selection"), "type": String("function_call_output")}, Object {"call_id": String("real-function"), "output": String("Original function result"), "type": String("function_call_output")}, Object {"call_id": String("real-custom"), "output": String("Original custom result"), "type": String("custom_tool_call_output")}]
+ right: Array [Object {"arguments": String("{}"), "call_id": String("real-function"), "name": String("read_file"), "type": String("function_call")}, Object {"name": String("codex_apps_open_page"), "namespace": String("agent"), "output": String("Synthetic page\n  preserve whitespace  "), "type": String("function_call_output")}, Object {"call_id": String("real-custom"), "input": String("fixture"), "name": String("custom_read"), "type": String("custom_tool_call")}, Object {"name": String("codex_apps_selected_page_part_1_of_1"), "namespace": String("agent"), "output": String("Synthetic selection"), "type": String("function_call_output")}, Object {"call_id": String("real-function"), "output": String("Original function result"), "type": String("function_call_output")}, Object {"call_id": String("real-custom"), "output": String("Original custom result"), "type": String("custom_tool_call_output")}]
+
+---- modules::codex_native_api::context_rebuild_http_tests::agent_browser_tests::agent_browser_checkpoint_with_pending_custom_call_rebuilds_result_only_delta_on_b stdout ----
+
+thread 'modules::codex_native_api::context_rebuild_http_tests::agent_browser_tests::agent_browser_checkpoint_with_pending_custom_call_rebuilds_result_only_delta_on_b' (test process) panicked at src-tauri\src\modules\codex_native_api\context_rebuild_agent_browser_tests.rs:199:31:
+A completed output with a pending custom call must retain the full checkpoint: QueryReturnedNoRows
+
+---- modules::codex_native_api::context_rebuild_http_tests::agent_browser_tests::agent_browser_host_history_keeps_a_rebuild_plan_and_bypasses_a_cooling_owner stdout ----
+
+thread 'modules::codex_native_api::context_rebuild_http_tests::agent_browser_tests::agent_browser_host_history_keeps_a_rebuild_plan_and_bypasses_a_cooling_owner' (test process) panicked at src-tauri\src\modules\codex_native_api\context_rebuild_agent_browser_tests.rs:143:10:
+Complete browser host history must have a safe rebuild plan
+
+---- modules::codex_native_api::context_rebuild_http_tests::agent_browser_tests::agent_browser_host_history_switches_a_to_b_after_http_and_sse_quota_exhaustion stdout ----
+
+thread 'modules::codex_native_api::context_rebuild_http_tests::agent_browser_tests::agent_browser_host_history_switches_a_to_b_after_http_and_sse_quota_exhaustion' (test process) panicked at src-tauri\src\modules\codex_native_api\context_rebuild_agent_browser_tests.rs:67:9:
+assertion `left == right` failed: sse_failure=false
+  left: 429
+ right: 200
+
+---- modules::codex_native_api::responses_host_results::agent_browser_tests::agent_browser_host_envelopes_and_page_part_boundaries_are_exact stdout ----
+
+thread 'modules::codex_native_api::responses_host_results::agent_browser_tests::agent_browser_host_envelopes_and_page_part_boundaries_are_exact' (test process) panicked at src-tauri\src\modules\codex_native_api\responses_host_results.rs:44:13:
+codex_apps_open_page
+
+
+failures:
+    modules::codex_native_api::codex_wire::tests::agent_browser_host_malformed_ids_remain_untouched_for_identity_validation
+    modules::codex_native_api::codex_wire::tests::agent_browser_host_results_never_consume_pending_tool_ids_on_http_or_websocket_wire
+    modules::codex_native_api::context_rebuild_http_tests::agent_browser_tests::agent_browser_checkpoint_with_pending_custom_call_rebuilds_result_only_delta_on_b
+    modules::codex_native_api::context_rebuild_http_tests::agent_browser_tests::agent_browser_host_history_keeps_a_rebuild_plan_and_bypasses_a_cooling_owner
+    modules::codex_native_api::context_rebuild_http_tests::agent_browser_tests::agent_browser_host_history_switches_a_to_b_after_http_and_sse_quota_exhaustion
+    modules::codex_native_api::responses_host_results::agent_browser_tests::agent_browser_host_envelopes_and_page_part_boundaries_are_exact
+
+test result: FAILED. 1 passed; 6 failed; 0 ignored; 0 measured; 4652 filtered out; finished in 0.24s

@@ -1132,6 +1132,9 @@ mod opaque_tests;
 #[path = "context_rebuild_host_results_tests.rs"]
 mod host_results_tests;
 
+#[path = "context_rebuild_agent_browser_tests.rs"]
+mod agent_browser_tests;
+
 #[path = "context_rebuild_codex_app_failover_tests.rs"]
 mod codex_app_failover_tests;
 
