@@ -202,6 +202,8 @@
 /* 自定义时间下拉：不用原生 <select>，弹出层跟随应用主题（原生弹出层在暗色下是白的）。 */
 .account-last-used {
   position: relative;
+  /* .card-date 默认 0.7 透明；下拉菜单会被整体压透明、背景透出卡片文字，这里单独还原 */
+  opacity: 1;
 }
 
 .account-last-used .alu-trigger {
@@ -213,7 +215,7 @@
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
-  color: inherit;
+  color: var(--text-muted);
   font-size: inherit;
   font-family: inherit;
   line-height: 1.4;
@@ -233,6 +235,7 @@
 .account-last-used .alu-trigger:hover,
 .account-last-used .alu-trigger.open {
   border-color: var(--border-color);
+  color: var(--text-primary);
 }
 
 .account-last-used .alu-trigger:focus-visible {
@@ -242,26 +245,29 @@
 
 .account-last-used .alu-menu {
   position: absolute;
-  left: 16px;
-  bottom: calc(100% + 4px);
+  left: 0;
+  bottom: calc(100% + 6px);
   z-index: 40;
   display: flex;
-  min-width: 210px;
+  min-width: 100%;
   flex-direction: column;
-  padding: 4px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  gap: 2px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  /* 比卡片表面高一档，确保菜单与卡片内容区分；color-mix 不支持时回退实色 */
   background: var(--bg-secondary);
-  box-shadow: var(--shadow-md, 0 12px 24px rgba(0, 0, 0, 0.35));
+  background: color-mix(in srgb, var(--bg-secondary) 92%, var(--text-primary) 8%);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.24);
 }
 
 .account-last-used .alu-menu-item {
   width: 100%;
-  padding: 7px 10px;
+  padding: 8px 10px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   font-size: 12px;
   text-align: left;
   white-space: nowrap;
@@ -270,11 +276,13 @@
 
 .account-last-used .alu-menu-item:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .account-last-used .alu-menu-item.active {
   color: var(--accent-color, #3b82f6);
   font-weight: 600;
+  background: color-mix(in srgb, var(--accent-color, #3b82f6) 14%, transparent);
 }
 
 /* Minimalist Action Bar - No Background */
