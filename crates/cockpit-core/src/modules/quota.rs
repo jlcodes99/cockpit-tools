@@ -1023,7 +1023,7 @@ fn build_quota_data_from_response(
                 .map(|f| (f * 100.0) as i32)
                 .unwrap_or(0);
             let reset_time = quota_info.reset_time.unwrap_or_default();
-            if name.contains("gemini") || name.contains("claude") || name.contains("argon") || name.contains("gpt") {
+            if name.contains("gemini") || name.contains("claude") || name.contains("argon") || name.contains("carbon") || name.contains("gpt") {
                 quota_data.add_model(name, display_name, percentage, reset_time);
             }
         }
