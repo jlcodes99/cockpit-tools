@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "7ca7f0db1f915452681c9bbc366f199e2310761f",
+  "testedSourceFingerprint": "E36F83881BC72542A5CA0C29D2691E03298B82755E0492325BF8C10327460317",
+  "testArtifactSha256": "BB2CD32156616B16A86C484F84F333AB6D6B06DF07FF8CCC9A68E440DC955CF5",
+  "transformation": "Rust source text CRLF converted to LF to match upstream. No other source character, manifest, dependency, or build input changed. Test logs retain original bytes.",
+  "verification": "Each published source equals the tested source after only CRLF-to-LF normalization. Tests were not rerun for this newline-only publication change; prior test fingerprint identifies the actual Windows source bytes.",
+  "files": [
+    {
+      "path": "src-tauri/src/modules/codex_native_api/context_rebuild_http_tests.rs",
+      "testedBytes": 46722,
+      "testedSha256": "bb7d51c9b673e494fafa22e3197aa85b099b24f93007f6f41ccfa28c879b7658",
+      "publishedBytes": 45566,
+      "publishedSha256": "b5267ca6eb5bd668ec962766169b5c3386b42a4bd73e8c06b268dd98945a14be",
+      "onlyCrLfToLf": true
+    },
+    {
+      "path": "src-tauri/src/modules/codex_native_api/context_rebuild_notify_results_tests.rs",
+      "testedBytes": 15954,
+      "testedSha256": "862a94dea2eba4934ed47597624c685f8d45b36ea1cf2d726a6da6f4448f1163",
+      "publishedBytes": 15512,
+      "publishedSha256": "1c1b1486349bba35a5cb7cd7eaa2b890bee8fd43e9868609ccd5f5789f35bf69",
+      "onlyCrLfToLf": true
+    },
+    {
+      "path": "src-tauri/src/modules/codex_native_api/cooldown_retry_tests.rs",
+      "testedBytes": 20262,
+      "testedSha256": "1fac9077958ced142cbc21cefc114b1d617e5302e884ea244009e58e954ceb6b",
+      "publishedBytes": 20262,
+      "publishedSha256": "1fac9077958ced142cbc21cefc114b1d617e5302e884ea244009e58e954ceb6b",
+      "onlyCrLfToLf": false
+    },
+    {
+      "path": "src-tauri/src/modules/codex_native_api/identity.rs",
+      "testedBytes": 65433,
+      "testedSha256": "d108495fe4938393887f4d681363a7a424960d1d420f76d03a1ae85e8da2ce5e",
+      "publishedBytes": 63726,
+      "publishedSha256": "927edffec8479e8ef7389ee307617de41bb63b53a9f984d5b54df1be255c5462",
+      "onlyCrLfToLf": true
+    },
+    {
+      "path": "src-tauri/src/modules/codex_native_api/identity_automatic_history.rs",
+      "testedBytes": 7762,
+      "testedSha256": "3df8c42aa81a91c2621c7a5d8f24bec4e61dfa9df08f77d7a0fd5b81c75cdfd0",
+      "publishedBytes": 7552,
+      "publishedSha256": "4216ad006ab6ad2fb69490bc24ca5da3d4cd91aaa8acc17685bb1235aa1b297b",
+      "onlyCrLfToLf": true
+    },
+    {
+      "path": "src-tauri/src/modules/codex_native_api/identity_custom_results_tests.rs",
+      "testedBytes": 3369,
+      "testedSha256": "4f237e81daed1488b6a2ae8e7da86a36eb0d8a2eb29570b6e3cf416e9009eb33",
+      "publishedBytes": 3287,
+      "publishedSha256": "5ad18b49da54c6117a63e4392fdc5e5e8f8bdc1ff57c10420190fd8da0fde328",
+      "onlyCrLfToLf": true
+    },
+    {
+      "path": "src-tauri/src/modules/codex_native_api/identity_rebuild.rs",
+      "testedBytes": 55663,
+      "testedSha256": "91ba93b4b5e209c263bb5c04344bde85163e32846b80f3e30610f2732636891c",
+      "publishedBytes": 54340,
+      "publishedSha256": "09682c44ad08402d3b769500b398a6ea9394ae223436c3548f0071f845e2af9e",
+      "onlyCrLfToLf": true
+    },
+    {
+      "path": "src-tauri/src/modules/codex_native_api/identity_rebuild_tests.rs",
+      "testedBytes": 45191,
+      "testedSha256": "eb6683a215b4ce7b02e08322b27df57b14cb81e215fda5e5455b89d3b950bc47",
+      "publishedBytes": 44018,
+      "publishedSha256": "3247ca3cc037c3994cc592df2224784d6972d4fecbf8e7cf80e3ff0390601e35",
+      "onlyCrLfToLf": true
+    },
+    {
+      "path": "src-tauri/src/modules/codex_native_api/mod.rs",
+      "testedBytes": 2965,
+      "testedSha256": "77650edf175463c645f74841e5ebb49d1d16452d8d7e7beef60c6d8d848bf66a",
+      "publishedBytes": 2833,
+      "publishedSha256": "8a9583a8565914583caffb5f3fa31f1bde304ce4c0626245a74ed4fd6eb614e9",
+      "onlyCrLfToLf": true
+    },
+    {
+      "path": "src-tauri/src/modules/codex_native_api/responses_custom_results.rs",
+      "testedBytes": 4720,
+      "testedSha256": "97ad9824cc2ee9b57da611cf0553c6825cc50eeab8bedbea474f98703b84218d",
+      "publishedBytes": 4599,
+      "publishedSha256": "33982bbe32d9cf7bf2a25d69ac5cd7f97f87663fb40d2e2c00844b8e3bbc4ff0",
+      "onlyCrLfToLf": true
+    },
+    {
+      "path": "src-tauri/src/modules/codex_native_api/responses_custom_results_tests.rs",
+      "testedBytes": 9189,
+      "testedSha256": "47fc255722196b2defb465a032f0cc5b0653c712410e115ac28003acd19ce039",
+      "publishedBytes": 8947,
+      "publishedSha256": "823aa01f98bd95267c92a394e9a981bd45aeac99ee516da7003d976052b8e3d6",
+      "onlyCrLfToLf": true
+    }
+  ]
+}
