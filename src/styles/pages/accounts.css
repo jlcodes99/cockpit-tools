@@ -176,6 +176,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px;
   padding-top: 4px;
 }
@@ -192,6 +193,7 @@
   display: inline-flex;
   min-width: 0;
   max-width: 100%;
+  overflow: hidden;
   align-items: center;
   gap: 4px;
 }
@@ -202,7 +204,12 @@
 .account-last-used .alu-select {
   display: inline-flex;
   align-items: center;
-  max-width: 220px;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: min(220px, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   border: 1px solid transparent;
   background: transparent;
   color: inherit;
@@ -236,6 +243,7 @@
   display: flex;
   align-items: center;
   gap: 1px;
+  margin-left: auto;
   background: transparent; /* 移除背景 */
   padding: 0;
   border: none;
@@ -830,18 +838,6 @@
 
 .accounts-page .card-quota-grid .codex-quota-mini:last-child:nth-child(odd) {
   grid-column: 1 / -1;
-  grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto;
-  column-gap: 6px;
-}
-
-.accounts-page .card-quota-grid .codex-quota-mini:last-child:nth-child(odd) .codex-quota-mini-pct {
-  grid-column: 3;
-}
-
-.accounts-page .card-quota-grid .codex-quota-mini:last-child:nth-child(odd) .codex-quota-mini-reset {
-  grid-column: 2;
-  grid-row: 1;
-  text-align: right;
 }
 /* Custom Sort Modal Styles (added for Antigravity custom sorting) */
 .codex-custom-sort-modal {

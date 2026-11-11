@@ -169,3 +169,55 @@ test('AntigravityQuotaSection renders cachedNeedsReauth warning when isNeedsReau
   assert.doesNotMatch(htmlNormal, /quota-reauth-warning/);
 });
 
+test('Antigravity card time elements prevent overflow occlusion across grid, compact, and quota views', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { loadHookModule } = await import('../../tests/helpers/reactHookHarness');
+  const accountsCss = readFileSync(new URL('../styles/pages/accounts.css', import.meta.url), 'utf8');
+  const compactCss = readFileSync(new URL('../styles/CompactView.module.css', import.meta.url), 'utf8');
+
+  // 1. .account-last-used and .alu-select must constrain width and clip overflow
+  assert.match(accountsCss, /\.account-last-used\s*\{[^}]*overflow:\s*hidden/s);
+  assert.match(accountsCss, /\.account-last-used\s+\.alu-select\s*\{[^}]*min-width:\s*0/s);
+  assert.match(accountsCss, /\.account-last-used\s+\.alu-select\s*\{[^}]*text-overflow:\s*ellipsis/s);
+
+  // 2. .card-footer must allow wrapping and .card-actions must align right so time selector never overlaps action buttons
+  assert.match(accountsCss, /\.card-footer\s*\{[^}]*flex-wrap:\s*wrap/s);
+  assert.match(accountsCss, /\.card-actions\s*\{[^}]*margin-left:\s*auto/s);
+
+  // 3. CompactView .card must wrap and place .account-last-used on its own full-width row
+  assert.match(compactCss, /\.card\s*\{[^}]*flex-wrap:\s*wrap/s);
+  assert.match(compactCss, /\.card\s+:global\(\.account-last-used\)\s*\{[^}]*flex:\s*1\s+0\s+100%/s);
+
+  // 4. Odd last quota item reset time must not be forced onto row 1 between label and percentage
+  assert.doesNotMatch(
+    accountsCss,
+    /\.codex-quota-mini:last-child:nth-child\(odd\)\s+\.codex-quota-mini-reset\s*\{[^}]*grid-row:\s*1/s,
+  );
+
+  // 5. AccountLastUsed stops click propagation so clicking time selector in CompactView does not toggle card selection
+  const h = loadHookModule(new URL('../components/AccountLastUsed.tsx', import.meta.url), {
+    'react-i18next': { useTranslation: () => ({ t: (_key: string, fallback?: string) => fallback || _key }) },
+    '../stores/useUiConfigStore': {
+      useUiConfigStore: (selector: (s: any) => any) =>
+        selector({ timeDisplayMode: 'switch', cardTimeModes: new Map(), setCardTimeMode() {} }),
+    },
+  });
+  let stopped = 0;
+  const rendered = h.render(() =>
+    h.exports.AccountLastUsed({
+      accountId: 'acc-1',
+      lastSwitchedAt: 1700000000,
+      createdAt: 1700000000,
+      formatDate: () => '2026/11/11 09:46',
+    }),
+  );
+  rendered.props.onClick({
+    stopPropagation() {
+      stopped++;
+    },
+  });
+  assert.equal(stopped, 1);
+  h.unmount();
+
+});
+

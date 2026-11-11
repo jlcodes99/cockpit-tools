@@ -109,7 +109,8 @@
 .card {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   padding: 8px 10px;
   background: var(--bg-card);
   border: 1px solid var(--border-light);
@@ -215,6 +216,11 @@
 .tierFree {
   background: var(--bg-tertiary);
   color: var(--text-muted);
+}
+
+.card :global(.account-last-used) {
+  order: 1;
+  flex: 1 0 100%;
 }
 
 .quotas {
