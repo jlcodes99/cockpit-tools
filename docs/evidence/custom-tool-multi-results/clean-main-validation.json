@@ -1,0 +1,1200 @@
+{
+  "schemaVersion": 1,
+  "description": "Independent final PR candidate validation on clean upstream main, separate from historical deployed-tree evidence.",
+  "base": {
+    "repository": "jlcodes99/cockpit-tools",
+    "branch": "main",
+    "commit": "7ca7f0db1f915452681c9bbc366f199e2310761f",
+    "earlierPageHostPrIncluded": false
+  },
+  "finalCandidate": {
+    "sourceFingerprint": "E36F83881BC72542A5CA0C29D2691E03298B82755E0492325BF8C10327460317",
+    "testArtifactSha256": "BB2CD32156616B16A86C484F84F333AB6D6B06DF07FF8CCC9A68E440DC955CF5",
+    "runnerSha256": "BB2CD32156616B16A86C484F84F333AB6D6B06DF07FF8CCC9A68E440DC955CF5",
+    "actualArtifactHashVerified": true,
+    "buildCommand": "cargo test --locked -p cockpit-tools --lib --no-run --message-format=json-render-diagnostics --offline",
+    "executions": 232,
+    "uniqueTests": 231,
+    "duplicateExecutions": 1,
+    "repeatedTests": [
+      "modules::codex_native_api::identity::rebuild::tests::custom_results_tests::custom_results_rebuild_preserves_source_checkpoint_after_restart"
+    ],
+    "failed": 0,
+    "ignored": 0,
+    "suiteCounts": [
+      8,
+      14,
+      129,
+      75,
+      6
+    ],
+    "registeredLibraryHarnessTests": 4664,
+    "fullLibrarySuiteExecuted": false,
+    "note": "Only these five targeted filters were run. The registered test count is not the executed-test count. The candidate uses move-based Cow handling to avoid the extra full-history clones present in the deployed-tree implementation; the live installation was not replaced with this PR candidate."
+  },
+  "firstCandidate": {
+    "sourceFingerprint": "8116417136E1EACF49775BAB49D6F37D0506E67DEC9133238AB673BD32CEFF9B",
+    "testArtifactSha256": "256E64B66381FA2CF4B87B02F28B7B73C7FDB34C99B799192CB888A6B7527B04",
+    "suites": [
+      {
+        "filter": "custom_results_",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_native_api::codex_wire::",
+        "passed": 14,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_native_api::identity::",
+        "passed": 129,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_native_api::context_rebuild_http_tests::",
+        "passed": 75,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_native_api::retry::",
+        "passed": 5,
+        "failed": 1,
+        "ignored": 0,
+        "exitCode": 101
+      }
+    ],
+    "retrySuite": {
+      "passed": 5,
+      "failed": 1,
+      "exitCode": 101,
+      "failedTest": "modules::codex_native_api::retry::cooldown_tests::http_transport_failover_excludes_only_this_request_but_real_status_marks_account",
+      "failure": "Windows error 32 while removing the temporary database directory; the HTTP 200, failure-accounting and exclusion assertions precede cleanup.",
+      "correction": "Drop the Handle owning the SQLite connection after shutdown and before remove_dir_all. This changes test cleanup, not production routing.",
+      "finalResult": "The corrected retry suite and all four other targeted suites passed on the rebuilt final artifact."
+    },
+    "note": "This initial candidate is a different source fingerprint and artifact. Its failure is retained as history, not attributed to the final candidate."
+  },
+  "historicalEvidence": {
+    "file": "validation-summary.json",
+    "note": "The 243 executions / 238 unique results there belong to the earlier locally deployed tree, not this clean-main PR candidate. Totals are not combined."
+  },
+  "privacy": {
+    "byteIdenticalLogs": true,
+    "redactionsRequired": false,
+    "scanCategories": [
+      "privatePath",
+      "uuid",
+      "email",
+      "credential",
+      "knownPrivateIdentifier"
+    ],
+    "note": "No private absolute paths, real conversation IDs, known account identifiers, credentials or business content detected in these logs. Synthetic fixture messages, relative source paths and test harness process numbers are retained."
+  },
+  "logs": [
+    {
+      "stage": "final-clean-main",
+      "sourceLog": "runs/20261112-004128-8507b616/custom_results_.log",
+      "publicLog": "test-logs/clean-main-custom-results.log",
+      "sourceSha256": "af663c90acc69f632399697decf7ab9ee67f68daa682592e029187a164f49711",
+      "publicSha256": "af663c90acc69f632399697decf7ab9ee67f68daa682592e029187a164f49711",
+      "byteIdentical": true,
+      "redactions": [],
+      "bytes": 1297,
+      "filter": "custom_results_",
+      "exitCode": 0,
+      "counts": {
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0,
+        "executed": 8,
+        "filteredOut": 4656,
+        "registeredInHarness": 4664
+      },
+      "sourceFingerprint": "E36F83881BC72542A5CA0C29D2691E03298B82755E0492325BF8C10327460317",
+      "artifactSha256": "BB2CD32156616B16A86C484F84F333AB6D6B06DF07FF8CCC9A68E440DC955CF5",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::custom_results_tests::custom_results_rebuild_preserves_source_checkpoint_after_restart",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::responses_custom_results::tests::custom_results_copy_keeps_content_order_whitespace_images_and_duplicates",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::responses_custom_results::tests::custom_results_does_not_relax_function_results_or_change_strict_pairs",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::responses_custom_results::tests::custom_results_multiple_groups_and_empty_strings_keep_every_part",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::responses_custom_results::tests::custom_results_refuses_orphans_conflicts_wrong_kind_and_noncontiguous_groups",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::responses_custom_results::tests::custom_results_three_groups_require_tail_pending_call_result_before_replay",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::responses_custom_results::tests::custom_results_three_observed_envelope_groups_keep_distinct_notifications",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::responses_custom_results::tests::custom_results_unknown_signed_encrypted_and_malformed_envelopes_stay_rejected",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "stage": "final-clean-main",
+      "sourceLog": "runs/20261112-004128-8507b616/modules__codex_native_api__codex_wire__.log",
+      "publicLog": "test-logs/clean-main-wire.log",
+      "sourceSha256": "2106391981186129aa9c2eb51b980f783648dc7b6fb681c5944a51c752d1adb3",
+      "publicSha256": "2106391981186129aa9c2eb51b980f783648dc7b6fb681c5944a51c752d1adb3",
+      "byteIdentical": true,
+      "redactions": [],
+      "bytes": 1990,
+      "filter": "modules::codex_native_api::codex_wire::",
+      "exitCode": 0,
+      "counts": {
+        "passed": 14,
+        "failed": 0,
+        "ignored": 0,
+        "executed": 14,
+        "filteredOut": 4650,
+        "registeredInHarness": 4664
+      },
+      "sourceFingerprint": "E36F83881BC72542A5CA0C29D2691E03298B82755E0492325BF8C10327460317",
+      "artifactSha256": "BB2CD32156616B16A86C484F84F333AB6D6B06DF07FF8CCC9A68E440DC955CF5",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::codex_wire::final_headers::tests::api_key_and_siwc_routing_headers_are_outside_backend_policy",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::codex_wire::final_headers::tests::backend_routing_hint_preserves_explicit_selected_account_override",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::codex_wire::final_headers::tests::backend_routing_hint_rejects_control_characters_and_clears_missing_model",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::codex_wire::final_headers::tests::backend_routing_hint_uses_final_model_and_normalized_service_tier",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::codex_wire::final_headers::tests::native_instruction_text_is_preserved_without_whitespace_replacement",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::codex_wire::runtime_parity_tests::parity22_runtime_http_final_wire_matches_go_executor",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::codex_wire::schema::parity_tests::constant_union_simplification_requires_eight_unique_pure_semantic_constants",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::codex_wire::schema::parity_tests::numeric_bound_exact_int64_decimal_and_exponent_limits_match_cpa",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::codex_wire::schema::parity_tests::numeric_bounds_keep_original_tokens_and_remove_only_incompatible_integer_constraints",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::codex_wire::schema::parity_tests::schema_cleanup_uses_only_the_upstream_schema_keyword_walk",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::codex_wire::schema::parity_tests::unsupported_regex_escapes_follow_cpa_escape_parity_and_preserve_ordinary_patterns",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::codex_wire::tests::invalid_body_is_rejected_without_rewriting_headers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::codex_wire::tests::matches_shared_go_golden_requests_and_headers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::codex_wire::tests::normalization_is_idempotent",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "stage": "final-clean-main",
+      "sourceLog": "runs/20261112-004128-8507b616/modules__codex_native_api__identity__.log",
+      "publicLog": "test-logs/clean-main-identity.log",
+      "sourceSha256": "9f3f221e5d725a7bb0be39cef7536bd7e231f08bb68e487218beb44080f7cc8d",
+      "publicSha256": "9f3f221e5d725a7bb0be39cef7536bd7e231f08bb68e487218beb44080f7cc8d",
+      "byteIdentical": true,
+      "redactions": [],
+      "bytes": 18542,
+      "filter": "modules::codex_native_api::identity::",
+      "exitCode": 0,
+      "counts": {
+        "passed": 129,
+        "failed": 0,
+        "ignored": 0,
+        "executed": 129,
+        "filteredOut": 4535,
+        "registeredInHarness": 4664
+      },
+      "sourceFingerprint": "E36F83881BC72542A5CA0C29D2691E03298B82755E0492325BF8C10327460317",
+      "artifactSha256": "BB2CD32156616B16A86C484F84F333AB6D6B06DF07FF8CCC9A68E440DC955CF5",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::identity::agent_communication_tests::agent_messages_match_official_direct_source_marker_and_keep_payload_opaque",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::agent_communication_tests::client_history_or_parent_identity_cannot_self_authorize_unseen_message_cipher",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::agent_communication_tests::explicit_plaintext_task_does_not_pin_an_account_or_allow_cipher_replay",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::agent_communication_tests::generic_or_malformed_tool_arguments_do_not_create_communication_evidence",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::agent_communication_tests::observed_parent_message_survives_restart_and_pins_child_to_its_account",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::automatic_history_rechecks_caller_provenance_before_binding",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::cached_history_completes_incremental_input_containing_new_unregistered_agent_cipher",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::cancellation_while_sqlite_is_busy_cannot_late_commit_unknown_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::checkpoint_markers::checkpoint_marker_replay_can_detach_a_foreign_owner_parent_only_with_the_attested_prefix",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::checkpoint_markers::checkpoint_marker_replay_cancellation_does_not_publish_the_reinterpreted_message",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::checkpoint_markers::checkpoint_marker_replay_does_not_ignore_nonempty_missing_or_reverse_markers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::checkpoint_markers::checkpoint_marker_replay_does_not_relax_other_call_envelopes_or_nested_ids",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::checkpoint_markers::checkpoint_marker_replay_preserves_all_four_request_shapes_after_restart",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::checkpoint_markers::checkpoint_marker_replay_requires_the_same_caller_thread_and_call",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::complete_legacy_shell_and_handled_argument_errors_are_replayable_without_changing_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::host_results::host_results_do_not_admit_unknown_malformed_or_conflicting_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::host_results::host_results_survive_admission_wire_normalization_restart_and_account_switch",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::incomplete_tool_or_resource_history_is_not_silently_truncated",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::invalid_completed_tool_output_cannot_publish_imported_input_or_generation",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::legacy_full_history_preserves_all_cipher_kinds_and_child_scope_across_engines",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::provider_projection_never_admits_ciphertext_omitted_from_upstream",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::remote_compaction_trigger_keeps_unknown_history_and_legacy_compact_can_disable_checkpoints",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::unknown_incremental_state_requests_full_input_then_resumes_without_manual_recovery",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::automatic_history_tests::unregistered_sticky_routing_is_removed_from_every_projection_without_touching_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::capacity_tests::automatic_history_deduplicates_references_without_committing_unaccepted_ownership",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::capacity_tests::durable_capacity_keeps_new_requests_automatic_history_and_engine_handoff_usable",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::io::tests::failed_replacement_preserves_original_and_cleans_temporary",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::io::tests::streaming_hash_matches_file_and_private_permissions",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::tests::handoff_lifetime_generation_count_does_not_block_new_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::tests::handoff_streams_snapshot_and_journal_beyond_former_file_limit",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::tests::native_handoff_consecutive_interrupted_rotations_keep_one_predecessor",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::tests::native_handoff_does_not_reapply_old_snapshot_affinity",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::tests::native_handoff_imports_go_passthrough_and_preserves_caller_owner_isolation",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::tests::native_handoff_imports_production_go_serialization_fixture",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::tests::native_handoff_imports_shared_go_regression_fixture",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::tests::native_handoff_journal_is_transactional_idempotent_and_restart_safe",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::tests::native_handoff_rejects_corruption_scope_gaps_and_owner_conflicts",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::tests::native_handoff_roundtrip_and_snapshot_rotation_survive_old_journal",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::transaction_tests::forward_fields_are_ignored_but_known_ownership_and_checksum_are_not",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::transaction_tests::incomplete_chunk_export_retires_the_entire_transaction_and_invalid_order_fails_closed",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::transaction_tests::large_legacy_completion_transaction_remains_invisible_until_final_commit",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::transaction_tests::owner_conflict_in_a_later_chunk_rolls_back_all_earlier_chunks",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::continuity::transaction_tests::shared_go_transaction_fixture_is_invisible_until_commit_and_reimports_idempotently",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::identity_handoff::tests::handoff_fences_only_the_matching_identity_path_and_releases_on_drop",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::key_continuity::tests::full_client_history_with_old_ciphertext_does_not_need_server_checkpoint",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::key_continuity::tests::key_rotation_does_not_grant_thread_only_access_or_copy_unrelated_records",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::key_continuity::tests::key_rotation_preserves_checkpoint_tools_and_supports_account_switch",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::key_continuity::tests::key_rotation_uses_legacy_session_alias_for_turn_token_scope",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::key_continuity::tests::partial_key_rotation_survives_restart_and_preserves_history_on_repeated_retry",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::key_continuity::tests::strict_hosts_still_isolate_keys_and_missing_history_does_not_become_empty",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::mapping_switch_tests::disabled_mapping_keeps_upstream_state_owner_and_caller_checks",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::mapping_switch_tests::disabled_mapping_preserves_original_identity_fields_without_creating_mappings",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::mapping_switch_tests::mapping_policy_is_snapshotted_and_reenabling_reuses_persisted_ids",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::opaque_replay_tests::child_full_replay_detaches_old_parent_anchor_without_overwriting_root_or_restarting_b",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::opaque_replay_tests::complete_opaque_history_preserves_ids_markers_and_original_provenance_after_restart_and_disable",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::opaque_replay_tests::completed_b_generation_discards_only_observed_old_a_sticky_tokens_in_full_and_delta_requests",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::opaque_replay_tests::failed_or_cancelled_replay_cannot_authorize_disabled_mixed_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::opaque_replay_tests::incomplete_or_resource_history_restores_original_pin_before_first_active_generation",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::opaque_replay_tests::missing_plan_cannot_use_a_legacy_affinity_or_server_pin_to_authorize_unaccepted_mixed_blobs",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::opaque_replay_tests::tool_schema_resource_property_names_are_replayable_but_real_resource_configuration_is_not",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::opaque_replay_tests::unknown_history_retries_automatically_and_publishes_only_successful_provenance",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::opaque_replay_tests::unknown_structured_output_blob_cannot_hide_behind_an_unrelated_content_extension",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::partial_history::tests::partial_history_cancellation_while_waiting_for_writer_cannot_publish_late",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::partial_history::tests::partial_history_cannot_override_a_different_resource_owner",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::partial_history::tests::partial_history_concurrent_duplicate_publication_is_idempotent",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::partial_history::tests::partial_history_corrupt_chunk_reports_error_without_erasing_original",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::partial_history::tests::partial_history_disk_failure_rolls_back_and_can_retry_without_losing_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::partial_history::tests::partial_history_invalid_terminal_never_becomes_a_recovery_anchor",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::partial_history::tests::partial_history_large_input_round_trips_and_string_continuations_work",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::partial_history::tests::partial_history_persists_without_claiming_completed_response_or_consuming_it",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::partial_history::tests::partial_history_reads_do_not_wait_for_the_shared_identity_writer_mutex",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::partial_history::tests::partial_history_restores_omitted_identity_and_rejects_other_callers_threads",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::partial_history::tests::partial_history_size_failure_and_explicit_parameter_overrides_preserve_original",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::partial_history::tests::partial_history_tool_result_can_arrive_later_without_duplicate_calls",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::partial_history::tests::partial_history_upgrade_preserves_existing_completed_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::a_to_b_to_a_uses_new_mapping_but_old_response_restores_its_exact_generation",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::archive_failure_and_cancellation_publish_no_partial_checkpoint",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::archive_load_does_not_hold_the_shared_identity_mutex",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::checkpoint_eviction_only_removes_optional_cache_not_old_response_owner_or_generation",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::checkpoint_total_byte_budget_evicts_optional_history_without_erasing_ownership",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::checkpoints_survive_restart_but_are_not_borrowed_by_another_caller_or_child_scope",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::complete_plaintext_checkpoint_joins_delta_and_preserves_original_request",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::concurrent_rebuilds_and_late_old_owner_success_cannot_overwrite_active_cas_winner",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::conflicting_duplicate_output_index_cannot_replace_delivered_manifest",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::custom_results_tests::custom_results_rebuild_preserves_source_checkpoint_after_restart",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::disabled_checkpoint_capture_and_missing_or_unknown_checkpoint_keep_owner_pins",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::disabling_rebuild_still_resumes_b_response_in_its_existing_generation",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::error_or_cancel_fences_late_completion_and_plain_tool_inventory_can_be_cached",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::failed_or_cancelled_candidate_does_not_activate_or_create_a_success_checkpoint",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::failed_unregistered_history_never_activates_or_prevents_a_fresh_automatic_attempt",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::large_checkpoint_survives_restart_rotation_and_deduplicates_history_items",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::large_parameter_inheritance_and_planning_do_not_wait_for_identity_mutex",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::large_parameter_manifest_is_inherited_after_restart_without_a_hot_checkpoint",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::missing_or_corrupt_archive_item_fails_closed_without_erasing_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::opaque_reasoning_summary_agent_messages_and_compaction_are_not_decrypted",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::plaintext_tools_require_ordered_complete_pairs_and_checkpoint_delta_can_finish_a_call",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::pre_upgrade_checkpoint_is_not_evicted_without_a_durable_history_copy",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::preparation_and_failed_b_keep_a_affinity_and_late_cas_loser_cannot_restore_it",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::rejected_stateless_rebuild_keeps_known_active_account_and_child_parent_scope",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::root_parameters_must_be_explicit_in_delta_requests_and_current_values_are_preserved",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::streamed_output_missing_or_changed_at_terminal_cannot_checkpoint_or_activate_target",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::truncated_history_declines_but_large_requests_keep_owner_and_cache_budget",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::unregistered_complete_history_is_admitted_and_records_ownership_only_after_success",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::rebuild::tests::verified_checkpoint_removes_old_turn_state_only_from_the_new_upstream_copy",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::canonical_identity_ignores_invalid_superseded_flat_and_thread_header",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::canonical_metadata_repairs_stale_projections_without_replacing_cache_alias",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::capacity_failure_rolls_back_without_rotating_existing_identities",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::durable_affinity_never_becomes_an_unbounded_soft_route_preference",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::encrypted_function_arguments_keep_their_observed_upstream_owner",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::ephemeral_fork_keeps_cache_alias_separate_from_logical_session",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::expired_turn_state_keeps_account_owner_evidence_and_only_expires_routing",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::generic_previous_response_recovers_identity_and_opaque_owner_after_restart",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::generic_stateless_requests_receive_independent_complete_identities",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::guardian_parent_reference_pins_live_owner_without_allowing_early_resume",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::hierarchy_preserves_shared_session_distinct_threads_and_references",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::installation_identity_and_user_content_remain_unchanged",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::legacy_session_header_cannot_bypass_invalid_higher_priority_identity",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::legacy_session_header_is_stable_and_stays_caller_and_owner_scoped",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::legacy_session_header_respects_metadata_and_canonical_header_precedence",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::legacy_session_header_validates_only_when_selected_and_keeps_empty_policy",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::mappings_survive_restart_account_roundtrip_and_concurrent_connections",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::memory_metadata_keeps_intentional_identity_omissions_and_unicode_header_safe",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::missing_identity_uses_own_thread_and_never_guesses_parent_session",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::only_missing_previous_response_requests_client_full_input_replay",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::opaque_state_is_preserved_and_cannot_cross_caller_owner_or_turn",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::persistent_continuations_outlive_routing_tokens_and_only_completed_responses_resume",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::reissued_routing_token_keeps_independent_turn_and_thread_scopes",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::switching_owner_preserves_root_and_descendant_graph_across_request_order",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::identity::tests::unsupported_opaque_history_fails_before_rewrite_and_delta_does_not_record_it",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "stage": "final-clean-main",
+      "sourceLog": "runs/20261112-004128-8507b616/modules__codex_native_api__context_rebuild_http_tests__.log",
+      "publicLog": "test-logs/clean-main-context-rebuild.log",
+      "sourceSha256": "2fbae1512d3e4ece4b727b22626e72abad08deed0c20f5db66550d601052e632",
+      "publicSha256": "2fbae1512d3e4ece4b727b22626e72abad08deed0c20f5db66550d601052e632",
+      "byteIdentical": true,
+      "redactions": [],
+      "bytes": 11563,
+      "filter": "modules::codex_native_api::context_rebuild_http_tests::",
+      "exitCode": 0,
+      "counts": {
+        "passed": 75,
+        "failed": 0,
+        "ignored": 0,
+        "executed": 75,
+        "filteredOut": 4589,
+        "registeredInHarness": 4664
+      },
+      "sourceFingerprint": "E36F83881BC72542A5CA0C29D2691E03298B82755E0492325BF8C10327460317",
+      "artifactSha256": "BB2CD32156616B16A86C484F84F333AB6D6B06DF07FF8CCC9A68E440DC955CF5",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::codex_app_failover_tests::codex_app_host_record_oauth_exception_does_not_authorize_missing_real_tool_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::codex_app_failover_tests::codex_app_host_records_oauth_429_replays_complete_and_cached_history_exactly",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::codex_app_failover_tests::codex_app_host_records_oauth_failed_candidate_never_commits_portable_b",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::context_rebuild_a_b_a_uses_new_a_generation_and_does_not_reassign_old_checkpoints",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::context_rebuild_cache_miss_reasoning_and_agent_cipher_keep_original_a_payload",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::context_rebuild_candidate_failure_or_client_cancel_never_activates_b",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::context_rebuild_defaults_off_and_previous_response_is_still_hard_pinned",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::context_rebuild_http_and_sse_overload_replay_complete_plaintext_and_keep_client_input",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::context_rebuild_only_replays_tool_history_after_call_and_result_are_paired",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::context_rebuild_real_response_socket_delta_overload_bridges_with_fresh_full_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::context_rebuild_unknown_complete_history_automatically_retries_an_available_account",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::context_rebuild_upstream_websocket_overload_rebuilds_then_reuses_b_generation",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::context_rebuild_websocket_keeps_tool_turn_connected_until_backup_recovers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::encrypted_reasoning_tests::encrypted_reasoning_http_status_recovers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::encrypted_reasoning_tests::encrypted_reasoning_late_error_after_metadata_still_recovers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::encrypted_reasoning_tests::encrypted_reasoning_never_discards_compaction",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::encrypted_reasoning_tests::encrypted_reasoning_never_replays_after_output",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::encrypted_reasoning_tests::encrypted_reasoning_retries_only_once_on_all_transports",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::encrypted_reasoning_tests::encrypted_reasoning_sse_recovers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::encrypted_reasoning_tests::encrypted_reasoning_websocket_opening_recovers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::encrypted_reasoning_tests::encrypted_reasoning_websocket_reused_recovers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::host_results_tests::host_results_continue_after_quota_failure_and_restart_without_losing_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::host_results_tests::host_results_invalid_ids_reach_upstream_without_unlocking_cross_account_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::host_results_tests::websocket_host_results_continue_when_client_omits_plaintext_marker",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::installation_tests::account_installation_http_and_sse_rebuild_keep_cipher_and_fresh_account_identity",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::installation_tests::account_installation_websocket_and_http_bridge_rebuild_use_selected_profiles",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::key_continuity_http_tests::key_continuity_http_keeps_new_caller_accounting_and_failover_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::key_continuity_http_tests::key_continuity_partial_retry_retains_executed_tool_result",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::key_continuity_http_tests::key_continuity_websocket_reconnects_with_new_key_and_old_response",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::local_quota_tests::local_quota_after_remote_failure_preserves_remote_error",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::local_quota_tests::local_quota_all_candidates_denied_terminates_with_original_local_error",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::local_quota_tests::local_quota_conversation_header_does_not_cross_accounts",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::local_quota_tests::local_quota_duplicate_metadata_headers_all_require_portable_state",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::local_quota_tests::local_quota_encoded_metadata_keeps_upstream_state_on_its_account",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::local_quota_tests::local_quota_function_schema_property_names_are_not_account_state",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::local_quota_tests::local_quota_http_unsent_rejection_uses_backup_without_remote_failure",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::local_quota_tests::local_quota_new_websocket_reselects_before_inference_send",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::local_quota_tests::local_quota_portable_encoded_metadata_still_allows_unsent_reselection",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::local_quota_tests::local_quota_rebuild_keeps_unrecognized_routing_references_off_backup",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::local_quota_tests::local_quota_reused_websocket_reconnects_only_for_portable_next_turn",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::local_quota_tests::local_quota_server_references_and_partial_tool_history_do_not_cross_accounts",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::local_quota_tests::local_quota_unknown_opaque_input_does_not_cross_accounts",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::local_quota_tests::local_quota_unrebuildable_owner_is_never_sent_to_backup",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::local_quota_tests::local_quota_validated_history_rebuilds_before_switching_owner",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_cancelled_candidate_never_publishes_backup_owner",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_http_quota_and_revoked_token_failover_preserve_parts_and_durable_source",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_orphan_noncontiguous_and_wrong_kind_never_unlock_backup",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_wrong_caller_cannot_borrow_history_or_publish_owner",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_default_removed_a_full_history_and_mixed_a_b_continue_b",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_cancelled_b_candidate_keeps_active_and_cipher_provenance_a",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_child_agent_parent_a_does_not_pin_child_b",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_disabled_policy_keeps_removed_known_owner_pinned",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_failed_b_keeps_active_a_and_original_cipher_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_observed_a_sticky_token_never_relocks_completed_b_generation",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_preexisting_uncached_history_replays_after_opt_in_without_previous",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_same_socket_automatically_replays_observed_history_when_owner_is_removed",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_same_socket_opt_in_joins_observed_uncached_history_with_delta",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::opaque_tests::context_rebuild_opaque_unknown_self_contained_history_is_sent_unchanged_and_caller_scoped",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::output_evidence_tests::output_evidence_complete_done_can_activate_a_sparse_cross_account_candidate",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::output_evidence_tests::output_evidence_complete_terminal_still_rebuilds_after_restart_with_fresh_identity",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::output_evidence_tests::output_evidence_repair_does_not_adopt_unknown_input_or_invent_a_missing_checkpoint",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::output_evidence_tests::output_evidence_repaired_candidate_cannot_activate_a_new_generation",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::output_evidence_tests::output_evidence_repaired_root_cannot_become_portable_after_restart_or_reconnect",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::partial_history_tests::partial_history_conflicting_output_stays_on_owner",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::partial_history_tests::partial_history_empty_interruption_recovers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::partial_history_tests::partial_history_failed_retry_preserves_recovery",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::partial_history_tests::partial_history_http_bridge_reconnect_recovers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::partial_history_tests::partial_history_http_bridge_recovers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::partial_history_tests::partial_history_missing_output_stays_on_owner",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::partial_history_tests::partial_history_omitted_parameters_are_inherited",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::partial_history_tests::partial_history_paired_tools_are_not_duplicated",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::partial_history_tests::partial_history_reconnect_recovers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::partial_history_tests::partial_history_service_restart_recovers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::partial_history_tests::partial_history_text_switches_and_keeps_next_turn",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::context_rebuild_http_tests::partial_history_tests::partial_history_unpaired_tools_stay_on_owner",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "stage": "final-clean-main",
+      "sourceLog": "runs/20261112-004128-8507b616/modules__codex_native_api__retry__.log",
+      "publicLog": "test-logs/clean-main-retry.log",
+      "sourceSha256": "9eae5f59426cc97373d01432ff95450fca4b6ee456f66bc88b0a5d3d62d63c74",
+      "publicSha256": "9eae5f59426cc97373d01432ff95450fca4b6ee456f66bc88b0a5d3d62d63c74",
+      "byteIdentical": true,
+      "redactions": [],
+      "bytes": 948,
+      "filter": "modules::codex_native_api::retry::",
+      "exitCode": 0,
+      "counts": {
+        "passed": 6,
+        "failed": 0,
+        "ignored": 0,
+        "executed": 6,
+        "filteredOut": 4658,
+        "registeredInHarness": 4664
+      },
+      "sourceFingerprint": "E36F83881BC72542A5CA0C29D2691E03298B82755E0492325BF8C10327460317",
+      "artifactSha256": "BB2CD32156616B16A86C484F84F333AB6D6B06DF07FF8CCC9A68E440DC955CF5",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::retry::cooldown_tests::http_retry_wait_retries_one_round_with_same_opaque_owner_and_respects_maximum",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::retry::cooldown_tests::http_transport_failover_excludes_only_this_request_but_real_status_marks_account",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::retry::cooldown_tests::model_availability_errors_rotate_but_client_faults_do_not",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::retry::cooldown_tests::oauth_refresh_failure_preserves_original_status_and_safely_rotates",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::retry::cooldown_tests::parity22_runtime_compact_cooldown_matches_default_go_conductor",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::retry::cooldown_tests::request_fault_tests::request_fault_http_and_native_chat_keep_body_without_refresh_rotation_or_cooling",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "stage": "first-clean-main-cleanup-failure",
+      "sourceLog": "runs/20261112-003511-e9de89f8/modules__codex_native_api__retry__.log",
+      "publicLog": "test-logs/clean-main-first-run-retry-cleanup-failure.log",
+      "sourceSha256": "efc5b9a163e4b7a83cce110bf6e88ecdc4a1b583d90f6c55addbec9524b07ee0",
+      "publicSha256": "efc5b9a163e4b7a83cce110bf6e88ecdc4a1b583d90f6c55addbec9524b07ee0",
+      "byteIdentical": true,
+      "redactions": [],
+      "bytes": 1740,
+      "filter": "modules::codex_native_api::retry::",
+      "exitCode": 101,
+      "counts": {
+        "passed": 5,
+        "failed": 1,
+        "ignored": 0,
+        "executed": 6,
+        "filteredOut": 4658,
+        "registeredInHarness": 4664
+      },
+      "sourceFingerprint": "8116417136E1EACF49775BAB49D6F37D0506E67DEC9133238AB673BD32CEFF9B",
+      "artifactSha256": "256E64B66381FA2CF4B87B02F28B7B73C7FDB34C99B799192CB888A6B7527B04",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::retry::cooldown_tests::http_retry_wait_retries_one_round_with_same_opaque_owner_and_respects_maximum",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::retry::cooldown_tests::http_transport_failover_excludes_only_this_request_but_real_status_marks_account",
+          "status": "FAILED"
+        },
+        {
+          "name": "modules::codex_native_api::retry::cooldown_tests::model_availability_errors_rotate_but_client_faults_do_not",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::retry::cooldown_tests::oauth_refresh_failure_preserves_original_status_and_safely_rotates",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::retry::cooldown_tests::parity22_runtime_compact_cooldown_matches_default_go_conductor",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::retry::cooldown_tests::request_fault_tests::request_fault_http_and_native_chat_keep_body_without_refresh_rotation_or_cooling",
+          "status": "ok"
+        }
+      ]
+    }
+  ]
+}

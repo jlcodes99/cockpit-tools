@@ -1,0 +1,13 @@
+
+running 8 tests
+test modules::codex_native_api::identity::rebuild::tests::custom_results_tests::custom_results_rebuild_preserves_source_checkpoint_after_restart ... ok
+test modules::codex_native_api::responses_custom_results::tests::custom_results_copy_keeps_content_order_whitespace_images_and_duplicates ... ok
+test modules::codex_native_api::responses_custom_results::tests::custom_results_does_not_relax_function_results_or_change_strict_pairs ... ok
+test modules::codex_native_api::responses_custom_results::tests::custom_results_multiple_groups_and_empty_strings_keep_every_part ... ok
+test modules::codex_native_api::responses_custom_results::tests::custom_results_refuses_orphans_conflicts_wrong_kind_and_noncontiguous_groups ... ok
+test modules::codex_native_api::responses_custom_results::tests::custom_results_three_groups_require_tail_pending_call_result_before_replay ... ok
+test modules::codex_native_api::responses_custom_results::tests::custom_results_three_observed_envelope_groups_keep_distinct_notifications ... ok
+test modules::codex_native_api::responses_custom_results::tests::custom_results_unknown_signed_encrypted_and_malformed_envelopes_stay_rejected ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 4656 filtered out; finished in 0.06s
+

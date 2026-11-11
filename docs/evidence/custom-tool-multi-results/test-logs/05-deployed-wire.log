@@ -1,0 +1,21 @@
+
+running 16 tests
+test modules::codex_native_api::codex_wire::final_headers::tests::api_key_and_siwc_routing_headers_are_outside_backend_policy ... ok
+test modules::codex_native_api::codex_wire::final_headers::tests::backend_routing_hint_preserves_explicit_selected_account_override ... ok
+test modules::codex_native_api::codex_wire::final_headers::tests::backend_routing_hint_rejects_control_characters_and_clears_missing_model ... ok
+test modules::codex_native_api::codex_wire::final_headers::tests::backend_routing_hint_uses_final_model_and_normalized_service_tier ... ok
+test modules::codex_native_api::codex_wire::final_headers::tests::native_instruction_text_is_preserved_without_whitespace_replacement ... ok
+test modules::codex_native_api::codex_wire::runtime_parity_tests::parity22_runtime_http_final_wire_matches_go_executor ... ok
+test modules::codex_native_api::codex_wire::schema::parity_tests::constant_union_simplification_requires_eight_unique_pure_semantic_constants ... ok
+test modules::codex_native_api::codex_wire::schema::parity_tests::numeric_bound_exact_int64_decimal_and_exponent_limits_match_cpa ... ok
+test modules::codex_native_api::codex_wire::schema::parity_tests::numeric_bounds_keep_original_tokens_and_remove_only_incompatible_integer_constraints ... ok
+test modules::codex_native_api::codex_wire::schema::parity_tests::schema_cleanup_uses_only_the_upstream_schema_keyword_walk ... ok
+test modules::codex_native_api::codex_wire::schema::parity_tests::unsupported_regex_escapes_follow_cpa_escape_parity_and_preserve_ordinary_patterns ... ok
+test modules::codex_native_api::codex_wire::tests::agent_browser_host_malformed_ids_remain_untouched_for_identity_validation ... ok
+test modules::codex_native_api::codex_wire::tests::agent_browser_host_results_never_consume_pending_tool_ids_on_http_or_websocket_wire ... ok
+test modules::codex_native_api::codex_wire::tests::invalid_body_is_rejected_without_rewriting_headers ... ok
+test modules::codex_native_api::codex_wire::tests::matches_shared_go_golden_requests_and_headers ... ok
+test modules::codex_native_api::codex_wire::tests::normalization_is_idempotent ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 4655 filtered out; finished in 0.11s
+

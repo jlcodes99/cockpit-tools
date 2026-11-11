@@ -891,7 +891,7 @@ impl IdentityStore {
                     && (automatic_history::complete_input(headers, body)
                         || (context.rebuild_enabled
                             && context.rebuild_input.as_ref().is_some_and(|input| {
-                                rebuild::replay_items(input) && rebuild::paired_tools(input)
+                                super::responses_custom_results::replay(input).is_some()
                             })))
                 {
                     continue;

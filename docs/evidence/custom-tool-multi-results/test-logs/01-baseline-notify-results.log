@@ -1,0 +1,31 @@
+
+running 4 tests
+test modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_cancelled_candidate_never_publishes_backup_owner ... FAILED
+test modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_http_quota_and_revoked_token_failover_preserve_parts_and_durable_source ... FAILED
+test modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_orphan_noncontiguous_and_wrong_kind_never_unlock_backup ... ok
+test modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_wrong_caller_cannot_borrow_history_or_publish_owner ... ok
+
+failures:
+
+---- modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_cancelled_candidate_never_publishes_backup_owner stdout ----
+
+thread 'modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_cancelled_candidate_never_publishes_backup_owner' (21772) panicked at src-tauri\src\modules\codex_native_api\context_rebuild_http_tests.rs:661:21:
+assertion `left != right` failed: Unexpected WS error: {"error":{"code":"usage_limit_reached","message":"Synthetic quota exhausted","type":"usage_limit_reached"},"status":429,"type":"error"}
+  left: String("error")
+ right: "error"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_http_quota_and_revoked_token_failover_preserve_parts_and_durable_source stdout ----
+
+thread 'modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_http_quota_and_revoked_token_failover_preserve_parts_and_durable_source' (23452) panicked at src-tauri\src\modules\codex_native_api\context_rebuild_notify_results_tests.rs:189:13:
+assertion `left == right` failed: failure=429, streaming=false: {"error":{"code":"usage_limit_reached","message":"Synthetic quota exhausted","type":"usage_limit_reached"}}
+  left: 429
+ right: 200
+
+
+failures:
+    modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_cancelled_candidate_never_publishes_backup_owner
+    modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_http_quota_and_revoked_token_failover_preserve_parts_and_durable_source
+
+test result: FAILED. 2 passed; 2 failed; 0 ignored; 0 measured; 4659 filtered out; finished in 0.49s
+

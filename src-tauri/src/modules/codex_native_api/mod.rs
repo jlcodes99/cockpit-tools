@@ -74,6 +74,7 @@ mod encrypted_reasoning;
 mod request_metrics;
 mod response_wire;
 mod replay_wire;
+mod responses_custom_results;
 mod responses_host_results;
 mod responses_tool_history;
 mod retry;

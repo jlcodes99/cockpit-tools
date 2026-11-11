@@ -1,0 +1,23 @@
+
+running 6 tests
+test modules::codex_native_api::retry::cooldown_tests::http_retry_wait_retries_one_round_with_same_opaque_owner_and_respects_maximum ... ok
+test modules::codex_native_api::retry::cooldown_tests::http_transport_failover_excludes_only_this_request_but_real_status_marks_account ... FAILED
+test modules::codex_native_api::retry::cooldown_tests::model_availability_errors_rotate_but_client_faults_do_not ... ok
+test modules::codex_native_api::retry::cooldown_tests::oauth_refresh_failure_preserves_original_status_and_safely_rotates ... ok
+test modules::codex_native_api::retry::cooldown_tests::parity22_runtime_compact_cooldown_matches_default_go_conductor ... ok
+test modules::codex_native_api::retry::cooldown_tests::request_fault_tests::request_fault_http_and_native_chat_keep_body_without_refresh_rotation_or_cooling ... ok
+
+failures:
+
+---- modules::codex_native_api::retry::cooldown_tests::http_transport_failover_excludes_only_this_request_but_real_status_marks_account stdout ----
+
+thread 'modules::codex_native_api::retry::cooldown_tests::http_transport_failover_excludes_only_this_request_but_real_status_marks_account' (17392) panicked at src-tauri\src\modules\codex_native_api\cooldown_retry_tests.rs:333:39:
+called `Result::unwrap()` on an `Err` value: Os { code: 32, kind: Uncategorized, message: "另一个程序正在使用此文件，进程无法访问。" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    modules::codex_native_api::retry::cooldown_tests::http_transport_failover_excludes_only_this_request_but_real_status_marks_account
+
+test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 4658 filtered out; finished in 3.96s
+

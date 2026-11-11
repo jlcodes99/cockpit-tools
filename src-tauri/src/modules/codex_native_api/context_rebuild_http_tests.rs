@@ -38,6 +38,7 @@ enum Step {
     RawEvents(Vec<Value>),
     HttpOverload,
     HttpRateLimit,
+    HttpTokenRevoked,
     SseOverload,
     Hold(&'static str),
 }
@@ -282,6 +283,7 @@ async fn upstream_http(
         Step::RawEvents(events) => sse(events),
         Step::HttpOverload => (StatusCode::SERVICE_UNAVAILABLE,Json(json!({"error":{"type":"server_error","code":"server_error","message":"Synthetic overloaded"}}))).into_response(),
         Step::HttpRateLimit => (StatusCode::TOO_MANY_REQUESTS,Json(json!({"error":{"type":"usage_limit_reached","code":"usage_limit_reached","message":"Synthetic quota exhausted"}}))).into_response(),
+        Step::HttpTokenRevoked => (StatusCode::UNAUTHORIZED,Json(json!({"error":{"type":"authentication_error","code":"token_revoked","message":"Synthetic token revoked"}}))).into_response(),
         Step::SseOverload => sse(vec![json!({"type":"error","status_code":503,"error":{"type":"service_unavailable_error","code":"server_is_overloaded","message":"Synthetic overloaded"}})]),
         Step::CompleteItems(id,items) => {
             let response=json!({"id":id,"status":"completed","output":items});
@@ -1134,6 +1136,9 @@ mod host_results_tests;
 
 #[path = "context_rebuild_codex_app_failover_tests.rs"]
 mod codex_app_failover_tests;
+
+#[path = "context_rebuild_notify_results_tests.rs"]
+mod notify_results_tests;
 
 #[path = "context_rebuild_output_evidence_tests.rs"]
 mod output_evidence_tests;

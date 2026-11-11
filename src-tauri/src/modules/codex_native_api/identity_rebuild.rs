@@ -43,6 +43,9 @@ pub(crate) struct Plan {
     pub headers: HeaderMap,
     pub body: Value,
     pub base_revision: i64,
+    // A replay-only custom result merge must not replace accepted source history.
+    // This also maps every merged item's original ID to its ordered result group.
+    pub source_input: Option<Arc<Vec<Value>>>,
 }
 
 pub(super) fn initialize(connection: &Connection) -> rusqlite::Result<()> {
@@ -670,7 +673,7 @@ pub(super) fn complete_input_available(
     else {
         return Ok(false);
     };
-    Ok(replay_items(&transcript) && paired_tools(&transcript))
+    Ok(super::super::responses_custom_results::replay(&transcript).is_some())
 }
 
 impl IdentityStore {
@@ -1061,12 +1064,15 @@ impl IdentityStore {
         });
         drop(connection);
         context.rebuild_base_revision = Some(base_revision);
-        if !paired_tools(&transcript) {
+        let Some(replay) = super::super::responses_custom_results::replay(&transcript) else {
             return Ok(None);
-        }
+        };
+        let (mut fresh_input, source_input) = match replay {
+            std::borrow::Cow::Borrowed(_) => (transcript, None),
+            std::borrow::Cow::Owned(replay) => (replay, Some(Arc::new(transcript))),
+        };
         let mut upstream_headers = headers.clone();
         let mut upstream_body = body.clone();
-        let mut fresh_input = transcript;
         if !context.portable_body {
             for item in &mut fresh_input {
                 item.as_object_mut().unwrap().remove("id");
@@ -1113,6 +1119,7 @@ impl IdentityStore {
             headers: upstream_headers,
             body: upstream_body,
             base_revision,
+            source_input,
         }))
     }
 
@@ -1270,6 +1277,9 @@ impl RequestIdentity {
         self.rebuild_base_revision = Some(plan.base_revision);
         self.rebuild_new_generation = true;
         self.generation = None;
+        if let Some(input) = &plan.source_input {
+            self.rebuild_input = Some((**input).clone());
+        }
     }
     pub(crate) fn retain_binding_generation(&mut self, binding: &Binding) {
         self.session_identity_mapping_enabled = binding.session_identity_mapping_enabled;

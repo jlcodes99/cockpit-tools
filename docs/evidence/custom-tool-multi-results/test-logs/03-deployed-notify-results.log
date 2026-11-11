@@ -1,0 +1,9 @@
+
+running 4 tests
+test modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_cancelled_candidate_never_publishes_backup_owner ... ok
+test modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_http_quota_and_revoked_token_failover_preserve_parts_and_durable_source ... ok
+test modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_orphan_noncontiguous_and_wrong_kind_never_unlock_backup ... ok
+test modules::codex_native_api::context_rebuild_http_tests::notify_results_tests::notify_results_wrong_caller_cannot_borrow_history_or_publish_owner ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 4667 filtered out; finished in 1.17s
+
