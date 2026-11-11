@@ -96,13 +96,22 @@ function createProbeCopy(sourceDir) {
     path.basename(statusFile),
     path.basename(exportFile),
   ]);
-  fs.cpSync(sourceDir, copyDir, {
-    recursive: true,
-    force: true,
-    errorOnExist: false,
-    filter: (src) => src === sourceDir || !skip.has(path.basename(src)),
-  });
-  fs.chmodSync(copyDir, 0o700);
+  try {
+    fs.cpSync(sourceDir, copyDir, {
+      recursive: true,
+      force: true,
+      errorOnExist: false,
+      filter: (src) => src === sourceDir || !skip.has(path.basename(src)),
+    });
+  } catch (error) {
+    // Do not leave a partial copy (it may already contain cookies) behind.
+    try {
+      fs.rmSync(copyDir, { recursive: true, force: true });
+    } catch {
+      // swept as stale on a later probe
+    }
+    throw error;
+  }
   return copyDir;
 }
 
