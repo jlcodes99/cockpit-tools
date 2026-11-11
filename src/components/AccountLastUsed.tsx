@@ -34,7 +34,7 @@ export function AccountLastUsed({
 
   if (!switched && !hasRefresh) {
     return (
-      <span className="card-date account-last-used">
+      <span className="card-date account-last-used" onClick={(e) => e.stopPropagation()}>
         <Clock size={12} />
         <span>{t("common.none", "暂无")}</span>
       </span>
@@ -42,7 +42,7 @@ export function AccountLastUsed({
   }
 
   return (
-    <span className="card-date account-last-used">
+    <span className="card-date account-last-used" onClick={(e) => e.stopPropagation()}>
       <Clock size={12} />
       <select
         className="alu-select"
