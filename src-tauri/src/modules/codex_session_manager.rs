@@ -390,6 +390,20 @@ fn read_token_stats_from_rollout_uncached(
     rollout_path: &Path,
     file_len: u64,
 ) -> Option<(u64, u64, u64)> {
+    if rollout_reader::is_compressed(rollout_path) {
+        // Compressed byte offsets cannot be used to seek to JSONL records.
+        let mut reader = BufReader::new(rollout_reader::open(rollout_path).ok()?);
+        let mut line = Vec::new();
+        let mut latest = None;
+        while reader.read_until(b'\n', &mut line).ok()? != 0 {
+            if let Some(stats) = parse_token_stats_line(&line) {
+                latest = Some(stats);
+            }
+            line.clear();
+        }
+        return latest;
+    }
+
     let mut file = File::open(rollout_path).ok()?;
     let mut offset = file_len;
     let mut pending_prefix = Vec::new();
@@ -441,51 +455,41 @@ fn byte_before_is_newline(file: &mut File, offset: u64) -> std::io::Result<bool>
 }
 
 fn parse_token_stats_lines(content: &[u8]) -> Option<(u64, u64, u64)> {
-    for line in content.split(|byte| *byte == b'\n').rev() {
-        let raw = String::from_utf8_lossy(line);
-        let trimmed = raw.trim();
-        if trimmed.is_empty()
-            || !trimmed.contains("\"token_count\"")
-            || !trimmed.contains("\"total_token_usage\"")
-        {
-            continue;
-        }
+    content
+        .split(|byte| *byte == b'\n')
+        .rev()
+        .find_map(parse_token_stats_line)
+}
 
-        let Ok(parsed) = serde_json::from_str::<JsonValue>(trimmed) else {
-            continue;
-        };
-        if parsed.get("type").and_then(|value| value.as_str()) != Some("event_msg") {
-            continue;
-        }
-        let Some(payload) = parsed.get("payload") else {
-            continue;
-        };
-        if payload.get("type").and_then(|value| value.as_str()) != Some("token_count") {
-            continue;
-        }
-        let Some(usage) = payload
-            .get("info")
-            .and_then(|info| info.get("total_token_usage"))
-        else {
-            continue;
-        };
-
-        let input = usage
-            .get("input_tokens")
-            .and_then(|value| value.as_u64())
-            .unwrap_or(0);
-        let output = usage
-            .get("output_tokens")
-            .and_then(|value| value.as_u64())
-            .unwrap_or(0);
-        let total = usage
-            .get("total_tokens")
-            .and_then(|value| value.as_u64())
-            .unwrap_or(0);
-        return Some((input, output, total));
+fn parse_token_stats_line(line: &[u8]) -> Option<(u64, u64, u64)> {
+    let raw = String::from_utf8_lossy(line);
+    let trimmed = raw.trim();
+    if !trimmed.contains("\"token_count\"") || !trimmed.contains("\"total_token_usage\"") {
+        return None;
     }
 
-    None
+    let parsed: JsonValue = serde_json::from_str(trimmed).ok()?;
+    if parsed.get("type")?.as_str()? != "event_msg" {
+        return None;
+    }
+    let payload = parsed.get("payload")?;
+    if payload.get("type")?.as_str()? != "token_count" {
+        return None;
+    }
+    let usage = payload.get("info")?.get("total_token_usage")?;
+    let input = usage
+        .get("input_tokens")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let output = usage
+        .get("output_tokens")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let total = usage
+        .get("total_tokens")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    Some((input, output, total))
 }
 
 pub fn list_sessions_across_instances(
