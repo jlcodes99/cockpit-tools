@@ -1314,6 +1314,9 @@
 
     fn normalize_antigravity_model_for_match(value: &str) -> String {
         let normalized = value.trim().to_lowercase();
+        if normalized.starts_with("gemini-4-carbon") || matches!(normalized.as_str(), "carbon:weekly" | "gemini-carbon-wtu-weekly") {
+            return "gemini-4-carbon".into();
+        }
         if normalized.starts_with("gemini-4-argon") || matches!(normalized.as_str(), "argon:weekly" | "gemini-argon-wtu-weekly") {
             return "gemini-4-argon".into();
         }

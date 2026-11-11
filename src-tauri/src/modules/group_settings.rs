@@ -75,6 +75,12 @@ impl Default for GroupSettings {
         let mut group_names = HashMap::new();
 
         // Additive defaults preserve existing user mappings and legacy groups.
+        group_mappings.insert("gemini-4-carbon".into(), "g4_carbon".into());
+        group_mappings.insert("gemini-4-carbon-low".into(), "g4_carbon".into());
+        group_mappings.insert("gemini-4-carbon-medium".into(), "g4_carbon".into());
+        group_mappings.insert("gemini-4-carbon-high".into(), "g4_carbon".into());
+        group_mappings.insert("carbon:weekly".into(), "g4_carbon".into());
+        group_mappings.insert("gemini-carbon-wtu-weekly".into(), "g4_carbon".into());
         group_mappings.insert("gemini-4-argon".into(), "g4_argon".into());
         group_mappings.insert("gemini-4-argon-medium".into(), "g4_argon".into());
         group_mappings.insert("gemini-4-argon-high".into(), "g4_argon".into());
@@ -91,6 +97,7 @@ impl Default for GroupSettings {
         group_mappings.insert("claude-sonnet-5-5".into(), "claude_45".into());
         group_mappings.insert("claude-sonnet-5-5-medium".into(), "claude_45".into());
         group_mappings.insert("claude-sonnet-5-5-high".into(), "claude_45".into());
+        group_names.insert("g4_carbon".into(), "Gemini 4 Carbon".into());
         group_names.insert("g4_argon".into(), "Gemini 4 Argon".into());
         // Claude 4.5 分组
         group_mappings.insert(
@@ -122,6 +129,7 @@ impl Default for GroupSettings {
         group_names.insert("g3_flash".to_string(), GROUP_NAME_GEMINI_FLASH.to_string());
 
         let group_order = vec![
+            "g4_carbon".to_string(),
             "g4_argon".to_string(),
             "claude_45".to_string(),
             "g3_pro".to_string(),
@@ -388,7 +396,8 @@ mod tests {
         assert_eq!(
             settings.group_order,
             vec![
-                "g4_argon".to_string(),
+                "g4_carbon".to_string(),
+            "g4_argon".to_string(),
                 "claude_45".to_string(),
                 "g3_pro".to_string(),
                 "g3_flash".to_string(),
@@ -487,6 +496,7 @@ mod model_upgrade_tests {
     fn new_defaults_preserve_saved_groups_and_custom_mapping() {
         let mut saved = GroupSettings::default();
         saved.group_order = vec!["claude_45".into(), "g3_pro".into(), "g3_flash".into()];
+        saved.group_names.remove("g4_carbon");
         saved.group_names.remove("g4_argon");
         saved
             .group_mappings
@@ -494,7 +504,7 @@ mod model_upgrade_tests {
         merge_default_groups(&mut saved, &GroupSettings::default());
         assert_eq!(
             saved.group_order,
-            vec!["claude_45", "g3_pro", "g3_flash", "g4_argon"]
+            vec!["claude_45", "g3_pro", "g3_flash", "g4_carbon", "g4_argon"]
         );
         assert_eq!(saved.group_mappings["gemini-4-argon"], "my-group");
         assert_eq!(saved.group_mappings["claude-sonnet-5-5-high"], "claude_45");

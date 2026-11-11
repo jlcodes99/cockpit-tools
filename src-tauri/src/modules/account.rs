@@ -1222,6 +1222,18 @@ fn available_ai_credits(account: &Account) -> Option<f64> {
 fn default_auto_switch_groups() -> Vec<AutoSwitchGroupDefinition> {
     vec![
         AutoSwitchGroupDefinition {
+            id: "g4_carbon".into(),
+            name: "Gemini 4 Carbon".into(),
+            models: vec![
+                "gemini-4-carbon".into(),
+                "gemini-4-carbon-low".into(),
+                "gemini-4-carbon-medium".into(),
+                "gemini-4-carbon-high".into(),
+                "carbon:weekly".into(),
+                "gemini-carbon-wtu-weekly".into(),
+            ],
+        },
+        AutoSwitchGroupDefinition {
             id: "g4_argon".into(),
             name: "Gemini 4 Argon".into(),
             models: vec![
@@ -1393,6 +1405,14 @@ fn resolve_monitored_auto_switch_groups(
 
 fn normalize_model_for_group_match(value: &str) -> String {
     let normalized = value.trim().to_lowercase();
+    if normalized.starts_with("gemini-4-carbon")
+        || matches!(
+            normalized.as_str(),
+            "carbon:weekly" | "gemini-carbon-wtu-weekly"
+        )
+    {
+        return "gemini-4-carbon".into();
+    }
     if normalized.starts_with("gemini-4-argon")
         || matches!(
             normalized.as_str(),
@@ -3155,6 +3175,7 @@ mod new_antigravity_model_tests {
             default_auto_switch_groups(),
             &reported,
         );
+        assert!(explicit.iter().any(|group| group.id == "g4_carbon"));
         assert!(explicit.iter().any(|group| group.id == "g4_argon"));
     }
 
@@ -3162,6 +3183,12 @@ mod new_antigravity_model_tests {
     fn new_groups_keep_legacy_models_and_separate_new_versions() {
         let groups = default_auto_switch_groups();
         assert!(groups.iter().any(|group| group.id == "g3_pro"));
+        let carbon = groups.iter().find(|group| group.id == "g4_carbon").unwrap();
+        assert!(carbon.models.contains(&"gemini-4-carbon-high".into()));
+        assert_eq!(
+            normalize_model_for_group_match("gemini-4-carbon-high"),
+            "gemini-4-carbon"
+        );
         let argon = groups.iter().find(|group| group.id == "g4_argon").unwrap();
         assert!(argon.models.contains(&"gemini-4-argon-high".into()));
         assert_eq!(

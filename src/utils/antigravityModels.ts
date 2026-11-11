@@ -21,6 +21,10 @@ interface CanonicalModel {
 }
 
 const CANONICAL_MODELS: CanonicalModel[] = [
+  { id: 'gemini-4-carbon', displayName: 'Gemini 4 Carbon', modelConstant: null, aliases: [] },
+  { id: 'gemini-4-carbon-medium', displayName: 'Gemini 4 Carbon (Medium)', modelConstant: null, aliases: [] },
+  { id: 'gemini-4-carbon-high', displayName: 'Gemini 4 Carbon (High)', modelConstant: null, aliases: [] },
+  { id: 'gemini-4-carbon-low', displayName: 'Gemini 4 Carbon (Low)', modelConstant: null, aliases: [] },
   { id: 'gemini-4-argon', displayName: 'Gemini 4 Argon', modelConstant: null, aliases: [] },
   { id: 'gemini-4-argon-medium', displayName: 'Gemini 4 Argon (Medium)', modelConstant: 'MODEL_PLACEHOLDER_M418', aliases: [] },
   { id: 'gemini-4-argon-high', displayName: 'Gemini 4 Argon (High)', modelConstant: 'MODEL_PLACEHOLDER_M417', aliases: [] },
