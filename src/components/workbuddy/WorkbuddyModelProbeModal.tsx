@@ -126,11 +126,10 @@ export function WorkbuddyModelProbeModal({
 }: WorkbuddyModelProbeModalProps) {
   const { t } = useTranslation();
   const [scope, setScope] = useState<Scope>(() => {
+    // 卡片入口会显式传 initialScope（锁定单账号）；顶部批量入口默认「全部」，
+    // 有勾选时优先「已勾选」——不再默认落到「当前账号」。
     if (initialScope) return initialScope;
     if (selectedAccountIds && selectedAccountIds.length > 0) return 'selected';
-    if (currentAccountId && accounts.some((account) => account.id === currentAccountId)) {
-      return 'current';
-    }
     return 'all';
   });
   const [models, setModels] = useState<string[]>(loadSavedModels);
