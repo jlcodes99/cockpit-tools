@@ -6,8 +6,13 @@
     "syntheticOnly": true,
     "liveAccountRequests": false,
     "cleanUpstreamIntegration": {
-      "status": "pending_separate_validation",
-      "note": "The parent task is compiling a clean upstream-main candidate, including a move-based allocation improvement. Do not relabel these historical logs as that candidate validation."
+      "status": "completed_separate_validation",
+      "evidence": "clean-main-validation.json",
+      "executions": 232,
+      "uniqueTests": 231,
+      "failed": 0,
+      "ignored": 0,
+      "note": "The clean upstream-main candidate, including the move-based allocation improvement and Windows test-cleanup fix, completed its separate validation. See clean-main-validation.json and its complete logs. The 243 executions / 238 unique tests below remain historical deployed-tree evidence and are not relabeled or combined with the independent candidate results."
     }
   },
   "green": {
