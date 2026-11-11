@@ -7,6 +7,8 @@ use sha2::{Digest, Sha256};
 const SCOPES: &str = "electron-account-renderer-state-v1";
 const PARKED: &str = "cockpit-local-project-account-state-v1";
 const ATOMS: &str = "electron-persisted-atom-state";
+const READ_STATE: &str = "electron-thread-read-state-v1";
+const UNREAD_BY_IDENTITY: &str = "unreadByIdentity";
 
 // Codex Desktop 26.1103 account-scoped globals. Keep unknown globals untouched.
 // This follows its native owner transition, rather than patching Desktop code.
@@ -72,6 +74,198 @@ fn validate_scopes(value: &Value) -> Result<(), String> {
     } else {
         Err("CODEX_PROJECT_ACCOUNT_STATE_UNSUPPORTED".into())
     }
+}
+
+fn validate_read_state(value: &Value) -> Result<(), String> {
+    let valid = value.is_object()
+        && value[UNREAD_BY_IDENTITY]
+            .as_object()
+            .is_some_and(|identities| {
+                identities.values().all(|hosts| {
+                    hosts.as_object().is_some_and(|entries| {
+                        entries.values().all(|threads| {
+                            threads
+                                .as_array()
+                                .is_some_and(|list| list.iter().all(Value::is_string))
+                        })
+                    })
+                })
+            });
+    if valid {
+        Ok(())
+    } else {
+        Err("CODEX_PROJECT_ACCOUNT_STATE_UNSUPPORTED".into())
+    }
+}
+
+fn api_key_read_identity() -> String {
+    format!("{:x}", Sha256::digest(br#"["execution-storage","apikey"]"#))
+}
+
+fn oauth_owner_and_read_identity(user: &str, account: &str) -> Option<(String, String)> {
+    if user.is_empty() || account.is_empty() {
+        return None;
+    }
+    let owner = serde_json::to_vec(&json!([user, account])).ok()?;
+    let read = serde_json::to_vec(&json!(["chatgpt", account, user])).ok()?;
+    Some((
+        format!("{:x}", Sha256::digest(owner)),
+        format!("{:x}", Sha256::digest(read)),
+    ))
+}
+
+fn scope_read_identity(
+    owner: Option<&str>,
+    atoms: &BTreeMap<String, Value>,
+    unread: &serde_json::Map<String, Value>,
+) -> Option<String> {
+    let Some(owner) = owner else {
+        return Some(api_key_read_identity());
+    };
+    if unread.contains_key(owner) {
+        return Some(owner.to_string());
+    }
+    if let Some(doc_id) = atoms.get("local-document-identity") {
+        if let (Some(user), Some(account)) =
+            (doc_id["userId"].as_str(), doc_id["accountId"].as_str())
+        {
+            if let Some((expected_owner, read_id)) = oauth_owner_and_read_identity(user, account) {
+                if expected_owner == owner {
+                    return Some(read_id);
+                }
+            }
+        }
+    }
+    for key in atoms.keys() {
+        if let Some(rest) = key.strip_prefix("chatgpt-work-models-v1/") {
+            if let Some((user, account)) = rest.split_once('/') {
+                if let Some((expected_owner, read_id)) =
+                    oauth_owner_and_read_identity(user, account)
+                {
+                    if expected_owner == owner {
+                        return Some(read_id);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn local_read_hosts_for_identity(
+    hosts: &Value,
+    excluded_threads: &HashSet<String>,
+) -> BTreeMap<String, Vec<String>> {
+    let mut local_hosts = BTreeMap::new();
+    let Some(entries) = hosts.as_object() else {
+        return local_hosts;
+    };
+    for (host, threads) in entries {
+        if !host.starts_with("local:") {
+            continue;
+        }
+        let mut seen = HashSet::new();
+        let filtered = threads
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter(|id| !id.is_empty() && !excluded_threads.contains(*id))
+            .filter(|id| seen.insert((*id).to_string()))
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        local_hosts.insert(host.clone(), filtered);
+    }
+    local_hosts
+}
+
+fn sync_local_read_state(
+    after: &mut Value,
+    current_owner: Option<&str>,
+    current_atoms: &BTreeMap<String, Value>,
+    target_owner: Option<&str>,
+    target_atoms: &BTreeMap<String, Value>,
+    target_read_identity: Option<&str>,
+    excluded_threads: &HashSet<String>,
+) {
+    let Some(unread) = after[READ_STATE][UNREAD_BY_IDENTITY].as_object() else {
+        return;
+    };
+    let current_id = scope_read_identity(current_owner, current_atoms, unread);
+    let target_id = target_read_identity
+        .filter(|id| *id != target_owner.unwrap_or_default() || unread.contains_key(*id))
+        .map(str::to_string)
+        .or_else(|| scope_read_identity(target_owner, target_atoms, unread))
+        .or_else(|| target_read_identity.map(str::to_string));
+
+    let local_by_identity = unread
+        .iter()
+        .map(|(id, hosts)| {
+            (
+                id.clone(),
+                local_read_hosts_for_identity(hosts, excluded_threads),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    let authoritative = current_id
+        .as_deref()
+        .and_then(|id| local_by_identity.get(id))
+        .filter(|hosts| !hosts.is_empty())
+        .cloned()
+        .or_else(|| {
+            if current_owner != target_owner {
+                if let Some(tid) = target_id.as_deref() {
+                    if let Some(baseline) = local_by_identity.get(tid) {
+                        if let Some((_, changed)) = local_by_identity.iter().find(|(id, hosts)| {
+                            id.as_str() != tid && !hosts.is_empty() && *hosts != baseline
+                        }) {
+                            return Some(changed.clone());
+                        }
+                    }
+                }
+            }
+            None
+        })
+        .unwrap_or_else(|| {
+            let mut merged: BTreeMap<String, Vec<String>> = BTreeMap::new();
+            for hosts in local_by_identity.values() {
+                for (host, threads) in hosts {
+                    let entry = merged.entry(host.clone()).or_default();
+                    for id in threads {
+                        if !entry.contains(id) {
+                            entry.push(id.clone());
+                        }
+                    }
+                }
+            }
+            merged
+        });
+
+    if authoritative.is_empty() {
+        return;
+    }
+
+    let mut updated_unread = unread.clone();
+    let mut target_ids = updated_unread.keys().cloned().collect::<Vec<_>>();
+    if let Some(tid) = target_id {
+        if !updated_unread.contains_key(&tid)
+            && authoritative.values().any(|threads| !threads.is_empty())
+        {
+            updated_unread.insert(tid.clone(), json!({}));
+            target_ids.push(tid);
+        }
+    }
+    for id in target_ids {
+        let Some(hosts) = updated_unread.get_mut(&id).and_then(Value::as_object_mut) else {
+            continue;
+        };
+        hosts.retain(|host, _| !host.starts_with("local:"));
+        for (host, threads) in &authoritative {
+            hosts.insert(host.clone(), json!(threads));
+        }
+    }
+    after[READ_STATE][UNREAD_BY_IDENTITY] = Value::Object(updated_unread);
 }
 
 fn scoped_globals(state: &Value) -> Value {
@@ -341,7 +535,16 @@ fn merge_local(target: &mut Value, view: &Value) {
 /// Caller holds the launch/profile lease and has verified the Desktop is stopped.
 /// Native Desktop clears top-level groups during its constructor, so restore the
 /// target owner *and* its globals together, before the existing quick repair.
+#[allow(dead_code)]
 pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> {
+    prepare_with_read_identity(home, owner, owner)
+}
+
+pub(crate) fn prepare_with_read_identity(
+    home: &Path,
+    owner: Option<&str>,
+    read_identity: Option<&str>,
+) -> Result<bool, String> {
     check()?;
     let Some(bytes) = read_bytes(&home.join(STATE))? else {
         return Ok(false);
@@ -363,12 +566,16 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
         .cloned()
         .unwrap_or_else(|| json!({"owner":null,"inactive":{}}));
     validate_scopes(&scopes)?;
+    if let Some(read_state) = before.get(READ_STATE) {
+        validate_read_state(read_state)?;
+    }
     if before.get(ATOMS).is_some_and(|v| !v.is_object()) {
         return Err("CODEX_PROJECT_ACCOUNT_STATE_UNSUPPORTED".into());
     }
     let atoms = object(&before[ATOMS]);
-    if let Some(current) = scopes["owner"].as_str().map(str::to_string) {
-        scopes["inactive"][&current] = json!({
+    let current_owner = scopes["owner"].as_str().map(str::to_string);
+    if let Some(current) = current_owner.as_deref() {
+        scopes["inactive"][current] = json!({
             "globals":scoped_globals(&before),
             "atoms":atoms.iter().filter(|(key, _)| !SHARED_ATOMS.contains(&key.as_str()))
                 .map(|(key,value)| (key.clone(),value.clone())).collect::<BTreeMap<_,_>>(),
@@ -392,6 +599,7 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
             .values()
             .map(|scope| &scope["globals"]),
     );
+    let mut excluded_read_threads = HashSet::new();
     for source in &sources {
         if ["local-projects", MAP, ASSIGN, HOSTS]
             .iter()
@@ -399,6 +607,21 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
             || source.get("project-order").is_some_and(|v| !v.is_array())
         {
             return Err("CODEX_PROJECT_ACCOUNT_STATE_UNSUPPORTED".into());
+        }
+        if let Some(hosts) = source[HOSTS].as_object() {
+            excluded_read_threads.extend(hosts.iter().filter_map(|(id, host)| {
+                host.as_str()
+                    .is_some_and(|host| host != "local")
+                    .then_some(id.clone())
+            }));
+        }
+        if let Some(assignments) = source[ASSIGN].as_object() {
+            excluded_read_threads.extend(assignments.iter().filter_map(|(id, assignment)| {
+                assignment["projectKind"]
+                    .as_str()
+                    .is_some_and(|kind| kind != "local")
+                    .then_some(id.clone())
+            }));
         }
     }
     // Account-state restoration also carries the native onboarding flags. It
@@ -421,11 +644,27 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
         } else {
             threads_with_limit(&db, Some(QUICK_MAX_THREADS))?
         };
+        excluded_read_threads.extend(
+            threads
+                .iter()
+                .filter(|thread| !thread.root)
+                .map(|thread| thread.id.clone()),
+        );
         let view = local_view(home, &sources, &projects, &threads)?;
         // Finish the read transaction before writing the renderer state.
         drop(db);
         merge_local(&mut target["globals"], &view);
     }
+    let target_atoms = object(&target["atoms"]);
+    sync_local_read_state(
+        &mut after,
+        current_owner.as_deref(),
+        &atoms,
+        owner,
+        &target_atoms,
+        read_identity,
+        &excluded_read_threads,
+    );
     for key in SCOPED_GLOBALS {
         after.as_object_mut().unwrap().remove(*key);
         if let Some(value) = target["globals"].get(*key) {

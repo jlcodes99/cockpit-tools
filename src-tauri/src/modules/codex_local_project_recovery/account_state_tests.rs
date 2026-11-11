@@ -415,6 +415,137 @@ fn account_project_switch_rejects_unknown_schema_without_writing() {
     let before = fs::read(f.home().join(STATE)).unwrap();
     assert!(prepare(f.home(), Some("b")).is_err());
     assert_eq!(fs::read(f.home().join(STATE)).unwrap(), before);
+
+    let bad_read_state = json!({
+        SCOPES:{"owner":"a","inactive":{}},
+        READ_STATE:{"version":1,"unreadByIdentity":{"a":{"local:host":"not-an-array"}}}
+    });
+    f.write(&bad_read_state);
+    let before = fs::read(f.home().join(STATE)).unwrap();
+    assert!(prepare(f.home(), Some("b")).is_err());
+    assert_eq!(fs::read(f.home().join(STATE)).unwrap(), before);
+}
+
+#[test]
+fn account_switch_preserves_local_unread_threads_across_oauth_and_api_key_identities() {
+    use base64::Engine as _;
+
+    let f = Fixture::new();
+    let local_host = "local:092af2cb59bdd804c6f7f1cd1d85464b682974e43cd517397d25510024034d1c";
+    let (owner_a, read_a) = oauth_owner_and_read_identity("user-a", "account-a").unwrap();
+    let (owner_b, read_b) = oauth_owner_and_read_identity("user-b", "account-b").unwrap();
+    let read_api = api_key_read_identity();
+
+    let token_b = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+        br#"{"https://api.openai.com/auth":{"user_id":"user-b","chatgpt_account_id":"account-b"}}"#,
+    );
+    let auth_b = json!({"tokens":{"access_token":format!("e30.{token_b}.fixture")}});
+    fs::write(
+        f.home().join("config.toml"),
+        "cli_auth_credentials_store = 'file'\n",
+    )
+    .unwrap();
+    fs::write(
+        f.home().join("auth.json"),
+        serde_json::to_vec(&auth_b).unwrap(),
+    )
+    .unwrap();
+
+    let mut state = f.local("legacy");
+    state[HOSTS]["remote-chat"] = json!("remote-host");
+    state[SCOPES] = json!({"owner":owner_a,"inactive":{}});
+    state[ATOMS] = json!({
+        "local-document-identity":{
+            "userId":"user-a",
+            "accountId":"account-a",
+            "authMethod":"chatgpt"
+        }
+    });
+    state[READ_STATE] = json!({
+        "version": 1,
+        UNREAD_BY_IDENTITY: {
+            &read_a: {
+                local_host: ["chat", "projectless-chat", "remote-chat", "child"],
+                "durable:cloud-a": ["cloud-thread-a"]
+            },
+            &read_b: {
+                local_host: ["stale-chat"],
+                "durable:cloud-b": ["cloud-thread-b"]
+            }
+        }
+    });
+    f.write(&state);
+
+    assert!(
+        crate::modules::codex_session_visibility::prepare_desktop_project_state_after_switch(
+            "test-unread-switch",
+            f.home(),
+        )
+        .unwrap()
+    );
+    let switched = native_start(f.state(), Some(&owner_b));
+    assert_eq!(
+        switched[READ_STATE][UNREAD_BY_IDENTITY][&read_b][local_host],
+        json!(["chat", "projectless-chat"])
+    );
+    assert_eq!(
+        switched[READ_STATE][UNREAD_BY_IDENTITY][&read_b]["durable:cloud-b"],
+        json!(["cloud-thread-b"])
+    );
+    assert!(
+        switched[READ_STATE][UNREAD_BY_IDENTITY][&read_b]
+            .get("durable:cloud-a")
+            .is_none()
+    );
+    assert_eq!(
+        switched[READ_STATE][UNREAD_BY_IDENTITY][&read_a]["durable:cloud-a"],
+        json!(["cloud-thread-a"])
+    );
+    f.write(&switched);
+    assert!(
+        !crate::modules::codex_session_visibility::prepare_desktop_project_state_after_switch(
+            "test-unread-switch",
+            f.home(),
+        )
+        .unwrap(),
+        "repeat switch preparation stays idempotent"
+    );
+
+    // Simulate reading 'chat' and receiving a new unread turn 'new-unread' in Account B,
+    // then switching to API key mode and back to Account A.
+    let mut running_b = f.state();
+    running_b[ATOMS]["local-document-identity"] = json!({
+        "userId":"user-b",
+        "accountId":"account-b",
+        "authMethod":"chatgpt"
+    });
+    running_b[READ_STATE][UNREAD_BY_IDENTITY][&read_b][local_host] =
+        json!(["projectless-chat", "new-unread"]);
+    f.write(&running_b);
+
+    assert!(prepare_with_read_identity(f.home(), None, Some(&read_api)).unwrap());
+    let api_booted = native_start(f.state(), None);
+    assert_eq!(
+        api_booted[READ_STATE][UNREAD_BY_IDENTITY][&read_api][local_host],
+        json!(["projectless-chat", "new-unread"])
+    );
+    f.write(&api_booted);
+
+    // Clear all unread threads in API-key mode and switch back to Account A.
+    let mut api_cleared = f.state();
+    api_cleared[READ_STATE][UNREAD_BY_IDENTITY][&read_api][local_host] = json!([]);
+    f.write(&api_cleared);
+
+    assert!(prepare_with_read_identity(f.home(), Some(&owner_a), Some(&read_a)).unwrap());
+    let restored_a = native_start(f.state(), Some(&owner_a));
+    assert_eq!(
+        restored_a[READ_STATE][UNREAD_BY_IDENTITY][&read_a][local_host],
+        json!([])
+    );
+    assert_eq!(
+        restored_a[READ_STATE][UNREAD_BY_IDENTITY][&read_a]["durable:cloud-a"],
+        json!(["cloud-thread-a"])
+    );
 }
 
 #[test]

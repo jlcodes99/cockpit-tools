@@ -391,11 +391,17 @@ fn prepare_local_project_account_state(instance: &CodexSyncInstance) -> Result<b
         if local_projects::has_pending(&instance.data_dir) {
             return Err("CODEX_PROJECT_PENDING_RECOVERY".into());
         }
-        let Some(owner) = modules::codex_account::desktop_renderer_project_owner(&instance.data_dir)? else {
+        let Some(identity) =
+            modules::codex_account::desktop_renderer_account_identity(&instance.data_dir)?
+        else {
             return Ok(false);
         };
         verify_project_recovery_stopped(instance)?;
-        let prepared = local_projects::account_state::prepare(&instance.data_dir, owner.as_deref())?;
+        let prepared = local_projects::account_state::prepare_with_read_identity(
+            &instance.data_dir,
+            identity.owner.as_deref(),
+            Some(identity.read_state_identity.as_str()),
+        )?;
         if prepared {
             modules::logger::log_info(&format!(
                 "[Codex Local Projects] prepared account-scoped local groups: instance_id={}",

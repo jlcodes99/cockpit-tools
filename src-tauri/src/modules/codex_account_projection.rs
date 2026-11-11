@@ -1443,28 +1443,52 @@ pub async fn sync_bound_oauth_consumers_after_reauth(account_id: &str) -> Result
         .map_err(|_| "PROXY_RUNTIME_FAILED".to_string())?
 }
 
-/// Derive the Desktop renderer owner from the actual projected credential,
-/// including API keys bound to OAuth. Never use Cockpit account IDs or email.
-pub(crate) fn desktop_renderer_project_owner(
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DesktopRendererAccountIdentity {
+    pub(crate) owner: Option<String>,
+    pub(crate) read_state_identity: String,
+}
+
+fn api_key_read_state_identity() -> String {
+    format!("{:x}", Sha256::digest(br#"["execution-storage","apikey"]"#))
+}
+
+/// Derive the Desktop renderer owner and thread read-state identity from the
+/// actual projected credential, including API keys bound to OAuth. Never use
+/// Cockpit account IDs or email.
+pub(crate) fn desktop_renderer_account_identity(
     base_dir: &Path,
-) -> Result<Option<Option<String>>, String> {
+) -> Result<Option<DesktopRendererAccountIdentity>, String> {
     let Some(auth) = read_configured_codex_auth_value(base_dir)? else {
         return Ok(None);
     };
-    renderer_project_owner_from_auth(&auth)
+    renderer_account_identity_from_auth(&auth)
 }
 
-fn renderer_project_owner_from_auth(
-    auth: &serde_json::Value,
+#[allow(dead_code)]
+pub(crate) fn desktop_renderer_project_owner(
+    base_dir: &Path,
 ) -> Result<Option<Option<String>>, String> {
+    Ok(desktop_renderer_account_identity(base_dir)?.map(|identity| identity.owner))
+}
+
+fn renderer_account_identity_from_auth(
+    auth: &serde_json::Value,
+) -> Result<Option<DesktopRendererAccountIdentity>, String> {
     if auth["auth_mode"] == "apikey" {
-        return Ok(Some(None));
+        return Ok(Some(DesktopRendererAccountIdentity {
+            owner: None,
+            read_state_identity: api_key_read_state_identity(),
+        }));
     }
     let tokens = &auth["tokens"];
     if !tokens.is_object() {
         return Ok(
             if auth["auth_mode"] == "apikey" || auth["OPENAI_API_KEY"].is_string() {
-                Some(None)
+                Some(DesktopRendererAccountIdentity {
+                    owner: None,
+                    read_state_identity: api_key_read_state_identity(),
+                })
             } else {
                 None
             },
@@ -1488,12 +1512,25 @@ fn renderer_project_owner_from_auth(
         .or_else(|| claims["account_id"].as_str());
     Ok(match (user, account) {
         (Some(user), Some(account)) if !user.is_empty() && !account.is_empty() => {
-            let identity = serde_json::to_vec(&serde_json::json!([user, account]))
+            let owner_identity = serde_json::to_vec(&serde_json::json!([user, account]))
                 .map_err(|e| e.to_string())?;
-            Some(Some(format!("{:x}", Sha256::digest(identity))))
+            let read_identity =
+                serde_json::to_vec(&serde_json::json!(["chatgpt", account, user]))
+                    .map_err(|e| e.to_string())?;
+            Some(DesktopRendererAccountIdentity {
+                owner: Some(format!("{:x}", Sha256::digest(owner_identity))),
+                read_state_identity: format!("{:x}", Sha256::digest(read_identity)),
+            })
         }
         _ => None,
     })
+}
+
+#[cfg(test)]
+fn renderer_project_owner_from_auth(
+    auth: &serde_json::Value,
+) -> Result<Option<Option<String>>, String> {
+    Ok(renderer_account_identity_from_auth(auth)?.map(|identity| identity.owner))
 }
 
 #[cfg(test)]
@@ -1519,11 +1556,17 @@ mod account_project_switch_identity_tests {
             "account_id":"projected-workspace"
         }});
         assert_eq!(
-            renderer_project_owner_from_auth(&auth).unwrap(),
-            Some(Some(format!(
-                "{:x}",
-                Sha256::digest(br#"["user-one","token-workspace"]"#)
-            )))
+            renderer_account_identity_from_auth(&auth).unwrap(),
+            Some(DesktopRendererAccountIdentity {
+                owner: Some(format!(
+                    "{:x}",
+                    Sha256::digest(br#"["user-one","token-workspace"]"#)
+                )),
+                read_state_identity: format!(
+                    "{:x}",
+                    Sha256::digest(br#"["chatgpt","token-workspace","user-one"]"#)
+                ),
+            })
         );
     }
     #[test]
@@ -1532,21 +1575,33 @@ mod account_project_switch_identity_tests {
             "access_token":token(serde_json::json!({"user_id":"user","account_id":"workspace"}))
         }});
         assert_eq!(
-            renderer_project_owner_from_auth(&auth).unwrap(),
-            Some(Some(format!(
-                "{:x}",
-                Sha256::digest(br#"["user","workspace"]"#)
-            )))
+            renderer_account_identity_from_auth(&auth).unwrap(),
+            Some(DesktopRendererAccountIdentity {
+                owner: Some(format!(
+                    "{:x}",
+                    Sha256::digest(br#"["user","workspace"]"#)
+                )),
+                read_state_identity: format!(
+                    "{:x}",
+                    Sha256::digest(br#"["chatgpt","workspace","user"]"#)
+                ),
+            })
         );
     }
     #[test]
     fn account_project_switch_distinguishes_key_unknown_and_oauth() {
         assert_eq!(
-            renderer_project_owner_from_auth(&serde_json::json!({
+            renderer_account_identity_from_auth(&serde_json::json!({
                 "auth_mode":"apikey","OPENAI_API_KEY":"fake","tokens":{}
             }))
             .unwrap(),
-            Some(None)
+            Some(DesktopRendererAccountIdentity {
+                owner: None,
+                read_state_identity: format!(
+                    "{:x}",
+                    Sha256::digest(br#"["execution-storage","apikey"]"#)
+                ),
+            })
         );
         assert_eq!(
             renderer_project_owner_from_auth(&serde_json::json!({
