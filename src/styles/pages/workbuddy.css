@@ -494,8 +494,8 @@
 }
 
 .workbuddy-model-probe-modal {
-  max-width: 540px;
-  width: 92%;
+  max-width: 760px;
+  width: 94%;
 }
 
 .workbuddy-model-probe-body {
@@ -780,4 +780,316 @@
 .wb-probe-notice-close:hover {
   opacity: 1;
   background: color-mix(in srgb, var(--notice-color, var(--danger, #ef4444)) 16%, transparent);
+}
+
+/* 批量探测：账号范围 / 模型多选 / 结果矩阵 */
+.wb-probe-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wb-probe-scope-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wb-probe-scope-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.wb-probe-scope-btn:hover:not(:disabled) {
+  border-color: var(--accent, #4f7cff);
+  color: var(--text-primary);
+}
+
+.wb-probe-scope-btn.active {
+  border-color: var(--accent, #4f7cff);
+  background: color-mix(in srgb, var(--accent, #4f7cff) 14%, transparent);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.wb-probe-scope-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.wb-probe-scope-summary {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.wb-probe-scope-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.wb-probe-scope-locked em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.wb-probe-models {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wb-probe-models-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wb-probe-models-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wb-probe-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+}
+
+.wb-probe-search input {
+  width: 110px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+
+.wb-probe-model-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 10px;
+  max-height: 190px;
+  overflow: auto;
+  padding: 6px 4px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.wb-probe-model-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.wb-probe-model-item:hover {
+  background: var(--bg-hover);
+}
+
+.wb-probe-model-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.wb-probe-model-name > em {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-probe-model-credits {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.wb-probe-model-empty {
+  grid-column: 1 / -1;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.wb-probe-run-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.wb-probe-matrix-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wb-probe-summary {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.wb-probe-summary-item.ok {
+  color: var(--success, #22c55e);
+}
+
+.wb-probe-summary-item.limited {
+  color: var(--danger, #ef4444);
+}
+
+.wb-probe-summary-item.error {
+  color: var(--warning, #f59e0b);
+}
+
+.wb-probe-summary-item.unknown {
+  color: var(--text-muted);
+}
+
+.wb-probe-matrix-scroll {
+  overflow: auto;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+}
+
+.wb-probe-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.wb-probe-matrix th,
+.wb-probe-matrix td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-light);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.wb-probe-matrix th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.wb-probe-matrix-account {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+}
+
+.wb-probe-matrix-current {
+  margin-left: 6px;
+  font-style: normal;
+  font-size: 10px;
+  color: var(--accent, #4f7cff);
+}
+
+.wb-probe-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.wb-probe-cell.ok {
+  color: var(--success, #22c55e);
+  border-color: color-mix(in srgb, var(--success, #22c55e) 40%, transparent);
+}
+
+.wb-probe-cell.limited {
+  color: var(--danger, #ef4444);
+  border-color: color-mix(in srgb, var(--danger, #ef4444) 40%, transparent);
+  background: color-mix(in srgb, var(--danger, #ef4444) 8%, transparent);
+}
+
+.wb-probe-cell.error {
+  color: var(--warning, #f59e0b);
+  border-color: color-mix(in srgb, var(--warning, #f59e0b) 40%, transparent);
+}
+
+.wb-probe-cell.running {
+  color: var(--accent, #4f7cff);
+}
+
+.wb-probe-cell-sub {
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.wb-probe-detail {
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.wb-probe-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 12px;
+}
+
+.wb-probe-detail-head > span {
+  color: var(--text-muted);
+}
+
+.wb-probe-detail-head > button {
+  margin-left: auto;
+}
+
+.wb-probe-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.wb-probe-detail-body p {
+  margin: 0;
 }

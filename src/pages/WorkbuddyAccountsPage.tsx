@@ -96,6 +96,7 @@ export function WorkbuddyAccountsPage() {
   const [creditAccountId, setCreditAccountId] = useState<string | null>(null);
   const [probeOpen, setProbeOpen] = useState(false);
   const [probeAccountId, setProbeAccountId] = useState<string | null>(null);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
   const [probeVersion, setProbeVersion] = useState(0);
   const store = useWorkbuddyAccountStore();
 
@@ -191,7 +192,7 @@ export function WorkbuddyAccountsPage() {
           setProbeAccountId(account.id);
           setProbeOpen(true);
         }}
-        title={page.t('workbuddy.modelProbe.title', '探测模型可用性')}
+        title={page.t('workbuddy.modelProbe.openForAccount', '探测该账号模型可用性')}
       >
         <Crosshair size={14} />
       </button>
@@ -243,7 +244,7 @@ export function WorkbuddyAccountsPage() {
           onClick={() => setProbeOpen(true)}
         >
           <Crosshair size={14} aria-hidden="true" />
-          {page.t('workbuddy.modelProbe.open', '探测模型可用性')}
+          {page.t('workbuddy.modelProbe.open', '批量探测模型')}
         </button>
       </div>
       <PlatformOverviewTabsHeader
@@ -262,6 +263,7 @@ export function WorkbuddyAccountsPage() {
           loading={store.loading}
           page={page}
           platformConfig={platformConfig}
+          onSelectionChange={setSelectedAccountIds}
           onRefreshAccounts={() => { store.fetchAccounts(); }}
         />
       )}
@@ -277,6 +279,9 @@ export function WorkbuddyAccountsPage() {
         <WorkbuddyModelProbeModal
           accounts={store.accounts}
           currentAccountId={probeAccountId ?? store.currentAccountId}
+          selectedAccountIds={selectedAccountIds}
+          initialScope={probeAccountId ? 'current' : undefined}
+          lockedAccountId={probeAccountId}
           onClose={() => {
             setProbeOpen(false);
             setProbeAccountId(null);

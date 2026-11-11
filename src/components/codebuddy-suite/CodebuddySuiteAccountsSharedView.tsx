@@ -210,6 +210,8 @@ interface CodebuddySuiteAccountsSharedViewProps<
   page: UseProviderAccountsPageReturn;
   platformConfig: CodebuddySuiteAccountsPlatformConfig<TAccount>;
   onRefreshAccounts: () => void;
+  /** 勾选变化时上报（用于批量操作，如批量探测） */
+  onSelectionChange?: (ids: string[]) => void;
 }
 
 export function CodebuddySuiteAccountsSharedView<
@@ -220,6 +222,7 @@ export function CodebuddySuiteAccountsSharedView<
   page,
   platformConfig,
   onRefreshAccounts,
+  onSelectionChange,
 }: CodebuddySuiteAccountsSharedViewProps<TAccount>) {
   const [filterTypes, setFilterTypes] = useState<string[]>(() =>
     page.filterPersistenceEnabled
@@ -347,6 +350,16 @@ export function CodebuddySuiteAccountsSharedView<
     formatDate,
     normalizeTag,
   } = page;
+
+  // 向上汇报勾选（批量探测等批量操作需要），用排序后的 key 避免 Set 引用抖动
+  const selectedIdsKey = useMemo(
+    () => Array.from(selected).sort().join(","),
+    [selected],
+  );
+  useEffect(() => {
+    onSelectionChange?.(selectedIdsKey ? selectedIdsKey.split(",") : []);
+  }, [selectedIdsKey, onSelectionChange]);
+
   const quotaNumberFormatter = useMemo(
     () =>
       new Intl.NumberFormat(locale || undefined, { maximumFractionDigits: 2 }),
