@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { app, BrowserWindow, session, shell } = require('electron');
+const { app, BrowserWindow, safeStorage, session, shell } = require('electron');
 
 function parseArgs(argv) {
   const result = {};
@@ -37,9 +37,140 @@ fs.mkdirSync(userDataDir, { recursive: true });
 fs.mkdirSync(path.dirname(statusFile), { recursive: true });
 fs.mkdirSync(path.dirname(exportFile), { recursive: true });
 
+// `probe` mode is pointed at a saved account snapshot. Loading claude.ai on top of
+// that directory lets Chromium rewrite its Cookies database: when the stored
+// cookies cannot be decrypted (Keychain locked/unavailable, or cookies written by
+// a client with a different Safe Storage key) the site answers as logged out and
+// the snapshot's sessionKey is overwritten for good. A probe must never mutate the
+// snapshot, so Chromium runs on a disposable copy; status/export files still go to
+// the paths Cockpit passed in.
+const PROBE_COPY_PREFIX = 'cockpit-claude-probe-';
+const PROBE_COPY_STALE_MS = 60 * 60 * 1000;
+const PROBE_COPY_SKIP = new Set([
+  'Cache',
+  'Code Cache',
+  'GPUCache',
+  'DawnGraphiteCache',
+  'DawnWebGPUCache',
+  'GraphiteDawnCache',
+  'GPUPersistentCache',
+  'ShaderCache',
+  'GrShaderCache',
+  'Crashpad',
+  'Logs',
+  'blob_storage',
+  'SingletonLock',
+  'SingletonSocket',
+  'SingletonCookie',
+  'claude_desktop_auth_helper.stdout.log',
+  'claude_desktop_auth_helper.stderr.log',
+]);
+
+function removeStaleProbeCopies(root) {
+  let entries = [];
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  const now = Date.now();
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith(PROBE_COPY_PREFIX)) continue;
+    const dir = path.join(root, entry.name);
+    try {
+      if (now - fs.statSync(dir).mtimeMs > PROBE_COPY_STALE_MS) {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    } catch {
+      // best effort
+    }
+  }
+}
+
+function createProbeCopy(sourceDir) {
+  const root = require('node:os').tmpdir();
+  removeStaleProbeCopies(root);
+  const copyDir = fs.mkdtempSync(path.join(root, PROBE_COPY_PREFIX));
+  const skip = new Set([
+    ...PROBE_COPY_SKIP,
+    path.basename(statusFile),
+    path.basename(exportFile),
+  ]);
+  fs.cpSync(sourceDir, copyDir, {
+    recursive: true,
+    force: true,
+    errorOnExist: false,
+    filter: (src) => src === sourceDir || !skip.has(path.basename(src)),
+  });
+  fs.chmodSync(copyDir, 0o700);
+  return copyDir;
+}
+
+let probeCopyDir = null;
+function removeProbeCopy() {
+  if (!probeCopyDir) return;
+  const dir = probeCopyDir;
+  probeCopyDir = null;
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch {
+    // ignored; the detached cleaner below retries
+  }
+  // Chromium's network/GPU processes keep writing small cache files while the app
+  // shuts down, after this handler has run. Delete again once this process is gone.
+  if (process.platform !== 'win32') {
+    try {
+      const { spawn } = require('node:child_process');
+      const cleaner = spawn(
+        '/bin/sh',
+        [
+          '-c',
+          'i=0; while kill -0 "$1" 2>/dev/null && [ $i -lt 300 ]; do sleep 0.2; i=$((i+1)); done; sleep 1; rm -rf -- "$2"',
+          'cockpit-probe-cleanup',
+          String(process.pid),
+          dir,
+        ],
+        { detached: true, stdio: 'ignore' },
+      );
+      cleaner.unref();
+    } catch {
+      // stale copies are swept on the next probe
+    }
+  }
+}
+
+let chromiumUserDataDir = userDataDir;
+if (mode === 'probe') {
+  try {
+    probeCopyDir = createProbeCopy(userDataDir);
+    chromiumUserDataDir = probeCopyDir;
+  } catch (error) {
+    writeJsonAtomic(statusFile, {
+      version: 1,
+      status: 'probe_error',
+      authenticated: false,
+      exportedAt: new Date().toISOString(),
+      userDataDir,
+      error: `复制 Claude 快照用于探测失败（未改动原快照）: ${error && error.message ? error.message : error}`,
+    });
+    process.exit(3);
+  }
+  // Electron's main process does not reliably emit Node's `exit` event, so clean up
+  // on Electron's own shutdown hooks as well.
+  process.on('exit', removeProbeCopy);
+  app.on('will-quit', removeProbeCopy);
+  app.on('quit', removeProbeCopy);
+  for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
+    process.on(signal, () => {
+      removeProbeCopy();
+      process.exit(0);
+    });
+  }
+}
+
 app.setName('Cockpit Claude Auth');
-app.setPath('userData', userDataDir);
-app.setPath('logs', path.join(userDataDir, 'Logs'));
+app.setPath('userData', chromiumUserDataDir);
+app.setPath('logs', path.join(chromiumUserDataDir, 'Logs'));
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 if (process.platform === 'darwin' && (mode === 'probe' || mode === 'cookie_probe') && app.dock) {
   app.dock.hide();
@@ -418,6 +549,22 @@ app.whenReady().then(async () => {
         error: lastError,
       });
     }
+    app.quit();
+    return;
+  }
+
+  if (mode === 'probe' && process.platform === 'darwin' && !safeStorage.isEncryptionAvailable()) {
+    // The login Keychain cannot be read (typically locked or in a failed state after
+    // a screen unlock). Cookies cannot be decrypted, so a probe could only produce a
+    // logged-out result. Stop here and report the real cause instead.
+    writeJsonAtomic(statusFile, {
+      version: 1,
+      status: 'probe_error',
+      authenticated: false,
+      exportedAt: new Date().toISOString(),
+      userDataDir,
+      error: 'macOS 钥匙串当前不可用，无法解密 Claude 登录态；已跳过探测且未改动快照。请解锁「登录」钥匙串或重启后重试。',
+    });
     app.quit();
     return;
   }
