@@ -1404,8 +1404,85 @@ pub struct WorkbuddyModelProbeResult {
     pub keep_conversation: bool,
 }
 
+/// 探测目标平台：WorkBuddy 与 CodeBuddy CN 后端同构（仅域名不同），探测逻辑共用。
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum WbPlatform {
+    Workbuddy,
+    CodebuddyCn,
+}
+
+/// CodeBuddy CN 应用面端点（与 WorkBuddy 的 www.workbuddy.cn 对称）
+const CODEBUDDY_CN_WEB_ENDPOINT: &str = "https://www.codebuddy.cn";
+
+impl WbPlatform {
+    fn endpoints(self) -> [&'static str; 2] {
+        match self {
+            Self::Workbuddy => [WORKBUDDY_WEB_ENDPOINT, WORKBUDDY_API_ENDPOINT],
+            Self::CodebuddyCn => [CODEBUDDY_CN_WEB_ENDPOINT, CODEBUDDY_CN_WEB_ENDPOINT],
+        }
+    }
+}
+
+/// 探测所需的鉴权字段（两个平台的账号结构一致）
+pub struct ProbeAuth<'a> {
+    pub access_token: &'a str,
+    pub uid: Option<&'a str>,
+    pub enterprise_id: Option<&'a str>,
+    pub domain: Option<&'a str>,
+}
+
+impl<'a> ProbeAuth<'a> {
+    fn from_workbuddy(account: &'a crate::models::workbuddy::WorkbuddyAccount) -> Self {
+        Self {
+            access_token: &account.access_token,
+            uid: account.uid.as_deref(),
+            enterprise_id: account.enterprise_id.as_deref(),
+            domain: account.domain.as_deref(),
+        }
+    }
+
+    fn from_codebuddy(account: &'a crate::models::codebuddy::CodebuddyAccount) -> Self {
+        Self {
+            access_token: &account.access_token,
+            uid: account.uid.as_deref(),
+            enterprise_id: account.enterprise_id.as_deref(),
+            domain: account.domain.as_deref(),
+        }
+    }
+}
+
 pub async fn probe_model(
     account: &crate::models::workbuddy::WorkbuddyAccount,
+    model: &str,
+    keep_conversation: bool,
+) -> Result<WorkbuddyModelProbeResult, String> {
+    probe_model_impl(
+        WbPlatform::Workbuddy,
+        &ProbeAuth::from_workbuddy(account),
+        model,
+        keep_conversation,
+    )
+    .await
+}
+
+/// CodeBuddy CN 平台的模型探测（与 WorkBuddy 共用同一套后端契约）。
+pub async fn probe_cn_model(
+    account: &crate::models::codebuddy::CodebuddyAccount,
+    model: &str,
+    keep_conversation: bool,
+) -> Result<WorkbuddyModelProbeResult, String> {
+    probe_model_impl(
+        WbPlatform::CodebuddyCn,
+        &ProbeAuth::from_codebuddy(account),
+        model,
+        keep_conversation,
+    )
+    .await
+}
+
+async fn probe_model_impl(
+    platform: WbPlatform,
+    auth: &ProbeAuth<'_>,
     model: &str,
     keep_conversation: bool,
 ) -> Result<WorkbuddyModelProbeResult, String> {
@@ -1424,17 +1501,16 @@ pub async fn probe_model(
     // 注意不能带 X-No-User-Id 等匿名头——它们在客户端只与 X-No-Authorization
     // 搭配用于免鉴权接口，混用会导致网关 403 access_denied。
     let headers = billing_headers(
-        &account.access_token,
-        account.uid.as_deref(),
-        account.enterprise_id.as_deref(),
-        account.domain.as_deref(),
+        auth.access_token,
+        auth.uid,
+        auth.enterprise_id,
+        auth.domain,
         "zh",
     )?;
 
-    // 对话接口在客户端走 www.workbuddy.cn（web 应用面）；copilot.tencent.com 是
-    // 计费/plugin 面。先打主端点，403/404 时回退备用端点再试一次。
-    let endpoints = [WORKBUDDY_WEB_ENDPOINT, WORKBUDDY_API_ENDPOINT];
-    let mut used_endpoint = WORKBUDDY_WEB_ENDPOINT;
+    // 对话接口在客户端走 web 应用面；备用端点用于 403/404 回退。
+    let endpoints = platform.endpoints();
+    let mut used_endpoint = endpoints[0];
     let mut http_status = 0u16;
     let mut text = String::new();
     for base in endpoints {
@@ -1464,7 +1540,7 @@ pub async fn probe_model(
     let mut reply = String::new();
     if status == "available" {
         if let Some(cid) = &conversation_id {
-            match fetch_conversation_session(&client, cid, account).await {
+            match fetch_conversation_session(&client, cid, auth, platform).await {
                 Ok((api_url, session_token, session_id)) => {
                     let outcome = read_acp_reply(
                         &client,
@@ -1472,7 +1548,7 @@ pub async fn probe_model(
                         &session_token,
                         &session_id,
                         model,
-                        account.enterprise_id.as_deref(),
+                        auth.enterprise_id,
                         45,
                     )
                     .await;
@@ -1518,8 +1594,8 @@ pub async fn probe_model(
             let del_url = format!("{}/console/as/conversations/{}", used_endpoint, cid);
             let mut del = client
                 .delete(&del_url)
-                .header("Authorization", format!("Bearer {}", account.access_token));
-            if let Some(d) = &account.domain {
+                .header("Authorization", format!("Bearer {}", auth.access_token));
+            if let Some(d) = auth.domain {
                 del = del.header("X-Domain", d);
             }
             let _ = del.send().await;
@@ -1551,17 +1627,18 @@ fn truncate_chars(value: &str, max: usize) -> String {
 async fn fetch_conversation_session(
     client: &reqwest::Client,
     conversation_id: &str,
-    account: &crate::models::workbuddy::WorkbuddyAccount,
+    auth: &ProbeAuth<'_>,
+    platform: WbPlatform,
 ) -> Result<(String, String, String), String> {
     let headers = billing_headers(
-        &account.access_token,
-        account.uid.as_deref(),
-        account.enterprise_id.as_deref(),
-        account.domain.as_deref(),
+        auth.access_token,
+        auth.uid,
+        auth.enterprise_id,
+        auth.domain,
         "zh",
     )?;
 
-    let endpoints = [WORKBUDDY_WEB_ENDPOINT, WORKBUDDY_API_ENDPOINT];
+    let endpoints = platform.endpoints();
     let mut last_err = String::new();
     for base in endpoints {
         let url = format!(
@@ -1990,22 +2067,35 @@ pub struct WorkbuddyCloudModel {
 pub async fn fetch_cloud_models(
     account: &crate::models::workbuddy::WorkbuddyAccount,
 ) -> Result<Vec<WorkbuddyCloudModel>, String> {
-    let scope = account
+    fetch_cloud_models_impl(WbPlatform::Workbuddy, &ProbeAuth::from_workbuddy(account)).await
+}
+
+/// CodeBuddy CN 平台的实时模型目录（与 WorkBuddy 同一套接口，域名不同）。
+pub async fn fetch_cn_cloud_models(
+    account: &crate::models::codebuddy::CodebuddyAccount,
+) -> Result<Vec<WorkbuddyCloudModel>, String> {
+    fetch_cloud_models_impl(WbPlatform::CodebuddyCn, &ProbeAuth::from_codebuddy(account)).await
+}
+
+async fn fetch_cloud_models_impl(
+    platform: WbPlatform,
+    auth: &ProbeAuth<'_>,
+) -> Result<Vec<WorkbuddyCloudModel>, String> {
+    let scope = auth
         .enterprise_id
-        .as_deref()
         .filter(|s| !s.trim().is_empty())
         .unwrap_or("personal")
         .to_string();
     let client = build_client()?;
     let headers = billing_headers(
-        &account.access_token,
-        account.uid.as_deref(),
-        account.enterprise_id.as_deref(),
-        account.domain.as_deref(),
+        auth.access_token,
+        auth.uid,
+        auth.enterprise_id,
+        auth.domain,
         "zh",
     )?;
 
-    let endpoints = [WORKBUDDY_WEB_ENDPOINT, WORKBUDDY_API_ENDPOINT];
+    let endpoints = platform.endpoints();
     let mut last_err = String::new();
     for base in endpoints {
         let url = format!("{}/console/enterprises/{}/models", base, scope);

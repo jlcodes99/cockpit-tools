@@ -8,6 +8,9 @@
 
 export type WorkbuddyProbeStatusKind = 'rate_limited' | 'error';
 
+/** 探测平台：WorkBuddy 与 CodeBuddy CN 额度共享，但账号体系各自独立 */
+export type WorkbuddyProbePlatform = 'workbuddy' | 'codebuddy_cn';
+
 export interface WorkbuddyProbeRecord {
   accountId: string;
   model: string;
@@ -24,6 +27,11 @@ type ProbeStore = Record<string, Record<string, WorkbuddyProbeRecord>>;
 
 const STORAGE_KEY = 'agtools.workbuddy.probe_status.v1';
 const CHANGE_EVENT = 'agtools:workbuddy-probe-status';
+
+/** WorkBuddy 沿用 accountId 作 key（兼容旧数据）；其它平台加前缀隔离。 */
+function storageKey(accountId: string, platform: WorkbuddyProbePlatform): string {
+  return platform === 'workbuddy' ? accountId : `${platform}:${accountId}`;
+}
 
 function readStore(): ProbeStore {
   try {
@@ -66,32 +74,48 @@ export function parseProbeResetAt(message: string): number | null {
   return Number.isFinite(time) && time > Date.now() - 24 * 3600 * 1000 ? time : null;
 }
 
-export function setWorkbuddyProbeRecord(record: WorkbuddyProbeRecord) {
+export function setWorkbuddyProbeRecord(
+  record: WorkbuddyProbeRecord,
+  platform: WorkbuddyProbePlatform = 'workbuddy',
+) {
   const store = readStore();
-  const perAccount = store[record.accountId] ?? {};
+  const key = storageKey(record.accountId, platform);
+  const perAccount = store[key] ?? {};
   perAccount[record.model] = record;
-  store[record.accountId] = perAccount;
+  store[key] = perAccount;
   writeStore(store);
 }
 
 /** 探测成功时清除该模型的不可用记录。 */
-export function clearWorkbuddyProbeRecord(accountId: string, model: string) {
+export function clearWorkbuddyProbeRecord(
+  accountId: string,
+  model: string,
+  platform: WorkbuddyProbePlatform = 'workbuddy',
+) {
   const store = readStore();
-  const perAccount = store[accountId];
+  const key = storageKey(accountId, platform);
+  const perAccount = store[key];
   if (!perAccount || !(model in perAccount)) return;
   delete perAccount[model];
-  if (Object.keys(perAccount).length === 0) delete store[accountId];
+  if (Object.keys(perAccount).length === 0) delete store[key];
   writeStore(store);
 }
 
 /** 用户点 × 关闭提示（删除记录，下次探测再写入）。 */
-export function dismissWorkbuddyProbeRecord(accountId: string, model: string) {
-  clearWorkbuddyProbeRecord(accountId, model);
+export function dismissWorkbuddyProbeRecord(
+  accountId: string,
+  model: string,
+  platform: WorkbuddyProbePlatform = 'workbuddy',
+) {
+  clearWorkbuddyProbeRecord(accountId, model, platform);
 }
 
 /** 某账号当前所有不可用记录（按探测时间倒序）。 */
-export function getWorkbuddyProbeRecords(accountId: string): WorkbuddyProbeRecord[] {
-  const perAccount = readStore()[accountId];
+export function getWorkbuddyProbeRecords(
+  accountId: string,
+  platform: WorkbuddyProbePlatform = 'workbuddy',
+): WorkbuddyProbeRecord[] {
+  const perAccount = readStore()[storageKey(accountId, platform)];
   if (!perAccount) return [];
   return Object.values(perAccount).sort((a, b) => b.checkedAt - a.checkedAt);
 }

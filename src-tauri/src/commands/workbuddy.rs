@@ -547,3 +547,25 @@ pub async fn fetch_workbuddy_cloud_models(
 pub async fn fetch_workbuddy_cloud_catalog() -> Result<Vec<workbuddy_oauth::WorkbuddyCatalogModel>, String> {
     workbuddy_oauth::fetch_cloud_catalog().await
 }
+
+// ---- CodeBuddy CN：与 WorkBuddy 同构，复用同一套探测/目录逻辑 ----
+
+#[tauri::command]
+pub async fn probe_codebuddy_cn_model(
+    account_id: String,
+    model: String,
+    keep_conversation: Option<bool>,
+) -> Result<workbuddy_oauth::WorkbuddyModelProbeResult, String> {
+    let account = crate::modules::codebuddy_cn_account::load_account(&account_id)
+        .ok_or_else(|| format!("账号不存在或读取失败: {}", account_id))?;
+    workbuddy_oauth::probe_cn_model(&account, &model, keep_conversation.unwrap_or(false)).await
+}
+
+#[tauri::command]
+pub async fn fetch_codebuddy_cn_cloud_models(
+    account_id: String,
+) -> Result<Vec<workbuddy_oauth::WorkbuddyCloudModel>, String> {
+    let account = crate::modules::codebuddy_cn_account::load_account(&account_id)
+        .ok_or_else(|| format!("账号不存在或读取失败: {}", account_id))?;
+    workbuddy_oauth::fetch_cn_cloud_models(&account).await
+}

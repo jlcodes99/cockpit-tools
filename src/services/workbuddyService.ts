@@ -187,6 +187,21 @@ export async function fetchWorkbuddyCloudModels(accountId: string): Promise<Work
   return await invoke('fetch_workbuddy_cloud_models', { accountId });
 }
 
+// CodeBuddy CN 与 WorkBuddy 同构（额度共享），探测/目录复用同一套后端逻辑。
+export async function probeCodebuddyCnModel(
+  accountId: string,
+  model: string,
+  keepConversation: boolean,
+): Promise<WorkbuddyModelProbeResult> {
+  return await invoke('probe_codebuddy_cn_model', { accountId, model, keepConversation });
+}
+
+export async function fetchCodebuddyCnCloudModels(
+  accountId: string,
+): Promise<WorkbuddyCloudModel[]> {
+  return await invoke('fetch_codebuddy_cn_cloud_models', { accountId });
+}
+
 export interface WorkbuddyCatalogModel {
   model: string;
   displayName: string | null;

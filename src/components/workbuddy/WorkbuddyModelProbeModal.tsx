@@ -25,7 +25,9 @@ import {
 import type { WorkbuddyAccount } from '../../types/workbuddy';
 import { getWorkbuddyAccountDisplayEmail } from '../../types/workbuddy';
 import {
+  fetchCodebuddyCnCloudModels,
   fetchWorkbuddyCloudModels,
+  probeCodebuddyCnModel,
   probeWorkbuddyModel,
   type WorkbuddyCloudModel,
   type WorkbuddyModelProbeResult,
@@ -35,6 +37,7 @@ import {
   clearWorkbuddyProbeRecord,
   parseProbeResetAt,
   setWorkbuddyProbeRecord,
+  type WorkbuddyProbePlatform,
 } from '../../utils/workbuddyProbeStatus';
 
 interface WorkbuddyModelProbeModalProps {
@@ -46,6 +49,10 @@ interface WorkbuddyModelProbeModalProps {
   initialScope?: Scope;
   /** 锁定单个账号（从卡片入口打开时使用，隐藏范围切换） */
   lockedAccountId?: string | null;
+  /** 平台：codebuddy_cn 复用同一套后端（额度共享），仅端点/账号来源不同 */
+  platform?: WorkbuddyProbePlatform;
+  /** 账号显示名（不同平台取法不同） */
+  displayEmail?: (account: WorkbuddyAccount) => string;
   onClose: () => void;
 }
 
@@ -113,6 +120,8 @@ export function WorkbuddyModelProbeModal({
   selectedAccountIds,
   initialScope,
   lockedAccountId,
+  platform = 'workbuddy',
+  displayEmail = getWorkbuddyAccountDisplayEmail,
   onClose,
 }: WorkbuddyModelProbeModalProps) {
   const { t } = useTranslation();
@@ -134,6 +143,9 @@ export function WorkbuddyModelProbeModal({
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [activeCell, setActiveCell] = useState<string | null>(null);
   const runTokenRef = useRef(0);
+  const probeModelFn = platform === 'codebuddy_cn' ? probeCodebuddyCnModel : probeWorkbuddyModel;
+  const fetchModelsFn =
+    platform === 'codebuddy_cn' ? fetchCodebuddyCnCloudModels : fetchWorkbuddyCloudModels;
 
   // 云端实时模型目录（失败回退内置目录）
   useEffect(() => {
@@ -143,7 +155,7 @@ export function WorkbuddyModelProbeModal({
         : accounts[0]?.id) ?? '';
     if (!anchorAccountId) return;
     let cancelled = false;
-    fetchWorkbuddyCloudModels(anchorAccountId)
+    fetchModelsFn(anchorAccountId)
       .then((list) => {
         if (!cancelled) setCloudModels(list);
       })
@@ -244,18 +256,21 @@ export function WorkbuddyModelProbeModal({
         const key = cellKey(account.id, model);
         setCells((previous) => ({ ...previous, [key]: { status: 'running' } }));
         try {
-          const result = await probeWorkbuddyModel(account.id, model, keepConversation);
+          const result = await probeModelFn(account.id, model, keepConversation);
           if (result.status === 'rate_limited' || result.status === 'error') {
-            setWorkbuddyProbeRecord({
-              accountId: account.id,
-              model,
-              status: result.status,
-              message: result.message,
-              resetAt: parseProbeResetAt(result.message),
-              checkedAt: Date.now(),
-            });
+            setWorkbuddyProbeRecord(
+              {
+                accountId: account.id,
+                model,
+                status: result.status,
+                message: result.message,
+                resetAt: parseProbeResetAt(result.message),
+                checkedAt: Date.now(),
+              },
+              platform,
+            );
           } else if (result.status === 'available') {
-            clearWorkbuddyProbeRecord(account.id, model);
+            clearWorkbuddyProbeRecord(account.id, model, platform);
           }
           if (runTokenRef.current === token) {
             setCells((previous) => ({
@@ -327,7 +342,7 @@ export function WorkbuddyModelProbeModal({
               <span className="wb-probe-scope-locked">
                 {(() => {
                   const account = accounts.find((item) => item.id === lockedAccountId);
-                  return account ? getWorkbuddyAccountDisplayEmail(account) : lockedAccountId;
+                  return account ? displayEmail(account) : lockedAccountId;
                 })()}
                 <em>{t('workbuddy.modelProbe.singleAccount', '仅测该账号')}</em>
               </span>
@@ -480,8 +495,8 @@ export function WorkbuddyModelProbeModal({
                     {scopedAccounts.map((account) => (
                       <tr key={account.id}>
                         <td className="wb-probe-matrix-account">
-                          <span title={getWorkbuddyAccountDisplayEmail(account)}>
-                            {getWorkbuddyAccountDisplayEmail(account)}
+                          <span title={displayEmail(account)}>
+                            {displayEmail(account)}
                           </span>
                           {account.id === currentAccountId && (
                             <em className="wb-probe-matrix-current">
@@ -531,9 +546,7 @@ export function WorkbuddyModelProbeModal({
                   <div className="wb-probe-detail-head">
                     <strong>{activePair.model}</strong>
                     <span>
-                      {activePair.account
-                        ? getWorkbuddyAccountDisplayEmail(activePair.account)
-                        : activePair.accountId}
+                      {activePair.account ? displayEmail(activePair.account) : activePair.accountId}
                     </span>
                     <button type="button" className="modal-close" onClick={() => setActiveCell(null)}>
                       <X size={14} />
