@@ -283,9 +283,11 @@ async fn send_inner(
         let request = request.map_err(|error| super::diagnostics::transport_failure(
             502, "upstream_request_invalid", "Unable to prepare the upstream request", &error,
         ))?;
-        let (request, plain_request) = super::http_compression::request(
-            state, request, codex_backend && !prepared.route.chatgpt_plan,
-        ).await?;
+        let compress = codex_backend
+            && !prepared.route.chatgpt_plan
+            && !super::http_compression::has_duplicate_inline_images(&body);
+        let (request, plain_request) =
+            super::http_compression::request(state, request, compress).await?;
         if let Err(error) = tracker.check_quota_before_send() {
             let safe_replay = mapping::local_quota_prepared_replay_is_safe(prepared);
             if error.code == "quota_reserved"

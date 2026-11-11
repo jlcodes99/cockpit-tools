@@ -197,6 +197,123 @@ async fn full_compat_official_zstd_request_rejection_retries_exact_plaintext_onc
 }
 
 #[tokio::test]
+async fn duplicate_inline_images_use_identity_and_keep_the_original_input() {
+    for repeated in [false, true] {
+        let cert = rcgen::generate_simple_self_signed(vec!["chatgpt.com".into()]).unwrap();
+        let root = reqwest::Certificate::from_der(cert.cert.der()).unwrap();
+        let tls = rustls::ServerConfig::builder_with_provider(Arc::new(
+            rustls::crypto::aws_lc_rs::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(
+            vec![cert.cert.der().clone()],
+            rustls::pki_types::PrivatePkcs8KeyDer::from(cert.key_pair.serialize_der()).into(),
+        )
+        .unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(tls));
+        let captured = Arc::new(Mutex::new(Vec::<(HeaderMap, Value)>::new()));
+        let capture = captured.clone();
+        let task = tokio::spawn(async move {
+            loop {
+                let (socket, _) = listener.accept().await.unwrap();
+                let tls = acceptor.clone();
+                let capture = capture.clone();
+                tokio::spawn(async move {
+                    let socket = tls.accept(socket).await.unwrap();
+                    let service = hyper::service::service_fn(
+                        move |request: hyper::Request<hyper::body::Incoming>| {
+                            let capture = capture.clone();
+                            async move {
+                                let (parts, body) = request.into_parts();
+                                let bytes = body.collect().await.unwrap().to_bytes();
+                                let plain = if parts
+                                    .headers
+                                    .get("content-encoding")
+                                    .is_some_and(|v| v == "zstd")
+                                {
+                                    zstd::stream::decode_all(bytes.as_ref()).unwrap()
+                                } else {
+                                    bytes.to_vec()
+                                };
+                                capture
+                                    .lock()
+                                    .unwrap()
+                                    .push((parts.headers, serde_json::from_slice(&plain).unwrap()));
+                                Ok::<_, std::convert::Infallible>(
+                                    Response::builder()
+                                        .header("content-type", "application/json")
+                                        .body(Body::from(r#"{"id":"synthetic-image-test","status":"completed","output":[]}"#))
+                                        .unwrap(),
+                                )
+                            }
+                        },
+                    );
+                    let _ = hyper::server::conn::http1::Builder::new()
+                        .serve_connection(hyper_util::rt::TokioIo::new(socket), service)
+                        .await;
+                });
+            }
+        });
+        let (mut unused, host, path) = native(addr, true, false, Options::default()).await;
+        unused.shutdown(Duration::from_secs(2)).await.unwrap();
+        let host = Arc::new(CompressionHost {
+            host,
+            client: reqwest::Client::builder()
+                .no_proxy()
+                .add_root_certificate(root)
+                .resolve("chatgpt.com", addr)
+                .build()
+                .unwrap(),
+            url: format!("https://chatgpt.com:{}/backend-api/codex", addr.port()),
+            stalled_rejection: false,
+        });
+        let mut handle = start(
+            "127.0.0.1:0".parse().unwrap(),
+            host,
+            path.join("duplicate-images.sqlite"),
+            Options::default(),
+        )
+        .await
+        .unwrap();
+        let first = "data:image/png;base64,QUFBQQ==";
+        let second = if repeated {
+            first
+        } else {
+            "data:image/png;base64,QkJCQg=="
+        };
+        let input = json!([{"role":"user","content":[
+            {"type":"input_text","text":"synthetic padding ".repeat(512)},
+            {"type":"input_image","image_url":first},
+            {"type":"input_image","image_url":second}
+        ]}]);
+        let response = client()
+            .post(format!("http://{}/v1/responses", handle.addr))
+            .bearer_auth("local-test-key")
+            .json(&json!({"model":"m","input":input}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status().as_u16(), 200);
+        let seen = captured.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].0.get("content-encoding").is_none(), repeated);
+        if !repeated {
+            assert_eq!(seen[0].0["content-encoding"], "zstd");
+        }
+        assert_eq!(seen[0].1["input"][0]["content"][1]["image_url"], first);
+        assert_eq!(seen[0].1["input"][0]["content"][2]["image_url"], second);
+        drop(seen);
+        handle.shutdown(Duration::from_secs(2)).await.unwrap();
+        task.abort();
+        let _ = std::fs::remove_dir_all(path);
+    }
+}
+
+#[tokio::test]
 async fn full_compat_compound_upstream_compression_decodes_stream_and_error() {
     use std::io::Write;
     for failed in [false, true] {

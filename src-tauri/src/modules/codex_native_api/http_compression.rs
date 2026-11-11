@@ -8,7 +8,8 @@ use axum::{
     response::Response,
 };
 use futures_util::{stream, StreamExt};
-use std::{io::Write, sync::Arc};
+use serde_json::Value;
+use std::{collections::HashSet, io::Write, sync::Arc};
 
 const MIN_BYTES: usize = 1024;
 
@@ -18,14 +19,69 @@ pub(super) fn codex_endpoint(url: &reqwest::Url) -> bool {
         && url.path().starts_with("/backend-api/codex/")
 }
 
+/// A repeated inline image can trigger a generic upstream 400 for zstd bodies.
+/// Keep the history intact and use identity encoding for this request instead.
+pub(super) fn has_duplicate_inline_images(body: &Value) -> bool {
+    fn visit<'a>(value: &'a Value, seen: &mut HashSet<&'a str>) -> bool {
+        match value {
+            Value::Object(object) => {
+                if object.get("type").and_then(Value::as_str) == Some("input_image") {
+                    if let Some(url) = object.get("image_url").and_then(Value::as_str) {
+                        if url.starts_with("data:image/") && !seen.insert(url) {
+                            return true;
+                        }
+                    }
+                }
+                object.values().any(|value| visit(value, seen))
+            }
+            Value::Array(items) => items.iter().any(|value| visit(value, seen)),
+            _ => false,
+        }
+    }
+    let mut seen = HashSet::new();
+    body.get("input")
+        .is_some_and(|input| visit(input, &mut seen))
+}
+
+#[cfg(test)]
+mod duplicate_image_tests {
+    use super::has_duplicate_inline_images;
+    use serde_json::json;
+
+    #[test]
+    fn repeated_inline_images_are_detected_across_tool_and_user_content() {
+        let image = "data:image/png;base64,c3ludGhldGlj";
+        let body = json!({"input":[
+            {"role":"user","content":[{"type":"input_image","image_url":image}]},
+            {"type":"custom_tool_call_output","output":[{"type":"input_image","image_url":image}]}
+        ]});
+        assert!(has_duplicate_inline_images(&body));
+    }
+
+    #[test]
+    fn different_or_non_inline_images_and_plain_text_do_not_disable_compression() {
+        let body = json!({"input":[
+            {"role":"user","content":[
+                {"type":"input_image","image_url":"data:image/png;base64,QQ=="},
+                {"type":"input_image","image_url":"data:image/png;base64,Qg=="},
+                {"type":"input_image","image_url":"https://example.invalid/image.png"},
+                {"type":"input_image","image_url":"https://example.invalid/image.png"},
+                {"type":"input_text","text":"data:image/png;base64,QQ=="}
+            ]}
+        ]});
+        assert!(!has_duplicate_inline_images(&body));
+        assert!(!has_duplicate_inline_images(&json!({"input":"hello"})));
+    }
+}
+
 pub(super) async fn request(
     state: &AppState,
     mut request: reqwest::Request,
-    codex: bool,
+    compress: bool,
 ) -> Result<(reqwest::Request, Option<reqwest::Request>), ServiceError> {
     request.headers_mut().remove(header::CONTENT_ENCODING);
     request.headers_mut().remove(header::CONTENT_LENGTH);
-    if !codex || !codex_endpoint(request.url()) {
+    if !compress || !codex_endpoint(request.url()) {
         return Ok((request, None));
     }
     let Some(plain) = request
