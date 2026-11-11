@@ -1717,6 +1717,22 @@ struct AcpOutcome {
 
 /// 读取 ACP SSE 流：累积 agent_message_chunk 的文本，捕获错误事件与限流文案。
 /// 统一的限流文案判定（服务端文案可能只有 "429 超出频率限制"，不含 quota 等字样）。
+/// 明确的限流/额度短语（用于扫描原始响应文本）。
+/// 注意不能裸匹配 "429"——成功响应里的 requestId / traceparent 也可能含 "429"（如 `f4291078`）。
+fn has_explicit_limit_phrase(text: &str) -> bool {
+    let low = text.to_lowercase();
+    text.contains("使用量已超出频率限制")
+        || text.contains("超出频率限制")
+        || text.contains("数量已经达到上限")
+        || text.contains("已经达到上限")
+        || text.contains("额度已用尽")
+        || low.contains("rate limit exceeded")
+        || low.contains("quota exceeded")
+        || low.contains("too many requests")
+        || low.contains("\"category\":\"quota\"")
+}
+
+/// 限流文案判定（输入是**已判定为错误**的文案，用于区分 限流 / 其它错误）。
 fn looks_rate_limited(text: &str) -> bool {
     let low = text.to_lowercase();
     text.contains("上限")
@@ -1724,7 +1740,11 @@ fn looks_rate_limited(text: &str) -> bool {
         || text.contains("额度")
         || text.contains("频率限制")
         || text.contains("使用量已超出")
-        || text.contains("429")
+        || text.contains("429 ")
+        || text.contains("429:")
+        || low.contains("http 429")
+        || low.contains("status 429")
+        || low.contains("\"code\":429")
         || low.contains("quota")
         || low.contains("rate limit")
         || low.contains("exceed")
@@ -1778,7 +1798,7 @@ fn parse_acp_post_error(body: &str) -> Option<String> {
                 return Some(format!("code={} {}", code, msg));
             }
         }
-        if looks_rate_limited(payload) {
+        if has_explicit_limit_phrase(payload) {
             return Some(truncate_chars(payload, 300));
         }
     }
