@@ -154,6 +154,8 @@ The first independent run had one existing retry test fail after its functional 
 
 The independent suite has seven fewer unique tests than the 238-test deployed-tree validation because the separate page-host-result patch and its seven added tests are not included. The new custom-result tests are retained. The duplicate selection of the custom-result identity test explains 232 executions versus 231 unique tests. Neither total is a full-repository test run, and the independent candidate results remain distinct from the prior deployed-tree results.
 
+The isolated Windows runner commands, environment setup, and Common Controls manifest are documented in [REPRODUCE.md](REPRODUCE.md).
+
 The machine-readable evidence is in [clean-main-validation.json](clean-main-validation.json); sanitized baseline, deployed-tree, and independent-candidate outputs are preserved in [test-logs/](test-logs/). The independent candidate was library-test compiled and exercised, but no new Release binary was built or deployed for this PR preparation. The earlier successful Release build and real installation observations belong to the deployed-tree version described below, not to the new move-optimized candidate.
 
 ## Authorization warnings and requested fast service
