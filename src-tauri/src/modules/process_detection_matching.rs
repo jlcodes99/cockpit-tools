@@ -3577,11 +3577,11 @@ pub fn minimax_code_client_confirmed_stopped() -> bool {
         path.file_name()
             .map(|name| name.to_string_lossy().into_owned())
     });
-    let mut system = System::new();
+    let mut system = sysinfo::System::new();
     let count = system.refresh_processes_specifics(
         sysinfo::ProcessesToUpdate::All,
         true,
-        ProcessRefreshKind::nothing(),
+        sysinfo::ProcessRefreshKind::nothing(),
     );
     count > 0
         && !system.processes().values().any(|process| {
