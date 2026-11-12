@@ -84,12 +84,60 @@ mod tests {
             template: Some(serde_json::json!({"multi_agent_version": null,
                 "supported_reasoning_levels": [{"effort": "max"}]})),
             image_capable: Some(true),
+            context_window: None,
         }];
         super::apply_profile_model_definition_overrides(&mut catalog, &definitions);
         assert_eq!(catalog["models"][0]["multi_agent_version"], "v2");
         assert_eq!(catalog["models"][0]["supported_reasoning_levels"][0]["effort"], "max");
         assert_eq!(catalog["models"][0]["input_modalities"], serde_json::json!(["text", "image"]));
     }
+
+    #[test]
+    fn profile_catalog_applies_account_context_window_after_template() {
+        let model_id = "deepseek-v4.1-flash";
+        let mut account = crate::models::codex::CodexAccount::new_api_key(
+            "account".into(),
+            "api-key-test".into(),
+            "test-key".into(),
+            crate::models::codex::CodexApiProviderMode::Custom,
+            Some("https://example.com/v1".into()),
+            None,
+            None,
+            vec![model_id.into()],
+        );
+        account.api_wire_api = Some("responses".into());
+        account
+            .api_model_context_windows
+            .insert(model_id.into(), 1_000_000);
+
+        let mut definitions = vec![super::ProfileModelDefinition {
+            model_id: model_id.into(),
+            display_name: model_id.into(),
+            template: super::codex_protocol::deepseek_model_template(model_id),
+            image_capable: Some(false),
+            context_window: None,
+        }];
+        assert_eq!(
+            definitions[0].template.as_ref().unwrap()["context_window"],
+            272_000
+        );
+        super::apply_profile_model_account_context_windows(
+            &mut definitions,
+            std::slice::from_ref(&account),
+        );
+
+        let catalog = super::build_local_access_profile_catalog(&definitions);
+        let model = catalog["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|model| model["slug"] == model_id)
+            .expect("profile model");
+        assert_eq!(model["context_window"], 1_000_000);
+        assert_eq!(model["max_context_window"], 1_000_000);
+        assert_eq!(model["auto_compact_token_limit"], 900_000);
+    }
+
     include!("codex_local_access_tests_automatic_routing.rs");
     include!("codex_local_access_tests_sidecar_gateway.rs");
     include!("codex_local_access_tests_shared_api_identity.rs");

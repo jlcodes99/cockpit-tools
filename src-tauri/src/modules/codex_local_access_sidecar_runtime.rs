@@ -1582,6 +1582,7 @@ struct ProfileModelDefinition {
     display_name: String,
     template: Option<Value>,
     image_capable: Option<bool>,
+    context_window: Option<i64>,
 }
 
 impl ProfileModelDefinition {
@@ -1591,6 +1592,7 @@ impl ProfileModelDefinition {
             display_name: display_name.trim().to_string(),
             template: None,
             image_capable: None,
+            context_window: None,
         }
     }
 
@@ -1628,6 +1630,43 @@ fn provider_template_for_model(
         }
     }
     None
+}
+
+fn profile_model_account_context_window(
+    accounts: &[CodexAccount],
+    model_id: &str,
+) -> Option<i64> {
+    let mut selected = None;
+    for account in accounts {
+        let Some((_, upstream)) = automatic_api_service_account_model_slots(account)
+            .into_iter()
+            .find(|(client, _)| client.eq_ignore_ascii_case(model_id))
+        else {
+            continue;
+        };
+        if let Some(window) =
+            lookup_client_model_context_window(&account.api_model_context_windows, model_id)
+                .or_else(|| {
+                    lookup_client_model_context_window(
+                        &account.api_model_context_windows,
+                        &upstream,
+                    )
+                })
+        {
+            selected = Some(window);
+        }
+    }
+    selected
+}
+
+fn apply_profile_model_account_context_windows(
+    definitions: &mut [ProfileModelDefinition],
+    accounts: &[CodexAccount],
+) {
+    for definition in definitions {
+        definition.context_window =
+            profile_model_account_context_window(accounts, &definition.model_id);
+    }
 }
 
 fn write_local_access_profile_model_catalog(
@@ -1732,6 +1771,16 @@ fn apply_profile_model_definition_overrides(
                     continue;
                 }
                 object.insert(key.clone(), value.clone());
+            }
+        }
+        if let Some(window) = definition.context_window {
+            if let Some(object) = model.as_object_mut() {
+                object.insert("context_window".to_string(), json!(window));
+                object.insert("max_context_window".to_string(), json!(window));
+                object.insert(
+                    "auto_compact_token_limit".to_string(),
+                    json!(codex_protocol::derived_auto_compact_token_limit(window)),
+                );
             }
         }
         // DeepSeek 官方模板可能含 null，不能覆盖最终的协作声明。
@@ -1920,6 +1969,7 @@ fn local_access_profile_model_definitions_with_accounts(profile_dir:&Path,collec
             image_capable,
         ));
     }
+    apply_profile_model_account_context_windows(&mut definitions, &pool_accounts);
     Ok(definitions)
 }
 
