@@ -2,6 +2,7 @@
 //! Only projects and user threads verified in this profile's SQLite registry are
 //! shared. Remote/cloud state and account atoms stay in their original scope.
 use super::*;
+use crate::modules::ssh_server_identity::AUTO_CONNECT;
 use sha2::{Digest, Sha256};
 use crate::modules::codex_session_visibility::{
     launch_visibility_budget, with_launch_visibility_budget, configure_launch_visibility_connection,
@@ -60,7 +61,7 @@ const SCOPED_GLOBALS: &[&str] = &[
     "host-id-remote-control-allowed",
     "added-remote-control-env-ids",
     "remote-project-connection-backfill-completed",
-    "remote-connection-auto-connect-by-host-id",
+    AUTO_CONNECT,
     "queued-follow-ups",
 ];
 const SHARED_ATOMS: &[&str] = &[
@@ -435,12 +436,12 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
     };
     check()?;
     let before = decode(Some(&bytes))?;
-    // Older/unscoped state is handled by the existing recovery path. Its
-    // top-level preferences do not identify an owner that we can archive.
-    if before.get(SCOPES).is_none() && before.get(PARKED).is_none() {
-        return Ok(ssh::prepare_startup(home, &before));
-    }
     let mut after = before.clone();
+    ssh::inherit_scoped_auto_connect(&mut after, owner);
+    // Modern scoped SSH preferences can exist without a project archive.
+    if before.get(SCOPES).is_none() && before.get(PARKED).is_none() {
+        return finish_prepare(home, &bytes, &before, &after);
+    }
     let mut scopes = before
         .get(SCOPES)
         .or_else(|| before.get(PARKED))
@@ -579,11 +580,15 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
         after.as_object_mut().unwrap().remove(SCOPES);
         after[PARKED] = scopes;
     }
+    finish_prepare(home, &bytes, &before, &after)
+}
+
+fn finish_prepare(home: &Path, bytes: &[u8], before: &Value, after: &Value) -> Result<bool, String> {
     if after == before {
-        return Ok(ssh::prepare_startup(home, &after));
+        return Ok(ssh::prepare_startup(home, after));
     }
-    let expected_hash: [u8; 32] = Sha256::digest(&bytes).into();
-    let content = serde_json::to_string(&after).map_err(|e| e.to_string())?;
+    let expected_hash: [u8; 32] = Sha256::digest(bytes).into();
+    let content = serde_json::to_string(after).map_err(|e| e.to_string())?;
     if content.len() as u64 > MAX_STATE_BYTES {
         return Err("CODEX_PROJECT_STATE_TOO_LARGE".into());
     }
@@ -597,7 +602,7 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
     )? {
         return Err("CODEX_PROJECT_CHANGED".into());
     }
-    ssh::prepare_startup(home, &after);
+    ssh::prepare_startup(home, after);
     Ok(true)
 }
 

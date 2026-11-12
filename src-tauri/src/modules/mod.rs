@@ -178,6 +178,7 @@ pub mod secure_account_storage;
 mod account_file_crypto;
 pub mod sponsor_route_sync;
 pub mod ssh_server;
+mod ssh_server_identity;
 pub mod sync_settings;
 #[cfg(test)]
 pub mod test_support;

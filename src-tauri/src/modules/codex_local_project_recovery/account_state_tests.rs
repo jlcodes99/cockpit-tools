@@ -365,6 +365,41 @@ fn switching_accounts_queues_enabled_ssh_aliases_during_native_startup() {
 }
 
 #[test]
+fn scoped_ssh_preferences_follow_the_outgoing_account_to_the_next_launch() {
+    let f = Fixture::new();
+    let mut state = f.local("legacy");
+    let outgoing = "electron-account-remote-preference:remote-connection-auto-connect-by-host-id:old";
+    let incoming = "electron-account-remote-preference:remote-connection-auto-connect-by-host-id:new";
+    state["electron-renderer-content-owner"] = json!("old");
+    state["codex-managed-remote-connections"] = json!([
+        {"hostId":"ssh-on","alias":"enabled"}, {"hostId":"ssh-off","alias":"disabled"}
+    ]);
+    state[outgoing] = json!({"ssh-on":true,"ssh-off":false,"cloud-old":true});
+    state[incoming] = json!({"ssh-on":false,"ssh-off":true,"cloud-new":true});
+    f.write(&state);
+
+    assert!(prepare(f.home(), Some("new")).unwrap());
+    let mut expected = state;
+    expected[incoming] = json!({"ssh-on":true,"ssh-off":false,"cloud-new":true});
+    assert_eq!(f.state(), expected);
+    let startup: Value =
+        serde_json::from_slice(&fs::read(f.home().join("codex-app/config.json")).unwrap()).unwrap();
+    assert_eq!(startup["remoteConnections"], json!([{"sshAlias":"enabled","projects":[]}]));
+    assert!(!prepare(f.home(), Some("new")).unwrap());
+
+    let mut booted = f.state();
+    booted["electron-renderer-content-owner"] = json!("new");
+    booted[incoming]["ssh-on"] = json!(false);
+    booted[incoming]["ssh-off"] = json!(true);
+    f.write(&booted);
+    assert!(prepare(f.home(), None).unwrap());
+    assert_eq!(
+        f.state()["electron-account-remote-preference:remote-connection-auto-connect-by-host-id:signed-out"],
+        json!({"ssh-on":false,"ssh-off":true})
+    );
+}
+
+#[test]
 fn ssh_startup_removes_disabled_owned_aliases_and_preserves_user_configuration() {
     let f = Fixture::new();
     let config_path = f.home().join("codex-app/config.json");
@@ -671,6 +706,10 @@ fn account_project_switch_keeps_an_explicit_unpin_across_scopes() {
 fn account_project_switch_reconciles_native_and_parked_archives_by_owner() {
     let f = Fixture::new();
     let mut state = f.local("current");
+    state["electron-renderer-content-owner"] = json!("b");
+    state["codex-managed-remote-connections"] = json!([{"hostId":"ssh","alias":"example"}]);
+    state["electron-account-remote-preference:remote-connection-auto-connect-by-host-id:b"] =
+        json!({"ssh":true});
     state[ATOMS] = json!({"active-private":"native-current"});
     state[SCOPES] = json!({"owner":"b","inactive":{
         "c":{"atoms":{"inactive-private":"native-c"},"globals":{}}
@@ -688,6 +727,10 @@ fn account_project_switch_reconciles_native_and_parked_archives_by_owner() {
     assert_eq!(actual[ATOMS], json!({"parked-private":"a"}));
     assert_eq!(actual[SCOPES]["inactive"]["b"]["atoms"], json!({"active-private":"native-current"}));
     assert_eq!(actual[SCOPES]["inactive"]["c"]["atoms"], json!({"inactive-private":"native-c"}));
+    assert_eq!(
+        actual["electron-account-remote-preference:remote-connection-auto-connect-by-host-id:a"],
+        json!({"ssh":true})
+    );
     f.write(&actual);
     assert!(!prepare(f.home(), Some("a")).unwrap());
 }

@@ -507,7 +507,7 @@ async fn sync_account_to_server(server: SshServer, account: &CodexAccount, wait_
                 logger::log_info(&format!("[Codex SSH] 客户端连接已重连并确认账号: server_id={}", server.id));
                 None
             }
-            Ok(false) => None, // No running Desktop connection to refresh.
+            Ok(false) => None, // No enabled Desktop connection to refresh.
             Err(error) => Some(format!("ssh_connection_refresh_failed: {}", sanitize_error(error))),
         };
         Ok::<_, String>((bundle, refresh_error))
