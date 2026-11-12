@@ -381,11 +381,7 @@ pub(super) async fn normalize_output(
             )
         })?;
     if items.is_empty() {
-        return Err(ServiceError::new(
-            502,
-            "invalid_image_response",
-            "Image response has no image data",
-        ));
+        return Err(super::result::missing_image_output());
     }
     let mut remaining = limit;
     for item in items {

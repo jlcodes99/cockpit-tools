@@ -54,6 +54,13 @@ junction = "2.0"
 [patch.crates-io]
 tao = { path = "vendor/tao" }
 
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package.cockpit-tools]
+# Keep macOS rebuilds from retaining a fresh set of .rcgu.o files (rust-lang/rust#161824).
+split-debuginfo = "packed"
+
 [profile.ci]
 inherits = "release"
 opt-level = 0

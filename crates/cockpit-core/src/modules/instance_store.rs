@@ -24,44 +24,12 @@ pub struct UpdateInstanceParams {
     pub bind_account_id: Option<Option<String>>,
 }
 
-pub fn load_instance_store(path: &Path, file_name: &str) -> Result<InstanceStore, String> {
-    if !path.exists() {
-        return Ok(InstanceStore::new());
+pub fn load_instance_store(path: &Path, _file_name: &str) -> Result<InstanceStore, String> {
+    let (store, complete) = super::instance_registry::read(path, None)?;
+    if !complete {
+        schedule_registry(path);
     }
-
-    let content = fs::read_to_string(path).map_err(|e| format!("读取实例配置失败: {}", e))?;
-    if content.trim().is_empty() {
-        return Ok(InstanceStore::new());
-    }
-
-    match serde_json::from_str(&content) {
-        Ok(store) => Ok(store),
-        Err(error) => {
-            match crate::modules::atomic_write::quarantine_file(path, "invalid-json") {
-                Ok(Some(backup_path)) => crate::modules::logger::log_warn(&format!(
-                    "实例配置解析失败，已隔离并使用空实例列表: file={}, path={}, backup={}, error={}",
-                    file_name,
-                    path.display(),
-                    backup_path.display(),
-                    error
-                )),
-                Ok(None) => crate::modules::logger::log_warn(&format!(
-                    "实例配置解析失败，文件已不存在，使用空实例列表: file={}, path={}, error={}",
-                    file_name,
-                    path.display(),
-                    error
-                )),
-                Err(backup_error) => crate::modules::logger::log_warn(&format!(
-                    "实例配置解析失败，隔离失败，使用空实例列表: file={}, path={}, parse_error={}, backup_error={}",
-                    file_name,
-                    path.display(),
-                    error,
-                    backup_error
-                )),
-            }
-            Ok(InstanceStore::new())
-        }
-    }
+    Ok(store)
 }
 
 pub fn save_instance_store(
@@ -69,12 +37,56 @@ pub fn save_instance_store(
     _file_name: &str,
     store: &InstanceStore,
 ) -> Result<(), String> {
-    let data_dir = path.parent().ok_or("无法获取实例配置目录")?;
-    fs::create_dir_all(data_dir).map_err(|e| format!("创建实例配置目录失败: {}", e))?;
-    let content =
-        serde_json::to_string_pretty(store).map_err(|e| format!("序列化实例配置失败: {}", e))?;
-    crate::modules::atomic_write::write_string_atomic(path, &content)
-        .map_err(|e| format!("保存实例配置失败: {}", e))
+    super::instance_registry::save(path, store, true)
+}
+
+pub(crate) fn protect_instance_creation() -> Result<fs::File, String> {
+    super::instance_registry::cleanup_gate(&super::account::get_data_dir()?, false)
+}
+
+fn schedule_registry(path: &Path) {
+    use std::{path::PathBuf, sync::Mutex, time::Duration};
+    static ACTIVE: Mutex<Option<HashSet<PathBuf>>> = Mutex::new(None);
+    let mut active = match ACTIVE.lock() {
+        Ok(active) => active,
+        Err(_) => return,
+    };
+    if !active
+        .get_or_insert_with(HashSet::new)
+        .insert(path.to_path_buf())
+    {
+        return;
+    }
+    drop(active);
+    let path = path.to_path_buf();
+    let worker_path = path.clone();
+    let worker = std::thread::Builder::new()
+        .name("instance-registry-migration".into())
+        .spawn(move || {
+            loop {
+                match super::instance_registry::migrate_batch(&worker_path) {
+                    Ok(false) => std::thread::sleep(Duration::from_millis(150)),
+                    Ok(true) => break,
+                    Err(error) => {
+                        super::logger::log_warn(&format!("[InstanceRegistry] {error}"));
+                        break;
+                    }
+                }
+            }
+            if let Ok(mut active) = ACTIVE.lock() {
+                if let Some(paths) = active.as_mut() {
+                    paths.remove(&worker_path);
+                }
+            }
+        });
+    if let Err(error) = worker {
+        if let Ok(mut active) = ACTIVE.lock() {
+            if let Some(paths) = active.as_mut() {
+                paths.remove(&path);
+            }
+        }
+        super::logger::log_warn(&format!("[InstanceRegistry] {error}"));
+    }
 }
 
 pub fn normalize_name(name: &str) -> Result<String, String> {

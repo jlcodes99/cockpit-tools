@@ -65,6 +65,8 @@ pub struct UserConfig {
     /// NO_PROXY 白名单（逗号分隔）
     #[serde(default = "default_global_proxy_no_proxy")]
     pub global_proxy_no_proxy: String,
+    #[serde(default)]
+    pub codex_proxy_direct_hosts: Vec<String>,
     /// 是否启用匿名错误诊断上报
     #[serde(default = "default_diagnostics_error_reporting_enabled")]
     pub diagnostics_error_reporting_enabled: bool,
@@ -185,6 +187,8 @@ pub struct UserConfig {
     /// 是否隐藏 Dock 图标（macOS）
     #[serde(default = "default_hide_dock_icon")]
     pub hide_dock_icon: bool,
+    #[serde(default = "default_show_tray_icon")]
+    pub show_tray_icon: bool,
     /// 菜单栏图标样式（macOS）
     #[serde(default = "default_tray_icon_style")]
     pub tray_icon_style: TrayIconStyle,
@@ -197,6 +201,9 @@ pub struct UserConfig {
     /// macOS 菜单栏额度监控平台
     #[serde(default = "default_menu_bar_quota_platform")]
     pub menu_bar_quota_platform: String,
+    /// Antigravity 模型或配额窗口；空值沿用最低剩余额度。
+    #[serde(default)]
+    pub menu_bar_antigravity_metric: String,
     /// 是否在启动后自动显示悬浮卡片
     #[serde(default = "default_floating_card_show_on_startup")]
     pub floating_card_show_on_startup: bool,
@@ -306,6 +313,8 @@ pub struct UserConfig {
     /// Antigravity IDE 启动路径（为空则使用默认路径）
     #[serde(default = "default_antigravity_app_path")]
     pub antigravity_app_path: String,
+    #[serde(default)]
+    pub antigravity_legacy_app_path: String,
     /// Codex 启动路径（为空则使用默认路径）
     #[serde(default = "default_codex_app_path")]
     pub codex_app_path: String,
@@ -807,6 +816,10 @@ fn default_close_behavior() -> CloseWindowBehavior {
 fn default_minimize_behavior() -> MinimizeWindowBehavior {
     MinimizeWindowBehavior::DockAndTray
 }
+fn default_show_tray_icon() -> bool {
+    true
+}
+
 fn default_hide_dock_icon() -> bool {
     false
 }
@@ -819,6 +832,8 @@ fn default_menu_bar_quota_enabled() -> bool {
 fn default_menu_bar_show_account_prefix() -> bool {
     true
 }
+pub(crate) const MENU_BAR_QUOTA_CLAUDE_CLI: &str = "claude_cli";
+
 fn default_menu_bar_quota_platform() -> String {
     "codex".to_string()
 }
@@ -1245,6 +1260,7 @@ impl Default for UserConfig {
             global_proxy_enabled: default_global_proxy_enabled(),
             global_proxy_url: default_global_proxy_url(),
             global_proxy_no_proxy: default_global_proxy_no_proxy(),
+            codex_proxy_direct_hosts: Vec::new(),
             diagnostics_error_reporting_enabled: default_diagnostics_error_reporting_enabled(),
             diagnostics_error_reporting_debug: default_diagnostics_error_reporting_debug(),
             language: default_language(),
@@ -1287,10 +1303,12 @@ impl Default for UserConfig {
             close_behavior: default_close_behavior(),
             minimize_behavior: default_minimize_behavior(),
             hide_dock_icon: default_hide_dock_icon(),
+            show_tray_icon: default_show_tray_icon(),
             tray_icon_style: default_tray_icon_style(),
             menu_bar_quota_enabled: default_menu_bar_quota_enabled(),
             menu_bar_show_account_prefix: default_menu_bar_show_account_prefix(),
             menu_bar_quota_platform: default_menu_bar_quota_platform(),
+            menu_bar_antigravity_metric: String::new(),
             floating_card_show_on_startup: default_floating_card_show_on_startup(),
             startup_minimized: default_startup_minimized(),
             startup_minimized_default_off_migrated:
@@ -1330,6 +1348,7 @@ impl Default for UserConfig {
             floating_card_position_y: None,
             opencode_app_path: default_opencode_app_path(),
             antigravity_app_path: default_antigravity_app_path(),
+            antigravity_legacy_app_path: String::new(),
             codex_app_path: default_codex_app_path(),
             codex_oauth_app_version: String::new(),
             grok_cli_path: None,
@@ -1590,6 +1609,28 @@ pub fn get_user_config_path() -> Result<PathBuf, String> {
     Ok(data_dir.join(USER_CONFIG_FILE))
 }
 
+fn split_legacy_antigravity_app_path(config: &mut serde_json::Map<String, serde_json::Value>) {
+    if config.contains_key("antigravity_legacy_app_path") {
+        return;
+    }
+    let Some(path) = config.get("antigravity_app_path").and_then(|value| value.as_str()) else {
+        return;
+    };
+    let normalized = path.trim().trim_matches('"').replace('\\', "/");
+    let lower = normalized.to_ascii_lowercase();
+    let desktop_bundle = lower.split('/').any(|part| part == "antigravity.app");
+    let windows_desktop = lower.as_bytes().get(1) == Some(&b':')
+        && lower.split('/').any(|part| part == "antigravity")
+        && !lower.contains("antigravity ide")
+        && !lower.contains("antigravity-ide");
+    let linux_desktop = normalized.trim_end_matches('/') == "/opt/Antigravity"
+        || normalized.starts_with("/opt/Antigravity/");
+    if desktop_bundle || windows_desktop || linux_desktop {
+        let desktop_path = config.remove("antigravity_app_path").unwrap_or_default();
+        config.insert("antigravity_legacy_app_path".to_string(), desktop_path);
+    }
+}
+
 /// 加载用户配置
 pub fn load_user_config() -> Result<UserConfig, String> {
     let config_path = get_user_config_path()?;
@@ -1629,6 +1670,7 @@ pub fn load_user_config() -> Result<UserConfig, String> {
 
     // 兼容旧配置：平台独立预警字段不存在时，继承历史全局预警配置
     if let Some(obj) = value.as_object_mut() {
+        split_legacy_antigravity_app_path(obj);
         if !obj.contains_key("kiro_auto_refresh_minutes") {
             let inherited_refresh = obj
                 .get("windsurf_auto_refresh_minutes")
@@ -2590,6 +2632,13 @@ pub fn get_user_config() -> UserConfig {
         .unwrap_or_default()
 }
 
+pub(crate) fn get_codex_proxy_direct_hosts() -> Vec<String> {
+    get_runtime_state()
+        .read()
+        .map(|state| state.user_config.codex_proxy_direct_hosts.clone())
+        .unwrap_or_default()
+}
+
 /// 更新 Grok CLI 路径；空白值恢复为自动检测。
 pub fn set_grok_cli_path(path: Option<String>) -> Result<(), String> {
     let normalized = path.and_then(|value| {
@@ -2663,6 +2712,31 @@ pub fn init_server_status(actual_port: u16, auth_token: String) -> Result<(), St
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn antigravity_desktop_path_migrates_once_without_overwriting_an_explicit_setting() {
+        use serde_json::json;
+
+        for path in [
+            "/Applications/Antigravity.app/Contents/MacOS/Antigravity",
+            r"C:\Users\fixture\AppData\Local\Programs\Antigravity\Antigravity.exe",
+            "/opt/Antigravity/antigravity",
+        ] {
+            let mut old = json!({"antigravity_app_path": path});
+            super::split_legacy_antigravity_app_path(old.as_object_mut().unwrap());
+            let config: UserConfig = serde_json::from_value(old).unwrap();
+            assert_eq!(config.antigravity_legacy_app_path, path);
+            assert!(config.antigravity_app_path.is_empty());
+        }
+        for mut config in [
+            json!({"antigravity_app_path": "/Applications/Antigravity IDE.app"}),
+            json!({"antigravity_app_path": "/opt/custom-app", "antigravity_legacy_app_path": ""}),
+        ] {
+            let expected = config.clone();
+            super::split_legacy_antigravity_app_path(config.as_object_mut().unwrap());
+            assert_eq!(config, expected);
+        }
+    }
+
     #[test]
     fn codex_refresh_scope_legacy_defaults_and_explicit_empty_round_trip() {
         let defaults = UserConfig::default();

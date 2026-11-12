@@ -8,8 +8,16 @@ pub async fn import_from_old_tools() -> Result<Vec<models::Account>, String> {
 }
 
 #[tauri::command]
-pub async fn import_from_local(app: AppHandle) -> Result<models::Account, String> {
-    let account = modules::import::import_from_local_logic().await?;
+pub async fn import_from_local(
+    app: AppHandle,
+    runtime_target: Option<String>,
+) -> Result<models::Account, String> {
+    use super::account::{normalize_antigravity_runtime_target, AntigravityRuntimeTarget};
+
+    let account = match normalize_antigravity_runtime_target(runtime_target.as_deref()) {
+        AntigravityRuntimeTarget::Legacy => modules::import::import_from_desktop_logic().await?,
+        AntigravityRuntimeTarget::Ide => modules::import::import_from_local_logic().await?,
+    };
     let _ = crate::modules::tray::update_tray_menu(&app);
     Ok(account)
 }

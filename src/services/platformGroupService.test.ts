@@ -16,22 +16,30 @@ function group(id: string, overrides: Partial<StoredGroup> = {}): StoredGroup {
   return { id, name: id, accountIds: [`${id}-account`], createdAt: 100, ...overrides };
 }
 
-function harness(initial: Record<string, StoredGroup[]> = {}) {
+function harness(initial: Record<string, StoredGroup[]> = {}, oldWebView: StoredGroup[] = []) {
   const disk = new Map(Object.entries(initial).map(([platform, groups]) => [platform, JSON.stringify(groups)]));
+  const revisions = new Map<string, number>();
+  const storage = new Map([['agtools.account_groups', JSON.stringify(oldWebView)]]);
   const readErrors = new Map<string, Error>();
   const writeErrors = new Map<string, Error>();
   const writeGates = new Map<string, ReturnType<typeof deferred<void>>>();
   const writes: { platform: string; data: string }[] = [];
   const imports = {
     '@tauri-apps/api/core': {
-      async invoke(command: string, args?: { platform?: string; data?: string }) {
-        const platform = command.includes('codex_account_groups') ? 'codex'
-          : command.includes('platform_account_groups') ? args?.platform : 'antigravity';
+      async invoke(command: string, args?: { platform?: string; data?: string; expectedRevision?: number }) {
+        const platform = args?.platform ?? (command.includes('codex_account_groups') ? 'codex' : 'antigravity');
         assert.ok(platform, `Missing platform for ${command}`);
         if (command.startsWith('load_')) {
           const error = readErrors.get(platform);
           if (error) throw error;
-          return disk.get(platform) ?? '[]';
+          return { data: disk.get(platform) ?? '[]', revision: revisions.get(platform) ?? 0 };
+        }
+        if (command === 'seed_account_groups') {
+          if (!disk.has(platform)) {
+            disk.set(platform, args!.data!);
+            revisions.set(platform, (revisions.get(platform) ?? 0) + 1);
+          }
+          return;
         }
         assert.match(command, /^save_(?:platform_|codex_)?account_groups$/);
         assert.equal(typeof args?.data, 'string');
@@ -44,11 +52,18 @@ function harness(initial: Record<string, StoredGroup[]> = {}) {
         }
         const error = writeErrors.get(platform);
         if (error) throw error;
+        const current = revisions.get(platform) ?? 0;
+        if (args?.expectedRevision !== current) throw Error('ACCOUNT_GROUPS_CHANGED');
         disk.set(platform, data);
+        revisions.set(platform, current + 1);
+        return current + 1;
       },
     },
   };
-  const globals = { localStorage: { getItem: () => null, removeItem() {} }, console: { error() {}, log() {} } };
+  const globals = {
+    localStorage: { getItem: (key: string) => storage.get(key) ?? null, removeItem: (key: string) => storage.delete(key) },
+    console: { error() {}, log() {} },
+  };
   const antigravity = loadHookModule(new URL('./accountGroupService.ts', import.meta.url), imports, globals)
     .exports as typeof import('./accountGroupService');
   const codex = loadHookModule(new URL('./codexAccountGroupService.ts', import.meta.url), imports, globals)
@@ -57,12 +72,60 @@ function harness(initial: Record<string, StoredGroup[]> = {}) {
     ...imports,
     './accountGroupService': antigravity,
     './codexAccountGroupService': codex,
+    '../utils/durableUiSettings': {},
   }, globals).exports as typeof import('./platformGroupService');
   return {
-    platform, antigravity, codex, disk, writes, readErrors, writeErrors, writeGates,
+    platform, antigravity, codex, disk, writes, readErrors, writeErrors, writeGates, storage,
+    nativeEdit(key: string, groups: StoredGroup[]) {
+      disk.set(key, JSON.stringify(groups));
+      revisions.set(key, (revisions.get(key) ?? 0) + 1);
+    },
     stored(key: string): StoredGroup[] { return JSON.parse(disk.get(key) ?? '[]'); },
   };
 }
+
+test('a stale page edit retries against native Codex import and preserves its members', async () => {
+  const h = harness({ codex: [group('one')] });
+  await h.codex.getCodexAccountGroups();
+  h.nativeEdit('codex', [group('one', { accountIds: ['one-account', 'imported'] })]);
+  await h.codex.renameCodexGroup('one', 'New title');
+  assert.deepEqual(h.stored('codex')[0].accountIds, ['one-account', 'imported']);
+  assert.equal(h.stored('codex')[0].name, 'New title');
+});
+
+test('moving Codex accounts writes both groups together and preserves other memberships', async () => {
+  const h = harness({ codex: [
+    group('source', { accountIds: ['move', 'stay'] }),
+    group('target', { accountIds: ['move'] }),
+    group('other', { accountIds: ['move', 'unrelated'] }),
+  ] });
+  await h.codex.getCodexAccountGroups();
+  h.writeErrors.set('codex', new Error('disk full'));
+  await assert.rejects(h.codex.moveAccountsBetweenCodexGroups('source', 'target', ['move']), /disk full/);
+  assert.deepEqual(h.stored('codex')[0].accountIds, ['move', 'stay']);
+  h.writeErrors.delete('codex');
+
+  assert.equal(await h.codex.moveAccountsBetweenCodexGroups('source', 'missing', ['move']), null);
+  assert.equal((await h.codex.moveAccountsBetweenCodexGroups('source', 'target', ['move', 'unrelated']))?.id, 'target');
+  assert.deepEqual(h.stored('codex').map((entry) => entry.accountIds), [
+    ['stay'],
+    ['move'],
+    ['move', 'unrelated'],
+  ]);
+  assert.equal(h.writes.length, 2);
+  await h.codex.moveAccountsBetweenCodexGroups('source', 'target', ['move']);
+  assert.equal(h.writes.length, 2);
+});
+
+test('Antigravity group migration preserves WebView and respects a saved empty collection', async () => {
+  const old = [group('browser')];
+  const existing = harness({ antigravity: [] }, old);
+  assert.equal((await existing.antigravity.getAccountGroups()).length, 0);
+  assert.equal(existing.storage.get('agtools.account_groups'), JSON.stringify(old));
+  const absent = harness({}, old);
+  assert.equal((await absent.antigravity.getAccountGroups())[0].id, 'browser');
+  assert.equal(absent.storage.get('agtools.account_groups'), JSON.stringify(old));
+});
 
 test('common Codex edits retain quota policies and persist sort order for both entry points', async () => {
   const h = harness({ codex: [

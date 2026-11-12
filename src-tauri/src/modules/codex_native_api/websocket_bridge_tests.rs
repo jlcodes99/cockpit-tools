@@ -26,9 +26,12 @@ type Socket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 mod tool_integrity_tests;
 #[path = "anthropic_http_tests.rs"]
 mod anthropic_tests;
+#[path = "responses_external_results_http_tests.rs"]
+mod external_results_tests;
 
 struct BridgeHost {
     base: String,
+    client: reqwest::Client,
     wire: WireApi,
     passthrough: bool,
     honor_preferred: AtomicBool,
@@ -81,7 +84,7 @@ impl Host for BridgeHost {
                 base_url: self.base.clone(),
                 model: request.model,
                 headers: HeaderMap::new(),
-                client: reqwest::Client::builder().no_proxy().build().unwrap(),
+                client: self.client.clone(),
                 proxy_url: None,
                 proxy_route: None,
                 chatgpt: false,
@@ -132,13 +135,37 @@ async fn fixture(
     tokio::task::JoinHandle<()>,
     tempfile::TempDir,
 ) {
+    fixture_with_upstream_host(app, wire, passthrough, options, None).await
+}
+
+async fn fixture_with_upstream_host(
+    app: Router,
+    wire: WireApi,
+    passthrough: bool,
+    options: native::Options,
+    hostname: Option<&str>,
+) -> (
+    native::Handle,
+    Arc<BridgeHost>,
+    tokio::task::JoinHandle<()>,
+    tempfile::TempDir,
+) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("http://{}/v1", listener.local_addr().unwrap());
+    let address = listener.local_addr().unwrap();
+    let client = reqwest::Client::builder().no_proxy();
+    let (base, client) = match hostname {
+        Some(hostname) => (
+            format!("http://{hostname}:{}/v1", address.port()),
+            client.resolve(hostname, address),
+        ),
+        None => (format!("http://{address}/v1"), client),
+    };
     let task = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
     let host = Arc::new(BridgeHost {
         base,
+        client: client.build().unwrap(),
         wire,
         passthrough,
         honor_preferred: AtomicBool::new(true),
@@ -270,8 +297,9 @@ async fn websocket_chat_bridge_prewarms_locally_then_replays_tools_with_stable_i
     reports(&host, 2).await;
     let requests = requests.lock().unwrap();
     assert_eq!(requests.len(), 2);
-    assert_eq!(requests[0].0["session-id"], requests[1].0["session-id"]);
-    assert_eq!(requests[0].0["thread-id"], requests[1].0["thread-id"]);
+    assert!(requests.iter().all(|(headers, _)| {
+        !headers.contains_key("session-id") && !headers.contains_key("thread-id")
+    }));
     assert!(requests[0].1["messages"]
         .as_array()
         .unwrap()

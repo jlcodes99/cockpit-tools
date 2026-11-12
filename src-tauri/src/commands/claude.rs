@@ -371,8 +371,10 @@ fn prepare_claude_cli_launch(
 }
 
 #[tauri::command]
-pub fn list_claude_accounts() -> Result<Vec<ClaudeAccount>, String> {
-    claude_account::list_accounts_checked()
+pub async fn list_claude_accounts() -> Result<Vec<ClaudeAccount>, String> {
+    tauri::async_runtime::spawn_blocking(claude_account::list_accounts_checked)
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]

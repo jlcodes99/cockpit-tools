@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listen } from '@tauri-apps/api/event';
+import { LOCAL_HISTORY_TIMEOUT, useLocalHistory } from '../../hooks/useLocalHistory';
 import {
   X,
   Clock,
@@ -18,7 +18,6 @@ import {
 import { useEscClose } from '../../hooks/useEscClose';
 import {
   MinimaxCodeAutoCheckinConfig,
-  MinimaxCodeAutoCheckinLogRecord,
   parseTimeToMinutes,
   getMinimaxCodeAutoCheckinLogsAsync,
   clearMinimaxCodeAutoCheckinLogs,
@@ -46,60 +45,12 @@ export function MinimaxCodeAutoCheckinConfigModal({
   const [endTime, setEndTime] = useState(config.endTime || '12:00');
   const [error, setError] = useState<string | null>(null);
 
-  const [logs, setLogs] = useState<MinimaxCodeAutoCheckinLogRecord[]>([]);
-  const [logsLoading, setLogsLoading] = useState(true);
-  const [logsError, setLogsError] = useState<string | null>(null);
+  const {
+    records: logs, loading: logsLoading, error: logsError, migrationPending, refresh: refreshLogs, cleared: clearVisibleLogs,
+  } = useLocalHistory(getMinimaxCodeAutoCheckinLogsAsync, MINIMAX_CODE_AUTO_CHECKIN_LOGS_CHANGED_EVENT);
   const [saving, setSaving] = useState(false);
   const [manualTesting, setManualTesting] = useState(false);
   const [expandedLogIds, setExpandedLogIds] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-    let requestId = 0;
-
-    const loadLogs = async () => {
-      const currentRequestId = ++requestId;
-      setLogsLoading(true);
-      setLogsError(null);
-
-      try {
-        const nextLogs = await getMinimaxCodeAutoCheckinLogsAsync();
-        if (!disposed && currentRequestId === requestId) {
-          setLogs(nextLogs);
-        }
-      } catch (err) {
-        console.warn('[MinimaxCodeAutoCheckin] 读取后端签到日志失败:', err);
-        if (!disposed && currentRequestId === requestId) {
-          setLogsError(err instanceof Error ? err.message : String(err));
-        }
-      } finally {
-        if (!disposed && currentRequestId === requestId) {
-          setLogsLoading(false);
-        }
-      }
-    };
-
-    void loadLogs();
-    const handleLogsChange = () => {
-      void loadLogs();
-    };
-    void listen(MINIMAX_CODE_AUTO_CHECKIN_LOGS_CHANGED_EVENT, handleLogsChange)
-      .then((stopListening) => {
-        if (disposed) {
-          stopListening();
-        } else {
-          unlisten = stopListening;
-        }
-      })
-      .catch((err) => {
-        console.warn('[MinimaxCodeAutoCheckin] 监听后端签到日志事件失败:', err);
-      });
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, []);
 
   const handleSave = async () => {
     const startMin = parseTimeToMinutes(startTime);
@@ -124,7 +75,7 @@ export function MinimaxCodeAutoCheckinConfigModal({
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(
-        t('minimaxCode.checkin.saveFailed', '自动签到设置保存失败：{{message}}', { message }),
+        t('common.shared.checkin.saveFailed', '自动签到设置保存失败：{{message}}', { message }),
       );
     } finally {
       setSaving(false);
@@ -136,25 +87,24 @@ export function MinimaxCodeAutoCheckinConfigModal({
     setError(null);
     try {
       const result = await runMinimaxCodeAutoCheckinCycleIfNeeded(true);
-      setLogs(await getMinimaxCodeAutoCheckinLogsAsync());
-      setLogsError(null);
+      refreshLogs();
       if (result === 'retry') {
         setError(
           t(
-            'minimaxCode.checkin.manualTestPartialFailure',
+            'common.shared.checkin.manualTestPartialFailure',
             '部分账号签到失败，请查看记录；后台稍后会自动重试。',
           ),
         );
       } else if (result === 'waiting') {
         setError(
-          t('minimaxCode.checkin.manualTestAlreadyRunning', '自动签到任务正在执行，请稍后查看记录。'),
+          t('common.shared.checkin.manualTestAlreadyRunning', '自动签到任务正在执行，请稍后查看记录。'),
         );
       }
     } catch (err) {
       console.warn('[MinimaxCodeAutoCheckin] 手动测试自动签到异常:', err);
       const message = err instanceof Error ? err.message : String(err);
       setError(
-        t('minimaxCode.checkin.manualTestFailed', '测试执行失败：{{message}}', { message }),
+        t('common.shared.checkin.manualTestFailed', '测试执行失败：{{message}}', { message }),
       );
     } finally {
       setManualTesting(false);
@@ -165,11 +115,11 @@ export function MinimaxCodeAutoCheckinConfigModal({
     setError(null);
     try {
       await clearMinimaxCodeAutoCheckinLogs();
-      setLogs([]);
+      clearVisibleLogs();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(
-        t('minimaxCode.checkin.clearLogsFailed', '清空签到记录失败：{{message}}', { message }),
+        t('common.shared.checkin.clearLogsFailed', '清空签到记录失败：{{message}}', { message }),
       );
     }
   };
@@ -201,14 +151,14 @@ export function MinimaxCodeAutoCheckinConfigModal({
               onClick={() => setActiveTab('settings')}
             >
               <Settings size={14} />
-              {t('minimaxCode.checkin.tabSettings', '自动签到设置')}
+              {t('common.shared.checkin.tabSettings', '自动签到设置')}
             </button>
             <button
               className={`auto-checkin-tab-item ${activeTab === 'history' ? 'active' : ''}`}
               onClick={() => setActiveTab('history')}
             >
               <History size={14} />
-              {t('minimaxCode.checkin.tabHistory', '自动签到记录')}
+              {t('common.shared.checkin.tabHistory', '自动签到记录')}
               {logs.length > 0 && <span className="tab-count-badge">{logs.length}</span>}
             </button>
           </div>
@@ -290,8 +240,8 @@ export function MinimaxCodeAutoCheckinConfigModal({
             <div className="auto-checkin-history-container">
               <div className="history-toolbar">
                 <span className="history-hint">
-                  {t(
-                    'minimaxCode.checkin.historyRangeHint',
+                  {!logsLoading && !migrationPending && !logsError && t(
+                    'common.shared.checkin.historyRangeHint',
                     '仅保留近 30 天的自动签到记录（共 {{count}} 条）',
                     { count: logs.length },
                   )}
@@ -301,47 +251,51 @@ export function MinimaxCodeAutoCheckinConfigModal({
                     className="btn btn-secondary btn-xs"
                     onClick={() => void handleManualTest()}
                     disabled={manualTesting}
-                    title={t('minimaxCode.checkin.manualTest', '测试触发一次自动签到')}
+                    title={t('common.shared.checkin.manualTest', '测试触发一次自动签到')}
                   >
                     {manualTesting ? (
                       <Loader2 size={12} className="animate-spin" />
                     ) : (
                       <Play size={12} />
                     )}
-                    {t('minimaxCode.checkin.manualTest', '测试执行')}
+                    {t('common.shared.checkin.manualTest', '测试执行')}
                   </button>
                   {logs.length > 0 && (
                     <button
                       className="btn btn-secondary btn-xs"
                       onClick={() => void handleClearLogs()}
-                      title={t('minimaxCode.checkin.clearLogs', '清空记录')}
+                      title={t('common.shared.checkin.clearLogs', '清空记录')}
                     >
                       <Trash2 size={12} />
-                      {t('minimaxCode.checkin.clearLogs', '清空')}
+                      {t('common.shared.checkin.clearLogs', '清空')}
                     </button>
                   )}
                 </div>
               </div>
 
-              {logsLoading ? (
+              {migrationPending && <p className="section-hint" role="status">{t('common.historyRestoring')}</p>}
+              {logsError && (
+                <div className="history-toolbar" role="alert">
+                  <span>{t('common.shared.checkin.historyLoadFailed', '读取自动签到记录失败：{{message}}', {
+                    message: logsError === LOCAL_HISTORY_TIMEOUT ? t('common.dataQueryBusy') : logsError,
+                  })}</span>
+                  <button type="button" className="btn btn-secondary btn-xs" onClick={() => refreshLogs(true)}>
+                    {t('common.retry')}
+                  </button>
+                </div>
+              )}
+              {logsLoading && logs.length === 0 && !migrationPending ? (
                 <div className="auto-checkin-empty-history">
                   <Loader2 size={32} className="animate-spin" />
-                  <span>{t('minimaxCode.checkin.historyLoading', '正在读取自动签到记录...')}</span>
-                </div>
-              ) : logsError ? (
-                <div className="auto-checkin-empty-history">
-                  <XCircle size={32} />
-                  <span>
-                    {t('minimaxCode.checkin.historyLoadFailed', '读取自动签到记录失败：{{message}}', {
-                      message: logsError,
-                    })}
-                  </span>
+                  <span>{t('common.shared.checkin.historyLoading', '正在读取自动签到记录...')}</span>
                 </div>
               ) : logs.length === 0 ? (
-                <div className="auto-checkin-empty-history">
-                  <Clock size={32} />
-                  <span>{t('minimaxCode.checkin.noHistory', '暂无近 30 天的自动签到记录')}</span>
-                </div>
+                !migrationPending && !logsError && (
+                  <div className="auto-checkin-empty-history">
+                    <Clock size={32} />
+                    <span>{t('common.shared.checkin.noHistory', '暂无近 30 天的自动签到记录')}</span>
+                  </div>
+                )
               ) : (
                 <div className="auto-checkin-history-list">
                   {logs.map((log) => {

@@ -32,8 +32,12 @@ mod http_parity_tests;
 mod audit_protocol_tests;
 #[path = "request_size_tests.rs"]
 mod request_size_tests;
+#[path = "legacy_relay_item_ids_tests.rs"]
+mod legacy_relay_item_ids_tests;
 #[path = "thinking_suffix_tests.rs"]
 mod thinking_suffix_tests;
+#[path = "reasoning_policy_transport_tests.rs"]
+mod reasoning_policy_transport_tests;
 
 #[path = "legacy_forwarding_websocket_tests.rs"]
 mod legacy_forwarding_websocket_tests;
@@ -51,6 +55,8 @@ struct TestHost {
     route_by_model: AtomicBool,
     bridge_with_policy: AtomicBool,
     reports: Mutex<Vec<RequestReport>>,
+    reasoning_ceiling: Mutex<Option<crate::models::codex_local_access::CodexReasoningLevel>>,
+    rejections: Mutex<Vec<RequestReport>>,
     diagnostics: Mutex<Vec<super::diagnostics::DiagnosticContext>>,
     selections: Mutex<Vec<RouteRequest>>,
     capacity: Arc<tokio::sync::Semaphore>,
@@ -94,7 +100,7 @@ impl Host for TestHost {
     }
     fn authorize<'a>(&'a self, bearer: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
         Box::pin(async move {
-            if bearer != "local-test-key" || !self.key_enabled.load(Ordering::SeqCst) {
+            if !matches!(bearer, "local-test-key" | "unlimited-test-key") || !self.key_enabled.load(Ordering::SeqCst) {
                 return Err(ServiceError::new(
                     401,
                     "invalid_api_key",
@@ -102,7 +108,7 @@ impl Host for TestHost {
                 ));
             }
             Ok(Caller {
-                id: "caller-a".to_string(),
+                id: if bearer == "local-test-key" { "caller-a" } else { "caller-b" }.to_string(),
                 label: "test".to_string(),
             })
         })
@@ -114,6 +120,9 @@ impl Host for TestHost {
     ) -> BoxFuture<'a, Result<Route, ServiceError>> {
         Box::pin(async move {
             self.selections.lock().unwrap().push(request.clone());
+            if request.model == "blocked-test-model" {
+                return Err(ServiceError::new(403, "model_excluded", "Key policy excluded this model"));
+            }
             let permit: Option<Arc<dyn Send + Sync>> = if request.model.is_empty() {
                 None
             } else {
@@ -195,6 +204,18 @@ impl Host for TestHost {
             self.reports.lock().unwrap().push(report);
         })
     }
+    fn record_rejection(&self, report: RequestReport) -> BoxFuture<'_, ()> {
+        Box::pin(async move {
+            self.rejections.lock().unwrap().push(report);
+        })
+    }
+    fn reasoning_ceiling<'a>(
+        &'a self, caller: &'a Caller,
+    ) -> BoxFuture<'a, Result<Option<crate::models::codex_local_access::CodexReasoningLevel>, ServiceError>> {
+        Box::pin(async move {
+            Ok(if caller.id == "caller-a" { *self.reasoning_ceiling.lock().unwrap() } else { None })
+        })
+    }
     fn diagnostic(&self, context: super::diagnostics::DiagnosticContext) -> BoxFuture<'_, ()> {
         Box::pin(async move {
             self.diagnostics.lock().unwrap().push(context);
@@ -227,6 +248,8 @@ async fn native(
         route_by_model: AtomicBool::new(false),
         bridge_with_policy: AtomicBool::new(false),
         reports: Mutex::new(Vec::new()),
+        reasoning_ceiling: Mutex::new(None),
+        rejections: Mutex::new(Vec::new()),
         diagnostics: Mutex::new(Vec::new()),
         selections: Mutex::new(Vec::new()),
         capacity: Arc::new(tokio::sync::Semaphore::new(1)),
@@ -550,7 +573,7 @@ async fn http_maps_identity_preserves_events_and_keeps_local_keys_private() {
         )
         .with_state(seen.clone());
     let (addr, upstream) = mock(app).await;
-    let (mut service, host, _) = native(addr, false, false, Options::default()).await;
+    let (mut service, host, _) = native(addr, true, false, Options::default()).await;
     let response = client()
         .post(format!("http://{}/v1/responses", service.addr))
         .bearer_auth("local-test-key")
@@ -655,6 +678,25 @@ async fn oauth_nonstream_collects_final_response_without_losing_unknown_fields()
     // The Go OAuth executor omits unsupported tiers; client intent is retained
     // in diagnostics, while API-key routes preserve their own wire settings.
     assert!(seen.lock().unwrap()[1].get("service_tier").is_none());
+    client()
+        .post(format!("http://{}/responses", service.addr))
+        .bearer_auth("local-test-key")
+        .header("session-id", "root")
+        .header("thread-id", "root")
+        .header(
+            crate::modules::codex_speed::CLIENT_SERVICE_TIER_HEADER,
+            crate::modules::codex_speed::CLIENT_SERVICE_TIER_VALUE,
+        )
+        .json(&body(false))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .bytes()
+        .await
+        .unwrap();
+    assert!(seen.lock().unwrap()[2].get("service_tier").is_none());
     {
         let reports = host.reports.lock().unwrap();
         assert!(reports[0].success);
@@ -672,6 +714,80 @@ async fn oauth_nonstream_collects_final_response_without_losing_unknown_fields()
             reports[1].response_service_tier.as_deref(),
             Some("priority")
         );
+    }
+    service.shutdown(Duration::from_secs(2)).await.unwrap();
+    upstream.abort();
+}
+
+#[tokio::test]
+async fn oauth_http_ultrafast_sends_final_routing_hint_and_preserves_reported_or_missing_tier() {
+    let seen = Arc::new(Mutex::new(Vec::<(HeaderMap, Value)>::new()));
+    let app = Router::new()
+        .route(
+            "/v1/responses",
+            post(
+                |State(seen): State<Arc<Mutex<Vec<(HeaderMap, Value)>>>>,
+                 headers: HeaderMap,
+                 axum::Json(body): axum::Json<Value>| async move {
+                    let mut seen = seen.lock().unwrap();
+                    seen.push((headers, body));
+                    let terminal = if seen.len() == 1 {
+                        completed().replace(r#""service_tier":"priority""#, r#""service_tier":"default""#)
+                    } else {
+                        completed().replace(r#","service_tier":"priority""#, "")
+                    };
+                    (
+                        [("content-type", "text/event-stream")],
+                        format!(
+                            "{}{terminal}",
+                            created().replace(r#""created_at":123"#, r#""created_at":123,"service_tier":"auto""#)
+                        ),
+                    )
+                },
+            ),
+        )
+        .with_state(seen.clone());
+    let (addr, upstream) = mock(app).await;
+    let (mut service, host, _) = native(addr, true, false, Options::default()).await;
+    let mut request = body(false);
+    request["model"] = json!("gpt-6.1-sol");
+    request["service_tier"] = json!("ultrafast");
+    request["reasoning"]["effort"] = json!("xhigh");
+    for expected in [Some("default"), None] {
+        let response: Value = client()
+            .post(format!("http://{}/responses", service.addr))
+            .bearer_auth("local-test-key")
+            .header("x-codex-routing-hint", "model=stale;tier=priority")
+            .json(&request)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(response["service_tier"].as_str(), expected);
+    }
+    {
+        let captured = seen.lock().unwrap();
+        assert_eq!(captured.len(), 2);
+        for (headers, body) in captured.iter() {
+            assert_eq!(body["model"], "gpt-6.1-sol");
+            assert_eq!(body["reasoning"]["effort"], "xhigh");
+            assert_eq!(body["service_tier"], "ultrafast");
+            assert_eq!(
+                headers["x-codex-routing-hint"],
+                "model=gpt-6.1-sol;tier=ultrafast"
+            );
+        }
+        let reports = host.reports.lock().unwrap();
+        assert_eq!(reports.len(), 2);
+        for (report, expected) in reports.iter().zip([Some("default"), None]) {
+            assert!(report.success);
+            assert_eq!(report.requested_service_tier.as_deref(), Some("ultrafast"));
+            assert_eq!(report.response_service_tier.as_deref(), expected);
+        }
     }
     service.shutdown(Duration::from_secs(2)).await.unwrap();
     upstream.abort();
@@ -864,6 +980,7 @@ async fn websocket_forwards_create_and_interrupt_without_reassigning_account() {
     request
         .headers_mut()
         .insert("thread-id", HeaderValue::from_static("ws-root"));
+    request.headers_mut().insert("x-forwarded-for", HeaderValue::from_static("198.51.100.8"));
     let (mut ws, _) = tokio_tungstenite::connect_async(request).await.unwrap();
     let mut create = body(false);
     create["type"] = json!("response.create");
@@ -903,6 +1020,7 @@ async fn websocket_forwards_create_and_interrupt_without_reassigning_account() {
     .unwrap();
     assert!(service.pause_if_idle());
     service.shutdown(Duration::from_secs(2)).await.unwrap();
+    assert_eq!(host.reports.lock().unwrap()[0].peer_ip, Some(std::net::Ipv4Addr::LOCALHOST.into()));
     drop(ws);
     upstream.abort();
 }
@@ -1286,7 +1404,7 @@ async fn websocket_http_bridge_keeps_selected_model_policy_and_explicit_tier() {
         "authorization",
         HeaderValue::from_static("Bearer local-test-key"),
     );
-    let (mut socket, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+    let (mut socket, _) = tokio_tungstenite::connect_async(request.clone()).await.unwrap();
     for tier in [None, Some("flex"), Some("ultrafast")] {
         let mut request = body(true);
         request["type"] = json!("response.create");
@@ -1305,8 +1423,25 @@ async fn websocket_http_bridge_keeps_selected_model_policy_and_explicit_tier() {
             assert_ne!(event["type"], "error", "{event}");
         }
     }
+    let _ = socket.close(None).await;
+    request.headers_mut().insert(
+        crate::modules::codex_speed::CLIENT_SERVICE_TIER_HEADER,
+        HeaderValue::from_static(crate::modules::codex_speed::CLIENT_SERVICE_TIER_VALUE),
+    );
+    let (mut socket, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+    let mut standard = body(true);
+    standard["type"] = json!("response.create");
+    socket.send(ClientMessage::Text(standard.to_string().into())).await.unwrap();
+    loop {
+        let event = ws_json(&mut socket).await;
+        if event["type"] == "response.completed" {
+            break;
+        }
+        assert_ne!(event["type"], "error", "{event}");
+    }
+
     let requests = seen.lock().unwrap();
-    assert_eq!(requests.len(), 3);
+    assert_eq!(requests.len(), 4);
     for request in requests.iter() {
         assert_eq!(request["model"], "mapped-model");
         assert_eq!(request["max_output_tokens"], 7);
@@ -1318,6 +1453,7 @@ async fn websocket_http_bridge_keeps_selected_model_policy_and_explicit_tier() {
     assert_eq!(requests[0]["service_tier"], "priority");
     assert_eq!(requests[1]["service_tier"], "flex");
     assert_eq!(requests[2]["service_tier"], "ultrafast");
+    assert!(requests[3].get("service_tier").is_none());
     drop(requests);
     let _ = socket.close(None).await;
     service.shutdown(Duration::from_secs(2)).await.unwrap();

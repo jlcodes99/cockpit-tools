@@ -1,32 +1,30 @@
-import assert from "node:assert/strict";
-import test from "node:test";
-import {
-  PLATFORM_LAYOUT_ICON_STORAGE_KEY,
-  persistPlatformLayoutCustomIcons,
-} from "./platformLayoutIconStorage.ts";
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { loadHookModule } from '../../tests/helpers/reactHookHarness';
+import { PLATFORM_LAYOUT_ICON_STORAGE_KEY } from './platformLayoutIconStorage.ts';
 
-test("custom platform icons are serialized to the expected key", () => {
+function storageHarness(fail = false) {
   const writes: Array<[string, string]> = [];
-  const storage = {
-    setItem(key: string, value: string) {
-      writes.push([key, value]);
+  const { exports } = loadHookModule(new URL('./platformLayoutIconStorage.ts', import.meta.url), {
+    './durableUiSettings': {
+      async saveDurableUiSetting(key: string, value: string) {
+        if (fail) throw new Error('write failed');
+        writes.push([key, value]);
+      },
     },
-  };
-  const icons = [{ id: "one", dataUrl: "data:image/png;base64,abc" }];
+  }, { console: { warn() {} } });
+  return { exports, writes };
+}
 
-  assert.equal(persistPlatformLayoutCustomIcons(storage, icons), true);
-  assert.deepEqual(writes, [
-    [PLATFORM_LAYOUT_ICON_STORAGE_KEY, JSON.stringify(icons)],
-  ]);
+test('custom platform icons are serialized to the durable preference key', async () => {
+  const { exports, writes } = storageHarness();
+  const icons = [{ id: 'one', dataUrl: 'data:image/png;base64,abc' }];
+  assert.equal(await exports.persistPlatformLayoutCustomIcons(icons), true);
+  assert.deepEqual(writes, [[PLATFORM_LAYOUT_ICON_STORAGE_KEY, JSON.stringify(icons)]]);
 });
 
-test("quota errors do not escape custom icon persistence", () => {
-  const storage = {
-    setItem() {
-      throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
-    },
-  };
-
-  assert.doesNotThrow(() => persistPlatformLayoutCustomIcons(storage, []));
-  assert.equal(persistPlatformLayoutCustomIcons(storage, []), false);
+test('native icon persistence reports a rejected write without changing the saved value', async () => {
+  const { exports, writes } = storageHarness(true);
+  assert.equal(await exports.persistPlatformLayoutCustomIcons([]), false);
+  assert.deepEqual(writes, []);
 });

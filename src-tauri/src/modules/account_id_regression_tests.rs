@@ -133,3 +133,25 @@ fn new_accounts_use_canonical_id_and_reimport_does_not_duplicate() {
     assert!(!updated.pending_oauth);
     assert_eq!(load_account_index().unwrap().accounts.len(), 1);
 }
+
+#[test]
+fn committed_empty_antigravity_index_never_rebuilds_deleted_accounts_from_details() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let guard = DataDirGuard::new();
+    let account = seed("deleted-but-file-retained");
+    let legacy = guard.path.join("accounts.json");
+    fs::write(
+        &legacy,
+        serde_json::to_vec(&load_account_index().unwrap()).unwrap(),
+    )
+    .unwrap();
+
+    save_account_index(&AccountIndex::new()).unwrap();
+    assert!(load_account(&account.id).is_ok());
+    assert!(load_account_index().unwrap().accounts.is_empty());
+    assert_eq!(get_current_account_id().unwrap(), None);
+    assert!(list_accounts().unwrap().is_empty());
+    assert!(legacy.exists());
+}

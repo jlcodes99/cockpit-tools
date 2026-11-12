@@ -1,11 +1,53 @@
 use super::super::{
-    auth_registry_entry, load_account, managed_profile_dir, refresh_account_inner_with_io,
-    save_account_locked, write_account_to_profile, GrokAccount, GrokQuotaQuery,
+    apply_quota_response, auth_registry_entry, load_account, managed_profile_dir,
+    refresh_account_inner_with_io, save_account_locked, write_account_to_profile, GrokAccount,
+    GrokQuotaQuery,
 };
 use super::{sample_account, EnvironmentGuard, TestDir};
 use crate::models::grok::GrokQuota;
 use crate::modules::grok_oauth::GrokTokenResponse;
 use futures::future::BoxFuture;
+use serde_json::json;
+
+#[test]
+fn incomplete_refresh_keeps_quota_until_valid_reset_data_arrives() {
+    let mut account = quota_fixture();
+    let old_billing = json!({"config":{"creditUsagePercent":37,
+        "productUsage":[{"product":"GrokBuild","usagePercent":12}]}});
+    apply_quota_response(&mut account, old_billing.clone(), None, None, Ok(json!({}))).unwrap();
+    let old_updated_at = account.usage_updated_at;
+
+    let error = apply_quota_response(
+        &mut account,
+        json!({"config":{}}),
+        None,
+        None,
+        Err("task quota temporarily unavailable".into()),
+    );
+    assert_eq!(error.unwrap_err(), "task quota temporarily unavailable");
+    assert_eq!(account.usage_updated_at, old_updated_at);
+    assert_eq!(account.billing_raw.as_ref(), Some(&old_billing));
+    let quota = account.quota.as_ref().unwrap();
+    assert_eq!(quota.weekly_limit_percent, Some(37.0));
+    assert_eq!(quota.products[0].usage_percent, Some(12.0));
+
+    apply_quota_response(
+        &mut account,
+        json!({"config":{
+            "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY",
+                "start":"2026-10-19T03:21:38Z","end":"2026-10-26T03:21:38Z"},
+            "productUsage":[{"product":"GrokBuild","usagePercent":0}]
+        }}),
+        None,
+        None,
+        Err("task quota still unavailable".into()),
+    )
+    .unwrap();
+    let quota = account.quota.as_ref().unwrap();
+    assert_eq!(quota.period_end.as_deref(), Some("2026-10-26T03:21:38Z"));
+    assert_eq!(quota.weekly_limit_percent, Some(0.0));
+    assert_eq!(quota.products[0].usage_percent, Some(0.0));
+}
 
 fn rotate_token<'a>(
     refresh_token: &'a str,

@@ -1,5 +1,6 @@
 //! Connection-local steering acknowledgements and automatic successor ownership.
 use super::{mapping::Prepared, ServiceError};
+use crate::models::codex_local_access::CodexReasoningLevel;
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
 
@@ -25,6 +26,7 @@ mod tests {
         state.submitted(
             &json!({"previous_response_id":"r","event_id":"control"}),
             None,
+            None,
         );
         assert!(!state.control_event(&mut json!({"type":"response.failed","response":{"error":{"code":"unsupported_native_inflight_message"}}})));
         assert!(!state.control_event(&mut json!({"type":"error","error":{"code":"server_error"}})));
@@ -42,6 +44,7 @@ mod tests {
         state.submitted(
             &json!({"previous_response_id":"r","event_id":"steer"}),
             None,
+            None,
         );
         let interrupt = state.next_control_order();
         assert!(!state.interrupt_rejected(&event, Some(&(interrupt, Some(json!("interrupt"))))));
@@ -54,6 +57,7 @@ mod tests {
         let interrupt = state.next_control_order();
         state.submitted(
             &json!({"previous_response_id":"r","event_id":"steer"}),
+            None,
             None,
         );
         assert!(!state.interrupt_rejected(&event, Some(&(interrupt, None))));
@@ -70,6 +74,7 @@ struct Submission {
     accepted: Option<String>,
     successor: Option<String>,
     permit: Option<std::sync::Arc<dyn Send + Sync>>,
+    reasoning_ceiling_proof: Option<CodexReasoningLevel>,
 }
 #[derive(Default)]
 pub(super) struct Steering {
@@ -140,7 +145,12 @@ impl Steering {
             }
         }
     }
-    pub fn submitted(&mut self, body: &Value, permit: Option<std::sync::Arc<dyn Send + Sync>>) {
+    pub fn submitted(
+        &mut self,
+        body: &Value,
+        permit: Option<std::sync::Arc<dyn Send + Sync>>,
+        reasoning_ceiling_proof: Option<CodexReasoningLevel>,
+    ) {
         let order = self.next_control_order();
         self.submissions.push_back(Submission {
             order,
@@ -152,6 +162,7 @@ impl Steering {
             accepted: None,
             successor: None,
             permit,
+            reasoning_ceiling_proof,
         });
     }
     pub fn next_control_order(&mut self) -> u64 {
@@ -311,12 +322,17 @@ impl Steering {
             })?
             .parent
             .clone();
-        let snapshot = self.snapshot(&parent)?;
+        let mut snapshot = self.snapshot(&parent)?;
+        let mut proof = Some(CodexReasoningLevel::None);
         for s in &mut self.submissions {
             if s.parent == parent && s.accepted.is_some() && s.successor.is_none() {
                 s.successor = Some(id.to_owned());
+                proof = proof
+                    .zip(s.reasoning_ceiling_proof)
+                    .map(|(current, next)| current.max(next));
             }
         }
+        snapshot.reasoning_ceiling_proof = proof;
         self.waiting = None;
         Some(snapshot)
     }

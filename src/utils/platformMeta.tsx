@@ -52,11 +52,11 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
     case 'trae':
       return _t('nav.trae', 'Trae');
     case 'trae_solo':
-      return _t('nav.traeSolo', 'TRAE SOLO');
+      return _t('nav.traeSolo', 'TraeWork');
     case 'trae_cn':
       return _t('nav.traeCn', 'Trae CN');
     case 'trae_solo_cn':
-      return _t('nav.traeSoloCn', 'TRAE SOLO CN');
+      return _t('nav.traeSoloCn', 'TraeWork CN');
     case 'workbuddy':
       return 'WorkBuddy';
     case 'minimaxcode':

@@ -70,8 +70,8 @@ test('text replies open in full, HTML keeps its sandbox and failed replies retai
 test('result footers edit the selected live account and reflect saved tags without changing the batch', async () => {
   const state = {
     accounts: [
-      { id: 'one', tags: ['good'] },
-      { id: 'two', tags: [' fast ', 'GOOD'] },
+      { id: 'one', account_name: 'Alpha', organization_id: 'org-first', tags: ['good'] },
+      { id: 'two', account_name: 'Beta', organization_id: 'org-second', tags: [' fast ', 'GOOD'] },
     ],
     async updateAccountTags(id: string, tags: string[]) {
       saved.push({ id, tags: Array.from(tags) });
@@ -80,9 +80,9 @@ test('result footers edit the selected live account and reflect saved tags witho
   };
   const saved: { id: string; tags: string[] }[] = [];
   const batch = { id: 'batch', status: 'completed', items: [
-    { id: 'result-one', accountId: 'one', accountEmail: 'one@example.com', status: 'completed' },
-    { id: 'result-two', accountId: 'two', accountEmail: 'two@example.com', status: 'failed' },
-    { id: 'deleted', accountId: 'deleted', status: 'completed' },
+    { id: 'result-one', accountId: 'one', accountEmail: 'same@example.com', status: 'completed' },
+    { id: 'result-two', accountId: 'two', accountEmail: 'same@example.com', status: 'failed' },
+    { id: 'deleted', accountId: 'deleted', accountEmail: 'same@example.com', status: 'completed' },
   ] };
   const batchBefore = JSON.stringify(batch);
   const h = loadHookModule(new URL('./PelicanResults.tsx', import.meta.url), {
@@ -99,6 +99,10 @@ test('result footers edit the selected live account and reflect saved tags witho
   h.render(() => h.exports.PelicanResults({ batch, mask: (value: string) => `masked:${value}` }));
   const buttons = () => nodes(h.flush()).filter((node) => node.props.className === 'card-action-btn');
   const editor = () => nodes(h.flush()).find((node) => node.type === 'tag-editor');
+  const context = nodes(h.flush()).filter((node) => node.props.className === 'pelican-account-context');
+  assert.deepEqual(context.map((node) => node.props.children), [
+    'masked:Alpha · masked:org-first', 'masked:Beta · masked:org-second', 'masked:deleted',
+  ]);
   assert.equal(buttons().length, 2, 'deleted accounts do not offer an unusable edit action');
   assert.equal(editor(), undefined);
   buttons()[1].props.onClick();

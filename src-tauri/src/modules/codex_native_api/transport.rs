@@ -30,6 +30,7 @@ pub(super) async fn connect_websocket(
         url,
         headers,
         max_message_bytes,
+        super::contract::ExecutionPolicy::default().websocket_fragment_timeout,
         timeout,
         stop,
         |_| {},
@@ -44,6 +45,7 @@ pub(super) async fn connect_websocket_tracked(
     url: &str,
     mut headers: HeaderMap,
     max_message_bytes: usize,
+    fragment_timeout: std::time::Duration,
     timeout: std::time::Duration,
     mut stop: StopSignal,
     on_dispatch: impl FnOnce(&HeaderMap),
@@ -197,7 +199,7 @@ pub(super) async fn connect_websocket_tracked(
             .map_err(|error| super::diagnostics::transport_failure(502,"websocket_connect_failed","Unable to upgrade the upstream connection", &error))?,
     };
     let extensions = super::websocket_io::negotiated(&headers)?;
-    let socket = yawc::WebSocket::from_stream_with_extensions(upgraded, yawc::Role::Client, extensions.as_deref(), super::websocket_io::options(max_message_bytes))
+    let socket = yawc::WebSocket::from_stream_with_extensions(upgraded, yawc::Role::Client, extensions.as_deref(), super::websocket_io::options(max_message_bytes, fragment_timeout))
         .map_err(|error| super::diagnostics::transport_failure(502, "invalid_websocket_handshake", "Invalid WebSocket compression negotiation", &error))?;
     Ok((super::websocket_io::Socket::new(socket), headers))
 }

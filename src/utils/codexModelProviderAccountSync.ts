@@ -36,6 +36,32 @@ export interface CodexModelProviderAccountSnapshot {
   accountName: string;
 }
 
+export function resolveCodexModelProviderForAccount(
+  provider: CodexModelProvider,
+  apiKey: string,
+  account?: CodexAccount,
+): CodexModelProvider {
+  const key = provider.apiKeys.find(item => item.apiKey.trim() === apiKey.trim());
+  const providerBaseUrl = normalizeBaseUrl(provider.baseUrl);
+  // Older account records can own a catalog before the key has a model configuration.
+  if (!account?.api_model_catalog?.length || !account.openai_api_key?.trim()
+    || account.openai_api_key.trim() !== apiKey.trim()
+    || !providerBaseUrl || normalizeBaseUrl(resolveAccountUsageBaseUrl(account)) !== providerBaseUrl
+    || key?.modelCatalog !== undefined) {
+    return resolveCodexModelProviderForApiKey(provider, apiKey);
+  }
+  return resolveCodexModelProviderForApiKey({
+    ...provider,
+    modelCatalog: account.api_model_catalog,
+    modelContextWindows: account.api_model_context_windows,
+    supportsVision: account.api_supports_vision === true,
+    modelCapabilities: Object.fromEntries(
+      Object.entries(account.api_model_vision_support ?? {}).map(([model, supportsVision]) => [model, { supportsVision }]),
+    ),
+    visionRoutingModel: account.api_vision_routing_model ?? undefined,
+  }, apiKey);
+}
+
 export function mergeCodexModelProviderCredentialInput(
   provider: CodexModelProvider | null,
   fallback: {

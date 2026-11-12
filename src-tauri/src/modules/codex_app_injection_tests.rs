@@ -289,6 +289,7 @@ fn custom_script_renders_weekly_and_optional_five_hour_fields() {
             available_account_count: Some(12),
             abnormal_account_count: Some(2),
             cooldown_account_count: Some(0),
+            provider_quotas: vec![],
             plans: vec![QuotaPlanSummary {
                 plan: "PLUS".to_string(),
                 official: false,
@@ -701,19 +702,15 @@ fn five_hour_only_quota_is_not_relabelled_as_weekly() {
 }
 
 #[test]
-fn empty_pool_quota_keeps_zero_windows_and_account_detail_counts() {
+fn empty_pool_quota_displays_unknown_windows_and_keeps_account_detail_counts() {
     let quota = QuotaResponse::empty_pool();
     assert_eq!(quota.account_count, Some(0));
-    assert_eq!(quota.five_hour_remaining_percent, Some(0));
-    assert_eq!(quota.weekly_remaining_percent, Some(0));
-    assert_eq!(quota.five_hour_capacity_percent, Some(0));
-    assert_eq!(quota.weekly_capacity_percent, Some(0));
 
     let script = api_service_script(&quota, &[], &[], InjectionBadgeKind::CodexQuota, None);
     assert!(script.contains("const accountCount = 0"));
-    assert!(script.contains("const fiveHourPercent = 0"));
-    assert!(script.contains("const weeklyPercent = 0"));
-    // 空池保留零额度；底部不再单独显示账号数，详情保留可用账号统计。
+    assert!(script.contains("const fiveHourPercent = null"));
+    assert!(script.contains("const weeklyPercent = null"));
+    // 额度栏展示未知，详情仍保留真实的账号统计。
     let summary = script
         .split("const fields = [];")
         .nth(1)
@@ -728,16 +725,31 @@ fn empty_pool_quota_keeps_zero_windows_and_account_detail_counts() {
 }
 
 #[test]
-fn empty_pool_response_normalizes_missing_window_values_to_zero() {
-    // The sidecar omits its empty plans list and absent window values.
-    let quota: QuotaResponse = serde_json::from_value(json!({"accountCount": 0})).unwrap();
+fn empty_pool_response_clears_zero_placeholders_and_preserves_real_exhaustion() {
+    let quota: QuotaResponse = serde_json::from_value(json!({
+        "accountCount": 0, "fiveHourRemainingPercent": 0, "weeklyRemainingPercent": 0,
+        "fiveHourCapacityPercent": 0, "weeklyCapacityPercent": 0,
+    })).unwrap();
     let quota = quota.normalize_empty_pool();
 
     assert_eq!(quota.account_count, Some(0));
-    assert_eq!(quota.five_hour_remaining_percent, Some(0));
-    assert_eq!(quota.weekly_remaining_percent, Some(0));
-    assert_eq!(quota.five_hour_capacity_percent, Some(0));
-    assert_eq!(quota.weekly_capacity_percent, Some(0));
+    assert_eq!(quota.five_hour_remaining_percent, None);
+    assert_eq!(quota.weekly_remaining_percent, None);
+    assert_eq!(quota.five_hour_capacity_percent, None);
+    assert_eq!(quota.weekly_capacity_percent, None);
+    let exhausted: QuotaResponse = serde_json::from_value(json!({
+        "accountCount": 1, "fiveHourRemainingPercent": 0, "weeklyRemainingPercent": 0,
+    })).unwrap();
+    let script = api_service_script(
+        &exhausted.normalize_empty_pool(), &[], &[], InjectionBadgeKind::CodexQuota, None,
+    );
+    assert!(script.contains("const fiveHourPercent = 0"));
+    assert!(script.contains("const weeklyPercent = 0"));
+    let provider_only: QuotaResponse = serde_json::from_value(json!({
+        "accountCount": 0,
+        "providerQuotas": [{"name": "Fixture relay", "remaining": 94, "total": 100, "unit": "%", "unlimited": false, "status": "ready"}],
+    })).unwrap();
+    assert_eq!(provider_only.normalize_empty_pool().provider_quotas[0].name, "Fixture relay");
 }
 
 #[test]

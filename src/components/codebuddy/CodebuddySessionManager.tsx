@@ -52,7 +52,13 @@ interface Props {
 }
 
 export function CodebuddySessionManager({ platform, accounts = [] }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const language = i18n.resolvedLanguage || i18n.language;
+  const relativeTime = useMemo(
+    () => new Intl.RelativeTimeFormat(language, { style: 'short' }),
+    [language],
+  );
+  const unknownTime = t('codebuddy.sessionManager.unknownTime');
 
   // userId → displayName map
   const userIdMap = useMemo(() => {
@@ -85,15 +91,15 @@ export function CodebuddySessionManager({ platform, accounts = [] }: Props) {
     () => [
       {
         value: '',
-        label: t('codebuddy.sessionManager.statusAll', '全部状态'),
+        label: t('codebuddy.sessionManager.statusAll'),
       },
       {
         value: 'Completed',
-        label: t('codebuddy.sessionManager.statusCompleted', '已完成'),
+        label: t('codebuddy.sessionManager.statusCompleted'),
       },
       {
         value: 'InProgress',
-        label: t('codebuddy.sessionManager.statusInProgress', '进行中'),
+        label: t('codebuddy.sessionManager.statusInProgress'),
       },
     ],
     [t],
@@ -181,7 +187,7 @@ export function CodebuddySessionManager({ platform, accounts = [] }: Props) {
                 type="text"
                 value={keywordInput}
                 onChange={(e) => handleKeywordChange(e.target.value)}
-                placeholder={t('codebuddy.sessionManager.searchPlaceholder', '搜索标题或工作目录...')}
+                placeholder={t('codebuddy.sessionManager.searchPlaceholder')}
                 disabled={loading}
               />
             </div>
@@ -201,7 +207,7 @@ export function CodebuddySessionManager({ platform, accounts = [] }: Props) {
             options={statusOptions}
             onChange={setStatusFilter}
             disabled={loading}
-            ariaLabel={t('codebuddy.sessionManager.statusFilter', '会话状态')}
+            ariaLabel={t('codebuddy.sessionManager.statusFilter')}
             menuWidth={160}
             menuMaxHeight={220}
           />
@@ -230,8 +236,8 @@ export function CodebuddySessionManager({ platform, accounts = [] }: Props) {
         {!loading && sessions.length === 0 && (
           <div className="codex-session-manager__empty">
             {keyword || statusFilter
-              ? t('codebuddy.sessionManager.noMatching', '没有匹配的会话')
-              : t('codebuddy.sessionManager.noSessions', '暂无会话记录')}
+              ? t('codebuddy.sessionManager.noMatching')
+              : t('codebuddy.sessionManager.noSessions')}
           </div>
         )}
         {groupedSessions.map((group) => {
@@ -252,7 +258,7 @@ export function CodebuddySessionManager({ platform, accounts = [] }: Props) {
                   <span className="codex-session-group__count">{group.sessions.length}</span>
                 </div>
                 <span className="codex-session-folder__time">
-                  {formatRelativeTime(group.latestUpdatedAt, t)}
+                  {formatRelativeTime(group.latestUpdatedAt, relativeTime, unknownTime)}
                 </span>
               </div>
 
@@ -264,7 +270,7 @@ export function CodebuddySessionManager({ platform, accounts = [] }: Props) {
                       <div className="codex-session-row__left">
                         <div className="codex-session-row__content">
                           <span className="codex-session-row__title">
-                            {session.title || t('codebuddy.sessionManager.untitled', '(untitled)')}
+                            {session.title || t('codebuddy.sessionManager.untitled')}
                           </span>
                           {session.locations.length > 0 && (
                             <span className="codex-session-row__meta">
@@ -276,21 +282,21 @@ export function CodebuddySessionManager({ platform, accounts = [] }: Props) {
                             </span>
                           )}
                           <span className="codex-session-row__meta codex-session-row__session-id" title={session.conversationId}>
-                            {t('codebuddy.sessionManager.labels.session', '会话')}: {formatConversationId(session.conversationId)}
+                            {t('codebuddy.sessionManager.labels.session')}: {formatConversationId(session.conversationId)}
                           </span>
                           {session.userId && (
                             <span className="codex-session-row__meta codex-session-row__session-id codex-session-row__user" title={session.userId}>
-                              {t('codebuddy.sessionManager.labels.user', '用户')}: {resolveUserName(session.userId)}
+                              {t('codebuddy.sessionManager.labels.user')}: {resolveUserName(session.userId)}
                             </span>
                           )}
                           <span className="codex-session-row__meta codex-session-row__cwd" title={session.cwd}>
-                            {t('codebuddy.sessionManager.labels.dir', '目录')}: {formatCwdDisplay(session.cwd)}
+                            {t('codebuddy.sessionManager.labels.dir')}: {formatCwdDisplay(session.cwd)}
                           </span>
                         </div>
                       </div>
                       <div className="codex-session-row__right">
                         <span className="codex-session-row__status-badge">
-                          {session.status}
+                          {statusOptions.find((option) => option.value && option.value === session.status)?.label ?? session.status}
                         </span>
                         <button
                           type="button"
@@ -301,7 +307,7 @@ export function CodebuddySessionManager({ platform, accounts = [] }: Props) {
                           {copiedId === session.conversationId ? <Check size={12} /> : <Copy size={12} />}
                         </button>
                         <span className="codex-session-row__time">
-                          {formatRelativeTime(session.updatedAt, t)}
+                          {formatRelativeTime(session.updatedAt, relativeTime, unknownTime)}
                         </span>
                       </div>
                     </div>

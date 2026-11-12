@@ -21,7 +21,6 @@ pub(crate) fn official_runtime_overlay(
     source.api_supports_websockets = false;
     source.api_supports_vision = true;
     source.api_model_catalog.clear();
-    source.api_model_mappings.clear();
     source.agent_identity = None;
     source.quota = None;
     source.quota_error = None;

@@ -155,13 +155,23 @@ async fn validate_managed_account_for_client_locked(
             account.id, error
         ));
     }
-    if account.requires_reauth {
+    let access_expired = codex_oauth::is_token_expired(&account.tokens.access_token);
+    // Keep the stored reauthorization status for the next refresh while the
+    // current access token is still usable for this launch.
+    if account.requires_reauth
+        && (access_expired
+            || !account
+                .reauth_reason
+                .as_deref()
+                .is_some_and(is_refresh_grant_only_failure)
+            || account_has_remote_api_auth_rejection(&account))
+    {
         return Err(account
             .reauth_reason
             .clone()
             .unwrap_or_else(|| "账号需要重新授权".to_string()));
     }
-    if codex_oauth::is_token_expired(&account.tokens.access_token) {
+    if access_expired {
         return Err("access_token 已过期，无法启动，请重新授权".to_string());
     }
     reject_known_access_token_revocation(&account)?;
@@ -383,23 +393,37 @@ pub async fn force_refresh_managed_account_after_observed(
         .await
 }
 
-pub async fn keepalive_managed_account(
+pub(crate) enum CodexKeepaliveOutcome {
+    Unchanged,
+    Updated(CodexAccount),
+    DeferredToDefaultProfile,
+}
+
+fn default_profile_uses_keepalive_token(profile: &Path, refresh_token: &str) -> bool {
+    !refresh_token.trim().is_empty()
+        && read_official_oauth_tokens(profile)
+            .and_then(|tokens| tokens.refresh_token)
+            .as_deref()
+            == Some(refresh_token)
+}
+
+pub(crate) async fn keepalive_managed_account(
     account_id: &str,
     reason: &str,
-) -> Result<CodexAccount, String> {
+) -> Result<CodexKeepaliveOutcome, String> {
     let lock = codex_token_lock_for(account_id);
     let _guard = lock.lock().await;
     let mut account =
         load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
     if account.is_api_key_auth() || account.is_agent_identity_auth() {
-        return Ok(account);
+        return Ok(CodexKeepaliveOutcome::Unchanged);
     }
     if !is_managed_auth_refresh_due(&account) {
-        return Ok(account);
+        return Ok(CodexKeepaliveOutcome::Unchanged);
     }
     let Some(_file_guard) = try_acquire_codex_token_refresh_file_lock(account_id, reason).await?
     else {
-        return Ok(account);
+        return Ok(CodexKeepaliveOutcome::Unchanged);
     };
     let official_runtime_has_account = running_codex_oauth_account_ids()
         .map(|account_ids| account_ids.contains(&account.id))
@@ -409,12 +433,13 @@ pub async fn keepalive_managed_account(
     } else {
         sync_account_from_authority_sources(&mut account)
     };
-    if let Err(err) = sync_result {
+    let synced = sync_result.unwrap_or_else(|err| {
         logger::log_warn(&format!(
             "Codex 保活同步官方凭证失败，继续使用账号库: account_id={}, error={}",
             account.id, err
         ));
-    }
+        false
+    });
     clear_refresh_token_reused_state(&mut account)?;
     if let Err(err) = clear_stale_missing_refresh_token_reauth(&mut account) {
         logger::log_warn(&format!(
@@ -429,10 +454,28 @@ pub async fn keepalive_managed_account(
             .unwrap_or_else(|| "账号需要重新登录".to_string()));
     }
     if !is_managed_auth_refresh_due(&account) {
-        return Ok(account);
+        return Ok(if synced {
+            CodexKeepaliveOutcome::Updated(account)
+        } else {
+            CodexKeepaliveOutcome::Unchanged
+        });
     }
 
-    perform_managed_token_refresh(account, reason, false).await
+    // The default CLI/app-server may start after this job and reuse the token
+    // still in its auth store. Give that client ownership of the shared chain.
+    let refresh_token = account.tokens.refresh_token.clone().unwrap_or_default();
+    let default_profile_owns_token = tauri::async_runtime::spawn_blocking(move || {
+        default_profile_uses_keepalive_token(&get_codex_home(), &refresh_token)
+    })
+    .await
+    .map_err(|err| format!("读取 Codex 默认配置凭据任务失败: {}", err))?;
+    if default_profile_owns_token {
+        return Ok(CodexKeepaliveOutcome::DeferredToDefaultProfile);
+    }
+
+    perform_managed_token_refresh(account, reason, false)
+        .await
+        .map(CodexKeepaliveOutcome::Updated)
 }
 
 pub async fn execute_with_managed_account_projection<R, F>(
@@ -736,12 +779,13 @@ async fn activate_provider_gateway_after_switch_if_needed(
 ) -> Result<(), String> {
     if crate::modules::codex_local_access::account_requires_provider_gateway(account) {
         logger::log_info(&format!(
-            "[Codex切号] API Key 账号启用本地供应商网关: account_id={}, target_dir={}",
+            "[Codex切号] 准备实例供应商网关配置: account_id={}, target_dir={}",
             account.id,
             base_dir.display()
         ));
-        crate::modules::codex_local_access::ensure_provider_gateway_for_dir(base_dir, &account.id)
+        crate::modules::codex_local_access::activate_provider_gateway_for_dir(base_dir, &account.id)
             .await?;
+        crate::modules::codex_cli_daemon::after_provider_gateway_profile_write(base_dir, &account.id);
         return Ok(());
     }
 

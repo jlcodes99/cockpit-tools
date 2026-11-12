@@ -1,4 +1,6 @@
+import type { LocalHistoryRead } from '../hooks/useLocalHistory';
 import { invoke } from '@tauri-apps/api/core';
+import { createCheckinConfigMigration } from './checkinConfigMigration';
 
 export interface WorkbuddyAccountScheduleState {
   scheduledDate: string;        // "YYYY-MM-DD"
@@ -28,21 +30,6 @@ const AUTO_CHECKIN_IDLE_RECHECK_DELAY_MS = 60 * 60 * 1000;
 
 export type WorkbuddyAutoCheckinCycleResult = 'disabled' | 'waiting' | 'completed' | 'retry';
 
-export function clearLegacyWorkbuddyAutoCheckinLogs(): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  try {
-    if (localStorage.getItem(LEGACY_LOGS_KEY) !== null) {
-      localStorage.removeItem(LEGACY_LOGS_KEY);
-      console.info('[WorkbuddyAutoCheckin] 已清理废弃的 WebView 自动签到日志缓存');
-    }
-  } catch (err) {
-    console.warn('[WorkbuddyAutoCheckin] 清理废弃的自动签到日志缓存失败:', err);
-  }
-}
-
 let cachedConfig: WorkbuddyAutoCheckinConfig | null = null;
 
 function isValidTime(time: unknown): time is string {
@@ -51,22 +38,20 @@ function isValidTime(time: unknown): time is string {
 
 function cacheConfigLocally(config: WorkbuddyAutoCheckinConfig, emitChange = false): void {
   cachedConfig = config;
-  if (typeof window === 'undefined') {
-    return;
-  }
-  try {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-    if (emitChange) {
-      window.dispatchEvent(new Event(WORKBUDDY_AUTO_CHECKIN_CONFIG_CHANGED_EVENT));
-    }
-  } catch (err) {
-    console.warn('[WorkbuddyAutoCheckin] 本地缓存保存失败:', err);
+  if (emitChange && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(WORKBUDDY_AUTO_CHECKIN_CONFIG_CHANGED_EVENT));
   }
 }
 
+const migrateLegacyConfig = createCheckinConfigMigration(
+  'migrate_workbuddy_auto_checkin_config',
+  readLegacyConfig,
+);
+
 export async function getWorkbuddyAutoCheckinConfigAsync(): Promise<WorkbuddyAutoCheckinConfig> {
   try {
-    const config = await invoke<WorkbuddyAutoCheckinConfig>('get_workbuddy_auto_checkin_config');
+    const config = await migrateLegacyConfig()
+      ?? await invoke<WorkbuddyAutoCheckinConfig>('get_workbuddy_auto_checkin_config');
     cacheConfigLocally(config);
     return config;
   } catch (err) {
@@ -76,16 +61,17 @@ export async function getWorkbuddyAutoCheckinConfigAsync(): Promise<WorkbuddyAut
 }
 
 export function getWorkbuddyAutoCheckinConfig(): WorkbuddyAutoCheckinConfig {
-  if (cachedConfig) {
-    return cachedConfig;
-  }
+  return cachedConfig ?? readLegacyConfig() ?? DEFAULT_WORKBUDDY_AUTO_CHECKIN_CONFIG;
+}
+
+function readLegacyConfig(): WorkbuddyAutoCheckinConfig | undefined {
   if (typeof window === 'undefined') {
-    return DEFAULT_WORKBUDDY_AUTO_CHECKIN_CONFIG;
+    return undefined;
   }
   try {
     const raw = localStorage.getItem(CONFIG_KEY);
     if (!raw) {
-      return DEFAULT_WORKBUDDY_AUTO_CHECKIN_CONFIG;
+      return undefined;
     }
     const parsed = JSON.parse(raw);
     const config: WorkbuddyAutoCheckinConfig = {
@@ -95,22 +81,10 @@ export function getWorkbuddyAutoCheckinConfig(): WorkbuddyAutoCheckinConfig {
       lastCheckedDate: typeof parsed.lastCheckedDate === 'string' ? parsed.lastCheckedDate : undefined,
       accountSchedules: typeof parsed.accountSchedules === 'object' && parsed.accountSchedules !== null ? parsed.accountSchedules : undefined,
     };
-    cachedConfig = config;
     return config;
   } catch {
-    return DEFAULT_WORKBUDDY_AUTO_CHECKIN_CONFIG;
+    return undefined;
   }
-}
-
-export async function migrateWorkbuddyAutoCheckinConfigAsync(
-  legacyConfig: WorkbuddyAutoCheckinConfig,
-): Promise<WorkbuddyAutoCheckinConfig> {
-  const config = await invoke<WorkbuddyAutoCheckinConfig>(
-    'migrate_workbuddy_auto_checkin_config',
-    { legacyConfig },
-  );
-  cacheConfigLocally(config, true);
-  return config;
 }
 
 export async function saveWorkbuddyAutoCheckinConfigAsync(config: WorkbuddyAutoCheckinConfig): Promise<void> {
@@ -276,8 +250,27 @@ export interface WorkbuddyAutoCheckinLogRecord {
 
 export const WORKBUDDY_AUTO_CHECKIN_LOGS_CHANGED_EVENT = 'workbuddy-auto-checkin-logs-changed';
 
-export async function getWorkbuddyAutoCheckinLogsAsync(): Promise<WorkbuddyAutoCheckinLogRecord[]> {
-  return await invoke<WorkbuddyAutoCheckinLogRecord[]>('get_workbuddy_auto_checkin_logs');
+let legacyHistoryStage: Promise<void> | undefined;
+
+export function stageWorkbuddyAutoCheckinLegacyLogs(): Promise<void> {
+  if (legacyHistoryStage) return legacyHistoryStage;
+  if (typeof window === 'undefined') return Promise.resolve();
+
+  legacyHistoryStage = Promise.resolve().then(async () => {
+    const snapshot = localStorage.getItem(LEGACY_LOGS_KEY);
+    if (snapshot) {
+      await invoke('stage_workbuddy_auto_checkin_legacy_logs', { snapshot });
+    }
+  }).catch((error) => {
+    legacyHistoryStage = undefined;
+    console.warn('[WorkbuddyAutoCheckin] 读取旧版签到历史失败:', error);
+    throw error;
+  });
+  return legacyHistoryStage;
+}
+
+export function getWorkbuddyAutoCheckinLogsAsync(retry = false): Promise<LocalHistoryRead<WorkbuddyAutoCheckinLogRecord>> {
+  return invoke<LocalHistoryRead<WorkbuddyAutoCheckinLogRecord>>('get_workbuddy_auto_checkin_logs', { retry });
 }
 
 export async function clearWorkbuddyAutoCheckinLogs(): Promise<void> {

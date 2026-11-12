@@ -30,23 +30,16 @@ impl Drop for DesktopCookieSnapshot {
     }
 }
 
-fn open_desktop_cookie_snapshot(cookies_path: &Path) -> Result<DesktopCookieSnapshot, String> {
-    let sidecar_path = |suffix: &str| {
-        let mut name = cookies_path.as_os_str().to_os_string();
+fn copy_desktop_cookie_files(cookies_path: &Path, destination_path: &Path) -> Result<(), String> {
+    let sidecar_path = |path: &Path, suffix: &str| {
+        let mut name = path.as_os_str().to_os_string();
         name.push(suffix);
         PathBuf::from(name)
-    };
-    let directory =
-        std::env::temp_dir().join(format!("cockpit-claude-cookies-{}", uuid::Uuid::new_v4()));
-    fs::create_dir(&directory).map_err(|error| error.to_string())?;
-    let mut snapshot = DesktopCookieSnapshot {
-        connection: None,
-        temporary_dir: Some(directory.clone()),
     };
     // Always copy: a running Chromium process can create WAL/journal files after
     // an existence check. SQLite must never recover or create SHM in the source.
     for suffix in ["", "-journal", "-wal"] {
-        let source = sidecar_path(suffix);
+        let source = sidecar_path(cookies_path, suffix);
         if suffix.is_empty() || source.exists() {
             let size = fs::metadata(&source)
                 .map_err(|error| error.to_string())?
@@ -58,7 +51,7 @@ fn open_desktop_cookie_snapshot(cookies_path: &Path) -> Result<DesktopCookieSnap
                     &[],
                 ));
             }
-            let destination = directory.join(format!("Cookies{}", suffix));
+            let destination = sidecar_path(destination_path, suffix);
             fs::copy(&source, &destination).map_err(|error| error.to_string())?;
             // Recovery writes only to this disposable copy, even when the source
             // has a read-only attribute. Unix copies restrict credentials to owner.
@@ -75,7 +68,19 @@ fn open_desktop_cookie_snapshot(cookies_path: &Path) -> Result<DesktopCookieSnap
             fs::set_permissions(&destination, permissions).map_err(|error| error.to_string())?;
         }
     }
+    Ok(())
+}
+
+fn open_desktop_cookie_snapshot(cookies_path: &Path) -> Result<DesktopCookieSnapshot, String> {
+    let directory =
+        std::env::temp_dir().join(format!("cockpit-claude-cookies-{}", uuid::Uuid::new_v4()));
+    fs::create_dir(&directory).map_err(|error| error.to_string())?;
+    let mut snapshot = DesktopCookieSnapshot {
+        connection: None,
+        temporary_dir: Some(directory.clone()),
+    };
     let read_path = directory.join("Cookies");
+    copy_desktop_cookie_files(cookies_path, &read_path)?;
     let flags = OpenFlags::SQLITE_OPEN_READ_WRITE;
     let connection =
         Connection::open_with_flags(&read_path, flags).map_err(|error| error.to_string())?;

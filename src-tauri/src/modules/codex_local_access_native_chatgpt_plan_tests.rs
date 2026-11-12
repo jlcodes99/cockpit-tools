@@ -18,6 +18,22 @@ fn collection() -> CodexLocalAccessCollection {
     serde_json::from_value(json!({"enabled":true,"port":19001,"apiKey":"local-test-key","accountIds":["chatgpt_plan_test-registration"],"createdAt":0,"updatedAt":0})).unwrap()
 }
 
+#[test]
+fn official_authorization_account_model_mapping_preserves_upstream_catalog_scope() {
+    let mut account = account();
+    account.api_model_mappings = serde_json::from_value(json!([
+        {"client_model": "official-alias", "upstream_model": "gpt-account-exclusive"},
+        {"client_model": "ungranted-alias", "upstream_model": "gpt-5.6-sol"}
+    ])).unwrap();
+    let collection = collection();
+    let plan = |model| native_model_route_plan(&collection, None, model).unwrap();
+    assert_eq!(
+        native_plan_account_model(&plan("official-alias"), &account).as_deref(),
+        Some("gpt-account-exclusive")
+    );
+    assert_eq!(native_plan_account_model(&plan("ungranted-alias"), &account), None);
+}
+
 fn mixed_oauth_host(projection: CodexAccount, scope: Vec<String>) -> NativeHostBridge {
     let collection = serde_json::from_value(json!({
         "enabled":true,"port":19009,"apiKey":"synthetic-mixed-key",

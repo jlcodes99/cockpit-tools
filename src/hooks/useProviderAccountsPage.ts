@@ -1,3 +1,6 @@
+import { useDurableUiBooleanSetting } from './useDurableUiSetting';
+import type { FlowNoticeSettingKey } from '../utils/durableUiSettings';
+import { useAccountsOverviewFilterState } from './useAccountsOverviewFilterState';
 import { applyExplicitApiBaseUrlToExternalImportItems } from '../utils/externalImportRouting';
 /**
  * useProviderAccountsPage
@@ -50,9 +53,7 @@ import {
   readAccountsOverviewFilterField,
   readAccountsOverviewFilterPersistenceEnabled,
   readAccountsOverviewFilterStringArray,
-  removeAccountsOverviewFilterField,
   setAccountsOverviewFilterPersistenceEnabled,
-  writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
 import { normalizeTimestamp } from '../utils/dataExtract';
 import { getLocalOffsetMinutes } from '../utils/localTimeZone';
@@ -153,9 +154,7 @@ export interface ProviderPageConfig<TAccount extends ProviderAccountBase> {
   /** OAuth 日志前缀 */
   oauthLogPrefix: string;
   /** localStorage key：flow notice 折叠状态 */
-  flowNoticeCollapsedKey?: string;
-  /** localStorage key：当前选中账号 */
-  currentAccountIdKey?: string;
+  flowNoticeCollapsedKey?: FlowNoticeSettingKey;
   /** 导出文件名前缀 */
   exportFilePrefix: string;
   /** Store 操作 */
@@ -183,7 +182,7 @@ export interface ProviderPageConfig<TAccount extends ProviderAccountBase> {
   /** 外部浏览器导入完成后的扩展处理（可选） */
   onExternalImportCompleted?: (accountIds: string[]) => void | Promise<void>;
   /** 首次渲染时使用的搜索内容 */
-  initialSearchQuery?: string;
+  searchPersistenceField?: string;
   defaultSortBy?: string;
   /**
    * 自定义删除确认的 Enter 行为（例如 Codex 批量删除）。
@@ -674,7 +673,6 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     platformKey,
     oauthLogPrefix,
     flowNoticeCollapsedKey,
-    currentAccountIdKey,
     exportFilePrefix,
     store,
     oauthService,
@@ -682,7 +680,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     defaultAddTab: defaultAddTabConfig,
     oauthAutoPrepare: oauthAutoPrepareConfig,
     dataService,
-    initialSearchQuery: initialSearchQueryConfig,
+    searchPersistenceField,
     defaultSortBy: defaultSortByConfig,
     onExternalImportCompleted,
   } = config;
@@ -770,7 +768,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   );
 
   // ─── View Mode ────────────────────────────────────────────────────────
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+  const [viewMode, setViewMode] = useAccountsOverviewFilterState<ViewMode>(filterPersistenceScope, FILTER_FIELD_VIEW_MODE, () => {
     if (!readAccountsOverviewFilterPersistenceEnabled(filterPersistenceScope)) {
       return DEFAULT_VIEW_MODE;
     }
@@ -783,10 +781,15 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   });
 
   // ─── Search & Filter ──────────────────────────────────────────────────
-  const [searchQuery, setSearchQuery] = useState(
-    () => initialSearchQueryConfig ?? '',
+  const [searchQuery, setSearchQuery] = useAccountsOverviewFilterState(
+    filterPersistenceScope,
+    searchPersistenceField,
+    () => {
+      if (!searchPersistenceField || !readAccountsOverviewFilterPersistenceEnabled(filterPersistenceScope)) return '';
+      return readAccountsOverviewFilterField(filterPersistenceScope, searchPersistenceField, '');
+    },
   );
-  const [filterType, setFilterType] = useState<string>(() => {
+  const [filterType, setFilterType] = useAccountsOverviewFilterState<string>(filterPersistenceScope, FILTER_FIELD_FILTER_TYPE, () => {
     if (!readAccountsOverviewFilterPersistenceEnabled(filterPersistenceScope)) {
       return 'all';
     }
@@ -799,7 +802,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   });
 
   // ─── Sort ─────────────────────────────────────────────────────────────
-  const [sortBy, setSortBy] = useState<string>(() => {
+  const [sortBy, setSortBy] = useAccountsOverviewFilterState<string>(filterPersistenceScope, FILTER_FIELD_SORT_BY, () => {
     // Explicit default (e.g. Codex custom-sort active flag) wins over stale saved sort (#1123).
     if (defaultSortBy === 'custom') {
       return 'custom';
@@ -814,7 +817,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     );
     return saved?.trim() ? saved : defaultSortBy;
   });
-  const [sortDirection, setSortDirection] = useState<SortDirection>(() => {
+  const [sortDirection, setSortDirection] = useAccountsOverviewFilterState<SortDirection>(filterPersistenceScope, FILTER_FIELD_SORT_DIRECTION, () => {
     if (!readAccountsOverviewFilterPersistenceEnabled(filterPersistenceScope)) {
       return DEFAULT_SORT_DIRECTION;
     }
@@ -825,42 +828,6 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     );
     return normalizeSortDirection(saved);
   });
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(filterPersistenceScope, FILTER_FIELD_VIEW_MODE);
-      return;
-    }
-    writeAccountsOverviewFilterField(filterPersistenceScope, FILTER_FIELD_VIEW_MODE, viewMode);
-  }, [filterPersistenceEnabled, filterPersistenceScope, viewMode]);
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(filterPersistenceScope, FILTER_FIELD_SORT_BY);
-      return;
-    }
-    writeAccountsOverviewFilterField(filterPersistenceScope, FILTER_FIELD_SORT_BY, sortBy);
-  }, [filterPersistenceEnabled, filterPersistenceScope, sortBy]);
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(filterPersistenceScope, FILTER_FIELD_SORT_DIRECTION);
-      return;
-    }
-    writeAccountsOverviewFilterField(
-      filterPersistenceScope,
-      FILTER_FIELD_SORT_DIRECTION,
-      sortDirection,
-    );
-  }, [filterPersistenceEnabled, filterPersistenceScope, sortDirection]);
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(filterPersistenceScope, FILTER_FIELD_FILTER_TYPE);
-      return;
-    }
-    writeAccountsOverviewFilterField(filterPersistenceScope, FILTER_FIELD_FILTER_TYPE, filterType);
-  }, [filterPersistenceEnabled, filterPersistenceScope, filterType]);
 
   // ─── Selection ────────────────────────────────────────────────────────
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -895,7 +862,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   );
 
   // ─── Tags ─────────────────────────────────────────────────────────────
-  const [tagFilter, setTagFilter] = useState<string[]>(() => {
+  const [tagFilter, setTagFilter] = useAccountsOverviewFilterState<string[]>(filterPersistenceScope, FILTER_FIELD_TAGS, () => {
     if (!readAccountsOverviewFilterPersistenceEnabled(filterPersistenceScope)) {
       return [];
     }
@@ -903,7 +870,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
       readAccountsOverviewFilterStringArray(filterPersistenceScope, FILTER_FIELD_TAGS),
     );
   });
-  const [groupByTag, setGroupByTag] = useState<boolean>(() => {
+  const [groupByTag, setGroupByTag] = useAccountsOverviewFilterState<boolean>(filterPersistenceScope, FILTER_FIELD_GROUP_BY_TAG, () => {
     if (!readAccountsOverviewFilterPersistenceEnabled(filterPersistenceScope)) {
       return false;
     }
@@ -961,26 +928,6 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   const clearTagFilter = useCallback(() => {
     setTagFilter([]);
   }, []);
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(filterPersistenceScope, FILTER_FIELD_TAGS);
-      return;
-    }
-    writeAccountsOverviewFilterField(filterPersistenceScope, FILTER_FIELD_TAGS, tagFilter);
-  }, [filterPersistenceEnabled, filterPersistenceScope, tagFilter]);
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(filterPersistenceScope, FILTER_FIELD_GROUP_BY_TAG);
-      return;
-    }
-    writeAccountsOverviewFilterField(
-      filterPersistenceScope,
-      FILTER_FIELD_GROUP_BY_TAG,
-      groupByTag,
-    );
-  }, [filterPersistenceEnabled, filterPersistenceScope, groupByTag]);
 
   const requestDeleteTag = useCallback(
     (tag: string) => {
@@ -1073,6 +1020,14 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   } = useModalErrorState();
   const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState<{ text: string; tone?: 'error' | 'success' } | null>(null);
+
+  useEffect(() => {
+    if (platformId !== 'codex' || !message || message.tone === 'error') return;
+    const timer = window.setTimeout(() => {
+      setMessage((current) => current === message ? null : current);
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, [message, platformId]);
   const refreshRequestId = useRef(0);
   const setDeleteConfirm = useCallback((value: { ids: string[]; message: string } | null) => {
     setDeleteConfirmError(null);
@@ -1290,14 +1245,14 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
       try {
         await openFn(accountId);
         setMessage({
-          text: t('workbuddy.webview.opened', '已打开网页会话：{{email}}', {
+          text: t('common.shared.webSession.opened', {
             email: maskAccountText(displayEmail),
           }),
           tone: 'success',
         });
       } catch (e: unknown) {
         setMessage({
-          text: t('workbuddy.webview.openFailed', '打开网页会话失败：{{error}}', {
+          text: t('common.shared.webSession.openFailed', {
             error: String(e) || t('common.failed', 'Failed'),
           }),
           tone: 'error',
@@ -1396,16 +1351,11 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   }, [showAddModal, addTab, addStatus, oauthService]);
 
   const cancelPendingOauthLogin = useCallback(
-    (force = false) => {
-      const loginId = oauthLoginIdRef.current ?? undefined;
-      if (
-        !force
-        && !loginId
-        && !oauthActiveRef.current
-        && !oauthCompletingRef.current
-      ) {
-        return;
-      }
+    () => {
+      const loginId = oauthLoginIdRef.current;
+      // A start still in flight is cleaned up by its own response. An
+      // unscoped cancellation can reach the backend after a newer start.
+      if (!loginId) return;
       oauthServiceRef.current?.cancelLogin(loginId).catch((error) => {
         console.error(`[${oauthLogPrefix}] 取消 OAuth 授权失败`, {
           loginId,
@@ -1450,7 +1400,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   );
 
   const closeAddModal = useCallback(() => {
-    cancelPendingOauthLogin(true);
+    cancelPendingOauthLogin();
     setShowAddModal(false);
     resetAddModalState();
   }, [cancelPendingOauthLogin, resetAddModalState]);
@@ -2402,34 +2352,11 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   ]);
 
   // ─── Flow Notice ──────────────────────────────────────────────────────
-  const [isFlowNoticeCollapsed, setIsFlowNoticeCollapsed] = useState<boolean>(() => {
-    if (!flowNoticeCollapsedKey) return false;
-    try {
-      return localStorage.getItem(flowNoticeCollapsedKey) === '1';
-    } catch {
-      return false;
-    }
-  });
-
-  useEffect(() => {
-    if (!flowNoticeCollapsedKey) return;
-    try {
-      localStorage.setItem(flowNoticeCollapsedKey, isFlowNoticeCollapsed ? '1' : '0');
-    } catch {
-      // ignore persistence failures
-    }
-  }, [isFlowNoticeCollapsed, flowNoticeCollapsedKey]);
+  const [isFlowNoticeCollapsed, setIsFlowNoticeCollapsed] =
+    useDurableUiBooleanSetting(flowNoticeCollapsedKey);
 
   // ─── Current Account ──────────────────────────────────────────────────
-  const [localCurrentAccountId, setLocalCurrentAccountId] = useState<string | null>(() => {
-    if (!currentAccountIdKey) return null;
-    try {
-      const value = localStorage.getItem(currentAccountIdKey);
-      return value && value.trim() ? value : null;
-    } catch {
-      return null;
-    }
-  });
+  const [localCurrentAccountId, setLocalCurrentAccountId] = useState<string | null>(null);
 
   const currentAccountId = managesCurrentAccountId
     ? storeCurrentAccountId ?? null
@@ -2455,19 +2382,6 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
       setCurrentAccountId(null);
     }
   }, [accounts, currentAccountId, managesCurrentAccountId, setCurrentAccountId]);
-
-  useEffect(() => {
-    if (managesCurrentAccountId || !currentAccountIdKey) return;
-    try {
-      if (currentAccountId) {
-        localStorage.setItem(currentAccountIdKey, currentAccountId);
-      } else {
-        localStorage.removeItem(currentAccountIdKey);
-      }
-    } catch {
-      // ignore persistence failures
-    }
-  }, [currentAccountId, currentAccountIdKey, managesCurrentAccountId]);
 
   // ─── Utilities ────────────────────────────────────────────────────────
   const formatDate = useCallback(

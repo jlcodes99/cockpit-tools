@@ -207,6 +207,29 @@ fn desktop_login_component_cleanup_removes_only_owned_cache_dirs() {
     }
 
     #[test]
+    fn claude_cli_user_config_switch_preserves_local_project_history_metadata() {
+        let projects = json!({
+            "/tmp/fixture-project": {
+                "lastSessionId": "saved-session",
+                "allowedTools": ["Read"]
+            }
+        });
+        let current = json!({
+            "oauthAccount": {"accountUuid": "old-account"},
+            "projects": projects
+        });
+        let new_account = json!({
+            "oauthAccount": {"accountUuid": "new-account"},
+            "projects": {"/tmp/unrelated-project": {}}
+        });
+
+        let switched = merge_claude_code_oauth_config(current, &new_account);
+
+        assert_eq!(switched["oauthAccount"]["accountUuid"], "new-account");
+        assert_eq!(switched["projects"], projects);
+    }
+
+    #[test]
     fn slims_claude_code_config_snapshot_to_switch_required_fields() {
         let full_config = serde_json::json!({
             "oauthAccount": {
@@ -533,6 +556,93 @@ fn desktop_login_component_cleanup_removes_only_owned_cache_dirs() {
                 u8::from_str_radix(text, 16).expect("valid hex byte")
             })
             .collect()
+    }
+
+    #[test]
+    fn claude_deduplication_updates_sqlite_before_removing_details() {
+        const DATA_ROOT: &str = "COCKPIT_TOOLS_TEST_DATA_DIR";
+        struct RestoreDataRoot(Option<std::ffi::OsString>);
+        impl Drop for RestoreDataRoot {
+            fn drop(&mut self) {
+                match self.0.take() {
+                    Some(value) => std::env::set_var(DATA_ROOT, value),
+                    None => std::env::remove_var(DATA_ROOT),
+                }
+            }
+        }
+
+        let _lock = crate::modules::test_support::env_lock().lock().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let _restore = RestoreDataRoot(std::env::var_os(DATA_ROOT));
+        std::env::set_var(DATA_ROOT, root.path());
+
+        let first = test_desktop_account("first", "same@example.test", Some("same"), None, 1, 2);
+        let second = test_desktop_account("second", "same@example.test", Some("same"), None, 3, 4);
+        let unrelated = test_desktop_account("unreadable", "other@example.test", None, None, 1, 1);
+        write_account_file(&first).unwrap();
+        write_account_file(&second).unwrap();
+        let mut index = ClaudeAccountIndex::new();
+        index.accounts = [&first, &second, &unrelated].into_iter().map(ClaudeAccount::summary).collect();
+        save_index(&index).unwrap();
+
+        let merged = dedupe_desktop_accounts(vec![first.clone(), first, second]).unwrap();
+        assert_eq!(merged.len(), 1);
+        let survivor = &merged[0].id;
+        let index = load_index().unwrap();
+        assert_eq!(index.accounts.len(), 2);
+        assert!(index.accounts.iter().any(|row| &row.id == survivor));
+        assert!(index.accounts.iter().any(|row| row.id == "unreadable"));
+        assert!(load_account_file(survivor).is_some());
+        let removed = if survivor == "first" { "second" } else { "first" };
+        assert!(!account_file_path(removed).unwrap().exists());
+    }
+
+    #[test]
+    fn claude_cli_user_settings_preserve_unrelated_values_and_reject_malformed_env() {
+        const DATA_ROOT: &str = "COCKPIT_TOOLS_TEST_DATA_DIR";
+        struct RestoreDataRoot(Option<std::ffi::OsString>);
+        impl Drop for RestoreDataRoot {
+            fn drop(&mut self) {
+                match self.0.take() {
+                    Some(value) => std::env::set_var(DATA_ROOT, value),
+                    None => std::env::remove_var(DATA_ROOT),
+                }
+            }
+        }
+        let _lock = crate::modules::test_support::env_lock().lock().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let _restore = RestoreDataRoot(std::env::var_os(DATA_ROOT));
+        std::env::set_var(DATA_ROOT, root.path());
+        let config_dir = root.path().join(".claude");
+        fs::create_dir(&config_dir).unwrap();
+        let settings_path = config_dir.join("settings.json");
+        fs::write(
+            &settings_path,
+            br#"{"permissions":{"allow":["Read"]},"env":{"KEEP_ME":"yes","ANTHROPIC_AUTH_TOKEN":"old"}}"#,
+        )
+        .unwrap();
+        let mut account = test_desktop_account("cli", "cli@example.test", None, None, 1, 1);
+        account.auth_mode = ClaudeAuthMode::ApiKey;
+        account.api_key = Some("new-fixture-key".to_string());
+        account.api_key_field = Some("ANTHROPIC_API_KEY".to_string());
+        account.api_base_url = Some("https://fixture.example.invalid".to_string());
+        account.api_extra_env = Some(BTreeMap::from([(
+            "ANTHROPIC_MODEL".to_string(),
+            "fixture-model".to_string(),
+        )]));
+        inject_api_key_to_claude_code_settings(&account, Some(&config_dir)).unwrap();
+        let settings = read_config_file(&settings_path).unwrap().unwrap();
+        assert_eq!(settings["permissions"]["allow"], json!(["Read"]));
+        assert_eq!(settings["env"]["KEEP_ME"], "yes");
+        assert_eq!(settings["env"]["ANTHROPIC_API_KEY"], "new-fixture-key");
+        assert_eq!(settings["env"]["ANTHROPIC_BASE_URL"], "https://fixture.example.invalid");
+        assert_eq!(settings["env"]["ANTHROPIC_MODEL"], "fixture-model");
+        assert!(settings["env"].get("ANTHROPIC_AUTH_TOKEN").is_none());
+
+        let malformed = br#"{"env":"keep the original file"}"#;
+        fs::write(&settings_path, malformed).unwrap();
+        assert!(inject_api_key_to_claude_code_settings(&account, Some(&config_dir)).is_err());
+        assert_eq!(fs::read(&settings_path).unwrap(), malformed);
     }
 
     fn test_desktop_account(

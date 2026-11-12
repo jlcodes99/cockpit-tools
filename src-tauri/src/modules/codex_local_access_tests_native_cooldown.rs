@@ -2,6 +2,7 @@
 
 fn native_cooldown_report(status: u16, error: &str) -> native_contract::RequestReport {
     native_contract::RequestReport {
+        peer_ip: None,
         transient_rate_limit: false,
         official_access_fingerprint: None,
         official_authorization_revision: None,
@@ -70,6 +71,7 @@ fn native_connection_failures_do_not_cool_accounts_or_shorten_existing_cooldown(
     host.cooldowns.lock().unwrap().insert(
         native_cooldown_key("pool-a", "fixture-model", false),
         NativeCooldown {
+            non_quota_failures: 0,
             recorded_at: Instant::now(),
             until,
             quota: true,
@@ -280,6 +282,7 @@ async fn native_cooldown_wait_is_scoped_and_initial_selection_waits_only_within_
         host.cooldowns.lock().unwrap().insert(
             native_cooldown_key(account, "gpt-fixture", false),
             NativeCooldown {
+                non_quota_failures: 0,
                 recorded_at: Instant::now(),
                 until,
                 quota: false,
@@ -314,6 +317,7 @@ async fn native_cooldown_wait_can_be_cancelled_without_holding_selection_or_stat
     host.cooldowns.lock().unwrap().insert(
         native_cooldown_key("pool-a", "gpt-fixture", false),
         NativeCooldown {
+            non_quota_failures: 0,
             recorded_at: Instant::now(),
             until: Instant::now() + Duration::from_millis(500),
             quota: false,
@@ -396,7 +400,7 @@ fn transient_admission_cools_only_the_model_without_quota_or_backoff() {
     native_upsert_transient_rate_limit(&mut states,"a","m",None,now);
     assert_eq!(states[&native_cooldown_key("a","m",false)].until,now+Duration::from_secs(1));
     let quota_until=now+Duration::from_secs(3600);
-    states.insert(native_cooldown_key("a","m",false),NativeCooldown{recorded_at:now,until:quota_until,quota:true,backoff_level:3,reason:"quota"});
+    states.insert(native_cooldown_key("a","m",false),NativeCooldown{non_quota_failures:0,recorded_at:now,until:quota_until,quota:true,backoff_level:3,reason:"quota"});
     native_upsert_transient_rate_limit(&mut states,"a","m",Some(Duration::from_secs(2)),now);
     assert_eq!(states[&native_cooldown_key("a","m",false)].until,quota_until);
     assert!(states[&native_cooldown_key("a","m",false)].quota);
@@ -785,4 +789,87 @@ fn native_quota_refresh_requires_positive_authoritative_allowance() {
     quota.hourly_reset_time = Some(200);
     quota.raw_data.as_mut().unwrap()["rate_limit"]["primary_window"]["used_percent"] = serde_json::json!(100);
     assert!(!quota_refresh_confirms_usable_allowance(&quota, started, now));
+}
+
+#[test]
+fn native_server_failure_streak_spans_models_and_preserves_quota() {
+    let mut states = HashMap::new();
+    let start = Instant::now();
+    for (attempt, (model, status)) in [("m1", 503), ("m2", 502), ("m1", 504)].into_iter().enumerate() {
+        let now = start + Duration::from_secs(attempt as u64 * 61);
+        native_upsert_cooldown(&mut states, "a", model, status, None, false, now);
+        assert_eq!(states[&native_upstream_failure_key("a")].non_quota_failures, (attempt + 1) as u8);
+        assert_eq!(
+            native_cooldown_wait(&states, "a", "healthy-model", false, now),
+            (attempt == 2).then_some(Duration::from_secs(600)),
+        );
+        assert!(native_cooldown_wait(&states, "b", model, false, now).is_none());
+    }
+    let now = start + Duration::from_secs(124);
+    native_mark_quota_exhausted(&mut states, "a", Some(Duration::from_secs(3600)), now);
+    assert_eq!(states[&native_upstream_failure_key("a")].non_quota_failures, 0);
+    assert_eq!(native_cooldown_wait(&states, "a", "m1", false, now), Some(Duration::from_secs(3600)));
+    assert!(native_clear_quota_cooldowns(&mut states, "a", now + Duration::from_secs(1)));
+    assert_eq!(native_cooldown_wait(&states, "a", "healthy-model", false, now), Some(Duration::from_secs(598)));
+    assert!(native_cooldown_wait(&states, "a", "healthy-model", false, now + Duration::from_secs(598)).is_none());
+}
+
+#[tokio::test]
+async fn native_failure_report_counts_each_dispatch_once_and_success_resets_it() {
+    let host = NativeHostBridge::default();
+    let key = native_upstream_failure_key("pool-a");
+    for number in 1..=3 {
+        native_contract::Host::route_failed_for_model(&host, "pool-a", "fixture-model", 503, None, false).await;
+        let mut report = native_cooldown_report(503, "upstream_http_503");
+        report.diagnostics = Some(native_api::diagnostics::DiagnosticContext {
+            attempts: vec![native_api::diagnostics::DiagnosticAttempt {
+                account_id: "pool-a".into(),
+                failure_cooldown_recorded: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+        host.record_failure_cooldown(&report);
+        assert_eq!(host.cooldowns.lock().unwrap()[&key].non_quota_failures, number);
+    }
+    assert!(host.cooldowns.lock().unwrap()[&key].until >= Instant::now() + Duration::from_secs(599));
+    let mut success = native_cooldown_report(200, "");
+    success.success = true;
+    success.upstream_model = "another-model".into();
+    host.record_failure_cooldown(&success);
+    assert!(!host.cooldowns.lock().unwrap().contains_key(&key));
+    host.record_failure_cooldown(&native_cooldown_report(503, "upstream_http_503"));
+    assert_eq!(host.cooldowns.lock().unwrap()[&key].non_quota_failures, 1);
+}
+
+#[tokio::test]
+async fn native_suspended_pool_member_fails_over_with_legacy_settings_and_keeps_alias_scope() {
+    let mut host = native_test_routing_host();
+    let mut legacy = serde_json::to_value(host.collection_override.take().unwrap()).unwrap();
+    legacy.as_object_mut().unwrap().remove("maxRetryCredentials");
+    legacy["modelAliases"] = json!([{"alias": "exclusive-alias", "sourceModel": "exclusive-upstream"}]);
+    legacy["customRoutingRules"] = json!([{"accountId": "pool-a", "isPreferred": true}]);
+    host.collection_override = Some(serde_json::from_value(legacy).unwrap());
+    host.account_overrides.get_mut("pool-a").unwrap().api_model_catalog
+        .push("exclusive-upstream".into());
+    let caller = native_test_caller(NATIVE_PRIMARY_CALLER);
+    let request = native_test_route_request("account-pause");
+    let route = native_select_route(&host, &caller, request.clone()).await.unwrap();
+    assert_eq!(route.account_id, "pool-a");
+    drop(route);
+    assert_eq!(native_contract::Host::execution_policy(&host).await.unwrap().credential_retries, 0);
+
+    for model in ["gpt-fixture", "exclusive-upstream", "gpt-fixture"] {
+        native_contract::Host::route_failed_for_model(&host, "pool-a", model, 503, None, false).await;
+    }
+
+    let route = native_select_route(&host, &caller, request.clone()).await.unwrap();
+    assert_eq!(route.account_id, "pool-b");
+    drop(route);
+    let mut alias = request;
+    alias.model = "exclusive-alias".into();
+    let error = native_select_route(&host, &caller, alias).await.err()
+        .expect("the healthy account cannot serve the alias");
+    assert_eq!((error.status, error.code), (503, "no_available_account"));
+    assert!(error.retry_after.unwrap() >= Duration::from_secs(598));
 }

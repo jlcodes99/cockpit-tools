@@ -7,8 +7,8 @@ use sha2::{Digest, Sha256};
 use tauri::Emitter;
 use tokio::sync::Mutex as AsyncMutex;
 
-use crate::models::codex::{CodexAccount, CodexAccountIndex, CodexAccountSummary};
-use crate::modules::{account, codex_account, codex_oauth, codex_quota, logger};
+use crate::models::codex::{CodexAccount, CodexAccountSummary};
+use crate::modules::{codex_account, codex_oauth, codex_quota, logger};
 
 const HOUR: i64 = 3600;
 const INDEX_INTERVAL: i64 = 30;
@@ -49,15 +49,9 @@ fn next_slot(phase: i64, from: i64, last_hour: Option<i64>) -> i64 {
 // Read the existing lightweight index. Account listing owns repair and migration;
 // scheduling only reads the committed index and never scans account details.
 fn read_index() -> Result<Vec<CodexAccountSummary>, String> {
-    let path = account::get_data_dir()?.join("codex_accounts.json");
-    let data = match std::fs::read(path) {
-        Ok(data) => data,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(error.to_string()),
-    };
-    let index: CodexAccountIndex =
-        serde_json::from_slice(&data).map_err(|error| error.to_string())?;
-    Ok(index.accounts)
+    Ok(codex_account::read_saved_account_index()?
+        .map(|index| index.accounts)
+        .unwrap_or_default())
 }
 
 fn supports_subscription_query(account: &CodexAccount) -> bool {

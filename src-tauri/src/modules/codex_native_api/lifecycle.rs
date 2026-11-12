@@ -69,10 +69,12 @@ impl Drop for BlockingWorkGuard {
 }
 
 pub(super) struct RequestTracker {
+    peer_ip: Option<std::net::IpAddr>,
     pub overload: super::overload::Budget,
     pub(super) quota_exhausted_accounts: std::collections::HashSet<String>,
     quota_exhausted_attempt: Option<usize>,
     pub field_compat: super::request_compat::Budget,
+    pub(super) opencode_go_session: Option<axum::http::HeaderValue>,
     request_size: Option<super::diagnostics::RequestSize>,
     pending_overload_retry: Option<super::diagnostics::OverloadRetry>,
     overload_response_seen: bool,
@@ -202,6 +204,7 @@ impl RequestTracker {
             stop,
             started,
             response_started: started,
+            peer_ip: None,
             busy: true,
             report: None,
             pending_dispatch: None,
@@ -216,6 +219,7 @@ impl RequestTracker {
             quota_exhausted_accounts: Default::default(),
             quota_exhausted_attempt: None,
             field_compat: Default::default(),
+            opencode_go_session: None,
             request_size: None,
             pending_overload_retry: None,
             overload_response_seen: false,
@@ -265,6 +269,7 @@ impl RequestTracker {
         self.quota_exhausted_accounts.clear();
         self.quota_exhausted_attempt = None;
         self.field_compat = Default::default();
+        self.opencode_go_session = None;
         self.request_size = None;
         self.pending_overload_retry = None;
         self.overload_response_seen = false;
@@ -345,6 +350,10 @@ impl RequestTracker {
         });
     }
 
+    pub(super) fn set_peer(&mut self, peer_ip: Option<std::net::IpAddr>) {
+        self.peer_ip = peer_ip;
+    }
+
     pub(super) fn authorized(&mut self, caller: &Caller, model: &str) {
         if let Some(report) = self
             .report
@@ -356,6 +365,7 @@ impl RequestTracker {
         }
         if self.report.is_none() {
             self.report = Some(RequestReport {
+                peer_ip: self.peer_ip,
                 transient_rate_limit: false,
                 official_access_fingerprint: None,
                 official_authorization_revision: None,
@@ -491,6 +501,14 @@ impl RequestTracker {
         self.quota_exhausted_attempt = Some(self.dispatch_count);
         self.quota_exhausted_accounts.insert(account.to_owned());
         true
+    }
+
+    pub(super) fn mark_failure_cooldown_recorded(&mut self, account: &str) {
+        if let Some(attempt) = self.diagnostics.as_mut().and_then(|context| context.attempts.last_mut()) {
+            if attempt.account_id == account {
+                attempt.failure_cooldown_recorded = true;
+            }
+        }
     }
 
     pub(super) fn upstream_attempt_count(&self) -> usize {
@@ -692,6 +710,24 @@ impl RequestTracker {
     pub(super) fn upstream_request_bytes(&mut self, bytes: usize) {
         if let Some(attempt) = self.diagnostics.as_mut().and_then(|context| context.attempts.last_mut()) {
             attempt.upstream_request_bytes = Some(bytes as u64);
+        }
+    }
+
+    pub(super) fn image_request_models(
+        &mut self,
+        models: crate::models::codex_local_access::CodexLocalAccessImageRequestDiagnostic,
+    ) {
+        if let Some(attempt) = self.diagnostics.as_mut().and_then(|context| context.attempts.last_mut()) {
+            attempt.image_request = Some(models);
+        }
+    }
+
+    pub(super) fn image_upstream_status(&mut self, status: u16) {
+        if let Some(image) = self.diagnostics.as_mut()
+            .and_then(|context| context.attempts.last_mut())
+            .and_then(|attempt| attempt.image_request.as_mut())
+        {
+            image.upstream_status = Some(status);
         }
     }
 
@@ -921,6 +957,7 @@ impl RequestTracker {
             ..Default::default()
         };
         let report = RequestReport {
+            peer_ip: self.peer_ip,
             transient_rate_limit: false,
             official_authorization_revision: route.official_authorization_revision.clone(),
             official_registration_id: route.official_registration_id.clone(),
@@ -1034,6 +1071,29 @@ impl RequestTracker {
     pub(super) fn response_tier(&mut self, value: Option<&str>) {
         if let (Some(report), Some(value)) = (self.report.as_mut(), value) {
             report.response_service_tier = Some(value.to_string());
+        }
+    }
+
+    pub(super) fn record_response_model(&mut self, route: &Route, event: &serde_json::Value) {
+        use super::events::{completed_response, response_terminal_kind};
+
+        if route.wire_api != super::contract::WireApi::Responses
+            || !self.dispatch_open
+            || !matches!(response_terminal_kind(event), Some("response.completed" | "response.done"))
+            || !completed_response(event)
+        {
+            return;
+        }
+        let response = event.get("response").unwrap_or(event);
+        let model = response.get("model").and_then(serde_json::Value::as_str).filter(|value| {
+            !value.is_empty() && value.len() <= 256
+                && value.bytes().all(|byte| byte.is_ascii_alphanumeric()
+                    || matches!(byte, b'-' | b'_' | b'.' | b'/' | b':'))
+        });
+        if let Some((attempt, model)) = self.diagnostics.as_mut()
+            .and_then(|context| context.attempts.last_mut()).zip(model)
+        {
+            attempt.response_model = Some(model.to_string());
         }
     }
 
@@ -1172,6 +1232,24 @@ impl RequestTracker {
     pub(super) async fn fail(&mut self, error: &ServiceError) {
         let dispatched = self.dispatch_open;
         self.attempt_error(error);
+        // Preserve the accounting boundary for requests that never dispatched.
+        // An authenticated request still belongs in the host's audit log.
+        if self.dispatch_count == 0 && self.peer_ip.is_some() {
+            if let Some(mut report) = self.report.take() {
+                report.diagnostics = self.diagnostics.take();
+                report.status = error.status;
+                report.elapsed = self.started.elapsed();
+                report.error = Some(error.code.to_string());
+                report.error_message = Some(super::diagnostics::sanitize_error_text(&error.message));
+                let host = self.host.clone();
+                let activity = self.activity.clone();
+                activity.tasks.fetch_add(1, Ordering::SeqCst);
+                tokio::spawn(async move {
+                    let _guard = PersistenceGuard(activity);
+                    let _ = tokio::time::timeout(Duration::from_secs(5), host.record_rejection(report)).await;
+                });
+            }
+        }
         if dispatched && error.retry_after.is_some() {
             self.set_retry_after(error.retry_after);
         }

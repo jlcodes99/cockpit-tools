@@ -394,78 +394,18 @@ fn assign_imported_account_to_group_by_name(
         return Ok(());
     }
 
-    let path = account::get_data_dir()?.join(CODEX_ACCOUNT_GROUPS_FILE);
-    let mut groups: Vec<serde_json::Value> = if path.exists() {
-        match fs::read_to_string(&path) {
-            Ok(raw) => serde_json::from_str::<serde_json::Value>(&raw)
-                .ok()
-                .and_then(|value| value.as_array().cloned())
-                .unwrap_or_default(),
-            Err(_) => Vec::new(),
-        }
-    } else {
-        Vec::new()
-    };
-
-    for group in groups.iter_mut() {
-        let Some(ids) = group
-            .get_mut("accountIds")
-            .and_then(|value| value.as_array_mut())
-        else {
-            continue;
-        };
-        ids.retain(|item| item.as_str().map(str::trim) != Some(account_id));
-    }
-
-    let existing_index = groups.iter().position(|group| {
-        group
-            .get("name")
-            .and_then(|value| value.as_str())
-            .map(str::trim)
-            == Some(group_name)
-    });
-
-    match existing_index {
-        Some(index) => {
-            if let Some(ids) = groups[index]
-                .get_mut("accountIds")
-                .and_then(|value| value.as_array_mut())
-            {
-                ids.push(serde_json::Value::String(account_id.to_string()));
-            }
-        }
-        None => {
-            let next_sort_order = groups
-                .iter()
-                .filter_map(|group| group.get("sortOrder").and_then(|value| value.as_i64()))
-                .max()
-                .unwrap_or(-1)
-                + 1;
-            let counter = CODEX_IMPORTED_GROUP_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
-            groups.push(serde_json::json!({
-                "id": format!(
-                    "cgrp_{}_{}",
-                    chrono::Utc::now().timestamp_millis(),
-                    counter
-                ),
-                "name": group_name,
-                "sortOrder": next_sort_order,
-                "accountIds": [account_id],
-                "createdAt": now_timestamp(),
-                "quotaAutoRefreshMinutes": serde_json::Value::Null,
-            }));
-        }
-    }
-
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            fs::create_dir_all(parent)
-                .map_err(|error| format!("创建 Codex 分组目录失败: {}", error))?;
-        }
-    }
-    let serialized = serde_json::to_string_pretty(&groups)
-        .map_err(|error| format!("序列化 Codex 分组失败: {}", error))?;
-    fs::write(&path, serialized).map_err(|error| format!("写入 Codex 分组失败: {}", error))
+    let store = crate::modules::account_groups_store::store(crate::modules::account_groups_store::CODEX)?;
+    store.assign_member(account_id, group_name, |sort_order| {
+        let counter = CODEX_IMPORTED_GROUP_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
+        serde_json::json!({
+            "id": format!("cgrp_{}_{}", chrono::Utc::now().timestamp_millis(), counter),
+            "name": group_name,
+            "sortOrder": sort_order,
+            "accountIds": [account_id],
+            "createdAt": now_timestamp(),
+            "quotaAutoRefreshMinutes": serde_json::Value::Null,
+        })
+    })
 }
 
 /// 分组归类属于附带信息，失败只记日志，不影响账号本身导入成功。
@@ -1923,11 +1863,29 @@ pub struct CodexBatchImportItem {
     pub provider: Option<String>,
     pub quota_status: String,
     pub quota_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub quota_windows: Vec<CodexBatchImportQuotaWindow>,
     pub status: String,
     pub error: Option<String>,
     pub default_selected: bool,
     pub selectable: bool,
     pub existing: bool,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexBatchImportQuotaWindow {
+    pub kind: CodexBatchImportQuotaKind,
+    pub percentage: i32,
+    pub window_minutes: Option<i64>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum CodexBatchImportQuotaKind {
+    Hourly,
+    Weekly,
+    Relay,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -2281,9 +2239,62 @@ fn codex_batch_import_preview_from_session(
         items: session
             .items
             .iter()
-            .map(|item| item.preview.clone())
+            .map(|item| {
+                let mut preview = item.preview.clone();
+                preview.quota_windows = item
+                    .quota
+                    .as_ref()
+                    .map(codex_batch_import_quota_windows)
+                    .unwrap_or_default();
+                preview
+            })
             .collect(),
     }
+}
+
+fn codex_batch_import_quota_windows(
+    quota: &crate::models::codex::CodexQuota,
+) -> Vec<CodexBatchImportQuotaWindow> {
+    if let Some(raw) = quota
+        .raw_data
+        .as_ref()
+        .filter(|raw| raw["provider"] == "cockpit-api")
+    {
+        let usage = &raw["usage"];
+        let has_percentage = usage["unlimited_quota"] == true
+            || (usage["total_granted"].as_i64().is_some_and(|total| total > 0)
+                && usage["total_available"].as_i64().is_some());
+        return has_percentage
+            .then_some(CodexBatchImportQuotaWindow {
+                kind: CodexBatchImportQuotaKind::Relay,
+                percentage: quota.hourly_percentage,
+                window_minutes: None,
+            })
+            .into_iter()
+            .collect();
+    }
+    [
+        (
+            CodexBatchImportQuotaKind::Hourly,
+            quota.hourly_window_present,
+            quota.hourly_percentage,
+            quota.hourly_window_minutes,
+        ),
+        (
+            CodexBatchImportQuotaKind::Weekly,
+            quota.weekly_window_present,
+            quota.weekly_percentage,
+            quota.weekly_window_minutes,
+        ),
+    ]
+    .into_iter()
+    .filter(|(_, present, percentage, _)| *present == Some(true) && (0..=100).contains(percentage))
+    .map(|(kind, _, percentage, window_minutes)| CodexBatchImportQuotaWindow {
+        kind,
+        percentage,
+        window_minutes,
+    })
+    .collect()
 }
 
 fn codex_batch_import_progress_from_items(
@@ -2707,6 +2718,7 @@ async fn build_codex_batch_import_item(
                     provider: None,
                     quota_status: "skipped".to_string(),
                     quota_error: None,
+                    quota_windows: Vec::new(),
                     status: "invalid".to_string(),
                     error: Some("未找到有效的 Codex 账号凭据".to_string()),
                     default_selected: false,
@@ -2730,6 +2742,7 @@ async fn build_codex_batch_import_item(
                     provider: None,
                     quota_status: "skipped".to_string(),
                     quota_error: None,
+                    quota_windows: Vec::new(),
                     status: "invalid".to_string(),
                     error: Some(error),
                     default_selected: false,
@@ -2757,6 +2770,7 @@ async fn build_codex_batch_import_item(
                     provider: None,
                     quota_status: "skipped".to_string(),
                     quota_error: None,
+                    quota_windows: Vec::new(),
                     status: "invalid".to_string(),
                     error: Some(error),
                     default_selected: false,
@@ -2775,10 +2789,14 @@ async fn build_codex_batch_import_item(
     let existing = load_account(&account.id).is_some();
     let (quota_status, quota_error, quota, status) = if check_quota
         && !account.is_agent_identity_auth()
+        && !crate::modules::codex_quota::account_relay_balance_disabled(&account)
     {
         let quota_result = crate::modules::codex_quota::probe_import_account_quota(&account).await;
         let (quota_status, quota_error, quota) = match quota_result {
             Ok(quota) => ("success".to_string(), None, Some(quota)),
+            Err(error) if error == crate::modules::codex_quota::RELAY_BALANCE_DISABLED => {
+                ("skipped".to_string(), None, None)
+            }
             Err(error) => ("failed".to_string(), Some(error), None),
         };
         let status = if quota_status == "failed" {
@@ -2813,6 +2831,7 @@ async fn build_codex_batch_import_item(
                 .or(account.api_base_url.clone()),
             quota_status,
             quota_error,
+            quota_windows: Vec::new(),
             status,
             error: None,
             default_selected,
@@ -2885,6 +2904,7 @@ async fn run_codex_batch_import_scan(
                         provider: None,
                         quota_status: "skipped".to_string(),
                         quota_error: None,
+                        quota_windows: Vec::new(),
                         status: "invalid".to_string(),
                         error: Some(error),
                         default_selected: false,
@@ -2907,6 +2927,7 @@ async fn run_codex_batch_import_scan(
                     provider: None,
                     quota_status: "skipped".to_string(),
                     quota_error: None,
+                    quota_windows: Vec::new(),
                     status: "invalid".to_string(),
                     error: Some(error.to_string()),
                     default_selected: false,

@@ -38,6 +38,8 @@ test('all desktop and CLI entry services retain exact target and launch options 
     ['openInstanceWindow', ['managed'], 'codex_open_instance_window', { instanceId: 'managed' }],
     ['updateInstance', [{ instanceId: 'managed', bindAccountId: 'account', deferBindAccountApplication: true }],
       'codex_update_instance', { instanceId: 'managed', bindAccountId: 'account', deferBindAccountApplication: true }],
+    ['switchInstanceAccount', ['managed', 'account', 'fast'],
+      'codex_switch_instance_account', { instanceId: 'managed', bindAccountId: 'account', appSpeed: 'fast' }],
     ['previewCodexInstanceLaunchCommand', [{ userDataDir: 'C:/profile', workingDir: 'C:/repo', extraArgs: '--extra', terminal: 'pwsh', launchCommand: 'codex --model test' }],
       'codex_preview_instance_launch_command', { userDataDir: 'C:/profile', workingDir: 'C:/repo', extraArgs: '--extra', terminal: 'pwsh', launchCommand: 'codex --model test' }],
     ['getCodexInstanceLaunchCommand', ['managed', 'pwsh'], 'codex_get_instance_launch_command', { instanceId: 'managed', terminal: 'pwsh' }],
@@ -85,19 +87,16 @@ test('API activation repair keeps the selected profile and can explicitly contin
   }]);
 });
 
-test('API enable catches early-stop path errors but disabling never starts a recovery transaction', async () => {
+test('API Service start and stop do not start desktop path recovery', async () => {
   const calls: any[] = [];
   const { service } = loadService('./codexLocalAccessService.ts', async (name, body) => {
     calls.push({ name, body: clone(body) });
     if (calls.length === 1) throw missing;
     return { running: body.enabled };
   });
-  const pending = service.setCodexLocalAccessEnabled(true);
-  await settlePromises();
-  await recovery.useCodexPathRecoveryStore.getState().request!.retry();
-  assert.deepEqual(await pending, { running: true });
+  await assert.rejects(service.setCodexLocalAccessEnabled(true), (error) => error === missing);
   await service.setCodexLocalAccessEnabled(false);
-  assert.deepEqual(calls.map((call) => call.body), [{ enabled: true }, { enabled: true }, { enabled: false }]);
+  assert.deepEqual(calls.map((call) => call.body), [{ enabled: true }, { enabled: false }]);
   assert.equal(recovery.useCodexPathRecoveryStore.getState().request, null);
 });
 

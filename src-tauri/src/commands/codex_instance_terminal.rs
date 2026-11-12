@@ -8,6 +8,13 @@ pub(super) struct CodexTerminalLaunchPlan {
     pub(super) terminal_name: String,
 }
 
+#[cfg(target_os = "macos")]
+pub(super) fn macos_loopback_bypass_prefix() -> String {
+    let loopback = crate::modules::codex_protocol::merge_local_no_proxy("");
+    let entries = format!(r#""${{NO_PROXY:+$NO_PROXY,}}${{no_proxy:+$no_proxy,}}{loopback}""#);
+    format!("NO_PROXY={entries} no_proxy={entries} ")
+}
+
 fn escape_applescript(value: &str) -> String {
     value
         .replace('\\', "\\\\")
@@ -272,6 +279,29 @@ pub(super) fn build_codex_terminal_launch_plan(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_codex_cli_preserves_shell_proxy_exceptions_and_bypasses_loopback() {
+        let command = format!("{} /usr/bin/env", macos_loopback_bypass_prefix());
+        let output = std::process::Command::new("/bin/sh")
+            .args(["-c", &command])
+            .env_clear()
+            .env("NO_PROXY", "upper.example")
+            .env("no_proxy", "lower.example")
+            .env("HTTPS_PROXY", "http://proxy.example:8080")
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        for name in ["NO_PROXY=", "no_proxy="] {
+            let entries = stdout.lines().find_map(|line| line.strip_prefix(name)).unwrap();
+            for host in ["upper.example", "lower.example", "localhost", "127.0.0.1", "::1"] {
+                assert!(entries.split(',').any(|entry| entry == host));
+            }
+        }
+        assert!(stdout.lines().any(|line| line == "HTTPS_PROXY=http://proxy.example:8080"));
+    }
 
     #[test]
     fn windows_system_terminal_falls_back_to_powershell_when_wt_is_unavailable() {

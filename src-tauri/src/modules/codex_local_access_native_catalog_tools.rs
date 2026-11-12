@@ -1,4 +1,47 @@
 // Share routing-derived capabilities between /models and managed on-disk catalogs.
+fn native_apply_catalog_route_contract(
+    model: &mut Value,
+    collection: &CodexLocalAccessCollection,
+    key: Option<&CodexLocalAccessApiKey>,
+    plan: &NativeModelRoutePlan,
+    accounts: &[CodexAccount],
+) {
+    let requires_mapping = native_plan_requires_account_mapping(plan, accounts);
+    let mut routes = accounts
+        .iter()
+        .filter(|account| {
+            (!requires_mapping || native_account_mapped_model(account, &plan.model).is_some())
+                && native_model_visible(collection, key, plan, account)
+        })
+        .peekable();
+    let mut supports_lite = true;
+    let all_official = plan.gateway.is_none()
+        && routes.peek().is_some()
+        && routes.all(|account| {
+            if account.is_api_key_auth() || native_is_chatgpt_plan_account(account) {
+                return false;
+            }
+            supports_lite &= native_plan_account_model(plan, account)
+                .as_deref()
+                .is_some_and(codex_protocol::codex_model_uses_responses_lite);
+            true
+        });
+    if !all_official {
+        codex_protocol::project_public_responses_model(model);
+        return;
+    }
+    model["use_responses_lite"] = json!(supports_lite);
+    // A managed profile may still contain the projection from a previous relay.
+    if model["tool_mode"] == "direct"
+        && model["slug"]
+            .as_str()
+            .and_then(codex_protocol::known_codex_model_template)
+            .is_some_and(|template| template["tool_mode"] == "code_mode_only")
+    {
+        model["tool_mode"] = json!("code_mode_only");
+    }
+}
+
 fn native_apply_catalog_tool_capabilities(
     model: &mut Value,
     collection: &CodexLocalAccessCollection,
@@ -6,6 +49,7 @@ fn native_apply_catalog_tool_capabilities(
     plan: &NativeModelRoutePlan,
     accounts: &[CodexAccount],
 ) {
+    native_apply_catalog_route_contract(model, collection, key, plan, accounts);
     if model["visibility"] != "hide" {
         model["multi_agent_version"] = json!("v2");
     }
@@ -60,7 +104,59 @@ fn native_catalog_remote_templates(accounts: &[CodexAccount]) -> HashMap<(String
         .collect()
 }
 
-fn native_apply_catalog_route_image_input(
+fn native_apply_oauth_mapping_metadata(
+    model: &mut Value,
+    account: &CodexAccount,
+    requested: &str,
+    upstream: &str,
+) {
+    if !native_is_oauth_authorization_account(account)
+        || native_account_mapped_model(account, requested).is_none()
+    {
+        return;
+    }
+    let Some(template) = codex_protocol::known_codex_model_template(upstream) else { return };
+    for field in [
+        "input_modalities",
+        "supports_image_detail_original",
+        "context_window",
+        "max_context_window",
+        "auto_compact_token_limit",
+        "supported_reasoning_levels",
+        "default_reasoning_level",
+    ] {
+        if let Some(value) = template.get(field) {
+            model[field] = value.clone();
+        }
+    }
+}
+
+fn native_apply_catalog_account_context(
+    model: &mut Value,
+    account: &CodexAccount,
+    requested: &str,
+    upstream: &str,
+) {
+    let windows = &account.api_model_context_windows;
+    let lookup = |name: &str| windows.get(name).copied().or_else(|| {
+        windows.iter().find_map(|(id, window)| id.eq_ignore_ascii_case(name).then_some(*window))
+    }).filter(|window| *window > 0);
+    let requested_window = if native_is_oauth_authorization_account(account) {
+        lookup(requested)
+    } else {
+        None
+    };
+    let Some(window) = requested_window.or_else(|| lookup(upstream))
+    else {
+        return;
+    };
+    model["context_window"] = json!(window);
+    model["max_context_window"] = json!(window);
+    model["auto_compact_token_limit"] =
+        json!(codex_protocol::derived_auto_compact_token_limit(window));
+}
+
+fn native_apply_catalog_route_metadata(
     model: &mut Value,
     collection: &CodexLocalAccessCollection,
     key: Option<&CodexLocalAccessApiKey>,
@@ -69,26 +165,34 @@ fn native_apply_catalog_route_image_input(
     remote_templates: &HashMap<(String, String), Value>,
 ) {
     let Some(account) = native_catalog_model_account(collection, key, plan, accounts)
-        .filter(|account| account.is_api_key_auth())
+        .filter(|account| account.is_api_key_auth()
+            || native_account_mapped_model(account, &plan.model).is_some())
     else {
         return;
     };
     let Some(upstream) = native_plan_account_model(plan, account) else {
         return;
     };
-    apply_provider_catalog_image_input(
-        model,
-        native_catalog_vision(collection, plan, account, &upstream),
-    );
+    if account.is_api_key_auth() {
+        apply_provider_catalog_image_input(
+            model,
+            native_catalog_vision(collection, plan, account, &upstream),
+        );
+    }
     // Known remote services expose their own protocol-level capabilities, just
     // as they do in native_catalog. This uses the existing local metadata cache.
-    if let Some(template) = remote_templates.get(&(account.id.clone(), upstream)) {
-        for field in ["input_modalities", "supports_image_detail_original"] {
+    native_apply_oauth_mapping_metadata(model, account, &plan.model, &upstream);
+    if let Some(template) = remote_templates.get(&(account.id.clone(), upstream.clone())) {
+        for field in [
+            "input_modalities", "supports_image_detail_original", "context_window",
+            "max_context_window", "auto_compact_token_limit",
+        ] {
             if let Some(value) = template.get(field) {
                 model[field] = value.clone();
             }
         }
     }
+    native_apply_catalog_account_context(model, account, &plan.model, &upstream);
 }
 
 fn native_apply_profile_catalog_capabilities(
@@ -98,6 +202,7 @@ fn native_apply_profile_catalog_capabilities(
     accounts: &[CodexAccount],
 ) {
     let remote_templates = native_catalog_remote_templates(accounts);
+    codex_protocol::project_public_responses_catalog(catalog);
     if let Some(models) = catalog.get_mut("models").and_then(Value::as_array_mut) {
         for model in models {
             let Some(slug) = model["slug"].as_str() else {
@@ -110,7 +215,7 @@ fn native_apply_profile_catalog_capabilities(
                 continue;
             };
             native_apply_catalog_tool_capabilities(model, collection, key, &plan, accounts);
-            native_apply_catalog_route_image_input(
+            native_apply_catalog_route_metadata(
                 model,
                 collection,
                 key,
@@ -143,15 +248,24 @@ fn profile_catalog_account_ids(
 /// Apply the actual key's route capabilities when the user saves model management
 /// or the versioned catalog is rebuilt. Never borrow another profile/key's scope.
 /// Runs in the existing blocking catalog writer, without starting a gateway.
-pub(crate) fn apply_attached_catalog_image_capabilities(
+pub(crate) fn apply_attached_catalog_route_capabilities(
     doc: &Document,
     catalog: &mut Value,
 ) -> Result<(), String> {
-    if doc.get("model_provider").and_then(|item| item.as_str())
-        != Some(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID)
-    {
+    let provider_id = doc.get("model_provider").and_then(|item| item.as_str()).map(str::trim);
+    if provider_id != Some(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID) {
+        let openai_base_url_override = doc
+            .get("openai_base_url")
+            .and_then(|item| item.as_str())
+            .is_some_and(|url| !url.trim().is_empty());
+        if openai_base_url_override || provider_id.is_some_and(|id| !id.is_empty() && id != "openai") {
+            codex_protocol::project_public_responses_catalog(catalog);
+        }
         return Ok(());
     }
+    // The active scoped route may establish support below. Without a matching
+    // listener and key, do not inherit a private protocol from a model slug.
+    codex_protocol::project_public_responses_catalog(catalog);
     let Some(provider) = doc
         .get("model_providers")
         .and_then(|item| item.as_table())
@@ -201,7 +315,8 @@ pub(crate) fn apply_attached_catalog_image_capabilities(
                 let Ok(plan) = native_model_route_plan(&collection, key, &public) else {
                     continue;
                 };
-                native_apply_catalog_route_image_input(
+                native_apply_catalog_route_contract(model, &collection, key, &plan, &accounts);
+                native_apply_catalog_route_metadata(
                     model,
                     &collection,
                     key,
@@ -262,6 +377,7 @@ async fn native_sync_profile_catalog_tool_capabilities(
         if !path.exists() {
             return Ok(());
         }
+        let profile_models = codex_account::read_enabled_profile_model_definitions(&profile);
         let mut changed = false;
         update_string_atomic(&path, |current| {
             let content = current.ok_or_else(|| "NATIVE_CATALOG_FILE_CHANGED".to_string())?;
@@ -274,6 +390,7 @@ async fn native_sync_profile_catalog_tool_capabilities(
                 key.as_ref(),
                 &accounts,
             );
+            codex_account::apply_model_context_config_to_catalog(&mut catalog, &profile_models);
             changed = catalog != original;
             if changed {
                 serde_json::to_string_pretty(&catalog).map_err(|error| error.to_string())

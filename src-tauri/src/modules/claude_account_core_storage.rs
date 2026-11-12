@@ -374,7 +374,8 @@ fn get_accounts_index_path() -> Result<PathBuf, String> {
 }
 
 pub fn accounts_index_path_string() -> Result<String, String> {
-    Ok(get_accounts_index_path()?.to_string_lossy().to_string())
+    Ok(crate::modules::provider_account_index::storage_path::<ClaudeAccountIndex>(&get_accounts_index_path()?)?
+        .to_string_lossy().into_owned())
 }
 
 fn account_file_path(account_id: &str) -> Result<PathBuf, String> {
@@ -382,24 +383,16 @@ fn account_file_path(account_id: &str) -> Result<PathBuf, String> {
 }
 
 fn load_index() -> Result<ClaudeAccountIndex, String> {
-    let path = get_accounts_index_path()?;
-    if !path.exists() {
-        return Ok(ClaudeAccountIndex::new());
-    }
-    let content =
-        fs::read_to_string(&path).map_err(|e| format!("读取 Claude 账号索引失败: {}", e))?;
-    if content.trim().is_empty() {
-        return Ok(ClaudeAccountIndex::new());
-    }
-    atomic_write::parse_json_with_auto_restore::<ClaudeAccountIndex>(&path, &content)
-        .map_err(|e| format!("解析 Claude 账号索引失败: {}", e))
+    crate::modules::provider_account_index::checked(
+        &get_accounts_index_path()?,
+        crate::modules::provider_index_maintenance::schedule,
+        |_| None,
+        |_| false,
+    )
 }
 
 fn save_index(index: &ClaudeAccountIndex) -> Result<(), String> {
-    let path = get_accounts_index_path()?;
-    let content = serde_json::to_string_pretty(index)
-        .map_err(|e| format!("序列化 Claude 账号索引失败: {}", e))?;
-    atomic_write::write_string_atomic(&path, &content)
+    crate::modules::provider_account_index::save(&get_accounts_index_path()?, index)
 }
 
 fn write_account_file(account: &ClaudeAccount) -> Result<(), String> {
@@ -723,9 +716,15 @@ fn dedupe_desktop_accounts(accounts: Vec<ClaudeAccount>) -> Result<Vec<ClaudeAcc
             .flatten();
     let mut kept: Vec<ClaudeAccount> = Vec::with_capacity(accounts.len());
     let mut removed_ids = Vec::new();
+    let mut observations = HashMap::new();
+    let mut seen_ids = HashSet::new();
+    let mut snapshots = Vec::new();
     let mut rewired_current: Option<String> = None;
 
     for account in accounts {
+        if !seen_ids.insert(account.id.clone()) {
+            continue;
+        }
         let Some(index) = kept
             .iter()
             .position(|existing| desktop_accounts_same_identity(existing, &account))
@@ -735,6 +734,12 @@ fn dedupe_desktop_accounts(accounts: Vec<ClaudeAccount>) -> Result<Vec<ClaudeAcc
         };
 
         let existing = kept.remove(index);
+        for candidate in [&existing, &account] {
+            if !observations.contains_key(&candidate.id) {
+                let bytes = serde_json::to_vec(candidate).map_err(|error| error.to_string())?;
+                observations.insert(candidate.id.clone(), Sha256::digest(bytes));
+            }
+        }
         let base =
             choose_desktop_duplicate_base(&existing, &account, current_id.as_deref()).clone();
         let other = if base.id == existing.id {
@@ -749,17 +754,7 @@ fn dedupe_desktop_accounts(accounts: Vec<ClaudeAccount>) -> Result<Vec<ClaudeAcc
         if current_id.as_deref() == Some(other.id.as_str()) {
             rewired_current = Some(base.id.clone());
         }
-        remove_desktop_snapshot_if_unused(
-            other_snapshot.as_deref(),
-            merged.desktop_profile_dir.as_deref(),
-        );
-        if merged.desktop_profile_dir.as_deref() != old_base_snapshot.as_deref() {
-            remove_desktop_snapshot_if_unused(
-                old_base_snapshot.as_deref(),
-                merged.desktop_profile_dir.as_deref(),
-            );
-        }
-        delete_account_file_silent(&other.id);
+        snapshots.extend([other.desktop_profile_dir.clone(), old_base_snapshot]);
         removed_ids.push(other.id.clone());
         kept.push(merged);
     }
@@ -768,13 +763,37 @@ fn dedupe_desktop_accounts(accounts: Vec<ClaudeAccount>) -> Result<Vec<ClaudeAcc
         return Ok(kept);
     }
 
-    for account in &kept {
-        write_account_file(account)?;
+    let _lock = CLAUDE_ACCOUNT_INDEX_LOCK.lock().map_err(|_| "无法获取 Claude 账号锁")?;
+    let mut index = load_index()?;
+    let indexed_ids: HashSet<&str> = index.accounts.iter().map(|row| row.id.as_str()).collect();
+    for (id, observed) in &observations {
+        if !indexed_ids.contains(id.as_str()) {
+            return Err("Claude 账号已更新，请重试".into());
+        }
+        let current = load_account_file(id).ok_or("Claude 账号已更新，请重试")?;
+        let bytes = serde_json::to_vec(&current).map_err(|error| error.to_string())?;
+        if &Sha256::digest(bytes) != observed {
+            return Err("Claude 账号已更新，请重试".into());
+        }
     }
-    let mut index = ClaudeAccountIndex::new();
-    index.accounts = kept.iter().map(|account| account.summary()).collect();
+    index.accounts.retain(|row| !observations.contains_key(&row.id));
+    for account in kept.iter().filter(|account| observations.contains_key(&account.id)) {
+        write_account_file(account)?;
+        index.accounts.push(account.summary());
+    }
     index.accounts.sort_by(|a, b| b.last_used.cmp(&a.last_used));
     save_index(&index)?;
+    for id in &removed_ids {
+        delete_account_file_silent(id);
+    }
+    let kept_snapshots: HashSet<&str> = kept.iter().filter_map(|account| {
+        account.desktop_profile_dir.as_deref().map(str::trim)
+    }).collect();
+    for snapshot in snapshots.iter().flatten() {
+        if !kept_snapshots.contains(snapshot.trim()) {
+            remove_desktop_snapshot_if_unused(Some(snapshot), None);
+        }
+    }
     if let Some(next_current) = rewired_current {
         let _ = crate::modules::provider_current_state::set_current_account_id(
             "claude_desktop_account",

@@ -9,6 +9,7 @@ import {
 } from '../../utils/codexProxyDraft';
 import type { CodexUnifiedProxyView } from '../../services/codexUnifiedProxyService';
 import { CodexUnifiedProxyPanel } from './CodexUnifiedProxyPanel';
+import { CodexProxyDirectHosts } from './CodexProxyDirectHosts';
 import { useCodexProxyAccountName } from './useCodexProxyExitEditor';
 import { useCodexProxyWorkspace } from './CodexProxyWorkspaceContext';
 import '../../styles/pages/codex-proxy-accounts.css';
@@ -54,6 +55,7 @@ export function CodexProxyExitRulesSection() {
         <li className="is-default">{t('codex.proxy.modeDefault')}</li>
       </ol>
     </div>
+    <CodexProxyDirectHosts />
     {catalogError && <div className="codex-proxy-rules-failure" role="alert">
       <div><strong>{t('codex.proxy.rules.loadFailed')}</strong><p>{catalogError}</p></div>
       <div className="codex-proxy-rules-failure-actions">

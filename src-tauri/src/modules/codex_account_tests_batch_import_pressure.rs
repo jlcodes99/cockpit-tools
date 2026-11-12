@@ -24,9 +24,9 @@ fn slow_batch_import_keeps_time_based_progress_and_checkpoints() {
 
 #[test]
 fn interrupted_batch_checkpoint_resumes_without_losing_sources_or_finished_items() {
-    let session = super::CodexBatchImportSession {
+    let mut session = super::CodexBatchImportSession {
         status: "scanning".into(),
-        check_quota: false,
+        check_quota: true,
         cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         scan_lock: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         source_items: (0..100)
@@ -49,6 +49,7 @@ fn interrupted_batch_checkpoint_resumes_without_losing_sources_or_finished_items
                     provider: None,
                     quota_status: "skipped".into(),
                     quota_error: None,
+                    quota_windows: Vec::new(),
                     status: "invalid".into(),
                     error: Some("test".into()),
                     default_selected: false,
@@ -61,6 +62,13 @@ fn interrupted_batch_checkpoint_resumes_without_losing_sources_or_finished_items
             })
             .collect(),
     };
+    session.items[0].preview.status = "ready".into();
+    session.items[0].preview.quota_status = "success".into();
+    session.items[0].quota = Some(serde_json::from_value(serde_json::json!({
+        "hourly_percentage": 0, "hourly_window_present": true, "hourly_window_minutes": 300,
+        "weekly_percentage": 0, "weekly_window_present": false,
+        "raw_data": {"fixture_field": "not part of the public preview"}
+    })).unwrap());
     let snapshot = super::codex_batch_import_snapshot_from_session(&session);
     let serialized = serde_json::to_string(&snapshot).unwrap();
     let restored =
@@ -71,6 +79,28 @@ fn interrupted_batch_checkpoint_resumes_without_losing_sources_or_finished_items
     assert_eq!(restored.items.len(), 25);
     assert_eq!(restored.items[24].preview.item_id, "test-24");
     assert_eq!(restored.source_items[25].value["index"], 25);
+    assert!(!serialized.contains("quotaWindows"));
+    let preview = super::codex_batch_import_preview_from_session("fixture", &restored);
+    let public = serde_json::to_value(preview).unwrap();
+    assert_eq!(public["items"][0]["quotaWindows"], serde_json::json!([
+        {"kind": "hourly", "percentage": 0, "windowMinutes": 300}
+    ]));
+    assert!(public["items"][1].get("quotaWindows").is_none());
+    assert!(!public.to_string().contains("fixture_field"));
+}
+
+#[test]
+fn batch_import_quota_windows_keep_missing_relay_values_unknown() {
+    let quota = |usage| serde_json::from_value(serde_json::json!({
+        "hourly_percentage": 0, "hourly_window_present": true, "weekly_percentage": 0,
+        "raw_data": {"provider": "cockpit-api", "usage": usage}
+    })).unwrap();
+    let unavailable = quota(serde_json::json!({"total_granted": 100}));
+    assert!(super::codex_batch_import_quota_windows(&unavailable).is_empty());
+    let exhausted = quota(serde_json::json!({"total_granted": 100, "total_available": 0}));
+    let windows = super::codex_batch_import_quota_windows(&exhausted);
+    assert_eq!(windows.len(), 1);
+    assert_eq!(windows[0].percentage, 0);
 }
 
 #[test]

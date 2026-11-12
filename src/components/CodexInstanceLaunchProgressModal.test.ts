@@ -59,6 +59,22 @@ test('completion clears a previous error and its failed start step', () => {
   assert.equal(h.state().steps.find((step: any) => step.id === 'startClient').details.error, undefined);
 });
 
+test('successful launch retains project recovery deferral details', () => {
+  const h = harness();
+  const message = 'Quick project scan reached its limit. Largest state file: 2542520 bytes.';
+  h.send({ type: 'start' });
+  h.send({
+    step: 'writeProfile',
+    stepStatus: 'warning',
+    details: { sessionMaintenanceDeferred: true, projectRecoveryDeferredMessage: message },
+  });
+  h.send({ type: 'complete' });
+  const step = h.state().steps.find((item: any) => item.id === 'writeProfile');
+  assert.equal(h.state().status, 'completed');
+  assert.equal(step.status, 'warning');
+  assert.equal(step.details.projectRecoveryDeferredMessage, message);
+});
+
 test('retrying the same account starts clean instead of carrying failed steps forward', () => {
   const h = harness();
   h.send({ type: 'start', operation: 'switch-and-start', accountId: 'a' });

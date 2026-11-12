@@ -41,9 +41,22 @@ export interface TestChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  imageDataUrl?: string;
   latencyMs?: number | null;
   failureTitle?: string;
   failureDetail?: string;
+}
+
+export function getLocalAccessTestModelIds(
+  modelIds: string[],
+  collection: Pick<CodexLocalAccessCollection, "imageGenerationMode" | "imageGenerationModel" | "imageGenerationAccountModels"> | null | undefined,
+): string[] {
+  if (!collection || collection.imageGenerationMode === "disabled") return modelIds;
+  return [...new Set([
+    ...modelIds,
+    collection.imageGenerationModel,
+    ...Object.values(collection.imageGenerationAccountModels ?? {}),
+  ].filter(Boolean))];
 }
 
 export const CUSTOM_ROUTING_PRIORITY_MIN = 0;
@@ -268,17 +281,9 @@ export function summarizeAccountPoolHealth(
   );
   const poolUnavailableAccountIds = new Set<string>();
   (state?.accountPoolHealth ?? []).forEach((pool) => {
-    const statuses = (pool.accountStatuses ?? []).filter((member) =>
-      member.accountId.trim(),
-    );
-    if (statuses.length === 0) {
-      accountIds.forEach((accountId) =>
-        poolUnavailableAccountIds.add(accountId),
-      );
-      return;
-    }
-    statuses
-      .filter((member) => !member.available)
+    // A pool failure without member diagnostics does not establish account health.
+    (pool.accountStatuses ?? [])
+      .filter((member) => !member.available && member.accountId.trim())
       .forEach((member) => poolUnavailableAccountIds.add(member.accountId.trim()));
   });
   const sourceMembers = new Map<string, string[]>();
@@ -387,6 +392,10 @@ export function buildLocalAccessRoutingStrategyOptions(t: TFunction) {
         "codex.localAccess.routingStrategy.expirySoonFirst",
         "优先近到期",
       ),
+    },
+    {
+      value: "five_hour_reset_soon_first",
+      label: t("codex.localAccess.routingStrategy.fiveHourResetSoonFirst"),
     },
     {
       value: "custom",

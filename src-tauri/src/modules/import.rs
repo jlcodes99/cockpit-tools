@@ -329,35 +329,43 @@ pub async fn import_from_old_tools_logic() -> Result<Vec<models::Account>, Strin
     Ok(imported)
 }
 
-/// 从本地 Antigravity IDE 客户端导入当前账号
-#[cfg(target_os = "windows")]
-pub async fn import_from_local_logic() -> Result<models::Account, String> {
-    modules::logger::log_info("开始从 Windows Credential Manager 导入 Antigravity 账号...");
-    let system_credential = modules::antigravity_credential::read_antigravity_system_credential()?
-        .ok_or_else(|| {
-            "未找到 Antigravity 系统凭据，请确保 Antigravity IDE 客户端已登录".to_string()
-        })?;
-    import_from_refresh_token(system_credential.refresh_token, "Antigravity 系统凭据").await
+pub async fn import_from_desktop_logic() -> Result<models::Account, String> {
+    use modules::antigravity_legacy_instance::{resolve_auth_mode, AntigravityDesktopAuthMode};
+
+    let refresh_token = tokio::task::spawn_blocking(|| match resolve_auth_mode() {
+        AntigravityDesktopAuthMode::LegacyStateDb => {
+            let path = modules::antigravity_paths::legacy_state_db_path()?;
+            read_state_db_refresh_token(&path, "Antigravity")
+        }
+        AntigravityDesktopAuthMode::SystemCredential => {
+            modules::antigravity_credential::read_antigravity_desktop_credential()?
+                .map(|credential| credential.refresh_token)
+                .ok_or_else(|| "未找到登录状态，请确保 Antigravity 桌面客户端已登录".to_string())
+        }
+    })
+    .await
+    .map_err(|error| format!("读取 Antigravity 登录状态失败: {error}"))??;
+    import_from_refresh_token(refresh_token, "Antigravity 桌面客户端").await
 }
 
 /// 从本地 Antigravity IDE 客户端导入当前账号
-#[cfg(not(target_os = "windows"))]
 pub async fn import_from_local_logic() -> Result<models::Account, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let credential = tokio::task::spawn_blocking(|| {
-            if !crate::commands::system::antigravity_ide_uses_shared_credentials() {
-                return Ok(None);
-            }
+    let credential = tokio::task::spawn_blocking(|| {
+        if cfg!(target_os = "windows")
+            || (cfg!(target_os = "macos")
+                && crate::commands::system::antigravity_ide_uses_shared_credentials())
+        {
             modules::antigravity_credential::read_antigravity_system_credential()?
                 .map(Some)
-                .ok_or_else(|| "未找到 Antigravity Keychain 凭据，请确保 Antigravity IDE 客户端已登录".to_string())
-        })
-        .await
-        .map_err(|error| format!("读取 Antigravity 登录状态失败: {error}"))??;
-        if let Some(credential) = credential {
-            return import_from_refresh_token(credential.refresh_token, "Antigravity Keychain").await;
+                .ok_or_else(|| "未找到系统凭据，请确保 Antigravity IDE 客户端已登录".to_string())
+        } else {
+            Ok(None)
         }
+    })
+    .await
+    .map_err(|error| format!("读取 Antigravity IDE 登录状态失败: {error}"))??;
+    if let Some(credential) = credential {
+        return import_from_refresh_token(credential.refresh_token, "Antigravity IDE 系统凭据").await;
     }
     import_from_local_state_db_logic().await
 }
@@ -406,23 +414,31 @@ async fn import_from_refresh_token(
 }
 
 pub(super) async fn import_from_local_state_db_logic() -> Result<models::Account, String> {
-    use base64::{engine::general_purpose, Engine as _};
-
     modules::logger::log_info("开始从本地 Antigravity IDE 客户端导入...");
+    let refresh_token = tokio::task::spawn_blocking(|| {
+        let path = modules::db::get_db_path()?;
+        read_state_db_refresh_token(&path, "Antigravity IDE")
+    })
+    .await
+    .map_err(|error| format!("读取 Antigravity IDE 登录状态失败: {error}"))??;
+    import_from_refresh_token(refresh_token, "Antigravity IDE state.vscdb").await
+}
 
-    // 读取 state.vscdb
-    let db_path = modules::db::get_db_path()?;
-    let conn =
-        rusqlite::Connection::open(&db_path).map_err(|e| format!("打开数据库失败: {}", e))?;
+fn read_state_db_refresh_token(path: &std::path::Path, client: &str) -> Result<String, String> {
+    use base64::{engine::general_purpose, Engine as _};
+    use rusqlite::{OpenFlags, OptionalExtension};
 
-    // 读取新版 Unified State Sync OAuth 数据
+    let conn = rusqlite::Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|error| format!("打开 {client} 数据库失败: {error}"))?;
     let state_data: String = conn
         .query_row(
             "SELECT value FROM ItemTable WHERE key = ?",
             ["antigravityUnifiedStateSync.oauthToken"],
             |row| row.get(0),
         )
-        .map_err(|_| "未找到登录状态，请确保 Antigravity IDE 客户端已登录")?;
+        .optional()
+        .map_err(|error| format!("读取 {client} 登录状态失败: {error}"))?
+        .ok_or_else(|| format!("未找到登录状态，请确保 {client} 客户端已登录"))?;
 
     // Base64 解码
     let blob = general_purpose::STANDARD
@@ -437,12 +453,7 @@ pub(super) async fn import_from_local_state_db_logic() -> Result<models::Account
         return Err("本地 refresh_token 为空".to_string());
     }
 
-    modules::logger::log_info(&format!(
-        "获取到本地 refresh_token (len={})",
-        refresh_token.len()
-    ));
-
-    import_from_refresh_token(refresh_token, "Antigravity state.vscdb").await
+    Ok(refresh_token)
 }
 
 fn nonempty_note_value(value: &str) -> Option<String> {
@@ -1272,6 +1283,35 @@ pub async fn import_from_extension_credentials(
 mod account_note_import_tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn local_import_reads_only_the_selected_client_database() {
+        use base64::{engine::general_purpose, Engine as _};
+
+        let root = tempfile::tempdir().unwrap();
+        let desktop = root.path().join("Antigravity.vscdb");
+        let ide = root.path().join("Antigravity IDE.vscdb");
+        for (path, token) in [(&desktop, "desktop-login"), (&ide, "ide-login")] {
+            let connection = rusqlite::Connection::open(path).unwrap();
+            connection
+                .execute("CREATE TABLE ItemTable (key TEXT PRIMARY KEY, value TEXT)", [])
+                .unwrap();
+            let payload = utils::protobuf::create_oauth_info("fixture-access", token, 1);
+            let topic = utils::protobuf::create_unified_topic_entry("oauthTokenInfoSentinelKey", &payload);
+            connection
+                .execute(
+                    "INSERT INTO ItemTable (key, value) VALUES ('antigravityUnifiedStateSync.oauthToken', ?)",
+                    [general_purpose::STANDARD.encode(topic)],
+                )
+                .unwrap();
+        }
+        assert_eq!(read_state_db_refresh_token(&desktop, "Antigravity").unwrap(), "desktop-login");
+        assert_eq!(read_state_db_refresh_token(&ide, "Antigravity IDE").unwrap(), "ide-login");
+        fs::remove_file(&desktop).unwrap();
+        assert!(read_state_db_refresh_token(&desktop, "Antigravity").is_err());
+        assert!(!desktop.exists());
+        assert_eq!(read_state_db_refresh_token(&ide, "Antigravity IDE").unwrap(), "ide-login");
+    }
 
     fn with_test_data_dir<T>(name: &str, run: impl FnOnce() -> T) -> T {
         let _lock = crate::modules::test_support::env_lock()

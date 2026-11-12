@@ -12,11 +12,13 @@ import {
   isCodexPendingOAuthAccount,
   isCodexApiKeyAccount,
   isCodexAgentIdentityAccount,
+  isCodexAccountDisplayCache,
 } from '../types/codex';
 import * as codexService from '../services/codexService';
 import { removeAccountIdsFromAllCodexGroups } from '../services/codexAccountGroupService';
 import { emitAccountsChanged, emitCurrentAccountChanged } from '../utils/accountSyncEvents';
-import { withoutCachedProxySecret } from '../utils/codexProxyCache';
+import { toCodexAccountDisplayCache } from '../utils/codexProxyCache';
+import { replaceLegacyAccountDisplayCache } from '../utils/providerAccountDisplayCache';
 import { createSerialAccountRefreshQueue } from '../utils/serialAccountRefreshQueue';
 import { createCoalescedWriter } from '../utils/coalescedWriter';
 import { mergeCodexProfileResult } from '../utils/codexProfileRefresh';
@@ -50,11 +52,8 @@ const loadCachedCodexAccounts = () => {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    const accounts = parsed.filter((account) => account && typeof account === 'object');
-    const sanitized = accounts.map(withoutCachedProxySecret);
-    if (accounts.some((account) => Object.prototype.hasOwnProperty.call(account, 'egress_proxy_url'))) {
-      try { localStorage.setItem(CODEX_ACCOUNTS_CACHE_KEY, JSON.stringify(sanitized)); } catch { /* cache is optional */ }
-    }
+    const sanitized = parsed.filter((account) => typeof account?.id === 'string').map(toCodexAccountDisplayCache);
+    replaceLegacyAccountDisplayCache(CODEX_ACCOUNTS_CACHE_KEY, raw, JSON.stringify(sanitized));
     return sanitized;
   } catch {
     return [];
@@ -67,10 +66,8 @@ const loadCachedCodexCurrentAccount = () => {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CodexAccount | null;
     if (!parsed || typeof parsed !== 'object') return null;
-    const sanitized = withoutCachedProxySecret(parsed);
-    if (Object.prototype.hasOwnProperty.call(parsed, 'egress_proxy_url')) {
-      try { localStorage.setItem(CODEX_CURRENT_ACCOUNT_CACHE_KEY, JSON.stringify(sanitized)); } catch { /* cache is optional */ }
-    }
+    const sanitized = toCodexAccountDisplayCache(parsed);
+    replaceLegacyAccountDisplayCache(CODEX_CURRENT_ACCOUNT_CACHE_KEY, raw, JSON.stringify(sanitized));
     return sanitized;
   } catch {
     return null;
@@ -80,9 +77,33 @@ const loadCachedCodexCurrentAccount = () => {
 const initialCachedCodexAccounts = loadCachedCodexAccounts();
 const initialCachedCodexCurrentAccount = loadCachedCodexCurrentAccount();
 
+/** Resolve credential-dependent actions after rendering a display-only startup snapshot. */
+export async function readCodexAccountForEditing(account: CodexAccount): Promise<CodexAccount> {
+  if (!isCodexAccountDisplayCache(account)) return account;
+  const readCurrent = () => {
+    const { accounts, currentAccount } = useCodexAccountStore.getState();
+    return accounts.find(item => item.id === account.id) ?? (currentAccount?.id === account.id ? currentAccount : null);
+  };
+  const current = readCurrent();
+  if (!current) throw new Error(CODEX_STALE_ACCOUNT_ERROR);
+  if (!isCodexAccountDisplayCache(current)) return current;
+  const fetched = (await codexService.listCodexAccounts()).find(item => item.id === account.id);
+  const latest = readCurrent();
+  if (!latest) throw new Error(CODEX_STALE_ACCOUNT_ERROR);
+  if (!isCodexAccountDisplayCache(latest)) return latest;
+  if (!fetched) throw new Error(CODEX_STALE_ACCOUNT_ERROR);
+
+  const live = reconcileAccountUpdates(fetched);
+  useCodexAccountStore.setState(state => ({
+    accounts: state.accounts.map(item => item.id === live.id ? live : item),
+    currentAccount: state.currentAccount?.id === live.id ? live : state.currentAccount,
+  }));
+  return live;
+}
+
 const codexAccountsCacheWriter = createCoalescedWriter((accounts: CodexAccount[]) => {
   try {
-    localStorage.setItem(CODEX_ACCOUNTS_CACHE_KEY, JSON.stringify(accounts.map(withoutCachedProxySecret)));
+    localStorage.setItem(CODEX_ACCOUNTS_CACHE_KEY, JSON.stringify(accounts.map(toCodexAccountDisplayCache)));
   } catch {
     // ignore cache write failures
   }
@@ -96,7 +117,7 @@ const persistCodexCurrentAccountCache = (account: CodexAccount | null) => {
       localStorage.removeItem(CODEX_CURRENT_ACCOUNT_CACHE_KEY);
       return;
     }
-    localStorage.setItem(CODEX_CURRENT_ACCOUNT_CACHE_KEY, JSON.stringify(withoutCachedProxySecret(account)));
+    localStorage.setItem(CODEX_CURRENT_ACCOUNT_CACHE_KEY, JSON.stringify(toCodexAccountDisplayCache(account)));
   } catch {
     // ignore cache write failures
   }

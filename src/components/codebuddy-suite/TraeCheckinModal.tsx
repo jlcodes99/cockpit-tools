@@ -1,5 +1,5 @@
 /**
- * Trae SOLO CN 签到弹窗
+ * TraeWork CN 签到弹窗
  *
  * 基于 CodebuddySuiteCheckinModal 模式，适配 Trae 的签到 API。
  */

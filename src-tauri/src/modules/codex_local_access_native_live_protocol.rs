@@ -203,6 +203,13 @@ async fn native_live_protocol_acceptance() -> Result<(), Box<dyn std::error::Err
         std::env::var_os("COCKPIT_PROTOCOL_LIVE_CONFIG").ok_or("Missing explicit config")?,
     );
     let config: Config = serde_json::from_slice(&std::fs::read(config_path)?)?;
+    if config.phase == "speed" {
+        tracing_subscriber::fmt()
+            .with_env_filter("codex_api=info")
+            .with_test_writer()
+            .try_init()
+            .ok();
+    }
     let data = PathBuf::from(
         std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR")
             .ok_or("Missing explicit real data directory")?,
@@ -218,8 +225,9 @@ async fn native_live_protocol_acceptance() -> Result<(), Box<dyn std::error::Err
     }
     let mut collection: CodexLocalAccessCollection =
         serde_json::from_slice(&std::fs::read(data.join("codex_local_access.json"))?)?;
+    let required_accounts = if config.phase == "speed" { 1 } else { 9 };
     if collection.port != config.service_port
-        || config.allowed_accounts.len() != 9
+        || config.allowed_accounts.len() != required_accounts
         || config
             .allowed_accounts
             .iter()

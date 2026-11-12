@@ -50,7 +50,10 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Some(Commands::List { platform }) => match platform.to_lowercase().as_str() {
             "cursor" => {
-                let accounts = cursor_account::list_accounts();
+                let (accounts, warning) = cursor_account::list_accounts_for_cli().map_err(anyhow::Error::msg)?;
+                if let Some(warning) = warning {
+                    eprintln!("{} {warning}", "Warning:".yellow());
+                }
                 display_accounts(
                     accounts
                         .iter()
@@ -64,7 +67,10 @@ async fn main() -> anyhow::Result<()> {
                 );
             }
             "copilot" | "github_copilot" => {
-                let accounts = github_copilot_account::list_accounts();
+                let (accounts, warning) = github_copilot_account::list_accounts_for_cli().map_err(anyhow::Error::msg)?;
+                if let Some(warning) = warning {
+                    eprintln!("{} {warning}", "Warning:".yellow());
+                }
                 display_accounts(
                     accounts
                         .iter()

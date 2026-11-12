@@ -5,6 +5,7 @@ fn native_account_rank(
     account: &CodexAccount,
     collection: &CodexLocalAccessCollection,
     key: Option<&CodexLocalAccessApiKey>,
+    now: i64,
 ) -> NativeAccountRank {
     use CodexLocalAccessRoutingStrategy as Strategy;
     let pinned = key
@@ -28,6 +29,11 @@ fn native_account_rank(
         Strategy::PlanLowFirst => (i64::from(plan.unwrap_or(i32::MAX)), high_quota, 0),
         Strategy::ExpirySoonFirst => (
             resolve_subscription_expiry_ms(account).unwrap_or(i64::MAX),
+            high_plan,
+            high_quota,
+        ),
+        Strategy::FiveHourResetSoonFirst => (
+            resolve_five_hour_reset_at(account, now).unwrap_or(i64::MAX),
             high_plan,
             high_quota,
         ),
@@ -75,7 +81,9 @@ fn native_sort_accounts_scoped(
     if collection.routing_strategy == Strategy::Random {
         accounts.shuffle(&mut rand::thread_rng());
     }
-    accounts.sort_by_key(|account| native_account_rank(account, collection, key));
+    let now = chrono::Utc::now().timestamp();
+    let rank = |account: &CodexAccount| native_account_rank(account, collection, key, now);
+    accounts.sort_by_key(rank);
     if collection.routing_strategy == Strategy::Random {
         return;
     }
@@ -84,10 +92,10 @@ fn native_sort_accounts_scoped(
         .lock()
         .ok()
         .and_then(|cursors| cursors.get(namespace).cloned());
-    let rank = native_account_rank(&accounts[0], collection, key);
+    let first_rank = rank(&accounts[0]);
     let end = accounts
         .iter()
-        .take_while(|account| native_account_rank(account, collection, key) == rank)
+        .take_while(|account| rank(account) == first_rank)
         .count();
     if end < 2 {
         return;

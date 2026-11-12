@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { isTauri } from '@tauri-apps/api/core';
+import { save } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useTranslation } from 'react-i18next';
 import {
@@ -32,23 +34,17 @@ import {
 import { ApiKeyFunKeyConfigModal } from '../components/apiKeyFun/ApiKeyFunKeyConfigModal';
 import { ApiKeyFunPromotionHeader } from '../components/apiKeyFun/ApiKeyFunPromotionHeader';
 import { useSponsorStore } from '../stores/useSponsorStore';
+import {
+  exportLegacyApiKeyFunVault,
+  initializeApiKeyFunVault,
+  requiresApiKeyFunRecovery,
+  restoreApiKeyFunVault,
+  subscribeApiKeyFunVault,
+  updateApiKeyFunVault,
+  type ManagedApiKey,
+} from '../services/apiKeyFunVault';
 import './ApiKeyFunPage.css';
 
-type ManagedApiKey = {
-  id: string;
-  key: string;
-  name: string;
-  createdAt: number;
-  lastUsedAt: number;
-  lastStatus?: 'ok' | 'bad' | 'unknown';
-  lastRemaining?: string;
-  addedToCodexAt?: number;
-  codexProviderName?: string;
-  addedToClaudeAt?: number;
-  claudeAccountName?: string;
-};
-
-const APIKEY_FUN_KEYS_STORAGE_KEY = 'apikey_fun_managed_keys';
 const APIKEY_FUN_AUTO_QUERY_DELAY_MS = 650;
 
 function maskKey(value: string): string {
@@ -84,24 +80,6 @@ function usageValidityTone(summary: ModelProviderUsageSummary | null): 'ok' | 'b
 function providerErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error ?? 'UNKNOWN_ERROR');
-}
-
-function loadManagedApiKeys(): ManagedApiKey[] {
-  try {
-    const raw = window.localStorage.getItem(APIKEY_FUN_KEYS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is ManagedApiKey => (
-      typeof item?.id === 'string' &&
-      typeof item?.key === 'string' &&
-      typeof item?.name === 'string' &&
-      typeof item?.createdAt === 'number' &&
-      typeof item?.lastUsedAt === 'number'
-    ));
-  } catch {
-    return [];
-  }
 }
 
 function buildManagedKeyName(key: string): string {
@@ -149,7 +127,14 @@ export function ApiKeyFunPage() {
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [queryingModels, setQueryingModels] = useState(false);
   const [saveFlash, setSaveFlash] = useState(false);
-  const [managedKeys, setManagedKeys] = useState<ManagedApiKey[]>(() => loadManagedApiKeys());
+  const [managedKeys, setManagedKeys] = useState<ManagedApiKey[]>([]);
+  const [vaultLoading, setVaultLoading] = useState(true);
+  const [vaultLoadFailed, setVaultLoadFailed] = useState(false);
+  const [vaultNeedsRecovery, setVaultNeedsRecovery] = useState(false);
+  const [vaultRestoreFailed, setVaultRestoreFailed] = useState(false);
+  const [vaultExporting, setVaultExporting] = useState(false);
+  const [vaultExportFailed, setVaultExportFailed] = useState(false);
+  const [vaultWriteFailed, setVaultWriteFailed] = useState(false);
   const [keyActionState, setKeyActionState] = useState<Record<string, {
     target: ApiKeyFunPrefillTarget;
     status: 'success' | 'error';
@@ -201,19 +186,84 @@ export function ApiKeyFunPage() {
   const canPrefillCurrentKey =
     Boolean(currentSavedKey) && !queryingModels && apiKeyFunModelCatalog.length > 0;
 
+  const loadSavedKeys = useCallback(async () => {
+    setVaultLoading(true);
+    setVaultLoadFailed(false);
+    setVaultNeedsRecovery(false);
+    setVaultRestoreFailed(false);
+    try {
+      await initializeApiKeyFunVault();
+    } catch (error) {
+      if (requiresApiKeyFunRecovery(error)) setVaultNeedsRecovery(true);
+      else setVaultLoadFailed(true);
+    } finally {
+      setVaultLoading(false);
+    }
+  }, []);
+
+  const restoreSavedKeys = async () => {
+    setVaultLoading(true);
+    setVaultRestoreFailed(false);
+    try {
+      await restoreApiKeyFunVault();
+      setVaultNeedsRecovery(false);
+      setVaultLoadFailed(false);
+      setVaultWriteFailed(false);
+    } catch (error) {
+      if (String(error).includes('apikey_fun_vault_already_exists')) await loadSavedKeys();
+      else setVaultRestoreFailed(true);
+    } finally {
+      setVaultLoading(false);
+    }
+  };
+
+  const exportSavedKeys = async () => {
+    setVaultExporting(true);
+    setVaultExportFailed(false);
+    try {
+      const path = await save({
+        defaultPath: 'apikey_fun_legacy_keys.json',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      });
+      if (path) await exportLegacyApiKeyFunVault(path);
+    } catch {
+      setVaultExportFailed(true);
+    } finally {
+      setVaultExporting(false);
+    }
+  };
+
+  useEffect(() => {
+    const unsubscribe = subscribeApiKeyFunVault(setManagedKeys);
+    void loadSavedKeys();
+    return unsubscribe;
+  }, [loadSavedKeys]);
+
   useEffect(() => {
     if (initialManagedKeySelectedRef.current) return;
-    initialManagedKeySelectedRef.current = true;
-    if (apiKey.trim()) return;
+    if (apiKey.trim()) {
+      initialManagedKeySelectedRef.current = true;
+      return;
+    }
     const firstKey = managedKeys[0]?.key.trim();
     if (firstKey) {
+      initialManagedKeySelectedRef.current = true;
       setApiKey(firstKey);
     }
   }, [apiKey, managedKeys]);
 
-  useEffect(() => {
-    window.localStorage.setItem(APIKEY_FUN_KEYS_STORAGE_KEY, JSON.stringify(managedKeys));
-  }, [managedKeys]);
+  const changeSavedKeys = useCallback(async (update: (keys: ManagedApiKey[]) => ManagedApiKey[]) => {
+    setVaultWriteFailed(false);
+    try {
+      await updateApiKeyFunVault(update);
+      setVaultLoadFailed(false);
+      return true;
+    } catch (error) {
+      if (requiresApiKeyFunRecovery(error)) setVaultNeedsRecovery(true);
+      else setVaultWriteFailed(true);
+      return false;
+    }
+  }, []);
 
   useEffect(() => {
     if (!saveFlash) return undefined;
@@ -262,7 +312,7 @@ export function ApiKeyFunPage() {
           const nextStatus = usageValidityTone(nextUsage);
           const nextRemaining = usagePrimaryValue(nextUsage);
           setUsage(nextUsage);
-          setManagedKeys((items) => items.map((item) => (
+          void changeSavedKeys((items) => items.map((item) => (
             item.key === key
               ? {
                   ...item,
@@ -282,7 +332,7 @@ export function ApiKeyFunPage() {
               error: providerErrorMessage(error),
             }),
           );
-          setManagedKeys((items) => items.map((item) => (
+          void changeSavedKeys((items) => items.map((item) => (
             item.key === key
               ? {
                   ...item,
@@ -328,10 +378,10 @@ export function ApiKeyFunPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [apiKey, providerBaseUrl, t]);
+  }, [apiKey, changeSavedKeys, providerBaseUrl, t]);
 
   // 保存密钥
-  const handleSaveCurrentKey = useCallback(() => {
+  const handleSaveCurrentKey = useCallback(async () => {
     const key = apiKey.trim();
     if (!key) {
       setUsageError(t('apiKeyFun.error.missingApiKey', '请输入 API Key。'));
@@ -340,7 +390,7 @@ export function ApiKeyFunPage() {
     const now = Date.now();
     const nextStatus = usageValidityTone(usage);
     const nextRemaining = usagePrimaryValue(usage);
-    setManagedKeys((items) => {
+    const saved = await changeSavedKeys((items) => {
       const existing = items.find((item) => item.key === key);
       if (existing) {
         return items.map((item) => (
@@ -368,9 +418,10 @@ export function ApiKeyFunPage() {
         ...items,
       ];
     });
+    if (!saved) return;
     setUsageError(null);
     setSaveFlash(true);
-  }, [apiKey, t, usage]);
+  }, [apiKey, changeSavedKeys, t, usage]);
 
   const setManagedKeyAction = useCallback((
     id: string,
@@ -442,15 +493,15 @@ export function ApiKeyFunPage() {
   const handleUseManagedKey = useCallback((item: ManagedApiKey) => {
     setApiKey(item.key);
     setUsageError(null);
-    setManagedKeys((items) => items.map((nextItem) => (
+    void changeSavedKeys((items) => items.map((nextItem) => (
       nextItem.id === item.id ? { ...nextItem, lastUsedAt: Date.now() } : nextItem
     )));
-  }, []);
+  }, [changeSavedKeys]);
 
   // 删除密钥
   const handleDeleteManagedKey = useCallback((id: string) => {
-    setManagedKeys((items) => items.filter((item) => item.id !== id));
-  }, []);
+    void changeSavedKeys((items) => items.filter((item) => item.id !== id));
+  }, [changeSavedKeys]);
 
   // 行内重命名密钥管理
   const handleStartRename = useCallback((item: ManagedApiKey, e: React.MouseEvent) => {
@@ -459,15 +510,15 @@ export function ApiKeyFunPage() {
     setEditNameValue(item.name);
   }, []);
 
-  const handleSaveRename = useCallback((id: string, e?: React.FormEvent) => {
+  const handleSaveRename = useCallback(async (id: string, e?: React.FormEvent) => {
     e?.preventDefault();
     const trimmed = editNameValue.trim();
     if (!trimmed) return;
-    setManagedKeys((items) => items.map((item) => (
-      item.id === id ? { ...item, name: trimmed } : item
+    const saved = await changeSavedKeys((items) => items.map((item) => (
+      item.id === id && item.name !== trimmed ? { ...item, name: trimmed } : item
     )));
-    setEditingId(null);
-  }, [editNameValue]);
+    if (saved) setEditingId(current => current === id ? null : current);
+  }, [changeSavedKeys, editNameValue]);
 
   const handleCancelRename = useCallback(() => {
     setEditingId(null);
@@ -731,7 +782,35 @@ export function ApiKeyFunPage() {
                 <p>{t('apiKeyFun.keyManager.desc', '保存常用 API Key，点击即可切换并自动查询额度。')}</p>
               </div>
             </div>
-            {managedKeys.length === 0 ? (
+            {isTauri() && !vaultLoadFailed && !vaultNeedsRecovery && (
+              <div>
+                <button type="button" className="btn btn-secondary btn-sm"
+                  disabled={vaultLoading || vaultExporting} onClick={exportSavedKeys}>
+                  {t(vaultExporting ? 'common.loading' : 'apiKeyFun.keyManager.exportLegacy')}
+                </button>
+              </div>
+            )}
+            {vaultLoadFailed && (
+              <div className="apikey-fun-empty-keys" role="alert">
+                <span>{t('apiKeyFun.keyManager.vaultLoadFailed')}</span>
+                <button className="btn btn-secondary btn-sm" onClick={() => void loadSavedKeys()}>
+                  {t('common.retry')}
+                </button>
+              </div>
+            )}
+            {vaultNeedsRecovery && (
+              <div className="apikey-fun-empty-keys" role="alert">
+                <span>{t('apiKeyFun.keyManager.checkpointAvailable')}</span>
+                <button type="button" className="btn btn-secondary btn-sm" disabled={vaultLoading} onClick={restoreSavedKeys}>
+                  {t('apiKeyFun.keyManager.restoreCheckpoint')}
+                </button>
+              </div>
+            )}
+            {vaultRestoreFailed && <p role="alert">{t('apiKeyFun.keyManager.checkpointRestoreFailed')}</p>}
+            {vaultExportFailed && <p role="alert">{t('apiKeyFun.keyManager.legacyExportFailed')}</p>}
+            {vaultWriteFailed && <p role="alert">{t('apiKeyFun.keyManager.vaultWriteFailed')}</p>}
+            {vaultLoading && <p role="status">{t('common.loading')}</p>}
+            {managedKeys.length === 0 ? !vaultLoading && !vaultLoadFailed && !vaultNeedsRecovery && (
               <div className="apikey-fun-empty-keys">
                 <KeyRound size={16} />
                 <span>{t('apiKeyFun.keyManager.empty', '暂无保存的密钥。')}</span>

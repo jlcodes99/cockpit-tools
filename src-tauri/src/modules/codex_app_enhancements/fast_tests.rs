@@ -34,6 +34,7 @@ struct Options {
     public_entry: bool,
     live_quota: bool,
     live_plan_invalid: bool,
+    live_rspack: bool,
     debugger_error: bool,
     preload_first: bool,
     profile_dir: PathBuf,
@@ -72,6 +73,7 @@ impl Default for Options {
             public_entry: false,
             live_quota: false,
             live_plan_invalid: false,
+            live_rspack: false,
             debugger_error: false,
             preload_first: false,
             profile_dir: PathBuf::new(),
@@ -188,10 +190,19 @@ async fn start(options: Options) -> Running {
                     let value = if expression == "location.href" {
                         json!("app://-/index.html")
                     } else if expression == "window.__cockpitQuotaCompat.prepareLiveQuotaGate()" {
-                        json!({"ok":true,"plan":{
+                        if options.live_rspack {
+                            let locations = ["543778.abc", "634303.def"].map(|chunk| json!({
+                                "url":format!("app://-/assets/async/{chunk}.js"),
+                                "lineNumber":0,"columnNumber":42,"hardVariable":"reserve","guardVariable":"usage",
+                                "host":"host","thread":"thread","provider":"providers","props":"props","scope":"scope","settings":"settings"
+                            }));
+                            json!({"ok":true,"rspackPlans":locations})
+                        } else {
+                            json!({"ok":true,"plan":{
                             "url":if options.live_plan_invalid { "https://example.test/assets/app-primary-mock.js" } else { "app://-/assets/app-primary-mock.js" },
                             "lineNumber":12,"columnNumber":34,"hardVariable":"Ct","guardVariable":"vn"
-                        }})
+                            }})
+                        }
                     } else if expression
                         .starts_with("window.__cockpitQuotaCompat.installLiveQuotaGuard(")
                     {
@@ -260,7 +271,9 @@ async fn start(options: Options) -> Running {
                         }
                     } else if expression.contains("typeof p?.prepareHandoff") {
                         browser_probes += 1;
-                        if options.browser_preloading_reads > 0 {
+                        if options.live_rspack {
+                            json!({"installed":false,"rspack":true})
+                        } else if options.browser_preloading_reads > 0 {
                             json!({"installed":false,"preloading":browser_probes <= options.browser_preloading_reads})
                         } else {
                             json!(message["params"]["contextId"] == 2 || options.initially_active)
@@ -303,7 +316,7 @@ async fn start(options: Options) -> Running {
                     json!({})
                 }
                 "Debugger.setBreakpointByUrl" if options.live_quota => {
-                    json!({"breakpointId":"live-quota"})
+                    json!({"breakpointId":if options.live_rspack {message["params"]["urlRegex"].as_str().unwrap()} else {"live-quota"}})
                 }
                 _ => {
                     // This simulated modern client deliberately has no
@@ -521,6 +534,25 @@ async fn api_service_public_entry_uses_current_page_on_supported_platforms() {
         ),
         0
     );
+}
+
+#[tokio::test]
+async fn live_rspack_quota_arms_both_composer_routes_and_removes_them_on_stop() {
+    let mut runtime = start(Options {
+        api_service: true,
+        live_quota: true,
+        live_rspack: true,
+        quota_compat: false,
+        api_key_auth_verified: true,
+        ..Options::default()
+    }).await;
+    runtime.notice("activation", Some("rspack-quota-breakpoints-armed")).await;
+    assert_eq!(runtime.navigations.load(Ordering::Acquire), 0);
+    let calls = runtime.finish(false).await;
+    assert_eq!(methods(&calls, "Debugger.setBreakpointByUrl"), 2);
+    assert_eq!(methods(&calls, "Debugger.removeBreakpoint"), 2);
+    assert_eq!(methods(&calls, "Debugger.disable"), 1);
+    assert_eq!(expressions(&calls, "window.__cockpitQuotaCompat.installLiveQuotaGuard()"), 0);
 }
 
 #[tokio::test]

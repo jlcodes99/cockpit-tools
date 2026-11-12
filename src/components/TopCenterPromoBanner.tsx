@@ -1,21 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useTranslation } from 'react-i18next';
-import { useTopRightAdStore } from '../stores/useTopRightAdStore';
 import type { TopRightAd } from '../types/topRightAd';
 import { normalizeApiKeyFunOfficialUrl } from '../utils/apikeyFunLinks';
 
 interface TopCenterPromoBannerProps {
-  reserveWhenEmpty?: boolean;
-  ads?: TopRightAd[];
+  ads: TopRightAd[];
 }
 
 const PROMO_ROTATION_INTERVAL_MS = 6000;
 
-export function TopCenterPromoBanner({ reserveWhenEmpty = true, ads: adsOverride }: TopCenterPromoBannerProps) {
+export function TopCenterPromoBanner({ ads }: TopCenterPromoBannerProps) {
   const { t } = useTranslation();
-  const storeAds = useTopRightAdStore((state) => state.state.ads);
-  const ads = adsOverride ?? storeAds;
   const [activeIndex, setActiveIndex] = useState(0);
   const [paused, setPaused] = useState(false);
 
@@ -50,9 +46,7 @@ export function TopCenterPromoBanner({ reserveWhenEmpty = true, ads: adsOverride
     }
   }, [ad?.ctaUrl]);
 
-  if (!ad) {
-    return reserveWhenEmpty ? <div className="global-promo-center global-promo-center-placeholder" aria-hidden="true" /> : null;
-  }
+  if (!ad) return null;
 
   return (
     <div
@@ -66,9 +60,7 @@ export function TopCenterPromoBanner({ reserveWhenEmpty = true, ads: adsOverride
         <span className="global-ad-slot-badge">
           {ad.badge || t('common.topRightAd.badge', '广告')}
         </span>
-        <div className="global-promo-main">
-          <p className="global-promo-text">{ad.text}</p>
-        </div>
+        <p className="global-promo-text" title={ad.text}>{ad.text}</p>
         {ad.ctaUrl ? (
           <button className="global-ad-slot-action" onClick={handleClick}>
             {ad.ctaLabel || t('common.topRightAd.action', '查看详情')}

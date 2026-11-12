@@ -895,9 +895,18 @@ fn mock_manual_callback_is_singleflight_with_loopback_and_preserves_pending_on_e
         assert!(submit_callback_url(&login.login_id, &invalid)
             .await
             .is_err());
-        let response = http::client(5).unwrap().get(&invalid).send().await.unwrap();
+        assert!(poll_login(&login.login_id).await.unwrap().error.is_none());
+        let forged = invalid.replace("?state=", "?state=forged-");
+        assert_ne!(forged, invalid);
+        let client = http::client(5).unwrap();
+        assert_eq!(client.get(&forged).send().await.unwrap().status(), 400);
+        assert!(poll_login(&login.login_id).await.unwrap().error.is_none());
+        let incomplete = callback.replace("&client_id=oaiapp_test", "");
+        let response = client.get(&incomplete).send().await.unwrap();
         assert_eq!(response.status(), 400);
-        assert_eq!(poll_login(&login.login_id).await.unwrap().status, "pending");
+        let status = poll_login(&login.login_id).await.unwrap();
+        assert_eq!(status.status, "pending");
+        assert_eq!(status.error.as_deref(), Some("CHATGPT_PLAN_INVALID_CALLBACK"));
         assert_eq!(fixture.state.lock().unwrap().code_started, 0);
         fixture.state.lock().unwrap().code_delay = true;
         let (manual, loopback) = tokio::join!(

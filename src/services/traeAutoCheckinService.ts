@@ -1,3 +1,4 @@
+import type { LocalHistoryRead } from '../hooks/useLocalHistory';
 /**
  * Trae CN 自动签到服务。
  * 调度与持久化在 Rust 后台（modules/trae_auto_checkin.rs），本文件只做
@@ -5,6 +6,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { createCheckinConfigMigration } from './checkinConfigMigration';
 
 export interface TraeAccountScheduleState {
   scheduledDate: string; // "YYYY-MM-DD"
@@ -44,19 +46,18 @@ function isValidTime(time: unknown): time is string {
 // 配置变更统一走 Tauri 事件（Rust emit）；前端保存后的 UI 同步由调用方自行 setState
 function cacheConfigLocally(config: TraeAutoCheckinConfig): void {
   cachedConfig = config;
-  if (typeof window === 'undefined') {
-    return;
-  }
-  try {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-  } catch (err) {
-    console.warn('[TraeAutoCheckin] 本地缓存保存失败:', err);
-  }
+
 }
+
+const migrateLegacyConfig = createCheckinConfigMigration(
+  'migrate_trae_auto_checkin_config',
+  readLegacyConfig,
+);
 
 export async function getTraeAutoCheckinConfigAsync(): Promise<TraeAutoCheckinConfig> {
   try {
-    const config = await invoke<TraeAutoCheckinConfig>('get_trae_auto_checkin_config');
+    const config = await migrateLegacyConfig()
+      ?? await invoke<TraeAutoCheckinConfig>('get_trae_auto_checkin_config');
     cacheConfigLocally(config);
     return config;
   } catch (err) {
@@ -66,16 +67,17 @@ export async function getTraeAutoCheckinConfigAsync(): Promise<TraeAutoCheckinCo
 }
 
 export function getTraeAutoCheckinConfig(): TraeAutoCheckinConfig {
-  if (cachedConfig) {
-    return cachedConfig;
-  }
+  return cachedConfig ?? readLegacyConfig() ?? DEFAULT_TRAE_AUTO_CHECKIN_CONFIG;
+}
+
+function readLegacyConfig(): TraeAutoCheckinConfig | undefined {
   if (typeof window === 'undefined') {
-    return DEFAULT_TRAE_AUTO_CHECKIN_CONFIG;
+    return undefined;
   }
   try {
     const raw = localStorage.getItem(CONFIG_KEY);
     if (!raw) {
-      return DEFAULT_TRAE_AUTO_CHECKIN_CONFIG;
+      return undefined;
     }
     const parsed = JSON.parse(raw);
     const config: TraeAutoCheckinConfig = {
@@ -93,10 +95,9 @@ export function getTraeAutoCheckinConfig(): TraeAutoCheckinConfig {
           ? parsed.deviceIds
           : undefined,
     };
-    cachedConfig = config;
     return config;
   } catch {
-    return DEFAULT_TRAE_AUTO_CHECKIN_CONFIG;
+    return undefined;
   }
 }
 
@@ -139,8 +140,8 @@ export interface TraeAutoCheckinLogRecord {
   details: TraeAutoCheckinAccountDetail[];
 }
 
-export async function getTraeAutoCheckinLogsAsync(): Promise<TraeAutoCheckinLogRecord[]> {
-  return await invoke<TraeAutoCheckinLogRecord[]>('get_trae_auto_checkin_logs');
+export function getTraeAutoCheckinLogsAsync(retry = false): Promise<LocalHistoryRead<TraeAutoCheckinLogRecord>> {
+  return invoke<LocalHistoryRead<TraeAutoCheckinLogRecord>>('get_trae_auto_checkin_logs', { retry });
 }
 
 export async function clearTraeAutoCheckinLogsAsync(): Promise<void> {

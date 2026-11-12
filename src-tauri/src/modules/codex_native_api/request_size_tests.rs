@@ -172,7 +172,8 @@ async fn unfinished_http_upload_still_times_out_without_reaching_account_selecti
         false,
         false,
         Options {
-            request_timeout: Duration::from_millis(100),
+            request_timeout: Duration::from_secs(5),
+            request_body_timeout: Some(Duration::from_millis(100)),
             ..Default::default()
         },
     )

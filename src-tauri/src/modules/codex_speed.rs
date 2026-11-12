@@ -6,6 +6,9 @@ use toml_edit::{value, Document};
 
 use crate::models::codex::{CodexAppSpeed, CodexAppSpeedConfig};
 
+pub(crate) const CLIENT_SERVICE_TIER_HEADER: &str = "x-cockpit-service-tier";
+pub(crate) const CLIENT_SERVICE_TIER_VALUE: &str = "client";
+
 const APP_SPEED_PREFERENCE_FILE: &str = "codex_api_service_speed.json";
 const CONFIG_FILE: &str = "config.toml";
 const GLOBAL_STATE_FILE: &str = ".codex-global-state.json";
@@ -126,14 +129,25 @@ fn read_global_state_json(path: &Path) -> Result<Option<Map<String, Value>>, Str
     }
 }
 
-fn write_global_state_json(path: &Path, state: &Map<String, Value>) -> Result<(), String> {
+fn write_global_state_json(
+    path: &Path,
+    state: &Map<String, Value>,
+    defer_replace_denial: bool,
+) -> Result<bool, String> {
     let content = serde_json::to_string(state)
         .map_err(|err| format!("序列化 Codex 全局状态失败: {}", err))?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| format!("创建 Codex 配置目录失败: {}", err))?;
     }
-    crate::modules::atomic_write::write_string_atomic(path, &content)
-        .map_err(|err| format!("写入 Codex 全局状态失败: {}", err))?;
+    let written = if defer_replace_denial && cfg!(target_os = "windows") {
+        crate::modules::atomic_write::write_string_atomic_defer_windows_replace_denial(path, &content)
+    } else {
+        crate::modules::atomic_write::write_string_atomic(path, &content).map(|_| true)
+    }
+    .map_err(|err| format!("写入 Codex 全局状态失败: {}", err))?;
+    if !written {
+        return Ok(false);
+    }
     if let Err(error) = crate::modules::atomic_write::write_string_atomic(
         &PathBuf::from(format!("{}.bak", path.to_string_lossy())),
         &content,
@@ -144,7 +158,7 @@ fn write_global_state_json(path: &Path, state: &Map<String, Value>) -> Result<()
             error
         ));
     }
-    Ok(())
+    Ok(true)
 }
 
 fn legacy_service_tier_value(speed: &CodexAppSpeed) -> Value {
@@ -154,7 +168,11 @@ fn legacy_service_tier_value(speed: &CodexAppSpeed) -> Value {
         .unwrap_or(Value::Null)
 }
 
-fn sync_legacy_service_tier_state(base_dir: &Path, speed: &CodexAppSpeed) -> Result<bool, String> {
+fn sync_legacy_service_tier_state(
+    base_dir: &Path,
+    speed: &CodexAppSpeed,
+    defer_replace_denial: bool,
+) -> Result<bool, String> {
     let path = get_global_state_path_for_dir(base_dir);
     let Some(mut state) = read_global_state_json(&path)? else {
         return Ok(false);
@@ -172,16 +190,21 @@ fn sync_legacy_service_tier_state(base_dir: &Path, speed: &CodexAppSpeed) -> Res
     let atoms = atoms
         .as_object_mut()
         .ok_or("Codex persisted atom 状态不是合法对象")?;
+    let legacy_tier = legacy_service_tier_value(speed);
+    if atoms.get(DESKTOP_DEFAULT_SERVICE_TIER_KEY) == Some(&legacy_tier)
+        && atoms.get(HAS_USER_CHANGED_SERVICE_TIER_KEY) == Some(&Value::Bool(true))
+    {
+        return Ok(true);
+    }
     atoms.insert(
         DESKTOP_DEFAULT_SERVICE_TIER_KEY.to_string(),
-        legacy_service_tier_value(speed),
+        legacy_tier,
     );
     atoms.insert(
         HAS_USER_CHANGED_SERVICE_TIER_KEY.to_string(),
         Value::Bool(true),
     );
-    write_global_state_json(&path, &state)?;
-    Ok(true)
+    write_global_state_json(&path, &state, defer_replace_denial)
 }
 
 fn read_official_app_speed_config_from_config_toml(
@@ -369,29 +392,34 @@ fn top_level_service_tier_value(speed: &CodexAppSpeed) -> &'static str {
 fn write_app_speed_for_base_dir(
     base_dir: &Path,
     speed: CodexAppSpeed,
+    defer_legacy_replace_denial: bool,
 ) -> Result<CodexAppSpeedConfig, String> {
     let config = write_app_speed_for_config_toml_path(
         get_config_toml_path_for_dir(base_dir),
         speed.clone(),
     )?;
-    if !sync_legacy_service_tier_state(base_dir, &speed)? {
-        crate::modules::logger::log_warn(&format!(
-            "Codex 速度设置已保存到 config.toml；全局状态异常，未同步旧版速度字段: path={}",
-            base_dir.display()
-        ));
-    }
+    sync_legacy_service_tier_state(base_dir, &speed, defer_legacy_replace_denial)?;
     Ok(config)
 }
 
 pub fn write_official_app_speed(speed: CodexAppSpeed) -> Result<CodexAppSpeedConfig, String> {
-    write_app_speed_for_base_dir(&crate::modules::codex_account::get_codex_home(), speed)
+    write_app_speed_for_base_dir(&crate::modules::codex_account::get_codex_home(), speed, false)
 }
 
 pub fn write_app_speed_for_dir(
     base_dir: &Path,
     speed: CodexAppSpeed,
 ) -> Result<CodexAppSpeedConfig, String> {
-    write_app_speed_for_base_dir(base_dir, speed)
+    write_app_speed_for_base_dir(base_dir, speed, false)
+}
+
+pub(crate) fn write_app_speed_for_launch(
+    base_dir: &Path,
+    speed: CodexAppSpeed,
+) -> Result<CodexAppSpeedConfig, String> {
+    // Launch uses config.toml as the authority. An occupied legacy atom file
+    // can be synced the next time the profile starts.
+    write_app_speed_for_base_dir(base_dir, speed, true)
 }
 
 pub fn get_api_service_app_speed_config() -> Result<CodexAppSpeedConfig, String> {
@@ -399,6 +427,31 @@ pub fn get_api_service_app_speed_config() -> Result<CodexAppSpeedConfig, String>
         &get_preference_path()?,
         read_preferred_speed()?.unwrap_or_default(),
     ))
+}
+
+pub(crate) fn resolve_app_speed_for_launch(
+    profile_dir: &Path,
+    instance_speed: CodexAppSpeed,
+) -> Result<CodexAppSpeed, String> {
+    resolve_app_speed_for_launch_with(profile_dir, instance_speed, read_preferred_speed)
+}
+
+fn resolve_app_speed_for_launch_with(
+    profile_dir: &Path,
+    instance_speed: CodexAppSpeed,
+    read_service_speed: impl FnOnce() -> Result<Option<CodexAppSpeed>, String>,
+) -> Result<CodexAppSpeed, String> {
+    use crate::modules::codex_local_access::is_cockpit_managed_local_access_config;
+
+    let config = profile_dir.join("config.toml");
+    match fs::read_to_string(&config) {
+        Ok(text) if is_cockpit_managed_local_access_config(&text) => {
+            Ok(read_service_speed()?.unwrap_or_default())
+        }
+        Ok(_) => Ok(instance_speed),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(instance_speed),
+        Err(error) => Err(format!("读取 Codex 配置失败: {}: {error}", config.display())),
+    }
 }
 
 pub fn save_api_service_app_speed(speed: CodexAppSpeed) -> Result<CodexAppSpeedConfig, String> {
@@ -525,7 +578,7 @@ mod tests {
                     fs::write(&backup, backup_content).unwrap();
                     fs::write(&older_backup, "older recovery data").unwrap();
                 }
-                assert!(!sync_legacy_service_tier_state(&dir, &CodexAppSpeed::Fast).unwrap());
+                assert!(!sync_legacy_service_tier_state(&dir, &CodexAppSpeed::Fast, false).unwrap());
                 for speed in [
                     CodexAppSpeed::Standard,
                     CodexAppSpeed::Fast,
@@ -558,7 +611,7 @@ mod tests {
         let backup_content = r#"{"local-projects":{"recoverable-project":{"name":"Keep"}}}"#;
         fs::write(&backup, backup_content).unwrap();
 
-        assert!(!sync_legacy_service_tier_state(&dir, &CodexAppSpeed::Fast).unwrap());
+        assert!(!sync_legacy_service_tier_state(&dir, &CodexAppSpeed::Fast, false).unwrap());
         super::write_app_speed_for_dir(&dir, CodexAppSpeed::Fast).unwrap();
 
         assert_eq!(
@@ -579,7 +632,7 @@ mod tests {
             if let Some(content) = content {
                 fs::write(&state, content).unwrap();
             }
-            assert!(sync_legacy_service_tier_state(&dir, &CodexAppSpeed::Fast).unwrap());
+            assert!(sync_legacy_service_tier_state(&dir, &CodexAppSpeed::Fast, false).unwrap());
             let saved: serde_json::Value =
                 serde_json::from_slice(&fs::read(&state).unwrap()).unwrap();
             assert_eq!(
@@ -604,6 +657,47 @@ mod tests {
         assert!(super::write_app_speed_for_dir(&dir, CodexAppSpeed::Fast).is_err());
         assert!(dir.join(GLOBAL_STATE_FILE).is_dir());
         assert!(!dir.join(format!("{GLOBAL_STATE_FILE}.bak")).exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn launch_does_not_replace_an_already_synced_legacy_state() {
+        let dir = unique_temp_dir("codex-speed-unchanged-state");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(GLOBAL_STATE_FILE);
+        let original = b"{ \"electron-persisted-atom-state\": {\"default-service-tier\": \"priority\", \"has-user-changed-service-tier\": true}, \"local-projects\": {} }\n";
+        fs::write(&path, original).unwrap();
+        super::write_app_speed_for_launch(&dir, CodexAppSpeed::Fast).unwrap();
+        assert_eq!(get_app_speed_config_for_dir(&dir).unwrap().speed, CodexAppSpeed::Fast);
+        assert_eq!(fs::read(&path).unwrap(), original);
+        assert!(!dir.join(format!("{GLOBAL_STATE_FILE}.bak")).exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_launch_keeps_locked_legacy_state_and_uses_saved_speed() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let dir = unique_temp_dir("codex-speed-locked-state");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(GLOBAL_STATE_FILE);
+        let backup = dir.join(format!("{GLOBAL_STATE_FILE}.bak"));
+        let original = br#"{"local-projects":{}}"#;
+        let old_backup = br#"{"recoverable":true}"#;
+        fs::write(&path, original).unwrap();
+        fs::write(&backup, old_backup).unwrap();
+        let opened = fs::OpenOptions::new().read(true).share_mode(0x01 | 0x02).open(&path).unwrap();
+
+        super::write_app_speed_for_launch(&dir, CodexAppSpeed::Fast).unwrap();
+        assert_eq!(get_app_speed_config_for_dir(&dir).unwrap().speed, CodexAppSpeed::Fast);
+        assert_eq!(fs::read(&path).unwrap(), original);
+        assert_eq!(fs::read(&backup).unwrap(), old_backup);
+        drop(opened);
+
+        super::write_app_speed_for_launch(&dir, CodexAppSpeed::Fast).unwrap();
+        let restored: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(restored[ELECTRON_PERSISTED_ATOM_STATE_KEY][DESKTOP_DEFAULT_SERVICE_TIER_KEY], "priority");
+        assert_eq!(restored["local-projects"], serde_json::json!({}));
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -671,6 +765,40 @@ service_tier = "flex"
             assert_eq!(fs::read_to_string(&path).unwrap(), original);
         }
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn launch_uses_service_speed_for_each_taken_over_profile() {
+        let dir = unique_temp_dir("codex-launch-api-speed");
+        let pref = dir.join("codex_api_service_speed.json");
+        let default = dir.join("default");
+        let managed = dir.join("managed");
+        let api_config = "model_provider = 'codex_local_access'\n[model_providers.codex_local_access]\nexperimental_bearer_token = 'agt_codex_test'\n";
+        for profile in [&default, &managed] {
+            fs::create_dir_all(profile).unwrap();
+            fs::write(profile.join("config.toml"), api_config).unwrap();
+        }
+        for selected in [CodexAppSpeed::Standard, CodexAppSpeed::Fast, CodexAppSpeed::Ultrafast] {
+            super::write_preferred_speed_to_path(&pref, &selected).unwrap();
+            for (profile, previous) in [
+                (&default, CodexAppSpeed::Fast),
+                (&managed, CodexAppSpeed::Standard),
+            ] {
+                let speed = super::resolve_app_speed_for_launch_with(profile, previous, || {
+                    super::read_preferred_speed_from_path(&pref)
+                }).unwrap();
+                super::write_app_speed_for_dir(profile, speed).unwrap();
+                assert_eq!(get_app_speed_config_for_dir(profile).unwrap().speed, selected);
+            }
+        }
+        fs::write(managed.join("config.toml"), "model_provider = 'openai'\n").unwrap();
+        assert_eq!(
+            super::resolve_app_speed_for_launch_with(&managed, CodexAppSpeed::Fast, || {
+                panic!("ordinary profiles must not read the service preference")
+            }).unwrap(),
+            CodexAppSpeed::Fast,
+        );
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
@@ -937,7 +1065,7 @@ default-service-tier = "priority"
         .expect("write global state");
 
         let speed: CodexAppSpeed = serde_json::from_str(r#""ultrafast""#).expect("legacy speed");
-        sync_legacy_service_tier_state(&base_dir, &speed).expect("sync service tier");
+        sync_legacy_service_tier_state(&base_dir, &speed, false).expect("sync service tier");
 
         let content = fs::read_to_string(&global_state_path).expect("read global state");
         let state: serde_json::Value = serde_json::from_str(&content).expect("parse state");
@@ -984,7 +1112,7 @@ service_tier = "ultrafast"
         )
         .expect("write global state");
 
-        sync_legacy_service_tier_state(&base_dir, &CodexAppSpeed::Fast).expect("sync service tier");
+        sync_legacy_service_tier_state(&base_dir, &CodexAppSpeed::Fast, false).expect("sync service tier");
 
         let content = fs::read_to_string(&global_state_path).expect("read global state");
         let state: serde_json::Value = serde_json::from_str(&content).expect("parse state");
@@ -1014,7 +1142,7 @@ service_tier = "ultrafast"
         )
         .expect("write global state");
 
-        sync_legacy_service_tier_state(&base_dir, &CodexAppSpeed::Standard)
+        sync_legacy_service_tier_state(&base_dir, &CodexAppSpeed::Standard, false)
             .expect("sync service tier");
 
         let content = fs::read_to_string(&global_state_path).expect("read global state");

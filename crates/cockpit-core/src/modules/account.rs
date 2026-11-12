@@ -1,3 +1,4 @@
+use crate::modules::antigravity_account_index_store::{AccountIndexStore, IndexRead, LEGACY_FILE};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -10,8 +11,6 @@ use uuid::Uuid;
 use crate::models::{Account, AccountIndex, AccountSummary, QuotaData, QuotaErrorInfo, TokenData};
 use crate::modules;
 
-static ACCOUNT_INDEX_LOCK: std::sync::LazyLock<Mutex<()>> =
-    std::sync::LazyLock::new(|| Mutex::new(()));
 static AUTO_SWITCH_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static QUOTA_ALERT_LAST_SENT: std::sync::LazyLock<Mutex<HashMap<String, i64>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -23,7 +22,6 @@ static LIST_ACCOUNTS_LOAD_LOCK: std::sync::LazyLock<Mutex<()>> =
 const QUOTA_ALERT_COOLDOWN_SECONDS: i64 = 300;
 const LIST_ACCOUNTS_CACHE_TTL_MS: u64 = 800;
 
-const ACCOUNTS_INDEX: &str = "accounts.json";
 const ACCOUNTS_DIR: &str = "accounts";
 
 #[derive(Clone)]
@@ -86,7 +84,6 @@ pub fn get_accounts_dir() -> Result<PathBuf, String> {
 }
 
 fn repair_account_index_from_details(reason: &str) -> Result<Option<AccountIndex>, String> {
-    let index_path = get_data_dir()?.join(ACCOUNTS_INDEX);
     let accounts_dir = get_accounts_dir()?;
     let mut accounts = crate::modules::account_index_repair::load_accounts_from_details(
         &accounts_dir,
@@ -117,17 +114,7 @@ fn repair_account_index_from_details(reason: &str) -> Result<Option<AccountIndex
         .collect();
     index.current_account_id = accounts.first().map(|account| account.id.clone());
 
-    let backup_path = crate::modules::account_index_repair::backup_existing_index(&index_path)
-        .unwrap_or_else(|err| {
-            modules::logger::log_warn(&format!(
-                "自动修复账号索引前备份失败，继续尝试重建: path={}, error={}",
-                index_path.display(),
-                err
-            ));
-            None
-        });
-
-    if let Err(err) = save_account_index(&index) {
+    if let Err(err) = save_account_index_locked(&index) {
         modules::logger::log_warn(&format!(
             "自动修复账号索引保存失败，将以内存结果继续运行: reason={}, recovered_accounts={}, error={}",
             reason,
@@ -137,78 +124,133 @@ fn repair_account_index_from_details(reason: &str) -> Result<Option<AccountIndex
     }
 
     modules::logger::log_warn(&format!(
-        "检测到账号索引异常，已根据详情文件自动重建: reason={}, recovered_accounts={}, backup_path={}",
-        reason,
-        index.accounts.len(),
-        backup_path
-            .as_ref()
-            .map(|path| path.display().to_string())
-            .unwrap_or_else(|| "-".to_string())
+        "已根据账号详情重建索引并保留旧文件: reason={}, recovered_accounts={}",
+        reason, index.accounts.len(),
     ));
 
     Ok(Some(index))
 }
 
-/// 加载账号索引
+fn index_store() -> Result<AccountIndexStore, String> {
+    Ok(AccountIndexStore::new(get_data_dir()?))
+}
+
+fn lock_account_index() -> Result<fs::File, String> {
+    index_store()?.lock_writes()
+}
+
 pub fn load_account_index() -> Result<AccountIndex, String> {
-    let data_dir = get_data_dir()?;
-    let index_path = data_dir.join(ACCOUNTS_INDEX);
-
-    if !index_path.exists() {
-        if let Some(index) = repair_account_index_from_details("索引文件不存在")? {
+    let store = index_store()?;
+    match store.load()? {
+        IndexRead::Active(index) => return Ok(index),
+        IndexRead::Legacy(index) if !index.accounts.is_empty() => {
+            schedule_index_store(store);
             return Ok(index);
         }
-        return Ok(AccountIndex::new());
+        _ => {}
     }
+    let _lock = store.lock_writes()?;
+    load_account_index_locked()
+}
 
-    let content =
-        fs::read_to_string(&index_path).map_err(|e| format!("读取账号索引失败: {}", e))?;
-
-    if content.trim().is_empty() {
-        if let Some(index) = repair_account_index_from_details("索引文件为空")? {
-            return Ok(index);
-        }
-        return Ok(AccountIndex::new());
-    }
-
-    match crate::modules::atomic_write::parse_json_with_auto_restore::<AccountIndex>(
-        &index_path,
-        &content,
-    ) {
-        Ok(index) => {
-            if index.accounts.is_empty() {
-                if let Some(repaired) = repair_account_index_from_details("索引账号列表为空")?
-                {
-                    return Ok(repaired);
-                }
-            }
+fn load_account_index_locked() -> Result<AccountIndex, String> {
+    let store = index_store()?;
+    match store.load()? {
+        IndexRead::Active(index) => Ok(index),
+        IndexRead::Legacy(index) if !index.accounts.is_empty() => {
+            schedule_index_store(store);
             Ok(index)
         }
-        Err(e) => {
-            if let Some(index) = repair_account_index_from_details("索引文件损坏")? {
+        IndexRead::Legacy(index) => Ok(
+            repair_account_index_from_details("索引账号列表为空")?.unwrap_or(index),
+        ),
+        IndexRead::Missing => Ok(
+            repair_account_index_from_details("旧索引缺失或为空")?.unwrap_or_default(),
+        ),
+        IndexRead::InvalidLegacy(error) => {
+            if let Some(index) = repair_account_index_from_details("旧索引损坏")? {
                 return Ok(index);
             }
             Err(crate::error::file_corrupted_error(
-                ACCOUNTS_INDEX,
-                &index_path.to_string_lossy(),
-                &e.to_string(),
+                LEGACY_FILE,
+                &store.legacy_path().to_string_lossy(),
+                &error,
             ))
         }
     }
 }
 
-/// 保存账号索引
-pub fn save_account_index(index: &AccountIndex) -> Result<(), String> {
-    let data_dir = get_data_dir()?;
-    let index_path = data_dir.join(ACCOUNTS_INDEX);
-
-    let content =
-        serde_json::to_string_pretty(index).map_err(|e| format!("序列化账号索引失败: {}", e))?;
-
-    crate::modules::atomic_write::write_string_atomic(&index_path, &content)
-        .map_err(|e| format!("写入账号索引失败: {}", e))?;
+fn save_account_index_locked(index: &AccountIndex) -> Result<(), String> {
+    index_store()?.replace(index)?;
     invalidate_list_accounts_cache();
     Ok(())
+}
+
+#[cfg(test)]
+fn save_account_index(index: &AccountIndex) -> Result<(), String> {
+    let _lock = lock_account_index()?;
+    save_account_index_locked(index)
+}
+
+pub(crate) fn schedule_index_store<T>(store: crate::modules::antigravity_account_index_store::IndexStore<T>)
+where
+    T: crate::modules::antigravity_account_index_store::IndexDocument + Send + 'static,
+{
+    let key = store.migration_key();
+    schedule_index_job(key, move || store.migrate_batch());
+}
+
+pub(crate) fn schedule_index_job(
+    key: String,
+    mut batch: impl FnMut() -> Result<bool, String> + Send + 'static,
+) {
+    static MIGRATING: std::sync::LazyLock<Mutex<HashSet<String>>> =
+        std::sync::LazyLock::new(|| Mutex::new(HashSet::new()));
+    let Ok(mut jobs) = MIGRATING.lock() else { return };
+    if !jobs.insert(key.clone()) { return; }
+    drop(jobs);
+    let task_key = key.clone();
+    let worker = std::thread::Builder::new().name("account-index-migration".into()).spawn(move || {
+        loop {
+            match batch() {
+                Ok(true) => break,
+                Ok(false) => std::thread::sleep(std::time::Duration::from_millis(150)),
+                Err(error) => {
+                    modules::logger::log_warn(&format!("[AccountIndex] {error}"));
+                    break;
+                }
+            }
+        }
+        if let Ok(mut jobs) = MIGRATING.lock() { jobs.remove(&task_key); }
+    });
+    if let Err(error) = worker {
+        if let Ok(mut jobs) = MIGRATING.lock() { jobs.remove(&key); }
+        modules::logger::log_warn(&format!("[AccountIndex] 无法启动索引迁移: {error}"));
+    }
+}
+
+pub(crate) fn list_after_cli_index_batches<T>(
+    mut batch: impl FnMut() -> Result<bool, String>,
+    list: impl FnOnce() -> Result<Vec<T>, String>,
+) -> Result<(Vec<T>, Option<String>), String> {
+    use std::time::{Duration, Instant};
+
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let warning = loop {
+        match batch() {
+            Ok(true) => break None,
+            Ok(false) if Instant::now() >= deadline => {
+                break Some("账号索引恢复暂未完成，已保留进度，请重试".to_string());
+            }
+            Ok(false) => std::thread::sleep(Duration::from_millis(15)),
+            Err(error) => break Some(error),
+        }
+    };
+    match (list(), warning) {
+        (Ok(accounts), Some(warning)) if !accounts.is_empty() => Ok((accounts, Some(warning))),
+        (_, Some(error)) => Err(error),
+        (accounts, None) => accounts.map(|accounts| (accounts, None)),
+    }
 }
 
 /// 加载账号数据
@@ -220,14 +262,7 @@ pub fn load_account(account_id: &str) -> Result<Account, String> {
         return Err(format!("账号不存在: {}", account_id));
     }
 
-    let content =
-        fs::read_to_string(&account_path).map_err(|e| format!("读取账号数据失败: {}", e))?;
-
-    let mut account = crate::modules::atomic_write::parse_json_with_auto_restore::<Account>(
-        &account_path,
-        &content,
-    )
-    .map_err(|e| format!("解析账号数据失败: {}", e))?;
+    let mut account: Account = crate::modules::secure_account_storage::read_account_file(&account_path)?;
     // 若账号已有可用模型配额，但残留了由 retrieveUserQuotaSummary 产生的假性 SUBSCRIPTION_REQUIRED 错误，自动修复
     if let Some(ref q) = account.quota {
         if !q.models.is_empty() {
@@ -270,11 +305,23 @@ pub fn save_account(account: &Account) -> Result<(), String> {
     let accounts_dir = get_accounts_dir()?;
     let account_path = accounts_dir.join(format!("{}.json", account.id));
 
-    let content =
-        serde_json::to_string_pretty(account).map_err(|e| format!("序列化账号数据失败: {}", e))?;
-
-    crate::modules::atomic_write::write_string_atomic(&account_path, &content)
-        .map_err(|e| format!("保存账号数据失败: {}", e))?;
+    crate::modules::secure_account_storage::write_account_file_preserving_fields(
+        &account_path,
+        "antigravity",
+        account,
+        &[(
+            "",
+            &[
+                "two_factor_secret",
+                "account_password",
+                "phone_number",
+                "mail_url",
+                "aux_email",
+                "pending_oauth",
+            ],
+        )],
+    )
+    .map_err(|e| format!("保存账号数据失败: {}", e))?;
     invalidate_list_accounts_cache();
     Ok(())
 }
@@ -472,10 +519,8 @@ pub fn upsert_account(
     token: TokenData,
 ) -> Result<Account, String> {
     let email = email.trim().to_string();
-    let _lock = ACCOUNT_INDEX_LOCK
-        .lock()
-        .map_err(|e| format!("获取锁失败: {}", e))?;
-    let mut index = load_account_index()?;
+    let _lock = lock_account_index()?;
+    let mut index = load_account_index_locked()?;
     let existing_account_id = find_matching_account_id(&index, &email, &token)?.or_else(|| {
         index
             .accounts
@@ -530,16 +575,14 @@ pub fn upsert_account(
     if index.current_account_id.is_none() {
         index.current_account_id = Some(account.id.clone());
     }
-    save_account_index(&index)?;
+    save_account_index_locked(&index)?;
     Ok(account)
 }
 
 /// 删除账号
 pub fn delete_account(account_id: &str) -> Result<(), String> {
-    let _lock = ACCOUNT_INDEX_LOCK
-        .lock()
-        .map_err(|e| format!("获取锁失败: {}", e))?;
-    let mut index = load_account_index()?;
+    let _lock = lock_account_index()?;
+    let mut index = load_account_index_locked()?;
 
     let original_len = index.accounts.len();
     index.accounts.retain(|s| s.id != account_id);
@@ -552,7 +595,7 @@ pub fn delete_account(account_id: &str) -> Result<(), String> {
         index.current_account_id = index.accounts.first().map(|s| s.id.clone());
     }
 
-    save_account_index(&index)?;
+    save_account_index_locked(&index)?;
 
     let accounts_dir = get_accounts_dir()?;
     let account_path = accounts_dir.join(format!("{}.json", account_id));
@@ -566,12 +609,8 @@ pub fn delete_account(account_id: &str) -> Result<(), String> {
 
 /// 批量删除账号
 pub fn delete_accounts(account_ids: &[String]) -> Result<(), String> {
-    let _lock = ACCOUNT_INDEX_LOCK
-        .lock()
-        .map_err(|e| format!("获取锁失败: {}", e))?;
-    let mut index = load_account_index()?;
-
-    let accounts_dir = get_accounts_dir()?;
+    let _lock = lock_account_index()?;
+    let mut index = load_account_index_locked()?;
 
     for account_id in account_ids {
         index.accounts.retain(|s| &s.id != account_id);
@@ -580,25 +619,42 @@ pub fn delete_accounts(account_ids: &[String]) -> Result<(), String> {
             index.current_account_id = None;
         }
 
-        let account_path = accounts_dir.join(format!("{}.json", account_id));
-        if account_path.exists() {
-            let _ = fs::remove_file(&account_path);
-        }
+
     }
 
     if index.current_account_id.is_none() {
         index.current_account_id = index.accounts.first().map(|s| s.id.clone());
     }
 
-    save_account_index(&index)
+    save_account_index_locked(&index)?;
+    let accounts_dir = get_accounts_dir()?;
+    let mut cleanup_error = None;
+    for account_id in account_ids {
+        let path = accounts_dir.join(format!("{account_id}.json"));
+        if let Err(error) = remove_deleted_account_file(&path) {
+            cleanup_error.get_or_insert(error);
+        }
+    }
+    match cleanup_error {
+        Some(error) => Err(format!("账号索引已更新，清理账号文件失败: {error}")),
+        None => Ok(()),
+    }
 }
+
+fn remove_deleted_account_file(path: &std::path::Path) -> Result<(), String> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+
 
 /// 重新排序账号列表
 pub fn reorder_accounts(account_ids: &[String]) -> Result<(), String> {
-    let _lock = ACCOUNT_INDEX_LOCK
-        .lock()
-        .map_err(|e| format!("获取锁失败: {}", e))?;
-    let mut index = load_account_index()?;
+    let _lock = lock_account_index()?;
+    let mut index = load_account_index_locked()?;
 
     let id_to_summary: std::collections::HashMap<_, _> = index
         .accounts
@@ -621,13 +677,15 @@ pub fn reorder_accounts(account_ids: &[String]) -> Result<(), String> {
 
     index.accounts = new_accounts;
 
-    save_account_index(&index)
+    save_account_index_locked(&index)
 }
 
 /// 获取当前账号 ID
 pub fn get_current_account_id() -> Result<Option<String>, String> {
-    let index = load_account_index()?;
-    Ok(index.current_account_id)
+    if let Some(current) = index_store()?.active_current()? {
+        return Ok(current);
+    }
+    Ok(load_account_index()?.current_account_id)
 }
 
 /// 获取当前激活账号
@@ -643,12 +701,17 @@ pub fn get_current_account() -> Result<Option<Account>, String> {
 
 /// 设置当前激活账号 ID
 pub fn set_current_account_id(account_id: &str) -> Result<(), String> {
-    let _lock = ACCOUNT_INDEX_LOCK
-        .lock()
-        .map_err(|e| format!("获取锁失败: {}", e))?;
-    let mut index = load_account_index()?;
-    index.current_account_id = Some(account_id.to_string());
-    save_account_index(&index)?;
+    let _lock = lock_account_index()?;
+    if index_store()?.set_active_current(account_id)? {
+        invalidate_list_accounts_cache();
+    } else {
+        let mut index = load_account_index_locked()?;
+        if !index.accounts.iter().any(|account| account.id == account_id) {
+            return Err(format!("找不到账号 ID: {account_id}"));
+        }
+        index.current_account_id = Some(account_id.to_string());
+        save_account_index_locked(&index)?;
+    }
 
     // 同时写入 current_account.json 供扩展读取
     if let Ok(account) = load_account(account_id) {
@@ -1189,6 +1252,10 @@ fn build_auto_switch_reason(
         rule: context.rule.clone(),
         threshold: context.threshold,
         scope_mode: context.scope_mode.clone(),
+        credits_enabled: false,
+        credits_threshold: None,
+        credits_triggered: false,
+        current_credits_remaining: None,
         selected_group_ids: context.selected_group_ids.clone(),
         selected_group_names: context.selected_group_names.clone(),
         hit_groups: context.hit_groups.clone(),
@@ -1830,9 +1897,13 @@ pub async fn switch_account_internal(account_id: &str) -> Result<Account, String
     Ok(account)
 }
 
-fn persist_switch_history(item: modules::antigravity_switch_history::AntigravitySwitchHistoryItem) {
-    if let Err(err) = modules::antigravity_switch_history::add_history_item(item) {
-        modules::logger::log_warn(&format!("写入 Antigravity IDE 切号记录失败: {}", err));
+async fn persist_switch_history(item: modules::antigravity_switch_history::AntigravitySwitchHistoryItem) {
+    let result = tokio::task::spawn_blocking(move || modules::antigravity_switch_history::add_history_item(item))
+        .await
+        .map_err(|error| error.to_string())
+        .and_then(|result| result);
+    if let Err(error) = result {
+        modules::logger::log_warn(&format!("保存 Antigravity 切号记录失败: {error}"));
     }
 }
 
@@ -1930,7 +2001,7 @@ pub async fn switch_account_dual_no_restart(
                     seamless_finished_at: None,
                     auto_switch_reason: auto_switch_reason.clone(),
                 },
-            );
+            ).await;
             return Err(error);
         }
     };
@@ -1963,7 +2034,7 @@ pub async fn switch_account_dual_no_restart(
                     seamless_finished_at: None,
                     auto_switch_reason: auto_switch_reason.clone(),
                 },
-            );
+            ).await;
             if error.starts_with("APP_PATH_NOT_FOUND:") {
                 return Err(error);
             }
@@ -2018,7 +2089,7 @@ pub async fn switch_account_dual_no_restart(
                     seamless_finished_at: Some(response.finished_at),
                     auto_switch_reason: auto_switch_reason.clone(),
                 },
-            );
+            ).await;
             Ok(account)
         }
         Ok(response) => {
@@ -2047,7 +2118,7 @@ pub async fn switch_account_dual_no_restart(
                     seamless_finished_at: Some(response.finished_at),
                     auto_switch_reason: auto_switch_reason.clone(),
                 },
-            );
+            ).await;
             Err(format!(
                 "本地切换已完成，但扩展无感切号失败: {}",
                 response
@@ -2081,7 +2152,7 @@ pub async fn switch_account_dual_no_restart(
                     seamless_finished_at: None,
                     auto_switch_reason,
                 },
-            );
+            ).await;
             Err(format!("本地切换已完成，但扩展无感切号失败: {}", error))
         }
     }

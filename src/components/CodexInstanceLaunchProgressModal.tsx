@@ -490,7 +490,11 @@ export function CodexInstanceLaunchProgressModal() {
       }
       case "writeProfile":
         return [t("instances.accountLease.detail.profileReady"),
-          ...(step.details.sessionMaintenanceDeferred ? [t("codex.launchConfirmation.maintenanceDeferred")] : [])];
+          ...(step.details.sessionMaintenanceDeferred ? [
+            typeof step.details.projectRecoveryDeferredMessage === "string"
+              ? step.details.projectRecoveryDeferredMessage
+              : t("codex.launchConfirmation.maintenanceDeferred"),
+          ] : [])];
       case "startClient":
         if (state.status === "unconfirmed") return [t("codex.launchConfirmation.description")];
         return step.details.launchMode === "cli"

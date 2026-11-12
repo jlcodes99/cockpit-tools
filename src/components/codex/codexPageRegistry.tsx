@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { TFunction } from 'i18next';
-import { Clock3, FolderOpen, Globe2, Layers, PanelTop, Server } from 'lucide-react';
+import { ChartNoAxesCombined, Clock3, FolderOpen, Globe2, Layers, PanelTop, Server } from 'lucide-react';
 import type { CodexTab } from '../CodexOverviewTabsHeader';
 import { CodexIcon } from '../icons/CodexIcon';
 
@@ -15,5 +15,6 @@ export function codexPageRegistry(t: TFunction): CodexRegisteredPage[] {
     { id: 'sessions', label: t('codex.sessionManager.title'), icon: <FolderOpen className="tab-icon" /> },
     { id: 'proxy', label: t('codex.proxy.management'), icon: <Globe2 className="tab-icon" /> },
     { id: 'top-layout', label: t('codex.more.topLayoutTitle'), icon: <PanelTop className="tab-icon" /> },
+    { id: 'quota-history', label: t('codex.quotaHistory.title'), icon: <ChartNoAxesCombined className="tab-icon" /> },
   ];
 }

@@ -26,6 +26,8 @@ pub struct CursorAccount {
     pub cursor_auth_raw: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor_usage_raw: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sand_usage: Option<CursorSandUsage>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
@@ -40,6 +42,13 @@ pub struct CursorAccount {
 
     pub created_at: i64,
     pub last_used: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CursorSandUsage {
+    pub percent_used: f64,
+    pub reset_at: Option<i64>,
+    pub stale: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,6 +69,12 @@ pub struct CursorAccountSummary {
 pub struct CursorAccountIndex {
     pub version: String,
     pub accounts: Vec<CursorAccountSummary>,
+    #[serde(skip)]
+    pub(crate) storage_revision: crate::modules::provider_account_index::Revision,
+    #[serde(skip)]
+    pub(crate) detail_recovery_complete: bool,
+    #[serde(skip)]
+    pub(crate) detail_recovery_requires_account: bool,
 }
 
 impl CursorAccountIndex {
@@ -67,6 +82,9 @@ impl CursorAccountIndex {
         Self {
             version: "1.0".to_string(),
             accounts: Vec::new(),
+            storage_revision: Default::default(),
+            detail_recovery_complete: false,
+            detail_recovery_requires_account: false,
         }
     }
 }

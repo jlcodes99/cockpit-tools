@@ -15,6 +15,7 @@ fn prepared_history() -> Prepared {
         .rewrite(&context, "a", "owner", &mut headers, &mut body)
         .unwrap();
     Prepared {
+        reasoning_ceiling_proof: None,
         preflight_attempts: Vec::new(),
         execution: crate::modules::codex_native_api::execution::Execution::from_deadline(
             Default::default(),

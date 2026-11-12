@@ -695,6 +695,8 @@
 
     fn build_antigravity_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {
         let accounts = modules::account::list_accounts().unwrap_or_default();
+        let config = modules::config::get_user_config();
+        let metric = config.menu_bar_antigravity_metric.trim();
         let current_id = modules::account::get_current_account()
             .ok()
             .flatten()
@@ -712,7 +714,13 @@
             .into_iter()
             .map(|account| {
                 let quota = account.quota.as_ref();
-                let quota_rows = build_antigravity_quota_rows(lang, quota);
+                let quota_rows = build_antigravity_quota_rows(lang, quota, metric);
+                let remaining_percent = if metric.is_empty() {
+                    min_quota_progress(&quota_rows, true)
+                } else {
+                    quota.and_then(|quota| selected_antigravity_menu_quota(quota, metric))
+                        .map(|model| model.percentage.clamp(0, 100))
+                };
                 AccountCard {
                     id: account.id,
                     title: account.email,
@@ -722,7 +730,7 @@
                         account.last_used,
                         account.created_at,
                     ),
-                    remaining_percent: min_quota_progress(&quota_rows, true),
+                    remaining_percent,
                     quota_rows,
                 }
             })

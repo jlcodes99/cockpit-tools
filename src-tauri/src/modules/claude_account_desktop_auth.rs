@@ -388,7 +388,7 @@ fn launch_default_claude_desktop() -> Result<(), String> {
         .map_err(|e| format!("Failed to launch Claude Desktop: {}", e))
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 fn launch_default_claude_desktop() -> Result<(), String> {
     let pid = crate::modules::claude_instance::start_claude_default_with_args_with_new_window(
         &[],
@@ -401,7 +401,7 @@ fn launch_default_claude_desktop() -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 fn launch_default_claude_desktop() -> Result<(), String> {
     Err("APP_PATH_NOT_FOUND:claude".to_string())
 }
@@ -2649,18 +2649,12 @@ fn inject_api_key_to_claude_code_settings(
 
     fs::create_dir_all(&config_dir).map_err(|e| format!("创建 Claude Code 配置目录失败: {}", e))?;
     let mut settings = read_config_file(&settings_path)?.unwrap_or_else(|| json!({}));
-    if !settings.is_object() {
-        settings = json!({});
-    }
 
     let keys_to_clear = managed_env_keys_for_settings(&settings_path);
     let object = settings
         .as_object_mut()
         .ok_or_else(|| "Claude settings.json 结构非法".to_string())?;
     let env_value = object.entry("env".to_string()).or_insert_with(|| json!({}));
-    if !env_value.is_object() {
-        *env_value = json!({});
-    }
     let env_object = env_value
         .as_object_mut()
         .ok_or_else(|| "Claude settings.json env 结构非法".to_string())?;

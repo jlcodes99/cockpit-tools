@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from 'react';
-import { getMfaOtpToken, rememberMfaQuery } from '../utils/mfaVault';
+import { getMfaOtpToken } from '../utils/mfaVault';
+import { rememberMfaQuery } from '../services/mfaRecoveryService';
 
 interface RememberMfaQueryOptions {
   enabled: boolean;
@@ -21,7 +22,8 @@ export function useRememberMfaQuery({
   const remember = useCallback(() => {
     const normalizedSecret = secret.trim();
     if (!enabled || !normalizedSecret || !getMfaOtpToken(normalizedSecret)) return;
-    rememberMfaQuery({ secret: normalizedSecret, accountName, remark });
+    void rememberMfaQuery({ secret: normalizedSecret, accountName, remark })
+      .catch(() => console.warn('[2FA] Could not save query history'));
   }, [accountName, enabled, remark, secret]);
 
   useEffect(() => {

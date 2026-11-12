@@ -7,7 +7,7 @@ use crate::models::codex::{
 use crate::modules::{account, codex_oauth, logger};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION};
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(test)))]
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -52,7 +52,7 @@ fn derived_auto_compact_token_limit(context_window: i64) -> i64 {
     }
     context_window.saturating_mul(CODEX_AUTO_COMPACT_RATIO_PERCENT) / 100
 }
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(test)))]
 const CODEX_KEYCHAIN_SERVICE: &str = "Codex Auth";
 const CODEX_AUTO_SWITCH_ACCOUNT_SCOPE_ALL: &str = "all_accounts";
 const CODEX_AUTO_SWITCH_ACCOUNT_SCOPE_SELECTED: &str = "selected_accounts";
@@ -916,24 +916,6 @@ fn migrate_codex_data_if_needed(new_data_dir: &PathBuf) {
     let old_dir = get_old_codex_data_dir();
     if !old_dir.exists() {
         return;
-    }
-
-    // 迁移 codex_accounts.json
-    let old_index = old_dir.join("codex_accounts.json");
-    let new_index = new_data_dir.join("codex_accounts.json");
-    if old_index.exists() && !new_index.exists() {
-        match fs::copy(&old_index, &new_index) {
-            Ok(_) => {
-                logger::log_info("[Codex Migration] codex_accounts.json 迁移成功，清理旧文件");
-                let _ = fs::remove_file(&old_index);
-            }
-            Err(e) => {
-                logger::log_warn(&format!(
-                    "[Codex Migration] codex_accounts.json 迁移失败: {}",
-                    e
-                ));
-            }
-        }
     }
 
     // 迁移 codex_accounts/ 目录

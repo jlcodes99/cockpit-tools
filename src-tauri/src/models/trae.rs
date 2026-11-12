@@ -75,6 +75,8 @@ pub struct TraeAccountSummary {
 pub struct TraeAccountIndex {
     pub version: String,
     pub accounts: Vec<TraeAccountSummary>,
+    #[serde(skip)]
+    pub(crate) storage_revision: crate::modules::provider_account_index::Revision,
 }
 
 impl TraeAccountIndex {
@@ -82,6 +84,7 @@ impl TraeAccountIndex {
         Self {
             version: "1.0".to_string(),
             accounts: Vec::new(),
+            storage_revision: Default::default(),
         }
     }
 }

@@ -158,10 +158,28 @@
     "providerClear": "Clear selection"
   },
   "common": {
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all",
+    "syncing": "Syncing…",
+    "notice": "Notice",
+    "gotIt": "Got it!",
+    "unknown": "Unknown",
+    "noData": "No data",
+    "search": "Search",
+    "rename": "Rename",
+    "yes": "Yes",
+    "no": "No",
+    "saved": "Saved",
+    "done": "Done",
+    "edit": "Edit",
+    "windowMinimize": "Minimize",
+    "windowMaximize": "Maximize",
+    "windowRestore": "Restore",
     "profileRestoreBusy": "Login state is being restored. Try again shortly.",
     "profileRestoreInvalid": "The login snapshot path is invalid. Import the account again.",
     "profileRestoreRecoveryFailed": "Login recovery failed. The backup was retained: {{detail}}",
     "dataQueryBusy": "Data is being processed. Please try again shortly.",
+    "historyRestoring": "Restoring history…",
     "apiBudget": {
       "keyScope": "This key",
       "upgradeRequired": "Update Cockpit Tools on the gateway computer to view statistics and request history.",
@@ -396,6 +414,33 @@
       "action": "View details"
     },
     "shared": {
+      "quotaCategories": {
+        "other": "Other",
+        "extra": "Add-on pack",
+        "activity": "Promo pack",
+        "base": "Base pack"
+      },
+      "webSession": {
+        "openFailed": "Could not open the web session: {{error}}",
+        "opened": "Web session opened: {{email}}",
+        "open": "Open web session"
+      },
+      "addAccountTargetGroup": "Will be added to {{group}}",
+      "checkin": {
+        "saveFailed": "Failed to save auto check-in settings: {{message}}",
+        "manualTestPartialFailure": "Some accounts failed to check in. See the records; a background retry will run later.",
+        "manualTestAlreadyRunning": "An auto check-in task is already running. Please check the records later.",
+        "manualTestFailed": "Test run failed: {{message}}",
+        "clearLogsFailed": "Failed to clear check-in records: {{message}}",
+        "tabSettings": "Auto Check-in Settings",
+        "tabHistory": "Auto Check-in History",
+        "historyRangeHint": "Only the last 30 days of auto check-in records are kept ({{count}} total)",
+        "manualTest": "Test Run",
+        "clearLogs": "Clear",
+        "historyLoadFailed": "Failed to load auto check-in records: {{message}}",
+        "historyLoading": "Loading auto check-in records...",
+        "noHistory": "No auto check-in records in the last 30 days"
+      },
       "addAccount": "Add Account",
       "columns": {
         "actions": "Actions",
@@ -428,6 +473,7 @@
       },
       "filterLabel": "Filter",
       "import": {
+        "file": "Choose file",
         "failedMsg": "Import failed: {{error}}",
         "label": "Import",
         "importing": "Importing...",
@@ -526,6 +572,15 @@
       "refreshQuota": "Refresh Quota",
       "search": "Search accounts...",
       "sort": {
+        "name": "By name",
+        "customReset": "Reset custom order",
+        "customModalDesc": "Drag accounts or use the up and down buttons to adjust the display order.",
+        "customModalTitle": "Custom account order",
+        "customSettingsTooltip": "Configure custom order",
+        "custom": "Custom order",
+        "dragToReorder": "Drag to reorder",
+        "moveUp": "Move up",
+        "moveDown": "Move down",
         "ascTooltip": "Current: Ascending. Click to switch to descending",
         "createdAt": "Created time",
         "descTooltip": "Current: Descending. Click to switch to ascending",
@@ -740,9 +795,9 @@
     },
     "qoder": "Qoder",
     "trae": "Trae",
-    "traeSolo": "TRAE SOLO",
+    "traeSolo": "TraeWork",
     "traeCn": "Trae CN",
-    "traeSoloCn": "TRAE SOLO CN",
+    "traeSoloCn": "TraeWork CN",
     "codebuddyCn": "CodeBuddy CN",
     "minimaxcode": "MiniMax Code",
     "switchClassicLayoutEntry": "Switch to classic layout",
@@ -886,6 +941,14 @@
     "copyKey": "Copy Key",
     "clearKey": "Clear input",
     "keyManager": {
+      "prefillOpened": "The add dialog in {{target}} is open. Review the details and save.",
+      "checkpointAvailable": "The key vault file is missing. Restore verifies the local backup first. Changes since the backup may be missing.",
+      "restoreCheckpoint": "Restore local backup",
+      "checkpointRestoreFailed": "Could not verify or restore the local key backup.",
+      "exportLegacy": "Export plaintext JSON",
+      "legacyExportFailed": "Could not export the legacy key list.",
+      "vaultLoadFailed": "Could not load saved keys.",
+      "vaultWriteFailed": "Could not save key changes.",
       "title": "Key Manager",
       "desc": "Save API Keys for quick switching and automatic quota checks.",
       "saveButton": "Save key",
@@ -919,6 +982,7 @@
       "useKey": "Use key"
     },
     "prefill": {
+      "codexReady": "APIKEY.FUN settings are filled in. Review them before adding to Codex.",
       "claudeDesktopReady": "APIKEY.FUN settings are filled in. Confirm to add them to Claude."
     },
     "table": {
@@ -950,6 +1014,7 @@
     }
   },
   "platformLayout": {
+    "customIconStorageFailed": "Could not save the custom icon. Local storage may be full. Remove unused custom icons and try again.",
     "title": "Platform Layout",
     "sidebarSelected": "Sidebar selected {{count}}/{{max}}",
     "sidebarSelectedUnlimited": "Sidebar selected {{count}}",
@@ -1026,6 +1091,7 @@
       "submit": "Import"
     },
     "actions": {
+      "duplicate": "Duplicate instance",
       "create": "New Instance",
       "refresh": "Refresh",
       "startAll": "Start All",
@@ -1084,6 +1150,7 @@
       "editTitle": "Edit Instance"
     },
     "form": {
+      "copyName": "{{name}} copy",
       "name": "Instance Name",
       "namePlaceholder": "e.g. Work Account",
       "path": "Instance Directory",
@@ -1150,6 +1217,41 @@
         }
       },
       "modelRouting": {
+        "deselectModel": "Deselect",
+        "selectModel": "Select",
+        "manageAction": "Manage channels",
+        "missingSource": "Route missing",
+        "disabledSource": "Route disabled",
+        "unavailableSource": "Account unavailable",
+        "modelUnavailable": "Model no longer in API catalog",
+        "provider": "Select API account",
+        "namespacePlaceholder": "Prefix",
+        "deleteRoute": "Remove channel",
+        "loadedModels": "Loaded models",
+        "enabledTotal": "Enabled / total",
+        "fetchModels": "Fetch list",
+        "manualPlaceholder": "E.g. gpt-5.6-sol, grok-4.6",
+        "channelsSummary": "Third-party API channels",
+        "manageChannels": "Set up channels",
+        "noChannels": "No third-party API channels",
+        "addRoute": "Add channel",
+        "unnamedAccount": "No account selected",
+        "routesCount": "Channels: {{count}}",
+        "statusBadge": "Hybrid routing",
+        "catalogUnavailable": "Cockpit cannot manage this instance’s visible model catalog, so routing cannot be enabled.",
+        "desktopOnly": "Model routing is available only for desktop instances.",
+        "oauthRequired": "Link an OAuth subscription account that supports direct sign-in.",
+        "routeRequired": "Add at least one API route.",
+        "invalidNamespace": "Use 2–32 lowercase Latin letters, digits, underscores, or hyphens. Reserved names are unavailable. Start with a letter or digit.",
+        "duplicateNamespace": "Each route must have a unique prefix.",
+        "providerRequired": "Select an API account for each route.",
+        "enabledRouteRequired": "Enable at least one API route.",
+        "createHint": "Copy the default instance when creating one to skip Codex setup. An empty instance must be launched once first.",
+        "fetchCredentialsRequired": "This account is missing an API key or base URL.",
+        "fetchEmpty": "The provider returned no models. You can add them manually below.",
+        "noProviderAccounts": "No API accounts are available. Add a supported provider on the API Accounts page.",
+        "noCatalog": "No models fetched yet. Fetch the list or add models manually.",
+        "modalDescription": "Configure third-party API accounts and model prefixes. Models without a prefix continue to use the current subscription.",
         "title": "Third-party API routing",
         "summary": "Unprefixed models use the current subscription; prefixed models such as cpa/gpt-5.6-sol are forwarded to a third-party API. Both depend on the local routing service.",
         "rowSummary": "Unprefixed models use the current subscription; prefixed models such as cpa/gpt-5.6-sol are forwarded to a third-party API. Both depend on the local routing service.",
@@ -1175,7 +1277,7 @@
       "appSpeed": "Speed",
       "appSpeedDesc": "Writes the selected speed before starting official Codex",
       "autoSyncThreads": "Auto-sync sessions",
-      "autoSyncThreadsDesc": "Off keeps multi-instance sessions isolated. When enabled, starting or closing an instance automatically merges local session records only after all Codex instances are stopped."
+      "autoSyncThreadsDesc": "Off keeps instance histories separate. When enabled, stopping an instance syncs missing sessions and matching additions only once all Codex instances have stopped. Existing content is preserved. Sync may copy large session files."
     },
     "quota": {
       "unbound": "No bound account",
@@ -1317,6 +1419,11 @@
     "title": "Settings",
     "subtitle": "Customize your Cockpit Tools experience.",
     "general": {
+      "accountLevelRefreshSummary": "Show settings",
+      "accountLevelRefreshSummaryActive": "Accounts configured: {{count}}",
+      "accountLevelRefreshDesc": "Set a different automatic refresh interval for each account to override the platform default.",
+      "accountLevelRefreshTitle": "Per-account refresh",
+      "accountLevelRefreshInherit": "Inherit platform",
       "errorReporting": "Diagnostics",
       "errorReportingDesc": "When enabled, submits startup and interface diagnostics after sanitization. Turning it off stops submissions.",
       "appearance": "Appearance",
@@ -1365,6 +1472,8 @@
       "minimizeBehaviorDesc": "Choose whether minimizing keeps the window in the Dock and menu bar, or only in the menu bar",
       "minimizeBehaviorDockAndTray": "Dock + Menu Bar (Recommended)",
       "minimizeBehaviorTrayOnly": "Menu Bar Only",
+      "showTrayIcon": "Show tray icon",
+      "showTrayIconDesc": "Background tasks keep running when the icon is hidden. Restore the window from the Dock or taskbar.",
       "hideDockIcon": "Hide Dock icon (macOS only)",
       "hideDockIconDesc": "Control Dock icon visibility independently; not affected by window minimize behavior",
       "hideDockIconOff": "No (Show Dock icon)",
@@ -1423,7 +1532,7 @@
       "vscodeAppPathPlaceholder": "Default path",
       "vscodePathSelect": "Select",
       "vscodePathReset": "Reset to default",
-      "antigravityAppPath": "Antigravity IDE App Path",
+      "antigravityAppPath": "{{appName}} App Path",
       "antigravityTitle": "Antigravity IDE Launch",
       "commonTitle": "Common",
       "antigravitySettingsTitle": "Antigravity IDE Settings",
@@ -1517,14 +1626,14 @@
       "platformAutoRefresh": "{{platform}} Auto Refresh Quota",
       "traeAutoRefreshDesc": "Background auto-refresh interval",
       "traeAppPath": "Trae Launch Path",
-      "traeSoloAppPath": "TRAE SOLO Launch Path",
+      "traeSoloAppPath": "TraeWork Launch Path",
       "traeCnAppPath": "Trae CN Launch Path",
-      "traeSoloCnAppPath": "TRAE SOLO CN Launch Path",
+      "traeSoloCnAppPath": "TraeWork CN Launch Path",
       "traeAppPathDesc": "Leave empty for default path",
       "traeAppPathPlaceholder": "Default path",
       "traePathSelect": "Select",
       "traePathReset": "Reset to default",
-      "workbuddyAppPath": "WorkBuddy Launch Path",
+      "workbuddyAppPath": "WorkBuddy China path",
       "workbuddyAppPathDesc": "Leave empty for default path",
       "workbuddyAppPathPlaceholder": "Default path",
       "workbuddyPathSelect": "Select",
@@ -1621,13 +1730,15 @@
       "menuBarQuotaConfigure": "Configure",
       "menuBarQuotaModalTitle": "Menu bar quota",
       "menuBarQuotaModalDesc": "Options for menu bar quota only: follow the selected platform’s current account. For Codex API Service: “API + pool remaining %”; for API Key accounts: “API + remaining balance”; for normal accounts: email prefix + remaining % (lowest of quotas; red/orange/green).",
+      "menuBarAntigravityMetric": "Menu bar quota",
+      "menuBarQuotaLowest": "Lowest quota",
       "menuBarQuotaPlatform": "Quota account platform",
       "menuBarQuotaPlatformDesc": "Uses that platform’s active account; updates after refresh or switch",
       "menuBarAccountPrefix": "Show first 4 email chars",
       "menuBarAccountPrefixDesc": "Normal accounts only: when off, hide email prefix. Codex API Service / API Key still show the API label",
       "menuBarQuotaConfirmEnable": "Enable",
-      "codexHideRelayQuota": "Hide relay quota",
-      "codexHideRelayQuotaDesc": "When on, Codex account overview hides mid-relay / New API style balance panels to reduce clutter.",
+      "codexHideRelayQuota": "Balance",
+      "codexHideRelayQuotaDesc": "Turn off to hide Codex relay balances and stop automatic and manual balance checks.",
       "floatingCardStyle": "Floating style",
       "floatingCardStyleDesc": "Shared by all floating windows. You can also change it in the window.",
       "floatingCardFull": "Full card",
@@ -1812,6 +1923,7 @@
         "unsupportedLegacyFile": "This legacy account backup format is not recognized",
         "codexTopLayoutInvalid": "The backup contains an invalid tab layout. Configuration was not imported.",
         "codexTopLayoutImportFailed": "Other settings were imported, but the tab layout could not be saved. Retry the import.",
+        "platformLayoutImportFailed": "Some settings may have been imported. The platform layout could not be saved. Retry the import.",
         "unsupportedVersion": "This app version does not support that bundle version"
       }
     },
@@ -1830,12 +1942,13 @@
       "saveFailed": "Save failed: {{error}}",
       "reportTitle": "Web Query Service",
       "reportService": "HTTP Report Service",
-      "reportServiceDesc": "Expose a token-protected HTTP endpoint for usage summaries",
+      "reportServiceDesc": "The service starts when saved and on future app launches. Access requires a token.",
       "reportPort": "Report Port",
-      "reportPortDesc": "Default is {{port}}, restart required after change",
+      "reportPortDesc": "Default port is {{port}}. Changes take effect when saved.",
       "reportToken": "Access Token",
       "reportTokenDesc": "Required when requesting /report, keep it private",
       "reportTokenRequired": "Access token cannot be empty when report service is enabled.",
+      "reportApplyFailed": "Settings saved, but the report service could not start. {{error}}",
       "generateToken": "Generate",
       "reportUrlPreview": "Endpoint Preview",
       "reportUrlPreviewDesc": "Supports format=md / format=yaml, and render=true for HTML view",
@@ -1998,6 +2111,8 @@
   },
   "appPath": {
     "missing": {
+      "scanEmpty": "No running app was found. Start it and retry, or choose its path manually.",
+      "scanEmptyGeneric": "{{app}} was not detected running. Start it and retry, or choose its path manually.",
       "title": "Application path not found",
       "desc": "Could not find the {{app}} application path. Please set it now to continue.",
       "codexLaunchHint": "Account switch is done. Set the path to launch the app. To skip launching after switch, turn off \"Launch Codex App when switching Codex\" in Settings.",
@@ -2101,6 +2216,8 @@
     "clearFilter": "Clear Filter",
     "editTags": "Edit Tags",
     "tagModal": {
+      "renamePlaceholder": "New tag name",
+      "renamingGlobal": "Renaming this tag across all accounts:",
       "title": "Account Tags",
       "hint": "Up to {{max}} tags. Each tag can be at most {{maxLength}} characters.",
       "empty": "No tags",
@@ -2382,8 +2499,8 @@
       "oauthAction": "OAuth Authorization",
       "fromExtension": "Import from Plugin",
       "syncBadge": "Sync Antigravity Cockpit plugin accounts",
-      "fromLocalDB": "Import from Local DB",
-      "localDBDesc": "Read login accounts from Antigravity IDE Client on this machine",
+      "fromLocalApp": "Import from local app",
+      "localAppDesc": "Read login accounts from {{appName}} Client on this machine",
       "toolsDescMigrate": "Migrate accounts from ~/.antigravity_tools/",
       "importingTools": "Importing from Antigravity Tools...",
       "importingLocal": "Importing local account...",
@@ -2400,6 +2517,7 @@
       "resetTime": "Reset Time"
     },
     "errors": {
+      "viewVerificationDetail": "Verification details",
       "title": "Error Details",
       "empty": "No error details",
       "account": "Account",
@@ -2427,6 +2545,8 @@
     "switchFailed": "Switch failed: {{error}}",
     "antigravitySwitchBusy": "An Antigravity account switch is in progress. Try again shortly.",
     "antigravitySwitchPrepareTimeout": "Antigravity account preparation timed out. Please retry.",
+    "antigravityWindowsCredentialStoreCapacity": "Windows Credential Manager may be full. In Control Panel, open User Accounts, then Credential Manager. Remove only Windows credentials you no longer use and retry.",
+    "antigravityWindowsCredentialTooLarge": "This credential exceeds the Windows limit of 2,560 bytes per entry.",
     "antigravitySwitchStateSaveFailed": "Client credentials switched, but saving local account state failed: {{error}}. Retry the switch.",
     "antigravityLegacyUnsupported": "Antigravity 2.0.0 and later is not supported here. Choose an Antigravity version below 2.0.0, or use Antigravity IDE.",
     "importSuccess": "Successfully imported {{count}} accounts",
@@ -2493,6 +2613,7 @@
     "historyClear": "Clear history",
     "historyPromptLabel": "Prompt: {{prompt}}",
     "errorUi": {
+      "officialLanguageServerUnavailable": "No language server was found for wakeup. Install the Antigravity desktop app or an IDE version that includes a language server. Checked folders: {{path}}.",
       "verificationRequiredTitle": "Verification required",
       "quotaTitle": "Quota limit",
       "temporaryTitle": "Temporary error",
@@ -2557,6 +2678,8 @@
       "crontabRequired": "Please enter a crontab expression",
       "crontabValid": "Crontab expression is valid",
       "crontabInvalid": "Crontab expression is invalid",
+      "stateLoadFailed": "Could not load wakeup tasks: {{error}}",
+      "stateSaveFailed": "Could not save wakeup tasks: {{error}}",
       "taskSaved": "Task \"{{name}}\" saved",
       "featureOff": "Wakeup disabled",
       "featureOn": "Wakeup enabled",
@@ -2599,7 +2722,9 @@
       "modeScheduled": "📅 Scheduled",
       "modeCrontab": "🧩 Crontab",
       "modeQuotaReset": "🔄 Quota reset",
-      "antigravityVersion": "Antigravity IDE Version",
+      "transportMode": "Wakeup method",
+      "transportLanguageServer": "Language server",
+      "transportClientless": "Clientless wakeup",
       "modelSelect": "Model selection",
       "modelHint": "For the same quota group, choose one model. Multiple models trigger in sequence.",
       "modelsEmpty": "No recommended models",
@@ -2693,6 +2818,7 @@
     "stopApiServiceFailedContinue": "The API service did not stop cleanly. Restarting anyway..."
   },
   "closeDialog": {
+    "minimizeWindow": "Minimize",
     "title": "Close Window",
     "description": "Choose an action when closing the window",
     "minimize": "Minimize to Tray",
@@ -2709,6 +2835,10 @@
     "other_group": "Other Models"
   },
   "codex": {
+    "cli": {
+      "launchSuccess": "Codex CLI launched",
+      "selectWorkingDir": "Choose Codex CLI working folder"
+    },
     "resetAutomation": {
       "nothingToReset": "No quota window needs a reset right now.",
       "unknownOutcome": "Could not confirm the reset result. Try again.",
@@ -2787,6 +2917,59 @@
         "threadSyncFileBusy": "Another sync operation is using the target session. Try again shortly."
       }
     },
+    "quotaHistory": {
+      "storage": {
+        "title": "History storage",
+        "usage": "{{records}} records · {{size}} on disk",
+        "loadFailed": "Unable to read history storage.",
+        "enabled": "Record history",
+        "onlyChanges": "Record changes only",
+        "autoCleanup": "Auto-clean expired records",
+        "intervalMinutes": "Record interval (min)",
+        "retentionDays": "Keep for (days)",
+        "cleanupEveryDays": "Clean every (days)",
+        "validRange": "Enter a whole number from 1 to {{max}}.",
+        "recordScope": "Record accounts",
+        "allAccounts": "All accounts",
+        "selectedAccounts": "Selected accounts",
+        "saveFailed": "Unable to save history settings.",
+        "saved": "History settings saved.",
+        "cleanup": "Clean history",
+        "cleanupAccounts": "Accounts to clean",
+        "cleanupRange": "Records to clean",
+        "expired": "Expired",
+        "dates": "Date range",
+        "all": "All records",
+        "fromDate": "From date",
+        "toDate": "Through date",
+        "invalidDates": "Choose a valid date range.",
+        "cleanupFailed": "Cleanup failed. Preview again before retrying.",
+        "previewCount": "About {{records}} records will be deleted.",
+        "confirmCleanup": "Confirm deletion",
+        "preview": "Preview cleanup",
+        "deleted": "Deleted {{records}} records."
+      },
+      "title": "Quota history",
+      "chart": "Chart",
+      "details": "Details",
+      "onlyChanges": "Changes only",
+      "noChanges": "No quota changes in this period.",
+      "sampledAt": "Sample time",
+      "changeFromPrevious": "Change from previous sample",
+      "points": "{{value}} pp",
+      "account": "Account",
+      "interval": "Interval (min)",
+      "intervalInvalid": "Enter a whole number from 1 to 1440.",
+      "empty": "No quota samples in this period.",
+      "readFailed": "Could not load quota history.",
+      "noAccount": "Add a Codex subscription account to see its quota history."
+    },
+    "quotaRecovery": {
+      "title": "Quota recovery reminder",
+      "description": "PushPlus sends a reminder when a refresh finds that remaining quota rose to at least 90%. External network access must be enabled.",
+      "token": "PushPlus token",
+      "settingsError": "Could not load or save reminder settings."
+    },
     "thresholds": {
       "shortCycle": "Short-cycle quota",
       "weekly": "Weekly quota",
@@ -2838,7 +3021,7 @@
     "contextOverride": {
       "title": "Context management",
       "description": "Models, ordering, the default model, and reasoning levels follow the official catalog. Context is overridden only when you set it manually.",
-      "dialogDescription": "This setting applies to every account in the current Codex instance and stays unchanged when accounts switch. Choose official settings, a preset, or Custom context.",
+      "dialogDescription": "This setting applies to every account in the current Codex instance and stays unchanged when accounts switch. Choose official settings, a preset, or Custom context. A preset or custom context overrides the catalog context window for every model.",
       "followOfficial": "Follow official",
       "custom": "Custom context",
       "automatic": "Automatic",
@@ -2866,6 +3049,10 @@
       "enabledHint": "Uses the current visible-model list. Restart Codex to apply.",
       "disabledHint": "When disabled, the Cockpit-managed model catalog is removed and official model visibility is restored; available models are determined by the official account entitlement.",
       "models": {
+        "addCustomBlank": "New custom model",
+        "addAll": "Add all ({{count}})",
+        "added": "Added",
+        "source": "Source",
         "title": "Model list",
         "model": "Model",
         "default": "Default model",
@@ -2932,9 +3119,9 @@
         "autoDisabled": "Auto sync for all instance records is off",
         "autoEnabled": "Auto sync for all instance records is on",
         "autoTooltip": "Auto sync all instance records",
-        "autoDesc": "When off, instance histories remain separate. When enabled, starting or stopping an instance synchronizes missing sessions and matching history additions only while all Codex instances are stopped. Existing bytes are preserved.",
+        "autoDesc": "Off keeps instance histories separate. When enabled, stopping an instance syncs missing sessions and matching additions only once all Codex instances have stopped. Existing content is preserved. Sync may copy large session files.",
         "closeFirst": "Close all Codex instances before syncing records to prevent running instances from writing old records back.",
-        "confirmMessage": "Add missing sessions across all instances and append new content only when the target instance is stopped and its history matches. Existing bytes are preserved. Updates to diverged histories or running targets are rejected. Target files are backed up before writing. Continue?",
+        "confirmMessage": "Add missing sessions across all instances and append new content only when the target instance is stopped and its history matches. Existing bytes are preserved. Updates to diverged histories or running targets are rejected. Target files are backed up before writing. Sync can copy large session files. Continue?",
         "needTwo": "At least two instances are required to sync records",
         "settingsSection": "Sync Settings",
         "settingsSubtitle": "Manage Codex multi-instance record sync behavior",
@@ -2960,6 +3147,10 @@
     "refreshAllSuccess": "Refresh completed, {{count}} account(s) succeeded",
     "refreshAllPartialFailed": "Refresh completed, {{success}} / {{total}} account(s) succeeded and some failed",
     "launchPreview": {
+      "providerAccessAutomatic": "Automatic",
+      "providerAccessDirect": "Direct upstream",
+      "providerAccessGatewayHint": "Requests go through the instance gateway.",
+      "providerAccessCdpHint": "CDP loads the model list into the desktop client.",
       "configLoading": "Loading instance configuration…",
       "configRefreshing": "Checking instance configuration. Existing details remain available.",
       "configLoadTimeout": "Loading instance configuration timed out. Please retry.",
@@ -3144,6 +3335,7 @@
       "reauthEmailLabel": "Reauth account"
     },
     "token": {
+      "importPartial": "Import finished. Succeeded: {{success}}, failed: {{failed}}. {{errors}}",
       "desc": "Paste auth.json, Agent Identity, account JSON, Sub2API JSON, accessToken, personal access token at-…, or refresh_token.",
       "placeholder": "Example: auth_mode=agentIdentity, session JSON, accessToken, at-…, Sub2API JSON, or refresh_token only",
       "formatSummary": "Required fields and examples",
@@ -3295,7 +3487,7 @@
         "custom": "Custom",
         "save": "Save model",
         "placeholder": "Enter custom model ID",
-        "description": "Used for /v1/images/generations and /v1/images/edits; default is gpt-image-2.5.",
+        "description": "Default model: {{model}}",
         "required": "Enter an image model name",
         "tooLong": "Image model name is too long",
         "saveSuccess": "Image model updated"
@@ -3329,7 +3521,7 @@
       "enableService": "Enable Service",
       "testAction": "Test",
       "testDialogTitle": "Test API Service",
-      "testDialogDesc": "Start a real playground-style chat through the current API service to check the model, account routing, and upstream response.",
+      "testDialogDesc": "Test chat or image generation through the current API service.",
       "testProgressTitle": "Testing service",
       "testProgressDesc": "Sending a real request to the local API service. Please wait.",
       "testOutputTitle": "Returned result",
@@ -3534,6 +3726,7 @@
         "planHighFirst": "High Plan First",
         "planLowFirst": "Low Plan First",
         "expirySoonFirst": "Expiry Soon First",
+        "fiveHourResetSoonFirst": "Soonest 5h reset",
         "random": "Random",
         "custom": "Custom"
       },
@@ -3660,7 +3853,7 @@
       "clientBaseUrlHostSaveSuccess": "Client address updated",
       "testChatModel": "Model",
       "testChatClear": "Clear chat",
-      "testChatEmpty": "Send a message to start a real chat through the current API service.",
+      "testChatEmpty": "Select a model and send a message or an image prompt.",
       "testChatLatency": "{{latency}} elapsed",
       "testChatSending": "Requesting API service",
       "testChatInputPlaceholder": "Type a test message, Enter to send",
@@ -3687,6 +3880,7 @@
       "hideApiKey": "Hide API Key",
       "apiKeyHiddenHint": "API Key hidden. Click to show.",
       "modelCatalog": {
+        "restartHint": "The model catalog was updated. If Codex is running, restart it to apply the changes.",
         "label": "Model List",
         "fetch": "Fetch from Provider",
         "fetching": "Fetching...",
@@ -3863,6 +4057,8 @@
       }
     },
     "modelProviders": {
+      "updateApiKeyFailed": "Could not update the API key: {{error}}",
+      "editApiKey": "Edit API key",
       "keyModels": {
         "title": "Key models",
         "override": "Override",
@@ -3908,6 +4104,8 @@
         "supportsWebsockets": "WebSocket Transport"
       },
       "validation": {
+        "apiKeyExists": "This API key already exists for this provider",
+        "apiKeyRequired": "Enter an API key",
         "nameRequired": "Provider name is required.",
         "baseUrlInvalid": "Invalid Base URL.",
         "baseUrlExists": "This Base URL already exists.",
@@ -3945,6 +4143,8 @@
         "anthropic": "Anthropic Messages",
         "gatewayRequired": "This protocol requires the local gateway. Select a launch model here."
       },
+      "searchSavedProviders": "Search providers",
+      "noMatchingSavedProviders": "No matching providers",
       "selectSavedProvider": "Saved Providers",
       "selectSavedApiKey": "Saved API Keys",
       "selectSavedApiKeyPlaceholder": "Select API key",
@@ -4028,6 +4228,7 @@
         "checkModelsApi": "Confirm this provider returns an OpenAI-compatible models response."
       },
       "batchTest": {
+        "firstText": "First text",
         "entry": "Test All",
         "entryHint": "Batch test real provider chat capability",
         "selectedCount": "{{count}} selected",
@@ -4114,6 +4315,15 @@
         "detailTitle": "Service Panel",
         "rawFields": "Service Data",
         "fields": {
+          "intervalRemaining": "Period remaining",
+          "intervalLimit": "Period limit",
+          "intervalRemainingPercent": "Period remaining (%)",
+          "intervalExpiresAt": "Period reset",
+          "weeklyRemaining": "Weekly remaining",
+          "weeklyLimit": "Weekly limit",
+          "weeklyRemainingPercent": "Weekly remaining (%)",
+          "weeklyExpiresAt": "Weekly reset",
+          "currency": "Currency",
           "status": "Status",
           "planName": "Plan",
           "remaining": "Remaining",
@@ -4136,6 +4346,7 @@
           "expiresAt": "Expires At",
           "totalGranted": "Granted",
           "totalAvailable": "Available",
+          "isAvailable": "Balance available",
           "modelLimitsEnabled": "Model Limits"
         },
         "accountBalance": "Account Balance",
@@ -4371,15 +4582,7 @@
       "hourly": "5-hour quota",
       "weeklyReset": "Weekly reset time",
       "hourlyReset": "5-hour reset time",
-      "subscriptionExpiry": "Subscription term",
-      "custom": "Custom order",
-      "customSettingsTooltip": "Configure custom order",
-      "customModalTitle": "Custom account order",
-      "customModalDesc": "Drag accounts or use the up and down buttons to adjust the display order.",
-      "customDragHandle": "Drag to sort",
-      "customMoveUp": "Move up",
-      "customMoveDown": "Move down",
-      "customReset": "Reset custom order"
+      "subscriptionExpiry": "Subscription term"
     },
     "opencodeSwitch": "OpenCode switch toggle",
     "opencodeSwitchDesc": "Sync Codex account info in OpenCode",
@@ -4433,6 +4636,12 @@
       "nextRunLabel": "Next run {{time}}",
       "lastRunLabel": "Last run {{time}}",
       "lastStatusLabel": "Latest result",
+      "confirmationTimedOut": "Confirmation timed out",
+      "confirmationDeclined": "Run declined",
+      "confirmationDeclinedOrExpired": "Run declined or confirmation timed out",
+      "confirmationUnavailable": "Could not request confirmation",
+      "taskRunCancelled": "Task cancelled",
+      "taskRunInterrupted": "Task interrupted",
       "lastStatusIdle": "Not run yet",
       "lastStatusSuccessSummary": "{{count}} account(s) succeeded",
       "lastStatusFailedSummary": "{{count}} account(s) failed",
@@ -4446,6 +4655,10 @@
       "taskNamePlaceholder": "For example: weekday morning wakeup",
       "taskNameRequired": "Please enter a task name.",
       "taskAccountsLabel": "Accounts",
+      "taskAccountsManual": "Manual selection",
+      "taskAccountsApiPool": "API service pool",
+      "taskAccountsApiPoolHint": "Wake the pool’s unpaused subscription accounts in order.",
+      "taskAccountsApiPoolEmpty": "The pool has no active subscription accounts.",
       "taskAccountsHint": "Only OAuth Codex accounts are supported. Multiple accounts run in sequence.",
       "taskAccountsRequired": "Please select at least one account.",
       "scheduleLabel": "Schedule",
@@ -4458,6 +4671,8 @@
       "scheduleQuotaResetHint": "When quota-reset wakeup is enabled, auto refresh will be adjusted to run every 2 minutes.",
       "quotaResetWindowLabel": "Reset window trigger condition",
       "quotaResetWindowHint": "primary_window usually maps to the 5-hour quota. For free users it may map to weekly quota, and can vary by subscription.",
+      "quotaResetDelayLabel": "Delay after reset",
+      "quotaResetDelayInvalid": "Enter a non-negative whole number of minutes within the supported range.",
       "quotaResetWindowOptions": {
         "either": "Trigger when either primary_window or secondary_window resets",
         "primary_window": "Trigger only on primary_window reset",
@@ -4701,6 +4916,14 @@
         "confirm": "Import Selected Sessions"
       },
       "repairModal": {
+        "historyDuplicateOrdinals": "The following histories have duplicate sequence numbers. History index repair skips them and Full repair cannot proceed. Select “Repair chat index” for other sessions.\n{{details}}",
+        "projectsDeferredAction": "Exit the instance and select Local projects in the session repair dialog to continue.",
+        "projectsStateSize": "Largest state file: {{file}} ({{bytes}} bytes).",
+        "projectsQuickBudget": "The quick project scan reached its limit.",
+        "projectsStateTooLarge": "The project state file exceeds the supported size.",
+        "projectsStopHint": "Exit the selected instances before recovery. You can preview changes now.",
+        "modeProjectsDesc": "Recover local projects and chat assignments. Conversation history stays intact.",
+        "modeProjects": "Local projects",
         "title": "Repair History",
         "description": "Quick repair fixes visibility indexes and current project assignments. Full repair also restores from historical snapshots and repairs chat indexes. Local backups are created before writes; chat log contents are preserved.",
         "stopInstanceHint": "Quit the selected Codex App/ChatGPT instance before a full repair. You can still preview the changes first.",
@@ -4778,7 +5001,8 @@
         "projectsPreview": "Preview: {{projects}} projects, {{assignments}} assignments; skipped {{skipped}} projects and {{ambiguous}} ambiguous chats.",
         "projectsSuccess": "Recovery complete: {{projects}} projects, {{assignments}} assignments; skipped {{skipped}} projects and {{ambiguous}} ambiguous chats.",
         "projectsPending": "A previous recovery was interrupted. Exit the target instance and run Full repair to recover unfinished writes.",
-        "projectsDeferred": "Some project metadata was deferred. Exit the target instance and retry Quick repair, or use Full repair."
+        "projectsDeferred": "Some project metadata was deferred. Exit the target instance and retry Quick repair, or use Full repair.",
+        "switchProjectsDeferred": "Credentials were updated, but local project state could not be synced. Exit the affected Codex instance and start it from Cockpit to retry."
       },
       "transferModal": {
         "exportTitle": "Export Sessions",
@@ -4952,6 +5176,8 @@
       "launchHint": "Written to client config on account switch and Cockpit launch. Restart a running client. New chats use the default; adjust existing chats with independent speed settings in the client."
     },
     "apiService": {
+      "providerQuotaStale": "Quota data is stale",
+      "providerQuotaUnitUnknown": "Unknown unit",
       "inspection": {
         "internalScope": "This is an internal client request. Check the service account pool and instance binding; it does not correspond to a public client Key.",
         "keyUnavailable": "The client Key for this request is missing or was deleted. Check current Keys and the account pool.",
@@ -4987,6 +5213,11 @@
         "responsesTitle": "Responses",
         "responsesNote": "Codex-native Responses entry.",
         "anthropicTitle": "Anthropic Messages",
+        "claudeCodeNoModels": "This key has no Claude Code preset models. Save the aliases in Model Rules first.",
+        "claudeCodeSettingsChanged": "Settings changed after the preview. Preview them again.",
+        "claudeCodeServiceUnavailable": "Could not load models for this key. Check the API Service and key status.",
+        "claudeCodeNoBackup": "No backup matches the current settings.",
+        "claudeCodeSettingsHint": "Saving merges the listed variables and encrypts a backup of the original settings. A null value removes the variable.",
         "anthropicNote": "Use the same service key.",
         "geminiTitle": "Gemini",
         "geminiNote": "Base URL uses /v1beta.",
@@ -5026,7 +5257,7 @@
         "upstreamModel": "Send",
         "addRow": "Add row",
         "fillDeepSeek": "Fill DeepSeek",
-        "empty": "No API key accounts in this pool can be mapped",
+        "empty": "No accounts support model mapping",
         "incomplete": "Fill both the request model and the sent model",
         "duplicate": "Request models must be unique",
         "saveSuccess": "Account model mappings saved",
@@ -5037,6 +5268,7 @@
         "capabilityTitle": "Capability Switches",
         "capabilityDesc": "gpt-image-2 is shown or hidden automatically based on the service switch, account plan, and recorded image capability state.",
         "rulesTitle": "Model Rules",
+        "claudeCodePreset": "Claude Code preset",
         "aliasTitle": "Model Aliases",
         "aliasPlaceholder": "gpt-5 => g5; add + to keep the original model",
         "excludedTitle": "Hidden Models",
@@ -5111,9 +5343,15 @@
         "unsaved": "Unsaved",
         "resetPolicy": "Discard Changes",
         "modelPrefix": "Model Prefix",
+        "maxReasoningEffort": "Max reasoning effort",
+        "maxReasoningHint": "Rejects requests above the limit or with an unverifiable effort.",
+        "reasoningNone": "None",
+        "reasoningMinimal": "Minimal",
         "modelPrefixPlaceholder": "Example: codex",
         "allowedModels": "Allowed Models",
         "allowedModelsPlaceholder": "Blank allows all; one model or wildcard per line",
+        "modelsOutsideAllowlist": "Models outside the allowlist",
+        "allowCurrentAndFutureModels": "Allow current and future models",
         "excludedModels": "Excluded Models",
         "excludedModelsPlaceholder": "One model or wildcard per line",
         "savePolicy": "Save Policy",
@@ -5122,8 +5360,8 @@
       "routing": {
         "optionsTitle": "Routing Options",
         "sessionIdentityMapping": "Session ID mapping",
-        "sessionIdentityMappingEnableHint": "Enabling mapping gives each upstream account independent Session-Id and Thread-Id values when switching accounts. This strengthens identifier isolation but may reduce cache reuse across accounts. Existing mappings are still reused within the same account.",
-        "sessionIdentityMappingDisableHint": "Disabling mapping preserves the original client Session-Id and Thread-Id values. Different upstream accounts may share those identifiers, weakening isolation but potentially increasing cache reuse across accounts.",
+        "sessionIdentityMappingEnableHint": "Enabling mapping gives each official Codex account independent Session-Id and Thread-Id values when switching accounts. This strengthens identifier isolation but may reduce cache reuse across accounts. Existing mappings are still reused within the same account.",
+        "sessionIdentityMappingDisableHint": "Disabling mapping preserves the original client Session-Id and Thread-Id values. Different official Codex accounts may share those identifiers, weakening isolation but potentially increasing cache reuse across accounts.",
         "sessionIdentityMappingCacheNote": "Cache hit rates also depend on upstream rules, account scope and request content. Switching this setting does not guarantee a higher or lower hit rate.",
         "sessionIdentityMappingSaveNote": "After confirming, save the settings to apply the change.",
         "sessionAffinity": "Session Affinity",
@@ -5140,6 +5378,7 @@
         "optionsSaved": "Routing options saved"
       },
       "timeouts": {
+        "retryTitle": "Send and account retries",
         "entryLabel": "Advanced",
         "openAction": "Timeouts & Retries",
         "title": "Timeouts & Retries",
@@ -5161,6 +5400,10 @@
         "bootstrapRetries": "Bootstrap retries",
         "websocketTitle": "WebSocket",
         "websocketConnect": "Connect timeout",
+        "requestBody": "Body read timeout",
+        "requestBodyHelp": "Time to receive the full HTTP request body (1–600 seconds).",
+        "websocketFragment": "Fragment timeout",
+        "websocketFragmentHelp": "Total time to receive one fragmented WebSocket message (1–600 seconds).",
         "websocketInitial": "First message timeout",
         "websocketIdle": "Idle timeout",
         "websocketHeartbeat": "Heartbeat interval",
@@ -5195,6 +5438,12 @@
         "allStatuses": "All Statuses",
         "allGatewayModes": "All Modes",
         "allInstances": "All Instances",
+        "allSources": "All Sources",
+        "connectionSource": "Connection source",
+        "peerIp": "Peer IP",
+        "sourceLocal": "This device",
+        "sourceLan": "LAN",
+        "sourceRemote": "Remote",
         "instanceFilter": "Instance",
         "instanceUnknown": "Instance -",
         "sessionFilter": "Session",
@@ -5202,7 +5451,7 @@
         "modelFilter": "Model",
         "modelPlaceholder": "Model ID",
         "accountFilter": "Account",
-        "accountPlaceholder": "Email or account ID",
+        "accountPlaceholder": "Name, email, or ID",
         "apiKeyFilter": "API Key",
         "apiKeyPlaceholder": "Name or ID",
         "kindFilter": "Type",
@@ -5294,6 +5543,9 @@
       "imported": "Imported",
       "failed": "Failed",
       "quotaOk": "Account OK",
+      "minimumQuota": "Minimum quota (%)",
+      "minimumQuotaHint": "Skip an account if any known remaining quota is below this value.",
+      "minimumQuotaEmpty": "No accounts match the quota filter.",
       "quotaFailed": "Exception",
       "checkQuotaToggle": "Check before import",
       "preparing": "Preparing import task...",
@@ -5410,6 +5662,7 @@
       "syncNow": "Sync now",
       "connectionOk": "Connected",
       "syncVerified": "SSH sync verified",
+      "connectionRefreshFailed": "Auth synced, but the SSH connection refresh did not finish. Please retry later.",
       "syncFailed": "SSH sync failed",
       "syncedAs": "Synced {{email}} · {{time}}",
       "neverSynced": "Not synced yet",
@@ -5425,13 +5678,15 @@
       "user": "User",
       "remoteDir": "Remote Codex dir",
       "syncSwitchActive": "On · {{name}} ({{user}}@{{host}})",
+      "syncSwitchActiveMultiple": "On · {{count}} servers",
+      "selectedServerCount": "{{selected}} / {{total}} selected",
       "footerHint": "The switch turns on after save; turn it off anytime to stop auto sync.",
       "formLead": "Remote host details",
       "namePlaceholder": "e.g. Home NAS",
       "syncOnSwitchHint": "After save & select, Codex switches push auth to this host",
       "addAndSave": "Add & save",
       "serverList": "Servers",
-      "serverListLead": "Pick sync target",
+      "serverListLead": "Select sync targets (multiple allowed)",
       "serverCount": "{{count}}",
       "autoSyncBadge": "Auto"
     },
@@ -5467,6 +5722,13 @@
       "restartFailed": "Failed to start the gateway: {{error}}"
     },
     "proxy": {
+      "directHosts": {
+        "title": "Codex direct hosts",
+        "hint": "Enter hostnames, IP addresses, or CIDR ranges, one rule per line. Matching destinations, such as internal MCP servers, bypass the managed Codex proxy. Client settings apply after restarting Codex.",
+        "invalid": "Enter a valid hostname, IP address, or CIDR range on each line.",
+        "loadFailed": "Could not load direct hosts.",
+        "saveFailed": "Could not save direct hosts."
+      },
       "legacyBoundHint": "The previous bound-account proxy remains active. Saving again applies the selected mode.",
       "boundAccountUnavailable": "The bound account is unavailable. Choose a proxy again.",
       "boundProxyUnavailable": "The bound account has no available proxy. Choose one again.",
@@ -6165,6 +6427,12 @@
       "done": "Done"
     },
     "cliDaemon": {
+      "profileChanged": "This profile was updated. The running CLI daemon may still use the previous account or model list.",
+      "restartWarning": "Finish active CLI tasks first. Restarting interrupts sessions connected to this daemon.",
+      "restart": "Restart CLI",
+      "restarting": "Restarting…",
+      "restarted": "CLI daemon restarted.",
+      "restartFailed": "Restart failed. Try again or copy the command to your terminal.",
       "title": "Refresh CLI account",
       "description": "Credentials were saved, but the Codex CLI daemon for this profile is still running and may retain the previous account.",
       "restartHint": "Finish active CLI tasks, then run this command in your terminal. Restarting interrupts sessions connected to this daemon.",
@@ -6191,6 +6459,9 @@
       }
     },
     "requestDiagnostics": {
+      "cloudflareGatewayError": "Cloudflare gateway error (HTTP {{status}}, Ray ID {{ray}})",
+      "responseModel": "Reported model",
+      "responseModelDiffers": "The reported model differs from the model sent.",
       "requestSizeTitle": "Request size",
       "requestSizeHint": "Decoded client JSON size; fields use compact JSON bytes. Only sizes are recorded.",
       "requestBytes": "Request",
@@ -6294,7 +6565,9 @@
       "defaultReasoning": "Default effort",
       "defaultReasoningFollow": "Inherit",
       "defaultReasoningHint": "Leave empty to inherit the model default. The selected effort must be supported.",
-      "defaultReasoningInvalid": "The default reasoning effort must be supported by this model."
+      "defaultReasoningInvalid": "The default reasoning effort must be supported by this model.",
+      "ultraReasoning": "Ultra effort",
+      "ultraReasoningInvalid": "Choose a supported reasoning effort for a model with Ultra."
     },
     "modelConfig": {
       "transfer": "Import / Export",
@@ -6412,9 +6685,57 @@
     },
     "officialApi": {
       "hint": "OpenAI API key account, identified by its actual endpoint."
+    },
+    "resetHistory": {
+      "redeemedCardId": "Redeemed card ID",
+      "windowsReset": "Quota windows reset",
+      "observations": "Usage details",
+      "effectiveRule": "Effective rule",
+      "before": "Before request",
+      "after": "After confirmation",
+      "availableCardIds": "Available card IDs",
+      "title": "Reset history",
+      "available": "Available",
+      "official": "Official history",
+      "local": "Local usage",
+      "officialHint": "Past 30 days, from official records.",
+      "localHint": "Records manual and automatic actions through this app from now on. Older data is not backfilled.",
+      "officialEmpty": "No reset activity in the past 30 days",
+      "localEmpty": "No local usage records",
+      "received": "Reset received",
+      "used": "Reset used",
+      "alreadyRedeemed": "Already redeemed (retry confirmed)",
+      "nothingToReset": "Nothing to reset; no credit used",
+      "noCredit": "No credit available",
+      "pending": "Awaiting confirmation",
+      "unconfirmed": "Outcome unconfirmed",
+      "manual": "Manual use",
+      "expiry": "Automatic · expiry",
+      "weekly": "Automatic · weekly quota",
+      "unknown": "Unknown event",
+      "requestId": "Request ID",
+      "more": "Show more",
+      "loadFailed": "Could not load history",
+      "officialUnavailable": "Official reset history is unavailable for this account"
     }
   },
   "codebuddy": {
+    "sessionManager": {
+      "statusAll": "All statuses",
+      "statusCompleted": "Completed",
+      "statusInProgress": "In progress",
+      "statusFilter": "Session status",
+      "noMatching": "No matching sessions",
+      "noSessions": "No sessions yet",
+      "untitled": "(untitled)",
+      "labels": {
+        "session": "Session",
+        "user": "User",
+        "dir": "Folder"
+      },
+      "unknownTime": "Unknown time",
+      "searchPlaceholder": "Search by title or working directory"
+    },
     "title": "CodeBuddy Account",
     "noAccounts": "No CodeBuddy accounts",
     "addAccount": "Add CodeBuddy Account",
@@ -6642,6 +6963,9 @@
     }
   },
   "quickSettings": {
+    "codexWindow": {
+      "orDivider": "Any condition can trigger this"
+    },
     "antigravity": {
       "title": "Antigravity IDE Settings",
       "appPath": "Launch Path"
@@ -6801,16 +7125,16 @@
       "appTargetPlaceholder": "Claude.exe path or shell:AppsFolder\\..."
     },
     "traeSolo": {
-      "title": "TRAE SOLO Settings",
-      "appPath": "TRAE SOLO Path"
+      "title": "TraeWork Settings",
+      "appPath": "TraeWork Path"
     },
     "traeCn": {
       "title": "Trae CN Settings",
       "appPath": "Trae CN Path"
     },
     "traeSoloCn": {
-      "title": "TRAE SOLO CN Settings",
-      "appPath": "TRAE SOLO CN Path"
+      "title": "TraeWork CN Settings",
+      "appPath": "TraeWork CN Path"
     }
   },
   "quotaAlert": {
@@ -6942,6 +7266,8 @@
   },
   "kiro": {
     "account": {
+      "signedInWithUnknown": "Sign-in provider unknown",
+      "signedInWithProvider": "Signed in with {{provider}}",
       "signedInWith": "Signed in with {{provider}}",
       "providerUnknown": "Unknown",
       "userId": "User ID"
@@ -7016,6 +7342,19 @@
     "subscription": "Subscription",
     "injectToCursor": "Switch to Cursor",
     "quota": {
+      "weeklyUsage": "Weekly usage",
+      "monthlyUsage": "Monthly usage",
+      "additionalBalance": "Credit balance",
+      "additionalMonthlyUsed": "Monthly extra usage",
+      "additionalMonthlyLimit": "Monthly extra limit",
+      "limitUnset": "Not set",
+      "autoTopUp": "Auto top-up",
+      "autoTopUpDetails": "Below {{threshold}} · Add {{amount}}",
+      "usedPercent": "{{percent}}% used",
+      "details": "Usage details",
+      "sandUsage": "Grok Bot usage",
+      "cursorModels": "Cursor Models",
+      "otherModels": "Other Models",
       "onDemand": "On-Demand"
     },
     "title": "Cursor Account",
@@ -7034,11 +7373,12 @@
       "desc": "Click the button below and complete Cursor authorization in your browser."
     },
     "token": {
-      "desc": "Paste your Cursor Access Token (JWT) or exported JSON data.",
+      "desc": "Paste a Cursor JWT, browser session token, or exported JSON.",
       "formatHint": "Required fields & examples (click to expand)",
-      "formatRequired": "Single token: paste JWT directly; batch import: use JSON array format",
+      "formatRequired": "Use a JWT or browser session token for one account. Use a JSON array for multiple accounts.",
       "singleExample": "Single example (JWT)",
-      "batchExample": "Batch example (JSON)"
+      "batchExample": "Batch example (JSON)",
+      "invalidBrowserToken": "The browser session token is malformed or its user ID does not match the JWT."
     },
     "import": {
       "localDesc": "Import account data from local Cursor client or a JSON file.",
@@ -7355,18 +7695,35 @@
     }
   },
   "qoder": {
+    "diagnostics": {
+      "launchUnconfirmed": "Could not confirm that Qoder IDE started.",
+      "workerFailed": "The Qoder background operation failed. {{detail}}",
+      "profileUninitialized": "Qoder IDE setup is incomplete. Open this profile as the current system user, quit the IDE, then retry. Folder: {{detail}}",
+      "storageUnavailable": "Qoder IDE credentials are unavailable. Make sure Cockpit and Qoder IDE run as the same system user. {{detail}}",
+      "profileConflict": "Launch arguments or environment variables point this instance to another profile. Check the instance settings. Actual folder: {{detail}}",
+      "dataRootUnavailable": "Could not resolve the Qoder IDE profile folder.",
+      "busy": "Another Qoder operation is in progress. Try again shortly.",
+      "reauthRequired": "Qoder sign-in has expired. Authorize again, or sign in to Qoder IDE and reimport.",
+      "apiUnauthorized": "The Qoder service did not authorize this request.",
+      "renewalFailed": "Could not renew Qoder credentials. Try again shortly.",
+      "sessionChanged": "The Qoder session changed. Refresh the account list and try again.",
+      "endpointUnavailable": "The service address for this Qoder session could not be verified. Check the sign-in and organization settings in the corresponding Qoder IDE.",
+      "switchLaunchFailed": "The account was written, but Qoder IDE failed to start. {{detail}}",
+      "refreshCount": "Refreshed {{count}} of {{total}} accounts."
+    },
     "title": "Qoder Account",
     "flowNotice": {
       "title": "Qoder account guide (click to expand/collapse)",
       "desc": "Supports official CLI device login authorization, local import, JSON import, account switching injection, multi-instance binding, and quota overview. Browser authorization does not require Qoder to stay running; injection writes back using Qoder client's actual on-disk rules.",
-      "permission": "Permission scope: reads Qoder local auth storage, user info, and machine identity caches such as machine_token.json and cache/id for official authorization, local import, account switching, and session injection. All data is processed locally on your machine.",
-      "network": "Network scope: OAuth authorization opens Qoder's official device login page in your browser and polls Qoder official OpenAPI to finish authorization. Quota queries call Qoder APIs for usage data. No local keys, credentials, or raw storage contents are uploaded."
+      "permission": "Local access: Cockpit reads Qoder IDE sign-in, plan, usage, and machine identity caches. Switching writes sign-in and usage data to the selected profile using OS credential protection.",
+      "network": "Network access: Browser authorization uses the Qoder sign-in page. Cockpit sends the authorization parameters, applicable machine identifiers, and tokens to the Qoder service for the session to poll sign-in, renew credentials, and query usage."
     },
     "oauth": {
       "hint": "Click the button below to complete Qoder authorization in your browser. This uses the official CLI device login flow and does not require Qoder to stay running.",
       "copyLoginUrl": "Copy Sign In URL"
     },
     "usageOverview": {
+      "enterpriseManaged": "Managed by organization",
       "title": "Usage Overview",
       "viewDetails": "View Details",
       "includedCredits": "Included Credits",
@@ -7631,6 +7988,7 @@
     "syncToWorkbuddy": "Sync to WorkBuddy"
   },
   "workbuddy": {
+    "desktopEdition": "WorkBuddy (China edition)",
     "credits": {
       "planBase": "Plan Base Credits",
       "planBonus": "Plan Bonus Credits",
@@ -7703,27 +8061,14 @@
       "endTime": "End Time",
       "timeRangeHint": "While the app is running, it selects a random time within this range daily to complete background check-in.",
       "errors": "Errors",
-      "tabSettings": "Auto Check-in Settings",
-      "tabHistory": "Auto Check-in History",
-      "manualTest": "Test Run",
-      "clearLogs": "Clear",
-      "clearLogsFailed": "Failed to clear check-in records: {{message}}",
-      "historyLoading": "Loading auto check-in records...",
-      "historyLoadFailed": "Failed to load auto check-in records: {{message}}",
       "totalCredits": "{{credits}} credits",
-      "historyRangeHint": "Only the last 30 days of auto check-in records are kept ({{count}} total)",
-      "noHistory": "No auto check-in records in the last 30 days",
-      "saveFailed": "Failed to save auto check-in settings: {{message}}",
-      "manualTestPartialFailure": "Some accounts failed to check in. See the records; a background retry will run later.",
-      "manualTestAlreadyRunning": "An auto check-in task is already running. Please check the records later.",
-      "manualTestFailed": "Test run failed: {{message}}",
       "timeRangeError": "Start time cannot be later than end time"
     },
     "flowNotice": {
       "title": "WorkBuddy Account Info (click to expand/collapse)",
       "desc": "Account switching writes the local WorkBuddy sign-in file using the current official client layout; local import reads the same file. Data is processed locally only. If an opaque official encryption wrapper is detected, the original file is preserved and the overwrite is stopped.",
       "permission": "Permission scope: read and write the WorkBuddy sign-in file (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) for local import and account switching; the legacy state.vscdb is no longer read or modified. Files with an official encryption wrapper are not overwritten without its key.",
-      "network": "OAuth sign-in and token refresh contact WorkBuddy. Credit balances and details are fetched from its billing service using the account token. Local sign-in files and system keys stay on this device."
+      "network": "OAuth sign-in and token refresh contact WorkBuddy. Credit balances and details are fetched from its billing service using the account token. Local sign-in files and system keys stay on this device. Model probes also send the selected model and a test message to the WorkBuddy conversation service and its session endpoint, then read the reply."
     },
     "nickname": "Nickname",
     "enterprise": "Enterprise",
@@ -7817,6 +8162,35 @@
       "unsupported": {
         "descPlatform": "WorkBuddy multi-instance is supported on macOS, Windows, and Linux only."
       }
+    },
+    "modelProbe": {
+      "title": "Model probe",
+      "hint": "Send a short message and read the reply. This uses a small amount of quota. Test conversations are deleted by default.",
+      "account": "Account",
+      "model": "Model",
+      "catalog": "Choose model",
+      "modelPlaceholder": "Enter model ID",
+      "catalog_loading": "Loading models…",
+      "catalog_loaded": "Choose a model or enter its ID.",
+      "catalog_error": "Could not load models. Enter a model ID to retry.",
+      "keep": "Keep test conversation",
+      "run": "Run probe",
+      "running": "Probing…",
+      "failed": "Probe failed",
+      "status_available": "Available",
+      "status_rate_limited": "Rate limited",
+      "status_error": "Request failed",
+      "status_unknown": "Unconfirmed",
+      "deleted": "Test conversation deleted",
+      "retained": "Test conversation kept",
+      "cleanupFailed": "Could not delete the conversation. You can remove it manually later.",
+      "protocolFailure": "Protocol verification is incomplete. Retry or check account authorization.",
+      "open": "Probe models"
+    },
+    "probeNotice": {
+      "until": "{{model}} was limited at last probe, resets {{time}}",
+      "unavailable": "{{model}} was limited at last probe",
+      "failed": "Last probe of {{model}} failed"
     }
   },
   "minimaxCode": {
@@ -7969,6 +8343,14 @@
     "placeholder": "MiniMax Code account management is coming soon."
   },
   "mfaVault": {
+    "checkpointAvailable": "The 2FA vault file is missing. Restore verifies the local backup first. Changes since the backup may be missing.",
+    "restoreCheckpoint": "Restore local backup",
+    "checkpointRestoring": "Verifying and restoring the 2FA backup…",
+    "checkpointRestoreFailed": "Could not verify or restore the local 2FA backup.",
+    "checkpointLiveVaultExists": "The current 2FA vault was found. Retry loading it.",
+    "checkpointSidecarExists": "SQLite recovery files are still present and were preserved.",
+    "recoveryFailed": "Could not recover 2FA keys.",
+    "storageWriteFailed": "Could not save 2FA changes.",
     "pageDesc": "Securely store and manage your MFA backup recovery codes, passcode sets, and other sensitive authentication data. MFA records are stored locally only. Deleting records, clearing cache, or replacing/losing a device may cause MFA loss. Keep backups and import from backup when needed.",
     "manualAdd": "Add Credential",
     "add": "Add",
@@ -8147,6 +8529,8 @@
       "apiBaseUrlInvalid": "Enter a full http:// or https:// URL without credentials, query parameters, or fragments"
     },
     "instances": {
+      "accountHomeReady": "Isolated folder ready for {{email}}",
+      "installLaunchHint": "Run the official command below in a terminal. After installation, choose Run in Terminal again.",
       "unsupported": "Grok CLI multi-instance is supported on macOS, Windows, and Linux only.",
       "launchDialogTitle": "Launch Instance",
       "launchHint": "Copy the command to run it manually, or execute it directly in a terminal.",
@@ -8176,6 +8560,7 @@
       "sectionTitle": "Quota"
     },
     "quota": {
+      "cliUnavailable": "CLI usage unavailable",
       "weekly": "Weekly usage",
       "sharedPool": "Shared pool",
       "monthly": "Monthly usage",
@@ -8307,6 +8692,7 @@
       "baseUrlInvalid": "Base URL is not a valid URL"
     },
     "desktopOAuth": {
+      "cliUnsupported": "This account cannot launch Claude Code CLI.",
       "title": "Claude sign-in",
       "desc": "Open the Claude sign-in window inside this tool, with Google, Apple, email, and free account support.",
       "start": "Open sign-in",
@@ -8356,6 +8742,7 @@
       }
     },
     "oauth": {
+      "switchHint": "Switch to local Claude Code",
       "title": "Claude OAuth Authorization",
       "desc": "Open the official Claude OAuth authorization page, then paste the callback URL or code to import the account.",
       "start": "Authorize OAuth",
@@ -8384,6 +8771,9 @@
       "cliUnsupported": "Legacy OAuth accounts cannot launch Claude CLI"
     },
     "cli": {
+      "applyUserConfig": "Apply to user settings",
+      "userConfigHint": "Write this account to ~/.claude for Claude Code and VS Code.",
+      "userConfigApplied": "User settings updated",
       "quickLaunch": "CLI Launch",
       "selectWorkingDir": "Select Claude CLI working folder",
       "launchSuccess": "Claude CLI launched",
@@ -8414,6 +8804,8 @@
       "nickname": "Nickname"
     },
     "desktopGateway": {
+      "switchHint": "Apply provider settings and launch Claude Desktop",
+      "switchSuccess": "Applied Claude Desktop provider settings for {{name}}.",
       "label": "Gateway",
       "authScheme": "Auth Scheme",
       "importAction": "Import Gateway",

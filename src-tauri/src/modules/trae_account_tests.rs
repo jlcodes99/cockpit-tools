@@ -3,6 +3,21 @@
 use super::*;
     use crate::models::trae::TraeAccount;
 
+    #[test]
+    fn trae_work_brand_preserves_client_data_paths_and_provider_keys() {
+        for (slug, key, display, data_dir) in [
+            ("trae-solo", "trae_solo", "TraeWork", "TRAE SOLO"),
+            ("trae-solo-cn", "trae_solo_cn", "TraeWork CN", "TRAE SOLO CN"),
+        ] {
+            let platform = TraePlatformKind::parse(Some(slug)).unwrap();
+            assert_eq!(platform.provider_key(), key);
+            assert_eq!(platform.display_name(), display);
+            assert_eq!(platform.app_support_dir_name(), data_dir);
+            #[cfg(target_os = "macos")]
+            assert_eq!(platform.macos_app_name(), format!("{data_dir}.app"));
+        }
+    }
+
     fn sample_account() -> TraeAccount {
         TraeAccount {
             last_switched_at: None,
@@ -64,6 +79,37 @@ use super::*;
             status: None,
             status_reason: None,
         }
+    }
+
+    #[test]
+    fn current_lookup_reads_only_matching_trae_accounts() {
+        let mut foreign = sample_account();
+        foreign.id = "foreign".into();
+        foreign.trae_auth_raw = Some(serde_json::json!({ "platformId": "trae_solo_cn" }));
+        let mut unrelated = sample_account();
+        unrelated.id = "unrelated".into();
+        unrelated.user_id = None;
+        unrelated.email = "unrelated@example.test".into();
+        let mut chosen = sample_account();
+        chosen.id = "chosen".into();
+        chosen.email = "Match@Example.Test".into();
+        let mut legacy = chosen.summary();
+        legacy.query_identity = None;
+        let mut index = TraeAccountIndex::new();
+        index.accounts = vec![foreign.summary(), unrelated.summary(), legacy];
+        let reads = std::cell::RefCell::new(Vec::new());
+        let found = find_current_account_in_index(
+            &index,
+            TraePlatformKind::Trae,
+            chosen.user_id.as_deref(),
+            Some("match@example.test"),
+            |id| {
+                reads.borrow_mut().push(id.to_string());
+                (id == chosen.id).then(|| chosen.clone())
+            },
+        );
+        assert_eq!(found.as_ref().map(|account| account.id.as_str()), Some("chosen"));
+        assert_eq!(reads.into_inner(), vec!["chosen"]);
     }
 
     #[test]

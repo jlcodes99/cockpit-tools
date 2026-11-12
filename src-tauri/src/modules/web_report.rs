@@ -4,6 +4,7 @@
 use crate::models::codebuddy::CodebuddyAccount;
 use serde::Serialize;
 use serde_json::Value;
+use std::net::Ipv4Addr;
 use std::sync::{OnceLock, RwLock};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -21,7 +22,8 @@ const AUTH_REFRESH_STALE_THRESHOLD_SECONDS: i64 = 10 * 60;
 const NEXT_AUTH_REFRESH_TRIGGER_LABEL: &str =
     "Next AuthRefresh trigger time (only trigger if access to this page )";
 
-static ACTUAL_REPORT_PORT: OnceLock<RwLock<Option<u16>>> = OnceLock::new();
+static REPORT_SERVER: OnceLock<RwLock<Option<ReportServer>>> = OnceLock::new();
+static REPORT_SERVER_APPLY: AsyncMutex<()> = AsyncMutex::const_new(());
 static REPORT_REFRESH_STATE: OnceLock<RwLock<ReportRefreshState>> = OnceLock::new();
 static REPORT_REFRESH_LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
 
@@ -65,8 +67,14 @@ struct ServiceRefreshPolicy {
     interval_minutes: i32,
 }
 
-fn report_port_state() -> &'static RwLock<Option<u16>> {
-    ACTUAL_REPORT_PORT.get_or_init(|| RwLock::new(None))
+struct ReportServer {
+    preferred_port: u16,
+    actual_port: u16,
+    listener_task: tokio::task::JoinHandle<()>,
+}
+
+fn report_server_state() -> &'static RwLock<Option<ReportServer>> {
+    REPORT_SERVER.get_or_init(|| RwLock::new(None))
 }
 
 fn report_refresh_state() -> &'static RwLock<ReportRefreshState> {
@@ -77,14 +85,11 @@ fn report_refresh_lock() -> &'static AsyncMutex<()> {
     REPORT_REFRESH_LOCK.get_or_init(|| AsyncMutex::new(()))
 }
 
-fn set_actual_port(port: Option<u16>) {
-    if let Ok(mut guard) = report_port_state().write() {
-        *guard = port;
-    }
-}
-
 pub fn get_actual_port() -> Option<u16> {
-    report_port_state().read().ok().and_then(|guard| *guard)
+    report_server_state().read().ok().and_then(|guard| {
+        guard.as_ref().filter(|server| !server.listener_task.is_finished())
+            .map(|server| server.actual_port)
+    })
 }
 
 fn build_service_refresh_policies(cfg: &super::config::UserConfig) -> Vec<ServiceRefreshPolicy> {
@@ -356,75 +361,82 @@ fn format_data_collected_at_human(meta: &ReportMeta) -> String {
     format!("{} ({})", base, note)
 }
 
-pub async fn start_server() {
+pub async fn apply_server_config() -> Result<(), String> {
+    let _apply = REPORT_SERVER_APPLY.lock().await;
     let cfg = super::config::get_user_config();
-    if !cfg.report_enabled {
-        set_actual_port(None);
-        super::logger::log_info("[WebReport] 网页查询服务未启用，跳过启动");
-        return;
+    if cfg.report_enabled && cfg.report_token.trim().is_empty() {
+        configure_listener(report_server_state(), None).await?;
+        return Err(crate::modules::i18n::translate(
+            &cfg.language, "settings.network.reportTokenRequired", &[],
+        ));
     }
+    configure_listener(report_server_state(), cfg.report_enabled.then_some(cfg.report_port)).await
+}
 
-    let token = cfg.report_token.trim().to_string();
-    if token.is_empty() {
-        set_actual_port(None);
-        super::logger::log_warn("[WebReport] 配置了启用但 token 为空，网页查询服务未启动");
-        return;
-    }
-
-    let preferred_port = cfg.report_port;
-    let mut port = preferred_port;
-    let mut listener = None;
-
-    for attempt in 0..PORT_RANGE {
-        let addr = format!("0.0.0.0:{}", port);
-        match TcpListener::bind(&addr).await {
-            Ok(bound) => {
-                listener = Some(bound);
-                if attempt > 0 {
-                    super::logger::log_info(&format!(
-                        "[WebReport] 配置端口 {} 被占用，已切换至 {}",
-                        preferred_port, port
-                    ));
-                }
-                break;
-            }
-            Err(err) => {
-                if attempt < PORT_RANGE - 1 {
-                    port += 1;
-                } else {
-                    super::logger::log_error(&format!(
-                        "[WebReport] 无法绑定端口 ({}-{})，最后错误: {}",
-                        preferred_port,
-                        preferred_port + PORT_RANGE - 1,
-                        err
-                    ));
-                    set_actual_port(None);
-                    return;
-                }
-            }
-        }
-    }
-
-    let listener = match listener {
-        Some(v) => v,
-        None => {
-            set_actual_port(None);
-            return;
+async fn configure_listener(
+    state: &RwLock<Option<ReportServer>>,
+    preferred_port: Option<u16>,
+) -> Result<(), String> {
+    let Some(preferred_port) = preferred_port else {
+        let previous = state.write().unwrap_or_else(|err| err.into_inner()).take();
+        stop_listener(previous).await;
+        return Ok(());
+    };
+    let active_port = {
+        let guard = state.read().unwrap_or_else(|err| err.into_inner());
+        match guard.as_ref().filter(|server| !server.listener_task.is_finished()) {
+            Some(server) if server.preferred_port == preferred_port => return Ok(()),
+            Some(server) => Some(server.actual_port),
+            None => None,
         }
     };
-
-    set_actual_port(Some(port));
-    super::logger::log_info(&format!(
-        "[WebReport] 网页查询服务已启动: http://0.0.0.0:{}/report?token=***",
-        port
-    ));
-
-    while let Ok((stream, addr)) = listener.accept().await {
-        tokio::spawn(async move {
-            if let Err(err) = handle_connection(stream, port).await {
-                super::logger::log_warn(&format!("[WebReport] 请求处理失败 {}: {}", addr, err));
+    let last_port = preferred_port.saturating_add(PORT_RANGE - 1);
+    let mut bind_error = None;
+    for port in preferred_port..=last_port {
+        if active_port == Some(port) {
+            if let Some(server) = state
+                .write()
+                .unwrap_or_else(|err| err.into_inner())
+                .as_mut()
+                .filter(|server| !server.listener_task.is_finished())
+            {
+                server.preferred_port = preferred_port;
+                return Ok(());
+            }
+        }
+        let listener = match TcpListener::bind((Ipv4Addr::UNSPECIFIED, port)).await {
+            Ok(listener) => listener,
+            Err(error) => {
+                bind_error = Some(error);
+                continue;
+            }
+        };
+        let actual_port = listener.local_addr().map_err(|error| error.to_string())?.port();
+        let listener_task = tokio::spawn(async move {
+            while let Ok((stream, addr)) = listener.accept().await {
+                tokio::spawn(async move {
+                    if let Err(error) = handle_connection(stream, actual_port).await {
+                        super::logger::log_warn(&format!("[WebReport] {addr}: {error}"));
+                    }
+                });
             }
         });
+        let previous = state.write().unwrap_or_else(|err| err.into_inner()).replace(ReportServer {
+            preferred_port,
+            actual_port,
+            listener_task,
+        });
+        stop_listener(previous).await;
+        super::logger::log_info(&format!("[WebReport] Listening on port {actual_port} (configured {preferred_port})"));
+        return Ok(());
+    }
+    Err(format!("{preferred_port}–{last_port}: {}", bind_error.unwrap()))
+}
+
+async fn stop_listener(server: Option<ReportServer>) {
+    if let Some(server) = server {
+        server.listener_task.abort();
+        let _ = server.listener_task.await;
     }
 }
 
@@ -465,11 +477,8 @@ async fn handle_connection(mut stream: TcpStream, port: u16) -> Result<(), Strin
         .find(|(key, _)| key == "token")
         .map(|(_, value)| value.into_owned())
         .unwrap_or_default();
-    let config_token = super::config::get_user_config()
-        .report_token
-        .trim()
-        .to_string();
-    if config_token.is_empty() || request_token != config_token {
+    let config = super::config::get_user_config();
+    if !report_token_matches(config.report_enabled, &config.report_token, &request_token) {
         write_response(
             &mut stream,
             "401 Unauthorized",
@@ -525,6 +534,63 @@ async fn handle_connection(mut stream: TcpStream, port: u16) -> Result<(), Strin
 
     write_response(&mut stream, "200 OK", content_type, &body).await?;
     Ok(())
+}
+
+fn report_token_matches(enabled: bool, configured_token: &str, request_token: &str) -> bool {
+    let configured_token = configured_token.trim();
+    enabled && !configured_token.is_empty() && request_token == configured_token
+}
+
+#[cfg(test)]
+mod listener_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn report_service_reuses_running_port_and_releases_listener_on_disable() {
+        let state = RwLock::new(None);
+        configure_listener(&state, Some(0)).await.unwrap();
+        let port = state.read().unwrap().as_ref().unwrap().actual_port;
+        assert_ne!(port, 0);
+        assert!(TcpStream::connect((Ipv4Addr::LOCALHOST, port)).await.is_ok());
+
+        configure_listener(&state, Some(0)).await.unwrap();
+        assert_eq!(state.read().unwrap().as_ref().unwrap().actual_port, port);
+
+        let occupied = TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0)).await.unwrap();
+        let preferred = occupied.local_addr().unwrap().port();
+        if preferred < u16::MAX {
+            configure_listener(&state, Some(preferred)).await.unwrap();
+            let fallback = state.read().unwrap().as_ref().unwrap().actual_port;
+            assert!((preferred + 1..=preferred.saturating_add(PORT_RANGE - 1)).contains(&fallback));
+            assert!(TcpStream::connect((Ipv4Addr::LOCALHOST, fallback)).await.is_ok());
+        }
+        let port = state.read().unwrap().as_ref().unwrap().actual_port;
+        configure_listener(&state, None).await.unwrap();
+        assert!(state.read().unwrap().is_none());
+        assert!(TcpStream::connect((Ipv4Addr::LOCALHOST, port)).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn report_service_keeps_working_listener_when_last_port_is_occupied() {
+        let state = RwLock::new(None);
+        let occupied = TcpListener::bind((Ipv4Addr::UNSPECIFIED, u16::MAX)).await;
+        assert!(occupied.is_ok() || occupied.as_ref().unwrap_err().kind() == std::io::ErrorKind::AddrInUse);
+        configure_listener(&state, Some(0)).await.unwrap();
+        let port = state.read().unwrap().as_ref().unwrap().actual_port;
+
+        let error = configure_listener(&state, Some(u16::MAX)).await.unwrap_err();
+        assert!(error.contains("65535–65535"));
+        assert_eq!(state.read().unwrap().as_ref().unwrap().actual_port, port);
+        configure_listener(&state, None).await.unwrap();
+    }
+
+    #[test]
+    fn report_service_requires_current_token_and_enabled_setting() {
+        assert!(report_token_matches(true, " report+token ", "report+token"));
+        assert!(!report_token_matches(false, "report+token", "report+token"));
+        assert!(!report_token_matches(true, "new-token", "report+token"));
+        assert!(!report_token_matches(true, " ", ""));
+    }
 }
 
 async fn write_response(

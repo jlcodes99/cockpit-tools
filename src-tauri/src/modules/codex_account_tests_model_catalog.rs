@@ -1,5 +1,32 @@
 // Codex 账号测试：DeepSeek and model catalog behavior。
 // 测试与生产实现共享 super 作用域，验证真实持久化和运行态行为。
+#[test]
+fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings() {
+    use super::*;
+    let defaults = &*OPENCODE_GO_CATALOG;
+    let mut account = CodexAccount::new_api_key(
+        "go".into(), "fixture@example.invalid".into(), "fixture".into(),
+        CodexApiProviderMode::Custom, Some(defaults.base_urls[1].clone()), None, None,
+        defaults.legacy_models.clone(),
+    );
+    assert!(upgrade_opencode_go_model_catalog(&mut account));
+    assert_eq!(account.api_model_catalog.last(), Some(&defaults.image_model));
+    assert_eq!(account.api_wire_api.as_deref(), Some("chat_completions"));
+    assert_eq!(account.api_model_vision_support.get(&defaults.image_model), Some(&true));
+
+    account.api_model_catalog.pop();
+    let mut reloaded: CodexAccount = serde_json::from_value(serde_json::to_value(&account).unwrap()).unwrap();
+    assert!(!upgrade_opencode_go_model_catalog(&mut reloaded));
+    assert_eq!(reloaded.api_model_catalog, defaults.legacy_models);
+
+    reloaded.opencode_go_model_catalog_version = None;
+    reloaded.api_model_catalog = vec![defaults.image_model.clone(), "my-model".into()];
+    reloaded.api_model_vision_support.insert(defaults.image_model.clone(), false);
+    assert!(upgrade_opencode_go_model_catalog(&mut reloaded));
+    assert_eq!(reloaded.api_model_catalog, [defaults.image_model.as_str(), "my-model"]);
+    assert_eq!(reloaded.api_model_vision_support.get(&defaults.image_model), Some(&false));
+}
+
     #[test]
     fn gpt_6_1_terra_catalog_upgrade_preserves_profiles_and_customization() {
         let _lock = crate::modules::test_support::env_lock()
@@ -152,6 +179,63 @@
         // Chat Completions 不能直连上游（Codex 端只支持 Responses 直连）。
         account.api_wire_api = Some("chat_completions".to_string());
         assert!(!super::account_wire_api_is_responses(&account));
+        assert!(!super::account_uses_provider_direct_access(&account));
+        assert!(crate::modules::codex_local_access::account_requires_provider_gateway(&account));
+        account.api_wire_api = Some("anthropic".to_string());
+        assert!(!super::account_uses_provider_direct_access(&account));
+        assert!(crate::modules::codex_local_access::account_requires_provider_gateway(&account));
+        account.api_wire_api = Some("responses".to_string());
+        account.upstream_grok_account_id = Some("fixture-grok".into());
+        assert!(!super::account_uses_provider_direct_access(&account));
+        assert!(crate::modules::codex_local_access::account_requires_provider_gateway(&account));
+    }
+
+    #[test]
+    fn provider_access_mode_save_projects_real_upstream_ids_and_removes_gateway_requirement() {
+        use crate::modules::codex_local_access::account_requires_provider_gateway;
+        let _lock = crate::modules::test_support::env_lock()
+            .lock().unwrap_or_else(|error| error.into_inner());
+        let env = TestEnvGuard::new("codex-provider-access-mode");
+        let mut account = CodexAccount::new_api_key(
+            "relay-access".into(), "relay@example.invalid".into(), "fixture-key".into(),
+            CodexApiProviderMode::Custom, Some("https://relay.example.invalid/v1".into()),
+            Some("relay".into()), Some("Relay".into()), vec!["vendor-model".into()],
+        );
+        account.api_wire_api = Some("responses".into());
+        account.api_sync_model_catalog_to_codex = true;
+        save_account(&account).unwrap();
+        assert!(account_requires_provider_gateway(&account));
+
+        super::update_account_instance_access(&account.id, Some("direct".into()), None, None).unwrap();
+        let direct = load_account(&account.id).unwrap();
+        assert_eq!(direct.api_instance_access_mode.as_deref(), Some("direct"));
+        assert!(!account_requires_provider_gateway(&direct));
+        let profile = env.codex_home();
+        write_account_bundle_to_dir(&profile, &direct).unwrap();
+        let catalog_path = profile.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE);
+        let catalog: serde_json::Value = serde_json::from_slice(&fs::read(catalog_path).unwrap()).unwrap();
+        assert_eq!(catalog["models"][0]["slug"], "vendor-model");
+        let config = fs::read_to_string(profile.join("config.toml")).unwrap();
+        let doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&config).unwrap();
+        let base_url = doc.get("openai_base_url").and_then(|item| item.as_str())
+            .or_else(|| {
+                let provider = doc.get("model_provider")?.as_str()?;
+                doc.get("model_providers")?.get(provider)?.get("base_url")?.as_str()
+            });
+        assert_eq!(base_url, Some("https://relay.example.invalid/v1"));
+
+        account.api_base_url = Some("https://api.openai.com/v1".into());
+        account.api_sync_model_catalog_to_codex = false;
+        assert!(!account_requires_provider_gateway(&account));
+        account.api_instance_access_mode = Some("gateway".into());
+        assert!(account_requires_provider_gateway(&account));
+
+        account.api_wire_api = Some("anthropic".into());
+        save_account(&account).unwrap();
+        assert!(super::update_account_instance_access(&account.id, Some("direct".into()), None, None).is_err());
+        let cdp = super::update_account_instance_access(&account.id, Some("cdp".into()), None, None).unwrap();
+        assert!(super::account_uses_cdp_model_injection(&cdp));
+        assert!(account_requires_provider_gateway(&cdp));
     }
 
     /// 历史遗留的 Codex/GPT 内置 id（例如 gpt-5.4 / gpt-5.4-mini）不能再作为 DeepSeek
@@ -1921,14 +2005,19 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
         );
         chat_account.api_wire_api = Some("chat_completions".to_string());
         save_account(&chat_account).expect("save chat account");
-        let direct_error = update_account_instance_access(
+        update_account_instance_access(
             &chat_account.id,
             Some("direct".to_string()),
             None,
             None,
         )
         .expect_err("Chat Completions 账号拒绝直连上游");
-        assert!(direct_error.contains("Chat Completions"));
+        assert_eq!(
+            load_account(&chat_account.id)
+                .expect("Chat account remains readable")
+                .api_instance_access_mode,
+            chat_account.api_instance_access_mode
+        );
     }
 
     #[test]
@@ -2322,6 +2411,32 @@ multi_agent = true
     }
 
     #[test]
+    fn provider_catalog_sync_keeps_legacy_catalog_if_config_cannot_be_saved() {
+        let profile = tempfile::tempdir().unwrap();
+        let legacy_catalog = profile.path().join(super::CODEX_LEGACY_LOCAL_ACCESS_MODEL_CATALOG_FILE);
+        fs::write(&legacy_catalog, r#"{"models":[{"slug":"old-model"}]}"#).unwrap();
+        fs::create_dir(profile.path().join("config.toml")).unwrap();
+        let mut account = CodexAccount::new_api_key(
+            "provider-catalog".into(),
+            "catalog@example.invalid".into(),
+            "synthetic-key".into(),
+            CodexApiProviderMode::Custom,
+            Some("https://example.invalid/v1".into()),
+            Some("custom".into()),
+            Some("Custom".into()),
+            vec!["custom-model".into()],
+        );
+        account.api_wire_api = Some("responses".into());
+        account.api_sync_model_catalog_to_codex = true;
+
+        assert!(super::sync_api_key_model_catalog_to_dir(profile.path(), &account).is_err());
+        assert_eq!(
+            fs::read_to_string(legacy_catalog).unwrap(),
+            r#"{"models":[{"slug":"old-model"}]}"#
+        );
+    }
+
+    #[test]
     fn provider_catalog_sync_reclaims_native_speed_reference_and_keeps_model_limits() {
         let _lock = crate::modules::test_support::env_lock()
             .lock()
@@ -2385,6 +2500,43 @@ multi_agent = true
     }
 
     #[test]
+    fn managed_catalog_rebuild_upgrades_only_legacy_sol_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(super::CODEX_MANAGED_MODEL_CATALOG_FILE);
+        let existing = serde_json::json!({"models":[
+            {"slug":"gpt-6.1-sol", "context_window":272_000, "max_context_window":872_000,
+             "auto_compact_token_limit":244_800}
+        ]});
+        fs::write(&path, existing.to_string()).unwrap();
+        for _ in 0..2 {
+            super::rebuild_managed_catalog_from_existing(&path).unwrap();
+            let rebuilt: serde_json::Value =
+                serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            assert_eq!(rebuilt["models"][0]["context_window"], 500_000);
+            assert_eq!(rebuilt["models"][0]["max_context_window"], 872_000);
+            assert_eq!(rebuilt["models"][0]["auto_compact_token_limit"], 450_000);
+        }
+        super::save_model_catalog_for_base_dir_preserving_context(
+            dir.path(), true,
+            vec![crate::models::codex::CodexExperimentalModelDefinition {
+                model_id: "gpt-6.1-sol".into(),
+                display_name: "GPT-6.1 Sol".into(),
+                reasoning_efforts: None,
+                default_reasoning_effort: None,
+                ultra_reasoning_effort: None,
+                context_window: Some(272_000),
+                auto_compact_token_limit: Some(244_800),
+            }],
+            Some("gpt-6.1-sol".into()),
+        ).unwrap();
+        fs::write(&path, existing.to_string()).unwrap();
+        super::rebuild_managed_catalog_from_existing(&path).unwrap();
+        let rebuilt: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(rebuilt["models"][0]["context_window"], 272_000);
+        assert_eq!(rebuilt["models"][0]["auto_compact_token_limit"], 244_800);
+    }
+
+    #[test]
     fn managed_catalog_rebuild_preserves_context_and_input_capabilities() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(super::CODEX_MANAGED_MODEL_CATALOG_FILE);
@@ -2431,6 +2583,31 @@ multi_agent = true
     }
 
     #[test]
+    fn managed_catalog_rebuild_uses_standard_responses_for_relay_configs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(super::CODEX_MANAGED_MODEL_CATALOG_FILE);
+        let config = dir.path().join("config.toml");
+        let models = crate::modules::codex_protocol::build_codex_client_models_response(&[
+            "gpt-5.6-sol".into(),
+        ]);
+        assert_eq!(models["models"][0]["use_responses_lite"], true);
+        for (contents, expects_lite) in [
+            ("model_provider = 'custom'\n", false),
+            ("model_provider = 'openai'\nopenai_base_url = 'https://relay.example.invalid/v1'\n", false),
+            ("model_provider = 'openai'\n", true),
+        ] {
+            fs::write(&config, contents).unwrap();
+            fs::write(&path, models.to_string()).unwrap();
+            super::rebuild_managed_catalog_from_existing(&path).unwrap();
+            let rebuilt: serde_json::Value =
+                serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            assert_eq!(rebuilt["models"][0]["use_responses_lite"], expects_lite);
+            assert_eq!(rebuilt["models"][0]["tool_mode"], if expects_lite { "code_mode_only" } else { "direct" });
+            assert_eq!(rebuilt["models"][0]["shell_type"], "shell_command");
+        }
+    }
+
+    #[test]
     fn legacy_speed_migration_restores_saved_managed_catalog() {
         let _lock = crate::modules::test_support::env_lock()
             .lock().unwrap_or_else(|error| error.into_inner());
@@ -2441,6 +2618,7 @@ multi_agent = true
             model_id: "gpt-6.1-sol".into(), display_name: "My Sol".into(),
             reasoning_efforts: Some(vec!["low".into(), "high".into()]),
             default_reasoning_effort: Some("high".into()),
+            ultra_reasoning_effort: None,
             context_window: Some(800_000), auto_compact_token_limit: Some(700_000),
         }];
         super::save_model_catalog_for_base_dir_preserving_context(

@@ -34,6 +34,7 @@ export interface CodexWakeupSchedule {
   weekly_time?: string;
   interval_hours?: number;
   quota_reset_window?: CodexWakeupQuotaResetWindow;
+  quota_reset_delay_minutes?: number;
   startup_delay_minutes?: number;
 }
 
@@ -42,6 +43,7 @@ export interface CodexWakeupTask {
   name: string;
   enabled: boolean;
   account_ids: string[];
+  use_api_service_pool?: boolean;
   prompt?: string;
   model?: string;
   model_display_name?: string;
@@ -126,6 +128,7 @@ export interface CodexWakeupProgressPayload {
   failure_count: number;
   running: boolean;
   phase: string;
+  account_ids?: string[];
   current_account_id?: string;
   item?: CodexWakeupHistoryItem;
 }
@@ -133,5 +136,4 @@ export interface CodexWakeupProgressPayload {
 export interface CodexWakeupOverview {
   runtime: CodexCliStatus;
   state: CodexWakeupState;
-  history: CodexWakeupHistoryItem[];
 }

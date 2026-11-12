@@ -41,6 +41,7 @@ fn native_diagnostic_detail(
             .into_iter()
             .take(REQUEST_DIAGNOSTICS_MAX_ATTEMPTS)
             .map(|item| CodexLocalAccessRequestAttempt {
+                image_request: item.image_request,
                 authorization_route: item.authorization_route,
                 service_tier_adaptation: item.service_tier_adaptation,
                 authorization_fallback: item.authorization_fallback.map(|trace| {
@@ -72,6 +73,7 @@ fn native_diagnostic_detail(
                 account_id: item.account_id,
                 account_email: item.account_email,
                 model_id: item.model_id,
+                response_model: item.response_model,
                 request_size: item.request_size,
                 upstream_request_bytes: item.upstream_request_bytes,
                 overload_retry: item.overload_retry,
@@ -340,13 +342,21 @@ async fn native_management(
                 .filter(|(_, state)| state.until > Instant::now())
                 .map(|(key, _)| key.account.clone())
                 .collect();
-            Ok(native_quota_summary(
+            let now = chrono::Utc::now().timestamp();
+            let mut summary = native_quota_summary(
                 &scope,
                 &accounts,
                 &cooling,
-                chrono::Utc::now().timestamp(),
+                now,
                 &official_plans,
-            ))
+            );
+            summary["providerQuotas"] = json!(crate::modules::codex_provider_pool_quota::scoped_rows(
+                &scope,
+                &original_accounts,
+                now,
+                crate::modules::codex_quota::relay_balance_disabled(),
+            ));
+            Ok(summary)
         }
         NativeManagementRequest::ResetAuth { account_ids }
         | NativeManagementRequest::ResetScheduler { account_ids } => {
@@ -721,6 +731,12 @@ mod native_diagnostic_tests {
                 crate::modules::codex_native_api::diagnostics::DiagnosticAttempt {
                     sequence: 1,
                     account_id: "a".into(),
+                    image_request: Some(crate::models::codex_local_access::CodexLocalAccessImageRequestDiagnostic {
+                        requested_model: None,
+                        upstream_model: "gpt-image-2.6-flare".into(),
+                        responses_model: None,
+                        upstream_status: Some(200),
+                    }),
                     upstream_identity_captured: true,
                     upstream_session_id: Some("mapped-session".into()),
                     upstream_thread_id: Some("mapped-thread".into()),
@@ -746,6 +762,10 @@ mod native_diagnostic_tests {
             .iter()
             .all(|payload| !payload.body.contains("never-persist")));
         let disabled = native_diagnostic_detail(context, false);
+        let encoded = serde_json::to_value(&disabled).unwrap();
+        assert_eq!(encoded["attempts"][0]["imageRequest"], json!({
+            "upstreamModel":"gpt-image-2.6-flare","upstreamStatus":200,
+        }));
         assert!(disabled.payloads.is_empty());
         assert_eq!(disabled.client_session_id.as_deref(), Some("raw-session"));
         assert!(disabled.client_identity_captured);

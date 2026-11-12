@@ -25,6 +25,7 @@ import { listAccounts } from '../services/accountService';
 import { getAntigravityTierBadge } from '../utils/account';
 import { SingleSelectDropdown } from './SingleSelectDropdown';
 import {
+  moveAccountsBetweenCodexGroups,
   setCodexGroupQuotaAutoRefreshMinutes,
   resolveCodexGroupQuotaAutoRefreshMinutes,
   normalizeCodexGroupQuotaAutoRefreshMinutes,
@@ -400,7 +401,7 @@ export const AccountGroupModal = ({
                     {/* 拖动手柄 */}
                     <div
                       className="group-drag-handle"
-                      title={t('accounts.groups.dragToSort', '按住拖动排序')}
+                      title={t('common.shared.sort.dragToReorder', '按住拖动排序')}
                     >
                       <GripVertical size={14} />
                     </div>
@@ -479,7 +480,7 @@ export const AccountGroupModal = ({
                             className="group-action-btn"
                             disabled={busy || loading || loadFailed || index === 0}
                             onClick={() => handleMove(index, 'up')}
-                            title={t('accounts.groups.moveUp', '上移')}
+                            title={t('common.shared.sort.moveUp', '上移')}
                           >
                             <ChevronUp size={14} />
                           </button>
@@ -488,7 +489,7 @@ export const AccountGroupModal = ({
                             className="group-action-btn"
                             disabled={busy || loading || loadFailed || index === groups.length - 1}
                             onClick={() => handleMove(index, 'down')}
-                            title={t('accounts.groups.moveDown', '下移')}
+                            title={t('common.shared.sort.moveDown', '下移')}
                           >
                             <ChevronDown size={14} />
                           </button>
@@ -940,7 +941,9 @@ export const AddToGroupModal = ({ isOpen, onClose, accountIds, sourceGroupId, on
     clearErrors();
     try {
       const groupId = await operation();
-      const updated = await assignAccountsToPlatformGroup(platformKey, groupId, accountIds);
+      const updated = platformKey === 'codex' && sourceGroupId
+        ? await moveAccountsBetweenCodexGroups(sourceGroupId, groupId, accountIds)
+        : await assignAccountsToPlatformGroup(platformKey, groupId, accountIds);
       if (!updated) throw new Error(t('accounts.groups.error.notFound'));
       await onAdded();
       onClose();

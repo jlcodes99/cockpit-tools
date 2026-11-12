@@ -1,3 +1,12 @@
+import {
+  previewDurableUiSetting,
+  readCommittedDurableUiSetting,
+  readDurableUiSetting,
+  saveDurableUiSetting,
+  type OverviewFilterFlagKey,
+  type OverviewFilterValueKey,
+} from './durableUiSettings';
+
 export const ACCOUNTS_OVERVIEW_FILTER_PERSISTENCE_CHANGED_EVENT =
   'agtools:accounts-overview-filter-persistence-changed';
 
@@ -28,16 +37,19 @@ const QUICK_SETTINGS_SCOPE_MAP: Record<string, string> = {
   zed: 'zed',
 };
 
-function getScopeBase(scope: string): string {
-  return `agtools.${scope}.accounts_overview_filters`;
+function getEnabledStorageKey(scope: string): OverviewFilterFlagKey {
+  return `agtools.${scope}.accounts_overview_filters.persist_enabled`;
 }
 
-function getEnabledStorageKey(scope: string): string {
-  return `${getScopeBase(scope)}.persist_enabled`;
+const CLEARED_FIELD = 'null';
+
+function getFieldStorageKey(scope: string, field: string): OverviewFilterValueKey {
+  return `agtools.${normalizeAccountsOverviewScope(scope)}.accounts_overview_filters.${field}`;
 }
 
-function getFieldStorageKey(scope: string, field: string): string {
-  return `${getScopeBase(scope)}.${field}`;
+export function readRawAccountsOverviewFilterField(scope: string, field: string): string | null {
+  const raw = readDurableUiSetting(getFieldStorageKey(scope, field));
+  return raw === CLEARED_FIELD ? null : raw;
 }
 
 export function normalizeAccountsOverviewScope(rawScope: string): string {
@@ -45,49 +57,25 @@ export function normalizeAccountsOverviewScope(rawScope: string): string {
   return normalized || 'default';
 }
 
+export function resolveAccountSortMode(remembered: string, active: string | null, fallback: string): string {
+  if (active === '1') return 'custom';
+  return active === '0' && remembered === 'custom' ? fallback : remembered;
+}
+
 export function resolveAccountsOverviewScopeFromQuickSettingsType(type: string): string {
   return QUICK_SETTINGS_SCOPE_MAP[type] ?? normalizeAccountsOverviewScope(type);
 }
 
 export function readAccountsOverviewFilterPersistenceEnabled(rawScope: string): boolean {
-  const scope = normalizeAccountsOverviewScope(rawScope);
-  try {
-    return localStorage.getItem(getEnabledStorageKey(scope)) !== '0';
-  } catch {
-    return false;
-  }
+  return readDurableUiSetting(getEnabledStorageKey(normalizeAccountsOverviewScope(rawScope))) !== '0';
 }
 
-function emitAccountsOverviewFilterPersistenceChanged(
-  scope: string,
-  enabled: boolean,
-): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
-  const detail: AccountsOverviewFilterPersistenceChangedDetail = {
-    scope,
-    enabled,
-  };
-  window.dispatchEvent(
-    new CustomEvent<AccountsOverviewFilterPersistenceChangedDetail>(
-      ACCOUNTS_OVERVIEW_FILTER_PERSISTENCE_CHANGED_EVENT,
-      { detail },
-    ),
-  );
+export function isAccountsOverviewFilterPersistenceDisabledOnDisk(scope: string): boolean {
+  return readCommittedDurableUiSetting(getEnabledStorageKey(normalizeAccountsOverviewScope(scope))) === '0';
 }
 
-export function setAccountsOverviewFilterPersistenceEnabled(
-  rawScope: string,
-  enabled: boolean,
-): void {
-  const scope = normalizeAccountsOverviewScope(rawScope);
-  try {
-    localStorage.setItem(getEnabledStorageKey(scope), enabled ? '1' : '0');
-  } catch {
-    // ignore persistence failures
-  }
-  emitAccountsOverviewFilterPersistenceChanged(scope, enabled);
+export function setAccountsOverviewFilterPersistenceEnabled(rawScope: string, enabled: boolean): void {
+  previewDurableUiSetting(getEnabledStorageKey(normalizeAccountsOverviewScope(rawScope)), enabled ? '1' : '0');
 }
 
 export function readAccountsOverviewFilterField<T>(
@@ -95,9 +83,8 @@ export function readAccountsOverviewFilterField<T>(
   field: string,
   fallback: T,
 ): T {
-  const scope = normalizeAccountsOverviewScope(rawScope);
   try {
-    const raw = localStorage.getItem(getFieldStorageKey(scope, field));
+    const raw = readRawAccountsOverviewFilterField(rawScope, field);
     if (raw == null) {
       return fallback;
     }
@@ -121,24 +108,23 @@ export function readAccountsOverviewFilterStringArray(
     .filter(Boolean);
 }
 
-export function writeAccountsOverviewFilterField<T>(
+export function saveAccountsOverviewFilterField<T>(
   rawScope: string,
   field: string,
   value: T,
-): void {
-  const scope = normalizeAccountsOverviewScope(rawScope);
-  try {
-    localStorage.setItem(getFieldStorageKey(scope, field), JSON.stringify(value));
-  } catch {
-    // ignore persistence failures
-  }
+): Promise<void> {
+  return saveDurableUiSetting(getFieldStorageKey(rawScope, field), JSON.stringify(value), true);
 }
 
-export function removeAccountsOverviewFilterField(rawScope: string, field: string): void {
-  const scope = normalizeAccountsOverviewScope(rawScope);
-  try {
-    localStorage.removeItem(getFieldStorageKey(scope, field));
-  } catch {
-    // ignore persistence failures
+export function writeAccountsOverviewFilterField<T>(scope: string, field: string, value: T): void {
+  if (readDurableUiSetting(getFieldStorageKey(scope, field)) === JSON.stringify(value)) return;
+  void saveAccountsOverviewFilterField(scope, field, value)
+    .catch(error => console.warn('[Account overview filters]', error));
+}
+
+export function removeAccountsOverviewFilterField(scope: string, field: string): void {
+  // Keep an explicit cleared value so retained legacy storage cannot restore it.
+  if (readRawAccountsOverviewFilterField(scope, field) !== null) {
+    writeAccountsOverviewFilterField(scope, field, null);
   }
 }

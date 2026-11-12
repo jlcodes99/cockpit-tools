@@ -57,6 +57,7 @@ async fn websocket_build_connect_and_timeout_have_distinct_dispatch_evidence() {
             url,
             HeaderMap::new(),
             4096,
+            Duration::from_secs(60),
             Duration::from_secs(1),
             StopSignal(stop.clone()),
             |_| {
@@ -75,6 +76,7 @@ async fn websocket_build_connect_and_timeout_have_distinct_dispatch_evidence() {
         "http://127.0.0.1:0/responses",
         HeaderMap::new(),
         4096,
+        Duration::from_secs(60),
         Duration::ZERO,
         StopSignal(stop.clone()),
         |_| {
@@ -94,6 +96,7 @@ async fn websocket_build_connect_and_timeout_have_distinct_dispatch_evidence() {
         "ftp://127.0.0.1/responses",
         HeaderMap::new(),
         4096,
+        Duration::from_secs(60),
         Duration::from_secs(1),
         StopSignal(stop.clone()),
         |_| {},
@@ -117,7 +120,7 @@ async fn websocket_header_timeout_and_bad_upgrade_keep_actual_attempt() {
         let count = AtomicUsize::new(0);
         let selected = route(&url, "a");
         let error = connect_websocket_tracked(&selected, &url, HeaderMap::new(), 4096,
-            Duration::from_millis(100), StopSignal(stop), |_| { count.fetch_add(1, Ordering::SeqCst); })
+            Duration::from_secs(60), Duration::from_millis(100), StopSignal(stop), |_| { count.fetch_add(1, Ordering::SeqCst); })
             .await.err().unwrap();
         assert_eq!(error.code, if reply.is_some() { "invalid_websocket_handshake" } else { "websocket_connect_timeout" });
         assert!(!error.upstream_not_sent);

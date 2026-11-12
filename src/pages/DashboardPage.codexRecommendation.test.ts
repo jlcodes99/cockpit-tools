@@ -7,6 +7,8 @@ import type { CodexAccount, CodexQuota } from '../types/codex';
 
 let server: ViteDevServer;
 let DashboardPage: typeof import('./DashboardPage').DashboardPage;
+let allAccountsView: typeof import('./DashboardAllAccounts');
+let prefetchDashboardAccounts: typeof import('./dashboardAccountPrefetch').prefetchDashboardAccounts;
 let store: typeof import('../stores/useCodexAccountStore').useCodexAccountStore;
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
@@ -30,6 +32,10 @@ before(async () => {
     optimizeDeps: { noDiscovery: true, include: [] }, appType: 'custom',
   });
   ({ DashboardPage } = await server.ssrLoadModule('/src/pages/DashboardPage.tsx'));
+  allAccountsView = await server.ssrLoadModule('/src/pages/DashboardAllAccounts.tsx') as typeof allAccountsView;
+  ({ prefetchDashboardAccounts } = await server.ssrLoadModule('/src/pages/dashboardAccountPrefetch.ts'));
+  const { applyDurableUiSnapshot } = await server.ssrLoadModule('/src/utils/durableUiSettings.ts');
+  applyDurableUiSnapshot({ values: { 'agtools.privacy_mode_enabled': '0' } });
   ({ useCodexAccountStore: store } = await server.ssrLoadModule('/src/stores/useCodexAccountStore.ts'));
   const { usePlatformLayoutStore } = await server.ssrLoadModule('/src/stores/usePlatformLayoutStore.ts');
   Object.assign(usePlatformLayoutStore.getInitialState(), {
@@ -89,4 +95,68 @@ test('zero quota remains eligible, while missing quota and unsupported API accou
 
 test('dashboard still has no recommendation without an eligible alternative', () => {
   assert.match(recommendation([account('missing')]), /暂无更好推荐/);
+});
+
+test('dashboard all accounts renders different platforms with colliding account IDs and paginates cards', () => {
+  const { DashboardAllAccounts, dashboardAccountCards } = allAccountsView;
+  const build = (entry: { id: string; label: string }) => createElement('span', null, entry.label);
+  const accounts = [
+    ...dashboardAccountCards('codex', [{ id: 'shared', label: 'Codex quota 0%' }], build),
+    ...dashboardAccountCards('claude_manager', [{ id: 'shared', label: 'Claude quota unavailable' }], build),
+    ...dashboardAccountCards('trae_cn', [{ id: 'shared', label: 'TRAE CN 200 credits' }], build),
+    ...dashboardAccountCards('trae_solo_cn', [{ id: 'shared', label: 'TRAE SOLO CN 250 credits' }], build),
+    ...dashboardAccountCards('qoder', Array.from({ length: 22 }, (_, index) => ({
+      id: String(index), label: `Qoder quota ${index}%`,
+    })), build),
+  ];
+  const html = renderToStaticMarkup(createElement(DashboardAllAccounts, { accounts, loading: false }));
+  assert.equal([...html.matchAll(/class="dashboard-all-accounts-item"/g)].length, 20);
+  assert.match(html, /Codex quota 0%/);
+  assert.match(html, /Claude quota unavailable/);
+  assert.match(html, /TRAE CN 200 credits/);
+  assert.match(html, /TRAE SOLO CN 250 credits/);
+  assert.match(html, /Qoder quota 15%/);
+  assert.doesNotMatch(html, /Qoder quota 16%/);
+  assert.match(html, /class="pagination-container"/);
+});
+
+test('dashboard all accounts shows progress alongside cached data and distinguishes an empty list', () => {
+  const { DashboardAllAccounts, dashboardAccountCards } = allAccountsView;
+  const accounts = dashboardAccountCards('codex', [{ id: 'cached' }], () => 'Cached quota');
+  const partial = renderToStaticMarkup(createElement(DashboardAllAccounts, { accounts, loading: true }));
+  assert.match(partial, /role="status"/);
+  assert.match(partial, /Cached quota/);
+  const empty = renderToStaticMarkup(createElement(DashboardAllAccounts, { accounts: [], loading: false }));
+  assert.doesNotMatch(empty, /role="status"|class="pagination-container"/);
+  assert.match(empty, /<p>[^<]+<\/p>/);
+});
+
+test('dashboard account prefetch stays shared and a slow platform does not delay the next platform', async () => {
+  const timers: Array<{ callback: () => void; delay: number }> = [];
+  const original = window.setTimeout;
+  Object.defineProperty(window, 'setTimeout', {
+    value: (callback: () => void, delay: number) => {
+      timers.push({ callback, delay });
+      return timers.length;
+    },
+  });
+  try {
+    const called: string[] = [];
+    let finishFirst!: () => void;
+    const first = new Promise<void>((resolve) => { finishFirst = resolve; });
+    const tasks = [
+      () => { called.push('first'); return first; },
+      async () => { called.push('second'); },
+    ];
+    const prefetch = prefetchDashboardAccounts(tasks);
+    assert.equal(prefetchDashboardAccounts(tasks), prefetch);
+    assert.deepEqual(timers.map(({ delay }) => delay), [6000, 7200]);
+    for (const { callback } of timers) callback();
+    await Promise.resolve();
+    assert.deepEqual(called, ['first', 'second']);
+    finishFirst();
+    await prefetch;
+  } finally {
+    window.setTimeout = original;
+  }
 });

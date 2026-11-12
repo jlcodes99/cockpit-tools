@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import {
   Check,
+  Square,
+  SquareCheck,
   KeyRound,
   Pencil,
   PlugZap,
@@ -12,11 +14,13 @@ import {
   X,
 } from 'lucide-react';
 import { useSshServerStore } from '../../stores/useSshServerStore';
+import { sshSyncSucceeded } from '../../utils/sshSyncStatus';
 import type {
   SshAuthConfig,
   SshCodexSyncResult,
   SshServer,
   SshServerDraft,
+  SshCodexSyncStatus,
 } from '../../types/sshServer';
 
 interface FormState {
@@ -87,14 +91,14 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
   const { t } = useTranslation();
   const {
     servers,
-    selectedServerId,
+    selectedServerIds,
     loading,
     error,
     lastSyncResult,
     fetchServers,
     upsertServer,
     deleteServer,
-    selectServer,
+    setServerSelected,
     testConnection,
     syncNow,
     applySyncResult,
@@ -102,15 +106,18 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [busyServerId, setBusyServerId] = useState<string | null>(null);
+  const [selecting, setSelecting] = useState(false);
   const [localMessage, setLocalMessage] = useState<{
     kind: 'success' | 'warning' | 'error';
     text: string;
   } | null>(null);
 
-  const selectedServer = useMemo(
-    () => servers.find((server) => server.id === selectedServerId) ?? null,
-    [servers, selectedServerId],
-  );
+  const syncMessage = (sync: SshCodexSyncStatus) => {
+    if (sync.verified && sync.error) {
+      return t('codex.ssh.connectionRefreshFailed', '鉴权已同步，但 SSH 连接刷新未完成，请稍后重试。');
+    }
+    return sync.error ?? t('codex.ssh.syncFailed', 'SSH 同步失败');
+  };
 
   useEffect(() => {
     void fetchServers();
@@ -122,11 +129,10 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
     listen<SshCodexSyncResult>('codex:ssh-sync-result', (event) => {
       applySyncResult(event.payload);
       setLocalMessage({
-        kind: event.payload.verified ? 'success' : 'warning',
-        text: event.payload.verified
+        kind: sshSyncSucceeded(event.payload) ? 'success' : 'warning',
+        text: `${event.payload.server_name}: ${sshSyncSucceeded(event.payload)
           ? t('codex.ssh.syncVerified', 'SSH 已校验同步成功')
-          : event.payload.error ??
-            t('codex.ssh.syncFailed', '本地切号成功，但 SSH 同步失败'),
+          : syncMessage(event.payload)}`,
       });
     }).then((dispose) => {
       if (disposed) {
@@ -147,20 +153,6 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
     try {
       const draft = draftFromForm(form);
       await upsertServer(draft);
-      // 开启「切号同步」时自动选中该服务器，设置里的开关会点亮
-      if (draft.sync_on_codex_switch) {
-        const list = useSshServerStore.getState().servers;
-        const matched =
-          list.find(
-            (server) =>
-              server.host === draft.host &&
-              server.port === draft.port &&
-              server.username === draft.username,
-          ) ?? list.find((server) => server.id === draft.id);
-        if (matched) {
-          await selectServer(matched.id);
-        }
-      }
       setForm(emptyForm);
       setLocalMessage({ kind: 'success', text: t('common.saved', '已保存') });
     } catch (err) {
@@ -186,16 +178,27 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
     }
   };
 
-  const handleSync = async (serverId?: string) => {
-    setBusyServerId(serverId ?? selectedServerId);
+  const handleSelect = async (serverId: string, selected: boolean) => {
+    setSelecting(true);
+    try {
+      await setServerSelected(serverId, selected);
+    } catch (err) {
+      setLocalMessage({ kind: 'error', text: String(err) });
+    } finally {
+      setSelecting(false);
+    }
+  };
+
+  const handleSync = async (serverId: string) => {
+    setBusyServerId(serverId);
     setLocalMessage(null);
     try {
       const result = await syncNow(serverId);
       setLocalMessage({
-        kind: result.verified ? 'success' : 'warning',
-        text: result.verified
+        kind: sshSyncSucceeded(result) ? 'success' : 'warning',
+        text: sshSyncSucceeded(result)
           ? t('codex.ssh.syncVerified', 'SSH 已校验同步成功')
-          : result.error ?? t('codex.ssh.syncFailed', 'SSH 同步失败'),
+          : syncMessage(result),
       });
     } catch (err) {
       setLocalMessage({ kind: 'error', text: String(err) });
@@ -443,12 +446,13 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
                 {t('codex.ssh.serverList', '服务器列表')}
               </div>
               <h3 className="codex-ssh-panel__list-title">
-                {t('codex.ssh.serverListLead', '选择同步目标')}
+                {t('codex.ssh.serverListLead', '选择同步目标（可多选）')}
               </h3>
             </div>
             <span className="codex-ssh-panel__count">
-              {t('codex.ssh.serverCount', '{{count}} 台', {
-                count: servers.length,
+              {t('codex.ssh.selectedServerCount', '已选 {{selected}} / {{total}} 台', {
+                selected: selectedServerIds.length,
+                total: servers.length,
               })}
             </span>
           </div>
@@ -470,7 +474,7 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
             )}
 
             {servers.map((server) => {
-              const isSelected = server.id === selectedServerId;
+              const isSelected = selectedServerIds.includes(server.id);
               const sync = server.last_sync;
               const busy = busyServerId === server.id;
               return (
@@ -481,7 +485,9 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
                   <button
                     type="button"
                     className="codex-ssh-panel__item-main"
-                    onClick={() => void selectServer(isSelected ? null : server.id)}
+                    aria-pressed={isSelected}
+                    disabled={selecting}
+                    onClick={() => void handleSelect(server.id, !isSelected)}
                   >
                     <div className="codex-ssh-panel__item-top">
                       <div className="codex-ssh-panel__item-avatar" aria-hidden="true">
@@ -513,17 +519,16 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
 
                     <div
                       className={`codex-ssh-panel__sync-status${
-                        sync?.verified ? ' is-ok' : sync ? ' is-fail' : ''
+                        sync && sshSyncSucceeded(sync) ? ' is-ok' : sync ? ' is-fail' : ''
                       }`}
                     >
                       {sync
-                        ? sync.verified
+                        ? sshSyncSucceeded(sync)
                           ? t('codex.ssh.syncedAs', '已同步 {{email}} · {{time}}', {
                               email: sync.account_email,
                               time: formatSyncTime(sync.synced_at),
                             })
-                          : sync.error ??
-                            t('codex.ssh.syncFailed', 'SSH 同步失败')
+                          : syncMessage(sync)
                         : t('codex.ssh.neverSynced', '尚未同步')}
                     </div>
                   </button>
@@ -532,12 +537,13 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
                     <button
                       className={`btn btn-secondary${isSelected ? ' is-active' : ''}`}
                       type="button"
-                      disabled={busy}
+                      disabled={busy || selecting}
+                      aria-pressed={isSelected}
                       onClick={() =>
-                        void selectServer(isSelected ? null : server.id)
+                        void handleSelect(server.id, !isSelected)
                       }
                     >
-                      <Check size={14} />
+                      {isSelected ? <SquareCheck size={14} /> : <Square size={14} />}
                       <span>
                         {isSelected
                           ? t('codex.ssh.selected', '已选中')
@@ -588,16 +594,15 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
         </section>
       </div>
 
-      {selectedServer && lastSyncResult?.server_id === selectedServer.id && (
+      {lastSyncResult && selectedServerIds.includes(lastSyncResult.server_id) && (
         <div
           className={`codex-ssh-panel__footer${
-            lastSyncResult.verified ? ' is-ok' : ' is-fail'
+            sshSyncSucceeded(lastSyncResult) ? ' is-ok' : ' is-fail'
           }`}
         >
-          {lastSyncResult.verified
+          {sshSyncSucceeded(lastSyncResult)
             ? t('codex.ssh.latestVerified', '最近一次 SSH 同步已校验通过')
-            : lastSyncResult.error ??
-              t('codex.ssh.syncFailed', 'SSH 同步失败')}
+            : syncMessage(lastSyncResult)}
         </div>
       )}
     </div>

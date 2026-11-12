@@ -9,8 +9,6 @@ import { compareCurrentAccountFirst } from './currentAccountSort';
 
 export type AntigravitySortDirection = 'asc' | 'desc';
 
-export const ANTIGRAVITY_ACCOUNTS_SORT_BY_STORAGE_KEY = 'accountsSortBy';
-export const ANTIGRAVITY_ACCOUNTS_SORT_DIRECTION_STORAGE_KEY = 'accountsSortDirection';
 export const ANTIGRAVITY_RESET_SORT_PREFIX = 'reset:';
 export const DEFAULT_ANTIGRAVITY_SORT_BY = 'overall';
 export const DEFAULT_ANTIGRAVITY_SORT_DIRECTION: AntigravitySortDirection = 'desc';
@@ -62,6 +60,18 @@ const compareByCreatedAt = (
   b: Account,
   direction: AntigravitySortDirection,
 ) => toDirectionValue(b.created_at - a.created_at, direction);
+
+const compareByLastSwitchedAt = (
+  a: Account,
+  b: Account,
+  direction: AntigravitySortDirection,
+) => {
+  const aTime = a.last_switched_at ?? 0;
+  const bTime = b.last_switched_at ?? 0;
+  if (aTime <= 0) return bTime > 0 ? 1 : 0;
+  if (bTime <= 0) return -1;
+  return toDirectionValue(bTime - aTime, direction);
+};
 
 const compareByGroupReset = (
   a: Account,
@@ -131,6 +141,10 @@ export const createAntigravityAccountComparator = ({
         return aIndex - bIndex;
       }
       return b.created_at - a.created_at;
+    }
+
+    if (normalizedSortBy === 'last_switched_at') {
+      return compareByLastSwitchedAt(a, b, sortDirection);
     }
 
     const currentFirstDiff = compareCurrentAccountFirst(a.id, b.id, currentAccountId);

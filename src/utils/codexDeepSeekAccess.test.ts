@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CODEX_PROVIDER_GATEWAY_BIND_PREFIX } from "../types/instance.ts";
 import {
+  canShowCodexProviderBalance,
+  codexProviderAccessModes,
   isDeepSeekAccount,
   isDeepSeekCdpAccess,
   isDeepSeekDirectAccess,
   isCodexApiKeyUsageQueryEligible,
   isCodexTokenPlanAccount,
   parseCodexBoundAccountId,
+  resolveCodexProviderBindAccountId,
   resolveDeepSeekAccessMode,
   resolveDeepSeekBindAccountId,
   resolveDeepSeekStartupModel,
@@ -15,6 +18,18 @@ import {
   shouldUseDeepSeekProviderGateway,
 } from "./codexDeepSeekAccess.ts";
 import type { CodexAccount } from "../types/codex.ts";
+
+test("provider mode respects protocol and replaces an older gateway binding for direct access", () => {
+  const relay = account({ auth_mode: "apikey", api_wire_api: "responses" });
+  const previousGateway = `${CODEX_PROVIDER_GATEWAY_BIND_PREFIX}${relay.id}`;
+  assert.deepEqual(codexProviderAccessModes(relay), ["gateway", "direct", "cdp"]);
+  assert.equal(resolveCodexProviderBindAccountId(relay, previousGateway), previousGateway);
+  assert.equal(resolveCodexProviderBindAccountId({ ...relay, api_instance_access_mode: "direct" }, previousGateway), relay.id);
+  assert.equal(resolveCodexProviderBindAccountId({ ...relay, api_instance_access_mode: "gateway" }), previousGateway);
+  assert.deepEqual(codexProviderAccessModes({ ...relay, api_wire_api: "anthropic" }), ["gateway", "cdp"]);
+  assert.deepEqual(codexProviderAccessModes({ ...relay, api_wire_api: undefined, api_base_url: "https://relay.example.invalid/v1/chat/completions" }), ["gateway", "cdp"]);
+  assert.deepEqual(codexProviderAccessModes({ ...relay, upstream_grok_account_id: "platform-account" }), ["gateway", "cdp"]);
+});
 
 function account(partial: Partial<CodexAccount>): CodexAccount {
   return {
@@ -273,4 +288,17 @@ test("account overview still shows DeepSeek quota when relay quota is hidden", (
   assert.equal(shouldShowCodexApiKeyUsagePanel(deepseek, false), true);
   assert.equal(shouldShowCodexApiKeyUsagePanel(relay, true), false);
   assert.equal(shouldShowCodexApiKeyUsagePanel(relay, false), true);
+});
+
+
+test("the balance switch hides relay panels while preserving dedicated provider usage", () => {
+  const relay = "https://relay.example/v1";
+  assert.equal(canShowCodexProviderBalance(false, relay, "new_api"), true);
+  assert.equal(canShowCodexProviderBalance(true, relay, "new_api"), false);
+  assert.equal(canShowCodexProviderBalance(true, relay, "sub2api"), false);
+  assert.equal(canShowCodexProviderBalance(true, relay), false);
+  assert.equal(canShowCodexProviderBalance(true, relay, "cockpit"), true);
+  assert.equal(canShowCodexProviderBalance(true, "https://api.openai.com/v1"), true);
+  assert.equal(canShowCodexProviderBalance(true, "https://api.deepseek.com/v1"), true);
+  assert.equal(canShowCodexProviderBalance(true, "https://api.z.ai/api/coding/paas/v4"), true);
 });

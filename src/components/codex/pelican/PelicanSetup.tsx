@@ -10,7 +10,7 @@ import { CODEX_PELICAN_MAX_CONCURRENCY } from '../../../types/codexPelican';
 import { SingleSelectDropdown } from '../../SingleSelectDropdown';
 import { ModalErrorMessage, useModalErrorState } from '../../ModalErrorMessage';
 import { pelicanError } from './pelicanUtils';
-import { defaultPelicanConcurrency, parsePelicanConcurrency } from './pelicanSetupModel';
+import { defaultPelicanConcurrency, parsePelicanConcurrency, pelicanAccountContext } from './pelicanSetupModel';
 import { PelicanAccountSummary } from './PelicanAccountSummary';
 import { PELICAN_BENCHMARKS, PELICAN_BENCHMARK_IDS, pelicanBenchmark, pelicanBenchmarkLabel, type PelicanBenchmark } from './pelicanBenchmarks';
 import { PelicanReference } from './PelicanReference';
@@ -41,7 +41,13 @@ export function PelicanSetup({ mask }: { mask: (value: string) => string }) {
   const formRef = useRef<HTMLFormElement>(null);
   const error = useModalErrorState();
   const eligible = useMemo(() => accounts.filter((account) => !isCodexApiKeyAccount(account) && !isCodexWebSessionAccount(account)), [accounts]);
-  const filtered = useMemo(() => eligible.filter((account) => `${account.email} ${account.tags?.join(' ')}`.toLowerCase().includes(search.toLowerCase())), [eligible, search]);
+  const choices = useMemo(() => eligible.map((account) => ({
+    account,
+    context: pelicanAccountContext(account, account.id, account.email),
+  })), [eligible]);
+  const query = search.trim().toLowerCase();
+  const filtered = choices.filter(({ account, context }) => [account.email, ...context, ...(account.tags ?? [])]
+    .join(' ').toLowerCase().includes(query));
   const selectedIds = eligible.filter((account) => selected.has(account.id)).map((account) => account.id);
 
   useEffect(() => {
@@ -123,16 +129,17 @@ export function PelicanSetup({ mask }: { mask: (value: string) => string }) {
     {providerMode ? <PelicanProviderSetup busy={busy} invalid={fieldError === 'providers'} mask={mask} onValidChange={setProvidersValid} onChange={fieldChanged} /> : <>
     <div className="pelican-section-heading"><strong>{t('pelican.accounts')} ({selectedIds.length}/{eligible.length})</strong>
       <button type="button" className="btn btn-secondary" disabled={busy || !filtered.length} onClick={() => {
-        const allSelected = filtered.every((account) => selected.has(account.id));
-        setSelected((previous) => { const next = new Set(previous); filtered.forEach((account) => allSelected ? next.delete(account.id) : next.add(account.id)); return next; }); fieldChanged();
+        const allSelected = filtered.every(({ account }) => selected.has(account.id));
+        setSelected((previous) => { const next = new Set(previous); filtered.forEach(({ account }) => allSelected ? next.delete(account.id) : next.add(account.id)); return next; }); fieldChanged();
       }}>{t('common.selectAll')}</button>
     </div>
     <input type="search" value={search} placeholder={t('pelican.search')} aria-label={t('pelican.search')} onChange={(event) => setSearch(event.target.value)} />
     <div className="pelican-account-list" data-field="accounts" tabIndex={-1} aria-invalid={fieldError === 'accounts'}>
       {!eligible.length && <p>{t('pelican.emptyAccounts')}</p>}
-      {filtered.map((account) => <label className="pelican-account-choice" key={account.id}>
+      {filtered.map(({ account, context }) => <label className="pelican-account-choice" key={account.id}>
         <input type="checkbox" checked={selected.has(account.id)} disabled={busy} onChange={() => { setSelected((previous) => { const next = new Set(previous); if (next.has(account.id)) next.delete(account.id); else next.add(account.id); return next; }); fieldChanged(); }} />
         <span className="pelican-account-identity"><span>{mask(account.email || account.id)}</span>
+          {context.length > 0 && <small className="pelican-account-context">{context.map(mask).join(' · ')}</small>}
           {account.tags?.length ? <small className="pelican-account-tags">{account.tags.join(' · ')}</small> : null}
         </span>
         <PelicanAccountSummary account={account} />

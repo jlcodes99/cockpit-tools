@@ -11,6 +11,20 @@
     use std::thread;
     use std::time::Duration;
 
+    #[test]
+    fn antigravity_desktop_path_and_ide_path_patch_independently() {
+        let mut config = UserConfig::default();
+        let settings = serde_json::json!({
+            "antigravity_app_path": "/Applications/Antigravity IDE.app",
+            "antigravity_legacy_app_path": "/Applications/Antigravity.app",
+        });
+        apply_general_config_updates(&mut config, settings.as_object().unwrap()).unwrap();
+        let clear_desktop = serde_json::json!({"antigravity_legacy_app_path": ""});
+        apply_general_config_updates(&mut config, clear_desktop.as_object().unwrap()).unwrap();
+        assert!(config.antigravity_legacy_app_path.is_empty());
+        assert_eq!(config.antigravity_app_path, "/Applications/Antigravity IDE.app");
+    }
+
     struct MetadataTestDir(PathBuf);
 
     impl MetadataTestDir {
@@ -254,6 +268,55 @@
             .recv_timeout(Duration::from_secs(1))
             .expect("second transaction should continue after unlock");
         worker.join().expect("join transaction worker");
+    }
+
+    #[test]
+    fn tray_visibility_defaults_on_and_round_trips_without_changing_preferences() {
+        let mut legacy = serde_json::to_value(UserConfig::default()).unwrap();
+        legacy.as_object_mut().unwrap().remove("show_tray_icon");
+        let mut config: UserConfig = serde_json::from_value(legacy).unwrap();
+        assert!(config.show_tray_icon);
+
+        config.hide_dock_icon = true;
+        config.menu_bar_quota_enabled = true;
+        config.startup_minimized = true;
+        for visible in [false, true] {
+            let patch = serde_json::json!({ "show_tray_icon": visible });
+            apply_general_config_updates(&mut config, patch.as_object().unwrap()).unwrap();
+            let saved = serde_json::to_value(&config).unwrap();
+            let restored: UserConfig = serde_json::from_value(saved).unwrap();
+            assert_eq!(restored.show_tray_icon, visible);
+            assert!(restored.hide_dock_icon);
+            assert!(restored.menu_bar_quota_enabled);
+            assert_eq!(crate::should_hide_dock_icon(&restored), visible);
+            assert_eq!(crate::should_hide_startup_minimized_window(&restored, true), visible);
+        }
+    }
+
+    #[test]
+    fn menu_bar_quota_keeps_claude_cli_separate_from_desktop() {
+        let mut config = UserConfig::default();
+        for platform in ["claude_cli", "claude_manager"] {
+            let patch = serde_json::json!({ "menu_bar_quota_platform": platform });
+            apply_general_config_updates(&mut config, patch.as_object().unwrap()).unwrap();
+            let saved = serde_json::to_value(&config).unwrap();
+            let reloaded: UserConfig = serde_json::from_value(saved).unwrap();
+            assert_eq!(reloaded.menu_bar_quota_platform, platform);
+        }
+    }
+
+    #[test]
+    fn antigravity_menu_quota_metric_defaults_and_survives_unrelated_settings() {
+        let mut old = serde_json::to_value(UserConfig::default()).unwrap();
+        old.as_object_mut().unwrap().remove("menu_bar_antigravity_metric");
+        let mut config: UserConfig = serde_json::from_value(old).unwrap();
+        assert!(config.menu_bar_antigravity_metric.is_empty());
+        let patch = serde_json::json!({ "menu_bar_antigravity_metric": " gemini:weekly " });
+        apply_general_config_updates(&mut config, patch.as_object().unwrap()).unwrap();
+        let patch = serde_json::json!({ "menu_bar_quota_platform": "codex" });
+        apply_general_config_updates(&mut config, patch.as_object().unwrap()).unwrap();
+        let reloaded: UserConfig = serde_json::from_value(serde_json::to_value(config).unwrap()).unwrap();
+        assert_eq!(reloaded.menu_bar_antigravity_metric, "gemini:weekly");
     }
 
     #[test]

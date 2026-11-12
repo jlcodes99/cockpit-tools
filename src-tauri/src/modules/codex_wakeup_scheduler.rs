@@ -1,15 +1,19 @@
-use crate::modules::{codex_account, codex_wakeup, logger};
+use crate::models::codex::CodexQuota;
+use crate::modules::codex_wakeup::QuotaResetPlan;
+use crate::modules::{codex_account, codex_local_access, codex_wakeup, logger};
 use chrono::{DateTime, Datelike, Local, TimeZone};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tokio::time::sleep;
 
 static STARTED: OnceLock<Mutex<bool>> = OnceLock::new();
 static RUNNING_TASKS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static ACTIVE_RUN_SCOPES: OnceLock<Mutex<HashMap<String, ActiveRunScope>>> = OnceLock::new();
 static STARTUP_TRIGGERED: OnceLock<Mutex<bool>> = OnceLock::new();
+const WAKEUP_QUOTA_REFRESH_TIMEOUT: Duration = Duration::from_secs(60);
+const PRIMARY_RESET_RECHECK_DELAY: Duration = Duration::from_secs(30);
 
 fn started_flag() -> &'static Mutex<bool> {
     STARTED.get_or_init(|| Mutex::new(false))
@@ -62,9 +66,34 @@ fn build_local_datetime(date: chrono::NaiveDate, minutes: i32) -> Option<DateTim
         })
 }
 
-fn collect_task_reset_timestamps(task: &codex_wakeup::CodexWakeupTask) -> Vec<i64> {
-    if task.account_ids.is_empty() {
-        return Vec::new();
+struct QuotaResetTiming {
+    plan: Option<QuotaResetPlan>,
+    due: Option<i64>,
+    next: Option<i64>,
+}
+
+fn quota_reset_timing(task: &codex_wakeup::CodexWakeupTask, now: i64) -> QuotaResetTiming {
+    let mut timing = QuotaResetTiming {
+        plan: None,
+        due: None,
+        next: None,
+    };
+    let pool;
+    let account_ids = if task.use_api_service_pool {
+        pool = match codex_local_access::configured_active_pool_member_ids() {
+            Ok(ids) => ids,
+            Err(error) => {
+                logger::log_warn(&format!("[CodexWakeup] 无法读取账号池重置计划: {error}"));
+                timing.plan = task.quota_reset_plan.clone();
+                return timing;
+            }
+        };
+        &pool
+    } else {
+        &task.account_ids
+    };
+    if account_ids.is_empty() {
+        return timing;
     }
     let quota_reset_window = task
         .schedule
@@ -75,27 +104,53 @@ fn collect_task_reset_timestamps(task: &codex_wakeup::CodexWakeupTask) -> Vec<i6
     let include_secondary =
         quota_reset_window == "either" || quota_reset_window == "secondary_window";
 
-    let selected: HashSet<&str> = task.account_ids.iter().map(String::as_str).collect();
-    let mut timestamps: Vec<i64> = codex_account::list_accounts()
+    let accounts = if task.use_api_service_pool {
+        account_ids.iter().filter_map(|id| codex_account::load_account(id))
+            .filter(codex_wakeup::is_pool_wakeup_account).collect::<Vec<_>>()
+    } else {
+        let selected: HashSet<&str> = account_ids.iter().map(String::as_str).collect();
+        codex_account::list_accounts().into_iter()
+            .filter(|account| selected.contains(account.id.as_str())).collect()
+    };
+    let delay = i64::from(task.schedule.quota_reset_delay_minutes.unwrap_or(0)) * 60;
+    let after = task.last_run_at.unwrap_or(task.created_at);
+    let observed = accounts.iter().flat_map(|account| {
+        let quota = account.quota.as_ref();
+        [
+            (true, include_primary, quota.and_then(|value| value.hourly_reset_time)),
+            (false, include_secondary, quota.and_then(|value| value.weekly_reset_time)),
+        ]
         .into_iter()
-        .filter(|account| selected.contains(account.id.as_str()))
-        .flat_map(|account| account.quota.into_iter())
-        .flat_map(|quota| {
-            let mut values = Vec::new();
-            if include_primary {
-                values.push(quota.hourly_reset_time);
-            }
-            if include_secondary {
-                values.push(quota.weekly_reset_time);
-            }
-            values
+        .filter_map(move |(primary, include, reset)| {
+            let reset_at = reset.filter(|_| include)?;
+            Some((account.id.as_str(), primary, reset_at))
         })
-        .flatten()
-        .filter(|ts| *ts > 0)
-        .collect();
-    timestamps.sort_unstable();
-    timestamps.dedup();
-    timestamps
+    });
+    // Once a known reset has passed, a quota refresh can replace it with the
+    // next window while this task is still waiting out its configured delay.
+    let retained = task.quota_reset_plan.as_ref().filter(|plan| {
+        delay > 0 && plan.reset_at <= now
+            && (if plan.primary { include_primary } else { include_secondary })
+            && accounts.iter().any(|account| account.id == plan.account_id)
+    });
+    let retained = retained.map(|plan| (plan.account_id.as_str(), plan.primary, plan.reset_at));
+    for (account_id, primary, reset_at) in observed.chain(retained) {
+        if reset_at <= 0 || reset_at <= after {
+            continue;
+        }
+        let Some(due) = reset_at.checked_add(delay) else {
+            continue;
+        };
+        if due <= now {
+            timing.due = Some(timing.due.map_or(due, |current| current.max(due)));
+        } else {
+            timing.next = Some(timing.next.map_or(due, |current| current.min(due)));
+        }
+        if delay > 0 && timing.plan.as_ref().is_none_or(|plan| reset_at < plan.reset_at) {
+            timing.plan = Some(QuotaResetPlan { account_id: account_id.into(), primary, reset_at });
+        }
+    }
+    timing
 }
 
 pub(super) fn current_due_at(
@@ -135,13 +190,7 @@ pub(super) fn current_due_at(
                 None
             }
         }
-        "quota_reset" => {
-            let last_run_at = task.last_run_at.unwrap_or(task.created_at);
-            collect_task_reset_timestamps(task)
-                .into_iter()
-                .filter(|reset_at| *reset_at <= now.timestamp() && *reset_at > last_run_at)
-                .max()
-        }
+        "quota_reset" => quota_reset_timing(task, now.timestamp()).due,
         "startup" => None,
         _ => None,
     }
@@ -181,10 +230,7 @@ pub fn calculate_next_run_at(task: &codex_wakeup::CodexWakeupTask) -> Option<i64
                 i64::from(task.schedule.interval_hours.unwrap_or(4).max(1)) * 3600;
             Some(task.last_run_at.unwrap_or(task.created_at) + interval_seconds)
         }
-        "quota_reset" => collect_task_reset_timestamps(task)
-            .into_iter()
-            .filter(|reset_at| *reset_at > now.timestamp())
-            .min(),
+        "quota_reset" => quota_reset_timing(task, now.timestamp()).next,
         "startup" => None,
         _ => None,
     }
@@ -248,6 +294,39 @@ pub async fn run_task_now(
         .ok_or_else(|| "唤醒任务已停用、删除或正在执行中".to_string())
 }
 
+fn primary_reset_pending(quota: &CodexQuota, now: i64) -> bool {
+    quota.hourly_reset_time.is_none_or(|reset_at| reset_at <= now)
+}
+
+async fn refresh_after_wakeup(
+    app: Option<&AppHandle>,
+    ids: &[String],
+) -> Vec<(String, CodexQuota)> {
+    let refreshed = match tokio::time::timeout(
+        WAKEUP_QUOTA_REFRESH_TIMEOUT,
+        crate::modules::codex_quota::refresh_quotas_for_account_ids_in_background(ids, true),
+    )
+    .await
+    {
+        Ok(Ok(results)) => results
+            .into_iter()
+            .filter_map(|(id, result)| result.ok().map(|quota| (id, quota)))
+            .collect::<Vec<_>>(),
+        Ok(Err(error)) => {
+            logger::log_warn(&format!("[CodexWakeup] 更新重置时间失败: {error}"));
+            Vec::new()
+        }
+        Err(_) => {
+            logger::log_warn("[CodexWakeup] 更新重置时间超时");
+            Vec::new()
+        }
+    };
+    if let Some(app) = app.filter(|_| !refreshed.is_empty()) {
+        let _ = app.emit("codex://wakeup-quota-refreshed", ());
+    }
+    refreshed
+}
+
 async fn run_task(
     app: Option<&AppHandle>,
     task_id: &str,
@@ -255,7 +334,10 @@ async fn run_task(
     run_id: Option<String>,
     due_at: Option<i64>,
 ) -> Result<Option<codex_wakeup::CodexWakeupBatchResult>, String> {
-    let Some(lease) = codex_wakeup::try_task_run_lease(task_id)? else {
+    let lease_task = task_id.to_string();
+    let Some(lease) = codex_wakeup::run_state_task(move || {
+        codex_wakeup::try_task_run_lease(&lease_task)
+    }).await? else {
         return Ok(None);
     };
     if !mark_running(task_id) {
@@ -280,7 +362,10 @@ async fn run_task(
 
     // Register cancellation first, then re-read enabled state while claiming.
     // A disable racing either side of the claim therefore cannot be lost.
-    let Some(task) = codex_wakeup::claim_task_run(task_id, due_at, require_enabled)? else {
+    let claim_task = task_id.to_string();
+    let Some(task) = codex_wakeup::run_state_task(move || {
+        codex_wakeup::claim_task_run(&claim_task, due_at, require_enabled)
+    }).await? else {
         return Ok(None);
     };
     let context = codex_wakeup::TaskRunContext {
@@ -288,56 +373,99 @@ async fn run_task(
         task_id: Some(task.id.clone()),
         task_name: Some(task.name.clone()),
     };
-    let result = crate::modules::codex_wakeup_confirmation::dispatch(
-        app,
-        &task,
-        require_enabled,
-        cancel_flag,
-        async {
-            codex_wakeup::authorize_task_dispatch(&task, require_enabled)?;
-            codex_wakeup::run_batch(
-                app,
-                task.account_ids.clone(),
-                task.prompt.clone(),
-                codex_wakeup::CodexWakeupExecutionConfig {
-                    model: task.model.clone(),
-                    model_display_name: task.model_display_name.clone(),
-                    model_reasoning_effort: task.model_reasoning_effort.clone(),
-                },
-                context,
-                run_id,
-                Some(&scope),
-            )
-            .await
-        },
-    )
-    .await;
+    let result = async {
+        let mut batch_task = task.clone();
+        if task.use_api_service_pool {
+            batch_task.account_ids = codex_wakeup::run_state_task(codex_wakeup::resolve_pool_wakeup_account_ids).await?;
+            if batch_task.account_ids.is_empty() {
+                return Err("CODEX_WAKEUP_POOL_EMPTY".to_string());
+            }
+        }
+        crate::modules::codex_wakeup_confirmation::dispatch(
+            app, &batch_task, require_enabled, cancel_flag, async {
+                let mut ids = batch_task.account_ids.clone();
+                if task.use_api_service_pool && require_enabled && task.execution_mode.as_deref() == Some("confirm") {
+                    let active = codex_wakeup::run_state_task(codex_wakeup::resolve_pool_wakeup_account_ids).await?;
+                    let active = active.into_iter().collect::<HashSet<_>>();
+                    ids.retain(|id| active.contains(id));
+                    if ids.is_empty() {
+                        return Err("CODEX_WAKEUP_POOL_EMPTY".to_string());
+                    }
+                }
+                let expected = task.clone();
+                codex_wakeup::run_state_task(move || {
+                    codex_wakeup::authorize_task_dispatch(&expected, require_enabled)
+                }).await?;
+                codex_wakeup::run_batch(
+                    app, ids, task.prompt.clone(),
+                    codex_wakeup::CodexWakeupExecutionConfig {
+                        model: task.model.clone(),
+                        model_display_name: task.model_display_name.clone(),
+                        model_reasoning_effort: task.model_reasoning_effort.clone(),
+                    }, context, run_id, Some(&scope),
+                ).await
+            },
+        ).await
+    }.await;
 
-    let update_result = match &result {
-        Ok(batch) => codex_wakeup::update_task_after_run(&task.id, &batch.records),
-        Err(error) => codex_wakeup::mark_task_run_failed(&task.id, error),
-    };
+    let completed = task.clone();
+    let (result, update_result) = codex_wakeup::run_state_task(move || {
+        let update = match &result {
+            Ok(batch) => codex_wakeup::update_task_after_run(&completed, &batch.records),
+            Err(error) => codex_wakeup::mark_task_run_failed(&completed, error),
+        };
+        Ok((result, update))
+    }).await?;
     if let Err(error) = update_result {
         logger::log_warn(&format!("[CodexWakeup] 更新任务执行结果失败: {}", error));
+    } else if let Some(app) = app {
+        let _ = app.emit("codex://wakeup-task-finished", ());
     }
     // Refresh reset windows through the existing deduplicating background
     // queue, after committing the run result. No scheduler lock spans I/O.
-    if task.schedule.kind == "quota_reset" && result.is_ok() {
-        let ids = task.account_ids.clone();
+    let quota_reset = task.schedule.kind == "quota_reset";
+    if let Some(batch) = result.as_ref().ok().filter(|_| quota_reset || task.use_api_service_pool) {
+        let successful: Vec<_> = batch.records.iter().filter(|record| record.success)
+            .map(|record| record.account_id.clone()).collect();
+        let ids = if task.use_api_service_pool {
+            successful.clone()
+        } else {
+            task.account_ids.clone()
+        };
+        if ids.is_empty() {
+            return result.map(Some);
+        }
+        let recheck_primary = quota_reset
+            && task.schedule.quota_reset_window.as_deref() != Some("secondary_window");
+        let successful: HashSet<_> = successful.into_iter().collect();
+        let app = app.cloned();
         tauri::async_runtime::spawn(async move {
-            match tokio::time::timeout(
-                Duration::from_secs(60),
-                crate::modules::codex_quota::refresh_quotas_for_account_ids_in_background(
-                    &ids, true,
-                ),
-            )
-            .await
-            {
-                Ok(Ok(_)) => {}
-                Ok(Err(error)) => {
-                    logger::log_warn(&format!("[CodexWakeup] 更新重置时间失败: {}", error))
-                }
-                Err(_) => logger::log_warn("[CodexWakeup] 更新重置时间超时"),
+            let refreshed = refresh_after_wakeup(app.as_ref(), &ids).await;
+            if !recheck_primary {
+                return;
+            }
+            let now = Local::now().timestamp();
+            let pending: Vec<_> = refreshed.into_iter()
+                .filter(|(id, quota)| successful.contains(id) && primary_reset_pending(quota, now))
+                .map(|(id, _)| id)
+                .collect();
+            if pending.is_empty() {
+                return;
+            }
+            sleep(PRIMARY_RESET_RECHECK_DELAY).await;
+            // A periodic or manual refresh may have filled the same window
+            // while we waited. Re-read the authoritative snapshot first.
+            let pending = codex_wakeup::run_state_task(move || {
+                let now = Local::now().timestamp();
+                Ok(pending.into_iter().filter(|id| {
+                    codex_account::load_account(id).and_then(|account| account.quota)
+                        .is_some_and(|quota| primary_reset_pending(&quota, now))
+                }).collect::<Vec<_>>())
+            }).await;
+            match pending {
+                Ok(ids) if !ids.is_empty() => { refresh_after_wakeup(app.as_ref(), &ids).await; }
+                Ok(_) => {}
+                Err(error) => logger::log_warn(&format!("[CodexWakeup] 复查主额度重置时间失败: {error}")),
             }
         });
     }
@@ -348,7 +476,7 @@ pub async fn run_enabled_tasks_now(
     app: Option<&AppHandle>,
     trigger_type: &str,
 ) -> Result<u32, String> {
-    let state = codex_wakeup::load_state_for_scheduler()?;
+    let state = codex_wakeup::run_state_task(codex_wakeup::load_state_for_scheduler).await?;
     if !state.enabled {
         return Ok(0);
     }
@@ -385,7 +513,7 @@ pub async fn run_enabled_tasks_now(
                     sleep(Duration::from_secs(delay_seconds)).await;
                 }
 
-                let current_state = match codex_wakeup::load_state_for_scheduler() {
+                let current_state = match codex_wakeup::run_state_task(codex_wakeup::load_state_for_scheduler).await {
                     Ok(state) => state,
                     Err(err) => {
                         logger::log_warn(&format!(
@@ -487,8 +615,33 @@ pub fn trigger_startup_tasks_if_needed(app: AppHandle) {
 }
 
 async fn run_scheduler_once(app: &AppHandle) {
-    let state = match codex_wakeup::load_state_for_scheduler() {
-        Ok(state) => state,
+    let (state, due_tasks) = match codex_wakeup::run_state_task(|| {
+        let state = codex_wakeup::load_state_for_scheduler()?;
+        let now = Local::now();
+        let due_tasks = if state.enabled && crate::modules::tray_layout::is_platform_enabled("codex") {
+            let mut plans = Vec::new();
+            let due = state.tasks.iter().filter(|task| task.enabled).filter_map(|task| {
+                if task.schedule.kind != "quota_reset" {
+                    return current_due_at(task, now).map(|due| (task.id.clone(), due, false));
+                }
+                let timing = quota_reset_timing(task, now.timestamp());
+                if task.quota_reset_plan != timing.plan {
+                    plans.push((task, timing.plan));
+                }
+                timing.due.map(|due| (task.id.clone(), due, true))
+            }).collect::<Vec<_>>();
+            if !plans.is_empty() {
+                if let Err(error) = codex_wakeup::save_quota_reset_plans(plans) {
+                    logger::log_warn(&format!("[CodexWakeup] 保存额度重置计划失败: {error}"));
+                }
+            }
+            due
+        } else {
+            Vec::new()
+        };
+        Ok((state, due_tasks))
+    }).await {
+        Ok(snapshot) => snapshot,
         Err(err) => {
             logger::log_warn(&format!("[CodexWakeup] 读取任务状态失败: {}", err));
             return;
@@ -496,29 +649,12 @@ async fn run_scheduler_once(app: &AppHandle) {
     };
 
     cancel_disabled_tasks(&state);
-    if !state.enabled {
-        return;
-    }
-
-    // 平台在「平台布局」中被禁用时不执行唤醒任务
-    if !crate::modules::tray_layout::is_platform_enabled("codex") {
-        return;
-    }
-
-    let now = Local::now();
-    for task in state.tasks {
-        if !task.enabled {
-            continue;
-        }
-        let Some(due_at) = current_due_at(&task, now) else {
-            continue;
-        };
-        if lock_or_recover(running_tasks(), "codex wakeup running tasks lock").contains(&task.id) {
+    for (task_id, due_at, quota_reset) in due_tasks {
+        if lock_or_recover(running_tasks(), "codex wakeup running tasks lock").contains(&task_id) {
             continue;
         }
 
-        let task_id = task.id.clone();
-        let trigger_type = if task.schedule.kind == "quota_reset" {
+        let trigger_type = if quota_reset {
             "quota_reset"
         } else {
             "scheduled"
@@ -558,6 +694,10 @@ pub fn ensure_started(app: AppHandle) {
         }
     });
 }
+
+#[cfg(test)]
+#[path = "codex_wakeup_scheduler_dispatch_tests.rs"]
+mod dispatch_tests;
 
 #[cfg(test)]
 mod tests {

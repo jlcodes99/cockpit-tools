@@ -1,4 +1,5 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { useAccountsOverviewFilterState } from '../hooks/useAccountsOverviewFilterState';
+import { Fragment, useCallback, useEffect, useMemo } from 'react';
 import {
   ArrowDownWideNarrow,
   Check,
@@ -63,15 +64,12 @@ import {
   normalizeAccountsOverviewScope,
   readAccountsOverviewFilterPersistenceEnabled,
   readAccountsOverviewFilterStringArray,
-  removeAccountsOverviewFilterField,
-  writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
 import './ZedAccountsPage.css';
 
 type ZedSortKey = 'created_at' | 'token_spend' | 'billing_end';
 
 const ZED_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.zed.flow_notice_collapsed';
-const ZED_CURRENT_ACCOUNT_ID_KEY = 'agtools.zed.current_account_id';
 const ZED_UNTAGGED_KEY = '__untagged__';
 const ZED_FILTER_PERSISTENCE_SCOPE = normalizeAccountsOverviewScope('Zed');
 const FILTER_TYPES_FIELD = 'filter_types';
@@ -197,7 +195,7 @@ export function ZedAccountsPage() {
   const { t } = useTranslation();
   const isMacOS = usePlatformRuntimeSupport('macos-only');
   const store = useZedAccountStore();
-  const [filterTypes, setFilterTypes] = useState<string[]>(() =>
+  const [filterTypes, setFilterTypes] = useAccountsOverviewFilterState<string[]>(ZED_FILTER_PERSISTENCE_SCOPE, FILTER_TYPES_FIELD, () =>
     readAccountsOverviewFilterPersistenceEnabled(ZED_FILTER_PERSISTENCE_SCOPE)
       ? readAccountsOverviewFilterStringArray(ZED_FILTER_PERSISTENCE_SCOPE, FILTER_TYPES_FIELD)
       : [],
@@ -207,7 +205,6 @@ export function ZedAccountsPage() {
     platformKey: 'Zed',
     oauthLogPrefix: 'ZedOAuth',
     flowNoticeCollapsedKey: ZED_FLOW_NOTICE_COLLAPSED_KEY,
-    currentAccountIdKey: ZED_CURRENT_ACCOUNT_ID_KEY,
     exportFilePrefix: 'zed_accounts',
     store: {
       accounts: store.accounts,
@@ -255,8 +252,6 @@ export function ZedAccountsPage() {
     setViewMode,
     searchQuery,
     setSearchQuery,
-    filterPersistenceEnabled,
-    filterPersistenceScope,
     sortBy,
     setSortBy,
     sortDirection,
@@ -357,14 +352,6 @@ export function ZedAccountsPage() {
   } = page;
 
   const grouping = usePlatformAccountGroups('zed', () => toggleSelectAll(Array.from(selected)));
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(filterPersistenceScope, FILTER_TYPES_FIELD);
-      return;
-    }
-    writeAccountsOverviewFilterField(filterPersistenceScope, FILTER_TYPES_FIELD, filterTypes);
-  }, [filterPersistenceEnabled, filterPersistenceScope, filterTypes]);
 
   const accounts = store.accounts;
   const loading = store.loading;

@@ -460,6 +460,11 @@ export interface CodexBatchImportItem {
   provider?: string | null;
   quotaStatus: string;
   quotaError?: string | null;
+  quotaWindows?: Array<{
+    kind: "hourly" | "weekly" | "relay";
+    percentage: number;
+    windowMinutes?: number | null;
+  }>;
   status: string;
   error?: string | null;
   defaultSelected: boolean;

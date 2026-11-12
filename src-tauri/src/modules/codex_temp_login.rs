@@ -437,14 +437,10 @@ async fn run_session(app: AppHandle, session_id: String, recover: bool) {
                 session_id, account.id, account.email
             ));
             // 额度/资料刷新放在后台，不阻塞登录结果回传。
-            let app_for_refresh = app.clone();
-            tauri::async_runtime::spawn(async move {
-                let _ = crate::commands::codex::refresh_imported_codex_accounts(
-                    &app_for_refresh,
-                    vec![account],
-                )
-                .await;
-            });
+            crate::commands::codex::schedule_imported_codex_quota_refresh(
+                &app,
+                std::slice::from_ref(&account),
+            );
         }
         SessionOutcome::CredentialsReady => {
             unreachable!("final credentials must be imported before completion")

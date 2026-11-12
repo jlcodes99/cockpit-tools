@@ -29,6 +29,9 @@ struct CodexRegisteredLaunch {
     executable: String,
 }
 
+#[cfg(any(test, target_os = "windows"))]
+const CODEX_REGISTRATION_RESULT_PREFIX: &str = "COCKPIT_CODEX_REGISTRATION:";
+
 /// Local manifest data is a launch hint, never proof of current registration.
 /// The activation script still checks the registered family, application and exe.
 #[cfg(any(test, target_os = "windows"))]
@@ -216,8 +219,10 @@ foreach ($pkg in $packages) {{
   if ($matches.Count -gt 0) {{ break }}
 }}
 if ($matches.Count -gt 1) {{ throw 'Ambiguous registered Codex GUI applications' }}
-if ($matches.Count -eq 1) {{ $matches[0] | ConvertTo-Json -Compress }} else {{ Write-Output 'null' }}"#,
+if ($matches.Count -eq 1) {{ $payload = $matches[0] | ConvertTo-Json -Compress }} else {{ $payload = 'null' }}
+Write-Output ('{result_prefix}' + $payload)"#,
         exe = escape_powershell_single_quoted(&launch_path.to_string_lossy()),
+        result_prefix = CODEX_REGISTRATION_RESULT_PREFIX,
         package_query = codex_store_package_family_from_path(launch_path)
             .map(|family| format!(
                 "Get-AppxPackage -Name '{}' -ErrorAction Stop",
@@ -274,8 +279,17 @@ fn codex_launch_powershell_output(script: &str) -> Result<String, String> {
 
 #[cfg(any(test, target_os = "windows"))]
 fn parse_codex_registered_launch(output: &str) -> Result<Option<CodexRegisteredLaunch>, String> {
+    let mut records = output.lines().filter_map(|line| {
+        line.trim()
+            .trim_start_matches('\u{feff}')
+            .strip_prefix(CODEX_REGISTRATION_RESULT_PREFIX)
+    });
+    let payload = records.next().ok_or("Missing Codex package registration result")?;
+    if records.next().is_some() {
+        return Err("Multiple Codex package registration results".to_string());
+    }
     let registered: Option<CodexRegisteredLaunch> =
-        serde_json::from_str(output.trim_start_matches('\u{feff}'))
+        serde_json::from_str(payload)
             .map_err(|error| format!("Invalid package registration response: {error}"))?;
     if let Some(package) = &registered {
         if package.family_name.trim().is_empty()

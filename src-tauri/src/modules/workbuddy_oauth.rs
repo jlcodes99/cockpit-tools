@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use crate::models::workbuddy::{WorkbuddyOAuthCompletePayload, WorkbuddyOAuthStartResponse};
 use crate::modules::logger;
 
-const WORKBUDDY_API_ENDPOINT: &str = "https://copilot.tencent.com";
+pub(super) const WORKBUDDY_API_ENDPOINT: &str = "https://copilot.tencent.com";
 const WORKBUDDY_API_PREFIX: &str = "/v2/plugin";
 const WORKBUDDY_PLATFORM: &str = "workbuddy";
 // WorkBuddy 与 CodeBuddy 共用同一网关校验，缺少 User-Agent 会返回 403 / code=10085。
@@ -653,7 +653,7 @@ pub async fn fetch_user_resource_with_access_token(
     post_user_resource(access_token, uid, enterprise_id, domain).await
 }
 
-fn billing_headers(
+pub(super) fn billing_headers(
     access_token: &str,
     uid: Option<&str>,
     enterprise_id: Option<&str>,

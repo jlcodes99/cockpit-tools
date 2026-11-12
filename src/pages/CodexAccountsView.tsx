@@ -16,16 +16,18 @@ import { buildCodexAccountPresentation } from "../presentation/platformAccountPr
 import { CodexOverviewTabsHeader } from "../components/CodexOverviewTabsHeader";
 import { CodexInstancesContent } from "./CodexInstancesPage";
 import { CodexLaunchPreviewModal } from "../components/codex/CodexLaunchPreviewModal";
+import { AccountFormReadDialog } from "../components/AccountFormReadDialog";
 import { CodexSessionManager } from "../components/codex/CodexSessionManager";
 import { CodexCliLaunchDialog } from "../components/codex/CodexCliLaunchDialog";
 import { CodexWakeupContent } from "../components/codex/CodexWakeupContent";
 import { CodexModelProviderManager } from "../components/codex/CodexModelProviderManager";
-import { isCodexApiKeyAccount, type CodexAccount } from "../types/codex";
+import { getCodexQuotaWindowLabel, isCodexApiKeyAccount, type CodexAccount } from "../types/codex";
 import type { useCodexAccountsPageController } from "./CodexAccountsPage";
 import { CodexOAuthBindingModal } from "./CodexOAuthBindingModal";
 import { CodexAccountsOverviewPanel } from "./CodexAccountsOverviewPanel";
 import { CodexTopLayoutPage } from "../components/codex/CodexTopLayoutPage";
 import { CodexEgressProxyPage } from "../components/codex/CodexEgressProxyPage";
+import { CodexQuotaHistoryPage } from "../components/codex/CodexQuotaHistoryPage";
 import { CODEX_API_SERVICE_PROXY_TARGET, apiServiceProxyAccount } from "../services/codexProxyTargetService";
 import { CodexAccountProxyPreview } from "../components/codex/CodexAccountProxyPreview";
 import { CODEX_OPEN_PROXY_EVENT, canUseCodexAccountProxy } from "../utils/codexAccountProxy";
@@ -51,6 +53,7 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
     batchImportCheckQuota,
     batchImportCounts,
     batchImportError,
+    batchImportMinimumQuota,
     batchImportOpen,
     batchImportPreview,
     batchImportProgress,
@@ -117,12 +120,13 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
     selectReadyBatchImportAccounts,
     setActiveTab,
     setBatchImportOpen,
+    setBatchImportMinimumQuota,
      setBatchImportTagsInput,
      setLaunchPreviewAccount,
      handleLaunchPreviewInstanceChange,
      setLocalAccessLaunchPreviewOpen,
     setManagedProviders,
-    managedProviders, editingApiKeyCredentialsId, closeApiKeyCredentialsModal,
+    managedProviders, editingApiKeyCredentialsId, closeApiKeyCredentialsModal, apiKeyEditorRead, apiKeyEditorReadError,
     setSelectedTerminal,
     setWakeupPresetManagerSignal,
     sortedAccountsForInstances,
@@ -255,6 +259,12 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
           maskAccountText(resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")))
         }
         onBack={() => setActiveTab("overview")}
+      />}
+      {activeTab === "quota-history" && <CodexQuotaHistoryPage
+        accounts={accounts}
+        resolveDisplayName={(account) =>
+          maskAccountText(resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")))
+        }
       />}
 
       {batchImportOpen &&
@@ -509,9 +519,10 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
                           className="btn btn-secondary compact"
                           disabled={
                             batchImportBusy ||
-                            batchImportCounts.ready +
-                              batchImportCounts.existing ===
-                              0
+                            !batchImportVisibleItems.some((item) =>
+                              batchImportSelectableIdSet.has(item.itemId) &&
+                              (item.status === "ready" || item.status === "existing"),
+                            )
                           }
                           onClick={selectReadyBatchImportAccounts}
                         >
@@ -530,6 +541,34 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
                         </button>
                       </div>
                     </div>
+
+                    {activeBatchImportCheckQuota && (
+                      <div className="codex-batch-import-tags-row">
+                        <label className="codex-batch-import-tags-label" htmlFor="codex-batch-import-minimum-quota">
+                          {t("codex.batchImport.minimumQuota")}
+                        </label>
+                        <input
+                          id="codex-batch-import-minimum-quota"
+                          className="codex-batch-import-tags-input"
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={batchImportMinimumQuota || ""}
+                          placeholder="0"
+                          disabled={batchImportBusy}
+                          aria-describedby="codex-batch-import-quota-hint"
+                          onChange={(event) => setBatchImportMinimumQuota(
+                            Math.max(0, Math.min(100, Math.round(event.currentTarget.valueAsNumber || 0))),
+                          )}
+                        />
+                      </div>
+                    )}
+                    {activeBatchImportCheckQuota && (
+                      <small id="codex-batch-import-quota-hint" className="codex-batch-import-quota-hint">
+                        {t("codex.batchImport.minimumQuotaHint")}
+                      </small>
+                    )}
 
                     <div className="codex-batch-import-tags-row">
                       <label
@@ -555,6 +594,9 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
                     </div>
 
                     <div className="codex-batch-import-list">
+                      {batchImportMinimumQuota > 0 && batchImportVisibleItems.length === 0 && (
+                        <div className="codex-batch-import-empty">{t("codex.batchImport.minimumQuotaEmpty")}</div>
+                      )}
                       {[...batchImportVisibleItems].reverse().map((item) => {
                         const selectable = batchImportSelectableIdSet.has(
                           item.itemId,
@@ -583,6 +625,13 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
                               <div className="codex-batch-import-row-meta">
                                 <span>{item.source}</span>
                                 {item.provider && <span>{item.provider}</span>}
+                                {item.quotaWindows?.map(({ kind, percentage, windowMinutes }) => {
+                                  const windowLabel = kind === "relay"
+                                    ? t("codex.quota.monthlyCredits")
+                                    : getCodexQuotaWindowLabel(windowMinutes ?? undefined, kind);
+                                  const label = windowLabel === "Weekly" ? t("codex.quota.weekly") : windowLabel;
+                                  return <span key={kind}>{label} {percentage}%</span>;
+                                })}
                                 {item.status === "ready" && (
                                   <span>
                                     {activeBatchImportCheckQuota
@@ -643,7 +692,7 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
                     className="btn btn-primary"
                     onClick={() => void handleCloseBatchImport()}
                   >
-                    {t("common.shared.close", "关闭")}
+                    {t("common.close", "关闭")}
                   </button>
                 ) : (
                   <>
@@ -663,7 +712,7 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
                           : activeBatchImportCheckQuota
                             ? t("codex.batchImport.cancelScan", "取消扫描")
                             : t("codex.batchImport.cancelParse", "取消解析")
-                        : t("common.shared.close", "关闭")}
+                        : t("common.close", "关闭")}
                     </button>
                     {!batchImportBusy &&
                       batchImportPreview?.status === "cancelled" && (
@@ -909,7 +958,7 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
 
       {cliLaunchModal && (
         <CodexCliLaunchDialog
-          subjectLabel={t("instances.columns.account", "账号")}
+          subjectLabel={t("common.shared.columns.account", "账号")}
           subjectValue={cliLaunchModal.accountLabel}
           workingDir={{
             value: cliLaunchModal.workingDir,
@@ -934,7 +983,7 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
           commandPlaceholder={
             cliLaunchModal.preparing
               ? t("common.loading", "加载中...")
-              : t("codex.cli.selectWorkingDir", "选择 Codex CLI 工作目录")
+              : t("codex.cli.selectWorkingDir")
           }
           preparing={cliLaunchModal.preparing}
           copied={cliLaunchModal.copied}
@@ -1023,6 +1072,8 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
 
       {activeTab === "sessions" && <CodexSessionManager />}
 
+      {apiKeyEditorRead.status !== 'ready' && <AccountFormReadDialog title={t('common.apiKeyAccount')}
+        status={apiKeyEditorRead.status} error={apiKeyEditorReadError} onRetry={apiKeyEditorRead.retry} onClose={closeApiKeyCredentialsModal} />}
       {(activeTab === "providers" || editingApiKeyCredentialsId) && <CodexModelProviderManager
           accounts={accounts}
           active={activeTab === "providers"}

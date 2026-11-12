@@ -110,30 +110,45 @@ fn process_paths(values: &[String]) -> Vec<PathBuf> {
     paths.iter().map(|path| path_key(path)).collect()
 }
 
-fn read_registry(path: &Path, protected: &mut Vec<PathBuf>) -> Result<(), String> {
-    match fs::read_to_string(path) {
-        Ok(content) => {
-            let registry: Registry = serde_json::from_str(&content).map_err(|e| {
-                format!(
-                    "Cannot safely read instance registry {}: {}",
-                    path.display(),
-                    e
-                )
-            })?;
-            for entry in registry.instances {
-                let value = entry.user_data_dir.trim();
-                if value.is_empty() || !Path::new(value).is_absolute() {
-                    return Err(format!("Invalid instance directory in {}", path.display()));
-                }
-                protected.push(path_key(Path::new(value)));
-                // Keep both spellings: symlinks may disappear between scans.
-                protected.push(PathBuf::from(value));
+fn is_registry(name: &str) -> bool {
+    name == "instances.json" || name.ends_with("_instances.json")
+}
+
+fn registered_references(
+    data: &Path,
+    include_backups: bool,
+) -> Result<Vec<RegistryEntry>, String> {
+    let (active, profiles) = modules::instance_registry::active_references(data)?;
+    let mut references: Vec<_> = profiles.into_iter().map(|(id, user_data_dir)| RegistryEntry {
+        id: Some(id),
+        user_data_dir,
+    }).collect();
+    for entry in fs::read_dir(data).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if let Some((original, _)) = name.split_once(".invalid-json.") {
+            if (is_registry(original) && !active.contains(original))
+                || (include_backups && original == "codex_local_access_takeover_backups.json")
+            {
+                return Err(format!("Quarantined instance or recovery registry requires recovery: {name}"));
             }
-            Ok(())
         }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(format!("Cannot read {}: {}", path.display(), e)),
+        let base = if include_backups { name.strip_suffix(".bak").unwrap_or(&name) } else { &name };
+        if !is_registry(base) || active.contains(base) {
+            continue;
+        }
+        let path = entry.path();
+        let content = match fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(format!("Cannot read {}: {error}", path.display())),
+        };
+        let registry: Registry = serde_json::from_str(&content).map_err(|error| {
+            format!("Cannot safely read instance registry {}: {error}", path.display())
+        })?;
+        references.extend(registry.instances);
     }
+    Ok(references)
 }
 
 fn roots_and_defaults() -> Result<(Vec<PlatformRoot>, Vec<PathBuf>), String> {
@@ -225,25 +240,12 @@ pub fn can_delete_registered_instance_directory(path: &Path) -> Result<bool, Str
 fn has_matching_registered_owner(path: &Path, data: &Path, owner: &str) -> Result<bool, String> {
     let target = path_key(path);
     let mut found = false;
-    for entry in fs::read_dir(data).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        if !entry
-            .file_name()
-            .to_string_lossy()
-            .ends_with("instances.json")
-        {
-            continue;
-        }
-        let registry: Registry =
-            serde_json::from_slice(&fs::read(entry.path()).map_err(|e| e.to_string())?)
-                .map_err(|e| e.to_string())?;
-        for entry in registry.instances {
-            if path_key(Path::new(&entry.user_data_dir)) == target {
-                if entry.id.as_deref() != Some(owner) {
-                    return Ok(false);
-                }
-                found = true;
+    for entry in registered_references(data, false)? {
+        if path_key(Path::new(&entry.user_data_dir)) == target {
+            if entry.id.as_deref() != Some(owner) {
+                return Ok(false);
             }
+            found = true;
         }
     }
     Ok(found)
@@ -273,35 +275,20 @@ fn has_only_one_registered_owner(
         return Ok(false);
     }
     let mut owners = 0;
-    for entry in fs::read_dir(data).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if name.contains("_instances.json.invalid-json.")
-            || name.starts_with("instances.json.invalid-json.")
-        {
+    for entry in registered_references(data, false)? {
+        let reference = Path::new(entry.user_data_dir.trim());
+        if !reference.is_absolute() {
             return Ok(false);
         }
-        if name != "instances.json" && !name.ends_with("_instances.json") {
-            continue;
-        }
-        let registry: Registry =
-            serde_json::from_slice(&fs::read(entry.path()).map_err(|error| error.to_string())?)
-                .map_err(|error| error.to_string())?;
-        for entry in registry.instances {
-            let reference = Path::new(entry.user_data_dir.trim());
-            if !reference.is_absolute() {
-                return Ok(false);
-            }
-            let key = path_key(reference);
-            let references_app_data = app_data_target
-                && app_root.is_some_and(|root| {
-                    path_key(&root.root.join(app_data_hash(reference))) == target
-                });
-            if key == target || references_app_data {
-                owners += 1;
-            } else if overlaps(&key, &target) {
-                return Ok(false);
-            }
+        let key = path_key(reference);
+        let references_app_data = app_data_target
+            && app_root.is_some_and(|root| {
+                path_key(&root.root.join(app_data_hash(reference))) == target
+            });
+        if key == target || references_app_data {
+            owners += 1;
+        } else if overlaps(&key, &target) {
+            return Ok(false);
         }
     }
     Ok(owners <= 1)
@@ -459,24 +446,14 @@ fn collect_protection_with_runtime(
     let mut paths: Vec<_> = defaults.iter().map(|path| path_key(path)).collect();
     // Root scanning is an explicit platform allowlist, but references also include
     // legacy or future registries: any platform may register a custom shared path.
-    for entry in fs::read_dir(data).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let name = entry.file_name().to_string_lossy().into_owned();
-        let base = name.strip_suffix(".bak").unwrap_or(&name);
-        if base == "instances.json" || base.ends_with("_instances.json") {
-            read_registry(&entry.path(), &mut paths)?;
+    for entry in registered_references(data, true)? {
+        let value = entry.user_data_dir.trim();
+        if value.is_empty() || !Path::new(value).is_absolute() {
+            return Err("Invalid directory in instance registry".into());
         }
-        if let Some((original, _)) = name.split_once(".invalid-json.") {
-            if original == "instances.json"
-                || original.ends_with("_instances.json")
-                || original == "codex_local_access_takeover_backups.json"
-            {
-                return Err(format!(
-                    "Quarantined instance or recovery registry requires recovery: {}",
-                    name
-                ));
-            }
-        }
+        paths.push(path_key(Path::new(value)));
+        // Keep both spellings: symlinks may disappear between scans.
+        paths.push(PathBuf::from(value));
     }
     for name in [
         "codex_local_access_takeover_backups.json",
@@ -831,6 +808,7 @@ fn delete_selected(
             let guard = INSTANCE_CREATION
                 .try_write()
                 .map_err(|_| "Instance creation or import is in progress; please retry")?;
+            let registry_guard = modules::instance_registry::cleanup_gate(&data, true)?;
             let protection = collect_protection_with_runtime(
                 &data,
                 &roots,
@@ -870,6 +848,7 @@ fn delete_selected(
                     .map_err(|e| format!("Cannot isolate directory: {}", e))?;
                 (quarantine, path.clone())
             };
+            drop(registry_guard);
             drop(guard);
             if let Err(error) = remove_directory_bounded(
                 &quarantine,
@@ -1384,6 +1363,34 @@ mod tests {
             fs::read_to_string(external.join("keep.txt")).unwrap(),
             "user-owned content"
         );
+    }
+
+    #[test]
+    fn sqlite_instance_references_protect_live_paths_after_legacy_cutover() {
+        let fixture = Fixture::new();
+        let root = fixture.root();
+        let live = root.root.join("live");
+        let removed = root.root.join("removed");
+        fs::create_dir_all(&live).unwrap();
+        fs::create_dir_all(&removed).unwrap();
+        let path = fixture.0.join("codex_instances.json");
+        let mut store: crate::models::InstanceStore = serde_json::from_value(serde_json::json!({
+            "instances": [
+                {"id":"live", "name":"Live", "userDataDir":live, "extraArgs":"", "createdAt":1},
+                {"id":"removed", "name":"Removed", "userDataDir":removed, "extraArgs":"", "createdAt":2}
+            ]
+        })).unwrap();
+        fs::write(&path, serde_json::to_vec(&store).unwrap()).unwrap();
+        fs::copy(&path, path.with_extension("json.bak")).unwrap();
+        store.instances.pop();
+        modules::instance_registry::save(&path, &store, false).unwrap();
+
+        let protection = collect_protection(&fixture.0, &[fixture.root()], vec![], vec![]).unwrap();
+        let rows = candidate_paths(&[root], &protection).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].1, removed);
+        assert!(has_matching_registered_owner(&live, &fixture.0, "live").unwrap());
+        assert!(!has_matching_registered_owner(&removed, &fixture.0, "removed").unwrap());
     }
 
     #[test]

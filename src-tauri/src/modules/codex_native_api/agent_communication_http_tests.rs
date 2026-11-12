@@ -379,13 +379,8 @@ async fn agent_communication_json_tool_messages_survive_restart_and_replay_witho
         let sent = seen.last().unwrap();
         assert_eq!(sent.0, "b");
         assert_eq!(sent.2["input"], child["input"]);
-        let parent = &seen[0];
         for field in ["session_id", "thread_id"] {
-            assert_ne!(
-                sent.2["client_metadata"][field],
-                parent.2["client_metadata"][field]
-            );
-            assert_ne!(
+            assert_eq!(
                 sent.2["client_metadata"][field],
                 child["client_metadata"][field]
             );

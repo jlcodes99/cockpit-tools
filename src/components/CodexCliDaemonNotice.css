@@ -14,6 +14,10 @@
   flex-shrink: 0;
 }
 
+.codex-cli-daemon-dialog .modal-footer {
+  flex-wrap: wrap;
+}
+
 .codex-cli-daemon-dialog .modal-body {
   min-height: 0;
   overflow-y: auto;

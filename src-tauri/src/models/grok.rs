@@ -281,6 +281,8 @@ pub struct GrokAccountIndex {
     pub version: String,
     #[serde(default)]
     pub accounts: Vec<GrokAccountSummary>,
+    #[serde(skip)]
+    pub(crate) storage_revision: crate::modules::provider_account_index::Revision,
 }
 
 fn default_index_version() -> String {

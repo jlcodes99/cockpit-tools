@@ -153,6 +153,8 @@
 .pelican-tag-editor { position: fixed; inset: 0; z-index: 10030; }
 .pelican-account-tile h3 { display: flex; align-items: center; gap: 4px; min-width: 0; margin: 0; padding: 8px 6px; border-bottom: 1px solid var(--border-color, #e1e5eb); text-align: left; font-size: 10px; line-height: 1.3; }
 .pelican-account-email { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pelican-result-identity { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 2px; }
+.pelican-result-identity .pelican-account-context { color: var(--text-secondary, #627084); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pelican-account-plan { flex: 0 0 auto; min-width: 0; }
 .pelican-account-plan .tier-badge { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 9px; padding: 2px 4px; }
 .pelican-canvas-cell { padding: 6px; vertical-align: top; }

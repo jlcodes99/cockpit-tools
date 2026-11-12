@@ -129,7 +129,7 @@ fn is_codex_local_access_config_for_api_key(config_text: &str, api_key: &str) ->
         == Some(api_key.trim())
 }
 
-fn is_cockpit_managed_local_access_config(config_text: &str) -> bool {
+pub(crate) fn is_cockpit_managed_local_access_config(config_text: &str) -> bool {
     let Ok(doc) = crate::modules::codex_config_format::read_codex_config_doc_from_str(config_text)
     else {
         return false;
@@ -192,6 +192,25 @@ fn profile_base_url_matches(actual: Option<&str>, expected: &str) -> bool {
         .zip(normalize_profile_base_url_for_match(Some(expected)))
         .map(|(actual, expected)| actual == expected)
         .unwrap_or(false)
+}
+
+/// Used by the blocking profile snapshot reader. The existing service runtime
+/// owns the endpoint and key, so a manually named provider is not enough.
+pub(crate) fn bound_oauth_prediction_route_matches(
+    provider_id: &str,
+    base_url: &str,
+    bearer: &str,
+) -> bool {
+    if provider_id != CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID {
+        return false;
+    }
+    let runtime = gateway_runtime().blocking_lock();
+    runtime.collection.as_ref().is_some_and(|collection| {
+        collection.enabled
+            && normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref()).is_some()
+            && bearer == collection.api_key.trim()
+            && profile_base_url_matches(Some(base_url), &build_collection_base_url(collection))
+    })
 }
 
 fn inspect_local_access_profile_config(
@@ -484,6 +503,7 @@ fn remove_codex_local_access_config_with_realtime_ownership(
                                     || key.eq_ignore_ascii_case(
                                         codex_account::CODEX_CLIENT_INSTANCE_ID_HEADER,
                                     )
+                                    || key.eq_ignore_ascii_case(crate::modules::codex_speed::CLIENT_SERVICE_TIER_HEADER)
                             })
                             .map(|(key, _)| key.to_string())
                             .collect::<Vec<_>>();
@@ -502,6 +522,7 @@ fn remove_codex_local_access_config_with_realtime_ownership(
                                     || key.eq_ignore_ascii_case(
                                         codex_account::CODEX_CLIENT_INSTANCE_ID_HEADER,
                                     )
+                                    || key.eq_ignore_ascii_case(crate::modules::codex_speed::CLIENT_SERVICE_TIER_HEADER)
                             })
                             .map(|(key, _)| key.to_string())
                             .collect::<Vec<_>>();
@@ -656,6 +677,7 @@ fn restore_config_toml_from_takeover_backup_with_realtime_ownership(
                 CODEX_IMAGEGEN_ACTOR_HEADER,
                 CODEX_LOCAL_ACCESS_DISABLE_HOSTED_IMAGE_GENERATION_HEADER,
                 codex_account::CODEX_CLIENT_INSTANCE_ID_HEADER,
+                crate::modules::codex_speed::CLIENT_SERVICE_TIER_HEADER,
             ] {
                 if let Some(header_value) = provider_header_value(backup_provider, header_name) {
                     set_provider_header_value(provider, header_name, header_value);
@@ -1066,6 +1088,14 @@ fn restore_takeover_profiles_after_disable_checked(
     collection: &CodexLocalAccessCollection,
     check: impl Fn() -> Result<(), String>,
 ) -> Result<(), String> {
+    restore_takeover_profiles_after_disable_with_projects(collection, check, false).map(|_| ())
+}
+
+fn restore_takeover_profiles_after_disable_with_projects(
+    collection: &CodexLocalAccessCollection,
+    check: impl Fn() -> Result<(), String>,
+    prepare_projects: bool,
+) -> Result<bool, String> {
     check()?;
     let backups = load_takeover_backups()?;
     let default_profile = codex_account::get_codex_home();
@@ -1093,6 +1123,7 @@ fn restore_takeover_profiles_after_disable_checked(
     }
 
     let mut restored_count = 0usize;
+    let mut project_state_deferred = false;
     let mut restored_profiles = HashSet::new();
     let mut remaining_backups = Vec::new();
     for backup in backups.profiles {
@@ -1107,7 +1138,28 @@ fn restore_takeover_profiles_after_disable_checked(
             remaining_backups.push(backup);
             continue;
         }
+        let profile = &target_profiles[&backup.profile_dir];
+        let is_default = backup.profile_dir == default_key;
+        // The explicit command already holds the default profile lease.
+        let _lease = if prepare_projects && !is_default {
+            Some(codex_account::try_acquire_profile_mutation_lease(profile, "api-service-disable")?)
+        } else {
+            None
+        };
         if restore_profile_takeover_backup(&backup, &collection.api_key, true)? {
+            if prepare_projects {
+                let instance_id = if is_default {
+                    crate::modules::codex_instance::CODEX_DEFAULT_INSTANCE_ID
+                } else {
+                    &backup.profile_dir
+                };
+                if let Err(error) = crate::modules::codex_session_visibility::prepare_desktop_project_state_after_switch(instance_id, profile) {
+                    project_state_deferred = true;
+                    logger::log_codex_api_warn(&format!(
+                        "API 服务已恢复实例凭据，项目状态准备推迟: instance_id={instance_id}, error={error}"
+                    ));
+                }
+            }
             restored_count += 1;
             restored_profiles.insert(backup.profile_dir);
         } else {
@@ -1142,5 +1194,5 @@ fn restore_takeover_profiles_after_disable_checked(
         ));
     }
 
-    Ok(())
+    Ok(project_state_deferred)
 }

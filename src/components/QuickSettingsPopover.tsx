@@ -3,6 +3,9 @@ import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName
 import { CodexRefreshPlanScopeControl } from './CodexRefreshPlanScopeControl';
 import { CodexRequestPayloadSetting } from './codex/CodexRequestPayloadSetting';
 import { CodexOverloadRetrySetting } from './codex/CodexOverloadRetrySetting';
+import { CodexQuotaRecoverySettings } from './codex/CodexQuotaRecoverySettings';
+import { CodexQuotaHistorySettings } from './codex/CodexQuotaHistorySettings';
+import { CodexProxyDirectHosts } from './codex/CodexProxyDirectHosts';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
@@ -16,9 +19,10 @@ import {
   Terminal,
   Zap,
   X,
-  EyeOff,
+  Wallet,
 } from 'lucide-react';
 import { useEscClose } from '../hooks/useEscClose';
+import { antigravityAppPathTarget, DEFAULT_ANTIGRAVITY_RUNTIME_TARGET, type AntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget';
 import * as accountService from '../services/accountService';
 import * as codexService from '../services/codexService';
 import { getAccountGroups, type AccountGroup } from '../services/accountGroupService';
@@ -54,6 +58,7 @@ import {
   buildDefaultCurrentAccountRefreshMinutesMap,
   type CurrentAccountRefreshMinutesMap,
   type CurrentAccountRefreshPlatform,
+  CURRENT_ACCOUNT_REFRESH_PREFERENCES_CHANGED_EVENT,
   loadCurrentAccountRefreshMinutesMap,
   saveCurrentAccountRefreshMinutesMap,
 } from '../utils/currentAccountRefresh';
@@ -67,6 +72,7 @@ import type {
 import { getDisplayGroups, type DisplayGroup } from '../services/groupService';
 import { useRemoteConfigStore } from '../stores/useRemoteConfigStore';
 import { usePlatformRuntimeSupport } from '../hooks/usePlatformRuntimeSupport';
+import { AntigravityMenuBarQuotaSelect } from './AntigravityMenuBarQuotaSelect';
 import {
   readAccountsOverviewFilterPersistenceEnabled,
   resolveAccountsOverviewScopeFromQuickSettingsType,
@@ -114,8 +120,10 @@ interface GeneralConfig {
   minimize_behavior?: 'dock_and_tray' | 'tray_only';
   hide_dock_icon?: boolean;
   tray_icon_style?: 'template' | 'color';
+  menu_bar_antigravity_metric?: string;
   opencode_app_path: string;
   antigravity_app_path: string;
+  antigravity_legacy_app_path: string;
   codex_app_path: string;
   claude_app_path: string;
   claude_app_scan_roots: string;
@@ -311,8 +319,9 @@ type AppLaunchCandidate = {
 const getAppPathKeyForTarget = (target: AppPathTarget): keyof GeneralConfig => {
   switch (target) {
     case 'antigravity':
-    case 'antigravity_legacy':
       return 'antigravity_app_path';
+    case 'antigravity_legacy':
+      return 'antigravity_legacy_app_path';
     case 'codex':
       return 'codex_app_path';
     case 'claude':
@@ -352,6 +361,7 @@ const getAppPathKeyForTarget = (target: AppPathTarget): keyof GeneralConfig => {
 
 interface QuickSettingsPopoverProps {
   type: QuickSettingsType;
+  antigravityRuntimeTarget?: AntigravityRuntimeTarget;
 }
 
 const AUTO_SWITCH_SCOPE_ALL_ACCOUNTS: AutoSwitchAccountScopeMode = 'all_accounts';
@@ -409,9 +419,13 @@ const normalizeAutoSwitchAccountScopeMode = (
     ? AUTO_SWITCH_SCOPE_SELECTED_ACCOUNTS
     : AUTO_SWITCH_SCOPE_ALL_ACCOUNTS;
 
-export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
+export function QuickSettingsPopover({
+  type,
+  antigravityRuntimeTarget = DEFAULT_ANTIGRAVITY_RUNTIME_TARGET,
+}: QuickSettingsPopoverProps) {
   const { t } = useTranslation();
   const isWindows = usePlatformRuntimeSupport('windows-only');
+  const isMacOS = usePlatformRuntimeSupport('macos-only');
   const remoteCodexOAuthAppVersion = useRemoteConfigStore(
     (state) => state.state.codexOAuthAppVersion,
   );
@@ -896,10 +910,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         setAppLaunchCandidates(candidates);
         if (candidates.length === 0) {
           setError(
-            t(
-              'quickSettings.appPath.scanEmpty',
-              '未检测到正在运行的应用，请先启动后重试，或手动选择路径。',
-            ),
+            t('appPath.missing.scanEmpty'),
           );
         }
       } catch (err) {
@@ -995,11 +1006,11 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         case 'trae':
           return 'Trae';
         case 'trae_solo':
-          return 'TRAE SOLO';
+          return t('nav.traeSolo');
         case 'trae_cn':
           return 'Trae CN';
         case 'trae_solo_cn':
-          return 'TRAE SOLO CN';
+          return t('nav.traeSoloCn');
         case 'workbuddy':
           return 'WorkBuddy';
         case 'minimaxcode':
@@ -1018,11 +1029,11 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'trae':
         return 'Trae';
       case 'trae_solo':
-        return 'TRAE SOLO';
+        return t('nav.traeSolo');
       case 'trae_cn':
         return 'Trae CN';
       case 'trae_solo_cn':
-        return 'TRAE SOLO CN';
+        return t('nav.traeSoloCn');
       default:
         return '';
     }
@@ -1176,7 +1187,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     if (!config) return '';
     switch (type) {
       case 'antigravity':
-        return config.antigravity_app_path;
+        return antigravityRuntimeTarget === 'antigravity'
+          ? config.antigravity_legacy_app_path
+          : config.antigravity_app_path;
       case 'codex':
         return config.codex_app_path;
       case 'claude':
@@ -1221,7 +1234,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const getAppPathLabel = () => {
     switch (type) {
       case 'antigravity':
-        return t('quickSettings.antigravity.appPath', '启动路径');
+        return t('settings.general.antigravityAppPath', {
+          appName: antigravityRuntimeTarget === 'antigravity' ? 'Antigravity' : 'Antigravity IDE',
+        });
       case 'codex':
         return t('quickSettings.codex.appPath', '启动路径');
       case 'claude':
@@ -1247,13 +1262,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'trae':
         return t('quickSettings.trae.appPath', 'Trae 路径');
       case 'trae_solo':
-        return t('quickSettings.traeSolo.appPath', 'TRAE SOLO 路径');
+        return t('quickSettings.traeSolo.appPath', 'TraeWork 路径');
       case 'trae_cn':
         return t('quickSettings.traeCn.appPath', 'Trae CN 路径');
       case 'trae_solo_cn':
-        return t('quickSettings.traeSoloCn.appPath', 'TRAE SOLO CN 路径');
+        return t('quickSettings.traeSoloCn.appPath', 'TraeWork CN 路径');
       case 'workbuddy':
-        return t('quickSettings.workbuddy.appPath', 'WorkBuddy 路径');
+        return t('settings.general.workbuddyAppPath');
       case 'minimaxcode':
         return t('quickSettings.minimaxCode.appPath', 'MiniMax Code 路径');
       case 'zed':
@@ -1264,7 +1279,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const getAppTarget = (): AppPathTarget => {
     switch (type) {
       case 'antigravity':
-        return 'antigravity_legacy';
+        return antigravityAppPathTarget(antigravityRuntimeTarget);
       case 'codex':
         return 'codex';
       case 'claude':
@@ -1412,14 +1427,17 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     setRefreshEditing(false);
   };
 
+  useEffect(() => {
+    const reload = () => setCurrentAccountRefreshMap(loadCurrentAccountRefreshMinutesMap());
+    window.addEventListener(CURRENT_ACCOUNT_REFRESH_PREFERENCES_CHANGED_EVENT, reload);
+    reload();
+    return () => window.removeEventListener(CURRENT_ACCOUNT_REFRESH_PREFERENCES_CHANGED_EVENT, reload);
+  }, []);
+
   const saveCurrentAccountRefresh = (minutes: number) => {
-    setCurrentAccountRefreshMap((prev) => {
-      const next = saveCurrentAccountRefreshMinutesMap({
-        ...prev,
-        [currentAccountRefreshPlatform]: minutes,
-      });
-      window.dispatchEvent(new Event('config-updated'));
-      return next;
+    saveCurrentAccountRefreshMinutesMap({
+      ...loadCurrentAccountRefreshMinutesMap(),
+      [currentAccountRefreshPlatform]: minutes,
     });
   };
 
@@ -1652,7 +1670,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 </div>
 
                 <div className="qs-hint" style={{ marginTop: 0, marginBottom: 4 }}>
-                  {t('quickSettings.codexWindow.orDivider', 'OR（命中任一即触发）')}
+                  {t('quickSettings.codexWindow.orDivider')}
                 </div>
 
                 <div className="qs-row">
@@ -1914,6 +1932,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                   onChange={(value) => void saveConfig({ codex_auto_refresh_plan_types: value })} />
                 <CodexRequestPayloadSetting />
                 <CodexOverloadRetrySetting />
+                <CodexProxyDirectHosts />
                 <CodexAppEnhancementSettings variant="quick" onError={setError} />
               </div>
             )}
@@ -2139,11 +2158,11 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 <CodexContextManagementControl variant="quick" active={isOpen && type === 'codex'} />
                 <div className="qs-row" style={{ marginTop: 8 }}>
                   <div className="qs-row-label">
-                    <EyeOff size={15} />
+                    <Wallet size={15} />
                     <span>
                       {t(
                         'settings.general.codexHideRelayQuota',
-                        '隐藏中转站额度',
+                        '余额开关',
                       )}
                     </span>
                   </div>
@@ -2151,10 +2170,10 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     <label className="qs-switch">
                       <input
                         type="checkbox"
-                        checked={config.codex_hide_relay_quota ?? false}
+                        checked={!config.codex_hide_relay_quota}
                         onChange={(e) =>
                           saveConfig({
-                            codex_hide_relay_quota: e.target.checked,
+                            codex_hide_relay_quota: !e.target.checked,
                           })
                         }
                       />
@@ -2165,7 +2184,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 <div className="qs-hint">
                   {t(
                     'settings.general.codexHideRelayQuotaDesc',
-                    '开启后，Codex 账号总览隐藏中转 / New API 类额度面板，减轻列表重叠与视觉干扰。',
+                    '关闭后，隐藏 Codex 中转站余额，并停止自动和手动余额查询。',
                   )}
                 </div>
               </div>
@@ -2900,7 +2919,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       </div>
 
                       <div className="qs-hint" style={{ marginTop: 0, marginBottom: 4 }}>
-                        {t('quickSettings.codexWindow.orDivider', 'OR（命中任一即触发）')}
+                        {t('quickSettings.codexWindow.orDivider')}
                       </div>
 
                       <div className="qs-row">
@@ -3349,6 +3368,20 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                   )}
                 </div>
 
+                {isMacOS && config && (
+                  <div className="qs-row">
+                    <div className="qs-row-label">
+                      <span>{t('settings.general.menuBarAntigravityMetric')}</span>
+                    </div>
+                    <div className="qs-row-control qs-row-control--fill">
+                      <AntigravityMenuBarQuotaSelect
+                        accounts={antigravityAccounts}
+                        value={config.menu_bar_antigravity_metric ?? ''}
+                        onChange={(value) => void saveConfig({ menu_bar_antigravity_metric: value })}
+                      />
+                    </div>
+                  </div>
+                )}
                 {renderQuotaAlertControls()}
               </div>
             )}
@@ -3360,6 +3393,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                   <span>{t('quickSettings.quotaAlert.enable', '超额预警')}</span>
                 </div>
                 {renderQuotaAlertControls()}
+                {type === 'codex' && <><CodexQuotaRecoverySettings /><CodexQuotaHistorySettings /></>}
               </div>
             )}
 

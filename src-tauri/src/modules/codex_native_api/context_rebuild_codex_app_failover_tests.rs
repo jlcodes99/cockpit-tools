@@ -7,6 +7,7 @@ use std::sync::atomic::AtomicUsize;
 #[derive(Clone, Copy, Debug)]
 enum LimitDelivery {
     Http,
+    HttpSubscriptionSharing,
     Sse,
 }
 
@@ -42,11 +43,15 @@ async fn limited_http(
         });
         let error = json!({
             "type":"rate_limit_error",
-            "code":"usage_limit_reached",
+            "code":if matches!(state.delivery, LimitDelivery::HttpSubscriptionSharing) {
+                "subscription_sharing_usage_limit_exceeded"
+            } else {
+                "usage_limit_reached"
+            },
             "message":"Synthetic account A five-hour quota exhausted"
         });
         return match state.delivery {
-            LimitDelivery::Http => {
+            LimitDelivery::Http | LimitDelivery::HttpSubscriptionSharing => {
                 (StatusCode::TOO_MANY_REQUESTS, Json(json!({"error":error}))).into_response()
             }
             LimitDelivery::Sse => sse(vec![json!({
@@ -88,6 +93,8 @@ async fn limited_fixture(delivery: LimitDelivery, b: Vec<Step>) -> Fixture {
         oauth: AtomicBool::new(true),
         passthrough: AtomicBool::new(false),
         removed_a: AtomicBool::new(false),
+        missing_owner_status: AtomicU16::new(503),
+        immediate_sse: AtomicBool::new(false),
         capacity_recovery_checks: Mutex::new(None),
         local_quota_preparation_denied: Mutex::new(vec![]),
         local_quota_send_denied: Mutex::new(vec![]),
@@ -209,6 +216,13 @@ fn assert_no_host_call_ids(input: &Value) {
     }
 }
 
+pub(super) fn assert_oauth_rebuild(source: &Sent, rebuilt: &Sent, expected: Value) {
+    assert_ne!(identity(source), identity(rebuilt));
+    assert_ne!(source.headers["session-id"], rebuilt.headers["session-id"]);
+    assert_ne!(source.headers["thread-id"], rebuilt.headers["thread-id"]);
+    assert_rebuilt_request(rebuilt, expected);
+}
+
 fn assert_oauth_wire(sent: &Sent) {
     // The nonstreaming client case especially proves the OAuth normalizer ran;
     // toggling a test flag without reaching the real wire path cannot pass.
@@ -235,7 +249,7 @@ async fn establish_root(fixture: &Fixture, delivery: LimitDelivery) {
 
 #[tokio::test]
 async fn codex_app_host_records_oauth_429_replays_complete_and_cached_history_exactly() {
-    for delivery in [LimitDelivery::Http, LimitDelivery::Sse] {
+    for delivery in [LimitDelivery::Http, LimitDelivery::HttpSubscriptionSharing, LimitDelivery::Sse] {
         for full in [true, false] {
             let fixture =
                 limited_fixture(delivery, vec![Step::Complete("host-b-accepted", None)]).await;
@@ -265,7 +279,7 @@ async fn codex_app_host_records_oauth_429_replays_complete_and_cached_history_ex
             // attempt; both A and B must see the same complete original items.
             assert_eq!(sent[1].body["input"], expected);
             assert!(sent[1].body.get("previous_response_id").is_none());
-            assert_fresh(&sent[1], &sent[2], expected.clone());
+            assert_oauth_rebuild(&sent[1], &sent[2], expected.clone());
             assert_oauth_wire(&sent[1]);
             assert_oauth_wire(&sent[2]);
             assert_no_host_call_ids(&sent[2].body["input"]);
@@ -300,7 +314,7 @@ async fn codex_app_host_records_oauth_failed_candidate_never_commits_portable_b(
                 vec!["a", "a", "b"]
             );
             assert_eq!(sent[1].body["input"], expected);
-            assert_fresh(&sent[1], &sent[2], expected);
+            assert_oauth_rebuild(&sent[1], &sent[2], expected);
             assert_oauth_wire(&sent[1]);
             assert_oauth_wire(&sent[2]);
             assert_no_host_call_ids(&sent[2].body["input"]);

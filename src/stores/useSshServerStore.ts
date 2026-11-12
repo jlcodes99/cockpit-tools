@@ -1,88 +1,97 @@
 import { create } from 'zustand';
 import * as sshServerService from '../services/sshServerService';
-import type { SshCodexSyncResult, SshServer, SshServerDraft } from '../types/sshServer';
+import type { SshCodexSyncResult, SshServer, SshServerDraft, SshServerList } from '../types/sshServer';
 
 interface SshServerState {
   servers: SshServer[];
-  selectedServerId: string | null;
+  selectedServerIds: string[];
   loading: boolean;
   error: string | null;
   lastSyncResult: SshCodexSyncResult | null;
   fetchServers: () => Promise<void>;
   upsertServer: (draft: SshServerDraft) => Promise<void>;
   deleteServer: (serverId: string) => Promise<void>;
-  selectServer: (serverId: string | null) => Promise<void>;
+  selectServers: (serverIds: string[]) => Promise<void>;
+  setServerSelected: (serverId: string, selected: boolean) => Promise<void>;
   testConnection: (serverId: string) => Promise<string>;
-  syncNow: (serverId?: string | null) => Promise<SshCodexSyncResult>;
+  syncNow: (serverId: string) => Promise<SshCodexSyncResult>;
   applySyncResult: (result: SshCodexSyncResult) => void;
 }
 
-function selectedIdFromList(selectedServerId: string | null, servers: SshServer[]) {
-  return selectedServerId && servers.some((server) => server.id === selectedServerId)
-    ? selectedServerId
-    : null;
+function stateFromList(list: SshServerList) {
+  return {
+    servers: list.servers,
+    selectedServerIds: [...new Set(list.selected_server_ids)]
+      .filter(id => list.servers.some(server => server.id === id)),
+    error: null,
+  };
 }
 
-export const useSshServerStore = create<SshServerState>((set, get) => ({
+export const useSshServerStore = create<SshServerState>((set, get) => {
+  let revision = 0;
+  let fetchSequence = 0;
+  let mutations = Promise.resolve();
+  const syncRevisions = new Map<string, number>();
+  const mutate = (operation: () => Promise<SshServerList>): Promise<void> => {
+    revision++;
+    const result = mutations.then(async () => {
+      const started = revision;
+      const list = await operation();
+      revision++;
+      set(state => {
+        const next = stateFromList(list);
+        const current = new Map(state.servers.map(server => [server.id, server]));
+        return { ...next, servers: next.servers.map(server =>
+          (syncRevisions.get(server.id) ?? 0) > started
+            ? { ...server, last_sync: current.get(server.id)?.last_sync ?? server.last_sync }
+            : server) };
+      });
+      for (const id of syncRevisions.keys()) {
+        if (!list.servers.some(server => server.id === id)) syncRevisions.delete(id);
+      }
+    });
+    mutations = result.catch(() => {});
+    return result;
+  };
+  return {
   servers: [],
-  selectedServerId: null,
+  selectedServerIds: [],
   loading: false,
   error: null,
   lastSyncResult: null,
 
   fetchServers: async () => {
+    const started = revision;
+    const sequence = ++fetchSequence;
     set({ loading: true, error: null });
     try {
       const list = await sshServerService.listSshServers();
-      set({
-        servers: list.servers,
-        selectedServerId: selectedIdFromList(list.selected_server_id, list.servers),
-        loading: false,
-      });
+      if (sequence === fetchSequence) {
+        set({ ...(started === revision ? stateFromList(list) : {}), loading: false });
+      }
     } catch (error) {
-      set({ error: String(error), loading: false });
+      if (sequence === fetchSequence) set({ error: String(error), loading: false });
     }
   },
 
-  upsertServer: async (draft) => {
-    const list = await sshServerService.upsertSshServer(draft);
-    set({
-      servers: list.servers,
-      selectedServerId: selectedIdFromList(list.selected_server_id, list.servers),
-      error: null,
-    });
-  },
-
-  deleteServer: async (serverId) => {
-    const list = await sshServerService.deleteSshServer(serverId);
-    set({
-      servers: list.servers,
-      selectedServerId: selectedIdFromList(list.selected_server_id, list.servers),
-      error: null,
-    });
-  },
-
-  selectServer: async (serverId) => {
-    const list = await sshServerService.selectSshServer(serverId);
-    set({
-      servers: list.servers,
-      selectedServerId: selectedIdFromList(list.selected_server_id, list.servers),
-      error: null,
-    });
-  },
+  upsertServer: (draft) => mutate(() => sshServerService.upsertSshServer(draft)),
+  deleteServer: (serverId) => mutate(() => sshServerService.deleteSshServer(serverId)),
+  selectServers: (serverIds) => mutate(() => sshServerService.selectSshServers(serverIds)),
+  setServerSelected: (serverId, selected) => mutate(() => sshServerService.setSshServerSelected(serverId, selected)),
 
   testConnection: async (serverId) => sshServerService.testSshServerConnection(serverId),
 
   syncNow: async (serverId) => {
     const result = await sshServerService.syncCurrentCodexAccountToSshServer(
-      serverId ?? get().selectedServerId,
+      serverId,
     );
     get().applySyncResult(result);
-    void get().fetchServers();
     return result;
   },
 
   applySyncResult: (result) => {
+    revision++;
+    syncRevisions.set(result.server_id, revision);
     set((state) => ({
       lastSyncResult: result,
       servers: state.servers.map((server) =>
@@ -103,4 +112,5 @@ export const useSshServerStore = create<SshServerState>((set, get) => ({
       ),
     }));
   },
-}));
+};
+});

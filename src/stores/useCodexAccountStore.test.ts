@@ -7,15 +7,19 @@ import ts from 'typescript';
 import { deferred, settlePromises } from '../../tests/helpers/reactHookHarness';
 import { mergeCodexQuotaUpdate } from '../utils/codexQuotaSync';
 import { mergeCodexSubscriptionUpdate } from '../utils/codexSubscriptionSync';
+import { isCodexAccountDisplayCache } from '../types/codex';
+import { toCodexAccountDisplayCache } from '../utils/codexProxyCache';
 
-function setup(options: { missing?: boolean; fail?: boolean; failAfterCommit?: boolean; deferCurrent?: boolean } = {}) {
+function setup(options: { missing?: boolean; fail?: boolean; failAfterCommit?: boolean; deferCurrent?: boolean; cache?: boolean; deferList?: boolean } = {}) {
   let lists = 0, currents = 0, switches = 0;
   let currentId = 'b';
   const currentRead = options.deferCurrent ? deferred<any>() : null;
+  const listRead = options.deferList ? deferred<any>() : null;
   const events: any[] = [], hydrations: any[] = [];
-  const authoritative = { id: 'a', email: 'fresh@example.com', token_generation: 2, quota: { hourly_percentage: 70, weekly_percentage: 80 } };
+  const authoritative = { id: 'a', email: 'fresh@example.com', token_generation: 2, quota: { hourly_percentage: 70, weekly_percentage: 80 },
+    account_password: 'fixture-password' };
   const service = {
-    async listCodexAccounts() { lists++; return options.missing ? [] : [authoritative, { id: 'b' }]; },
+    async listCodexAccounts() { lists++; return listRead ? listRead.promise : options.missing ? [] : [authoritative, { id: 'b' }]; },
     async getCurrentCodexAccount() { currents++; return currentRead ? currentRead.promise : { id: currentId }; },
     async switchCodexAccount() {
       switches++;
@@ -27,11 +31,13 @@ function setup(options: { missing?: boolean; fail?: boolean; failAfterCommit?: b
   };
   const imports: Record<string, any> = {
     '../types/codex': { hasCodexAccountStructure: () => true, hasCodexAccountName: () => true,
-      isCodexTeamLikePlan: () => false, isCodexPendingOAuthAccount: () => false, isCodexApiKeyAccount: () => false, isCodexAgentIdentityAccount: () => false },
+      isCodexTeamLikePlan: () => false, isCodexPendingOAuthAccount: () => false, isCodexApiKeyAccount: () => false,
+      isCodexAgentIdentityAccount: () => false, isCodexAccountDisplayCache },
     '../services/codexService': service,
     '../services/codexAccountGroupService': {},
     '../utils/accountSyncEvents': { emitCurrentAccountChanged: async (event: any) => { events.push(event); } },
-    '../utils/codexProxyCache': { withoutCachedProxySecret: (value: any) => value },
+    '../utils/codexProxyCache': { toCodexAccountDisplayCache },
+    '../utils/providerAccountDisplayCache': { replaceLegacyAccountDisplayCache() {} },
     '../utils/serialAccountRefreshQueue': { createSerialAccountRefreshQueue: () => ({ enqueue: async (ids: string[]) => { hydrations.push(ids); } }) },
     '../utils/coalescedWriter': { createCoalescedWriter: () => ({ schedule() {}, flush() {} }) },
     '../utils/codexProfileRefresh': {},
@@ -44,12 +50,57 @@ function setup(options: { missing?: boolean; fail?: boolean; failAfterCommit?: b
   const exports: any = {};
   const require = createRequire(import.meta.url);
   runInNewContext(compiled, { exports, require: (name: string) => name in imports ? imports[name] : require(name),
-    window: { addEventListener() {} }, localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    window: { addEventListener() {} }, localStorage: { getItem: (key: string) => options.cache && key === 'agtools.codex.accounts.cache'
+      ? JSON.stringify([{ ...authoritative, tokens: { id_token: '', access_token: 'fixture-access' } }]) : null, setItem() {}, removeItem() {} },
     console: { info() {}, warn() {}, error() {} }, performance });
   const store = exports.useCodexAccountStore;
-  return { store, events, hydrations, counts: () => ({ lists, currents, switches }),
+  return { store, events, hydrations, readForEditing: exports.readCodexAccountForEditing, counts: () => ({ lists, currents, switches }),
+    resolveList: () => listRead?.resolve([authoritative]),
     resolveCurrent: () => currentRead?.resolve({ id: currentId }) };
 }
+
+test('opening a credential editor from the startup list reads the native record first', async () => {
+  const s = setup({ cache: true });
+  const preview = s.store.getState().accounts[0];
+  assert.equal(preview.account_password, undefined);
+  assert.equal((await s.readForEditing(preview)).account_password, 'fixture-password');
+  assert.equal(s.store.getState().accounts[0].account_password, 'fixture-password');
+  assert.equal(s.counts().lists, 1);
+});
+
+test('a newly authorized account appears immediately and survives an older pending list read', async () => {
+  const s = setup({ cache: true, deferList: true });
+  const pending = s.store.getState().fetchAccounts();
+  s.store.getState().applyAccountSnapshot({
+    id: 'new-oauth',
+    email: 'new@example.invalid',
+    token_generation: 1,
+  });
+  assert.ok(s.store.getState().accounts.some((account: { id: string }) => account.id === 'new-oauth'));
+
+  s.resolveList();
+  await pending;
+  const ids = s.store.getState().accounts.map((account: { id: string }) => account.id);
+  assert.ok(ids.includes('new-oauth'));
+  assert.ok(ids.includes('a'));
+});
+
+test('a pending credential read cannot restore a deleted account or replace a newer native result', async () => {
+  for (const deleted of [true, false]) {
+    const s = setup({ cache: true, deferList: true });
+    const result = s.readForEditing(s.store.getState().accounts[0]);
+    const newer = { id: 'a', email: 'newer@example.com', account_password: 'fixture-newer' };
+    s.store.setState({ accounts: deleted ? [] : [newer] });
+    s.resolveList();
+    if (deleted) {
+      await assert.rejects(result, /CODEX_STALE_ACCOUNT/);
+      assert.equal(s.store.getState().accounts.length, 0);
+    } else {
+      assert.equal(await result, newer);
+      assert.equal(s.store.getState().accounts[0], newer);
+    }
+  }
+});
 
 test('successful switch checks the authoritative list once and applies the returned snapshot without a second full-list refresh', async () => {
   const s = setup();

@@ -194,6 +194,7 @@ export function CodexOfficialAuthorizationDialog({ sourceAccount, registrations,
     return () => { stopped = true; };
   }, [grant?.id, usable]);
 
+  const reportedCallbackError = useRef<{ loginId: string; error: string } | null>(null);
   useEffect(() => {
     if (!login) return;
     let stopped = false;
@@ -221,6 +222,11 @@ export function CodexOfficialAuthorizationDialog({ sourceAccount, registrations,
         if (['error', 'cancelled', 'expired'].includes(status.status)) {
           if (status.account) { setGrant({ ...status.account, in_service: false }); notifyChanged(); }
           throw new Error(status.error ?? `CHATGPT_PLAN_LOGIN_${status.status.toUpperCase()}`);
+        }
+        const reported = reportedCallbackError.current;
+        if (status.status === 'pending' && status.error && (reported?.loginId !== login.login_id || reported.error !== status.error)) {
+          reportedCallbackError.current = { loginId: login.login_id, error: status.error };
+          error.report(t(chatGptPlanErrorKey(status.error)));
         }
         timer = setTimeout(() => void poll(), 1500);
       } catch (failure) {

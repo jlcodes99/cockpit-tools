@@ -181,8 +181,9 @@ async fn claude_signature_http_continuation_survives_restart_and_replays_for_onl
         let requests = seen.lock().unwrap();
         assert_eq!(requests.len(), 3);
         assert_eq!(requests[2].1["input"], requests[1].1["input"]);
-        for header in ["session-id", "thread-id"] {
-            assert_ne!(requests[2].0[header], requests[1].0[header]);
+        for (headers, _) in requests.iter() {
+            assert!(!headers.contains_key("session-id"));
+            assert_eq!(headers["thread-id"], "original-thread");
         }
     }
     assert_eq!(

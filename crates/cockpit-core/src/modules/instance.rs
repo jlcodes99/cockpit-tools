@@ -270,6 +270,7 @@ pub fn inject_account_to_profile(profile_dir: &Path, account_id: &str) -> Result
 }
 
 pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, String> {
+    let _creation_guard = instance_store::protect_instance_creation()?;
     let _lock = INSTANCE_STORE_LOCK.lock().map_err(|_| "无法获取实例锁")?;
     let mut store = load_instance_store()?;
 

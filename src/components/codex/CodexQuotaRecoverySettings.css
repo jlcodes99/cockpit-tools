@@ -1,0 +1,57 @@
+.codex-quota-recovery {
+  display: grid;
+  gap: 8px;
+  padding-block: 12px;
+}
+
+.codex-quota-recovery-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.codex-quota-recovery-title span,
+.codex-quota-recovery-description {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.codex-quota-recovery-description,
+.codex-quota-recovery-error {
+  margin: 0;
+}
+
+.codex-quota-recovery-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.codex-quota-recovery-controls input {
+  flex: 1 1 160px;
+  min-width: 0;
+  padding: 7px 10px;
+  appearance: none;
+  font: inherit;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+}
+
+.codex-quota-recovery-controls input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.codex-quota-recovery-controls input:disabled {
+  opacity: 0.6;
+}
+
+.codex-quota-recovery-error {
+  color: var(--danger);
+}

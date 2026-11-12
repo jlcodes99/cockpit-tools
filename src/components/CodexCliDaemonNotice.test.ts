@@ -16,6 +16,7 @@ function harness() {
   let cleanups = 0;
   const registration = deferred<() => void>();
   const copies: { command: string; task: ReturnType<typeof deferred<void>> }[] = [];
+  const restarts: { codexHome: string; task: ReturnType<typeof deferred<void>> }[] = [];
   const h = loadHookModule(new URL('./CodexCliDaemonNotice.tsx', import.meta.url), {
     'react-dom': { createPortal: (value: unknown) => value },
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
@@ -26,12 +27,20 @@ function harness() {
         return registration.promise;
       },
     },
+    '@tauri-apps/api/core': {
+      invoke(commandName: string, args: { codexHome: string }) {
+        assert.equal(commandName, 'codex_restart_cli_daemon');
+        const task = deferred<void>();
+        restarts.push({ codexHome: args.codexHome, task });
+        return task.promise;
+      },
+    },
     '../hooks/useEscClose': { useEscCloseTopmost(open: boolean, close: () => void) { escape = open ? close : undefined; } },
     '../hooks/useModalFocusTrap': { useModalFocusTrap() {} },
     '../hooks/useModalScrollLock': { useModalScrollLock() {} },
   }, {
     document: { body: {} },
-    console,
+    console: { warn() {} },
     navigator: { clipboard: { writeText(command: string) {
       const task = deferred<void>();
       copies.push({ command, task });
@@ -40,9 +49,10 @@ function harness() {
   });
   h.render(() => h.exports.CodexCliDaemonNotice());
   return {
-    h, copies, registration,
+    h, copies, restarts, registration,
     button(key: string) {
-      const button = nodes(h.flush()).find((node) => node.type === 'button' && node.props.children === `common.${key}`);
+      const button = nodes(h.flush()).find((node) => node.type === 'button'
+        && [`common.${key}`, `codex.cliDaemon.${key}`].includes(node.props.children));
       assert.ok(button, `Missing ${key}`);
       return button;
     },
@@ -100,4 +110,31 @@ test('unmount releases late event registration and discards late events', async 
   await settlePromises();
   assert.equal(h.cleanups(), 1);
   assert.equal(h.notify(command), null);
+});
+
+test('a completed write enables restart for its exact profile and permits retry after failure', async () => {
+  const h = harness();
+  h.notify({ command, codexHome: null });
+  assert.equal(nodes(h.h.flush()).some((node) => node.props.children === 'codex.cliDaemon.restart'), false);
+  const codexHome = "/tmp/Alice's Codex/$profile";
+  h.notify({ command, codexHome });
+  assert.equal(h.restarts.length, 0);
+
+  const restart = h.button('restart').props.onClick;
+  restart();
+  restart();
+  assert.equal(h.restarts.length, 1);
+  assert.equal(h.restarts[0].codexHome, codexHome);
+  assert.equal(h.button('restarting').props.disabled, true);
+  h.restarts[0].task.reject(new Error('daemon failed'));
+  await settlePromises();
+  assert.equal(nodes(h.h.flush()).find((node) => node.props.role === 'alert')?.props.children, 'codex.cliDaemon.restartFailed');
+
+  h.button('restart').props.onClick();
+  assert.equal(nodes(h.h.flush()).some((node) => node.props.role === 'alert'), false);
+  h.restarts[1].task.resolve();
+  await settlePromises();
+  assert.equal(nodes(h.h.flush()).find((node) => node.props.role === 'status')?.props.children, 'codex.cliDaemon.restarted');
+  assert.equal(h.button('restart').props.disabled, true);
+  assert.equal(h.escape(), null);
 });

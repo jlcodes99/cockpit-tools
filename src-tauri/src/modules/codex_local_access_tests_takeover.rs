@@ -1,5 +1,37 @@
 // Codex Local Access 测试：Takeover reconciliation, gateway configuration and remaining integration cases。
 // 测试与生产实现共享 super 作用域，验证真实网关、持久化和请求协议行为。
+    #[tokio::test]
+    async fn service_pool_maintenance_preserves_external_router_and_live_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        let profile = dir.path();
+        let auth = br#"{"auth_mode":"chatgpt","tokens":{"access_token":"fixture-access","refresh_token":"fixture-refresh","id_token":"fixture-id","account_id":"fixture-account"}}"#;
+        let config = b"model_provider = 'cc-switch'\n\n[model_providers.cc-switch]\nbase_url = 'http://127.0.0.1:15721/v1'\nexperimental_bearer_token = 'PROXY_MANAGED'\n";
+        let mut collection = test_local_access_collection(vec!["added-account".into()]);
+        collection.enabled = true;
+        collection.bound_oauth_account_id = Some("live-account".into());
+
+        // Check both an external profile with and without an older Cockpit takeover marker.
+        for stale_takeover in [false, true] {
+            if stale_takeover {
+                let owned = format!(
+                    "model_provider = 'codex_local_access'\n[model_providers.codex_local_access]\nbase_url = '{}'\nexperimental_bearer_token = '{}'\n",
+                    build_collection_base_url(&collection), collection.api_key,
+                );
+                fs::write(super::profile_config_path(profile), owned).unwrap();
+                super::remember_takeover_ownership(profile).unwrap();
+            }
+            fs::write(super::profile_auth_path(profile), auth).unwrap();
+            fs::write(super::profile_config_path(profile), config).unwrap();
+            assert!(!super::profile_still_owned_for_collection(profile, &collection).unwrap());
+            super::maintain_local_access_profile(profile, &collection).unwrap();
+            super::refresh_owned_takeovers_after_explicit_oauth_binding(
+                vec![profile.to_path_buf()], &collection, &collection,
+            ).await.unwrap();
+            assert_eq!(fs::read(super::profile_config_path(profile)).unwrap(), config);
+            assert_eq!(fs::read(super::profile_auth_path(profile)).unwrap(), auth);
+        }
+    }
+
     #[test]
     fn managed_voice_gateway_config_respects_voice_overrides() {
         let config = r#"
@@ -72,6 +104,11 @@ experimental_bearer_token = "agt_codex_test"
         let doc = config.parse::<Document>().expect("parse config");
         assert_eq!(doc["model_providers"]["codex_local_access"]["requires_openai_auth"].as_bool(), Some(true));
         assert_eq!(doc["model_providers"]["codex_local_access"]["experimental_bearer_token"].as_str(), Some(collection.api_key.as_str()));
+        assert_eq!(
+            doc["model_providers"]["codex_local_access"]["http_headers"]
+                [crate::modules::codex_speed::CLIENT_SERVICE_TIER_HEADER].as_str(),
+            Some(crate::modules::codex_speed::CLIENT_SERVICE_TIER_VALUE),
+        );
         assert_eq!(doc["experimental_realtime_ws_base_url"].as_str(), Some(build_collection_base_url(&collection).as_str()));
         fs::remove_dir_all(profile_dir).expect("cleanup fixture");
     }
@@ -101,6 +138,7 @@ experimental_bearer_token = "agt_codex_test"
         assert_eq!(restored["model_auto_compact_token_limit"].as_integer(), Some(900_000));
         let cleaned = remove_codex_local_access_config(&config).expect("cleanup without backup");
         assert!(!cleaned.contains("experimental_realtime_ws_base_url"));
+        assert!(!cleaned.contains(crate::modules::codex_speed::CLIENT_SERVICE_TIER_HEADER));
         fs::remove_dir_all(profile_dir).expect("cleanup fixture");
     }
 
@@ -450,6 +488,7 @@ experimental_bearer_token = "agt_codex_test"
                 display_name: "GPT-5.6 Sol".into(),
                 reasoning_efforts: None,
                 default_reasoning_effort: None,
+                ultra_reasoning_effort: Some("max".into()),
                 context_window: Some(516_000),
                 auto_compact_token_limit: Some(460_000),
             },
@@ -458,6 +497,7 @@ experimental_bearer_token = "agt_codex_test"
                 display_name: "Custom".into(),
                 reasoning_efforts: None,
                 default_reasoning_effort: None,
+                ultra_reasoning_effort: None,
                 context_window: Some(123_456),
                 auto_compact_token_limit: Some(111_111),
             },
@@ -481,6 +521,7 @@ experimental_bearer_token = "agt_codex_test"
                 assert_eq!(model["context_window"].as_i64(), definition.context_window);
                 assert_eq!(model["max_context_window"].as_i64(), definition.context_window);
                 assert_eq!(model["auto_compact_token_limit"].as_i64(), definition.auto_compact_token_limit);
+                assert_eq!(model["multi_agent_reasoning_effort"].as_str(), definition.ultra_reasoning_effort.as_deref());
                 assert_eq!(model["comp_hash"], "3000");
             }
         }
@@ -497,6 +538,7 @@ experimental_bearer_token = "agt_codex_test"
         ).unwrap();
         let models = catalog["models"].as_array().unwrap();
         assert_eq!(models.iter().find(|model| model["slug"] == "gpt-5.6-sol").unwrap()["context_window"], 516_000);
+        assert_eq!(models.iter().find(|model| model["slug"] == "gpt-5.6-sol").unwrap()["multi_agent_reasoning_effort"], "max");
         let defaults = super::codex_protocol::build_codex_client_models_response(&["gpt-6-astra".into()]);
         assert_eq!(models.iter().find(|model| model["slug"] == "gpt-6-astra").unwrap()["context_window"], defaults["models"][0]["context_window"]);
         // Disabling model management must stop applying persisted overrides.
@@ -511,6 +553,7 @@ experimental_bearer_token = "agt_codex_test"
         ).unwrap();
         let defaults = super::codex_protocol::build_codex_client_models_response(&["gpt-5.6-sol".into()]);
         assert_eq!(catalog["models"][0]["context_window"], defaults["models"][0]["context_window"]);
+        assert_eq!(catalog["models"][0]["multi_agent_reasoning_effort"], defaults["models"][0]["multi_agent_reasoning_effort"]);
         fs::remove_dir_all(profile).unwrap();
     }
 
@@ -603,6 +646,7 @@ experimental_bearer_token = "agt_codex_test"
         let mut collection = test_local_access_collection(Vec::new());
         let key = "deepseek-local-key".to_string();
         collection.api_keys.push(CodexLocalAccessApiKey {
+            max_reasoning_effort: None,
             id: "provider_gateway_deepseek".to_string(),
             label: "Provider Gateway: DeepSeek".to_string(),
             key: key.clone(),

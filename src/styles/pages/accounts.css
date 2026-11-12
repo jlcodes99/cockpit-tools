@@ -203,6 +203,8 @@
   display: inline-flex;
   align-items: center;
   max-width: 220px;
+  min-width: 0;
+  text-overflow: ellipsis;
   border: 1px solid transparent;
   background: transparent;
   color: inherit;
@@ -776,6 +778,21 @@
 
 .accounts-page .account-table .codex-quota-mini-list {
   min-width: 220px;
+}
+
+.accounts-page .antigravity-model-quota-details > summary {
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.accounts-page .antigravity-model-quota-details > summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.accounts-page .antigravity-model-quota-details > .codex-quota-mini-list {
+  margin-top: 6px;
 }
 
 /* Custom Sort Modal Styles (added for Antigravity custom sorting) */

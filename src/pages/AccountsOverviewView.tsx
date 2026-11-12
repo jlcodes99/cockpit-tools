@@ -1,3 +1,4 @@
+import { LOCAL_HISTORY_TIMEOUT } from '../hooks/useLocalHistory';
 import { createPortal } from 'react-dom';
 import { Plus, RefreshCw, Upload, Trash2, Rocket, X, Globe, KeyRound, Database, Plug, Copy, Check, LayoutGrid, List, Search, CircleAlert, Info, RotateCw, History, ArrowDownWideNarrow, ArrowUp, ArrowDown, Wrench, Rows3, GripVertical, Eye, EyeOff, BookOpen, FileUp, ExternalLink, FolderOpen, FolderPlus, FileText, ChevronDown } from 'lucide-react';
 import * as accountService from '../services/accountService';
@@ -16,7 +17,8 @@ import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { MultiSelectFilterDropdown } from '../components/MultiSelectFilterDropdown';
 import { AccountTagFilterDropdown } from '../components/AccountTagFilterDropdown';
-import { getMfaOtpToken, loadSavedMfaRecords } from '../utils/mfaVault';
+import { getMfaOtpToken } from '../utils/mfaVault';
+import { loadSavedMfaRecords } from '../services/mfaRecoveryService';
 import type { AccountsFilterType, useAccountsPageController } from "./AccountsPage";
 
 export type AccountsOverviewViewProps = ReturnType<typeof useAccountsPageController>;
@@ -28,6 +30,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
     accountNoteCopiedKey,
     accountNoteError,
     accountNoteErrorScrollKey,
+    accountNoteReadStatus,
     accountNoteFieldError,
     accountNoteMailPreview,
     accountNoteMailPreviewError,
@@ -37,6 +40,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
     accountNotePasswordVisible,
     accountNoteSecretVisible,
     accounts,
+    antigravityRuntimeTarget,
     activeAccountNoteEmail,
     activeAccountNoteForm,
     addMessage,
@@ -68,7 +72,8 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
     deletingTag,
     displayGroups,
     draggedCustomSortAccountId,
-    editingAccountNoteAccount,
+    editingAccountNoteId,
+    retryAccountNoteRead,
     exportAccountIdsRef,
     exporting,
     exportModal,
@@ -197,6 +202,9 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
     switchHistoryClearConfirmOpen,
     switchHistoryClearing,
     switchHistoryLoading,
+    switchHistoryError,
+    switchHistoryMigrating,
+    refreshSwitchHistory,
     t,
     tagDeleteConfirm,
     tagDeleteConfirmError,
@@ -296,6 +304,10 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                   value: 'created_at',
                   label: t('accounts.sort.createdAt', '按创建时间'),
                 },
+                {
+                  value: 'last_switched_at',
+                  label: t('accounts.lastSwitchTime'),
+                },
                 ...displayGroups.map((group) => ({
                   value: group.id,
                   label: t('accounts.sort.byGroup', {
@@ -312,7 +324,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                 })),
                 {
                   value: 'custom',
-                  label: t('accounts.sort.custom', '自定义顺序'),
+                  label: t('common.shared.sort.custom'),
                 },
               ]}
               ariaLabel={t('accounts.sortLabel', '排序')}
@@ -340,8 +352,8 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
               <button
                 className="sort-direction-btn"
                 onClick={() => setShowCustomSortModal(true)}
-                title={t('accounts.sort.customSettingsTooltip', '配置自定义顺序')}
-                aria-label={t('accounts.sort.customSettingsTooltip', '配置自定义顺序')}
+                title={t('common.shared.sort.customSettingsTooltip')}
+                aria-label={t('common.shared.sort.customSettingsTooltip')}
               >
                 <Wrench size={14} />
               </button>
@@ -422,7 +434,11 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                 <FolderOpen size={14} />
               </button>
             )}
-            <QuickSettingsPopover type="antigravity" />
+            <QuickSettingsPopover
+              key={antigravityRuntimeTarget}
+              type="antigravity"
+              antigravityRuntimeTarget={antigravityRuntimeTarget}
+            />
           </div>
         </div>
 
@@ -559,7 +575,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                 <div className="accounts-add-target-group-hint">
                   <FolderPlus size={14} />
                   <span>
-                    {t('accounts.addModal.targetGroup', {
+                    {t('common.shared.addAccountTargetGroup', {
                       defaultValue: '将添加到分组：{{group}}',
                       group: addTargetGroup.name,
                     })}
@@ -780,10 +796,12 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                       </div>
                       <div className="import-option-content">
                         <div className="import-option-title">
-                          {t('modals.import.fromLocalDB')}
+                          {t('modals.import.fromLocalApp')}
                         </div>
                         <div className="import-option-desc">
-                          {t('modals.import.localDBDesc')}
+                          {t('modals.import.localAppDesc', {
+                            appName: antigravityRuntimeTarget === 'antigravity' ? 'Antigravity' : 'Antigravity IDE',
+                          })}
                         </div>
                       </div>
                     </button>
@@ -908,13 +926,10 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
             <div className="modal-header">
               <div>
                 <h2>
-                  {t('accounts.sort.customModalTitle', '自定义账号排序')}
+                  {t('common.shared.sort.customModalTitle')}
                 </h2>
                 <p className="codex-custom-sort-modal-desc">
-                  {t(
-                    'accounts.sort.customModalDesc',
-                    '拖动账号或使用上下按钮调整展示顺序。'
-                  )}
+                  {t('common.shared.sort.customModalDesc')}
                 </p>
               </div>
               <button
@@ -971,11 +986,11 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                             handleCustomSortDragStart(event, account.id)
                           }
                           title={t(
-                            'accounts.sort.customDragHandle',
+                            'common.shared.sort.dragToReorder',
                             '拖拽排序'
                           )}
                           aria-label={t(
-                            'accounts.sort.customDragHandle',
+                            'common.shared.sort.dragToReorder',
                             '拖拽排序'
                           )}
                         >
@@ -1032,8 +1047,8 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                             moveCustomSortAccount(account.id, 'up')
                           }
                           disabled={index === 0}
-                          title={t('accounts.sort.customMoveUp', '上移')}
-                          aria-label={t('accounts.sort.customMoveUp', '上移')}
+                          title={t('common.shared.sort.moveUp', '上移')}
+                          aria-label={t('common.shared.sort.moveUp', '上移')}
                         >
                           <ArrowUp size={14} />
                         </button>
@@ -1044,9 +1059,9 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                             moveCustomSortAccount(account.id, 'down')
                           }
                           disabled={index === customSortAccounts.length - 1}
-                          title={t('accounts.sort.customMoveDown', '下移')}
+                          title={t('common.shared.sort.moveDown', '下移')}
                           aria-label={t(
-                            'accounts.sort.customMoveDown',
+                            'common.shared.sort.moveDown',
                             '下移'
                           )}
                         >
@@ -1064,7 +1079,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                 onClick={resetCustomSortOrder}
               >
                 <RotateCw size={14} />
-                {t('accounts.sort.customReset', '重置自定义顺序')}
+                {t('common.shared.sort.customReset')}
               </button>
               <button
                 className="btn btn-primary"
@@ -1097,14 +1112,27 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
               </button>
             </div>
             <div className="modal-body">
-              {switchHistoryLoading ? (
+              {switchHistoryMigrating && <p role="status">{t('common.historyRestoring')}</p>}
+              {switchHistoryError && (
+                <div role="alert">
+                  <p>{t('accounts.switchHistory.loadFailed', {
+                    error: switchHistoryError === LOCAL_HISTORY_TIMEOUT ? t('common.dataQueryBusy') : switchHistoryError,
+                  })}</p>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => refreshSwitchHistory(true)}>
+                    {t('common.retry')}
+                  </button>
+                </div>
+              )}
+              {switchHistoryLoading && switchHistory.length === 0 ? (
                 <div className="empty-state">
                   <div className="loading-spinner" style={{ width: 28, height: 28 }} />
                 </div>
               ) : switchHistory.length === 0 ? (
-                <div className="empty-state" style={{ minHeight: 180 }}>
-                  <p>{t('accounts.switchHistory.empty', '暂无切换记录')}</p>
-                </div>
+                !switchHistoryMigrating && !switchHistoryError && (
+                  <div className="empty-state" style={{ minHeight: 180 }}>
+                    <p>{t('accounts.switchHistory.empty', '暂无切换记录')}</p>
+                  </div>
+                )
               ) : (
                 <div style={{ maxHeight: 420, overflowY: 'auto', display: 'grid', gap: 10 }}>
                   {switchHistory.map((item) => (
@@ -1660,7 +1688,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
         onSave={handleSaveTags}
       />
 
-      {(editingAccountNoteAccount || oauthAccountNoteMode) && createPortal(
+      {(editingAccountNoteId || oauthAccountNoteMode) && createPortal(
         <div className="modal-overlay">
           <div
             className="modal antigravity-account-note-modal"
@@ -1688,6 +1716,8 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                 message={accountNoteError}
                 scrollKey={accountNoteErrorScrollKey}
               />
+              {accountNoteReadStatus === 'loading' && <p role="status">{t('common.loading')}</p>}
+              {accountNoteReadStatus === 'ready' && <>
               <p className="antigravity-account-note-desc">
                 {t('accounts.accountNote.desc', {
                   account: maskAccountText(activeAccountNoteEmail),
@@ -1936,6 +1966,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                   {activeAccountNoteForm.note.length}/{ANTIGRAVITY_ACCOUNT_NOTE_MAX_LENGTH}
                 </span>
               </label>
+              </>}
             </div>
             <div className="modal-footer">
               <button
@@ -1949,12 +1980,12 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={() => void handleSaveAccountNote()}
-                disabled={savingAccountNote}
+                onClick={accountNoteReadStatus === 'failed' ? retryAccountNoteRead : () => void handleSaveAccountNote()}
+                disabled={savingAccountNote || accountNoteReadStatus === 'loading'}
               >
                 {savingAccountNote
                   ? t('common.saving', '保存中...')
-                  : t('common.save', '保存')}
+                  : accountNoteReadStatus === 'failed' ? t('common.retry') : t('common.save', '保存')}
               </button>
             </div>
           </div>

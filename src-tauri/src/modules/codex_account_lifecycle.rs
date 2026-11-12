@@ -212,7 +212,13 @@ pub fn upsert_api_key_account(
     )?;
     let account_id = build_api_key_account_id(&api_key);
     let account_name = normalize_optional_value(account_name);
-    let mut index = load_account_index();
+    // Initialize legacy storage before taking the lock. Re-read the saved
+    // index under the lock so a parallel Key import cannot lose its row.
+    let initial_index = load_account_index_inner(false)?;
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK
+        .lock()
+        .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
+    let mut index = read_saved_account_index()?.unwrap_or(initial_index);
 
     let mut account = if let Some(mut acc) = load_account(&account_id) {
         let sync_model_catalog_to_codex =
@@ -265,6 +271,7 @@ pub fn upsert_api_key_account(
 
     account.auth_mode = CodexAuthMode::Apikey;
     let _ = enforce_deepseek_responses_account(&mut account);
+    let _ = upgrade_opencode_go_model_catalog(&mut account);
     if api_model_context_windows.is_some() || !account.api_model_context_windows.is_empty() {
         account.api_model_context_windows = normalize_api_model_context_windows(
             api_model_context_windows.unwrap_or_else(|| account.api_model_context_windows.clone()),
@@ -272,7 +279,7 @@ pub fn upsert_api_key_account(
             &account.api_model_mappings,
         );
     }
-    save_account_from_user_action(&mut account)?;
+    save_account_from_user_action_unlocked(&mut account)?;
 
     if let Some(summary) = index.accounts.iter_mut().find(|item| item.id == account.id) {
         summary.email = account.email.clone();
@@ -346,7 +353,7 @@ fn resolve_reauth_target_account_id(
     }
     if !target.email.trim().is_empty() && !target.email.eq_ignore_ascii_case(email) {
         return Err(format!(
-            "重新授权账号邮箱不匹配: 目标账号为 {}，本次授权为 {}",
+            "CODEX_OAUTH_RESTART_REQUIRED: 重新授权账号邮箱不匹配: 目标账号为 {}，本次授权为 {}",
             target.email, email
         ));
     }

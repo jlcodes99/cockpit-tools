@@ -302,6 +302,10 @@ export async function switchClaudeAccount(accountId: string): Promise<string> {
   return await withClaudeProfileErrors(() => invoke('switch_claude_account', { accountId }));
 }
 
+export async function applyClaudeCliAccountToUserConfig(accountId: string): Promise<void> {
+  return invoke('claude_apply_cli_account_to_user_config', { accountId });
+}
+
 export async function getClaudeCliLaunchCommand(
   accountId: string,
   workingDir: string,

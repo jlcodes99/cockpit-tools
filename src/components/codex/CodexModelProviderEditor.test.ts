@@ -4,12 +4,13 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { resolveCodexModelProviderForApiKey } from '../../utils/codexModelProviderKeyConfig';
-import { buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider } from '../../utils/codexModelProviderAccountSync';
+import { buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider, resolveCodexModelProviderForAccount } from '../../utils/codexModelProviderAccountSync';
 import { contextWindowDraftsFromRecord, parseContextWindowDrafts } from '../../utils/codexModelContextWindows';
 import { buildProviderModelVisionCapabilities } from '../../utils/codexModelProviderVision';
 import { resolveCodexApiProviderPresetId } from '../../utils/codexProviderPresets';
 import { isValidProviderApiKeyUrl } from '../../utils/codexProviderApiKeyUrl';
 import { resolveCodexProviderCapabilityProfile } from '../../utils/codexProviderGateway';
+import { isCodexApiKeyAccount } from '../../types/codex';
 
 const file = ts.createSourceFile('manager.tsx', readFileSync(new URL('./CodexModelProviderManager.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 function bind(name: string, state: Record<string, any>) {
@@ -35,7 +36,7 @@ function harness() {
   let failSync = false, failWrite = false;
   const state: Record<string, any> = {
     useCallback: (value: any) => value, accounts, providers: [provider], currentEditingProvider: provider,
-    resolveCodexModelProviderForApiKey, buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider,
+    resolveCodexModelProviderForApiKey, buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider, resolveCodexModelProviderForAccount,
     contextWindowDraftsFromRecord, parseContextWindowDrafts, buildProviderModelVisionCapabilities,
     resolveCodexApiProviderPresetId, isValidProviderApiKeyUrl, resolveCodexProviderCapabilityProfile,
     normalizeCodexModelProviderBaseUrl: (url: string) => url.trim().replace(/\/+$/, '').toLowerCase(),
@@ -74,6 +75,7 @@ function harness() {
   bind('openEditModal', state)(provider);
   return { state, calls, provider: () => provider, failSync(value: boolean) { failSync = value; }, failWrite(value: boolean) { failWrite = value; },
     openAccount(index = 0) { bind('openEditModal', state)(provider, accounts[index]); },
+    openSelectedKey(id: string) { bind('openEditModal', state)(provider, undefined, id); },
     save: () => bind('handleSaveProvider', state)(),
   };
 }
@@ -93,11 +95,100 @@ test('account entry uses the full provider editor and scopes model changes to it
   assert.deepEqual(h.calls.reloadMerges, [false], "saving must not re-import stale account snapshots");
 });
 
+test('a legacy account catalog survives editing, reopening and enabling its provider key', async () => {
+  const h = harness();
+  const provider = h.provider();
+  const key = provider.apiKeys[0];
+  const account = h.state.accounts[0];
+  const visionModel = 'deepseek-v4-flash-vision-exp';
+  delete key.modelCatalog;
+  delete key.modelContextWindows;
+  provider.modelCatalog = ['deepseek-v4-pro', 'deepseek-v4-flash'];
+  Object.assign(account, {
+    api_model_catalog: [visionModel, 'gpt-image-2'],
+    api_model_context_windows: { [visionModel]: 128000 },
+    api_supports_vision: true,
+    api_model_vision_support: { [visionModel]: true },
+    api_vision_routing_model: visionModel,
+  });
+  const enables: any[][] = [];
+  const prefetched: unknown[] = [];
+  Object.assign(h.state, {
+    CODEX_API_PROVIDER_CUSTOM_ID: 'custom',
+    isCodexApiKeyAccount,
+    enablingProviderId: null,
+    setEnablingProviderId() {}, setProviderLaunchPreview() {},
+    async addCodexAccountWithApiKey(...args: any[]) { enables.push(args); return account; },
+    prefetchCodexLaunchModels(savedAccount: unknown) { prefetched.push(savedAccount); },
+    async updateCodexApiKeyBoundOAuthAccount() {}, async reloadCurrentAccount() {},
+    async reloadLocalAccessState() {}, async reloadCodexInstances() {},
+  });
+  await bind('handleEnableProvider', h.state)(provider, key, 'instance', 'Test instance');
+  assert.deepEqual(enables[0][5], [visionModel, 'gpt-image-2']);
+  assert.deepEqual(enables[0][13], { [visionModel]: 128000 });
+  assert.equal(enables[0][8], visionModel);
+  assert.deepEqual(prefetched, [account]);
+
+  h.openAccount();
+  assert.equal(h.state.form.modelCatalogText, `${visionModel}\ngpt-image-2`);
+  h.state.form.modelCatalogText += '\nrelay-extra';
+  await h.save();
+  assert.deepEqual(Array.from(h.calls.bindings[0][6]), [visionModel, 'gpt-image-2', 'relay-extra']);
+  h.openAccount();
+  assert.equal(h.state.form.modelCatalogText, `${visionModel}\ngpt-image-2\nrelay-extra`);
+});
+
+test('account catalog recovery respects an explicit empty key catalog and changed endpoint', () => {
+  const h = harness();
+  const provider = h.provider();
+  provider.modelCatalog = [];
+  provider.apiKeys[0].modelCatalog = [];
+  h.state.accounts[0].api_model_catalog = ['legacy-only'];
+  h.openAccount();
+  assert.equal(h.state.form.modelCatalogText, '');
+
+  delete provider.apiKeys[0].modelCatalog;
+  h.state.accounts[0].api_base_url = 'https://other-relay.invalid/v1';
+  h.openAccount();
+  assert.equal(h.state.form.modelCatalogText, '');
+});
+
 test('provider entry saves shared defaults while explicit key catalogs stay independent', async () => {
   const h = harness(); h.state.form.modelCatalogText = 'new-default'; await h.save();
   assert.deepEqual(Array.from(h.provider().modelCatalog), ['new-default']);
   assert.deepEqual(h.provider().apiKeys.map((key: any) => key.modelCatalog), [['model-a'], ['model-b']]);
   assert.equal(h.calls.bindings.length, 0); assert.equal(h.calls.syncs.length, 2); assert.equal(h.calls.queries, 0);
+});
+
+test('editing the selected provider key opens and saves that key’s own catalog', async () => {
+  const h = harness();
+  h.openSelectedKey('b');
+  assert.equal(h.state.editorModelKeyId, 'b');
+  assert.equal(h.state.form.modelCatalogText, 'model-b');
+  assert.equal(h.state.accountEditor, null);
+  h.state.form.modelCatalogText = 'updated-b';
+  await h.save();
+  assert.deepEqual(h.provider().modelCatalog, ['default']);
+  assert.deepEqual(h.provider().apiKeys[0].modelCatalog, ['model-a']);
+  assert.deepEqual(Array.from(h.provider().apiKeys[1].modelCatalog), ['updated-b']);
+});
+
+test('an existing third-party API key can switch to Chat Completions and retain it on reopen', async () => {
+  const h = harness();
+  h.openAccount();
+  assert.equal(h.state.form.wireApi, 'responses');
+  Object.assign(h.state.form, {
+    wireApi: 'chat_completions',
+    supportsWebsockets: false,
+    enableModePreference: 'gateway',
+  });
+  await h.save();
+
+  assert.equal(h.provider().wireApi, 'chat_completions');
+  assert.equal(h.calls.bindings[0][10], 'chat_completions');
+  h.openAccount();
+  assert.equal(h.state.form.wireApi, 'chat_completions');
+  assert.equal(h.state.form.supportsWebsockets, false);
 });
 
 test('account binding changes use the selected key and retain its Codex model-sync option', async () => {

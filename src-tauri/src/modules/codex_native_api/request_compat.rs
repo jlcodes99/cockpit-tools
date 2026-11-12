@@ -156,13 +156,41 @@ fn pointer(param: &str) -> Option<String> {
         )
     })
 }
+
+fn named_null_schema_repair(body: &Value, message: &str) -> Option<Repair> {
+    let (name, detail) = message
+        .strip_prefix("Invalid schema for function '")?
+        .split_once("': ")?;
+    if detail.trim_end_matches('.')
+        != r#"schema must be a JSON Schema of 'type: "object"', got 'type: null'"#
+    {
+        return None;
+    }
+    let mut matches = body["tools"]
+        .as_array()?
+        .iter()
+        .enumerate()
+        .filter(|(_, tool)| tool["type"] == "function" && tool["name"].as_str() == Some(name));
+    let (index, tool) = matches.next()?;
+    if matches.next().is_some()
+        || !tool["parameters"].is_object()
+        || !tool["parameters"]["type"].is_null()
+    {
+        return None;
+    }
+    Some(Repair::Schema(format!("/tools/{index}/parameters")))
+}
+
 fn repair(body: &Value, error: &Value) -> Option<Repair> {
     let error = super::diagnostics::error_object(error);
     let code = error["code"].as_str().unwrap_or_default();
-    let message = error["message"]
-        .as_str()
-        .unwrap_or_default()
-        .to_ascii_lowercase();
+    let message = error["message"].as_str().unwrap_or_default();
+    if matches!(code, "" | "invalid_request_error" | "invalid_function_parameters") {
+        if let Some(repair) = named_null_schema_repair(body, message) {
+            return Some(repair);
+        }
+    }
+    let message = message.to_ascii_lowercase();
     let param = parameter(error)?;
     let pointer = pointer(&param)?;
     let explicit = matches!(code, "unknown_parameter" | "unsupported_parameter")

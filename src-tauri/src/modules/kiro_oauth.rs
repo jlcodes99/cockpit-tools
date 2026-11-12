@@ -7,7 +7,10 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::net::TcpListener;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Mutex,
+};
 use url::Url;
 
 use crate::models::kiro::{
@@ -16,6 +19,9 @@ use crate::models::kiro::{
 use crate::modules::{kiro_account, logger};
 #[path = "kiro_idc_token.rs"]
 mod idc_token;
+#[cfg(test)]
+#[path = "kiro_oauth_device_tests.rs"]
+mod device_tests;
 #[path = "kiro_import_credentials.rs"]
 pub(crate) mod import_credentials;
 
@@ -176,11 +182,25 @@ fn hydrate_pending_login_if_missing() {
     }
 }
 
-fn set_pending_login(state: Option<PendingOAuthState>) {
-    if let Ok(mut guard) = PENDING_OAUTH_STATE.lock() {
-        *guard = state.clone();
+static KIRO_OAUTH_START_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+fn begin_kiro_oauth_start() -> Result<u64, String> {
+    let _guard = PENDING_OAUTH_STATE
+        .lock()
+        .map_err(|_| "OAuth 状态锁不可用".to_string())?;
+    Ok(KIRO_OAUTH_START_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1)
+}
+
+fn publish_pending_kiro_login(attempt: u64, state: PendingOAuthState) -> Result<(), String> {
+    let mut guard = PENDING_OAUTH_STATE
+        .lock()
+        .map_err(|_| "OAuth 状态锁不可用".to_string())?;
+    if KIRO_OAUTH_START_SEQUENCE.load(Ordering::Relaxed) != attempt {
+        return Err("登录会话已变更，请刷新后重试".to_string());
     }
-    persist_pending_login(state.as_ref());
+    *guard = Some(state);
+    persist_pending_login(guard.as_ref());
+    Ok(())
 }
 
 fn ensure_callback_server_for_state(state: &PendingOAuthState) {
@@ -188,7 +208,6 @@ fn ensure_callback_server_for_state(state: &PendingOAuthState) {
         return;
     }
     if state.expires_at <= now_timestamp() {
-        set_pending_login(None);
         return;
     }
     if state.callback_result.is_some() {
@@ -2420,6 +2439,7 @@ fn idc_http_client() -> Result<reqwest::Client, String> {
 
 async fn start_idc_login(
     options: KiroOAuthLoginStartOptions,
+    attempt: u64,
 ) -> Result<KiroOAuthStartResponse, String> {
     let method = options
         .method
@@ -2534,7 +2554,7 @@ async fn start_idc_login(
             interval_seconds,
         }),
     };
-    set_pending_login(Some(pending));
+    publish_pending_kiro_login(attempt, pending)?;
 
     Ok(KiroOAuthStartResponse {
         login_id,
@@ -2550,6 +2570,7 @@ async fn start_idc_login(
 pub async fn start_login(
     options: Option<KiroOAuthLoginStartOptions>,
 ) -> Result<KiroOAuthStartResponse, String> {
+    let attempt = begin_kiro_oauth_start()?;
     if let Some(options) = options {
         if options
             .method
@@ -2557,11 +2578,14 @@ pub async fn start_login(
             .map(|value| !value.eq_ignore_ascii_case("social"))
             .unwrap_or(false)
         {
-            return start_idc_login(options).await;
+            return start_idc_login(options, attempt).await;
         }
     }
     hydrate_pending_login_if_missing();
     if let Ok(guard) = PENDING_OAUTH_STATE.lock() {
+        if KIRO_OAUTH_START_SEQUENCE.load(Ordering::Relaxed) != attempt {
+            return Err("登录会话已变更，请刷新后重试".to_string());
+        }
         if let Some(state) = guard.as_ref() {
             if state.flow == "social"
                 && state.expires_at > now_timestamp()
@@ -2580,8 +2604,6 @@ pub async fn start_login(
             }
         }
     }
-    set_pending_login(None);
-
     let callback_port = find_available_callback_port()?;
     let callback_url = format!("http://localhost:{}", callback_port);
     let state_token = generate_token();
@@ -2608,7 +2630,7 @@ pub async fn start_login(
         idc: None,
     };
 
-    set_pending_login(Some(pending.clone()));
+    publish_pending_kiro_login(attempt, pending.clone())?;
 
     let expected_login_id = pending.login_id.clone();
     let expected_state = state_token.clone();
@@ -2657,35 +2679,33 @@ fn pending_login_is_active(login_id: &str) -> bool {
         .unwrap_or(false)
 }
 
-async fn complete_idc_login(
+async fn poll_idc_device_token(
+    client: &reqwest::Client,
+    endpoint: &str,
     login_id: &str,
-    state: &PendingOAuthState,
-) -> Result<KiroOAuthCompletePayload, String> {
-    let idc = state
-        .idc
-        .clone()
-        .ok_or_else(|| "IAM Identity Center 登录状态缺少设备授权信息".to_string())?;
-    let endpoint = KIRO_AWS_OIDC_TOKEN_ENDPOINT_FMT.replace("{region}", &idc.region);
-    let client = idc_http_client()?;
+    expires_at: i64,
+    idc: &PendingKiroIdcLogin,
+    is_active: impl Fn() -> bool,
+) -> Result<KiroIdcTokenResponse, String> {
     let mut interval_seconds = idc.interval_seconds.max(1);
 
     loop {
-        if !pending_login_is_active(login_id) {
+        if !is_active() {
             return Err("IAM Identity Center 登录已取消".to_string());
         }
-        if state.expires_at <= now_timestamp() {
+        if expires_at <= now_timestamp() {
             let _ = cancel_login(Some(login_id));
             return Err("IAM Identity Center 设备授权已过期，请重新发起登录".to_string());
         }
 
         tokio::time::sleep(tokio::time::Duration::from_secs(interval_seconds)).await;
-        if !pending_login_is_active(login_id) {
+        if !is_active() {
             return Err("IAM Identity Center 登录已取消".to_string());
         }
 
         let response = idc_token::request(
-            &client,
-            endpoint.as_str(),
+            client,
+            endpoint,
             idc_token::TokenRequest {
                 client_id: idc.client_id.as_str(),
                 client_secret: idc.client_secret.as_str(),
@@ -2703,38 +2723,12 @@ async fn complete_idc_login(
             .await
             .map_err(|error| format!("读取 AWS IAM Identity Center Token 响应失败: {error}"))?;
 
+        if !is_active() {
+            return Err("IAM Identity Center 登录已取消".to_string());
+        }
         if status.is_success() {
-            let token: KiroIdcTokenResponse = serde_json::from_str(&body)
-                .map_err(|error| format!("解析 AWS IAM Identity Center Token 响应失败: {error}"))?;
-            let expires_at = now_timestamp() + token.expires_in.max(1) as i64;
-            let mut auth_token = json!({
-                "accessToken": token.access_token,
-                "refreshToken": token.refresh_token,
-                "expiresIn": token.expires_in,
-                "expiresAt": expires_at,
-                "authMethod": "IdC",
-                "provider": idc.provider.clone(),
-                "loginProvider": idc.provider.clone(),
-                "idc_region": idc.region.clone(),
-                "idcRegion": idc.region.clone(),
-                "region": idc.region.clone(),
-                "issuer_url": idc.start_url.clone(),
-                "issuerUrl": idc.start_url.clone(),
-                "clientId": idc.client_id.clone(),
-                "clientIdHash": idc.client_id_hash.clone(),
-                "clientRegistration": idc.client_registration.clone(),
-            });
-            if let Some(id_token) = token.id_token {
-                auth_token["idToken"] = Value::String(id_token);
-            }
-            if let Some(token_type) = token.token_type {
-                auth_token["tokenType"] = Value::String(token_type);
-            }
-
-            let payload = build_payload_from_snapshot(auth_token, None, None)?;
-            let payload = enrich_payload_with_runtime_usage(payload).await;
-            let _ = cancel_login(Some(login_id));
-            return Ok(payload);
+            return serde_json::from_str(&body)
+                .map_err(|error| format!("解析 AWS IAM Identity Center Token 响应失败: {error}"));
         }
 
         let error =
@@ -2771,6 +2765,54 @@ async fn complete_idc_login(
     }
 }
 
+async fn complete_idc_login(
+    login_id: &str,
+    state: &PendingOAuthState,
+) -> Result<KiroOAuthCompletePayload, String> {
+    let idc = state
+        .idc
+        .as_ref()
+        .ok_or_else(|| "IAM Identity Center 登录状态缺少设备授权信息".to_string())?;
+    let endpoint = KIRO_AWS_OIDC_TOKEN_ENDPOINT_FMT.replace("{region}", &idc.region);
+    let client = idc_http_client()?;
+    let token = poll_idc_device_token(&client, &endpoint, login_id, state.expires_at, idc, || {
+        pending_login_is_active(login_id)
+    })
+    .await?;
+    let expires_at = now_timestamp() + token.expires_in.max(1) as i64;
+    let mut auth_token = json!({
+        "accessToken": token.access_token,
+        "refreshToken": token.refresh_token,
+        "expiresIn": token.expires_in,
+        "expiresAt": expires_at,
+        "authMethod": "IdC",
+        "provider": idc.provider.clone(),
+        "loginProvider": idc.provider.clone(),
+        "idc_region": idc.region.clone(),
+        "idcRegion": idc.region.clone(),
+        "region": idc.region.clone(),
+        "issuer_url": idc.start_url.clone(),
+        "issuerUrl": idc.start_url.clone(),
+        "clientId": idc.client_id.clone(),
+        "clientIdHash": idc.client_id_hash.clone(),
+        "clientRegistration": idc.client_registration.clone(),
+    });
+    if let Some(id_token) = token.id_token {
+        auth_token["idToken"] = Value::String(id_token);
+    }
+    if let Some(token_type) = token.token_type {
+        auth_token["tokenType"] = Value::String(token_type);
+    }
+
+    let payload = build_payload_from_snapshot(auth_token, None, None)?;
+    let payload = enrich_payload_with_runtime_usage(payload).await;
+
+    if !finish_kiro_login(Some(login_id))? {
+        return Err("IAM Identity Center 登录已取消".to_string());
+    }
+    Ok(payload)
+}
+
 pub async fn complete_login(login_id: &str) -> Result<KiroOAuthCompletePayload, String> {
     hydrate_pending_login_if_missing();
     loop {
@@ -2795,7 +2837,9 @@ pub async fn complete_login(login_id: &str) -> Result<KiroOAuthCompletePayload, 
         }
 
         if let Some(result) = state.callback_result.clone() {
-            let _ = cancel_login(Some(login_id));
+            if !finish_kiro_login(Some(login_id))? {
+                return Err("登录流程已取消，请重新发起授权".to_string());
+            }
             let callback = result?;
 
             let login_option = callback.login_option.trim().to_ascii_lowercase();
@@ -2823,24 +2867,32 @@ pub async fn complete_login(login_id: &str) -> Result<KiroOAuthCompletePayload, 
     }
 }
 
-pub fn cancel_login(login_id: Option<&str>) -> Result<(), String> {
-    hydrate_pending_login_if_missing();
-    let current = PENDING_OAUTH_STATE
-        .lock()
-        .map_err(|_| "OAuth 状态锁不可用".to_string())?
-        .as_ref()
-        .cloned();
-
-    match (current.as_ref(), login_id) {
-        (Some(state), Some(input)) if state.login_id != input => {
+fn take_matching_kiro_login(
+    pending: &mut Option<PendingOAuthState>,
+    login_id: Option<&str>,
+) -> Result<bool, String> {
+    if let (Some(state), Some(id)) = (pending.as_ref(), login_id) {
+        if state.login_id != id {
             return Err("登录会话不匹配，取消失败".to_string());
         }
-        (Some(_), _) => {
-            set_pending_login(None);
-        }
-        (None, _) => {}
     }
-    Ok(())
+    Ok(pending.take().is_some())
+}
+
+fn finish_kiro_login(login_id: Option<&str>) -> Result<bool, String> {
+    hydrate_pending_login_if_missing();
+    let mut guard = PENDING_OAUTH_STATE
+        .lock()
+        .map_err(|_| "OAuth 状态锁不可用".to_string())?;
+    let removed = take_matching_kiro_login(&mut guard, login_id)?;
+    if removed {
+        persist_pending_login(None);
+    }
+    Ok(removed)
+}
+
+pub fn cancel_login(login_id: Option<&str>) -> Result<(), String> {
+    finish_kiro_login(login_id).map(|_| ())
 }
 
 pub fn submit_callback_url(login_id: &str, callback_url: &str) -> Result<(), String> {

@@ -12,7 +12,7 @@ mod final_headers;
 mod lite;
 #[path = "codex_wire_schema.rs"]
 mod schema;
-pub(super) use final_headers::finalize_routing_hint;
+pub(super) use final_headers::{finalize_routing_hint, ROUTING_HINT};
 
 pub(super) const LITE_HEADER: &str = "x-openai-internal-codex-responses-lite";
 
@@ -191,6 +191,7 @@ fn normalize_inner(
         normalize_builtin_tools(body);
     }
     calls::normalize(body);
+    super::responses_tool_history::strip_legacy_codex_item_ids(body);
     let object = body.as_object_mut().expect("Object checked above");
     if object.get("instructions").is_none_or(Value::is_null) {
         object.insert("instructions".into(), json!(""));

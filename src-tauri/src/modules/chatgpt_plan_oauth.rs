@@ -538,9 +538,20 @@ async fn run_listener(session: &Arc<Session>, listener: TcpListener) -> Result<(
                 respond(&mut stream, true).await;
                 return Ok(());
             }
-            Err(_) => {
+            Err(error) => {
+                // Only callbacks with the expected state reach this point.
+                // Keep the attempt available for a corrected, pasted callback.
+                if matches!(
+                    error.as_str(),
+                    "CHATGPT_PLAN_INVALID_CALLBACK" | "CHATGPT_PLAN_REGISTRATION_CHANGED"
+                ) {
+                    if let Ok(mut state) = session.result.lock() {
+                        if pending_session(session, &state).is_ok() {
+                            state.error = Some(error);
+                        }
+                    }
+                }
                 respond(&mut stream, false).await;
-                // Invalid callback input never consumes a pending session.
             }
         }
     }

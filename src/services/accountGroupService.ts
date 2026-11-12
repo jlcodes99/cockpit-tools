@@ -1,6 +1,6 @@
 /**
  * 账号分组服务
- * 数据通过 Tauri 命令持久化到磁盘 (~/.cockpit_tools/account_groups.json)
+ * 分组与成员通过 Tauri 命令持久化到本地数据库
  * 内存中维护一份缓存避免频繁 IO
  */
 
@@ -22,13 +22,33 @@ export interface AccountGroup {
 
 // ─── 内存缓存 ───────────────────────────────────────
 let cachedGroups: AccountGroup[] | null = null;
+let cachedRevision: number | undefined;
+let legacyChecked = false;
+
+export interface AccountGroupSnapshot {
+  data: string;
+  revision: number;
+}
+
+export function isGroupRevisionConflict(error: unknown): boolean {
+  return String(error).endsWith('ACCOUNT_GROUPS_CHANGED');
+}
 
 // Serialize read-modify-write operations so concurrent UI actions cannot
 // overwrite a newer group membership snapshot with a stale one.
 let groupsOperation: Promise<unknown> = Promise.resolve();
 
 function enqueue<T>(operation: () => Promise<T>): Promise<T> {
-  const next = groupsOperation.then(operation, operation);
+  const run = async () => {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isGroupRevisionConflict(error)) throw error;
+      cachedGroups = null;
+      return operation();
+    }
+  };
+  const next = groupsOperation.then(run, run);
   groupsOperation = next.then(
     () => undefined,
     () => undefined,
@@ -87,8 +107,12 @@ export function parseAccountGroups(raw: string): AccountGroup[] {
 
 async function loadGroupsFromDisk(): Promise<AccountGroup[]> {
   try {
-    const raw: string = await invoke('load_account_groups');
-    return parseAccountGroups(raw);
+    const { data, revision } = await invoke<AccountGroupSnapshot>('load_account_group_snapshot', {
+      platform: 'antigravity',
+    });
+    const groups = parseAccountGroups(data);
+    cachedRevision = revision;
+    return groups;
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('[AccountGroups]')) {
       throw error;
@@ -99,35 +123,28 @@ async function loadGroupsFromDisk(): Promise<AccountGroup[]> {
 
 async function saveGroupsToDisk(groups: AccountGroup[]): Promise<void> {
   try {
-    await invoke('save_account_groups', { data: JSON.stringify(groups, null, 2) });
+    cachedRevision = await invoke<number>('save_account_groups', {
+      data: JSON.stringify(groups, null, 2),
+      expectedRevision: cachedRevision,
+    });
   } catch (e) {
+    if (isGroupRevisionConflict(e)) cachedGroups = null;
     console.error('[AccountGroups] Failed to save to disk:', e);
     throw e;
   }
 }
 
-/** 迁移 localStorage 数据到磁盘（仅首次） */
+/** 旧 WebView 副本只允许填补不存在的原生分组。 */
 async function migrateLegacyData(): Promise<void> {
+  if (legacyChecked) return;
   try {
     const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (!raw) return;
-    const legacy = JSON.parse(raw);
-    if (!Array.isArray(legacy) || legacy.length === 0) return;
-
-    // 检查磁盘上是否已有数据
-    const diskData = await loadGroupsFromDisk();
-    if (diskData.length > 0) {
-      // 磁盘已有数据，清理 localStorage
-      localStorage.removeItem(LEGACY_STORAGE_KEY);
-      return;
+    if (raw && parseAccountGroups(raw).length > 0) {
+      await invoke('seed_account_groups', { data: raw });
     }
-
-    // 迁移到磁盘
-    await saveGroupsToDisk(legacy);
-    localStorage.removeItem(LEGACY_STORAGE_KEY);
-    console.log('[AccountGroups] Migrated', legacy.length, 'groups from localStorage to disk');
-  } catch {
-    // ignore migration errors
+    legacyChecked = true;
+  } catch (error) {
+    console.error('[AccountGroups] Failed to read legacy groups:', error);
   }
 }
 

@@ -94,6 +94,20 @@ fn is_server_revoked_refresh_error(message: &str) -> bool {
     )
 }
 
+fn is_refresh_grant_only_failure(reason: &str) -> bool {
+    let reason = reason.to_ascii_lowercase();
+    !is_server_revoked_refresh_error(&reason)
+        && [
+            "invalid_grant",
+            "invalid_refresh_token",
+            "invalid refresh token",
+            "refresh_token is invalid",
+            "refresh_token_expired",
+        ]
+        .iter()
+        .any(|code| reason.contains(code))
+}
+
 fn format_refresh_error_for_user(raw: &str) -> String {
     match classify_refresh_error(raw) {
         CodexRefreshErrorKind::RefreshTokenReused => format!(
@@ -962,6 +976,9 @@ fn persist_refreshed_account(
         sync_identity_from_tokens(current);
         if previous.subscription_query_last_success_at.is_some() {
             if subscription_workspace_unchanged(&previous, current) {
+                if crate::modules::codex_quota::has_confirmed_free_subscription(&previous) {
+                    current.plan_type = previous.plan_type;
+                }
                 current.subscription_active_until = previous.subscription_active_until;
             } else {
                 current.subscription_query_last_attempt_at = None;

@@ -66,6 +66,7 @@ async fn request_fault_http_and_native_chat_keep_body_without_refresh_rotation_o
     for chat in [false, true] {
         for (status,raw) in [
             (403,r#"{"error":{"code":"cyber_policy","type":"invalid_request_error","message":"Rejected prompt"}}"#),
+            (400,r#"{"error":{"code":"invalid_prompt","type":"invalid_request_error","message":"Invalid prompt: your prompt was flagged as potentially violating our usage policy."}}"#),
             (401,r#"{"error":{"code":"invalid_request_error","message":"Malformed request"}}"#),
             (503,r#"{"error":{"type":"invalid_request_error","message":"Cannot represent request"}}"#),
             (404,"Item with id fixture-item not found. Items are not persisted when `store` is set to false."),

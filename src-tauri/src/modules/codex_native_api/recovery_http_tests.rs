@@ -293,7 +293,8 @@ async fn automatic_history_http_and_sse_preserve_unknown_cipher_and_commit_only_
             let seen = source.seen.lock().unwrap();
             assert_eq!(seen.len(), 1);
             assert_eq!(seen[0].1["input"], original["input"]);
-            assert_ne!(seen[0].0["thread-id"], "client-child");
+            assert!(!seen[0].0.contains_key("thread-id"));
+            assert_eq!(seen[0].1["client_metadata"], original["client_metadata"]);
             drop(seen);
             assert_eq!(input_owners(&source.path), if mode == 200 { 1 } else { 0 });
             assert!(!source.path.with_extension("recovery").exists());

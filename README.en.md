@@ -7,7 +7,7 @@ English · [Portuguese (BR)](README.pt-br.md) · [简体中文](README.md)
 [![GitHub release](https://img.shields.io/github/v/release/jlcodes99/cockpit-tools?style=flat)](https://github.com/jlcodes99/cockpit-tools/releases)
 [![GitHub issues](https://img.shields.io/github/issues/jlcodes99/cockpit-tools)](https://github.com/jlcodes99/cockpit-tools/issues)
 
-A **universal AI IDE account management tool**, currently supporting **Antigravity IDE**, **Codex**, **GitHub Copilot**, **Windsurf**, **Kiro**, **Cursor**, **Grok CLI**, **CodeBuddy**, **CodeBuddy CN**, **Qoder**, **Trae**, **TRAE SOLO**, **Trae CN**, **TRAE SOLO CN**, **Zed**, and **ZCode**, with multi-instance parallel workflows.
+A **universal AI IDE account management tool**, currently supporting **Antigravity IDE**, **Codex**, **GitHub Copilot**, **Windsurf**, **Kiro**, **Cursor**, **Grok CLI**, **CodeBuddy**, **CodeBuddy CN**, **Qoder**, **Trae**, **TraeWork**, **Trae CN**, **TraeWork CN**, **Zed**, and **ZCode**, with multi-instance parallel workflows.
 
 > Designed to help users efficiently manage multiple AI IDE accounts, this tool supports one-click switching, quota monitoring, wake-up tasks, and multi-instance parallel runs, helping you fully utilize resources from different accounts.
 
@@ -54,7 +54,7 @@ A **universal AI IDE account management tool**, currently supporting **Antigravi
 
 A brand new visual dashboard providing a one-stop status overview:
 
-- **Sixteen-Platform Support**: Simultaneously displays Antigravity IDE, Codex, GitHub Copilot, Windsurf, Kiro, Cursor, Grok CLI, CodeBuddy, CodeBuddy CN, Qoder, Trae, TRAE SOLO, Trae CN, TRAE SOLO CN, Zed, and ZCode account status
+- **Sixteen-Platform Support**: Simultaneously displays Antigravity IDE, Codex, GitHub Copilot, Windsurf, Kiro, Cursor, Grok CLI, CodeBuddy, CodeBuddy CN, Qoder, Trae, TraeWork, Trae CN, TraeWork CN, Zed, and ZCode account status
 - **Quota Monitoring**: Real-time view of remaining quotas and reset times for each model
 - **Quick Actions**: One-click refresh, one-click wake-up
 - **Visual Progress**: Intuitive progress bars showing quota consumption
@@ -239,7 +239,7 @@ Manage Qoder instances with isolated profiles and lifecycle controls.
 - **Account Import**: supports local import and JSON import
 - **Quota View**: shows raw plan values, USD spent/total budget, and reset time
 - **Batch Operations**: supports tags, filters, export, and batch delete/refresh
-- **Trae Suite**: supports local import and switch injection for the default clients of Trae, TRAE SOLO, Trae CN, and TRAE SOLO CN; they appear independently by default and can be grouped manually in Top Layout
+- **Trae Suite**: supports local import and switch injection for the default clients of Trae, TraeWork, Trae CN, and TraeWork CN; they appear independently by default and can be grouped manually in Top Layout
 - **Switch Injection**: supports writing back local auth state using each client's real on-disk rules and launching the target client
 
 #### 11.1 Trae Multi-Instance
@@ -294,6 +294,7 @@ These are the most common security questions answered directly:
   - `~/.codex`: official Codex current login `auth.json`
   - `~/.grok`: the official Grok CLI default instance and current sign-in `auth.json`
   - `~/.zcode/v2`: ZCode encrypted credentials for the current official sign-in and quota cache
+  - Saved 2FA entries and query history are encrypted in `mfa_vault.sqlite` under the application data directory. Saved APIKEY.FUN keys are stored in the encrypted `apikey_fun_vault.json` file. The encryption material lives in a private key file in the same application data directory, and old WebView data is retained during migration.
   - system application data under `com.jlcodes.cockpit-tools`: host WebView state and related data; historical `com.antigravity.cockpit-tools` directories are used only for legacy data imports
 - **Grok CLI credentials are not encrypted**: access and refresh tokens are stored locally as plaintext JSON and rely primarily on operating-system account isolation and local file permissions. On Unix systems, credential directories are set to `0700` and credential files to `0600`. Redacted exports contain no tokens and cannot serve as sign-in backups.
 - **WebSocket is local-only by default**: binds to `127.0.0.1`, default port `19528`; you can disable it or change the port in Settings.

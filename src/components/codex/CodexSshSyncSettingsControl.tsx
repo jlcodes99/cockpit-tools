@@ -19,9 +19,9 @@ export function CodexSshSyncSettingsControl({
 }: CodexSshSyncSettingsControlProps) {
   const { t } = useTranslation();
   const servers = useSshServerStore((s) => s.servers);
-  const selectedServerId = useSshServerStore((s) => s.selectedServerId);
+  const selectedServerIds = useSshServerStore((s) => s.selectedServerIds);
   const fetchServers = useSshServerStore((s) => s.fetchServers);
-  const selectServer = useSshServerStore((s) => s.selectServer);
+  const selectServers = useSshServerStore((s) => s.selectServers);
   const [modalOpen, setModalOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -29,14 +29,13 @@ export function CodexSshSyncSettingsControl({
     void fetchServers();
   }, [fetchServers]);
 
-  const selectedServer = useMemo(
-    () => servers.find((server) => server.id === selectedServerId) ?? null,
-    [servers, selectedServerId],
+  const selectedServers = useMemo(
+    () => servers.filter((server) => selectedServerIds.includes(server.id) && server.sync_on_codex_switch),
+    [servers, selectedServerIds],
   );
 
-  const enabled = Boolean(
-    selectedServer && selectedServer.sync_on_codex_switch,
-  );
+  const enabled = selectedServers.length > 0;
+  const selectedServer = selectedServers[0];
 
   const openModal = useCallback(() => setModalOpen(true), []);
   const closeModal = useCallback(() => setModalOpen(false), []);
@@ -50,7 +49,7 @@ export function CodexSshSyncSettingsControl({
     setBusy(true);
     try {
       // 关闭：取消选中，后端切号同步不会再推到任何 SSH 主机
-      await selectServer(null);
+      await selectServers([]);
     } catch (error) {
       console.warn('[Codex SSH] disable sync failed:', error);
     } finally {
@@ -58,7 +57,9 @@ export function CodexSshSyncSettingsControl({
     }
   };
 
-  const hintText = enabled && selectedServer
+  const hintText = selectedServers.length > 1
+    ? t('codex.ssh.syncSwitchActiveMultiple', '已启用 · {{count}} 台服务器', { count: selectedServers.length })
+    : enabled && selectedServer
     ? t('codex.ssh.syncSwitchActive', '已启用 · {{name}}（{{user}}@{{host}}）', {
         name: selectedServer.name,
         user: selectedServer.username,

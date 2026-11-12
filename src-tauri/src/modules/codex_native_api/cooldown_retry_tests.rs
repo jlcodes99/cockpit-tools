@@ -330,6 +330,9 @@ async fn http_transport_failover_excludes_only_this_request_but_real_status_mark
         drop(selections);
         task.abort();
         let _ = task.await;
+        // Shutdown drains requests, but Handle still owns the SQLite connection.
+        // Release it before removing the database directory on Windows.
+        drop(handle);
         std::fs::remove_dir_all(root).unwrap();
     }
 }

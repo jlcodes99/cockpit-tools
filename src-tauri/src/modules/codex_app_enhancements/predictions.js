@@ -14,7 +14,7 @@
     // STATE_SCRIPT has already checked ownership and the complete installed
     // feature mask before preserving an active graph on transport reattach.
     if (state?.nativePatchState === "active" && state.nativePredictionPatchState === "ready"
-      && state.nativePredictions === true && state.apiKeyAuthVerified === true)
+      && state.nativePredictions === true && (state.apiKeyAuthVerified === true || state.apiService === true))
       root.__cockpitNativePredictions.setReady(true);
     if (typeof module === "object" && module.exports) module.exports = root.__cockpitNativePredictions;
     return;
@@ -43,12 +43,18 @@
   const services = new WeakMap();
   const diagnostic = { state: "disabled", reason: "not-ready", completed: 0, cancelled: 0 };
 
-  const enabled = () => root.__cockpitEnhancements?.nativePredictions === true
-    && root.__cockpitEnhancements?.apiKeyAuthVerified === true;
+  const enabled = () => {
+    const state = root.__cockpitEnhancements;
+    return state?.nativePredictions === true && (state.apiKeyAuthVerified === true || state.apiService === true);
+  };
   const allow = (host = "local") => enabled() && ready && host === "local"
     && typeof managerForHost === "function";
   const abortError = () => new DOMException("Prediction cancelled", "AbortError");
-  const isApiAuth = auth => auth == null || auth === "apiKey" || auth === "apikey";
+  const isBoundOAuth = auth => auth === "chatgpt" && root.__cockpitEnhancements?.apiService === true
+    && root.__cockpitEnhancements?.apiKeyAuthVerified === false;
+  const usesPredictionAdapter = auth => isBoundOAuth(auth)
+    || root.__cockpitEnhancements?.apiKeyAuthVerified === true
+      && (auth == null || auth === "apiKey" || auth === "apikey");
   const fail = (source, reason, kind) => ({ ok: false, patchedSource: source, diagnostics: { reason, kind } });
   const validTarget = target => target && target.hostId === "local"
     && typeof target.threadId === "string" && target.threadId.length > 0
@@ -188,7 +194,8 @@
     const promise = Promise.resolve().then(async () => {
       try {
         const auth = await wait(manager.getAuthMethod());
-        if (!isApiAuth(auth)) {
+        const boundOAuth = isBoundOAuth(auth);
+        if (!usesPredictionAdapter(auth)) {
           const fallback = original?.requestUserMessagePrediction?.(target, onIneligible);
           if (fallback == null) return null;
           listeners.push({ [Symbol.dispose]: () => disposeValue(fallback) });
@@ -221,7 +228,8 @@
         const resumed = await request("thread/resume", { threadId: target.threadId, excludeTurns: true });
         if (resumed?.collaborationMode?.mode === "plan" || !resumed?.model || !resumed?.modelProvider
           || resumed.thread?.id !== target.threadId || resumed.thread.status?.type !== "idle"
-          || !await currentSource(manager, target, wait)) return null;
+          || boundOAuth && resumed.modelProvider !== "codex_local_access"
+          || !await currentSource(manager, target, wait) || !usesPredictionAdapter(auth)) return null;
         if (typeof root.electronBridge?.sendMessageFromView !== "function") throw new Error("Prediction sample bridge unavailable");
         sampleId = `thread/sample:${root.crypto.randomUUID()}`;
         root.addEventListener("message", onResponse);
@@ -243,7 +251,8 @@
         const sampled = await wait(completion);
         if (typeof sampled?.responseId !== "string" || sampled.responseId.length === 0
           || sampled.sourceTurnId !== target.latestTurnId) throw new Error("Unsupported prediction sample");
-        if (!current() || !isApiAuth(await wait(manager.getAuthMethod()))
+        const finalAuth = await wait(manager.getAuthMethod());
+        if (!current() || !usesPredictionAdapter(finalAuth) || isBoundOAuth(finalAuth) !== boundOAuth
           || !await currentSource(manager, target, wait)) return null;
         const finalContext = await wait(manager.getFollowUpContext(target.threadId));
         if (finalContext.modelProvider != null && finalContext.modelProvider !== resumed.modelProvider) return null;
@@ -289,7 +298,7 @@
         if (!allow(hostId)) return original?.isEnabledByRemoteConfig?.() ?? false;
         try {
           const manager = managerForHost(scope, hostId);
-          return isApiAuth(await manager.getAuthMethod()) ? true : original?.isEnabledByRemoteConfig?.() ?? false;
+          return usesPredictionAdapter(await manager.getAuthMethod()) ? true : original?.isEnabledByRemoteConfig?.() ?? false;
         } catch { return false; }
       },
       requestUserMessagePrediction(target, onIneligible) {

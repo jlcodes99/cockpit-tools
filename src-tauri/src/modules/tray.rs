@@ -166,7 +166,11 @@ fn configure_macos_status_item_identity<R: Runtime>(tray: &TrayIcon<R>) {
 
 #[cfg(target_os = "macos")]
 pub fn apply_tray_icon_style<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
-    let style = crate::modules::config::get_user_config().tray_icon_style;
+    let config = crate::modules::config::get_user_config();
+    if !config.show_tray_icon {
+        return Ok(());
+    }
+    let style = config.tray_icon_style;
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         let (icon, icon_as_template) =
             macos_tray_icon_for_style(app, style).map_err(|err| err.to_string())?;
@@ -188,6 +192,27 @@ pub fn apply_tray_icon_style<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<()
             icon_as_template,
             rect_log
         ));
+    }
+    Ok(())
+}
+
+pub(crate) fn set_tray_visibility<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    visible: bool,
+) -> Result<(), String> {
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        tray.set_visible(visible).map_err(|err| err.to_string())?;
+        #[cfg(target_os = "macos")]
+        if visible {
+            // Showing the icon again creates a new native status item.
+            configure_macos_status_item_identity(&tray);
+            apply_tray_icon_style(app)?;
+        }
+    } else if visible {
+        create_tray_skeleton(app).map_err(|err| err.to_string())?;
+    }
+    if visible {
+        update_tray_menu(app)?;
     }
     Ok(())
 }
@@ -306,9 +331,9 @@ impl PlatformId {
             Self::Qoder => "Qoder",
             Self::Zcode => "ZCode",
             Self::Trae => "Trae",
-            Self::TraeSolo => "TRAE SOLO",
+            Self::TraeSolo => super::trae_account::TraePlatformKind::TraeSolo.display_name(),
             Self::TraeCn => "Trae CN",
-            Self::TraeSoloCn => "TRAE SOLO CN",
+            Self::TraeSoloCn => super::trae_account::TraePlatformKind::TraeSoloCn.display_name(),
             Self::Workbuddy => "WorkBuddy",
             Self::MinimaxCode => "MiniMax Code",
         }
@@ -3774,16 +3799,9 @@ fn handle_tray_event<R: Runtime>(tray: &TrayIcon<R>, event: TrayIconEvent) {
         } => {
             #[cfg(target_os = "macos")]
             {
-                if button == MouseButton::Left {
-                    if let Err(err) =
-                        crate::modules::floating_card_window::show_main_window(tray.app_handle())
-                    {
-                        logger::log_warn(&format!("[Tray] 左键恢复主窗口失败: {}", err));
-                    }
-                    return;
-                }
-
-                if button == MouseButton::Right && button_state == MouseButtonState::Down {
+                if matches!(button, MouseButton::Left | MouseButton::Right)
+                    && button_state == MouseButtonState::Down
+                {
                     let app = tray.app_handle().clone();
                     let app_for_menu = app.clone();
                     let _ = app.run_on_main_thread(move || {

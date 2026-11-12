@@ -118,6 +118,69 @@ mod profile_copy_integration_tests {
         }
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn codex_profile_copy_preserves_dangling_vendor_skills_link() {
+        let _lock = crate::modules::test_support::env_lock().lock().unwrap();
+        let env = TestEnvironment::new();
+        let source = env.root.join("source");
+        let target = env.root.join("target");
+        let vendor_skills = Path::new(CODEX_SHARED_VENDOR_IMPORTS_SKILLS_DIR);
+        let global_vendor_skills = source.join(vendor_skills);
+        let missing = env.root.join("vendor-skills");
+        fs::create_dir_all(global_vendor_skills.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&missing, &global_vendor_skills).unwrap();
+        fs::write(source.join("AGENTS.md"), b"shared instructions").unwrap();
+
+        let mut create = params("CLI copy with dangling link", &target, "copy");
+        create.launch_mode = Some(InstanceLaunchMode::Cli);
+        let profile = create_instance(create).unwrap();
+        assert_eq!(profile.launch_mode, InstanceLaunchMode::Cli);
+        assert!(load_instance_store()
+            .unwrap()
+            .instances
+            .iter()
+            .any(|item| item.id == profile.id));
+        assert_eq!(fs::read_link(&global_vendor_skills).unwrap(), missing);
+        assert!(fs::symlink_metadata(target.join(vendor_skills)).is_err());
+        assert!(target.join("skills").is_dir());
+        assert!(target.join("rules").is_dir());
+        assert_eq!(
+            fs::read(target.join("AGENTS.md")).unwrap(),
+            b"shared instructions"
+        );
+
+        fs::create_dir(&missing).unwrap();
+        ensure_instance_shared_skills(&target).unwrap();
+        assert_eq!(
+            fs::canonicalize(target.join(vendor_skills)).unwrap(),
+            missing
+        );
+    }
+
+    #[test]
+    fn codex_profile_copy_preserves_file_at_vendor_skills_path() {
+        let _lock = crate::modules::test_support::env_lock().lock().unwrap();
+        let env = TestEnvironment::new();
+        let source = env.root.join("source");
+        let target = env.root.join("target");
+        let vendor_skills = Path::new(CODEX_SHARED_VENDOR_IMPORTS_SKILLS_DIR);
+        let global_vendor_skills = source.join(vendor_skills);
+        fs::create_dir_all(global_vendor_skills.parent().unwrap()).unwrap();
+        fs::write(&global_vendor_skills, b"original contents").unwrap();
+
+        let profile = create_instance(params("Desktop copy with file", &target, "copy")).unwrap();
+        assert_eq!(profile.launch_mode, InstanceLaunchMode::App);
+        assert_eq!(
+            fs::read(global_vendor_skills).unwrap(),
+            b"original contents"
+        );
+        assert_eq!(
+            fs::read(target.join(vendor_skills)).unwrap(),
+            b"original contents"
+        );
+    }
+
     #[test]
     fn codex_profile_copy_slow_copy_keeps_registry_available_and_concurrent_creates() {
         let _lock = crate::modules::test_support::env_lock().lock().unwrap();
@@ -165,6 +228,46 @@ mod profile_copy_integration_tests {
         for profile in [result.0, result.1] {
             assert!(store.instances.iter().any(|item| item.id == profile.id));
         }
+    }
+
+    #[test]
+    fn codex_instance_slow_deletion_preserves_concurrent_registry_changes() {
+        let _lock = crate::modules::test_support::env_lock().lock().unwrap();
+        let env = TestEnvironment::new();
+        let target = env.root.join("to-delete");
+        let instance = create_instance(params("To delete", &target, "empty")).unwrap();
+        let deleted_id = &instance.id;
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+
+        let other = std::thread::scope(|scope| {
+            let pending = scope.spawn(move || {
+                delete_instance_with(deleted_id, |path| {
+                    if path == target {
+                        started_tx.send(()).unwrap();
+                        resume_rx
+                            .recv_timeout(std::time::Duration::from_secs(10))
+                            .map_err(|error| error.to_string())?;
+                    }
+                    Ok(())
+                })
+            });
+            started_rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
+            let other = if CODEX_INSTANCE_STORE_LOCK.try_lock().is_ok() {
+                create_instance(params("Keep", &env.root.join("keep"), "empty"))
+            } else {
+                Err("slow deletion held the registry lock".to_string())
+            };
+            resume_tx.send(()).unwrap();
+            pending.join().unwrap().unwrap();
+            other.unwrap()
+        });
+        let ids: Vec<_> = load_instance_store().unwrap().instances.into_iter().map(|item| item.id).collect();
+        assert_eq!(ids, [other.id.clone()]);
+
+        let error = delete_instance_with(&other.id, |_| Err("trash unavailable".into())).unwrap_err();
+        assert_eq!(error, "trash unavailable");
+        assert_eq!(load_instance_store().unwrap().instances[0].id, other.id);
     }
 
     #[test]

@@ -81,6 +81,13 @@ fn remember_main_window_state_enabled() -> bool {
     config::get_user_config().remember_main_window_state
 }
 
+fn maximized_state(saved: Option<MainWindowState>) -> MainWindowState {
+    MainWindowState {
+        maximized: true,
+        ..saved.unwrap_or_default()
+    }
+}
+
 fn has_visible_overlap(window: LogicalRect, monitor: LogicalRect) -> bool {
     let overlap_width =
         (window.x + window.width).min(monitor.x + monitor.width) - window.x.max(monitor.x);
@@ -171,6 +178,9 @@ pub fn save_main_window_state(state: &MainWindowState) -> Result<(), String> {
 pub fn capture_main_window_state<R: Runtime>(
     window: &WebviewWindow<R>,
 ) -> Result<MainWindowState, String> {
+    if window.is_maximized().unwrap_or(false) {
+        return Ok(maximized_state(load_main_window_state()));
+    }
     let scale = window.scale_factor().unwrap_or(1.0).max(0.1);
     let physical = window
         .inner_size()
@@ -179,24 +189,9 @@ pub fn capture_main_window_state<R: Runtime>(
     let height = physical.height as f64 / scale;
     let (width, height) = clamp_size(width, height);
 
-    let maximized = window.is_maximized().unwrap_or(false);
-    let (x, y) = if maximized {
-        // Keep last known non-maximized position if we already saved one.
-        load_main_window_state()
-            .map(|s| (s.x, s.y))
-            .unwrap_or((None, None))
-    } else {
-        match window.outer_position() {
-            Ok(pos) => {
-                let lx = pos.x as f64 / scale;
-                let ly = pos.y as f64 / scale;
-                (
-                    if lx.is_finite() { Some(lx) } else { None },
-                    if ly.is_finite() { Some(ly) } else { None },
-                )
-            }
-            Err(_) => (None, None),
-        }
+    let (x, y) = match window.outer_position() {
+        Ok(pos) => (Some(pos.x as f64 / scale), Some(pos.y as f64 / scale)),
+        Err(_) => (None, None),
     };
 
     Ok(MainWindowState {
@@ -204,7 +199,7 @@ pub fn capture_main_window_state<R: Runtime>(
         height,
         x,
         y,
-        maximized,
+        maximized: false,
     })
 }
 
@@ -255,8 +250,7 @@ pub fn apply_state_to_window_config(config: &mut tauri::utils::config::WindowCon
     };
     config.width = state.width;
     config.height = state.height;
-    // Position is restored only after the window exists and can validate current monitors.
-    config.maximized = state.maximized;
+    // Apply position and maximization after creation so the window has normal restore bounds.
 }
 
 /// Apply saved geometry to an already-created main window (first launch / recreate).
@@ -267,13 +261,6 @@ pub fn restore_to_window<R: Runtime>(window: &WebviewWindow<R>) {
     let Some(state) = load_main_window_state() else {
         return;
     };
-
-    if state.maximized {
-        if let Err(err) = window.maximize() {
-            logger::log_warn(&format!("[Window] 恢复最大化失败: {}", err));
-        }
-        return;
-    }
 
     if let Err(err) = window.set_size(Size::Logical(LogicalSize {
         width: state.width,
@@ -300,6 +287,12 @@ pub fn restore_to_window<R: Runtime>(window: &WebviewWindow<R>) {
             if let Err(err) = save_main_window_state(&repaired) {
                 logger::log_warn(&format!("[Window] 清理无效窗口位置失败: {}", err));
             }
+        }
+    }
+
+    if state.maximized {
+        if let Err(err) = window.maximize() {
+            logger::log_warn(&format!("[Window] 恢复最大化失败: {}", err));
         }
     }
 }
@@ -346,6 +339,33 @@ mod tests {
         let (w, h) = clamp_size(1400.0, 900.0);
         assert_eq!(w, 1400.0);
         assert_eq!(h, 900.0);
+    }
+
+    #[test]
+    fn maximizing_preserves_saved_normal_window_bounds() {
+        let normal = MainWindowState {
+            width: 1420.0,
+            height: 760.0,
+            x: Some(120.0),
+            y: Some(70.0),
+            maximized: false,
+        };
+        let maximized = maximized_state(Some(normal.clone()));
+        assert_eq!(
+            maximized,
+            MainWindowState {
+                maximized: true,
+                ..normal
+            }
+        );
+        assert_eq!(maximized_state(Some(maximized.clone())), maximized);
+        assert_eq!(
+            maximized_state(None),
+            MainWindowState {
+                maximized: true,
+                ..MainWindowState::default()
+            }
+        );
     }
 
     #[test]

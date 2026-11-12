@@ -4,8 +4,8 @@ use std::sync::{LazyLock, Mutex};
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, Runtime, WebviewWindow, WebviewWindowBuilder,
-    Window,
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Runtime,
+    WebviewWindow, WebviewWindowBuilder, Window,
 };
 
 use crate::modules::{config, i18n, logger, main_window_state, process_memory};
@@ -28,6 +28,10 @@ impl From<&config::UserConfig> for FloatingCardAppearance {
     }
 }
 const MAIN_WINDOW_LABEL: &str = "main";
+const FLOATING_CARD_WIDTH: f64 = 250.0;
+const FLOATING_CARD_FULL_HEIGHT: f64 = 290.0;
+const FLOATING_CARD_MINIMAL_HEIGHT: f64 = 110.0;
+const FLOATING_CARD_MAX_HEIGHT: f64 = 520.0;
 const FLOATING_CARD_DEFAULT_MARGIN: i32 = 20;
 const INSTANCE_FLOATING_CARD_WINDOW_OFFSET_STEP: i32 = 28;
 const FLOATING_CARD_NATIVE_CORNER_RADIUS: f64 = 15.0;
@@ -37,7 +41,33 @@ static FLOATING_CARD_INSTANCE_CONTEXTS: LazyLock<
 static PENDING_MAIN_WINDOW_NAVIGATION: LazyLock<Mutex<Option<String>>> =
     LazyLock::new(|| Mutex::new(None));
 static APP_EXIT_REQUESTED: AtomicBool = AtomicBool::new(false);
-static MAIN_WINDOW_DESTROYED_TO_TRAY: AtomicBool = AtomicBool::new(false);
+static MAIN_WINDOW_TRAY_STATE: Mutex<MainWindowTrayState> = Mutex::new(MainWindowTrayState {
+    destroyed_to_tray: false,
+    restore_requested: false,
+});
+
+#[derive(Default)]
+struct MainWindowTrayState {
+    destroyed_to_tray: bool,
+    restore_requested: bool,
+}
+
+impl MainWindowTrayState {
+    fn defer_restore(&mut self, window_present: bool) -> bool {
+        self.restore_requested = self.destroyed_to_tray && window_present;
+        self.restore_requested
+    }
+
+    fn take_restore_request(&mut self) -> bool {
+        std::mem::take(&mut self.restore_requested)
+    }
+}
+
+fn main_window_tray_state() -> std::sync::MutexGuard<'static, MainWindowTrayState> {
+    MAIN_WINDOW_TRAY_STATE
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -141,8 +171,8 @@ fn clone_floating_card_window_config(
     config.create = false;
     config.visible = false;
     if crate::modules::config::get_user_config().floating_card_minimal {
-        config.height = 110.0;
-        config.min_height = Some(110.0);
+        config.height = FLOATING_CARD_MINIMAL_HEIGHT;
+        config.min_height = Some(FLOATING_CARD_MINIMAL_HEIGHT);
     }
     Ok(config)
 }
@@ -165,13 +195,6 @@ fn ensure_floating_card_window_with_label<R: Runtime>(
     apply_native_floating_card_window_shape(&window)?;
     logger::log_info(&format!("[FloatingCard] 悬浮卡片窗口已创建: {}", label));
     Ok((window, true))
-}
-
-pub fn ensure_floating_card_window<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Result<WebviewWindow<R>, String> {
-    ensure_floating_card_window_with_label(app, FLOATING_CARD_WINDOW_LABEL)
-        .map(|(window, _)| window)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -276,12 +299,12 @@ fn resolve_saved_floating_card_position() -> Option<PhysicalPosition<i32>> {
     }
 }
 
-fn clamp_position_to_work_area(
-    position: PhysicalPosition<i32>,
+fn floating_card_position_in_work_area(
+    saved: Option<PhysicalPosition<i32>>,
     work_area: &tauri::PhysicalRect<i32, u32>,
-    window: &WebviewWindow<impl Runtime>,
+    window_size: PhysicalSize<u32>,
+    stack_offset: i32,
 ) -> Result<PhysicalPosition<i32>, String> {
-    let window_size = window.outer_size().map_err(|err| err.to_string())?;
     let window_width = i32::try_from(window_size.width)
         .map_err(|_| "floating_card_window_width_overflow".to_string())?;
     let window_height = i32::try_from(window_size.height)
@@ -295,6 +318,12 @@ fn clamp_position_to_work_area(
     let min_y = work_area.position.y;
     let max_x = (min_x + work_area_width - window_width).max(min_x);
     let max_y = (min_y + work_area_height - window_height).max(min_y);
+    let position = saved.unwrap_or_else(|| {
+        PhysicalPosition::new(
+            max_x - FLOATING_CARD_DEFAULT_MARGIN - stack_offset,
+            min_y + FLOATING_CARD_DEFAULT_MARGIN + stack_offset,
+        )
+    });
 
     Ok(PhysicalPosition::new(
         position.x.clamp(min_x, max_x),
@@ -302,62 +331,41 @@ fn clamp_position_to_work_area(
     ))
 }
 
-fn resolve_visible_floating_card_position<R: Runtime>(
-    app: &AppHandle<R>,
-    window: &WebviewWindow<R>,
-) -> Result<Option<PhysicalPosition<i32>>, String> {
-    let Some(saved_position) = resolve_saved_floating_card_position() else {
-        return Ok(None);
-    };
-
-    let Some(monitor) = app
-        .monitor_from_point(saved_position.x as f64, saved_position.y as f64)
-        .map_err(|err| err.to_string())?
-    else {
-        return Ok(None);
-    };
-
-    clamp_position_to_work_area(saved_position, monitor.work_area(), window).map(Some)
+fn floating_card_min_height(minimal: bool) -> f64 {
+    if minimal {
+        FLOATING_CARD_MINIMAL_HEIGHT
+    } else {
+        FLOATING_CARD_FULL_HEIGHT
+    }
 }
 
-fn calculate_default_top_right_position<R: Runtime>(
-    app: &AppHandle<R>,
-    window: &WebviewWindow<R>,
-) -> Result<PhysicalPosition<i32>, String> {
-    let Some(monitor) = app.primary_monitor().map_err(|err| err.to_string())? else {
-        return Ok(PhysicalPosition::new(
-            FLOATING_CARD_DEFAULT_MARGIN,
-            FLOATING_CARD_DEFAULT_MARGIN,
-        ));
+fn floating_card_logical_size(minimal: bool, requested_height: f64) -> LogicalSize<f64> {
+    let min_height = floating_card_min_height(minimal);
+    let height = if requested_height.is_finite() {
+        requested_height.clamp(min_height, FLOATING_CARD_MAX_HEIGHT)
+    } else {
+        min_height
     };
-    let work_area = monitor.work_area();
-    let window_size = window.outer_size().map_err(|err| err.to_string())?;
-    let window_width = i32::try_from(window_size.width)
-        .map_err(|_| "floating_card_window_width_overflow".to_string())?;
-
-    let x = work_area.position.x
-        + i32::try_from(work_area.size.width)
-            .map_err(|_| "floating_card_monitor_width_overflow".to_string())?
-        - window_width
-        - FLOATING_CARD_DEFAULT_MARGIN;
-    let y = work_area.position.y + FLOATING_CARD_DEFAULT_MARGIN;
-
-    Ok(PhysicalPosition::new(x.max(work_area.position.x), y))
+    LogicalSize::new(FLOATING_CARD_WIDTH, height)
 }
 
-fn apply_floating_card_position<R: Runtime>(
-    app: &AppHandle<R>,
-    window: &WebviewWindow<R>,
+pub fn resize_floating_card_window<R: Runtime>(
+    window: &Window<R>,
+    height: f64,
 ) -> Result<(), String> {
-    let target_position =
-        if let Some(saved_position) = resolve_visible_floating_card_position(app, window)? {
-            saved_position
-        } else {
-            calculate_default_top_right_position(app, window)?
-        };
-
+    let label = window.label();
+    if label != FLOATING_CARD_WINDOW_LABEL && !is_instance_floating_card_window_label(label) {
+        return Err("invalid_floating_card_window".to_string());
+    }
+    let minimal = config::get_user_config().floating_card_minimal;
     window
-        .set_position(target_position)
+        .set_min_size(Some(LogicalSize::new(
+            FLOATING_CARD_WIDTH,
+            floating_card_min_height(minimal),
+        )))
+        .map_err(|err| err.to_string())?;
+    window
+        .set_size(floating_card_logical_size(minimal, height))
         .map_err(|err| err.to_string())
 }
 
@@ -371,33 +379,85 @@ fn count_visible_instance_floating_card_windows<R: Runtime>(app: &AppHandle<R>) 
         .count()
 }
 
-fn apply_instance_floating_card_position<R: Runtime>(
+fn apply_floating_card_position<R: Runtime>(
     app: &AppHandle<R>,
     window: &WebviewWindow<R>,
+    created: bool,
+    minimal: bool,
 ) -> Result<(), String> {
-    let Some(monitor) = app.primary_monitor().map_err(|err| err.to_string())? else {
-        return Ok(());
+    let instance = is_instance_floating_card_window_label(window.label());
+    let saved = if instance {
+        None
+    } else {
+        resolve_saved_floating_card_position()
+    };
+    let saved_monitor = saved
+        .map(|position| app.monitor_from_point(f64::from(position.x), f64::from(position.y)))
+        .transpose()
+        .map_err(|err| err.to_string())?
+        .flatten();
+    let (monitor, saved) = match saved_monitor {
+        Some(monitor) => (Some(monitor), saved),
+        None => (app.primary_monitor().map_err(|err| err.to_string())?, None),
+    };
+    let Some(monitor) = monitor else {
+        if instance {
+            return Ok(());
+        }
+        return window
+            .set_position(PhysicalPosition::new(
+                FLOATING_CARD_DEFAULT_MARGIN,
+                FLOATING_CARD_DEFAULT_MARGIN,
+            ))
+            .map_err(|err| err.to_string());
     };
 
-    let stack_index = count_visible_instance_floating_card_windows(app);
-    let base_position = calculate_default_top_right_position(app, window)?;
-    let offset = i32::try_from(stack_index)
-        .map_err(|_| "floating_card_instance_stack_overflow".to_string())?
-        * INSTANCE_FLOATING_CARD_WINDOW_OFFSET_STEP;
-    let target_position = PhysicalPosition::new(base_position.x - offset, base_position.y + offset);
-    let clamped = clamp_position_to_work_area(target_position, monitor.work_area(), window)?;
+    #[cfg(target_os = "windows")]
+    let size = {
+        let height = if created {
+            floating_card_min_height(minimal)
+        } else {
+            window
+                .inner_size()
+                .map_err(|err| err.to_string())?
+                .to_logical::<f64>(window.scale_factor().map_err(|err| err.to_string())?)
+                .height
+        };
+        // Window creation can take place on a different screen. Use the same
+        // destination DPI for clamping and for the physical size before show.
+        floating_card_logical_size(minimal, height).to_physical::<u32>(monitor.scale_factor())
+    };
+    #[cfg(not(target_os = "windows"))]
+    let size = {
+        let _ = (created, minimal);
+        window.outer_size().map_err(|err| err.to_string())?
+    };
 
-    window.set_position(clamped).map_err(|err| err.to_string())
+    let offset = if instance {
+        i32::try_from(count_visible_instance_floating_card_windows(app))
+            .map_err(|_| "floating_card_instance_stack_overflow".to_string())?
+            * INSTANCE_FLOATING_CARD_WINDOW_OFFSET_STEP
+    } else {
+        0
+    };
+    let position = floating_card_position_in_work_area(saved, monitor.work_area(), size, offset)?;
+    window
+        .set_position(position)
+        .map_err(|err| err.to_string())?;
+    #[cfg(target_os = "windows")]
+    window.set_size(size).map_err(|err| err.to_string())?;
+    Ok(())
 }
 
 pub fn show_floating_card_window<R: Runtime>(
     app: &AppHandle<R>,
     focus: bool,
 ) -> Result<(), String> {
-    let window = ensure_floating_card_window(app)?;
+    let (window, created) =
+        ensure_floating_card_window_with_label(app, FLOATING_CARD_WINDOW_LABEL)?;
     let config = config::get_user_config();
 
-    apply_floating_card_position(app, &window)?;
+    apply_floating_card_position(app, &window, created, config.floating_card_minimal)?;
     window
         .set_always_on_top(config.floating_card_always_on_top)
         .map_err(|err| err.to_string())?;
@@ -421,7 +481,7 @@ pub fn show_instance_floating_card_window<R: Runtime>(
     set_floating_card_instance_context(app, &window_label, context)?;
     if created {
         let config = config::get_user_config();
-        apply_instance_floating_card_position(app, &window)?;
+        apply_floating_card_position(app, &window, true, config.floating_card_minimal)?;
         window
             .set_always_on_top(config.floating_card_always_on_top)
             .map_err(|err| err.to_string())?;
@@ -481,39 +541,18 @@ fn clone_main_window_config(
     Ok(config)
 }
 
-/// After close-to-tray destroy (#686), a stale `main` label can still resolve on
-/// Windows/WebView2. Treat `destroyed_to_tray` as authoritative and force recreate.
+/// The frontend needs pending navigation for both a missing window and one that
+/// has been closed to the tray but has not finished its queued destruction.
 fn must_recreate_main_window(window_present: bool, destroyed_to_tray: bool) -> bool {
     destroyed_to_tray || !window_present
 }
 
-fn wait_until_main_window_gone<R: Runtime>(app: &AppHandle<R>, attempts: u32) {
-    for _ in 0..attempts {
-        if app.get_webview_window(MAIN_WINDOW_LABEL).is_none() {
-            return;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    }
-}
-
 fn ensure_main_window<R: Runtime>(app: &AppHandle<R>) -> Result<(WebviewWindow<R>, bool), String> {
-    let destroyed_to_tray = MAIN_WINDOW_DESTROYED_TO_TRAY.load(Ordering::SeqCst);
-
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-        if !must_recreate_main_window(true, destroyed_to_tray) {
-            return Ok((window, false));
-        }
-
-        logger::log_info("[Window] 托盘销毁后检测到残留主窗口句柄，强制销毁并重建");
-        if let Err(err) = window.destroy() {
-            logger::log_warn(&format!(
-                "[Window] 清理残留主窗口失败（仍将尝试重建）: {}",
-                err
-            ));
-        }
-        wait_until_main_window_gone(app, 50);
+        return Ok((window, false));
     }
 
+    let destroyed_to_tray = main_window_tray_state().destroyed_to_tray;
     logger::log_info(&format!(
         "[Window] 开始重建主窗口 WebView (destroyed_to_tray={})",
         destroyed_to_tray
@@ -556,8 +595,18 @@ pub fn request_app_exit() {
 }
 
 pub fn should_keep_alive_after_main_window_destroyed() -> bool {
-    MAIN_WINDOW_DESTROYED_TO_TRAY.load(Ordering::SeqCst)
+    main_window_tray_state().destroyed_to_tray
         && !APP_EXIT_REQUESTED.load(Ordering::SeqCst)
+}
+
+/// Tauri removes the old window label before dispatching the Destroyed run event.
+pub fn resume_requested_main_window_restore<R: Runtime>(app: &AppHandle<R>) {
+    let restore_requested = main_window_tray_state().take_restore_request();
+    if restore_requested && !APP_EXIT_REQUESTED.load(Ordering::SeqCst) {
+        if let Err(err) = show_main_window(app) {
+            logger::log_warn(&format!("[Window] 托盘销毁后恢复主窗口失败: {}", err));
+        }
+    }
 }
 
 /// Destroy the main WebView when minimizing to tray (community #686 full behavior).
@@ -565,9 +614,9 @@ pub fn should_keep_alive_after_main_window_destroyed() -> bool {
 pub fn destroy_main_window_to_tray<R: Runtime>(window: &Window<R>) -> Result<(), String> {
     // Persist size before destroy so tray reopen can restore geometry (#948 / #1132).
     main_window_state::capture_and_save_from_window_handle(window);
-    MAIN_WINDOW_DESTROYED_TO_TRAY.store(true, Ordering::SeqCst);
+    main_window_tray_state().destroyed_to_tray = true;
     if let Err(err) = window.destroy() {
-        MAIN_WINDOW_DESTROYED_TO_TRAY.store(false, Ordering::SeqCst);
+        *main_window_tray_state() = MainWindowTrayState::default();
         return Err(err.to_string());
     }
     // Defer working-set trim so WebView2 can finish teardown before a later recreate.
@@ -584,14 +633,14 @@ pub fn show_main_window_and_navigate<R: Runtime>(
     page: &str,
 ) -> Result<(), String> {
     let window_present = app.get_webview_window(MAIN_WINDOW_LABEL).is_some();
-    let destroyed_to_tray = MAIN_WINDOW_DESTROYED_TO_TRAY.load(Ordering::SeqCst);
+    let destroyed_to_tray = main_window_tray_state().destroyed_to_tray;
     // Recreate (or first create) means the frontend is not ready for tray:navigate yet.
     let should_defer_navigation = must_recreate_main_window(window_present, destroyed_to_tray);
     if should_defer_navigation {
         set_pending_main_window_navigation(page)?;
         logger::log_info(&format!("[Window] 主窗口将重建，延迟导航到: {}", page));
     }
-    if let Err(err) = show_main_window_internal(app) {
+    if let Err(err) = show_main_window(app) {
         if should_defer_navigation {
             let _ = take_pending_main_window_navigation();
         }
@@ -624,10 +673,10 @@ pub async fn show_main_window_and_navigate_async<R: Runtime>(
 }
 
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-    show_main_window_internal(app).map(|_| ())
-}
-
-fn show_main_window_internal<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
+    let window_present = app.get_webview_window(MAIN_WINDOW_LABEL).is_some();
+    if main_window_tray_state().defer_restore(window_present) {
+        return Ok(());
+    }
     let (window, created) = ensure_main_window(app)?;
 
     logger::log_info(&format!("[Window] 尝试恢复主窗口 (recreated={})", created));
@@ -637,6 +686,8 @@ fn show_main_window_internal<R: Runtime>(app: &AppHandle<R>) -> Result<bool, Str
     window.show().map_err(|err| err.to_string())?;
     window.unminimize().map_err(|err| err.to_string())?;
 
+    // The window event loop focuses only a visible window. A separate deferred
+    // restore could bring the main window back after the user closes it again.
     if let Err(err) = window.set_focus() {
         logger::log_warn(&format!("[Window] WebView 主窗口聚焦失败: {}", err));
     }
@@ -644,43 +695,12 @@ fn show_main_window_internal<R: Runtime>(app: &AppHandle<R>) -> Result<bool, Str
     #[cfg(target_os = "macos")]
     activate_macos_application(app);
 
-    #[cfg(target_os = "windows")]
-    {
-        // Prefer the Tauri main window HWND. Process MainWindowHandle often points at
-        // the floating card after the main WebView was destroyed to tray.
-        // Never block the UI thread on PowerShell focus.
-        match window.hwnd() {
-            Ok(hwnd) => {
-                let raw = hwnd.0 as isize;
-                std::thread::spawn(move || {
-                    if let Err(err) = crate::modules::process::focus_window_by_hwnd(raw) {
-                        logger::log_warn(&format!(
-                            "[Window] Windows 按 HWND 前置主窗口失败: {}",
-                            err
-                        ));
-                    }
-                });
-            }
-            Err(err) => {
-                logger::log_warn(&format!(
-                    "[Window] 获取主窗口 HWND 失败，回退进程主句柄: {}",
-                    err
-                ));
-                std::thread::spawn(|| {
-                    if let Err(err) = crate::modules::process::focus_current_process_main_window() {
-                        logger::log_warn(&format!("[Window] Windows 原生前置主窗口失败: {}", err));
-                    }
-                });
-            }
-        }
-    }
-
     if created {
-        MAIN_WINDOW_DESTROYED_TO_TRAY.store(false, Ordering::SeqCst);
+        *main_window_tray_state() = MainWindowTrayState::default();
         logger::log_info("[Window] 主窗口恢复完成，前端将重新加载");
     }
 
-    Ok(created)
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -747,7 +767,61 @@ fn send_hidden_notification<R: Runtime>(app: &AppHandle<R>) {
 
 #[cfg(test)]
 mod tests {
-    use super::must_recreate_main_window;
+    use super::*;
+
+    #[test]
+    fn floating_card_cold_start_clamps_with_destination_monitor_size() {
+        let full = floating_card_logical_size(false, FLOATING_CARD_FULL_HEIGHT);
+        let primary_size = full.to_physical::<u32>(1.5);
+        let secondary_size = full.to_physical::<u32>(1.0);
+        assert_eq!(primary_size, PhysicalSize::new(375, 435));
+        assert_eq!(secondary_size, PhysicalSize::new(250, 290));
+
+        let secondary_work_area = tauri::PhysicalRect {
+            position: PhysicalPosition::new(3840, 0),
+            size: PhysicalSize::new(1920, 1040),
+        };
+        let saved = PhysicalPosition::new(5530, 800);
+        assert_eq!(
+            floating_card_position_in_work_area(
+                Some(saved),
+                &secondary_work_area,
+                secondary_size,
+                0
+            )
+            .unwrap(),
+            PhysicalPosition::new(5510, 750),
+        );
+    }
+
+    #[test]
+    fn floating_card_keeps_fixed_width_and_bounded_content_height_across_scales() {
+        assert_eq!(
+            floating_card_logical_size(false, f64::NAN),
+            LogicalSize::new(250.0, 290.0)
+        );
+        assert_eq!(
+            floating_card_logical_size(true, 85.0).to_physical::<u32>(1.5),
+            PhysicalSize::new(375, 165)
+        );
+        assert_eq!(
+            floating_card_logical_size(false, 400.0),
+            LogicalSize::new(250.0, 400.0)
+        );
+        assert_eq!(
+            floating_card_logical_size(false, 900.0),
+            LogicalSize::new(250.0, 520.0)
+        );
+        let area = tauri::PhysicalRect {
+            position: PhysicalPosition::new(-1920, 0),
+            size: PhysicalSize::new(1920, 1040),
+        };
+        assert_eq!(
+            floating_card_position_in_work_area(None, &area, PhysicalSize::new(250, 290), 28)
+                .unwrap(),
+            PhysicalPosition::new(-298, 48),
+        );
+    }
 
     #[test]
     fn recreates_when_window_missing() {
@@ -761,8 +835,17 @@ mod tests {
     }
 
     #[test]
-    fn force_recreates_stale_handle_after_tray_destroy() {
-        // Windows/WebView2 may still resolve `main` after destroy; flag wins.
+    fn defers_repeated_tray_restore_requests_until_destruction() {
         assert!(must_recreate_main_window(true, true));
+        let mut state = MainWindowTrayState {
+            destroyed_to_tray: true,
+            ..MainWindowTrayState::default()
+        };
+        assert!(!state.take_restore_request());
+        assert!(state.defer_restore(true));
+        assert!(state.defer_restore(true));
+        assert!(state.take_restore_request());
+        assert!(!state.defer_restore(false));
+        assert!(!state.take_restore_request());
     }
 }

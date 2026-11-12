@@ -297,6 +297,11 @@
   }
 
   async function prepareLiveQuotaGate() {
+    if (root.__cockpitEnhancements?.apiService === true
+      && (root.__cockpitEnhancements?.apiKeyAuthVerified === true || liveQuotaEnabled())) {
+      const rspack = await root.__cockpitServiceRspack?.prepareLiveQuotaGate();
+      if (rspack) return rspack;
+    }
     if (!liveQuotaEnabled()) return { ok: false, reason: 'disabled' };
     const read = async value => {
       const response = await root.fetch(value, { cache: 'no-store', signal: AbortSignal.timeout(6000) });

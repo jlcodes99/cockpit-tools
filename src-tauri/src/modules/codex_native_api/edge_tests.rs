@@ -344,7 +344,7 @@ async fn native_edge_raw_chat_preserves_provider_parameters_and_all_choices() {
     assert_eq!(seen[0].1["model"], "upstream-model");
     assert_eq!(seen[0].1["n"], 2);
     assert_eq!(seen[0].1["stop"], json!(["END"]));
-    assert_ne!(seen[0].0["session-id"], "local-session");
+    assert_eq!(seen[0].0["session-id"], "local-session");
     assert_eq!(
         fixture.host.reports.lock().unwrap()[0]
             .usage

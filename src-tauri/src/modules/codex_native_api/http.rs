@@ -58,9 +58,11 @@ pub(super) async fn read_request(
     state: &AppState,
     request: Request,
 ) -> Result<Input, ServiceError> {
-    let mut tracker = state.begin()?;
+    let mut tracker = state.begin_with_peer(super::server::request_peer(request.extensions()))?;
     let (mut parts, body) = request.into_parts();
     parts.headers.remove("x-cockpit-compat-source");
+    parts.headers.remove(super::compat_http::CLAUDE_CACHE_SCOPE);
+    super::websocket::clear_routing_header_markers(&mut parts.headers);
     let capture = tokio::time::timeout(
         state.options.request_timeout,
         state.host.payload_logging_enabled(),
@@ -80,7 +82,7 @@ pub(super) async fn read_request(
         let mut stop = state.stop.clone();
         let bytes = tokio::select! {
             _ = stop.wait() => return Err(stopping_error()),
-            result = tokio::time::timeout(state.options.request_timeout, to_bytes(body, state.options.max_body_bytes)) =>
+            result = tokio::time::timeout(state.options.body_timeout(), to_bytes(body, state.options.max_body_bytes)) =>
                 result.map_err(|_| ServiceError::new(408, "request_body_timeout", "Timed out reading request body"))?
                     .map_err(super::request_body::read_error)?,
         };
@@ -134,9 +136,27 @@ pub(super) async fn dispatch(
     {
         policy = policy.for_images();
     }
-    let immediate =
-        !compact && input.body["stream"].as_bool().unwrap_or(false) && policy.immediate_sse;
     let codex_client = super::output_error::is_codex_client(&input.headers);
+    // Codex needs the HTTP status to stop retrying an invalid continuation.
+    // An SSE failure sent after committing 200 cannot convey that status.
+    let codex_continuation = codex_client && input.body["previous_response_id"].is_string();
+    let immediate = !compact
+        && input.body["stream"].as_bool().unwrap_or(false)
+        && policy.immediate_sse
+        && !codex_continuation;
+    // A restricted key must receive a real policy error before response
+    // headers are committed, including when the final wire differs.
+    let immediate = if immediate {
+        match super::execution::within(&state, state.host.reasoning_ceiling(&input.caller)).await {
+            Ok(ceiling) => ceiling.is_none(),
+            Err(error) => {
+                input.tracker.fail(&error).await;
+                return Err(error);
+            }
+        }
+    } else {
+        false
+    };
     if !compact && policy.continuous_overload_retry && policy.keepalive.is_zero() {
         policy.keepalive = std::time::Duration::from_secs(10);
     }
@@ -608,6 +628,7 @@ async fn forward_with_policy(
             return Err(error);
         }
         super::replay_wire::instructions(&prepared.source_body, &mut response);
+        tracker.record_response_model(&prepared.route, &response);
         super::response_wire::ResponseWire::default().stamp_response(&mut response);
         tracker.payload("upstream_response", "http", &headers, &response.to_string());
         tracker.set_retry_after(observation.retry_after);
@@ -683,6 +704,9 @@ async fn forward_with_policy(
     {
         tracker.capture_response_error(Some("cloudflare challenge"), false);
         tracker.capture_request_fault(false);
+    } else if value.is_none() {
+        let message = super::diagnostics::cloudflare_gateway_message(status, &headers);
+        tracker.capture_response_error(message.as_deref(), false);
     }
     if status.is_success()
         && !value.as_ref().is_some_and(|value| {
@@ -702,6 +726,9 @@ async fn forward_with_policy(
         return Err(error);
     }
     if let Some(value) = &value {
+        if status.is_success() {
+            tracker.record_response_model(&prepared.route, value);
+        }
         tracker.response_tier(value.get("service_tier").and_then(Value::as_str));
         if let Err(error) = mapping::observe_event(&state, &prepared, value).await {
             tracker.fail(&error).await;
@@ -862,6 +889,9 @@ impl StreamingResponse {
                 .await?;
                 self.tracker.quota_event(&event);
                 self.observation.observe(&event);
+                if self.observation.succeeded {
+                    self.tracker.record_response_model(&self.prepared.route, frame.identity_event.as_ref().unwrap_or(&event));
+                }
                 if super::replay_wire::instructions(&self.prepared.source_body, &mut event) | self.wire.stamp_event(&mut event) { outgoing = super::response_wire::rewrite_frame(&frame.bytes, &event); }
                 self.tracker
                     .response_tier(self.observation.service_tier.as_deref());

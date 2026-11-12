@@ -10,6 +10,7 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, TransactionBehavior};
 
 #[path = "codex_history_projection_repair/files.rs"]
 mod files;
+pub(super) use files::file_ids as rollout_file_ids;
 #[path = "codex_history_projection_repair/storage.rs"]
 mod storage;
 
@@ -28,6 +29,7 @@ pub(crate) struct Plan {
     candidates: Vec<Checkpoint>,
     // Requested/projected ID and missing source ID. Their existing indexes are retained.
     pub(crate) skipped_sources: Vec<(String, String)>,
+    pub(crate) duplicate_ordinals: Vec<(String, String, u64)>,
 }
 
 impl Plan {
@@ -121,6 +123,7 @@ pub(crate) fn scan(
             selected_paths: vec![],
             candidates: vec![],
             skipped_sources: vec![],
+            duplicate_ordinals: vec![],
         });
     }
     let db = database(&profile, HISTORY_DB, false)?;
@@ -154,6 +157,9 @@ pub(crate) fn scan(
                     skipped_sources.push((id.clone(), missing));
                     continue;
                 }
+                Err(files::SourceError::DuplicateOrdinal { source_id, ordinal }) => {
+                    return Err(error("DUPLICATE_ORDINAL", format!("{source_id}: {ordinal}")));
+                }
                 Err(files::SourceError::Invalid(error)) => return Err(error),
             };
             roots.push(physical.clone());
@@ -173,6 +179,7 @@ pub(crate) fn scan(
     roots.sort();
     roots.dedup();
     let mut sources = HashMap::new();
+    let mut duplicate_ordinals = Vec::new();
     for (index, id) in roots.iter().enumerate() {
         match files::load_chain(
             id,
@@ -184,6 +191,9 @@ pub(crate) fn scan(
             Ok(()) => {}
             Err(files::SourceError::Missing(missing)) => {
                 skipped_sources.push((id.clone(), missing));
+            }
+            Err(files::SourceError::DuplicateOrdinal { source_id, ordinal }) => {
+                duplicate_ordinals.push((id.clone(), source_id, ordinal));
             }
             Err(files::SourceError::Invalid(error)) => return Err(error),
         }
@@ -237,6 +247,7 @@ pub(crate) fn scan(
         selected_paths,
         candidates,
         skipped_sources,
+        duplicate_ordinals,
     })
 }
 

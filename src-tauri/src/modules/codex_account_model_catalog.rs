@@ -12,6 +12,12 @@ pub fn get_codex_home() -> PathBuf {
         }
     }
     if let Some(from_env) = resolve_codex_home_from_env() {
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if crate::modules::codex_instance::is_inherited_managed_codex_home(&from_env) {
+            // A shell opened by a managed Codex instance inherits its profile.
+            // That profile is not the default client's credential directory.
+            return dirs::home_dir().expect("无法获取用户主目录").join(".codex");
+        }
         return from_env;
     }
     dirs::home_dir().expect("无法获取用户主目录").join(".codex")
@@ -88,6 +94,54 @@ fn catalog_ref_targets_cockpit_managed_file(value: &str, base_dir: &Path) -> boo
 
 fn experimental_model_catalog_path(base_dir: &Path) -> PathBuf {
     base_dir.join(CODEX_MANAGED_MODEL_CATALOG_FILE)
+}
+
+pub(crate) fn restore_missing_managed_catalog_backup(
+    base_dir: &Path,
+    reference: &str,
+) -> Result<bool, String> {
+    use std::io::{ErrorKind, Read};
+
+    if !catalog_ref_targets_cockpit_managed_file(reference, base_dir) {
+        return Ok(false);
+    }
+    let path = resolve_catalog_reference(reference, base_dir);
+    if path.try_exists().map_err(|error| error.to_string())? {
+        return Ok(false);
+    }
+    let backup_path = path.with_extension("json.bak");
+    let metadata = match fs::symlink_metadata(&backup_path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(false),
+        Err(error) => {
+            return Err(format!(
+                "读取 Codex 模型目录备份失败: path={}, error={}",
+                backup_path.display(),
+                error
+            ));
+        }
+    };
+    let limit = crate::modules::codex_model_catalog::MAX_CATALOG_BYTES;
+    if !metadata.is_file() || metadata.len() > limit as u64 {
+        return Ok(false);
+    }
+    let mut content = String::new();
+    fs::File::open(&backup_path)
+        .and_then(|file| file.take((limit + 1) as u64).read_to_string(&mut content))
+        .map_err(|error| {
+            format!(
+                "读取 Codex 模型目录备份失败: path={}, error={}",
+                backup_path.display(),
+                error
+            )
+        })?;
+    if content.len() > limit
+        || !serde_json::from_str::<serde_json::Value>(&content)
+            .is_ok_and(|catalog| catalog.get("models").is_some_and(|models| models.is_array()))
+    {
+        return Ok(false);
+    }
+    crate::modules::atomic_write::replace_string_if_matches(&path, None, Some(&content))
 }
 
 pub(crate) fn cleanup_legacy_managed_model_catalogs(base_dir: &Path) {
@@ -653,6 +707,7 @@ fn default_experimental_model_definitions(
                         display_name: model_catalog_display_name(model_id, display_name),
                         reasoning_efforts: None,
                         default_reasoning_effort: None,
+                        ultra_reasoning_effort: None,
                         context_window: None,
                         auto_compact_token_limit: None,
                     })
@@ -668,6 +723,7 @@ fn default_experimental_model_definitions(
                 model_id,
                 reasoning_efforts: None,
                 default_reasoning_effort: None,
+                ultra_reasoning_effort: None,
                 context_window: None,
                 auto_compact_token_limit: None,
             })
@@ -953,12 +1009,38 @@ pub(crate) fn model_reasoning_efforts_for_profile(
     result
 }
 
-fn validate_profile_default_reasoning_efforts(
+const ULTRA_REASONING_INVALID: &str = "EXPERIMENTAL_MODEL_CATALOG_ULTRA_REASONING_INVALID";
+
+fn supports_ultra_reasoning_override<'a>(
+    effort: &str,
+    levels: impl Iterator<Item = &'a str> + Clone,
+) -> bool {
+    effort != "ultra"
+        && levels.clone().any(|level| level == "ultra")
+        && levels.into_iter().any(|level| level == effort)
+}
+
+fn validate_ultra_reasoning_override(
+    model: &CodexExperimentalModelDefinition,
+    efforts: Option<&Vec<String>>,
+) -> Result<(), String> {
+    if model.ultra_reasoning_effort.as_deref().is_some_and(|effort| {
+        !efforts.is_some_and(|levels| {
+            supports_ultra_reasoning_override(effort, levels.iter().map(String::as_str))
+        })
+    }) {
+        return Err(ULTRA_REASONING_INVALID.to_string());
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_profile_reasoning_efforts(
     base_dir: &Path,
     models: &[CodexExperimentalModelDefinition],
 ) -> Result<(), String> {
     let efforts = model_reasoning_efforts_for_profile(base_dir, models);
     for model in models {
+        validate_ultra_reasoning_override(model, efforts.get(&model.model_id))?;
         if let Some(default) = model.default_reasoning_effort.as_ref() {
             if !efforts
                 .get(&model.model_id)
@@ -1079,11 +1161,20 @@ pub(crate) fn normalize_experimental_model_definitions_with_template(
                 default_reasoning_effort = selected.first().cloned();
             }
         }
+        let ultra_reasoning_effort = model.ultra_reasoning_effort
+            .as_deref().map(str::trim).filter(|value| !value.is_empty())
+            .map(str::to_ascii_lowercase);
+        if ultra_reasoning_effort.as_deref().is_some_and(|effort| {
+            effort == "ultra" || !CODEX_REASONING_EFFORTS.contains(&effort)
+        }) {
+            return Err(ULTRA_REASONING_INVALID.to_string());
+        }
         let definition = CodexExperimentalModelDefinition {
             model_id: model_id.to_string(),
             display_name: display_name.to_string(),
             reasoning_efforts,
             default_reasoning_effort,
+            ultra_reasoning_effort,
             context_window: model.context_window,
             auto_compact_token_limit: model.context_window.map(|window| {
                 model.auto_compact_token_limit.unwrap_or_else(|| {
@@ -1197,6 +1288,7 @@ pub(crate) fn read_experimental_model_definitions(
             display_name: crate::modules::codex_protocol::CODEX_RESERVE_DISPLAY_NAME.to_string(),
             reasoning_efforts: None,
             default_reasoning_effort: None,
+            ultra_reasoning_effort: None,
             context_window: None,
             auto_compact_token_limit: None,
         });
@@ -1218,7 +1310,7 @@ fn persist_experimental_model_definitions(
     let models = prioritize_gpt_6_model_definitions(
         normalize_experimental_model_definitions_for_profile(Some(base_dir), models)?,
     );
-    validate_profile_default_reasoning_efforts(base_dir, &models)?;
+    validate_profile_reasoning_efforts(base_dir, &models)?;
     let mut default_model_id = default_model_id.and_then(|value| {
         models
             .iter()
@@ -1306,7 +1398,7 @@ fn persist_experimental_model_policy(base_dir: &Path, enabled: bool) -> Result<(
     }
 }
 
-fn apply_model_context_config_to_catalog(
+pub(crate) fn apply_model_context_config_to_catalog(
     catalog: &mut serde_json::Value,
     models: &[CodexExperimentalModelDefinition],
 ) {
@@ -1321,6 +1413,14 @@ fn apply_model_context_config_to_catalog(
         })
         .collect::<Vec<_>>();
     crate::modules::codex_protocol::apply_model_context_overrides(catalog, &definitions);
+}
+
+pub(crate) fn read_enabled_profile_model_definitions(base_dir: &Path) -> Vec<CodexExperimentalModelDefinition> {
+    if experimental_model_policy_enabled(base_dir) {
+        read_experimental_model_definitions(base_dir)
+    } else {
+        Vec::new()
+    }
 }
 
 fn apply_model_reasoning_config_to_catalog(
@@ -1373,8 +1473,24 @@ fn apply_model_reasoning_config_to_catalog(
             }
             entry["default_reasoning_level"] = serde_json::json!(default);
         }
+        apply_ultra_reasoning_override(entry, definition);
     }
     Ok(())
+}
+
+fn apply_ultra_reasoning_override(
+    entry: &mut serde_json::Value,
+    definition: &CodexExperimentalModelDefinition,
+) {
+    let Some(effort) = definition.ultra_reasoning_effort.as_deref() else {
+        return;
+    };
+    let levels = entry["supported_reasoning_levels"]
+        .as_array().into_iter().flatten()
+        .filter_map(|level| level["effort"].as_str());
+    if supports_ultra_reasoning_override(effort, levels) {
+        entry["multi_agent_reasoning_effort"] = serde_json::json!(effort);
+    }
 }
 
 pub(crate) fn decorate_managed_model_catalog_for_profile(
@@ -1531,7 +1647,14 @@ fn read_catalog_model_definitions(
     let Ok(catalog) = serde_json::from_str::<serde_json::Value>(&content) else {
         return Vec::new();
     };
-    let uses_chatgpt_models = profile_uses_chatgpt_models(base_dir);
+    catalog_model_definitions(&catalog, profile_uses_chatgpt_models(base_dir), false)
+}
+
+pub(crate) fn catalog_model_definitions(
+    catalog: &serde_json::Value,
+    uses_chatgpt_models: bool,
+    preserve_display_names: bool,
+) -> Vec<CodexExperimentalModelDefinition> {
     catalog
         .get("models")
         .and_then(serde_json::Value::as_array)
@@ -1591,9 +1714,14 @@ fn read_catalog_model_definitions(
             };
             Some(CodexExperimentalModelDefinition {
                 model_id: model_id.to_string(),
-                display_name: model_catalog_display_name(model_id, display_name),
+                display_name: if preserve_display_names {
+                    display_name.to_string()
+                } else {
+                    model_catalog_display_name(model_id, display_name)
+                },
                 reasoning_efforts: None,
                 default_reasoning_effort: None,
+                ultra_reasoning_effort: None,
                 context_window,
                 auto_compact_token_limit,
             })
@@ -1783,7 +1911,8 @@ fn apply_experimental_model_catalog_to_doc(
     };
     let mut catalog = serde_json::from_str(&content)
         .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_SERIALIZE_FAILED".to_string())?;
-    crate::modules::codex_local_access::apply_attached_catalog_image_capabilities(doc, &mut catalog)?;
+    crate::modules::codex_local_access::apply_attached_catalog_route_capabilities(doc, &mut catalog)?;
+    apply_model_context_config_to_catalog(&mut catalog, &experimental_models);
     crate::modules::codex_model_catalog_capabilities::supplement(&mut catalog)?;
     let content = serde_json::to_string_pretty(&catalog)
         .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_SERIALIZE_FAILED".to_string())?;
@@ -1793,7 +1922,6 @@ fn apply_experimental_model_catalog_to_doc(
     crate::modules::codex_local_access::invalidate_codex_model_cache(base_dir)
         .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_CACHE_CLEAR_FAILED".to_string())?;
     crate::modules::codex_managed_model_catalog_version::write_managed_catalog_meta(&path)?;
-    cleanup_legacy_managed_model_catalogs(base_dir);
     doc[CODEX_CONFIG_MODEL_CATALOG_JSON_KEY] = value(CODEX_MANAGED_MODEL_CATALOG_FILE);
     Ok(false)
 }
@@ -1817,8 +1945,8 @@ fn enforce_experimental_model_policy_for_dir(base_dir: &Path) -> Result<(), Stri
     crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
         .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
 
+    cleanup_legacy_managed_model_catalogs(base_dir);
     if migrated_legacy_catalog {
-        cleanup_legacy_managed_model_catalogs(base_dir);
         let _ = crate::modules::codex_local_access::invalidate_codex_model_cache(base_dir);
     }
     persist_experimental_model_policy(base_dir, true)
@@ -2223,8 +2351,10 @@ fn write_quick_config_to_config_toml_with_default_mode(
     crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
         .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
 
-    if migrated_legacy_catalog {
+    if migrated_legacy_catalog || effective_experimental_enabled == Some(true) {
         cleanup_legacy_managed_model_catalogs(base_dir);
+    }
+    if migrated_legacy_catalog {
         let _ = crate::modules::codex_local_access::invalidate_codex_model_cache(base_dir);
     }
 
@@ -2905,13 +3035,12 @@ fn sync_api_key_model_catalog_to_dir(
             err
         ));
     }
-    cleanup_legacy_managed_model_catalogs(base_dir);
-
     doc[CODEX_CONFIG_MODEL_CATALOG_JSON_KEY] = value(CODEX_MANAGED_MODEL_CATALOG_FILE);
     migrate_retired_chatgpt_default_in_doc(&mut doc);
     let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
     crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
         .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
+    cleanup_legacy_managed_model_catalogs(base_dir);
     // 模型目录变更后同步生图 header：无 gpt-image-2 时清掉残留 actor，避免客户端误开生图卡住。
     if let Err(err) = refresh_api_key_provider_projection_in_dir(base_dir, account) {
         logger::log_warn(&format!(
@@ -3168,17 +3297,30 @@ fn rebuild_managed_catalog_from_existing(catalog_path: &Path) -> Result<(), Stri
                 model["supports_image_detail_original"] = serde_json::json!(original);
             }
             // Rebuilding capabilities must retain the profile's per-model limits.
-            for field in [
-                "context_window",
-                "max_context_window",
-                "auto_compact_token_limit",
-            ] {
-                if let Some(value) = old
-                    .get(field)
-                    .filter(|value| value.as_u64().is_some_and(|n| n > 0))
-                {
-                    model[field] = value.clone();
+            let upgrade_sol_defaults = crate::modules::codex_model_catalog::uses_legacy_sol_context(old)
+                && !configured.iter().any(|definition| {
+                    definition.model_id.eq_ignore_ascii_case(&slug)
+                        && (definition.context_window.is_some()
+                            || definition.auto_compact_token_limit.is_some())
+                });
+            if !upgrade_sol_defaults {
+                for field in [
+                    "context_window",
+                    "max_context_window",
+                    "auto_compact_token_limit",
+                ] {
+                    if let Some(value) = old
+                        .get(field)
+                        .filter(|value| value.as_u64().is_some_and(|n| n > 0))
+                    {
+                        model[field] = value.clone();
+                    }
                 }
+            }
+            if let Some(definition) = configured.iter().find(|definition| {
+                definition.model_id.eq_ignore_ascii_case(&slug)
+            }) {
+                apply_ultra_reasoning_override(model, definition);
             }
         }
     }
@@ -3187,7 +3329,10 @@ fn rebuild_managed_catalog_from_existing(catalog_path: &Path) -> Result<(), Stri
             Ok(text) => {
                 let doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&text)
                     .map_err(|error| error.to_string())?;
-                crate::modules::codex_local_access::apply_attached_catalog_image_capabilities(&doc, &mut rebuilt)?;
+                crate::modules::codex_local_access::apply_attached_catalog_route_capabilities(&doc, &mut rebuilt)?;
+                if experimental_model_policy_enabled(profile) {
+                    apply_model_context_config_to_catalog(&mut rebuilt, &configured);
+                }
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.to_string()),

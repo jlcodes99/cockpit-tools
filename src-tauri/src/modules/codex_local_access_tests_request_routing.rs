@@ -365,20 +365,22 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
 
     #[test]
     fn sidecar_timeout_event_requests_automatic_restart() {
-        let event: SidecarUsageEvent = serde_json::from_value(json!({
-            "success": false,
-            "status": 504,
-            "errorCategory": "gateway_context_canceled",
-            "errorMessage": "Post https://chatgpt.com/backend-api/codex/responses: context canceled"
-        }))
-        .expect("timeout event should deserialize");
+        for category in ["gateway_context_canceled", "client_canceled"] {
+            let event: SidecarUsageEvent = serde_json::from_value(json!({
+                "success": false,
+                "status": 504,
+                "errorCategory": category,
+                "errorMessage": "Post https://chatgpt.com/backend-api/codex/responses: context canceled"
+            }))
+            .expect("timeout event should deserialize");
 
-        assert!(sidecar_usage_event_should_auto_restart(&event));
-        assert!(!sidecar_usage_event_is_client_canceled(&event));
-        assert_eq!(
-            normalized_sidecar_error_category(&event).as_deref(),
-            Some("gateway_context_canceled")
-        );
+            assert!(sidecar_usage_event_should_auto_restart(&event));
+            assert!(!sidecar_usage_event_is_client_canceled(&event));
+            assert_eq!(
+                normalized_sidecar_error_category(&event).as_deref(),
+                Some("gateway_context_canceled")
+            );
+        }
     }
 
     #[test]
@@ -425,6 +427,15 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
         .expect("client disconnect event should deserialize");
 
         assert!(!sidecar_usage_event_should_auto_restart(&event));
+        let canceled: SidecarUsageEvent = serde_json::from_value(json!({
+            "success": false,
+            "status": 499,
+            "errorCategory": "client_canceled",
+            "errorMessage": "context canceled"
+        }))
+        .expect("client cancellation event should deserialize");
+        assert!(sidecar_usage_event_is_client_canceled(&canceled));
+        assert!(!sidecar_usage_event_should_auto_restart(&canceled));
     }
 
     #[test]
@@ -545,36 +556,42 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                 plan_rank: Some(500),
                 remaining_quota: Some(80),
                 subscription_expiry_ms: None,
+                five_hour_reset_at: None,
             },
             RoutingCandidate {
                 account_id: "acc-plus".to_string(),
                 plan_rank: Some(300),
                 remaining_quota: Some(40),
                 subscription_expiry_ms: None,
+                five_hour_reset_at: None,
             },
             RoutingCandidate {
                 account_id: "acc-team".to_string(),
                 plan_rank: Some(300),
                 remaining_quota: Some(70),
                 subscription_expiry_ms: None,
+                five_hour_reset_at: None,
             },
             RoutingCandidate {
                 account_id: "acc-business".to_string(),
                 plan_rank: Some(300),
                 remaining_quota: Some(60),
                 subscription_expiry_ms: None,
+                five_hour_reset_at: None,
             },
             RoutingCandidate {
                 account_id: "acc-promax".to_string(),
                 plan_rank: Some(600),
                 remaining_quota: Some(90),
                 subscription_expiry_ms: None,
+                five_hour_reset_at: None,
             },
             RoutingCandidate {
                 account_id: "acc-edu".to_string(),
                 plan_rank: Some(700),
                 remaining_quota: Some(100),
                 subscription_expiry_ms: None,
+                five_hour_reset_at: None,
             },
         ];
         let original_index = candidates
@@ -998,6 +1015,56 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
     }
 
     #[test]
+    fn claude_code_model_aliases_keep_both_luna_names_visible() {
+        use super::{apply_model_aliases_to_ids, normalize_model_aliases, CodexLocalAccessModelAlias};
+
+        let source_model = "gpt-5.6-luna";
+        let mut collection = test_local_access_collection(vec![]);
+        collection.image_generation_mode = CodexLocalAccessImageGenerationMode::Disabled;
+        collection.model_aliases = normalize_model_aliases(
+            ["claude-sonnet-5", "claude-haiku-4-5-20251001"]
+                .into_iter()
+                .enumerate()
+                .map(|(index, alias)| CodexLocalAccessModelAlias {
+                    source_model: source_model.to_string(),
+                    alias: alias.to_string(),
+                    fork: index == 0,
+                })
+                .collect(),
+        );
+        let api_key = resolve_collection_api_key(&collection, &collection.api_key)
+            .expect("resolve collection key");
+        assert_eq!(
+            visible_codex_model_ids_for_api_key_with_supported_models(
+                &collection,
+                &api_key,
+                None,
+                None,
+                vec![source_model.into(), "gpt-5.3-codex-spark".into()],
+            ),
+            [
+                source_model,
+                "claude-sonnet-5",
+                "claude-haiku-4-5-20251001",
+                "gpt-5.3-codex-spark",
+                "gpt-reserve",
+                CODEX_AUTO_REVIEW_MODEL_ID,
+            ],
+        );
+        for alias in &collection.model_aliases {
+            assert_eq!(
+                canonical_model_for_client_model(&alias.alias, &collection, &api_key),
+                source_model,
+            );
+        }
+        collection.model_aliases[0].fork = false;
+        assert_eq!(
+            apply_model_aliases_to_ids(vec![source_model.into()], &collection.model_aliases),
+            ["claude-sonnet-5", "claude-haiku-4-5-20251001"],
+        );
+    }
+
+    #[test]
     fn local_models_include_codex_image_model() {
         let response = build_local_models_response(&[
             "gpt-5.4".to_string(),
@@ -1341,8 +1408,17 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                         .filter_map(|tool| tool.get("type").and_then(Value::as_str))
                         .collect::<Vec<_>>()
                 }),
-            Some(vec!["function", "function", "custom", "tool_search", "namespace"])
+            Some(vec![
+                "function",
+                "function",
+                "custom",
+                "tool_search",
+                "tool_search",
+                "namespace"
+            ])
         );
+        let tools = mapped_body["tools"].as_array().unwrap();
+        assert_eq!(tools[4]["execution"], "client");
         assert!(mapped_body.get("tool_choice").is_none());
         assert!(mapped_body
             .get("tools")

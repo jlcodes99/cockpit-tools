@@ -45,23 +45,27 @@ fn load_instance_store_by_platform(platform: &str) -> Result<InstanceStore, Stri
 }
 
 fn save_instance_store_by_platform(platform: &str, store: &InstanceStore) -> Result<(), String> {
-    match platform {
-        "antigravity" => modules::instance::save_instance_store(store),
-        "codex" => modules::codex_instance::save_instance_store(store),
-        "github-copilot" => modules::github_copilot_instance::save_instance_store(store),
-        "windsurf" => modules::windsurf_instance::save_instance_store(store),
-        "kiro" => modules::kiro_instance::save_instance_store(store),
-        "cursor" => modules::cursor_instance::save_instance_store(store),
-        "grok" => modules::grok_instance::save_instance_store(store),
-        "codebuddy" => modules::codebuddy_instance::save_instance_store(store),
-        "codebuddy_cn" => modules::codebuddy_cn_instance::save_instance_store(store),
-        "qoder" => modules::qoder_instance::save_instance_store(store),
-        "zcode" => modules::zcode_instance::save_instance_store(store),
-        "trae" => modules::trae_instance::save_instance_store(store),
-        "workbuddy" => modules::workbuddy_instance::save_instance_store(store),
-        "minimaxcode" | "minimax_code" => modules::minimax_code_instance::save_instance_store(store),
-        _ => Err("不支持的实例平台".to_string()),
-    }
+    type SaveStore = fn(&InstanceStore) -> Result<(), String>;
+    let (filename, save): (&str, SaveStore) = match platform {
+        "antigravity" => ("instances.json", modules::instance::save_instance_store),
+        "codex" => ("codex_instances.json", modules::codex_instance::save_instance_store),
+        "github-copilot" => ("github_copilot_instances.json", modules::github_copilot_instance::save_instance_store),
+        "windsurf" => ("windsurf_instances.json", modules::windsurf_instance::save_instance_store),
+        "kiro" => ("kiro_instances.json", modules::kiro_instance::save_instance_store),
+        "cursor" => ("cursor_instances.json", modules::cursor_instance::save_instance_store),
+        "grok" => ("grok_instances.json", modules::grok_instance::save_instance_store),
+        "codebuddy" => ("codebuddy_instances.json", modules::codebuddy_instance::save_instance_store),
+        "codebuddy_cn" => ("codebuddy_cn_instances.json", modules::codebuddy_cn_instance::save_instance_store),
+        "qoder" => ("qoder_instances.json", modules::qoder_instance::save_instance_store),
+        "zcode" => ("zcode_instances.json", modules::zcode_instance::save_instance_store),
+        "trae" => ("trae_instances.json", modules::trae_instance::save_instance_store),
+        "workbuddy" => ("workbuddy_instances.json", modules::workbuddy_instance::save_instance_store),
+        "minimaxcode" | "minimax_code" => ("minimax_code_instances.json", modules::minimax_code_instance::save_instance_store),
+        _ => return Err("不支持的实例平台".to_string()),
+    };
+    let path = modules::account::get_data_dir()?.join(filename);
+    store.storage_revision.set(modules::instance_registry::active_revision(&path)?);
+    save(store)
 }
 
 fn sanitize_instance_store(store: &InstanceStore) -> InstanceStore {
@@ -96,6 +100,7 @@ pub fn data_transfer_apply_user_config(
 
     let mut needs_restart = false;
     let mut language_changed = false;
+    let mut tray_visibility_changed = false;
     #[cfg(target_os = "macos")]
     let mut hide_dock_icon_changed = false;
     #[cfg(target_os = "macos")]
@@ -122,9 +127,11 @@ pub fn data_transfer_apply_user_config(
             || current.report_port != next_config.report_port
             || current.report_token != next_config.report_token;
         language_changed = current.language != next_config.language;
+        tray_visibility_changed = current.show_tray_icon != next_config.show_tray_icon;
         #[cfg(target_os = "macos")]
         {
-            hide_dock_icon_changed = current.hide_dock_icon != next_config.hide_dock_icon;
+            hide_dock_icon_changed =
+                crate::should_hide_dock_icon(current) != crate::should_hide_dock_icon(&next_config);
             tray_icon_style_changed = current.tray_icon_style != next_config.tray_icon_style;
         }
         *current = next_config.clone();
@@ -152,7 +159,7 @@ pub fn data_transfer_apply_user_config(
     }
 
     #[cfg(target_os = "macos")]
-    if hide_dock_icon_changed {
+    if hide_dock_icon_changed && !tray_visibility_changed {
         crate::apply_macos_activation_policy(&app);
     }
 
@@ -175,6 +182,9 @@ pub fn data_transfer_apply_user_config(
         }
     }
 
+    if tray_visibility_changed {
+        crate::apply_tray_visibility(&app, next_config.show_tray_icon)?;
+    }
     Ok(needs_restart)
 }
 

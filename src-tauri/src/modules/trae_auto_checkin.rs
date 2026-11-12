@@ -1,16 +1,20 @@
-// Trae CN 自动签到：后台调度器、每账号随机分散调度与文件持久化。
+use super::checkin_state_store::{validate_config, CheckinStore};
+pub use super::checkin_state_store::{
+    AccountSchedule as TraeAccountScheduleState, CheckinConfig as TraeAutoCheckinConfig,
+};
+use super::wakeup_history_store::{self, checkin_timestamp, HistoryRow, HistoryStore};
+// Trae CN 自动签到：后台调度器、每账号随机分散调度与持久化。
 // 结构对齐 workbuddy_auto_checkin.rs，差异点：CN 平台过滤、user_id 签到去重、
 // 签到 device_id 管理、签到 API 走 trae_account（api.trae.cn checkin_credits）。
 use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Mutex, MutexGuard, OnceLock,
+    Mutex, OnceLock,
 };
 use std::time::{Duration, Instant};
 
-use chrono::{Local, TimeZone, Timelike};
+use chrono::{Local, Timelike};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Notify;
@@ -30,43 +34,6 @@ struct CheckinGuard;
 impl Drop for CheckinGuard {
     fn drop(&mut self) {
         IS_CHECKIN_RUNNING.store(false, Ordering::SeqCst);
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TraeAccountScheduleState {
-    pub scheduled_date: String,
-    pub scheduled_minute: i32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_checked_date: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TraeAutoCheckinConfig {
-    pub enabled: bool,
-    pub start_time: String,
-    pub end_time: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_checked_date: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub account_schedules: Option<HashMap<String, TraeAccountScheduleState>>,
-    // 账号 → 签到 device_id（16 位纯数字）。接口按 did 全局判重，必须稳定复用
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub device_ids: Option<HashMap<String, String>>,
-}
-
-impl Default for TraeAutoCheckinConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            start_time: "06:00".to_string(),
-            end_time: "12:00".to_string(),
-            last_checked_date: None,
-            account_schedules: None,
-            device_ids: None,
-        }
     }
 }
 
@@ -97,12 +64,16 @@ pub struct TraeAutoCheckinLogRecord {
     pub details: Vec<TraeAutoCheckinAccountDetail>,
 }
 
+pub(crate) const CONFIG_FILE: &str = "trae_auto_checkin_config.json";
+
 fn get_config_file_path() -> PathBuf {
-    config::get_shared_dir().join("trae_auto_checkin_config.json")
+    config::get_shared_dir().join(CONFIG_FILE)
 }
 
+pub(crate) const LOGS_FILE: &str = "trae_auto_checkin_logs.json";
+
 fn get_logs_file_path() -> PathBuf {
-    config::get_shared_dir().join("trae_auto_checkin_logs.json")
+    config::get_shared_dir().join(LOGS_FILE)
 }
 
 fn scheduler_wake() -> &'static Notify {
@@ -113,147 +84,75 @@ fn wake_scheduler() {
     scheduler_wake().notify_one();
 }
 
-fn lock_storage() -> Result<MutexGuard<'static, ()>, String> {
-    STORAGE_LOCK
-        .lock()
-        .map_err(|_| "Trae 自动签到存储锁已损坏".to_string())
+fn state_store() -> CheckinStore {
+    state_store_at(get_config_file_path())
 }
 
-fn validate_time(value: &str) -> Option<i32> {
-    if value.len() != 5 || value.as_bytes().get(2) != Some(&b':') {
-        return None;
-    }
-    let hour = value.get(0..2)?.parse::<i32>().ok()?;
-    let minute = value.get(3..5)?.parse::<i32>().ok()?;
-    if (0..=23).contains(&hour) && (0..=59).contains(&minute) {
-        Some(hour * 60 + minute)
-    } else {
-        None
-    }
-}
-
-fn validate_config(config: &TraeAutoCheckinConfig) -> Result<(), String> {
-    let start = validate_time(&config.start_time)
-        .ok_or_else(|| format!("自动签到开始时间无效: {}", config.start_time))?;
-    let end = validate_time(&config.end_time)
-        .ok_or_else(|| format!("自动签到结束时间无效: {}", config.end_time))?;
-    if start > end {
-        return Err("自动签到开始时间不能晚于结束时间".to_string());
-    }
-    if let Some(schedules) = &config.account_schedules {
-        for (account_id, schedule) in schedules {
-            if !(0..=1439).contains(&schedule.scheduled_minute) {
-                return Err(format!(
-                    "账号 {} 的自动签到分钟无效: {}",
-                    account_id, schedule.scheduled_minute
-                ));
-            }
-        }
-    }
-    Ok(())
-}
-
-fn read_config_from_path(path: &Path) -> Result<Option<TraeAutoCheckinConfig>, String> {
-    if !path.exists() {
-        return Ok(None);
-    }
-    let content =
-        fs::read_to_string(path).map_err(|e| format!("读取 Trae 自动签到配置失败: {}", e))?;
-    let config = crate::modules::atomic_write::parse_json_with_auto_restore(path, &content)
-        .map_err(|e| format!("解析 Trae 自动签到配置失败: {}", e))?;
-    validate_config(&config)?;
-    Ok(Some(config))
-}
-
-fn write_config_to_path(path: &Path, config: &TraeAutoCheckinConfig) -> Result<(), String> {
-    validate_config(config)?;
-    let content = serde_json::to_string_pretty(config)
-        .map_err(|e| format!("序列化 Trae 自动签到配置失败: {}", e))?;
-    crate::modules::atomic_write::write_string_atomic(path, &content)
-        .map_err(|e| format!("保存 Trae 自动签到配置失败: {}", e))
+pub(super) fn state_store_at(path: PathBuf) -> CheckinStore {
+    CheckinStore::new(path, "trae-cn")
 }
 
 pub fn get_config_checked() -> Result<TraeAutoCheckinConfig, String> {
-    let _guard = lock_storage()?;
-    Ok(read_config_from_path(&get_config_file_path())?.unwrap_or_default())
+    state_store().load()
 }
 
 pub fn save_config(config: &TraeAutoCheckinConfig) -> Result<(), String> {
-    let result = save_config_without_wake(config);
-    if result.is_ok() {
-        wake_scheduler();
-    }
-    result
+    validate_config(config)?;
+    let _guard = STORAGE_LOCK.lock().map_err(|_| "自动签到存储锁已损坏")?;
+    state_store().save_rules(config)?;
+    wake_scheduler();
+    Ok(())
 }
 
-fn save_config_without_wake(config: &TraeAutoCheckinConfig) -> Result<(), String> {
-    let _guard = lock_storage()?;
-    write_config_merging_disk(&get_config_file_path(), config, false)
+pub fn migrate_config_if_missing(
+    legacy_config: &TraeAutoCheckinConfig,
+) -> Result<TraeAutoCheckinConfig, String> {
+    let _guard = STORAGE_LOCK.lock().map_err(|_| "自动签到存储锁已损坏")?;
+    let config = state_store().seed_webview(legacy_config)?;
+    wake_scheduler();
+    Ok(config)
 }
 
-/// 后台 cycle 写回调度状态：enabled/start/end 以磁盘为准，避免 cycle 持快照
-/// 执行期间用户在弹窗保存的新配置被旧快照覆盖。
-fn save_cycle_state_without_wake(config: &TraeAutoCheckinConfig) -> Result<(), String> {
-    let _guard = lock_storage()?;
-    write_config_merging_disk(&get_config_file_path(), config, true)
-}
-
-/// 写盘前并入磁盘状态：did 双向合并（调用方可能持有旧快照，直接覆盖会丢掉
-/// 期间产生的 did）；preserve_user_fields 时用户字段（enabled/start/end）以磁盘为准。
-fn write_config_merging_disk(
-    path: &Path,
-    config: &TraeAutoCheckinConfig,
-    preserve_user_fields: bool,
+async fn save_schedules(
+    previous: Option<HashMap<String, TraeAccountScheduleState>>,
+    schedules: Option<HashMap<String, TraeAccountScheduleState>>,
 ) -> Result<(), String> {
-    let mut merged = config.clone();
-    // 磁盘配置不可读/损坏时按无存量处理，不阻断保存
-    if let Some(disk) = read_config_from_path(path).ok().flatten() {
-        if preserve_user_fields {
-            merged.enabled = disk.enabled;
-            merged.start_time = disk.start_time;
-            merged.end_time = disk.end_time;
-        }
-        // UI 保存不携带 account_schedules（None=未提供），沿用磁盘调度状态，
-        // 避免 cycle 执行期间用户保存设置清空当天调度进度
-        if merged.account_schedules.is_none() {
-            merged.account_schedules = disk.account_schedules;
-        }
-        if let Some(disk_ids) = disk.device_ids {
-            let mut ids = disk_ids;
-            if let Some(memory_ids) = config.device_ids.clone() {
-                ids.extend(memory_ids);
-            }
-            merged.device_ids = Some(ids);
-        }
+    tauri::async_runtime::spawn_blocking(move || {
+        state_store().save_schedules(previous.as_ref(), schedules)
+    })
+    .await
+    .map_err(|error| format!("自动签到状态任务失败: {error}"))?
+}
+
+impl HistoryRow for TraeAutoCheckinLogRecord {
+    fn id(&self) -> &str {
+        &self.date
     }
-    write_config_to_path(path, &merged)
-}
-
-fn read_logs_from_path(path: &Path) -> Result<Vec<TraeAutoCheckinLogRecord>, String> {
-    if !path.exists() {
-        return Ok(Vec::new());
+    fn timestamp(&self) -> i64 {
+        checkin_timestamp(&self.timestamp)
     }
-    let content =
-        fs::read_to_string(path).map_err(|e| format!("读取 Trae 自动签到日志失败: {}", e))?;
-    crate::modules::atomic_write::parse_json_with_auto_restore(path, &content)
-        .map_err(|e| format!("解析 Trae 自动签到日志失败: {}", e))
 }
 
-fn write_logs_to_path(path: &Path, logs: &[TraeAutoCheckinLogRecord]) -> Result<(), String> {
-    let content = serde_json::to_string_pretty(logs)
-        .map_err(|e| format!("序列化 Trae 自动签到日志失败: {}", e))?;
-    crate::modules::atomic_write::write_string_atomic(path, &content)
-        .map_err(|e| format!("保存 Trae 自动签到日志失败: {}", e))
+fn history_store() -> HistoryStore {
+    history_store_at(get_logs_file_path())
 }
 
-pub fn get_logs_checked() -> Result<Vec<TraeAutoCheckinLogRecord>, String> {
-    let _guard = lock_storage()?;
-    read_logs_from_path(&get_logs_file_path())
+pub(crate) fn history_store_at(path: PathBuf) -> HistoryStore {
+    wakeup_history_store::daily_checkin(path, "trae-cn")
 }
 
-pub fn save_logs(logs: &[TraeAutoCheckinLogRecord]) -> Result<(), String> {
-    let _guard = lock_storage()?;
-    write_logs_to_path(&get_logs_file_path(), logs)
+pub fn schedule_log_migration() {
+    history_store().schedule::<TraeAutoCheckinLogRecord>();
+}
+
+pub fn get_logs_checked(
+    retry: bool,
+) -> Result<wakeup_history_store::HistoryRead<TraeAutoCheckinLogRecord>, String> {
+    wakeup_history_store::read_available(history_store(), retry)
+}
+
+pub fn clear_logs() -> Result<(), String> {
+    history_store().clear()
 }
 
 /// 同日多轮签到合并到既有记录：明细按账号覆盖、耗时累加、计数与状态重算。
@@ -304,31 +203,18 @@ fn merge_log_record(existing: &mut TraeAutoCheckinLogRecord, record: TraeAutoChe
 }
 
 fn add_log_record(record: TraeAutoCheckinLogRecord) -> Result<(), String> {
-    let _guard = lock_storage()?;
-    let path = get_logs_file_path();
-    let mut logs = read_logs_from_path(&path)?;
-    if let Some(existing) = logs.iter_mut().find(|log| log.date == record.date) {
-        merge_log_record(existing, record);
-    } else {
-        logs.insert(0, record);
-    }
-
     const THIRTY_DAYS_SECS: i64 = 30 * 24 * 60 * 60;
-    let cutoff = Local::now().timestamp() - THIRTY_DAYS_SECS;
+    history_store().merge_day(
+        record,
+        Local::now().timestamp() - THIRTY_DAYS_SECS,
+        merge_log_record,
+    )
+}
 
-    logs.retain(|r| {
-        if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(&r.timestamp, "%Y-%m-%d %H:%M:%S") {
-            if let Some(local_dt) = Local.from_local_datetime(&ndt).single() {
-                local_dt.timestamp() >= cutoff
-            } else {
-                ndt.and_utc().timestamp() >= cutoff
-            }
-        } else {
-            true
-        }
-    });
-
-    write_logs_to_path(&path, &logs)
+async fn persist_log_record(record: TraeAutoCheckinLogRecord) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || add_log_record(record))
+        .await
+        .map_err(|error| format!("保存签到历史任务失败: {error}"))?
 }
 
 pub fn parse_time_to_minutes(time_str: &str) -> i32 {
@@ -454,56 +340,21 @@ fn is_valid_device_id(device_id: &str) -> bool {
     device_id.len() == 16 && device_id.chars().all(|c| c.is_ascii_digit())
 }
 
-/// 生成未被占用的 did：13 位毫秒时间戳 + 3 位随机数。
-/// 同一毫秒内为多账号连续生成会撞号（接口按 did 全局判重），必须对齐既有 did 去重。
-fn generate_device_id(existing: &HashMap<String, String>) -> String {
-    loop {
-        let candidate = format!(
-            "{}{:03}",
-            Local::now().timestamp_millis(),
-            rand::random::<u16>() % 1000
-        );
-        if !existing.values().any(|value| value == &candidate) {
-            return candidate;
-        }
-    }
+/// 签到接口按 did 全局判重，生成结果须由持久化存储检查并复用。
+fn device_candidate() -> String {
+    format!(
+        "{}{:03}",
+        Local::now().timestamp_millis(),
+        rand::random::<u16>() % 1000
+    )
 }
 
-/// 获取账号签到 device_id，无合法存量则生成并写回内存配置。
-pub fn ensure_device_id(config: &mut TraeAutoCheckinConfig, account_id: &str) -> String {
-    let mut ids = config.device_ids.clone().unwrap_or_default();
-    if let Some(existing) = ids.get(account_id) {
-        if is_valid_device_id(existing) {
-            return existing.clone();
-        }
-    }
-    let device_id = generate_device_id(&ids);
-    ids.insert(account_id.to_string(), device_id.clone());
-    config.device_ids = Some(ids);
-    device_id
-}
-
-/// 取账号 did，仅在没有合法存量时落盘。读改写全程持存储锁，
-/// 避免与后台 cycle 的整份配置写回互相覆盖；生成 did 不需要唤醒调度器。
-pub fn ensure_device_id_persisted(account_id: &str) -> Result<String, String> {
-    let _guard = lock_storage()?;
-    ensure_device_id_persisted_at_path(&get_config_file_path(), account_id)
-}
-
-fn ensure_device_id_persisted_at_path(path: &Path, account_id: &str) -> Result<String, String> {
-    let mut config = read_config_from_path(path)?.unwrap_or_default();
-    if let Some(existing) = config
-        .device_ids
-        .as_ref()
-        .and_then(|ids| ids.get(account_id))
-    {
-        if is_valid_device_id(existing) {
-            return Ok(existing.clone());
-        }
-    }
-    let device_id = ensure_device_id(&mut config, account_id);
-    write_config_to_path(path, &config)?;
-    Ok(device_id)
+pub async fn ensure_device_id_persisted(account_id: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        state_store().device_id(&account_id, is_valid_device_id, device_candidate)
+    })
+    .await
+    .map_err(|error| format!("签到设备标识任务失败: {error}"))?
 }
 
 fn mark_schedule_checked(
@@ -532,7 +383,9 @@ pub async fn run_trae_auto_checkin_cycle_if_needed(
     }
     let _guard = CheckinGuard;
 
-    let mut config = get_config_checked()?;
+    let mut config = tauri::async_runtime::spawn_blocking(get_config_checked)
+        .await
+        .map_err(|error| format!("自动签到状态任务失败: {error}"))??;
     if !config.enabled && !force {
         return Ok("disabled".to_string());
     }
@@ -543,13 +396,15 @@ pub async fn run_trae_auto_checkin_cycle_if_needed(
         .iter()
         .filter(|account| {
             let platform = trae_account::resolve_account_platform_kind(account);
-            platform.is_cn() && (force || crate::modules::tray_layout::is_platform_enabled(platform.provider_key()))
+            platform.is_cn()
+                && (force
+                    || crate::modules::tray_layout::is_platform_enabled(platform.provider_key()))
         })
         .collect();
     let accounts: Vec<&TraeAccount> = dedup_checkin_accounts(&cn_accounts);
     if accounts.is_empty() {
         if force {
-            add_log_record(TraeAutoCheckinLogRecord {
+            persist_log_record(TraeAutoCheckinLogRecord {
                 id: format!(
                     "log_{}_{}",
                     Local::now().timestamp_millis(),
@@ -564,15 +419,17 @@ pub async fn run_trae_auto_checkin_cycle_if_needed(
                 failed_count: 0,
                 status: "no_accounts".to_string(),
                 details: Vec::new(),
-            })?;
+            })
+            .await?;
             let _ = app.emit("trae-auto-checkin-logs-changed", ());
         }
         return Ok("no_accounts".to_string());
     }
 
+    let previous = config.account_schedules.clone();
     let schedule_changed = ensure_account_schedules(&mut config, &accounts);
     if schedule_changed {
-        save_cycle_state_without_wake(&config)?;
+        save_schedules(previous, config.account_schedules.clone()).await?;
         let _ = app.emit("trae-auto-checkin-config-changed", ());
     }
 
@@ -631,7 +488,7 @@ pub async fn run_trae_auto_checkin_cycle_if_needed(
             account.id.clone()
         };
         let account_checkin_time = format_time_only();
-        let device_id = ensure_device_id(&mut config, &account.id);
+        let device_id = ensure_device_id_persisted(account.id.clone()).await?;
 
         match trae_account::get_trae_checkin_status(&account.id, &device_id).await {
             Ok(status) if status.checked_in => {
@@ -734,14 +591,10 @@ pub async fn run_trae_auto_checkin_cycle_if_needed(
         }
     }
 
-    config.account_schedules = Some(new_schedules);
-    save_cycle_state_without_wake(&config)?;
+    save_schedules(config.account_schedules, Some(new_schedules)).await?;
 
     let duration_ms = start_instant.elapsed().as_millis() as u64;
-    let total_accounts = details
-        .iter()
-        .filter(|d| d.status != "inactive")
-        .count();
+    let total_accounts = details.iter().filter(|d| d.status != "inactive").count();
     let overall_status = if total_accounts == 0 {
         "no_accounts"
     } else if failed_count == 0 {
@@ -752,7 +605,7 @@ pub async fn run_trae_auto_checkin_cycle_if_needed(
         "failed"
     };
 
-    add_log_record(TraeAutoCheckinLogRecord {
+    persist_log_record(TraeAutoCheckinLogRecord {
         id: format!(
             "log_{}_{}",
             Local::now().timestamp_millis(),
@@ -767,7 +620,8 @@ pub async fn run_trae_auto_checkin_cycle_if_needed(
         failed_count,
         status: overall_status.to_string(),
         details,
-    })?;
+    })
+    .await?;
 
     if !claimed_account_ids.is_empty() {
         logger::log_info(&format!(
@@ -783,9 +637,13 @@ pub async fn run_trae_auto_checkin_cycle_if_needed(
         let refresh_ids: Vec<String> = all_accounts
             .iter()
             .filter(|account| {
-            let platform = trae_account::resolve_account_platform_kind(account);
-            platform.is_cn() && (force || crate::modules::tray_layout::is_platform_enabled(platform.provider_key()))
-        })
+                let platform = trae_account::resolve_account_platform_kind(account);
+                platform.is_cn()
+                    && (force
+                        || crate::modules::tray_layout::is_platform_enabled(
+                            platform.provider_key(),
+                        ))
+            })
             .filter(|account| {
                 claimed_account_ids.contains(&account.id)
                     || normalized_user_id(account)
@@ -900,21 +758,6 @@ mod tests {
         }
     }
 
-    fn make_temp_config_path(test_name: &str) -> PathBuf {
-        let unique = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("system time should be after unix epoch")
-            .as_nanos();
-        std::env::temp_dir()
-            .join(format!(
-                "cockpit-trae-auto-checkin-{}-{}-{}",
-                test_name,
-                std::process::id(),
-                unique
-            ))
-            .join("trae_auto_checkin_config.json")
-    }
-
     #[test]
     fn test_parse_time_to_minutes() {
         assert_eq!(parse_time_to_minutes("06:00"), 360);
@@ -1014,182 +857,6 @@ mod tests {
             .map(|a| a.id.as_str())
             .collect();
         assert_eq!(ids, vec!["trae_c"]);
-    }
-
-    #[test]
-    fn test_ensure_device_id_generates_16_digit_and_reuses() {
-        let mut config = TraeAutoCheckinConfig::default();
-        let first = ensure_device_id(&mut config, "acc_1");
-        assert_eq!(first.len(), 16);
-        assert!(first.chars().all(|c| c.is_ascii_digit()));
-
-        let second = ensure_device_id(&mut config, "acc_1");
-        assert_eq!(first, second);
-
-        // 非法存量值重新生成
-        config.device_ids = Some(HashMap::from([(
-            "acc_2".to_string(),
-            "bad".to_string(),
-        )]));
-        let regenerated = ensure_device_id(&mut config, "acc_2");
-        assert_eq!(regenerated.len(), 16);
-        assert_ne!(regenerated, "bad");
-    }
-
-    #[test]
-    fn test_ensure_device_id_does_not_reuse_taken_value() {
-        let mut config = TraeAutoCheckinConfig::default();
-        // 同一毫秒内连续为多账号生成，did 不能重复（接口按 did 全局判重）
-        for index in 0..200 {
-            let account_id = format!("acc_{}", index);
-            let device_id = ensure_device_id(&mut config, &account_id);
-            assert_eq!(device_id.len(), 16);
-            assert!(device_id.chars().all(|c| c.is_ascii_digit()));
-        }
-
-        let ids = config.device_ids.unwrap();
-        let unique: std::collections::HashSet<&String> = ids.values().collect();
-        assert_eq!(unique.len(), ids.len());
-    }
-
-    #[test]
-    fn test_ensure_device_id_persisted_reuses_stored_value() {
-        let config_path = make_temp_config_path("device-id-persisted");
-
-        let generated = ensure_device_id_persisted_at_path(&config_path, "acc_1").unwrap();
-        assert_eq!(generated.len(), 16);
-        assert!(generated.chars().all(|c| c.is_ascii_digit()));
-
-        // 二次调用沿用已落盘的值，且不改动其他字段
-        let stored = TraeAutoCheckinConfig {
-            enabled: true,
-            start_time: "07:00".to_string(),
-            end_time: "09:00".to_string(),
-            last_checked_date: None,
-            account_schedules: None,
-            device_ids: Some(HashMap::from([("acc_1".to_string(), generated.clone())])),
-        };
-        write_config_to_path(&config_path, &stored).unwrap();
-
-        assert_eq!(
-            ensure_device_id_persisted_at_path(&config_path, "acc_1").unwrap(),
-            generated
-        );
-        let reloaded = read_config_from_path(&config_path).unwrap().unwrap();
-        assert_eq!(reloaded.start_time, "07:00");
-        assert_eq!(reloaded.device_ids.unwrap().len(), 1);
-
-        let temp_dir = config_path.parent().unwrap();
-        std::fs::remove_dir_all(temp_dir).unwrap();
-    }
-
-    #[test]
-    fn test_save_config_keeps_device_ids_written_by_other_caller() {
-        let config_path = make_temp_config_path("device-id-merge");
-        let mut disk_config = TraeAutoCheckinConfig::default();
-        ensure_device_id(&mut disk_config, "acc_1");
-        write_config_to_path(&config_path, &disk_config).unwrap();
-
-        // 前端保存设置时可能持有不含 deviceIds 的旧快照
-        let stale = TraeAutoCheckinConfig {
-            enabled: true,
-            start_time: "08:00".to_string(),
-            end_time: "10:00".to_string(),
-            last_checked_date: None,
-            account_schedules: None,
-            device_ids: None,
-        };
-        write_config_merging_disk(&config_path, &stale, false).unwrap();
-
-        let reloaded = read_config_from_path(&config_path).unwrap().unwrap();
-        assert!(reloaded.enabled);
-        assert_eq!(reloaded.device_ids.unwrap().len(), 1);
-
-        let temp_dir = config_path.parent().unwrap();
-        std::fs::remove_dir_all(temp_dir).unwrap();
-    }
-
-    #[test]
-    fn test_save_config_keeps_account_schedules_from_disk() {
-        let config_path = make_temp_config_path("schedule-merge");
-        // 磁盘上已有 cycle 写入的调度状态
-        let mut disk_config = TraeAutoCheckinConfig::default();
-        let mut schedules = HashMap::new();
-        schedules.insert(
-            "acc_1".to_string(),
-            TraeAccountScheduleState {
-                scheduled_date: "2026-11-03".to_string(),
-                scheduled_minute: 480,
-                last_checked_date: Some("2026-11-03".to_string()),
-            },
-        );
-        disk_config.account_schedules = Some(schedules);
-        write_config_to_path(&config_path, &disk_config).unwrap();
-
-        // 前端保存设置不携带 accountSchedules（None=未提供），调度状态不被清空
-        let stale = TraeAutoCheckinConfig {
-            enabled: true,
-            start_time: "08:00".to_string(),
-            end_time: "10:00".to_string(),
-            last_checked_date: None,
-            account_schedules: None,
-            device_ids: None,
-        };
-        write_config_merging_disk(&config_path, &stale, false).unwrap();
-
-        let reloaded = read_config_from_path(&config_path).unwrap().unwrap();
-        assert_eq!(
-            reloaded
-                .account_schedules
-                .and_then(|s| s.get("acc_1").cloned())
-                .and_then(|s| s.last_checked_date),
-            Some("2026-11-03".to_string())
-        );
-
-        let temp_dir = config_path.parent().unwrap();
-        std::fs::remove_dir_all(temp_dir).unwrap();
-    }
-
-    #[test]
-    fn test_cycle_state_write_preserves_user_fields_from_disk() {
-        let config_path = make_temp_config_path("cycle-state-merge");
-
-        // 用户在 cycle 执行期间保存了新配置
-        let user_config = TraeAutoCheckinConfig {
-            enabled: false,
-            start_time: "20:00".to_string(),
-            end_time: "23:00".to_string(),
-            ..TraeAutoCheckinConfig::default()
-        };
-        write_config_to_path(&config_path, &user_config).unwrap();
-
-        // cycle 持旧快照写回调度状态：用户字段不被回滚，schedules/did 以 cycle 为准
-        let mut cycle_snapshot = TraeAutoCheckinConfig {
-            enabled: true,
-            start_time: "06:00".to_string(),
-            end_time: "12:00".to_string(),
-            ..TraeAutoCheckinConfig::default()
-        };
-        ensure_device_id(&mut cycle_snapshot, "acc_1");
-        cycle_snapshot.account_schedules = Some(HashMap::from([(
-            "acc_1".to_string(),
-            TraeAccountScheduleState {
-                scheduled_date: "2026-10-03".to_string(),
-                scheduled_minute: 400,
-                last_checked_date: Some("2026-10-03".to_string()),
-            },
-        )]));
-        write_config_merging_disk(&config_path, &cycle_snapshot, true).unwrap();
-
-        let reloaded = read_config_from_path(&config_path).unwrap().unwrap();
-        assert!(!reloaded.enabled);
-        assert_eq!(reloaded.start_time, "20:00");
-        assert_eq!(reloaded.end_time, "23:00");
-        assert!(reloaded.account_schedules.unwrap().contains_key("acc_1"));
-        assert_eq!(reloaded.device_ids.unwrap().len(), 1);
-
-        let temp_dir = config_path.parent().unwrap();
-        std::fs::remove_dir_all(temp_dir).unwrap();
     }
 
     #[test]

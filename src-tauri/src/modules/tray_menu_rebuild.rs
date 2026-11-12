@@ -24,6 +24,9 @@ fn apply_changed_tray_menu(
     Ok(true)
 }
 pub fn update_tray_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+    if !crate::modules::config::get_user_config().show_tray_icon {
+        return Ok(());
+    }
     TRAY_MENU_REQUESTS.fetch_add(1, Ordering::AcqRel);
     if TRAY_MENU_REBUILD_SCHEDULED.swap(true, Ordering::AcqRel) {
         // A worker is already going to pick this request up.
@@ -81,6 +84,9 @@ struct TrayMenuRebuildTiming {
 fn rebuild_tray_menu_now<R: Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<Option<TrayMenuRebuildTiming>, String> {
+    if !crate::modules::config::get_user_config().show_tray_icon {
+        return Ok(None);
+    }
     #[cfg(target_os = "macos")]
     {
         crate::modules::macos_native_menu::update_status_item(app)?;
@@ -102,7 +108,9 @@ fn rebuild_tray_menu_now<R: Runtime>(
         let app_handle = app.clone();
         let (tx, rx) = std::sync::mpsc::channel();
         app.run_on_main_thread(move || {
-            if is_stale_tray_menu_apply(&TRAY_MENU_APPLY_GENERATION, generation) {
+            if is_stale_tray_menu_apply(&TRAY_MENU_APPLY_GENERATION, generation)
+                || !crate::modules::config::get_user_config().show_tray_icon
+            {
                 let _ = tx.send(Ok(None));
                 return;
             }

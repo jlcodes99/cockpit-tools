@@ -1,4 +1,6 @@
 use crate::models::codex::{CodexAccount, CodexQuota, CodexQuotaErrorInfo, CodexResetCredit};
+#[path = "codex_reset_credit_history.rs"]
+pub mod reset_history;
 use crate::modules::{codex_account, codex_agent_identity, logger};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, REFERER, USER_AGENT};
 use reqwest::{Method, StatusCode};
@@ -266,6 +268,24 @@ struct SubscriptionStatusSnapshot {
     account_id: Option<String>,
     plan_type: Option<String>,
     subscription_active_until: Option<String>,
+}
+
+impl SubscriptionStatusSnapshot {
+    fn is_free_without_active_subscription(&self) -> bool {
+        self.plan_type
+            .as_deref()
+            .is_some_and(|plan| plan.eq_ignore_ascii_case("free"))
+            && subscription_missing_or_expired(self.subscription_active_until.as_deref())
+    }
+}
+
+pub(super) fn has_confirmed_free_subscription(account: &CodexAccount) -> bool {
+    account.subscription_query_last_success_at.is_some()
+        && account.subscription_active_until.is_none()
+        && account
+            .plan_type
+            .as_deref()
+            .is_some_and(|plan| plan.eq_ignore_ascii_case("free"))
 }
 
 #[derive(Debug, Clone)]
@@ -667,12 +687,22 @@ fn parse_account_check_snapshot(
             subscription_active_until: None,
         });
     }
-    let plan_type = entitlement
-        .and_then(|value| extract_account_record_field(value, &["subscription_plan"]))
-        .or_else(|| extract_account_record_field(account_record, &["plan_type", "planType"]));
     let subscription_active_until = entitlement
         .and_then(|value| extract_account_record_field(value, &["expires_at"]))
         .or_else(|| extract_account_record_field(account_record, &["expires_at"]));
+    let account_plan = extract_account_record_field(account_record, &["plan_type", "planType"]);
+    let entitlement_plan =
+        entitlement.and_then(|value| extract_account_record_field(value, &["subscription_plan"]));
+    let expired_entitlement = subscription_active_until.as_deref()
+        .and_then(parse_subscription_timestamp)
+        .is_some_and(|expiry| expiry <= now_timestamp());
+    let plan_type = if expired_entitlement
+        && account_plan.as_deref().is_some_and(|plan| plan.eq_ignore_ascii_case("free"))
+    {
+        account_plan
+    } else {
+        entitlement_plan.or(account_plan)
+    };
 
     Ok(SubscriptionStatusSnapshot {
         account_id,
@@ -846,9 +876,11 @@ async fn fetch_subscription_status_snapshot(
 ) -> Result<SubscriptionStatusSnapshot, String> {
     let mut snapshot = fetch_subscription_account_check(account).await?;
 
-    let should_query_subscriptions =
-        subscription_missing_or_expired(snapshot.subscription_active_until.as_deref());
-    if !should_query_subscriptions {
+    // The account check can confirm a downgrade to Free while the paid
+    // subscriptions endpoint no longer accepts the same access token.
+    if snapshot.is_free_without_active_subscription()
+        || !subscription_missing_or_expired(snapshot.subscription_active_until.as_deref())
+    {
         return Ok(snapshot);
     }
 
@@ -885,26 +917,34 @@ async fn refresh_subscription_state(account: &mut CodexAccount) -> Result<(), St
         }
     };
 
+    apply_subscription_snapshot(account, snapshot);
+    Ok(())
+}
+
+fn apply_subscription_snapshot(account: &mut CodexAccount, snapshot: SubscriptionStatusSnapshot) {
+    let is_free = snapshot.is_free_without_active_subscription();
     if snapshot.account_id.is_some() {
         account.account_id = snapshot.account_id;
     }
     if snapshot.plan_type.is_some() {
         account.plan_type = snapshot.plan_type;
     }
-    if snapshot
+    if is_free || snapshot
         .subscription_active_until
         .as_deref()
         .and_then(parse_subscription_timestamp)
         .is_some()
     {
-        account.subscription_active_until = snapshot.subscription_active_until;
+        account.subscription_active_until = if is_free {
+            None
+        } else {
+            snapshot.subscription_active_until
+        };
         account.subscription_query_last_success_at = Some(now_timestamp());
         account.subscription_query_last_error = None;
     } else {
         account.subscription_query_last_error = Some("订阅接口未返回有效订阅时间".into());
     }
-
-    Ok(())
 }
 
 async fn refresh_account_tokens(account: &mut CodexAccount, reason: &str) -> Result<(), String> {
@@ -1110,8 +1150,18 @@ fn is_new_api_account(account: &CodexAccount) -> bool {
             .unwrap_or(false)
 }
 
+pub(crate) const RELAY_BALANCE_DISABLED: &str = "PROVIDER_RELAY_BALANCE_DISABLED";
+
+pub(crate) fn relay_balance_disabled() -> bool {
+    crate::modules::config::get_user_config().codex_hide_relay_quota
+}
+
+pub(crate) fn account_relay_balance_disabled(account: &CodexAccount) -> bool {
+    account.is_api_key_auth() && is_new_api_account(account) && relay_balance_disabled()
+}
+
 pub fn supports_quota_refresh(account: &CodexAccount) -> bool {
-    !account.is_api_key_auth() || is_new_api_account(account)
+    !account.is_api_key_auth() || (is_new_api_account(account) && !relay_balance_disabled())
 }
 
 fn normalize_api_base_url_for_match(raw: Option<&str>) -> Option<String> {
@@ -1520,21 +1570,51 @@ impl ResetCreditConsumeOutcome {
     }
 }
 
-fn parse_reset_credit_consume_outcome(body: &str) -> Result<ResetCreditConsumeOutcome, String> {
-    #[derive(Deserialize)]
-    struct ConsumeResponse {
-        code: ResetCreditConsumeOutcome,
-    }
-    serde_json::from_str::<ConsumeResponse>(body)
-        .map(|response| response.code)
-        .map_err(|_| crate::modules::codex_reset_automation::message("unknownOutcome"))
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ResetCreditReceipt {
+    pub credit_id: Option<String>,
+    pub windows_reset: Option<u32>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ResetCreditConsumeResponse {
+    pub outcome: ResetCreditConsumeOutcome,
+    pub receipt: Option<ResetCreditReceipt>,
+}
+
+fn parse_reset_credit_consume_response(body: &str) -> Result<ResetCreditConsumeResponse, String> {
+    let unknown_outcome = || crate::modules::codex_reset_automation::message("unknownOutcome");
+    let value: serde_json::Value = serde_json::from_str(body).map_err(|_| unknown_outcome())?;
+    let code = value.get("code").ok_or_else(unknown_outcome)?;
+    let outcome = ResetCreditConsumeOutcome::deserialize(code).map_err(|_| unknown_outcome())?;
+    let credit_id = matches!(
+        outcome,
+        ResetCreditConsumeOutcome::Reset | ResetCreditConsumeOutcome::AlreadyRedeemed
+    )
+    .then(|| {
+        value
+            .pointer("/credit/id")
+            .and_then(serde_json::Value::as_str)
+    })
+    .flatten()
+    .filter(|id| !id.trim().is_empty())
+    .map(str::to_owned);
+    let windows_reset = value
+        .get("windows_reset")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|count| u32::try_from(count).ok());
+    let receipt = (credit_id.is_some() || windows_reset.is_some()).then_some(ResetCreditReceipt {
+        credit_id,
+        windows_reset,
+    });
+    Ok(ResetCreditConsumeResponse { outcome, receipt })
 }
 
 async fn post_reset_credit_once(
     account: &CodexAccount,
     redeem_request_id: &str,
     expected_identity: &str,
-) -> Result<ResetCreditConsumeOutcome, String> {
+) -> Result<ResetCreditConsumeResponse, String> {
     if crate::modules::codex_reset_automation::account_identity(account) != expected_identity {
         return Err(crate::modules::codex_reset_automation::message("conflict"));
     }
@@ -1562,7 +1642,7 @@ async fn post_reset_credit_once(
     ));
 
     if status.is_success() {
-        return parse_reset_credit_consume_outcome(&body);
+        return parse_reset_credit_consume_response(&body);
     }
 
     let detail_code = extract_detail_code_from_body(&body);
@@ -1587,7 +1667,7 @@ pub(crate) async fn consume_reset_credit_with_request_id(
     account_id: &str,
     redeem_request_id: &str,
     expected_identity: &str,
-) -> Result<ResetCreditConsumeOutcome, String> {
+) -> Result<ResetCreditConsumeResponse, String> {
     let mut account = codex_account::prepare_account_for_injection(account_id).await?;
     if account.is_api_key_auth() {
         return Err("API Key 账号不支持主动重置额度".to_string());
@@ -1597,7 +1677,10 @@ pub(crate) async fn consume_reset_credit_with_request_id(
             "Codex 主动重置使用显式 mock JSON 空操作: account_id={}",
             account_id
         ));
-        return Ok(ResetCreditConsumeOutcome::Reset);
+        return Ok(ResetCreditConsumeResponse {
+            outcome: ResetCreditConsumeOutcome::Reset,
+            receipt: None,
+        });
     }
 
     if !account.is_agent_identity_auth()
@@ -1658,8 +1741,9 @@ fn sync_subscription_from_token(
 }
 
 fn sync_subscription_expiry_from_current_id_token(account: &mut CodexAccount) {
-    if account.subscription_query_last_success_at.is_some()
-        && account.subscription_active_until.is_some()
+    if has_confirmed_free_subscription(account)
+        || (account.subscription_query_last_success_at.is_some()
+            && account.subscription_active_until.is_some())
     {
         return;
     }
@@ -1710,6 +1794,9 @@ async fn refresh_account_quota_once(
     };
     if account.is_api_key_auth() {
         if is_new_api_account(&account) {
+            if account_relay_balance_disabled(&account) {
+                return Err(RELAY_BALANCE_DISABLED.into());
+            }
             let result = match fetch_new_api_quota(&account).await {
                 Ok(result) => result,
                 Err(e) => {
@@ -1731,33 +1818,33 @@ async fn refresh_account_quota_once(
             crate::modules::codex_quota_sync::publish(&account);
             return Ok(result.quota);
         }
-        account.quota = None;
-        account.quota_error = None;
-        account.usage_updated_at = None;
-        let _ = codex_account::save_account_preserving_egress_proxy(&account);
         return Err("API Key 账号不支持刷新配额，请在网页端查看。".to_string());
     }
     if account.is_agent_identity_auth() {
+        let query_started = std::time::Instant::now();
         let result = match fetch_quota(&account).await {
             Ok(result) => result,
             Err(error) => {
-                if write_quota_error(&mut account, error.clone()) {
-                    if let Err(save_error) = codex_account::save_account_preserving_egress_proxy(&account) {
-                        logger::log_warn(&format!("写入 Agent Identity 配额错误失败: {}", save_error));
-                    }
+                let saved_error = error.clone();
+                let saved = tokio::task::spawn_blocking(move || {
+                    codex_account::save_quota_sync_failure(&account, saved_error, query_started)
+                })
+                .await;
+                if !matches!(saved, Ok(Ok(()))) {
+                    logger::log_warn(
+                        "[Codex Quota Sync] failed to persist Agent Identity refresh failure",
+                    );
                 }
                 return Err(error);
             }
         };
-        account = codex_account::load_account(&account.id).unwrap_or(account);
-        if result.plan_type.is_some() {
-            sync_subscription_from_token(&mut account, result.plan_type.clone(), None);
-        }
-        account.replace_quota_preserving_team_history(result.quota.clone(), now_timestamp());
-        account.quota_error = None;
-        account.usage_updated_at = Some(now_timestamp());
-        codex_account::save_account_preserving_egress_proxy(&account)?;
-        crate::modules::codex_quota_sync::publish(&account);
+        let quota = result.quota.clone();
+        let plan_type = result.plan_type;
+        tokio::task::spawn_blocking(move || {
+            codex_account::save_refreshed_quota(&account, quota, plan_type, query_started)
+        })
+        .await
+        .map_err(|error| error.to_string())??;
         return Ok(result.quota);
     }
 
@@ -1956,6 +2043,9 @@ pub async fn probe_import_account_quota(account: &CodexAccount) -> Result<CodexQ
     }
     if account.is_api_key_auth() {
         if is_new_api_account(account) {
+            if account_relay_balance_disabled(account) {
+                return Err(RELAY_BALANCE_DISABLED.into());
+            }
             return fetch_new_api_quota(account)
                 .await
                 .map(|result| result.quota);
@@ -2081,7 +2171,12 @@ async fn refresh_quotas_for_account_ids_with_options_and_runtime_snapshot(
     }
 
     let effective_ids: Vec<String> = if respect_group_quota_refresh {
-        codex_account::filter_account_ids_by_quota_refresh_policy(account_ids)
+        let ids = account_ids.to_vec();
+        tokio::task::spawn_blocking(move || {
+            codex_account::filter_account_ids_by_quota_refresh_policy(&ids)
+        })
+        .await
+        .map_err(|error| error.to_string())?
     } else {
         account_ids
             .iter()
@@ -2121,7 +2216,7 @@ async fn refresh_quotas_for_account_ids_with_options_and_runtime_snapshot(
         }
         None => Arc::new(codex_account::CodexQuotaRuntimeSnapshot::empty()),
     };
-    let requests = futures_util::stream::iter(attach_runtime_snapshot_to_account_ids(
+    let mut requests = futures_util::stream::iter(attach_runtime_snapshot_to_account_ids(
         unique_ids,
         runtime_snapshot,
     ))
@@ -2138,6 +2233,7 @@ async fn refresh_quotas_for_account_ids_with_options_and_runtime_snapshot(
     .buffered(4)
     .collect::<Vec<_>>()
     .await;
+    requests.retain(|(_, result)| !matches!(result, Err(error) if error == RELAY_BALANCE_DISABLED));
     Ok(requests)
 }
 
@@ -2165,7 +2261,10 @@ async fn refresh_all_quotas_with_options(
     skip_running_oauth_accounts: bool,
     priority: crate::modules::codex_quota_refresh_scheduler::RefreshPriority,
 ) -> Result<Vec<(String, Result<CodexQuota, String>)>, String> {
-    let disabled = codex_account::load_quota_refresh_disabled_account_ids();
+    let disabled =
+        tokio::task::spawn_blocking(codex_account::load_quota_refresh_disabled_account_ids)
+            .await
+            .map_err(|error| error.to_string())?;
     let runtime_snapshot = if skip_running_oauth_accounts {
         Some(Arc::new(
             codex_account::CodexQuotaRuntimeSnapshot::capture().await?,
@@ -2612,6 +2711,38 @@ mod tests {
     }
 
     #[test]
+    fn confirmed_free_subscription_needs_no_paid_lookup_and_keeps_oauth() {
+        for entitlement in [
+            serde_json::Value::Null,
+            json!({"subscription_plan":"plus","expires_at":"2000-01-01T00:00:00Z"}),
+        ] {
+            let mut account = subscription_test_account();
+            account.account_id = Some("target".into());
+            account.plan_type = Some("plus".into());
+            account.subscription_active_until = Some("2000-01-01T00:00:00Z".into());
+            let tokens = serde_json::to_value(&account.tokens).unwrap();
+            let snapshot = parse_account_check_snapshot(
+                &json!({
+                    "accounts": {"target": {
+                        "account": {"account_id": "target", "plan_type": "free"},
+                        "entitlement": entitlement
+                    }}
+                }),
+                &account,
+            )
+            .unwrap();
+            assert!(snapshot.is_free_without_active_subscription());
+            super::apply_subscription_snapshot(&mut account, snapshot);
+            assert_eq!(account.plan_type.as_deref(), Some("free"));
+            assert!(account.subscription_active_until.is_none());
+            assert!(account.subscription_query_last_success_at.is_some());
+            assert!(account.subscription_query_last_error.is_none());
+            assert!(!account.requires_reauth);
+            assert_eq!(serde_json::to_value(&account.tokens).unwrap(), tokens);
+        }
+    }
+
+    #[test]
     fn account_check_fallback_prefers_default_then_paid() {
         let account = subscription_test_account();
         let default_snapshot = parse_account_check_snapshot(
@@ -2779,11 +2910,41 @@ mod reset_credit_outcome_tests {
             (r#"{"code":"nothing_to_reset"}"#, false),
             (r#"{"code":"no_credit"}"#, false),
         ] {
-            let outcome = parse_reset_credit_consume_outcome(body).unwrap();
-            assert_eq!(outcome.into_result().is_ok(), applied, "{body}");
+            let response = parse_reset_credit_consume_response(body).unwrap();
+            assert_eq!(response.outcome.into_result().is_ok(), applied, "{body}");
         }
         for body in ["", "{}", r#"{"code":"unknown"}"#, "<html>OK</html>"] {
-            assert!(parse_reset_credit_consume_outcome(body).is_err(), "{body}");
+            assert!(parse_reset_credit_consume_response(body).is_err(), "{body}");
         }
+    }
+
+    #[test]
+    fn reset_credit_receipt_uses_returned_card_id_without_requiring_optional_fields() {
+        let response = parse_reset_credit_consume_response(
+            r#"{"code":"reset","credit":{"id":"actual-card"},"windows_reset":2}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            response.receipt,
+            Some(ResetCreditReceipt {
+                credit_id: Some("actual-card".into()),
+                windows_reset: Some(2),
+            })
+        );
+        let legacy =
+            parse_reset_credit_consume_response(r#"{"code":"reset","credit":null}"#).unwrap();
+        assert_eq!(legacy.outcome, ResetCreditConsumeOutcome::Reset);
+        assert!(legacy.receipt.is_none());
+        let no_op = parse_reset_credit_consume_response(
+            r#"{"code":"nothing_to_reset","credit":{"id":"unused"},"windows_reset":0}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            no_op.receipt,
+            Some(ResetCreditReceipt {
+                credit_id: None,
+                windows_reset: Some(0)
+            })
+        );
     }
 }

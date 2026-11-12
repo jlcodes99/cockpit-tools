@@ -28,15 +28,12 @@ fn memory_path() -> Result<PathBuf, String> {
 }
 
 fn read_memory_from_path(path: &PathBuf) -> Result<UserMemory, String> {
-    if !path.exists() {
-        return Ok(UserMemory::default());
-    }
-    let raw =
-        std::fs::read_to_string(path).map_err(|error| format!("读取用户记忆失败: {error}"))?;
-    if raw.trim().is_empty() {
-        return Ok(UserMemory::default());
-    }
-    serde_json::from_str(&raw).or_else(|_| Ok(UserMemory::default()))
+    let raw = match std::fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(UserMemory::default()),
+        Err(error) => return Err(format!("读取用户记忆失败: {error}")),
+    };
+    serde_json::from_str(&raw).map_err(|error| format!("用户记忆格式无效，已保留原文件: {error}"))
 }
 
 fn write_memory_to_path(path: &PathBuf, memory: &UserMemory) -> Result<(), String> {
@@ -45,11 +42,36 @@ fn write_memory_to_path(path: &PathBuf, memory: &UserMemory) -> Result<(), Strin
     write_string_atomic(path, &raw)
 }
 
-pub fn load_user_memory() -> Result<UserMemory, String> {
+fn mutate_memory(edit: impl FnOnce(&mut UserMemory) -> bool) -> Result<UserMemory, String> {
     let _guard = MEMORY_LOCK
         .lock()
         .map_err(|_| "用户记忆锁已损坏".to_string())?;
-    read_memory_from_path(&memory_path()?)
+    let path = memory_path()?;
+    let mut memory = read_memory_from_path(&path)?;
+    if edit(&mut memory) {
+        write_memory_to_path(&path, &memory)?;
+    }
+    Ok(memory)
+}
+
+pub fn load_user_memory(legacy: Option<UserMemory>) -> Result<UserMemory, String> {
+    mutate_memory(|memory| legacy.is_some_and(|legacy| migrate_missing(memory, legacy)))
+}
+
+fn migrate_missing(memory: &mut UserMemory, legacy: UserMemory) -> bool {
+    let mut changed = false;
+    for (id, dismissed) in legacy.dismissed {
+        if dismissed && !id.trim().is_empty() && !memory.dismissed.contains_key(&id) {
+            memory.dismissed.insert(id, true);
+            changed = true;
+        }
+    }
+    for (id, items) in legacy.lists {
+        if !id.trim().is_empty() && !memory.lists.contains_key(&id) && !items.is_empty() {
+            changed |= apply_memory_list(memory, &id, items);
+        }
+    }
+    changed
 }
 
 pub fn mark_user_memory_dismissed(id: &str) -> Result<UserMemory, String> {
@@ -57,14 +79,7 @@ pub fn mark_user_memory_dismissed(id: &str) -> Result<UserMemory, String> {
     if id.is_empty() {
         return Err("记忆项不能为空".to_string());
     }
-    let _guard = MEMORY_LOCK
-        .lock()
-        .map_err(|_| "用户记忆锁已损坏".to_string())?;
-    let path = memory_path()?;
-    let mut memory = read_memory_from_path(&path)?;
-    memory.dismissed.insert(id.to_string(), true);
-    write_memory_to_path(&path, &memory)?;
-    Ok(memory)
+    mutate_memory(|memory| memory.dismissed.insert(id.to_string(), true) != Some(true))
 }
 
 fn sanitize_memory_list(items: Vec<String>) -> Vec<String> {
@@ -103,15 +118,7 @@ pub fn save_user_memory_list(id: &str, items: Vec<String>) -> Result<UserMemory,
     if id.is_empty() {
         return Err("记忆项不能为空".to_string());
     }
-    let _guard = MEMORY_LOCK
-        .lock()
-        .map_err(|_| "用户记忆锁已损坏".to_string())?;
-    let path = memory_path()?;
-    let mut memory = read_memory_from_path(&path)?;
-    if apply_memory_list(&mut memory, id, items) {
-        write_memory_to_path(&path, &memory)?;
-    }
-    Ok(memory)
+    mutate_memory(|memory| apply_memory_list(memory, id, items))
 }
 
 #[cfg(test)]
@@ -169,5 +176,31 @@ mod tests {
             memory.lists.get("codex.accounts.custom_sort"),
             Some(&vec!["b".to_string(), "c".to_string()])
         );
+    }
+
+    #[test]
+    fn legacy_memory_only_seeds_missing_entries() {
+        let mut memory = UserMemory {
+            dismissed: std::collections::BTreeMap::from([("kept".into(), false)]),
+            lists: std::collections::BTreeMap::from([
+                ("sorted".into(), vec!["new".into()]),
+                ("empty".into(), Vec::new()),
+            ]),
+        };
+        let legacy = UserMemory {
+            dismissed: std::collections::BTreeMap::from([("kept".into(), true), ("missing".into(), true)]),
+            lists: std::collections::BTreeMap::from([
+                ("sorted".into(), vec!["old".into()]),
+                ("empty".into(), vec!["old".into()]),
+                ("missing".into(), vec![" a ".into(), "a".into(), "b".into()]),
+            ]),
+        };
+        assert!(super::migrate_missing(&mut memory, legacy.clone()));
+        assert!(!super::migrate_missing(&mut memory, legacy));
+        assert_eq!(memory.lists["sorted"], ["new"]);
+        assert!(memory.lists["empty"].is_empty());
+        assert_eq!(memory.lists["missing"], ["a", "b"]);
+        assert!(!memory.dismissed["kept"]);
+        assert!(memory.dismissed["missing"]);
     }
 }

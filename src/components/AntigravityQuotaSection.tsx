@@ -4,6 +4,7 @@ import { formatResetTimeDisplay, getQuotaClass } from '../utils/account';
 
 interface Props {
   items: AgQuotaDisplayItem[];
+  modelItems?: AgQuotaDisplayItem[];
   isList?: boolean;
   isNeedsReauth?: boolean;
   t: TFunction;
@@ -14,19 +15,17 @@ const PAID_BUCKET_WINDOWS: ReadonlyArray<{ key: string; label: string }> = [
   { key: 'claude:weekly', label: 'Claude (Weekly)' },
   { key: 'gemini:5h', label: 'Gemini (5h)' },
   { key: 'gemini:weekly', label: 'Gemini (Weekly)' },
-  { key: 'argon:weekly', label: 'Gemini 4 Argon (Weekly)' },
 ];
 
 const FREE_BUCKET_WINDOWS: ReadonlyArray<{ key: string; label: string }> = [
   { key: 'claude:weekly', label: 'Claude (Weekly)' },
   { key: 'gemini:weekly', label: 'Gemini (Weekly)' },
-  { key: 'argon:weekly', label: 'Gemini 4 Argon (Weekly)' },
 ];
 
 const BUCKET_KEYS = new Set(PAID_BUCKET_WINDOWS.map((window) => window.key));
 
-export function AntigravityQuotaSection({ items, isNeedsReauth = false, t }: Props) {
-  if (items.length === 0) {
+export function AntigravityQuotaSection({ items, modelItems = [], isNeedsReauth = false, t }: Props) {
+  if (items.length === 0 && modelItems.length === 0) {
     return (
       <div className="quota-empty" style={{ gridColumn: '1 / -1', textAlign: 'center' }}>
         {t('overview.noQuotaData')}
@@ -90,17 +89,27 @@ export function AntigravityQuotaSection({ items, isNeedsReauth = false, t }: Pro
             : t('common.shared.quota.cachedRefreshFailed')}
         </div>
       )}
-      <div className="codex-quota-mini-list">
-        {hasBuckets &&
-          targetWindows.map((window) =>
-            renderBar(
-              window.key,
-              window.label,
-              items.find((item) => item.key === window.key),
-            ),
-          )}
-        {extraItems.map((item) => renderBar(item.key, item.label, item))}
-      </div>
+      {items.length > 0 && (
+        <div className="codex-quota-mini-list">
+          {hasBuckets &&
+            targetWindows.map((window) =>
+              renderBar(
+                window.key,
+                window.label,
+                items.find((item) => item.key === window.key),
+              ),
+            )}
+          {extraItems.map((item) => renderBar(item.key, item.label, item))}
+        </div>
+      )}
+      {modelItems.length > 0 && (
+        <details className="antigravity-model-quota-details">
+          <summary>{t('modals.quota.title')}</summary>
+          <div className="codex-quota-mini-list">
+            {modelItems.map((item) => renderBar(item.key, item.label, item))}
+          </div>
+        </details>
+      )}
     </>
   );
 }

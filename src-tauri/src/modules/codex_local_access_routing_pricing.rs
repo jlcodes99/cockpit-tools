@@ -150,7 +150,28 @@ fn resolve_subscription_expiry_ms(account: &CodexAccount) -> Option<i64> {
         .map(|parsed| parsed.timestamp_millis())
 }
 
+fn resolve_five_hour_reset_at(account: &CodexAccount, now: i64) -> Option<i64> {
+    let quota = account.quota.as_ref()?;
+    [
+        (
+            quota.hourly_window_present,
+            quota.hourly_window_minutes,
+            quota.hourly_reset_time,
+        ),
+        (
+            quota.weekly_window_present,
+            quota.weekly_window_minutes,
+            quota.weekly_reset_time,
+        ),
+    ]
+    .into_iter()
+    .filter(|(present, minutes, _)| *present != Some(false) && *minutes == Some(300))
+    .filter_map(|(_, _, reset)| reset.filter(|reset| *reset > now))
+    .min()
+}
+
 fn build_routing_candidates(ordered_account_ids: &[String]) -> Vec<RoutingCandidate> {
+    let now = chrono::Utc::now().timestamp();
     ordered_account_ids
         .iter()
         .map(|account_id| {
@@ -161,6 +182,9 @@ fn build_routing_candidates(ordered_account_ids: &[String]) -> Vec<RoutingCandid
                 plan_rank: account.as_ref().and_then(resolve_plan_rank),
                 remaining_quota: account.as_ref().and_then(resolve_remaining_quota),
                 subscription_expiry_ms: account.as_ref().and_then(resolve_subscription_expiry_ms),
+                five_hour_reset_at: account
+                    .as_ref()
+                    .and_then(|account| resolve_five_hour_reset_at(account, now)),
             }
         })
         .collect()
@@ -218,6 +242,11 @@ fn compare_routing_candidates(
         }
         CodexLocalAccessRoutingStrategy::ExpirySoonFirst => {
             compare_option_i64_asc(left.subscription_expiry_ms, right.subscription_expiry_ms)
+                .then_with(|| compare_option_desc(left.plan_rank, right.plan_rank))
+                .then_with(|| compare_option_desc(left.remaining_quota, right.remaining_quota))
+        }
+        CodexLocalAccessRoutingStrategy::FiveHourResetSoonFirst => {
+            compare_option_i64_asc(left.five_hour_reset_at, right.five_hour_reset_at)
                 .then_with(|| compare_option_desc(left.plan_rank, right.plan_rank))
                 .then_with(|| compare_option_desc(left.remaining_quota, right.remaining_quota))
         }
@@ -400,7 +429,11 @@ fn additional_rate_limit_allowed(entry: &Value) -> Option<bool> {
         .or_else(|| entry.get("allowed").and_then(Value::as_bool))
 }
 
-fn additional_rate_limit_matches_gpt_reserve(entry: &Value, object_key: Option<&str>) -> bool {
+fn additional_rate_limit_matches(
+    entry: &Value,
+    object_key: Option<&str>,
+    matches_name: impl Fn(&str) -> bool,
+) -> bool {
     [
         object_key,
         entry.get("limit_name").and_then(Value::as_str),
@@ -411,7 +444,28 @@ fn additional_rate_limit_matches_gpt_reserve(entry: &Value, object_key: Option<&
     ]
     .into_iter()
     .flatten()
-    .any(is_gpt_reserve_entitlement_name)
+    .any(matches_name)
+}
+
+fn quota_has_allowed_additional_rate_limit(
+    raw: &Value,
+    matches_name: impl Fn(&str) -> bool,
+) -> bool {
+    let Some(additional) = raw
+        .get("additional_rate_limits")
+        .or_else(|| raw.get("additionalRateLimits"))
+    else {
+        return false;
+    };
+    let allows = |entry: &Value, key| {
+        additional_rate_limit_matches(entry, key, &matches_name)
+            && additional_rate_limit_allowed(entry) == Some(true)
+    };
+    match additional {
+        Value::Array(entries) => entries.iter().any(|entry| allows(entry, None)),
+        Value::Object(entries) => entries.iter().any(|(key, entry)| allows(entry, Some(key))),
+        _ => false,
+    }
 }
 
 fn account_has_gpt_reserve_entitlement(account: &CodexAccount) -> bool {
@@ -435,24 +489,28 @@ fn account_has_gpt_reserve_entitlement(account: &CodexAccount) -> bool {
     {
         return false;
     }
-    let Some(additional) = raw
-        .get("additional_rate_limits")
-        .or_else(|| raw.get("additionalRateLimits"))
-    else {
-        return false;
-    };
+    quota_has_allowed_additional_rate_limit(raw, is_gpt_reserve_entitlement_name)
+}
 
-    match additional {
-        Value::Array(entries) => entries.iter().any(|entry| {
-            additional_rate_limit_matches_gpt_reserve(entry, None)
-                && additional_rate_limit_allowed(entry) == Some(true)
-        }),
-        Value::Object(entries) => entries.iter().any(|(name, entry)| {
-            additional_rate_limit_matches_gpt_reserve(entry, Some(name))
-                && additional_rate_limit_allowed(entry) == Some(true)
-        }),
-        _ => false,
-    }
+const CODEX_SPARK_MODEL_ID: &str = "gpt-5.3-codex-spark";
+
+fn native_is_spark_model(model: &str) -> bool {
+    model.trim().eq_ignore_ascii_case(CODEX_SPARK_MODEL_ID)
+}
+
+fn account_has_available_spark_quota(account: &CodexAccount) -> bool {
+    account
+        .quota
+        .as_ref()
+        .and_then(|quota| quota.raw_data.as_ref())
+        .is_some_and(|raw| {
+            quota_has_allowed_additional_rate_limit(raw, |name| {
+                matches!(
+                    normalize_quota_entitlement_key(name).as_str(),
+                    CODEX_SPARK_MODEL_ID | "codex-spark"
+                )
+            })
+        })
 }
 
 fn metered_features_in_quota_raw(raw: &Value) -> HashSet<String> {

@@ -166,6 +166,30 @@ test('completed login binds to the explicit source without joining or generating
   ctx.hook.unmount();
 });
 
+test('browser callback errors are shown once and allow a corrected manual callback', async () => {
+  const submitted: string[] = [];
+  const ctx = harness({
+    async pollChatGptPlanLogin() { return { status: 'pending', error: 'CHATGPT_PLAN_INVALID_CALLBACK' }; },
+    async submitChatGptPlanCallbackUrl(_loginId: string, callback: string) { submitted.push(callback); },
+  });
+  await settlePromises(); ctx.tree(); await settlePromises();
+  assert.equal(ctx.failures.message, 'chatgptPlan.error.callback');
+  assert.equal(ctx.failures.scrollKey, 1);
+  const nextPoll = [...ctx.timers.values()].find(({ delay }) => delay === 1500);
+  assert.ok(nextPoll);
+  nextPoll.fn();
+  await settlePromises();
+  assert.equal(ctx.failures.scrollKey, 1);
+  const field = ctx.tree().find((node) => node.type === 'input' && node.props.placeholder === key('callbackPlaceholder'))!;
+  field.props.onChange({ target: { value: 'http://127.0.0.1:12345/auth/callback' } });
+  ctx.button(key('submitCallback')).props.onClick();
+  await settlePromises();
+  assert.equal(submitted.length, 1);
+  assert.equal(ctx.failures.message, '');
+  assert.equal(ctx.calls.cancelled.length, 0);
+  ctx.hook.unmount();
+});
+
 test('binding does not depend on service membership or call service mutations', async () => {
   const ctx = harness({ setChatGptPlanServiceMode() { throw new Error('must not run'); } }, [bound]);
   ctx.button(key('verifyAndBind')).props.onClick();

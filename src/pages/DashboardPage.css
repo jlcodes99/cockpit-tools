@@ -6,6 +6,12 @@
   /* No specific height, flex parent handles it */
 }
 
+.dashboard-page > .page-tabs-row {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
 /* Reusing .page-heading from App.css, so .dashboard-header styles are removed/minimized */
 .date-display {
   font-size: 14px;
@@ -14,10 +20,13 @@
 }
 
 .dashboard-top-actions {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 10px;
+  max-width: 100%;
   position: relative;
   z-index: 2;
 }
@@ -27,6 +36,28 @@
   align-items: center;
   gap: 8px;
   z-index: 2;
+}
+
+.dashboard-all-accounts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 16px;
+}
+
+.dashboard-all-accounts-item {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-all-accounts-platform {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 /* Stats Row */

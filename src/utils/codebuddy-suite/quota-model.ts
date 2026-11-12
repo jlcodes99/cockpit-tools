@@ -391,9 +391,9 @@ export function getQuotaCategoryGroups(account: CodebuddySuiteAccountBase, t: (k
   const otherAgg = aggregate(otherItems);
 
   return [
-    { key: 'base', label: t('codebuddy.quotaCategory.base', '基础体验包'), ...baseAgg, items: baseItems, visible: baseAgg.unlimited || baseAgg.total > 0 },
-    { key: 'activity', label: t('codebuddy.quotaCategory.activity', '活动赠送包'), ...activityAgg, items: activityItems, visible: activityAgg.unlimited || activityAgg.total > 0 },
-    { key: 'extra', label: t('codebuddy.quotaCategory.extra', '加量包'), ...extraAgg, items: extraItems, visible: extraAgg.unlimited || extraAgg.total > 0 },
-    { key: 'other', label: t('codebuddy.quotaCategory.other', '其他'), ...otherAgg, items: otherItems, visible: otherAgg.unlimited || otherAgg.total > 0 },
+    { key: 'base', label: t('common.shared.quotaCategories.base'), ...baseAgg, items: baseItems, visible: baseAgg.unlimited || baseAgg.total > 0 },
+    { key: 'activity', label: t('common.shared.quotaCategories.activity'), ...activityAgg, items: activityItems, visible: activityAgg.unlimited || activityAgg.total > 0 },
+    { key: 'extra', label: t('common.shared.quotaCategories.extra'), ...extraAgg, items: extraItems, visible: extraAgg.unlimited || extraAgg.total > 0 },
+    { key: 'other', label: t('common.shared.quotaCategories.other'), ...otherAgg, items: otherItems, visible: otherAgg.unlimited || otherAgg.total > 0 },
   ];
 }

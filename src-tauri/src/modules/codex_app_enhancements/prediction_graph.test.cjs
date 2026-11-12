@@ -108,9 +108,9 @@ test('disabled setting performs no source discovery and no runtime activation', 
 });
 
 
-test('unsupported quota does not block prediction-only mode when Fast is disabled', async () => {
+test('bound OAuth predictions stay available when Fast is disabled and quota is unsupported', async () => {
   const {root} = setup();
-  root.__cockpitEnhancements.quotaCompat = true;
+  Object.assign(root.__cockpitEnhancements, { apiService: true, apiKeyAuthVerified: false, quotaCompat: true });
   root.__cockpitQuotaCompat.transform = () => ({ok: false, diagnostics: {reason: 'quota-contract-changed'}});
   const result = await root.__cockpitNativeFast.prepareDocument();
   assert.equal(result.ok, true);
@@ -119,6 +119,11 @@ test('unsupported quota does not block prediction-only mode when Fast is disable
   assert.equal(result.modules.length, 3);
   assert.ok(result.patchedSource.includes('cockpit-native-predictions-graph-v1'));
   assert.ok(!result.patchedSource.includes('__cockpitQuotaCompat'));
+  let installed;
+  root.__cockpitNativeFast.installModule = (_, __, modules) => { installed = modules; return {ok: true}; };
+  vm.runInNewContext(preloadSource, root);
+  assert.equal(root.__cockpitStartupPreload.ok, true);
+  assert.equal(installed.length, 3);
 });
 
 

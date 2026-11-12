@@ -45,7 +45,11 @@ pub(super) fn save_pending_model_catalog(
         return Err("当前实例不支持受管模型目录".to_string());
     }
     let models = if enabled {
-        modules::codex_account::normalize_experimental_model_definitions(models)?
+        let models = modules::codex_account::normalize_experimental_model_definitions_for_profile(
+            Some(profile), models,
+        )?;
+        modules::codex_account::validate_profile_reasoning_efforts(profile, &models)?;
+        models
     } else {
         models
     };

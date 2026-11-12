@@ -151,7 +151,7 @@ async fn context_rebuild_default_removed_a_full_history_and_mixed_a_b_continue_b
         assert_eq!(sent.len(), 2);
         assert_eq!(sent[1].account, "b");
         assert_input_exact(&sent[1], &original);
-        assert_ne!(identity(&sent[0]), identity(&sent[1]));
+        assert_eq!(identity(&sent[0]), identity(&sent[1]));
         let b_active = fixture.active().unwrap();
         assert_eq!(b_active.0, "b");
         let mut mixed = original["input"].as_array().unwrap().clone();
@@ -253,7 +253,7 @@ async fn context_rebuild_opaque_preexisting_uncached_history_replays_after_opt_i
     assert_eq!(sent.len(), 2);
     assert_eq!(sent[1].account, "b");
     assert_input_exact(&sent[1], &original);
-    assert_ne!(identity(&sent[0]), identity(&sent[1]));
+    assert_eq!(identity(&sent[0]), identity(&sent[1]));
     assert_eq!(original, unchanged);
     fixture.assert_owner("a-root", "a");
     for item in &a_output[1..] {
@@ -593,7 +593,7 @@ async fn context_rebuild_opaque_same_socket_opt_in_joins_observed_uncached_histo
         assert_eq!(sent[1].body["input"], json!(full));
         assert!(sent[1].body.get("previous_response_id").is_none());
         assert!(!sent[1].headers.contains_key("x-codex-turn-state"));
-        assert_ne!(identity(&sent[0]), identity(&sent[1]));
+        assert_eq!(identity(&sent[0]), identity(&sent[1]));
         assert_eq!(request, unchanged);
         fixture.assert_owner("a-root", "a");
         fixture.assert_owner("b-socket-replayed", "b");

@@ -284,7 +284,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
                       removeTag(tag);
                     }}
                     style={{ cursor: 'pointer' }}
-                    title={t('accounts.tagModal.editHint', '点击修改')}
+                    title={t('common.edit')}
                   >
                     {tag}
                   </span>
@@ -317,7 +317,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
                         className="tag-suggestion"
                         style={{ border: 'none', background: 'transparent', paddingRight: 4, margin: 0 }}
                         onClick={() => addTag(tag)}
-                        title={t('accounts.tagModal.addHint', '点击添加')}
+                        title={t('common.add')}
                       >
                         <Tag size={12} style={{ marginRight: 4 }} />
                         {tag}
@@ -377,7 +377,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
           {globalRenamingTag ? (
             <div className="tag-input-row">
               <div className="tag-global-rename-hint" style={{ fontSize: 12, color: 'var(--text-secondary, #6b7280)', marginBottom: 4 }}>
-                {t('accounts.tagModal.renamingGlobal', '正在全局重命名已存在标签所有账号记录：')} <b>{globalRenamingTag}</b>
+                {t('accounts.tagModal.renamingGlobal')} <b>{globalRenamingTag}</b>
               </div>
               <div className="tag-input-wrap">
                 <input
@@ -396,7 +396,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
                       setInputValue('');
                     }
                   }}
-                  placeholder={t('accounts.tagModal.renamePlaceholder', '输入新的标签名称')}
+                  placeholder={t('accounts.tagModal.renamePlaceholder')}
                   autoFocus
                 />
                 <button

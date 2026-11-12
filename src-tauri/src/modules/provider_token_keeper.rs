@@ -308,10 +308,10 @@ async fn refresh_due_codex_accounts() -> bool {
             continue;
         }
 
-        attempted_refreshes += 1;
         match codex_account::keepalive_managed_account(&account.id, "TokenKeeper 授权保活").await
         {
-            Ok(updated) => {
+            Ok(codex_account::CodexKeepaliveOutcome::Updated(updated)) => {
+                attempted_refreshes += 1;
                 clear_attempt_backoff(&key);
                 refreshed_any = true;
                 logger::log_info(&format!(
@@ -319,7 +319,19 @@ async fn refresh_due_codex_accounts() -> bool {
                     updated.id, updated.email
                 ));
             }
+            Ok(codex_account::CodexKeepaliveOutcome::Unchanged) => {
+                attempted_refreshes += 1;
+                clear_attempt_backoff(&key);
+            }
+            Ok(codex_account::CodexKeepaliveOutcome::DeferredToDefaultProfile) => {
+                clear_attempt_backoff(&key);
+                logger::log_info(&format!(
+                    "[TokenKeeper][Codex] 默认客户端持有同一刷新令牌，由官方客户端续期: account_id={}",
+                    account.id
+                ));
+            }
             Err(err) => {
+                attempted_refreshes += 1;
                 mark_attempt_failure(&key);
                 logger::log_warn(&format!(
                     "[TokenKeeper][Codex] Token 保活失败，进入退避: account_id={}, error={}",

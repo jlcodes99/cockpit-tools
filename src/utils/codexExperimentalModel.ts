@@ -35,6 +35,9 @@ export function getCodexExperimentalModelErrorMessage(
       '推理强度选项无效。',
     );
   }
+  if (message.includes('EXPERIMENTAL_MODEL_CATALOG_ULTRA_REASONING_INVALID')) {
+    return t('codex.experimentalModels.ultraReasoningInvalid');
+  }
   if (message.includes('EXPERIMENTAL_MODEL_CATALOG_CONTEXT_WINDOW_INVALID')) {
     return t(
       'codex.experimentalModelCatalog.models.validation.contextWindow',

@@ -651,7 +651,7 @@ fn failure_kind(kind: &str) -> bool {
             | "error"
     )
 }
-fn completed_response(event: &Value) -> bool {
+pub(super) fn completed_response(event: &Value) -> bool {
     let response = event.get("response").unwrap_or(event);
     response.get("status").and_then(Value::as_str) == Some("completed")
         && response
@@ -707,12 +707,6 @@ impl ResponseObservation {
             .filter(|usage| !usage.is_null())
         {
             self.usage = Some(usage.clone());
-        }
-        if let Some(tier) = event
-            .pointer("/response/service_tier")
-            .and_then(Value::as_str)
-        {
-            self.service_tier = Some(tier.to_string());
         }
         if let Some(value) = retry_after_event(event) {
             self.retry_after = Some(self.retry_after.map_or(value, |current| current.max(value)));
@@ -775,7 +769,14 @@ impl ResponseObservation {
             self.succeeded = terminal
                 .is_some_and(|kind| matches!(kind, "response.completed" | "response.done"))
                 && completed_response(event);
-            self.response = Some(event.get("response").unwrap_or(event).clone());
+            let response = event.get("response").unwrap_or(event);
+            // Created and in-progress events can echo a provisional tier.
+            self.service_tier = response
+                .get("service_tier")
+                .and_then(Value::as_str)
+                .filter(|tier| !tier.trim().is_empty())
+                .map(str::to_owned);
+            self.response = Some(response.clone());
             if !self.succeeded {
                 self.error = Some(
                     if model_unavailable {

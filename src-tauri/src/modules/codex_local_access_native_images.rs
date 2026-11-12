@@ -237,10 +237,24 @@ fn native_image_requested_model(
         .model
         .as_deref()
         .unwrap_or(&collection.image_generation_model);
+    native_image_model_for_public_name(
+        collection,
+        key,
+        requested,
+        request.responses_model.is_some() || request.model.is_none(),
+    )
+}
+
+fn native_image_model_for_public_name(
+    collection: &CodexLocalAccessCollection,
+    key: Option<&CodexLocalAccessApiKey>,
+    requested: &str,
+    unprefixed: bool,
+) -> Result<String, native_contract::ServiceError> {
     // Namespaces belong to the public top-level model. A server default or the
     // nested Responses image tool model remains an actual image model ID.
     let mut scoped_key = key.cloned();
-    if request.responses_model.is_some() || request.model.is_none() {
+    if unprefixed {
         if let Some(key) = scoped_key.as_mut() {
             key.model_prefix = None;
         }

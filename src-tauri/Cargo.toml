@@ -1,6 +1,6 @@
 [package]
 name = "cockpit-tools"
-version = "1.3.81"
+version = "1.3.82"
 description = "Cockpit Tools"
 authors = ["jlcodes"]
 license = "CC-BY-NC-SA-4.0"
@@ -55,7 +55,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "time"] }
 tracing-appender = "0.2"
 tracing-log = "0.2"
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.32", features = ["bundled", "backup"] }
 base64 = "0.22"
 minisign-verify = "0.2"
 tokio = { version = "1", features = ["full"] }
@@ -76,6 +76,7 @@ crypto_box = { version = "0.9.1", features = ["seal", "std"] }
 rsa = "0.9"
 serde_urlencoded = "0.7"
 url = "2.5"
+ipnet = "2"
 regex = "1"
 rand = "0.8"
 futures = "0.3"
@@ -105,11 +106,13 @@ sha1 = "0.10"
 [target.'cfg(target_os = "windows")'.dependencies]
 age = { version = "0.11", default-features = false }
 keyring = { version = "3.6", features = ["windows-native"] }
+socket2 = "0.6"
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_Storage_Packaging_Appx", "Win32_System_Com", "Win32_System_JobObjects", "Win32_System_LibraryLoader", "Win32_System_ProcessStatus", "Win32_System_Registry", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 junction.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 mac-notification-sys = "0.6"
+plist = "1.8"
 objc2 = "0.6.3"
 objc2-foundation = "0.3.2"
 objc2-app-kit = "0.3.2"

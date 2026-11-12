@@ -356,9 +356,14 @@
   transition: all 0.2s;
 }
 
-.settings-select:hover {
+.settings-select:hover:not(:disabled) {
   border-color: var(--border-light);
   background-color: var(--bg-secondary);
+}
+
+.settings-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .settings-select--input-mode {
@@ -420,6 +425,11 @@
 
 input:checked + .slider {
   background-color: var(--primary);
+}
+
+.switch input:focus-visible + .slider {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 input:checked + .slider:before {

@@ -1,0 +1,139 @@
+.quota-history-storage {
+  min-width: 0;
+  margin-block: 8px;
+}
+
+.quota-history-storage .quota-history-storage__entry {
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 9px;
+  font-size: 0.82rem;
+}
+
+.quota-history-storage__entry[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.quota-history-storage__body {
+  display: grid;
+  gap: 10px;
+  margin-block-start: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+
+.quota-history-storage__row,
+.quota-history-storage__check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.quota-history-storage__field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.quota-history-storage__field input {
+  appearance: none;
+  box-sizing: border-box;
+  width: 6em;
+  min-height: 32px;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.quota-history-storage__field input[type="date"] {
+  width: 11em;
+  max-width: 100%;
+}
+
+.quota-history-storage__check {
+  flex-wrap: nowrap;
+}
+
+.quota-history-storage__check input {
+  appearance: none;
+  display: grid;
+  place-content: center;
+  flex: 0 0 15px;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  border: 1px solid var(--text-secondary);
+  border-radius: 4px;
+  background: var(--bg-surface);
+}
+
+.quota-history-storage__check input:checked {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.quota-history-storage__check input:checked::after {
+  content: "";
+  width: 7px;
+  height: 4px;
+  border: solid #fff;
+  border-width: 0 0 2px 2px;
+  transform: translateY(-1px) rotate(-45deg);
+}
+
+.quota-history-storage input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.quota-history-storage input:disabled {
+  opacity: 0.55;
+}
+
+.quota-history-storage input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.quota-history-storage__row .quota-history-storage__select {
+  width: auto;
+  flex: 0 1 14rem;
+  min-width: 0;
+}
+
+.quota-history-storage__row .single-select-dropdown-trigger {
+  min-height: 34px;
+}
+
+.quota-history-storage__accounts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 8px;
+  max-height: 11rem;
+  overflow: auto;
+  padding: 4px;
+}
+
+.quota-history-storage__cleanup {
+  display: grid;
+  gap: 8px;
+  padding-block-start: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.quota-history-storage__body p {
+  margin: 0;
+}
+
+.quota-history-storage__error,
+.quota-history-storage__field [role="alert"] {
+  color: var(--danger);
+}

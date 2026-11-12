@@ -37,6 +37,7 @@ pub mod diagnostics;
 mod deadline;
 mod edge;
 mod events;
+pub(super) mod provider_test_stream;
 mod event_documents;
 pub(crate) mod execution;
 pub(crate) mod gpt_thinking;
@@ -58,6 +59,9 @@ mod multi_agent_lifecycle_http_tests;
 #[cfg(test)]
 mod tls_recovery_http_tests;
 mod native_chat;
+mod opencode_go;
+#[cfg(test)]
+mod opencode_go_http_tests;
 mod official_fallback;
 #[cfg(test)]
 mod official_fallback_http_tests;
@@ -74,9 +78,12 @@ mod encrypted_reasoning;
 mod request_metrics;
 mod response_wire;
 mod replay_wire;
+mod responses_custom_results;
 mod responses_host_results;
+mod responses_http_input;
 mod responses_tool_history;
 mod retry;
+mod reasoning_policy;
 mod server;
 mod token_count;
 mod transport;

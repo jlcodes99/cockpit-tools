@@ -1,14 +1,16 @@
 import { requestCodexOfficialAuthorizationManagement } from "../utils/codexAccountServiceNavigation";
 import { Fragment, useEffect, useRef, useState } from "react";
+import { CodexResetHistory } from '../components/codex/CodexResetHistory';
 import { createPortal } from "react-dom";
 import { useModalScrollLock } from "../hooks/useModalScrollLock";
+import { useCodexTagGroupLayout } from "../hooks/useCodexTagGroupLayout";
 import { useModalFocusTrap } from "../hooks/useModalFocusTrap";
 import "./CodexAccountDialogs.css";
 import { Plus, RefreshCw, Upload, Trash2, X, Globe, Power, Copy, Check, Play, Pause, RotateCw, CircleAlert, Info, Rows3, LayoutGrid, List, Search, ArrowDownWideNarrow, ArrowUp, ArrowDown, GripVertical, Clock, Tag, Eye, EyeOff, BookOpen, FileText, ExternalLink, FolderOpen, FolderPlus, LogOut, Terminal, ChevronDown } from "lucide-react";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
 import { TagEditModal } from "../components/TagEditModal";
 import { ExportJsonModal } from "../components/ExportJsonModal";
-import { ModalErrorMessage } from "../components/ModalErrorMessage";
+import { ModalErrorMessage, useModalErrorState } from "../components/ModalErrorMessage";
 import { PaginationControls } from "../components/PaginationControls";
 import { PlatformGroupTabs } from "../components/PlatformGroupTabs";
 import { AccountGroupModal, AddToGroupModal } from "../components/AccountGroupModal";
@@ -36,10 +38,14 @@ import { PELICAN_GROUPS_CHANGED } from "../components/codex/pelican/PelicanResul
 
 /** 渲染 CodexAccountsView 的 activeTab === "overview" 业务面板。 */
 export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
+  const { message: hideEntryError, scrollKey: hideEntryErrorScrollKey, set: setHideEntryError } =
+    useModalErrorState();
   const {
     accountNoteCopiedKey,
     accountNoteError,
     accountNoteErrorScrollKey,
+    accountNoteReadStatus,
+    retryAccountNoteRead,
     accountNoteFieldErrors,
     accountNoteMailPreview,
     accountNoteMailPreviewError,
@@ -318,6 +324,44 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     updateActiveAccountNoteForm,
     viewMode,
   } = props;
+  const tagLayout = useCodexTagGroupLayout(paginatedGroupedAccounts, availableTags);
+  const renderTagGroupHeader = (groupKey: string, totalCount: number, index: number) => {
+    const collapsed = tagLayout.isCollapsed(groupKey);
+    const moveUp = t("common.shared.sort.moveUp");
+    const moveDown = t("common.shared.sort.moveDown");
+    const before = tagLayout.visible[index - 1];
+    const after = tagLayout.visible[index + 1];
+    return (
+      <div
+        className={`tag-group-header${tagLayout.dropTarget === groupKey ? " tag-group-drop-target" : ""}`}
+        data-codex-tag-group={groupKey}
+      >
+        <span className="tag-group-grip" aria-hidden="true"
+          title={t("common.shared.sort.dragToReorder")}
+          onPointerDown={(event) => tagLayout.startDrag(event, groupKey)}
+          onPointerMove={tagLayout.dragOver}
+          onPointerUp={tagLayout.drop}
+          onPointerCancel={tagLayout.endDrag}
+          onLostPointerCapture={tagLayout.endDrag}>
+          <GripVertical size={15} />
+        </span>
+        <button type="button" className="btn btn-secondary tag-group-toggle"
+          aria-expanded={!collapsed} onClick={() => tagLayout.toggle(groupKey)}>
+          <ChevronDown size={15} className={collapsed ? "tag-group-chevron-collapsed" : undefined} aria-hidden="true" />
+          <span className="tag-group-title">{resolveGroupLabel(groupKey)}</span>
+          <span className="tag-group-count">{totalCount}</span>
+        </button>
+        <button type="button" className="btn btn-icon" title={moveUp} aria-label={moveUp}
+          disabled={!before} onClick={() => before && tagLayout.move(groupKey, before.groupKey)}>
+          <ArrowUp size={14} aria-hidden="true" />
+        </button>
+        <button type="button" className="btn btn-icon" title={moveDown} aria-label={moveDown}
+          disabled={!after} onClick={() => after && tagLayout.move(groupKey, after.groupKey)}>
+          <ArrowDown size={14} aria-hidden="true" />
+        </button>
+      </div>
+    );
+  };
   const noteMfaInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!activeAccountNoteMode || !accountNoteFieldErrors.twoFactorSecret) return;
@@ -600,7 +644,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                   <>
                     <span className="codex-overview-selected-count">
                       {t(
-                        "codex.apiService.customRoutingSelected",
+                        "codex.localAccess.customRoutingSelected",
                         "已选 {{count}}",
                       ).replace("{{count}}", String(selected.size))}
                     </span>
@@ -951,6 +995,13 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                     </div>
                   </div>
                 )}
+              {groupByTag && tagLayout.visible.length > 0 && (
+                <div className="tag-group-toolbar">
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={tagLayout.toggleAll}>
+                    {t(tagLayout.allCollapsed ? "common.expandAll" : "common.collapseAll")}
+                  </button>
+                </div>
+              )}
               {overviewLayoutMode === "compact" ? (
                 <>
                   {inlineFolderCards && (
@@ -960,20 +1011,13 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                   )}
                   {groupByTag ? (
                     <div className="tag-group-list">
-                      {paginatedGroupedAccounts.map(
-                        ({ groupKey, items, totalCount }) => (
+                      {tagLayout.visible.map(
+                        ({ groupKey, items, totalCount }, index) => (
                           <div key={groupKey} className="tag-group-section">
-                            <div className="tag-group-header">
-                              <span className="tag-group-title">
-                                {resolveGroupLabel(groupKey)}
-                              </span>
-                              <span className="tag-group-count">
-                                {totalCount}
-                              </span>
-                            </div>
-                            <div className="codex-compact-list">
+                            {renderTagGroupHeader(groupKey, totalCount, index)}
+                            {!tagLayout.isCollapsed(groupKey) && <div className="codex-compact-list">
                               {renderCompactRows(items, groupKey)}
-                            </div>
+                            </div>}
                           </div>
                         ),
                       )}
@@ -1020,20 +1064,13 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                         </div>
                       )}
                       <div className="tag-group-list">
-                        {paginatedGroupedAccounts.map(
-                          ({ groupKey, items, totalCount }) => (
+                        {tagLayout.visible.map(
+                          ({ groupKey, items, totalCount }, index) => (
                             <div key={groupKey} className="tag-group-section">
-                              <div className="tag-group-header">
-                                <span className="tag-group-title">
-                                  {resolveGroupLabel(groupKey)}
-                                </span>
-                                <span className="tag-group-count">
-                                  {totalCount}
-                                </span>
-                              </div>
-                              <div className="tag-group-grid codex-accounts-grid">
+                              {renderTagGroupHeader(groupKey, totalCount, index)}
+                              {!tagLayout.isCollapsed(groupKey) && <div className="tag-group-grid codex-accounts-grid">
                                 {renderGridCards(items, groupKey)}
-                              </div>
+                              </div>}
                             </div>
                           ),
                         )}
@@ -1083,22 +1120,15 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                         </tr>
                       </thead>
                       <tbody>
-                        {paginatedGroupedAccounts.map(
-                          ({ groupKey, items, totalCount }) => (
+                        {tagLayout.visible.map(
+                          ({ groupKey, items, totalCount }, index) => (
                             <Fragment key={groupKey}>
                               <tr className="tag-group-row">
                                 <td colSpan={6}>
-                                  <div className="tag-group-header">
-                                    <span className="tag-group-title">
-                                      {resolveGroupLabel(groupKey)}
-                                    </span>
-                                    <span className="tag-group-count">
-                                      {totalCount}
-                                    </span>
-                                  </div>
+                                  {renderTagGroupHeader(groupKey, totalCount, index)}
                                 </td>
                               </tr>
-                              {renderTableRows(items, groupKey)}
+                              {!tagLayout.isCollapsed(groupKey) && renderTableRows(items, groupKey)}
                             </Fragment>
                           ),
                         )}
@@ -1358,13 +1388,10 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                 <div className="modal-header">
                   <div>
                     <h2>
-                      {t("codex.sort.customModalTitle", "自定义账号排序")}
+                      {t("common.shared.sort.customModalTitle")}
                     </h2>
                     <p className="codex-custom-sort-modal-desc">
-                      {t(
-                        "codex.sort.customModalDesc",
-                        "拖动账号或使用上下按钮调整展示顺序。",
-                      )}
+                      {t("common.shared.sort.customModalDesc")}
                     </p>
                   </div>
                   <button
@@ -1429,14 +1456,8 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                               onMouseDown={(event) =>
                                 handleCustomSortDragStart(event, account.id)
                               }
-                              title={t(
-                                "codex.sort.customDragHandle",
-                                "拖拽排序",
-                              )}
-                              aria-label={t(
-                                "codex.sort.customDragHandle",
-                                "拖拽排序",
-                              )}
+                              title={t("common.shared.sort.dragToReorder")}
+                              aria-label={t("common.shared.sort.dragToReorder")}
                             >
                               <GripVertical size={16} />
                             </button>
@@ -1496,8 +1517,8 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                                 moveCustomSortAccount(account.id, "up")
                               }
                               disabled={index === 0}
-                              title={t("codex.sort.customMoveUp", "上移")}
-                              aria-label={t("codex.sort.customMoveUp", "上移")}
+                              title={t("common.shared.sort.moveUp")}
+                              aria-label={t("common.shared.sort.moveUp")}
                             >
                               <ArrowUp size={14} />
                             </button>
@@ -1508,11 +1529,8 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                                 moveCustomSortAccount(account.id, "down")
                               }
                               disabled={index === customSortAccounts.length - 1}
-                              title={t("codex.sort.customMoveDown", "下移")}
-                              aria-label={t(
-                                "codex.sort.customMoveDown",
-                                "下移",
-                              )}
+                              title={t("common.shared.sort.moveDown")}
+                              aria-label={t("common.shared.sort.moveDown")}
                             >
                               <ArrowDown size={14} />
                             </button>
@@ -1528,7 +1546,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                     onClick={resetCustomSortOrder}
                   >
                     <RotateCw size={14} />
-                    {t("codex.sort.customReset", "重置自定义顺序")}
+                    {t("common.shared.sort.customReset")}
                   </button>
                   <button
                     className="btn btn-primary"
@@ -1730,6 +1748,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                     className="modal-close"
                     onClick={() => {
                       if (localAccessHideSubmitting) return;
+                      setHideEntryError(null);
                       setShowLocalAccessHideConfirm(false);
                     }}
                     aria-label={t("common.close", "关闭")}
@@ -1774,24 +1793,28 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                       </span>
                     </div>
                   </div>
+                  <ModalErrorMessage message={hideEntryError} scrollKey={hideEntryErrorScrollKey} />
                 </div>
                 <div className="modal-footer">
                   <button
                     className="btn btn-secondary"
-                    onClick={() => setShowLocalAccessHideConfirm(false)}
+                    onClick={() => {
+                      setHideEntryError(null);
+                      setShowLocalAccessHideConfirm(false);
+                    }}
                     disabled={localAccessHideSubmitting}
                   >
-                    {t("common.cancel", "取消")}
+                    {props.localAccessEntryVisible ? t("common.cancel") : t("common.close")}
                   </button>
-                  <button
+                  {props.localAccessEntryVisible && <button
                     className="btn btn-danger"
-                    onClick={() => void confirmHideLocalAccessEntry()}
+                    onClick={() => void confirmHideLocalAccessEntry(setHideEntryError)}
                     disabled={localAccessHideSubmitting}
                   >
                     {localAccessHideSubmitting
                       ? t("common.processing", "处理中...")
                       : t("common.confirm", "确认")}
-                  </button>
+                  </button>}
                 </div>
               </div>
             </div>
@@ -1953,7 +1976,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                   )}
                   {!isCodexWebSessionAccount(resetCreditConfirmAccount) && <CodexResetAutomationSection accountId={resetCreditConfirmAccount.id}
                     disabled={isResetCreditConfirmSubmitting} onSettings={() => setResetAutomationOpen(true)} />}
-                  <div className="codex-reset-credit-confirm-details">
+                  <CodexResetHistory key={resetCreditConfirmAccount.id} accountId={resetCreditConfirmAccount.id}>
                     <div className="codex-reset-credit-confirm-details-title">
                       {t("codex.quota.resetCreditDetailsTitle", "重置次数明细")}
                     </div>
@@ -1994,7 +2017,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                         {t("codex.quota.resetCreditNoRecords", "暂无重置记录")}
                       </div>
                     )}
-                  </div>
+                  </CodexResetHistory>
                   <ModalErrorMessage
                     message={resetCreditConfirmError}
                     scrollKey={resetCreditConfirmErrorScrollKey}
@@ -2212,6 +2235,8 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                       message={accountNoteError}
                       scrollKey={accountNoteErrorScrollKey}
                     />
+                    {accountNoteReadStatus === 'loading' && <p role="status">{t('common.loading')}</p>}
+                    {accountNoteReadStatus === 'ready' && <>
                     <p className="codex-account-note-desc">
                       {t("codex.accountNote.desc", {
                         account: maskAccountText(activeAccountNoteDisplayName),
@@ -2870,6 +2895,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                         rows={4}
                       />
                     </label>
+                    </>}
                   </div>
                   <div className="modal-footer">
                     <button
@@ -2881,12 +2907,12 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                     </button>
                     <button
                       className="btn btn-primary"
-                      onClick={() => void handleSubmitAccountNote()}
-                      disabled={activeAccountNoteSaving}
+                      onClick={accountNoteReadStatus === 'failed' ? retryAccountNoteRead : () => void handleSubmitAccountNote()}
+                      disabled={activeAccountNoteSaving || accountNoteReadStatus === 'loading'}
                     >
                       {activeAccountNoteSaving
                         ? t("common.saving", "保存中...")
-                        : t("common.save", "保存")}
+                        : accountNoteReadStatus === 'failed' ? t('common.retry') : t("common.save", "保存")}
                     </button>
                   </div>
                 </div>

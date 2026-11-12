@@ -27,7 +27,7 @@ function harness(event: Record<string, unknown>, options: { detail?: CodexLocalA
   const hook = loadHookModule(new URL('./CodexRequestDetailModal.tsx', import.meta.url), {
     'react-dom': { createPortal: (content: unknown) => content },
     'react-i18next': { useTranslation: () => ({ t }) },
-    'lucide-react': Object.fromEntries(['Activity', 'CheckCircle2', 'ChevronDown', 'Clock3', 'Copy', 'FileJson', 'Gauge', 'Info', 'RefreshCw', 'Route', 'X', 'XCircle'].map((name) => [name, name])),
+    'lucide-react': Object.fromEntries(['Activity', 'CheckCircle2', 'ChevronDown', 'CircleAlert', 'Clock3', 'Copy', 'FileJson', 'Gauge', 'Info', 'RefreshCw', 'Route', 'X', 'XCircle'].map((name) => [name, name])),
     '../../services/codexLocalAccessService': { getCodexLocalAccessRequestDetail: async () => options.detail ?? null },
     '../../utils/codexRequestDiagnostics': diagnostics,
     '../../hooks/useEscClose': { useEscCloseTopmost: () => {} },
@@ -70,13 +70,12 @@ test('an identical error code does not turn unknown history or a successful tool
   success.unmount();
 });
 
-test('request details retain priority and raw default separately even without request-body recording', async () => {
+test('request details show the requested speed even when the upstream reports default', async () => {
   const hook = harness({ requestedServiceTier: 'priority', responseServiceTier: 'default', serviceTier: 'standard' });
   await settlePromises();
   const content = text(hook.flush());
   assert.match(content, /requestedTier:codex.speed.fast/);
-  assert.match(content, /responseTier:default/);
-  assert.match(content, /serviceTierHint/);
+  assert.doesNotMatch(content, /responseTier:|serviceTierHint/);
   assert.equal(content.includes('codex.speed.standard'), false);
   assert.equal(content.includes('legacyTier:'), false);
   hook.unmount();
@@ -97,6 +96,42 @@ function detail(overrides: Partial<CodexLocalAccessRequestDetail> = {}): CodexLo
 function attempt(sequence: number, overrides: Partial<CodexLocalAccessRequestDetail['attempts'][number]> = {}) {
   return { sequence, accountId:sequence===1?'a':'b', modelId:'m', transport:sequence===1?'http':'websocket', startedAtMs:1, latencyMs:1, success:true, ...overrides };
 }
+
+test('image diagnostics show the requested and sent image models, driver, and upstream HTTP status', async () => {
+  const hook = harness({ success: false }, { detail: detail({ attempts: [
+    attempt(1, { status: 502, success: false, failurePhase: 'upstream_response', imageRequest: {
+      requestedModel: 'gpt-image-2', upstreamModel: 'gpt-image-2.5-flare',
+      responsesModel: 'gpt-5.6-luna', upstreamStatus: 200,
+    } }),
+    attempt(2, { status: 200, imageRequest: { upstreamModel: 'gpt-image-2.6-flare', upstreamStatus: 200 } }),
+    attempt(3, { modelId: 'older-chat-model' }),
+  ] }) });
+  await settlePromises();
+  const tree = hook.flush();
+  const list = nodes(tree, (node) => node.type === 'ol' && node.props.className === 'codex-request-attempts')[0];
+  const entries = nodes(list, (node) => node.type === 'li');
+  assert.match(text(entries[0]), /clientModel.*gpt-image-2.*upstreamModel.*gpt-image-2.5-flare.*imageGenerationMainModel.label.*gpt-5.6-luna.*upstream_response.*HTTP 200.*HTTP 502/s);
+  assert.match(text(entries[1]), /upstreamModel.*gpt-image-2.6-flare/s);
+  assert.doesNotMatch(text(entries[1]), /clientModel|imageGenerationMainModel.label/);
+  assert.match(text(entries[2]), /older-chat-model/);
+  hook.unmount();
+});
+
+test('reports upstream model differences only on attempts with explicit differing evidence', async () => {
+  const hook = harness({ success: true }, { detail: detail({ attempts: [
+    attempt(1, { modelId: 'gpt-6-astra', responseModel: 'gpt-5.5-mini' }),
+    attempt(2, { modelId: 'gpt-6-astra', responseModel: 'gpt-6-astra' }),
+    attempt(3, { modelId: 'gpt-6-astra' }),
+  ] }) });
+  await settlePromises();
+  const list = nodes(hook.flush(), (node) => node.type === 'ol' && node.props.className === 'codex-request-attempts')[0];
+  const entries = nodes(list, (node) => node.type === 'li');
+  assert.match(text(entries[0]), /gpt-6-astra.*responseModel.*gpt-5.5-mini.*responseModelDiffers/s);
+  assert.match(text(entries[1]), /responseModel.*gpt-6-astra/s);
+  assert.doesNotMatch(text(entries[1]), /responseModelDiffers/);
+  assert.doesNotMatch(text(entries[2]), /responseModel/);
+  hook.unmount();
+});
 
 test('official rejection and same-account local fallback retain both attempts, causes and upstream request IDs without bodies', async () => {
   for (const success of [true, false]) {
@@ -324,14 +359,12 @@ test('identity layout wraps complete long values without changing modal sizing o
   for (const part of ['header','footer']) assert.match(modal,new RegExp(`\\.codex-request-detail-modal \\.modal-${part}\\s*\\{[^}]*flex:\\s*0 0 auto`));
 });
 
-test('legacy request details show unknown request/response sources instead of claiming standard processing', async () => {
+test('legacy request details leave the requested tier unspecified when only a mixed tier was recorded', async () => {
   const hook = harness({ serviceTier: 'standard' });
   await settlePromises();
   const content = text(hook.flush());
   assert.match(content, /requestedTier:—/);
-  assert.match(content, /responseTier:—/);
-  assert.match(content, /legacyTier:standard/);
-  assert.match(content, /legacyTierHint/);
+  assert.doesNotMatch(content, /responseTier:|legacyTier/);
   assert.equal(content.includes('codex.speed.standard'), false);
   hook.unmount();
 });
@@ -353,7 +386,7 @@ test('request details distinguish the final route and individual fallback attemp
 });
 
 
-test('official adjustment distinguishes original choice, default send and unknown response tier', async () => {
+test('official adjustment shows the original choice and the standard tier sent upstream', async () => {
   const adjustment = { requestedTier: 'priority', sentTier: 'default', reason: 'official_default_only' } as const;
   const hook = harness({ requestedServiceTier: 'auto', responseServiceTier: null, serviceTierAdaptation: adjustment }, {
     detail: detail({ attempts: [attempt(1, { authorizationRoute: 'official', serviceTierAdaptation: adjustment, status: 200 })] }),
@@ -362,7 +395,7 @@ test('official adjustment distinguishes original choice, default send and unknow
   const content = text(hook.flush());
   assert.match(content, /originalTier:codex.speed.fast/);
   assert.match(content, /sentTier:codex.speed.standard/);
-  assert.match(content, /responseTier:—/);
+  assert.doesNotMatch(content, /responseTier:/);
   assert.match(content, /officialDefaultSpeed/);
   assert.doesNotMatch(content, /authorizationFallback.title|requestLogFailed/);
   hook.unmount();

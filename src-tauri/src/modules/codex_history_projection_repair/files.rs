@@ -14,6 +14,7 @@ const MAX_CHAIN_DEPTH: usize = 128;
 #[derive(Debug)]
 pub(super) enum SourceError {
     Missing(String),
+    DuplicateOrdinal { source_id: String, ordinal: u64 },
     Invalid(String),
 }
 
@@ -153,7 +154,7 @@ fn physical_id(path: &Path) -> Option<String> {
     file_ids(path).map(|(_, physical)| physical)
 }
 
-fn file_ids(path: &Path) -> Option<(String, String)> {
+pub(crate) fn file_ids(path: &Path) -> Option<(String, String)> {
     let name = path.file_name()?.to_str()?;
     let name = name.strip_suffix(".zst").unwrap_or(name);
     let core = name.strip_prefix("rollout-")?.strip_suffix(".jsonl")?;
@@ -380,7 +381,7 @@ fn next_record<T: DeserializeOwned, R: Read, F: FnMut(&[u8]) -> io::Result<()>>(
     }
 }
 
-fn read(path: &Path, budget: &Budget) -> Result<Evidence, String> {
+fn read(path: &Path, budget: &Budget) -> Result<Evidence, SourceError> {
     let before = stamp(path)?;
     let hash = digest(path, budget)?;
     let file = fs::File::open(path).map_err(|e| error("IO", e))?;
@@ -399,13 +400,12 @@ fn read(path: &Path, budget: &Budget) -> Result<Evidence, String> {
         budget.check().map_err(io::Error::other)
     });
     let Some(header) = next_record::<Header, _, _>(&mut records, budget)? else {
-        return Err(error("UNSAFE_HISTORY", "rollout contains no ordinal evidence"));
+        return Err(error("UNSAFE_HISTORY", "rollout contains no ordinal evidence").into());
     };
     if header.kind != "session_meta" {
-        return Err(error("UNSAFE_HISTORY", "rollout has no initial session metadata"));
+        return Err(error("UNSAFE_HISTORY", "rollout has no initial session metadata").into());
     }
-    let expected_id = file_ids(path)
-        .map(|(logical, _)| logical)
+    let (expected_id, physical_id) = file_ids(path)
         .ok_or_else(|| error("UNSAFE_PATH", "noncanonical rollout filename"))?;
     let payload = header.payload.0;
     let metadata_id = uuid::Uuid::parse_str(&payload.id)
@@ -414,7 +414,7 @@ fn read(path: &Path, budget: &Budget) -> Result<Evidence, String> {
         return Err(error(
             "UNSAFE_HISTORY",
             "rollout filename and session metadata disagree",
-        ));
+        ).into());
     }
     let base = payload.history_base.map(|Object(value)| {
         let id = uuid::Uuid::parse_str(&value.thread_id)
@@ -442,17 +442,23 @@ fn read(path: &Path, budget: &Budget) -> Result<Evidence, String> {
             }
         };
         if next != expected {
-            return Err(error("MISSING_RECORDS", "rollout ordinals are not contiguous"));
+            if expected > initial_ordinal && next == expected - 1 {
+                return Err(SourceError::DuplicateOrdinal {
+                    source_id: physical_id,
+                    ordinal: next,
+                });
+            }
+            return Err(error("MISSING_RECORDS", "rollout ordinals are not contiguous").into());
         }
         expected = next
             .checked_add(1)
             .ok_or_else(|| error("UNSAFE_HISTORY", "rollout ordinal overflow"))?;
     }
     if expected == initial_ordinal {
-        return Err(error("UNSAFE_HISTORY", "rollout contains no ordinal evidence"));
+        return Err(error("UNSAFE_HISTORY", "rollout contains no ordinal evidence").into());
     }
     if stamp(path)? != before {
-        return Err(error("CHANGED", "rollout changed while scanning"));
+        return Err(error("CHANGED", "rollout changed while scanning").into());
     }
     Ok(Evidence {
         path: path.to_path_buf(),

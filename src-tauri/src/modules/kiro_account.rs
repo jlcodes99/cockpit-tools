@@ -78,7 +78,8 @@ fn get_accounts_index_path() -> Result<PathBuf, String> {
 }
 
 pub fn accounts_index_path_string() -> Result<String, String> {
-    Ok(get_accounts_index_path()?.to_string_lossy().to_string())
+    Ok(crate::modules::provider_account_index::storage_path::<KiroAccountIndex>(&get_accounts_index_path()?)?
+        .to_string_lossy().into_owned())
 }
 
 fn normalize_account_id(account_id: &str) -> Result<String, String> {
@@ -141,22 +142,32 @@ pub fn load_account(account_id: &str) -> Option<KiroAccount> {
 
 fn save_account_file(account: &KiroAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
-    crate::modules::account_query_identity::invalidate_before_write(
-        &get_accounts_index_path()?,
-        &account.id,
-        &query_identity(account),
-    )?;
     crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "kiro", account)
         .map_err(|e| format!("保存账号失败: {}", e))
 }
 
+fn save_account_file_indexed(account: &KiroAccount, index: &mut KiroAccountIndex) -> Result<(), String> {
+    if let Some(summary) = index.accounts.iter_mut().find(|row| row.id == account.id) {
+        if summary.query_identity.as_ref().is_some_and(|previous| previous != &query_identity(account)) {
+            summary.query_identity = None;
+            index.identity_revision = index.identity_revision.wrapping_add(1);
+            index.identity_maintenance_version = 0;
+            save_account_index(index)?;
+        }
+    }
+    save_account_file(account)
+}
+
+
 // Record credential-switch success separately from refresh activity.
 pub fn touch_last_used(account_id: &str) -> Result<(), String> {
+    let _lock = KIRO_ACCOUNT_INDEX_LOCK.lock().map_err(|_| "获取账号写入锁失败")?;
+    let _storage_lock = index_store()?.lock_writes()?;
     let mut account = load_account(account_id)
         .ok_or_else(|| format!("Kiro account not found: {}", account_id))?;
     account.last_switched_at = Some(now_ts());
-    save_account_file(&account)?;
-    Ok(())
+    let mut index = load_account_index_checked()?;
+    save_account_file_indexed(&account, &mut index)
 }
 
 fn delete_account_file(account_id: &str) -> Result<(), String> {
@@ -168,101 +179,31 @@ fn delete_account_file(account_id: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn index_store() -> Result<crate::modules::antigravity_account_index_store::IndexStore<KiroAccountIndex>, String> {
+    crate::modules::provider_account_index::store(&get_accounts_index_path()?)
+}
+
 fn load_account_index() -> KiroAccountIndex {
-    let path = match get_accounts_index_path() {
-        Ok(p) => p,
-        Err(_) => return KiroAccountIndex::new(),
-    };
-
-    if !path.exists() {
-        return repair_account_index_from_details("索引文件不存在")
-            .unwrap_or_else(KiroAccountIndex::new);
-    }
-
-    match fs::read_to_string(&path) {
-        Ok(content) if content.trim().is_empty() => {
-            repair_account_index_from_details("索引文件为空").unwrap_or_else(KiroAccountIndex::new)
-        }
-        Ok(content) => match crate::modules::atomic_write::parse_json_with_auto_restore::<
-            KiroAccountIndex,
-        >(&path, &content)
-        {
-            Ok(index) if !index.accounts.is_empty() => index,
-            Ok(_) => repair_account_index_from_details("索引账号列表为空")
-                .unwrap_or_else(KiroAccountIndex::new),
-            Err(err) => {
-                logger::log_warn(&format!(
-                    "[Kiro Account] 账号索引解析失败，尝试按详情文件自动修复: path={}, error={}",
-                    path.display(),
-                    err
-                ));
-                repair_account_index_from_details("索引文件损坏")
-                    .unwrap_or_else(KiroAccountIndex::new)
-            }
-        },
-        Err(_) => KiroAccountIndex::new(),
-    }
+    load_account_index_checked().unwrap_or_else(|error| {
+        logger::log_warn(&format!("[Kiro Account] {error}"));
+        KiroAccountIndex::new()
+    })
 }
 
 fn load_account_index_checked() -> Result<KiroAccountIndex, String> {
-    let path = get_accounts_index_path()?;
-    if !path.exists() {
-        if let Some(index) = repair_account_index_from_details("索引文件不存在") {
-            return Ok(index);
-        }
-        return Ok(KiroAccountIndex::new());
-    }
-
-    let content = match fs::read_to_string(&path) {
-        Ok(content) => content,
-        Err(err) => {
-            if let Some(index) = repair_account_index_from_details("索引文件读取失败") {
-                return Ok(index);
-            }
-            return Err(format!("读取账号索引失败: {}", err));
-        }
-    };
-
-    if content.trim().is_empty() {
-        if let Some(index) = repair_account_index_from_details("索引文件为空") {
-            return Ok(index);
-        }
-        return Ok(KiroAccountIndex::new());
-    }
-
-    match crate::modules::atomic_write::parse_json_with_auto_restore::<KiroAccountIndex>(
-        &path, &content,
-    ) {
-        Ok(index) if !index.accounts.is_empty() => Ok(index),
-        Ok(index) => {
-            if let Some(repaired) = repair_account_index_from_details("索引账号列表为空") {
-                return Ok(repaired);
-            }
-            Ok(index)
-        }
-        Err(err) => {
-            if let Some(index) = repair_account_index_from_details("索引文件损坏") {
-                return Ok(index);
-            }
-            Err(crate::error::file_corrupted_error(
-                ACCOUNTS_INDEX_FILE,
-                &path.to_string_lossy(),
-                &err.to_string(),
-            ))
-        }
-    }
+    crate::modules::provider_account_index::checked(
+        &get_accounts_index_path()?,
+        crate::modules::provider_index_maintenance::schedule,
+        repair_account_index_from_details,
+        |index| index.accounts.is_empty(),
+    )
 }
 
 fn save_account_index(index: &KiroAccountIndex) -> Result<(), String> {
-    let path = get_accounts_index_path()?;
-    let content =
-        serde_json::to_string_pretty(index).map_err(|e| format!("序列化账号索引失败: {}", e))?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
-        .map_err(|e| format!("写入账号索引失败: {}", e))
+    index_store()?.replace(index)
 }
 
 fn repair_account_index_from_details(reason: &str) -> Option<KiroAccountIndex> {
-    let index_path = get_accounts_index_path().ok()?;
     let accounts_dir = get_accounts_dir().ok()?;
     let mut accounts = crate::modules::account_index_repair::load_accounts_from_details(
         &accounts_dir,
@@ -284,35 +225,14 @@ fn repair_account_index_from_details(reason: &str) -> Option<KiroAccountIndex> {
     let mut index = KiroAccountIndex::new();
     index.accounts = accounts.iter().map(|account| account.summary()).collect();
 
-    let backup_path = crate::modules::account_index_repair::backup_existing_index(&index_path)
-        .unwrap_or_else(|err| {
-            logger::log_warn(&format!(
-                "[Kiro Account] 自动修复前备份索引失败，继续尝试重建: path={}, error={}",
-                index_path.display(),
-                err
-            ));
-            None
-        });
-
-    if let Err(err) = save_account_index(&index) {
-        logger::log_warn(&format!(
-            "[Kiro Account] 自动修复索引保存失败，将以内存结果继续运行: reason={}, recovered_accounts={}, error={}",
-            reason,
-            index.accounts.len(),
-            err
-        ));
+    if let Err(error) = save_account_index(&index) {
+        logger::log_warn(&format!("[Kiro Account] 保存恢复索引失败: reason={reason}, error={error}"));
+        return None;
     }
-
-    logger::log_warn(&format!(
-        "[Kiro Account] 检测到账号索引异常，已根据详情文件自动重建: reason={}, recovered_accounts={}, backup_path={}",
-        reason,
-        index.accounts.len(),
-        backup_path
-            .as_ref()
-            .map(|path| path.display().to_string())
-            .unwrap_or_else(|| "-".to_string())
+    logger::log_info(&format!(
+        "[Kiro Account] 已恢复账号索引: reason={reason}, accounts={}",
+        index.accounts.len()
     ));
-
     Some(index)
 }
 
@@ -337,8 +257,9 @@ fn upsert_account_record(account: KiroAccount) -> Result<KiroAccount, String> {
     let _lock = KIRO_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "获取 Kiro 账号锁失败".to_string())?;
-    let mut index = load_account_index();
-    save_account_file(&account)?;
+    let _storage_lock = index_store()?.lock_writes()?;
+    let mut index = load_account_index_checked()?;
+    save_account_file_indexed(&account, &mut index)?;
     refresh_summary(&mut index, &account);
     save_account_index(&index)?;
     Ok(account)
@@ -573,7 +494,7 @@ fn choose_primary_account_index(
         .unwrap_or(group[0])
 }
 
-include!("kiro_account_identity.rs");
+include!("../../../crates/cockpit-core/src/modules/kiro_account_identity.rs");
 
 pub fn list_accounts() -> Vec<KiroAccount> {
     schedule_identity_maintenance();
@@ -636,8 +557,9 @@ pub fn upsert_account(payload: KiroOAuthCompletePayload) -> Result<KiroAccount, 
     let _lock = KIRO_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "获取 Kiro 账号锁失败".to_string())?;
+    let _storage_lock = index_store()?.lock_writes()?;
     let now = now_ts();
-    let mut index = load_account_index();
+    let mut index = load_account_index_checked()?;
     let incoming_user_id = normalize_user_identity(payload.user_id.as_deref());
     let incoming_email = normalize_email_identity(Some(payload.email.as_str()));
     let incoming_refresh_token = normalize_token_identity(payload.refresh_token.as_deref());
@@ -713,7 +635,7 @@ pub fn upsert_account(payload: KiroOAuthCompletePayload) -> Result<KiroAccount, 
     account.quota_query_last_error_at = None;
     account.last_used = now;
 
-    save_account_file(&account)?;
+    save_account_file_indexed(&account, &mut index)?;
     refresh_summary(&mut index, &account);
     save_account_index(&index)?;
 
@@ -756,6 +678,7 @@ fn commit_refresh(
     let _lock = KIRO_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "KIRO_REFRESH_BUSY")?;
+    let _storage_lock = index_store()?.lock_writes()?;
     let mut current = load_account(&previous.id).ok_or("KIRO_ACCOUNT_REMOVED")?;
     if !refresh_matches_snapshot(&current, &previous) {
         return Ok(current);
@@ -794,8 +717,8 @@ fn commit_refresh(
             Some(error)
         }
     };
-    let mut index = load_account_index();
-    save_account_file(&current)?;
+    let mut index = load_account_index_checked()?;
+    save_account_file_indexed(&current, &mut index)?;
     refresh_summary(&mut index, &current);
     save_account_index(&index)?;
     match error {
@@ -882,7 +805,8 @@ pub fn remove_account(account_id: &str) -> Result<(), String> {
     let _lock = KIRO_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "获取 Kiro 账号锁失败".to_string())?;
-    let mut index = load_account_index();
+    let _storage_lock = index_store()?.lock_writes()?;
+    let mut index = load_account_index_checked()?;
     index.accounts.retain(|item| item.id != account_id);
     index.identity_revision = index.identity_revision.wrapping_add(1);
     index.identity_maintenance_version = 0;

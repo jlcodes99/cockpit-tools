@@ -1,10 +1,25 @@
 use crate::models::codex::CodexAccount;
 use crate::models::github_copilot::GitHubCopilotAccount;
 use crate::models::grok::GrokAccount;
-use crate::modules::{codex_account, codex_oauth, logger};
+use crate::modules::{codex_account, codex_oauth, config, logger, process};
 use serde_json::json;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
+
+#[path = "opencode_v2_auth.rs"]
+mod v2;
+
+#[derive(Default)]
+struct CodexSyncQueue {
+    running: bool,
+    pending: bool,
+}
+
+static CODEX_SYNC: Mutex<CodexSyncQueue> = Mutex::new(CodexSyncQueue {
+    running: false,
+    pending: false,
+});
 
 fn push_unique_path(paths: &mut Vec<PathBuf>, path: PathBuf) {
     if !paths.iter().any(|item| item == &path) {
@@ -226,15 +241,88 @@ fn replace_provider_entry(provider_key: &str, payload: serde_json::Value) -> Res
     Ok(())
 }
 
-/// 使用 Codex 账号的 token 替换 OpenCode auth.json 中的 openai 记录
-pub fn replace_openai_entry_from_codex(account: &CodexAccount) -> Result<(), String> {
-    // 确保 token 未过期
+fn replace_openai_entry_from_codex(
+    account: &CodexAccount,
+    app_path: &str,
+    is_current: impl Fn() -> bool,
+) -> Result<bool, String> {
     if codex_oauth::is_token_expired(&account.tokens.access_token) {
         return Err("Codex access_token 已过期，无法同步到 OpenCode".to_string());
     }
 
     let openai_payload = build_openai_payload(account)?;
-    replace_provider_entry("openai", openai_payload)
+    let legacy_path = get_opencode_auth_json_path()?;
+    let data_dir = legacy_path.parent().ok_or("无法定位 OpenCode 数据目录")?;
+    if let Some(cli) = v2::detect_cli(app_path, data_dir)? {
+        let applied = v2::sync(&cli, data_dir, &account.id, openai_payload, is_current)?;
+        if applied {
+            logger::log_info("[OpenCode] 已激活从 Codex 同步的 OpenAI 登录");
+        }
+        return Ok(applied);
+    }
+    if !is_current() {
+        return Ok(false);
+    }
+    replace_provider_entry("openai", openai_payload)?;
+    Ok(true)
+}
+
+/// Read the committed selection in the worker. Concurrent switch callbacks can
+/// arrive out of order after the account selection has already changed.
+pub fn schedule_codex_account_sync() {
+    {
+        let mut queue = CODEX_SYNC.lock().unwrap_or_else(|error| error.into_inner());
+        queue.pending = true;
+        if queue.running {
+            return;
+        }
+        queue.running = true;
+    }
+    tauri::async_runtime::spawn_blocking(run_codex_sync_queue);
+}
+
+fn run_codex_sync_queue() {
+    loop {
+        {
+            let mut queue = CODEX_SYNC.lock().unwrap_or_else(|error| error.into_inner());
+            if !std::mem::take(&mut queue.pending) {
+                queue.running = false;
+                return;
+            }
+        }
+        let Some(account_id) = codex_account::load_account_index().current_account_id else {
+            continue;
+        };
+        let is_current = || {
+            config::get_user_config().opencode_auth_overwrite_on_switch
+                && codex_account::load_account_index().current_account_id.as_deref() == Some(&account_id)
+        };
+        if !is_current() {
+            continue;
+        }
+        let settings = config::get_user_config();
+        let Some(account) = codex_account::load_account(&account_id) else {
+            continue;
+        };
+        match replace_openai_entry_from_codex(&account, &settings.opencode_app_path, is_current) {
+            Ok(true) => {}
+            Ok(false) => continue,
+            Err(error) => {
+                logger::log_warn(&format!("[OpenCode] Codex 登录同步失败: {error}"));
+                continue;
+            }
+        }
+        if is_current() && config::get_user_config().opencode_sync_on_switch {
+            if process::is_opencode_running() {
+                if let Err(error) = process::close_opencode(20) {
+                    logger::log_warn(&format!("[OpenCode] 关闭失败: {error}"));
+                }
+            }
+            if let Err(error) = process::start_opencode_with_path(Some(&settings.opencode_app_path)) {
+                logger::log_warn(&format!("[OpenCode] 启动失败: {error}"));
+            }
+        }
+    }
 }
 
 /// 使用 GitHub Copilot 账号的 token 替换 OpenCode auth.json 中的 github-copilot 记录

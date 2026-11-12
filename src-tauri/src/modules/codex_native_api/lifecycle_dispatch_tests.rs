@@ -317,3 +317,21 @@ async fn quota_protection_fences_the_pending_candidate_without_committing_a_send
     assert_eq!(tracker.check_quota_before_send().unwrap_err().code, "quota_reserved");
     assert_eq!(host.quota_checks.lock().unwrap().last().unwrap(), "retry-selected");
 }
+
+#[tokio::test]
+async fn failure_feedback_marker_is_scoped_to_one_dispatch_and_never_serialized() {
+    let (mut tracker, _host, _activity, _stop) = unsent_fixture();
+    select_candidate(&mut tracker, "a");
+    tracker.begin_attempt("responses");
+    tracker.mark_failure_cooldown_recorded("a");
+    let first = tracker.diagnostics.as_ref().unwrap().attempts.last().unwrap();
+    assert!(first.failure_cooldown_recorded);
+    assert!(serde_json::to_value(first).unwrap().get("failureCooldownRecorded").is_none());
+    tracker.attempt_error(&ServiceError::new(503, "upstream_unavailable", "first dispatch failed"));
+    select_candidate(&mut tracker, "b");
+    tracker.begin_attempt("responses");
+    tracker.mark_failure_cooldown_recorded("a");
+    assert!(!tracker.diagnostics.as_ref().unwrap().attempts.last().unwrap().failure_cooldown_recorded);
+    tracker.mark_failure_cooldown_recorded("b");
+    assert!(tracker.diagnostics.as_ref().unwrap().attempts.last().unwrap().failure_cooldown_recorded);
+}

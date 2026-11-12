@@ -66,6 +66,8 @@ pub struct GitHubCopilotAccountSummary {
 pub struct GitHubCopilotAccountIndex {
     pub version: String,
     pub accounts: Vec<GitHubCopilotAccountSummary>,
+    #[serde(skip)]
+    pub(crate) storage_revision: crate::modules::provider_account_index::Revision,
 }
 
 impl GitHubCopilotAccountIndex {
@@ -73,6 +75,7 @@ impl GitHubCopilotAccountIndex {
         Self {
             version: "1.0".to_string(),
             accounts: Vec::new(),
+            storage_revision: Default::default(),
         }
     }
 }

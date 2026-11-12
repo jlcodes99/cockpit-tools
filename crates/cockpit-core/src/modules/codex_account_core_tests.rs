@@ -182,6 +182,7 @@
             id: storage_id,
             email: account.email.clone(),
             plan_type: account.plan_type.clone(),
+            subscription_active_until: None,
             created_at: account.created_at,
             last_used: account.last_used,
         });
@@ -762,6 +763,7 @@
             id: legacy.id.clone(),
             email: legacy.email.clone(),
             plan_type: legacy.plan_type.clone(),
+            subscription_active_until: None,
             created_at: legacy.created_at,
             last_used: legacy.last_used,
         });
@@ -1395,7 +1397,9 @@ requires_openai_auth = false
             let mut index = CodexAccountIndex::new();
             index.accounts.push(CodexAccountSummary {
                 id: provider.id.clone(), email: provider.email.clone(),
-                plan_type: provider.plan_type.clone(), created_at: provider.created_at,
+                plan_type: provider.plan_type.clone(),
+                subscription_active_until: None,
+                created_at: provider.created_at,
                 last_used: provider.last_used,
             });
             super::save_account_index(&index).unwrap();

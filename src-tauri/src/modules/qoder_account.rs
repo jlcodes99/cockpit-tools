@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::models::qoder::{QoderAccount, QoderAccountIndex};
-use crate::modules::{account, logger};
+use crate::modules::{account, logger, qoder_identity};
 
 const ACCOUNTS_INDEX_FILE: &str = "qoder_accounts.json";
 const ACCOUNTS_DIR: &str = "qoder_accounts";
@@ -67,6 +67,18 @@ fn generate_account_id(
     user_id: Option<&str>,
     email: Option<&str>,
 ) -> String {
+    let (source, organization) = qoder_identity::scope(
+        snapshot.user_info_raw.as_ref(),
+        snapshot.user_plan_raw.as_ref(),
+    );
+    if (source.is_some() || organization.is_some()) && user_id.or(email).is_some() {
+        let identity = user_id.or(email).unwrap_or_default().to_ascii_lowercase();
+        let scope = serde_json::json!([source, organization, identity]);
+        return format!(
+            "qoder_scoped_{:x}",
+            md5::compute(scope.to_string().as_bytes())
+        );
+    }
     if let Some(uid) = normalize_non_empty(user_id) {
         let cleaned = sanitize_account_id_component(&uid);
         if !cleaned.is_empty() {
@@ -121,7 +133,13 @@ fn get_accounts_index_path() -> Result<PathBuf, String> {
 }
 
 pub fn accounts_index_path_string() -> Result<String, String> {
-    Ok(get_accounts_index_path()?.to_string_lossy().to_string())
+    Ok(
+        crate::modules::provider_account_index::storage_path::<QoderAccountIndex>(
+            &get_accounts_index_path()?,
+        )?
+        .to_string_lossy()
+        .into_owned(),
+    )
 }
 
 fn normalize_account_id(account_id: &str) -> Result<String, String> {
@@ -183,8 +201,10 @@ pub fn load_account(account_id: &str) -> Option<QoderAccount> {
 
 fn save_account_file(account: &QoderAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
-    crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "qoder", account)
-        .map_err(|e| format!("保存账号失败: {}", e))
+    crate::modules::secure_account_storage::write_account_preserving_switch_time(
+        &path, "qoder", account,
+    )
+    .map_err(|e| format!("保存账号失败: {}", e))
 }
 
 fn delete_account_file(account_id: &str) -> Result<(), String> {
@@ -197,98 +217,26 @@ fn delete_account_file(account_id: &str) -> Result<(), String> {
 }
 
 fn load_account_index() -> QoderAccountIndex {
-    let path = match get_accounts_index_path() {
-        Ok(p) => p,
-        Err(_) => return QoderAccountIndex::new(),
-    };
-    if !path.exists() {
-        return repair_account_index_from_details("索引文件不存在")
-            .unwrap_or_else(QoderAccountIndex::new);
-    }
-    match fs::read_to_string(&path) {
-        Ok(content) if content.trim().is_empty() => {
-            repair_account_index_from_details("索引文件为空").unwrap_or_else(QoderAccountIndex::new)
-        }
-        Ok(content) => match crate::modules::atomic_write::parse_json_with_auto_restore::<
-            QoderAccountIndex,
-        >(&path, &content)
-        {
-            Ok(index) if !index.accounts.is_empty() => index,
-            Ok(_) => repair_account_index_from_details("索引账号列表为空")
-                .unwrap_or_else(QoderAccountIndex::new),
-            Err(err) => {
-                logger::log_warn(&format!(
-                    "[Qoder Account] 账号索引解析失败，尝试按详情文件自动修复: path={}, error={}",
-                    path.display(),
-                    err
-                ));
-                repair_account_index_from_details("索引文件损坏")
-                    .unwrap_or_else(QoderAccountIndex::new)
-            }
-        },
-        Err(_) => QoderAccountIndex::new(),
-    }
+    load_account_index_checked().unwrap_or_else(|error| {
+        logger::log_warn(&format!("[Qoder Account] {error}"));
+        QoderAccountIndex::new()
+    })
 }
 
 fn load_account_index_checked() -> Result<QoderAccountIndex, String> {
-    let path = get_accounts_index_path()?;
-    if !path.exists() {
-        if let Some(index) = repair_account_index_from_details("索引文件不存在") {
-            return Ok(index);
-        }
-        return Ok(QoderAccountIndex::new());
-    }
-
-    let content = match fs::read_to_string(&path) {
-        Ok(content) => content,
-        Err(err) => {
-            if let Some(index) = repair_account_index_from_details("索引文件读取失败") {
-                return Ok(index);
-            }
-            return Err(format!("读取账号索引失败: {}", err));
-        }
-    };
-
-    if content.trim().is_empty() {
-        if let Some(index) = repair_account_index_from_details("索引文件为空") {
-            return Ok(index);
-        }
-        return Ok(QoderAccountIndex::new());
-    }
-
-    match crate::modules::atomic_write::parse_json_with_auto_restore::<QoderAccountIndex>(
-        &path, &content,
-    ) {
-        Ok(index) if !index.accounts.is_empty() => Ok(index),
-        Ok(index) => {
-            if let Some(repaired) = repair_account_index_from_details("索引账号列表为空") {
-                return Ok(repaired);
-            }
-            Ok(index)
-        }
-        Err(err) => {
-            if let Some(index) = repair_account_index_from_details("索引文件损坏") {
-                return Ok(index);
-            }
-            Err(crate::error::file_corrupted_error(
-                ACCOUNTS_INDEX_FILE,
-                &path.to_string_lossy(),
-                &err.to_string(),
-            ))
-        }
-    }
+    crate::modules::provider_account_index::checked(
+        &get_accounts_index_path()?,
+        crate::modules::provider_index_maintenance::schedule,
+        repair_account_index_from_details,
+        |index| index.accounts.is_empty(),
+    )
 }
 
 fn save_account_index(index: &QoderAccountIndex) -> Result<(), String> {
-    let path = get_accounts_index_path()?;
-    let content =
-        serde_json::to_string_pretty(index).map_err(|e| format!("序列化账号索引失败: {}", e))?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
-        .map_err(|e| format!("写入账号索引失败: {}", e))
+    crate::modules::provider_account_index::save(&get_accounts_index_path()?, index)
 }
 
 fn repair_account_index_from_details(reason: &str) -> Option<QoderAccountIndex> {
-    let index_path = get_accounts_index_path().ok()?;
     let accounts_dir = get_accounts_dir().ok()?;
     let mut accounts = crate::modules::account_index_repair::load_accounts_from_details(
         &accounts_dir,
@@ -310,35 +258,16 @@ fn repair_account_index_from_details(reason: &str) -> Option<QoderAccountIndex> 
     let mut index = QoderAccountIndex::new();
     index.accounts = accounts.iter().map(|account| account.summary()).collect();
 
-    let backup_path = crate::modules::account_index_repair::backup_existing_index(&index_path)
-        .unwrap_or_else(|err| {
-            logger::log_warn(&format!(
-                "[Qoder Account] 自动修复前备份索引失败，继续尝试重建: path={}, error={}",
-                index_path.display(),
-                err
-            ));
-            None
-        });
-
-    if let Err(err) = save_account_index(&index) {
+    if let Err(error) = save_account_index(&index) {
         logger::log_warn(&format!(
-            "[Qoder Account] 自动修复索引保存失败，将以内存结果继续运行: reason={}, recovered_accounts={}, error={}",
-            reason,
-            index.accounts.len(),
-            err
+            "[Qoder Account] 保存恢复索引失败: reason={reason}, error={error}"
         ));
+        return None;
     }
-
-    logger::log_warn(&format!(
-        "[Qoder Account] 检测到账号索引异常，已根据详情文件自动重建: reason={}, recovered_accounts={}, backup_path={}",
-        reason,
-        index.accounts.len(),
-        backup_path
-            .as_ref()
-            .map(|path| path.display().to_string())
-            .unwrap_or_else(|| "-".to_string())
+    logger::log_info(&format!(
+        "[Qoder Account] 已恢复账号索引: reason={reason}, accounts={}",
+        index.accounts.len()
     ));
-
     Some(index)
 }
 
@@ -350,31 +279,39 @@ fn refresh_summary(index: &mut QoderAccountIndex, account: &QoderAccount) {
     index.accounts.push(account.summary());
 }
 
-fn upsert_account_record(account: QoderAccount) -> Result<QoderAccount, String> {
-    let _lock = QODER_ACCOUNT_INDEX_LOCK
+pub(crate) fn mark_quota_query_error(expected: &QoderAccount, error: String) -> Result<(), String> {
+    let _guard = QODER_ACCOUNT_INDEX_LOCK
         .lock()
-        .map_err(|_| "获取 Qoder 账号锁失败".to_string())?;
-    let mut index = load_account_index();
-    save_account_file(&account)?;
-    refresh_summary(&mut index, &account);
-    save_account_index(&index)?;
-    Ok(account)
+        .map_err(|_| "QODER_ACCOUNT_BUSY")?;
+    let Some(mut account) = load_account(&expected.id) else {
+        return Ok(());
+    };
+    if account.auth_user_info_raw != expected.auth_user_info_raw
+        || account.auth_user_plan_raw != expected.auth_user_plan_raw
+    {
+        return Ok(());
+    }
+    account.quota_query_last_error = Some(error);
+    account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
+    save_account_file(&account)
 }
 
-pub fn update_quota_query_error(
+fn update_existing_account(
     account_id: &str,
-    message: Option<String>,
+    update: impl FnOnce(&mut QoderAccount),
 ) -> Result<Option<QoderAccount>, String> {
+    let _guard = QODER_ACCOUNT_INDEX_LOCK
+        .lock()
+        .map_err(|_| "QODER_ACCOUNT_BUSY")?;
     let Some(mut account) = load_account(account_id) else {
         return Ok(None);
     };
-    account.quota_query_last_error = message;
-    account.quota_query_last_error_at = account
-        .quota_query_last_error
-        .as_ref()
-        .map(|_| chrono::Utc::now().timestamp_millis());
-    let updated = upsert_account_record(account)?;
-    Ok(Some(updated))
+    let mut index = load_account_index_checked()?;
+    update(&mut account);
+    save_account_file(&account)?;
+    refresh_summary(&mut index, &account);
+    save_account_index(&index)?;
+    Ok(Some(account))
 }
 
 fn list_accounts_from_index(index: &QoderAccountIndex) -> Vec<QoderAccount> {
@@ -391,6 +328,14 @@ fn list_accounts_from_index(index: &QoderAccountIndex) -> Vec<QoderAccount> {
 pub fn list_accounts() -> Vec<QoderAccount> {
     let index = load_account_index();
     list_accounts_from_index(&index)
+}
+
+pub(crate) fn list_account_ids() -> Result<Vec<String>, String> {
+    Ok(load_account_index_checked()?
+        .accounts
+        .into_iter()
+        .map(|account| account.id)
+        .collect())
 }
 
 pub fn list_accounts_checked() -> Result<Vec<QoderAccount>, String> {
@@ -823,29 +768,22 @@ fn snapshot_has_any_data(snapshot: &QoderSnapshot) -> bool {
 
 fn same_identity(
     account: &QoderAccount,
+    snapshot: &QoderSnapshot,
     user_id: Option<&str>,
     email: Option<&str>,
-    generated_id: &str,
 ) -> bool {
-    if let (Some(left), Some(right)) = (
-        normalize_non_empty(account.user_id.as_deref()),
-        normalize_non_empty(user_id),
-    ) {
-        if left.eq_ignore_ascii_case(&right) {
-            return true;
-        }
-    }
-
-    if let (Some(left), Some(right)) = (
-        normalize_email(Some(account.email.as_str())),
-        normalize_email(email),
-    ) {
-        if left == right {
-            return true;
-        }
-    }
-
-    account.id == generated_id
+    qoder_identity::scope(
+        account.auth_user_info_raw.as_ref(),
+        account.auth_user_plan_raw.as_ref(),
+    ) == qoder_identity::scope(
+        snapshot.user_info_raw.as_ref(),
+        snapshot.user_plan_raw.as_ref(),
+    ) && qoder_identity::matches(
+        account.user_id.as_deref(),
+        user_id,
+        Some(account.email.as_str()).filter(|email| *email != "unknown@qoder.local"),
+        email,
+    )
 }
 
 fn normalize_tags(tags: Vec<String>) -> Option<Vec<String>> {
@@ -919,6 +857,8 @@ fn snapshot_to_account(snapshot: QoderSnapshot, existing: Option<&QoderAccount>)
             existing.and_then(|item| item.usage_updated_at)
         },
         tags: existing.and_then(|item| item.tags.clone()),
+        verified_openapi_origin: existing
+            .and_then(|account| account.verified_openapi_origin.clone()),
         auth_user_info_raw: snapshot
             .user_info_raw
             .or_else(|| existing.and_then(|item| item.auth_user_info_raw.clone())),
@@ -936,30 +876,49 @@ fn snapshot_to_account(snapshot: QoderSnapshot, existing: Option<&QoderAccount>)
 
 fn find_existing_account_for_snapshot(
     snapshot: &QoderSnapshot,
-    accounts: &[QoderAccount],
+    index: &QoderAccountIndex,
+    user_id: Option<&str>,
+    email: Option<&str>,
 ) -> Option<QoderAccount> {
-    let user_id = extract_snapshot_user_id(snapshot);
-    let email = extract_snapshot_email(snapshot);
-    let generated_id = generate_account_id(snapshot, user_id.as_deref(), email.as_deref());
-    accounts
+    let mut matches = index
+        .accounts
         .iter()
-        .find(|item| same_identity(item, user_id.as_deref(), email.as_deref(), &generated_id))
-        .cloned()
+        .filter(|item| {
+            qoder_identity::matches(item.user_id.as_deref(), user_id, Some(&item.email), email)
+        })
+        .filter_map(|item| load_account(&item.id))
+        .filter(|item| same_identity(item, snapshot, user_id, email));
+    let mut candidate = matches.next()?;
+    let mut ambiguous = false;
+    for account in matches {
+        if user_id.is_some() && candidate.user_id.is_none() && account.user_id.is_some() {
+            candidate = account;
+            ambiguous = false;
+        } else if user_id.is_none() || candidate.user_id.is_some() == account.user_id.is_some() {
+            ambiguous = true;
+        }
+    }
+    (!ambiguous).then_some(candidate)
 }
 
-fn read_qoder_secret_json(db_path: &Path, db_key: &str) -> Result<Option<Value>, String> {
-    let raw =
-        crate::modules::vscode_inject::read_qoder_secret_storage_value_by_db_path(db_path, db_key)?;
-    Ok(raw.map(|text| parse_json_or_string(text.as_str())))
+fn lookup_snapshot(snapshot: &QoderSnapshot, index: &QoderAccountIndex) -> Option<QoderAccount> {
+    let user_id = extract_snapshot_user_id(snapshot);
+    let email = extract_snapshot_email(snapshot);
+    find_existing_account_for_snapshot(snapshot, index, user_id.as_deref(), email.as_deref())
 }
 
 fn read_snapshot_from_state_db_path(db_path: &Path) -> Result<Option<QoderSnapshot>, String> {
-    if !db_path.exists() {
-        return Ok(None);
-    }
-
-    let credit = read_qoder_secret_json(db_path, QODER_SECRET_CREDIT_USAGE_KEY)?;
-    let enterprise = read_qoder_secret_json(db_path, QODER_SECRET_ENTERPRISE_USAGE_KEY)?;
+    let [user_info, user_plan, credit, enterprise] =
+        crate::modules::vscode_inject::read_qoder_secret_snapshot(
+            db_path,
+            [
+                QODER_SECRET_USER_INFO_KEY,
+                QODER_SECRET_USER_PLAN_KEY,
+                QODER_SECRET_CREDIT_USAGE_KEY,
+                QODER_SECRET_ENTERPRISE_USAGE_KEY,
+            ],
+        )?
+        .map(|value| value.map(|text| parse_json_or_string(&text)));
     let credit = if enterprise.as_ref().is_some_and(Value::is_object) {
         Some(
             serde_json::json!({"displayMode": if credit.as_ref().is_some_and(Value::is_object) { "hybrid" } else { "enterprise" }, "qoderUsage": credit, "enterpriseUsage": enterprise}),
@@ -968,8 +927,8 @@ fn read_snapshot_from_state_db_path(db_path: &Path) -> Result<Option<QoderSnapsh
         credit
     };
     let snapshot = QoderSnapshot {
-        user_info_raw: read_qoder_secret_json(db_path, QODER_SECRET_USER_INFO_KEY)?,
-        user_plan_raw: read_qoder_secret_json(db_path, QODER_SECRET_USER_PLAN_KEY)?,
+        user_info_raw: user_info,
+        user_plan_raw: user_plan,
         credit_usage_raw: credit,
     };
 
@@ -980,11 +939,71 @@ fn read_snapshot_from_state_db_path(db_path: &Path) -> Result<Option<QoderSnapsh
     }
 }
 
-fn merge_snapshot(snapshot: QoderSnapshot) -> Result<QoderAccount, String> {
-    let accounts = list_accounts();
-    let existing = find_existing_account_for_snapshot(&snapshot, &accounts);
-    let account = snapshot_to_account(snapshot, existing.as_ref());
-    upsert_account_record(account)
+fn merge_snapshot(mut snapshot: QoderSnapshot) -> Result<QoderAccount, String> {
+    let _guard = QODER_ACCOUNT_INDEX_LOCK
+        .lock()
+        .map_err(|_| "QODER_ACCOUNT_BUSY")?;
+    let mut index = load_account_index_checked()?;
+    let existing = lookup_snapshot(&snapshot, &index);
+    if let Some(account) = &existing {
+        let expiry = crate::modules::qoder_oauth::token_expiry;
+        if let (Some(incoming), Some(stored)) = (
+            expiry(snapshot.user_info_raw.as_ref(), "expireTime"),
+            expiry(account.auth_user_info_raw.as_ref(), "expireTime"),
+        ) {
+            if incoming < stored {
+                snapshot.user_info_raw = account.auth_user_info_raw.clone();
+            }
+        }
+    }
+    let mut account = snapshot_to_account(snapshot, existing.as_ref());
+    if existing.is_none() && index.accounts.iter().any(|item| item.id == account.id) {
+        account.id = format!("qoder_{}", uuid::Uuid::new_v4().simple());
+    }
+    save_account_file(&account)?;
+    refresh_summary(&mut index, &account);
+    save_account_index(&index)?;
+    Ok(account)
+}
+
+pub(crate) fn save_refresh(
+    expected: &QoderAccount,
+    user_info: Value,
+    plan: Option<Value>,
+    usage: Option<Value>,
+    quota_error: Option<String>,
+    verified_openapi_origin: Option<String>,
+) -> Result<QoderAccount, String> {
+    let _guard = QODER_ACCOUNT_INDEX_LOCK
+        .lock()
+        .map_err(|_| "QODER_ACCOUNT_BUSY")?;
+    let current = load_account(&expected.id).ok_or("QODER_SESSION_CHANGED")?;
+    if current.auth_user_info_raw != expected.auth_user_info_raw
+        || current.auth_user_plan_raw != expected.auth_user_plan_raw
+    {
+        return Err("QODER_SESSION_CHANGED".into());
+    }
+    let mut index = load_account_index_checked()?;
+    let mut updated = snapshot_to_account(
+        QoderSnapshot {
+            user_info_raw: Some(user_info),
+            user_plan_raw: plan,
+            credit_usage_raw: usage,
+        },
+        Some(&current),
+    );
+    if verified_openapi_origin.is_some() {
+        updated.verified_openapi_origin = verified_openapi_origin;
+    }
+    updated.quota_query_last_error = quota_error;
+    updated.quota_query_last_error_at = updated
+        .quota_query_last_error
+        .as_ref()
+        .map(|_| chrono::Utc::now().timestamp_millis());
+    save_account_file(&updated)?;
+    refresh_summary(&mut index, &updated);
+    save_account_index(&index)?;
+    Ok(updated)
 }
 
 pub fn upsert_account_from_snapshot(
@@ -1017,49 +1036,65 @@ fn resolve_state_db_path_for_user_data_dir(user_data_dir: &str) -> PathBuf {
 }
 
 pub fn ensure_state_db_path_for_user_data_dir(user_data_dir: &str) -> Result<PathBuf, String> {
-    let root = PathBuf::from(user_data_dir);
-    let candidates = vec![
-        root.join("User").join("globalStorage").join("state.vscdb"),
-        root.join("globalStorage").join("state.vscdb"),
-        root.join("state.vscdb"),
-    ];
-
-    if let Some(existing) = candidates.iter().find(|path| path.exists()) {
-        return Ok(existing.clone());
+    let root = Path::new(user_data_dir);
+    if !crate::modules::vscode_inject::qoder_storage_ready(root)? {
+        return Err(format!("QODER_PROFILE_UNINITIALIZED: {}", root.display()));
     }
-
-    let preferred = resolve_state_db_path_for_user_data_dir(user_data_dir);
-    if let Some(parent) = preferred.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("创建 Qoder globalStorage 目录失败: {}", e))?;
-    }
-
-    if let Some(default_db) = get_default_qoder_state_db_path() {
-        if default_db.exists() && default_db != preferred {
-            if let Err(err) = fs::copy(&default_db, &preferred) {
-                logger::log_warn(&format!(
-                    "[Qoder Inject] 复制默认 state.vscdb 失败，改为写入新库: from={}, to={}, error={}",
-                    default_db.to_string_lossy(),
-                    preferred.to_string_lossy(),
-                    err
-                ));
-            }
-        }
-    }
-
-    Ok(preferred)
+    Ok(resolve_state_db_path_for_user_data_dir(user_data_dir))
 }
 
-fn ensure_default_state_db_path() -> Result<PathBuf, String> {
-    let data_root = crate::modules::qoder_instance::get_default_qoder_user_data_dir()?;
-    ensure_state_db_path_for_user_data_dir(&data_root.to_string_lossy())
+fn read_local_session(root: &Path) -> Result<Option<QoderSnapshot>, String> {
+    let db_path = root.join("User/globalStorage/state.vscdb");
+    let [user_info, plan] = crate::modules::vscode_inject::read_qoder_secret_snapshot(
+        &db_path,
+        [QODER_SECRET_USER_INFO_KEY, QODER_SECRET_USER_PLAN_KEY],
+    )?
+    .map(|value| value.map(|text| parse_json_or_string(&text)));
+    if crate::modules::qoder_oauth::access_token_from_info(user_info.as_ref()).is_none() {
+        return Ok(None);
+    }
+    Ok(Some(QoderSnapshot {
+        user_info_raw: user_info,
+        user_plan_raw: plan,
+        credit_usage_raw: None,
+    }))
+}
+
+pub(crate) fn local_session_matches(root: &Path, account: &QoderAccount) -> Result<bool, String> {
+    let Some(snapshot) = read_local_session(root)? else {
+        return Ok(false);
+    };
+    let user_id = extract_snapshot_user_id(&snapshot);
+    let email = extract_snapshot_email(&snapshot);
+    let local_token =
+        crate::modules::qoder_oauth::access_token_from_info(snapshot.user_info_raw.as_ref());
+    let account_token =
+        crate::modules::qoder_oauth::access_token_from_info(account.auth_user_info_raw.as_ref());
+    Ok(
+        same_identity(account, &snapshot, user_id.as_deref(), email.as_deref())
+            && (local_token == account_token
+                || qoder_identity::field(snapshot.user_info_raw.as_ref(), "refreshToken")
+                    .is_some_and(|token| {
+                        qoder_identity::field(account.auth_user_info_raw.as_ref(), "refreshToken")
+                            == Some(token)
+                    })),
+    )
 }
 
 pub fn import_from_local() -> Result<Option<QoderAccount>, String> {
-    let db_path = ensure_default_state_db_path()?;
+    let root = crate::modules::qoder_instance::get_default_qoder_user_data_dir()?;
+    let db_path = resolve_state_db_path_for_user_data_dir(&root.to_string_lossy());
+    if db_path.exists() && !crate::modules::vscode_inject::qoder_storage_ready(&root)? {
+        return Err(format!("QODER_PROFILE_UNINITIALIZED: {}", root.display()));
+    }
     let Some(snapshot) = read_snapshot_from_state_db_path(&db_path)? else {
         return Ok(None);
     };
+    if crate::modules::qoder_oauth::access_token_from_info(snapshot.user_info_raw.as_ref())
+        .is_none()
+    {
+        return Ok(None);
+    }
     let account = merge_snapshot(snapshot)?;
     logger::log_info(&format!(
         "[Qoder Account] 从本地导入成功: id={}, email={}, db={}",
@@ -1068,6 +1103,62 @@ pub fn import_from_local() -> Result<Option<QoderAccount>, String> {
         db_path.to_string_lossy()
     ));
     Ok(Some(account))
+}
+
+pub(crate) fn reconcile_current_account() -> Result<Option<String>, String> {
+    let root = crate::modules::qoder_instance::get_default_qoder_user_data_dir()?;
+    let database = root.join("User/globalStorage/state.vscdb");
+    let stamp = |path: &Path| {
+        std::fs::metadata(path)
+            .ok()
+            .and_then(|meta| Some((meta.len(), meta.modified().ok()?)))
+    };
+    let wal = database.with_extension("vscdb-wal");
+    let before = (stamp(&database), stamp(&wal));
+    let snapshot = before.0.map(|_| read_local_session(&root));
+    let index = load_account_index_checked()?;
+    let previous = crate::modules::provider_current_state::resolve_existing_current_account_id(
+        "qoder",
+        index.accounts.iter().map(|account| account.id.as_str()),
+    );
+    let Some(snapshot) = snapshot else {
+        return Ok(previous);
+    };
+    let snapshot = match snapshot {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            logger::log_warn(&format!("[Qoder Account] 无法读取当前会话: {error}"));
+            return Ok(previous);
+        }
+    };
+    let current = snapshot
+        .as_ref()
+        .and_then(|snapshot| lookup_snapshot(snapshot, &index))
+        .map(|account| account.id);
+    let Ok(_lifecycle) = crate::modules::qoder_instance::QODER_LIFECYCLE.try_lock() else {
+        return Ok(previous);
+    };
+    if before != (stamp(&database), stamp(&wal)) {
+        return Ok(previous);
+    }
+    if previous != current {
+        crate::modules::provider_current_state::set_current_account_id(
+            "qoder",
+            current.as_deref(),
+        )?;
+    }
+    Ok(current)
+}
+
+pub(crate) fn local_identity_key() -> Option<String> {
+    let root = crate::modules::qoder_instance::get_default_qoder_user_data_dir().ok()?;
+    let snapshot = read_local_session(&root).ok()??;
+    let (source, org) = qoder_identity::scope(
+        snapshot.user_info_raw.as_ref(),
+        snapshot.user_plan_raw.as_ref(),
+    );
+    let user = extract_snapshot_user_id(&snapshot).or_else(|| extract_snapshot_email(&snapshot))?;
+    Some(serde_json::json!([source, org, user]).to_string())
 }
 
 pub(crate) fn resolve_current_account_id(accounts: &[QoderAccount]) -> Option<String> {
@@ -1080,14 +1171,6 @@ pub(crate) fn resolve_current_account_id(accounts: &[QoderAccount]) -> Option<St
 fn serialize_raw_or_fallback(raw: &Option<Value>, fallback: Value) -> Result<String, String> {
     let value = raw.clone().unwrap_or(fallback);
     serde_json::to_string(&value).map_err(|e| format!("序列化 Qoder 注入数据失败: {}", e))
-}
-
-fn build_user_info_fallback(account: &QoderAccount) -> Value {
-    serde_json::json!({
-        "id": account.user_id.clone().unwrap_or_default(),
-        "email": account.email,
-        "name": account.display_name.clone().unwrap_or_default(),
-    })
 }
 
 fn build_user_plan_fallback(account: &QoderAccount) -> Value {
@@ -1137,18 +1220,14 @@ fn verify_injected_account_matches(db_path: &Path, account: &QoderAccount) -> Re
     })?;
     let effective_user_id = extract_snapshot_user_id(&snapshot);
     let effective_email = extract_snapshot_email(&snapshot);
-    let generated_id = generate_account_id(
+    if same_identity(
+        account,
         &snapshot,
         effective_user_id.as_deref(),
         effective_email.as_deref(),
-    );
-
-    if same_identity(
-        account,
-        effective_user_id.as_deref(),
-        effective_email.as_deref(),
-        &generated_id,
-    ) {
+    ) && crate::modules::qoder_oauth::access_token_from_info(snapshot.user_info_raw.as_ref())
+        == crate::modules::qoder_oauth::access_token_from_info(account.auth_user_info_raw.as_ref())
+    {
         return Ok(());
     }
 
@@ -1162,11 +1241,6 @@ fn verify_injected_account_matches(db_path: &Path, account: &QoderAccount) -> Re
     ))
 }
 
-pub fn inject_to_qoder(account_id: &str) -> Result<(), String> {
-    let db_path = ensure_default_state_db_path()?;
-    inject_to_qoder_at_path(&db_path, account_id)
-}
-
 pub fn inject_to_qoder_for_user_data_dir(
     user_data_dir: &str,
     account_id: &str,
@@ -1178,15 +1252,28 @@ pub fn inject_to_qoder_for_user_data_dir(
 pub fn inject_to_qoder_at_path(db_path: &Path, account_id: &str) -> Result<(), String> {
     let account =
         load_account(account_id).ok_or_else(|| format!("Qoder 账号不存在: {}", account_id))?;
+    let access_token =
+        crate::modules::qoder_oauth::access_token_from_info(account.auth_user_info_raw.as_ref())
+            .ok_or("QODER_REAUTH_REQUIRED")?;
     if let Some(parent) = db_path.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("创建 Qoder state.vscdb 目录失败: {}", e))?;
     }
 
-    let user_info_json = serialize_raw_or_fallback(
-        &account.auth_user_info_raw,
-        build_user_info_fallback(&account),
-    )?;
+    let mut info = account
+        .auth_user_info_raw
+        .as_ref()
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    info.insert("token".into(), Value::String(access_token));
+    if let Some(id) = &account.user_id {
+        info.entry("id")
+            .or_insert_with(|| Value::String(id.clone()));
+    }
+    info.entry("email")
+        .or_insert_with(|| Value::String(account.email.clone()));
+    let user_info_json = Value::Object(info).to_string();
     let user_plan_json = serialize_raw_or_fallback(
         &account.auth_user_plan_raw,
         build_user_plan_fallback(&account),
@@ -1222,10 +1309,11 @@ pub fn inject_to_qoder_at_path(db_path: &Path, account_id: &str) -> Result<(), S
     verify_state_db_key_exists(db_path, QODER_SECRET_CREDIT_USAGE_KEY)?;
     verify_injected_account_matches(db_path, &account)?;
 
-    let mut updated = account.clone();
-    updated.last_used = now_ts();
-    updated.last_switched_at = Some(updated.last_used);
-    let _ = upsert_account_record(updated);
+    update_existing_account(account_id, |updated| {
+        updated.last_used = now_ts();
+        updated.last_switched_at = Some(updated.last_used);
+    })?
+    .ok_or("QODER_SESSION_CHANGED")?;
 
     logger::log_info(&format!(
         "[Qoder Inject] 注入成功: account_id={}, email={}, db={}",
@@ -1237,14 +1325,16 @@ pub fn inject_to_qoder_at_path(db_path: &Path, account_id: &str) -> Result<(), S
 }
 
 pub fn update_account_tags(account_id: &str, tags: Vec<String>) -> Result<QoderAccount, String> {
-    let mut account =
-        load_account(account_id).ok_or_else(|| format!("Qoder 账号不存在: {}", account_id))?;
-    account.tags = normalize_tags(tags);
-    account.last_used = now_ts();
-    upsert_account_record(account)
+    update_existing_account(account_id, |account| {
+        account.tags = normalize_tags(tags);
+        account.last_used = now_ts();
+    })?
+    .ok_or_else(|| format!("Qoder 账号不存在: {}", account_id))
 }
 
 fn normalize_imported_account(mut account: QoderAccount) -> QoderAccount {
+    // An imported file cannot authorize sending credentials to a remote host.
+    account.verified_openapi_origin = None;
     let now = now_ts();
     account.id = sanitize_account_id_component(account.id.trim());
     if account.id.is_empty() {
@@ -1334,9 +1424,31 @@ pub fn import_from_json(json_content: &str) -> Result<Vec<QoderAccount>, String>
 
     let mut imported = Vec::new();
     for item in items {
-        let account = parse_import_item(&item)?;
-        let saved = upsert_account_record(account)?;
-        imported.push(saved);
+        let mut account = parse_import_item(&item)?;
+        let _guard = QODER_ACCOUNT_INDEX_LOCK
+            .lock()
+            .map_err(|_| "QODER_ACCOUNT_BUSY")?;
+        let mut index = load_account_index_checked()?;
+        let snapshot = QoderSnapshot {
+            user_info_raw: account.auth_user_info_raw.clone(),
+            user_plan_raw: account.auth_user_plan_raw.clone(),
+            credit_usage_raw: account.auth_credit_usage_raw.clone(),
+        };
+        if let Some(existing) = find_existing_account_for_snapshot(
+            &snapshot,
+            &index,
+            account.user_id.as_deref(),
+            Some(&account.email),
+        ) {
+            account.id = existing.id;
+            account.verified_openapi_origin = existing.verified_openapi_origin;
+        } else if index.accounts.iter().any(|item| item.id == account.id) {
+            account.id = format!("qoder_{}", uuid::Uuid::new_v4().simple());
+        }
+        save_account_file(&account)?;
+        refresh_summary(&mut index, &account);
+        save_account_index(&index)?;
+        imported.push(account);
     }
 
     Ok(imported)

@@ -32,6 +32,7 @@ export type PlatformOverviewTab =
   | 'sessions'
   | 'providers'
   | 'proxy'
+  | 'quota-history'
   | 'top-layout';
 export type PlatformOverviewHeaderId =
   | 'codex'
@@ -127,7 +128,7 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
     overviewIcon: <TraeIcon className="tab-icon" />,
   },
   trae_solo: {
-    platformLabel: 'TRAE SOLO',
+    platformLabel: 'TraeWork',
     overviewIcon: <TraeSoloIcon className="tab-icon" />,
   },
   trae_cn: {
@@ -135,7 +136,7 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
     overviewIcon: <TraeCnIcon className="tab-icon" />,
   },
   trae_solo_cn: {
-    platformLabel: 'TRAE SOLO CN',
+    platformLabel: 'TraeWork CN',
     overviewIcon: <TraeSoloCnIcon className="tab-icon" />,
   },
   workbuddy: {

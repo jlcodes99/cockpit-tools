@@ -52,10 +52,9 @@ async fn plan_configuration_updates_are_collapsed_on_every_http_attempt() {
             assert!(!headers.contains_key("originator"));
             assert!(!headers.contains_key("x-codex-routing-hint"));
             assert!(!headers.contains_key("x-codex-beta-features"));
-            assert_ne!(headers["session-id"], "synthetic-session");
-            assert_ne!(headers["thread-id"], "synthetic-thread");
-            assert_eq!(headers["thread-id"], headers["x-client-request-id"]);
-            assert_ne!(headers["session-id"], headers["thread-id"]);
+            assert_eq!(headers["session-id"], "synthetic-session");
+            assert_eq!(headers["thread-id"], "synthetic-thread");
+            assert!(!headers.contains_key("x-client-request-id"));
         }
     }
     service.shutdown(Duration::from_secs(2)).await.unwrap();

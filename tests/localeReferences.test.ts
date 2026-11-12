@@ -27,3 +27,18 @@ test('backend messages include digit-bearing codes and ignore dynamic prefixes',
   assert.deepEqual(references.map((item: {key: string}) => item.key), ['codex.proxyQuality.messages.ping0Risk', 'pelican.error.invalidConcurrency']);
   assert.equal(findMissingTranslationReferences(references, new Map([['en', {}]])).length, 2);
 });
+
+test('fallback auditing recognizes missing fallback keys and existing dotted keys', () => {
+  const references = requiredTranslationReferences(
+    "t('checkin.button.loading', '签到中'); i18next.t('checkin.missing', { defaultValue: '未知' });",
+    'Checkin.tsx',
+    true,
+  );
+  assert.deepEqual(references.map((item: { hasDefault: boolean }) => item.hasDefault), [true, true]);
+  const missing = findMissingTranslationReferences(references, new Map([
+    ['en', { checkin: { button: 'Check in', 'button.loading': 'Checking in' } }],
+    ['ru', { checkin: { button: 'Отметиться', 'button.loading': 'Выполняется' } }],
+  ]));
+  assert.deepEqual(missing.map((item: { key: string }) => item.key), ['checkin.missing']);
+  assert.deepEqual(missing[0].languages, ['en', 'ru']);
+});

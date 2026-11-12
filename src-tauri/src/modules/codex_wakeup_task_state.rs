@@ -28,7 +28,11 @@ fn try_file_lock(path: &Path) -> Result<Option<fs::File>, String> {
 }
 
 pub(super) fn lock_task_state() -> Result<fs::File, String> {
-    try_file_lock(&tasks_path()?.with_extension("json.lock"))?
+    lock_task_state_at(&tasks_path()?)
+}
+
+pub(super) fn lock_task_state_at(legacy: &Path) -> Result<fs::File, String> {
+    try_file_lock(&legacy.with_extension("json.lock"))?
         .ok_or_else(|| "Codex 唤醒任务状态正在更新，请重试".to_string())
 }
 
@@ -68,6 +72,9 @@ fn claim_in_state(
         return None;
     }
     task.last_run_at = Some(now);
+    if task.quota_reset_plan.as_ref().is_some_and(|plan| plan.reset_at <= now) {
+        task.quota_reset_plan = None;
+    }
     task.last_status = Some(
         if require_enabled && task.execution_mode.as_deref() == Some("confirm") {
             "pending_confirmation"
@@ -82,6 +89,34 @@ fn claim_in_state(
     task.last_duration_ms = None;
     task.updated_at = now;
     Some(task.clone())
+}
+
+pub(in crate::modules) fn save_quota_reset_plans(
+    plans: Vec<(&CodexWakeupTask, Option<QuotaResetPlan>)>,
+) -> Result<(), String> {
+    let _lock = TASKS_LOCK.lock().map_err(|_| "获取 Codex 唤醒任务锁失败")?;
+    let _file_lock = lock_task_state()?;
+    let mut state = read_state_file()?;
+    if !state.enabled {
+        return Ok(());
+    }
+    let store = run_store()?;
+    for (previous, plan) in plans {
+        let Some(task) = state.tasks.iter_mut().find(|task| task.id == previous.id) else {
+            continue;
+        };
+        if task.enabled
+            && task.schedule == previous.schedule
+            && task.account_ids == previous.account_ids
+            && task.use_api_service_pool == previous.use_api_service_pool
+            && task.last_run_at == previous.last_run_at
+            && task.quota_reset_plan == previous.quota_reset_plan
+        {
+            task.quota_reset_plan = plan;
+            store.save_run(task)?;
+        }
+    }
+    Ok(())
 }
 
 /// Called only while holding this task's run lease. A durable claim is written
@@ -109,13 +144,12 @@ pub fn claim_task_run(
     let Some(task) = claim_in_state(&mut state, task_id, due_at, require_enabled, now_ts()) else {
         return Ok(None);
     };
-    refresh_next_run_at(&mut state);
-    save_json_atomic(&tasks_path()?, &state)?;
+    run_store()?.save_run(&task)?;
     Ok(Some(task))
 }
 
 fn dispatch_settings(task: &CodexWakeupTask) -> serde_json::Value {
-    serde_json::json!({"account_ids":task.account_ids,"prompt":task.prompt,"model":task.model,
+    serde_json::json!({"account_ids":task.account_ids,"use_api_service_pool":task.use_api_service_pool,"prompt":task.prompt,"model":task.model,
         "model_display_name":task.model_display_name,"model_reasoning_effort":task.model_reasoning_effort,
         "schedule":task.schedule,"execution_mode":task.execution_mode,"timeout":task.confirm_timeout_minutes})
 }
@@ -125,15 +159,15 @@ pub fn authorize_task_dispatch(expected: &CodexWakeupTask, automatic: bool) -> R
     let _lock = TASKS_LOCK.lock().map_err(|_| "CODEX_WAKEUP_LOCK")?;
     let _file_lock = lock_task_state()?;
     let mut state = read_state_file()?;
-    authorize_in_state(&mut state, expected, automatic)?;
-    save_json_atomic(&tasks_path()?, &state)
+    let task = authorize_in_state(&mut state, expected, automatic)?;
+    run_store()?.save_run(task)
 }
 
-fn authorize_in_state(
-    state: &mut CodexWakeupState,
+fn authorize_in_state<'a>(
+    state: &'a mut CodexWakeupState,
     expected: &CodexWakeupTask,
     automatic: bool,
-) -> Result<(), String> {
+) -> Result<&'a CodexWakeupTask, String> {
     if automatic && !state.enabled {
         return Err(cancelled_error());
     }
@@ -150,38 +184,56 @@ fn authorize_in_state(
         return Err(cancelled_error());
     }
     task.last_status = Some("running".into());
-    Ok(())
+    Ok(task)
 }
 
-fn record_dispatch_failure(task: &mut CodexWakeupTask, error: Option<&str>) {
+pub(super) fn claimed_task_mut<'a>(
+    state: &'a mut CodexWakeupState,
+    claimed: &CodexWakeupTask,
+) -> Option<&'a mut CodexWakeupTask> {
+    state.tasks.iter_mut().find(|task| {
+        task.id == claimed.id
+            && task.last_run_at == claimed.last_run_at
+            && matches!(
+                task.last_status.as_deref(),
+                Some("running" | "pending_confirmation")
+            )
+    })
+}
+
+fn record_dispatch_failure(task: &mut CodexWakeupTask, error: &str) {
     task.last_status = Some("error".to_string());
-    task.last_message = error.map(str::to_string);
-    task.last_success_count = Some(0);
-    task.last_failure_count = Some(1);
+    task.last_message = Some(error.to_string());
+    task.last_success_count = None;
+    task.last_failure_count = None;
     task.last_duration_ms = None;
     task.updated_at = now_ts();
     // Keep last_run_at: failure never re-arms the same due event.
 }
 
-pub fn mark_task_run_failed(task_id: &str, error: &str) -> Result<(), String> {
+pub fn mark_task_run_failed(claimed: &CodexWakeupTask, error: &str) -> Result<(), String> {
     let _lock = TASKS_LOCK.lock().map_err(|_| "获取 Codex 唤醒任务锁失败")?;
     let _file_lock = lock_task_state()?;
     let mut state = read_state_file()?;
-    if let Some(task) = state.tasks.iter_mut().find(|task| task.id == task_id) {
-        record_dispatch_failure(task, Some(error));
-        refresh_next_run_at(&mut state);
-        save_json_atomic(&tasks_path()?, &state)?;
+    if let Some(task) = claimed_task_mut(&mut state, claimed) {
+        record_dispatch_failure(task, error);
+        run_store()?.save_run(task)?;
     }
     Ok(())
 }
 
-pub(super) fn recover_interrupted_runs(state: &mut CodexWakeupState) -> Result<bool, String> {
-    recover_interrupted_runs_with(state, try_task_run_lease)
+pub(super) fn recover_interrupted_runs(
+    state: &mut CodexWakeupState,
+    store: &run_store::RunStore,
+) -> Result<(), String> {
+    recover_interrupted_runs_with(state, try_task_run_lease, |task| store.save_run(task))?;
+    Ok(())
 }
 
 fn recover_interrupted_runs_with(
     state: &mut CodexWakeupState,
     mut acquire: impl FnMut(&str) -> Result<Option<fs::File>, String>,
+    mut persist: impl FnMut(&CodexWakeupTask) -> Result<(), String>,
 ) -> Result<bool, String> {
     let mut changed = false;
     for task in &mut state.tasks {
@@ -197,7 +249,8 @@ fn recover_interrupted_runs_with(
         // The process holding the run lease exited. The upstream may already
         // have accepted the request; expose failure and leave manual retry
         // available instead of automatically spending quota again.
-        record_dispatch_failure(task, None);
+        record_dispatch_failure(task, "CODEX_WAKEUP_RUN_INTERRUPTED");
+        persist(task)?;
         logger::log_warn(&format!(
             "[CodexWakeup] 恢复中断任务，保留已认领事件并等待下次计划或手动重试: task_id={}",
             task.id
@@ -263,10 +316,12 @@ mod tests {
         assert!(claim_in_state(&mut restored, "task-1", Some(100), true, 180).is_none());
         let dir =
             std::env::temp_dir().join(format!("confirmation-restart-{}", uuid::Uuid::new_v4()));
-        assert!(
-            recover_interrupted_runs_with(&mut restored, |_| try_file_lock(&dir.join("lease")))
-                .unwrap()
-        );
+        assert!(recover_interrupted_runs_with(
+            &mut restored,
+            |_| try_file_lock(&dir.join("lease")),
+            |_| Ok(())
+        )
+        .unwrap());
         assert_eq!(restored.tasks[0].last_status.as_deref(), Some("error"));
         assert!(claim_in_state(&mut restored, "task-1", Some(100), true, 180).is_none());
         fs::remove_dir_all(dir).unwrap();
@@ -280,6 +335,7 @@ mod tests {
         for change in [
             "prompt",
             "account",
+            "pool",
             "mode",
             "disabled-task",
             "disabled-global",
@@ -290,6 +346,7 @@ mod tests {
             match change {
                 "prompt" => edited.tasks[0].prompt = Some("different".into()),
                 "account" => edited.tasks[0].account_ids = vec!["different".into()],
+                "pool" => edited.tasks[0].use_api_service_pool = true,
                 "mode" => edited.tasks[0].execution_mode = Some("auto".into()),
                 "disabled-task" => edited.tasks[0].enabled = false,
                 "disabled-global" => edited.enabled = false,
@@ -312,10 +369,42 @@ mod tests {
         assert!(claim_in_state(&mut state, "task-1", Some(100), true, 120).is_some());
         let encoded = serde_json::to_string(&state).unwrap();
         let mut restored: CodexWakeupState = serde_json::from_str(&encoded).unwrap();
-        record_dispatch_failure(&mut restored.tasks[0], Some("network failed"));
+        record_dispatch_failure(&mut restored.tasks[0], "CODEX_CONFIRMATION_EXPIRED");
+        assert_eq!(restored.tasks[0].last_message.as_deref(), Some("CODEX_CONFIRMATION_EXPIRED"));
+        assert_eq!(restored.tasks[0].last_success_count, None);
+        assert_eq!(restored.tasks[0].last_failure_count, None);
         assert!(claim_in_state(&mut restored, "task-1", Some(100), true, 180).is_none());
         assert_eq!(restored.tasks[0].last_run_at, Some(120));
         assert!(claim_in_state(&mut restored, "task-1", Some(200), true, 220).is_some());
+    }
+
+    #[test]
+    fn sqlite_claim_and_restart_recovery_do_not_replay_the_same_due_time() {
+        let dir = tempfile::tempdir().unwrap();
+        let legacy = dir.path().join("tasks.json");
+        let store = run_store::RunStore::new(legacy.clone());
+        let mut first = state();
+        first.tasks[0].execution_mode = Some("confirm".into());
+        store.save_rules(&first, &[&first.tasks[0]]).unwrap();
+        let claimed = claim_in_state(&mut first, "task-1", Some(100), true, 120).unwrap();
+        store.save_run(&claimed).unwrap();
+
+        let restarted = run_store::RunStore::new(legacy);
+        let mut loaded = restarted.load().unwrap();
+        assert!(claim_in_state(&mut loaded, "task-1", Some(100), true, 180).is_none());
+        assert!(recover_interrupted_runs_with(
+            &mut loaded,
+            |_| try_file_lock(&dir.path().join("lease")),
+            |task| restarted.save_run(task),
+        )
+        .unwrap());
+        let mut reloaded = restarted.load().unwrap();
+        assert_eq!(reloaded.tasks[0].last_status.as_deref(), Some("error"));
+        assert_eq!(reloaded.tasks[0].last_message.as_deref(), Some("CODEX_WAKEUP_RUN_INTERRUPTED"));
+        assert_eq!(reloaded.tasks[0].last_failure_count, None);
+        assert_eq!(reloaded.tasks[0].last_run_at, Some(120));
+        assert!(claim_in_state(&mut reloaded, "task-1", Some(100), true, 180).is_none());
+        assert!(claim_in_state(&mut reloaded, "task-1", Some(200), true, 220).is_some());
     }
 
     #[test]
@@ -334,7 +423,7 @@ mod tests {
         let mut saved = state();
         let mut stale_ui = saved.clone();
         claim_in_state(&mut saved, "task-1", Some(100), true, 120).unwrap();
-        record_dispatch_failure(&mut saved.tasks[0], Some("cancelled"));
+        record_dispatch_failure(&mut saved.tasks[0], "cancelled");
         stale_ui.enabled = false;
         stale_ui.tasks[0].name = "Edited name".to_string();
         preserve_run_metadata(&mut stale_ui, &saved);
@@ -371,11 +460,14 @@ mod tests {
     fn interrupted_run_recovers_without_replaying_and_leaves_active_run_intact() {
         let mut state = state();
         claim_in_state(&mut state, "task-1", Some(100), true, 120).unwrap();
-        assert!(!recover_interrupted_runs_with(&mut state, |_| Ok(None)).unwrap());
+        assert!(!recover_interrupted_runs_with(&mut state, |_| Ok(None), |_| Ok(())).unwrap());
         assert_eq!(state.tasks[0].last_status.as_deref(), Some("running"));
         let dir = std::env::temp_dir().join(format!("wakeup-recover-{}", uuid::Uuid::new_v4()));
         let path = dir.join("task.lock");
-        assert!(recover_interrupted_runs_with(&mut state, |_| try_file_lock(&path)).unwrap());
+        assert!(
+            recover_interrupted_runs_with(&mut state, |_| try_file_lock(&path), |_| Ok(()))
+                .unwrap()
+        );
         assert_eq!(state.tasks[0].last_status.as_deref(), Some("error"));
         assert_eq!(state.tasks[0].last_run_at, Some(120));
         assert!(claim_in_state(&mut state, "task-1", Some(100), true, 180).is_none());

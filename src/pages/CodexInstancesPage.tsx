@@ -13,7 +13,8 @@ import {
 import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
 import { useCodexInstanceStore } from "../stores/useCodexInstanceStore";
 import { useCodexAccountStore } from "../stores/useCodexAccountStore";
-import { isCodexApiKeyAccount, type CodexAccount } from "../types/codex";
+import { useCodexRelayBalanceDisabled } from "../hooks/useCodexRelayBalanceDisabled";
+import { isCodexApiKeyAccount, isCodexNewApiAccount, type CodexAccount } from "../types/codex";
 import {
   CODEX_API_SERVICE_BIND_ID,
   CODEX_PROVIDER_GATEWAY_BIND_PREFIX,
@@ -42,9 +43,8 @@ import { useEscClose } from "../hooks/useEscClose";
 import { useCodexRemoteUsageCache } from '../hooks/useCodexRemoteUsageCache';
 import { isCodexRemoteGateway, withCodexRemotePresentation } from '../utils/codexRemotePresentation';
 import {
-  isDeepSeekAccount,
   parseCodexBoundAccountId,
-  resolveDeepSeekBindAccountId,
+  resolveCodexProviderBindAccountId,
 } from "../utils/codexDeepSeekAccess";
 import {
   isPrivacyModeEnabledByDefault,
@@ -187,11 +187,16 @@ export function CodexInstancesContent({
     };
   }, []);
 
+  const relayBalanceDisabled = useCodexRelayBalanceDisabled();
   const resolvePresentation = useCallback((account: CodexAccount) => {
     // Read planBadgeStyle so style event rebuilds badge classes on instances.
     void planBadgeStyle;
+    const basePresentation = buildCodexAccountPresentation(account, t);
+    if (relayBalanceDisabled && isCodexNewApiAccount(account)) {
+      basePresentation.quotaItems = [];
+    }
     const presentation = withCodexRemotePresentation(account,
-      buildCodexAccountPresentation(account, t), remoteUsage[account.id]?.summary,
+      basePresentation, remoteUsage[account.id]?.summary,
       t('common.apiBudget.gatewayName'));
     return {
       ...presentation,
@@ -202,7 +207,7 @@ export function CodexInstancesContent({
         return true;
       }),
     };
-  }, [remoteUsage, t, planBadgeStyle, showCodeReviewQuota, showAdditionalQuota]);
+  }, [relayBalanceDisabled, remoteUsage, t, planBadgeStyle, showCodeReviewQuota, showAdditionalQuota]);
 
   const accountsWithDisplayName = useMemo(
     () =>
@@ -302,19 +307,19 @@ export function CodexInstancesContent({
       let launchAccount = account;
       if (
         account &&
-        isDeepSeekAccount(account) &&
-        launchOptions?.deepSeekAccessMode
+        isCodexApiKeyAccount(account) &&
+        launchOptions?.providerAccessMode
       ) {
         launchAccount = await updateAccountInstanceAccess(
           account.id,
-          launchOptions.deepSeekAccessMode,
+          launchOptions.providerAccessMode,
           null,
-          launchOptions.imageGenerationAccountIds ?? [],
-            launchOptions.imageGenerationAccountModels ?? {},
+          launchOptions.imageGenerationAccountIds,
+            launchOptions.imageGenerationAccountModels,
         );
       }
-      if (launchAccount && isDeepSeekAccount(launchAccount)) {
-        const nextBindId = resolveDeepSeekBindAccountId(launchAccount);
+      if (launchAccount && launchOptions?.providerAccessMode) {
+        const nextBindId = resolveCodexProviderBindAccountId(launchAccount);
         if ((instance.bindAccountId || null) !== nextBindId) {
           await instanceStore.updateInstance({
             instanceId: instance.id,
@@ -747,7 +752,7 @@ export function CodexInstancesContent({
                       />
                       <span>
                         {syncingAllRecords
-                          ? t("common.syncing", "同步中...")
+                          ? t("common.syncing")
                           : t(
                               "codex.instances.syncAllRecords.action",
                               "同步所有实例记录",

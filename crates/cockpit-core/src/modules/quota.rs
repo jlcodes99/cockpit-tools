@@ -447,6 +447,11 @@ pub struct QuotaFetchError {
     pub validation_url: Option<String>,
 }
 
+fn is_explicit_quota_denial(reason: Option<&str>, validation_url: Option<&str>) -> bool {
+    matches!(reason, Some("VALIDATION_REQUIRED" | "SUBSCRIPTION_REQUIRED"))
+        || validation_url.is_some_and(|url| !url.trim().is_empty())
+}
+
 pub fn parse_google_api_error(status: u16, text: &str) -> QuotaFetchError {
     let mut message = if text.trim().is_empty() {
         format!("API returned status {}", status)
@@ -1138,40 +1143,39 @@ pub async fn fetch_quota_with_context(
             .await
         {
             Ok(response) => {
-                if response.error_for_status_ref().is_err() {
-                    let status = response.status();
-
-                    if status == reqwest::StatusCode::FORBIDDEN {
-                        crate::modules::logger::log_warn(&format!(
-                            "账号无权限 (403 Forbidden), 标记为 forbidden 状态: {}",
-                            email
-                        ));
-                        let text = response.text().await.unwrap_or_default();
-                        let mut q = QuotaData::new();
-                        q.is_forbidden = true;
-                        q.subscription_tier = subscription_tier.clone();
-                        let parsed_error = parse_google_api_error(status.as_u16(), &text);
-                        return Ok(QuotaFetchResult {
-                            quota: q,
-                            error: Some(parsed_error),
-                        });
-                    }
-
-                    if attempt < max_retries {
-                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                        continue;
-                    }
-
+                let status = response.status();
+                let mut models_error = None;
+                let mut payload_value = if status == reqwest::StatusCode::FORBIDDEN {
                     let text = response.text().await.unwrap_or_default();
-                    return Err(AppError::Unknown(format!(
-                        "API 错误: {} - {}",
-                        status, text
-                    )));
-                }
-
-                let body = response.text().await.map_err(AppError::Network)?;
-                let mut payload_value: serde_json::Value = serde_json::from_str(&body)
-                    .map_err(|e| AppError::Unknown(format!("API 响应解析失败: {}", e)))?;
+                    let error = parse_google_api_error(status.as_u16(), &text);
+                    if is_explicit_quota_denial(
+                        error.reason.as_deref(),
+                        error.validation_url.as_deref(),
+                    ) {
+                        let mut quota = QuotaData::new();
+                        quota.is_forbidden = true;
+                        quota.subscription_tier = subscription_tier.clone();
+                        quota.credits = credits.clone();
+                        return Ok(QuotaFetchResult { quota, error: Some(error) });
+                    }
+                    crate::modules::logger::log_warn(
+                        "[Quota] fetchAvailableModels 返回 403，继续检查配额摘要",
+                    );
+                    models_error = Some(error);
+                    json!({"models": {}})
+                } else {
+                    if response.error_for_status_ref().is_err() {
+                        if attempt < max_retries {
+                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                            continue;
+                        }
+                        let text = response.text().await.unwrap_or_default();
+                        return Err(AppError::Unknown(format!("API 错误: {} - {}", status, text)));
+                    }
+                    let body = response.text().await.map_err(AppError::Network)?;
+                    serde_json::from_str::<serde_json::Value>(&body)
+                        .map_err(|e| AppError::Unknown(format!("API 响应解析失败: {}", e)))?
+                };
 
                 // Fetch retrieveUserQuotaSummary to get weekly and 5h buckets
                 let mut quota_summary_val: Option<serde_json::Value> = None;
@@ -1230,10 +1234,17 @@ pub async fn fetch_quota_with_context(
                                 status, err_text
                             ));
                             let parsed = parse_google_api_error(status.as_u16(), &err_text);
-                            if parsed.reason.as_deref() == Some("VALIDATION_REQUIRED")
-                                || parsed.validation_url.is_some()
-                                || parsed.message.contains("Verify your account")
-                            {
+                            let explicitly_denied = if models_error.is_some() {
+                                is_explicit_quota_denial(
+                                    parsed.reason.as_deref(),
+                                    parsed.validation_url.as_deref(),
+                                )
+                            } else {
+                                parsed.reason.as_deref() == Some("VALIDATION_REQUIRED")
+                                    || parsed.validation_url.is_some()
+                                    || parsed.message.contains("Verify your account")
+                            };
+                            if explicitly_denied {
                                 quota_summary_error = Some(parsed);
                             }
                         }
@@ -1246,26 +1257,32 @@ pub async fn fetch_quota_with_context(
                     }
                 }
 
-                write_api_cache(
-                    "authorized",
-                    "desktop",
-                    email,
-                    effective_project_id.clone(),
-                    payload_value.clone(),
-                );
+                if models_error.is_none() {
+                    write_api_cache(
+                        "authorized",
+                        "desktop",
+                        email,
+                        effective_project_id.clone(),
+                        payload_value.clone(),
+                    );
+                }
 
                 let quota_response: QuotaResponse = serde_json::from_value(payload_value)
                     .map_err(|e| AppError::Unknown(format!("API 响应解析失败: {}", e)))?;
-                let quota_data = build_quota_data_from_response(
+                let mut quota_data = build_quota_data_from_response(
                     quota_response,
                     subscription_tier.clone(),
                     credits.clone(),
                     quota_summary_val,
                 );
 
+                if models_error.is_some() {
+                    quota_data.is_forbidden = quota_summary_error.is_some();
+                }
                 return Ok(QuotaFetchResult {
+                    error: quota_summary_error
+                        .or_else(|| models_error.filter(|_| quota_data.models.is_empty())),
                     quota: quota_data,
-                    error: quota_summary_error,
                 });
             }
             Err(e) => {

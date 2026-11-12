@@ -13,12 +13,11 @@ const fixtures = {
   572868: 'function settings(){let scope=(0,g.gh)(L.u);let f=(0,G.Zj)("4290031608"),service=Z.appServices.cumberbatch;return ["cumberbatch-availability",service];}',
 };
 function setup() {
-  const ready = [], appended = [];
-  const root = { URL, Blob, __cockpitEnhancements: {},
-    __cockpitNativePredictions: { setReady: value => ready.push(value), runtime: { dispose() {} } },
+  const appended = [];
+  const root = { URL, Blob,
     HTMLScriptElement: { supports: () => true }, addEventListener() {},
     document: { documentElement: null,
-      createElement: () => ({ appendChild: node => appended.push(node) }),
+      createElement: () => ({ appendChild: node => appended.push(node), relList: { supports: () => true } }),
       appendChild(node) { this.documentElement = node; },
     },
   };
@@ -28,7 +27,7 @@ function setup() {
     [`app://-/assets/async/${id}.abcdef1234.js`, `export const __rspack_esm_id=${id};${body}`]));
   sources.set('app://-/assets/123.abcdef1234.js',
     'r.u=e=>"assets/async/"+e+"."+({' + Object.keys(fixtures).map(id => `${id}:"abcdef1234"`).join(',') + '})[e]+".js";r.miniCssF=e=>({24191:"other-css"})[e];');
-  return { root, ready, appended, sources, api: root.__cockpitPredictionRspack,
+  return { root, appended, sources, api: root.__cockpitPredictionRspack,
     html: '<script src="/assets/123.abcdef1234.js"></script>',
     read: url => { if (!sources.has(url)) throw Error('missing-chunk'); return sources.get(url); } };
 }
@@ -38,12 +37,13 @@ test('Rspack prepares every native companion before publishing a single import m
   const prepared = h.api.prepare(h.html, h.read);
   assert.equal(prepared.ok, true, prepared.reason);
   assert.equal(prepared.modules.length, 4);
-  assert.deepEqual(h.ready, [], 'source discovery alone must not enable predictions');
-  assert.equal(h.api.install(prepared), true);
-  assert.deepEqual(h.ready, [true]);
+  assert.equal(h.root.document.documentElement, null);
+  assert.equal(h.api.installModules(prepared.modules), true);
   const imports = JSON.parse(h.appended[0].textContent).imports;
   assert.equal(Object.keys(imports).length, 4);
   assert.ok(Object.keys(imports).every(url => url.endsWith('.abcdef1234.js')));
+  assert.deepEqual(h.appended.slice(1).map(node => [node.rel, node.href]),
+    Object.values(imports).map(url => ['modulepreload', url]));
   Object.values(imports).forEach(url => URL.revokeObjectURL(url));
 });
 
@@ -52,9 +52,7 @@ test('an unavailable companion leaves the document and prediction readiness unto
   h.sources.delete('app://-/assets/async/572868.abcdef1234.js');
   const prepared = h.api.prepare(h.html, h.read);
   assert.equal(prepared.ok, false);
-  assert.equal(h.api.install(prepared), false);
   assert.equal(h.root.document.documentElement, null);
-  assert.deepEqual(h.ready, []);
 });
 
 test('a changed native contract cannot partially replace an otherwise valid source', () => {
@@ -63,4 +61,27 @@ test('a changed native contract cannot partially replace an otherwise valid sour
   const result = h.api.transform(original, 'initial');
   assert.equal(result.ok, false);
   assert.equal(result.source, original);
+});
+
+test('the current Mac and Windows host factories bind the actual exported RPC lazily', () => {
+  const h = setup();
+  for (const [exportsName, loader] of [['t', 'n'], ['o', 'a']]) {
+    const body = fixtures[24191].split('function managerModule')[0]
+      .replace('async function run(', 'async function(').replace('}const message', '};const message');
+    const source = 'export const __rspack_esm_ids=[182735];'
+      + 'const native=' + body
+      + 'const modules={Dgwo(e,' + exportsName + ',' + loader + '){let marker=true;'
+      + loader + '.d(' + exportsName + ',{},{V:function(scope,host){return [scope,host]}})}};';
+    const result = h.api.transform(source, 'host', 182735);
+    assert.equal(result.ok, true, result.reason);
+    let bindings;
+    const root = { __cockpitNativePredictions: { runtime: { register: value => { bindings = value; } } } };
+    const factories = vm.runInNewContext(result.source.replace('export const', 'const') + 'modules;', {window:root});
+    const exports = {};
+    const require = name => name === 'RxZZ' ? {CN: (get, key) => get(key)} : {W:()=>({enabled:'enabled'})};
+    require.d = (target, _, values) => Object.assign(target, values);
+    factories.Dgwo(null, exports, require);
+    assert.equal(bindings.nativeEnabled({get:key=>key==='enabled'}), true);
+    assert.equal(bindings.managerForHost('scope','local')[1], 'local');
+  }
 });

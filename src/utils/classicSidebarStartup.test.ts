@@ -11,7 +11,7 @@ const saved = JSON.stringify({ orderedPlatformIds: ['claude_manager', 'codex', '
 const defaults = JSON.stringify({ orderedPlatformIds: ['claude_manager', 'codex', 'grok'],
   sidebarEntryIds: ['group:platform-claude_manager', 'group:codex-suite', 'group:platform-grok'] });
 
-async function harness(cached: string | null, disk: string | null) {
+async function harness(cached: string | null, disk: string | null, nativeMode = 'classic') {
   let local = cached;
   let durable = disk;
   const read = deferred<{ values: Record<string, string> }>();
@@ -23,11 +23,11 @@ async function harness(cached: string | null, disk: string | null) {
     setItem: (_key: string, value: string) => { local = value; },
   };
   (globalThis as any).window = { dispatchEvent() {}, __TAURI_INTERNALS__: {
-    invoke(command: string, args?: { values: Record<string, string> }) {
+    invoke(command: string, args?: { key: string; value: string }) {
       if (command === 'load_ui_preferences') return read.promise;
-      if (command === 'save_ui_preferences') {
-        durable = args!.values[KEY]; writes.push(durable);
-        return Promise.resolve({ values: args!.values });
+      if (command === 'update_ui_preference') {
+        durable = args!.value; writes.push(durable);
+        return Promise.resolve({ values: { [KEY]: durable } });
       }
       throw new Error(command);
     },
@@ -50,6 +50,9 @@ async function harness(cached: string | null, disk: string | null) {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText, {
     exports, sideNavLayoutMode: 'classic', sideNavClassicFirstSyncDone: false,
+    hydrateDurableUiSettings: async () => {},
+    useSideNavLayoutStore: { getState: () => ({ mode: nativeMode, classicFirstSyncDone: calls.marked > 0 }) },
+    console: { warn() {} },
     syncSidebarEntriesFromDashboard() { calls.initialized++; prefs.persistPlatformLayout(defaults); },
     markSideNavClassicFirstSyncDone() { calls.marked++; },
     initializeClassicSidebar(options: unknown) {
@@ -61,7 +64,7 @@ async function harness(cached: string | null, disk: string | null) {
     local: () => local, durable: () => durable,
     resolve: () => read.resolve({ values: disk == null ? {} : { [KEY]: disk } }),
     reject: () => read.reject(new Error('disk unavailable')),
-    finish: async () => { await hydrate; await Promise.all(work); await settlePromises(); },
+    finish: async () => { await hydrate; await settlePromises(); await Promise.all(work); await settlePromises(); },
   };
 }
 
@@ -71,7 +74,8 @@ test('upgrade with an empty WebView cache waits for the saved Grok sidebar witho
   assert.equal(h.calls.marked, 0);
   assert.equal(h.local(), null);
   h.resolve(); await h.finish();
-  assert.equal(h.local(), saved); assert.equal(h.durable(), saved);
+  assert.equal(h.local(), null); assert.equal(h.prefs.readPlatformLayout(), saved);
+  assert.equal(h.durable(), saved);
   assert.equal(h.calls.initialized, 0); assert.equal(h.calls.marked, 1);
   assert.equal(h.writes.length, 0);
 });
@@ -109,4 +113,14 @@ test('failed reads and a closed startup effect cannot replace unknown or saved p
   const closed = await harness(null, saved); closed.boot()?.(); closed.resolve(); await closed.finish();
   assert.equal(closed.calls.initialized, 0); assert.equal(closed.calls.marked, 0);
   assert.equal(closed.durable(), saved); assert.equal(closed.writes.length, 0);
+});
+
+test('a hydrated original sidebar choice cancels the classic-default boot effect', async () => {
+  const h = await harness(null, null, 'original');
+  h.boot();
+  h.resolve();
+  await h.finish();
+  assert.equal(h.calls.initialized, 0);
+  assert.equal(h.calls.marked, 0);
+  assert.deepEqual(h.writes, []);
 });

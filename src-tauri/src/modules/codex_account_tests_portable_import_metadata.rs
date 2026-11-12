@@ -46,12 +46,9 @@ async fn cockpit_tools_import_restores_exported_tags_and_group() {
     assert_eq!(reloaded.tags, expected_tags);
     assert_eq!(reloaded.account_name.as_deref(), Some("Portable Name"));
 
-    let groups_path = crate::modules::account::get_data_dir()
-        .expect("data dir")
-        .join("codex_account_groups.json");
+    let store = crate::modules::account_groups_store::store("codex").expect("group store");
     let groups: Vec<serde_json::Value> =
-        serde_json::from_str(&std::fs::read_to_string(&groups_path).expect("read groups"))
-            .expect("parse groups");
+        serde_json::from_str(&store.snapshot().expect("read groups").data).expect("parse groups");
     assert_eq!(groups.len(), 1);
     assert_eq!(
         groups[0].get("name").and_then(|value| value.as_str()),
@@ -111,12 +108,9 @@ fn imported_group_name_creates_then_reuses_and_moves_accounts() {
     super::assign_imported_account_to_group_by_name("acc-2", "其他分组")
         .expect("move account into another group");
 
-    let path = crate::modules::account::get_data_dir()
-        .expect("data dir")
-        .join("codex_account_groups.json");
+    let store = crate::modules::account_groups_store::store("codex").expect("group store");
     let groups: Vec<serde_json::Value> =
-        serde_json::from_str(&std::fs::read_to_string(&path).expect("read groups"))
-            .expect("parse groups");
+        serde_json::from_str(&store.snapshot().expect("read groups").data).expect("parse groups");
 
     assert_eq!(groups.len(), 2);
     let default_group = groups
@@ -141,5 +135,17 @@ fn imported_group_name_creates_then_reuses_and_moves_accounts() {
             .and_then(|ids| ids.first())
             .and_then(|value| value.as_str()),
         Some("acc-2")
+    );
+
+    let mut policies = groups;
+    policies[1]["quotaAutoRefreshMinutes"] = serde_json::json!(-1);
+    store
+        .replace_json(&serde_json::to_string(&policies).unwrap(), None)
+        .unwrap();
+    assert!(super::is_quota_refresh_enabled_for_account("acc-1"));
+    assert!(!super::is_quota_refresh_enabled_for_account("acc-2"));
+    assert_eq!(
+        super::load_quota_refresh_disabled_account_ids(),
+        std::collections::HashSet::from(["acc-2".to_string()])
     );
 }

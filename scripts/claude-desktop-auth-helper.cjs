@@ -110,6 +110,7 @@ function loadUrlWithTimeout(win, url, timeoutMs) {
 
 let cachedWebProfile = null;
 let cachedWebProfileKey = '';
+let webProfileRequestId = 0;
 
 function cookieHeader(cookies) {
   return cookies
@@ -178,6 +179,7 @@ async function fetchClaudeWebProfileInPage(webContents, lastActiveOrg) {
             method: 'GET',
             credentials: 'include',
             redirect: 'follow',
+            signal: AbortSignal.timeout(10000),
             referrer: options.referrer || 'https://claude.ai/',
             headers: {
               accept: 'application/json',
@@ -333,25 +335,40 @@ async function fetchClaudeWebProfile(cookies, webContents) {
 }
 
 async function writeStatus(status, extra = {}, webContents = null, options = {}) {
-  const cookies = await readClaudeCookies().catch(() => []);
+  const cookies = await readClaudeCookies().catch(() => null);
+  if (!cookies) return false;
   const sessionKey = ['sessionKey', 'sessionKeyV3', 'sessionKeyV2']
     .map((name) => findCookie(cookies, name)).find(Boolean);
   const lastActiveOrg = findCookie(cookies, 'lastActiveOrg');
   const authenticated = Boolean(sessionKey && lastActiveOrg && isUuid(lastActiveOrg.value));
   const profileKey = authenticated ? `${sessionKey.value}:${lastActiveOrg.value}` : '';
-  if (authenticated && !options.skipWebProfile && profileKey !== cachedWebProfileKey) {
+  if (!authenticated) {
+    if (cachedWebProfileKey) {
+      webProfileRequestId += 1;
+      if (mode === 'auth') fs.rmSync(exportFile, { force: true });
+    }
+    cachedWebProfileKey = '';
+    cachedWebProfile = null;
+  } else if (!options.skipWebProfile && profileKey !== cachedWebProfileKey) {
     cachedWebProfileKey = profileKey;
-    cachedWebProfile = await fetchClaudeWebProfile(cookies, webContents).catch((error) => ({
+    cachedWebProfile = null;
+    const requestId = ++webProfileRequestId;
+    const loadProfile = fetchClaudeWebProfile(cookies, webContents).catch((error) => ({
       version: 1,
       fetchedAt: new Date().toISOString(),
       errors: {
         profile: String(error && error.message ? error.message : error),
       },
     }));
-  }
-  if (!authenticated) {
-    cachedWebProfileKey = '';
-    cachedWebProfile = null;
+    if (options.onProfileReady) {
+      void loadProfile.then((profile) => {
+        if (requestId !== webProfileRequestId) return;
+        cachedWebProfile = profile;
+        options.onProfileReady();
+      });
+    } else {
+      cachedWebProfile = await loadProfile;
+    }
   }
   const webProfile = authenticated ? cachedWebProfile : null;
   const payload = {
@@ -516,35 +533,54 @@ app.whenReady().then(async () => {
     return { action: 'deny' };
   });
 
+  let pendingStatus = null;
+  let refreshing = false;
+  let closing = false;
+  const cookies = session.defaultSession.cookies;
+  function queueStatus(status = 'running', extra = {}) {
+    if (closing) return;
+    pendingStatus = { status, extra };
+    if (refreshing) return;
+    refreshing = true;
+    setImmediate(async () => {
+      try {
+        while (pendingStatus && !closing) {
+          const next = pendingStatus;
+          pendingStatus = null;
+          const contents = win.webContents;
+          const authenticated = await writeStatus(next.status, {
+            url: contents.isDestroyed() ? null : contents.getURL(),
+            ...next.extra,
+          }, contents, { onProfileReady: queueStatus }).catch(() => false);
+          if (authenticated && !win.isDestroyed()) {
+            win.setTitle('Claude Login - authenticated');
+          }
+        }
+      } finally {
+        refreshing = false;
+      }
+    });
+  }
+
+  const onCookieChanged = (_, cookie) => {
+    if (isClaudeCookie(cookie)) queueStatus();
+  };
+  cookies.on('changed', onCookieChanged);
   win.on('closed', () => {
-    writeStatus('closed').finally(() => app.quit());
+    closing = true;
+    cookies.removeListener('changed', onCookieChanged);
+    app.quit();
   });
+  win.webContents.on('did-navigate', (_, url) => queueStatus('running', { url }));
+  win.webContents.on('did-navigate-in-page', (_, url, isMainFrame) => {
+    if (isMainFrame) queueStatus('running', { url });
+  });
+  win.webContents.on('did-fail-load', (_, errorCode, errorDescription, url, isMainFrame) => {
+    if (isMainFrame) queueStatus('load_error', { errorCode, errorDescription, url });
+  });
+  win.webContents.on('did-finish-load', () => queueStatus('loaded'));
 
-  win.webContents.on('did-navigate', (_, url) => {
-    writeStatus('running', { url }, win.webContents).catch(() => {});
-  });
-  win.webContents.on('did-navigate-in-page', (_, url) => {
-    writeStatus('running', { url }, win.webContents).catch(() => {});
-  });
-  win.webContents.on('did-fail-load', (_, errorCode, errorDescription, validatedUrl) => {
-    writeStatus('load_error', { errorCode, errorDescription, url: validatedUrl }, win.webContents).catch(() => {});
-  });
-  win.webContents.on('did-finish-load', () => {
-    writeStatus('loaded', { url: win.webContents.getURL() }, win.webContents).catch(() => {});
-  });
-
-  await win.loadURL(startUrl);
-
-  const interval = setInterval(async () => {
-    const authenticated = await writeStatus('running', {
-      url: win.webContents.isDestroyed() ? null : win.webContents.getURL(),
-    }, win.webContents).catch(() => false);
-    if (authenticated && !win.isDestroyed()) {
-      win.setTitle('Claude Login - authenticated');
-    }
-  }, 1500);
-
-  app.on('before-quit', () => clearInterval(interval));
+  void win.loadURL(startUrl).catch(() => {});
 });
 
 app.on('window-all-closed', () => app.quit());

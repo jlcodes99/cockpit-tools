@@ -6,7 +6,11 @@ import { after, before, test } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer, type ViteDevServer } from 'vite';
+import { createInstance } from 'i18next';
+import { I18nextProvider } from 'react-i18next';
 import type { Account } from '../types/account';
+import { PACKAGE_CODE, RESOURCE_STATUS } from '../types/codebuddy-suite';
+import enResources from '../locales/en.json';
 
 // Render the real consumer and presentation with real stores; only the native
 // host and browser storage are inert. SSR does not run effects or native calls.
@@ -29,7 +33,7 @@ before(async () => {
     location: { search: '' },
   } });
   server = await createServer({ configFile: false, server: { middlewareMode: true, watch: null, hmr: false }, appType: 'custom',
-    esbuild: { jsx: 'automatic' }, ssr: { external: ['react', 'react-dom', 'react-dom/server'] } });
+    esbuild: { jsx: 'automatic' }, ssr: { external: ['react', 'react-dom', 'react-dom/server', 'react-i18next'] } });
   accountStore = (await server.ssrLoadModule('/src/stores/useAccountStore.ts')).useAccountStore;
   ({ FloatingCardWindow } = await server.ssrLoadModule('/src/pages/FloatingCardWindow.tsx'));
 });
@@ -63,9 +67,10 @@ for (const platform of ['antigravity', 'antigravity_ide']) {
     assert.match(html, /80%/);
   });
   test(`${platform} retains Gemini weekly without an Argon bucket`, () => {
-    const html = render(platform, ['3p-5h', '3p-weekly', 'gemini-5h', 'gemini-weekly']);
+    const html = render(platform, ['3p-5h', '3p-weekly', 'gemini-5h', 'gemini-weekly', 'gemini-4-argon-high']);
     assert.equal((html.match(/class="floating-card-quota-row"/g) ?? []).length, 4);
     assert.ok(html.includes('Gemini (Weekly)'));
+    assert.doesNotMatch(html, /Gemini 4 Argon \(Weekly\)/);
   });
   test(`${platform} retains all three free-tier weekly windows`, () => {
     const html = render(platform, ['3p-weekly', 'gemini-weekly', 'gemini-argon-wtu-weekly'], true);
@@ -86,9 +91,13 @@ test('Cursor keeps its three primary bars and excludes On-Demand', async () => {
   const snapshot = { accounts: [account], currentAccountId: account.id };
   store.setState(snapshot); Object.assign(store.getInitialState(), snapshot);
   storage.set('agtools.floating_card.platform', 'cursor');
-  const html = renderToStaticMarkup(createElement(FloatingCardWindow));
+  const i18n = createInstance();
+  await i18n.init({ lng: 'en', resources: { en: { translation: enResources } } });
+  const html = renderToStaticMarkup(createElement(I18nextProvider, { i18n }, createElement(FloatingCardWindow)));
   assert.equal((html.match(/class="floating-card-quota-row"/g) ?? []).length, 3);
-  for (const label of ['Total Usage', 'Auto + Composer', 'API Usage']) assert.ok(html.includes(label), label);
+  assert.ok(html.includes('Total Usage'));
+  assert.match(html, /Cursor Models[^]*?30%/);
+  assert.match(html, /Other Models[^]*?40%/);
   assert.ok(!html.includes('On-Demand'));
 });
 
@@ -106,6 +115,40 @@ test('Codex retains its existing two-window cap', async () => {
   assert.match(html, /23%/); assert.match(html, /67%/);
   assert.ok(!html.includes('Code Review'));
 });
+
+for (const [platform, storeName] of [
+  ['workbuddy', 'useWorkbuddyAccountStore'],
+  ['codebuddy_cn', 'useCodebuddyCnAccountStore'],
+]) {
+  test(`${platform} shows the total of active grants rather than the first package`, async () => {
+    const store = (await server.ssrLoadModule(`/src/stores/${storeName}.ts`))[storeName];
+    const pack = (PackageCode: string, total: number, remaining: number, status: number = RESOURCE_STATUS.valid) => ({
+      PackageCode, Status: status,
+      CycleCapacitySizePrecise: String(total), CycleCapacityRemainPrecise: String(remaining),
+      DeductionEndTime: '2039-01-01T00:00:00Z',
+    });
+    const account = { id: `${platform}-credits`, email: 'credits@example.com', access_token: '', created_at: 0, last_used: 0,
+      quota_raw: { userResource: { Response: { Data: { Accounts: [
+        pack(PACKAGE_CODE.freeMon, 500, 0),
+        pack(PACKAGE_CODE.activity, 5000, 4854.26),
+        pack(PACKAGE_CODE.activity, 1000, 1000),
+        pack(PACKAGE_CODE.activity, 2505, 1090.65),
+        pack(PACKAGE_CODE.activity, 999, 0, RESOURCE_STATUS.expired),
+        pack(PACKAGE_CODE.extra, 200, 100),
+      ] } } } },
+    };
+    const snapshot = { accounts: [account], currentAccountId: account.id };
+    store.setState(snapshot); Object.assign(store.getInitialState(), snapshot);
+    storage.set('agtools.floating_card.platform', platform);
+    const i18n = createInstance();
+    await i18n.init({ lng: 'en', resources: { en: { translation: enResources } } });
+    const html = renderToStaticMarkup(createElement(I18nextProvider, { i18n, children: createElement(FloatingCardWindow) }));
+    assert.equal((html.match(/class="floating-card-quota-row"/g) ?? []).length, 3);
+    assert.match(html, /1,560\.09 \/ 8,505/);
+    assert.match(html, /100 \/ 200/);
+    assert.doesNotMatch(html, /145\.74 \/ 5,000/);
+  });
+}
 
 
 test('quota bodies remain scrollable when content exceeds the window height cap', () => {

@@ -1,6 +1,8 @@
+import { hydrateDurableUiSettings } from '../utils/durableUiSettings';
 import {
   ChangeEvent,
   MouseEvent as ReactMouseEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -49,7 +51,8 @@ import {
   retryPlatformLayoutPersistence,
 } from '../utils/uiPreferences';
 import {
-  PLATFORM_LAYOUT_ICON_STORAGE_KEY,
+  PLATFORM_LAYOUT_ICONS_CHANGED_EVENT,
+  readPlatformLayoutCustomIcons,
   persistPlatformLayoutCustomIcons,
 } from '../utils/platformLayoutIconStorage';
 
@@ -113,7 +116,7 @@ function loadCustomIcons(): PlatformLayoutCustomIcon[] {
     return [];
   }
   try {
-    const raw = localStorage.getItem(PLATFORM_LAYOUT_ICON_STORAGE_KEY);
+    const raw = readPlatformLayoutCustomIcons();
     if (!raw) {
       return [];
     }
@@ -556,16 +559,33 @@ export function PlatformLayoutModal({
     return map;
   }, [platformGroups]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
+  const iconSaveSequence = useRef(0);
+  const changeCustomIcons = useCallback(async (
+    edit: (previous: PlatformLayoutCustomIcon[]) => PlatformLayoutCustomIcon[],
+  ) => {
+    const sequence = ++iconSaveSequence.current;
+    let saved = false;
+    try {
+      await hydrateDurableUiSettings();
+      const previous = loadCustomIcons();
+      const next = edit(previous);
+      saved = next === previous || await persistPlatformLayoutCustomIcons(next);
+    } catch (error) {
+      console.warn('[Platform layout] Could not load custom icons:', error);
     }
-    setCustomIconStorageFailed(
-      !persistPlatformLayoutCustomIcons(localStorage, customIcons),
-    );
-  }, [customIcons]);
+    if (sequence === iconSaveSequence.current) setCustomIconStorageFailed(!saved);
+    return saved;
+  }, []);
 
   useEffect(() => {
+    const reload = () => setCustomIcons(loadCustomIcons());
+    window.addEventListener(PLATFORM_LAYOUT_ICONS_CHANGED_EVENT, reload);
+    reload();
+    return () => window.removeEventListener(PLATFORM_LAYOUT_ICONS_CHANGED_EVENT, reload);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
     const used = new Set<string>();
     for (const group of platformGroups) {
       if (group.iconKind === 'custom' && group.iconCustomDataUrl?.trim()) {
@@ -582,7 +602,7 @@ export function PlatformLayoutModal({
       return;
     }
 
-    setCustomIcons((prev) => {
+    void changeCustomIcons((prev) => {
       const next = [...prev];
       let changed = false;
       for (const dataUrl of used) {
@@ -599,7 +619,7 @@ export function PlatformLayoutModal({
       }
       return changed ? next : prev;
     });
-  }, [platformGroups]);
+  }, [open, platformGroups, changeCustomIcons]);
 
   useEffect(() => {
     if (!open || (!draggingId && !draggingChild)) return;
@@ -647,7 +667,7 @@ export function PlatformLayoutModal({
     if (!cleaned) {
       return;
     }
-    setCustomIcons((prev) => {
+    void changeCustomIcons((prev) => {
       if (prev.some((item) => item.dataUrl === cleaned)) {
         return prev;
       }
@@ -703,7 +723,7 @@ export function PlatformLayoutModal({
     }
   };
 
-  const removeCustomIcon = (iconId: string) => {
+  const removeCustomIcon = async (iconId: string) => {
     const icon = customIcons.find((item) => item.id === iconId);
     if (!icon) {
       return;
@@ -716,7 +736,7 @@ export function PlatformLayoutModal({
       return;
     }
 
-    setCustomIcons((prev) => prev.filter((item) => item.id !== iconId));
+    if (!await changeCustomIcons(prev => prev.filter(item => item.id !== iconId))) return;
     clearCustomIconUsage(icon.dataUrl);
 
     if (groupDraftIconKind === 'custom' && groupDraftIconCustomDataUrl === icon.dataUrl) {
@@ -1201,10 +1221,7 @@ export function PlatformLayoutModal({
 
           {customIconStorageFailed && (
             <div className="platform-layout-group-error" role="alert">
-              {t(
-                'platformLayout.customIconStorageFailed',
-                '自定义图标无法保存，本地存储空间可能已满。删除不再使用的自定义图标后重试。',
-              )}
+              {t('platformLayout.customIconStorageFailed')}
             </div>
           )}
 

@@ -65,6 +65,15 @@ fn resolve_running_pid(last_pid: Option<u32>, user_data_dir: Option<&str>) -> Op
     modules::process::resolve_workbuddy_pid(last_pid, user_data_dir)
 }
 
+async fn close_workbuddy_instance(user_data_dir: &str) -> Result<(), String> {
+    let user_data_dir = user_data_dir.to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        modules::process::close_workbuddy_instances(&[user_data_dir], 20)
+    })
+    .await
+    .map_err(|error| format!("WorkBuddy 实例停止后台任务失败: {}", error))?
+}
+
 #[tauri::command]
 pub async fn workbuddy_get_instance_defaults() -> Result<modules::instance::InstanceDefaults, String>
 {
@@ -210,11 +219,7 @@ pub async fn workbuddy_start_instance(instance_id: String) -> Result<InstancePro
         let default_dir_str = default_dir.to_string_lossy().to_string();
         let default_settings = modules::workbuddy_instance::load_default_settings()?;
 
-        if let Some(pid) = resolve_running_pid(default_settings.last_pid, None) {
-            modules::process::close_pid(pid, 20)?;
-            let _ = modules::workbuddy_instance::update_default_pid(None)?;
-        }
-        modules::process::close_workbuddy_instances(&[default_dir_str.clone()], 20)?;
+        close_workbuddy_instance(&default_dir_str).await?;
         let _ = modules::workbuddy_instance::update_default_pid(None)?;
 
         inject_bound_account_for_instance_start(
@@ -253,11 +258,7 @@ pub async fn workbuddy_start_instance(instance_id: String) -> Result<InstancePro
         .find(|item| item.id == instance_id)
         .ok_or("实例不存在")?;
 
-    if let Some(pid) = resolve_running_pid(instance.last_pid, Some(&instance.user_data_dir)) {
-        modules::process::close_pid(pid, 20)?;
-        let _ = modules::workbuddy_instance::update_instance_pid(&instance.id, None)?;
-    }
-    modules::process::close_workbuddy_instances(&[instance.user_data_dir.clone()], 20)?;
+    close_workbuddy_instance(&instance.user_data_dir).await?;
     let _ = modules::workbuddy_instance::update_instance_pid(&instance.id, None)?;
 
     inject_bound_account_for_instance_start(
@@ -287,10 +288,7 @@ pub async fn workbuddy_stop_instance(instance_id: String) -> Result<InstanceProf
         let default_dir = modules::workbuddy_instance::get_default_workbuddy_user_data_dir()?;
         let default_dir_str = default_dir.to_string_lossy().to_string();
         let default_settings = modules::workbuddy_instance::load_default_settings()?;
-        if let Some(pid) = resolve_running_pid(default_settings.last_pid, None) {
-            modules::process::close_pid(pid, 20)?;
-        }
-        modules::process::close_workbuddy_instances(&[default_dir_str.clone()], 20)?;
+        close_workbuddy_instance(&default_dir_str).await?;
         let _ = modules::workbuddy_instance::update_default_pid(None)?;
         return Ok(InstanceProfileView {
             id: DEFAULT_INSTANCE_ID.to_string(),
@@ -316,10 +314,7 @@ pub async fn workbuddy_stop_instance(instance_id: String) -> Result<InstanceProf
         .find(|item| item.id == instance_id)
         .ok_or("实例不存在")?;
 
-    if let Some(pid) = resolve_running_pid(instance.last_pid, Some(&instance.user_data_dir)) {
-        modules::process::close_pid(pid, 20)?;
-    }
-    modules::process::close_workbuddy_instances(&[instance.user_data_dir.clone()], 20)?;
+    close_workbuddy_instance(&instance.user_data_dir).await?;
     let updated = modules::workbuddy_instance::update_instance_pid(&instance.id, None)?;
     let initialized = is_profile_initialized(&updated.user_data_dir);
     Ok(InstanceProfileView::from_profile(

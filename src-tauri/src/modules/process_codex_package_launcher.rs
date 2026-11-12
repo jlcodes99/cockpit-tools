@@ -98,6 +98,7 @@ impl LaunchRequest {
         command.args(&self.args).envs(self.env.iter().cloned());
         // No launch payload or inherited Codex profile reaches the official client.
         command.env_remove(PAYLOAD_ENV);
+        command.env_remove("CODEX_CLI_PATH");
         for (key, value) in [
             ("CODEX_HOME", self.codex_home.as_deref()),
             (

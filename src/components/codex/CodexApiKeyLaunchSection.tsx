@@ -15,8 +15,8 @@ import {
   DEEPSEEK_ACCESS_MODE_DIRECT,
   DEEPSEEK_ACCESS_MODE_GATEWAY,
   isDeepSeekAccount,
-  isDeepSeekResponsesAccount,
-  resolveDeepSeekAccessMode,
+  codexProviderAccessModes,
+  resolveCodexProviderAccessMode,
   resolveDeepSeekModelOptions,
   resolveDeepSeekStartupModel,
   shouldUseDeepSeekProviderGateway,
@@ -30,7 +30,7 @@ import "./CodexLaunchPreviewModal.css";
 import "./CodexApiKeyLaunchSection.css";
 
 export interface CodexApiKeyLaunchOptions {
-  accessMode: DeepSeekAccessMode;
+  accessMode?: DeepSeekAccessMode;
   startupModel: string;
   imageGenEnabled: boolean;
   imageGenAccountIds: string[];
@@ -58,7 +58,7 @@ export function createCodexApiKeyLaunchOptions(
       )
     : [];
   return {
-    accessMode: resolveDeepSeekAccessMode(account ?? undefined),
+    accessMode: resolveCodexProviderAccessMode(account),
     startupModel: resolveDeepSeekStartupModel(account ?? undefined),
     imageGenEnabled: imageAccountIds.length > 0,
     imageGenAccountIds: imageAccountIds,
@@ -131,7 +131,7 @@ export function CodexApiKeyLaunchSection({
     }
   }, [accounts, accountsLoaded, imageModelConfig.loaded, imageModelConfig.model, imageModelConfig.deletedModels, onChange, options]);
 
-  const canChooseAccessMode = isDeepSeekResponsesAccount(account);
+  const supportedAccessModes = codexProviderAccessModes(account);
   const isDeepSeek = isDeepSeekAccount(account);
   const models = useMemo(() => {
     if (isDeepSeek) return resolveDeepSeekModelOptions(account);
@@ -167,15 +167,15 @@ export function CodexApiKeyLaunchSection({
     {
       id: DEEPSEEK_ACCESS_MODE_GATEWAY,
       title: t("codex.deepSeek.start.gatewayMode", "网关列出"),
-      description: t(
+      description: !isDeepSeek ? t("codex.launchPreview.providerAccessGatewayHint") : t(
         "codex.deepSeek.start.gatewayDesc",
         "需要本地网关。支持绑定 OAuth 的 GPT 账号并使用 OAuth 的全部能力（浏览器操作等），支持在 Codex 内切换模型，可把生图交给 GPT 账号。",
       ),
     },
     {
       id: DEEPSEEK_ACCESS_MODE_DIRECT,
-      title: t("codex.deepSeek.start.directMode", "直连官方"),
-      description: t(
+      title: t(isDeepSeek ? "codex.deepSeek.start.directMode" : "codex.launchPreview.providerAccessDirect"),
+      description: !isDeepSeek ? t("codex.deepSeek.start.directUpstreamHint") : t(
         "codex.deepSeek.start.directDesc",
         "不走网关，速度更快。不能在 Codex 内切换模型，也没有 OAuth 能力与生图转发。",
       ),
@@ -183,7 +183,7 @@ export function CodexApiKeyLaunchSection({
     {
       id: DEEPSEEK_ACCESS_MODE_CDP,
       title: t("codex.deepSeek.start.cdpMode", "CDP 注入"),
-      description: t(
+      description: !isDeepSeek ? t("codex.launchPreview.providerAccessCdpHint") : t(
         "codex.deepSeek.start.cdpDesc",
         "通过注入接管 Codex 官方模型列表，速度与直连一致。需要注入官方客户端，不支持绑定 OAuth。",
       ),
@@ -212,60 +212,25 @@ export function CodexApiKeyLaunchSection({
         </div>
       )}
 
-      {canChooseAccessMode ? (
-        <div className="form-group">
-          <label>{t("codex.deepSeek.start.accessMode", "接入方式")}</label>
-          <div className="codex-api-key-launch-mode-list">
-            {modes.map((mode) => (
-              <button
-                key={mode.id}
-                type="button"
-                className={`codex-api-key-launch-mode ${
-                  options.accessMode === mode.id ? "active" : ""
-                }`}
-                onClick={() => onChange({ ...options, accessMode: mode.id })}
-                disabled={disabled}
-              >
-                <span className="codex-api-key-launch-mode-title">{mode.title}</span>
-                <span className="codex-api-key-launch-mode-desc">{mode.description}</span>
-              </button>
-            ))}
-          </div>
+      <div className="form-group">
+        <label>{t("codex.deepSeek.start.accessMode", "接入方式")} · {wireApiLabel}</label>
+        <div className="codex-api-key-launch-mode-list">
+          {modes.filter((mode) => supportedAccessModes.includes(mode.id)).map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              className={`codex-api-key-launch-mode ${
+                options.accessMode === mode.id ? "active" : ""
+              }`}
+              onClick={() => onChange({ ...options, accessMode: mode.id })}
+              disabled={disabled}
+            >
+              <span className="codex-api-key-launch-mode-title">{mode.title}</span>
+              <span className="codex-api-key-launch-mode-desc">{mode.description}</span>
+            </button>
+          ))}
         </div>
-      ) : (
-        <div className="form-group">
-          <label>{t("codex.deepSeek.start.accessMode", "接入方式")}</label>
-          <div className="codex-api-key-launch-context-list">
-            <span className="codex-api-key-launch-context-item">
-              <span className="codex-api-key-launch-context-model">
-                {t("codex.deepSeek.start.protocol", "协议")}
-              </span>
-              <span className="codex-api-key-launch-context-value">{wireApiLabel}</span>
-            </span>
-            <span className="codex-api-key-launch-context-item">
-              <span className="codex-api-key-launch-context-model">
-                {t("codex.deepSeek.start.accessRoute", "接入")}
-              </span>
-              <span className="codex-api-key-launch-context-value">
-                {usesLocalGateway
-                  ? t("codex.deepSeek.start.gatewayRequired", "走实例本地网关")
-                  : t("codex.deepSeek.start.directUpstream", "直连上游，不经网关")}
-              </span>
-            </span>
-          </div>
-          <p className="form-hint">
-            {usesLocalGateway
-              ? t(
-                  "codex.deepSeek.start.gatewayHint",
-                  "该协议需要本地网关转换，可在 Codex 内切换模型；网关还能承接生图转发。",
-                )
-              : t(
-                  "codex.deepSeek.start.directUpstreamHint",
-                  "该账号直接访问上游，不经过本地网关，因此不支持生图转发。",
-                )}
-          </p>
-        </div>
-      )}
+      </div>
 
       {isDeepSeek && (
         <div className="form-group">
@@ -288,7 +253,7 @@ export function CodexApiKeyLaunchSection({
         </div>
       )}
 
-      {(canChooseAccessMode ? options.accessMode === DEEPSEEK_ACCESS_MODE_GATEWAY : usesLocalGateway) && (
+      {(options.accessMode ? options.accessMode === DEEPSEEK_ACCESS_MODE_GATEWAY : usesLocalGateway) && (
         <div className="form-group codex-api-key-launch-imagegen">
           <label className="codex-api-key-launch-imagegen-head">
             <input

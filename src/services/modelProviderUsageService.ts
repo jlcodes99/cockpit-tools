@@ -121,6 +121,8 @@ export async function queryModelProviderUsage(input: {
   /** Only used for OpenAI organization usage; never replaces the model credential. */
   usageApiKey?: string;
   integrationType?: ModelProviderUsageIntegrationType | null;
+  respectRelayBalanceSwitch?: boolean;
+  accountId?: string;
 }): Promise<ModelProviderUsageSummary> {
   const candidates = buildUsageBaseUrlCandidates(input.baseUrl);
   let lastError: unknown = null;
@@ -131,6 +133,8 @@ export async function queryModelProviderUsage(input: {
         apiKey: input.apiKey,
         usageApiKey: input.usageApiKey ?? null,
         integrationType: input.integrationType ?? null,
+        respectRelayBalanceSwitch: input.respectRelayBalanceSwitch ?? false,
+        accountId: input.accountId ?? null,
       });
       if (summary.cockpit) summary.sourceBinding = await codexRemoteBinding(input.baseUrl, input.apiKey);
       return summary;
@@ -149,13 +153,31 @@ export async function listModelProviderModels(input: {
   apiKey: string;
   wireApi?: string;
   authScheme?: "x-api-key" | "bearer";
+  rememberForLaunch?: boolean;
 }): Promise<ModelProviderModelsResult> {
   return await invoke('codex_list_model_provider_models', {
     baseUrl: input.baseUrl,
     apiKey: input.apiKey,
     wireApi: input.wireApi ?? null,
     authScheme: input.authScheme ?? null,
+    rememberForLaunch: input.rememberForLaunch ?? null,
   });
+}
+
+const launchModelRequests = new Map<string, Promise<ModelProviderModelsResult>>();
+
+export function discoverModelProviderLaunchModels(input: Parameters<typeof listModelProviderModels>[0]) {
+  const requestKey = JSON.stringify([input.baseUrl, input.apiKey, input.wireApi, input.authScheme]);
+  const current = launchModelRequests.get(requestKey);
+  if (current) return current;
+  const request = listModelProviderModels({ ...input, rememberForLaunch: true })
+    .finally(() => launchModelRequests.delete(requestKey));
+  launchModelRequests.set(requestKey, request);
+  return request;
+}
+
+export function isRelayBalanceDisabledError(error: unknown): boolean {
+  return String(error).replace(/^Error:\s*/, '') === 'PROVIDER_RELAY_BALANCE_DISABLED';
 }
 
 export function isModelProviderUsageUnavailableError(error: unknown): boolean {

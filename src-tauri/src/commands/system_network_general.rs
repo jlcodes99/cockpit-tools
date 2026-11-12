@@ -25,7 +25,33 @@ pub fn get_network_config() -> Result<NetworkConfig, String> {
 
 /// 保存网络服务配置
 #[tauri::command]
-pub fn save_network_config(
+pub async fn save_network_config(
+    ws_enabled: bool,
+    ws_port: u16,
+    report_enabled: Option<bool>,
+    report_port: Option<u16>,
+    report_token: Option<String>,
+    global_proxy_enabled: Option<bool>,
+    global_proxy_url: Option<String>,
+    global_proxy_no_proxy: Option<String>,
+) -> Result<NetworkConfigSaveResult, String> {
+    let needs_restart = tauri::async_runtime::spawn_blocking(move || {
+        persist_network_config(
+            ws_enabled, ws_port, report_enabled, report_port, report_token,
+            global_proxy_enabled, global_proxy_url, global_proxy_no_proxy,
+        )
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+    let report_error = web_report::apply_server_config().await.err();
+    Ok(NetworkConfigSaveResult {
+        needs_restart,
+        report_actual_port: web_report::get_actual_port(),
+        report_error,
+    })
+}
+
+fn persist_network_config(
     ws_enabled: bool,
     ws_port: u16,
     report_enabled: Option<bool>,
@@ -61,11 +87,7 @@ pub fn save_network_config(
             return Err("启用全局代理时，代理地址不能为空".to_string());
         }
 
-        needs_restart = current.ws_port != ws_port
-            || current.ws_enabled != ws_enabled
-            || current.report_enabled != next_report_enabled
-            || current.report_port != next_report_port
-            || current.report_token != next_report_token;
+        needs_restart = current.ws_port != ws_port || current.ws_enabled != ws_enabled;
 
         current.ws_enabled = ws_enabled;
         current.ws_port = ws_port;
@@ -300,10 +322,12 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         close_behavior: close_behavior_str.to_string(),
         minimize_behavior: minimize_behavior_str.to_string(),
         hide_dock_icon: user_config.hide_dock_icon,
+        show_tray_icon: user_config.show_tray_icon,
         tray_icon_style: user_config.tray_icon_style.as_str().to_string(),
         menu_bar_quota_enabled: user_config.menu_bar_quota_enabled,
         menu_bar_show_account_prefix: user_config.menu_bar_show_account_prefix,
         menu_bar_quota_platform: user_config.menu_bar_quota_platform,
+        menu_bar_antigravity_metric: user_config.menu_bar_antigravity_metric,
         floating_card_show_on_startup: user_config.floating_card_show_on_startup,
         startup_minimized: user_config.startup_minimized,
         remember_main_window_state: user_config.remember_main_window_state,
@@ -328,6 +352,9 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         ),
         antigravity_app_path: modules::process::normalize_windows_user_facing_path(
             &user_config.antigravity_app_path,
+        ),
+        antigravity_legacy_app_path: modules::process::normalize_windows_user_facing_path(
+            &user_config.antigravity_legacy_app_path,
         ),
         codex_app_path: modules::process::normalize_windows_user_facing_path(
             &user_config.codex_app_path,
@@ -531,6 +558,7 @@ pub fn patch_general_config(
     let mut token_keeper_enabled_changed = false;
     let mut auto_import_from_local_enabled_changed = false;
     let mut floating_always_on_top_changed = false;
+    let mut tray_visibility_changed = false;
     #[cfg(target_os = "macos")]
     let mut hide_dock_icon_changed = false;
     #[cfg(target_os = "macos")]
@@ -543,8 +571,9 @@ pub fn patch_general_config(
         let previous_token_keeper_enabled = current.token_keeper_enabled;
         let previous_auto_import_from_local_enabled = current.auto_import_from_local_enabled;
         let previous_floating_always_on_top = current.floating_card_always_on_top;
+        let previous_show_tray_icon = current.show_tray_icon;
         #[cfg(target_os = "macos")]
-        let previous_hide_dock_icon = current.hide_dock_icon;
+        let previous_hide_dock_icon = crate::should_hide_dock_icon(current);
         #[cfg(target_os = "macos")]
         let previous_tray_icon_style = current.tray_icon_style;
         #[cfg(target_os = "macos")]
@@ -552,6 +581,8 @@ pub fn patch_general_config(
             current.menu_bar_quota_enabled,
             current.menu_bar_show_account_prefix,
             current.menu_bar_quota_platform.clone(),
+            current.menu_bar_antigravity_metric.clone(),
+            current.codex_hide_relay_quota,
         );
 
         apply_general_config_updates(current, &updates)?;
@@ -563,15 +594,18 @@ pub fn patch_general_config(
             previous_auto_import_from_local_enabled != current.auto_import_from_local_enabled;
         floating_always_on_top_changed =
             previous_floating_always_on_top != current.floating_card_always_on_top;
+        tray_visibility_changed = previous_show_tray_icon != current.show_tray_icon;
         #[cfg(target_os = "macos")]
         {
-            hide_dock_icon_changed = previous_hide_dock_icon != current.hide_dock_icon;
+            hide_dock_icon_changed = previous_hide_dock_icon != crate::should_hide_dock_icon(current);
             tray_icon_style_changed = previous_tray_icon_style != current.tray_icon_style;
             menu_bar_quota_changed = previous_menu_bar_quota
                 != (
                     current.menu_bar_quota_enabled,
                     current.menu_bar_show_account_prefix,
                     current.menu_bar_quota_platform.clone(),
+                    current.menu_bar_antigravity_metric.clone(),
+                    current.codex_hide_relay_quota,
                 );
         }
         Ok(())
@@ -617,7 +651,7 @@ pub fn patch_general_config(
     }
 
     #[cfg(target_os = "macos")]
-    if hide_dock_icon_changed {
+    if hide_dock_icon_changed && !tray_visibility_changed {
         crate::apply_macos_activation_policy(&app);
     }
 
@@ -632,6 +666,13 @@ pub fn patch_general_config(
     if menu_bar_quota_changed {
         if let Err(err) = modules::tray::update_tray_menu(&app) {
             modules::logger::log_warn(&format!("[Tray] 保存菜单栏额度设置后刷新失败: {}", err));
+        }
+    }
+
+    if updates.contains_key("codex_hide_relay_quota") {
+        use tauri::Emitter;
+        if let Err(err) = app.emit("codex:relay-balance-changed", new_config.codex_hide_relay_quota) {
+            modules::logger::log_warn(&format!("[Codex] 余额开关通知失败: {}", err));
         }
     }
 
@@ -651,6 +692,9 @@ pub fn patch_general_config(
         }
     }
 
+    if tray_visibility_changed {
+        crate::apply_tray_visibility(&app, new_config.show_tray_icon)?;
+    }
     Ok(())
 }
 

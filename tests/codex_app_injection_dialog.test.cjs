@@ -21,6 +21,8 @@ const usageLabels = { ...labels.common.codexUsage,
   tierFast: labels.codex.speed.fast, tierUltrafast: labels.codex.speed.ultrafast,
   tierStandard: labels.codex.speed.standard, tierAuto: labels.codex.contextOverride.automatic,
   tierUnknown: labels.common.requestProxy.unknown,
+  providerQuotaStale: labels.codex.apiService.providerQuotaStale,
+  providerQuotaUnitUnknown: labels.codex.apiService.providerQuotaUnitUnknown,
 };
 const thread = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const row = (id, extra = {}) => ({ id, timestamp: 1792545981000, accountDisplayName: 'user@example.com',
@@ -70,13 +72,28 @@ test('image requests have explicit operation labels without text reasoning or sp
   }
 });
 
-function harness() {
+test('provider-only quota shows source units and stale status in the client', () => {
+  const h = harness([
+    { name: '<Relay>', status: 'ready', remaining: 94, total: 100, unit: '%', unlimited: false },
+    { name: 'Wallet', status: 'ready', remaining: 23, unit: 'CNY', unlimited: true },
+    { name: 'Old', status: 'stale', remaining: 200, unit: 'USD', unlimited: false },
+  ]);
+  h.respond();
+  assert.match(h.details.innerHTML, /&lt;Relay&gt;/);
+  assert.match(h.details.innerHTML, /94% \/ 100%/);
+  assert.match(h.details.innerHTML, /23 CNY/);
+  assert.ok(h.details.innerHTML.includes(usageLabels.providerQuotaStale));
+  assert.ok(!h.details.innerHTML.includes('200 USD'));
+  assert.ok(!h.details.innerHTML.includes('No quota'));
+});
+
+function harness(providerQuotas = []) {
   let now = 1792546000000;
   class Clock extends Date { static now() { return now; } }
   const dispatched = [];
   const window = { __cockpitUsageRequest: (value) => dispatched.push(JSON.parse(value)) };
   const context = { Date: Clock, window, usageLabels, missingLabel: '—', closeLabel: 'Close',
-    plans: [], balanceLines: [], grokLines: [], accountCount: 0, availableAccountCount: 0,
+    plans: [], providerQuotas, balanceLines: [], grokLines: [], accountCount: 0, availableAccountCount: 0,
     abnormalAccountCount: 0, cooldownAccountCount: 0, accountPoolLabel: 'Accounts', balanceLabel: 'Balance',
     grokEmptyLabel: 'No Grok quota', quotaOverviewLabel: 'Quota', planLabel: 'Plan', fiveHourLabel: '5h',
     weeklyLabel: 'Week', quotaEmptyLabel: 'No quota', officialLabel: 'Official', document: { activeElement: null } };

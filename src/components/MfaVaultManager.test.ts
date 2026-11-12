@@ -16,12 +16,12 @@ function text(tree: any): string {
 }
 
 const saved: MfaRecord[] = [
-  { id: 'charlie', accountName: 'Charlie', secret: 'SECRET_C', time: 3000 },
-  { id: 'alpha', accountName: 'Alpha', secret: 'SECRET_A', time: 1000 },
-  { id: 'bravo', accountName: 'Bravo', secret: 'SECRET_B', time: 2000 },
+  { id: 'charlie', accountName: 'Charlie', secret: 'JBCUYTCPJBCUYTCP', remark: '', time: 3000 },
+  { id: 'alpha', accountName: 'Alpha', secret: 'JBSWY3DPEHPK3PXP', remark: '', time: 1000 },
+  { id: 'bravo', accountName: 'Bravo', secret: 'GEZDGNBVGY3TQOJQ', remark: '', time: 2000 },
 ];
 const history: MfaRecord[] = [
-  { id: 'history-alpha', accountName: 'Alpha', secret: 'SECRET_A', time: 4000 },
+  { id: 'history-alpha', accountName: 'Alpha', secret: 'JBSWY3DPEHPK3PXP', time: 4000 },
 ];
 
 function setup(options: {
@@ -30,8 +30,35 @@ function setup(options: {
   records?: MfaRecord[];
   savePath?: string | null;
   importData?: string;
+  failRead?: boolean;
+  checkpointRequired?: boolean;
+  restoreCheckpoint?: () => Promise<void>;
 } = {}) {
-  const storage = new Map<string, string>();
+  const storage = new Map<string, string>([
+    [mfaVault.MFA_STORAGE_KEY_SAVED, JSON.stringify(options.records ?? saved)],
+    [mfaVault.MFA_STORAGE_KEY_HISTORY, JSON.stringify(history)],
+  ]);
+  const storageWrites: string[] = [];
+  const localStorage = {
+    getItem(key: string) {
+      if (options.failRead) throw new Error('simulated storage read failure');
+      return storage.get(key) ?? null;
+    },
+    setItem(key: string, value: string) { storageWrites.push(key); storage.set(key, value); },
+    removeItem(key: string) { storage.delete(key); },
+  };
+  const vault = loadHookModule(new URL('../utils/mfaVault.ts', import.meta.url), {}, { localStorage }).exports;
+  const listeners = new Set<() => void>();
+  const recoveryListeners = new Set<(status: string) => void>();
+  const notifyRecovery = (status: string) => recoveryListeners.forEach(listener => listener(status));
+  const readNative = (key: string): MfaRecord[] => options.failRead ? [] : JSON.parse(storage.get(key) ?? '[]');
+  const updateNative = async (key: string, update: (records: MfaRecord[]) => MfaRecord[]) => {
+    if (options.failRead) throw new Error('simulated native read failure');
+    const next = update(readNative(key));
+    storage.set(key, JSON.stringify(next));
+    listeners.forEach(listener => listener());
+    return next;
+  };
   const confirmations: Array<{ message: string; options: unknown }> = [];
   const fallbackMessages: string[] = [];
   const writes: Array<{ path: string; contents: string }> = [];
@@ -61,29 +88,52 @@ function setup(options: {
     },
     '../utils/mfaMigrationQr': {
       buildMfaMigrationQrPages: (records: readonly MfaRecord[]) => {
-        qrExports.push(records.map(record => ({ ...record })));
+        qrExports.push(Array.from(records, record => ({ ...record })));
         return [{ uri: 'demo', count: records.length, svg: '<svg/>', dataUrl: 'data:image/svg+xml,%3Csvg%2F%3E' }];
       },
     },
+    '../services/mfaRecoveryService': {
+      subscribeMfaRecovery: (listener: (status: string) => void) => {
+        recoveryListeners.add(listener);
+        if (options.checkpointRequired) listener('checkpoint-required');
+        return () => recoveryListeners.delete(listener);
+      },
+      restoreMfaRecoveryCheckpoint: async () => {
+        notifyRecovery('restoring');
+        try {
+          await options.restoreCheckpoint?.();
+          notifyRecovery('complete');
+        } catch (error) {
+          notifyRecovery('checkpoint-required');
+          throw error;
+        }
+      },
+      subscribeMfaVault: (listener: () => void) => {
+        listeners.add(listener);
+        listener();
+        return () => listeners.delete(listener);
+      },
+      loadSavedMfaRecords: () => readNative(mfaVault.MFA_STORAGE_KEY_SAVED),
+      loadMfaHistoryRecords: () => readNative(mfaVault.MFA_STORAGE_KEY_HISTORY),
+      updateSavedMfaRecords: (update: (items: MfaRecord[]) => MfaRecord[]) =>
+        updateNative(mfaVault.MFA_STORAGE_KEY_SAVED, update),
+      updateMfaHistoryRecords: (update: (items: MfaRecord[]) => MfaRecord[]) =>
+        updateNative(mfaVault.MFA_STORAGE_KEY_HISTORY, update),
+    },
     '../utils/mfaVault': {
-      ...mfaVault,
-      loadSavedMfaRecords: () => (options.records ?? saved).map(record => ({ ...record })),
-      loadMfaHistoryRecords: () => history.map(record => ({ ...record })),
+      ...vault,
       getMfaOtpToken: () => '123456',
       getMfaTimeRemaining: () => 30,
       createMfaRecordId: () => `added-${++nextId}`,
       parseGoogleAuthenticatorMigrationBatch: () => null,
       parseMfaCredentialInputs: (input: string) => input === 'new-account'
-        ? [{ accountName: 'Added', secret: 'SECRET_NEW' }]
+        ? [{ accountName: 'Added', secret: 'MZXW6YTBOIXXE3DE' }]
         : [],
       dedupeMfaRecordsBySecret: (records: MfaRecord[]) => records,
       toMfaSecretIdentity: (secret: string) => secret,
     },
   }, {
-    localStorage: {
-      getItem: (key: string) => storage.get(key) ?? null,
-      setItem: (key: string, value: string) => storage.set(key, value),
-    },
+    localStorage,
     window: {
       setInterval: () => 1,
       clearInterval() {},
@@ -115,8 +165,26 @@ function setup(options: {
     h.flush();
   };
   return { h, allNodes, find, button, rows, row, rowCheckbox, allCheckbox, toggle, stored, confirmations,
-    fallbackMessages, writes, qrExports, searchInput, search };
+    fallbackMessages, writes, qrExports, searchInput, search, storageWrites };
 }
+
+test('a missing vault exposes an explicit restore and keeps a rejected backup error visible', async () => {
+  const restore = deferred<void>();
+  const s = setup({ checkpointRequired: true, failRead: true, restoreCheckpoint: () => restore.promise });
+  try {
+    const button = s.button('mfaVault.restoreCheckpoint');
+    assert.ok(button);
+    assert.ok(!s.find(node => node.props?.className === 'tfa-empty-state'));
+    const pending = button.props.onClick();
+    assert.ok(s.find(node => node.props?.role === 'status' && text(node).includes('mfaVault.checkpointRestoring')));
+    restore.reject(new Error('mfa_recovery_live_vault_sidecar_exists'));
+    await pending;
+    assert.ok(s.button('mfaVault.restoreCheckpoint'));
+    assert.ok(s.find(node => node.props?.role === 'alert' && text(node).includes('mfaVault.checkpointSidecarExists')));
+  } finally {
+    s.h.unmount();
+  }
+});
 
 test('saved records support partial selection, select all and clearing without selecting history', () => {
   const s = setup();
@@ -199,7 +267,7 @@ test('pending confirmation blocks duplicate requests and deletes only the snapsh
     assert.ok(s.row('alpha'));
     const input = s.find(node => node.type === 'input' && node.props.onPaste);
     input.props.onChange({ target: { value: 'new-account' } });
-    s.button('twoFactorAuth.btnSaveToFavorites').props.onClick();
+    await s.button('twoFactorAuth.btnSaveToFavorites').props.onClick();
     s.h.flush();
     assert.ok(s.stored().some(record => record.id === 'added-1'));
     confirmation.resolve(true);
@@ -253,7 +321,7 @@ test('search matches issuer and account but never secrets and clears selection w
     s.search('ALICE@EXAMPLE.COM');
     assert.deepEqual(s.rows().map(row => row.key), ['alpha']);
     assert.equal(s.rowCheckbox('alpha').props.checked, false);
-    s.search('SECRET_A');
+    s.search('JBSWY3DPEHPK3PXP');
     assert.match(text(s.find(node => node.type === 'tbody')), /mfaVault.noSearchResults/);
     assert.equal(s.allCheckbox().props.disabled, true);
     s.search('');
@@ -293,7 +361,7 @@ test('editing a selected account out of the search results removes it from batch
     const editInput = nodes(s.row('alpha')).find(node => node.type === 'input' && node.props.type === 'text');
     editInput.props.onChange({ target: { value: 'GitHub:alice@example.com' } });
     const saveName = nodes(s.row('alpha')).find(node => node.type === 'button' && node.props.title === 'mfaVault.saveAccountName');
-    saveName.props.onClick();
+    await saveName.props.onClick();
     s.h.flush();
     assert.equal(s.row('alpha'), undefined);
     assert.equal(s.button('mfaVault.batchDelete').props.disabled, true);
@@ -359,7 +427,10 @@ test('JSON backup exports all saved metadata and imports it without adding a typ
     await exporter.button('mfaVault.exportBackup').props.onClick();
     assert.equal(exporter.writes.length, 1);
     backup = exporter.writes[0].contents;
-    assert.deepEqual(JSON.parse(backup), records.map(({ id: _id, ...record }) => record));
+    assert.deepEqual(
+      (JSON.parse(backup) as MfaRecord[]).sort((a, b) => a.time - b.time),
+      records.map(({ id: _id, ...record }) => record),
+    );
   } finally { exporter.h.unmount(); }
   const importer = setup({ records: [], importData: backup });
   try {
@@ -386,7 +457,7 @@ test('native confirmation failure uses the existing browser confirmation before 
   }
 });
 
-test('empty saved view keeps the query and list panels available across history and first save', () => {
+test('empty saved view keeps the query and list panels available across history and first save', async () => {
   const s = setup({ records: [] });
   try {
     assert.equal(s.find(node => node.props.className === 'mfa-empty-heading'), undefined);
@@ -409,7 +480,7 @@ test('empty saved view keeps the query and list panels available across history 
     assert.equal(input().props.value, 'new-account');
     s.button('twoFactorAuth.tabSaved').props.onClick();
     assert.equal(input().props.value, 'new-account');
-    s.button('twoFactorAuth.btnSaveToFavorites').props.onClick();
+    await s.button('twoFactorAuth.btnSaveToFavorites').props.onClick();
     assert.equal(s.find(node => node.props.className === 'mfa-empty-heading'), undefined);
     assert.ok(s.find(node => node.type === 'table'));
     assert.ok(s.find(node => node.type === 'thead'));
@@ -419,5 +490,15 @@ test('empty saved view keeps the query and list panels available across history 
     assert.equal(s.allCheckbox().props.disabled, false);
     assert.ok(s.row('added-1'));
     assert.doesNotMatch(text(s.find(node => node.type === 'tbody')), /mfaVault.noData/);
+  } finally { s.h.unmount(); }
+});
+
+
+test('opening the vault after a storage read failure leaves saved keys and query history untouched', () => {
+  const s = setup({ failRead: true });
+  try {
+    assert.deepEqual(s.storageWrites, []);
+    assert.deepEqual(s.stored(), saved);
+    assert.deepEqual(s.stored(mfaVault.MFA_STORAGE_KEY_HISTORY), history);
   } finally { s.h.unmount(); }
 });

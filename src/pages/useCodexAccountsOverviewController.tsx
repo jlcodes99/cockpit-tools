@@ -1,7 +1,7 @@
 import { formatOpenAIUsageMoney, currentOpenAIUsageState, isOpenAIOfficialUsageAccount } from "../utils/openaiOfficialUsage";
 import { codexOverviewMutableAccountIds } from "../utils/chatgptPlanOverview";
 import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
-import { useEffect, useMemo, useCallback, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useMemo, useCallback, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { RefreshCw, RotateCw } from "lucide-react";
 import { CodexResetCreditExpiry } from '../components/CodexResetCreditExpiry';
 import { CodexResetAutomationStatus } from '../components/codex/CodexResetAutomation';
@@ -21,7 +21,7 @@ import { useEnterConfirm } from "../hooks/useEnterConfirm";
 import type { CodexAccount } from "../types/codex";
 import { CODEX_LOCAL_ACCESS_STATUS_KEYS, resolveCodexLocalAccessRuntimeStatus } from "../utils/codexLocalAccessStatus";
 import { CODEX_API_SERVICE_BIND_ID } from "../types/instance";
-import { createCodexOverviewAccountComparator, filterAndSortCodexOverviewAccounts } from "../utils/codexAccountOverview";
+import { createCodexOverviewAccountComparator, filterAndSortCodexOverviewAccounts, writeCodexCustomSortActive, writeCodexCustomSortOrder } from "../utils/codexAccountOverview";
 import { buildPaginatedGroups, buildPaginationPageSizeStorageKey, isEveryIdSelected, usePagination } from "../hooks/usePagination";
 import { formatCockpitApiInteger, formatCockpitApiTokenCount, getCodexAccountNoteTitle, isPendingOAuthCodexAccount, resolveApiKeyUsageMode, shouldAutoHideBatchDeleteJob } from "./codexAccountsControllerModel";
 import type { useCodexAccountsBaseController } from "./useCodexAccountsBaseController";
@@ -131,6 +131,7 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
   | "setRefreshingGroupId"
   | "setSelected"
   | "setShowCustomSortModal"
+  | "showCustomSortModal"
   | "setSortBy"
   | "showAdditionalQuota"
   | "showCodeReviewQuota"
@@ -245,6 +246,7 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
     setRefreshingGroupId,
     setSelected,
     setShowCustomSortModal,
+    showCustomSortModal,
     setSortBy,
     showAdditionalQuota,
     showCodeReviewQuota,
@@ -791,6 +793,7 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
             plan_high_first: "planHighFirst",
             plan_low_first: "planLowFirst",
             expiry_soon_first: "expirySoonFirst",
+            five_hour_reset_soon_first: "fiveHourResetSoonFirst",
             custom: "custom",
           }[routingStrategy] ?? "auto";
         const requestCount = totals?.requestCount ?? 0;
@@ -1205,6 +1208,7 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
       () => customSortAccounts.map((account) => account.id),
       [customSortAccounts],
     );
+    const draggedOrder = useRef<string[] | null>(null);
     const moveCustomSortAccount = useCallback(
       (accountId: string, direction: "up" | "down") => {
         const currentIndex = customSortAccountIds.indexOf(accountId);
@@ -1216,10 +1220,15 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
         const [moved] = next.splice(currentIndex, 1);
         next.splice(targetIndex, 0, moved);
         setCustomSortOrder(next);
+        writeCodexCustomSortOrder(next);
       },
       [customSortAccountIds],
     );
     const stopCustomSortDragging = useCallback(() => {
+      if (draggedOrder.current) {
+        writeCodexCustomSortOrder(draggedOrder.current);
+        draggedOrder.current = null;
+      }
       setDraggedCustomSortAccountId(null);
       setCustomSortDropTargetId(null);
     }, []);
@@ -1249,16 +1258,30 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
         const next = [...customSortAccountIds];
         const [moved] = next.splice(fromIndex, 1);
         next.splice(toIndex, 0, moved);
+        draggedOrder.current = next;
         setCustomSortOrder(next);
       },
       [customSortAccountIds, draggedCustomSortAccountId],
     );
     const resetCustomSortOrder = useCallback(() => {
-      setCustomSortOrder(overviewAccounts.map((account) => account.id));
+      const next = overviewAccounts.map((account) => account.id);
+      setCustomSortOrder(next);
+      writeCodexCustomSortOrder(next);
     }, [overviewAccounts]);
+    useEffect(() => {
+      if (!showCustomSortModal || !draggedCustomSortAccountId) return;
+      window.addEventListener("mouseup", stopCustomSortDragging);
+      return () => window.removeEventListener("mouseup", stopCustomSortDragging);
+    }, [showCustomSortModal, draggedCustomSortAccountId, stopCustomSortDragging]);
+
+    useEffect(() => {
+      if (!showCustomSortModal) stopCustomSortDragging();
+    }, [showCustomSortModal, stopCustomSortDragging]);
+
     const handleSortByChange = useCallback(
       (value: string) => {
         setSortBy(value);
+        writeCodexCustomSortActive(value === "custom");
         if (value === "custom") {
           setShowCustomSortModal(true);
         }

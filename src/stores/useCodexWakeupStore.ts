@@ -3,7 +3,6 @@ import * as codexWakeupService from '../services/codexWakeupService';
 import {
   CodexCliStatus,
   CodexWakeupBatchResult,
-  CodexWakeupHistoryItem,
   CodexWakeupModelPreset,
   CodexWakeupReasoningEffort,
   CodexWakeupState,
@@ -13,13 +12,12 @@ import {
 interface CodexWakeupStoreState {
   runtime: CodexCliStatus | null;
   state: CodexWakeupState;
-  history: CodexWakeupHistoryItem[];
   loading: boolean;
   saving: boolean;
   runningTaskId: string | null;
   testing: boolean;
   error: string | null;
-  loadAll: () => Promise<void>;
+  loadAll: (refreshAfterPending?: boolean) => Promise<void>;
   refreshRuntime: (runtimeConfig?: { codexCliPath?: string; nodePath?: string }) => Promise<void>;
   saveState: (
     enabled: boolean,
@@ -50,21 +48,24 @@ const EMPTY_STATE: CodexWakeupState = {
 
 let loadAllInFlight: Promise<void> | null = null;
 
-export const useCodexWakeupStore = create<CodexWakeupStoreState>((set) => ({
+export const useCodexWakeupStore = create<CodexWakeupStoreState>((set, get) => ({
   runtime: null,
   state: EMPTY_STATE,
-  history: [],
   loading: false,
   saving: false,
   runningTaskId: null,
   testing: false,
   error: null,
-  loadAll: async () => {
+  loadAll: async (refreshAfterPending = false): Promise<void> => {
     if (loadAllInFlight) {
+      if (refreshAfterPending) {
+        await loadAllInFlight;
+        return get().loadAll();
+      }
       return loadAllInFlight;
     }
     set((current) => ({
-      loading: current.runtime === null && current.history.length === 0 && current.state.tasks.length === 0,
+      loading: current.runtime === null && current.state.tasks.length === 0,
       error: null,
     }));
     loadAllInFlight = (async () => {
@@ -73,7 +74,6 @@ export const useCodexWakeupStore = create<CodexWakeupStoreState>((set) => ({
         set({
           runtime: overview.runtime,
           state: overview.state,
-          history: overview.history,
           loading: false,
         });
       } catch (error) {
@@ -119,12 +119,11 @@ export const useCodexWakeupStore = create<CodexWakeupStoreState>((set) => ({
     set({ runningTaskId: taskId, error: null });
     try {
       const result = await codexWakeupService.runCodexWakeupTask(taskId, runId);
-      const [state, history, runtime] = await Promise.all([
+      const [state, runtime] = await Promise.all([
         codexWakeupService.getCodexWakeupState(),
-        codexWakeupService.loadCodexWakeupHistory(),
         codexWakeupService.getCodexWakeupCliStatus(),
       ]);
-      set({ state, history, runtime, runningTaskId: null });
+      set({ state, runtime, runningTaskId: null });
       return result;
     } catch (error) {
       set({ runningTaskId: null, error: String(error) });
@@ -151,11 +150,8 @@ export const useCodexWakeupStore = create<CodexWakeupStoreState>((set) => ({
         modelReasoningEffort,
         cancelScopeId,
       );
-      const [history, runtime] = await Promise.all([
-        codexWakeupService.loadCodexWakeupHistory(),
-        codexWakeupService.getCodexWakeupCliStatus(),
-      ]);
-      set({ history, runtime, testing: false });
+      const runtime = await codexWakeupService.getCodexWakeupCliStatus();
+      set({ runtime, testing: false });
       return result;
     } catch (error) {
       set({ testing: false, error: String(error) });
@@ -171,6 +167,5 @@ export const useCodexWakeupStore = create<CodexWakeupStoreState>((set) => ({
   clearHistory: async () => {
     set({ error: null });
     await codexWakeupService.clearCodexWakeupHistory();
-    set({ history: [] });
   },
 }));

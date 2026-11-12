@@ -18,6 +18,16 @@ export interface ModelPricingDraft {
 export type ModelPricingDraftField = keyof Omit<ModelPricingDraft,
   'modelId' | 'hasPreset' | 'custom' | 'standardLongPriceOverride'>;
 
+// Strip floating-point artifacts from calculated prices.
+function formatDerivedPrice(value: number): string {
+  return String(Number(value.toPrecision(15)));
+}
+
+export function formatPriceDraftValue(value: number | null | undefined, derived = false): string {
+  if (value == null || !Number.isFinite(value)) return '';
+  return derived ? formatDerivedPrice(value) : String(value);
+}
+
 const longFields = [
   'standardLongInputUsdPerMillion',
   'standardLongCachedInputUsdPerMillion',
@@ -43,7 +53,7 @@ export function updateModelPricingDraft(
     const scaled = (raw: string, multiplier: number) => {
       const parsed = Number(raw);
       return raw.trim() && Number.isFinite(parsed) && parsed >= 0
-        ? String(parsed * multiplier) : '';
+        ? formatDerivedPrice(parsed * multiplier) : '';
     };
     // Keep unedited display prices derived from the base, including cache fallback.
     // Models without a long-context tier retain empty fields.

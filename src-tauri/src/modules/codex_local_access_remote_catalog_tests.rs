@@ -47,6 +47,7 @@ fn remote_catalog_roundtrip_preserves_host_names_order_and_reasoning_with_key_pr
             .iter()
             .find(|item| item["slug"] == model["slug"])
             .unwrap();
+        assert_eq!(reconstructed["use_responses_lite"], false);
         for field in REMOTE_MODEL_FIELDS {
             if let Some(expected) = model.get(*field) {
                 assert_eq!(&reconstructed[*field], expected, "{field}");
@@ -72,6 +73,25 @@ fn remote_catalog_roundtrip_preserves_host_names_order_and_reasoning_with_key_pr
 }
 
 #[test]
+fn remote_catalog_converts_legacy_show_visibility_without_revealing_hidden_models() {
+    let models = vec!["visible".into(), "hidden".into(), "unlisted".into()];
+    let connection = remote(json!({ "models": [
+        { "slug": "visible", "visibility": "show" },
+        { "slug": "hidden", "visibility": "hide" },
+        { "slug": "unlisted", "visibility": "none" },
+        { "slug": "unauthorized", "visibility": "show" }
+    ] }), models);
+
+    let catalog = project_remote_model_catalog(&connection).unwrap();
+    let entries = catalog["models"].as_array().unwrap();
+    assert_eq!(entries.len(), 3);
+    for (slug, visibility) in [("visible", "list"), ("hidden", "hide"), ("unlisted", "none")] {
+        let entry = entries.iter().find(|entry| entry["slug"] == slug).unwrap();
+        assert_eq!(entry["visibility"], visibility);
+    }
+}
+
+#[test]
 fn remote_catalog_replaces_stale_account_catalog_and_survives_profile_and_http_views() {
     let base = format!("http://192.0.2.10/{}/v1", uuid::Uuid::new_v4());
     let mut account = CodexAccount::new_api_key(
@@ -86,7 +106,7 @@ fn remote_catalog_replaces_stale_account_catalog_and_survives_profile_and_http_v
     );
     account.api_wire_api = Some("responses".into());
     let connection = remote(
-        json!({"models":[{"slug":"deepseek-flash","display_name":"DeepSeek-V4.1-Flash","priority":17,
+        json!({"models":[{"slug":"deepseek-flash","display_name":"DeepSeek-V4.1-Flash","priority":17,"visibility":"show",
         "context_window":123456,"supported_reasoning_levels":[{"effort":"max","description":"Maximum"}],"default_reasoning_level":"max"}]}),
         vec!["deepseek-flash".into()],
     );
@@ -111,6 +131,7 @@ fn remote_catalog_replaces_stale_account_catalog_and_survives_profile_and_http_v
     assert_eq!(saved["models"].as_array().unwrap().len(), 1);
     assert_eq!(saved["models"][0]["display_name"], "DeepSeek-V4.1-Flash");
     assert_eq!(saved["models"][0]["priority"], 17);
+    assert_eq!(saved["models"][0]["visibility"], "list");
     assert_eq!(
         account_model_template(&account, "deepseek-flash").unwrap()["default_reasoning_level"],
         "max"
@@ -129,6 +150,7 @@ fn remote_catalog_replaces_stale_account_catalog_and_survives_profile_and_http_v
     let gateway_catalog = native_catalog(&collection, Some(&key), &[account.clone()]).unwrap();
     assert_eq!(gateway_catalog["models"].as_array().unwrap().len(), 1);
     assert_eq!(gateway_catalog["models"][0]["slug"], "deepseek-flash");
+    assert_eq!(gateway_catalog["models"][0]["visibility"], "list");
     let catalog = native_catalog(&collection, None, &[account]).unwrap();
     let entry = catalog["models"]
         .as_array()

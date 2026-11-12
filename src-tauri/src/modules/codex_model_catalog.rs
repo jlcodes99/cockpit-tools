@@ -14,7 +14,7 @@ use super::{
     config, logger,
 };
 
-const MAX_CATALOG_BYTES: usize = 8 * 1024 * 1024;
+pub(crate) const MAX_CATALOG_BYTES: usize = 8 * 1024 * 1024;
 const SOURCE_TIMEOUT: Duration = Duration::from_secs(8);
 const PRIMARY_URL: &str = "https://raw.githubusercontent.com/router-for-me/models/refs/heads/main/codex_client_models.json";
 const SECONDARY_URL: &str = "https://models.router-for.me/codex_client_models.json";
@@ -175,6 +175,16 @@ fn parse_and_merge(bytes: &[u8]) -> Result<Value, String> {
         .map(|model| normalized_id(model["slug"].as_str().unwrap()))
         .collect();
     let defaults = embedded();
+    if let Some(sol) = models.iter_mut().find(|model| uses_legacy_sol_context(model)) {
+        let current = defaults["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|model| model["slug"] == "gpt-6.1-sol")
+            .expect("embedded catalog includes GPT-6.1 Sol");
+        sol["context_window"] = current["context_window"].clone();
+        sol["auto_compact_token_limit"] = current["auto_compact_token_limit"].clone();
+    }
     for slug in PINNED_MODELS {
         if !present.contains(slug) {
             let pinned = defaults["models"]
@@ -201,6 +211,16 @@ fn parse_and_merge(bytes: &[u8]) -> Result<Value, String> {
         return Err("merged catalog exceeds 8 MiB".to_string());
     }
     Ok(catalog)
+}
+
+pub(crate) fn uses_legacy_sol_context(model: &Value) -> bool {
+    model["slug"]
+        .as_str()
+        .is_some_and(|slug| slug.eq_ignore_ascii_case("gpt-6.1-sol"))
+        && model["context_window"].as_i64() == Some(272_000)
+        && model["max_context_window"].as_i64() == Some(872_000)
+        && (model["auto_compact_token_limit"].is_null()
+            || integer_value(&model["auto_compact_token_limit"]) == Some(244_800))
 }
 
 fn normalized_id(id: &str) -> String {
@@ -532,6 +552,24 @@ mod tests {
 
     fn parse(value: &Value) -> Result<Value, String> {
         parse_and_merge(&serde_json::to_vec(value).unwrap())
+    }
+
+    #[test]
+    fn sol_catalog_upgrades_the_legacy_default_and_keeps_other_source_limits() {
+        for (source_window, source_compaction, expected_window, expected_compaction) in [
+            (272_000, Value::Null, 500_000, json!(450_000)),
+            (272_000, json!(244_800), 500_000, json!(450_000)),
+            (272_000, json!(210_000), 272_000, json!(210_000)),
+            (516_000, json!(460_000), 516_000, json!(460_000)),
+        ] {
+            let mut sol = template("gpt-6.1-sol");
+            sol["context_window"] = json!(source_window);
+            sol["auto_compact_token_limit"] = source_compaction;
+            let merged = parse(&json!({"models": [sol]})).unwrap();
+            assert_eq!(merged["models"][0]["context_window"], expected_window);
+            assert_eq!(merged["models"][0]["max_context_window"], 872_000);
+            assert_eq!(merged["models"][0]["auto_compact_token_limit"], expected_compaction);
+        }
     }
 
     fn local_client() -> Client {

@@ -53,6 +53,7 @@ pub enum CodexSessionVisibilityRepairMode {
     Quick,
     Deep,
     History,
+    Projects,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -185,6 +186,8 @@ pub struct CodexSessionVisibilityRepairSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub local_project_recovery: Option<local_projects::Counts>,
     pub local_project_recovery_deferred: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_project_recovery_deferred_message: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -235,7 +238,6 @@ struct RepairTargetSelection {
     target_provider: Option<String>,
     session_ids: Option<HashSet<String>>,
     instance_ids: Option<HashSet<String>>,
-    prepare_desktop_projects: bool,
 }
 
 impl RepairTargetSelection {
@@ -264,7 +266,6 @@ impl RepairTargetSelection {
             .filter(|value| !value.is_empty())
             .collect::<HashSet<_>>();
         Ok(Self {
-            prepare_desktop_projects: false,
             target_provider,
             session_ids: if session_ids.is_empty() {
                 None
@@ -352,7 +353,7 @@ impl CodexSessionVisibilityRepairOptions {
         match mode {
             CodexSessionVisibilityRepairMode::Quick => Self::official_state_db_only(mode),
             CodexSessionVisibilityRepairMode::Deep => Self::full_provider_migration(),
-            CodexSessionVisibilityRepairMode::History => Self {
+            CodexSessionVisibilityRepairMode::History | CodexSessionVisibilityRepairMode::Projects => Self {
                 repair_referenced_rollouts: false,
                 ..Self::official_state_db_only(mode)
             },
@@ -493,23 +494,36 @@ pub fn repair_session_visibility_quick_for_instance(
         data_dir.display()
     ));
     let result = with_launch_visibility_budget(LAUNCH_VISIBILITY_REPAIR_BUDGET, || {
-        repair_session_visibility_for_instances_with_options(
+        let instance = CodexSyncInstance {
+            id: instance_id.to_string(),
+            name: instance_name.to_string(),
+            data_dir: data_dir.to_path_buf(),
+            last_pid: None,
+        };
+        // Desktop switches its renderer scope during startup. Restore the local
+        // workspace and SSH state before optional history maintenance can use up
+        // the budget or hit a quick-scan limit. Failure here must stop the launch.
+        let prepared = launch_desktop
+            && prepare_local_project_account_state(&instance).map_err(|error| {
+                format!("CODEX_DESKTOP_STATE_PREPARATION_FAILED: {error}")
+            })?;
+        let mut summary = repair_session_visibility_for_instances_with_options(
             CodexSessionVisibilityRepairOptions::for_auto_repair_mode(
                 CodexSessionVisibilityAutoRepairMode::Current,
             ),
             None,
             None,
-            RepairTargetSelection {
-                prepare_desktop_projects: launch_desktop,
-                ..Default::default()
-            },
-            vec![CodexSyncInstance {
-                id: instance_id.to_string(),
-                name: instance_name.to_string(),
-                data_dir: data_dir.to_path_buf(),
-                last_pid: None,
-            }],
-        )
+            RepairTargetSelection::default(),
+            vec![instance],
+        )?;
+        if prepared {
+            summary.updated_global_state_entry_count += 1;
+            summary.mutated_instance_count = 1;
+            if let Some(item) = summary.items.first_mut() {
+                item.updated_global_state_entry_count += 1;
+            }
+        }
+        Ok(summary)
     });
     match &result {
         Ok(summary) => modules::logger::log_info(&format!(
@@ -595,7 +609,7 @@ pub fn repair_session_visibility_across_instances_with_target(
     dry_run: bool,
 ) -> Result<CodexSessionVisibilityRepairSummary, String> {
     let options = CodexSessionVisibilityRepairOptions::for_mode(mode).with_dry_run(dry_run);
-    let target_provider = (mode != CodexSessionVisibilityRepairMode::History)
+    let target_provider = matches!(mode, CodexSessionVisibilityRepairMode::Quick | CodexSessionVisibilityRepairMode::Deep)
         .then_some(target_provider).flatten();
     let selection = RepairTargetSelection::from_inputs(target_provider, session_ids, instance_ids)?;
     repair_session_visibility_across_instances_with_options(
@@ -1103,6 +1117,7 @@ fn repair_provider_visibility_for_instances_with_options(
         history_repair_warning: None,
         local_project_recovery: None,
         local_project_recovery_deferred: false,
+        local_project_recovery_deferred_message: None,
     };
     report_repair_progress(
         progress_reporter,

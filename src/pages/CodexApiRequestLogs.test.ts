@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { loadHookModule } from '../../tests/helpers/reactHookHarness';
 import { resolveCodexApiServiceLogModelPair } from '../utils/codexApiServiceLogModel';
-import { authorizationFallbackReasonKey, authorizationFallbackSummaryKey, hasRequestFirstResponse, recordedServiceTierAdaptation, requestAuthorizationRouteKey, requestServiceTierPresentation, requestedServiceTierLabelKey } from '../utils/codexRequestDiagnostics';
+import { authorizationFallbackReasonKey, authorizationFallbackSummaryKey, hasRequestFirstResponse, recordedServiceTierAdaptation, requestAuthorizationRouteKey, requestedServiceTierLabelKey } from '../utils/codexRequestDiagnostics';
 
 type Element = { type: unknown; props: Record<string, any> };
 function nodes(value: any): Element[] {
@@ -37,8 +37,29 @@ function props(events: any[] = [sample]) {
     REQUEST_LOG_PAGE_SIZE_OPTIONS: [20], requestLogCurrentPage: 1, requestLogTotalPages: 1, requestLogTotal: events.length,
   };
 }
-function harness(localStorage: any) {
-  return loadHookModule(new URL('./CodexApiRequestLogs.tsx', import.meta.url), {
+function harness(preferences: ReturnType<typeof storage>) {
+  let setPreference: ((value: string) => void) | undefined;
+  let pending: string | undefined;
+  const readPreference = () => {
+    try { return pending ?? preferences.getItem(); } catch { return null; }
+  };
+  const hook = loadHookModule(new URL('./CodexApiRequestLogs.tsx', import.meta.url), {
+    '../hooks/useDurableUiSetting': {
+      useDurableUiSetting: () => {
+        const [value, setValue] = hook.hooks.useState(readPreference);
+        setPreference = setValue;
+        return value;
+      },
+    },
+    '../utils/durableUiSettings': {
+      readDurableUiSetting: readPreference,
+      previewDurableUiSetting: (key: string, value: string) => {
+        assert.equal(key, 'codex.apiService.logColumns.v1');
+        pending = value;
+        setPreference?.(value);
+        try { preferences.setItem(key, value); } catch { /* pending until native write settles */ }
+      },
+    },
     '../components/codex/CodexOutputSpeed': { CodexOutputSpeed: 'CodexOutputSpeed' },
     '../utils/codexOutputSpeed': { aggregateOutputSpeed: () => ({ tokensPerSecond: null, samples: 0 }), formatOutputSpeed: () => null },
     'lucide-react': { Check: 'Check', CircleAlert: 'CircleAlert', Columns3: 'Columns3', Route: 'Route', Zap: 'Zap' },
@@ -46,9 +67,10 @@ function harness(localStorage: any) {
     '../components/PaginationControls': { PaginationControls: 'PaginationControls' },
     '../components/codex/CodexRequestProxyLabel': { CodexRequestProxyLabel: 'CodexRequestProxyLabel' },
     '../components/codex/CodexRequestDetailModal': { CodexRequestDetailModal: 'CodexRequestDetailModal' },
-    '../utils/codexRequestDiagnostics': { authorizationFallbackReasonKey, authorizationFallbackSummaryKey, hasRequestFirstResponse, recordedServiceTierAdaptation, requestAuthorizationRouteKey, requestServiceTierPresentation, requestedServiceTierLabelKey },
+    '../utils/codexRequestDiagnostics': { authorizationFallbackReasonKey, authorizationFallbackSummaryKey, hasRequestFirstResponse, recordedServiceTierAdaptation, requestAuthorizationRouteKey, requestedServiceTierLabelKey },
     '../utils/codexApiServiceLogModel': { resolveCodexApiServiceLogModelPair },
-  }, { localStorage });
+  });
+  return hook;
 }
 function storage(initial: string | null = null) {
   let value = initial;
@@ -59,6 +81,43 @@ function openColumns(hook: ReturnType<typeof harness>) {
   button.props.onClick();
   return nodes(hook.flush()).filter((n) => n.type === 'button' && 'aria-pressed' in n.props);
 }
+
+test('request rows show the recorded Responses reasoning effort for each request', () => {
+  const hook = harness(storage());
+  hook.render(() => hook.exports.CodexApiRequestLogs(props([
+    { ...sample, requestId: 'high', reasoningEffort: 'high' },
+    { ...sample, requestId: 'xhigh', reasoningEffort: 'xhigh' },
+    { ...sample, requestId: 'unspecified', reasoningEffort: undefined },
+  ])));
+  const rows = nodes(hook.flush()).filter((node) => node.type === 'tr').slice(1);
+  const effort = (row: typeof rows[number]) => nodes(row)
+    .find((node) => node.props.title === 'codex.apiService.logs.reasoningEffort')
+    ?.props.children;
+  assert.deepEqual(rows.map(effort), ['high', 'xhigh', undefined]);
+  hook.unmount();
+});
+
+test('connection source uses the recorded TCP peer independently of the client instance', () => {
+  const hook = harness(storage());
+  const changes: string[] = [];
+  hook.render(() => hook.exports.CodexApiRequestLogs({
+    ...props([
+      { ...sample, connectionSource: { kind: 'lan', peerIp: '192.168.1.8' } },
+      { ...sample, requestId: 'old', clientInstanceId: 'self-reported' },
+    ]),
+    requestLogSourceKind: 'lan',
+    requestLogPeerIp: '192.168.1.8',
+    setRequestLogPeerIp: (value: string) => changes.push(value),
+  }));
+  const view = nodes(hook.flush());
+  const rows = view.filter((node) => node.type === 'tr').slice(1);
+  assert.match(text(rows[0]), /sourceLan · 192\.168\.1\.8/);
+  assert.match(text(rows[1]), /connectionSource common\.unknown/);
+  view.find((node) => node.type === 'input' && node.props.value === '192.168.1.8')!
+    .props.onChange({ target: { value: '::1' } });
+  assert.deepEqual(changes, ['::1']);
+  hook.unmount();
+});
 
 test('log rows distinguish recorded local and official access without consulting current account bindings', () => {
   const hook = harness(storage());
@@ -110,7 +169,7 @@ test('one row records local attempts with the masked source account, without cha
   hook.unmount();
 });
 
-test('speed badges use short labels and retain raw tier evidence only in details', () => {
+test('speed badges and tooltips reflect the request regardless of the upstream report', () => {
   const hook = harness(storage());
   hook.render(() => hook.exports.CodexApiRequestLogs(props([
     { ...sample, requestedServiceTier: 'priority', responseServiceTier: 'default' },
@@ -120,11 +179,14 @@ test('speed badges use short labels and retain raw tier evidence only in details
     { ...sample, requestId: 'fast-alias', requestedServiceTier: 'FAST', responseServiceTier: 'default' },
     { ...sample, requestId: 'response-only', responseServiceTier: 'priority' },
     { ...sample, requestId: 'ultrafast', requestedServiceTier: 'ultrafast', responseServiceTier: 'default' },
+    { ...sample, requestId: 'unreported', requestedServiceTier: 'ultrafast' },
+    { ...sample, requestId: 'confirmed', requestedServiceTier: 'fast', responseServiceTier: 'priority' },
   ])));
   const rows = nodes(hook.flush()).filter((n) => n.type === 'tr').slice(1);
   const badges = rows.map((row) => nodes(row).filter((n) => n.props.className?.startsWith('codex-request-log-speed')));
   assert.deepEqual(badges.map((items) => items.map(text)), [
     ['codex.speed.fast'], [], [], ['codex.speed.standard'], ['codex.speed.fast'], [], ['codex.speed.ultrafast'],
+    ['codex.speed.ultrafast'], ['codex.speed.fast'],
   ]);
   for (const row of rows) assert.doesNotMatch(text(row), /requestedTier|responseTier|legacyTier|default/);
   for (const index of [0, 4]) {
@@ -133,6 +195,10 @@ test('speed badges use short labels and retain raw tier evidence only in details
     assert.equal(badges[index][0].props.onClick, undefined);
     assert.equal(nodes(badges[index][0]).filter((n) => n.type === 'Zap').length, 1);
   }
+  assert.equal(badges[6][0].props.title, 'codex.apiService.logs.requestedTier:codex.speed.ultrafast');
+  assert.equal(badges[7][0].props.title, badges[6][0].props.title);
+  assert.equal(badges[0][0].props.title, badges[8][0].props.title);
+  assert.equal(nodes(badges[8][0]).filter((n) => n.type === 'Zap').length, 1);
   assert.equal(nodes(badges[3][0]).filter((n) => n.type === 'Zap').length, 0);
   const details = nodes(rows[0]).find((n) => n.type === 'button' && text(n) === 'codex.requestDiagnostics.details')!;
   details.props.onClick();

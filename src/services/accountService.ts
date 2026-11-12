@@ -1,3 +1,4 @@
+import type { LocalHistoryRead } from '../hooks/useLocalHistory';
 import { invoke } from '@tauri-apps/api/core';
 import { Account, AccountNoteUpdate, RefreshStats } from '../types/account';
 import { AntigravityRuntimeTarget, getAntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget';
@@ -133,8 +134,8 @@ export interface AntigravityAutoSwitchReason {
   selectedPolicy: string;
 }
 
-export async function loadAntigravitySwitchHistory(): Promise<AntigravitySwitchHistoryItem[]> {
-    return await invoke('load_antigravity_switch_history');
+export function loadAntigravitySwitchHistory(retry = false): Promise<LocalHistoryRead<AntigravitySwitchHistoryItem>> {
+    return invoke('load_antigravity_switch_history', { retry });
 }
 
 export async function clearAntigravitySwitchHistory(): Promise<void> {
@@ -165,8 +166,8 @@ export async function importFromOldTools(): Promise<Account[]> {
 }
 
 
-export async function importFromLocal(): Promise<Account> {
-    return await invoke('import_from_local');
+export async function importFromLocal(runtimeTarget: AntigravityRuntimeTarget): Promise<Account> {
+    return await invoke('import_from_local', { runtimeTarget });
 }
 
 export async function importFromJson(jsonContent: string): Promise<Account[]> {

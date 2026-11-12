@@ -29,9 +29,20 @@ test('only Codex and its API service are grouped by default and explicit layouts
   try {
     Object.defineProperty(globalThis, 'window', { configurable: true, value: windowMock });
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage });
-    mockIPC(() => null);
     const savedAppLayout = layout('antigravity', false);
+    let durable = savedAppLayout;
+    let revision = 1;
+    mockIPC((command, args) => {
+      if (command === 'load_ui_preferences') return { values: { [key]: durable }, revisions: { [key]: revision } };
+      if (command === 'update_ui_preference') {
+        durable = (args as { value: string }).value;
+        revision++;
+        return { values: { [key]: durable }, revisions: { [key]: revision } };
+      }
+      return null;
+    });
     storage.setItem(key, savedAppLayout);
+    const prefs = await import('../utils/uiPreferences.ts');
     const { usePlatformLayoutStore } = await import('./usePlatformLayoutStore.ts');
     const group = () => usePlatformLayoutStore.getState().platformGroups.find(
       (item) => item.id === 'antigravity-suite',
@@ -41,15 +52,12 @@ test('only Codex and its API service are grouped by default and explicit layouts
     assert.equal(group().iconPlatformId, 'antigravity');
     assert.equal(storage.getItem(key), savedAppLayout, 'startup normalization must not rewrite preferences');
     for (const client of ['antigravity_ide', 'antigravity'] as const) {
-      storage.setItem(key, layout(client, true));
-      windowMock.dispatchEvent(new Event('agtools:platform-layout-hydrated'));
+      await prefs.restorePlatformLayout(prefs.validateImportedPlatformLayout(layout(client, true)));
       assert.equal(group().defaultPlatformId, client);
       assert.equal(group().iconPlatformId, client);
     }
-    const hydrate = (value: object | null) => {
-      if (value) storage.setItem(key, JSON.stringify(value));
-      else storage.removeItem(key);
-      windowMock.dispatchEvent(new Event('agtools:platform-layout-hydrated'));
+    const hydrate = async (value: object | null) => {
+      await prefs.restorePlatformLayout(prefs.validateImportedPlatformLayout(value));
       return usePlatformLayoutStore.getState();
     };
     const assertDefaultGrouping = (state: ReturnType<typeof usePlatformLayoutStore.getState>) => {
@@ -59,27 +67,27 @@ test('only Codex and its API service are grouped by default and explicit layouts
         assert.ok(state.orderedEntryIds.includes(`platform:${id}`));
       }
     };
-    const independent = hydrate(null);
+    const independent = await hydrate(null);
     assertDefaultGrouping(independent);
     assert.deepEqual(independent.orderedEntryIds, ALL_PLATFORM_IDS.filter((id) => id !== 'codex_api_service')
       .map((id) => id === 'codex' ? 'group:codex-suite' : `platform:${id}`));
     assert.equal(independent.independentPlatformsMigrated, true);
     assert.equal(independent.codexApiServiceDefaultGrouped, true);
-    assertDefaultGrouping(hydrate({ orderedPlatformIds: ['codex'] }));
-    assertDefaultGrouping(hydrate({ platformGroups: [], traeSuiteDefaultGroupRestored: false, codexApiServiceSuiteMigrated: false }));
+    assertDefaultGrouping(await hydrate({ orderedPlatformIds: ['codex'] }));
+    assertDefaultGrouping(await hydrate({ platformGroups: [], traeSuiteDefaultGroupRestored: false, codexApiServiceSuiteMigrated: false }));
 
     // Older standalone items must not be reassembled into automatic suites.
     const singletons = ALL_PLATFORM_IDS.map((id) => ({
       id: `platform-${id}`, name: id === 'codex' ? 'Codex' : id,
       platformIds: [id], defaultPlatformId: id, iconKind: 'platform', iconPlatformId: id,
     }));
-    const oldStandalone = hydrate({ platformGroups: [singletons.find((item) => item.id === 'platform-codex')] });
+    const oldStandalone = await hydrate({ platformGroups: [singletons.find((item) => item.id === 'platform-codex')] });
     assertDefaultGrouping(oldStandalone);
     for (const [platformId, members] of [
       ['antigravity', ['antigravity', 'antigravity_ide']],
       ['codex', ['codex', 'codex_api_service']],
     ] as const) {
-      const legacyExpanded = hydrate({ platformGroups: [{
+      const legacyExpanded = await hydrate({ platformGroups: [{
         id: `platform-${platformId}`, name: platformId === 'codex' ? 'Codex' : 'Antigravity',
         platformIds: members, defaultPlatformId: platformId, iconKind: 'platform', iconPlatformId: platformId,
       }], orderedEntryIds: [`group:platform-${platformId}`] });
@@ -103,13 +111,32 @@ test('only Codex and its API service are grouped by default and explicit layouts
       hiddenEntryIds: ['group:codex-suite'], sidebarEntryIds: ['group:trae-suite'],
       apiRelayEntryOrder: 1,
     };
-    const migrated = hydrate(old);
+    const migrated = await hydrate(old);
     assertDefaultGrouping(migrated);
     assert.deepEqual(migrated.orderedEntryIds.slice(0, 2), ['group:codex-suite', 'platform:zed']);
     assert.deepEqual(migrated.hiddenEntryIds, ['group:codex-suite']);
     assert.deepEqual(migrated.sidebarEntryIds, ['platform:trae', 'platform:trae_solo', 'platform:trae_cn', 'platform:trae_solo_cn']);
     assert.equal(migrated.apiRelayEntryOrder, 1);
-    assert.deepEqual(JSON.parse(storage.getItem(key)!), old, 'loading must not overwrite durable preferences');
+    assert.deepEqual(JSON.parse(prefs.readPlatformLayout()!).orderedEntryIds, old.orderedEntryIds);
+    assert.equal(storage.getItem(key), savedAppLayout, 'imports do not write the old cache');
+
+    const traeSuite = {
+      ...suites[3],
+      childConfigs: [
+        { platformId: 'trae_solo', name: 'TRAE SOLO' },
+        { platformId: 'trae_solo_cn', name: 'TRAE SOLO CN\u200b' },
+        { platformId: 'trae_cn', name: 'My Trae IDE' },
+      ],
+    };
+    const renamedLayout = await hydrate({ independentPlatformsMigrated: true, platformGroups: [traeSuite] });
+    const renamedSuite = renamedLayout.platformGroups.find((item) => item.id === traeSuite.id)!;
+    assert.deepEqual(renamedSuite.platformIds, traeSuite.platformIds);
+    const childNames = Object.fromEntries(renamedSuite.childConfigs!.map(({ platformId, name }) => [platformId, name]));
+    assert.deepEqual(childNames, {
+      trae_solo: 'TraeWork',
+      trae_solo_cn: 'TraeWork CN',
+      trae_cn: 'My Trae IDE',
+    });
 
     for (const customized of [
       { ...suites[1], name: 'My models' },
@@ -119,24 +146,24 @@ test('only Codex and its API service are grouped by default and explicit layouts
       { ...suites[1], childConfigs: [{ platformId: 'codex', name: 'My Codex' }] },
       { ...suites[0], name: 'Antigravity IDE' },
     ]) {
-      const kept = hydrate({ platformGroups: [customized] });
+      const kept = await hydrate({ platformGroups: [customized] });
       const savedGroup = kept.platformGroups.find((item) => item.id === customized.id)!;
       assert.equal(savedGroup.name, customized.name);
       assert.deepEqual(savedGroup.platformIds, customized.platformIds);
     }
-    hydrate(null);
+    await hydrate(null);
     usePlatformLayoutStore.getState().upsertPlatformGroup(suites[1] as Parameters<typeof independent.upsertPlatformGroup>[0]);
-    const manuallySaved = JSON.parse(storage.getItem(key)!);
+    const manuallySaved = JSON.parse(prefs.readPlatformLayout()!);
     assert.equal(manuallySaved.independentPlatformsMigrated, true);
     assert.equal(manuallySaved.codexApiServiceDefaultGrouped, true);
-    assert.equal(hydrate(manuallySaved).platformGroups[0].id, 'codex-suite', 'explicit regrouping survives reload');
+    assert.equal((await hydrate(manuallySaved)).platformGroups[0].id, 'codex-suite', 'explicit regrouping survives reload');
     usePlatformLayoutStore.getState().removePlatformGroup('codex-suite');
     assert.deepEqual(usePlatformLayoutStore.getState().platformGroups, []);
     assert.ok(usePlatformLayoutStore.getState().orderedEntryIds.includes('platform:codex'));
     assert.ok(usePlatformLayoutStore.getState().orderedEntryIds.includes('platform:codex_api_service'));
-    assert.deepEqual(hydrate(JSON.parse(storage.getItem(key)!)).platformGroups, [], 'a later explicit split must not be re-grouped');
-    assertDefaultGrouping(hydrate({ platformGroups: suites, orderedEntryIds: 'invalid' }));
-    const previewUpgrade = hydrate({ independentPlatformsMigrated: true, platformGroups: [],
+    assert.deepEqual((await hydrate(JSON.parse(prefs.readPlatformLayout()!))).platformGroups, [], 'a later explicit split must not be re-grouped');
+    assertDefaultGrouping(await hydrate({ platformGroups: suites, orderedEntryIds: 'invalid' }));
+    const previewUpgrade = await hydrate({ independentPlatformsMigrated: true, platformGroups: [],
       orderedEntryIds: ['platform:codex', 'platform:codex_api_service', 'platform:zed'],
       hiddenEntryIds: ['platform:codex_api_service'], sidebarEntryIds: ['platform:codex'], apiRelayEntryOrder: 2 });
     assertDefaultGrouping(previewUpgrade);
@@ -145,12 +172,12 @@ test('only Codex and its API service are grouped by default and explicit layouts
     assert.deepEqual(previewUpgrade.hiddenEntryIds, ['group:codex-suite']);
     assert.deepEqual(previewUpgrade.sidebarEntryIds, ['group:codex-suite']);
     const customCodex = { ...suites[1], id: 'my-codex', name: 'My Codex', platformIds: ['codex'] };
-    assert.equal(hydrate({ platformGroups: [customCodex] }).platformGroups.length, 1);
+    assert.equal((await hydrate({ platformGroups: [customCodex] })).platformGroups.length, 1);
     assert.equal(usePlatformLayoutStore.getState().platformGroups[0].id, 'my-codex');
     assert.ok(usePlatformLayoutStore.getState().orderedEntryIds.includes('platform:codex_api_service'));
     usePlatformLayoutStore.getState().resetPlatformLayout();
     assertDefaultGrouping(usePlatformLayoutStore.getState());
-    assertDefaultGrouping(hydrate(JSON.parse(storage.getItem(key)!)));
+    assertDefaultGrouping(await hydrate(JSON.parse(prefs.readPlatformLayout()!)));
   } finally {
     // Allow the sidebar store's deferred legacy-key cleanup to finish before
     // restoring global storage, including when an assertion fails.

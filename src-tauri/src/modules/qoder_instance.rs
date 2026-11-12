@@ -15,6 +15,8 @@ pub use crate::modules::instance_store::{CreateInstanceParams, UpdateInstancePar
 static QODER_INSTANCE_STORE_LOCK: std::sync::LazyLock<Mutex<()>> =
     std::sync::LazyLock::new(|| Mutex::new(()));
 
+pub(crate) static QODER_LIFECYCLE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 const QODER_INSTANCES_FILE: &str = "qoder_instances.json";
 
 fn instances_path() -> Result<PathBuf, String> {
@@ -68,27 +70,10 @@ pub fn update_default_settings(
 }
 
 pub fn get_default_qoder_user_data_dir() -> Result<PathBuf, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join("Library/Application Support/Qoder"));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let appdata =
-            std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
-        return Ok(PathBuf::from(appdata).join("Qoder"));
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join(".config/Qoder"));
-    }
-
-    #[allow(unreachable_code)]
-    Err("Qoder 应用多开仅支持 macOS、Windows 和 Linux".to_string())
+    let settings = load_default_settings()?;
+    let args = modules::process::parse_extra_args(&settings.extra_args);
+    let executable = modules::process::resolve_qoder_launch_path().ok();
+    modules::qoder_paths::user_data_dir(&args, executable.as_deref())
 }
 
 pub fn get_default_instances_root_dir() -> Result<PathBuf, String> {
@@ -106,7 +91,10 @@ pub fn get_instance_defaults() -> Result<InstanceDefaults, String> {
 
 pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, String> {
     let directory_preexisted = std::path::Path::new(params.user_data_dir.trim()).exists();
-    let creation_mode = params.init_mode.clone().unwrap_or_else(|| "copy".to_string());
+    let creation_mode = params
+        .init_mode
+        .clone()
+        .unwrap_or_else(|| "copy".to_string());
     let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
     let _lock = QODER_INSTANCE_STORE_LOCK
         .lock()
@@ -195,11 +183,7 @@ pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, 
         user_data_dir,
         working_dir: params.working_dir,
         extra_args: params.extra_args.trim().to_string(),
-        bind_account_id: if create_empty {
-            None
-        } else {
-            params.bind_account_id
-        },
+        bind_account_id: params.bind_account_id,
         model_routing: None,
         launch_mode: crate::models::InstanceLaunchMode::App,
         app_speed: crate::models::codex::CodexAppSpeed::Standard,
@@ -209,7 +193,10 @@ pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, 
     };
 
     crate::modules::instance_directory_ownership::record_creation(
-        std::path::Path::new(&instance.user_data_dir), &instance.id, &creation_mode, directory_preexisted,
+        std::path::Path::new(&instance.user_data_dir),
+        &instance.id,
+        &creation_mode,
+        directory_preexisted,
     )?;
     store.instances.push(instance.clone());
     save_instance_store(&store)?;

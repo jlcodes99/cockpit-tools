@@ -16,13 +16,13 @@ fn history_repair_error(error: String) -> String {
     }
 }
 
-fn repair_history_projections_for_instances(
+fn scan_history_projections_for_instances(
     options: CodexSessionVisibilityRepairOptions,
-    run_id: Option<String>,
+    run_id: &Option<String>,
     progress_reporter: ProgressReporter<'_>,
-    selection: RepairTargetSelection,
-    instances: Vec<CodexSyncInstance>,
-) -> Result<CodexSessionVisibilityRepairSummary, String> {
+    selection: &RepairTargetSelection,
+    instances: &[CodexSyncInstance],
+) -> Result<Vec<(modules::codex_history_projection_repair::Plan, bool)>, String> {
     use modules::codex_history_projection_repair as history;
 
     if instances.is_empty() {
@@ -30,13 +30,7 @@ fn repair_history_projections_for_instances(
             "CODEX_HISTORY_REPAIR_NO_INSTANCE".into(),
         ));
     }
-    let mut summary = CodexSessionVisibilityRepairSummary {
-        instance_count: instances.len(),
-        history_projection_count: Some(0),
-        ..Default::default()
-    };
-    // Validate every selected instance before the first mutation. Missing sources
-    // are reported separately; other scan failures still abort before any writes.
+    // Validate every selected instance before the first mutation.
     let mut plans = Vec::with_capacity(instances.len());
     // Running state is informational; SQLite transactions and source checks
     // protect the repair without requiring the desktop client or CLI to stop.
@@ -45,7 +39,7 @@ fn repair_history_projections_for_instances(
         let progress = |current: usize, total: usize| {
             report_repair_progress(
                 progress_reporter,
-                &run_id,
+                run_id,
                 options,
                 "scan_history_index",
                 instance_progress_percent(index, instances.len(), 0, 4),
@@ -59,6 +53,51 @@ fn repair_history_projections_for_instances(
         let running = is_instance_running(instance, &process_entries);
         plans.push((plan, running));
     }
+    Ok(plans)
+}
+
+fn history_duplicate_ordinals_warning(
+    instances: &[CodexSyncInstance],
+    plans: &[(modules::codex_history_projection_repair::Plan, bool)],
+) -> Option<String> {
+    let affected = instances.iter().zip(plans).flat_map(|(instance, (plan, _))| {
+        plan.duplicate_ordinals.iter().map(move |(id, source, ordinal)| {
+            format!("{}: {id} → {source} ({ordinal})", instance.name)
+        })
+    }).collect::<Vec<_>>();
+    (!affected.is_empty()).then(|| history_repair_message(
+        "historyDuplicateOrdinals",
+        &[("details", &affected.join("\n"))],
+    ))
+}
+
+fn repair_history_projections_for_instances(
+    options: CodexSessionVisibilityRepairOptions,
+    run_id: Option<String>,
+    progress_reporter: ProgressReporter<'_>,
+    selection: RepairTargetSelection,
+    instances: Vec<CodexSyncInstance>,
+) -> Result<CodexSessionVisibilityRepairSummary, String> {
+    let plans = scan_history_projections_for_instances(
+        options, &run_id, progress_reporter, &selection, &instances,
+    )?;
+    apply_history_projection_plans(options, run_id, progress_reporter, &instances, plans)
+}
+
+fn apply_history_projection_plans(
+    options: CodexSessionVisibilityRepairOptions,
+    run_id: Option<String>,
+    progress_reporter: ProgressReporter<'_>,
+    instances: &[CodexSyncInstance],
+    plans: Vec<(modules::codex_history_projection_repair::Plan, bool)>,
+) -> Result<CodexSessionVisibilityRepairSummary, String> {
+    use modules::codex_history_projection_repair as history;
+    let mut summary = CodexSessionVisibilityRepairSummary {
+        instance_count: instances.len(),
+        history_projection_count: Some(0),
+        history_repair_warning: history_duplicate_ordinals_warning(instances, &plans),
+        ..Default::default()
+    };
     let mut total = 0;
     let mut skipped = Vec::new();
     for (index, (instance, (plan, running))) in instances.iter().zip(plans).enumerate() {
@@ -137,10 +176,14 @@ fn repair_history_projections_for_instances(
     }
     summary.history_projection_count = Some(total);
     if !skipped.is_empty() {
-        summary.history_repair_warning = Some(history_repair_message(
+        let missing = history_repair_message(
             "historySkippedSources",
             &[("count", &skipped.len().to_string()), ("details", &skipped.join("\n"))],
-        ));
+        );
+        summary.history_repair_warning = Some(match summary.history_repair_warning.take() {
+            Some(warning) => format!("{warning}\n\n{missing}"),
+            None => missing,
+        });
     }
     summary.message = history_repair_message(
         if total == 0 {

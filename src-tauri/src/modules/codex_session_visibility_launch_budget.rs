@@ -10,6 +10,7 @@ const LAUNCH_VISIBILITY_ROLLBACK_FAILED: &str = "CODEX_SESSION_VISIBILITY_ROLLBA
 /// after writes, a rollback failure, or an actual history/configuration error.
 pub fn can_defer_launch_snapshot_error(error: &str) -> bool {
     !error.contains(LAUNCH_VISIBILITY_ROLLBACK_FAILED)
+        && !error.contains("CODEX_DESKTOP_STATE_PREPARATION_FAILED")
         && (error.contains("CODEX_SESSION_VISIBILITY_PROCESS_UNAVAILABLE")
             || (error.contains(LAUNCH_VISIBILITY_TIMEOUT)
                 && error.ends_with("stage=process_snapshot")))

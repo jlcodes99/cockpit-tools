@@ -39,8 +39,9 @@ async fn websocket_http_natural_incomplete_replays_partial_history_without_promo
     {
         let requests = requests.lock().unwrap();
         assert_eq!(requests.len(), 2);
-        assert_eq!(requests[0].0["session-id"], requests[1].0["session-id"]);
-        assert_eq!(requests[0].0["thread-id"], requests[1].0["thread-id"]);
+        assert!(requests.iter().all(|(headers, _)| {
+            !headers.contains_key("session-id") && !headers.contains_key("thread-id")
+        }));
         assert!(requests[1].1.get("previous_response_id").is_none());
         assert_eq!(requests[1].1["input"][0]["content"], "original");
         assert_eq!(

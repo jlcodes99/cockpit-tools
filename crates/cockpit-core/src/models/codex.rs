@@ -217,6 +217,8 @@ pub struct CodexAccountIndex {
     pub detail_schema_version: u32,
     pub accounts: Vec<CodexAccountSummary>,
     pub current_account_id: Option<String>,
+    #[serde(skip)]
+    pub(crate) storage_revision: Option<u64>,
 }
 
 /// 账号摘要信息
@@ -225,6 +227,8 @@ pub struct CodexAccountSummary {
     pub id: String,
     pub email: String,
     pub plan_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subscription_active_until: Option<String>,
     pub created_at: i64,
     pub last_used: i64,
 }
@@ -236,6 +240,7 @@ impl CodexAccountIndex {
             detail_schema_version: 2,
             accounts: Vec::new(),
             current_account_id: None,
+            storage_revision: None,
         }
     }
 }

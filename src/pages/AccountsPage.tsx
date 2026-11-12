@@ -1,3 +1,9 @@
+import { useDurableUiSetting } from '../hooks/useDurableUiSetting';
+import { useLocalHistory, type LocalHistoryRead } from '../hooks/useLocalHistory';
+import { useAccountsOverviewFilterState } from '../hooks/useAccountsOverviewFilterState'
+import { useAccountFormLoad } from '../hooks/useAccountFormLoad'
+import { previewDurableUiSetting, readDurableUiSetting, saveDurableUiSetting } from '../utils/durableUiSettings';
+import { loadSavedMfaRecords, subscribeMfaVault, upsertSavedMfaRecord } from '../services/mfaRecoveryService'
 import { useState, useEffect, useMemo, useRef, useCallback, Fragment, MouseEvent as ReactMouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import {
@@ -57,6 +63,7 @@ import {
 } from '../services/groupService'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import {
+  getAntigravityModelQuotaDisplayItems,
   getAntigravityQuotaDisplayItems,
   isAccountNeedsReauth,
 } from '../presentation/platformAccountPresentation'
@@ -96,7 +103,7 @@ import {
   normalizeAccountTag,
   type AccountFilterType,
 } from '../utils/accountFilters'
-import { loadWakeupOfficialLsVersionMode } from '../utils/wakeupOfficialLsVersion'
+import { formatWakeupRuntimeError } from '../utils/wakeupRuntimeError'
 import {
   buildValidAccountsFilterOption,
   splitValidityFilterValues,
@@ -112,21 +119,16 @@ import {
   normalizeAntigravityExternalImportToken,
 } from '../utils/externalProviderImport'
 import {
-  ACCOUNTS_OVERVIEW_FILTER_PERSISTENCE_CHANGED_EVENT,
-  type AccountsOverviewFilterPersistenceChangedDetail,
   readAccountsOverviewFilterField,
   readAccountsOverviewFilterPersistenceEnabled,
   readAccountsOverviewFilterStringArray,
-  removeAccountsOverviewFilterField,
-  writeAccountsOverviewFilterField,
+  resolveAccountSortMode,
 } from '../utils/accountsOverviewFilterPersistence'
 import { useAntigravityRuntimeTarget } from '../hooks/useAntigravityRuntimeTarget'
 import { useRememberMfaQuery } from '../hooks/useRememberMfaQuery'
 import {
   getMfaOtpToken,
-  loadSavedMfaRecords,
   parseMfaCredentialInput,
-  upsertSavedMfaRecord,
   type MfaRecord,
 } from '../utils/mfaVault'
 import { findFirstMailVerificationCode } from '../utils/mailVerificationCode'
@@ -155,7 +157,7 @@ import {
   hasAntigravityAccountNoteDetails,
   hasAntigravityAccountNoteFormDetails,
   isPendingAntigravityAccount,
-  readAntigravityCustomSortActive,
+  ANTIGRAVITY_CUSTOM_SORT_ACTIVE_KEY,
   readAntigravityCustomSortOrder,
   writeAntigravityCustomSortActive,
   writeAntigravityCustomSortOrder,
@@ -163,7 +165,6 @@ import {
   type AntigravityAccountNoteFormState,
   type AntigravityAccountNoteMailPreviewState,
   type ExtensionImportProgressPayload,
-  type VerificationDetailRecord,
   type VerificationHistoryBatch,
   type ViewMode,
 } from './antigravityAccountOverviewModel';
@@ -173,9 +174,11 @@ interface AccountsPageProps {
   onNavigate?: (page: Page) => void
 }
 
-type AntigravitySwitchHistoryItem = accountService.AntigravitySwitchHistoryItem
 
 export type { AccountsFilterType } from './antigravityAccountOverviewModel';
+
+const readVerificationHistory = (retry: boolean): Promise<LocalHistoryRead<VerificationHistoryBatch>> =>
+  invoke('wakeup_verification_load_history', { retry })
 
 export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   const { t, i18n } = useTranslation()
@@ -203,28 +206,10 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
 
   // ─── 验证状态标记 ────────────────────────────────────────────────────
   // 优先读 disabled_reason（新版后端写入），没有则回退到验证历史（向后兼容）
-  const [verificationStatusMap, setVerificationStatusMap] = useState<Record<string, string>>({})
-  const [verificationDetailMap, setVerificationDetailMap] = useState<Record<string, VerificationDetailRecord>>({})
-
-  const loadVerificationHistory = useCallback(async () => {
-    const requestId = verificationHistoryRequestIdRef.current + 1
-    verificationHistoryRequestIdRef.current = requestId
-
-    try {
-      const batches = await invoke<VerificationHistoryBatch[]>('wakeup_verification_load_history')
-      if (verificationHistoryRequestIdRef.current !== requestId) {
-        return
-      }
-      const { statusMap, detailMap } = buildVerificationHistoryMaps(batches || [])
-      setVerificationStatusMap(statusMap)
-      setVerificationDetailMap(detailMap)
-    } catch (error) {
-      if (verificationHistoryRequestIdRef.current !== requestId) {
-        return
-      }
-      console.error('Failed to load verification history:', error)
-    }
-  }, [])
+  const { records: verificationBatches, refresh: loadVerificationHistory } = useLocalHistory(readVerificationHistory)
+  const { statusMap: verificationStatusMap, detailMap: verificationDetailMap } = useMemo(
+    () => buildVerificationHistoryMaps(verificationBatches), [verificationBatches],
+  )
 
   const getVerificationBadge = useCallback((account: Account) => {
     // 优先从 disabled_reason 读（新版），回退到验证历史（旧数据兼容）
@@ -297,12 +282,9 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   const initialFilterPersistenceEnabled = readAccountsOverviewFilterPersistenceEnabled(
     ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
   )
-  const [filterPersistenceEnabled, setFilterPersistenceEnabled] = useState<boolean>(
-    initialFilterPersistenceEnabled,
-  )
 
   // View mode — always remember layout independently of filter-memory switch (#1200)
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+  const [viewMode, setViewMode] = useAccountsOverviewFilterState<ViewMode>(ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE, ANTIGRAVITY_FILTER_FIELD_VIEW_MODE, () => {
     const saved = readAccountsOverviewFilterField<unknown>(
       ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
       ANTIGRAVITY_FILTER_FIELD_VIEW_MODE,
@@ -311,7 +293,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     return saved === 'grid' || saved === 'list' || saved === 'compact'
       ? saved
       : 'grid'
-  })
+  }, true)
   const [privacyModeEnabled, setPrivacyModeEnabled] = useState<boolean>(() =>
     isPrivacyModeEnabledByDefault()
   )
@@ -335,7 +317,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
 
   // 筛选
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterTypes, setFilterTypes] = useState<AccountsFilterType[]>(() => {
+  const [filterTypes, setFilterTypes] = useAccountsOverviewFilterState<AccountsFilterType[]>(ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE, ANTIGRAVITY_FILTER_FIELD_FILTER_TYPES, () => {
     if (initialFilterPersistenceEnabled) {
       const saved = readAccountsOverviewFilterField<unknown>(
         ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
@@ -351,7 +333,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     }
     return DEFAULT_FILTER_TYPES
   })
-  const [tagFilter, setTagFilter] = useState<string[]>(() => {
+  const [tagFilter, setTagFilter] = useAccountsOverviewFilterState<string[]>(ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE, ANTIGRAVITY_FILTER_FIELD_TAG_FILTER, () => {
     if (initialFilterPersistenceEnabled) {
       const saved = readAccountsOverviewFilterField<unknown>(
         ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
@@ -367,7 +349,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     }
     return DEFAULT_TAG_FILTER
   })
-  const [groupByTag, setGroupByTag] = useState<boolean>(() =>
+  const [groupByTag, setGroupByTag] = useAccountsOverviewFilterState<boolean>(ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE, ANTIGRAVITY_FILTER_FIELD_GROUP_BY_TAG, () =>
     initialFilterPersistenceEnabled
       ? Boolean(
           readAccountsOverviewFilterField<unknown>(
@@ -413,10 +395,12 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   const exportAccountIdsRef = useRef<string[]>([])
   const exportSensitiveRefreshSeqRef = useRef(0)
   const [showSwitchHistoryModal, setShowSwitchHistoryModal] = useState(false)
-  const [switchHistoryLoading, setSwitchHistoryLoading] = useState(false)
   const [switchHistoryClearing, setSwitchHistoryClearing] = useState(false)
   const [switchHistoryClearConfirmOpen, setSwitchHistoryClearConfirmOpen] = useState(false)
-  const [switchHistory, setSwitchHistory] = useState<AntigravitySwitchHistoryItem[]>([])
+  const {
+    records: switchHistory, loading: switchHistoryLoading, error: switchHistoryError,
+    migrationPending: switchHistoryMigrating, refresh: refreshSwitchHistory, cleared: clearVisibleSwitchHistory,
+  } = useLocalHistory(accountService.loadAntigravitySwitchHistory, undefined, undefined, showSwitchHistoryModal)
   const [antigravitySeamlessSwitchUnlocked, setAntigravitySeamlessSwitchUnlocked] = useState(
     isAntigravitySeamlessSwitchFeatureUnlocked,
   )
@@ -508,6 +492,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   const [accountNoteCopiedKey, setAccountNoteCopiedKey] = useState<string | null>(null)
   const [accountNoteFieldError, setAccountNoteFieldError] = useState<string | null>(null)
   const [savedMfaRecords, setSavedMfaRecords] = useState<MfaRecord[]>([])
+  useEffect(() => subscribeMfaVault(() => setSavedMfaRecords(loadSavedMfaRecords())), [])
   const [accountNoteMfaPickerOpen, setAccountNoteMfaPickerOpen] = useState(false)
   const [accountNoteMailPreview, setAccountNoteMailPreview] = useState<AntigravityAccountNoteMailPreviewState | null>(null)
   const [accountNoteMailPreviewLoading, setAccountNoteMailPreviewLoading] = useState(false)
@@ -643,10 +628,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     },
     [addTargetGroupId, grouping, resolveValidAccountGroupId],
   )
-  const [sortBy, setSortBy] = useState<string>(() => {
-    if (readAntigravityCustomSortActive()) {
-      return 'custom'
-    }
+  const [rememberedSortBy, setSortBy] = useAccountsOverviewFilterState<string>(ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE, ANTIGRAVITY_FILTER_FIELD_SORT_BY, () => {
     if (!initialFilterPersistenceEnabled) {
       return DEFAULT_ANTIGRAVITY_SORT_BY
     }
@@ -658,7 +640,12 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       ) as string,
     )
   })
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(() => {
+  const sortBy = resolveAccountSortMode(
+    rememberedSortBy,
+    useDurableUiSetting(ANTIGRAVITY_CUSTOM_SORT_ACTIVE_KEY),
+    DEFAULT_ANTIGRAVITY_SORT_BY,
+  )
+  const [sortDirection, setSortDirection] = useAccountsOverviewFilterState<'asc' | 'desc'>(ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE, ANTIGRAVITY_FILTER_FIELD_SORT_DIRECTION, () => {
     if (!initialFilterPersistenceEnabled) {
       return 'desc'
     }
@@ -707,7 +694,6 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   const addStatusRef = useRef(addStatus)
   const oauthAccountNoteFormRef = useRef(oauthAccountNoteForm)
   const addTargetGroupIdRef = useRef<string | null>(null)
-  const verificationHistoryRequestIdRef = useRef(0)
   const colorPickerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -865,7 +851,6 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       const nextFilterPersistenceEnabled = readAccountsOverviewFilterPersistenceEnabled(
         ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
       )
-      setFilterPersistenceEnabled(nextFilterPersistenceEnabled)
       if (nextFilterPersistenceEnabled) {
         loadPersistedOverviewFilters()
       } else {
@@ -880,112 +865,13 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       setPrivacyModeEnabled(isEnabled)
     }
 
-    const handleFilterPersistenceChanged = (event: Event) => {
-      const detail = (event as CustomEvent<AccountsOverviewFilterPersistenceChangedDetail>).detail
-      if (!detail || detail.scope !== ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE) {
-        return
-      }
-      setFilterPersistenceEnabled(Boolean(detail.enabled))
-    }
     window.addEventListener('config-updated', handleConfigUpdated)
     window.addEventListener(PRIVACY_MODE_CHANGED_EVENT, handlePrivacyModeChanged as EventListener)
-    window.addEventListener(
-      ACCOUNTS_OVERVIEW_FILTER_PERSISTENCE_CHANGED_EVENT,
-      handleFilterPersistenceChanged as EventListener,
-    )
     return () => {
       window.removeEventListener('config-updated', handleConfigUpdated)
       window.removeEventListener(PRIVACY_MODE_CHANGED_EVENT, handlePrivacyModeChanged as EventListener)
-      window.removeEventListener(
-        ACCOUNTS_OVERVIEW_FILTER_PERSISTENCE_CHANGED_EVENT,
-        handleFilterPersistenceChanged as EventListener,
-      )
     }
   }, [loadPersistedOverviewFilters, resetOverviewFilters, fetchAccounts])
-
-  useEffect(() => {
-    // Always persist layout mode so switching tabs does not reset list/card view (#1200)
-    writeAccountsOverviewFilterField(
-      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-      ANTIGRAVITY_FILTER_FIELD_VIEW_MODE,
-      viewMode,
-    )
-  }, [viewMode])
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_SORT_BY,
-      )
-      return
-    }
-    writeAccountsOverviewFilterField(
-      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-      ANTIGRAVITY_FILTER_FIELD_SORT_BY,
-      sortBy,
-    )
-  }, [filterPersistenceEnabled, sortBy])
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_SORT_DIRECTION,
-      )
-      return
-    }
-    writeAccountsOverviewFilterField(
-      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-      ANTIGRAVITY_FILTER_FIELD_SORT_DIRECTION,
-      sortDirection,
-    )
-  }, [filterPersistenceEnabled, sortDirection])
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_FILTER_TYPES,
-      )
-      return
-    }
-    writeAccountsOverviewFilterField(
-      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-      ANTIGRAVITY_FILTER_FIELD_FILTER_TYPES,
-      filterTypes,
-    )
-  }, [filterPersistenceEnabled, filterTypes])
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_TAG_FILTER,
-      )
-      return
-    }
-    writeAccountsOverviewFilterField(
-      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-      ANTIGRAVITY_FILTER_FIELD_TAG_FILTER,
-      tagFilter,
-    )
-  }, [filterPersistenceEnabled, tagFilter])
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_GROUP_BY_TAG,
-      )
-      return
-    }
-    writeAccountsOverviewFilterField(
-      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-      ANTIGRAVITY_FILTER_FIELD_GROUP_BY_TAG,
-      groupByTag,
-    )
-  }, [filterPersistenceEnabled, groupByTag])
 
   useEffect(() => {
     return subscribeUserMemory(() => {
@@ -1017,31 +903,6 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     })
   }, [accounts])
 
-  useEffect(() => {
-    writeAntigravityCustomSortOrder(customSortOrder)
-  }, [customSortOrder])
-
-  useEffect(() => {
-    writeAntigravityCustomSortActive(sortBy === 'custom')
-  }, [sortBy])
-
-  useEffect(() => {
-    if (!showCustomSortModal || !draggedCustomSortAccountId) return
-    const handleMouseUp = () => {
-      setDraggedCustomSortAccountId(null)
-      setCustomSortDropTargetId(null)
-    }
-    window.addEventListener('mouseup', handleMouseUp)
-    return () => window.removeEventListener('mouseup', handleMouseUp)
-  }, [showCustomSortModal, draggedCustomSortAccountId])
-
-  useEffect(() => {
-    if (!showCustomSortModal) {
-      setDraggedCustomSortAccountId(null)
-      setCustomSortDropTargetId(null)
-    }
-  }, [showCustomSortModal])
-
   const isCustomSortActive = sortBy === 'custom'
   const customSortAccounts = useMemo(() => {
     const accountMap = new Map(
@@ -1071,6 +932,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     [customSortAccounts]
   )
 
+  const draggedOrder = useRef<string[] | null>(null)
   const moveCustomSortAccount = useCallback(
     (accountId: string, direction: 'up' | 'down') => {
       const currentIndex = customSortAccountIds.indexOf(accountId)
@@ -1082,11 +944,16 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       const [moved] = next.splice(currentIndex, 1)
       next.splice(targetIndex, 0, moved)
       setCustomSortOrder(next)
+      writeAntigravityCustomSortOrder(next)
     },
     [customSortAccountIds]
   )
 
   const stopCustomSortDragging = useCallback(() => {
+    if (draggedOrder.current) {
+      writeAntigravityCustomSortOrder(draggedOrder.current)
+      draggedOrder.current = null
+    }
     setDraggedCustomSortAccountId(null)
     setCustomSortDropTargetId(null)
   }, [])
@@ -1118,18 +985,32 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       const next = [...customSortAccountIds]
       const [moved] = next.splice(fromIndex, 1)
       next.splice(toIndex, 0, moved)
+      draggedOrder.current = next
       setCustomSortOrder(next)
     },
     [customSortAccountIds, draggedCustomSortAccountId]
   )
 
   const resetCustomSortOrder = useCallback(() => {
-    setCustomSortOrder(accounts.map((account) => account.id))
+    const next = accounts.map((account) => account.id)
+    setCustomSortOrder(next)
+    writeAntigravityCustomSortOrder(next)
   }, [accounts])
+
+  useEffect(() => {
+    if (!showCustomSortModal || !draggedCustomSortAccountId) return
+    window.addEventListener('mouseup', stopCustomSortDragging)
+    return () => window.removeEventListener('mouseup', stopCustomSortDragging)
+  }, [showCustomSortModal, draggedCustomSortAccountId, stopCustomSortDragging])
+
+  useEffect(() => {
+    if (!showCustomSortModal) stopCustomSortDragging()
+  }, [showCustomSortModal, stopCustomSortDragging])
 
   const handleSortByChange = useCallback(
     (value: string) => {
       setSortBy(value)
+      writeAntigravityCustomSortActive(value === 'custom')
       if (value === 'custom') {
         setShowCustomSortModal(true)
       }
@@ -1145,6 +1026,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     if (
       normalizedSortBy === 'overall' ||
       normalizedSortBy === 'created_at' ||
+      normalizedSortBy === 'last_switched_at' ||
       normalizedSortBy === 'default' ||
       normalizedSortBy === 'custom'
     ) {
@@ -1331,56 +1213,40 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     ]
   )
 
-  // 加载显示用分组配置
+  // Display groups are native data; their presentation is a separate preference.
   const loadDisplayGroups = async () => {
     try {
-      const groups = await getDisplayGroups()
-      setDisplayGroups(groups)
-      // Initialize compact mode group order
-      setCompactGroupOrder(groups.map((g) => g.id))
-
-      // Load custom settings from localStorage
-      const savedOrder = localStorage.getItem('compactGroupOrder')
-      const savedColors = localStorage.getItem('compactGroupColors')
-      const savedHidden = localStorage.getItem('compactHiddenGroups')
-
-      if (savedOrder) {
-        try {
-          const order = JSON.parse(savedOrder)
-          // 确保所有分组都在排序中
-          const validOrder = order.filter((id: string) =>
-            groups.some((g) => g.id === id)
-          )
-          const missingGroups = groups
-            .filter((g) => !validOrder.includes(g.id))
-            .map((g) => g.id)
-          setCompactGroupOrder([...validOrder, ...missingGroups])
-        } catch (e) {
-          console.error('Failed to parse saved order:', e)
-        }
-      }
-
-      if (savedColors) {
-        try {
-          setGroupColors(JSON.parse(savedColors))
-        } catch (e) {
-          console.error('Failed to parse saved colors:', e)
-        }
-      }
-
-      if (savedHidden) {
-        try {
-          setHiddenGroups(new Set(JSON.parse(savedHidden)))
-        } catch (e) {
-          console.error('Failed to parse saved hidden groups:', e)
-        }
-      }
+      setDisplayGroups(await getDisplayGroups())
     } catch (e) {
       console.error('Failed to load display groups:', e)
     } finally {
       setDisplayGroupsLoaded(true)
     }
   }
+
+  useEffect(() => {
+    const reload = () => {
+      const parse = (key: 'compactGroupOrder' | 'compactGroupColors' | 'compactHiddenGroups') => {
+        try {
+          return JSON.parse(readDurableUiSetting(key) ?? 'null')
+        } catch {
+          return null
+        }
+      }
+      const order = parse('compactGroupOrder')
+      const ids = displayGroups.map(group => group.id)
+      const validOrder = Array.isArray(order)
+        ? [...new Set(order.filter((id): id is string => typeof id === 'string' && ids.includes(id)))]
+        : []
+      setCompactGroupOrder([...validOrder, ...ids.filter(id => !validOrder.includes(id))])
+      setGroupColors(parse('compactGroupColors') ?? {})
+      const hidden = parse('compactHiddenGroups')
+      setHiddenGroups(new Set(Array.isArray(hidden) ? hidden.filter(id => typeof id === 'string') : []))
+    }
+    reload()
+    window.addEventListener('agtools:compact-groups-changed', reload)
+    return () => window.removeEventListener('agtools:compact-groups-changed', reload)
+  }, [displayGroups])
 
   // 获取按紧凑模式排序后的分组
   const getOrderedDisplayGroups = () => {
@@ -1395,29 +1261,15 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     return groupColors[groupId] ?? fallbackIndex
   }
 
-  // 切换模型显示/隐藏
   const toggleGroupVisibility = (groupId: string) => {
-    setHiddenGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(groupId)) {
-        next.delete(groupId)
-      } else {
-        next.add(groupId)
-      }
-      // Save to localStorage
-      localStorage.setItem('compactHiddenGroups', JSON.stringify([...next]))
-      return next
-    })
+    const next = new Set(hiddenGroups)
+    if (next.has(groupId)) next.delete(groupId)
+    else next.add(groupId)
+    previewDurableUiSetting('compactHiddenGroups', JSON.stringify([...next]))
   }
 
-  // Set group color
   const setGroupColor = (groupId: string, colorIndex: number) => {
-    setGroupColors((prev) => {
-      const next = { ...prev, [groupId]: colorIndex }
-      // Save to localStorage
-      localStorage.setItem('compactGroupColors', JSON.stringify(next))
-      return next
-    })
+    previewDurableUiSetting('compactGroupColors', JSON.stringify({ ...groupColors, [groupId]: colorIndex }))
     setShowColorPicker(null)
     setColorPickerPos(null)
   }
@@ -1467,10 +1319,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       // Persist order to backend and localStorage
       try {
         await updateGroupOrder(compactGroupOrder)
-        localStorage.setItem(
-          'compactGroupOrder',
-          JSON.stringify(compactGroupOrder)
-        )
+        await saveDurableUiSetting('compactGroupOrder', JSON.stringify(compactGroupOrder))
       } catch (e) {
         console.error('Failed to save group order:', e)
       }
@@ -1482,7 +1331,6 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     fetchAccounts()
     fetchCurrentAccount(antigravityRuntimeTarget)
     loadDisplayGroups()
-    loadVerificationHistory()
 
     let unlisten: UnlistenFn | undefined
 
@@ -1499,7 +1347,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
         )
         await fetchAccounts()
       }
-      await loadVerificationHistory()
+      loadVerificationHistory()
     }).then((fn) => {
       unlisten = fn
     })
@@ -1617,7 +1465,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       setRefreshResult((prev) => ({ ...prev, [accountId]: 'error' }))
       setTimeout(() => setRefreshResult((prev) => { const next = { ...prev }; delete next[accountId]; return next }), 2000)
     } finally {
-      await loadVerificationHistory()
+      loadVerificationHistory()
       setRefreshing((prev) => { const next = new Set(prev); next.delete(accountId); return next })
     }
   }
@@ -1639,7 +1487,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     } catch (e) {
       console.error(e)
     } finally {
-      await loadVerificationHistory()
+      loadVerificationHistory()
       setRefreshingAll(false)
     }
   }
@@ -1651,12 +1499,12 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     const selectedIdSet = new Set(selected)
     const selectedAccounts = accounts.filter((account) => selectedIdSet.has(account.id))
     try {
+      await invoke('wakeup_ensure_runtime_ready')
       const models = await invoke<Array<{ id: string }>>('fetch_available_models')
       const model = models.find((item) => item.id)?.id
       if (!model) {
         throw new Error(t('wakeup.notice.testMissingModel'))
       }
-      const officialLsVersionMode = loadWakeupOfficialLsVersionMode()
       const results = await Promise.allSettled(
         selectedAccounts.map((account) =>
           invoke('trigger_wakeup', {
@@ -1665,7 +1513,6 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
             prompt: undefined,
             maxOutputTokens: 0,
             cancelScopeId: undefined,
-            officialLsVersionMode,
           }),
         ),
       )
@@ -1685,7 +1532,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       setMessage({
         text: t('messages.actionFailed', {
           action: t('wakeup.runTest'),
-          error: String(error).replace(/^Error:\s*/, ''),
+          error: formatWakeupRuntimeError(String(error).replace(/^Error:\s*/, ''), t),
         }),
         tone: 'error',
       })
@@ -1969,28 +1816,12 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setSwitching(null)
   }
 
-  const loadSwitchHistory = useCallback(async () => {
-    setSwitchHistoryLoading(true)
-    try {
-      const items = await accountService.loadAntigravitySwitchHistory()
-      setSwitchHistory(items)
-    } catch (error) {
-      setMessage({
-        text: t('accounts.switchHistory.loadFailed', { error: String(error) }),
-        tone: 'error',
-      })
-    } finally {
-      setSwitchHistoryLoading(false)
-    }
-  }, [t])
-
-  const openSwitchHistoryModal = async () => {
+  const openSwitchHistoryModal = () => {
     if (!antigravitySeamlessSwitchUnlocked) {
       return
     }
     setShowSwitchHistoryModal(true)
     setSwitchHistoryClearConfirmOpen(false)
-    await loadSwitchHistory()
   }
 
   const handleClearSwitchHistory = () => {
@@ -2004,7 +1835,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setSwitchHistoryClearing(true)
     try {
       await accountService.clearAntigravitySwitchHistory()
-      setSwitchHistory([])
+      clearVisibleSwitchHistory()
       setSwitchHistoryClearConfirmOpen(false)
     } catch (error) {
       setSwitchHistoryClearConfirmOpen(false)
@@ -2147,7 +1978,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setAddStatus('loading')
     setAddMessage(t('modals.import.importingLocal'))
     try {
-      const imported = await accountService.importFromLocal()
+      const imported = await accountService.importFromLocal(antigravityRuntimeTarget)
       await fetchAccounts()
       await new Promise((resolve) => setTimeout(resolve, 180))
       await fetchAccounts()
@@ -2567,10 +2398,11 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setShowTagModal(accountId);
   };
 
-  const openAccountNoteModal = useCallback((account: Account) => {
+  const { status: accountNoteReadStatus, start: loadAccountNote, reset: resetAccountNoteRead, retry: retryAccountNoteRead } = useAccountFormLoad()
+  const openAccountNoteModal = useCallback((snapshot: Account) => {
     setOauthAccountNoteMode(false)
-    setEditingAccountNoteId(account.id)
-    setEditingAccountNoteForm(buildAntigravityAccountNoteForm(account))
+    setEditingAccountNoteId(snapshot.id)
+    setEditingAccountNoteForm(EMPTY_ANTIGRAVITY_ACCOUNT_NOTE_FORM)
     setAccountNoteSecretVisible(true)
     setAccountNotePasswordVisible(true)
     setAccountNoteCopiedKey(null)
@@ -2579,9 +2411,29 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setSavedMfaRecords(loadSavedMfaRecords())
     setAccountNoteError(null)
     resetAccountNoteMailPreview()
-  }, [resetAccountNoteMailPreview, setAccountNoteError])
+    const account = useAccountStore.getState().accounts.find(item => item.id === snapshot.id) ?? snapshot
+    if (account.token.access_token || account.token.refresh_token) {
+      resetAccountNoteRead()
+      setEditingAccountNoteForm(buildAntigravityAccountNoteForm(account))
+      return
+    }
+    loadAccountNote(async () => {
+      const fetched = (await accountService.listAccounts()).find(item => item.id === snapshot.id)
+      const latest = useAccountStore.getState().accounts.find(item => item.id === snapshot.id)
+      if (!latest) throw new Error(t('common.failed'))
+      if (latest.token.access_token || latest.token.refresh_token) return latest
+      if (!fetched) throw new Error(t('common.failed'))
+      return fetched
+    }, live => {
+      setEditingAccountNoteForm(buildAntigravityAccountNoteForm(live))
+      void fetchAccountNoteMailPreviewForUrl(live.mail_url ?? '')
+    }, error => setAccountNoteError(error ? t('messages.actionFailed', {
+      action: t('accounts.accountNote.short'), error: String(error),
+    }) : null))
+  }, [fetchAccountNoteMailPreviewForUrl, loadAccountNote, resetAccountNoteMailPreview, resetAccountNoteRead, setAccountNoteError, t])
 
   const openOAuthAccountNoteModal = useCallback(() => {
+    resetAccountNoteRead()
     setOauthAccountNoteMode(true)
     setEditingAccountNoteId(null)
     setEditingAccountNoteForm(EMPTY_ANTIGRAVITY_ACCOUNT_NOTE_FORM)
@@ -2593,7 +2445,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setSavedMfaRecords(loadSavedMfaRecords())
     setAccountNoteError(null)
     resetAccountNoteMailPreview()
-  }, [resetAccountNoteMailPreview, setAccountNoteError])
+  }, [resetAccountNoteMailPreview, resetAccountNoteRead, setAccountNoteError])
 
   useEffect(() => {
     if (editingAccountNoteId && editingAccountNoteAccount?.mail_url?.trim()) {
@@ -2616,6 +2468,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
 
   const closeAccountNoteModal = useCallback(() => {
     if (savingAccountNote) return
+    resetAccountNoteRead()
     rememberActiveAccountNoteMfaQuery()
     setEditingAccountNoteId(null)
     setOauthAccountNoteMode(false)
@@ -2625,7 +2478,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setAccountNoteMfaPickerOpen(false)
     setAccountNoteError(null)
     resetAccountNoteMailPreview()
-  }, [rememberActiveAccountNoteMfaQuery, resetAccountNoteMailPreview, savingAccountNote, setAccountNoteError])
+  }, [rememberActiveAccountNoteMfaQuery, resetAccountNoteMailPreview, resetAccountNoteRead, savingAccountNote, setAccountNoteError])
 
   const updateEditingAccountNoteForm = useCallback(
     (update: Partial<AntigravityAccountNoteFormState>) => {
@@ -2655,7 +2508,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   }, [])
 
   const handleSaveAccountNote = useCallback(async () => {
-    if ((!editingAccountNoteId && !oauthAccountNoteMode) || savingAccountNote) return
+    if ((!editingAccountNoteId && !oauthAccountNoteMode) || savingAccountNote || accountNoteReadStatus !== 'ready') return
     setSavingAccountNote(true)
     setAccountNoteError(null)
     setAccountNoteFieldError(null)
@@ -2685,11 +2538,11 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       }
       if (normalizedTwoFactorSecret) {
         rememberActiveAccountNoteMfaQuery()
-        setSavedMfaRecords(upsertSavedMfaRecord({
+        void upsertSavedMfaRecord({
           secret: normalizedTwoFactorSecret,
           accountName: editingAccountNoteAccount?.email ?? parsedTwoFactorSecret?.accountName ?? null,
           remark: activeAccountNoteForm.note,
-        }))
+        }).then(setSavedMfaRecords)
       }
       setMessage({ text: t('accounts.accountNote.saved', '账号备注已保存') })
       setEditingAccountNoteId(null)
@@ -2706,6 +2559,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       setSavingAccountNote(false)
     }
   }, [
+    accountNoteReadStatus,
     activeAccountNoteForm,
     editingAccountNoteId,
     editingAccountNoteAccount,
@@ -2866,6 +2720,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   const renderCustomQuotaSection = (account: Account, isList: boolean = false) => (
     <AntigravityQuotaSection
       items={getQuotaDisplayItems(account)}
+      modelItems={isList ? getAntigravityModelQuotaDisplayItems(account) : undefined}
       isList={isList}
       isNeedsReauth={isAccountNeedsReauth(account, verificationStatusMap)}
       t={t}
@@ -3006,7 +2861,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
                         setShowVerificationErrorModal(account.id)
                       }
                     }}
-                    title={validationUrl || t('modals.errors.viewVerificationDetail', '查看验证详情')}
+                    title={validationUrl || t('modals.errors.viewVerificationDetail')}
                   >
                     <ExternalLink size={12} />
                     <span>{t('accounts.actions.openValidationUrl', '网页验证')}</span>
@@ -3077,7 +2932,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
               {moreTagCount > 0 && <span className="tag-pill more">+{moreTagCount}</span>}
             </div>
           )}
-          <div className="card-footer">
+          <div className="card-footer antigravity-card-footer">
             <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDate} />
             <div className="card-actions">
               {isPendingAntigravityAccount(account) && (
@@ -3612,7 +3467,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
                             setShowVerificationErrorModal(account.id)
                           }
                         }}
-                        title={validationUrl || t('modals.errors.viewVerificationDetail', '查看验证详情')}
+                        title={validationUrl || t('modals.errors.viewVerificationDetail')}
                       >
                         <ExternalLink size={12} />
                         <span>{t('accounts.actions.openValidationUrl', '网页验证')}</span>
@@ -3701,7 +3556,11 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
               </div>
             </div>
           </td>
-          <td>{account.last_used > 0 ? formatDate(account.last_used) : '—'}</td>
+          <td>
+            {account.last_switched_at != null && account.last_switched_at > 0
+              ? formatDate(account.last_switched_at)
+              : t('common.none')}
+          </td>
           <td className="sticky-action-cell table-action-cell">
             <div className="action-buttons">
               {isPendingAntigravityAccount(account) && (
@@ -3812,7 +3671,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
             </th>
             <th style={{ width: 220 }}>{t('accounts.columns.email')}</th>
             <th>{t('accounts.columns.quota')}</th>
-            <th>{t('accounts.columns.lastUsed')}</th>
+            <th>{t('accounts.lastSwitchTime')}</th>
             <th className="sticky-action-header table-action-header">
               {t('accounts.columns.actions')}
             </th>
@@ -3847,6 +3706,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     accountNoteCopiedKey,
     accountNoteError,
     accountNoteErrorScrollKey,
+    accountNoteReadStatus,
     accountNoteFieldError,
     accountNoteMailPreview,
     accountNoteMailPreviewError,
@@ -3868,6 +3728,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     ANTIGRAVITY_ACCOUNT_NOTE_MAX_LENGTH,
     ANTIGRAVITY_TOKEN_BATCH_EXAMPLE,
     ANTIGRAVITY_TOKEN_SINGLE_EXAMPLE,
+    antigravityRuntimeTarget,
     antigravitySeamlessSwitchUnlocked,
     availableTags,
     clearFilterTypes,
@@ -3890,6 +3751,8 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     displayGroups,
     draggedCustomSortAccountId,
     editingAccountNoteAccount,
+    editingAccountNoteId,
+    retryAccountNoteRead,
     exportAccountIdsRef,
     exporting,
     exportModal,
@@ -4027,6 +3890,9 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     switchHistoryClearConfirmOpen,
     switchHistoryClearing,
     switchHistoryLoading,
+    switchHistoryError,
+    switchHistoryMigrating,
+    refreshSwitchHistory,
     t,
     tagDeleteConfirm,
     tagDeleteConfirmError,

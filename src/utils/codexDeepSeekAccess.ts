@@ -1,4 +1,6 @@
-import { isOpenAIOfficialUsageAccount } from './openaiOfficialUsage';
+import { isOpenAIOfficialUsageAccount, isOpenAIOfficialUsageUrl } from './openaiOfficialUsage';
+import type { ModelProviderUsageIntegrationType, ModelProviderUsageSummary } from '../services/modelProviderUsageService';
+import { codexProviderNeedsProtocolGateway } from './codexLocalAccessAccounts';
 import type { CodexAccount } from "../types/codex";
 import {
   buildCodexProviderGatewayBindId,
@@ -33,6 +35,29 @@ export const DEEPSEEK_DIRECT_MODELS = [
 
 export type DeepSeekAccessMode = "gateway" | "direct" | "cdp";
 
+export function codexProviderAccessModes(account: DeepSeekStartTarget): DeepSeekAccessMode[] {
+  const needsGateway = Boolean(account.upstream_grok_account_id?.trim())
+    || account.api_provider_id === "cockpit_chatgpt_plan"
+    || codexProviderNeedsProtocolGateway(account);
+  return needsGateway ? ["gateway", "cdp"] : ["gateway", "direct", "cdp"];
+}
+
+export function resolveCodexProviderAccessMode(account?: DeepSeekStartTarget | null): DeepSeekAccessMode | undefined {
+  if (!account) return undefined;
+  const stored = account.api_instance_access_mode?.trim().toLowerCase();
+  return codexProviderAccessModes(account).find((mode) => mode === stored)
+    ?? (isDeepSeekAccount(account) ? "gateway" : undefined);
+}
+
+export function resolveCodexProviderBindAccountId(
+  account: DeepSeekStartTarget & { id: string },
+  fallback = account.id,
+): string {
+  const mode = resolveCodexProviderAccessMode(account);
+  if (mode === "gateway") return buildCodexProviderGatewayBindId(account.id);
+  return mode ? account.id : fallback;
+}
+
 export type DeepSeekStartTarget = Pick<
   CodexAccount,
   | "api_provider_id"
@@ -41,6 +66,7 @@ export type DeepSeekStartTarget = Pick<
   | "api_instance_access_mode"
   | "api_startup_model"
   | "api_model_catalog"
+  | "upstream_grok_account_id"
 > & {
   id?: string;
 };
@@ -107,8 +133,22 @@ export function isApiKeyFunUsageAccount(account: Pick<CodexAccount, "api_base_ur
   }
 }
 
+export function canShowCodexProviderBalance(
+  relayBalanceDisabled: boolean,
+  baseUrl?: string | null,
+  mode?: string | null,
+): boolean {
+  if (!relayBalanceDisabled || mode === "cockpit" || isOpenAIOfficialUsageUrl(baseUrl ?? "")) {
+    return true;
+  }
+  const provider = { api_base_url: baseUrl ?? undefined, api_provider_id: undefined };
+  return isDeepSeekAccount(provider) || isCodexTokenPlanAccount(provider);
+}
+
 export function isCodexApiKeyUsageQueryEligible(
   account: CodexAccount,
+  integrationType?: ModelProviderUsageIntegrationType | null,
+  summary?: Pick<ModelProviderUsageSummary, 'mode' | 'cockpit'>,
 ): boolean {
   const tokenPlan = isCodexTokenPlanAccount(account);
   return (
@@ -116,7 +156,9 @@ export function isCodexApiKeyUsageQueryEligible(
     !isCodexNewApiAccount(account) &&
     (!isCodexChatCompletionsApiKeyAccount(account) ||
       isDeepSeekAccount(account) ||
-      tokenPlan || isOpenAIOfficialUsageAccount(account) || isApiKeyFunUsageAccount(account)) &&
+      tokenPlan || isOpenAIOfficialUsageAccount(account) || isApiKeyFunUsageAccount(account) ||
+      integrationType === 'sub2api' || integrationType === 'new_api' ||
+      summary?.mode === 'sub2api' || summary?.mode === 'new_api' || Boolean(summary?.cockpit)) &&
     Boolean(account.openai_api_key?.trim())
   );
 }

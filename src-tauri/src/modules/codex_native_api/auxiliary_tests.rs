@@ -229,7 +229,7 @@ async fn auxiliary_search_maps_caller_identity_and_model_without_changing_search
 }
 
 #[tokio::test]
-async fn auxiliary_search_and_automatic_history_do_not_reserve_each_others_identity_mappings() {
+async fn auxiliary_search_does_not_block_automatic_history() {
     let calls = Arc::new(Mutex::new(Vec::<String>::new()));
     let app = Router::new()
         .route(
@@ -246,8 +246,10 @@ async fn auxiliary_search_and_automatic_history_do_not_reserve_each_others_ident
                  headers: HeaderMap,
                  Json(body): Json<Value>| async move {
                     calls.lock().unwrap().push("responses".into());
-                    assert_ne!(headers["thread-id"], "child");
-                    assert_ne!(headers["session-id"], "root");
+                    assert!(!headers.contains_key("thread-id"));
+                    assert!(!headers.contains_key("session-id"));
+                    assert_eq!(body["client_metadata"]["thread_id"], "child");
+                    assert_eq!(body["client_metadata"]["session_id"], "root");
                     assert!(body.get("previous_response_id").is_none());
                     assert_eq!(body["input"][0]["encrypted_content"], "legacy-cipher");
                     Json(json!({"id":"automatic-response","status":"completed","output":[]}))
@@ -922,6 +924,76 @@ async fn auxiliary_call_sideband_reuses_admission_and_hangup_closes_connection()
     cleanup(handle, upstream, root).await;
 }
 
+#[tokio::test]
+async fn legacy_live_creates_codex_voice_call_and_relays_sideband() {
+    let app = Router::new()
+        .route(
+            "/v1/realtime/calls",
+            post(|headers: HeaderMap, Json(body): Json<Value>| async move {
+                assert_eq!(headers[header::AUTHORIZATION], "Bearer upstream-secret");
+                assert_eq!(body["sdp"], "v=fixture");
+                assert_eq!(body["session"]["model"], "gpt-live-1-codex");
+                (
+                    [(header::LOCATION, "/v1/realtime/calls/rtc_voice")],
+                    "v=answer",
+                )
+            }),
+        )
+        .route(
+            "/v1/live/rtc_voice",
+            get(|headers: HeaderMap, ws: WebSocketUpgrade| async move {
+                assert_eq!(headers[header::AUTHORIZATION], "Bearer upstream-secret");
+                ws.on_upgrade(|mut socket| async move {
+                    if let Some(Ok(message)) = socket.recv().await {
+                        socket.send(message).await.unwrap();
+                    }
+                })
+            }),
+        );
+    let (handle, host, upstream, root) = fixture(app, true, Options::default()).await;
+    let call = client()
+        .post(format!("http://{}/v1/live", handle.addr))
+        .bearer_auth("local-a")
+        .json(&json!({"sdp": "v=fixture", "session": {"model": "gpt-realtime"}}))
+        .send()
+        .await
+        .unwrap();
+    let status = call.status();
+    let location = call.headers().get(header::LOCATION).cloned();
+    let answer = call.text().await.unwrap();
+    assert_eq!(status, 200, "{answer}");
+    assert_eq!(answer, "v=answer");
+    assert_eq!(location.unwrap(), "/v1/live/rtc_voice");
+
+    let mut request = format!("ws://{}/v1/live/rtc_voice", handle.addr)
+        .into_client_request()
+        .unwrap();
+    request.headers_mut().insert(
+        header::AUTHORIZATION,
+        HeaderValue::from_static("Bearer local-a"),
+    );
+    let (mut socket, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+    let voice_frame = UpstreamMessage::Binary(vec![1, 2, 3].into());
+    socket.send(voice_frame.clone()).await.unwrap();
+    let echoed = tokio::time::timeout(Duration::from_secs(2), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(echoed, voice_frame);
+    drop(socket);
+    let selections = host.selections.lock().unwrap();
+    assert_eq!(selections.len(), 2);
+    assert_eq!(
+        selections[1].preferred_account_id.as_deref(),
+        Some("account-a")
+    );
+    assert!(!selections[1].requires_permit);
+    drop(selections);
+    cleanup(handle, upstream, root).await;
+}
+
+
 #[test]
 fn auxiliary_call_location_and_sideband_styles_match_official_protocols() {
     for (location, id) in [
@@ -938,6 +1010,35 @@ fn auxiliary_call_location_and_sideband_styles_match_official_protocols() {
     ] {
         assert!(call_id_from_location(location).is_none());
     }
+}
+
+#[tokio::test]
+async fn auxiliary_desktop_voice_validates_target_and_preserves_voice_session() {
+    let app = Router::new().route("/v1/realtime/calls", post(
+        |headers: HeaderMap, Json(body): Json<Value>| async move {
+            assert_eq!(headers["voice-session-id"], "desktop-voice-fixture");
+            assert!(!headers.contains_key("x-cockpit-voice-target"));
+            assert_eq!(body["session"]["voice_session_id"], "body-voice-fixture");
+            ([(header::LOCATION, "/v1/realtime/calls/rtc_voice_fixture")], "v=answer")
+        },
+    ));
+    let (handle, host, upstream, root) = fixture(app, true, Options::default()).await;
+    let endpoint = format!("http://{}/v1/live", handle.addr);
+    let body = json!({"sdp":"v=0","session":{"model":"client-model","voice_session_id":"body-voice-fixture"}});
+    for target in ["", "/other/realtime/calls?intent=quicksilver&architecture=avas"] {
+        let response = client().post(&endpoint).bearer_auth("local-a")
+            .header("x-cockpit-voice-target", target).json(&body).send().await.unwrap();
+        assert_eq!(response.status(), 400);
+    }
+    assert!(host.selections.lock().unwrap().is_empty());
+    let response = client().post(endpoint).bearer_auth("local-a")
+        .header("x-cockpit-voice-target", "/wham/realtime/calls?intent=quicksilver&architecture=avas")
+        .header("voice-session-id", "desktop-voice-fixture")
+        .json(&body).send().await.unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()[header::LOCATION], "/v1/live/rtc_voice_fixture");
+    assert_eq!(response.text().await.unwrap(), "v=answer");
+    cleanup(handle, upstream, root).await;
 }
 
 #[tokio::test]

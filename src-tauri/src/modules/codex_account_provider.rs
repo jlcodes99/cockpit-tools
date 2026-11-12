@@ -45,7 +45,6 @@ const API_KEY_EMAIL_PREFIX: &str = "api-key";
 const API_KEY_AUTH_MODE: &str = "apikey";
 /// OAuth 账号 auth.json 的 auth_mode 取值，与官方 codex `AuthMode::Chatgpt` 序列化结果一致。
 const CODEX_AUTH_MODE_CHATGPT: &str = "chatgpt";
-const CODEX_ACCOUNT_GROUPS_FILE: &str = "codex_account_groups.json";
 const CODEX_ACCOUNT_TOMBSTONES_DIR: &str = "codex_account_tombstones";
 const CODEX_CONFIG_FILE_NAME: &str = "config.toml";
 const CODEX_CONFIG_CLI_AUTH_CREDENTIALS_STORE_KEY: &str = "cli_auth_credentials_store";
@@ -874,7 +873,7 @@ pub(crate) fn account_uses_cdp_model_injection(account: &CodexAccount) -> bool {
 
 /// 账号是否要求「直连上游，不经实例网关」。
 pub(crate) fn account_uses_provider_direct_access(account: &CodexAccount) -> bool {
-    account.is_api_key_auth()
+    account_supports_provider_direct_access(account)
         && normalize_deepseek_instance_access_mode(account.api_instance_access_mode.as_deref())
             == DEEPSEEK_ACCESS_MODE_DIRECT
 }
@@ -887,13 +886,15 @@ pub(crate) fn account_uses_raw_provider_model_ids(account: &CodexAccount) -> boo
 
 /// 账号是否按 Responses 协议与上游对话（未设置时按 Codex 默认 Responses 处理）。
 pub(crate) fn account_wire_api_is_responses(account: &CodexAccount) -> bool {
-    account
-        .api_wire_api
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| value.eq_ignore_ascii_case(CODEX_PROVIDER_WIRE_API))
-        .unwrap_or(true)
+    crate::modules::codex_local_access::provider_gateway_wire_api_for_account(account)
+        == CODEX_PROVIDER_WIRE_API
+}
+
+fn account_supports_provider_direct_access(account: &CodexAccount) -> bool {
+    account.is_api_key_auth()
+        && !is_grok_upstream_provider(account)
+        && !is_chatgpt_plan_account(account)
+        && account_wire_api_is_responses(account)
 }
 
 fn resolve_deepseek_startup_model(account: &CodexAccount) -> String {
@@ -979,9 +980,9 @@ pub fn update_account_instance_access_with_image_models(
         {
             return Err(format!("不支持的接入方式: {}", mode));
         }
-        if mode == DEEPSEEK_ACCESS_MODE_DIRECT && !account_wire_api_is_responses(&account) {
+        if mode == DEEPSEEK_ACCESS_MODE_DIRECT && !account_supports_provider_direct_access(&account) {
             return Err(
-                "Chat Completions 只能走本地网关；直连上游只支持 Responses 协议的供应商"
+                "直连上游需要支持 Responses 协议且可直接鉴权的供应商账号"
                     .to_string(),
             );
         }
@@ -1212,24 +1213,84 @@ pub fn update_account_api_model_mappings(
     if account_id.is_empty() {
         return Err("账号 ID 不能为空".to_string());
     }
+    let mappings = normalize_api_model_mappings(mappings)?;
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK
+        .lock()
+        .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
     let mut account =
         load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
-    if !account.is_api_key_auth() {
-        return Err("只有 API Key 账号支持模型映射".to_string());
+    if !account.is_api_key_auth()
+        && (account.is_web_session_auth()
+            || account.is_agent_identity_auth()
+            || is_pending_oauth_account(&account))
+    {
+        return Err(crate::modules::i18n::translate(
+            &crate::modules::config::get_user_config().language,
+            "codex.apiService.accountModelMappings.empty",
+            &[],
+        ));
     }
-    account.api_model_mappings = normalize_api_model_mappings(mappings)?;
+    account.api_model_mappings = mappings;
     account.api_model_context_windows = normalize_api_model_context_windows(
         api_model_context_windows.unwrap_or_else(|| account.api_model_context_windows.clone()),
         &account.api_model_catalog,
         &account.api_model_mappings,
     );
-    save_account(&account)?;
+    save_account_with_tombstone_guard(&account)?;
     Ok(account)
 }
 
 /// Backward-compatible name used by older call sites / tests.
 fn enforce_deepseek_responses_account(account: &mut CodexAccount) -> bool {
     normalize_deepseek_account(account)
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenCodeGoCatalog {
+    version: u32,
+    base_urls: Vec<String>,
+    legacy_models: Vec<String>,
+    image_model: String,
+}
+
+static OPENCODE_GO_CATALOG: std::sync::LazyLock<OpenCodeGoCatalog> = std::sync::LazyLock::new(|| {
+    serde_json::from_str(include_str!("../../../src/utils/opencodeGoCatalog.json"))
+        .expect("valid bundled OpenCode Go model catalog")
+});
+
+pub(crate) fn is_opencode_go_base_url(base_url: &str) -> bool {
+    let base_url = base_url.trim().trim_end_matches('/');
+    OPENCODE_GO_CATALOG.base_urls.iter().any(|url| url.eq_ignore_ascii_case(base_url))
+}
+
+fn upgrade_opencode_go_model_catalog(account: &mut CodexAccount) -> bool {
+    if !account.is_api_key_auth() {
+        return false;
+    }
+    if !account.api_base_url.as_deref().is_some_and(is_opencode_go_base_url) {
+        return false;
+    }
+    let catalog = &*OPENCODE_GO_CATALOG;
+    let mut changed = false;
+    if account.opencode_go_model_catalog_version.unwrap_or_default() < catalog.version {
+        account.opencode_go_model_catalog_version = Some(catalog.version);
+        if account.api_model_catalog == catalog.legacy_models {
+            account.api_model_catalog.push(catalog.image_model.clone());
+        }
+        changed = true;
+    }
+    if account.api_wire_api.is_none() {
+        account.api_wire_api = Some("chat_completions".into());
+        changed = true;
+    }
+    if account.api_model_catalog.iter().any(|id| id.eq_ignore_ascii_case(&catalog.image_model))
+        && !account.api_model_vision_support.keys().any(|id| id.eq_ignore_ascii_case(&catalog.image_model))
+    {
+        account.api_model_vision_support.insert(catalog.image_model.clone(), true);
+        changed = true;
+    }
+    changed
 }
 
 /// 账号的模型列表即最终列表：保留用户顺序、去重、小写化；为空时回落到官方默认三条。
@@ -2111,7 +2172,6 @@ fn sync_deepseek_shell_remap_catalog_to_dir(
             e
         )
     })?;
-    cleanup_legacy_managed_model_catalogs(base_dir);
     remove_leftover_deepseek_models_json(base_dir);
     if let Err(error) = crate::modules::codex_local_access::invalidate_codex_model_cache(base_dir) {
         logger::log_warn(&format!(
@@ -2137,6 +2197,7 @@ fn sync_deepseek_shell_remap_catalog_to_dir(
     let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
     crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
         .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
+    cleanup_legacy_managed_model_catalogs(base_dir);
     if let Err(err) = refresh_api_key_provider_projection_in_dir(base_dir, account) {
         logger::log_warn(&format!(
             "[Codex切号] 同步 DeepSeek 壳映射目录后刷新 provider 失败: path={}, error={}",
@@ -2297,6 +2358,7 @@ fn apply_api_key_fields(
     account.api_supports_vision = api_supports_vision;
     account.api_model_vision_support = normalize_api_model_vision_support(api_model_vision_support);
     account.api_vision_routing_model = normalize_optional_value(api_vision_routing_model);
+    let _ = upgrade_opencode_go_model_catalog(account);
     account.email = build_api_key_email(api_key);
     if is_cockpit_api && normalize_optional_ref(account.account_name.as_deref()).is_none() {
         account.account_name = Some(COCKPIT_API_DEFAULT_ACCOUNT_NAME.to_string());

@@ -80,10 +80,6 @@ fn get_accounts_index_path() -> Result<PathBuf, String> {
     Ok(get_data_dir()?.join(ACCOUNTS_INDEX_FILE))
 }
 
-pub fn accounts_index_path_string() -> Result<String, String> {
-    Ok(get_accounts_index_path()?.to_string_lossy().to_string())
-}
-
 fn normalize_account_id(account_id: &str) -> Result<String, String> {
     let trimmed = account_id.trim();
     if trimmed.is_empty() {
@@ -118,120 +114,35 @@ pub fn load_account(account_id: &str) -> Option<CursorAccount> {
     if !account_path.exists() {
         return None;
     }
-    let content = fs::read_to_string(&account_path).ok()?;
-    crate::modules::atomic_write::parse_json_with_auto_restore(&account_path, &content).ok()
+    let account: CursorAccount = crate::modules::secure_account_storage::read_account_file(&account_path).ok()?;
+    (account.id == account_id.trim()).then_some(account)
 }
 
 fn save_account_file(account: &CursorAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
-    let content =
-        serde_json::to_string_pretty(account).map_err(|e| format!("序列化账号失败: {}", e))?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
+    crate::modules::secure_account_storage::write_account_file(&path, "cursor", account)
         .map_err(|e| format!("保存账号失败: {}", e))
 }
 
 fn delete_account_file(account_id: &str) -> Result<(), String> {
     let path = resolve_account_file_path(account_id)?;
-    if path.exists() {
-        fs::remove_file(path).map_err(|e| format!("删除账号文件失败: {}", e))?;
+    let _lock = crate::modules::account_file_crypto::lock_account_file_for_write(&path)?;
+    remove_account_detail(&path)
+}
+
+fn remove_account_detail(path: &std::path::Path) -> Result<(), String> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("删除账号文件失败: {error}")),
     }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
 // Index operations
 // ---------------------------------------------------------------------------
 
-fn load_account_index() -> CursorAccountIndex {
-    let path = match get_accounts_index_path() {
-        Ok(p) => p,
-        Err(_) => return CursorAccountIndex::new(),
-    };
-
-    if !path.exists() {
-        return CursorAccountIndex::new();
-    }
-
-    match fs::read_to_string(path.as_path()) {
-        Ok(content) => match crate::modules::atomic_write::parse_json_with_auto_restore::<
-            CursorAccountIndex,
-        >(&path, &content)
-        {
-            Ok(index) => index,
-            Err(err) => {
-                logger::log_warn(&format!(
-                    "[Cursor Account] 账号索引解析失败，使用空索引兜底: path={}, error={}",
-                    path.display(),
-                    err
-                ));
-                CursorAccountIndex::new()
-            }
-        },
-        Err(err) => {
-            logger::log_warn(&format!(
-                "[Cursor Account] 读取账号索引失败，使用空索引兜底: path={}, error={}",
-                path.display(),
-                err
-            ));
-            CursorAccountIndex::new()
-        }
-    }
-}
-
-fn load_account_index_checked() -> Result<CursorAccountIndex, String> {
-    let path = get_accounts_index_path()?;
-    if !path.exists() {
-        return Ok(CursorAccountIndex::new());
-    }
-
-    let content = match fs::read_to_string(path.as_path()) {
-        Ok(content) => content,
-        Err(err) => {
-            if !collect_account_ids_from_directory().is_empty() {
-                logger::log_warn(&format!(
-                    "[Cursor Account] 读取账号索引失败，将按账号目录补扫恢复: path={}, error={}",
-                    path.display(),
-                    err
-                ));
-                return Ok(CursorAccountIndex::new());
-            }
-            return Err(format!("读取账号索引失败: {}", err));
-        }
-    };
-
-    if content.trim().is_empty() {
-        return Ok(CursorAccountIndex::new());
-    }
-
-    match crate::modules::atomic_write::parse_json_with_auto_restore::<CursorAccountIndex>(
-        &path, &content,
-    ) {
-        Ok(index) => Ok(index),
-        Err(err) => {
-            if !collect_account_ids_from_directory().is_empty() {
-                logger::log_warn(&format!(
-                    "[Cursor Account] 账号索引解析失败，将按账号目录补扫恢复: path={}, error={}",
-                    path.display(),
-                    err
-                ));
-                return Ok(CursorAccountIndex::new());
-            }
-            Err(crate::error::file_corrupted_error(
-                ACCOUNTS_INDEX_FILE,
-                &path.to_string_lossy(),
-                &err.to_string(),
-            ))
-        }
-    }
-}
-
-fn save_account_index(index: &CursorAccountIndex) -> Result<(), String> {
-    let path = get_accounts_index_path()?;
-    let content =
-        serde_json::to_string_pretty(index).map_err(|e| format!("序列化账号索引失败: {}", e))?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
-        .map_err(|e| format!("写入账号索引失败: {}", e))
-}
+include!("cursor_account_index_flow.rs");
 
 fn refresh_summary(index: &mut CursorAccountIndex, account: &CursorAccount) {
     if let Some(summary) = index.accounts.iter_mut().find(|item| item.id == account.id) {
@@ -245,7 +156,7 @@ fn upsert_account_record(account: CursorAccount) -> Result<CursorAccount, String
     let _lock = CURSOR_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "获取 Cursor 账号锁失败".to_string())?;
-    let mut index = load_account_index();
+    let mut index = load_account_index_checked()?;
     save_account_file(&account)?;
     refresh_summary(&mut index, &account);
     save_account_index(&index)?;
@@ -391,41 +302,6 @@ fn normalize_cursor_sign_up_type(value: Option<&str>) -> Option<String> {
     }
 }
 
-fn accounts_are_duplicates(left: &CursorAccount, right: &CursorAccount) -> bool {
-    let left_auth_id = resolve_account_auth_id(left);
-    let right_auth_id = resolve_account_auth_id(right);
-    if let (Some(left_auth), Some(right_auth)) = (left_auth_id.as_ref(), right_auth_id.as_ref()) {
-        return left_auth == right_auth;
-    }
-    if left_auth_id.is_some() || right_auth_id.is_some() {
-        return false;
-    }
-
-    let left_email = normalize_email_identity(Some(left.email.as_str()));
-    let right_email = normalize_email_identity(Some(right.email.as_str()));
-    let left_token = normalize_token_identity(Some(left.access_token.as_str()));
-    let right_token = normalize_token_identity(Some(right.access_token.as_str()));
-
-    let email_conflict = matches!(
-        (left_email.as_ref(), right_email.as_ref()),
-        (Some(l), Some(r)) if l != r
-    );
-    if email_conflict {
-        return false;
-    }
-
-    let email_match = matches!(
-        (left_email.as_ref(), right_email.as_ref()),
-        (Some(l), Some(r)) if l == r
-    );
-    let token_match = matches!(
-        (left_token.as_ref(), right_token.as_ref()),
-        (Some(l), Some(r)) if l == r
-    );
-
-    email_match || token_match
-}
-
 // ---------------------------------------------------------------------------
 // Merge helpers
 // ---------------------------------------------------------------------------
@@ -512,233 +388,34 @@ fn choose_primary_account_index(group: &[usize], accounts: &[CursorAccount]) -> 
         .unwrap_or(group[0])
 }
 
-fn collect_account_ids_from_directory() -> Vec<String> {
-    let accounts_dir = match get_accounts_dir() {
-        Ok(dir) => dir,
-        Err(err) => {
-            logger::log_warn(&format!(
-                "[Cursor Account] 获取账号目录失败，跳过目录补扫: {}",
-                err
-            ));
-            return Vec::new();
-        }
-    };
-
-    let entries = match fs::read_dir(&accounts_dir) {
-        Ok(value) => value,
-        Err(err) => {
-            logger::log_warn(&format!(
-                "[Cursor Account] 读取账号目录失败，跳过目录补扫: path={}, error={}",
-                accounts_dir.display(),
-                err
-            ));
-            return Vec::new();
-        }
-    };
-
-    let mut ids = Vec::new();
-    for entry in entries {
-        let Ok(item) = entry else {
-            continue;
-        };
-        let path = item.path();
-        if !path.is_file() {
-            continue;
-        }
-
-        let is_json = path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| ext.eq_ignore_ascii_case("json"))
-            .unwrap_or(false);
-        if !is_json {
-            continue;
-        }
-
-        let Some(stem) = path.file_stem().and_then(|name| name.to_str()) else {
-            continue;
-        };
-        let Ok(account_id) = normalize_account_id(stem) else {
-            logger::log_warn(&format!(
-                "[Cursor Account] 检测到非法账号文件名，已忽略: file={}",
-                path.display()
-            ));
-            continue;
-        };
-        ids.push(account_id);
-    }
-
-    ids.sort();
-    ids.dedup();
-    ids
+fn cursor_recovery_job(store: IndexStore<CursorAccountIndex>) -> Result<cursor_account_recovery::CursorRecovery, String> {
+    let directory = get_data_dir()?.join(ACCOUNTS_DIR);
+    Ok(cursor_account_recovery::CursorRecovery::new(
+        store, directory, decode_recovery_detail, normalize_account_id, &CURSOR_ACCOUNT_INDEX_LOCK,
+    ))
 }
 
-fn normalize_account_index(index: &mut CursorAccountIndex) -> Vec<CursorAccount> {
-    let mut loaded_accounts = Vec::new();
-    let mut seen_account_ids = HashSet::new();
-    let mut seen_summary_ids = HashSet::new();
-
-    for summary in &index.accounts {
-        if !seen_summary_ids.insert(summary.id.clone()) {
-            continue;
-        }
-        if let Some(account) = load_account(&summary.id) {
-            if seen_account_ids.insert(account.id.clone()) {
-                loaded_accounts.push(account);
-            }
-        }
-    }
-
-    let mut recovered_count = 0usize;
-    for account_id in collect_account_ids_from_directory() {
-        if seen_account_ids.contains(&account_id) {
-            continue;
-        }
-        if let Some(account) = load_account(&account_id) {
-            if seen_account_ids.insert(account.id.clone()) {
-                if !seen_summary_ids.contains(&account_id) {
-                    recovered_count += 1;
-                }
-                loaded_accounts.push(account);
-            }
-        }
-    }
-    if recovered_count > 0 {
-        logger::log_warn(&format!(
-            "[Cursor Account] 检测到索引缺失，已从账号目录恢复 {} 个账号",
-            recovered_count
-        ));
-    }
-
-    if loaded_accounts.len() <= 1 {
-        index.accounts = loaded_accounts
-            .iter()
-            .map(|account| account.summary())
-            .collect();
-        return loaded_accounts;
-    }
-
-    let mut parents: Vec<usize> = (0..loaded_accounts.len()).collect();
-
-    fn find(parents: &mut [usize], idx: usize) -> usize {
-        let parent = parents[idx];
-        if parent == idx {
-            return idx;
-        }
-        let root = find(parents, parent);
-        parents[idx] = root;
-        root
-    }
-
-    fn union(parents: &mut [usize], left: usize, right: usize) {
-        let left_root = find(parents, left);
-        let right_root = find(parents, right);
-        if left_root != right_root {
-            parents[right_root] = left_root;
-        }
-    }
-
-    let total = loaded_accounts.len();
-    for left in 0..total {
-        for right in (left + 1)..total {
-            if accounts_are_duplicates(&loaded_accounts[left], &loaded_accounts[right]) {
-                union(&mut parents, left, right);
-            }
-        }
-    }
-
-    let mut grouped: HashMap<usize, Vec<usize>> = HashMap::new();
-    for idx in 0..total {
-        let root = find(&mut parents, idx);
-        grouped.entry(root).or_default().push(idx);
-    }
-
-    let mut processed_roots = HashSet::new();
-    let mut normalized_accounts = Vec::new();
-    let mut removed_ids = Vec::new();
-    for idx in 0..total {
-        let root = find(&mut parents, idx);
-        if !processed_roots.insert(root) {
-            continue;
-        }
-        let Some(group) = grouped.get(&root) else {
-            continue;
-        };
-
-        if group.len() == 1 {
-            normalized_accounts.push(loaded_accounts[group[0]].clone());
-            continue;
-        }
-
-        let primary_idx = choose_primary_account_index(group, &loaded_accounts);
-        let mut primary = loaded_accounts[primary_idx].clone();
-        for member in group {
-            if *member == primary_idx {
-                continue;
-            }
-            merge_duplicate_account(&mut primary, &loaded_accounts[*member]);
-            removed_ids.push(loaded_accounts[*member].id.clone());
-        }
-
-        normalized_accounts.push(primary);
-    }
-
-    if !removed_ids.is_empty() {
-        for account in &normalized_accounts {
-            if let Err(err) = save_account_file(account) {
-                logger::log_warn(&format!(
-                    "[Cursor Account] 保存去重账号失败: id={}, error={}",
-                    account.id, err
-                ));
-            }
-        }
-        for account_id in &removed_ids {
-            if let Err(err) = delete_account_file(account_id) {
-                logger::log_warn(&format!(
-                    "[Cursor Account] 删除重复账号文件失败: id={}, error={}",
-                    account_id, err
-                ));
-            }
-        }
-        logger::log_warn(&format!(
-            "[Cursor Account] 检测到重复账号并已合并: removed_ids={}",
-            removed_ids.join(",")
-        ));
-    }
-
-    index.accounts = normalized_accounts
-        .iter()
-        .map(|account| account.summary())
-        .collect();
-    normalized_accounts
+fn schedule_cursor_recovery(store: IndexStore<CursorAccountIndex>) -> Result<(), String> {
+    let mut job = cursor_recovery_job(store)?;
+    crate::modules::account::schedule_index_job(
+        job.migration_key(),
+        move || job.run_batch(),
+    );
+    Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// CRUD
-// ---------------------------------------------------------------------------
-
-pub fn list_accounts() -> Vec<CursorAccount> {
-    let _lock = CURSOR_ACCOUNT_INDEX_LOCK
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let mut index = load_account_index();
-    let accounts = normalize_account_index(&mut index);
-    if let Err(err) = save_account_index(&index) {
-        logger::log_warn(&format!("[Cursor Account] 保存账号索引失败: {}", err));
-    }
-    accounts
+/// A CLI invocation must own the recovery work because its process exits after listing.
+pub fn list_accounts_for_cli() -> Result<(Vec<CursorAccount>, Option<String>), String> {
+    let mut job = cursor_recovery_job(index_store()?)?;
+    crate::modules::account::list_after_cli_index_batches(|| job.run_batch(), list_accounts_checked)
 }
 
-pub fn list_accounts_checked() -> Result<Vec<CursorAccount>, String> {
-    let _lock = CURSOR_ACCOUNT_INDEX_LOCK
-        .lock()
-        .map_err(|_| "获取 Cursor 账号锁失败".to_string())?;
-    let mut index = load_account_index_checked()?;
-    let accounts = normalize_account_index(&mut index);
-    if let Err(err) = save_account_index(&index) {
-        logger::log_warn(&format!("[Cursor Account] 保存账号索引失败: {}", err));
-    }
-    Ok(accounts)
+fn decode_recovery_detail(content: &str) -> Result<CursorAccount, String> {
+    crate::modules::secure_account_storage::decode_account_snapshot(content)
+}
+
+fn cursor_recovery_busy() -> String {
+    "Cursor 账号正在恢复，请稍后重试".into()
 }
 
 fn apply_payload(
@@ -775,7 +452,7 @@ pub fn upsert_account(payload: CursorImportPayload) -> Result<CursorAccount, Str
         .map_err(|_| "获取 Cursor 账号锁失败".to_string())?;
 
     let now = now_ts();
-    let mut index = load_account_index();
+    let mut index = load_account_index_checked()?;
     let incoming_auth_id = resolve_payload_auth_id(&payload);
     let incoming_email = normalize_email_identity(Some(payload.email.as_str()));
     let incoming_token = normalize_token_identity(Some(payload.access_token.as_str()));
@@ -837,6 +514,7 @@ pub fn upsert_account(payload: CursorImportPayload) -> Result<CursorAccount, Str
         sign_up_type: payload.sign_up_type.clone(),
         cursor_auth_raw: payload.cursor_auth_raw.clone(),
         cursor_usage_raw: payload.cursor_usage_raw.clone(),
+        sand_usage: None,
         status: payload.status.clone(),
         status_reason: payload.status_reason.clone(),
         quota_query_last_error: None,
@@ -868,11 +546,12 @@ pub fn remove_account(account_id: &str) -> Result<(), String> {
     let _lock = CURSOR_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "获取 Cursor 账号锁失败".to_string())?;
-    let mut index = load_account_index();
+    let path = resolve_account_file_path(account_id)?;
+    let _file_lock = crate::modules::account_file_crypto::lock_account_file_for_write(&path)?;
+    let mut index = load_account_index_checked()?;
     index.accounts.retain(|item| item.id != account_id);
-    save_account_index(&index)?;
-    delete_account_file(account_id)?;
-    Ok(())
+    index_store()?.replace_with_removals(&index, &[account_id.to_string()])?;
+    remove_account_detail(&path)
 }
 
 pub fn remove_accounts(account_ids: &[String]) -> Result<(), String> {

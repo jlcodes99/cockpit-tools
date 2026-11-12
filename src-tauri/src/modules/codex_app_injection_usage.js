@@ -108,5 +108,9 @@
     return cards.includes(previousCard) ? previousCard : cards[0] || null;
   }
 
-  return { snapshot, threadId, visibleCard, percent };
+  function composerFooter(card) {
+    return card?.querySelector('[class*="ComposerLayoutFooter-"], [class*="_ComposerLayoutFooter_"], [class*="_footer_"]') || card;
+  }
+
+  return { snapshot, threadId, visibleCard, composerFooter, percent };
 })()

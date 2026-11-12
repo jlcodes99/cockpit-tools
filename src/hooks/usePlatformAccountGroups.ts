@@ -3,10 +3,12 @@ import {
   AccountGroup,
   getPlatformGroups,
   removeAccountsFromPlatformGroup,
-  getActiveGroupTab,
   setActiveGroupTab,
 } from '../services/platformGroupService';
 import { invalidateCache as invalidateLegacyCache } from '../services/accountGroupService';
+import { useActiveGroupTab } from './useActiveGroupTab';
+
+const EMPTY_GROUPS: AccountGroup[] = [];
 
 export interface UsePlatformAccountGroupsReturn {
   platform: string;
@@ -27,17 +29,17 @@ export function usePlatformAccountGroups(
   platform: string,
   onClearSelection?: () => void
 ): UsePlatformAccountGroupsReturn {
-  const [groups, setGroups] = useState<AccountGroup[]>([]);
-  const [groupsReady, setGroupsReady] = useState(false);
-  const [activeGroupId, setActiveGroupIdState] = useState<string | null>(() => getActiveGroupTab(platform));
+  const [loadedGroups, setLoadedGroups] = useState<Record<string, AccountGroup[]>>({});
+  const platformGroups = loadedGroups[platform];
+  const groups = platformGroups ?? EMPTY_GROUPS;
+  const activeGroupId = useActiveGroupTab(platform, platformGroups);
   const [showManageModal, setShowManageModal] = useState(false);
   const [showAddToGroupModal, setShowAddToGroupModal] = useState(false);
 
   const reloadGroups = useCallback(async () => {
     try {
       const list = await getPlatformGroups(platform);
-      setGroups(list);
-      setGroupsReady(true);
+      setLoadedGroups(previous => ({ ...previous, [platform]: list }));
     } catch (err) {
       console.error(`[usePlatformAccountGroups] Failed to load groups for ${platform}:`, err);
     }
@@ -47,21 +49,8 @@ export function usePlatformAccountGroups(
     reloadGroups();
   }, [reloadGroups]);
 
-  // Sync activeGroupId: if groups loaded and activeGroupId is not found in groups, reset to null
-  useEffect(() => {
-    if (!groupsReady) return;
-    if (activeGroupId !== null && activeGroupId !== '__ungrouped__') {
-      const exists = groups.some((g) => g.id === activeGroupId);
-      if (!exists) {
-        setActiveGroupIdState(null);
-        setActiveGroupTab(platform, null);
-      }
-    }
-  }, [activeGroupId, groups, groupsReady, platform]);
-
   const setActiveGroupId = useCallback(
     (id: string | null) => {
-      setActiveGroupIdState(id);
       setActiveGroupTab(platform, id);
       onClearSelection?.();
     },

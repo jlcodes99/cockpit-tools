@@ -26,6 +26,8 @@ pub struct GitHubCopilotAccount {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub copilot_refresh_in: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub copilot_token_based_billing: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub copilot_quota_snapshots: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub copilot_quota_reset_date: Option<String>,
@@ -61,6 +63,8 @@ pub struct GitHubCopilotAccountSummary {
 pub struct GitHubCopilotAccountIndex {
     pub version: String,
     pub accounts: Vec<GitHubCopilotAccountSummary>,
+    #[serde(skip)]
+    pub(crate) storage_revision: crate::modules::provider_account_index::Revision,
 }
 
 impl GitHubCopilotAccountIndex {
@@ -68,6 +72,7 @@ impl GitHubCopilotAccountIndex {
         Self {
             version: "1.0".to_string(),
             accounts: Vec::new(),
+            storage_revision: Default::default(),
         }
     }
 }

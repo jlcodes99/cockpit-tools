@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  CODEX_TOP_LAYOUT_STORAGE_KEY,
   CODEX_TOP_LAYOUT_UPDATED_EVENT,
   createDefaultCodexTopLayout,
   loadCodexTopLayoutPreference,
@@ -24,19 +23,27 @@ export function useCodexTopLayoutPreference() {
   const [state, setState] = useState(loadState);
   const current = useRef(state);
   current.current = state;
+  const saveSequence = useRef(0);
+  const saving = useRef(false);
   const changeLayout = useCallback((layout: CodexTopLayoutPreference) => {
     const normalized = normalizeCodexTopLayout(layout);
-    try {
-      writeCodexTopLayoutPreference(normalized);
-      current.current = { layout: normalized, storageError: null };
+    const sequence = ++saveSequence.current;
+    saving.current = true;
+    current.current = { layout: normalized, storageError: null };
+    setState(current.current);
+    const finish = (storageError: StorageError) => {
+      if (sequence !== saveSequence.current) return;
+      saving.current = false;
+      current.current = { layout: normalized, storageError };
       setState(current.current);
-    } catch {
-      current.current = { layout: normalized, storageError: 'save' };
-      setState(current.current);
-    }
+    };
+    void writeCodexTopLayoutPreference(normalized).then(
+      () => finish(null),
+      () => finish('save'),
+    );
   }, []);
   const reload = useCallback(() => {
-    if (current.current.storageError === 'save') return;
+    if (saving.current || current.current.storageError === 'save') return;
     try {
       current.current = { layout: loadCodexTopLayoutPreference(), storageError: null };
       setState(current.current);
@@ -52,15 +59,8 @@ export function useCodexTopLayoutPreference() {
   }, [changeLayout, reload]);
 
   useEffect(() => {
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === CODEX_TOP_LAYOUT_STORAGE_KEY || event.key === null) reload();
-    };
     window.addEventListener(CODEX_TOP_LAYOUT_UPDATED_EVENT, reload);
-    window.addEventListener('storage', onStorage);
-    return () => {
-      window.removeEventListener(CODEX_TOP_LAYOUT_UPDATED_EVENT, reload);
-      window.removeEventListener('storage', onStorage);
-    };
+    return () => window.removeEventListener(CODEX_TOP_LAYOUT_UPDATED_EVENT, reload);
   }, [reload]);
   return { ...state, changeLayout, retry };
 }

@@ -7,6 +7,8 @@ use serde_json::Value;
 
 pub use super::multi_agent_compat::{ModelProfile, Options as MultiAgentOptions};
 
+pub(crate) const MIXED_MODEL_ROUTING_CALLER_ID: &str = "mixed_model_routing";
+
 #[derive(Clone, Debug, Default)]
 pub struct MultiAgentPolicy {
     pub options: MultiAgentOptions,
@@ -87,6 +89,7 @@ pub struct ExecutionPolicy {
     pub immediate_sse: bool,
     pub websocket_connect_timeout: Duration,
     pub websocket_initial_timeout: Duration,
+    pub websocket_fragment_timeout: Duration,
     pub websocket_idle_timeout: Duration,
     pub websocket_heartbeat: Duration,
 }
@@ -115,6 +118,7 @@ impl Default for ExecutionPolicy {
             immediate_sse: false,
             websocket_connect_timeout: Duration::from_secs(30),
             websocket_initial_timeout: Duration::from_secs(30),
+            websocket_fragment_timeout: Duration::from_secs(60),
             websocket_idle_timeout: Duration::from_secs(180),
             websocket_heartbeat: Duration::ZERO,
         }
@@ -170,6 +174,10 @@ pub struct Route {
 }
 
 impl Route {
+    pub(super) fn uses_codex_session_mapping(&self) -> bool {
+        self.chatgpt && !self.chatgpt_plan
+    }
+
     pub fn continuity_id(&self) -> &str {
         self.continuity_account_id
             .as_deref()
@@ -296,6 +304,8 @@ impl std::error::Error for ServiceError {}
 
 #[derive(Clone, Debug)]
 pub struct RequestReport {
+    /// Address of the accepted TCP socket. Forwarded headers are not consulted.
+    pub peer_ip: Option<std::net::IpAddr>,
     pub transient_rate_limit: bool,
     /// One-way fingerprint of the actual SIWC access token for stale-error fencing.
     /// Never serialized into public logs or request payloads.
@@ -389,6 +399,15 @@ pub trait Host: Send + Sync + 'static {
     fn overload_outcome(&self, _request_id: &str, _outcome: &str, _account_id: Option<&str>) {}
     fn diagnostic(&self, _context: super::diagnostics::DiagnosticContext) -> BoxFuture<'_, ()> {
         Box::pin(async {})
+    }
+    fn record_rejection(&self, _report: RequestReport) -> BoxFuture<'_, ()> {
+        Box::pin(async {})
+    }
+    fn reasoning_ceiling<'a>(
+        &'a self,
+        _caller: &'a Caller,
+    ) -> BoxFuture<'a, Result<Option<crate::models::codex_local_access::CodexReasoningLevel>, ServiceError>> {
+        Box::pin(async { Ok(None) })
     }
     fn management<'a>(
         &'a self,

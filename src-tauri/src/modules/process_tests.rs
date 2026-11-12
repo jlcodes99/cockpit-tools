@@ -1,6 +1,133 @@
 // Process 模块测试：平台路径、Codex 启动参数和进程清理行为。
 // 保持测试模块位于原作用域，super 引用和 cfg 条件不变。
 #[cfg(test)]
+#[test]
+fn workbuddy_scoped_close_rechecks_after_taskkill_failure() {
+    use std::cell::{Cell, RefCell};
+
+    let target_dir = normalize_path_for_compare("workbuddy/target/app");
+    let other_dir = normalize_path_for_compare("workbuddy/other/app");
+    let old_pid = 1460;
+    let replacement_pid = 1461;
+    let other_pid = 1462;
+
+    for (replacement, remains_running) in [(false, false), (true, false), (true, true)] {
+        let scans = Cell::new(0);
+        let stop_calls = RefCell::new(Vec::new());
+        let collect_entries = || {
+            let scan = scans.get();
+            scans.set(scan + 1);
+            let mut entries = vec![(other_pid, Some(other_dir.clone()))];
+            if scan == 0 {
+                entries.push((old_pid, None));
+            } else if replacement && (scan == 1 || remains_running) {
+                entries.push((replacement_pid, Some(target_dir.clone())));
+            }
+            entries
+        };
+        let result = close_managed_instances_common(
+            "WorkBuddy Close",
+            "Closing WorkBuddy instances",
+            "No target directory",
+            "WorkBuddy is not running",
+            "WorkBuddy",
+            "WorkBuddy is still running",
+            std::slice::from_ref(&target_dir),
+            20,
+            |pids, timeout| {
+                stop_calls.borrow_mut().push((pids.to_vec(), timeout));
+                if pids == [old_pid] || remains_running {
+                    return Err("taskkill failed with status exit code: 255".to_string());
+                }
+                Ok(())
+            },
+            collect_entries,
+            |entries, targets| select_main_pids_by_target_dirs(entries, targets, Some(&target_dir)),
+            |targets| filter_entries_by_target_dirs(collect_entries(), targets, Some(&target_dir)),
+            None,
+            None,
+            None,
+        );
+
+        let mut expected_stops = vec![(vec![old_pid], 20)];
+        if replacement {
+            expected_stops.push((vec![replacement_pid], 6));
+        }
+        assert_eq!(stop_calls.into_inner(), expected_stops);
+        if remains_running {
+            assert!(result.unwrap_err().contains(&replacement_pid.to_string()));
+        } else {
+            result.unwrap();
+        }
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+#[test]
+fn antigravity_desktop_path_uses_its_bundle_metadata_and_never_launches_the_ide() {
+    let root = tempfile::tempdir().unwrap();
+    let desktop = root.path().join("Renamed Desktop.app");
+    let ide = root.path().join("Antigravity IDE.app");
+    for (bundle, id, binary) in [
+        (&desktop, "com.google.antigravity", "Antigravity"),
+        (&ide, "com.google.antigravity-ide", "Electron"),
+    ] {
+        let contents = bundle.join("Contents");
+        std::fs::create_dir_all(contents.join("MacOS")).unwrap();
+        let metadata = plist::Dictionary::from_iter([
+            ("CFBundleIdentifier", plist::Value::String(id.into())),
+            ("CFBundleExecutable", plist::Value::String(binary.into())),
+        ]);
+        plist::Value::Dictionary(metadata).to_file_xml(contents.join("Info.plist")).unwrap();
+        std::fs::write(contents.join("MacOS").join(binary), "fixture").unwrap();
+    }
+    let desktop_exe = desktop.join("Contents/MacOS/Antigravity");
+    let ide_exe = ide.join("Contents/MacOS/Electron");
+    assert_eq!(resolve_macos_antigravity_custom_path(&desktop, true), Some(desktop_exe));
+    assert_eq!(resolve_macos_antigravity_custom_path(&ide_exe, false), Some(ide_exe.clone()));
+    assert!(resolve_macos_antigravity_custom_path(&desktop, false).is_none());
+    assert!(resolve_macos_antigravity_custom_path(&ide, true).is_none());
+    std::fs::remove_file(ide_exe).unwrap();
+    assert!(resolve_macos_antigravity_custom_path(&ide, false).is_none());
+}
+
+#[cfg(test)]
+#[test]
+fn linux_running_status_excludes_exited_children_but_keeps_stopped_processes() {
+    use sysinfo::ProcessStatus;
+
+    assert!(!linux_process_status_is_running(ProcessStatus::Zombie));
+    assert!(!linux_process_status_is_running(ProcessStatus::Dead));
+    assert!(linux_process_status_is_running(ProcessStatus::Run));
+    assert!(linux_process_status_is_running(ProcessStatus::Stop));
+}
+
+#[cfg(all(test, target_os = "linux"))]
+#[test]
+fn linux_close_accepts_an_unreaped_exited_child() {
+    let mut child = Command::new("sh").args(["-c", "exit 0"]).spawn().unwrap();
+    let pid = child.id();
+    let path = format!("/proc/{pid}/stat");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    let zombie = loop {
+        let stat = std::fs::read_to_string(&path).unwrap_or_default();
+        if stat.rsplit_once(") ").is_some_and(|(_, status)| status.starts_with("Z ")) {
+            break true;
+        }
+        if std::time::Instant::now() >= deadline {
+            break false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    };
+    let exited = !is_pid_running(pid);
+    let closed = close_pids(&[pid], 0);
+    child.wait().unwrap();
+    assert!(zombie);
+    assert!(exited);
+    assert!(closed.is_ok());
+}
+
+#[cfg(test)]
 mod codex_native_probe_policy_tests {
     use super::{complete_native_codex_entries_or_probe, fresh_codex_entries_or_probe};
 
@@ -465,22 +592,49 @@ mod managed_sidecar_port_cleanup_tests {
 
 #[cfg(all(test, target_os = "macos"))]
 mod qoder_macos_process_tests {
-    use super::is_qoder_macos_main_process_command_line;
+    use super::{qoder_macos_process_profile, resolve_pid_from_entries_by_user_data_dir};
 
     #[test]
     fn matches_current_and_legacy_qoder_main_processes() {
-        assert!(is_qoder_macos_main_process_command_line(
-            "/Applications/Qoder IDE.app/Contents/MacOS/Qoder"
-        ));
-        assert!(is_qoder_macos_main_process_command_line(
-            "/Applications/Qoder.app/Contents/MacOS/Qoder"
-        ));
-        assert!(!is_qoder_macos_main_process_command_line(
-            "/Applications/Qoder IDE.app/Contents/Frameworks/Qoder Helper.app/Contents/MacOS/Qoder Helper --type=gpu-process --user-data-dir=/tmp/qoder"
-        ));
-        assert!(!is_qoder_macos_main_process_command_line(
-            "/Applications/Qoder IDE.app/Contents/Frameworks/Electron Framework.framework/Helpers/chrome_crashpad_handler"
-        ));
+        let current = "/Applications/Qoder IDE.app/Contents/MacOS/Qoder";
+        let legacy = "/Applications/Qoder.app/Contents/MacOS/Qoder";
+        assert_eq!(qoder_macos_process_profile(current, current), Some(None));
+        assert_eq!(qoder_macos_process_profile(legacy, legacy), Some(None));
+        assert_eq!(qoder_macos_process_profile(legacy, current), None);
+        let helper = "/Applications/Qoder IDE.app/Contents/Frameworks/Qoder Helper.app/Contents/MacOS/Qoder Helper --type=gpu-process --user-data-dir=/tmp/qoder";
+        assert_eq!(qoder_macos_process_profile(helper, current), None);
+        let renderer = format!("{current} --type=renderer --user-data-dir=/tmp/qoder");
+        assert_eq!(qoder_macos_process_profile(&renderer, current), None);
+    }
+
+    #[test]
+    fn qoder_macos_profiles_remain_distinct_with_spaces_and_helper_words() {
+        let executable = "/Applications/İ Qoder Sandbox.app/Contents/MacOS/Electron";
+        let first = "/tmp/Qoder Profiles/audio testing";
+        let second = "/tmp/Qoder Profiles/plugin sandbox";
+        let entries = [first, second]
+            .into_iter()
+            .enumerate()
+            .map(|(index, profile)| {
+                let cmdline = format!("{executable} --user-data-dir {profile} --new-window");
+                let dir = qoder_macos_process_profile(&cmdline, executable).unwrap();
+                (100 + index as u32, dir)
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            resolve_pid_from_entries_by_user_data_dir(None, first, false, &entries),
+            Some(100)
+        );
+        assert_eq!(
+            resolve_pid_from_entries_by_user_data_dir(None, second, false, &entries),
+            Some(101)
+        );
+        let positional = format!("{executable} -- --user-data-dir=/tmp/qoder");
+        assert_eq!(
+            qoder_macos_process_profile(&positional, executable),
+            Some(None)
+        );
     }
 }
 
@@ -780,6 +934,24 @@ mod codex_path_migration_tests {
             score_windows_candidate(Path::new("C:/Tools/ChatGPT.exe"), &exe_names, &keywords,)
                 .is_some()
         );
+    }
+
+    #[test]
+    fn scan_rejects_claude_cowork_service_inside_store_package() {
+        let exe_names = HashSet::from(["claude.exe".to_string()]);
+        let keywords = vec!["claude".to_string()];
+        assert!(score_windows_candidate(
+            Path::new("C:/Program Files/WindowsApps/Claude_2.2553.1.0/app/resources/cowork-svc.exe"),
+            &exe_names,
+            &keywords,
+        )
+        .is_none());
+        assert!(score_windows_candidate(
+            Path::new("C:/Program Files/WindowsApps/Claude_2.2553.1.0/app/Claude.exe"),
+            &exe_names,
+            &keywords,
+        )
+        .is_some());
     }
 
     #[test]
@@ -1342,7 +1514,8 @@ mod managed_proxy_env_tests {
                 "example.test",
                 &[],
                 "existing.test",
-                "upper.test"
+                "upper.test",
+                false,
             )
             .is_empty());
         }
@@ -1352,9 +1525,24 @@ mod managed_proxy_env_tests {
             "",
             &[" ".into()],
             "",
-            ""
+            "",
+            false,
         )
         .is_empty());
+    }
+
+    #[test]
+    fn macos_codex_system_proxy_launch_adds_local_bypass_without_proxy_environment() {
+        let pairs = build_managed_proxy_env_pairs(
+            false, "", "", &[], "existing.test", "", true,
+        );
+        assert_eq!(pairs.len(), 2);
+        for name in ["NO_PROXY", "no_proxy"] {
+            let bypass = &pairs.iter().find(|(key, _)| *key == name).unwrap().1;
+            for entry in ["localhost", "127.0.0.1", "::1", "existing.test"] {
+                assert!(bypass.split(',').any(|value| value.trim() == entry));
+            }
+        }
     }
 
     #[test]
@@ -1372,6 +1560,7 @@ mod managed_proxy_env_tests {
                 &inherited,
                 "lower.test",
                 "upper.test",
+                false,
             );
             assert_eq!(pairs.len(), if managed { 8 } else { 2 });
             let bypass = &pairs.iter().find(|(key, _)| *key == "NO_PROXY").unwrap().1;

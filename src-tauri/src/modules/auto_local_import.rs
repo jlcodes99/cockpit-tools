@@ -286,27 +286,7 @@ fn peek_minimax_code_identity() -> Option<String> {
 }
 
 fn peek_qoder_identity() -> Option<String> {
-    let db_path = qoder_account::get_default_qoder_state_db_path()?;
-    if !db_path.exists() {
-        return None;
-    }
-    let user_info = crate::modules::vscode_inject::read_qoder_secret_storage_value_by_db_path(
-        &db_path,
-        "secret://aicoding.auth.userInfo",
-    )
-    .ok()
-    .flatten()?;
-    let parsed: Value = serde_json::from_str(&user_info).unwrap_or(Value::String(user_info));
-    let email = parsed
-        .get("email")
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    let user_id = parsed
-        .get("id")
-        .or_else(|| parsed.get("userId"))
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    identity_key(&[email, user_id])
+    qoder_account::local_identity_key()
 }
 
 fn peek_trae_identity(platform: trae_account::TraePlatformKind) -> Option<String> {
@@ -566,9 +546,13 @@ fn import_minimax_code() -> ImportFuture {
 
 fn import_qoder() -> ImportFuture {
     Box::pin(async {
-        qoder_account::import_from_local()
-            .map(|account| account.is_some())
-            .map_err(|error| error.to_string())
+        tauri::async_runtime::spawn_blocking(|| {
+            let imported = qoder_account::import_from_local()?;
+            if imported.is_some() {
+                qoder_account::reconcile_current_account()?;
+            }
+            Ok(imported.is_some())
+        }).await.map_err(|error| error.to_string())?
     })
 }
 

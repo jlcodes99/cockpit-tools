@@ -14,6 +14,7 @@ export interface CodexExperimentalModelDefinition {
   /** undefined follows the official model reasoning levels; otherwise custom multi-select. */
   reasoning_efforts?: CodexReasoningEffort[];
   default_reasoning_effort?: CodexReasoningEffort;
+  ultra_reasoning_effort?: CodexReasoningEffort;
   /** Omitted values follow the model catalog metadata. */
   context_window?: number;
   auto_compact_token_limit?: number;
@@ -400,7 +401,7 @@ export interface CodexSessionVisibilityRepairItem {
   historyProjectionCount?: number;
 }
 
-export type CodexSessionVisibilityRepairMode = 'quick' | 'deep' | 'history';
+export type CodexSessionVisibilityRepairMode = 'quick' | 'deep' | 'history' | 'projects';
 export type CodexSessionVisibilityAutoRepairMode =
   | 'legacy_before_4eb75d96'
   | 'legacy_4eb75d96'
@@ -471,6 +472,7 @@ export interface CodexSessionVisibilityRepairSummary {
   metadataRebuildFailedCount: number;
   historyProjectionCount?: number;
   localProjectRecoveryDeferred?: boolean;
+  localProjectRecoveryDeferredMessage?: string;
   localProjectRecovery?: {
     projects: number;
     assignments: number;
@@ -652,6 +654,7 @@ export interface CodexSessionExportPreview {
   missingSessionCount: number;
   totalSizeBytes: number;
   items: CodexSessionExportPreviewItem[];
+  unavailable?: Array<{ sessionId: string; title: string; reason: string }>;
 }
 
 export type CodexSessionImportPreviewStatus =
@@ -1066,6 +1069,7 @@ export function isCodexPendingOAuthAccount(account?: CodexAccount | null): boole
   }
   if (isCodexApiKeyAccount(account)) return false;
   if (isCodexAgentIdentityAccount(account)) return false;
+  if (isCodexAccountDisplayCache(account)) return false;
   const hasToken =
     Boolean((account.tokens?.access_token || "").trim()) ||
     Boolean((account.tokens?.refresh_token || "").trim()) ||
@@ -1077,6 +1081,12 @@ export function isCodexPendingOAuthAccount(account?: CodexAccount | null): boole
     Boolean((account.phone_number || "").trim()) ||
     Boolean((account.mail_url || "").trim());
   return !hasToken && hasSavedNote;
+}
+
+export const CODEX_ACCOUNT_DISPLAY_CACHE = Symbol('Codex account display cache');
+
+export function isCodexAccountDisplayCache(account: CodexAccount): boolean {
+  return CODEX_ACCOUNT_DISPLAY_CACHE in account;
 }
 
 export function isCodexNewApiAccount(account: CodexAccount): boolean {

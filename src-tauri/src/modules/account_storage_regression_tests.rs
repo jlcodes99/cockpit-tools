@@ -1,4 +1,6 @@
 use super::*;
+use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
+use base64::{engine::general_purpose, Engine as _};
 
 struct StorageFixture {
     dir: tempfile::TempDir,
@@ -240,30 +242,30 @@ fn oauth_still_accepts_legacy_token_only_encryption_with_a_bom() {
         .unwrap_or_else(|e| e.into_inner());
     let fixture = StorageFixture::new();
     let pending = fixture.pending();
+    let key = [7u8; 32];
     fs::write(
-        fixture.dir.path().join(LEGACY_TOKEN_KEY_FILE),
-        general_purpose::STANDARD.encode([7u8; 32]),
+        fixture.dir.path().join(modules::account_file_crypto::LEGACY_TOKEN_KEY_FILE),
+        general_purpose::STANDARD.encode(key),
     )
     .unwrap();
     let nonce = [3u8; 12];
-    let encrypted = legacy_token_cipher()
+    let encrypted = Aes256Gcm::new_from_slice(&key)
         .unwrap()
         .encrypt(
             Nonce::from_slice(&nonce),
             serde_json::to_vec(&pending.token).unwrap().as_slice(),
         )
         .unwrap();
-    let envelope = EncryptedTokenEnvelope {
-        version: LEGACY_TOKEN_VERSION,
-        algorithm: "AES-256-GCM".into(),
-        key_id: "legacy-fixture".into(),
-        nonce: general_purpose::STANDARD.encode(nonce),
-        ciphertext: general_purpose::STANDARD.encode(encrypted),
-        encrypted_at: chrono::Utc::now().timestamp(),
-    };
     let mut value = serde_json::to_value(&pending).unwrap();
     value.as_object_mut().unwrap().remove("token");
-    value["token_encrypted"] = serde_json::to_value(envelope).unwrap();
+    value["token_encrypted"] = serde_json::json!({
+        "version": 1,
+        "algorithm": "AES-256-GCM",
+        "key_id": "legacy-fixture",
+        "nonce": general_purpose::STANDARD.encode(nonce),
+        "ciphertext": general_purpose::STANDARD.encode(encrypted),
+        "encrypted_at": chrono::Utc::now().timestamp(),
+    });
     fs::write(fixture.path(&pending), format!("\u{feff}{value}")).unwrap();
     let authorized = fixture.authorize().unwrap();
     assert_eq!(authorized.id, pending.id);

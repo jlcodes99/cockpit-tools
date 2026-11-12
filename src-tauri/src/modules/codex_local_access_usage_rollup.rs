@@ -214,6 +214,45 @@ fn query_rollup_window(
 #[cfg(test)]
 mod request_rollup_tests {
     use super::*;
+
+    #[test]
+    fn extending_custom_window_keeps_boundary_tokens_and_adds_older_usage() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = open_local_access_logs_db_once(&dir.path().join("logs.sqlite"), true).unwrap();
+        for (timestamp, cached_tokens) in [
+            (29_999, 100_000_000),
+            (60_001, 2_558_400_000),
+            (120_002, 241_600_000),
+            (120_003, 100_000_000),
+        ] {
+            let event = CodexLocalAccessUsageEvent {
+                timestamp,
+                request_id: format!("range-{timestamp}"),
+                account_id: "account".into(),
+                api_key_id: "key".into(),
+                model_id: "model".into(),
+                request_kind: CodexLocalAccessRequestKind::Text,
+                success: true,
+                cached_tokens,
+                input_tokens: cached_tokens,
+                total_tokens: cached_tokens,
+                ..Default::default()
+            };
+            insert_local_access_usage_event(&conn, &event).unwrap();
+        }
+        for backfilled in [false, true] {
+            if backfilled {
+                while !REQUEST_USAGE_ROLLUP.batch(&conn).unwrap() {}
+            }
+            let narrow = query_rollup_window(&conn, 120_001, 120_002).unwrap();
+            let wide = query_rollup_window(&conn, 30_000, 120_002).unwrap();
+            assert_eq!(narrow.totals.cached_tokens, 241_600_000);
+            assert_eq!(wide.totals.cached_tokens, 2_800_000_000);
+            assert_eq!(wide.totals.request_count, 2);
+            assert_eq!(wide.api_keys[0].usage.cached_tokens, wide.totals.cached_tokens);
+        }
+    }
+
     #[test]
     fn rollup_matches_event_statistics_and_tracks_reprice_and_clear() {
         let dir = tempfile::tempdir().unwrap();

@@ -48,53 +48,6 @@ fn local_gateway_start_lock() -> &'static TokioMutex<()> {
     LOCAL_GATEWAY_START_LOCK.get_or_init(|| TokioMutex::new(()))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum OfficialLsVersionMode {
-    Gte1216,
-    Lt1216,
-}
-
-impl OfficialLsVersionMode {
-    fn from_str(value: &str) -> Option<Self> {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "gte_1_21_6" | ">=1.21.6" => Some(Self::Gte1216),
-            "lt_1_21_6" | "<1.21.6" => Some(Self::Lt1216),
-            _ => None,
-        }
-    }
-
-    fn requires_random_port(self) -> bool {
-        matches!(self, Self::Lt1216)
-    }
-}
-
-fn official_ls_version_mode_cell() -> &'static Mutex<OfficialLsVersionMode> {
-    static MODE: OnceLock<Mutex<OfficialLsVersionMode>> = OnceLock::new();
-    MODE.get_or_init(|| Mutex::new(OfficialLsVersionMode::Gte1216))
-}
-
-fn current_official_ls_version_mode() -> OfficialLsVersionMode {
-    official_ls_version_mode_cell()
-        .lock()
-        .map(|guard| *guard)
-        .unwrap_or(OfficialLsVersionMode::Gte1216)
-}
-
-fn official_ls_requires_random_port() -> bool {
-    current_official_ls_version_mode().requires_random_port()
-}
-
-pub fn set_official_ls_version_mode(mode: Option<&str>) -> Result<(), String> {
-    let next_mode = mode
-        .and_then(OfficialLsVersionMode::from_str)
-        .unwrap_or(OfficialLsVersionMode::Gte1216);
-    let mut guard = official_ls_version_mode_cell()
-        .lock()
-        .map_err(|_| "官方 LS 版本模式锁失败".to_string())?;
-    *guard = next_mode;
-    Ok(())
-}
-
 #[derive(Debug, Clone)]
 struct PreparedStartContext {
     account_id: String,
@@ -187,7 +140,7 @@ async fn start_official_ls_cascade_session(
     let mut ls = start_official_ls_process(&prepared.account_id, &token).await?;
     let client = build_official_ls_local_client(30)?;
     let base_url = format!("https://127.0.0.1:{}", ls.started.https_port);
-    // 新版官方 LS（≥1.21.6）要求 StartCascadeRequest.source（枚举 CortexTrajectorySource）非空，
+    // 官方 LS 要求 StartCascadeRequest.source（枚举 CortexTrajectorySource）非空，
     // 否则返回 "invalid_argument: CortexTrajectorySource is unspecified"。
     // 唤醒等价于 IDE 前台交互式 cascade，故默认注入 INTERACTIVE_CASCADE；
     // 若调用方已显式传入 source 则保留，不覆盖。
@@ -1409,9 +1362,6 @@ async fn start_official_ls_process(
 
     let mut cmd = Command::new(&binary_path);
     cmd.arg("--enable_lsp");
-    if official_ls_requires_random_port() {
-        cmd.arg("--random_port");
-    }
     cmd.arg("--csrf_token")
         .arg(&ls_csrf)
         .arg("--extension_server_port")

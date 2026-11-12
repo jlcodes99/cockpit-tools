@@ -1,5 +1,6 @@
 //! Bounded local failure details. Never retain URLs, credentials or authorization values.
 use super::super::contract::{ServiceError, TransportFailureKind};
+use axum::http::{header, HeaderMap, StatusCode};
 use regex::Regex;
 use serde_json::Value;
 use std::{error::Error, sync::LazyLock};
@@ -9,7 +10,26 @@ pub(crate) fn is_cloudflare_challenge(message: &str) -> bool {
     lower.contains("challenge-platform")
         || lower.contains("cf-mitigated")
         || lower.contains("cloudflare challenge")
-        || (lower.contains("cloudflare") && lower.contains("<html"))
+        || (lower.contains("cloudflare") && lower.contains("<html")
+            && (lower.contains("just a moment") || lower.contains("attention required")))
+}
+
+pub(crate) fn cloudflare_gateway_message(status: StatusCode, headers: &HeaderMap) -> Option<String> {
+    if !matches!(status, StatusCode::BAD_GATEWAY | StatusCode::GATEWAY_TIMEOUT)
+        || !headers.get(header::CONTENT_TYPE).and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.split(';').next().is_some_and(|mime| mime.trim().eq_ignore_ascii_case("text/html")))
+    {
+        return None;
+    }
+    let ray = headers.get("cf-ray")?.to_str().ok()?.trim();
+    if ray.is_empty() || ray.len() > 64 || !ray.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-') {
+        return None;
+    }
+    Some(crate::modules::i18n::translate(
+        &crate::modules::config::get_user_config().language,
+        "codex.requestDiagnostics.cloudflareGatewayError",
+        &[("status", status.as_str()), ("ray", ray)],
+    ))
 }
 
 pub(crate) fn sanitize_error_text(message: &str) -> String {
@@ -211,6 +231,7 @@ pub(crate) fn failure_phase(code: &str) -> &'static str {
             "stream_read"
         }
         "upstream_idle_timeout" => "stream_idle",
+        "image_output_missing" => "upstream_response",
         "upstream_total_timeout" => "total_timeout",
         "client_cancelled" | "client_disconnected" | "client_interrupted" => "client_cancelled",
         "identity_store_unavailable" | "identity_store_full" | "unknown_upstream_state" => {

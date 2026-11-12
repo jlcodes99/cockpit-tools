@@ -57,7 +57,7 @@ function harness() {
     },
   };
   for (const name of ['OauthUrl', 'OauthUrlCopied', 'OauthPrepareError', 'OauthPortInUse', 'OauthTimeoutInfo',
-    'OauthCallbackInput', 'OauthCallbackSubmitting', 'OauthCallbackError', 'OauthTokenExchangeRetryVisible',
+    'OauthCallbackInput', 'OauthCallbackSubmitting', 'OauthCallbackError', 'OauthRetryAction',
     'DeviceAuthInfo', 'DeviceAuthError', 'OauthMethod', 'DeviceCodeCopied']) {
     state[`set${name}`] = (value: any) => { state[name] = value; };
   }
@@ -98,7 +98,7 @@ test('local save failure keeps the dialog open and retries without exchanging OA
   assert.equal(h.state.status, 'error');
   assert.match(h.state.message, /accountNote.saveFailed: disk full/);
   assert.equal(h.state.modalOpen, true);
-  assert.equal(h.state.OauthTokenExchangeRetryVisible, true);
+  assert.equal(h.state.OauthRetryAction, "exchange");
   assert.equal(h.state.oauthLoginIdRef.current, 'login-1');
   assert.equal(h.timers.length, 0);
   h.state.failSave = false;
@@ -108,7 +108,7 @@ test('local save failure keeps the dialog open and retries without exchanging OA
   assert.equal(h.saves.length, 2);
   assert.equal(h.saves[1].update.accountPassword, 'corrected-password');
   assert.equal(h.state.status, 'success');
-  assert.equal(h.state.OauthTokenExchangeRetryVisible, false);
+  assert.equal(h.state.OauthRetryAction, null);
   assert.equal(h.state.OauthCallbackError, null);
   assert.deepEqual(Object.keys(h.state.fieldErrors), []);
   assert.equal(h.state.oauthCompletingRef.current, false);

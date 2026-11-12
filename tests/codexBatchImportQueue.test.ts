@@ -5,12 +5,28 @@ import {
   findNextCodexBatchImportTaskId,
   getCodexBatchImportProgressTone,
   getCodexBatchImportProgressPercent,
+  matchesCodexBatchImportQuota,
   mergeCodexBatchImportDefaultSelection,
   recoverCodexBatchImportStartedTaskFromPreview,
   type CodexBatchImportQueueTaskLike,
 } from "../src/utils/codexBatchImportQueue.ts";
 
 describe("codex batch import queue helpers", () => {
+  it("filters by the lowest confirmed quota and keeps accounts with unknown quotas", () => {
+    const accounts = [
+      { id: "zero", quotaWindows: [{ percentage: 80 }, { percentage: 0 }] },
+      { id: "low", quotaWindows: [{ percentage: 2 }] },
+      { id: "boundary", quotaWindows: [{ percentage: 75 }, { percentage: 20 }] },
+      { id: "unknown" },
+    ];
+    const idsAtMinimum = (minimum: number) => accounts
+      .filter((item) => matchesCodexBatchImportQuota(item, minimum))
+      .map((item) => item.id);
+    assert.deepEqual(idsAtMinimum(0), ["zero", "low", "boundary", "unknown"]);
+    assert.deepEqual(idsAtMinimum(1), ["low", "boundary", "unknown"]);
+    assert.deepEqual(idsAtMinimum(20), ["boundary", "unknown"]);
+  });
+
   it("does not start a queued task while another task is running", () => {
     const tasks: CodexBatchImportQueueTaskLike[] = [
       { id: "first", status: "running" },

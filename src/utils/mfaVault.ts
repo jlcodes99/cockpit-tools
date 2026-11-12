@@ -28,9 +28,10 @@ export interface GoogleAuthenticatorMigrationBatch {
   credentials: ParsedMfaCredential[];
 }
 
-export const MFA_STORAGE_KEY_SAVED = 'agtools.mfa.vault.v2';
+export const MFA_STORAGE_KEY_SAVED = 'agtools.mfa.vault.v3';
 export const MFA_STORAGE_KEY_HISTORY = 'agtools.2fa.query.history.v1';
 
+const PREVIOUS_STORAGE_KEY_SAVED = 'agtools.mfa.vault.v2';
 const LEGACY_STORAGE_KEY_SAVED_MFA = 'agtools.mfa.vault.v1';
 const LEGACY_STORAGE_KEY_SAVED_2FA = 'agtools.two_factor_auth.saved.v2';
 const LEGACY_STORAGE_KEY_HISTORY_2FA = 'agtools.two_factor_auth.history.v2';
@@ -355,17 +356,6 @@ export function getMfaTimeRemaining(): number {
   return value === 0 ? 30 : value;
 }
 
-function readStorageArray(key: string): unknown[] {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
 export function normalizeMfaRecord(raw: unknown): MfaRecord | null {
   if (!raw || typeof raw !== 'object') return null;
   const item = raw as Record<string, unknown>;
@@ -421,119 +411,79 @@ export function dedupeMfaRecordsBySecret(records: MfaRecord[]): MfaRecord[] {
   return Array.from(map.values());
 }
 
-export function loadSavedMfaRecords(): MfaRecord[] {
-  const merged = [
-    ...readStorageArray(MFA_STORAGE_KEY_SAVED),
-    ...readStorageArray(LEGACY_STORAGE_KEY_SAVED_MFA),
-    ...readStorageArray(LEGACY_STORAGE_KEY_SAVED_2FA),
-  ]
-    .map(normalizeMfaRecord)
-    .filter((item): item is MfaRecord => !!item);
-
-  return dedupeMfaRecordsBySecret(merged);
+export function normalizeMfaRecords(items: unknown[]): MfaRecord[] {
+  const ids = new Set<string>();
+  const records = items.flatMap(item => {
+    const record = normalizeMfaRecord(item);
+    if (!record) return [];
+    const id = (item as { id?: unknown }).id;
+    if (typeof id === 'string' && id && !ids.has(id)) record.id = id;
+    ids.add(record.id);
+    return [record];
+  });
+  return dedupeMfaRecordsBySecret(records);
 }
 
-export function loadMfaHistoryRecords(): MfaRecord[] {
-  const merged = [
-    ...readStorageArray(MFA_STORAGE_KEY_HISTORY),
-    ...readStorageArray(LEGACY_STORAGE_KEY_HISTORY_2FA),
-  ]
-    .map(normalizeMfaRecord)
-    .filter((item): item is MfaRecord => !!item);
-
-  return dedupeMfaRecordsBySecret(merged);
+function parseSavedMfaRecords(raw: string): MfaRecord[] | null {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const records = normalizeMfaRecords(parsed);
+    return !parsed.length || records.length ? records : null;
+  } catch {
+    return null;
+  }
 }
 
-export function rememberMfaQuery(input: {
-  secret: string;
-  accountName?: string | null;
-  remark?: string | null;
-}): MfaRecord[] {
-  const parsed = parseMfaCredentialInput(input.secret);
-  if (!parsed?.secret || !getMfaOtpToken(input.secret)) {
-    return loadMfaHistoryRecords();
+// The presence of v3 records, including [], marks completed migration or an explicit save.
+export function readSavedMfaSnapshot() {
+  let unreadable = false;
+  const read = (key: string) => {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      unreadable = true;
+      return null;
+    }
+  };
+  const current = read(MFA_STORAGE_KEY_SAVED);
+  if (current !== null) {
+    const records = parseSavedMfaRecords(current);
+    return { migrated: true, records: records ?? [], unreadable: records === null };
   }
 
-  const now = Date.now();
-  const records = loadMfaHistoryRecords();
-  const identity = toMfaSecretIdentity(parsed.secret);
-  const existing = records.find(
-    (record) => toMfaSecretIdentity(record.secret) === identity,
-  );
-  const accountName = input.accountName?.trim() || parsed.accountName || '';
-  const remark = input.remark?.trim() || '';
-  const nextRecord: MfaRecord = existing
-    ? {
-        ...existing,
-        secret: parsed.secret,
-        accountName: accountName || existing.accountName,
-        remark: remark || existing.remark,
-        time: now,
+  const legacyRecords = [
+    PREVIOUS_STORAGE_KEY_SAVED, LEGACY_STORAGE_KEY_SAVED_MFA, LEGACY_STORAGE_KEY_SAVED_2FA,
+  ].flatMap(key => {
+    const raw = read(key);
+    if (raw === null) return [];
+    const records = parseSavedMfaRecords(raw);
+    if (records) return records;
+    unreadable = true;
+    return [];
+  });
+
+  return { migrated: false, records: dedupeMfaRecordsBySecret(legacyRecords), unreadable };
+}
+
+export function hasLegacyMfaHistoryStorage(): boolean {
+  return localStorage.getItem(MFA_STORAGE_KEY_HISTORY) !== null
+    || localStorage.getItem(LEGACY_STORAGE_KEY_HISTORY_2FA) !== null;
+}
+
+export function readLegacyMfaHistoryRecords(): MfaRecord[] {
+  return normalizeMfaRecords(
+    [MFA_STORAGE_KEY_HISTORY, LEGACY_STORAGE_KEY_HISTORY_2FA].flatMap(key => {
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw === null) return [];
+        const parsed: unknown = JSON.parse(raw);
+        if (!Array.isArray(parsed)) throw new Error('mfa_history_invalid');
+        return parsed;
+      } catch (error) {
+        if (key === MFA_STORAGE_KEY_HISTORY) throw error;
+        return [];
       }
-    : {
-        id: createMfaRecordId(),
-        secret: parsed.secret,
-        accountName,
-        remark,
-        time: now,
-      };
-  const nextRecords = dedupeMfaRecordsBySecret([
-    nextRecord,
-    ...records.filter(
-      (record) => toMfaSecretIdentity(record.secret) !== identity,
-    ),
-  ]);
-
-  try {
-    localStorage.setItem(MFA_STORAGE_KEY_HISTORY, JSON.stringify(nextRecords));
-  } catch {
-    // Local 2FA query history sync is best effort.
-  }
-  return nextRecords;
-}
-
-export function upsertSavedMfaRecord(input: {
-  secret: string;
-  accountName?: string | null;
-  remark?: string | null;
-}): MfaRecord[] {
-  const parsed = parseMfaCredentialInput(input.secret);
-  if (!parsed?.secret) {
-    return loadSavedMfaRecords();
-  }
-
-  const now = Date.now();
-  const records = loadSavedMfaRecords();
-  const identity = toMfaSecretIdentity(parsed.secret);
-  const existingIndex = records.findIndex(
-    (record) => toMfaSecretIdentity(record.secret) === identity,
+    }),
   );
-  const accountName = input.accountName?.trim() || parsed.accountName || "";
-  const remark = input.remark?.trim() || "";
-
-  if (existingIndex >= 0) {
-    records[existingIndex] = {
-      ...records[existingIndex],
-      secret: parsed.secret,
-      accountName: accountName || records[existingIndex].accountName,
-      remark: remark || records[existingIndex].remark,
-      time: now,
-    };
-  } else {
-    records.unshift({
-      id: createMfaRecordId(),
-      secret: parsed.secret,
-      accountName,
-      remark,
-      time: now,
-    });
-  }
-
-  const nextRecords = dedupeMfaRecordsBySecret(records);
-  try {
-    localStorage.setItem(MFA_STORAGE_KEY_SAVED, JSON.stringify(nextRecords));
-  } catch {
-    // Local 2FA vault sync is best effort.
-  }
-  return nextRecords;
 }

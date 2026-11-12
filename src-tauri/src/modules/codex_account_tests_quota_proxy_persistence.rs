@@ -41,6 +41,31 @@ fn seed_quota_proxy_account() -> CodexAccount {
 }
 
 #[test]
+fn oauth_account_model_mapping_survives_a_stale_credential_snapshot() {
+    let _env_lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _storage = QuotaProxyStorage::new();
+    let account = seed_quota_proxy_account();
+    let mappings = vec![crate::models::codex::CodexApiModelMapping {
+        client_model: " preferred-model ".into(),
+        upstream_model: "gpt-5.6-sol".into(),
+    }];
+    update_account_api_model_mappings(
+        &account.id,
+        mappings,
+        Some(std::collections::HashMap::from([("preferred-model".into(), 120_000)])),
+    )
+    .unwrap();
+
+    save_account_preserving_egress_proxy(&account).unwrap();
+    let saved = load_account(&account.id).unwrap();
+    assert_eq!(saved.api_model_mappings[0].client_model, "preferred-model");
+    assert_eq!(saved.api_model_mappings[0].upstream_model, "gpt-5.6-sol");
+    assert_eq!(saved.api_model_context_windows["preferred-model"], 120_000);
+}
+
+#[test]
 fn delayed_quota_response_preserves_source_preferences_saved_after_disabled_snapshot() {
     let _env_lock = crate::modules::test_support::env_lock()
         .lock()

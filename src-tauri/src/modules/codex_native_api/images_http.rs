@@ -41,7 +41,7 @@ async fn handle(
     incoming: Request,
     operation: ImageOperation,
 ) -> Result<Response, ServiceError> {
-    let mut tracker = state.begin()?;
+    let mut tracker = state.begin_with_peer(super::super::server::request_peer(incoming.extensions()))?;
     let capture = tokio::time::timeout(
         state.options.request_timeout,
         state.host.payload_logging_enabled(),
@@ -55,10 +55,21 @@ async fn handle(
         capture,
     );
     let caller = state.authorize(incoming.headers()).await?;
+    tracker.set_operation(if operation == ImageOperation::Edit { "image_edit" } else { "image_generation" });
+    tracker.authorized(&caller, "");
     let headers = incoming.headers().clone();
-    let request = parse_request(&state, incoming, operation).await?;
+    let request = match parse_request(&state, incoming, operation).await {
+        Ok(request) => request,
+        Err(error) => {
+            tracker.fail(&error).await;
+            return Err(error);
+        }
+    };
     tracker.authorized(&caller, request.model.as_deref().unwrap_or(""));
-    tracker.admit(&caller).await?;
+    if let Err(error) = tracker.admit(&caller).await {
+        tracker.fail(&error).await;
+        return Err(error);
+    }
     let mut policy = match super::super::retry::execution_policy(&state).await {
         Ok(policy) => policy.for_images(),
         Err(error) => {
@@ -255,7 +266,7 @@ async fn parse_request(
     let mut stop = state.stop.clone();
     let bytes = tokio::select! {
         _ = stop.wait() => return Err(stopping_error()),
-        result = tokio::time::timeout(state.options.request_timeout, to_bytes(incoming.into_body(), state.options.max_body_bytes)) =>
+        result = tokio::time::timeout(state.options.body_timeout(), to_bytes(incoming.into_body(), state.options.max_body_bytes)) =>
             result.map_err(|_| ServiceError::new(408,"request_body_timeout","Timed out reading image request"))?
                 .map_err(|_| ServiceError::new(413,"request_too_large","Image request exceeds its size limit"))?,
     };
@@ -470,6 +481,12 @@ impl Execution {
                 self.selected.route.base_url.trim_end_matches('/'),
                 path
             );
+            if oauth {
+                super::super::reasoning_policy::check_dispatch(
+                    &self.state, &self.caller, &self.selected.route, &self.request.original, &payload,
+                    super::super::contract::WireApi::Responses,
+                ).await?;
+            }
             let mut outgoing = self.selected.route.client.post(url).headers(headers);
             if !oauth {
                 let parts = if self.selected.route.chatgpt { None }
@@ -516,6 +533,18 @@ impl Execution {
                 self.tracker.payload("upstream_request", "http", built.headers(), &payload.to_string());
                 self.tracker.upstream_headers(built.headers());
                 self.tracker.check_quota_before_send()?;
+                self.tracker.image_request_models(
+                    crate::models::codex_local_access::CodexLocalAccessImageRequestDiagnostic {
+                        requested_model: self.request.model.clone(),
+                        upstream_model: self.selected.image_model.clone(),
+                        responses_model: if oauth {
+                            payload["model"].as_str().map(str::to_owned)
+                        } else {
+                            None
+                        },
+                        upstream_status: None,
+                    },
+                );
                 self.tracker.quota_request_started();
                 client.execute(built).await.map_err(|error| {
                     super::super::diagnostics::transport_failure(502,"upstream_unavailable","Unable to connect to the image upstream",&error)
@@ -591,6 +620,7 @@ impl Execution {
                 }
             };
             self.tracker.upstream_http_version(response.version());
+            self.tracker.image_upstream_status(response.status().as_u16());
             self.tracker.upstream_response_headers(response.headers());
             response = super::super::http_compression::decode_response(response)?;
             self.tracker.quota_headers(response.headers());
@@ -819,6 +849,7 @@ impl Execution {
                         _=stop.wait()=>return Err(stopping_error()),
                         result=deadline::timeout_at(deadline,self.state.host.route_failed_attempt(&self.selected.route,&self.selected.image_model,if model_unavailable { 404 } else { response.status().as_u16() },retry_after,credential_scope,failure_message.as_deref()))=>result.map_err(|_|super::super::retry::total_timeout())?,
                     }
+                    self.tracker.mark_failure_cooldown_recorded(&self.selected.route.account_id);
                 }
                 if self
                     .cooldown_round(response.status().as_u16(), &policy, deadline)
@@ -894,6 +925,7 @@ impl Execution {
                 _=stop.wait()=>return Err(stopping_error()),
                 result=deadline::timeout_at(deadline,self.state.host.route_failed_attempt(&self.selected.route,&self.selected.image_model,status,retry_after,credential_scope,message))=>{result.map_err(|_|super::super::retry::total_timeout())?;}
             }
+            self.tracker.mark_failure_cooldown_recorded(&self.selected.route.account_id);
         }
         self.tracker.release_route();
         self.selected.route.permit = None;
@@ -1444,7 +1476,7 @@ impl ImageStreamProgress {
         self.image_events = self.image_events.saturating_add(usize::from(image));
         self.completion_seen |= matches!(
             kind,
-            "response.completed" | "image_generation.completed" | "image_edit.completed"
+            "response.completed" | "response.done" | "image_generation.completed" | "image_edit.completed"
         );
         self.last_event = if kind.ends_with(".partial_image") && image {
             "image_partial"
@@ -1462,7 +1494,8 @@ impl ImageStreamProgress {
     fn failure(&self, mut error: ServiceError) -> ServiceError {
         if !matches!(
             error.code,
-            "upstream_stream_error"
+            "image_output_missing"
+                | "upstream_stream_error"
                 | "upstream_timeout"
                 | "upstream_idle_timeout"
                 | "upstream_total_timeout"
@@ -1470,7 +1503,9 @@ impl ImageStreamProgress {
         ) {
             return error;
         }
-        let stage = if self.image_events > 0 {
+        let stage = if error.code == "image_output_missing" && self.completion_seen {
+            "completed_without_image"
+        } else if self.image_events > 0 {
             "image_activity"
         } else if self.business_events > 0 {
             "business_output"
@@ -1811,7 +1846,7 @@ impl OAuthStream {
             usage_inputs.push(json!({"data":[],"usage":self.accumulator.usage}));
             self.execution.usage = merge_responses(&usage_inputs)?.get("usage").cloned();
             self.execution.tracker.capture_usage(&self.execution.usage);
-            for mut output in converted? {
+            for mut output in converted.map_err(|error| self.progress.failure(error))? {
                 let offset: usize = self
                     .results
                     .iter()

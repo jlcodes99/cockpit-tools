@@ -1471,25 +1471,7 @@ async fn fetch_checkin_status_from(
         .await
         .map_err(|e| format!("请求 {} 失败: {}", path, e))?;
 
-    let status_code = resp.status();
-    let body: Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("解析 {} 响应失败: {}", path, e))?;
-
-    if !status_code.is_success() {
-        let message = body
-            .get("message")
-            .or_else(|| body.get("msg"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown error");
-        return Err(format!(
-            "请求 {} 失败 (http={}): {}",
-            path,
-            status_code.as_u16(),
-            message
-        ));
-    }
+    let body = read_checkin_response(resp, path).await?;
 
     // 与官方 WorkBuddy 一致：仅 code === 0 视为成功
     let code = body.get("code").and_then(|v| v.as_i64()).unwrap_or(-1);
@@ -1623,24 +1605,7 @@ pub async fn perform_checkin(
         .await
         .map_err(|e| format!("请求 daily-checkin 失败: {}", e))?;
 
-    let status_code = resp.status();
-    let body: Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("解析 daily-checkin 响应失败: {}", e))?;
-
-    if !status_code.is_success() {
-        let message = body
-            .get("message")
-            .or_else(|| body.get("msg"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown error");
-        return Err(format!(
-            "请求 daily-checkin 失败 (http={}): {}",
-            status_code.as_u16(),
-            message
-        ));
-    }
+    let body = read_checkin_response(resp, "daily-checkin").await?;
 
     let code = body.get("code").and_then(|v| v.as_i64()).unwrap_or(-1);
     let api_msg = body
@@ -1705,6 +1670,25 @@ pub async fn perform_checkin(
     })
 }
 
+async fn read_checkin_response(response: reqwest::Response, path: &str) -> Result<Value, String> {
+    let status = response.status();
+    let body = response.json::<Value>().await;
+    if status.is_success() {
+        return body.map_err(|error| format!("解析 {} 响应失败: {}", path, error));
+    }
+    let error = format!("请求 {} 失败 (http={})", path, status.as_u16());
+    if let Ok(body) = body {
+        if let Some(message) = body
+            .get("message")
+            .or_else(|| body.get("msg"))
+            .and_then(Value::as_str)
+        {
+            return Err(format!("{}: {}", error, message));
+        }
+    }
+    Err(error)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1712,6 +1696,38 @@ mod tests {
     #[test]
     fn billing_client_uses_required_user_agent() {
         assert!(CODEBUDDY_HTTP_USER_AGENT.starts_with("Mozilla/5.0"));
+    }
+
+    #[tokio::test]
+    async fn checkin_response_keeps_http_status_for_non_json_errors() {
+        use axum::{http::StatusCode, response::Html, routing::get, Json, Router};
+        let router = Router::new()
+            .route(
+                "/auth",
+                get(|| async { (StatusCode::UNAUTHORIZED, Html("<p>private gateway details</p>")) }),
+            )
+            .route(
+                "/denied",
+                get(|| async { (StatusCode::FORBIDDEN, Json(json!({"msg":"forbidden"}))) }),
+            )
+            .route("/ok", get(|| async { Json(json!({"code":0})) }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        for (path, expected) in [
+            ("/auth", "请求 /auth 失败 (http=401)"),
+            ("/denied", "请求 /denied 失败 (http=403): forbidden"),
+        ] {
+            let response = client.get(format!("{base}{path}")).send().await.unwrap();
+            assert_eq!(
+                read_checkin_response(response, path).await.unwrap_err(),
+                expected
+            );
+        }
+        let response = client.get(format!("{base}/ok")).send().await.unwrap();
+        assert_eq!(read_checkin_response(response, "/ok").await.unwrap()["code"], 0);
+        server.abort();
     }
 
     #[test]

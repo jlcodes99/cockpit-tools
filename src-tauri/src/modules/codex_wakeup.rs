@@ -1,4 +1,6 @@
+use crate::models::codex::CodexAccount;
 use crate::modules::{account, codex_account, codex_local_access, logger, process};
+use super::wakeup_history_store::{self, HistoryRow, HistoryStore};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
@@ -12,8 +14,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
-const TASKS_FILE: &str = "codex_wakeup_tasks.json";
-const HISTORY_FILE: &str = "codex_wakeup_history.json";
+pub(crate) const TASKS_FILE: &str = "codex_wakeup_tasks.json";
+pub(crate) const HISTORY_FILE: &str = "codex_wakeup_history.json";
 const RUNTIME_CONFIG_FILE: &str = "codex_wakeup_runtime_config.json";
 const MANAGED_HOMES_DIR: &str = "codex_wakeup_homes";
 const MAX_HISTORY_ITEMS: usize = 300;
@@ -63,6 +65,8 @@ const LEGACY_CODEX_MODEL_PRESET_MODELS: &[&str] = &[
     "gpt-5.1-codex-mini",
 ];
 
+#[path = "codex_wakeup_run_store.rs"]
+mod run_store;
 #[path = "codex_wakeup_task_state.rs"]
 mod task_state;
 pub use task_state::{
@@ -70,7 +74,6 @@ pub use task_state::{
 };
 
 static TASKS_LOCK: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| Mutex::new(()));
-static HISTORY_LOCK: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| Mutex::new(()));
 static TEST_CANCEL_SCOPES: std::sync::LazyLock<Mutex<HashMap<String, Arc<AtomicBool>>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -142,7 +145,7 @@ pub struct CodexWakeupRuntimeConfig {
     pub node_path: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexWakeupSchedule {
     pub kind: String,
@@ -157,7 +160,17 @@ pub struct CodexWakeupSchedule {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quota_reset_window: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_reset_delay_minutes: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub startup_delay_minutes: Option<i32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct QuotaResetPlan {
+    pub account_id: String,
+    pub primary: bool,
+    pub reset_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -178,6 +191,8 @@ pub struct CodexWakeupTask {
     pub name: String,
     pub enabled: bool,
     pub account_ids: Vec<String>,
+    #[serde(default)]
+    pub use_api_service_pool: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -203,6 +218,8 @@ pub struct CodexWakeupTask {
     pub last_duration_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_run_at: Option<i64>,
+    #[serde(skip)]
+    pub(super) quota_reset_plan: Option<QuotaResetPlan>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -289,7 +306,6 @@ pub struct CodexWakeupBatchResult {
 pub struct CodexWakeupOverview {
     pub runtime: CodexCliStatus,
     pub state: CodexWakeupState,
-    pub history: Vec<CodexWakeupHistoryItem>,
 }
 
 #[derive(Debug, Clone)]
@@ -314,6 +330,8 @@ pub struct CodexWakeupProgressPayload {
     pub failure_count: usize,
     pub running: bool,
     pub phase: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_ids: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_account_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -966,8 +984,16 @@ fn tasks_path() -> Result<PathBuf, String> {
     Ok(data_dir()?.join(TASKS_FILE))
 }
 
-fn history_path() -> Result<PathBuf, String> {
-    Ok(data_dir()?.join(HISTORY_FILE))
+fn run_store() -> Result<run_store::RunStore, String> {
+    Ok(run_store::RunStore::new(tasks_path()?))
+}
+
+fn history_store() -> Result<HistoryStore, String> {
+    Ok(history_store_at(data_dir()?.join(HISTORY_FILE)))
+}
+
+pub(crate) fn history_store_at(path: PathBuf) -> HistoryStore {
+    wakeup_history_store::wakeup(path, "codex", MAX_HISTORY_ITEMS)
 }
 
 fn runtime_config_path() -> Result<PathBuf, String> {
@@ -1859,6 +1885,12 @@ pub fn resolve_cli_runtime() -> Result<CodexCliResolvedRuntime, String> {
     })
 }
 
+#[cfg(any(unix, windows))]
+pub(crate) fn build_resolved_cli_command() -> Result<Command, String> {
+    let binary = resolve_binary().map_err(|error| error.message)?;
+    Ok(build_binary_command(&binary))
+}
+
 pub fn run_cli_conversation_in_home_detailed(
     codex_home: &Path,
     prompt: &str,
@@ -1992,6 +2024,9 @@ fn normalize_schedule(raw: &CodexWakeupSchedule) -> CodexWakeupSchedule {
         } else {
             None
         },
+        quota_reset_delay_minutes: raw.quota_reset_delay_minutes.filter(|&minutes| {
+            normalized_kind == "quota_reset" && minutes > 0
+        }),
         startup_delay_minutes: if normalized_kind == "startup" {
             Some(startup_delay_minutes.unwrap_or(0))
         } else {
@@ -2000,11 +2035,18 @@ fn normalize_schedule(raw: &CodexWakeupSchedule) -> CodexWakeupSchedule {
     }
 }
 
-fn existing_codex_account_id_set() -> HashSet<String> {
-    codex_account::list_accounts()
-        .into_iter()
-        .map(|account| account.id)
-        .collect()
+pub(crate) fn is_pool_wakeup_account(account: &CodexAccount) -> bool {
+    !account.is_api_key_auth() && !account.is_web_session_auth()
+}
+
+pub(crate) fn resolve_pool_wakeup_account_ids() -> Result<Vec<String>, String> {
+    let mut eligible = Vec::new();
+    for id in codex_local_access::configured_active_pool_member_ids()? {
+        if codex_account::load_account_checked(&id)?.as_ref().is_some_and(is_pool_wakeup_account) {
+            eligible.push(id);
+        }
+    }
+    Ok(eligible)
 }
 
 /// Keep only non-empty account ids that still exist in the Codex account store.
@@ -2034,7 +2076,7 @@ fn prune_missing_accounts_from_state(
             changed = true;
             task.updated_at = now_ts();
         }
-        if task.account_ids.is_empty() {
+        if task.account_ids.is_empty() && !task.use_api_service_pool {
             changed = true;
             continue;
         }
@@ -2044,9 +2086,17 @@ fn prune_missing_accounts_from_state(
     changed
 }
 
+fn prune_missing_indexed_accounts(state: &mut CodexWakeupState) -> Result<bool, String> {
+    if state.tasks.iter().all(|task| task.use_api_service_pool) {
+        return Ok(false);
+    }
+    let existing = codex_account::list_indexed_account_ids()?;
+    Ok(prune_missing_accounts_from_state(state, &existing))
+}
+
 /// Remove deleted account ids from persisted Codex wakeup tasks.
 /// Called when Codex accounts are deleted so task snapshots stay in sync.
-pub fn remove_deleted_accounts_from_tasks(account_ids: &[String]) -> Result<(), String> {
+pub async fn remove_deleted_accounts_from_tasks(account_ids: &[String]) -> Result<(), String> {
     let remove_ids: HashSet<String> = account_ids
         .iter()
         .map(|item| item.trim().to_string())
@@ -2055,25 +2105,14 @@ pub fn remove_deleted_accounts_from_tasks(account_ids: &[String]) -> Result<(), 
     if remove_ids.is_empty() {
         return Ok(());
     }
+    run_state_task(move || remove_task_account_refs(&remove_ids)).await
+}
 
+fn remove_task_account_refs(remove_ids: &HashSet<String>) -> Result<(), String> {
     let _lock = TASKS_LOCK.lock().map_err(|_| "获取 Codex 唤醒任务锁失败")?;
     let _file_lock = task_state::lock_task_state()?;
-    let path = tasks_path()?;
-    if !path.exists() {
-        return Ok(());
-    }
-    let content =
-        fs::read_to_string(&path).map_err(|e| format!("读取 Codex 唤醒任务失败: {}", e))?;
-    if content.trim().is_empty() {
-        return Ok(());
-    }
-    let mut state: CodexWakeupState = match serde_json::from_str(&content) {
-        Ok(state) => state,
-        Err(error) => {
-            quarantine_corrupted_wakeup_file(&path, "任务配置", &error);
-            return Ok(());
-        }
-    };
+    let store = run_store()?;
+    let mut state = store.load()?;
 
     let mut changed = false;
     let mut kept = Vec::with_capacity(state.tasks.len());
@@ -2085,7 +2124,7 @@ pub fn remove_deleted_accounts_from_tasks(account_ids: &[String]) -> Result<(), 
             changed = true;
             task.updated_at = now_ts();
         }
-        if task.account_ids.is_empty() {
+        if task.account_ids.is_empty() && !task.use_api_service_pool {
             changed = true;
             continue;
         }
@@ -2098,11 +2137,9 @@ pub fn remove_deleted_accounts_from_tasks(account_ids: &[String]) -> Result<(), 
     state.tasks = kept;
     // Normalize + refresh schedules before writing, without re-entering load_state locks.
     state.tasks = state.tasks.iter().map(normalize_task).collect();
-    state.tasks.retain(|task| !task.account_ids.is_empty());
-    let existing = existing_codex_account_id_set();
-    let _ = prune_missing_accounts_from_state(&mut state, &existing);
-    refresh_next_run_at(&mut state);
-    save_json_atomic(&path, &state)?;
+    state.tasks.retain(|task| task.use_api_service_pool || !task.account_ids.is_empty());
+    prune_missing_indexed_accounts(&mut state)?;
+    store.save_rules(&state, &[])?;
     crate::modules::codex_wakeup_scheduler::cancel_disabled_tasks(&state);
     logger::log_info(&format!(
         "[CodexWakeup] 已从唤醒任务中移除已删除账号引用: removed={}, remaining_tasks={}",
@@ -2122,6 +2159,9 @@ fn normalize_task(raw: &CodexWakeupTask) -> CodexWakeupTask {
         .collect();
     account_ids.sort();
     account_ids.dedup();
+    if raw.use_api_service_pool {
+        account_ids.clear();
+    }
 
     let name = raw.name.trim();
     let prompt = raw
@@ -2154,6 +2194,7 @@ fn normalize_task(raw: &CodexWakeupTask) -> CodexWakeupTask {
         },
         enabled: raw.enabled,
         account_ids,
+        use_api_service_pool: raw.use_api_service_pool,
         prompt,
         model,
         model_display_name,
@@ -2176,6 +2217,7 @@ fn normalize_task(raw: &CodexWakeupTask) -> CodexWakeupTask {
         last_failure_count: raw.last_failure_count,
         last_duration_ms: raw.last_duration_ms,
         next_run_at: raw.next_run_at,
+        quota_reset_plan: raw.quota_reset_plan.clone(),
         execution_mode: raw
             .execution_mode
             .as_ref()
@@ -2233,22 +2275,8 @@ pub fn save_runtime_config(
 
 // Caller owns TASKS_LOCK and the cross-process state lock.
 fn read_state_file() -> Result<CodexWakeupState, String> {
-    let path = tasks_path()?;
-    if !path.exists() {
-        return Ok(CodexWakeupState::default());
-    }
-    let content =
-        fs::read_to_string(&path).map_err(|e| format!("读取 Codex 唤醒任务失败: {}", e))?;
-    if content.trim().is_empty() {
-        return Ok(CodexWakeupState::default());
-    }
-    let mut state: CodexWakeupState = match serde_json::from_str(&content) {
-        Ok(state) => state,
-        Err(error) => {
-            quarantine_corrupted_wakeup_file(&path, "任务配置", &error);
-            return Ok(CodexWakeupState::default());
-        }
-    };
+    let store = run_store()?;
+    let mut state = store.load()?;
     state.tasks = state.tasks.iter().map(normalize_task).collect();
     let mut preset_ids = HashSet::new();
     state.model_presets = state
@@ -2266,12 +2294,10 @@ fn read_state_file() -> Result<CodexWakeupState, String> {
     state.model_preset_migrations.sort();
     state.model_preset_migrations.dedup();
     let migration_changed = apply_model_preset_migrations(&mut state);
-    let existing_accounts = existing_codex_account_id_set();
-    let account_prune_changed = prune_missing_accounts_from_state(&mut state, &existing_accounts);
-    refresh_next_run_at(&mut state);
-    let interrupted_changed = task_state::recover_interrupted_runs(&mut state)?;
-    if migration_changed || account_prune_changed || interrupted_changed {
-        save_json_atomic(&path, &state)?;
+    let account_prune_changed = prune_missing_indexed_accounts(&mut state)?;
+    task_state::recover_interrupted_runs(&mut state, &store)?;
+    if migration_changed || account_prune_changed {
+        store.save_rules(&state, &[])?;
     }
     Ok(state)
 }
@@ -2282,22 +2308,32 @@ fn load_state_inner() -> Result<CodexWakeupState, String> {
     read_state_file()
 }
 
+pub(crate) async fn run_state_task<T: Send + 'static>(
+    task: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(task)
+        .await
+        .map_err(|error| format!("Codex 唤醒状态任务失败: {error}"))?
+}
+
 pub fn load_state() -> Result<CodexWakeupState, String> {
-    load_state_inner()
+    let mut state = load_state_inner()?;
+    refresh_next_run_at(&mut state);
+    Ok(state)
 }
 
 pub fn load_state_for_scheduler() -> Result<CodexWakeupState, String> {
     load_state_inner()
 }
 
+pub(super) use task_state::save_quota_reset_plans;
+
 pub fn load_overview() -> Result<CodexWakeupOverview, String> {
     let runtime = wakeup_runtime_status();
     let state = load_state()?;
-    let history = load_history()?;
     Ok(CodexWakeupOverview {
         runtime,
         state,
-        history,
     })
 }
 
@@ -2314,7 +2350,9 @@ pub fn save_state(next_state: &CodexWakeupState) -> Result<CodexWakeupState, Str
             .iter()
             .map(normalize_task)
             .filter(|task| {
-                !task.id.is_empty() && !task.account_ids.is_empty() && seen.insert(task.id.clone())
+                !task.id.is_empty()
+                    && (task.use_api_service_pool || !task.account_ids.is_empty())
+                    && seen.insert(task.id.clone())
             })
             .collect(),
         model_presets: next_state
@@ -2333,61 +2371,47 @@ pub fn save_state(next_state: &CodexWakeupState) -> Result<CodexWakeupState, Str
     state.model_preset_migrations.sort();
     state.model_preset_migrations.dedup();
     apply_model_preset_migrations(&mut state);
-    let existing_accounts = existing_codex_account_id_set();
-    let _ = prune_missing_accounts_from_state(&mut state, &existing_accounts);
+    prune_missing_indexed_accounts(&mut state)?;
 
     // UI snapshots own configuration, never the scheduler's newer run results.
     task_state::preserve_run_metadata(&mut state, &current_state);
-    refresh_next_run_at(&mut state);
 
-    save_json_atomic(&tasks_path()?, &state)?;
+    let existing: HashSet<_> = current_state.tasks.iter().map(|task| task.id.as_str()).collect();
+    let new_tasks: Vec<_> = state
+        .tasks
+        .iter()
+        .filter(|task| !existing.contains(task.id.as_str()))
+        .collect();
+    run_store()?.save_rules(&state, &new_tasks)?;
     crate::modules::codex_wakeup_scheduler::cancel_disabled_tasks(&state);
+    drop(_file_lock);
+    drop(_lock);
+    refresh_next_run_at(&mut state);
     Ok(state)
 }
 
-pub fn load_history() -> Result<Vec<CodexWakeupHistoryItem>, String> {
-    let path = history_path()?;
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let content =
-        fs::read_to_string(&path).map_err(|e| format!("读取 Codex 唤醒历史失败: {}", e))?;
-    if content.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-    match serde_json::from_str(&content) {
-        Ok(history) => Ok(history),
-        Err(error) => {
-            quarantine_corrupted_wakeup_file(&path, "历史记录", &error);
-            Ok(Vec::new())
-        }
-    }
+impl HistoryRow for CodexWakeupHistoryItem {
+    fn id(&self) -> &str { &self.id }
+    fn timestamp(&self) -> i64 { self.timestamp }
+}
+
+pub fn schedule_history_migration() -> Result<(), String> {
+    history_store()?.schedule::<CodexWakeupHistoryItem>();
+    Ok(())
+}
+
+pub fn load_history(
+    retry: bool,
+) -> Result<wakeup_history_store::HistoryRead<CodexWakeupHistoryItem>, String> {
+    wakeup_history_store::read_available(history_store()?, retry)
 }
 
 pub fn add_history_items(new_items: Vec<CodexWakeupHistoryItem>) -> Result<(), String> {
-    if new_items.is_empty() {
-        return Ok(());
-    }
-    let _lock = HISTORY_LOCK
-        .lock()
-        .map_err(|_| "获取 Codex 唤醒历史锁失败")?;
-    let mut existing = load_history().unwrap_or_default();
-    let existing_ids: HashSet<String> = existing.iter().map(|item| item.id.clone()).collect();
-    let mut merged: Vec<CodexWakeupHistoryItem> = new_items
-        .into_iter()
-        .filter(|item| !existing_ids.contains(&item.id))
-        .collect();
-    merged.append(&mut existing);
-    merged.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-    merged.truncate(MAX_HISTORY_ITEMS);
-    save_json_atomic(&history_path()?, &merged)
+    history_store()?.add(&new_items)
 }
 
 pub fn clear_history() -> Result<(), String> {
-    let _lock = HISTORY_LOCK
-        .lock()
-        .map_err(|_| "获取 Codex 唤醒历史锁失败")?;
-    save_json_atomic(&history_path()?, &Vec::<CodexWakeupHistoryItem>::new())
+    history_store()?.clear()
 }
 
 #[cfg(target_os = "windows")]
@@ -2700,6 +2724,7 @@ fn emit_progress(
     phase: &str,
     current_account_id: Option<&str>,
     item: Option<CodexWakeupHistoryItem>,
+    account_ids: Option<&[String]>,
 ) {
     let Some(app) = app else {
         return;
@@ -2716,6 +2741,7 @@ fn emit_progress(
         failure_count,
         running,
         phase: phase.to_string(),
+        account_ids: account_ids.map(<[String]>::to_vec),
         current_account_id: current_account_id.map(|value| value.to_string()),
         item,
     };
@@ -3121,7 +3147,7 @@ pub async fn run_batch(
         &mut execution_config.model,
         &mut execution_config.model_display_name,
     );
-    let existing_accounts = existing_codex_account_id_set();
+    let existing_accounts = run_state_task(codex_account::list_indexed_account_ids).await?;
     let cleaned_ids: Vec<String> = account_ids
         .into_iter()
         .map(|item| item.trim().to_string())
@@ -3153,6 +3179,7 @@ pub async fn run_batch(
         "batch_started",
         None,
         None,
+        Some(&cleaned_ids),
     );
     let mut records = Vec::with_capacity(cleaned_ids.len());
     let mut success_count = 0usize;
@@ -3181,6 +3208,7 @@ pub async fn run_batch(
                 "account_completed",
                 Some(&account_id),
                 Some(record.clone()),
+                None,
             );
             records.push(record);
             continue;
@@ -3197,6 +3225,7 @@ pub async fn run_batch(
             true,
             "account_started",
             Some(&account_id),
+            None,
             None,
         );
         let record = run_single_account(
@@ -3225,11 +3254,15 @@ pub async fn run_batch(
             "account_completed",
             Some(&account_id),
             Some(record.clone()),
+            None,
         );
         records.push(record);
     }
 
-    add_history_items(records.clone())?;
+    let history = records.clone();
+    tauri::async_runtime::spawn_blocking(move || add_history_items(history))
+        .await
+        .map_err(|error| format!("保存 Codex 唤醒历史任务失败: {error}"))??;
     emit_progress(
         app,
         &run_id,
@@ -3240,6 +3273,7 @@ pub async fn run_batch(
         failure_count,
         false,
         "batch_completed",
+        None,
         None,
         None,
     );
@@ -3253,44 +3287,26 @@ pub async fn run_batch(
     })
 }
 
-fn summarize_task_result(
-    records: &[CodexWakeupHistoryItem],
-) -> (Option<String>, Option<u64>, Option<i64>) {
-    let latest_ts = records.iter().map(|item| item.timestamp).max();
-    let total_duration = records
-        .iter()
-        .filter_map(|item| item.duration_ms)
-        .sum::<u64>();
-
-    (
-        None,
-        if records.is_empty() {
-            None
-        } else {
-            Some(total_duration)
-        },
-        latest_ts,
-    )
-}
-
 pub fn update_task_after_run(
-    task_id: &str,
+    claimed: &CodexWakeupTask,
     records: &[CodexWakeupHistoryItem],
 ) -> Result<(), String> {
     let _lock = TASKS_LOCK.lock().map_err(|_| "获取 Codex 唤醒任务锁失败")?;
     let _file_lock = task_state::lock_task_state()?;
     let mut state = read_state_file()?;
-    let Some(task) = state.tasks.iter_mut().find(|item| item.id == task_id) else {
+    let Some(task) = task_state::claimed_task_mut(&mut state, claimed) else {
         return Ok(());
     };
 
     let all_success = !records.is_empty() && records.iter().all(|item| item.success);
     let success_count = records.iter().filter(|item| item.success).count() as u32;
     let failure_count = records.len().saturating_sub(success_count as usize) as u32;
-    let (summary_message, total_duration, _) = summarize_task_result(records);
     task.last_run_at = Some(now_ts());
     task.last_status = Some(if all_success { "success" } else { "error" }.to_string());
-    task.last_message = summary_message;
+    task.last_message = records
+        .iter()
+        .filter(|record| !record.success)
+        .find_map(|record| record.error.clone());
     task.last_success_count = if records.is_empty() {
         None
     } else {
@@ -3301,11 +3317,10 @@ pub fn update_task_after_run(
     } else {
         Some(failure_count)
     };
-    task.last_duration_ms = total_duration;
+    task.last_duration_ms = (!records.is_empty())
+        .then(|| records.iter().filter_map(|record| record.duration_ms).sum());
     task.updated_at = now_ts();
-    refresh_next_run_at(&mut state);
-    save_json_atomic(&tasks_path()?, &state)?;
-    Ok(())
+    run_store()?.save_run(task)
 }
 
 pub fn get_task(task_id: &str) -> Result<Option<CodexWakeupTask>, String> {
@@ -3354,6 +3369,7 @@ mod tests {
             name: id.to_string(),
             enabled: true,
             account_ids: account_ids.iter().map(|item| item.to_string()).collect(),
+            use_api_service_pool: false,
             prompt: None,
             model: None,
             model_display_name: None,
@@ -3365,6 +3381,7 @@ mod tests {
                 weekly_time: None,
                 interval_hours: None,
                 quota_reset_window: None,
+                quota_reset_delay_minutes: None,
                 startup_delay_minutes: None,
             },
             created_at: 1,
@@ -3376,6 +3393,7 @@ mod tests {
             last_failure_count: None,
             last_duration_ms: None,
             next_run_at: None,
+            quota_reset_plan: None,
             execution_mode: None,
             confirm_timeout_minutes: None,
         }
@@ -3400,11 +3418,14 @@ mod tests {
 
     #[test]
     fn prune_missing_accounts_removes_stale_ids_and_empty_tasks() {
+        let mut pool = sample_task("task-pool", &[]);
+        pool.use_api_service_pool = true;
         let mut state = CodexWakeupState {
             enabled: true,
             tasks: vec![
                 sample_task("task-keep", &["acc-1", "acc-gone"]),
                 sample_task("task-empty", &["acc-gone"]),
+                pool,
             ],
             model_presets: Vec::new(),
             model_preset_migrations: Vec::new(),
@@ -3412,9 +3433,12 @@ mod tests {
         let existing = HashSet::from(["acc-1".to_string()]);
 
         assert!(prune_missing_accounts_from_state(&mut state, &existing));
-        assert_eq!(state.tasks.len(), 1);
+        assert_eq!(state.tasks.len(), 2);
         assert_eq!(state.tasks[0].id, "task-keep");
         assert_eq!(state.tasks[0].account_ids, vec!["acc-1".to_string()]);
+        let saved = serde_json::to_value(&state.tasks[1]).unwrap();
+        assert_eq!(saved["useApiServicePool"], true);
+        assert_eq!(saved["accountIds"], serde_json::json!([]));
     }
 
     #[test]

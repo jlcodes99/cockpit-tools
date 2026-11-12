@@ -9,13 +9,51 @@ use super::{
 use axum::{
     body::{to_bytes, Body, Bytes},
     extract::{Request, State},
-    http::{header, HeaderValue, StatusCode},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
 use futures_util::{stream, StreamExt};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::{collections::VecDeque, sync::Arc};
+
+pub(super) const CLAUDE_CACHE_SCOPE: &str = "x-cockpit-claude-cache-scope";
+
+fn claude_cache_scope(headers: &HeaderMap, body: &Value) -> Option<HeaderValue> {
+    fn stable_id(value: &str) -> Option<&str> {
+        let value = value.trim();
+        (!value.is_empty() && value.len() <= 256 && !value.chars().any(char::is_control))
+            .then_some(value)
+    }
+    let header_id = |name| headers.get(name)?.to_str().ok().and_then(stable_id);
+    let metadata = body
+        .pointer("/metadata/user_id")
+        .and_then(Value::as_str)
+        .filter(|value| value.len() <= 4096)
+        .unwrap_or_default();
+    let structured = metadata
+        .starts_with('{')
+        .then(|| serde_json::from_str::<Value>(metadata).ok())
+        .flatten();
+    let session = header_id("x-claude-code-session-id")
+        .or_else(|| structured.as_ref()?.get("session_id")?.as_str().and_then(stable_id))
+        .or_else(|| {
+            let (_, suffix) = metadata.rsplit_once("_session_")?;
+            stable_id(suffix).filter(|value| value.bytes().all(|byte| byte.is_ascii_hexdigit() || byte == b'-'))
+        })?;
+    let agent = header_id("x-claude-code-agent-id").unwrap_or("main");
+    HeaderValue::from_str(&cache_digest([session, agent])).ok()
+}
+
+pub(super) fn cache_digest<const N: usize>(parts: [&str; N]) -> String {
+    let mut digest = Sha256::new();
+    for part in parts {
+        digest.update((part.len() as u64).to_be_bytes());
+        digest.update(part.as_bytes());
+    }
+    format!("{:x}", digest.finalize())
+}
 
 pub(super) async fn handle(State(state): State<Arc<AppState>>, request: Request) -> Response {
     let flavor = if request.uri().path().starts_with("/api/") {
@@ -51,7 +89,7 @@ async fn execute(
 ) -> Result<Response, ServiceError> {
     let path = request.uri().path().to_owned();
     if request.method() == axum::http::Method::GET {
-        let mut tracker = state.begin()?;
+        let mut tracker = state.begin_with_peer(super::server::request_peer(request.extensions()))?;
         tracker.context("GET", &path, request.headers(), false);
         let request_headers = request.headers().clone();
         let result = async {
@@ -230,7 +268,12 @@ async fn execute_body(
         conversion_error: native.responses_error,
     });
     input.body = converted.responses;
-    if flavor == CompatFlavor::Claude { input.headers.insert("x-cockpit-compat-source", HeaderValue::from_static("claude")); }
+    if flavor == CompatFlavor::Claude {
+        input.headers.insert("x-cockpit-compat-source", HeaderValue::from_static("claude"));
+        if let Some(scope) = claude_cache_scope(&input.headers, &original) {
+            input.headers.insert(CLAUDE_CACHE_SCOPE, scope);
+        }
+    }
     let mut outcome = input.tracker.defer_downstream();
     let response = match http::dispatch(
         state.clone(),

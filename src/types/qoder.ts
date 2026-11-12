@@ -249,6 +249,11 @@ export function getQoderPlanBadge(account: QoderAccount): string {
   return 'UNKNOWN';
 }
 
+export function isEnterpriseManagedQoderUsage(account: QoderAccount): boolean {
+  const raw = account.auth_credit_usage_raw;
+  return isRecord(raw) && raw.displayMode === 'enterprise';
+}
+
 export function resolveQoderCreditUsage(account: QoderAccount): unknown {
   const raw = account.auth_credit_usage_raw;
   if (!isRecord(raw)) return raw;

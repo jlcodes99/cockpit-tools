@@ -3,6 +3,7 @@ import {
   getCodexPlanFilterKey,
   getCodexPlanDisplayName,
   isCodexChatgptPlanAccount,
+  isCodexApiKeyAccount,
   getCodexQuotaWindows,
 } from '../types/codex';
 import { sortCodexPlanFilterKeys } from './codexAccountOverview';
@@ -104,7 +105,7 @@ export function summarizeCodexQuotaPool(accounts: CodexAccount[], context?: {
     if (official && !rawPlan && !source && !linkedDisplay) byPlan[planKey].unknownPlan = true;
     // For a projected endpoint, consume only its explicit source quota. The
     // endpoint itself remains untouched for routing and health checks.
-    const includeQuota = Boolean(source) || linkedDisplay || !official;
+    const includeQuota = Boolean(source) || linkedDisplay || (!official && !isCodexApiKeyAccount(account));
     addAccountToQuotaPool(all, display, includeQuota);
     addAccountToQuotaPool(byPlan[planKey], display, includeQuota);
   });

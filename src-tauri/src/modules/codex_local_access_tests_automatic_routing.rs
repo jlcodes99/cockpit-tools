@@ -667,6 +667,7 @@ fn managed_catalog_save_preserves_scoped_image_input_and_explicit_disable() {
     let model = crate::models::codex::CodexExperimentalModelDefinition {
         model_id: "team/custom-input-model".into(), display_name: "My custom model".into(),
         reasoning_efforts: None, default_reasoning_effort: None,
+        ultra_reasoning_effort: None,
         context_window: None, auto_compact_token_limit: None,
     };
     let path = profile.path().join("cockpit-model-catalog.json");

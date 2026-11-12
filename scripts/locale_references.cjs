@@ -2,8 +2,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
+const i18next = require('i18next');
 
-function requiredTranslationReferences(source, filename) {
+function requiredTranslationReferences(source, filename, includeFallbacks = false) {
   const ast = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true);
   const references = [];
   function literalKeys(node) {
@@ -18,9 +19,10 @@ function requiredTranslationReferences(source, filename) {
       const options = node.arguments[1];
       const hasDefault = options && (ts.isStringLiteralLike(options) ||
         (ts.isObjectLiteralExpression(options) && options.properties.some(property => property.name?.text === 'defaultValue')));
-      if (!hasDefault) {
+      if (!hasDefault || includeFallbacks) {
         for (const key of literalKeys(node.arguments[0])) references.push({
           key, file: filename, line: ast.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+          ...(hasDefault ? { hasDefault: true } : {}),
         });
       }
     }
@@ -30,14 +32,14 @@ function requiredTranslationReferences(source, filename) {
   return references;
 }
 
-function collectRequiredTranslationReferences(root) {
+function collectRequiredTranslationReferences(root, includeFallbacks = false) {
   const result = [];
   function walk(directory) {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
       const filename = path.join(directory, entry.name);
       if (entry.isDirectory()) walk(filename);
       else if (/\.tsx?$/.test(filename) && !/\.(test|spec)\.tsx?$/.test(filename)) {
-        result.push(...requiredTranslationReferences(fs.readFileSync(filename, 'utf8'), filename));
+        result.push(...requiredTranslationReferences(fs.readFileSync(filename, 'utf8'), filename, includeFallbacks));
       }
     }
   }
@@ -47,10 +49,18 @@ function collectRequiredTranslationReferences(root) {
 
 function findMissingTranslationReferences(references, locales) {
   const missing = [];
+  const localeList = [...locales];
+  const i18n = i18next.createInstance();
+  i18n.init({
+    resources: Object.fromEntries(localeList.map(([language, data]) => [language, { translation: data }])),
+    lng: localeList[0]?.[0],
+    fallbackLng: false,
+    initImmediate: false,
+  });
   for (const reference of references) {
     const languages = [];
-    for (const [language, data] of locales) {
-      const value = reference.key.split('.').reduce((current, key) => current?.[key], data);
+    for (const [language] of localeList) {
+      const value = i18n.getResource(language, 'translation', reference.key);
       if (typeof value !== 'string') languages.push(language);
     }
     if (languages.length) missing.push({ ...reference, languages });

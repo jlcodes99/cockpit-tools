@@ -1,5 +1,5 @@
 import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -65,6 +65,7 @@ interface SwitchProgressState {
   authFailure?: CodexSwitchAuthFailure | null;
   launchAfterSwitch?: boolean;
   canRetry?: boolean;
+  projectStateDeferred?: boolean;
 }
 
 const EVENT_NAME = "codex-switch-progress";
@@ -111,6 +112,7 @@ export function CodexSwitchProgressModal() {
   const [actionBusy, setActionBusy] = useState<"api" | null>(null);
   const [retryBusy, setRetryBusy] = useState<"retry" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const projectWarningRef = useRef<HTMLDivElement>(null);
   const accounts = useCodexAccountStore((store) => store.accounts);
 
   useEffect(() => {
@@ -191,6 +193,8 @@ export function CodexSwitchProgressModal() {
             accountId,
             progress: 100,
             status: hasStepError ? "error" : "completed",
+            projectStateDeferred: detail.details?.projectStateDeferred === true ||
+              (detail.details?.projectStateDeferred === undefined && base.projectStateDeferred),
           };
         }
         const steps = detail.step
@@ -246,10 +250,16 @@ export function CodexSwitchProgressModal() {
   }, [t]);
 
   useEffect(() => {
-    if (!state || state.status !== "completed") return;
+    if (!state || state.status !== "completed" || state.projectStateDeferred) return;
     const timer = window.setTimeout(() => setState(null), 1600);
     return () => window.clearTimeout(timer);
   }, [state]);
+
+  useEffect(() => {
+    if (state?.projectStateDeferred) {
+      projectWarningRef.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [state?.projectStateDeferred]);
 
   const relativeTime = useMemo(
     () =>
@@ -658,7 +668,20 @@ export function CodexSwitchProgressModal() {
               {windowsOperationError?.originalReason || state.error}
             </div>
           )}
+          {state.projectStateDeferred && (
+            <div ref={projectWarningRef} className="codex-switch-progress-error" role="alert">
+              {t("codex.sessionManager.repairModal.switchProjectsDeferred")}
+            </div>
+          )}
         </div>
+
+        {state.status === "completed" && state.projectStateDeferred && (
+          <div className="codex-switch-progress-footer">
+            <button type="button" className="btn btn-secondary" onClick={() => setState(null)}>
+              {t("common.close")}
+            </button>
+          </div>
+        )}
 
         {isAuthRequired && authFailure && (
           <div className="codex-switch-progress-footer codex-switch-auth-footer">

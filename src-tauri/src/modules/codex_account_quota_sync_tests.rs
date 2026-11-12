@@ -43,6 +43,39 @@ fn quota(value: i32) -> crate::models::codex::CodexQuota {
 }
 
 #[test]
+fn provider_quota_snapshot_rejects_old_credentials_and_late_failures() {
+    let _lock = crate::modules::test_support::env_lock().lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _storage = Storage::new();
+    let mut account = seed();
+    account.auth_mode = crate::models::codex::CodexAuthMode::Apikey;
+    account.openai_api_key = Some("fixture-key".into());
+    account.api_base_url = Some("https://relay.example.invalid/v1".into());
+    save_account(&account).unwrap();
+    let older = Instant::now() - Duration::from_secs(1);
+    let summary = serde_json::json!({ "mode": "new_api", "quotaRemaining": 94, "unit": "%" });
+    save_provider_usage_snapshot(&account, Some(summary.clone()), Instant::now()).unwrap();
+    save_provider_usage_snapshot(&account, None, older).unwrap();
+    let read = || load_account(&account.id).unwrap();
+    let latest = read();
+    let raw = latest.quota.unwrap().raw_data.unwrap();
+    assert_eq!(raw["provider_usage"], summary);
+    assert!(raw.get("provider_usage_query_failed").is_none());
+    let last_success = latest.usage_updated_at;
+    assert!(last_success.is_some());
+
+    save_provider_usage_snapshot(&account, None, Instant::now()).unwrap();
+    let mut latest = read();
+    assert_eq!(latest.usage_updated_at, last_success);
+    assert_eq!(latest.quota.as_ref().unwrap().raw_data.as_ref().unwrap()["provider_usage_query_failed"], true);
+    latest.api_base_url = Some("https://new-relay.example.invalid/v1".into());
+    latest.quota = None;
+    save_account(&latest).unwrap();
+    save_provider_usage_snapshot(&account, Some(summary), Instant::now()).unwrap();
+    assert!(read().quota.is_none());
+}
+
+#[test]
 fn quota_and_subscription_writes_preserve_each_others_results() {
     let _lock = crate::modules::test_support::env_lock()
         .lock()
@@ -80,19 +113,77 @@ fn quota_and_subscription_writes_preserve_each_others_results() {
 }
 
 #[test]
+fn confirmed_free_subscription_survives_a_stale_maintenance_write() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _storage = Storage::new();
+    let mut paid = seed();
+    paid.plan_type = Some("plus".into());
+    paid.subscription_active_until = Some("2000-01-01T00:00:00Z".into());
+    save_account(&paid).unwrap();
+    let mut free = paid.clone();
+    free.plan_type = Some("free".into());
+    free.subscription_active_until = None;
+    free.subscription_query_last_attempt_at = Some(100);
+    free.subscription_query_last_success_at = Some(101);
+    save_subscription_refresh(&paid, &free).unwrap();
+
+    let stored = save_account_preserving_egress_proxy(&paid).unwrap();
+    assert_eq!(stored.plan_type.as_deref(), Some("free"));
+    assert!(stored.subscription_active_until.is_none());
+    assert_eq!(stored.subscription_query_last_success_at, Some(101));
+    assert_eq!(stored.tokens.access_token, paid.tokens.access_token);
+    assert!(!stored.requires_reauth);
+}
+
+#[test]
+fn confirmed_free_subscription_does_not_clear_date_after_a_concurrent_plan_change() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _storage = Storage::new();
+    let mut paid = seed();
+    paid.plan_type = Some("plus".into());
+    paid.subscription_active_until = Some("2000-01-01T00:00:00Z".into());
+    save_account(&paid).unwrap();
+    let mut free = paid.clone();
+    free.plan_type = Some("free".into());
+    free.subscription_active_until = None;
+    let updated =
+        save_refreshed_quota(&paid, quota(60), Some("pro".into()), Instant::now()).unwrap();
+
+    assert_eq!(
+        save_subscription_refresh(&paid, &free).unwrap_err(),
+        "CODEX_STALE_QUOTA_REQUEST"
+    );
+    let stored = load_account(&paid.id).unwrap();
+    assert_eq!(stored.plan_type, updated.plan_type);
+    assert_eq!(stored.subscription_active_until, paid.subscription_active_until);
+}
+
+#[test]
 fn changed_token_or_workspace_invalidates_delayed_quota_response() {
     let _lock = crate::modules::test_support::env_lock()
         .lock()
         .unwrap_or_else(|e| e.into_inner());
     let _storage = Storage::new();
     let original = seed();
-    for mutation in 0..4 {
+    for mutation in 0..5 {
         let mut changed = original.clone();
         match mutation {
             0 => changed.token_generation += 1,
             1 => changed.tokens.access_token = "rotated-fixture".into(),
             2 => changed.account_id = Some("workspace-b".into()),
-            _ => changed.organization_id = Some("other-org".into()),
+            3 => changed.organization_id = Some("other-org".into()),
+            _ => {
+                changed.agent_identity = Some(serde_json::from_value(serde_json::json!({
+                    "agent_runtime_id": "fixture-runtime",
+                    "agent_private_key": "fixture-key",
+                    "account_id": "workspace-a",
+                    "chatgpt_user_id": "fixture-user",
+                })).unwrap());
+            }
         }
         save_account(&changed).unwrap();
         assert!(save_refreshed_quota(&original, quota(1), None, Instant::now()).is_err());

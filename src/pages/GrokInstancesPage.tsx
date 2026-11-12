@@ -217,13 +217,7 @@ export function GrokInstancesContent({
         accountId,
         workingDir,
         switchMessage: boundAccount
-          ? t(
-              'grok.instances.accountHomeReady',
-              '已准备独立目录：{{email}}',
-              {
-                email: getGrokAccountDisplayEmail(boundAccount),
-              },
-            )
+          ? t('grok.instances.accountHomeReady', { email: getGrokAccountDisplayEmail(boundAccount) })
           : t('instances.messages.launchPrepared', '启动命令已准备'),
         launchCommand: launchInfo.launchCommand,
         regeneratingCommand: false,
@@ -915,10 +909,7 @@ export function GrokInstancesContent({
               {showLaunchInstallGuide &&
                 renderGrokCliInstallGuide(
                   launchModal.executing,
-                  t(
-                    'grok.instances.installLaunchHint',
-                    '可在终端运行以下官方命令，安装完成后重新点击终端执行。',
-                  ),
+                  t('grok.instances.installLaunchHint'),
                 )}
               <div className="form-group">
                 <label>{t('instances.columns.instance', '实例')}</label>

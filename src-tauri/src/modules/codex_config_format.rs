@@ -329,7 +329,15 @@ pub fn read_codex_config_doc_from_str(content: &str) -> Result<Document, String>
 
 pub fn sanitize_codex_config_toml_file(path: &Path) -> Result<bool, String> {
     log_codex_config_audit(path, "before-sanitize");
-    let changed = sanitize_codex_config_toml_file_once(path)?;
+    let (doc, changed) = repair_codex_config_toml_file(path)?;
+    let mut catalog_restored = false;
+    if let (Some(base_dir), Some(reference)) = (
+        path.parent(),
+        doc.get(CODEX_MODEL_CATALOG_JSON_KEY).and_then(|item| item.as_str()),
+    ) {
+        catalog_restored =
+            crate::modules::codex_account::restore_missing_managed_catalog_backup(base_dir, reference)?;
+    }
     let backup_path = path.with_file_name(format!(
         "{}.bak",
         path.file_name()
@@ -337,7 +345,7 @@ pub fn sanitize_codex_config_toml_file(path: &Path) -> Result<bool, String> {
             .unwrap_or("config.toml")
     ));
     let backup_changed = sanitize_codex_config_toml_file_once(&backup_path)?;
-    let changed_any = changed || backup_changed;
+    let changed_any = changed || backup_changed || catalog_restored;
     log_codex_config_audit(path, "after-sanitize");
     Ok(changed_any)
 }
@@ -449,6 +457,34 @@ mod tests {
             std::process::id(),
             unique
         ))
+    }
+
+    #[test]
+    fn startup_restores_only_a_missing_managed_catalog_with_a_valid_backup() {
+        let profile = tempfile::tempdir().unwrap();
+        let config_path = profile.path().join("config.toml");
+        let legacy_catalog = profile.path().join("cockpit-local-access-model-catalog.json");
+        let custom_catalog = profile.path().join("user-models.json");
+        let config = "model_provider = 'codex_local_access'\nmodel_catalog_json = 'cockpit-local-access-model-catalog.json'\n";
+        let catalog = r#"{"models":[{"slug":"provider-model"}]}"#;
+        fs::write(&config_path, config).unwrap();
+        fs::write(legacy_catalog.with_extension("json.bak"), r#"{"models":null}"#).unwrap();
+        assert!(!sanitize_codex_config_toml_file(&config_path).unwrap());
+        assert!(!legacy_catalog.exists());
+
+        fs::write(legacy_catalog.with_extension("json.bak"), catalog).unwrap();
+        assert!(sanitize_codex_config_toml_file(&config_path).unwrap());
+        assert_eq!(fs::read_to_string(&legacy_catalog).unwrap(), catalog);
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), config);
+
+        fs::write(&legacy_catalog, r#"{"models":[]}"#).unwrap();
+        assert!(!sanitize_codex_config_toml_file(&config_path).unwrap());
+        assert_eq!(fs::read_to_string(&legacy_catalog).unwrap(), r#"{"models":[]}"#);
+
+        fs::write(custom_catalog.with_extension("json.bak"), catalog).unwrap();
+        fs::write(&config_path, "model_catalog_json = 'user-models.json'\n").unwrap();
+        assert!(!sanitize_codex_config_toml_file(&config_path).unwrap());
+        assert!(!custom_catalog.exists());
     }
 
     #[test]

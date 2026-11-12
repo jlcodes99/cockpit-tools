@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  antigravityAppPathTarget,
   getAntigravityRuntimeTarget,
   hasSavedAntigravityRuntimeTarget,
+  normalizeAntigravityRuntimeTarget,
   resolveAntigravityStartupTarget,
 } from './antigravityRuntimeTarget.ts';
+
+test('desktop and IDE recovery use separate path targets and missing context defaults to IDE', () => {
+  assert.equal(antigravityAppPathTarget(normalizeAntigravityRuntimeTarget('antigravity')), 'antigravity_legacy');
+  assert.equal(antigravityAppPathTarget(normalizeAntigravityRuntimeTarget('antigravity_ide')), 'antigravity');
+  assert.equal(antigravityAppPathTarget(normalizeAntigravityRuntimeTarget(undefined)), 'antigravity');
+});
 
 test('saved client preferences survive unavailable installation discovery', () => {
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');

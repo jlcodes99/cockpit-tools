@@ -61,10 +61,11 @@ export type CodexLocalAccessAccountIneligibleReason =
   | "web_session_quota_only";
 
 export function isCodexChatCompletionsApiKeyAccount(account: CodexAccount): boolean {
-  if (!isCodexApiKeyAccount(account)) {
-    return false;
-  }
-  const wireApi = (account.api_wire_api || "").trim();
+  return isCodexApiKeyAccount(account) && codexProviderNeedsProtocolGateway(account);
+}
+
+export function codexProviderNeedsProtocolGateway(account: Pick<CodexAccount, "api_wire_api" | "api_base_url">): boolean {
+  const wireApi = (account.api_wire_api || "").trim().toLowerCase();
   if (wireApi === "chat_completions" || wireApi === "anthropic") {
     return true;
   }

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { buildCursorAccountPresentation } from '../presentation/platformAccountPresentation';
 import { getCursorPlanBadge, getCursorPlanBadgeClass, getCursorPlanDisplayName, getCursorUsage, type CursorAccount } from './cursor';
 
 const account = (extra: Partial<CursorAccount> = {}): CursorAccount => ({
@@ -45,3 +46,66 @@ test('Cursor uses the official weekly reset without falling back to the billing 
   }).allowanceResetAt, includedUsageResetsAt / 1000);
   assert.equal(usage({ ...base, included_usage_resets_at: includedUsageResetsAt }).allowanceResetAt, includedUsageResetsAt / 1000);
 });
+
+test('weekly Cursor presentation preserves true zeros, unset caps and the auto top-up rule', () => {
+  const items = cursorQuotaItems({
+    planInfo: { includedUsagePeriod: 2, includedUsageResetsAt: '1794755940000' },
+    planUsage: { totalPercentUsed: 0, autoPercentUsed: 30, apiPercentUsed: 50, limit: 4615 },
+    spendLimitUsage: { individualUsed: 1500 },
+    credits: {
+      balanceCents: 0, monthlyUsedCents: 0, monthlyLimitCents: null,
+      autoTopUpEnabled: true, autoTopUpThresholdCents: 500, autoTopUpAmountCents: 2000,
+    },
+  });
+  assert.deepEqual(items.map(({ key, valueText }) => [key, valueText]), [
+    ['total', 'cursor.quota.usedPercent:0'],
+    ['balance', '$0.00'],
+    ['monthly_used', '$0.00'],
+    ['monthly_limit', 'cursor.quota.limitUnset'],
+    ['auto_top_up', 'common.enabled'],
+  ]);
+  assert.equal(items[0].resetAt, 1794755940);
+  assert.equal(items[items.length - 1].resetText, 'cursor.quota.autoTopUpDetails:$5.00,$20.00');
+  assert.ok(items.slice(1).every(({ showProgress }) => showProgress === false));
+});
+
+test('weekly Cursor presentation never substitutes the old web total or reset for missing values', () => {
+  const items = cursorQuotaItems({
+    planInfo: { includedUsagePeriod: 'INCLUDED_USAGE_PERIOD_WEEKLY' },
+    billingCycleEnd: '2026-12-01T00:00:00Z',
+    individualUsage: { plan: { totalPercentUsed: 75 }, onDemand: { enabled: false } },
+    credits: { autoTopUpEnabled: false, monthlyLimitCents: 0 },
+  });
+  assert.equal(items[0].valueText, '—');
+  assert.equal(items[0].showProgress, false);
+  assert.equal(items[0].resetText, 'common.shared.quota.resetAt:—');
+  assert.equal(items[1].valueText, '—');
+  assert.equal(items[2].valueText, '—');
+  assert.equal(items[3].valueText, '$0.00');
+  assert.equal(items[4].valueText, 'common.disabled');
+});
+
+test('legacy Cursor presents only reported allowance and paid usage details', () => {
+  const items = cursorQuotaItems({
+    planInfo: { includedUsagePeriod: 1 },
+    planUsage: { autoPercentUsed: 0, apiPercentUsed: 37 },
+    spendLimitUsage: { individualLimit: 1000 },
+  });
+  assert.deepEqual(items.map(({ key, valueText }) => [key, valueText]), [
+    ['auto', 'cursor.quota.usedPercent:0'],
+    ['api', 'cursor.quota.usedPercent:37'],
+    ['on_demand', '—'],
+    ['sand', 'cursor.quota.usedPercent:13'],
+  ]);
+  assert.equal(items[2].resetText, '— / $10.00');
+});
+
+function cursorQuotaItems(cursor_usage_raw: unknown) {
+  const t = (key: string, options?: unknown) =>
+    options && typeof options === 'object' ? `${key}:${Object.values(options).join(',')}` : key;
+  return buildCursorAccountPresentation(account({
+    membership_type: 'premium',
+    cursor_usage_raw,
+    sand_usage: { percent_used: 13, reset_at: null, stale: false },
+  }), t).quotaItems;
+}

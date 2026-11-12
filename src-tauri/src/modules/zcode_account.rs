@@ -109,7 +109,8 @@ fn index_path() -> Result<PathBuf, String> {
 }
 
 pub fn accounts_index_path_string() -> Result<String, String> {
-    Ok(index_path()?.to_string_lossy().to_string())
+    Ok(crate::modules::provider_account_index::storage_path::<ZcodeAccountIndex>(&index_path()?)?
+        .to_string_lossy().into_owned())
 }
 
 fn safe_account_id(value: &str) -> Result<&str, String> {
@@ -132,24 +133,16 @@ fn account_path(account_id: &str) -> Result<PathBuf, String> {
 }
 
 fn load_index() -> Result<ZcodeAccountIndex, String> {
-    let path = index_path()?;
-    if !path.exists() {
-        return Ok(ZcodeAccountIndex::default());
-    }
-    let content =
-        fs::read_to_string(&path).map_err(|error| format!("读取 ZCode 账号索引失败: {}", error))?;
-    if content.trim().is_empty() {
-        return Ok(ZcodeAccountIndex::default());
-    }
-    atomic_write::parse_json_with_auto_restore(&path, &content)
-        .map_err(|error| format!("解析 ZCode 账号索引失败: {}", error))
+    crate::modules::provider_account_index::checked(
+        &index_path()?,
+        crate::modules::provider_index_maintenance::schedule,
+        |_| None,
+        |_| false,
+    )
 }
 
 fn save_index(index: &ZcodeAccountIndex) -> Result<(), String> {
-    let content = serde_json::to_string_pretty(index)
-        .map_err(|error| format!("序列化 ZCode 账号索引失败: {}", error))?;
-    atomic_write::write_string_atomic(&index_path()?, &content)
-        .map_err(|error| format!("保存 ZCode 账号索引失败: {}", error))
+    crate::modules::provider_account_index::save(&index_path()?, index)
 }
 
 pub fn load_account(account_id: &str) -> Option<ZcodeAccount> {
@@ -421,8 +414,12 @@ fn read_json_map(path: &Path) -> Result<Map<String, Value>, String> {
 
 fn resolve_default_v2_dir() -> Result<PathBuf, String> {
     let home = dirs::home_dir().ok_or_else(|| "无法获取用户主目录".to_string())?;
+    Ok(resolve_default_v2_dir_for_home(&home))
+}
+
+fn resolve_default_v2_dir_for_home(home: &Path) -> PathBuf {
     let default = home.join(".zcode/v2");
-    let setting_path = default.join(SETTINGS_FILE);
+    let setting_path = settings_path_for_home(home);
     if let Ok(content) = fs::read_to_string(setting_path) {
         if let Ok(value) = serde_json::from_str::<Value>(&content) {
             if let Some(base) = value
@@ -430,11 +427,11 @@ fn resolve_default_v2_dir() -> Result<PathBuf, String> {
                 .and_then(Value::as_str)
                 .and_then(|v| normalize_string(Some(v)))
             {
-                return Ok(PathBuf::from(base).join(".zcode/v2"));
+                return PathBuf::from(base).join(".zcode/v2");
             }
         }
     }
-    Ok(default)
+    default
 }
 
 pub fn default_credentials_path() -> Result<PathBuf, String> {
@@ -445,8 +442,13 @@ fn default_config_path() -> Result<PathBuf, String> {
     Ok(resolve_default_v2_dir()?.join(CONFIG_FILE))
 }
 
-fn default_settings_path() -> Result<PathBuf, String> {
-    Ok(resolve_default_v2_dir()?.join(SETTINGS_FILE))
+fn settings_path_for_home(home: &Path) -> PathBuf {
+    home.join(".zcode/v2").join(SETTINGS_FILE)
+}
+
+pub(super) fn default_settings_path() -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or_else(|| "无法获取用户主目录".to_string())?;
+    Ok(settings_path_for_home(&home))
 }
 
 pub fn default_data_root_dir() -> Result<PathBuf, String> {
@@ -464,8 +466,8 @@ fn config_path_for_instance_root(root: &Path) -> PathBuf {
     root.join("data/.zcode/v2").join(CONFIG_FILE)
 }
 
-fn settings_path_for_instance_root(root: &Path) -> PathBuf {
-    root.join("data/.zcode/v2").join(SETTINGS_FILE)
+pub(super) fn settings_path_for_instance_root(root: &Path) -> PathBuf {
+    settings_path_for_home(&root.join("data"))
 }
 
 fn decrypted_value(
@@ -845,18 +847,32 @@ fn write_account_to_credentials_path_with_home(
 
 pub fn inject_to_default(account_id: &str) -> Result<ZcodeAccount, String> {
     let mut value = load_account(account_id).ok_or_else(|| "ZCode 账号不存在".to_string())?;
-    if value.auth_mode == ZcodeAuthMode::ApiKey {
-        write_api_key_to_config_path(&value, &default_config_path()?)?;
-    } else {
-        write_account_to_credentials_path(&value, &default_credentials_path()?)?;
-    }
-    write_auth_mode_to_settings_path(&value.provider, value.auth_mode, &default_settings_path()?)?;
+    let home = dirs::home_dir().ok_or_else(|| "无法获取用户主目录".to_string())?;
+    write_default_account_for_home(&value, &home)?;
     value.last_used = now_ts();
     let value = upsert_account(value)?;
     let mut index = load_index()?;
     index.current_account_id = Some(value.id.clone());
     save_index(&index)?;
     Ok(value)
+}
+
+fn write_default_account_for_home(account: &ZcodeAccount, home: &Path) -> Result<(), String> {
+    let data_dir = resolve_default_v2_dir_for_home(home);
+    if account.auth_mode == ZcodeAuthMode::ApiKey {
+        write_api_key_to_config_path(account, &data_dir.join(CONFIG_FILE))?;
+    } else {
+        write_account_to_credentials_path_with_home(
+            account,
+            &data_dir.join(CREDENTIALS_FILE),
+            home,
+        )?;
+    }
+    write_auth_mode_to_settings_path(
+        &account.provider,
+        account.auth_mode,
+        &settings_path_for_home(home),
+    )
 }
 
 pub fn inject_to_instance_root(account_id: &str, root: &Path) -> Result<ZcodeAccount, String> {
@@ -1385,6 +1401,43 @@ mod tests {
         assert_eq!(restored.refresh_token, account.refresh_token);
         assert_eq!(restored.zcode_jwt_token, account.zcode_jwt_token);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn default_switch_writes_settings_to_home_and_credentials_to_custom_data() {
+        let home = tempfile::tempdir().unwrap();
+        let data = tempfile::tempdir().unwrap();
+        let setting = settings_path_for_home(home.path());
+        fs::create_dir_all(setting.parent().unwrap()).unwrap();
+        fs::write(
+            &setting,
+            json!({"dataBaseDir": data.path(), "locale":"zh-CN", "providerFamilyDomain":"bigmodel"})
+                .to_string(),
+        )
+        .unwrap();
+
+        let oauth = sample_account();
+        write_default_account_for_home(&oauth, home.path()).unwrap();
+        let active_data = data.path().join(".zcode/v2");
+        let credentials = active_data.join(CREDENTIALS_FILE);
+        let restored = account_from_credentials_path_with_home(&credentials, home.path()).unwrap();
+        assert_eq!(restored.access_token, oauth.access_token);
+        assert_eq!(read_json_map(&setting).unwrap()["providerFamilyDomain"], "zai");
+        assert!(!active_data.join(SETTINGS_FILE).exists());
+        assert!(!setting.with_file_name(CREDENTIALS_FILE).exists());
+
+        let api_key = api_key_account("bigmodel", "fixture-key", None).unwrap();
+        write_default_account_for_home(&api_key, home.path()).unwrap();
+        let settings = read_json_map(&setting).unwrap();
+        assert_eq!(settings["providerFamilyDomain"], "bigmodel");
+        assert_eq!(settings["modelProviderFamilyModes"]["bigmodel"], "apiKey");
+        assert_eq!(settings["locale"], "zh-CN");
+        assert_eq!(settings["dataBaseDir"], json!(data.path()));
+        assert_eq!(
+            read_json_map(&active_data.join(CONFIG_FILE)).unwrap()["provider"]
+                [api_key_provider_spec("bigmodel").0]["options"]["apiKey"],
+            "fixture-key"
+        );
     }
 
     #[test]

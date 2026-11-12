@@ -203,3 +203,117 @@ fn unresolved_public_key_preserves_last_good_files_even_with_internal_key() {
     assert!(!super::sidecar_manifest_path(&dir).exists());
     let _ = fs::remove_dir_all(dir);
 }
+
+#[tokio::test]
+async fn mixed_gateway_restart_reuses_key_and_publishes_bound_port_after_reauth() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _env = LocalAccessTestDataGuard::new("mixed-native-reauth");
+    let root = tempfile::tempdir().unwrap();
+    let profile = root.path();
+    let oauth_id = "oauth-mixed-fixture";
+    let key = "mixed-profile-fixture-key";
+    let runtime_id = super::MIXED_MODEL_ROUTING_RUNTIME_ID;
+    let occupied = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let old_port = occupied.local_addr().unwrap().port();
+    super::save_provider_gateway_profile_state(
+        profile,
+        runtime_id,
+        &super::ProviderGatewayProfileState {
+            api_key: key.into(),
+            port: Some(old_port),
+            created_at: 1,
+            updated_at: 1,
+        },
+    )
+    .unwrap();
+    let config_path = super::profile_config_path(profile);
+    let original = b"model_provider = 'openai'\n";
+    fs::write(&config_path, original).unwrap();
+    let provider = CodexAccount::new_api_key(
+        "mixed-provider-fixture".into(),
+        "relay@example.test".into(),
+        "fixture-upstream-key".into(),
+        CodexApiProviderMode::Custom,
+        Some("https://relay.example.test/v1".into()),
+        None,
+        Some("Fixture relay".into()),
+        vec!["fixture-model".into()],
+    );
+    crate::modules::codex_account::save_account(&provider).unwrap();
+    let routing = super::CodexInstanceModelRouting {
+        enabled: true,
+        version: 1,
+        routes: vec![super::CodexInstanceApiRoute {
+            id: "fixture-route".into(),
+            namespace: "relay".into(),
+            provider_account_id: provider.id,
+            enabled: true,
+            selected_models: None,
+            extra_models: None,
+        }],
+    };
+    let error = super::ensure_mixed_model_gateway_for_dir(profile, oauth_id, &routing)
+        .await
+        .unwrap_err();
+    assert!(error.contains(oauth_id), "{error}");
+    assert_eq!(fs::read(&config_path).unwrap(), original);
+
+    let oauth = CodexAccount::new(
+        oauth_id.into(),
+        "oauth@example.test".into(),
+        CodexTokens {
+            id_token: make_test_jwt(json!({"email":"oauth@example.test","exp":4_102_444_800i64})),
+            access_token: make_test_jwt(json!({"sub":"oauth-fixture","exp":4_102_444_800i64})),
+            refresh_token: Some("fixture-refresh".into()),
+        },
+    );
+    crate::modules::codex_account::save_account(&oauth).unwrap();
+    super::ensure_mixed_model_gateway_for_dir(profile, oauth_id, &routing)
+        .await
+        .unwrap();
+
+    let runtime_key = super::provider_gateway_runtime_key(profile, runtime_id);
+    let port = {
+        let runtimes = super::provider_gateway_runtime_store().lock().await;
+        let runtime = &runtimes[&runtime_key];
+        assert_eq!(runtime.oauth_account_ids, [oauth_id]);
+        let collection = runtime.collection.as_ref().unwrap();
+        assert_eq!(collection.api_keys[0].account_ids, [oauth_id]);
+        assert_eq!(collection.api_key, key);
+        runtime.actual_port.unwrap()
+    };
+    let persisted = super::load_provider_gateway_profile_state(profile, runtime_id)
+        .unwrap()
+        .unwrap();
+    assert_ne!(port, old_port);
+    assert_eq!(persisted.port, Some(port));
+    assert_eq!(persisted.api_key, key);
+    let doc = fs::read_to_string(&config_path)
+        .unwrap()
+        .parse::<Document>()
+        .unwrap();
+    let provider_config = &doc["model_providers"]["codex_local_access"];
+    let base_url = provider_config["base_url"].as_str().unwrap();
+    assert_eq!(url::Url::parse(base_url).unwrap().port(), Some(port));
+    assert_eq!(provider_config["experimental_bearer_token"].as_str(), Some(key));
+
+    let response = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap()
+        .get(format!("{base_url}/models"))
+        .bearer_auth(key)
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+    let catalog: Value = response.json().await.unwrap();
+    assert!(catalog["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|model| model["id"] == "relay/fixture-model"));
+    super::stop_provider_gateway_runtime(&runtime_key).await.unwrap();
+}

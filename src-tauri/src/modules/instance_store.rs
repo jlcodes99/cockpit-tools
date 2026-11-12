@@ -24,44 +24,14 @@ pub struct UpdateInstanceParams {
     pub bind_account_id: Option<Option<String>>,
 }
 
-pub fn load_instance_store(path: &Path, file_name: &str) -> Result<InstanceStore, String> {
-    if !path.exists() {
-        return Ok(InstanceStore::new());
-    }
-
-    let content = fs::read_to_string(path).map_err(|e| format!("读取实例配置失败: {}", e))?;
-    if content.trim().is_empty() {
-        return Ok(InstanceStore::new());
-    }
-
-    match serde_json::from_str(&content) {
-        Ok(store) => Ok(store),
-        Err(error) => {
-            match crate::modules::atomic_write::quarantine_file(path, "invalid-json") {
-                Ok(Some(backup_path)) => crate::modules::logger::log_warn(&format!(
-                    "实例配置解析失败，已隔离并使用空实例列表: file={}, path={}, backup={}, error={}",
-                    file_name,
-                    path.display(),
-                    backup_path.display(),
-                    error
-                )),
-                Ok(None) => crate::modules::logger::log_warn(&format!(
-                    "实例配置解析失败，文件已不存在，使用空实例列表: file={}, path={}, error={}",
-                    file_name,
-                    path.display(),
-                    error
-                )),
-                Err(backup_error) => crate::modules::logger::log_warn(&format!(
-                    "实例配置解析失败，隔离失败，使用空实例列表: file={}, path={}, parse_error={}, backup_error={}",
-                    file_name,
-                    path.display(),
-                    error,
-                    backup_error
-                )),
-            }
-            Ok(InstanceStore::new())
+pub fn load_instance_store(path: &Path, _file_name: &str) -> Result<InstanceStore, String> {
+    let (store, complete) = super::instance_registry::read(path, None)?;
+    if !complete {
+        if let Some(root) = path.parent() {
+            schedule_registries(root);
         }
     }
+    Ok(store)
 }
 
 pub fn save_instance_store(
@@ -69,13 +39,41 @@ pub fn save_instance_store(
     _file_name: &str,
     store: &InstanceStore,
 ) -> Result<(), String> {
-    let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
-    let data_dir = path.parent().ok_or("无法获取实例配置目录")?;
-    fs::create_dir_all(data_dir).map_err(|e| format!("创建实例配置目录失败: {}", e))?;
-    let content =
-        serde_json::to_string_pretty(store).map_err(|e| format!("序列化实例配置失败: {}", e))?;
-    crate::modules::atomic_write::write_string_atomic(path, &content)
-        .map_err(|e| format!("保存实例配置失败: {}", e))
+    let _creation_guard = super::instance_storage_cleanup::protect_instance_creation()?;
+    super::instance_registry::save(path, store, false)
+}
+
+pub(crate) fn schedule_legacy_registries() -> Result<(), String> {
+    schedule_registries(&super::account::get_data_dir()?);
+    Ok(())
+}
+
+fn schedule_registries(root: &Path) {
+    let mut remaining: std::collections::VecDeque<_> = super::instance_registry::REGISTRIES
+        .iter()
+        .map(|name| (root.join(name), 0_u8))
+        .collect();
+    super::background_maintenance::schedule(
+        format!("instance-registries:{}", root.display()),
+        move || {
+            if let Some((path, failures)) = remaining.pop_front() {
+                match super::instance_registry::migrate_batch(&path) {
+                    Ok(false) => remaining.push_back((path, 0)),
+                    Ok(true) => {}
+                    Err(error) => {
+                        super::logger::log_warn(&format!(
+                            "[InstanceRegistry] 迁移失败: path={}, error={error}",
+                            path.display()
+                        ));
+                        if failures < 4 {
+                            remaining.push_back((path, failures + 1));
+                        }
+                    }
+                }
+            }
+            Ok(remaining.is_empty())
+        },
+    );
 }
 
 pub fn normalize_name(name: &str) -> Result<String, String> {

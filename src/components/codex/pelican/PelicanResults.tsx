@@ -14,6 +14,7 @@ import { pelicanError } from './pelicanUtils';
 import { pelicanPreviewDocument } from './pelicanPreviewDocument';
 import { PelicanReference } from './PelicanReference';
 import { PelicanScore } from './PelicanScore';
+import { pelicanAccountContext } from './pelicanSetupModel';
 
 // Kept for existing account-group listeners; results no longer edit account groups.
 export const PELICAN_GROUPS_CHANGED = 'codex-pelican-groups-changed';
@@ -52,7 +53,7 @@ function formatPelicanPercent(value: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
-function PelicanItem({ batch, item, mask }: { batch: CodexPelicanBatch; item: CodexPelicanItem; mask: (value: string) => string }) {
+function PelicanItem({ batch, item, label }: { batch: CodexPelicanBatch; item: CodexPelicanItem; label: string }) {
   const { t } = useTranslation();
   const [artifact, setArtifact] = useState<CodexPelicanArtifact | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -107,11 +108,11 @@ function PelicanItem({ batch, item, mask }: { batch: CodexPelicanBatch; item: Co
   const textReply = terminal && item.status === 'completed' && !html ? artifact?.rawReply : null;
   const document = html ? pelicanPreviewDocument(html) : undefined;
   return <div className="pelican-canvas-cell" ref={cellRef}>
-    {html ? <button ref={previewRef} type="button" className="pelican-canvas" aria-label={`${mask(item.accountEmail || item.accountId)} · ${t('pelican.preview')}`}
+    {html ? <button ref={previewRef} type="button" className="pelican-canvas" aria-label={`${label} · ${t('pelican.preview')}`}
       onClick={() => { error.clear(); setSource('preview'); setDetailsOpen(true); }}>
-      <iframe title={mask(item.accountEmail || item.accountId)} srcDoc={document} sandbox="allow-scripts" tabIndex={-1} loading="lazy" />
+      <iframe title={label} srcDoc={document} sandbox="allow-scripts" tabIndex={-1} loading="lazy" />
     </button> : textReply ? <button ref={previewRef} type="button" className="pelican-canvas pelican-text-canvas"
-      aria-label={`${mask(item.accountEmail || item.accountId)} · ${t('pelican.rawReply')}`}
+      aria-label={`${label} · ${t('pelican.rawReply')}`}
       onClick={() => { error.clear(); setSource('rawReply'); setDetailsOpen(true); }}>
       <span>{textReply.slice(0, 2000)}</span>
     </button> : <div className={`pelican-canvas-placeholder${retryable ? ' is-failed' : ''}`}>
@@ -145,7 +146,7 @@ function PelicanItem({ batch, item, mask }: { batch: CodexPelicanBatch; item: Co
           if (last && !event.shiftKey && window.document.activeElement === last) { event.preventDefault(); first.focus(); }
         }
       }}>
-        <header className="pelican-detail-header"><h3 id={`pelican-detail-${item.id}`}>{mask(item.accountEmail || item.accountId)}</h3><button className="btn btn-secondary" autoFocus onClick={closeDetails}>{t('common.close')}</button></header>
+        <header className="pelican-detail-header"><h3 id={`pelican-detail-${item.id}`}>{label}</h3><button className="btn btn-secondary" autoFocus onClick={closeDetails}>{t('common.close')}</button></header>
         <div className="pelican-detail-body">
           <PelicanScore prompt={batch.prompt} reply={artifact?.rawReply} status={item.status} />
           <div className="pelican-actions pelican-detail-actions">
@@ -173,7 +174,8 @@ export function PelicanResults({ batch, mask }: { batch: CodexPelicanBatch; mask
   const accounts = useCodexAccountStore((state) => state.accounts);
   const updateAccountTags = useCodexAccountStore((state) => state.updateAccountTags);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
-  const editingAccount = accounts.find((account) => account.id === editingAccountId);
+  const accountsById = useMemo(() => new Map(accounts.map((account) => [account.id, account])), [accounts]);
+  const editingAccount = editingAccountId ? accountsById.get(editingAccountId) : undefined;
   const availableTags = useMemo(() => [...new Set(accounts.flatMap((account) =>
     (account.tags ?? []).map((tag) => tag.trim().toLowerCase()).filter(Boolean),
   ))].sort((a, b) => a.localeCompare(b)), [accounts]);
@@ -189,11 +191,18 @@ export function PelicanResults({ batch, mask }: { batch: CodexPelicanBatch; mask
       <PelicanReference prompt={batch.prompt} />
       <div className="pelican-canvas-table" aria-label={t('pelican.results')}>
         {batch.items.map((item) => {
-          const account = accounts.find((entry) => entry.id === item.accountId);
+          const account = accountsById.get(item.accountId);
+          const email = item.accountEmail && item.accountEmail !== item.accountId
+            ? item.accountEmail : account?.email || item.accountId;
+          const context = item.provider ? [] : pelicanAccountContext(account, item.accountId, email).map(mask);
+          const label = [mask(email), ...context].join(' · ');
           return <article className="pelican-account-tile" key={item.id}>
-            <h3><span className="pelican-account-email">{mask(item.accountEmail || item.accountId)}</span>{account && <span className="pelican-account-plan"><PelicanPlanBadge account={account} /></span>}</h3>
+            <h3><span className="pelican-result-identity" title={label}>
+              <span className="pelican-account-email">{mask(email)}</span>
+              {context.length > 0 && <small className="pelican-account-context">{context.join(' · ')}</small>}
+            </span>{account && <span className="pelican-account-plan"><PelicanPlanBadge account={account} /></span>}</h3>
             {item.provider && <div className="pelican-provider-attribution"><span>{t('codex.modelProviders.selectSavedApiKey')}: {mask(item.provider.apiKeyName || item.provider.apiKeyId)}</span><span>{item.provider.model}</span></div>}
-            <PelicanItem batch={batch} item={item} mask={mask} />
+            <PelicanItem batch={batch} item={item} label={label} />
             {account && <footer className="pelican-result-tags">
               <div className="pelican-result-tag-list" aria-label={t('accounts.tagModal.title')}>
                 {(account.tags ?? []).map((tag) => <span key={tag} className="tag-pill" title={tag}>{tag}</span>)}

@@ -1,17 +1,60 @@
 use serde::{Deserialize, Serialize};
 
+#[cfg(test)]
+#[path = "ssh_server_tests.rs"]
+mod tests;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(from = "SshServerStoreWire")]
 pub struct SshServerStore {
     pub version: String,
-    pub selected_server_id: Option<String>,
+    pub selected_server_ids: Vec<String>,
     pub servers: Vec<SshServer>,
+}
+
+#[derive(Deserialize)]
+struct SshServerStoreWire {
+    version: String,
+    #[serde(default)]
+    selected_server_ids: Option<Vec<String>>,
+    #[serde(default)]
+    selected_server_id: Option<String>,
+    servers: Vec<SshServer>,
+}
+
+impl From<SshServerStoreWire> for SshServerStore {
+    fn from(wire: SshServerStoreWire) -> Self {
+        Self {
+            version: wire.version,
+            // Explicit [] means disabled; only older files lack this field.
+            selected_server_ids: wire
+                .selected_server_ids
+                .unwrap_or_else(|| wire.selected_server_id.into_iter().collect()),
+            servers: wire.servers,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SshServerList {
+    pub selected_server_ids: Vec<String>,
+    pub servers: Vec<SshServer>,
+}
+
+impl From<SshServerStore> for SshServerList {
+    fn from(store: SshServerStore) -> Self {
+        Self {
+            selected_server_ids: store.selected_server_ids,
+            servers: store.servers,
+        }
+    }
 }
 
 impl Default for SshServerStore {
     fn default() -> Self {
         Self {
-            version: "1".to_string(),
-            selected_server_id: None,
+            version: "2".to_string(),
+            selected_server_ids: Vec::new(),
             servers: Vec::new(),
         }
     }

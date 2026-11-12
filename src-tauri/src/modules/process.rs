@@ -5,6 +5,7 @@ include!("process_launch_candidates.rs");
 include!("process_codex_launch_proxy.rs");
 include!("process_passive_wsl.rs");
 include!("process_path_resolution.rs");
+include!("process_workbuddy_launch_path.rs");
 include!("process_codex_path_recovery.rs");
 include!("process_codex_windows_launch.rs");
 include!("process_codex_windows_default_launch.rs");
@@ -13,6 +14,8 @@ include!("process_codex_launch_confirmation.rs");
 #[path = "process_codex_package_launcher.rs"]
 pub(crate) mod codex_package_launcher;
 include!("process_codex_app_server.rs");
+#[cfg(target_os = "macos")]
+include!("process_antigravity_macos.rs");
 include!("process_detection_matching.rs");
 #[cfg(any(test, target_os = "windows"))]
 #[path = "process_codex_probe_cache.rs"]

@@ -1,12 +1,13 @@
 {
   "name": "cockpit-tools",
   "private": true,
-  "version": "1.3.81",
+  "version": "1.3.82",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "test": "node scripts/run_ts_tests.cjs",
     "test:rust": "cargo test --package cockpit-tools --lib",
+    "clean:rust:debug": "cargo clean --profile dev",
     "test:all": "npm test && npm run test:release && npm run test:rust",
     "test:release": "node --test scripts/release/*.test.cjs",
     "proxy-engine:prepare": "node scripts/prepare-proxy-engine.cjs",

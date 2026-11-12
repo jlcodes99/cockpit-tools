@@ -438,7 +438,7 @@ fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, St
     Ok(value)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(test)))]
 fn build_codex_keychain_account(base_dir: &Path) -> String {
     let resolved_home = fs::canonicalize(base_dir).unwrap_or_else(|_| base_dir.to_path_buf());
     let mut hasher = Sha256::new();
@@ -448,7 +448,7 @@ fn build_codex_keychain_account(base_dir: &Path) -> String {
     format!("cli|{}", &digest_hex[..16])
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(test)))]
 fn write_codex_keychain_to_dir(base_dir: &Path, account: &CodexAccount) -> Result<(), String> {
     if account.is_api_key_auth() {
         return Ok(());
@@ -499,7 +499,8 @@ fn write_codex_keychain_to_dir(base_dir: &Path, account: &CodexAccount) -> Resul
     Ok(())
 }
 
-#[cfg(not(target_os = "macos"))]
+// Unit tests use temporary profiles and must not touch the user's keychain.
+#[cfg(any(not(target_os = "macos"), test))]
 fn write_codex_keychain_to_dir(_base_dir: &Path, _account: &CodexAccount) -> Result<(), String> {
     Ok(())
 }

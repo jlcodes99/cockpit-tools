@@ -5,7 +5,7 @@ import { listModelProviderModels } from "../../services/modelProviderUsageServic
 import { ModalErrorMessage } from "../ModalErrorMessage";
 
 export function CodexProviderModelFetch({ baseUrl, apiKey, wireApi, authScheme, disabled, onModels }: {
-  baseUrl: string; apiKey: string; wireApi: string; authScheme: "x-api-key" | "bearer";
+  baseUrl: string; apiKey: string; wireApi?: string; authScheme?: "x-api-key" | "bearer";
   disabled?: boolean; onModels: (models: string[]) => void;
 }) {
   const { t } = useTranslation();

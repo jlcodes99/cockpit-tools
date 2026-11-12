@@ -59,8 +59,14 @@ async fn host_results_continue_after_quota_failure_and_restart_without_losing_hi
                     .collect::<Vec<_>>(),
                 ["a", "a", "b"]
             );
-            assert_eq!(sent[0].body["input"], first["input"]);
-            assert_fresh(&sent[1], &sent[2], json!(input));
+            for index in [0, 1, 3] {
+                assert_eq!(sent[0].body["input"][index], first["input"][index]);
+            }
+            assert_eq!(sent[0].body["input"][2]["content"][0]["text"], format!(
+                "[External tool result: {namespace}.create_thread]\nOriginal task handoff\n  preserve whitespace  "));
+            // HTTP projects standalone receipts; both routes retain the same
+            // projected input while the durable checkpoint below stays original.
+            assert_fresh(&sent[1], &sent[2], sent[1].body["input"].clone());
             assert_eq!(fixture.active().unwrap().0, "b");
             fixture.assert_owner("host-a", "a");
             fixture.assert_owner("host-b", "b");
@@ -99,7 +105,7 @@ async fn host_results_continue_after_quota_failure_and_restart_without_losing_hi
 }
 
 #[tokio::test]
-async fn host_results_invalid_ids_reach_upstream_without_unlocking_cross_account_history() {
+async fn host_results_rejections_preserve_errors_without_unlocking_cross_account_history() {
     let upstream_error = json!({
         "type":"invalid_request_error",
         "code":"invalid_request_error",
@@ -119,7 +125,7 @@ async fn host_results_invalid_ids_reach_upstream_without_unlocking_cross_account
         .enumerate()
     {
         let mut item = host_result(namespace, "create_thread");
-        item["call_id"] = id;
+        item["call_id"] = id.clone();
         let original = body(
             vec![
                 message("user", "old task"),
@@ -138,7 +144,14 @@ async fn host_results_invalid_ids_reach_upstream_without_unlocking_cross_account
         let sent = fixture.sent();
         assert_eq!(sent.len(), index + 1, "ordinary forwarding must not retry");
         assert!(sent.iter().all(|request| request.account == "a"));
-        assert_eq!(sent[index].body["input"], original["input"]);
+        if id.is_null() || id == " " {
+            assert_eq!(sent[index].body["input"][2]["type"], "message");
+            for unchanged in [0, 1] {
+                assert_eq!(sent[index].body["input"][unchanged], original["input"][unchanged]);
+            }
+        } else {
+            assert_eq!(sent[index].body["input"], original["input"]);
+        }
         assert_eq!(fixture.host.selections.lock().unwrap().len(), index + 1);
         assert!(fixture.host.failures.lock().unwrap().is_empty());
         assert!(fixture.active().is_none());

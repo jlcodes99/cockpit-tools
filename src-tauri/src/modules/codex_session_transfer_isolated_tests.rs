@@ -127,6 +127,106 @@ fn isolated_export_import_trash_restore_roundtrip_keeps_bytes_index_and_package(
 }
 
 #[test]
+#[ignore = "requires disposable HOME, official app-server and OS-denied networking"]
+fn offline_zip_import_is_visible_to_official_client_in_clean_profile() {
+    assert_eq!(
+        std::env::var("COCKPIT_CODEX_OFFLINE_INTEGRATION").as_deref(),
+        Ok("1")
+    );
+    let root = PathBuf::from(std::env::var_os("COCKPIT_CODEX_OFFLINE_ROOT").unwrap());
+    let home = PathBuf::from(std::env::var_os("HOME").unwrap());
+    let target = modules::codex_instance::get_default_codex_home().unwrap();
+    assert!(root.is_absolute() && home.starts_with(&root) && target.starts_with(&root));
+    assert!(modules::account::get_data_dir().unwrap().starts_with(&root));
+    let denied = std::net::TcpStream::connect_timeout(
+        &"127.0.0.1:9".parse().unwrap(),
+        std::time::Duration::from_millis(100),
+    )
+    .unwrap_err();
+    assert!(matches!(denied.raw_os_error(), Some(1 | 13)), "{denied}");
+
+    let source = root.join("previous-install");
+    let project = source.join("original-project");
+    fs::create_dir_all(&project).unwrap();
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let relative = format!("sessions/2026/10/11/rollout-2026-10-11T03-00-00-{session_id}.jsonl");
+    let rollout = source.join(&relative);
+    fs::create_dir_all(rollout.parent().unwrap()).unwrap();
+    let original = [
+        json!({"timestamp":"2026-10-11T03:00:00Z","type":"session_meta","payload":{
+            "id":session_id,"timestamp":"2026-10-11T03:00:00Z","cwd":project,
+            "originator":"codex_cli_rs","cli_version":"0.162.0-alpha.17.2","source":"cli","model_provider":"openai"
+        }}),
+        json!({"timestamp":"2026-10-11T03:00:01Z","type":"event_msg","payload":{
+            "type":"user_message","message":"Synthetic restored session","images":[],"local_images":[],"text_elements":[]
+        }}),
+    ].map(|row| format!("{row}\n")).concat();
+    fs::write(&rollout, &original).unwrap();
+    fs::write(source.join(SESSION_INDEX_FILE), format!("{}\n", json!({
+        "id":session_id,"thread_name":"Synthetic restored session","updated_at":"2026-10-11T03:00:01Z"
+    }))).unwrap();
+
+    let mut store = modules::codex_instance::load_instance_store().unwrap();
+    store.instances.push(crate::models::InstanceProfile {
+        id: "previous-install".into(),
+        name: "Previous install".into(),
+        user_data_dir: source.to_string_lossy().into_owned(),
+        working_dir: None,
+        extra_args: String::new(),
+        bind_account_id: None,
+        model_routing: None,
+        launch_mode: crate::models::InstanceLaunchMode::App,
+        app_speed: crate::models::codex::CodexAppSpeed::Standard,
+        created_at: 1,
+        last_launched_at: None,
+        last_pid: None,
+    });
+    modules::codex_instance::save_instance_store(&store).unwrap();
+    let package = root
+        .join("previous-sessions.zip")
+        .to_string_lossy()
+        .into_owned();
+    let selected = vec![session_id.clone()];
+    let export = export_sessions(selected.clone(), package.clone(), None, None).unwrap();
+    assert_eq!(export.exported_session_count, 1);
+
+    let mut store = modules::codex_instance::load_instance_store().unwrap();
+    store.instances.clear();
+    modules::codex_instance::save_instance_store(&store).unwrap();
+    fs::remove_dir_all(source).unwrap();
+    fs::create_dir_all(&target).unwrap();
+    fs::write(target.join("config.toml"), "cli_auth_credentials_store = 'file'\n[analytics]\nenabled = false\n[feedback]\nenabled = false\n").unwrap();
+    assert!(!target.join("state_5.sqlite").exists());
+    let imported = import_sessions(package, None, selected, HashMap::new(), None, None).unwrap();
+    assert_eq!(imported.target_instance_id, DEFAULT_INSTANCE_ID);
+    assert_eq!(imported.imported_session_count, 1, "{}", imported.message);
+    assert!(
+        !imported.message.contains("索引或项目归属更新未完成"),
+        "{}",
+        imported.message
+    );
+    modules::codex_session_visibility::repair_session_visibility_quick_for_instance(
+        DEFAULT_INSTANCE_ID,
+        "Clean install",
+        &target,
+        true,
+    )
+    .unwrap();
+    assert_eq!(fs::read_to_string(target.join(relative)).unwrap(), original);
+    assert!(!target.join("auth.json").exists());
+    let db = rusqlite::Connection::open(target.join("state_5.sqlite")).unwrap();
+    let count: i64 = db
+        .query_row(
+            "SELECT COUNT(*) FROM threads WHERE id=?1",
+            [&session_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 1);
+    println!("IMPORTED_FIXTURE_THREAD_ID={session_id}");
+}
+
+#[test]
 fn isolated_import_rejects_manifest_id_mismatch_without_publishing_file() {
     let base = make_temp_dir("codex-session-import-id-mismatch");
     let (instance, snapshot, mut manifest) = isolated_export_fixture(&base, "actual-id");
@@ -234,4 +334,94 @@ fn isolated_import_retry_repairs_only_identical_unindexed_history() {
     assert!(repair_imported_session_index(&root, &mut archive, item, &mapped, Some("/mapped/project")).unwrap());
     assert_eq!(read_session_index_map(&root).unwrap()["retry-index"]["cwd"], "/mapped/project");
     fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
+fn paginated_session_transfer_keeps_only_the_selected_branch_history() {
+    let base = tempfile::tempdir().unwrap();
+    let session_id = "3a2cfad6-6e2c-4637-9570-8022128b3c03";
+    let source_id = "3a2cfad6-6e2c-4637-9570-8022128b3c01";
+    let physical_id = "3a2cfad6-6e2c-4637-9570-8022128b3c02";
+    let child_physical = "3a2cfad6-6e2c-4637-9570-8022128b3c04";
+    let (instance, mut snapshot, mut manifest) = isolated_export_fixture(base.path(), session_id);
+    let source_path = instance.data_dir.join(format!(
+        "archived_sessions/rollout-2026-10-11T00-00-00-{source_id}_{physical_id}.jsonl.zst"
+    ));
+    fs::create_dir_all(source_path.parent().unwrap()).unwrap();
+    let line = |ordinal: u64, kind: &str, payload: JsonValue| {
+        format!(
+            "{}\n",
+            json!({
+                "timestamp": "2026-10-11T00:00:00Z", "ordinal": ordinal, "type": kind, "payload": payload,
+            })
+        )
+    };
+    let message = |ordinal, text: &str| {
+        line(
+            ordinal,
+            "event_msg",
+            json!({
+                "type": "item_completed", "item": {"type":"UserMessage", "id": "message",
+                    "content": [{"type": "text", "text": text}]},
+            }),
+        )
+    };
+    let prefix = line(
+        0,
+        "session_meta",
+        json!({"id": source_id, "history_mode": "paginated"}),
+    ) + &message(1, "ancestor included 中文🙂");
+    let source = prefix.clone() + &message(2, "unselected ancestor tail");
+    let compressed = zstd::stream::encode_all(source.as_bytes(), 0).unwrap();
+    fs::write(&source_path, &compressed).unwrap();
+
+    fs::remove_file(&snapshot.rollout_path).unwrap();
+    snapshot.rollout_path.set_file_name(format!(
+        "rollout-2026-10-11T00-01-00-{session_id}_{child_physical}.jsonl"
+    ));
+    let child = line(
+        2,
+        "session_meta",
+        json!({
+            "id": session_id, "cwd": "/tmp/project", "history_mode": "paginated",
+            "history_base": {"thread_id": physical_id, "end_byte_offset": prefix.len(), "end_ordinal_exclusive": 2},
+        }),
+    ) + &message(3, "selected branch");
+    fs::write(&snapshot.rollout_path, &child).unwrap();
+    let original_child = snapshot.rollout_path.clone();
+
+    let (_staging, prepared) = prepare_export_session_entries(vec![(instance, snapshot)]).unwrap();
+    let item = &mut manifest.sessions[0];
+    let staged = &prepared[0].1;
+    (item.size_bytes, item.sha256) = sha256_file(&staged.rollout_path).unwrap();
+    item.relative_rollout_path = snapshot_relative_rollout_path(staged);
+    assert!(item
+        .relative_rollout_path
+        .ends_with(&format!("-{session_id}.jsonl")));
+    let package = base.path().join("portable.zip");
+    write_session_export_package(&package, &manifest, &prepared, None, None).unwrap();
+
+    let target = base.path().join("different-computer");
+    let item = &manifest.sessions[0];
+    let destination = resolve_import_target_rollout_path(&target, item);
+    let mut archive = ZipArchive::new(File::open(package).unwrap()).unwrap();
+    write_imported_rollout_from_archive(&mut archive, item, &destination, Some("/tmp/new-project"))
+        .unwrap();
+    let imported = fs::read_to_string(destination).unwrap();
+    let records = imported
+        .lines()
+        .map(|line| serde_json::from_str::<JsonValue>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(records[0]["payload"]["cwd"], "/tmp/new-project");
+    assert_eq!(records[0]["payload"]["history_mode"], "legacy");
+    assert!(records[0]["payload"].get("history_base").is_none());
+    let messages = records
+        .iter()
+        .filter(|record| record["payload"]["type"] == "user_message")
+        .map(|record| record["payload"]["message"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(messages, ["ancestor included 中文🙂", "selected branch"]);
+    assert!(!imported.contains("unselected ancestor tail"));
+    assert_eq!(fs::read(source_path).unwrap(), compressed);
+    assert_eq!(fs::read_to_string(original_child).unwrap(), child);
 }

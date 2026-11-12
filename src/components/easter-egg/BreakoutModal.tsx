@@ -3,7 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ALL_PLATFORM_IDS, PlatformId } from '../../types/platform';
 import { renderPlatformIcon } from '../../utils/platformMeta';
+import { readPlatformLayout } from '../../utils/uiPreferences';
 import { useEscClose } from '../../hooks/useEscClose';
+import { useDurableUiSetting } from '../../hooks/useDurableUiSetting';
+import { hydrateDurableUiSettings, readDurableUiSetting, saveDurableUiSetting } from '../../utils/durableUiSettings';
 import './BreakoutModal.css';
 
 interface BreakoutModalProps {
@@ -142,7 +145,6 @@ const MAX_SEPARATOR_Y = 728;
 const BREAKOUT_HISTORY_STORAGE_KEY = 'agtools.breakout.history';
 const BREAKOUT_HISTORY_LIMIT = 200;
 const BREAKOUT_DROP_ICON_ASSIGN_STORAGE_KEY = 'agtools.breakout.drop_icon_assign.v1';
-const PLATFORM_LAYOUT_STORAGE_KEY = 'agtools.platform_layout.v1';
 const FALLBACK_PLATFORM_ICON_ORDER: PlatformId[] = ['antigravity', 'codex', 'github-copilot', 'windsurf'];
 
 const BASE_DROP_ICON_MAP: DropIconMap = {
@@ -257,32 +259,12 @@ function mergePlatformIdList(target: PlatformId[], source: PlatformId[]): Platfo
   return next;
 }
 
-function saveDropIconAssignmentState(
-  dropIconMap: DropIconMap,
-  seenPlatformIds: PlatformId[],
-  nextDropTypeIndex: number,
-) {
-  try {
-    localStorage.setItem(
-      BREAKOUT_DROP_ICON_ASSIGN_STORAGE_KEY,
-      JSON.stringify({
-        dropIconMap,
-        seenPlatformIds,
-        nextDropTypeIndex,
-      }),
-    );
-  } catch {
-    // ignore localStorage write failure
-  }
-}
-
-function loadBreakoutDropIconMap(): DropIconMap {
+function resolveBreakoutDropIconAssignment(raw: string | null) {
   let dropIconMap: DropIconMap = { ...BASE_DROP_ICON_MAP };
   let seenPlatformIds: PlatformId[] = [...BASE_DROP_ICON_PLATFORM_IDS];
   let nextDropTypeIndex = 0;
 
   try {
-    const raw = localStorage.getItem(BREAKOUT_DROP_ICON_ASSIGN_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as {
         dropIconMap?: unknown;
@@ -315,8 +297,7 @@ function loadBreakoutDropIconMap(): DropIconMap {
     nextDropTypeIndex = (nextDropTypeIndex + 1) % DROP_TYPES.length;
   }
 
-  saveDropIconAssignmentState(dropIconMap, seenPlatformIds, nextDropTypeIndex);
-  return dropIconMap;
+  return { dropIconMap, seenPlatformIds, nextDropTypeIndex };
 }
 
 function buildDropTypeOrder(platformOrder: PlatformId[], dropIconMap: DropIconMap): DropType[] {
@@ -339,7 +320,7 @@ function loadDropTypeOrderSnapshot(dropIconMap: DropIconMap): DropType[] {
     return buildDropTypeOrder(FALLBACK_PLATFORM_ICON_ORDER, dropIconMap);
   }
   try {
-    const raw = window.localStorage.getItem(PLATFORM_LAYOUT_STORAGE_KEY);
+    const raw = readPlatformLayout();
     if (!raw) return buildDropTypeOrder(FALLBACK_PLATFORM_ICON_ORDER, dropIconMap);
     const parsed = JSON.parse(raw) as { orderedPlatformIds?: unknown };
     if (!Array.isArray(parsed.orderedPlatformIds)) {
@@ -1548,9 +1529,8 @@ function normalizeHistoryRecord(value: unknown): GameHistoryRecord | null {
   };
 }
 
-function loadBreakoutHistoryRecords(): GameHistoryRecord[] {
+function parseBreakoutHistoryRecords(raw: string | null): GameHistoryRecord[] {
   try {
-    const raw = localStorage.getItem(BREAKOUT_HISTORY_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -1565,12 +1545,14 @@ function loadBreakoutHistoryRecords(): GameHistoryRecord[] {
   }
 }
 
-function saveBreakoutHistoryRecords(records: GameHistoryRecord[]) {
-  try {
-    localStorage.setItem(BREAKOUT_HISTORY_STORAGE_KEY, JSON.stringify(records));
-  } catch {
-    // ignore localStorage write failure
-  }
+let historyWrites = Promise.resolve();
+
+function updateBreakoutHistoryRecords(update: (records: GameHistoryRecord[]) => GameHistoryRecord[]) {
+  historyWrites = historyWrites.then(async () => {
+    await hydrateDurableUiSettings();
+    const records = parseBreakoutHistoryRecords(readDurableUiSetting(BREAKOUT_HISTORY_STORAGE_KEY));
+    await saveDurableUiSetting(BREAKOUT_HISTORY_STORAGE_KEY, JSON.stringify(update(records)), true);
+  }).catch(error => console.warn('[Breakout history]', error));
 }
 
 function formatHistoryDuration(durationMs: number): string {
@@ -1629,11 +1611,11 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
   const [isPaused, setIsPaused] = useState(false);
   const [isStarted, setIsStarted] = useState(false);
   const [isBallLaunched, setIsBallLaunched] = useState(false);
-  const [historyRecords, setHistoryRecords] = useState<GameHistoryRecord[]>(() =>
-    loadBreakoutHistoryRecords(),
-  );
-  const [dropIconMap] = useState<DropIconMap>(() => loadBreakoutDropIconMap());
-  const [dropTypeOrder] = useState<DropType[]>(() => loadDropTypeOrderSnapshot(dropIconMap));
+  const rawHistory = useDurableUiSetting(BREAKOUT_HISTORY_STORAGE_KEY);
+  const historyRecords = useMemo(() => parseBreakoutHistoryRecords(rawHistory), [rawHistory]);
+  const rawDropIcons = useDurableUiSetting(BREAKOUT_DROP_ICON_ASSIGN_STORAGE_KEY);
+  const { dropIconMap } = useMemo(() => resolveBreakoutDropIconAssignment(rawDropIcons), [rawDropIcons]);
+  const dropTypeOrder = useMemo(() => loadDropTypeOrderSnapshot(dropIconMap), [dropIconMap]);
   const historyRecordsRef = useRef<GameHistoryRecord[]>(historyRecords);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [gameOverRank, setGameOverRank] = useState<number | null>(null);
@@ -1681,6 +1663,15 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
     historyRecordsRef.current = historyRecords;
   }, [historyRecords]);
 
+  useEffect(() => {
+    if (!open) return;
+    void hydrateDurableUiSettings().then(async () => {
+      const current = readDurableUiSetting(BREAKOUT_DROP_ICON_ASSIGN_STORAGE_KEY);
+      const next = JSON.stringify(resolveBreakoutDropIconAssignment(current));
+      if (current !== next) await saveDurableUiSetting(BREAKOUT_DROP_ICON_ASSIGN_STORAGE_KEY, next);
+    }).catch(error => console.warn('[Breakout icons]', error));
+  }, [open]);
+
   const appendHistoryRecord = useCallback((state: GameState, reason: GameEndReason): number | null => {
     if (sessionRecordedRef.current) return null;
     if (state.score <= 0) return null;
@@ -1704,16 +1695,14 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
 
     const next = [record, ...historyRecordsRef.current].slice(0, BREAKOUT_HISTORY_LIMIT);
     historyRecordsRef.current = next;
-    setHistoryRecords(next);
-    saveBreakoutHistoryRecords(next);
+    updateBreakoutHistoryRecords(records => [record, ...records].slice(0, BREAKOUT_HISTORY_LIMIT));
     sessionRecordedRef.current = true;
     return getHistoryRank(next, record.id);
   }, []);
 
   const handleClearHistory = useCallback(() => {
-    setHistoryRecords([]);
     historyRecordsRef.current = [];
-    saveBreakoutHistoryRecords([]);
+    updateBreakoutHistoryRecords(() => []);
   }, []);
 
   const handleEndAndClose = useCallback(() => {

@@ -27,6 +27,7 @@ urlencoding = "2.1"
 lazy_static = "1.5"
 toml_edit = "0.20"
 rusqlite.workspace = true
+fs2 = "0.4"
 tracing-subscriber.workspace = true
 tracing-appender.workspace = true
 tracing-log.workspace = true
@@ -57,3 +58,6 @@ mac-notification-sys.workspace = true
 [target.'cfg(target_os = "windows")'.dependencies]
 windows.workspace = true
 junction.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

@@ -229,24 +229,24 @@ pub async fn github_copilot_start_instance(
     instance_id: String,
 ) -> Result<InstanceProfileView, String> {
     modules::logger::log_info(&format!("开始启动 GitHub Copilot 实例: {}", instance_id));
-    modules::process::ensure_vscode_launch_path_configured()?;
+    tauri::async_runtime::spawn_blocking(modules::process::ensure_vscode_launch_path_configured)
+        .await
+        .map_err(|error| error.to_string())??;
 
     if instance_id == DEFAULT_INSTANCE_ID {
         let default_dir = modules::github_copilot_instance::get_default_vscode_user_data_dir()?;
         let default_dir_str = default_dir.to_string_lossy().to_string();
         let default_settings = modules::github_copilot_instance::load_default_settings()?;
-        if let Some(pid) = modules::process::resolve_vscode_pid(default_settings.last_pid, None) {
-            modules::process::close_pid(pid, 20)?;
+        modules::process::close_vscode(std::slice::from_ref(&default_dir_str), 20)?;
+        if default_settings.last_pid.is_some() {
             let _ = modules::github_copilot_instance::update_default_pid(None)?;
         }
-        modules::process::close_vscode(&[default_dir_str.clone()], 20)?;
         inject_bound_account_for_instance_start(
             &default_dir_str,
             default_settings.bind_account_id.as_deref(),
         )?;
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
-        let pid =
-            modules::process::start_vscode_default_with_args_with_new_window(&extra_args, true)?;
+        let pid = modules::process::start_vscode_default_with_args(&extra_args)?;
         modules::logger::log_info(&format!("GitHub Copilot 默认实例已启动: pid={}", pid));
         let _ = modules::github_copilot_instance::update_default_pid(Some(pid))?;
         let running = modules::process::is_pid_running(pid);

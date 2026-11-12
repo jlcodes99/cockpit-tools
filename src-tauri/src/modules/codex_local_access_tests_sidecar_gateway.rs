@@ -1810,6 +1810,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
             vision_routing_model: None,
         };
         let mut key = CodexLocalAccessApiKey {
+            max_reasoning_effort: None,
             id: "provider_gateway_deepseek".to_string(),
             label: "Provider Gateway: deepseek".to_string(),
             key: "agt_test".to_string(),
@@ -1951,6 +1952,8 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
                     "display_name": "DeepSeek-V4-Flash",
                     "apply_patch_tool_type": "freeform",
                     "shell_type": "shell_command",
+                    "use_responses_lite": true,
+                    "multi_agent_version": "v1",
                     "base_instructions": "flash-instr"
                 },
                 {
@@ -1958,6 +1961,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
                     "display_name": "DeepSeek-V4-Pro",
                     "apply_patch_tool_type": "freeform",
                     "shell_type": "shell_command",
+                    "tool_mode": "code_mode_only",
                     "base_instructions": "pro-instr"
                 }
             ]
@@ -1969,6 +1973,8 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
             .get("models")
             .and_then(Value::as_array)
             .expect("models");
+        assert_eq!(models[0]["use_responses_lite"], false);
+        assert_eq!(models[0]["multi_agent_version"], "v1");
         assert_eq!(
             models[0].get("slug").and_then(Value::as_str),
             Some("gpt-5.6-luna")
@@ -1991,6 +1997,8 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
             models[1].get("display_name").and_then(Value::as_str),
             Some("DeepSeek-V4-Pro")
         );
+        assert_eq!(models[1]["tool_mode"], "direct");
+        assert_eq!(models[1]["shell_type"], "shell_command");
     }
 
     #[test]
@@ -2008,18 +2016,17 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
         account.api_wire_api = Some("responses".to_string());
         account.bound_oauth_account_id = Some("oauth-1".to_string());
 
-        assert!(!account_requires_provider_gateway(&account));
+        assert!(account_requires_provider_gateway(&account));
         assert!(!account_requires_bound_oauth_local_gateway(&account));
         assert!(is_local_access_eligible_account(&account, false));
 
         account.bound_oauth_use_local_gateway = true;
-        assert!(!account_requires_provider_gateway(&account));
-        // 绑定 OAuth：不走本地网关路径（与改前一致）
+        assert!(account_requires_provider_gateway(&account));
         assert!(!account_requires_bound_oauth_local_gateway(&account));
         assert!(is_local_access_eligible_account(&account, false));
 
         account.bound_oauth_account_id = None;
-        assert!(!account_requires_provider_gateway(&account));
+        assert!(account_requires_provider_gateway(&account));
         assert!(!account_requires_bound_oauth_local_gateway(&account));
         assert!(is_local_access_eligible_account(&account, false));
     }
@@ -2089,6 +2096,35 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
     }
 
     #[test]
+    fn provider_gateway_models_fill_empty_catalog_for_exact_official_endpoints() {
+        for (base_url, expected_model) in [
+            ("https://ark.cn-beijing.volces.com/api/coding/v3", "ark-code-latest"),
+            ("https://ark.cn-beijing.volces.com/api/v3", "doubao-seed-2-1-pro-260915"),
+            ("https://api.xiaomimimo.com/v1", "mimo-v2.6-pro"),
+            ("https://token-plan-cn.xiaomimimo.com/v1/", "mimo-v2.6-pro"),
+        ] {
+            let mut account = CodexAccount::new_api_key(
+                "local-account-id".to_string(),
+                "custom@example.com".to_string(),
+                "sk-test".to_string(),
+                CodexApiProviderMode::Custom,
+                Some(base_url.to_string()),
+                None,
+                None,
+                Vec::new(),
+            );
+            assert_eq!(provider_gateway_default_model_for_account(&account), expected_model);
+
+            account.api_model_catalog = vec!["user-selected-model".to_string()];
+            assert_eq!(provider_gateway_models_for_account(&account), vec!["user-selected-model"]);
+
+            account.api_model_catalog.clear();
+            account.api_base_url = Some(format!("https://relay.example/{base_url}"));
+            assert!(provider_gateway_models_for_account(&account).is_empty());
+        }
+    }
+
+    #[test]
     fn provider_gateway_models_empty_for_unknown_provider_without_catalog() {
         let account = CodexAccount::new_api_key(
             "local-account-id".to_string(),
@@ -2103,6 +2139,39 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
 
         assert!(provider_gateway_models_for_account(&account).is_empty());
         assert!(provider_gateway_default_model_for_account(&account).is_empty());
+    }
+
+    #[test]
+    fn discovered_relay_models_are_available_to_gateway_launch_without_changing_saved_catalog() {
+        let base_url = "https://model-discovery.example.invalid/v1";
+        let api_key = "fixture-model-discovery";
+        let mut saved = CodexAccount::new_api_key(
+            "discovery-account".into(), "relay@example.invalid".into(), api_key.into(),
+            CodexApiProviderMode::Custom, Some(base_url.into()), None, None, Vec::new(),
+        );
+        saved.api_wire_api = Some("responses".into());
+        let models = vec!["relay-chat".to_string(), "relay-vision".to_string(), "gpt-image-2".to_string()];
+        crate::modules::codex_provider_discovered_models::remember(base_url, api_key, "responses", None, models.clone()).unwrap();
+
+        let mut launch = saved.clone();
+        super::apply_discovered_provider_gateway_models(&mut launch);
+        let gateway = super::provider_gateway_for_account(&launch).unwrap();
+        assert_eq!(gateway.upstream_models, models);
+        let slots = super::provider_model_slots_for_account(&launch, &gateway.upstream_models);
+        assert_eq!(slots.len(), 3);
+        assert!(slots.iter().any(|slot| slot.upstream_model == "gpt-image-2"));
+        assert!(saved.api_model_catalog.is_empty());
+        assert!(!saved.api_sync_model_catalog_to_codex);
+
+        launch = saved.clone();
+        launch.api_model_catalog = vec!["manual-model".into()];
+        super::apply_discovered_provider_gateway_models(&mut launch);
+        assert_eq!(launch.api_model_catalog, ["manual-model"]);
+
+        launch = saved;
+        launch.openai_api_key = Some("different-key".into());
+        super::apply_discovered_provider_gateway_models(&mut launch);
+        assert!(launch.api_model_catalog.is_empty());
     }
 
     #[test]
@@ -2230,7 +2299,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
     }
 
     #[test]
-    fn responses_sync_catalog_with_only_official_shells_skips_provider_gateway() {
+    fn responses_sync_catalog_with_only_official_shells_still_uses_provider_gateway() {
         let mut account = CodexAccount::new_api_key(
             "local-account-id".to_string(),
             "relay@example.com".to_string(),
@@ -2244,7 +2313,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
         account.api_wire_api = Some("responses".to_string());
         account.api_sync_model_catalog_to_codex = true;
 
-        assert!(!account_requires_provider_gateway(&account));
+        assert!(account_requires_provider_gateway(&account));
     }
 
     #[test]
@@ -3778,6 +3847,7 @@ http_headers = { "x-cockpit-instance-id" = "default" }
     fn provider_gateway_api_key_disables_profile_websockets() {
         let mut collection = test_local_access_collection(Vec::new());
         collection.api_keys.push(CodexLocalAccessApiKey {
+            max_reasoning_effort: None,
             id: "provider_gateway_deepseek".to_string(),
             label: "Provider Gateway: DeepSeek".to_string(),
             key: "deepseek-local-key".to_string(),
@@ -3984,6 +4054,7 @@ http_headers = { "x-cockpit-instance-id" = "default" }
                 display_name: "5.6 Luna".to_string(),
                 reasoning_efforts: None,
                 default_reasoning_effort: None,
+                ultra_reasoning_effort: None,
                 context_window: Some(516000),
                 auto_compact_token_limit: Some(460000),
             },
@@ -3992,6 +4063,7 @@ http_headers = { "x-cockpit-instance-id" = "default" }
                 display_name: "GPT-5.6 Reserve".to_string(),
                 reasoning_efforts: None,
                 default_reasoning_effort: None,
+                ultra_reasoning_effort: None,
                 context_window: None,
                 auto_compact_token_limit: None,
             },

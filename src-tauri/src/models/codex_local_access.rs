@@ -41,6 +41,7 @@ pub enum CodexLocalAccessRoutingStrategy {
     PlanHighFirst,
     PlanLowFirst,
     ExpirySoonFirst,
+    FiveHourResetSoonFirst,
     Custom,
 }
 
@@ -296,6 +297,10 @@ fn default_websocket_initial_message_timeout_ms() -> u64 {
     30 * 1000
 }
 
+fn default_websocket_fragment_timeout_ms() -> u64 {
+    60 * 1000
+}
+
 fn default_websocket_idle_timeout_ms() -> u64 {
     5 * 60 * 1000
 }
@@ -369,6 +374,8 @@ pub struct CodexLocalAccessTimeouts {
     pub websocket_connect_timeout_ms: u64,
     #[serde(default = "default_websocket_initial_message_timeout_ms")]
     pub websocket_initial_message_timeout_ms: u64,
+    #[serde(default = "default_websocket_fragment_timeout_ms")]
+    pub websocket_fragment_timeout_ms: u64,
     #[serde(default = "default_websocket_idle_timeout_ms")]
     pub websocket_idle_timeout_ms: u64,
     #[serde(default = "default_websocket_heartbeat_interval_ms")]
@@ -404,6 +411,7 @@ impl Default for CodexLocalAccessTimeouts {
             sidecar_stream_keepalive_seconds: default_sidecar_stream_keepalive_seconds(),
             websocket_connect_timeout_ms: default_websocket_connect_timeout_ms(),
             websocket_initial_message_timeout_ms: default_websocket_initial_message_timeout_ms(),
+            websocket_fragment_timeout_ms: default_websocket_fragment_timeout_ms(),
             websocket_idle_timeout_ms: default_websocket_idle_timeout_ms(),
             websocket_heartbeat_interval_ms: default_websocket_heartbeat_interval_ms(),
             upstream_send_retry_attempts: default_upstream_send_retry_attempts(),
@@ -508,6 +516,8 @@ pub struct CodexLocalAccessApiKey {
     #[serde(default)]
     pub excluded_models: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_reasoning_effort: Option<CodexReasoningLevel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token_limit: Option<u64>,
     #[serde(default)]
     pub token_used: u64,
@@ -523,6 +533,35 @@ pub struct CodexLocalAccessApiKey {
     pub updated_at: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_used_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CodexReasoningLevel {
+    None,
+    Minimal,
+    Low,
+    Medium,
+    High,
+    Xhigh,
+    Max,
+    Ultra,
+}
+
+impl CodexReasoningLevel {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "none" => Some(Self::None),
+            "minimal" => Some(Self::Minimal),
+            "low" => Some(Self::Low),
+            "medium" => Some(Self::Medium),
+            "high" => Some(Self::High),
+            "xhigh" => Some(Self::Xhigh),
+            "max" => Some(Self::Max),
+            "ultra" => Some(Self::Ultra),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -757,6 +796,7 @@ pub struct CodexLocalAccessCollection {
     pub session_affinity_default_enabled_migrated: bool,
     #[serde(default)]
     pub responses_websockets_enabled: bool,
+    /// Zero (including older configurations without this field) uses the eligible pool.
     #[serde(default)]
     pub max_retry_credentials: u16,
     #[serde(default = "default_max_retry_interval_ms")]
@@ -936,9 +976,47 @@ pub struct CodexLocalAccessProxyRoute {
     pub name: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CodexLocalAccessSourceKind {
+    Local,
+    Lan,
+    Remote,
+}
+
+impl CodexLocalAccessSourceKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::Lan => "lan",
+            Self::Remote => "remote",
+        }
+    }
+
+    pub(crate) fn from_str(value: &str) -> Option<Self> {
+        match value {
+            "local" => Some(Self::Local),
+            "lan" => Some(Self::Lan),
+            "remote" => Some(Self::Remote),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessConnectionSource {
+    pub peer_ip: std::net::IpAddr,
+    pub kind: CodexLocalAccessSourceKind,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessUsageEvent {
+    #[serde(skip)]
+    pub(crate) local_rejection: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connection_source: Option<CodexLocalAccessConnectionSource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub budget_settlement: Option<CodexRequestBudgetSettlement>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1154,7 +1232,21 @@ pub struct CodexLocalAccessServiceTierAdaptation {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessImageRequestDiagnostic {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_model: Option<String>,
+    pub upstream_model: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub responses_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_status: Option<u16>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessRequestAttempt {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_request: Option<CodexLocalAccessImageRequestDiagnostic>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_size: Option<crate::modules::codex_native_api::diagnostics::RequestSize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1198,6 +1290,8 @@ pub struct CodexLocalAccessRequestAttempt {
     pub account_email: Option<String>,
     #[serde(default)]
     pub model_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_model: Option<String>,
     #[serde(default)]
     pub transport: String,
     #[serde(default)]
@@ -1373,6 +1467,7 @@ pub struct CodexLocalAccessProfileAttachment {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessState {
+    pub project_state_deferred: bool,
     #[serde(default)]
     pub service_members: Vec<CodexLocalAccessServiceMember>,
     pub recovering: bool,

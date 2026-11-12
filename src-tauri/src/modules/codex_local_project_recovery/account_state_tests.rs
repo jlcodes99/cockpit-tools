@@ -258,6 +258,254 @@ fn account_project_switch_recovers_archived_groups_after_native_startup() {
 }
 
 #[test]
+fn account_switch_keeps_configured_ssh_workspaces_and_latest_auto_connect_choices() {
+    let f = Fixture::new();
+    let mut state = f.local("legacy");
+    state[SCOPES] = json!({"owner":"a","inactive":{
+        "older":{"atoms":{},"globals":{
+            "remote-connection-auto-connect-by-host-id":{"ssh-one":true,"ssh-two":true},
+            "remote-projects":[
+                {"id":"second","hostId":"ssh-two","label":"Second","remotePath":"/second"},
+                {"id":"deleted","hostId":"removed-host","remotePath":"/removed"}
+            ]
+        }}
+    }});
+    state["codex-managed-remote-connections"] = json!([
+        {"hostId":"ssh-one","hostname":"one.invalid","source":"discovered"},
+        {"hostId":"ssh-two","hostname":"two.invalid","source":"discovered"}
+    ]);
+    state["remote-connection-auto-connect-by-host-id"] =
+        json!({"ssh-one":false,"cloud-host":true});
+    state["selected-remote-host-id"] = json!("ssh-one");
+    state["active-remote-project-id"] = json!("first");
+    state["remote-projects"] = json!([
+        {"id":"first","hostId":"ssh-one","label":"First","remotePath":"/first",
+            "unknown-account-data":"do-not-share"},
+        {"id":"cloud","hostId":"cloud-host","remotePath":"/private"}
+    ]);
+    state["host-id-remote-control-allowed"] = json!({"cloud-host":true});
+    state["added-remote-control-env-ids"] = json!(["cloud-host"]);
+    f.write(&state);
+    for owner in [Some("b"), None, Some("b")] {
+        prepare(f.home(), owner).unwrap();
+        let booted = native_start(f.state(), owner);
+        assert_eq!(booted["codex-managed-remote-connections"], state["codex-managed-remote-connections"]);
+        assert_eq!(booted["remote-connection-auto-connect-by-host-id"],
+            json!({"ssh-one":false,"ssh-two":true}));
+        assert_eq!(booted["selected-remote-host-id"], "ssh-one");
+        assert_eq!(booted["active-remote-project-id"], "first");
+        let projects = booted["remote-projects"].as_array().unwrap();
+        assert_eq!(projects.len(), 2);
+        assert!(projects.iter().all(|p| p.get("unknown-account-data").is_none()));
+        assert!(booted.get("host-id-remote-control-allowed").is_none());
+        assert!(booted.get("added-remote-control-env-ids").is_none());
+        assert_eq!(booted[ASSIGN]["chat"]["projectId"], "legacy");
+        f.write(&booted);
+        assert!(!prepare(f.home(), owner).unwrap());
+    }
+    prepare(f.home(), Some("a")).unwrap();
+    let back = native_start(f.state(), Some("a"));
+    assert_eq!(back["host-id-remote-control-allowed"], state["host-id-remote-control-allowed"]);
+    assert_eq!(back["added-remote-control-env-ids"], state["added-remote-control-env-ids"]);
+    assert_eq!(back["remote-projects"].as_array().unwrap().len(), 3);
+}
+
+#[test]
+fn ssh_auto_connect_survives_api_key_start_without_a_project_database() {
+    let temp = tempfile::tempdir().unwrap();
+    let state = json!({
+        SCOPES:{"owner":"a","inactive":{}},
+        "codex-managed-remote-connections":[{"hostId":"ssh","hostname":"fixture.invalid"}],
+        "remote-connection-auto-connect-by-host-id":{"ssh":true},
+        "selected-remote-host-id":"ssh"
+    });
+    fs::write(temp.path().join(STATE), serde_json::to_vec(&state).unwrap()).unwrap();
+    prepare(temp.path(), None).unwrap();
+    let prepared: Value = serde_json::from_slice(&fs::read(temp.path().join(STATE)).unwrap()).unwrap();
+    let booted = native_start(prepared, None);
+    assert_eq!(booted["remote-connection-auto-connect-by-host-id"], state["remote-connection-auto-connect-by-host-id"]);
+    assert_eq!(booted["selected-remote-host-id"], "ssh");
+}
+
+// Desktop discovers SSH before account globals return. Its native startup
+// config then refreshes the catalog and actively connects configured aliases.
+fn native_startup_ssh_aliases(home: &Path, prepared: Value) -> Vec<String> {
+    let mut booting = prepared;
+    native_select(&mut booting, None);
+    let config = fs::read(home.join("codex-app/config.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        .unwrap_or_else(|| json!({}));
+    config["remoteConnections"].as_array().into_iter().flatten()
+        .filter_map(|entry| entry["sshAlias"].as_str())
+        .filter(|alias| booting["codex-managed-remote-connections"].as_array().into_iter().flatten()
+            .any(|host| host["alias"] == *alias
+                && booting["remote-connection-auto-connect-by-host-id"][host["hostId"].as_str().unwrap()] != false))
+        .map(str::to_string).collect()
+}
+
+#[test]
+fn switching_accounts_queues_enabled_ssh_aliases_during_native_startup() {
+    let f = Fixture::new();
+    let mut state = f.local("legacy");
+    state[SCOPES] = json!({"owner":"a","inactive":{}});
+    state["codex-managed-remote-connections"] = json!([
+        {"hostId":"ssh-on","alias":"enabled","hostname":null},
+        {"hostId":"ssh-off","alias":"disabled","hostname":null},
+        {"hostId":"ssh-unused","alias":"unused","hostname":null}
+    ]);
+    state["remote-connection-auto-connect-by-host-id"] = json!({"ssh-on":true,"ssh-off":false});
+    f.write(&state);
+    for owner in [Some("b"), Some("a"), None] {
+        prepare(f.home(), owner).unwrap();
+        assert_eq!(native_startup_ssh_aliases(f.home(), f.state()), vec!["enabled"],
+            "restoring the flag after discovery must also schedule a real connection");
+        f.write(&native_start(f.state(), owner));
+    }
+}
+
+#[test]
+fn ssh_startup_removes_disabled_owned_aliases_and_preserves_user_configuration() {
+    let f = Fixture::new();
+    let config_path = f.home().join("codex-app/config.json");
+    fs::create_dir_all(config_path.parent().unwrap()).unwrap();
+    let user_config = json!({"version":1,"remoteConnectionMaxRetryAttempts":4,
+        "sshConnectTimeoutSeconds":9,"remoteConnections":[
+            {"sshAlias":"admin","projects":[{"remotePath":"/admin","label":"Team"}]}
+        ]});
+    fs::write(&config_path, serde_json::to_vec(&user_config).unwrap()).unwrap();
+    let existing_backup = config_path.with_extension("json.bak");
+    fs::write(&existing_backup, b"existing native backup").unwrap();
+    let mut state = f.local("legacy");
+    state[SCOPES] = json!({"owner":"a","inactive":{}});
+    state["codex-managed-remote-connections"] = json!([
+        {"hostId":"ssh","alias":"resume","hostname":null},
+        {"hostId":"admin-host","alias":"admin","hostname":null}
+    ]);
+    state["remote-connection-auto-connect-by-host-id"] = json!({"ssh":true,"admin-host":true});
+    f.write(&state);
+    prepare(f.home(), Some("b")).unwrap();
+    let configured: Value = serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+    assert_eq!(configured["remoteConnections"].as_array().unwrap().len(), 2);
+    assert_eq!(configured["remoteConnections"][0], user_config["remoteConnections"][0]);
+    assert_eq!(fs::read(&existing_backup).unwrap(), b"existing native backup");
+    let booted = native_start(f.state(), Some("b"));
+    f.write(&booted);
+    assert!(!prepare(f.home(), Some("b")).unwrap(), "startup writes are idempotent");
+
+    let mut disconnected = f.state();
+    disconnected["remote-connection-auto-connect-by-host-id"]["ssh"] = json!(false);
+    f.write(&disconnected);
+    prepare(f.home(), Some("a")).unwrap();
+    let after_disable: Value = serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+    assert_eq!(after_disable, user_config, "only Cockpit's added startup entry is removed");
+
+    let mut removed = f.state();
+    removed["codex-managed-remote-connections"] = json!([]);
+    f.write(&removed);
+    prepare(f.home(), Some("b")).unwrap();
+    let after_remove: Value = serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+    assert_eq!(after_remove, user_config, "existing administrator entries remain user-owned");
+}
+
+#[test]
+fn same_account_and_unscoped_starts_reconcile_ssh_startup_entries() {
+    let f = Fixture::new();
+    let mut state = f.local("legacy");
+    state["codex-managed-remote-connections"] = json!([
+        {"hostId":"ssh","alias":"resume","hostname":null}
+    ]);
+    state["remote-connection-auto-connect-by-host-id"] = json!({"ssh":true});
+    f.write(&state);
+    assert!(prepare(f.home(), None).unwrap());
+    assert_eq!(native_startup_ssh_aliases(f.home(), f.state()), vec!["resume"]);
+    assert!(!prepare(f.home(), None).unwrap());
+    state["codex-managed-remote-connections"] = json!([]);
+    f.write(&state);
+    assert!(prepare(f.home(), None).unwrap());
+    assert!(native_startup_ssh_aliases(f.home(), f.state()).is_empty());
+}
+
+#[test]
+fn ssh_startup_keeps_adopted_entries_and_leaves_unsupported_files_untouched() {
+    let f = Fixture::new();
+    let mut state = f.local("legacy");
+    state["codex-managed-remote-connections"] = json!([
+        {"hostId":"ssh","alias":"resume","hostname":null}
+    ]);
+    state["remote-connection-auto-connect-by-host-id"] = json!({"ssh":true});
+    f.write(&state);
+    prepare(f.home(), None).unwrap();
+    let path = f.home().join("codex-app/config.json");
+    let mut adopted: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    adopted["remoteConnections"][0]["projects"] = json!([{"remotePath":"/team"}]);
+    fs::write(&path, serde_json::to_vec(&adopted).unwrap()).unwrap();
+    state["remote-connection-auto-connect-by-host-id"]["ssh"] = json!(false);
+    f.write(&state);
+    prepare(f.home(), None).unwrap();
+    assert_eq!(serde_json::from_slice::<Value>(&fs::read(&path).unwrap()).unwrap(), adopted);
+
+    state["remote-connection-auto-connect-by-host-id"]["ssh"] = json!(true);
+    f.write(&state);
+    let journal = f.home().join("codex-app/.cockpit-ssh-startup.json");
+    let original_journal = fs::read(&journal).unwrap();
+    for raw in [r#"{"version":2,"remoteConnections":[]}"#, "broken-json",
+        r#"{"version":null,"remoteConnections":[]}"#,
+        r#"{"version":1,"remoteConnections":[{"sshAlias":"admin","projects":[{"remotePath":"/team","label":null}]}]}"#] {
+        fs::write(&path, raw).unwrap();
+        prepare(f.home(), None).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), raw.as_bytes());
+        assert_eq!(fs::read(&journal).unwrap(), original_journal);
+    }
+}
+
+#[test]
+fn desktop_launch_restores_archived_groups_before_optional_catalog_scan_defers() {
+    let f = Fixture::new();
+    fs::write(f.home().join("config.toml"), "cli_auth_credentials_store = 'file'\n").unwrap();
+    let auth = br#"{"auth_mode":"apikey","OPENAI_API_KEY":"fixture-key"}"#;
+    fs::write(f.home().join("auth.json"), auth).unwrap();
+    // Reproduce a multi-account state above the former 2 MB launch threshold.
+    let state = json!({SCOPES:{"owner":"b","inactive":{
+        "a":{"globals":f.local("legacy"),"atoms":{}}
+    }},"large-cache":"x".repeat(3_500_000)});
+    f.write(&state);
+    let db = Connection::open(f.home().join("state_5.sqlite")).unwrap();
+    db.execute_batch("CREATE TABLE local_thread_catalog(host_id TEXT,thread_id TEXT,project_id TEXT,cwd TEXT);
+        WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<4096)
+        INSERT INTO local_thread_catalog SELECT 'local','catalog-'||x,'server','unused' FROM n;").unwrap();
+    drop(db);
+    let summary = super::super::super::repair_session_visibility_quick_for_instance(
+        "archived-projects", "Archived projects", f.home(), true,
+    ).unwrap();
+    assert!(summary.local_project_recovery_deferred);
+    let detail = summary.local_project_recovery_deferred_message.as_deref().unwrap();
+    let actual_size = fs::metadata(f.home().join(STATE)).unwrap().len().to_string();
+    assert!(detail.contains(&actual_size), "{detail}");
+    assert!(summary.message.contains(detail));
+    let booted = native_start(f.state(), None);
+    assert_eq!(booted["local-projects"]["legacy"]["name"], "My project");
+    assert_eq!(booted[ASSIGN]["chat"]["projectId"], "legacy");
+    assert_eq!(booted["large-cache"], state["large-cache"]);
+    assert_eq!(fs::read(f.home().join("auth.json")).unwrap(), auth);
+}
+
+#[test]
+fn desktop_launch_rejects_unrestorable_renderer_state_before_history_writes() {
+    let f = Fixture::new();
+    fs::write(f.home().join("config.toml"), "cli_auth_credentials_store = 'file'\n").unwrap();
+    fs::write(f.home().join("auth.json"), br#"{"auth_mode":"apikey","OPENAI_API_KEY":"fixture-key"}"#).unwrap();
+    let invalid = json!({SCOPES:{"owner":"a","inactive":[]}});
+    f.write(&invalid);
+    let error = super::super::super::repair_session_visibility_quick_for_instance(
+        "unsupported-state", "Unsupported state", f.home(), true,
+    ).unwrap_err();
+    assert!(error.contains("CODEX_DESKTOP_STATE_PREPARATION_FAILED"), "{error}");
+    assert!(!super::super::super::can_defer_launch_snapshot_error(&error));
+    assert_eq!(f.state(), invalid);
+}
+
+#[test]
 fn switch_without_launch_preserves_projects_with_large_catalog_and_history() {
     use base64::Engine as _;
 
@@ -283,6 +531,9 @@ fn switch_without_launch_preserves_projects_with_large_catalog_and_history() {
         SCOPES:{"owner":"previous","inactive":{}},
         "local-projects":f.local("legacy")["local-projects"],
         "project-order":["legacy"],
+        PINNED_PROJECTS:["legacy"],
+        PINNED_THREADS:["chat"],
+        THREAD_ORDERS:{"legacy":{"threadIds":["chat"]}},
         MAP:f.local("legacy")[MAP],
         ASSIGN:f.local("legacy")[ASSIGN],
         "remote-projects":{"remote-a":{"name":"Previous account only"}}
@@ -298,6 +549,9 @@ fn switch_without_launch_preserves_projects_with_large_catalog_and_history() {
     let after_native_start = native_start(f.state(), Some(&owner));
     assert_eq!(after_native_start["local-projects"]["legacy"]["name"], "My project");
     assert_eq!(after_native_start["project-order"], json!(["legacy"]));
+    assert_eq!(after_native_start[PINNED_PROJECTS], json!(["legacy"]));
+    assert_eq!(after_native_start[PINNED_THREADS], json!(["chat"]));
+    assert_eq!(after_native_start[THREAD_ORDERS]["legacy"]["threadIds"], json!(["chat"]));
     assert!(after_native_start.get("remote-projects").is_none());
     assert_eq!(
         after_native_start[SCOPES]["inactive"]["previous"]["globals"][ASSIGN]["chat"]["projectId"],
@@ -319,7 +573,9 @@ fn switch_without_launch_preserves_projects_with_large_catalog_and_history() {
     .unwrap();
     assert!(launch.local_project_recovery_deferred);
     assert_eq!(launch.mutated_instance_count, 1);
-    assert_eq!(native_start(f.state(), Some(&owner))["project-order"], json!(["legacy"]));
+    let after_launch = native_start(f.state(), Some(&owner));
+    assert_eq!(after_launch["project-order"], json!(["legacy"]));
+    assert_eq!(after_launch[PINNED_PROJECTS], json!(["legacy"]));
 }
 
 #[test]
@@ -328,12 +584,14 @@ fn account_project_switch_api_key_roundtrip_preserves_oauth_archive_without_leak
     let mut state = f.local("legacy");
     state[SCOPES] = json!({"owner":"a","inactive":{}});
     state["remote-projects"] = json!({"cloud":"private-a"});
+    state[PINNED_PROJECTS] = json!(["legacy", "cloud"]);
     state[ATOMS] = json!({"private-a":"private","thread-sort-key":"updated"});
     f.write(&state);
     prepare(f.home(), None).unwrap();
     let key = native_start(f.state(), None);
     assert!(key.get(SCOPES).is_none());
     assert!(key.get("remote-projects").is_none());
+    assert_eq!(key[PINNED_PROJECTS], json!(["legacy"]));
     assert!(key[ATOMS].get("private-a").is_none());
     assert_eq!(key[ASSIGN]["chat"]["projectId"], "legacy");
     assert_eq!(
@@ -342,10 +600,16 @@ fn account_project_switch_api_key_roundtrip_preserves_oauth_archive_without_leak
     );
     f.write(&key);
     assert!(!prepare(f.home(), None).unwrap());
+
+    // A relay scope prepared by an older build may have no pin list yet.
+    let mut old_key = key;
+    old_key.as_object_mut().unwrap().remove(PINNED_PROJECTS);
+    f.write(&old_key);
     prepare(f.home(), Some("a")).unwrap();
     let back = native_start(f.state(), Some("a"));
     assert!(back.get(PARKED).is_none());
     assert_eq!(back["remote-projects"], state["remote-projects"]);
+    assert_eq!(back[PINNED_PROJECTS], state[PINNED_PROJECTS]);
     assert_eq!(back[ATOMS]["private-a"], "private");
     assert_eq!(back["local-projects"], state["local-projects"]);
     let files: Vec<_> = fs::read_dir(f.home())
@@ -364,20 +628,110 @@ fn account_project_switch_keeps_target_alias_order_and_cloud_memberships() {
     let f = Fixture::new();
     let mut target = f.local("target-id");
     target["project-order"] = json!(["cloud-id", "target-id"]);
+    target[PINNED_PROJECTS] = json!(["cloud-id"]);
     target["local-projects"]["cloud-id"] = json!({"id":"cloud-id","chatGptBacking":{}});
     target[ASSIGN]["cloud-thread"] = json!({"projectKind":"chatgpt","projectId":"cloud-id"});
     f.write(&json!({SCOPES:{"owner":"a","inactive":{
         "b":{"globals":target,"atoms":{"b-only":true}}
-    }}, "local-projects":f.local("old-id")["local-projects"]}));
+    }}, "local-projects":f.local("old-id")["local-projects"],
+        PINNED_PROJECTS:["old-id", "source-cloud-id"]}));
     prepare(f.home(), Some("b")).unwrap();
     let actual = native_start(f.state(), Some("b"));
     assert_eq!(actual["project-order"], target["project-order"]);
+    assert_eq!(actual[PINNED_PROJECTS], json!(["cloud-id", "target-id"]));
     assert!(actual["local-projects"].get("old-id").is_none());
     assert_eq!(actual[ASSIGN]["chat"]["projectId"], "target-id");
     assert_eq!(
         actual[ASSIGN]["cloud-thread"],
         target[ASSIGN]["cloud-thread"]
     );
+}
+
+#[test]
+fn account_project_switch_keeps_an_explicit_unpin_across_scopes() {
+    let f = Fixture::new();
+    let mut state = f.local("legacy");
+    state[SCOPES] = json!({"owner":"a","inactive":{}});
+    state[PINNED_PROJECTS] = json!(["server"]);
+    f.write(&state);
+    prepare(f.home(), None).unwrap();
+    let mut key = native_start(f.state(), None);
+    assert_eq!(key[PINNED_PROJECTS], json!(["legacy"]));
+
+    // The official client persists an empty list when the last pin is removed.
+    key[PINNED_PROJECTS] = json!([]);
+    f.write(&key);
+    prepare(f.home(), Some("a")).unwrap();
+    let back = native_start(f.state(), Some("a"));
+    assert_eq!(back[PINNED_PROJECTS], json!([]));
+    assert_eq!(back["local-projects"], state["local-projects"]);
+}
+
+#[test]
+fn account_project_switch_reconciles_native_and_parked_archives_by_owner() {
+    let f = Fixture::new();
+    let mut state = f.local("current");
+    state[ATOMS] = json!({"active-private":"native-current"});
+    state[SCOPES] = json!({"owner":"b","inactive":{
+        "c":{"atoms":{"inactive-private":"native-c"},"globals":{}}
+    }});
+    state[PARKED] = json!({"owner":null,"inactive":{
+        "a":{"atoms":{"parked-private":"a"},"globals":f.local("original")},
+        "b":{"atoms":{"active-private":"old-b","obsolete":true},"globals":{}},
+        "c":{"atoms":{"inactive-private":"old-c","obsolete":true},"globals":{}}
+    }});
+    f.write(&state);
+
+    assert!(prepare(f.home(), Some("a")).unwrap());
+    let actual = native_start(f.state(), Some("a"));
+    assert!(actual.get(PARKED).is_none());
+    assert_eq!(actual[ATOMS], json!({"parked-private":"a"}));
+    assert_eq!(actual[SCOPES]["inactive"]["b"]["atoms"], json!({"active-private":"native-current"}));
+    assert_eq!(actual[SCOPES]["inactive"]["c"]["atoms"], json!({"inactive-private":"native-c"}));
+    f.write(&actual);
+    assert!(!prepare(f.home(), Some("a")).unwrap());
+}
+
+#[test]
+fn account_project_switch_carries_only_verified_local_sidebar_presentation() {
+    let f = Fixture::new();
+    let db = Connection::open(f.home().join("state_5.sqlite")).unwrap();
+    db.execute_batch(
+        "ALTER TABLE threads ADD COLUMN thread_section_id TEXT;
+         INSERT INTO threads SELECT 'chat-2',cwd,source,project_id,has_user_event,NULL FROM threads WHERE id='chat';
+         INSERT INTO threads SELECT 'remote',cwd,source,project_id,has_user_event,NULL FROM threads WHERE id='chat';
+         INSERT INTO threads SELECT 'migrated',cwd,source,project_id,has_user_event,NULL FROM threads WHERE id='chat';
+         INSERT INTO threads SELECT 'native',cwd,source,project_id,has_user_event,'section' FROM threads WHERE id='chat';",
+    ).unwrap();
+    let mut target = f.local("target-id");
+    let target_appearance = json!({"color":"blue","marker":{"kind":"icon","icon":"folder"}});
+    target[PROJECT_APPEARANCES] = json!({"target-cloud":target_appearance});
+    target[PINNED_THREADS] = json!(["target-remote"]);
+    target[THREAD_ORDERS] = json!({"linked:target-cloud":{"threadIds":["target-remote"]}});
+    let mut current = f.local("old-id");
+    let current_appearance = json!({"color":"red","marker":{"kind":"emoji","emoji":"📁"}});
+    current[PROJECT_APPEARANCES] = json!({"old-id":current_appearance,"source-cloud":target_appearance});
+    current[HOSTS]["remote"] = json!("ssh-host");
+    current[PINNED_THREADS] = json!(["chat-2","remote","child","migrated","native"]);
+    current[MIGRATED_PINS] = json!({format!("local:{}",f.home().display()):["migrated"]});
+    current[THREAD_ORDERS] = json!({
+        "old-id":{"threadIds":["chat-2","remote","child","chat"]},
+        "linked:source-cloud":{"threadIds":["remote"]}
+    });
+    current[SCOPES] = json!({"owner":"a","inactive":{"b":{"atoms":{},"globals":target}}});
+    f.write(&current);
+
+    assert!(prepare(f.home(), Some("b")).unwrap());
+    let actual = native_start(f.state(), Some("b"));
+    assert_eq!(actual[PROJECT_APPEARANCES], json!({
+        "target-id":current_appearance,"target-cloud":target_appearance
+    }));
+    assert_eq!(actual[PINNED_THREADS], json!(["target-remote","chat-2"]));
+    assert_eq!(actual[THREAD_ORDERS], json!({
+        "target-id":{"threadIds":["chat-2","chat"]},
+        "linked:target-cloud":{"threadIds":["target-remote"]}
+    }));
+    assert!(actual.get(MIGRATED_PINS).is_none());
 }
 
 #[test]
@@ -491,4 +845,272 @@ fn account_project_switch_respects_launch_deadline_without_writing() {
         .unwrap_err()
         .contains("CODEX_SESSION_VISIBILITY_TIMEOUT"));
     assert_eq!(fs::read(f.home().join(STATE)).unwrap(), before);
+}
+
+fn state_with_ssh(f: &Fixture) -> Value {
+    let mut state = f.local("legacy");
+    state[SCOPES] = json!({"owner":"a","inactive":{}});
+    state["codex-managed-remote-connections"] = json!([
+        {"hostId":"ssh","hostname":"fixture.invalid"}
+    ]);
+    state["remote-connection-auto-connect-by-host-id"] = json!({"ssh":true});
+    state["selected-remote-host-id"] = json!("ssh");
+    state["active-remote-project-id"] = json!("bookmark");
+    state["remote-projects"] = json!([
+        {"id":"bookmark","hostId":"ssh","label":"Before","remotePath":"/before"}
+    ]);
+    state
+}
+
+#[test]
+fn large_history_recovers_saved_memberships_without_scanning_unreferenced_threads() {
+    for project in [None, Some("server")] {
+        let f = Fixture::new();
+        f.write(&state_with_ssh(&f));
+        let db = Connection::open(f.home().join("state_5.sqlite")).unwrap();
+        db.execute("WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<2046)
+            INSERT INTO threads SELECT 'extra-'||x,'unused','cli',?1,1 FROM n;", [project]).unwrap();
+        assert_eq!(db.query_row("SELECT count(*) FROM threads", [], |r| r.get::<_, i64>(0)).unwrap(), 2049);
+        drop(db);
+        for owner in [Some("a"), Some("b"), None] {
+            with_launch_visibility_budget(std::time::Duration::from_secs(5), || {
+                prepare(f.home(), owner)
+            })
+            .unwrap();
+            let booted = native_start(f.state(), owner);
+            assert_eq!(booted[ASSIGN]["chat"]["projectId"], "legacy");
+            assert!(booted[ASSIGN].get("extra-2046").is_none());
+            assert!(booted["remote-projects"].as_array().is_some_and(|projects| !projects.is_empty()));
+            f.write(&booted);
+        }
+    }
+}
+
+#[test]
+fn large_project_registry_does_not_block_account_state_preparation() {
+    let f = Fixture::new();
+    f.write(&state_with_ssh(&f));
+    let db = Connection::open(f.home().join("state_5.sqlite")).unwrap();
+    db.execute_batch("WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<255)
+        INSERT INTO projects SELECT 'extra-'||x,'Project','{}' FROM n;").unwrap();
+    assert_eq!(db.query_row("SELECT count(*) FROM projects", [], |r| r.get::<_, i64>(0)).unwrap(), 257);
+    drop(db);
+    prepare(f.home(), Some("b")).unwrap();
+    let booted = native_start(f.state(), Some("b"));
+    assert_eq!(booted["local-projects"].as_object().unwrap().len(), 1);
+    assert_eq!(booted[ASSIGN]["chat"]["projectId"], "legacy");
+}
+
+#[test]
+fn slow_history_does_not_block_local_and_ssh_project_restoration() {
+    let f = Fixture::new();
+    let original = state_with_ssh(&f);
+    f.write(&original);
+    let db = Connection::open(f.home().join("state_5.sqlite")).unwrap();
+    // Synthesize a history whose ordered scan cannot finish within the launch
+    // budget, without generating or writing millions of fixture rows.
+    db.execute_batch(
+        "ALTER TABLE threads RENAME TO fixture_threads;
+         CREATE VIEW threads AS
+         WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<1000000000)
+         SELECT id,cwd,source,project_id,has_user_event FROM fixture_threads
+         UNION ALL SELECT 'extra-'||x,'unused','cli','server',1 FROM n;",
+    )
+    .unwrap();
+    drop(db);
+
+    with_launch_visibility_budget(std::time::Duration::from_secs(2), || {
+        prepare(f.home(), Some("b"))
+    })
+    .unwrap();
+    let booted = native_start(f.state(), Some("b"));
+    assert_eq!(booted["local-projects"], original["local-projects"]);
+    assert_eq!(booted["remote-projects"], original["remote-projects"]);
+    assert!(booted.get(ASSIGN).is_none());
+    assert_eq!(
+        booted[SCOPES]["inactive"]["a"]["globals"][ASSIGN],
+        original[ASSIGN]
+    );
+}
+
+#[test]
+fn deleted_ssh_bookmark_stays_deleted_after_restart_and_account_switch() {
+    let f = Fixture::new();
+    f.write(&state_with_ssh(&f));
+    prepare(f.home(), Some("b")).unwrap();
+    let mut current = native_start(f.state(), Some("b"));
+    current["remote-projects"] = json!([]);
+    current["active-remote-project-id"] = Value::Null;
+    f.write(&current);
+    for owner in [Some("b"), Some("a"), None, Some("b")] {
+        prepare(f.home(), owner).unwrap();
+        let booted = native_start(f.state(), owner);
+        assert_eq!(booted["remote-projects"], json!([]));
+        assert!(booted["active-remote-project-id"].is_null());
+        f.write(&booted);
+        assert!(!prepare(f.home(), owner).unwrap());
+    }
+}
+
+#[test]
+fn renamed_ssh_bookmark_follows_latest_machine_state() {
+    let f = Fixture::new();
+    f.write(&state_with_ssh(&f));
+    prepare(f.home(), Some("b")).unwrap();
+    let mut current = native_start(f.state(), Some("b"));
+    current["remote-projects"][0]["label"] = json!("After");
+    current["remote-projects"][0]["remotePath"] = json!("/after");
+    f.write(&current);
+    for owner in [Some("a"), None, Some("b")] {
+        prepare(f.home(), owner).unwrap();
+        let booted = native_start(f.state(), owner);
+        assert_eq!(booted["remote-projects"][0]["label"], "After");
+        assert_eq!(booted["remote-projects"][0]["remotePath"], "/after");
+        f.write(&booted);
+        assert!(!prepare(f.home(), owner).unwrap());
+    }
+}
+
+#[test]
+fn removed_ssh_hosts_do_not_reappear_from_other_account_archives() {
+    let f = Fixture::new();
+    f.write(&state_with_ssh(&f));
+    prepare(f.home(), Some("b")).unwrap();
+    let mut current = native_start(f.state(), Some("b"));
+    current["codex-managed-remote-connections"] = json!([]);
+    current["remote-projects"] = json!([]);
+    current["remote-connection-auto-connect-by-host-id"] = json!({});
+    current["selected-remote-host-id"] = json!("local");
+    current["active-remote-project-id"] = Value::Null;
+    f.write(&current);
+    for owner in [Some("b"), Some("a"), None, Some("b")] {
+        prepare(f.home(), owner).unwrap();
+        let booted = native_start(f.state(), owner);
+        assert_eq!(booted["remote-projects"], json!([]));
+        assert!(booted["remote-connection-auto-connect-by-host-id"].get("ssh").is_none());
+        assert_eq!(booted["selected-remote-host-id"], "local");
+        assert!(booted["active-remote-project-id"].is_null());
+        f.write(&booted);
+        assert!(!prepare(f.home(), owner).unwrap());
+    }
+}
+
+fn add_remote_catalog(f: &Fixture) {
+    fs::create_dir_all(f.home().join("sqlite")).unwrap();
+    let db = Connection::open(f.home().join("sqlite/codex-dev.db")).unwrap();
+    db.execute_batch("CREATE TABLE local_thread_catalog(host_id TEXT,thread_id TEXT,project_id TEXT,cwd TEXT,source_kind TEXT,source_detail TEXT);
+        INSERT INTO local_thread_catalog VALUES('ssh','remote-chat',NULL,'/before','vscode',NULL);
+        INSERT INTO local_thread_catalog VALUES('other-host','wrong-host',NULL,'/before','vscode',NULL);
+        INSERT INTO local_thread_catalog VALUES('ssh','child',NULL,'/before','subagent',NULL);
+        INSERT INTO local_thread_catalog VALUES('ssh','wrong-directory',NULL,'/elsewhere','vscode',NULL);").unwrap();
+}
+
+#[test]
+fn discovered_ssh_alias_restores_bookmarks_order_and_verified_thread_memberships() {
+    let f = Fixture::new();
+    add_remote_catalog(&f);
+    let mut archived = state_with_ssh(&f);
+    archived["project-order"] = json!(["bookmark", "legacy"]);
+    for id in ["remote-chat", "wrong-host", "child", "wrong-directory"] {
+        archived[ASSIGN][id] = json!({"projectKind":"remote","projectId":"bookmark"});
+        archived[HOSTS][id] = json!("ssh");
+    }
+    let mut state = f.local("legacy");
+    state[SCOPES] = json!({"owner":"current","inactive":{
+        "old":{"globals":scoped_globals(&archived),"atoms":{}}
+    }});
+    // Real Desktop discovery records resolve SSH aliases later; hostname and
+    // identity are null. The previous build consequently saved an empty marker.
+    state["codex-managed-remote-connections"] = json!([
+        {"hostId":"ssh","alias":"work","hostname":null,"identity":null,"source":"discovered","sshPort":null}
+    ]);
+    state["cockpit-shared-ssh-hosts-v1"] = json!([]);
+    f.write(&state);
+    for owner in [Some("next"), None, Some("old")] {
+        prepare(f.home(), owner).unwrap();
+        let booted = native_start(f.state(), owner);
+        assert_eq!(booted["remote-projects"][0]["id"], "bookmark");
+        assert!(booted["project-order"].as_array().unwrap().contains(&json!("bookmark")));
+        assert_eq!(booted[ASSIGN]["remote-chat"], json!({"projectKind":"remote","projectId":"bookmark"}));
+        assert_eq!(booted[HOSTS]["remote-chat"], "ssh");
+        for id in ["wrong-host", "child", "wrong-directory"] {
+            assert_ne!(booted[ASSIGN][id]["projectKind"], "remote");
+        }
+        assert_eq!(booted[ASSIGN]["chat"]["projectKind"], "local");
+        f.write(&booted);
+        assert!(!prepare(f.home(), owner).unwrap());
+    }
+}
+
+#[test]
+fn adding_an_alias_host_does_not_restore_deleted_projects_on_initialized_hosts() {
+    let f = Fixture::new();
+    let mut archived = state_with_ssh(&f);
+    archived["remote-projects"].as_array_mut().unwrap().push(json!({
+        "id":"new-project","hostId":"new-ssh","label":"New","remotePath":"/new"
+    }));
+    archived["project-order"] = json!(["bookmark","new-project"]);
+    let mut state = f.local("legacy");
+    state[SCOPES] = json!({"owner":"current","inactive":{
+        "old":{"globals":scoped_globals(&archived),"atoms":{}}
+    }});
+    state["codex-managed-remote-connections"] = json!([
+        {"hostId":"ssh","alias":"existing","hostname":null,"source":"discovered"},
+        {"hostId":"new-ssh","alias":"new","hostname":null,"source":"discovered"}
+    ]);
+    state["cockpit-shared-ssh-hosts-v1"] = json!(["ssh"]);
+    state["remote-projects"] = json!([]);
+    f.write(&state);
+    prepare(f.home(), Some("next")).unwrap();
+    let booted = native_start(f.state(), Some("next"));
+    assert_eq!(booted["remote-projects"].as_array().unwrap().len(), 1);
+    assert_eq!(booted["remote-projects"][0]["id"], "new-project");
+    assert!(!booted["project-order"].as_array().unwrap().contains(&json!("bookmark")));
+}
+
+#[test]
+fn legacy_ssh_project_ids_for_the_same_bookmark_share_one_group() {
+    let f = Fixture::new();
+    add_remote_catalog(&f);
+    let mut current = state_with_ssh(&f);
+    current["project-order"] = json!(["legacy", "bookmark"]);
+    let mut old = scoped_globals(&current);
+    old["remote-projects"][0]["id"] = json!("older-id");
+    old["project-order"] = json!(["older-id"]);
+    old[ASSIGN]["remote-chat"] = json!({"projectKind":"remote","projectId":"older-id"});
+    old[HOSTS]["remote-chat"] = json!("ssh");
+    current[SCOPES]["inactive"]["old"] = json!({"globals":old,"atoms":{}});
+    f.write(&current);
+    prepare(f.home(), Some("next")).unwrap();
+    let booted = native_start(f.state(), Some("next"));
+    assert_eq!(booted["remote-projects"].as_array().unwrap().len(), 1);
+    assert_eq!(booted["remote-projects"][0]["id"], "bookmark");
+    assert_eq!(booted[ASSIGN]["remote-chat"]["projectId"], "bookmark");
+    assert!(!booted["project-order"].as_array().unwrap().contains(&json!("older-id")));
+}
+
+#[test]
+fn deleting_a_restored_ssh_project_removes_its_order_and_memberships() {
+    let f = Fixture::new();
+    add_remote_catalog(&f);
+    let mut state = state_with_ssh(&f);
+    state["project-order"] = json!(["bookmark", "legacy"]);
+    state[ASSIGN]["remote-chat"] = json!({"projectKind":"remote","projectId":"bookmark"});
+    state[HOSTS]["remote-chat"] = json!("ssh");
+    f.write(&state);
+    prepare(f.home(), Some("b")).unwrap();
+    let mut current = native_start(f.state(), Some("b"));
+    assert_eq!(current[ASSIGN]["remote-chat"]["projectKind"], "remote");
+    current["remote-projects"] = json!([]);
+    f.write(&current);
+    for owner in [Some("b"), Some("a"), None] {
+        prepare(f.home(), owner).unwrap();
+        let booted = native_start(f.state(), owner);
+        assert!(booted["remote-projects"].as_array().unwrap().is_empty());
+        assert!(!booted["project-order"].as_array().unwrap().contains(&json!("bookmark")));
+        assert!(booted[ASSIGN].get("remote-chat").is_none());
+        assert!(booted[HOSTS].get("remote-chat").is_none());
+        assert_eq!(booted[ASSIGN]["chat"]["projectKind"], "local");
+        f.write(&booted);
+    }
 }

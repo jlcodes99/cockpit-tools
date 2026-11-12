@@ -280,6 +280,7 @@ pub fn update_api_key_credentials(
             id: account.id.clone(),
             email: account.email.clone(),
             plan_type: account.plan_type.clone(),
+            subscription_active_until: None,
             created_at: account.created_at,
             last_used: account.last_used,
         });

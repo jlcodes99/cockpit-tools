@@ -94,6 +94,18 @@ export async function cancelInstanceStart(instanceId: string): Promise<void> {
   await invoke("codex_cancel_instance_start", { instanceId });
 }
 export const stopInstance = service.stopInstance;
+export async function switchInstanceAccount(
+  instanceId: string,
+  bindAccountId: string,
+  appSpeed?: CodexAppSpeed,
+): Promise<boolean> {
+  const args = { instanceId, bindAccountId, appSpeed: appSpeed ?? null };
+  return withCodexPathRecovery(
+    () => withProxyEnginePrerequisite(invoke<boolean>("codex_switch_instance_account", args)),
+    { key: codexPathRecoveryKey("codex_switch_instance_account", args) },
+  );
+}
+
 export const closeAllInstances = service.closeAllInstances;
 export async function openInstanceWindow(instanceId: string): Promise<void> {
   return withCodexPathRecovery(

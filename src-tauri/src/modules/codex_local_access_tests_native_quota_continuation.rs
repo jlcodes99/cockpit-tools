@@ -209,6 +209,7 @@ async fn native_quota_snapshot_wait_covers_both_quota_windows_and_memory_cooling
     host.cooldowns.lock().unwrap().insert(
         native_cooldown_key("pool-a", &request.model, false),
         NativeCooldown {
+            non_quota_failures: 0,
             recorded_at: Instant::now(),
             until: Instant::now() + Duration::from_secs(180),
             quota: true,
@@ -316,6 +317,7 @@ async fn native_quota_snapshot_disable_cooling_does_not_disable_real_quota() {
     host.cooldowns.lock().unwrap().insert(
         native_cooldown_key("pool-a", &request.model, false),
         NativeCooldown {
+            non_quota_failures: 0,
             recorded_at: Instant::now(),
             until: Instant::now() + Duration::from_secs(180),
             quota: true,
@@ -345,6 +347,7 @@ async fn native_quota_snapshot_unknown_reset_is_not_replaced_by_finite_memory_co
     host.cooldowns.lock().unwrap().insert(
         native_cooldown_key("pool-a", &request.model, false),
         NativeCooldown {
+            non_quota_failures: 0,
             recorded_at: Instant::now(),
             until: Instant::now() + Duration::from_secs(60),
             quota: false,
@@ -437,4 +440,37 @@ async fn rebuildable_quota_owner_yields_to_ready_backup_before_its_reset() {
     request.excluded_account_ids.push(request.preferred_account_id.take().unwrap());
     let replacement = native_select_route(&host, &caller, request).await.unwrap();
     assert_eq!(replacement.account_id, "pool-b");
+}
+
+#[tokio::test]
+async fn native_business_accounts_remain_eligible_when_selected_together() {
+    let (_root, mut host, mut request) = native_quota_continuation_fixture(None);
+    let template = host.account_overrides["pool-a"].clone();
+    for (id, hourly, weekly) in [("pool-a", 75, 98), ("pool-b", 25, 24)] {
+        let mut account = template.clone();
+        account.id = id.into();
+        account.account_id = Some(format!("workspace-{id}"));
+        account.plan_type = Some("business".into());
+        let quota = account.quota.as_mut().unwrap();
+        quota.hourly_percentage = hourly;
+        quota.weekly_percentage = weekly;
+        host.account_overrides.insert(id.into(), account);
+    }
+    host.collection_override.as_mut().unwrap().restrict_free_accounts = true;
+    request.preferred_account_id = None;
+    request.model = "gpt-6.1-sol".into();
+    let caller = native_test_caller(NATIVE_PRIMARY_CALLER);
+    for (index, members) in [
+        vec!["pool-a"],
+        vec!["pool-b"],
+        vec!["pool-a", "pool-b"],
+        vec!["pool-a", "pool-b"],
+    ].into_iter().enumerate() {
+        host.collection_override.as_mut().unwrap().account_ids =
+            members.iter().copied().map(str::to_owned).collect();
+        request.session_id = Some(format!("business-{index}"));
+        request.thread_id = request.session_id.clone();
+        let route = native_select_route(&host, &caller, request.clone()).await.unwrap();
+        assert!(members.contains(&route.account_id.as_str()));
+    }
 }

@@ -21,9 +21,15 @@ function harness(raw: string | null = null) {
     removeEventListener(name: string, callback: (event: any) => void) { listeners.get(name)?.delete(callback); },
     dispatchEvent(event: { type: string; key?: string }) { listeners.get(event.type)?.forEach(callback => callback(event)); },
   };
-  const utils = loadHookModule(new URL('../utils/codexTopLayoutPreferences.ts', import.meta.url), {}, {
-    localStorage: storage, window, CustomEvent: class { constructor(readonly type: string, readonly detail: unknown) {} },
-  }).exports;
+  const utils = loadHookModule(new URL('../utils/codexTopLayoutPreferences.ts', import.meta.url), {
+    './durableUiSettings': {
+      readDurableUiSetting: () => storage.getItem(),
+      async saveDurableUiSetting(key: string, value: string) {
+        storage.setItem(key, value);
+        window.dispatchEvent({ type: preferences.CODEX_TOP_LAYOUT_UPDATED_EVENT });
+      },
+    },
+  }, { window }).exports;
   const hook = loadHookModule(new URL('./useCodexTopLayoutPreference.ts', import.meta.url), {
     '../utils/codexTopLayoutPreferences': utils,
   }, { window });
@@ -32,7 +38,7 @@ function harness(raw: string | null = null) {
   hook.render(() => hook.exports.useCodexTopLayoutPreference()); flush();
   return { hook, flush, utils, window, get state() { return state; }, get writes() { return writes; }, get stored() { return stored; },
     failReads(value: boolean) { failRead = value; }, failWrites(value: boolean) { failWrite = value; },
-    replace(value: string | null) { stored = value; window.dispatchEvent({ type: 'storage', key: preferences.CODEX_TOP_LAYOUT_STORAGE_KEY }); flush(); },
+    replace(value: string | null) { stored = value; window.dispatchEvent({ type: preferences.CODEX_TOP_LAYOUT_UPDATED_EVENT }); flush(); },
   };
 }
 
@@ -41,26 +47,26 @@ test('mounting with corrupt storage uses a preview without overwriting it; read 
   assert.equal(h.state.storageError, 'read'); assert.equal(h.writes, 0); assert.equal(h.stored, '{broken');
   h.replace(JSON.stringify({ order: ['sessions'] }));
   assert.equal(h.state.storageError, null); assert.equal(h.state.layout.order[0], 'sessions'); assert.equal(h.writes, 0);
-  h.failReads(true); h.window.dispatchEvent({ type: 'storage', key: preferences.CODEX_TOP_LAYOUT_STORAGE_KEY }); h.flush();
+  h.failReads(true); h.window.dispatchEvent({ type: preferences.CODEX_TOP_LAYOUT_UPDATED_EVENT }); h.flush();
   assert.equal(h.state.storageError, 'read'); assert.equal(h.state.layout.order[0], 'sessions');
   h.failReads(false); h.state.retry(); h.flush(); assert.equal(h.state.storageError, null); assert.equal(h.writes, 0);
   h.hook.unmount();
 });
 
-test('failed save retains immediate ordering and retries the same preview after storage recovers', () => {
+test('failed save retains immediate ordering and retries the same preview after storage recovers', async () => {
   const h = harness(); const edited = preferences.moveCodexTopLayoutTab(preferences.createDefaultCodexTopLayout(), 6, 0);
-  h.failWrites(true); h.state.changeLayout(edited); h.flush();
+  h.failWrites(true); h.state.changeLayout(edited); await new Promise(resolve => setImmediate(resolve)); h.flush();
   assert.equal(h.state.storageError, 'save'); assert.deepEqual(h.state.layout.order, edited.order); assert.equal(h.stored, null);
   h.replace(JSON.stringify({ order: ['sessions'] }));
   assert.deepEqual(h.state.layout.order, edited.order); assert.equal(h.state.storageError, 'save');
-  h.failWrites(false); h.state.retry(); h.flush();
+  h.failWrites(false); h.state.retry(); await new Promise(resolve => setImmediate(resolve)); h.flush();
   assert.equal(h.state.storageError, null); assert.deepEqual(JSON.parse(h.stored!).order, edited.order); assert.equal(h.writes, 2);
   h.hook.unmount();
 });
 
-test('same-window import events reread persisted order without writing or looping', () => {
+test('same-window import events reread persisted order without writing or looping', async () => {
   const h = harness(); const imported = preferences.moveCodexTopLayoutTab(preferences.createDefaultCodexTopLayout(), 5, 0);
-  h.utils.writeCodexTopLayoutPreference(imported); h.flush();
+  await h.utils.writeCodexTopLayoutPreference(imported); h.flush();
   assert.deepEqual(Array.from(h.state.layout.order), imported.order); assert.equal(h.writes, 1);
   h.hook.unmount();
 });

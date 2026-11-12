@@ -32,7 +32,7 @@ export interface SshServer {
 }
 
 export interface SshServerList {
-  selected_server_id: string | null;
+  selected_server_ids: string[];
   servers: SshServer[];
 }
 

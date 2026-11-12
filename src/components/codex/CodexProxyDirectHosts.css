@@ -1,0 +1,19 @@
+.codex-proxy-direct-hosts { display: grid; gap: 6px; min-width: 0; width: 100%; }
+.codex-proxy-direct-hosts label { font-weight: 600; }
+.codex-proxy-direct-hosts p { margin: 0; color: var(--text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.codex-proxy-direct-hosts textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  resize: vertical;
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.codex-proxy-direct-hosts textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.codex-proxy-direct-hosts textarea:disabled { opacity: .6; cursor: not-allowed; }
+.codex-proxy-direct-hosts textarea[aria-invalid="true"] { border-color: var(--danger, #dc2626); }
+.codex-proxy-direct-hosts p.codex-proxy-direct-hosts-error { color: var(--danger, #dc2626); }

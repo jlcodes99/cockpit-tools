@@ -100,17 +100,18 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  flex: 1;
+  flex: 1 1 420px;
   min-width: 0;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .accounts-page .toolbar-right {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
-  flex-wrap: nowrap;
+  justify-content: flex-end;
+  max-width: 100%;
+  flex-wrap: wrap;
 }
 
 .accounts-page .search-box {
@@ -859,6 +860,28 @@
 .accounts-page .card-footer {
   padding-top: 10px;
   border-top: 1px dashed rgba(15, 23, 42, 0.12);
+}
+
+.accounts-page .antigravity-card-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: start;
+  border-top: 0;
+}
+
+.accounts-page .antigravity-card-footer::before {
+  content: '';
+  grid-row: 2;
+  justify-self: stretch;
+  border-top: 1px solid var(--border-light);
+}
+
+.accounts-page .antigravity-card-footer > .card-actions {
+  grid-row: 3;
+  justify-self: end;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 100%;
 }
 
 .accounts-page .card-date {

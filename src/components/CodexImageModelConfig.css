@@ -68,7 +68,7 @@
   min-height: 32px;
 }
 
-.codex-image-main-model-hint {
+.codex-image-model-hint {
   display: block;
   color: var(--text-secondary);
   font-size: 11px;

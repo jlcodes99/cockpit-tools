@@ -121,7 +121,7 @@ fn initialize_empty_root(root: &Path) -> Result<(), String> {
 }
 
 fn sanitize_managed_setting(root: &Path) -> Result<(), String> {
-    let path = root.join("data/.zcode/v2/setting.json");
+    let path = modules::zcode_account::settings_path_for_instance_root(root);
     if !path.exists() {
         return Ok(());
     }
@@ -149,12 +149,23 @@ fn copy_default_to_root(root: &Path) -> Result<(), String> {
         fs::create_dir_all(root.join("electron"))
             .map_err(|error| format!("创建 ZCode Electron 实例目录失败: {}", error))?;
     }
-    let zcode_source = modules::zcode_account::default_data_root_dir()?;
-    if zcode_source.exists() {
-        instance_store::copy_dir_recursive(&zcode_source, &root.join("data/.zcode"))?;
-    } else {
-        fs::create_dir_all(root.join("data/.zcode/v2"))
-            .map_err(|error| format!("创建 ZCode 数据实例目录失败: {}", error))?;
+    copy_default_zcode_data(
+        root,
+        &modules::zcode_account::default_data_root_dir()?,
+        &modules::zcode_account::default_settings_path()?,
+    )
+}
+
+fn copy_default_zcode_data(root: &Path, source_data: &Path, source_setting: &Path) -> Result<(), String> {
+    if source_data.exists() {
+        instance_store::copy_dir_recursive(source_data, &root.join("data/.zcode"))?;
+    }
+    let setting = modules::zcode_account::settings_path_for_instance_root(root);
+    fs::create_dir_all(root.join("data/.zcode/v2"))
+        .map_err(|error| format!("创建 ZCode 数据实例目录失败: {error}"))?;
+    if source_setting.exists() {
+        fs::copy(source_setting, &setting)
+            .map_err(|error| format!("复制 ZCode 默认实例设置失败: {error}"))?;
     }
     sanitize_managed_setting(root)
 }
@@ -722,6 +733,28 @@ mod tests {
         assert!(is_profile_initialized(&second, false));
         assert!(!second_credentials.exists());
         fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn copied_instance_reads_settings_from_home_and_data_from_custom_root() {
+        let home = tempfile::tempdir().unwrap();
+        let data = tempfile::tempdir().unwrap();
+        let instance = tempfile::tempdir().unwrap();
+        let source_data = data.path().join(".zcode");
+        let source_setting = home.path().join("setting.json");
+        fs::create_dir_all(source_data.join("v2")).unwrap();
+        fs::write(source_data.join("v2/credentials.json"), r#"{"credential":"fixture"}"#).unwrap();
+        fs::write(source_data.join("v2/setting.json"), r#"{"locale":"en-US"}"#).unwrap();
+        fs::write(&source_setting, r#"{"locale":"zh-CN","dataBaseDir":"custom"}"#).unwrap();
+
+        copy_default_zcode_data(instance.path(), &source_data, &source_setting).unwrap();
+
+        let setting = modules::zcode_account::settings_path_for_instance_root(instance.path());
+        let settings: Value = serde_json::from_slice(&fs::read(setting).unwrap()).unwrap();
+        assert_eq!(settings, serde_json::json!({"locale":"zh-CN"}));
+        let credentials = modules::zcode_account::credentials_path_for_instance_root(instance.path());
+        assert_eq!(fs::read_to_string(credentials).unwrap(), r#"{"credential":"fixture"}"#);
+        assert!(fs::read_to_string(source_setting).unwrap().contains("dataBaseDir"));
     }
 
     #[test]

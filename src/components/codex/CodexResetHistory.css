@@ -1,0 +1,48 @@
+.codex-reset-credit-confirm-details.codex-reset-history {
+  flex-shrink: 0;
+  max-height: initial;
+  overflow: initial;
+}
+.codex-reset-history-panel { min-width: 0; }
+.codex-reset-history-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.codex-reset-history-tabs .btn {
+  min-width: 0;
+  padding: 6px 10px;
+  white-space: normal;
+}
+.codex-reset-history-tabs .btn.is-active {
+  background: color-mix(in srgb, var(--primary) 12%, var(--bg-surface));
+  color: var(--primary);
+  border-color: currentColor;
+}
+.codex-reset-history-tabs .btn.is-active:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 18%, var(--bg-surface));
+}
+.codex-reset-history-tabs .btn.is-active:disabled { opacity: 0.5; cursor: not-allowed; }
+.codex-reset-history-heading { display: flex; align-items: flex-start; gap: 8px; }
+.codex-reset-history-heading p { flex: 1; margin: 0; font-size: 12px; color: var(--text-secondary); }
+.codex-reset-history-heading .btn { flex-shrink: 0; padding: 6px; }
+.codex-reset-history-list { list-style: none; padding: 0; margin: 8px 0 0; }
+.codex-reset-history-list li {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border);
+}
+.codex-reset-history-event { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 4px; }
+.codex-reset-history-event strong { font-size: 13px; }
+.codex-reset-history-event span, .codex-reset-history-event p { margin: 0; font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.codex-reset-history-observations { font-size: 12px; }
+.codex-reset-history-observations summary { cursor: pointer; }
+.codex-reset-history-observations p { margin-top: 4px; }
+.codex-reset-history-list time { display: flex; flex-direction: column; gap: 4px; text-align: end; font-size: 12px; }
+.codex-reset-history-list time span { color: var(--text-secondary); }
+.codex-reset-history-empty { padding: 8px 0; font-size: 12px; color: var(--text-secondary); }
+.codex-reset-history-actions { display: flex; justify-content: center; gap: 8px; }
+@media (max-width: 420px) {
+  .codex-reset-history-list li { flex-direction: column; gap: 6px; }
+  .codex-reset-history-list time { flex-direction: row; flex-wrap: wrap; text-align: start; }
+}

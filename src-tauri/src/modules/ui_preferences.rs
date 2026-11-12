@@ -1,4 +1,4 @@
-//! 跨版本保留的侧边栏布局。
+//! 跨版本保留的界面偏好。
 //! 存在数据目录，不依赖 WebView localStorage。
 
 use std::collections::BTreeMap;
@@ -19,6 +19,8 @@ static PREFERENCES_LOCK: Mutex<()> = Mutex::new(());
 pub struct UiPreferences {
     #[serde(default)]
     pub values: BTreeMap<String, String>,
+    #[serde(default)]
+    pub revisions: BTreeMap<String, u64>,
 }
 
 fn preferences_path() -> Result<PathBuf, String> {
@@ -26,11 +28,13 @@ fn preferences_path() -> Result<PathBuf, String> {
 }
 
 fn read_preferences_from_path(path: &PathBuf) -> Result<UiPreferences, String> {
-    if !path.exists() {
-        return Ok(UiPreferences::default());
-    }
-    let raw =
-        std::fs::read_to_string(path).map_err(|error| format!("读取界面偏好失败: {error}"))?;
+    let raw = match std::fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(UiPreferences::default());
+        }
+        Err(error) => return Err(format!("读取界面偏好失败: {error}")),
+    };
     if raw.trim().is_empty() {
         return Err("界面偏好文件为空，已保留原文件".into());
     }
@@ -54,11 +58,74 @@ fn apply_values(preferences: &mut UiPreferences, values: BTreeMap<String, String
     let mut changed = false;
     for (key, value) in values {
         if preferences.values.get(&key) != Some(&value) {
+            let revision = preferences.revisions.entry(key.clone()).or_default();
+            *revision = revision.saturating_add(1);
             preferences.values.insert(key, value);
             changed = true;
         }
     }
     changed
+}
+
+fn migrate_missing(preferences: &mut UiPreferences, legacy: BTreeMap<String, String>) -> bool {
+    let missing = legacy
+        .into_iter()
+        .filter(|(key, _)| !preferences.values.contains_key(key))
+        .collect();
+    apply_values(preferences, missing)
+}
+
+fn update_value(
+    preferences: &mut UiPreferences,
+    key: String,
+    value: String,
+    expected_revision: u64,
+) -> Result<bool, String> {
+    if preferences.values.get(&key) == Some(&value) {
+        return Ok(false);
+    }
+    let current_revision = preferences.revisions.get(&key).copied().unwrap_or(0);
+    if current_revision != expected_revision {
+        return Err("ui_preference_revision_conflict".into());
+    }
+    Ok(apply_values(preferences, BTreeMap::from([(key, value)])))
+}
+
+pub fn migrate_ui_preference_values(
+    legacy: BTreeMap<String, String>,
+) -> Result<UiPreferences, String> {
+    mutate_preferences(|preferences| Ok(migrate_missing(preferences, legacy)))
+}
+
+pub fn update_ui_preference(
+    key: String,
+    value: String,
+    expected_revision: u64,
+) -> Result<UiPreferences, String> {
+    mutate_preferences(|preferences| update_value(preferences, key, value, expected_revision))
+}
+
+fn mutate_preferences(
+    edit: impl FnOnce(&mut UiPreferences) -> Result<bool, String>,
+) -> Result<UiPreferences, String> {
+    let _guard = PREFERENCES_LOCK
+        .lock()
+        .map_err(|_| "界面偏好写入锁不可用".to_string())?;
+    let path = preferences_path()?;
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(path.with_extension("lock"))
+        .map_err(|error| format!("打开界面偏好写入锁失败: {error}"))?;
+    fs2::FileExt::try_lock_exclusive(&lock)
+        .map_err(|error| format!("获取界面偏好写入锁失败: {error}"))?;
+    let mut preferences = read_preferences_from_path(&path)?;
+    if edit(&mut preferences)? {
+        write_preferences_to_path(&path, &preferences)?;
+    }
+    Ok(preferences)
 }
 
 fn check_layout_revision(
@@ -83,16 +150,10 @@ fn check_layout_revision(
 }
 
 pub fn save_ui_preferences(values: BTreeMap<String, String>) -> Result<UiPreferences, String> {
-    let _guard = PREFERENCES_LOCK
-        .try_lock()
-        .map_err(|_| "界面偏好正在读写，请重试".to_string())?;
-    let path = preferences_path()?;
-    let mut preferences = read_preferences_from_path(&path)?;
-    check_layout_revision(&preferences, &values)?;
-    if apply_values(&mut preferences, values) {
-        write_preferences_to_path(&path, &preferences)?;
-    }
-    Ok(preferences)
+    mutate_preferences(|preferences| {
+        check_layout_revision(preferences, &values)?;
+        Ok(apply_values(preferences, values))
+    })
 }
 
 #[cfg(test)]
@@ -106,6 +167,7 @@ mod tests {
         let key = "agtools.platform_layout.v1".to_string();
         let preferences = UiPreferences {
             values: BTreeMap::from([(key.clone(), r#"{"_layoutUpdatedAt":200}"#.into())]),
+            ..UiPreferences::default()
         };
         assert!(super::check_layout_revision(
             &preferences,
@@ -185,5 +247,23 @@ mod tests {
             &mut preferences,
             BTreeMap::from([("agtools.platform_layout.v1".to_string(), "next".to_string())]),
         ));
+    }
+    #[test]
+    fn webview_import_fills_missing_keys_and_revisions_prevent_lost_updates() {
+        let mut snapshot = UiPreferences::default();
+        assert!(super::migrate_missing(
+            &mut snapshot,
+            BTreeMap::from([("privacy".into(), "1".into())])
+        ));
+        assert_eq!(snapshot.revisions["privacy"], 1);
+        assert!(super::update_value(&mut snapshot, "privacy".into(), "0".into(), 1).unwrap());
+        assert!(!super::migrate_missing(
+            &mut snapshot,
+            BTreeMap::from([("privacy".into(), "1".into())])
+        ));
+        assert!(super::update_value(&mut snapshot, "privacy".into(), "1".into(), 1).is_err());
+        assert_eq!(snapshot.values["privacy"], "0");
+        assert_eq!(snapshot.revisions["privacy"], 2);
+        assert!(super::update_value(&mut snapshot, "other".into(), "value".into(), 0).unwrap());
     }
 }

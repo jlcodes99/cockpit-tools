@@ -1,11 +1,12 @@
+import type { LocalHistoryRead } from '../hooks/useLocalHistory';
 /**
  * MiniMax Code 自动签到服务
  *
- * 与 workbuddyAutoCheckinService 保持一致的对齐方式：配置同时缓存在
- * WebView localStorage 与 Rust 后台调度器中，由后台调度器负责实际签到。
+ * 由 Rust 持久化配置并负责实际签到，前端仅缓存当前配置。
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { createCheckinConfigMigration } from './checkinConfigMigration';
 
 export interface MinimaxCodeAccountScheduleState {
   scheduledDate: string; // "YYYY-MM-DD"
@@ -43,22 +44,20 @@ function isValidTime(time: unknown): time is string {
 
 function cacheConfigLocally(config: MinimaxCodeAutoCheckinConfig, emitChange = false): void {
   cachedConfig = config;
-  if (typeof window === 'undefined') {
-    return;
-  }
-  try {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-    if (emitChange) {
-      window.dispatchEvent(new Event(MINIMAX_CODE_AUTO_CHECKIN_CONFIG_CHANGED_EVENT));
-    }
-  } catch (err) {
-    console.warn('[MinimaxCodeAutoCheckin] 本地缓存保存失败:', err);
+  if (emitChange && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(MINIMAX_CODE_AUTO_CHECKIN_CONFIG_CHANGED_EVENT));
   }
 }
 
+const migrateLegacyConfig = createCheckinConfigMigration(
+  'migrate_minimax_code_auto_checkin_config',
+  readLegacyConfig,
+);
+
 export async function getMinimaxCodeAutoCheckinConfigAsync(): Promise<MinimaxCodeAutoCheckinConfig> {
   try {
-    const config = await invoke<MinimaxCodeAutoCheckinConfig>('get_minimax_code_auto_checkin_config');
+    const config = await migrateLegacyConfig()
+      ?? await invoke<MinimaxCodeAutoCheckinConfig>('get_minimax_code_auto_checkin_config');
     cacheConfigLocally(config);
     return config;
   } catch (err) {
@@ -68,16 +67,17 @@ export async function getMinimaxCodeAutoCheckinConfigAsync(): Promise<MinimaxCod
 }
 
 export function getMinimaxCodeAutoCheckinConfig(): MinimaxCodeAutoCheckinConfig {
-  if (cachedConfig) {
-    return cachedConfig;
-  }
+  return cachedConfig ?? readLegacyConfig() ?? DEFAULT_MINIMAX_CODE_AUTO_CHECKIN_CONFIG;
+}
+
+function readLegacyConfig(): MinimaxCodeAutoCheckinConfig | undefined {
   if (typeof window === 'undefined') {
-    return DEFAULT_MINIMAX_CODE_AUTO_CHECKIN_CONFIG;
+    return undefined;
   }
   try {
     const raw = localStorage.getItem(CONFIG_KEY);
     if (!raw) {
-      return DEFAULT_MINIMAX_CODE_AUTO_CHECKIN_CONFIG;
+      return undefined;
     }
     const parsed = JSON.parse(raw);
     const config: MinimaxCodeAutoCheckinConfig = {
@@ -91,10 +91,9 @@ export function getMinimaxCodeAutoCheckinConfig(): MinimaxCodeAutoCheckinConfig 
           ? parsed.accountSchedules
           : undefined,
     };
-    cachedConfig = config;
     return config;
   } catch {
-    return DEFAULT_MINIMAX_CODE_AUTO_CHECKIN_CONFIG;
+    return undefined;
   }
 }
 
@@ -266,8 +265,8 @@ export interface MinimaxCodeAutoCheckinLogRecord {
 export const MINIMAX_CODE_AUTO_CHECKIN_LOGS_CHANGED_EVENT =
   'minimax-code-auto-checkin-logs-changed';
 
-export async function getMinimaxCodeAutoCheckinLogsAsync(): Promise<MinimaxCodeAutoCheckinLogRecord[]> {
-  return await invoke<MinimaxCodeAutoCheckinLogRecord[]>('get_minimax_code_auto_checkin_logs');
+export function getMinimaxCodeAutoCheckinLogsAsync(retry = false): Promise<LocalHistoryRead<MinimaxCodeAutoCheckinLogRecord>> {
+  return invoke<LocalHistoryRead<MinimaxCodeAutoCheckinLogRecord>>('get_minimax_code_auto_checkin_logs', { retry });
 }
 
 export async function clearMinimaxCodeAutoCheckinLogs(): Promise<void> {

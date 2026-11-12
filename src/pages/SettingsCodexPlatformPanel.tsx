@@ -2,6 +2,8 @@ import { CodexAppEnhancementSettings } from '../components/codex/CodexAppEnhance
 import { CodexRefreshPlanScopeControl } from '../components/CodexRefreshPlanScopeControl';
 import { CodexRequestPayloadSetting } from '../components/codex/CodexRequestPayloadSetting';
 import { CodexOverloadRetrySetting } from '../components/codex/CodexOverloadRetrySetting';
+import { CodexQuotaRecoverySettings } from '../components/codex/CodexQuotaRecoverySettings';
+import { CodexQuotaHistorySettings } from '../components/codex/CodexQuotaHistorySettings';
 import { AutoSwitchAccountScopeSelector } from '../components/AutoSwitchAccountScopeSelector';
 import { CodexContextManagementControl } from '../components/codex/CodexContextManagementControl';
 import { CodexSshSyncSettingsControl } from '../components/codex/CodexSshSyncSettingsControl';
@@ -606,6 +608,8 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
                   </label>
                 </div>
               </div>
+              <CodexQuotaRecoverySettings />
+              <CodexQuotaHistorySettings />
               {codexQuotaAlertEnabled && (
                 <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                   <div className="row-label">
@@ -671,12 +675,12 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
               <div className="settings-row">
                 <div className="row-label">
                   <div className="row-title">
-                    {t('settings.general.codexHideRelayQuota', '隐藏中转站额度')}
+                    {t('settings.general.codexHideRelayQuota', '余额开关')}
                   </div>
                   <div className="row-desc">
                     {t(
                       'settings.general.codexHideRelayQuotaDesc',
-                      '开启后，Codex 账号总览隐藏中转 / New API 类额度面板，减轻列表重叠与视觉干扰。',
+                      '关闭后，隐藏 Codex 中转站余额，并停止自动和手动余额查询。',
                     )}
                   </div>
                 </div>
@@ -684,8 +688,8 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
                   <label className="switch">
                     <input
                       type="checkbox"
-                      checked={codexHideRelayQuota}
-                      onChange={(e) => setCodexHideRelayQuota(e.target.checked)}
+                      checked={!codexHideRelayQuota}
+                      onChange={(e) => setCodexHideRelayQuota(!e.target.checked)}
                     />
                     <span className="slider"></span>
                   </label>

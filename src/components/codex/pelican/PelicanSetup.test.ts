@@ -9,6 +9,35 @@ function nodes(tree: any): any[] {
 }
 const t = (key: string) => key;
 
+test('account setup shows and filters workspace credentials sharing one email', () => {
+  const accounts = [
+    { id: 'one', email: 'same@example.invalid', account_name: 'Alpha', organization_id: 'org-first' },
+    { id: 'two', email: 'same@example.invalid', account_name: 'Beta', organization_id: 'org-second' },
+  ];
+  const state = { sourceMode: 'accounts', selectedAccountIds: ['two'], starting: false,
+    draft: { model: 'selected-model', prompt: PELICAN_BENCHMARKS.simple1, effort: 'high', concurrency: 1 } };
+  const h = loadHookModule(new URL('./PelicanSetup.tsx', import.meta.url), {
+    'react-i18next': { useTranslation: () => ({ t }) },
+    './PelicanProviderSetup': { PelicanProviderSetup: 'provider-setup' },
+    './PelicanAccountSummary': { PelicanAccountSummary: 'account-summary' },
+    '../../../stores/useCodexPelicanStore': { useCodexPelicanStore: (select: any) => select(state) },
+    '../../../stores/useCodexAccountStore': { useCodexAccountStore: (select: any) => select({ accounts }) },
+    '../../../services/codexWakeupService': { getCodexWakeupState: async () => ({ model_presets: [] }) },
+    '../../SingleSelectDropdown': { SingleSelectDropdown: 'dropdown' },
+    '../../ModalErrorMessage': { ModalErrorMessage: 'error', useModalErrorState: () => ({ clear() {}, set() {} }) },
+  });
+  h.render(() => h.exports.PelicanSetup({ mask: (value: string) => `masked:${value}` }));
+  const scopeLabels = () => nodes(h.flush()).filter((node) => node.props.className === 'pelican-account-context')
+    .map((node) => node.props.children);
+  assert.deepEqual(scopeLabels(), ['masked:Alpha · masked:org-first', 'masked:Beta · masked:org-second']);
+  const search = nodes(h.flush()).find((node) => node.type === 'input' && node.props.type === 'search');
+  search.props.onChange({ target: { value: 'BETA' } });
+  assert.deepEqual(scopeLabels(), ['masked:Beta · masked:org-second']);
+  const checkbox = nodes(h.flush()).find((node) => node.type === 'input' && node.props.type === 'checkbox');
+  assert.equal(checkbox.props.checked, true);
+  h.unmount();
+});
+
 test('both account and provider entries submit built-in prompts without reference answers or grading rules', async () => {
   for (const sourceMode of ['accounts', 'providers']) {
     for (const id of PELICAN_BENCHMARK_IDS.filter((key) => key !== 'animation' && key !== 'custom')) {

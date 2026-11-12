@@ -497,6 +497,11 @@ pub struct QuotaFetchError {
     pub validation_url: Option<String>,
 }
 
+pub(crate) fn is_explicit_quota_denial(reason: Option<&str>, validation_url: Option<&str>) -> bool {
+    matches!(reason, Some("VALIDATION_REQUIRED" | "SUBSCRIPTION_REQUIRED"))
+        || validation_url.is_some_and(|url| !url.trim().is_empty())
+}
+
 pub fn format_google_validation_url(raw_url: &str, email: &str) -> String {
     let email = email.trim();
     if raw_url.trim().is_empty() || email.is_empty() {
@@ -1298,22 +1303,23 @@ fn build_quota_data_from_response(
     quota_data
 }
 
-fn is_summary_bucket(name: &str) -> bool {
-    matches!(
-        name,
-        "3p-5h"
-            | "claude:5h"
-            | "3p-weekly"
-            | "claude:weekly"
-            | "gemini-5h"
-            | "gemini:5h"
-            | "gemini-weekly"
-            | "gemini:weekly"
-            | "gemini-argon-wtu-weekly"
-            | "argon:weekly"
-            | "gemini-argon-5h"
-            | "argon:5h"
-    ) || (name.starts_with("gemini-argon-") && (name.ends_with("-weekly") || name.ends_with("-5h")))
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum SummaryBucketFamily {
+    Claude,
+    Gemini,
+    Argon,
+}
+
+pub(super) fn summary_bucket_family(name: &str) -> Option<SummaryBucketFamily> {
+    use SummaryBucketFamily::*;
+    match name {
+        "3p-5h" | "claude:5h" | "3p-weekly" | "claude:weekly" => Some(Claude),
+        "gemini-5h" | "gemini:5h" | "gemini-weekly" | "gemini:weekly" => Some(Gemini),
+        "argon:weekly" | "argon:5h" => Some(Argon),
+        name if name.starts_with("gemini-argon-")
+            && (name.ends_with("-weekly") || name.ends_with("-5h")) => Some(Argon),
+        _ => None,
+    }
 }
 
 /// Merge only real quota windows from this account's last successful summary.
@@ -1334,7 +1340,7 @@ pub(crate) fn preserve_failed_quota_summary(quota: &mut QuotaData, previous: Opt
     for model in previous
         .models
         .iter()
-        .filter(|model| is_summary_bucket(&model.name))
+        .filter(|model| summary_bucket_family(&model.name).is_some())
     {
         if !quota
             .models
@@ -1347,7 +1353,7 @@ pub(crate) fn preserve_failed_quota_summary(quota: &mut QuotaData, previous: Opt
     if quota
         .models
         .iter()
-        .any(|model| is_summary_bucket(&model.name))
+        .any(|model| summary_bucket_family(&model.name).is_some())
     {
         quota.quota_summary_updated_at = previous
             .quota_summary_updated_at
@@ -1369,9 +1375,16 @@ pub async fn fetch_quota_for_token(
 ) {
     let ctx = QuotaCloudCodeContext::from_token(token);
     let meta = fetch_project_metadata_with_context(&token.access_token, email, &ctx).await;
-    let quota =
-        fetch_quota_with_project_metadata(&token.access_token, email, skip_cache, &ctx, &meta)
-            .await;
+    let base_url = resolve_cloud_code_base_url(&ctx);
+    let quota = fetch_quota_with_project_metadata(
+        &token.access_token,
+        email,
+        skip_cache,
+        &ctx,
+        &meta,
+        &base_url,
+    )
+    .await;
     (meta, quota)
 }
 
@@ -1381,10 +1394,10 @@ async fn fetch_quota_with_project_metadata(
     skip_cache: bool,
     ctx: &QuotaCloudCodeContext,
     meta: &ProjectMetadataResult,
+    base_url: &str,
 ) -> crate::error::AppResult<QuotaFetchResult> {
     use crate::error::AppError;
 
-    let base_url = resolve_cloud_code_base_url(ctx);
     let resolved_project_id =
         valid_cloud_code_project_id(meta.project_id.as_deref()).map(ToOwned::to_owned);
     let subscription_tier = meta.subscription_tier.clone();
@@ -1466,43 +1479,41 @@ async fn fetch_quota_with_project_metadata(
             .await
         {
             Ok(response) => {
-                if response.error_for_status_ref().is_err() {
-                    let status = response.status();
-
-                    if status == reqwest::StatusCode::FORBIDDEN {
-                        crate::modules::logger::log_warn(&format!(
-                            "账号无权限 (403 Forbidden), 标记为 forbidden 状态: {}",
-                            email
-                        ));
-                        let text = response.text().await.unwrap_or_default();
-                        let mut q = QuotaData::new();
-                        q.is_forbidden = true;
-                        q.subscription_tier = subscription_tier.clone();
-                        q.is_gcp_tos = is_gcp_tos;
-                        q.project_id = resolved_project_id.clone();
-                        let parsed_error =
-                            parse_google_api_error_with_email(status.as_u16(), &text, Some(email));
-                        return Ok(QuotaFetchResult {
-                            quota: q,
-                            error: Some(parsed_error),
-                        });
-                    }
-
-                    if attempt < max_retries {
-                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                        continue;
-                    }
-
+                let status = response.status();
+                let mut models_error = None;
+                let mut payload_value = if status == reqwest::StatusCode::FORBIDDEN {
                     let text = response.text().await.unwrap_or_default();
-                    return Err(AppError::Unknown(format!(
-                        "API 错误: {} - {}",
-                        status, text
-                    )));
-                }
-
-                let body = response.text().await.map_err(AppError::Network)?;
-                let mut payload_value: serde_json::Value = serde_json::from_str(&body)
-                    .map_err(|e| AppError::Unknown(format!("API 响应解析失败: {}", e)))?;
+                    let error = parse_google_api_error_with_email(status.as_u16(), &text, Some(email));
+                    if is_explicit_quota_denial(
+                        error.reason.as_deref(),
+                        error.validation_url.as_deref(),
+                    ) {
+                        let mut quota = QuotaData::new();
+                        quota.is_forbidden = true;
+                        quota.subscription_tier = subscription_tier.clone();
+                        quota.credits = credits.clone();
+                        quota.is_gcp_tos = is_gcp_tos;
+                        quota.project_id = resolved_project_id.clone();
+                        return Ok(QuotaFetchResult { quota, error: Some(error) });
+                    }
+                    crate::modules::logger::log_warn(
+                        "[Quota] fetchAvailableModels 返回 403，继续检查配额摘要",
+                    );
+                    models_error = Some(error);
+                    json!({"models": {}})
+                } else {
+                    if response.error_for_status_ref().is_err() {
+                        if attempt < max_retries {
+                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                            continue;
+                        }
+                        let text = response.text().await.unwrap_or_default();
+                        return Err(AppError::Unknown(format!("API 错误: {} - {}", status, text)));
+                    }
+                    let body = response.text().await.map_err(AppError::Network)?;
+                    serde_json::from_str::<serde_json::Value>(&body)
+                        .map_err(|e| AppError::Unknown(format!("API 响应解析失败: {}", e)))?
+                };
 
                 // Fetch retrieveUserQuotaSummary to get weekly and 5h buckets
                 let mut quota_summary_val: Option<serde_json::Value> = None;
@@ -1565,10 +1576,17 @@ async fn fetch_quota_with_project_metadata(
                                 &err_text,
                                 Some(email),
                             );
-                            if parsed.reason.as_deref() == Some("VALIDATION_REQUIRED")
-                                || parsed.validation_url.is_some()
-                                || parsed.message.contains("Verify your account")
-                            {
+                            let explicitly_denied = if models_error.is_some() {
+                                is_explicit_quota_denial(
+                                    parsed.reason.as_deref(),
+                                    parsed.validation_url.as_deref(),
+                                )
+                            } else {
+                                parsed.reason.as_deref() == Some("VALIDATION_REQUIRED")
+                                    || parsed.validation_url.is_some()
+                                    || parsed.message.contains("Verify your account")
+                            };
+                            if explicitly_denied {
                                 quota_summary_error = Some(parsed);
                             }
                         }
@@ -1581,17 +1599,19 @@ async fn fetch_quota_with_project_metadata(
                     }
                 }
 
-                write_api_cache(
-                    "authorized",
-                    "desktop",
-                    email,
-                    effective_project_id.clone(),
-                    payload_value.clone(),
-                );
+                if models_error.is_none() {
+                    write_api_cache(
+                        "authorized",
+                        "desktop",
+                        email,
+                        effective_project_id.clone(),
+                        payload_value.clone(),
+                    );
+                }
 
                 let quota_response: QuotaResponse = serde_json::from_value(payload_value)
                     .map_err(|e| AppError::Unknown(format!("API 响应解析失败: {}", e)))?;
-                let quota_data = build_quota_data_from_response(
+                let mut quota_data = build_quota_data_from_response(
                     quota_response,
                     subscription_tier.clone(),
                     credits.clone(),
@@ -1600,9 +1620,17 @@ async fn fetch_quota_with_project_metadata(
                     resolved_project_id.clone(),
                 );
 
+                if models_error.is_some() {
+                    quota_data.is_forbidden = quota_summary_error.is_some();
+                    if quota_data.models.is_empty() {
+                        quota_data.quota_summary_stale = true;
+                        quota_data.quota_summary_updated_at = None;
+                    }
+                }
                 return Ok(QuotaFetchResult {
+                    error: quota_summary_error
+                        .or_else(|| models_error.filter(|_| quota_data.models.is_empty())),
                     quota: quota_data,
-                    error: quota_summary_error,
                 });
             }
             Err(e) => {

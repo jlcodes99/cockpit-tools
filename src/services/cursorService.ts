@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import i18n from '../i18n';
 import { CursorAccount } from '../types/cursor';
 
 export interface CursorOAuthLoginStartResponse {
@@ -55,8 +56,19 @@ export async function refreshAllCursorTokens(): Promise<number> {
   return await invoke('refresh_all_cursor_tokens');
 }
 
+export async function retryCursorFailedQuotas(accountIds: string[]): Promise<string[]> {
+  return await invoke('retry_cursor_failed_quotas', { accountIds });
+}
+
 export async function addCursorAccountWithToken(accessToken: string): Promise<CursorAccount> {
-  return await invoke('add_cursor_account_with_token', { accessToken });
+  try {
+    return await invoke('add_cursor_account_with_token', { accessToken });
+  } catch (error) {
+    if (String(error).replace(/^Error:\s*/, '') === 'CURSOR_INVALID_BROWSER_TOKEN') {
+      throw new Error(i18n.t('cursor.token.invalidBrowserToken'));
+    }
+    throw error;
+  }
 }
 
 export async function updateCursorAccountTags(accountId: string, tags: string[]): Promise<CursorAccount> {

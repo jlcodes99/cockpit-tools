@@ -22,23 +22,17 @@ pub async fn codex_query_remote_key_data(base_url:String,api_key:String,resource
 // 配置持久化、模型发现、连接测试和用量解析。对外调用仍使用原有
 // `commands::codex::<command>` 路径，避免拆分影响命令注册和现有调用方。
 
-const CODEX_GROUPS_FILE: &str = "codex_account_groups.json";
 const CODEX_MODEL_PROVIDERS_FILE: &str = "codex_model_providers.json";
 const CODEX_MODEL_PROVIDER_TEST_TIMEOUT_SECS: u64 = 20;
 
 #[tauri::command]
 pub async fn load_codex_account_groups() -> Result<String, String> {
-    let path = account::get_data_dir()?.join(CODEX_GROUPS_FILE);
-    if !path.exists() {
-        return Ok("[]".to_string());
-    }
-    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read codex groups: {}", e))
+    crate::commands::account::load_platform_account_groups("codex".to_string()).await
 }
 
 #[tauri::command]
-pub async fn save_codex_account_groups(data: String) -> Result<(), String> {
-    // The shared and Codex-specific UI must use the same validated atomic write.
-    crate::commands::account::save_platform_account_groups("codex".to_string(), data).await
+pub async fn save_codex_account_groups(data: String, expected_revision: Option<u64>) -> Result<u64, String> {
+    crate::commands::account::save_platform_account_groups("codex".to_string(), data, expected_revision).await
 }
 
 #[tauri::command]
@@ -302,6 +296,7 @@ pub struct CodexModelProviderChatTestRecord {
     pub reply: Option<String>,
     pub error: Option<String>,
     pub duration_ms: Option<u64>,
+    pub first_text_ms: Option<u64>,
     pub timestamp: i64,
 }
 
@@ -470,6 +465,7 @@ async fn run_single_model_provider_chat_test(
             reply: None,
             error: Some("供应商缺少 API Key".to_string()),
             duration_ms: None,
+            first_text_ms: None,
             timestamp,
         };
     }
@@ -506,6 +502,7 @@ async fn run_single_model_provider_chat_test(
             reply: None,
             error: Some(codex_local_access::MODEL_PROVIDER_CHAT_TEST_CANCELLED_ERROR.to_string()),
             duration_ms: None,
+            first_text_ms: None,
             timestamp,
         };
     }
@@ -523,6 +520,7 @@ async fn run_single_model_provider_chat_test(
             reply: None,
             error: Some("无法确定测试模型，请先配置模型目录或确认 /models 可用".to_string()),
             duration_ms: None,
+            first_text_ms: None,
             timestamp,
         };
     };
@@ -543,11 +541,10 @@ async fn run_single_model_provider_chat_test(
             prompt: prompt.to_string(),
         },
     )
-    .await
-    .map(|result| (result.duration_ms, result.reply));
+    .await;
 
     match result {
-        Ok((duration_ms, reply)) => CodexModelProviderChatTestRecord {
+        Ok(result) => CodexModelProviderChatTestRecord {
             provider_id: target.provider_id,
             provider_name: target.provider_name,
             api_key_id: target.api_key_id,
@@ -557,9 +554,10 @@ async fn run_single_model_provider_chat_test(
             model_id: Some(model_id),
             success: true,
             prompt: prompt.to_string(),
-            reply: Some(reply),
+            reply: Some(result.reply),
             error: None,
-            duration_ms: Some(duration_ms),
+            duration_ms: Some(result.duration_ms),
+            first_text_ms: result.first_text_ms,
             timestamp,
         },
         Err(error) => CodexModelProviderChatTestRecord {
@@ -575,6 +573,7 @@ async fn run_single_model_provider_chat_test(
             reply: None,
             error: Some(error),
             duration_ms: None,
+            first_text_ms: None,
             timestamp,
         },
     }
@@ -1735,7 +1734,7 @@ pub fn codex_cancel_model_provider_chat_test(run_id: String) -> Result<bool, Str
 }
 
 #[tauri::command]
-pub async fn codex_list_model_provider_models(base_url: String, api_key: String, wire_api: Option<String>, auth_scheme: Option<String>) -> Result<CodexModelProviderModelsResult, String> {
+pub async fn codex_list_model_provider_models(base_url: String, api_key: String, wire_api: Option<String>, auth_scheme: Option<String>, remember_for_launch: Option<bool>) -> Result<CodexModelProviderModelsResult, String> {
     if let Ok(Some(remote)) = crate::modules::codex_remote_service::discover(&base_url, api_key.trim(), false).await {
         let names:std::collections::HashMap<String,String>=remote.model_catalog.as_ref().and_then(|c|c["models"].as_array())
             .into_iter().flatten().filter_map(|m|Some((m["slug"].as_str()?.into(),m["display_name"].as_str()?.into()))).collect();
@@ -1748,7 +1747,12 @@ pub async fn codex_list_model_provider_models(base_url: String, api_key: String,
         }).collect(), latency_ms: 0 });
     }
     if api_key.trim().is_empty() { return Err("MISSING_API_KEY".into()); }
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(20)).build().map_err(|_| "PROVIDER_MODELS_NETWORK_FAILED".to_string())?;
+    let remember_for_launch = remember_for_launch.unwrap_or(false);
+    let mut client = reqwest::Client::builder().timeout(Duration::from_secs(20));
+    if remember_for_launch {
+        client = client.redirect(reqwest::redirect::Policy::none());
+    }
+    let client = client.build().map_err(|_| "PROVIDER_MODELS_NETWORK_FAILED".to_string())?;
     let protocol = normalize_model_provider_wire_api(wire_api.as_deref(), &base_url);
     let raw = if protocol == "anthropic" {
         crate::modules::codex_native_api::anthropic::endpoint(&base_url,"models").map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())?
@@ -1762,11 +1766,30 @@ pub async fn codex_list_model_provider_models(base_url: String, api_key: String,
         let request = crate::modules::codex_provider_protocol::authenticate_provider_request(client.get(url.clone()), &protocol, auth_scheme.as_deref(), &api_key).timeout(remaining);
         let response = request.send().await.map_err(|_| "PROVIDER_MODELS_NETWORK_FAILED".to_string())?;
         if !response.status().is_success() { return Err(format!("PROVIDER_MODELS_HTTP_{}",response.status().as_u16())); }
-        let body: serde_json::Value = response.json().await.map_err(|_| "PROVIDER_MODELS_PARSE_FAILED".to_string())?;
+        let body: serde_json::Value = if remember_for_launch {
+            let mut response = response;
+            let mut bytes = Vec::new();
+            let limit = crate::modules::codex_model_catalog::MAX_CATALOG_BYTES;
+            while let Some(chunk) = response.chunk().await.map_err(|_| "PROVIDER_MODELS_PARSE_FAILED")? {
+                if chunk.len() > limit - bytes.len() {
+                    return Err("PROVIDER_MODELS_PARSE_FAILED".to_string());
+                }
+                bytes.extend_from_slice(&chunk);
+            }
+            serde_json::from_slice(&bytes).map_err(|_| "PROVIDER_MODELS_PARSE_FAILED".to_string())?
+        } else {
+            response.json().await.map_err(|_| "PROVIDER_MODELS_PARSE_FAILED".to_string())?
+        };
         for model in list_model_provider_models(&body) { if seen.insert(model.id.clone()) { models.push(model); } }
         if body["has_more"] != true { break; }
         let Some(last) = body["last_id"].as_str().filter(|s|!s.is_empty()) else { break; };
         url.query_pairs_mut().clear().append_pair("after_id",last);
+    }
+    if remember_for_launch {
+        crate::modules::codex_provider_discovered_models::remember(
+            &base_url, &api_key, &protocol, auth_scheme.as_deref(),
+            models.iter().map(|model| model.id.clone()).collect(),
+        )?;
     }
     Ok(CodexModelProviderModelsResult {models,latency_ms:started.elapsed().as_millis().min(u64::MAX as u128) as u64})
 }
@@ -1777,6 +1800,67 @@ pub async fn codex_query_model_provider_usage(
     api_key: String,
     integration_type: Option<String>,
     usage_api_key: Option<String>,
+    respect_relay_balance_switch: Option<bool>,
+    account_id: Option<String>,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    let relay_balance_disabled = respect_relay_balance_switch.unwrap_or(true)
+        && crate::modules::codex_quota::relay_balance_disabled();
+    let query_started = std::time::Instant::now();
+    let original = if let Some(id) = account_id {
+        let (base, key) = (base_url.clone(), api_key.clone());
+        tokio::task::spawn_blocking(move || {
+            crate::modules::codex_account::load_account(&id)
+                .filter(|account| provider_quota_source_matches(account, &base, &key))
+        }).await.ok().flatten()
+    } else {
+        None
+    };
+    let result = query_model_provider_usage(base_url, api_key, integration_type, usage_api_key, relay_balance_disabled).await;
+    if let Some(original) = original {
+        let snapshot = match &result {
+            Ok(summary) => {
+                let mut summary = summary.clone();
+                // The connection contains remote scope metadata, which is not quota.
+                summary.cockpit = None;
+                serde_json::to_value(summary).ok()
+            }
+            Err(error) if error == crate::modules::codex_quota::RELAY_BALANCE_DISABLED => return result,
+            Err(_) => None,
+        };
+        let saved = tokio::task::spawn_blocking(move || {
+            crate::modules::codex_account::save_provider_usage_snapshot(&original, snapshot, query_started)
+        }).await;
+        if !matches!(saved, Ok(Ok(()))) {
+            crate::modules::logger::log_warn("[Codex Provider Quota] Could not save usage snapshot");
+        }
+    }
+    result
+}
+
+fn provider_quota_source_matches(account: &crate::models::codex::CodexAccount, base: &str, key: &str) -> bool {
+    if !account.is_api_key_auth() || account.openai_api_key.as_deref().map(str::trim) != Some(key.trim()) {
+        return false;
+    }
+    let configured = account.api_base_url.as_deref().map(str::trim)
+        .filter(|url| !url.is_empty())
+        .or_else(|| (account.api_provider_mode == crate::models::codex::CodexApiProviderMode::OpenaiBuiltin)
+            .then_some("https://api.openai.com/v1"));
+    let (Some(configured), Ok(mut requested)) = (configured, reqwest::Url::parse(base)) else { return false; };
+    let Ok(mut expected) = reqwest::Url::parse(configured) else { return false; };
+    let path = requested.path().trim_end_matches('/').to_owned();
+    requested.set_path(&path);
+    let mut expected_path = expected.path().trim_end_matches('/').to_owned();
+    if expected_path.is_empty() && path == "/v1" { expected_path = path; }
+    expected.set_path(&expected_path);
+    requested == expected
+}
+
+async fn query_model_provider_usage(
+    base_url: String,
+    api_key: String,
+    integration_type: Option<String>,
+    usage_api_key: Option<String>,
+    relay_balance_disabled: bool,
 ) -> Result<CodexModelProviderUsageSummary, String> {
     let key = api_key.trim();
     if key.is_empty() {
@@ -1792,7 +1876,16 @@ pub async fn codex_query_model_provider_usage(
         return openai_usage::query(&client, usage_key).await;
     }
 
-    if let Some(connection) = crate::modules::codex_remote_service::discover(&base_url, key, true).await? {
+    let connection = if relay_balance_disabled {
+        // Only contact a known Cockpit service while relay balance discovery is disabled.
+        let (base, key) = (base_url.clone(), key.to_owned());
+        tokio::task::spawn_blocking(move || crate::modules::codex_remote_service::cached(&base, &key))
+            .await
+            .map_err(|error| format!("COCKPIT_REMOTE_CACHE_FAILED: {error}"))?
+    } else {
+        crate::modules::codex_remote_service::discover(&base_url, key, true).await?
+    };
+    if let Some(connection) = connection {
         let now=chrono::Utc::now().timestamp_millis();
         let today_query=crate::modules::codex_remote_service::KeyQuery {
             start_at:Some(now/86_400_000*86_400_000),
@@ -1828,6 +1921,10 @@ pub async fn codex_query_model_provider_usage(
 
     if let Some(url) = codex_model_provider_deepseek_balance_url(&base_url)? {
         return query_deepseek_model_provider_balance(&client, &url, key).await;
+    }
+
+    if relay_balance_disabled {
+        return Err(crate::modules::codex_quota::RELAY_BALANCE_DISABLED.into());
     }
 
     let requested_type = integration_type
@@ -2070,6 +2167,149 @@ async fn query_sub2api_model_provider_usage(
 mod new_api_usage_tests {
     use super::*;
     use serde_json::json;
+
+    #[tokio::test]
+    async fn provider_test_selected_model_and_visible_text_timing_through_gateway() {
+        use axum::{body::Body, routing::post, Json, Router};
+        use futures_util::{stream, StreamExt};
+        use serde_json::Value;
+
+        let _env = crate::modules::test_support::env_lock().lock().unwrap();
+        let app = Router::new()
+            .route("/v1/responses", post(|Json(body): Json<Value>| async move {
+                assert_eq!(body["model"], "selected-model");
+                assert_eq!(body["stream"], true);
+                let message = json!({"type":"message","role":"assistant","content":[{"type":"output_text","text":"Ready"}]});
+                let events = [
+                    (0, json!({"type":"response.created","response":{"id":"fixture","status":"in_progress","output":[]}})),
+                    (15, json!({"type":"response.output_text.delta","delta":"Ready","output_index":0,"content_index":0})),
+                    (80, json!({"type":"response.completed","response":{"id":"fixture","status":"completed","output":[message]}})),
+                ];
+                let stream = stream::iter(events).then(|(delay, event)| async move {
+                    tokio::time::sleep(Duration::from_millis(delay)).await;
+                    Ok::<_, std::io::Error>(format!("data: {event}\n\n"))
+                });
+                ([(reqwest::header::CONTENT_TYPE, "text/event-stream")], Body::from_stream(stream))
+            }))
+            .route("/v1/chat/completions", post(|Json(body): Json<Value>| async move {
+                assert_eq!(body["model"], "selected-model");
+                assert_eq!(body["stream"], true);
+                let chunk = json!({"id":"fixture","object":"chat.completion.chunk","model":"selected-model",
+                    "choices":[{"index":0,"delta":{"role":"assistant","content":"Ready"},"finish_reason":null}]});
+                let end = json!({"id":"fixture","object":"chat.completion.chunk","model":"selected-model",
+                    "choices":[{"index":0,"delta":{},"finish_reason":"stop"}]});
+                let stream = stream::iter([(15, chunk), (80, end)]).then(|(delay, event)| async move {
+                    tokio::time::sleep(Duration::from_millis(delay)).await;
+                    Ok::<_, std::io::Error>(format!("data: {event}\n\n"))
+                }).chain(stream::once(async {
+                    Ok::<_, std::io::Error>("data: [DONE]\n\n".to_string())
+                }));
+                ([(reqwest::header::CONTENT_TYPE, "text/event-stream")], Body::from_stream(stream))
+            }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+        let upstream = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        for protocol in ["responses", "chat_completions"] {
+            let record = run_single_model_provider_chat_test(
+                &client,
+                CodexModelProviderChatTestTarget {
+                    provider_id: protocol.to_string(),
+                    provider_name: "Local fixture".to_string(),
+                    base_url: base_url.clone(),
+                    api_key_id: None,
+                    api_key_name: None,
+                    api_key: "fixture-key".to_string(),
+                    wire_api: Some(protocol.to_string()),
+                    auth_scheme: None,
+                    model_catalog: vec!["configured-default".to_string()],
+                },
+                "ping",
+                Some("selected-model"),
+                "fixture-provider-chat-test",
+            ).await;
+            assert!(record.success, "{protocol}: {:?}", record.error);
+            assert_eq!(record.model_id.as_deref(), Some("selected-model"));
+            assert_eq!(record.reply.as_deref(), Some("Ready"));
+            let first = record.first_text_ms.expect("streaming first text");
+            let total = record.duration_ms.unwrap();
+            assert!(total >= first + 40, "{protocol}: first={first}, total={total}");
+        }
+        upstream.abort();
+    }
+
+    #[tokio::test]
+    async fn sub2api_usage_reports_remaining_and_unit_from_usage_endpoint() {
+        use axum::{routing::get, Json, Router};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}/v1", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let app = Router::new().route("/v1/usage", get(|| async {
+                Json(json!({"mode":"sub2api","remaining":12.5,"unit":"CNY","quota":{"remaining":7,"limit":10}}))
+            }));
+            axum::serve(listener, app).await.unwrap();
+        });
+        let summary = query_model_provider_usage(
+            base,
+            "fixture-key".into(),
+            Some("sub2api".into()),
+            None,
+            false,
+        ).await.unwrap();
+        assert_eq!(summary.remaining, Some(12.5));
+        assert_eq!(summary.quota_remaining, Some(7.0));
+        assert_eq!(summary.unit.as_deref(), Some("CNY"));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn relay_balance_switch_stops_requests_and_preserves_enabled_queries() {
+        use axum::{extract::Request, http::StatusCode, response::IntoResponse, Json, Router};
+        use std::sync::{Arc, Mutex};
+
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&requests);
+        let router = Router::new().fallback(move |request: Request| {
+            let recorded = Arc::clone(&recorded);
+            async move {
+                let path = request.uri().path();
+                recorded.lock().unwrap().push(path.to_owned());
+                match path {
+                    "/v1/dashboard/billing/subscription" => Json(json!({"hard_limit_usd": 10})).into_response(),
+                    "/v1/dashboard/billing/usage" => Json(json!({"total_usage": 100})).into_response(),
+                    _ => StatusCode::NOT_FOUND.into_response(),
+                }
+            }
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}/v1", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+        for integration in [None, Some("new_api"), Some("sub2api")] {
+            let result = query_model_provider_usage(
+                base.clone(), "test-key".into(), integration.map(str::to_owned), None, true,
+            )
+            .await;
+            assert!(matches!(result, Err(error) if error == crate::modules::codex_quota::RELAY_BALANCE_DISABLED));
+        }
+        assert!(requests.lock().unwrap().is_empty());
+
+        let official = query_model_provider_usage(
+            "https://api.openai.com/v1".into(), "test-key".into(), None, None, true,
+        )
+        .await;
+        assert!(matches!(official, Err(error) if error == "OPENAI_USAGE_NOT_CONFIGURED"));
+
+        let summary = query_model_provider_usage(
+            base, "test-key".into(), Some("new_api".into()), None, false,
+        )
+        .await
+        .unwrap();
+        assert_eq!(summary.mode.as_deref(), Some("new_api"));
+        assert!(requests.lock().unwrap().iter().any(|path| path == "/v1/dashboard/billing/subscription"));
+        server.abort();
+    }
 
     #[test]
     fn apikey_fun_root_uses_versioned_usage_endpoint() {

@@ -417,6 +417,130 @@ fn local_access_chat_completions_url(base_url: &str) -> String {
     }
 }
 
+fn is_local_access_image_test_model(collection: &CodexLocalAccessCollection, model: &str) -> bool {
+    let model = collection.model_aliases.iter()
+        .find(|alias| alias.alias.eq_ignore_ascii_case(model))
+        .map_or(model, |alias| alias.source_model.as_str());
+    is_gpt_image_generation_model(model)
+        || std::iter::once(&collection.image_generation_model)
+            .chain(&collection.image_generation_models)
+            .chain(collection.image_generation_account_models.values())
+            .any(|id| id.eq_ignore_ascii_case(model))
+}
+
+#[cfg(test)]
+mod image_test_dialog_tests {
+    use super::*;
+    use axum::{extract::Json, http::HeaderMap, response::IntoResponse, routing::post, Router};
+
+    #[test]
+    fn image_test_dialog_recognizes_configured_sources_and_aliases() {
+        let collection: CodexLocalAccessCollection = serde_json::from_value(json!({
+            "enabled":true,"port":1455,"apiKey":"fixture","accountIds":[],
+            "createdAt":0,"updatedAt":0,
+            "imageGenerationModel":"custom-image",
+            "imageGenerationAccountModels":{"source":"custom-image-high"},
+            "modelAliases":[{"alias":"preview-image","sourceModel":"custom-image"}]
+        })).unwrap();
+        for model in ["gpt-image-2", "custom-image", "custom-image-high", "preview-image"] {
+            assert!(is_local_access_image_test_model(&collection, model), "{model}");
+        }
+        assert!(!is_local_access_image_test_model(&collection, "gpt-5.6-luna"));
+    }
+
+    #[tokio::test]
+    async fn image_test_dialog_uses_images_endpoint_and_preserves_key_denial() {
+        const IMAGE: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
+        let app = Router::new().route("/v1/images/generations", post(
+            |headers: HeaderMap, Json(body): Json<Value>| async move {
+                assert_eq!(body, json!({"model":"gpt-image-2.6","prompt":"draw","response_format":"b64_json"}));
+                if headers.get(AUTHORIZATION).is_some_and(|key| key == "Bearer allowed") {
+                    return Json(json!({"data":[{"b64_json":IMAGE}]})).into_response();
+                }
+                (StatusCode::FORBIDDEN, Json(json!({"error":{"message":"Model is not allowed for this API key"}}))).into_response()
+            }
+        ));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let (_, image) = run_local_access_image_test(
+            &format!("http://{addr}/v1/"), "allowed", "gpt-image-2.6", "draw",
+            Duration::from_secs(2),
+        ).await.unwrap();
+        assert_eq!(image, format!("data:image/png;base64,{IMAGE}"));
+        let denied = run_local_access_image_test(
+            &format!("http://{addr}"), "denied", "gpt-image-2.6", "draw",
+            Duration::from_secs(2),
+        ).await.unwrap_err();
+        assert_eq!(denied.status, Some(403));
+        assert_eq!(denied.message, "Model is not allowed for this API key");
+        server.abort();
+    }
+}
+
+async fn run_local_access_image_test(
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+    prompt: &str,
+    timeout: Duration,
+) -> Result<(u64, String), LocalAccessGatewayProbeFailure> {
+    let network_failure = |error: reqwest::Error| LocalAccessGatewayProbeFailure {
+        status: error.status().map(|status| status.as_u16()),
+        message: error.to_string(),
+        detail: None,
+        gateway_output: None,
+    };
+    let base = base_url.trim_end_matches('/');
+    let prefix = if base.ends_with("/v1") { "" } else { "/v1" };
+    let client = build_localhost_http_client(timeout, "Images API")
+        .map_err(|message| LocalAccessGatewayProbeFailure {
+            status: None,
+            message,
+            detail: None,
+            gateway_output: None,
+        })?;
+    let started = Instant::now();
+    let response = client
+        .post(format!("{base}{prefix}/images/generations"))
+        .bearer_auth(api_key.trim())
+        .json(&json!({"model":model,"prompt":prompt,"response_format":"b64_json"}))
+        .send()
+        .await
+        .map_err(network_failure)?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.map_err(network_failure)?;
+        return Err(LocalAccessGatewayProbeFailure {
+            status: Some(status.as_u16()),
+            message: extract_gateway_error_message(&body),
+            detail: None,
+            gateway_output: clean_diagnostic_text(body),
+        });
+    }
+    let body: Value = response.json().await.map_err(network_failure)?;
+    let image = body["data"].as_array().and_then(|items| {
+        items.iter().find_map(|item| {
+            let encoded = item["b64_json"].as_str()?;
+            let prefix = encoded.get(..16)?;
+            let bytes = general_purpose::STANDARD.decode(prefix).ok()?;
+            let mime = detect_image_mime_type(&bytes, "");
+            (mime != "application/octet-stream").then(|| format!("data:{mime};base64,{encoded}"))
+        })
+    });
+    image.map(|url| (started.elapsed().as_millis() as u64, url))
+        .ok_or_else(|| LocalAccessGatewayProbeFailure {
+            status: Some(502),
+            message: crate::modules::i18n::translate(
+                &crate::modules::config::get_user_config().language,
+                "codex.localAccess.testChatEmptyResponse",
+                &[],
+            ),
+            detail: None,
+            gateway_output: None,
+        })
+}
+
 fn extract_chat_completion_output(body: &str) -> Option<String> {
     let value = serde_json::from_str::<Value>(body).ok()?;
     let message = value
@@ -861,6 +985,41 @@ pub async fn stream_chat_local_access_with_dialog(
         ));
         return Ok(());
     }
+    let base_url = state
+        .base_url
+        .clone()
+        .unwrap_or_else(|| build_collection_base_url(&collection));
+    if is_local_access_image_test_model(&collection, &model_id) {
+        let prompt = normalized_messages
+            .iter()
+            .rev()
+            .find(|message| message.role == "user")
+            .expect("validated user message");
+        let timeouts = &collection.timeouts;
+        let timeout = Duration::from_millis(
+            timeouts.sidecar_image_stream_open_timeout_ms
+                .saturating_add(timeouts.sidecar_image_stream_idle_timeout_ms)
+                .max(90_000),
+        );
+        match run_local_access_image_test(
+            &base_url, &collection.api_key, &model_id, &prompt.content, timeout,
+        )
+        .await
+        {
+            Ok((latency_ms, image_data_url)) => emit_chat_test_stream_event(
+                &app,
+                &session_id,
+                json!({
+                    "type":"done",
+                    "modelId":model_id,
+                    "latencyMs":latency_ms,
+                    "imageDataUrl":image_data_url,
+                }),
+            ),
+            Err(failure) => emit_failure(classify_gateway_probe_failure(&model_id, failure)),
+        }
+        return Ok(());
+    }
     if collection.account_ids.is_empty() {
         emit_failure(local_access_test_failure(
             "账号集合为空",
@@ -872,10 +1031,6 @@ pub async fn stream_chat_local_access_with_dialog(
         return Ok(());
     }
 
-    let base_url = state
-        .base_url
-        .clone()
-        .unwrap_or_else(|| build_collection_base_url(&collection));
     let bound_oauth_account_id =
         normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref());
     if let Some(bound_id) = bound_oauth_account_id.as_deref() {

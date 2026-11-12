@@ -1,0 +1,6 @@
+{
+  "https://ark.cn-beijing.volces.com/api/coding/v3": ["ark-code-latest", "doubao-seed-evolving", "glm-5.3"],
+  "https://ark.cn-beijing.volces.com/api/v3": ["doubao-seed-2-1-pro-260915", "doubao-seed-2-1-lite-260915"],
+  "https://api.xiaomimimo.com/v1": ["mimo-v2.6-pro"],
+  "https://token-plan-cn.xiaomimimo.com/v1": ["mimo-v2.6-pro"]
+}

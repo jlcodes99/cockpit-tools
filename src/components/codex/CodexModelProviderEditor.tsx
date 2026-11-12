@@ -717,10 +717,7 @@ export function CodexModelProviderEditor(props: Props) {
                               })
                             }
                             disabled={saving}
-                            title={t(
-                              "codex.modelProviders.editApiKey",
-                              "Edit API Key",
-                            )}
+                            title={t("codex.modelProviders.editApiKey")}
                           >
                             <KeyRound size={12} />
                           </button>

@@ -10,13 +10,10 @@ async fn read_headers(stream: &mut TcpStream) -> Vec<u8> {
     bytes
 }
 
-async fn ingress(entry: &str, http: bool, host: &str, port: u16) -> TcpStream {
-    let mut stream = TcpStream::connect((
-        Ipv4Addr::LOCALHOST,
-        url::Url::parse(entry).unwrap().port().unwrap(),
-    ))
-    .await
-    .unwrap();
+async fn ingress(entry_port: u16, http: bool, host: &str, port: u16) -> TcpStream {
+    let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, entry_port))
+        .await
+        .unwrap();
     if http {
         // A client may send the TLS preface in the same write as CONNECT.
         let request = format!("CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\nProxy-Authorization: do-not-forward\r\n\r\nping");
@@ -42,6 +39,108 @@ async fn ingress(entry: &str, http: bool, host: &str, port: u16) -> TcpStream {
     stream
 }
 
+#[test]
+fn managed_direct_hosts_route_local_requests_and_keep_unmatched_proxying() {
+    const CHILD: &str = "COCKPIT_TEST_CODEX_DIRECT_HOSTS";
+    if let Some(proof) = std::env::var_os(CHILD) {
+        let fixture = LaunchFixture::new("direct-host-routes");
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                tokio::time::timeout(Duration::from_secs(10), async {
+                    let target = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+                    let port = target.local_addr().unwrap().port();
+                    let upstream = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+                    let mut account = eligible_account("direct-host-routes");
+                    account.egress_proxy_url =
+                        Some(format!("http://{}", upstream.local_addr().unwrap()));
+                    fixture.save(&account);
+                    let direct = tokio::spawn(async move {
+                        for _ in 0..2 {
+                            let (mut socket, _) = target.accept().await.unwrap();
+                            let mut payload = [0; 4];
+                            socket.read_exact(&mut payload).await.unwrap();
+                            assert_eq!(&payload, b"ping");
+                            socket.write_all(b"mcp!").await.unwrap();
+                        }
+                    });
+                    let proxied = tokio::spawn(async move {
+                        for expected in [
+                            "public.fixture.invalid:443".to_owned(),
+                            format!("127.0.0.1:{port}"),
+                        ] {
+                            let (mut socket, _) = upstream.accept().await.unwrap();
+                            let headers = read_headers(&mut socket).await;
+                            assert!(headers.starts_with(
+                                format!("CONNECT {expected} HTTP/1.1\r\n").as_bytes()
+                            ));
+                            socket
+                                .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                                .await
+                                .unwrap();
+                            let mut payload = [0; 4];
+                            socket.read_exact(&mut payload).await.unwrap();
+                            assert_eq!(&payload, b"ping");
+                            socket.write_all(b"edge").await.unwrap();
+                        }
+                    });
+                    let entry = ensure(&account.id).await.unwrap().unwrap();
+                    let rules =
+                        crate::modules::codex_proxy_direct_hosts::parse("127.0.0.0/24").unwrap();
+                    crate::modules::config::patch_user_config(move |config| {
+                        config.codex_proxy_direct_hosts = rules;
+                        Ok(())
+                    })
+                    .unwrap();
+                    for http in [false, true] {
+                        let mut stream = ingress(entry, http, "127.0.0.1", port).await;
+                        let mut reply = [0; 4];
+                        stream.read_exact(&mut reply).await.unwrap();
+                        assert_eq!(&reply, b"mcp!");
+                    }
+                    let mut public = ingress(entry, true, "public.fixture.invalid", 443).await;
+                    let mut reply = [0; 4];
+                    public.read_exact(&mut reply).await.unwrap();
+                    assert_eq!(&reply, b"edge");
+                    crate::modules::config::patch_user_config(|config| {
+                        config.codex_proxy_direct_hosts.clear();
+                        Ok(())
+                    })
+                    .unwrap();
+                    let mut restored = ingress(entry, false, "127.0.0.1", port).await;
+                    restored.read_exact(&mut reply).await.unwrap();
+                    assert_eq!(&reply, b"edge");
+                    direct.await.unwrap();
+                    proxied.await.unwrap();
+                })
+                .await
+                .expect("managed direct host regression must complete");
+            });
+        fs::write(proof, "verified").unwrap();
+        return;
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let proof = directory.path().join("verified");
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    let (_, module) = module_path!().split_once("::").unwrap();
+    let name =
+        format!("{module}::managed_direct_hosts_route_local_requests_and_keep_unmatched_proxying");
+    let status = command
+        .env(CHILD, &proof)
+        .args(["--exact", &name, "--nocapture"])
+        .status()
+        .unwrap();
+    assert!(status.success());
+    assert_eq!(fs::read_to_string(proof).unwrap(), "verified");
+}
+
 #[tokio::test]
 async fn both_ingress_protocols_share_binding_changes_and_preserve_tunnel_bytes() {
     let fixture = LaunchFixture::new("mixed-transport");
@@ -60,7 +159,7 @@ async fn both_ingress_protocols_share_binding_changes_and_preserve_tunnel_bytes(
             if let Some(first) = &first_entry {
                 assert_eq!(&entry, first);
             }
-            first_entry = Some(entry.clone());
+            first_entry = Some(entry);
             let upstream_task = tokio::spawn(async move {
                 for _ in 0..2 {
                     let (mut socket, _) = upstream.accept().await.unwrap();
@@ -89,7 +188,7 @@ async fn both_ingress_protocols_share_binding_changes_and_preserve_tunnel_bytes(
                 }
             });
             for http in [true, false] {
-                let mut client = ingress(&entry, http, "fixture.invalid", 443).await;
+                let mut client = ingress(entry, http, "fixture.invalid", 443).await;
                 let mut reply = [0; 4];
                 client.read_exact(&mut reply).await.unwrap();
                 assert_eq!(&reply, b"pong");
@@ -122,12 +221,9 @@ async fn http_connect_returns_bad_gateway_and_can_recover_on_the_same_entry() {
                 .await
                 .unwrap();
         });
-        let mut client = TcpStream::connect((
-            Ipv4Addr::LOCALHOST,
-            url::Url::parse(&entry).unwrap().port().unwrap(),
-        ))
-        .await
-        .unwrap();
+        let mut client = TcpStream::connect((Ipv4Addr::LOCALHOST, entry))
+            .await
+            .unwrap();
         client
             .write_all(b"CONNECT fixture.invalid:443 HTTP/1.1\r\n\r\n")
             .await
@@ -150,7 +246,7 @@ async fn http_connect_returns_bad_gateway_and_can_recover_on_the_same_entry() {
             socket.read_exact(&mut payload).await.unwrap();
             socket.write_all(&payload).await.unwrap();
         });
-        let mut retry = ingress(&entry, true, "127.0.0.1", port).await;
+        let mut retry = ingress(entry, true, "127.0.0.1", port).await;
         let mut reply = [0; 4];
         retry.read_exact(&mut reply).await.unwrap();
         assert_eq!(&reply, b"ping");

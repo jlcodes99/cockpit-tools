@@ -8,7 +8,7 @@ use super::super::{
     mapping::{self, Prepared},
     server::AppState,
 };
-use super::{history::History, open_response, OpeningRetries};
+use super::{history::History, open_response, ConnectionIdentity, OpeningRetries};
 use futures_util::{stream, stream::BoxStream, StreamExt};
 use serde_json::{json, Value};
 use std::{collections::VecDeque, sync::Arc};
@@ -20,7 +20,7 @@ pub(super) struct Transport {
     pub stream: BoxStream<'static, Result<UpstreamMessage, ServiceError>>,
     pub http: bool,
     pub local: bool,
-    pub identity: Option<super::super::diagnostics::HeaderIdentity>,
+    pub(super) identity: Option<ConnectionIdentity>,
     pub(super) opening_retries: OpeningRetries,
 }
 

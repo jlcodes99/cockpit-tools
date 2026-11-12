@@ -2,10 +2,10 @@ import { resolveCodexAccountReferenceDisplayName } from "../../utils/codexAccoun
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Activity, CheckCircle2, ChevronDown, Clock3, Copy, FileJson, Gauge, Info, RefreshCw, Route, X, XCircle } from 'lucide-react';
+import { Activity, CheckCircle2, ChevronDown, CircleAlert, Clock3, Copy, FileJson, Gauge, Info, RefreshCw, Route, X, XCircle } from 'lucide-react';
 import type { CodexLocalAccessRequestDetail, CodexLocalAccessUsageEvent } from '../../types/codexLocalAccess';
 import { getCodexLocalAccessRequestDetail } from '../../services/codexLocalAccessService';
-import { formatRequestDiagnosticError, formatRequestPayloadBody, hasRequestFirstResponse, recordedServiceTierAdaptation, requestAuthorizationRouteKey, requestDiagnosticErrorSource, requestDiagnosticPhaseKey, requestServiceTierPresentation, requestedServiceTierLabelKey } from '../../utils/codexRequestDiagnostics';
+import { formatRequestDiagnosticError, formatRequestPayloadBody, hasRequestFirstResponse, recordedServiceTierAdaptation, requestAuthorizationRouteKey, requestDiagnosticErrorSource, requestDiagnosticPhaseKey, requestedServiceTierLabelKey } from '../../utils/codexRequestDiagnostics';
 import { useEscCloseTopmost } from '../../hooks/useEscClose';
 import { useModalFocusTrap } from '../../hooks/useModalFocusTrap';
 import { useModalScrollLock } from '../../hooks/useModalScrollLock';
@@ -79,9 +79,8 @@ export function CodexRequestDetailModal({ event, accountDisplayNames = new Map()
     const key = requestedServiceTierLabelKey(tier);
     return key ? t(key) : tier;
   };
-  const tiers = requestServiceTierPresentation(event);
   const adaptation = recordedServiceTierAdaptation(event.serviceTierAdaptation);
-  const originalTier = adaptation?.requestedTier ?? tiers.requested;
+  const originalTier = adaptation?.requestedTier ?? event.requestedServiceTier?.trim() ?? '';
   const requestedTierLabel = tierLabel(originalTier);
   return createPortal(<div className="modal-overlay codex-request-detail-overlay">
     <div className="modal codex-request-detail-modal" ref={dialog} role="dialog" aria-modal="true" aria-labelledby="codex-request-detail-title" tabIndex={-1}>
@@ -121,9 +120,6 @@ export function CodexRequestDetailModal({ event, accountDisplayNames = new Map()
           <p>{t(adaptation ? 'codex.apiService.logs.originalTier' : 'codex.apiService.logs.requestedTier', { tier: requestedTierLabel || '—' })}</p>
           {adaptation && <><p>{t('codex.apiService.logs.sentTier', { tier: t('codex.speed.standard') })}</p>
             <p className="codex-request-diagnostics-hint">{t('codex.apiService.logs.officialDefaultSpeed')}</p></>}
-          <p>{t('codex.apiService.logs.responseTier', { tier: tiers.response || '—' })}</p>
-          <p className="codex-request-diagnostics-hint">{t('codex.apiService.logs.serviceTierHint')}</p>
-          {tiers.legacy && <><p>{t('codex.apiService.logs.legacyTier', { tier: tiers.legacy })}</p><p className="codex-request-diagnostics-hint">{t('codex.apiService.logs.legacyTierHint')}</p></>}
         </section>
         {detail?.failurePhase && <div className="codex-request-detail-failure"><span>{t('codex.requestDiagnostics.failurePhase')}</span><strong>{t(requestDiagnosticPhaseKey(detail.failurePhase))}</strong></div>}
         {event.success === false && <section className="codex-request-detail-section codex-request-error-evidence" aria-labelledby="codex-request-error-title">
@@ -151,7 +147,14 @@ export function CodexRequestDetailModal({ event, accountDisplayNames = new Map()
                       {t(attempt.success ? 'codex.localAccess.requestLogSuccess' : 'codex.localAccess.requestLogFailed')}
                     </span>
                   </div>
-                  <div className="codex-request-attempt-meta"><code>{attempt.modelId}</code><span className="codex-request-transport">{attempt.transport}</span>
+                  {attempt.imageRequest && <div className="codex-request-attempt-meta">
+                    {attempt.imageRequest.requestedModel && <span>{t('codex.apiService.accountModelMappings.clientModel')} <code>{attempt.imageRequest.requestedModel}</code></span>}
+                    <span>{t('codex.localAccess.imageAccounts.upstreamModel')} <code>{attempt.imageRequest.upstreamModel}</code></span>
+                    {attempt.imageRequest.responsesModel && <span>{t('codex.localAccess.imageGenerationMainModel.label')} <code>{attempt.imageRequest.responsesModel}</code></span>}
+                    {attempt.imageRequest.upstreamStatus != null && attempt.imageRequest.upstreamStatus !== attempt.status &&
+                      <span>{t('codex.requestDiagnostics.phases.upstream_response')} HTTP {attempt.imageRequest.upstreamStatus}</span>}
+                  </div>}
+                  <div className="codex-request-attempt-meta">{!attempt.imageRequest && <code>{attempt.modelId}</code>}<span className="codex-request-transport">{attempt.transport}</span>
                     <span>{t(requestAuthorizationRouteKey(attempt.accountId, attempt.authorizationRoute))}</span>
                     {attempt.transport === 'preflight'
                       ? <span>{t('codex.requestDiagnostics.authorizationFallback.localPreflight')}</span>
@@ -163,6 +166,12 @@ export function CodexRequestDetailModal({ event, accountDisplayNames = new Map()
                   {attempt.errorMessage && <p className="codex-request-attempt-error">{attempt.errorMessage}</p>}
                   {attempt.errorCategory && <p className="codex-request-diagnostics-hint"><code>{attempt.errorCategory}</code></p>}
                   {attempt.upstreamRequestId && <p className="codex-request-diagnostics-hint">{t('codex.requestDiagnostics.upstreamRequestId')}: <code>{attempt.upstreamRequestId}</code></p>}
+                  {attempt.responseModel && <>
+                    <p className="codex-request-attempt-meta"><span>{t('codex.requestDiagnostics.responseModel')} <code>{attempt.responseModel}</code></span></p>
+                    {attempt.modelId && attempt.responseModel !== attempt.modelId && <p className="codex-request-diagnostics-hint">
+                      <CircleAlert size={13} aria-hidden="true" /> {t('codex.requestDiagnostics.responseModelDiffers')}
+                    </p>}
+                  </>}
                   <CodexAuthorizationFallbackTrace trace={attempt.authorizationFallback} />
                   {recordedServiceTierAdaptation(attempt.serviceTierAdaptation) && <div className="codex-request-diagnostics-hint">
                     <p>{t('codex.apiService.logs.speedAdjusted', { tier: tierLabel(attempt.serviceTierAdaptation!.requestedTier) })}</p>

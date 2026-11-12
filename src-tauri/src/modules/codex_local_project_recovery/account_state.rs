@@ -3,10 +3,25 @@
 //! shared. Remote/cloud state and account atoms stay in their original scope.
 use super::*;
 use sha2::{Digest, Sha256};
+use crate::modules::codex_session_visibility::{
+    launch_visibility_budget, with_launch_visibility_budget, configure_launch_visibility_connection,
+    LAUNCH_VISIBILITY_TIMEOUT, QUICK_PROJECT_REPAIR_BUDGET,
+};
+
+#[path = "account_state_ssh.rs"]
+mod ssh;
 
 const SCOPES: &str = "electron-account-renderer-state-v1";
 const PARKED: &str = "cockpit-local-project-account-state-v1";
 const ATOMS: &str = "electron-persisted-atom-state";
+const PINNED_PROJECTS: &str = "pinned-project-ids";
+const PROJECT_APPEARANCES: &str = "project-appearances";
+const THREAD_ORDERS: &str = "sidebar-project-thread-orders";
+const PINNED_THREADS: &str = "pinned-thread-ids";
+const MIGRATED_PINS: &str = "app-server-migrated-pinned-thread-ids-by-host";
+
+#[path = "account_presentation.rs"]
+mod presentation;
 
 // Codex Desktop 26.1103 account-scoped globals. Keep unknown globals untouched.
 // This follows its native owner transition, rather than patching Desktop code.
@@ -23,12 +38,12 @@ const SCOPED_GLOBALS: &[&str] = &[
     "app-server-pending-project-deletions-by-host",
     "selected-project",
     "project-writable-roots",
-    "project-appearances",
+    PROJECT_APPEARANCES,
     "project-files",
-    "pinned-thread-ids",
-    "app-server-migrated-pinned-thread-ids-by-host",
-    "pinned-project-ids",
-    "sidebar-project-thread-orders",
+    PINNED_THREADS,
+    MIGRATED_PINS,
+    PINNED_PROJECTS,
+    THREAD_ORDERS,
     "sidebar-thread-metadata",
     ASSIGN,
     HOSTS,
@@ -101,6 +116,9 @@ fn local_view(
     let mut recovered = BTreeMap::new();
     let mut mapping = BTreeMap::new();
     let mut aliases = HashMap::new();
+    let mut current_aliases = HashMap::new();
+    let mut current_server_ids = HashMap::new();
+    let mut presentation_projects = Vec::new();
     let mut server_to_legacy = HashMap::new();
     let mut blocked = HashSet::new();
     let mut by_source = Vec::new();
@@ -182,7 +200,7 @@ fn local_view(
         }
         let mut candidates = Vec::new();
         let mut ambiguous = false;
-        for (source, index) in sources.iter().zip(&by_source) {
+        for (source_index, (source, index)) in sources.iter().zip(&by_source).enumerate() {
             // Stable registry IDs distinguish different projects using the same
             // directories. Only infer an identity from roots when it is unique.
             let entries = index.get(&roots).into_iter().flatten().copied();
@@ -198,7 +216,7 @@ fn local_view(
                 break;
             }
             if let Some(entry) = explicit.first() {
-                candidates.push(*entry);
+                candidates.push((source_index, *entry));
                 continue;
             }
             if root_counts[&roots] != 1 {
@@ -214,12 +232,12 @@ fn local_view(
                     ambiguous = true;
                     break;
                 }
-                candidates.push(first);
+                candidates.push((source_index, first));
             }
         }
         // This launch step preserves archived groups; creating new groups is
         // the existing project-recovery planner's job.
-        let Some((legacy, entry)) = candidates.first().copied().filter(|_| !ambiguous) else {
+        let Some((_, (legacy, entry))) = candidates.first().copied().filter(|_| !ambiguous) else {
             continue;
         };
         if blocked.contains(legacy)
@@ -237,8 +255,14 @@ fn local_view(
         {
             continue;
         }
-        for (alias, _) in candidates {
+        for (source_index, (alias, _)) in candidates {
             aliases.insert(alias, legacy);
+            // Sources are the target, the active scope, then inactive scopes.
+            if source_index == 1 {
+                current_aliases.insert(alias, legacy);
+                current_server_ids.insert(project.id.as_str(), legacy);
+                presentation_projects.push((alias, project.id.as_str(), legacy));
+            }
         }
         aliases.insert(project.id.as_str(), legacy);
         server_to_legacy.insert(project.id.as_str(), legacy);
@@ -266,6 +290,14 @@ fn local_view(
         }
     }
     view["project-order"] = json!(order);
+    if let Some(pins) = merge_local_pins(
+        sources[0],
+        sources[1],
+        &current_aliases,
+        &current_server_ids,
+    ) {
+        view[PINNED_PROJECTS] = pins;
+    }
     view[MAP] = json!({ &host: mapping });
     let ungrouped = sources
         .first()
@@ -300,14 +332,69 @@ fn local_view(
             hosts.insert(thread.id.clone(), json!("local"));
         }
     }
+    presentation::merge(
+        &mut view, sources, &host, &presentation_projects, threads, &assignments,
+        &nonlocal_threads,
+    )?;
     set_map(&mut view, "local-projects", recovered);
     set_map(&mut view, ASSIGN, assignments);
     set_map(&mut view, HOSTS, hosts);
     Ok(view)
 }
 
+fn merge_local_pins(
+    target: &Value,
+    current: &Value,
+    current_aliases: &HashMap<&str, &str>,
+    current_server_ids: &HashMap<&str, &str>,
+) -> Option<Value> {
+    let current_pins = current[PINNED_PROJECTS].as_array()?;
+    if current_aliases.is_empty() {
+        return None;
+    }
+    let mut target_pins = match target.get(PINNED_PROJECTS) {
+        Some(pins) => pins.as_array()?.clone(),
+        None => Vec::new(),
+    };
+    // An explicit list includes unpins. Use it only for verified projects in
+    // the active scope, so older archives cannot re-pin them.
+    let current_projects = current_aliases.values().copied().collect::<HashSet<_>>();
+    let pinned = current_pins
+        .iter()
+        .filter_map(Value::as_str)
+        .filter_map(|id| {
+            current_aliases
+                .get(id)
+                .or_else(|| current_server_ids.get(id))
+                .copied()
+        })
+        .collect::<Vec<_>>();
+    let pinned_ids = pinned.iter().copied().collect::<HashSet<_>>();
+    let mut kept_local_pins = HashSet::new();
+    target_pins.retain(|value| {
+        let Some(id) = value.as_str() else {
+            return true;
+        };
+        let project_id = current_projects
+            .get(id)
+            .or_else(|| current_server_ids.get(id));
+        project_id.is_none_or(|id| pinned_ids.contains(id) && kept_local_pins.insert(*id))
+    });
+    for id in pinned {
+        if kept_local_pins.insert(id) {
+            target_pins.push(json!(id));
+        }
+    }
+    Some(json!(target_pins))
+}
+
 // Add verified local entries; existing target cloud/remote entries and settings win.
 fn merge_local(target: &mut Value, view: &Value) {
+    for key in [PINNED_PROJECTS, PROJECT_APPEARANCES, THREAD_ORDERS, PINNED_THREADS] {
+        if let Some(value) = view.get(key) {
+            target[key] = value.clone();
+        }
+    }
     for key in ["local-projects", ASSIGN, HOSTS] {
         let mut entries = object(&target[key]);
         for (id, entry) in object(&view[key]) {
@@ -351,18 +438,28 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
     // Older/unscoped state is handled by the existing recovery path. Its
     // top-level preferences do not identify an owner that we can archive.
     if before.get(SCOPES).is_none() && before.get(PARKED).is_none() {
-        return Ok(false);
+        return Ok(ssh::prepare_startup(home, &before));
     }
     let mut after = before.clone();
-    if before.get(SCOPES).is_some() && before.get(PARKED).is_some() {
-        return Err("CODEX_PROJECT_ACCOUNT_STATE_AMBIGUOUS".into());
-    }
     let mut scopes = before
         .get(SCOPES)
         .or_else(|| before.get(PARKED))
         .cloned()
         .unwrap_or_else(|| json!({"owner":null,"inactive":{}}));
     validate_scopes(&scopes)?;
+    if let (Some(_), Some(parked)) = (before.get(SCOPES), before.get(PARKED)) {
+        validate_scopes(parked)?;
+        // Native Desktop may create a new archive after signing in while the
+        // Cockpit archive is parked. Native entries and its active owner are
+        // newer. Only recover parked accounts that native state does not own.
+        let active = scopes["owner"].as_str().map(str::to_owned);
+        let inactive = scopes["inactive"].as_object_mut().unwrap();
+        for (id, entry) in parked["inactive"].as_object().unwrap() {
+            if active.as_deref() != Some(id.as_str()) {
+                inactive.entry(id.clone()).or_insert_with(|| entry.clone());
+            }
+        }
+    }
     if before.get(ATOMS).is_some_and(|v| !v.is_object()) {
         return Err("CODEX_PROJECT_ACCOUNT_STATE_UNSUPPORTED".into());
     }
@@ -401,13 +498,14 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
             return Err("CODEX_PROJECT_ACCOUNT_STATE_UNSUPPORTED".into());
         }
     }
+    let mut ssh_state = ssh::shared_state(&before, &sources)?;
     // Account-state restoration also carries the native onboarding flags. It
     // must run for projectless profiles, before a project database exists.
     if let Some(primary) = project_database(home)? {
         let db = open(&home.join(primary), false)?;
         db.execute_batch("BEGIN").map_err(|e| e.to_string())?;
-        // Project visibility depends on the registry, not the size of the
-        // conversation history. The caller's deadline still bounds this read.
+        // Project visibility depends on the registry. Read thread memberships
+        // within a separate budget so they cannot block restoring the groups.
         let projects = projects_with_limit(&db, None)?;
         let large_history: bool = db
             .query_row(
@@ -417,7 +515,20 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
             )
             .map_err(|error| error.to_string())?;
         let threads = if large_history {
-            Vec::new()
+            let ids = presentation::referenced_threads(&sources[..2])?;
+            let budget = launch_visibility_budget().map(|budget|
+                budget.deadline.saturating_duration_since(std::time::Instant::now()) / 4)
+                .unwrap_or(QUICK_PROJECT_REPAIR_BUDGET);
+            match with_launch_visibility_budget(budget, || {
+                configure_launch_visibility_connection(&db)?;
+                threads_for_presentation(&db, &ids)
+            }) {
+                Err(error) if error.starts_with(LAUNCH_VISIBILITY_TIMEOUT) => {
+                    crate::modules::logger::log_warn("[Codex Local Projects] Thread membership recovery deferred within launch budget");
+                    Vec::new()
+                }
+                result => result?,
+            }
         } else {
             threads_with_limit(&db, Some(QUICK_MAX_THREADS))?
         };
@@ -426,6 +537,22 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
         drop(db);
         merge_local(&mut target["globals"], &view);
     }
+    let remaining = launch_visibility_budget().map(|budget|
+        budget.deadline.saturating_duration_since(std::time::Instant::now()));
+    let verification = if let Some(remaining) = remaining {
+        with_launch_visibility_budget((remaining / 4).min(QUICK_PROJECT_REPAIR_BUDGET),
+            || ssh::verify_threads(home, &mut ssh_state))
+    } else {
+        ssh::verify_threads(home, &mut ssh_state)
+    };
+    match verification {
+        Err(error) if error.starts_with(LAUNCH_VISIBILITY_TIMEOUT) => {
+            crate::modules::logger::log_warn("[Codex SSH] Thread membership recovery deferred within launch budget");
+        }
+        result => result?,
+    }
+    ssh::merge(&mut target["globals"], &ssh_state)?;
+    ssh::remember_hosts(&mut after, &ssh_state);
     for key in SCOPED_GLOBALS {
         after.as_object_mut().unwrap().remove(*key);
         if let Some(value) = target["globals"].get(*key) {
@@ -453,7 +580,7 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
         after[PARKED] = scopes;
     }
     if after == before {
-        return Ok(false);
+        return Ok(ssh::prepare_startup(home, &after));
     }
     let expected_hash: [u8; 32] = Sha256::digest(&bytes).into();
     let content = serde_json::to_string(&after).map_err(|e| e.to_string())?;
@@ -470,6 +597,7 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
     )? {
         return Err("CODEX_PROJECT_CHANGED".into());
     }
+    ssh::prepare_startup(home, &after);
     Ok(true)
 }
 

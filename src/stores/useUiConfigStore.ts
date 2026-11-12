@@ -1,3 +1,4 @@
+import { previewDurableUiSetting, readDurableUiSetting } from '../utils/durableUiSettings';
 import { create } from "zustand";
 
 const UI_CONFIG_STORAGE_KEY = "agtools.ui_config.v1";
@@ -25,7 +26,7 @@ interface PersistedUiConfig {
 
 function loadUiConfig(): { timeDisplayMode: TimeDisplayMode } {
   try {
-    const raw = localStorage.getItem(UI_CONFIG_STORAGE_KEY);
+    const raw = readDurableUiSetting(UI_CONFIG_STORAGE_KEY);
     if (!raw) return { timeDisplayMode: "switch" };
     const parsed = JSON.parse(raw) as PersistedUiConfig;
     if (parsed.timeDisplayMode === "refresh") {
@@ -42,14 +43,7 @@ function loadUiConfig(): { timeDisplayMode: TimeDisplayMode } {
 }
 
 function persistUiConfig(state: { timeDisplayMode: TimeDisplayMode }) {
-  try {
-    localStorage.setItem(
-      UI_CONFIG_STORAGE_KEY,
-      JSON.stringify({ timeDisplayMode: state.timeDisplayMode }),
-    );
-  } catch {
-    /* localStorage 不可用时忽略 */
-  }
+  previewDurableUiSetting(UI_CONFIG_STORAGE_KEY, JSON.stringify({ timeDisplayMode: state.timeDisplayMode }));
 }
 
 const initial = loadUiConfig();
@@ -74,3 +68,7 @@ export const useUiConfigStore = create<UiConfigState>((set, get) => ({
     });
   },
 }));
+
+export function reloadUiTimeDisplayPreference(): void {
+  useUiConfigStore.setState(loadUiConfig());
+}

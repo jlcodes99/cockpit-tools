@@ -37,6 +37,8 @@ pub struct InstanceStore {
     pub instances: Vec<InstanceProfile>,
     #[serde(default)]
     pub default_settings: DefaultInstanceSettings,
+    #[serde(skip)]
+    pub(crate) storage_revision: crate::modules::instance_registry::Revision,
 }
 
 impl InstanceStore {
@@ -44,6 +46,7 @@ impl InstanceStore {
         Self {
             instances: Vec::new(),
             default_settings: DefaultInstanceSettings::default(),
+            storage_revision: Default::default(),
         }
     }
 }

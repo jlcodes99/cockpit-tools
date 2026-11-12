@@ -204,9 +204,10 @@ async fn concurrent_consumers_share_entry_engine_and_binding_switch_preserves_ol
             ensure(&account.id),
         );
         let entry = first.unwrap().unwrap();
-        for url in [sidecar, second, desktop] {
+        for url in [sidecar, second] {
             assert_eq!(url.unwrap(), Some(entry.clone()));
         }
+        assert_eq!(desktop.unwrap(), url::Url::parse(&entry).unwrap().port());
         assert_eq!(
             fs::read_to_string(&starts).unwrap(),
             "old1\n",
@@ -349,7 +350,10 @@ async fn direct_proxy_manifest_requires_preparation_and_all_consumers_share_nati
                 .unwrap(),
             Some(entry.clone())
         );
-        assert_eq!(ensure(&account.id).await.unwrap(), Some(entry.clone()));
+        assert_eq!(
+            ensure(&account.id).await.unwrap(),
+            url::Url::parse(&entry).unwrap().port()
+        );
         assert_eq!(
             codex_proxy_runtime::prepared_sidecar_url(&account).unwrap(),
             Some(entry.clone())
@@ -429,9 +433,6 @@ async fn concurrent_entries_keep_both_port_records_and_slow_storage_does_not_blo
         ("entry-concurrent-first", first.unwrap()),
         ("entry-concurrent-second", second.unwrap()),
     ] {
-        assert_eq!(
-            registry.recorded(id),
-            url::Url::parse(&entry).unwrap().port()
-        );
+        assert_eq!(registry.recorded(id), Some(entry));
     }
 }

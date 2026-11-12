@@ -1,3 +1,5 @@
+import { previewDurableUiSetting, readDurableUiSetting } from './durableUiSettings';
+
 const CODEX_SHOW_CODE_REVIEW_QUOTA_STORAGE_KEY = 'agtools.codex_show_code_review_quota';
 const CODEX_SHOW_ADDITIONAL_QUOTA_STORAGE_KEY = 'agtools.codex_show_additional_quota';
 const CODEX_PLAN_BADGE_STYLE_STORAGE_KEY = 'agtools.codex_plan_badge_style';
@@ -20,7 +22,7 @@ const CODEX_PLAN_BADGE_STYLES: readonly CodexPlanBadgeStyle[] = [
 
 export function isCodexCodeReviewQuotaVisibleByDefault(): boolean {
   try {
-    return localStorage.getItem(CODEX_SHOW_CODE_REVIEW_QUOTA_STORAGE_KEY) === '1';
+    return readDurableUiSetting(CODEX_SHOW_CODE_REVIEW_QUOTA_STORAGE_KEY) === '1';
   } catch {
     return false;
   }
@@ -28,37 +30,23 @@ export function isCodexCodeReviewQuotaVisibleByDefault(): boolean {
 
 export function isCodexAdditionalQuotaVisibleByDefault(): boolean {
   try {
-    return localStorage.getItem(CODEX_SHOW_ADDITIONAL_QUOTA_STORAGE_KEY) !== '0';
+    return readDurableUiSetting(CODEX_SHOW_ADDITIONAL_QUOTA_STORAGE_KEY) !== '0';
   } catch {
     return true;
   }
 }
 
 export function persistCodexCodeReviewQuotaVisible(visible: boolean): void {
-  try {
-    localStorage.setItem(CODEX_SHOW_CODE_REVIEW_QUOTA_STORAGE_KEY, visible ? '1' : '0');
-    window.dispatchEvent(
-      new CustomEvent(CODEX_CODE_REVIEW_QUOTA_VISIBILITY_CHANGED_EVENT, { detail: visible }),
-    );
-  } catch {
-    // ignore localStorage write failures
-  }
+  previewDurableUiSetting(CODEX_SHOW_CODE_REVIEW_QUOTA_STORAGE_KEY, visible ? '1' : '0');
 }
 
 export function persistCodexAdditionalQuotaVisible(visible: boolean): void {
-  try {
-    localStorage.setItem(CODEX_SHOW_ADDITIONAL_QUOTA_STORAGE_KEY, visible ? '1' : '0');
-    window.dispatchEvent(
-      new CustomEvent(CODEX_ADDITIONAL_QUOTA_VISIBILITY_CHANGED_EVENT, { detail: visible }),
-    );
-  } catch {
-    // ignore localStorage write failures
-  }
+  previewDurableUiSetting(CODEX_SHOW_ADDITIONAL_QUOTA_STORAGE_KEY, visible ? '1' : '0');
 }
 
 export function getCodexPlanBadgeStyle(): CodexPlanBadgeStyle {
   try {
-    const raw = localStorage.getItem(CODEX_PLAN_BADGE_STYLE_STORAGE_KEY);
+    const raw = readDurableUiSetting(CODEX_PLAN_BADGE_STYLE_STORAGE_KEY);
     if (raw && (CODEX_PLAN_BADGE_STYLES as readonly string[]).includes(raw)) {
       return raw as CodexPlanBadgeStyle;
     }
@@ -69,14 +57,7 @@ export function getCodexPlanBadgeStyle(): CodexPlanBadgeStyle {
 }
 
 export function persistCodexPlanBadgeStyle(style: CodexPlanBadgeStyle): void {
-  try {
-    localStorage.setItem(CODEX_PLAN_BADGE_STYLE_STORAGE_KEY, style);
-    window.dispatchEvent(
-      new CustomEvent(CODEX_PLAN_BADGE_STYLE_CHANGED_EVENT, { detail: style }),
-    );
-  } catch {
-    // ignore
-  }
+  previewDurableUiSetting(CODEX_PLAN_BADGE_STYLE_STORAGE_KEY, style);
 }
 
 /** Append style-only class; never rewrite plan label text. */

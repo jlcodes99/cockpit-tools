@@ -260,7 +260,7 @@ async fn single_account_capacity_recovers_before_and_after_metadata_visibility()
                 sent[0].2, sent[1].2,
                 "same-owner request body must be retained verbatim"
             );
-            assert_eq!(sent[0].1["session-id"], sent[1].1["session-id"]);
+            assert!(sent.iter().all(|attempt| !attempt.1.contains_key("session-id")));
             let reports = host.inner.reports.lock().unwrap();
             assert_eq!(reports.len(), 1);
             assert!(reports[0].success);
