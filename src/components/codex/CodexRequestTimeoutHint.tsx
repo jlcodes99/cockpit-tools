@@ -2,6 +2,13 @@ import { useTranslation } from 'react-i18next';
 import type { CodexLocalAccessUsageEvent } from '../../types/codexLocalAccess';
 import { requestTimeoutDiagnostic, type RequestTimeoutField } from '../../utils/codexRequestDiagnostics';
 
+const timeoutSettingLabels: Record<RequestTimeoutField, string> = {
+  sidecarStreamOpenTimeoutMs: 'streamOpen',
+  sidecarStreamIdleTimeoutMs: 'streamIdle',
+  sidecarImageStreamOpenTimeoutMs: 'imageOpen',
+  sidecarImageStreamIdleTimeoutMs: 'imageIdle',
+};
+
 export function CodexRequestTimeoutHint({ event, onOpenSettings }: {
   event: CodexLocalAccessUsageEvent;
   onOpenSettings?: (field: RequestTimeoutField) => void;
@@ -11,7 +18,7 @@ export function CodexRequestTimeoutHint({ event, onOpenSettings }: {
   if (!diagnostic) return null;
   const { kind, seconds, field } = diagnostic;
   return <div className="codex-request-timeout-hint">
-    <p className="codex-request-diagnostics-hint">{t(`codex.requestDiagnostics.timeout.${kind}`, { setting: t(`codex.apiService.timeouts.${field === 'sidecarImageStreamOpenTimeoutMs' ? 'imageOpen' : 'streamOpen'}`) })}</p>
+    <p className="codex-request-diagnostics-hint">{t(`codex.requestDiagnostics.timeout.${kind}`, { setting: t(`codex.apiService.timeouts.${field ? timeoutSettingLabels[field] : 'streamOpen'}`) })}</p>
     {seconds != null && <p className="codex-request-diagnostics-hint">{t('codex.requestDiagnostics.timeout.threshold', { seconds })}</p>}
     {field && onOpenSettings && <button type="button" className="btn btn-secondary btn-sm" onClick={() => onOpenSettings(field)}>
       {t('codex.requestDiagnostics.timeout.settings')}
