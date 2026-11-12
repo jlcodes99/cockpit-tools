@@ -8,24 +8,42 @@ use std::path::Path;
 
 use crate::models::InstanceProfileView;
 use crate::modules;
+use crate::modules::minimax_code_account::{self, PreparedClientSwitch};
 
 const DEFAULT_INSTANCE_ID: &str = "__default__";
 
-async fn inject_bound_account_for_instance_start(
-    user_data_dir: &str,
+async fn prepare_bound_account_for_instance_start(
     bind_account_id: Option<&str>,
-) -> Result<(), String> {
+) -> Result<Option<PreparedClientSwitch>, String> {
     let bind_id = bind_account_id
         .map(str::trim)
         .filter(|value| !value.is_empty());
     let Some(bind_id) = bind_id else {
+        return Ok(None);
+    };
+    minimax_code_account::prepare_client_switch(bind_id)
+        .await
+        .map(Some)
+}
+
+async fn inject_bound_account_for_instance_start(
+    user_data_dir: &str,
+    prepared: Option<PreparedClientSwitch>,
+    restart_previous: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let Some(mut prepared) = prepared else {
         return Ok(());
     };
-
+    if let Err(error) = minimax_code_account::recheck_client_switch(&mut prepared).await {
+        // Recheck precedes all writes, so the client can reopen its previous login.
+        return Err(match restart_previous() {
+            Ok(()) => error,
+            Err(restart_error) => format!("{error}；恢复原 MiniMax Code 窗口失败：{restart_error}"),
+        });
+    }
     let user_data_dir = user_data_dir.to_string();
-    let bind_id = bind_id.to_string();
     tauri::async_runtime::spawn_blocking(move || {
-        inject_bound_account_for_instance_start_blocking(&user_data_dir, &bind_id)
+        inject_bound_account_for_instance_start_blocking(&user_data_dir, prepared)
     })
     .await
     .map_err(|error| format!("MiniMax Code 账号切换后台任务失败: {}", error))?
@@ -33,23 +51,22 @@ async fn inject_bound_account_for_instance_start(
 
 fn inject_bound_account_for_instance_start_blocking(
     user_data_dir: &str,
-    bind_id: &str,
+    prepared: PreparedClientSwitch,
 ) -> Result<(), String> {
-    let account = modules::minimax_code_account::load_account(bind_id)
-        .ok_or_else(|| format!("绑定账号不存在: {}", bind_id))?;
+    let account = &prepared.account;
     modules::logger::log_info(&format!(
         "[MiniMax Code Instance] 实例启动检测到绑定账号，准备注入: bind_account_id={}, email={}, user_data_dir={}",
-        bind_id, account.email, user_data_dir
+        account.id, account.email, user_data_dir
     ));
 
     // MiniMax 客户端把登录态写在 `<data root>/auth/<buildEnv>/<region>/<clientId>/auth.json`，
     // 因此直接改写该实例自己的 auth.json 即可，无需 WorkBuddy 那样的会话合并。
     let auth_file = modules::minimax_code_account::switch_minimax_code_account_to_data_dir(
-        &account,
+        account,
         Path::new(user_data_dir),
     )?;
 
-    modules::minimax_code_account::record_client_switch(bind_id, &auth_file)?;
+    modules::minimax_code_account::record_client_switch(&account.id, &auth_file)?;
 
     modules::logger::log_info(&format!(
         "[MiniMax Code Instance] 账号注入完成: email={}, user_data_dir={}",
@@ -227,28 +244,40 @@ pub async fn switch_default_account_and_start(account_id: String) -> Result<Inst
 }
 
 #[tauri::command]
-pub async fn minimax_code_start_instance(instance_id: String) -> Result<InstanceProfileView, String> {
+pub async fn minimax_code_start_instance(
+    instance_id: String,
+) -> Result<InstanceProfileView, String> {
     modules::process::ensure_minimax_code_launch_path_configured()?;
 
     if instance_id == DEFAULT_INSTANCE_ID {
         let default_dir = modules::minimax_code_instance::get_default_minimax_code_user_data_dir()?;
         let default_dir_str = default_dir.to_string_lossy().to_string();
         let default_settings = modules::minimax_code_instance::load_default_settings()?;
+        let prepared =
+            prepare_bound_account_for_instance_start(default_settings.bind_account_id.as_deref())
+                .await?;
+        let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
 
-        if let Some(pid) = resolve_running_pid(default_settings.last_pid, None) {
+        let previous_pid = resolve_running_pid(default_settings.last_pid, None);
+        if let Some(pid) = previous_pid {
             modules::process::close_pid(pid, 20)?;
             let _ = modules::minimax_code_instance::update_default_pid(None)?;
         }
         modules::process::close_minimax_code_instances(&[default_dir_str.clone()], 20)?;
         let _ = modules::minimax_code_instance::update_default_pid(None)?;
 
-        inject_bound_account_for_instance_start(
-            &default_dir_str,
-            default_settings.bind_account_id.as_deref(),
-        )
+        inject_bound_account_for_instance_start(&default_dir_str, prepared, || {
+            if previous_pid.is_some() {
+                let pid = modules::process::start_minimax_code_default_with_args_with_new_window(
+                    &extra_args,
+                    true,
+                )?;
+                modules::minimax_code_instance::update_default_pid(Some(pid))?;
+            }
+            Ok(())
+        })
         .await?;
 
-        let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
         let pid = modules::process::start_minimax_code_default_with_args_with_new_window(
             &extra_args,
             true,
@@ -279,21 +308,31 @@ pub async fn minimax_code_start_instance(instance_id: String) -> Result<Instance
         .into_iter()
         .find(|item| item.id == instance_id)
         .ok_or("实例不存在")?;
+    let prepared =
+        prepare_bound_account_for_instance_start(instance.bind_account_id.as_deref()).await?;
+    let extra_args = modules::process::parse_extra_args(&instance.extra_args);
 
-    if let Some(pid) = resolve_running_pid(instance.last_pid, Some(&instance.user_data_dir)) {
+    let previous_pid = resolve_running_pid(instance.last_pid, Some(&instance.user_data_dir));
+    if let Some(pid) = previous_pid {
         modules::process::close_pid(pid, 20)?;
         let _ = modules::minimax_code_instance::update_instance_pid(&instance.id, None)?;
     }
     modules::process::close_minimax_code_instances(&[instance.user_data_dir.clone()], 20)?;
     let _ = modules::minimax_code_instance::update_instance_pid(&instance.id, None)?;
 
-    inject_bound_account_for_instance_start(
-        &instance.user_data_dir,
-        instance.bind_account_id.as_deref(),
-    )
+    inject_bound_account_for_instance_start(&instance.user_data_dir, prepared, || {
+        if previous_pid.is_some() {
+            let pid = modules::process::start_minimax_code_with_args_with_new_window(
+                &instance.user_data_dir,
+                &extra_args,
+                true,
+            )?;
+            modules::minimax_code_instance::update_instance_pid(&instance.id, Some(pid))?;
+        }
+        Ok(())
+    })
     .await?;
 
-    let extra_args = modules::process::parse_extra_args(&instance.extra_args);
     let pid = modules::process::start_minimax_code_with_args_with_new_window(
         &instance.user_data_dir,
         &extra_args,
