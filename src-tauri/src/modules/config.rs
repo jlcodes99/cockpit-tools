@@ -461,6 +461,15 @@ pub struct UserConfig {
     /// Credits 自动切号阈值（剩余值）
     #[serde(default = "default_auto_switch_credits_threshold")]
     pub auto_switch_credits_threshold: i32,
+    /// 是否按 5h / 周 配额窗口分别设置切号阈值（类似 Codex）
+    #[serde(default = "default_auto_switch_window_thresholds_enabled")]
+    pub auto_switch_window_thresholds_enabled: bool,
+    /// 5h 配额窗口切号阈值（百分比）
+    #[serde(default = "default_auto_switch_window_threshold")]
+    pub auto_switch_five_hour_threshold: i32,
+    /// 周配额窗口切号阈值（百分比）
+    #[serde(default = "default_auto_switch_window_threshold")]
+    pub auto_switch_weekly_threshold: i32,
     /// 自动切号触发模式：any_group | selected_groups
     #[serde(default = "default_auto_switch_scope_mode")]
     pub auto_switch_scope_mode: String,
@@ -1122,6 +1131,12 @@ fn default_auto_switch_credits_enabled() -> bool {
 fn default_auto_switch_credits_threshold() -> i32 {
     5
 }
+fn default_auto_switch_window_thresholds_enabled() -> bool {
+    false
+}
+fn default_auto_switch_window_threshold() -> i32 {
+    5
+}
 fn default_auto_switch_scope_mode() -> String {
     "any_group".to_string()
 }
@@ -1404,6 +1419,9 @@ impl Default for UserConfig {
             auto_switch_threshold: default_auto_switch_threshold(),
             auto_switch_credits_enabled: default_auto_switch_credits_enabled(),
             auto_switch_credits_threshold: default_auto_switch_credits_threshold(),
+            auto_switch_window_thresholds_enabled: default_auto_switch_window_thresholds_enabled(),
+            auto_switch_five_hour_threshold: default_auto_switch_window_threshold(),
+            auto_switch_weekly_threshold: default_auto_switch_window_threshold(),
             auto_switch_scope_mode: default_auto_switch_scope_mode(),
             auto_switch_selected_group_ids: default_auto_switch_selected_group_ids(),
             auto_switch_account_scope_mode: default_auto_switch_account_scope_mode(),

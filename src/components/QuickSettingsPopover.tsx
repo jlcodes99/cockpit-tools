@@ -172,6 +172,9 @@ interface GeneralConfig {
   auto_switch_threshold: number;
   auto_switch_credits_enabled: boolean;
   auto_switch_credits_threshold: number;
+  auto_switch_window_thresholds_enabled?: boolean;
+  auto_switch_five_hour_threshold?: number;
+  auto_switch_weekly_threshold?: number;
   auto_switch_scope_mode: string;
   auto_switch_selected_group_ids: string[];
   auto_switch_account_scope_mode?: string;
@@ -306,7 +309,9 @@ type CodexWindowThresholdKey =
   | 'codex_auto_switch_primary_threshold'
   | 'codex_auto_switch_secondary_threshold'
   | 'codex_quota_alert_primary_threshold'
-  | 'codex_quota_alert_secondary_threshold';
+  | 'codex_quota_alert_secondary_threshold'
+  | 'auto_switch_five_hour_threshold'
+  | 'auto_switch_weekly_threshold';
 
 type AppLaunchCandidate = {
   target_type: string;
@@ -470,6 +475,8 @@ export function QuickSettingsPopover({
   const [codexAutoSwitchSecondaryCustomThreshold, setCodexAutoSwitchSecondaryCustomThreshold] = useState('');
   const [codexQuotaAlertPrimaryCustomThreshold, setCodexQuotaAlertPrimaryCustomThreshold] = useState('');
   const [codexQuotaAlertSecondaryCustomThreshold, setCodexQuotaAlertSecondaryCustomThreshold] = useState('');
+  const [agFiveHourCustomThreshold, setAgFiveHourCustomThreshold] = useState('');
+  const [agWeeklyCustomThreshold, setAgWeeklyCustomThreshold] = useState('');
   const [autoSwitchDisplayGroups, setAutoSwitchDisplayGroups] = useState<DisplayGroup[]>([]);
   const [antigravityAccounts, setAntigravityAccounts] = useState<Account[]>([]);
   const [antigravityAccountGroups, setAntigravityAccountGroups] = useState<AccountGroup[]>([]);
@@ -799,6 +806,8 @@ export function QuickSettingsPopover({
       setCodexAutoSwitchSecondaryCustomThreshold(String(cfg.codex_auto_switch_secondary_threshold));
       setCodexQuotaAlertPrimaryCustomThreshold(String(cfg.codex_quota_alert_primary_threshold));
       setCodexQuotaAlertSecondaryCustomThreshold(String(cfg.codex_quota_alert_secondary_threshold));
+      setAgFiveHourCustomThreshold(String(cfg.auto_switch_five_hour_threshold ?? 5));
+      setAgWeeklyCustomThreshold(String(cfg.auto_switch_weekly_threshold ?? 5));
       setAppLaunchCandidates([]);
     } catch (err) {
       if (loadVersion !== configLoadVersionRef.current) {
@@ -1361,6 +1370,9 @@ export function QuickSettingsPopover({
   const codexAutoSwitchSecondaryThresholdValue = config
     ? Number(config.codex_auto_switch_secondary_threshold)
     : 20;
+  const agWindowThresholdsEnabled = config?.auto_switch_window_thresholds_enabled ?? false;
+  const agFiveHourThresholdValue = Number(config?.auto_switch_five_hour_threshold ?? 5);
+  const agWeeklyThresholdValue = Number(config?.auto_switch_weekly_threshold ?? 5);
   const codexQuotaAlertPrimaryThresholdValue = config
     ? Number(config.codex_quota_alert_primary_threshold)
     : 20;
@@ -3209,6 +3221,86 @@ export function QuickSettingsPopover({
                         )}
                       </div>
                     </div>
+
+                    <div className="qs-row">
+                      <div className="qs-row-label">
+                        <span>
+                          {t('quickSettings.autoSwitch.windowThresholdsEnable', '按 5h / 周额度分别设阈值')}
+                        </span>
+                      </div>
+                      <div className="qs-row-control">
+                        <label className="qs-switch">
+                          <input
+                            type="checkbox"
+                            checked={agWindowThresholdsEnabled}
+                            onChange={(e) =>
+                              saveConfig({ auto_switch_window_thresholds_enabled: e.target.checked })
+                            }
+                          />
+                          <span className="qs-switch-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {agWindowThresholdsEnabled && (
+                      <>
+                        {(
+                          [
+                            [
+                              'auto_switch_five_hour_threshold',
+                              t('quickSettings.autoSwitch.fiveHourThreshold', '5h 额度切号阈值'),
+                              agFiveHourCustomThreshold,
+                              setAgFiveHourCustomThreshold,
+                              agFiveHourThresholdValue,
+                            ],
+                            [
+                              'auto_switch_weekly_threshold',
+                              t('quickSettings.autoSwitch.weeklyThreshold', '周额度切号阈值'),
+                              agWeeklyCustomThreshold,
+                              setAgWeeklyCustomThreshold,
+                              agWeeklyThresholdValue,
+                            ],
+                          ] as const
+                        ).map(([key, label, value, setValue, fallback]) => (
+                          <div className="qs-row" key={key}>
+                            <div className="qs-row-label">
+                              <span>{label}</span>
+                            </div>
+                            <div className="qs-row-control">
+                              <div className="qs-inline-input">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  className="qs-select qs-select--input-mode qs-select--with-unit"
+                                  value={value}
+                                  placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                                  onChange={(e) =>
+                                    handleCodexWindowThresholdInputChange(e.target.value, setValue)
+                                  }
+                                  onBlur={() =>
+                                    handleCodexWindowCustomThresholdApply(value, setValue, key, fallback)
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleCodexWindowCustomThresholdApply(value, setValue, key, fallback);
+                                    }
+                                  }}
+                                />
+                                <span className="qs-input-unit">%</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <div className="qs-hint" style={{ marginTop: 0 }}>
+                          {t(
+                            'quickSettings.autoSwitch.windowThresholdsHint',
+                            '5h 或周额度任一低于各自阈值即切号（满足任一条件即触发）；上方「切号阈值」仅用于模型级额度。'
+                          )}
+                        </div>
+                      </>
+                    )}
 
                     <div className="qs-row">
                       <div className="qs-row-label">
