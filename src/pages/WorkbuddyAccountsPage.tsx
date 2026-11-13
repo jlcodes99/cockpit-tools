@@ -214,7 +214,7 @@ export function WorkbuddyAccountsPage() {
                   className="wb-probe-notice-close"
                   onClick={(event) => {
                     event.stopPropagation();
-                    dismissWorkbuddyProbeRecord(record.accountId, record.model);
+                    dismissWorkbuddyProbeRecord(account.id, record.model);
                   }}
                   title={page.t('common.close', '关闭')}
                 >

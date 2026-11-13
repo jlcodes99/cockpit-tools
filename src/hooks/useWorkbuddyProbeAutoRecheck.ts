@@ -57,21 +57,18 @@ export function useWorkbuddyProbeAutoRecheck(
           currentPlatform === 'codebuddy_cn' ? probeCodebuddyCnModel : probeWorkbuddyModel;
         const result = await probe(accountId, model, false);
         if (result.status === 'available') {
-          markWorkbuddyProbeRecovered(accountId, model, currentPlatform);
+          markWorkbuddyProbeRecovered(accountId, model);
         } else if (result.status === 'rate_limited') {
-          setWorkbuddyProbeRecord(
-            {
-              accountId,
-              model,
-              status: 'rate_limited',
-              message: result.message,
-              resetAt: parseProbeResetAt(result.message),
-              checkedAt: Date.now(),
-            },
-            currentPlatform,
-          );
+          setWorkbuddyProbeRecord({
+            accountId,
+            model,
+            status: 'rate_limited',
+            message: result.message,
+            resetAt: parseProbeResetAt(result.message),
+            checkedAt: Date.now(),
+          });
         } else {
-          bumpWorkbuddyProbeCheckedAt(accountId, model, currentPlatform);
+          bumpWorkbuddyProbeCheckedAt(accountId, model);
         }
       } catch {
         /* 命令失败（如 PROBE_BUSY）：忽略，等下一轮 */
@@ -83,11 +80,11 @@ export function useWorkbuddyProbeAutoRecheck(
     const scan = async () => {
       if (stopped || busyRef.current) return;
       const currentPlatform = platformRef.current;
-      expireWorkbuddyProbeRecoveries(currentPlatform, RECOVERED_TTL_MS);
+      expireWorkbuddyProbeRecoveries(RECOVERED_TTL_MS);
       const now = Date.now();
       const due: Array<{ accountId: string; model: string }> = [];
       for (const account of accountsRef.current) {
-        for (const record of getWorkbuddyProbeRecords(account.id, currentPlatform)) {
+        for (const record of getWorkbuddyProbeRecords(account.id)) {
           if (record.status !== 'rate_limited' || record.recoveredAt) continue;
           // 没有明确恢复时间的记录无法判断何时复测，交给手动探测
           if (record.resetAt === null || record.resetAt > now) continue;

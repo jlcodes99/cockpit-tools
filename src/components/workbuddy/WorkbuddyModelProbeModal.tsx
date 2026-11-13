@@ -256,19 +256,16 @@ export function WorkbuddyModelProbeModal({
         try {
           const result = await probeModelFn(account.id, model, keepConversation);
           if (result.status === 'rate_limited' || result.status === 'error') {
-            setWorkbuddyProbeRecord(
-              {
-                accountId: account.id,
-                model,
-                status: result.status,
-                message: result.message,
-                resetAt: result.status === 'rate_limited' ? parseProbeResetAt(result.message) : null,
-                checkedAt: Date.now(),
-              },
-              platform,
-            );
+            setWorkbuddyProbeRecord({
+              accountId: account.id,
+              model,
+              status: result.status,
+              message: result.message,
+              resetAt: result.status === 'rate_limited' ? parseProbeResetAt(result.message) : null,
+              checkedAt: Date.now(),
+            });
           } else if (result.status === 'available') {
-            clearWorkbuddyProbeRecord(account.id, model, platform);
+            clearWorkbuddyProbeRecord(account.id, model);
           }
           if (runTokenRef.current === token) {
             setCells((previous) => ({

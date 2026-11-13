@@ -185,7 +185,7 @@ export function CodebuddyCnAccountsPage() {
         </button>
       ),
       renderCardNotice: (account) => {
-        const records = getWorkbuddyProbeRecords(account.id, 'codebuddy_cn');
+        const records = getWorkbuddyProbeRecords(account.id);
         if (records.length === 0) return null;
         return (
           <div className="wb-probe-notice">
@@ -215,7 +215,7 @@ export function CodebuddyCnAccountsPage() {
                     className="wb-probe-notice-close"
                     onClick={(event) => {
                       event.stopPropagation();
-                      dismissWorkbuddyProbeRecord(record.accountId, record.model, 'codebuddy_cn');
+                      dismissWorkbuddyProbeRecord(account.id, record.model);
                     }}
                     title={page.t('common.close')}
                   >
