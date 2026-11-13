@@ -95,7 +95,8 @@ test('Cursor keeps its three primary bars and excludes On-Demand', async () => {
   await i18n.init({ lng: 'en', resources: { en: { translation: enResources } } });
   const html = renderToStaticMarkup(createElement(I18nextProvider, { i18n }, createElement(FloatingCardWindow)));
   assert.equal((html.match(/class="floating-card-quota-row"/g) ?? []).length, 3);
-  assert.ok(html.includes('Total Usage'));
+  // v1.3.82 起总量标签使用 common.shared.quota.usage（"Usage"），不再是 "Total Usage"
+  assert.ok(html.includes('Usage'));
   assert.match(html, /Cursor Models[^]*?30%/);
   assert.match(html, /Other Models[^]*?40%/);
   assert.ok(!html.includes('On-Demand'));

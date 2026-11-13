@@ -1149,10 +1149,16 @@ export function FloatingCardWindow() {
   const hideRelayBalance = relayBalanceDisabled && selectedPlatform === 'codex' && viewedAccount != null
     && isCodexNewApiAccount(viewedAccount as typeof codexAccounts[number]);
   const quotaItems = hideRelayBalance ? [] : presentation?.quotaItems ?? [];
+  // Cursor：悬浮卡片只保留 3 条主额度条（Total / Cursor Models / Other Models），
+  // On-Demand 与附加余额属于详情页信息，避免卡片被撑长。
+  const cursorPrimaryQuotaItems =
+    selectedPlatform === 'cursor'
+      ? quotaItems.filter((item) => item.key !== 'on_demand')
+      : quotaItems;
   const visibleQuotaItems =
     selectedPlatform === 'antigravity' || selectedPlatform === 'antigravity_ide'
       || selectedPlatform === 'workbuddy' || selectedPlatform === 'codebuddy_cn' || selectedPlatform === 'cursor'
-      ? quotaItems
+      ? cursorPrimaryQuotaItems
       : quotaItems.slice(0, 2);
   const accountStateLabel = viewedAccount
     ? isCurrentViewed
