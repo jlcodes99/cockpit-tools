@@ -19,6 +19,7 @@ test('general settings retain payload privacy, refresh scope and account refresh
     '../components/AutoSwitchAccountScopeSelector': { AutoSwitchAccountScopeSelector: 'AccountScope' },
     '../components/codex/CodexContextManagementControl': { CodexContextManagementControl: 'Context' },
     '../components/codex/CodexSshSyncSettingsControl': { CodexSshSyncSettingsControl: 'SshSync' },
+    '../components/SingleSelectDropdown': { SingleSelectDropdown: 'SingleSelectDropdown' },
     '../stores/useRemoteConfigStore': { useRemoteConfigStore: () => '' },
   });
   const props = new Proxy({

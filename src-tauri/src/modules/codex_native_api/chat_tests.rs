@@ -25,6 +25,12 @@ fn deepseek_chat_can_disable_thinking() {
     let wire = chat_upstream::responses_to_chat(&request).unwrap();
     assert_eq!(wire["thinking"]["type"], "disabled");
     assert!(wire.get("reasoning_effort").is_none());
+    for (requested, sent) in [("minimal", "low"), ("medium", "high"), ("xhigh", "high"), ("ultra", "max")] {
+        let wire = chat_upstream::responses_to_chat(&json!({
+            "model":"vendor/deepseek-v5-pro", "input":"hello", "reasoning":{"effort":requested}
+        })).unwrap();
+        assert_eq!(wire["reasoning_effort"], sent);
+    }
 }
 
 #[test]

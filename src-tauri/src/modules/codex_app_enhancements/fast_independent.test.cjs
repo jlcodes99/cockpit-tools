@@ -15,7 +15,7 @@ function harness({ failure = 'initial', config = {}, source = fixture } = {}) {
   const initial = `${source}\nconst primary='./app-primary-fixture.js';`;
   const root = { module: { exports: {} }, Blob, AbortSignal, name: 'existing-name',
     location: { protocol: 'app:', hostname: '-' },
-    __cockpitEnhancements: { nativeFast: true, quotaCompat: false, apiService: true,
+    __cockpitEnhancements: { nativeFast: true, quotaCompat: true, apiService: false,
       apiKeyAuthVerified: true, owner: 'independent-fast', ...config },
     setTimeout(fn) { timers.set(++serial, fn); return serial; }, clearTimeout(id) { timers.delete(id); },
     addEventListener: (key, fn) => listeners.set(key, fn), removeEventListener: key => listeners.delete(key),
@@ -80,7 +80,7 @@ for (const failure of ['initial', 'primary', 'fetch']) {
     assert.equal(state.nativePatchState, 'active');
     assert.equal(state.nativePatchMode, 'fast-only');
     assert.equal(state.nativePatchFeatures, '1010');
-    assert.equal(state.nativePatchRequestedFeatures, '1011');
+    assert.equal(state.nativePatchRequestedFeatures, '1110');
     assert.equal(state.nativeQuotaPatchState, 'unsupported');
     assert.equal(state.nativeQuotaPatchReason, prepared.quotaReason);
     assert.equal(state.nativePatchReason, 'fast-only-quota-unsupported');
@@ -96,7 +96,7 @@ test('known complete quota and Fast contracts still require both modules to eval
   app.root.__cockpitNativeFastComplete();
   assert.equal(app.root.__cockpitEnhancements.nativePatchState, 'preloading');
   app.root.__cockpitNativeFastComplete('quota');
-  assert.equal(app.root.__cockpitEnhancements.nativePatchFeatures, '1111');
+  assert.equal(app.root.__cockpitEnhancements.nativePatchFeatures, '1110');
   assert.equal(app.root.__cockpitEnhancements.nativeQuotaPatchState, 'active');
 });
 
@@ -129,7 +129,7 @@ test('fast-only handoff rejects partial quota code, inaccurate features and cros
     assert.equal(next.api.consumeHandoff('tamper').ok, false);
     assert.equal(next.root.name, 'existing-name'); assert.equal(next.blobs.size, 0);
   }
-  const changedConfig = harness({ config: { quotaCompat: true } }); changedConfig.root.name = app.root.name;
+  const changedConfig = harness({ config: { quotaCompat: false } }); changedConfig.root.name = app.root.name;
   assert.equal(changedConfig.api.consumeHandoff('tamper').ok, false);
   app.api.cancelHandoff('tamper');
 });
@@ -141,11 +141,11 @@ test('host reconnection preserves actual Fast-only features and revokes them aft
   const prepared = await app.api.prepareDocument();
   assert.equal(app.api.installModule(prepared.patchedSource, prepared.url, [], prepared.mode, prepared.quotaReason).ok, true);
   app.root.__cockpitNativeFastComplete();
-  const config = { nativeFast: true, quotaCompat: false, apiKeyAuthVerified: true, apiService: true, owner: 'reconnected' };
+  const config = { nativeFast: true, quotaCompat: true, apiKeyAuthVerified: true, apiService: false, owner: 'reconnected' };
   vm.runInNewContext(stateScript.replace('__COCKPIT_STATE_OPTIONS__', JSON.stringify(config)), app.root);
   assert.equal(app.root.__cockpitEnhancements.nativePatchState, 'active');
   assert.equal(app.root.__cockpitEnhancements.nativePatchFeatures, '1010');
-  assert.equal(app.root.__cockpitEnhancements.nativePatchRequestedFeatures, '1011');
+  assert.equal(app.root.__cockpitEnhancements.nativePatchRequestedFeatures, '1110');
   assert.equal(app.root.__cockpitEnhancements.nativeQuotaPatchReason, prepared.quotaReason);
   config.nativeFast = false;
   vm.runInNewContext(stateScript.replace('__COCKPIT_STATE_OPTIONS__', JSON.stringify(config)), app.root);
@@ -160,8 +160,8 @@ test('page handover waits only for the matching browser installation and never r
   const app = harness({ config: { owner: 'preload-9222' } });
   const prepared = await app.api.prepareDocument();
   app.api.installModule(prepared.patchedSource, prepared.url, [], prepared.mode, prepared.quotaReason);
-  const expected = { owner: 'preload-9222', nativeFast: true, quotaCompat: false,
-    apiKeyAuthVerified: true, apiService: true };
+  const expected = { owner: 'preload-9222', nativeFast: true, quotaCompat: true,
+    apiKeyAuthVerified: true, apiService: false };
   const probe = options => vm.runInNewContext(probeSource
     .replace('__COCKPIT_BROWSER_SNAPSHOT__', JSON.stringify({ ...expected, ...options }))
     .replace('__COCKPIT_WORKER_OWNER__', '"worker-new"'), app.root);

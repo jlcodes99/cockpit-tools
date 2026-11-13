@@ -161,6 +161,36 @@ fn native_model_namespace_is_exact_and_deny_rules_override_allow_rules() {
 }
 
 #[test]
+fn native_deepseek_legacy_model_ids_resolve_only_on_the_bound_instance() {
+    let collection = native_test_collection();
+    let mut key = native_test_key();
+    key.account_ids = vec!["deepseek-account".into()];
+    key.provider_gateway = Some(serde_json::from_value(json!({
+        "baseUrl":"https://api.deepseek.com",
+        "apiKey":"fixture",
+        "upstreamModel":"deepseek-v4-flash",
+        "upstreamModels":["deepseek-v4-flash","deepseek-v4-pro"],
+        "wireApi":"responses"
+    })).unwrap());
+    assert_eq!(
+        native_model_for_key(&collection, Some(&key), "gpt-5.6-luna").unwrap(),
+        "gpt-5.6-luna"
+    );
+    key.id = provider_gateway_api_key_id("deepseek-account");
+    for (requested, upstream) in [
+        ("gpt-5.6-luna", "deepseek-v4-flash"),
+        ("gpt-5.6-sol", "deepseek-v4-pro"),
+        ("deepseek-v4-pro", "deepseek-v4-pro"),
+    ] {
+        let model = native_model_for_key(&collection, Some(&key), requested).unwrap();
+        let plan = native_model_route_plan(&collection, Some(&key), &model).unwrap();
+        assert_eq!(plan.model, upstream);
+    }
+    key.excluded_models = vec!["deepseek-v4-pro".into()];
+    assert!(native_model_for_key(&collection, Some(&key), "gpt-5.6-sol").is_err());
+}
+
+#[test]
 fn native_model_aliases_do_not_bypass_the_public_alias_allowlist() {
     let mut collection = native_test_collection();
     let mut key = native_test_key();

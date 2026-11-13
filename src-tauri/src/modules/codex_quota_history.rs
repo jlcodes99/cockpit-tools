@@ -14,7 +14,7 @@ use crate::modules::{account, codex_account, logger};
 
 const MINUTE: i64 = 60_000;
 const DAY: i64 = 24 * 60 * MINUTE;
-const MAX_QUERY_RANGE: i64 = 32 * DAY;
+const MAX_QUERY_BUCKETS: i64 = 32 * DAY / MINUTE;
 const BATCH_SIZE: usize = 32;
 const PRUNE_SIZE: usize = 256;
 static WRITER: OnceLock<Option<SyncSender<Sample>>> = OnceLock::new();
@@ -33,6 +33,31 @@ pub(crate) struct QuotaHistoryPoint {
     bucket_start: i64,
     short_remaining: Option<i32>,
     weekly_remaining: Option<i32>,
+}
+
+#[derive(Default)]
+struct QuotaConsumption {
+    previous: Option<i32>,
+    total: Option<i64>,
+}
+
+impl QuotaConsumption {
+    fn observe(&mut self, remaining: Option<i32>) {
+        if let (Some(previous), Some(current)) = (self.previous, remaining) {
+            let decrease = i64::from(previous) - i64::from(current);
+            *self.total.get_or_insert(0) += decrease.max(0);
+        }
+        self.previous = remaining;
+    }
+}
+
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct QuotaHistory {
+    points: Vec<QuotaHistoryPoint>,
+    short_consumed: Option<i64>,
+    weekly_consumed: Option<i64>,
+    interval_minutes: i64,
 }
 
 struct Sample {
@@ -140,10 +165,16 @@ fn history_path() -> Result<PathBuf, String> {
 
 fn initialize(conn: &Connection) -> rusqlite::Result<()> {
     conn.busy_timeout(Duration::from_millis(500))?;
-    conn.execute_batch(
-        "PRAGMA journal_mode=WAL;
-         BEGIN IMMEDIATE;
-         CREATE TABLE IF NOT EXISTS quota_samples (
+    let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version >= 2 {
+        return Ok(());
+    }
+    conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+    let tx = rusqlite::Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    let version: i64 = tx.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version == 0 {
+        tx.execute_batch(
+            "CREATE TABLE IF NOT EXISTS quota_samples (
              account_id TEXT NOT NULL,
              identity TEXT NOT NULL,
              minute INTEGER NOT NULL,
@@ -159,10 +190,19 @@ fn initialize(conn: &Connection) -> rusqlite::Result<()> {
              id INTEGER PRIMARY KEY CHECK(id = 1),
              settings TEXT NOT NULL DEFAULT '{}',
              last_pruned_at INTEGER
-         );
-         PRAGMA user_version=1;
-         COMMIT;",
-    )
+         );",
+        )?;
+    }
+    if version == 1 {
+        tx.execute(
+            "UPDATE quota_history_settings SET settings=json_set(settings,'$.onlyChanges',json('true')) WHERE id=1",
+            [],
+        )?;
+    }
+    if version < 2 {
+        tx.pragma_update(None, "user_version", 2)?;
+    }
+    tx.commit()
 }
 
 fn store_batch(conn: &mut Connection, batch: &[Sample]) -> Result<Vec<String>, String> {
@@ -319,29 +359,41 @@ fn read_history(
     from: i64,
     to: i64,
     interval: i64,
-) -> rusqlite::Result<Vec<QuotaHistoryPoint>> {
+) -> rusqlite::Result<QuotaHistory> {
     let mut query = conn.prepare(
-        "WITH samples AS (
-           SELECT observed_at, short_remaining, weekly_remaining,
-             (observed_at - ?3) / ?5 AS bucket,
-             ROW_NUMBER() OVER (
-               PARTITION BY (observed_at - ?3) / ?5 ORDER BY observed_at DESC
-             ) AS sample_order
-           FROM quota_samples WHERE account_id=?1 AND identity=?2
-             AND observed_at>=?3 AND observed_at<?4
-         )
-         SELECT observed_at, ?3 + bucket * ?5, short_remaining, weekly_remaining
-         FROM samples WHERE sample_order=1 ORDER BY observed_at",
+        "SELECT observed_at, short_remaining, weekly_remaining
+         FROM quota_samples WHERE account_id=?1 AND identity=?2
+           AND observed_at>=?3 AND observed_at<?4 ORDER BY observed_at",
     )?;
-    let points = query.query_map(params![account_id, identity, from, to, interval], |row| {
-        Ok(QuotaHistoryPoint {
-            observed_at: row.get(0)?,
-            bucket_start: row.get(1)?,
-            short_remaining: row.get(2)?,
-            weekly_remaining: row.get(3)?,
-        })
-    })?;
-    points.collect()
+    let mut rows = query.query(params![account_id, identity, from, to])?;
+    let mut points: Vec<QuotaHistoryPoint> = Vec::new();
+    let mut short = QuotaConsumption::default();
+    let mut weekly = QuotaConsumption::default();
+    while let Some(row) = rows.next()? {
+        let observed_at: i64 = row.get(0)?;
+        let point = QuotaHistoryPoint {
+            observed_at,
+            bucket_start: from + (observed_at - from) / interval * interval,
+            short_remaining: row.get(1)?,
+            weekly_remaining: row.get(2)?,
+        };
+        short.observe(point.short_remaining);
+        weekly.observe(point.weekly_remaining);
+        if let Some(previous) = points
+            .last_mut()
+            .filter(|previous| previous.bucket_start == point.bucket_start)
+        {
+            *previous = point;
+        } else {
+            points.push(point);
+        }
+    }
+    Ok(QuotaHistory {
+        points,
+        short_consumed: short.total,
+        weekly_consumed: weekly.total,
+        interval_minutes: interval / MINUTE,
+    })
 }
 
 #[tauri::command]
@@ -350,20 +402,22 @@ pub(crate) async fn get_codex_quota_history(
     from: i64,
     to: i64,
     interval_minutes: i64,
-) -> Result<Vec<QuotaHistoryPoint>, String> {
-    if from < 0
-        || to <= from
-        || to - from > MAX_QUERY_RANGE
-        || !(1..=24 * 60).contains(&interval_minutes)
-    {
+) -> Result<QuotaHistory, String> {
+    if from < 0 || to <= from || !(1..=24 * 60).contains(&interval_minutes) {
         return Err("CODEX_QUOTA_HISTORY_INVALID_RANGE".into());
     }
+    // Preserve the existing maximum number of display points for long custom ranges.
+    let interval_minutes = interval_minutes.max(1 + (to - from - 1) / (MAX_QUERY_BUCKETS * MINUTE));
+    let empty = move || QuotaHistory {
+        interval_minutes,
+        ..QuotaHistory::default()
+    };
     tokio::task::spawn_blocking(move || {
         let account = codex_account::load_account_checked(&account_id)?
             .ok_or("CODEX_QUOTA_HISTORY_ACCOUNT_NOT_FOUND")?;
         let path = history_path()?;
         if !path.try_exists().map_err(|error| error.to_string())? {
-            return Ok(Vec::new());
+            return Ok(empty());
         }
         let conn = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(|error| error.to_string())?;
@@ -374,7 +428,7 @@ pub(crate) async fn get_codex_quota_history(
             .map_err(|error| error.to_string())?;
         if version == 0 {
             // A newly opened file may still be waiting on its first schema commit.
-            return Ok(Vec::new());
+            return Ok(empty());
         }
         read_history(
             &conn,

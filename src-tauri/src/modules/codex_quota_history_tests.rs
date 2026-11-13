@@ -33,6 +33,7 @@ fn history_preserves_newest_samples_per_interval_and_separates_identities() {
             sample("a", "person", from + 200, Some(4), Some(62)),
             sample("a", "person", from + 100, Some(99), None),
             sample("a", "person", from + 3 * MINUTE, None, Some(0)),
+            sample("a", "person", from + 4 * MINUTE, None, Some(100)),
             sample("a", "person", from + 10 * MINUTE, Some(85), Some(100)),
             sample("a", "person", from + 15 * MINUTE, Some(99), Some(100)),
             sample("a", "other-workspace", from + 4 * MINUTE, Some(73), None),
@@ -41,19 +42,23 @@ fn history_preserves_newest_samples_per_interval_and_separates_identities() {
     )
     .unwrap();
     let until = from + 15 * MINUTE;
-    let minute = read_history(&conn, "a", "person", from, until, MINUTE).unwrap();
-    assert_eq!(minute.len(), 3);
+    let minute = read_history(&conn, "a", "person", from, until, MINUTE)
+        .unwrap()
+        .points;
+    assert_eq!(minute.len(), 4);
     assert_eq!(minute[0].short_remaining, Some(4));
     assert_eq!(minute[0].observed_at, from + 200);
     let five_minutes = read_history(&conn, "a", "person", from, until, 5 * MINUTE).unwrap();
+    assert_eq!(five_minutes.short_consumed, None);
+    assert_eq!(five_minutes.weekly_consumed, Some(62));
     assert_eq!(
-        five_minutes,
+        five_minutes.points,
         [
             QuotaHistoryPoint {
-                observed_at: from + 3 * MINUTE,
+                observed_at: from + 4 * MINUTE,
                 bucket_start: from,
                 short_remaining: None,
-                weekly_remaining: Some(0),
+                weekly_remaining: Some(100),
             },
             QuotaHistoryPoint {
                 observed_at: from + 10 * MINUTE,
@@ -66,12 +71,14 @@ fn history_preserves_newest_samples_per_interval_and_separates_identities() {
     assert_eq!(
         read_history(&conn, "a", "other-workspace", from, until, MINUTE)
             .unwrap()
+            .points
             .len(),
         1
     );
     assert!(
         read_history(&conn, "a", "new-identity", from, until, MINUTE)
             .unwrap()
+            .points
             .is_empty()
     );
 }
@@ -101,9 +108,11 @@ fn recorded_samples_survive_reopening_the_database() {
     let version: i64 = reader
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 1);
+    assert_eq!(version, 2);
     assert_eq!(
-        read_history(&reader, "account", "workspace", 0, 120_000, MINUTE).unwrap(),
+        read_history(&reader, "account", "workspace", 0, 120_000, MINUTE)
+            .unwrap()
+            .points,
         [QuotaHistoryPoint {
             observed_at,
             bucket_start: MINUTE,
@@ -120,7 +129,6 @@ fn history_settings_filter_by_account_interval_and_actual_changes() {
     let mut settings = HistorySettings::default();
     settings.interval_minutes = 5;
     settings.account_ids = Some(vec!["a".into()]);
-    settings.only_changes = true;
     let sample = |id: &str, minute, short| Sample {
         account_id: id.into(),
         identity: "identity".into(),
@@ -145,6 +153,7 @@ fn history_settings_filter_by_account_interval_and_actual_changes() {
     let history = read_history(&conn, "a", "identity", 0, 20 * MINUTE, MINUTE).unwrap();
     assert_eq!(
         history
+            .points
             .iter()
             .map(|row| row.observed_at / MINUTE)
             .collect::<Vec<_>>(),
@@ -153,6 +162,7 @@ fn history_settings_filter_by_account_interval_and_actual_changes() {
     assert!(
         read_history(&conn, "other", "identity", 0, 20 * MINUTE, MINUTE)
             .unwrap()
+            .points
             .is_empty()
     );
     settings.enabled = false;

@@ -32,3 +32,26 @@ test('timeout hint shows the recorded threshold and navigates to the matching im
   assert.equal(tree.some((node) => node.type === 'button'), false);
   assert.equal(tree.some((node) => String(node.props?.children).includes('.threshold')), false);
 });
+
+test('native timeout hints name and focus the matching open or idle setting', () => {
+  let target = '';
+  const h = loadHookModule(new URL('./CodexRequestTimeoutHint.tsx', import.meta.url), {
+    'react-i18next': { useTranslation: () => ({ t: (key: string, args?: any) => `${key}${args?.setting ? `:${args.setting}` : ''}` }) },
+    '../../utils/codexRequestDiagnostics': { requestTimeoutDiagnostic },
+  });
+  let event: any = {};
+  h.render(() => h.exports.CodexRequestTimeoutHint({ event, onOpenSettings: (field: string) => { target = field; } }));
+  for (const [errorCategory, requestKind, kind, label, field] of [
+    ['upstream_connect_timeout', 'text', 'open', 'streamOpen', 'sidecarStreamOpenTimeoutMs'],
+    ['upstream_connect_timeout', 'image_generation', 'open', 'imageOpen', 'sidecarImageStreamOpenTimeoutMs'],
+    ['upstream_idle_timeout', 'text', 'idle', 'streamIdle', 'sidecarStreamIdleTimeoutMs'],
+    ['upstream_idle_timeout', 'image_edit', 'idle', 'imageIdle', 'sidecarImageStreamIdleTimeoutMs'],
+  ] as const) {
+    event = { httpStatus: 504, errorCategory, requestKind, errorMessage: '上游响应超时' };
+    const tree = nodes(h.flush());
+    assert.ok(tree.some((node) => node.props?.children === `codex.requestDiagnostics.timeout.${kind}:codex.apiService.timeouts.${label}`));
+    assert.equal(tree.some((node) => String(node.props?.children).includes('.threshold')), false);
+    tree.find((node) => node.type === 'button').props.onClick();
+    assert.equal(target, field);
+  }
+});

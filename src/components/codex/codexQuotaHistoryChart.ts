@@ -1,4 +1,4 @@
-export type QuotaHistoryRange = "today" | "thisWeek" | "thisMonth";
+export type QuotaHistoryPreset = "today" | "thisWeek" | "thisMonth";
 
 export interface QuotaHistoryPoint {
   observedAt: number;
@@ -7,7 +7,27 @@ export interface QuotaHistoryPoint {
   weeklyRemaining: number | null;
 }
 
-export function quotaHistoryDateRange(period: QuotaHistoryRange, offset: number, now = new Date()) {
+export interface QuotaHistory {
+  points: QuotaHistoryPoint[];
+  shortConsumed: number | null;
+  weeklyConsumed: number | null;
+  intervalMinutes: number;
+}
+
+export function quotaHistoryDateInput(time: number): string {
+  const date = new Date(time);
+  return [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+    .map((part) => String(part).padStart(2, "0")).join("-");
+}
+
+export function quotaHistoryCustomRange(start: string, end: string) {
+  const from = new Date(`${start}T00:00:00`).getTime();
+  const lastDay = new Date(`${end}T00:00:00`);
+  const to = lastDay.setDate(lastDay.getDate() + 1);
+  return from >= 0 && from < to ? { from, to } : undefined;
+}
+
+export function quotaHistoryDateRange(period: QuotaHistoryPreset, offset: number, now = new Date()) {
   const from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const to = new Date(from);
   if (period === "today") {
@@ -29,10 +49,12 @@ export function quotaHistoryDateRange(period: QuotaHistoryRange, offset: number,
 
 export const QUOTA_PLOT = { width: 920, height: 252, left: 49, right: 44, top: 20, bottom: 44 };
 
-export function quotaHistoryTicks(first: number, last: number, period: QuotaHistoryRange, count: number, lang: string) {
+export function quotaHistoryTicks(first: number, last: number, period: QuotaHistoryPreset | "custom", count: number, lang: string) {
   const sameDay = new Date(first).toDateString() === new Date(last).toDateString();
+  const sameYear = new Date(first).getFullYear() === new Date(last).getFullYear();
   const format = new Intl.DateTimeFormat(lang, period === "today" || sameDay
-    ? { hour: "2-digit", minute: "2-digit" } : { month: "short", day: "numeric" });
+    ? { hour: "2-digit", minute: "2-digit" }
+    : { month: "short", day: "numeric", year: sameYear ? undefined : "numeric" });
   const firstLabel = format.format(first);
   const lastLabel = format.format(last);
   if (firstLabel === lastLabel) return [{ value: first, label: firstLabel }];

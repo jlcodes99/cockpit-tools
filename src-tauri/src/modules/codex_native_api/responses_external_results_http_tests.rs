@@ -119,9 +119,38 @@ async fn deepseek_responses_can_continue_after_an_incomplete_tool_batch() {
             let failure = strict_error(WireApi::Responses, &body)
                 .or_else(|| (!calls.is_subset(&outputs)).then_some("No tool output found"))
                 .or_else(|| (!outputs.is_subset(&calls)).then_some("No tool call found"))
-                .or_else(|| input.iter().enumerate().any(|(index, item)| item["type"] == "function_call"
-                    && !input.get(index + 1).is_some_and(|output| output["type"] == "function_call_output"
-                        && output["call_id"] == item["call_id"])).then_some("Tool result must immediately follow its call"));
+                .or_else(|| {
+                    let mut pending = std::collections::HashSet::new();
+                    let mut receiving_outputs = false;
+                    let thinking = input.iter().any(|item| item["type"] == "reasoning");
+                    let mut has_reasoning = false;
+                    for item in input {
+                        match item["type"].as_str() {
+                            Some("reasoning") if pending.is_empty() => {
+                                has_reasoning = item["content"].as_array().is_some_and(|parts| {
+                                    parts.iter().any(|part| part["type"] == "reasoning_text")
+                                });
+                            }
+                            Some("function_call") if !receiving_outputs => {
+                                if pending.is_empty() && thinking && !std::mem::take(&mut has_reasoning) {
+                                    return Some("The reasoning_text in the thinking mode must be passed back to the API");
+                                }
+                                pending.insert(item["call_id"].as_str().unwrap());
+                            }
+                            Some("function_call_output") => {
+                                if !pending.remove(item["call_id"].as_str().unwrap()) {
+                                    return Some("Tool results must immediately follow their batch");
+                                }
+                                receiving_outputs = !pending.is_empty();
+                            }
+                            _ if !pending.is_empty() => {
+                                return Some("Tool results must immediately follow their batch");
+                            }
+                            _ => {}
+                        }
+                    }
+                    None
+                });
             if let Some(message) = failure {
                 return (StatusCode::BAD_REQUEST, Json(json!({"error":{
                     "type":"invalid_request_error","message":message
@@ -165,16 +194,18 @@ async fn deepseek_responses_can_continue_after_an_incomplete_tool_batch() {
     }
     let mut complete = original.clone();
     let input = complete["input"].as_array_mut().unwrap();
-    input.swap(1, 2);
     input.insert(3, json!({
         "type":"function_call_output","call_id":"missing","output":"real result committed"
     }));
+    input.insert(0, json!({"type":"reasoning","summary":[],
+        "content":[{"type":"reasoning_text","text":"Read both files before answering."}]}));
     let response = local.post(&gateway_url).bearer_auth("key")
         .json(&complete).send().await.unwrap();
-    assert_eq!(response.status(), 200);
+    assert_eq!(response.status(), 200, "{}", response.text().await.unwrap());
     let mut interleaved = complete.clone();
+    interleaved["reasoning"] = json!({"effort":"ultra"});
     let hook = json!({"type":"message","role":"developer","content":"PostToolUse hook context"});
-    interleaved["input"].as_array_mut().unwrap().insert(1, hook.clone());
+    interleaved["input"].as_array_mut().unwrap().insert(4, hook.clone());
     let response = host.client.post(&upstream_url).json(&interleaved).send().await.unwrap();
     assert_eq!(response.status(), 400);
     assert!(response.text().await.unwrap().contains("must immediately follow"));
@@ -188,13 +219,15 @@ async fn deepseek_responses_can_continue_after_an_incomplete_tool_batch() {
             assert_eq!(wire["parallel_tool_calls"], false);
             assert_eq!(wire["input"][3]["call_id"], "missing");
             assert!(wire["input"][3]["output"].as_str().unwrap().starts_with("Tool result unavailable"));
-            assert_eq!(wire["input"][1], original["input"][2]);
+            assert_eq!(wire["input"][1], original["input"][1]);
+            assert_eq!(wire["input"][2], original["input"][2]);
             assert_eq!(wire["input"][4]["type"], "message");
             assert!(wire["input"][4]["content"][0]["text"].as_str().unwrap().contains("cross-thread context"));
         }
         assert_eq!(sent[2], complete);
         let mut repaired = complete;
-        repaired["input"].as_array_mut().unwrap().insert(2, hook);
+        repaired["reasoning"] = json!({"effort":"max"});
+        repaired["input"].as_array_mut().unwrap().insert(5, hook);
         assert_eq!(sent[3], repaired);
     }
     gateway.shutdown(Duration::from_secs(2)).await.unwrap();

@@ -46,6 +46,7 @@ import {
   getZedAccountDisplayEmail,
   getZedEditPredictionsMetrics,
   getZedPlanBadge,
+  getZedPlanTone,
   hasZedQuotaData,
   type ZedAccount,
 } from '../types/zed';
@@ -81,23 +82,6 @@ function parseFiniteNumber(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
-}
-
-function getZedPlanTone(planRaw?: string | null): string {
-  const normalized = (planRaw || '').trim().toLowerCase();
-  if (!normalized) return 'unknown';
-  if (normalized.includes('enterprise') || normalized.includes('team')) return 'enterprise';
-  if (normalized.includes('trial')) return 'trial';
-  if (
-    normalized.includes('pro') ||
-    normalized.includes('plus') ||
-    normalized.includes('ultra') ||
-    normalized.includes('ultimate')
-  ) {
-    return 'pro';
-  }
-  if (normalized.includes('free')) return 'free';
-  return 'unknown';
 }
 
 function getZedStatusTone(status?: string | null): 'normal' | 'warning' | 'forbidden' | 'neutral' {

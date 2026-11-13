@@ -132,6 +132,10 @@
   background: color-mix(in srgb, var(--primary) 10%, var(--bg-secondary));
 }
 
+.settings-account-scope-item > .tier-badge {
+  flex-shrink: 0;
+}
+
 .settings-account-scope-item-label {
   font-size: 13px;
   color: var(--text-primary);
@@ -153,8 +157,9 @@
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(2px);
   display: flex;
-  align-items: center;
+  align-items: safe center;
   justify-content: center;
+  overflow-y: auto;
   padding: 24px;
 }
 

@@ -13,8 +13,13 @@ import {
   isAccountNeedsReauth,
 } from './platformAccountPresentation';
 
-const t = ((key: string, defaultValue?: string | Record<string, unknown>) =>
-  typeof defaultValue === 'string' ? defaultValue : key) as unknown as TFunction;
+const t = ((key: string, defaultValue?: string | Record<string, unknown>, vars?: Record<string, unknown>) => {
+  const base = typeof defaultValue === 'string' ? defaultValue : key;
+  const params = typeof defaultValue === 'object' && defaultValue !== null ? defaultValue : vars;
+  return params
+    ? base.replace(/\{\{(\w+)\}\}/g, (_, k) => (k in params ? String(params[k]) : `{{${k}}}`))
+    : base;
+}) as unknown as TFunction;
 const futureReset = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
 function account(models: ModelQuota[], stale = false): Account {
   return {
@@ -43,8 +48,8 @@ test('list disclosure shows each real model and keeps account-wide windows separ
   ]);
   const html = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items, modelItems, t }));
   const [windows, detail] = html.split('<details');
-  assert.match(windows, /Claude \(5h\).*?>100%<\/span>/);
-  assert.match(windows, /Claude \(Weekly\).*?>0%<\/span>/);
+  assert.match(windows, /Claude · 5h.*?100%/);
+  assert.match(windows, /Claude · Weekly.*?0%/);
   assert.match(detail, /Claude Sonnet.*0%.*Gemini Pro High.*60%.*Gemini Pro Low.*90%/);
   assert.doesNotMatch(detail, /Weekly|3p-5h/);
   assert.match(renderToStaticMarkup(createElement(AntigravityQuotaSection, { items: [], modelItems, t })), /Gemini Pro Low/);
@@ -64,7 +69,7 @@ test('explicit quota buckets keep percentages and distant reset times unchanged'
     { key: 'argon:weekly', label: 'Gemini 4 Argon (Weekly)', percentage: 91, resetTime: futureReset },
   ]);
   const html = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items, t }));
-  assert.equal((html.match(/class="codex-quota-mini"/g) || []).length, 5);
+  assert.equal((html.match(/class="ag-quota-cell /g) || []).length, 5);
   assert.match(html, /Gemini 4 Argon \(Weekly\)/);
   assert.match(html, /91%/);
   const otherAccount = account([model('gemini-5h', 0), model('gemini-weekly', 35)]);
@@ -101,7 +106,7 @@ test('free tier accounts show weekly quota without 5h rows', () => {
   assert.equal(items.some((i) => i.key.endsWith(':5h')), false);
   const html = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items, t }));
   assert.match(html, /Weekly/);
-  assert.doesNotMatch(html, /\(5h\)/);
+  assert.doesNotMatch(html, /· 5h/);
 });
 
 test('Ultra model quota and short Argon windows never fill the Argon weekly row', () => {

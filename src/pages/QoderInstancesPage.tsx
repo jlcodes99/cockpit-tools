@@ -6,6 +6,7 @@ import type { QoderAccount } from '../types/qoder';
 import {
   getQoderAccountDisplayEmail,
   getQoderPlanBadge,
+  resolveQoderPlanBadgeClass,
   getQoderUsage,
 } from '../types/qoder';
 import { usePlatformRuntimeSupport } from '../hooks/usePlatformRuntimeSupport';
@@ -58,8 +59,7 @@ export function QoderInstancesContent({
       renderAccountQuotaPreview={renderQoderQuotaPreview}
       renderAccountBadge={(account) => {
         const plan = getQoderPlanBadge(account);
-        const normalizedClass = plan.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        return <span className={`instance-plan-badge ${normalizedClass}`}>{plan}</span>;
+        return <span className={`tier-badge account-picker-plan raw-value ${resolveQoderPlanBadgeClass(plan)}`}>{plan}</span>;
       }}
       getAccountSearchText={(account) =>
         `${getQoderAccountDisplayEmail(account)} ${getQoderPlanBadge(account)}`

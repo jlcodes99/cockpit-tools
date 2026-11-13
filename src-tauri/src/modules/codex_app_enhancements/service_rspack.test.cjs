@@ -14,28 +14,12 @@ const queue = [
   'export function policy(e,D,R,nn,t,tE,c){return {authMethod:e.hostId===R.local?D.authMethod:null,includeUltraReasoningEffort:(0,nn.flag)(t,"1186680773"),isAuthLoading:D.loading,isCustomModelProvider:(0,tE.cc)(c),workspaceDependenciesEnabled:true}}',
 ].join('\n');
 
-function composer(mac) {
-  return [
-    'export function itX7(n){',
-    'const p=n("tl5a"),r=n("eLmE"),u=n("a6kU");',
-    'return function(e,{reader:x,config:c,scope:s,thread:t,load:l}){',
-    'const {atMentionRankingContext:am,a1:v1,useAsbDirect:asb,a2:v2,homeRunLocationRemoteProject:remote,a3:v3,selectedProject:project,other:unused}=e,d="local"===s.value.kind?e.k:e.ComposerContent,h=e.hostId;',
-    'let a=true,b=(0,x._U)(r.F9,h),q=(0,x._U)(e.M,null==t?null:{hostId:h,threadId:t});',
-    'let settings=(0,c.Fc)(h);',
-    'const cfg=settings.isConfigDataPending?null:settings.resolvedConfig,usage=(0,x.Ul)("local"===h&&u.U);',
-    mac
-      ? 'let reserve=b&&"reserve-limit",limit=usage&&"usage-limit";return Boolean(e.disabled||l?.isLoading||reserve||limit)'
-      : 'let blocked=e.disabled||l?.isLoading===!0||b||usage;return Boolean(blocked)',
-    '}}',
-  ].join('\n');
-}
-
 function setup(flags = {}, { host = 182735, menus = menuIds, queries = modelQueryIds } = {}) {
   const modules = new Map();
   const sources = new Map([
     ...menus.map(id => [id, menu]),
     ...queries.map(id => [id, modelQuery]),
-    [host, queue], [543778, composer(true)], [634303, composer(false)],
+    [host, queue],
   ]);
   const html = '<script type="module" src="/assets/123.abcdef1234.js"></script>';
   const root = {
@@ -138,47 +122,6 @@ test('the updated desktop manifest selects the new speed routes and forwards the
   }), 'priority');
 });
 
-test('macOS and Windows only hand local API Service quota decisions to the gateway', async () => {
-  for (const mixed of [false, true]) {
-    const h = setup({nativeFast: !mixed, apiKeyAuthVerified: !mixed, quotaCompat: mixed});
-    h.preload();
-    assert.equal(h.root.__cockpitStartupPreload.quota.ok, true, h.root.__cockpitStartupPreload.quota.reason);
-    for (const id of [543778, 634303]) {
-      const modules = { tl5a: {jR: 'threadProvider'}, eLmE: {F9: 'reserve'}, a6kU: {U: 'usage'} };
-      const {itX7: factory} = await h.exports(id);
-      const blocked = factory(name => modules[name]);
-      const provider = { requires_openai_auth: mixed, experimental_bearer_token: 'agt_codex_test', base_url: 'http://127.0.0.1:8765/v1' };
-      const settings = { isConfigDataPending: false, resolvedConfig: {
-        model_provider: 'codex_local_access', model_providers: {codex_local_access: provider},
-      } };
-      function submit({props, route, thread, threadProvider, reserve = true, usage = true, load} = {}) {
-        return blocked({hostId: 'local', ...props}, {
-          reader: { _U: key => key === 'threadProvider' ? threadProvider : key === 'reserve' && reserve, Ul: key => key === 'usage' && usage },
-          config: { Fc: () => settings }, scope: {value: route ?? {kind:'new'}}, thread, load,
-        });
-      }
-      assert.equal(submit(), false);
-      assert.equal(submit({reserve: false}), false);
-      assert.equal(submit({usage: false}), false);
-      assert.equal(submit({props: {disabled: true}}), true);
-      assert.equal(submit({load: {isLoading: true}}), true);
-      assert.equal(submit({props: {hostId: 'remote'}}), true);
-      assert.equal(submit({props: {useAsbDirect: true}}), true);
-      assert.equal(submit({props: {selectedProject: {type: 'remote'}}}), true);
-      assert.equal(submit({route: {kind: 'new', cloudThreadPrototype: {}}}), true);
-      assert.equal(submit({route: {kind: 'cloud'}}), true);
-      const existing = {thread: 't1', route: {kind: 'local', conversationId: 't1'}};
-      assert.equal(submit(existing), true);
-      assert.equal(submit({...existing, threadProvider: 'openai'}), true);
-      assert.equal(submit({...existing, threadProvider: 'codex_local_access'}), false);
-      provider.base_url = 'https://remote.example/v1';
-      assert.equal(submit(), true);
-      provider.base_url = 'http://localhost:8765/v1';
-      settings.isConfigDataPending = true;
-      assert.equal(submit(), true);
-    }
-  }
-});
 
 test('Ultra reasoning respects native eligibility and only adds the verified local custom route', async () => {
   const h = setup();
@@ -206,33 +149,6 @@ test('Ultra reasoning respects native eligibility and only adds the verified loc
   }
 });
 
-test('live quota resolves the Mac and Windows guards in both lazy chunks without changing the document', async () => {
-  const h = setup();
-  const entry = 'app://-/assets/123.abcdef1234.js';
-  h.root.document.scripts = [{src: entry}];
-  h.root.fetch = async url => {
-    const xhr = new h.root.XMLHttpRequest();
-    xhr.open('GET', url);
-    xhr.send();
-    return {ok: true, text: async () => xhr.responseText};
-  };
-  h.root.AbortSignal = AbortSignal;
-  const result = await h.root.__cockpitServiceRspack.prepareLiveQuotaGate();
-  assert.equal(result.ok, true, result.reason);
-  assert.deepEqual(Array.from(result.rspackPlans, plan => plan.hardVariable), ['b','b']);
-  assert.deepEqual(Array.from(result.rspackPlans, plan => plan.guardVariable), ['usage','usage']);
-  assert.deepEqual(Array.from(result.rspackPlans, plan => plan.scope), ['s','s']);
-  assert.equal(h.root.document.documentElement, null);
-});
-
-test('a changed speed contract preserves quota and publishes no partial speed graph', () => {
-  const h = setup();
-  h.sources.delete(menuIds.at(-1));
-  h.preload();
-  assert.equal(h.root.__cockpitStartupPreload.speed.ok, false);
-  assert.equal(h.root.__cockpitStartupPreload.quota.ok, true, h.root.__cockpitStartupPreload.quota.reason);
-  assert.equal(Object.keys(h.root.imports).length, 2);
-});
 
 test('predictions share the Rspack import map in both API Service auth modes', () => {
   for (const apiKeyAuthVerified of [true, false]) {
@@ -249,7 +165,7 @@ test('predictions share the Rspack import map in both API Service auth modes', (
     });
     h.preload();
     assert.deepEqual(readiness, [true]);
-    assert.equal(Object.keys(h.root.imports).length, apiKeyAuthVerified ? 22 : 3);
+    assert.equal(Object.keys(h.root.imports).length, apiKeyAuthVerified ? 20 : 1);
     assert.ok(Object.hasOwn(h.root.imports, url));
   }
 });

@@ -1519,7 +1519,7 @@
       "codexPreserveExternalBridgeDesc": "Conserver le pont Codex Web GPT validé par les données locales lors du changement de compte OAuth. Désactivé par défaut.",
       "codexEnhancements": {
         "quotaCompat": "Quotas en mode mixte",
-        "quotaCompatDesc": "Avec une connexion OAuth réelle et une route API externe, évite que le quota de l’abonnement bloque les messages API locaux. Ne modifie ni la consommation réelle ni les quotas d’images.",
+        "quotaCompatDesc": "Les instances du service API présentent un quota disponible pour l’affichage et les vérifications locales du client. L’utilisation réelle chez le fournisseur et les limites d’images restent inchangées. Ce réglage concerne uniquement les autres configurations OAuth avec API externe.",
         "restartHint": "Les prédictions natives sont désactivées par défaut. Redémarrez chaque instance Codex concernée après modification et gardez Cockpit Tools ouvert. La dictée native dépend des capacités et réglages du client ; Cockpit ne la remplace pas et ne force pas son activation.",
         "configFailed": "Échec de lecture ou d’enregistrement des paramètres : {{error}}",
         "nativePredictions": "Prédictions natives de l’étape suivante (Tab)",
@@ -2222,7 +2222,13 @@
     "refreshTime": "Actualisation",
     "lastSwitchTimeFull": "Changement : {{time}}",
     "refreshTimeFull": "Actualisation : {{time}}",
-    "toggleTimeMode": "Afficher le changement ou l’actualisation"
+    "toggleTimeMode": "Afficher le changement ou l’actualisation",
+    "quotaSummary": {
+      "geminiModels": "Modèles Gemini",
+      "claudeAndGptModels": "Modèles Claude et GPT",
+      "weeklyLimit": "Limite hebdomadaire",
+      "fiveHourLimit": "Limite 5 h"
+    }
   },
   "overview": {
     "title": "Aperçu des comptes",
@@ -2680,6 +2686,10 @@
     "quotaHistory": {
       "storage": {
         "title": "Stockage de l’historique",
+        "recordCount": "Entrées",
+        "diskSpace": "Espace disque",
+        "defaultAccount": "Compte par défaut",
+        "recording": "Enregistrement",
         "usage": "{{records}} relevés · {{size}} sur le disque",
         "loadFailed": "Impossible de lire le stockage de l’historique.",
         "enabled": "Enregistrer l’historique",
@@ -2714,7 +2724,14 @@
       "details": "Détails",
       "onlyChanges": "Variations seules",
       "noChanges": "Aucune variation du quota sur cette période.",
-      "sampledAt": "Heure du relevé",
+      "recordedAt": "Heure du relevé",
+      "noValue": "Aucun",
+      "shortConsumed": "Quota 5 h consommé",
+      "weeklyConsumed": "Quota hebdo consommé",
+      "shortRemaining": "Reste 5 h",
+      "shortDelta": "Var. 5 h",
+      "weeklyRemaining": "Reste hebdo",
+      "weeklyDelta": "Var. hebdo",
       "changeFromPrevious": "Écart par rapport au relevé précédent",
       "points": "{{value}} pts",
       "account": "Compte",
@@ -8442,6 +8459,7 @@
       "addToClaude": "Ajouter à Claude CLI",
       "addToClaudeDesktop": "Ajouter à Claude",
       "addToClaudeCli": "Ajouter à Claude CLI",
+      "addToGrok": "Ajouter à Grok",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "Déploiement rapide vers Codex",
@@ -8485,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "La facturation Grok n’a renvoyé aucune donnée de quota. Réessayez plus tard.",
     "search": "Rechercher des comptes Grok CLI...",
     "flowNotice": {
       "title": "Gestion des comptes Grok CLI",

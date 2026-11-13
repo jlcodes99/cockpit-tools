@@ -1519,7 +1519,7 @@
       "codexPreserveExternalBridgeDesc": "切換 OAuth 帳號時保留經本機紀錄驗證的 Codex Web GPT 橋接；預設關閉。",
       "codexEnhancements": {
         "quotaCompat": "混合模式額度相容",
-        "quotaCompatDesc": "僅真實 OAuth 登入且使用外部 API 路由時，避免訂閱額度攔截本機 API 訊息；不改變實際用量及圖像額度。",
+        "quotaCompatDesc": "API 服務執行個體使用可用額度檢視，僅調整用戶端顯示與本機判斷；實際上游用量及圖片額度不變。此開關僅適用於其他 OAuth＋外部 API 混合模式。",
         "restartHint": "原生下一步預測預設關閉。修改後需重新啟動各目標 Codex 執行個體，並保持 Cockpit Tools 執行。原生聽寫由用戶端功能與設定決定，Cockpit 不接管或強制啟用。",
         "configFailed": "設定讀取或儲存失敗：{{error}}",
         "nativePredictions": "原生下一步預測（Tab）",
@@ -2222,7 +2222,13 @@
     "refreshTime": "更新時間",
     "lastSwitchTimeFull": "切換時間：{{time}}",
     "refreshTimeFull": "更新時間：{{time}}",
-    "toggleTimeMode": "切換顯示切換或更新時間"
+    "toggleTimeMode": "切換顯示切換或更新時間",
+    "quotaSummary": {
+      "geminiModels": "Gemini 模型",
+      "claudeAndGptModels": "Claude 與 GPT 模型",
+      "weeklyLimit": "每週限額",
+      "fiveHourLimit": "5 小時限額"
+    }
   },
   "overview": {
     "title": "帳號總覽",
@@ -2680,6 +2686,10 @@
     "quotaHistory": {
       "storage": {
         "title": "歷史儲存",
+        "recordCount": "記錄數",
+        "diskSpace": "佔用空間",
+        "defaultAccount": "預設帳號",
+        "recording": "記錄設定",
         "usage": "{{records}} 筆記錄 · 佔用 {{size}}",
         "loadFailed": "無法讀取歷史儲存。",
         "enabled": "記錄額度歷史",
@@ -2714,7 +2724,14 @@
       "details": "明細",
       "onlyChanges": "僅看變化",
       "noChanges": "此時段暫無額度變化。",
-      "sampledAt": "取樣時間",
+      "recordedAt": "記錄時間",
+      "noValue": "無",
+      "shortConsumed": "5 小時累計用量",
+      "weeklyConsumed": "週額度累計用量",
+      "shortRemaining": "5h 剩餘",
+      "shortDelta": "5h 變化",
+      "weeklyRemaining": "週剩餘",
+      "weeklyDelta": "週變化",
       "changeFromPrevious": "與上一筆取樣的差異",
       "points": "{{value}} 個百分點",
       "account": "帳號",
@@ -8442,6 +8459,7 @@
       "addToClaude": "加入 Claude CLI",
       "addToClaudeDesktop": "加入 Claude",
       "addToClaudeCli": "加入 Claude CLI",
+      "addToGrok": "加入 Grok",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "快速部署到 Codex",
@@ -8485,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "Grok 帳單介面未傳回額度資料，請稍後再試。",
     "search": "搜尋 Grok CLI 帳號...",
     "flowNotice": {
       "title": "Grok CLI 帳號管理說明",

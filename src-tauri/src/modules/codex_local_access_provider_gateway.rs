@@ -656,6 +656,12 @@ fn preferred_provider_gateway_slot<'a>(
         .map(str::trim)
         .filter(|value| !value.is_empty());
     if let Some(startup) = startup {
+        let startup = if is_official_deepseek_account(account) {
+            legacy_deepseek_model_id(startup, slots.iter().map(|slot| slot.upstream_model.as_str()))
+                .unwrap_or(startup)
+        } else {
+            startup
+        };
         if let Some(slot) = slots.iter().find(|slot| {
             slot.upstream_model.eq_ignore_ascii_case(startup)
                 || slot.client_model.eq_ignore_ascii_case(startup)
@@ -686,74 +692,54 @@ pub(crate) fn is_codex_provider_shell_model_id(model: &str) -> bool {
     is_provider_model_shell_slug(model)
 }
 
-const DEEPSEEK_OFFICIAL_SHELL_SLOTS: &[(&str, &str)] = &[
+const LEGACY_DEEPSEEK_MODEL_IDS: &[(&str, &str)] = &[
     ("deepseek-flash", "gpt-5.6-luna"),
-    // 旧模型名保留同一套壳位，已存在的账号不需要迁移。
+    // 旧 Flash 目录也使用过同一个 ID。
     ("deepseek-v4-flash", "gpt-5.6-luna"),
     ("deepseek-v4-pro", "gpt-5.6-sol"),
     ("deepseek-v4-flash-vision-exp", "gpt-5.6-terra"),
 ];
 
-/// DeepSeek 目录壳位映射（客户端可见名 → 上游模型）。
-///
-/// 同一个壳位只保留表内第一个上游模型，与 `allocate_official_deepseek_shell_slots` 一致。
-pub(crate) fn deepseek_official_shell_client_mappings() -> Vec<(String, String)> {
-    let mut used_shells = HashSet::new();
-    DEEPSEEK_OFFICIAL_SHELL_SLOTS
+pub(crate) fn is_legacy_deepseek_model_id(model: &str) -> bool {
+    LEGACY_DEEPSEEK_MODEL_IDS
         .iter()
-        .filter(|(_, shell)| used_shells.insert(shell.to_ascii_lowercase()))
-        .map(|(upstream, shell)| ((*shell).to_string(), (*upstream).to_string()))
-        .collect()
+        .any(|(_, legacy)| legacy.eq_ignore_ascii_case(model.trim()))
 }
 
-fn allocate_official_deepseek_shell_slots(
-    models: &[String],
-) -> Option<Vec<ProviderGatewayModelSlot>> {
-    let upstream_models =
-        normalize_provider_gateway_models(models.iter().map(String::as_str).collect());
-    if upstream_models.is_empty() {
-        return None;
-    }
-    if !upstream_models.iter().all(|model| {
-        DEEPSEEK_OFFICIAL_SHELL_SLOTS
-            .iter()
-            .any(|(upstream, _)| upstream.eq_ignore_ascii_case(model))
-    }) {
-        return None;
-    }
-    Some({
-        let mut used_shells = HashSet::new();
-        DEEPSEEK_OFFICIAL_SHELL_SLOTS
-            .iter()
-            .filter(|(upstream, _)| {
-                upstream_models
-                    .iter()
-                    .any(|model| model.eq_ignore_ascii_case(upstream))
-            })
-            .filter_map(|(upstream, shell)| {
-                // 新名与旧名指向同一个上游模型时只占一个壳位。
-                if !used_shells.insert(shell.to_ascii_lowercase()) {
-                    return None;
-                }
-                Some(ProviderGatewayModelSlot {
-                    client_model: (*shell).to_string(),
-                    upstream_model: (*upstream).to_string(),
-                })
-            })
-            .collect()
+/// Resolve an old ID only within a known DeepSeek catalog.
+pub(crate) fn legacy_deepseek_model_id<'a>(
+    model: &str,
+    available: impl Iterator<Item = &'a str> + Clone,
+) -> Option<&'a str> {
+    LEGACY_DEEPSEEK_MODEL_IDS.iter().find_map(|(upstream, legacy)| {
+        if !legacy.eq_ignore_ascii_case(model.trim()) {
+            return None;
+        }
+        available
+            .clone()
+            .find(|candidate| candidate.eq_ignore_ascii_case(upstream))
     })
+}
+
+pub(crate) fn legacy_deepseek_model_aliases(
+    models: &[String],
+) -> std::collections::BTreeMap<&'static str, &str> {
+    LEGACY_DEEPSEEK_MODEL_IDS
+        .iter()
+        .filter_map(|(_, legacy)| {
+            legacy_deepseek_model_id(legacy, models.iter().map(String::as_str))
+                .map(|upstream| (*legacy, upstream))
+        })
+        .collect()
 }
 
 /// Allocate client-visible model shells for upstream provider models.
 ///
-/// 1. Official DeepSeek Responses models use a fixed shell whitelist.
+/// 1. DeepSeek models keep their upstream IDs, including in mixed catalogs.
 /// 2. Upstream IDs that already match an official shell keep identity.
-/// 3. Remaining models claim free shells in pool order.
+/// 3. Keep the existing pool positions of other models in mixed catalogs.
 /// 4. If the shell pool is exhausted, keep the upstream ID so nothing is dropped.
 pub(crate) fn allocate_provider_model_slots(models: &[String]) -> Vec<ProviderGatewayModelSlot> {
-    if let Some(slots) = allocate_official_deepseek_shell_slots(models) {
-        return slots;
-    }
     let upstream_models =
         normalize_provider_gateway_models(models.iter().map(String::as_str).collect());
     let mut used_shells = HashSet::new();
@@ -781,19 +767,16 @@ pub(crate) fn allocate_provider_model_slots(models: &[String]) -> Vec<ProviderGa
     let mut free_shells = free_shells.into_iter();
 
     for upstream_model in deferred {
-        if let Some(shell) = free_shells.next() {
-            used_shells.insert(shell.to_ascii_lowercase());
-            slots.push(ProviderGatewayModelSlot {
-                client_model: shell.to_string(),
-                upstream_model,
-            });
+        let shell = free_shells.next();
+        let client_model = if codex_protocol::is_deepseek_model(&upstream_model) {
+            upstream_model.clone()
         } else {
-            // Keep listing the model even without a free official shell.
-            slots.push(ProviderGatewayModelSlot {
-                client_model: upstream_model.clone(),
-                upstream_model,
-            });
-        }
+            shell.unwrap_or(&upstream_model).to_string()
+        };
+        slots.push(ProviderGatewayModelSlot {
+            client_model,
+            upstream_model,
+        });
     }
 
     slots
@@ -814,9 +797,15 @@ pub(crate) fn provider_model_slots_for_account(
     {
         return Vec::new();
     }
-    if !codex_account::account_uses_raw_provider_model_ids(account) {
+    if !is_official_deepseek_account(account)
+        && !codex_account::account_uses_raw_provider_model_ids(account)
+    {
         return allocate_provider_model_slots(models);
     }
+    raw_provider_model_slots(models)
+}
+
+pub(crate) fn raw_provider_model_slots(models: &[String]) -> Vec<ProviderGatewayModelSlot> {
     normalize_provider_gateway_models(models.iter().map(String::as_str).collect())
         .into_iter()
         .map(|model| ProviderGatewayModelSlot {
@@ -931,7 +920,7 @@ fn lookup_explicit_catalog_context_window(
 }
 
 fn is_official_deepseek_catalog_model(model: &str) -> bool {
-    DEEPSEEK_OFFICIAL_SHELL_SLOTS
+    LEGACY_DEEPSEEK_MODEL_IDS
         .iter()
         .any(|(upstream, _)| upstream.eq_ignore_ascii_case(model.trim()))
 }
@@ -1843,6 +1832,7 @@ fn build_provider_gateway_collection_for_profile(
     }
     if is_remote_service
         || (account_requires_responses_compatibility_gateway(account)
+            && !is_official_deepseek_account(account)
             && !account_uses_synced_model_shell_gateway(account))
     {
         // A previously direct provider does not inherit API Service model rules.
@@ -2175,7 +2165,7 @@ fn build_model_provider_gateway_test_collection(
     collection.excluded_models.clear();
     collection.bound_oauth_account_id = None;
     collection.api_key = generate_local_api_key();
-    if provider_gateway.is_none() {
+    if provider_gateway.is_none() && !client_model_id.eq_ignore_ascii_case(request.model_id.trim()) {
         collection.model_aliases.push(CodexLocalAccessModelAlias {
             source_model: request.model_id.trim().to_string(),
             alias: client_model_id.trim().to_string(),
@@ -2357,7 +2347,10 @@ pub async fn run_model_provider_gateway_chat_test(
     let account_id = model_provider_gateway_test_account_id(&request);
     let account = build_model_provider_gateway_test_account(&request, account_id, models);
     let uses_provider_gateway = model_provider_test_uses_provider_gateway(&request);
-    let client_model_id = if uses_provider_gateway {
+    let client_model_id = if uses_provider_gateway
+        || is_official_deepseek_account(&account)
+        || codex_protocol::is_deepseek_model(model_id)
+    {
         model_id.to_string()
     } else {
         model_provider_direct_test_client_model()

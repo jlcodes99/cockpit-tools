@@ -1,7 +1,7 @@
 use crate::models::grok::{
     GrokAccount, GrokAccountIndex, GrokAccountView, GrokAuthMode, GrokOAuthCompletePayload,
 };
-use crate::modules::{account, config, grok_oauth, logger, provider_current_state};
+use crate::modules::{account, config, grok_oauth, i18n, logger, provider_current_state};
 use chrono::{DateTime, Utc};
 use reqwest::header::{ACCEPT, AUTHORIZATION, USER_AGENT};
 use serde_json::{Map, Value};
@@ -2305,6 +2305,19 @@ fn apply_quota_response(
         cli_user.as_ref(),
         task_usage_result.as_ref().ok(),
     );
+    let billing_config = billing.get("config").unwrap_or(&billing);
+    let has_cached_billing_quota = account.quota.as_ref().is_some_and(|quota| {
+        quota.weekly_limit_percent.is_some() || !quota.products.is_empty()
+    });
+    if has_cached_billing_quota
+        && quota.weekly_limit_percent.is_none()
+        && quota.products.is_empty()
+        && billing_config.as_object().is_some_and(Map::is_empty)
+    {
+        return Err(task_usage_result.err().unwrap_or_else(|| {
+            i18n::translate(&config::get_user_config().language, "grok.emptyBillingQuota", &[])
+        }));
+    }
     let has_usage_quota = quota.weekly_limit_percent.is_some()
         || quota
             .products

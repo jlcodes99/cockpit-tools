@@ -2033,8 +2033,9 @@
   max-width: none !important;
   max-height: none !important;
   display: flex !important;
-  align-items: center;
+  align-items: safe center;
   justify-content: center;
+  overflow-y: auto;
 }
 
 .codex-ssh-sync-modal {

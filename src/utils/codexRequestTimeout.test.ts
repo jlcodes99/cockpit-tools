@@ -11,6 +11,19 @@ test('stream-open diagnostic reads actual Go duration, including ms and compound
     { kind: 'open', seconds: undefined, field: 'sidecarStreamOpenTimeoutMs' });
 });
 
+test('native timeout codes identify the relevant setting without inventing a threshold', () => {
+  for (const [errorCategory, requestKind, kind, field] of [
+    ['upstream_connect_timeout', 'text', 'open', 'sidecarStreamOpenTimeoutMs'],
+    ['upstream_connect_timeout', 'image_generation', 'open', 'sidecarImageStreamOpenTimeoutMs'],
+    ['upstream_idle_timeout', 'text', 'idle', 'sidecarStreamIdleTimeoutMs'],
+    ['upstream_idle_timeout', 'image_edit', 'idle', 'sidecarImageStreamIdleTimeoutMs'],
+  ] as const) {
+    assert.deepEqual(requestTimeoutDiagnostic({ httpStatus: 504, errorCategory, requestKind,
+      errorMessage: '通过代理连接上游服务超时，请检查代理或更换节点后重试。' }),
+    { kind, seconds: undefined, field });
+  }
+});
+
 test('idle, image open, cancellation and unrelated 504 remain distinct', () => {
   assert.deepEqual(requestTimeoutDiagnostic({ errorMessage: 'upstream timed out in stream_idle after 2m0s' }),
     { kind: 'idle', seconds: 120, field: 'sidecarStreamIdleTimeoutMs' });

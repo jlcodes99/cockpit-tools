@@ -6,6 +6,7 @@ import { CodexOverloadRetrySetting } from './codex/CodexOverloadRetrySetting';
 import { CodexQuotaRecoverySettings } from './codex/CodexQuotaRecoverySettings';
 import { CodexQuotaHistorySettings } from './codex/CodexQuotaHistorySettings';
 import { CodexProxyDirectHosts } from './codex/CodexProxyDirectHosts';
+import { SingleSelectDropdown } from './SingleSelectDropdown';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
@@ -39,7 +40,8 @@ import {
   buildAccountTierCounts,
   buildAccountTierFilterOptions,
 } from '../utils/accountFilters';
-import { getSubscriptionTier } from '../utils/account';
+import { getAntigravityTierBadge, getSubscriptionTier } from '../utils/account';
+import { CodexAccountPlanBadge } from './codex/CodexAccountPlanBadge';
 import {
   getCodexPlanBadgeStyle,
   isCodexAdditionalQuotaVisibleByDefault,
@@ -511,9 +513,11 @@ export function QuickSettingsPopover({
             : disabledReason === 'tos_violation'
               ? 'TOS_VIOLATION'
               : getSubscriptionTier(account.quota);
+        const badge = getAntigravityTierBadge(account.quota);
         return {
           id: account.id,
           label: account.email,
+          badge: <span className={`tier-badge ${badge.className}`}>{badge.label}</span>,
           searchableText: account.email,
           tags: account.tags || [],
           type: typeValue,
@@ -535,6 +539,7 @@ export function QuickSettingsPopover({
       codexAccounts.map((account) => ({
         id: account.id,
         label: resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")),
+        badge: <CodexAccountPlanBadge account={account} />,
         searchableText: [resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")), account.email, account.api_base_url].join(" "),
         tags: account.tags || [],
       })),
@@ -1746,22 +1751,22 @@ export function QuickSettingsPopover({
                       <span className="qs-input-unit">%</span>
                     </div>
                   ) : (
-                    <select
-                      className="qs-select"
+                    <SingleSelectDropdown
+                      className="qs-dropdown"
                       value={String(quotaAlertThresholdValue)}
-                      onChange={(e) => handleQuotaAlertThresholdSelectChange(e.target.value)}
-                    >
-                      {!isQuotaAlertThresholdPreset && (
-                        <option value={String(quotaAlertThresholdValue)}>
-                          {quotaAlertThresholdValue}%
-                        </option>
-                      )}
-                      <option value="0">0%</option>
-                      <option value="20">20%</option>
-                      <option value="40">40%</option>
-                      <option value="60">60%</option>
-                      <option value="custom">{t('quickSettings.customInput', '自定义')}</option>
-                    </select>
+                      ariaLabel={t('quickSettings.quotaAlert.threshold', '预警阈值')}
+                      options={[
+                        ...(!isQuotaAlertThresholdPreset
+                          ? [{ value: String(quotaAlertThresholdValue), label: `${quotaAlertThresholdValue}%` }]
+                          : []),
+                        { value: '0', label: '0%' },
+                        { value: '20', label: '20%' },
+                        { value: '40', label: '40%' },
+                        { value: '60', label: '60%' },
+                        { value: 'custom', label: t('quickSettings.customInput', '自定义') },
+                      ]}
+                      onChange={handleQuotaAlertThresholdSelectChange}
+                    />
                   )}
                 </div>
               </div>
@@ -2218,23 +2223,23 @@ export function QuickSettingsPopover({
                     <span className="qs-input-unit">{t('settings.general.minutes')}</span>
                   </div>
                 ) : (
-                  <select
-                    className="qs-select"
+                  <SingleSelectDropdown
+                    className="qs-dropdown"
                     value={String(refreshValue)}
-                    onChange={(e) => handleRefreshSelectChange(e.target.value)}
-                  >
-                    {!isPreset && (
-                      <option value={String(refreshValue)}>
-                        {refreshValue} {t('settings.general.minutes')}
-                      </option>
-                    )}
-                    <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                    <option value="2">2 {t('settings.general.minutes')}</option>
-                    <option value="5">5 {t('settings.general.minutes')}</option>
-                    <option value="10">10 {t('settings.general.minutes')}</option>
-                    <option value="15">15 {t('settings.general.minutes')}</option>
-                    <option value="custom">{t('quickSettings.customInput', '自定义')}</option>
-                  </select>
+                    ariaLabel={getRefreshLabel()}
+                    options={[
+                      ...(!isPreset
+                        ? [{ value: String(refreshValue), label: `${refreshValue} ${t('settings.general.minutes')}` }]
+                        : []),
+                      { value: '-1', label: t('settings.general.autoRefreshDisabled') },
+                      { value: '2', label: `2 ${t('settings.general.minutes')}` },
+                      { value: '5', label: `5 ${t('settings.general.minutes')}` },
+                      { value: '10', label: `10 ${t('settings.general.minutes')}` },
+                      { value: '15', label: `15 ${t('settings.general.minutes')}` },
+                      { value: 'custom', label: t('quickSettings.customInput', '自定义') },
+                    ]}
+                    onChange={handleRefreshSelectChange}
+                  />
                 )}
               </div>
             </div>
@@ -2268,27 +2273,27 @@ export function QuickSettingsPopover({
                     <span className="qs-input-unit">{t('settings.general.minutes')}</span>
                   </div>
                 ) : (
-                  <select
-                    className="qs-select"
+                  <SingleSelectDropdown
+                    className="qs-dropdown"
                     value={currentAccountRefreshDisplayValue}
-                    onChange={(e) => handleCurrentAccountRefreshSelectChange(e.target.value)}
                     disabled={!isCurrentAccountRefreshAllowed}
-                  >
-                    {!isCurrentAccountRefreshAllowed && (
-                      <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                    )}
-                    {!isCurrentAccountRefreshPreset && (
-                      <option value={String(currentAccountRefreshValue)}>
-                        {currentAccountRefreshValue} {t('settings.general.minutes')}
-                      </option>
-                    )}
-                    <option value="1">1 {t('settings.general.minutes')}</option>
-                    <option value="2">2 {t('settings.general.minutes')}</option>
-                    <option value="5">5 {t('settings.general.minutes')}</option>
-                    <option value="10">10 {t('settings.general.minutes')}</option>
-                    <option value="15">15 {t('settings.general.minutes')}</option>
-                    <option value="custom">{t('quickSettings.customInput', '自定义')}</option>
-                  </select>
+                    ariaLabel={t('settings.general.currentAccountRefreshTitle')}
+                    options={[
+                      ...(!isCurrentAccountRefreshAllowed
+                        ? [{ value: '-1', label: t('settings.general.autoRefreshDisabled') }]
+                        : []),
+                      ...(!isCurrentAccountRefreshPreset
+                        ? [{ value: String(currentAccountRefreshValue), label: `${currentAccountRefreshValue} ${t('settings.general.minutes')}` }]
+                        : []),
+                      { value: '1', label: `1 ${t('settings.general.minutes')}` },
+                      { value: '2', label: `2 ${t('settings.general.minutes')}` },
+                      { value: '5', label: `5 ${t('settings.general.minutes')}` },
+                      { value: '10', label: `10 ${t('settings.general.minutes')}` },
+                      { value: '15', label: `15 ${t('settings.general.minutes')}` },
+                      { value: 'custom', label: t('quickSettings.customInput', '自定义') },
+                    ]}
+                    onChange={handleCurrentAccountRefreshSelectChange}
+                  />
                 )}
                 <div className="qs-hint" style={{ marginTop: 6 }}>
                   {isCurrentAccountRefreshAllowed
@@ -2834,18 +2839,18 @@ export function QuickSettingsPopover({
                     <span>{t('codex.list.planBadgeStyle', '套餐徽章样式')}</span>
                   </div>
                   <div className="qs-row-control">
-                    <select
-                      className="qs-select"
+                    <SingleSelectDropdown
+                      className="qs-dropdown"
                       value={codexPlanBadgeStyle}
-                      onChange={(e) =>
-                        handleCodexPlanBadgeStyleChange(e.target.value as CodexPlanBadgeStyle)
-                      }
-                    >
-                      <option value="default">{t('codex.list.planBadgeStyleDefault', '默认')}</option>
-                      <option value="outline">{t('codex.list.planBadgeStyleOutline', '描边')}</option>
-                      <option value="soft">{t('codex.list.planBadgeStyleSoft', '柔和')}</option>
-                      <option value="mono">{t('codex.list.planBadgeStyleMono', '单色')}</option>
-                    </select>
+                      ariaLabel={t('codex.list.planBadgeStyle', '套餐徽章样式')}
+                      options={[
+                        { value: 'default', label: t('codex.list.planBadgeStyleDefault', '默认') },
+                        { value: 'outline', label: t('codex.list.planBadgeStyleOutline', '描边') },
+                        { value: 'soft', label: t('codex.list.planBadgeStyleSoft', '柔和') },
+                        { value: 'mono', label: t('codex.list.planBadgeStyleMono', '单色') },
+                      ]}
+                      onChange={(value) => handleCodexPlanBadgeStyleChange(value as CodexPlanBadgeStyle)}
+                    />
                   </div>
                 </div>
 
@@ -3190,22 +3195,22 @@ export function QuickSettingsPopover({
                             <span className="qs-input-unit">%</span>
                           </div>
                         ) : (
-                          <select
-                            className="qs-select"
+                          <SingleSelectDropdown
+                            className="qs-dropdown"
                             value={String(config.auto_switch_threshold)}
-                            onChange={(e) => handleThresholdSelectChange(e.target.value)}
-                          >
-                            {!isThresholdPreset && (
-                              <option value={String(config.auto_switch_threshold)}>
-                                {config.auto_switch_threshold}%
-                              </option>
-                            )}
-                            <option value="0">0%</option>
-                            <option value="20">20%</option>
-                            <option value="40">40%</option>
-                            <option value="60">60%</option>
-                            <option value="custom">{t('quickSettings.customInput', '自定义')}</option>
-                          </select>
+                            ariaLabel={t('quickSettings.autoSwitch.threshold', '切号阈值')}
+                            options={[
+                              ...(!isThresholdPreset
+                                ? [{ value: String(config.auto_switch_threshold), label: `${config.auto_switch_threshold}%` }]
+                                : []),
+                              { value: '0', label: '0%' },
+                              { value: '20', label: '20%' },
+                              { value: '40', label: '40%' },
+                              { value: '60', label: '60%' },
+                              { value: 'custom', label: t('quickSettings.customInput', '自定义') },
+                            ]}
+                            onChange={handleThresholdSelectChange}
+                          />
                         )}
                       </div>
                     </div>
@@ -3255,22 +3260,22 @@ export function QuickSettingsPopover({
                               />
                             </div>
                           ) : (
-                            <select
-                              className="qs-select"
+                            <SingleSelectDropdown
+                              className="qs-dropdown"
                               value={String(creditsAutoSwitchThresholdValue)}
-                              onChange={(e) => handleCreditsThresholdSelectChange(e.target.value)}
-                            >
-                              {!isCreditsThresholdPreset && (
-                                <option value={String(creditsAutoSwitchThresholdValue)}>
-                                  {creditsAutoSwitchThresholdValue}
-                                </option>
-                              )}
-                              <option value="0">0</option>
-                              <option value="5">5</option>
-                              <option value="10">10</option>
-                              <option value="20">20</option>
-                              <option value="custom">{t('quickSettings.customInput', '自定义')}</option>
-                            </select>
+                              ariaLabel={t('quickSettings.autoSwitch.creditsThreshold', 'Credits 阈值')}
+                              options={[
+                                ...(!isCreditsThresholdPreset
+                                  ? [{ value: String(creditsAutoSwitchThresholdValue), label: String(creditsAutoSwitchThresholdValue) }]
+                                  : []),
+                                { value: '0', label: '0' },
+                                { value: '5', label: '5' },
+                                { value: '10', label: '10' },
+                                { value: '20', label: '20' },
+                                { value: 'custom', label: t('quickSettings.customInput', '自定义') },
+                              ]}
+                              onChange={handleCreditsThresholdSelectChange}
+                            />
                           )}
                         </div>
                       </div>
@@ -3281,18 +3286,16 @@ export function QuickSettingsPopover({
                         <span>{t('quickSettings.autoSwitch.triggerModel', '触发模型')}</span>
                       </div>
                       <div className="qs-row-control">
-                        <select
-                          className="qs-select"
+                        <SingleSelectDropdown
+                          className="qs-dropdown"
                           value={autoSwitchScopeMode}
-                          onChange={(e) => handleAutoSwitchScopeModeChange(e.target.value)}
-                        >
-                          <option value="any_group">
-                            {t('quickSettings.autoSwitch.scopeAnyGroup', '任一模型分组')}
-                          </option>
-                          <option value="selected_groups">
-                            {t('quickSettings.autoSwitch.scopeSelectedGroups', '指定模型分组')}
-                          </option>
-                        </select>
+                          ariaLabel={t('quickSettings.autoSwitch.triggerModel', '触发模型')}
+                          options={[
+                            { value: 'any_group', label: t('quickSettings.autoSwitch.scopeAnyGroup', '任一模型分组') },
+                            { value: 'selected_groups', label: t('quickSettings.autoSwitch.scopeSelectedGroups', '指定模型分组') },
+                          ]}
+                          onChange={handleAutoSwitchScopeModeChange}
+                        />
                       </div>
                     </div>
 
@@ -3393,7 +3396,17 @@ export function QuickSettingsPopover({
                   <span>{t('quickSettings.quotaAlert.enable', '超额预警')}</span>
                 </div>
                 {renderQuotaAlertControls()}
-                {type === 'codex' && <><CodexQuotaRecoverySettings /><CodexQuotaHistorySettings /></>}
+              </div>
+            )}
+
+            {type === 'codex' && (
+              <div className="qs-section">
+                <div className="qs-section-header">
+                  <Settings size={15} />
+                  <span>{t('codex.quotaHistory.title')}</span>
+                </div>
+                <CodexQuotaRecoverySettings variant="quick-settings" />
+                <CodexQuotaHistorySettings variant="quick-settings" />
               </div>
             )}
 

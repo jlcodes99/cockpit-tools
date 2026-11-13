@@ -31,6 +31,16 @@ fn incomplete_refresh_keeps_quota_until_valid_reset_data_arrives() {
     assert_eq!(quota.weekly_limit_percent, Some(37.0));
     assert_eq!(quota.products[0].usage_percent, Some(12.0));
 
+    assert!(apply_quota_response(
+        &mut account,
+        json!({"config":{}}),
+        None,
+        None,
+        Ok(json!({})),
+    ).is_err());
+    assert_eq!(account.billing_raw.as_ref(), Some(&old_billing));
+    assert_eq!(account.usage_updated_at, old_updated_at);
+
     apply_quota_response(
         &mut account,
         json!({"config":{

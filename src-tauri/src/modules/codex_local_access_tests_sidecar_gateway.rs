@@ -38,7 +38,7 @@
     }
 
     #[test]
-    fn deepseek_provider_model_slots_include_deterministic_vision_shell() {
+    fn deepseek_provider_model_slots_keep_upstream_ids() {
         let slots = super::allocate_provider_model_slots(&[
             "deepseek-v4-flash".to_string(),
             "deepseek-v4-pro".to_string(),
@@ -48,15 +48,15 @@
             slots,
             vec![
                 super::ProviderGatewayModelSlot {
-                    client_model: "gpt-5.6-luna".to_string(),
+                    client_model: "deepseek-v4-flash".to_string(),
                     upstream_model: "deepseek-v4-flash".to_string(),
                 },
                 super::ProviderGatewayModelSlot {
-                    client_model: "gpt-5.6-sol".to_string(),
+                    client_model: "deepseek-v4-pro".to_string(),
                     upstream_model: "deepseek-v4-pro".to_string(),
                 },
                 super::ProviderGatewayModelSlot {
-                    client_model: "gpt-5.6-terra".to_string(),
+                    client_model: "deepseek-v4-flash-vision-exp".to_string(),
                     upstream_model: "deepseek-v4-flash-vision-exp".to_string(),
                 },
             ]
@@ -1760,7 +1760,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
     }
 
     #[test]
-    fn official_deepseek_responses_uses_shell_remap_gateway() {
+    fn official_deepseek_responses_gateway_uses_original_model_ids() {
         let mut account = CodexAccount::new_api_key(
             "local-account-id".to_string(),
             "deepseek@example.com".to_string(),
@@ -1784,8 +1784,8 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
                 .map(|slot| (slot.client_model.as_str(), slot.upstream_model.as_str()))
                 .collect::<Vec<_>>(),
             vec![
-                ("gpt-5.6-luna", "deepseek-v4-flash"),
-                ("gpt-5.6-sol", "deepseek-v4-pro"),
+                ("deepseek-v4-flash", "deepseek-v4-flash"),
+                ("deepseek-v4-pro", "deepseek-v4-pro"),
             ]
         );
 
@@ -1848,7 +1848,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
 
         let profile_dir = make_temp_dir("codex-pool-local-compaction");
         let config_path = profile_config_path(&profile_dir);
-        let original = "model = \"gpt-5.6-sol\"\nservice_tier = \"priority\"\n\n[features]\njs_repl = false\n";
+        let original = "model = \"deepseek-v4-pro\"\nservice_tier = \"priority\"\n\n[features]\njs_repl = false\n";
         crate::modules::codex_config_format::write_codex_config_toml_atomic(
             &config_path,
             original,
@@ -1940,7 +1940,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
     }
 
     #[test]
-    fn official_template_catalog_keeps_shell_slug_and_upstream_metadata() {
+    fn official_template_catalog_keeps_deepseek_ids_and_upstream_metadata() {
         let slots = provider_gateway_model_slots(&[
             "deepseek-v4-flash".to_string(),
             "deepseek-v4-pro".to_string(),
@@ -1977,7 +1977,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
         assert_eq!(models[0]["multi_agent_version"], "v1");
         assert_eq!(
             models[0].get("slug").and_then(Value::as_str),
-            Some("gpt-5.6-luna")
+            Some("deepseek-v4-flash")
         );
         assert_eq!(
             models[0].get("display_name").and_then(Value::as_str),
@@ -1991,7 +1991,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
         );
         assert_eq!(
             models[1].get("slug").and_then(Value::as_str),
-            Some("gpt-5.6-sol")
+            Some("deepseek-v4-pro")
         );
         assert_eq!(
             models[1].get("display_name").and_then(Value::as_str),
@@ -2177,10 +2177,10 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
     #[test]
     fn provider_gateway_model_slots_are_stable_and_bounded() {
         let slots = provider_gateway_model_slots(&[
-            "deepseek-v4-pro".to_string(),
-            "deepseek-v4-flash".to_string(),
-            "deepseek-v4-lite".to_string(),
-            "deepseek-v4-extra".to_string(),
+            "vendor-pro".to_string(),
+            "vendor-flash".to_string(),
+            "vendor-lite".to_string(),
+            "vendor-extra".to_string(),
             "gpt-5.5".to_string(),
             "custom-overflow-a".to_string(),
             "custom-overflow-b".to_string(),
@@ -2198,10 +2198,10 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
             vec![
                 // Explicit API-key models retain identity ahead of assigned shells.
                 ("gpt-5.5", "gpt-5.5"),
-                ("gpt-5.6-sol", "deepseek-v4-pro"),
-                ("gpt-5.6-terra", "deepseek-v4-flash"),
-                ("gpt-5.6-luna", "deepseek-v4-lite"),
-                ("deepseek-v4-extra", "deepseek-v4-extra"),
+                ("gpt-5.6-sol", "vendor-pro"),
+                ("gpt-5.6-terra", "vendor-flash"),
+                ("gpt-5.6-luna", "vendor-lite"),
+                ("vendor-extra", "vendor-extra"),
                 ("custom-overflow-a", "custom-overflow-a"),
                 ("custom-overflow-b", "custom-overflow-b"),
                 ("custom-overflow-c", "custom-overflow-c"),
@@ -2334,7 +2334,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
             .collect::<Vec<_>>();
         backup_current_profile_model_before_provider_gateway(&profile_dir, &client_models)
             .expect("track provider models");
-        write_local_access_profile_model_override(&profile_dir, "gpt-5.6-luna")
+        write_local_access_profile_model_override(&profile_dir, "deepseek-v4-flash")
             .expect("write model override");
         write_provider_gateway_model_catalog(&profile_dir, &slots)
             .expect("write provider model catalog");
@@ -2349,8 +2349,8 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
             .and_then(Value::as_array)
             .expect("models should be an array");
         for (model_id, display_name) in [
-            ("gpt-5.6-luna", "deepseek-v4-flash"),
-            ("gpt-5.6-sol", "deepseek-v4-pro"),
+            ("deepseek-v4-flash", "deepseek-v4-flash"),
+            ("deepseek-v4-pro", "deepseek-v4-pro"),
         ] {
             assert!(models.iter().any(|model| {
                 model.get("slug").and_then(Value::as_str) == Some(model_id)
@@ -2364,14 +2364,14 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
             "model_catalog_json = \"{}\"",
             CODEX_PROVIDER_MODEL_CATALOG_FILE
         )));
-        assert!(config.contains("model = \"gpt-5.6-luna\""));
+        assert!(config.contains("model = \"deepseek-v4-flash\""));
 
         cleanup_provider_gateway_profile_model_overrides(&profile_dir).expect("cleanup overrides");
 
         let config =
             fs::read_to_string(profile_dir.join(CODEX_PROFILE_CONFIG_FILE)).expect("read config");
         assert!(!config.contains("model_catalog_json"));
-        assert!(!config.contains("model = \"gpt-5.6-sol\""));
+        assert!(!config.contains("model = \"deepseek-v4-flash\""));
         assert!(!profile_dir
             .join(CODEX_LEGACY_PROVIDER_MODEL_CATALOG_FILE)
             .exists());

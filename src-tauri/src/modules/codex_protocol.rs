@@ -842,6 +842,19 @@ pub(crate) fn is_known_deepseek_model(model_id: &str) -> bool {
         "deepseek-flash" | "deepseek-v4-flash" | "deepseek-v4-pro" | "deepseek-v4-flash-vision-exp")
 }
 
+pub(crate) const DEEPSEEK_DEFAULT_REASONING_EFFORT: &str = "max";
+pub(crate) const DEEPSEEK_REASONING_EFFORTS: &[&str] = &["low", "high", "max"];
+
+pub(crate) fn normalize_deepseek_reasoning_effort(effort: &str) -> Option<&'static str> {
+    match effort.trim().to_ascii_lowercase().as_str() {
+        "none" => Some("none"),
+        "minimal" | "low" => Some("low"),
+        "medium" | "high" | "xhigh" => Some("high"),
+        "max" | "ultra" => Some("max"),
+        _ => None,
+    }
+}
+
 pub(crate) fn deepseek_model_template(model_id: &str) -> Option<Value> {
     if !is_deepseek_model(model_id) {
         return None;
@@ -857,7 +870,9 @@ pub(crate) fn deepseek_model_template(model_id: &str) -> Option<Value> {
     let catalog = CATALOG.get_or_init(|| serde_json::from_str(include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/resources/deepseek_codex_models.json"))).expect("valid DeepSeek catalog"));
     let template = catalog["models"].as_array()?.iter().find(|item| item["slug"] == template_id)?;
     if is_known_deepseek_model(model_id) {
-        return Some(template.clone());
+        let mut model = template.clone();
+        model["default_reasoning_level"] = json!(DEEPSEEK_DEFAULT_REASONING_EFFORT);
+        return Some(model);
     }
     // Future models inherit only reasoning defaults, not a known model's
     // context size, image support, tools, or execution capabilities.
@@ -868,7 +883,7 @@ pub(crate) fn deepseek_model_template(model_id: &str) -> Option<Value> {
     fallback["input_modalities"] = json!(["text"]);
     fallback["supports_image_detail_original"] = json!(false);
     fallback["supported_reasoning_levels"] = template["supported_reasoning_levels"].clone();
-    fallback["default_reasoning_level"] = template["default_reasoning_level"].clone();
+    fallback["default_reasoning_level"] = json!(DEEPSEEK_DEFAULT_REASONING_EFFORT);
     Some(fallback)
 }
 
@@ -1403,6 +1418,7 @@ mod tests {
             let model = &build_codex_client_models_response(&[id.to_string()])["models"][0];
             let levels: Vec<_> = model["supported_reasoning_levels"].as_array().unwrap().iter().map(|level| level["effort"].as_str().unwrap()).collect();
             assert_eq!(levels, ["low", "high", "max"]);
+            assert_eq!(model["default_reasoning_level"], "max", "{id}");
         }
         assert!(deepseek_model_template("not-deepseek-v4-pro").is_none());
         assert!(deepseek_model_template("deepseek-").is_none());

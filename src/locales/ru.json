@@ -1519,7 +1519,7 @@
       "codexPreserveExternalBridgeDesc": "При смене OAuth-аккаунта сохранять мост Codex Web GPT, подтверждённый локальными записями интеграции. По умолчанию выключено.",
       "codexEnhancements": {
         "quotaCompat": "Лимиты в смешанном режиме",
-        "quotaCompatDesc": "При настоящем входе через OAuth и внешнем маршруте API лимит подписки не блокирует локальные API-сообщения. Реальный расход и лимиты изображений не меняются.",
+        "quotaCompatDesc": "Экземпляры службы API показывают клиенту доступную квоту для локальных проверок. Фактическое использование у поставщика и лимиты изображений не меняются. Этот переключатель относится только к другим сочетаниям OAuth и внешнего API.",
         "restartHint": "Встроенные подсказки по умолчанию выключены. После изменений перезапустите нужные экземпляры Codex и оставьте Cockpit Tools запущенным. Встроенная диктовка зависит от возможностей и настроек клиента; Cockpit не заменяет её обработку и не включает её принудительно.",
         "configFailed": "Не удалось прочитать или сохранить настройки: {{error}}",
         "nativePredictions": "Встроенные подсказки следующего шага (Tab)",
@@ -2222,7 +2222,13 @@
     "refreshTime": "Обновление",
     "lastSwitchTimeFull": "Переключение: {{time}}",
     "refreshTimeFull": "Обновление: {{time}}",
-    "toggleTimeMode": "Показать время переключения или обновления"
+    "toggleTimeMode": "Показать время переключения или обновления",
+    "quotaSummary": {
+      "geminiModels": "Модели Gemini",
+      "claudeAndGptModels": "Модели Claude и GPT",
+      "weeklyLimit": "Недельный лимит",
+      "fiveHourLimit": "Лимит за 5 ч"
+    }
   },
   "overview": {
     "title": "Обзор аккаунтов",
@@ -2680,6 +2686,10 @@
     "quotaHistory": {
       "storage": {
         "title": "Хранилище истории",
+        "recordCount": "Записи",
+        "diskSpace": "Место на диске",
+        "defaultAccount": "Аккаунт по умолчанию",
+        "recording": "Запись",
         "usage": "{{records}} записей · {{size}} на диске",
         "loadFailed": "Не удалось прочитать хранилище истории.",
         "enabled": "Записывать историю",
@@ -2714,7 +2724,14 @@
       "details": "Детали",
       "onlyChanges": "Только изменения",
       "noChanges": "За этот период квота не менялась.",
-      "sampledAt": "Время замера",
+      "recordedAt": "Время записи",
+      "noValue": "Нет",
+      "shortConsumed": "Расход за 5 ч",
+      "weeklyConsumed": "Расход недельной квоты",
+      "shortRemaining": "Ост. 5 ч",
+      "shortDelta": "Изм. 5 ч",
+      "weeklyRemaining": "Ост. нед.",
+      "weeklyDelta": "Изм. нед.",
       "changeFromPrevious": "Изменение относительно предыдущего замера",
       "points": "{{value}} п. п.",
       "account": "Аккаунт",
@@ -8442,6 +8459,7 @@
       "addToClaude": "В Claude CLI",
       "addToClaudeDesktop": "В Claude",
       "addToClaudeCli": "В Claude CLI",
+      "addToGrok": "В Grok",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "Быстрое развёртывание в Codex",
@@ -8485,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "Сервис выставления счетов Grok не вернул данные о квоте. Повторите попытку позже.",
     "search": "Поиск аккаунтов Grok CLI...",
     "flowNotice": {
       "title": "Управление аккаунтами Grok CLI",

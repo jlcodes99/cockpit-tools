@@ -1519,7 +1519,7 @@
       "codexPreserveExternalBridgeDesc": "OAuth 계정 전환 시 로컬 기록으로 검증된 Codex Web GPT 브리지를 유지합니다. 기본값은 꺼짐입니다.",
       "codexEnhancements": {
         "quotaCompat": "혼합 모드 한도 호환",
-        "quotaCompatDesc": "실제 OAuth 로그인과 외부 API 경로를 함께 쓸 때만 구독 한도가 로컬 API 메시지를 차단하지 않도록 합니다. 실제 사용량과 이미지 한도는 바뀌지 않습니다.",
+        "quotaCompatDesc": "API 서비스 인스턴스는 클라이언트 표시와 로컬 확인에 사용 가능한 할당량을 제공합니다. 실제 공급자 사용량과 이미지 한도는 변경되지 않습니다. 이 설정은 다른 OAuth 및 외부 API 혼합 구성에만 적용됩니다.",
         "restartHint": "네이티브 예측은 기본적으로 꺼져 있습니다. 변경 후 대상 Codex 인스턴스를 다시 시작하고 Cockpit Tools를 실행해 두세요. 기본 음성 입력은 클라이언트 기능과 설정을 따릅니다. Cockpit은 이를 대신 처리하거나 강제로 활성화하지 않습니다.",
         "configFailed": "설정을 읽거나 저장하지 못했습니다: {{error}}",
         "nativePredictions": "네이티브 다음 단계 예측(Tab)",
@@ -2222,7 +2222,13 @@
     "refreshTime": "새로고침 시간",
     "lastSwitchTimeFull": "전환 시간: {{time}}",
     "refreshTimeFull": "새로고침 시간: {{time}}",
-    "toggleTimeMode": "전환 시간과 새로고침 시간 전환"
+    "toggleTimeMode": "전환 시간과 새로고침 시간 전환",
+    "quotaSummary": {
+      "geminiModels": "Gemini 모델",
+      "claudeAndGptModels": "Claude 및 GPT 모델",
+      "weeklyLimit": "주간 한도",
+      "fiveHourLimit": "5시간 한도"
+    }
   },
   "overview": {
     "title": "계정 개요",
@@ -2680,6 +2686,10 @@
     "quotaHistory": {
       "storage": {
         "title": "기록 저장소",
+        "recordCount": "기록 수",
+        "diskSpace": "사용 공간",
+        "defaultAccount": "기본 계정",
+        "recording": "기록 설정",
         "usage": "기록 {{records}}개 · 디스크 {{size}}",
         "loadFailed": "기록 저장소를 읽을 수 없습니다.",
         "enabled": "기록 저장",
@@ -2714,7 +2724,14 @@
       "details": "상세",
       "onlyChanges": "변경만 보기",
       "noChanges": "이 기간에는 할당량 변동이 없습니다.",
-      "sampledAt": "기록 시각",
+      "recordedAt": "기록 시각",
+      "noValue": "없음",
+      "shortConsumed": "5시간 사용량",
+      "weeklyConsumed": "주간 사용량",
+      "shortRemaining": "5h 잔여",
+      "shortDelta": "5h 변화",
+      "weeklyRemaining": "주간 잔여",
+      "weeklyDelta": "주간 변화",
       "changeFromPrevious": "직전 기록 대비 변동",
       "points": "{{value}}%p",
       "account": "계정",
@@ -8442,6 +8459,7 @@
       "addToClaude": "Claude CLI에 추가",
       "addToClaudeDesktop": "Claude에 추가",
       "addToClaudeCli": "Claude CLI에 추가",
+      "addToGrok": "Grok에 추가",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "Codex에 빠른 배포",
@@ -8485,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "Grok 결제 서비스에서 할당량 데이터를 반환하지 않았습니다. 나중에 다시 시도하세요.",
     "search": "Grok CLI 계정 검색...",
     "flowNotice": {
       "title": "Grok CLI 계정 관리",

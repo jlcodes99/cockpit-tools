@@ -9,7 +9,7 @@ pub(super) fn is_host_result(item: &Value) -> bool {
                 true
             }
             (Some("agent"), Some(name)) => {
-                name == "codex_apps_open_page" || selected_page_part(name)
+                matches!(name, "browser_tabs" | "codex_apps_open_page") || selected_page_part(name)
             }
             _ => false,
         }
@@ -58,6 +58,7 @@ mod agent_browser_tests {
     #[test]
     fn agent_browser_host_envelopes_and_page_part_boundaries_are_exact() {
         for name in [
+            "browser_tabs",
             "codex_apps_open_page",
             "codex_apps_selected_page_part_1_of_1",
             "codex_apps_selected_page_part_1_of_2",
@@ -71,6 +72,7 @@ mod agent_browser_tests {
             assert!(is_standalone(&item), "{name}: explicit empty ID");
         }
         for name in [
+            "browser_tabs_extra",
             "codex_apps_selected_page_part_0_of_1",
             "codex_apps_selected_page_part_1_of_0",
             "codex_apps_selected_page_part_2_of_1",
@@ -118,6 +120,7 @@ mod agent_browser_tests {
     fn agent_browser_host_results_keep_real_tool_pairing_and_payload_validation() {
         use crate::modules::codex_native_api::identity::rebuild::{paired_tools, replay_items};
         for name in [
+            "browser_tabs",
             "codex_apps_open_page",
             "codex_apps_selected_page_part_1_of_1",
         ] {

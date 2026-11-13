@@ -973,6 +973,7 @@
       "addToClaude": "Add to Claude CLI",
       "addToClaudeDesktop": "Add to Claude",
       "addToClaudeCli": "Add to Claude CLI",
+      "addToGrok": "Add to Grok",
       "codexShort": "Codex",
       "claudeShort": "Claude",
       "deployToCodex": "Quick deploy to Codex",
@@ -1755,7 +1756,7 @@
       "codexPreserveExternalBridgeDesc": "Keep a Codex Web GPT bridge verified against local integration records when switching OAuth accounts. Off by default.",
       "codexEnhancements": {
         "quotaCompat": "Mixed-mode quota compatibility",
-        "quotaCompatDesc": "With real OAuth sign-in and an external API route, prevent subscription quota from blocking local API messages. Actual usage and image quotas stay unchanged.",
+        "quotaCompatDesc": "API Service instances use an available-quota view for client displays and local checks. Actual upstream usage and image limits stay unchanged. This switch applies only to other OAuth + external API setups.",
         "restartHint": "Native predictions are off by default. Restart each target Codex instance after changing these settings. Keep Cockpit Tools running. Native dictation follows the client’s capabilities and settings; Cockpit does not take it over or force-enable it.",
         "configFailed": "Could not load or save settings: {{error}}",
         "nativePredictions": "Native next-step predictions (Tab)",
@@ -2462,6 +2463,12 @@
     "tagUpdated": "Tag updated",
     "plan": {
       "personal": "Personal"
+    },
+    "quotaSummary": {
+      "geminiModels": "Gemini Models",
+      "claudeAndGptModels": "Claude and GPT models",
+      "weeklyLimit": "Weekly limit",
+      "fiveHourLimit": "5h limit"
     }
   },
   "overview": {
@@ -2920,6 +2927,10 @@
     "quotaHistory": {
       "storage": {
         "title": "History storage",
+        "recordCount": "Records",
+        "diskSpace": "Disk space",
+        "defaultAccount": "Default account",
+        "recording": "Recording",
         "usage": "{{records}} records · {{size}} on disk",
         "loadFailed": "Unable to read history storage.",
         "enabled": "Record history",
@@ -2954,7 +2965,14 @@
       "details": "Details",
       "onlyChanges": "Changes only",
       "noChanges": "No quota changes in this period.",
-      "sampledAt": "Sample time",
+      "recordedAt": "Recorded at",
+      "noValue": "None",
+      "shortConsumed": "5h consumed",
+      "weeklyConsumed": "Weekly consumed",
+      "shortRemaining": "5h Left",
+      "shortDelta": "5h Change",
+      "weeklyRemaining": "Weekly Left",
+      "weeklyDelta": "Weekly Change",
       "changeFromPrevious": "Change from previous sample",
       "points": "{{value}} pp",
       "account": "Account",
@@ -8485,6 +8503,7 @@
     "btnExportTitle": "Export Saved as JSON"
   },
   "grok": {
+    "emptyBillingQuota": "Grok billing returned no quota data. Try again later.",
     "search": "Search Grok CLI accounts...",
     "flowNotice": {
       "title": "Grok CLI account guide",

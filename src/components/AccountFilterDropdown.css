@@ -73,6 +73,11 @@
   white-space: nowrap;
 }
 
+.single-filter-btn > .tier-badge,
+.single-filter-option > .tier-badge {
+  flex-shrink: 0;
+}
+
 .account-filter-surface .single-filter-panel {
   min-width: 180px;
 }

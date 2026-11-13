@@ -178,6 +178,16 @@ export function resolveDefaultModel(
   return byPrefix ?? normalized[0] ?? preset.fallbackModel;
 }
 
+export function resolveApiKeyFunGrokModel(models: readonly string[]): string | undefined {
+  const preset = APIKEY_FUN_FAMILIES.find((family) => family.id === 'grok');
+  if (!preset) return undefined;
+  const grokModels = models.filter((model) => {
+    const id = model.trim().toLowerCase().split('/').pop() ?? '';
+    return preset.prefixes.some((prefix) => id.startsWith(prefix));
+  });
+  return grokModels.length ? resolveDefaultModel(preset, grokModels) : undefined;
+}
+
 function escapeToml(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }

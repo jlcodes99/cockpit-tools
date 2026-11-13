@@ -78,6 +78,8 @@ fn only_api_service_binding_supports_quota_injection() {
 fn deepseek_script_controls_official_picker_and_returns_pending_model() {
     let payload = json!({
         "selectedModel": "deepseek-v4-flash",
+        "defaultReasoningEffort": "max",
+        "reasoningLevels": ["low", "high", "max"],
         "models": [
             { "id": "deepseek-v4-flash", "name": "DeepSeek-V4-Flash", "vision": true },
             { "id": "deepseek-v4-pro", "name": "DeepSeek-V4-Pro", "vision": false }
@@ -93,7 +95,8 @@ fn deepseek_script_controls_official_picker_and_returns_pending_model() {
     assert!(script.contains("list-models-for-host"));
     assert!(script.contains("model/list"));
     assert!(script.contains("deepseek-official-picker"));
-    assert!(script.contains("const reasoningLevels = [\"low\", \"high\", \"max\"]"));
+    assert!(script.contains("\"defaultReasoningEffort\":\"max\""));
+    assert!(script.contains("item.default_reasoning_level = defaultReasoningEffort"));
     assert!(script.contains("supported_reasoning_levels = levels"));
     assert!(script.contains("supportedReasoningEfforts = levels"));
     assert!(script.contains("applyVisionMetadata"));

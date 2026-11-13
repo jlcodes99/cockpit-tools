@@ -243,6 +243,21 @@ export function getQoderAccountDisplayEmail(account: QoderAccount): string {
   );
 }
 
+export function resolveQoderPlanBadgeClass(plan: string): string {
+  const normalized = plan.trim().toLowerCase();
+  if (!normalized) return 'unknown';
+  if (normalized.includes('free')) return 'free';
+  if (normalized.includes('trial')) return 'trial';
+  if (normalized.includes('pro')) return 'pro';
+  if (normalized.includes('team')) return 'team';
+  if (normalized.includes('enterprise')) return 'enterprise';
+  if (normalized.includes('business')) return 'business';
+  if (normalized.includes('individual') || normalized.includes('personal')) return 'individual';
+  if (normalized.includes('plus')) return 'plus';
+  if (normalized.includes('ultra')) return 'ultra';
+  return 'unknown';
+}
+
 export function getQoderPlanBadge(account: QoderAccount): string {
   const raw = getRawPlanTag(account);
   if (raw) return raw;

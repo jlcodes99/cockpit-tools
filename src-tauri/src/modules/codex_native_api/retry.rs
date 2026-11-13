@@ -294,11 +294,23 @@ async fn send_inner(
         let base_url = endpoint.as_ref().map_or(prepared.route.base_url.as_str(), |endpoint| {
             endpoint.base_url.as_str()
         });
-        if path == "responses"
-            && prepared.route.wire_api == WireApi::Responses
-            && crate::modules::codex_account::is_official_deepseek_base_url(base_url)
-        {
-            super::responses_tool_history::normalize_deepseek_tool_history(&mut body);
+        if path == "responses" && prepared.route.wire_api == WireApi::Responses {
+            let official_deepseek =
+                crate::modules::codex_account::is_official_deepseek_base_url(base_url);
+            if official_deepseek
+                || crate::modules::codex_protocol::is_deepseek_model(&prepared.route.model)
+            {
+                if let Some(effort) = body.pointer_mut("/reasoning/effort") {
+                    if let Some(normalized) = effort.as_str()
+                        .and_then(crate::modules::codex_protocol::normalize_deepseek_reasoning_effort)
+                    {
+                        *effort = Value::String(normalized.into());
+                    }
+                }
+            }
+            if official_deepseek {
+                super::responses_tool_history::normalize_deepseek_tool_history(&mut body);
+            }
         }
         super::opencode_go::apply_session_header(
             base_url, &prepared.caller.id, &prepared.binding, &mut tracker.opencode_go_session, &mut headers,

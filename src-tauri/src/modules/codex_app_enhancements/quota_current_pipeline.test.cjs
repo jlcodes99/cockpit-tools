@@ -35,7 +35,7 @@ function browser({ config = {}, adapter = undefined, owner = 'current-owner' } =
     static revokeObjectURL(key) { revoked.push(key); }
   }, Blob, AbortSignal, module: { exports: {} }, name: 'existing-name',
     location: { protocol: 'app:', hostname: '-', pathname: '/index.html' },
-    __cockpitEnhancements: { nativeFast: true, quotaCompat: false, apiKeyAuthVerified: true, apiService: true, owner, ...config },
+    __cockpitEnhancements: { nativeFast: true, quotaCompat: true, apiKeyAuthVerified: true, apiService: false, owner, ...config },
     setTimeout(fn, delay) { const id = ++serial; if (delay === 0) queueMicrotask(fn); else timers.set(id, fn); return id; }, clearTimeout(id) { timers.delete(id); },
     addEventListener(key, fn) { listeners.set(key, fn); }, removeEventListener(key) { listeners.delete(key); },
     HTMLScriptElement: { supports: () => true },
@@ -108,7 +108,7 @@ test('real current handoff installs one graph and waits for initial, primary and
   const maps = next.elements.filter(element => element.type === 'importmap'); assert.equal(maps.length, 1);
   assert.deepEqual(Object.keys(JSON.parse(maps[0].textContent).imports), [app.files.initialUrl, app.files.primaryUrl, app.files.adapterUrl]);
   assert.equal(next.blobs.size, 3); complete(next);
-  assert.equal(next.root.__cockpitEnhancements.nativePatchFeatures, '1011');
+  assert.equal(next.root.__cockpitEnhancements.nativePatchFeatures, '1110');
   app.api.cancelHandoff('current-three'); next.api.cancelHandoff('current-three');
 });
 test('real current synchronous startup uses the same three-module completion protocol', { skip: !dir }, () => {
@@ -165,10 +165,9 @@ test('late completions after adapter preload failure cannot activate the current
   assert.equal(active(next), 'unsupported'); app.api.cancelHandoff('current-three');
 });
 
-test('current quota-only and API-only startup preserve their exact requested feature masks', { skip: !dir }, () => {
+test('current non-service quota startup preserves its requested feature mask', { skip: !dir }, () => {
   for (const [config, mask] of [
-    [{ nativeFast: false, quotaCompat: true, apiKeyAuthVerified: false }, '0101'],
-    [{ nativeFast: false, quotaCompat: false, apiKeyAuthVerified: true }, '0011'],
+    [{ nativeFast: false, quotaCompat: true, apiKeyAuthVerified: false }, '0100'],
   ]) {
     const app = browser({ config }); vm.runInNewContext(scripts.startup_preload, app.root);
     assert.equal(app.root.__cockpitStartupPreload.ok, true);

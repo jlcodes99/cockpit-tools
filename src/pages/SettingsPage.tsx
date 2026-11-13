@@ -39,7 +39,8 @@ import { applyReducedMotion } from '../utils/reducedMotion';
 import {
   setClaudeQuotaDisplayRemainingEnabled,
 } from '../utils/claudeQuotaDisplayPreference';
-import { getSubscriptionTier } from '../utils/account';
+import { getAntigravityTierBadge, getSubscriptionTier } from '../utils/account';
+import { CodexAccountPlanBadge } from '../components/codex/CodexAccountPlanBadge';
 import type { Account } from '../types/account';
 import type { CodexAccount } from '../types/codex';
 import {
@@ -807,9 +808,11 @@ export function useSettingsPageController() {
             : disabledReason === 'tos_violation'
               ? 'TOS_VIOLATION'
               : getSubscriptionTier(account.quota);
+        const badge = getAntigravityTierBadge(account.quota);
         return {
           id: account.id,
           label: account.email,
+          badge: <span className={`tier-badge ${badge.className}`}>{badge.label}</span>,
           searchableText: account.email,
           tags: account.tags || [],
           type,
@@ -822,6 +825,7 @@ export function useSettingsPageController() {
       codexAccounts.map((account) => ({
         id: account.id,
         label: resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")),
+        badge: <CodexAccountPlanBadge account={account} />,
         searchableText: [resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")), account.email, account.api_base_url].join(" "),
         tags: account.tags || [],
       })),

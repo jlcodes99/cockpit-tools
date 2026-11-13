@@ -23,6 +23,7 @@
 }
 
 .codex-quota-history__header h2 {
+  flex-shrink: 0;
   margin: 0;
   color: var(--text-primary);
   font-size: 1.25rem;
@@ -32,15 +33,27 @@
 
 .codex-quota-history__header-controls {
   display: flex;
-  flex: 0 1 26rem;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
 
 .codex-quota-history__header-controls .codex-quota-history__account {
-  flex: 1 1 19rem;
-  min-width: 0;
+  flex: 1 1 16rem;
+  min-width: min(12rem, 100%);
+  max-width: 26rem;
+}
+
+.codex-quota-history__header-controls .quota-history-storage {
+  flex-shrink: 0;
+  margin-block: 0;
+}
+
+.codex-quota-history__header-controls .quota-history-storage__entry {
+  white-space: nowrap;
 }
 
 .codex-quota-history__header .codex-quota-history__account .single-select-dropdown-trigger {
@@ -88,6 +101,7 @@
 
 .codex-quota-history__periods {
   display: flex;
+  flex-shrink: 0;
   padding: 2px;
   gap: 2px;
 }
@@ -108,10 +122,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+.codex-quota-history__range[data-custom="true"] {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 34px;
+  padding-inline: 6px;
+}
+
 .codex-quota-history__control {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   appearance: none;
   min-width: 30px;
   min-height: 32px;
@@ -123,6 +144,7 @@
   font: inherit;
   font-size: 0.82rem;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -166,10 +188,34 @@
   font-size: 0.82rem;
 }
 
+.codex-quota-history__custom-dates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.codex-quota-history__custom-dates label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.codex-quota-history__custom-dates button {
+  padding-inline: 10px;
+}
+
+.codex-quota-history__custom-dates [role="alert"] {
+  flex-basis: 100%;
+}
+
+.codex-quota-history__custom-dates input,
 .codex-quota-history__interval input {
   appearance: none;
   box-sizing: border-box;
-  width: 4em;
   height: 34px;
   padding: 4px 7px;
   border: 1px solid var(--border);
@@ -181,14 +227,20 @@
   text-align: center;
 }
 
+.codex-quota-history__interval input {
+  width: 4em;
+}
+
 .codex-quota-history__control:focus-visible,
+.codex-quota-history__custom-dates input:focus-visible,
 .codex-quota-history__interval input:focus-visible,
 .codex-quota-history__figure svg:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
-.codex-quota-history__interval input[aria-invalid="true"] {
+.codex-quota-history__interval input[aria-invalid="true"],
+.codex-quota-history__custom-dates input[aria-invalid="true"] {
   border-color: var(--danger);
 }
 
@@ -325,8 +377,34 @@
 
 .codex-quota-history__table-toolbar {
   display: flex;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
   padding: 6px 10px;
+}
+
+.codex-quota-history__consumption,
+.codex-quota-history__consumption > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  min-width: 0;
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.codex-quota-history__consumption > div {
+  gap: 4px 6px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.codex-quota-history__consumption dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }
 
 .codex-quota-history__change-toggle {
@@ -365,8 +443,13 @@
   background: #fff;
 }
 
+.codex-quota-history__table-scroll {
+  overflow-x: auto;
+}
+
 .codex-quota-history__table {
   width: 100%;
+  min-width: 480px;
   border-collapse: collapse;
   table-layout: fixed;
   color: var(--text-primary);
@@ -389,30 +472,27 @@
 }
 
 .codex-quota-history__table th:first-child {
-  width: 36%;
+  width: 26%;
 }
 
 .codex-quota-history__table tbody tr:hover {
   background: var(--bg-hover);
 }
 
-.codex-quota-history__detail-value {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 3px 8px;
-}
-
-.codex-quota-history__detail-value strong[data-missing="true"],
+.codex-quota-history__remaining[data-missing="true"],
 .codex-quota-history__delta {
   color: var(--text-secondary);
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   font-weight: 500;
 }
 
-.codex-quota-history__delta[data-direction="up"],
+.codex-quota-history__delta[data-direction="up"] {
+  color: var(--success);
+  font-weight: 600;
+}
+
 .codex-quota-history__delta[data-direction="down"] {
-  color: var(--text-primary);
+  color: var(--danger);
   font-weight: 600;
 }
 

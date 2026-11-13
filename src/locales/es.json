@@ -1519,7 +1519,7 @@
       "codexPreserveExternalBridgeDesc": "Conservar el puente Codex Web GPT verificado con registros locales al cambiar de cuenta OAuth. Desactivado por defecto.",
       "codexEnhancements": {
         "quotaCompat": "Cuotas en modo mixto",
-        "quotaCompatDesc": "Con inicio OAuth real y una ruta API externa, evita que la cuota de suscripción bloquee mensajes API locales. No cambia el consumo real ni las cuotas de imágenes.",
+        "quotaCompatDesc": "Las instancias del servicio API muestran una cuota disponible para las comprobaciones locales del cliente. El uso real del proveedor y los límites de imágenes no cambian. Este ajuste solo se aplica a otras combinaciones de OAuth y API externa.",
         "restartHint": "Las predicciones nativas están desactivadas por defecto. Reinicia cada instancia Codex afectada tras los cambios y mantén Cockpit Tools abierto. El dictado nativo depende de las funciones y ajustes del cliente; Cockpit no lo sustituye ni fuerza su activación.",
         "configFailed": "Error al leer o guardar ajustes: {{error}}",
         "nativePredictions": "Predicciones nativas del siguiente paso (Tab)",
@@ -2222,7 +2222,13 @@
     "refreshTime": "Actualización",
     "lastSwitchTimeFull": "Cambio: {{time}}",
     "refreshTimeFull": "Actualización: {{time}}",
-    "toggleTimeMode": "Mostrar hora del cambio o de actualización"
+    "toggleTimeMode": "Mostrar hora del cambio o de actualización",
+    "quotaSummary": {
+      "geminiModels": "Modelos Gemini",
+      "claudeAndGptModels": "Modelos Claude y GPT",
+      "weeklyLimit": "Límite semanal",
+      "fiveHourLimit": "Límite de 5 h"
+    }
   },
   "overview": {
     "title": "Resumen de Cuentas",
@@ -2680,6 +2686,10 @@
     "quotaHistory": {
       "storage": {
         "title": "Almacenamiento del historial",
+        "recordCount": "Registros",
+        "diskSpace": "Espacio en disco",
+        "defaultAccount": "Cuenta predeterminada",
+        "recording": "Registro",
         "usage": "{{records}} registros · {{size}} en disco",
         "loadFailed": "No se pudo leer el almacenamiento del historial.",
         "enabled": "Registrar el historial",
@@ -2714,7 +2724,14 @@
       "details": "Detalle",
       "onlyChanges": "Solo cambios",
       "noChanges": "No hay cambios de cuota en este período.",
-      "sampledAt": "Hora de muestreo",
+      "recordedAt": "Hora del registro",
+      "noValue": "Sin datos",
+      "shortConsumed": "Consumo de 5 h",
+      "weeklyConsumed": "Consumo semanal",
+      "shortRemaining": "Rest. 5 h",
+      "shortDelta": "Cambio 5 h",
+      "weeklyRemaining": "Rest. sem.",
+      "weeklyDelta": "Cambio sem.",
       "changeFromPrevious": "Cambio desde la muestra anterior",
       "points": "{{value}} p. p.",
       "account": "Cuenta",
@@ -8442,6 +8459,7 @@
       "addToClaude": "Añadir a Claude CLI",
       "addToClaudeDesktop": "Añadir a Claude",
       "addToClaudeCli": "Añadir a Claude CLI",
+      "addToGrok": "Añadir a Grok",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "Despliegue rápido a Codex",
@@ -8485,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "La facturación de Grok no devolvió datos de cuota. Inténtalo más tarde.",
     "search": "Buscar cuentas de Grok CLI...",
     "flowNotice": {
       "title": "Gestión de cuentas de Grok CLI",

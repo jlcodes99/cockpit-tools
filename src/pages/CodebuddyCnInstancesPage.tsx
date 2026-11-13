@@ -51,7 +51,7 @@ export function CodebuddyCnInstancesContent({
 
         return (
           <div className="badge-group inline-flex items-center gap-1">
-            <span className={`instance-plan-badge ${normalizedClass}`}>{planBadge}</span>
+            <span className={`tier-badge account-picker-plan ${normalizedClass}`}>{planBadge}</span>
           </div>
         );
       }}

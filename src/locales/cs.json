@@ -1519,7 +1519,7 @@
       "codexPreserveExternalBridgeDesc": "Při změně účtu OAuth zachová most Codex Web GPT ověřený místními záznamy integrace. Ve výchozím stavu vypnuto.",
       "codexEnhancements": {
         "quotaCompat": "Limity ve smíšeném režimu",
-        "quotaCompatDesc": "Při skutečném přihlášení OAuth a externí trase API limit předplatného neblokuje místní zprávy API. Skutečná spotřeba a limity obrázků se nemění.",
+        "quotaCompatDesc": "Instance služby API zobrazují klientovi dostupnou kvótu pro místní kontroly. Skutečné využití u poskytovatele ani limity obrázků se nemění. Tento přepínač platí jen pro ostatní kombinace OAuth a externího API.",
         "restartHint": "Nativní návrhy jsou ve výchozím stavu vypnuté. Po změnách restartujte dotčené instance Codex a nechte Cockpit Tools spuštěný. Nativní diktování se řídí možnostmi a nastavením klienta; Cockpit ho nepřebírá ani nevynucuje jeho zapnutí.",
         "configFailed": "Nepodařilo se načíst nebo uložit nastavení: {{error}}",
         "nativePredictions": "Nativní návrhy dalšího kroku (Tab)",
@@ -2222,7 +2222,13 @@
     "refreshTime": "Obnovení",
     "lastSwitchTimeFull": "Přepnutí: {{time}}",
     "refreshTimeFull": "Obnovení: {{time}}",
-    "toggleTimeMode": "Zobrazit čas přepnutí nebo obnovení"
+    "toggleTimeMode": "Zobrazit čas přepnutí nebo obnovení",
+    "quotaSummary": {
+      "geminiModels": "Modely Gemini",
+      "claudeAndGptModels": "Modely Claude a GPT",
+      "weeklyLimit": "Týdenní limit",
+      "fiveHourLimit": "5h limit"
+    }
   },
   "overview": {
     "title": "Přehled účtů",
@@ -2680,6 +2686,10 @@
     "quotaHistory": {
       "storage": {
         "title": "Úložiště historie",
+        "recordCount": "Záznamy",
+        "diskSpace": "Místo na disku",
+        "defaultAccount": "Výchozí účet",
+        "recording": "Záznam historie",
         "usage": "Záznamy: {{records}} · na disku {{size}}",
         "loadFailed": "Úložiště historie nelze načíst.",
         "enabled": "Zaznamenávat historii",
@@ -2714,7 +2724,14 @@
       "details": "Podrobnosti",
       "onlyChanges": "Jen změny",
       "noChanges": "V tomto období se kvóta nezměnila.",
-      "sampledAt": "Čas vzorku",
+      "recordedAt": "Čas záznamu",
+      "noValue": "Žádné",
+      "shortConsumed": "Spotřeba za 5 h",
+      "weeklyConsumed": "Týdenní spotřeba",
+      "shortRemaining": "Zbývá 5 h",
+      "shortDelta": "Změna 5 h",
+      "weeklyRemaining": "Zbývá týd.",
+      "weeklyDelta": "Změna týd.",
       "changeFromPrevious": "Změna oproti předchozímu vzorku",
       "points": "{{value}} p. b.",
       "account": "Účet",
@@ -8442,6 +8459,7 @@
       "addToClaude": "Přidat do Claude CLI",
       "addToClaudeDesktop": "Přidat do Claude",
       "addToClaudeCli": "Přidat do Claude CLI",
+      "addToGrok": "Přidat do Grok",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "Rychlé nasazení do Codexu",
@@ -8485,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "Fakturace Grok nevrátila údaje o kvótě. Zkuste to později.",
     "search": "Hledat účty Grok CLI...",
     "flowNotice": {
       "title": "Správa účtů Grok CLI",

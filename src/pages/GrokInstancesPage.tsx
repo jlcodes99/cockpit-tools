@@ -28,6 +28,7 @@ import { useGrokInstanceStore } from '../stores/useGrokInstanceStore';
 import {
   getGrokAccountDisplayEmail,
   getGrokPlanBadge,
+  getGrokPlanBadgeClass,
   getGrokUsage,
   type GrokAccount,
 } from '../types/grok';
@@ -727,7 +728,7 @@ export function GrokInstancesContent({
           />
         )}
         renderAccountBadge={(account) => (
-          <span className="instance-plan-badge">
+          <span className={`tier-badge account-picker-plan ${getGrokPlanBadgeClass(getGrokPlanBadge(account), account)} raw-value`}>
             {getGrokPlanBadge(account) || t('common.none', '暂无')}
           </span>
         )}

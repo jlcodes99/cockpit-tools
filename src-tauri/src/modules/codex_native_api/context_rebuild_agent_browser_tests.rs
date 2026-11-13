@@ -6,6 +6,7 @@ use crate::modules::codex_native_api::codex_cpa_wire::synthetic_gpt_signature;
 
 fn browser_results() -> Vec<Value> {
     [
+        "browser_tabs",
         "codex_apps_open_page",
         "codex_apps_selected_page_part_1_of_1",
     ]

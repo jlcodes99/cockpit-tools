@@ -273,17 +273,22 @@ impl Child {
     }
 }
 
-// APIService capability denial must not wait on, or be revoked by, a slow
-// keyring/config read. Optional Fast/quota adaptations fail closed meanwhile.
+// API Service quota adaptation uses the persisted instance binding. Optional
+// Fast/prediction features still wait for their verified profile snapshot.
 fn profile_or_api_fallback(profile: Option<Profile>, api_service: bool) -> Option<Profile> {
     profile.or_else(|| api_service.then(Profile::default))
 }
 
 fn trusted_preload_source(profile: Option<&Profile>, api_service: bool, port: u16) -> Option<String> {
-    profile.filter(|profile| profile.active() || api_service).map(|profile| {
-        fast::browser_preload_source(profile.native_fast, profile.native_predictions, profile.quota_compat,
-            profile.api_key_auth_verified, api_service, &format!("preload-{port}"))
-    })
+    let owner = format!("preload-{port}");
+    match profile {
+        Some(profile) if profile.native_fast || profile.native_predictions
+            || profile.quota_compat && !api_service => Some(fast::browser_preload_source(
+            profile.native_fast, profile.native_predictions, profile.quota_compat,
+            profile.api_key_auth_verified, api_service, &owner)),
+        _ if api_service => Some(fast::quota_state_source(&owner)),
+        _ => None,
+    }
 }
 
 // Browser pre-registration also protects restored macOS conversations from
@@ -318,7 +323,7 @@ async fn run_profile(
         return;
     };
     let preload_source = if browser_preload_enabled {
-        let (source, receiver) = watch::channel(None);
+        let (source, receiver) = watch::channel(trusted_preload_source(None, api_service, port));
         let preload_stop = stop.clone();
         let launch = startup.clone().expect("preload requires an explicit launch");
         tauri::async_runtime::spawn(async move {
@@ -372,7 +377,7 @@ async fn run_profile(
         } else if read.is_some() && !read_timed_out && read_started.elapsed() > Duration::from_secs(10) {
             // A stalled keyring probe remains single-flight; revoke active adapters
             // while waiting rather than launching more blocking credential reads.
-            if let Some(sender) = &preload_source { sender.send_replace(None); }
+            if let Some(sender) = &preload_source { sender.send_replace(trusted_preload_source(None, api_service, port)); }
             read_timed_out = true;
             initial_snapshot_ready = true;
             current_verified = false;
@@ -399,7 +404,7 @@ async fn run_profile(
                 let result = read_profile(&path, api_service);
                 // Publish immediately from the one existing read worker, not
                 // after page discovery's network timeout or the next poll.
-                // An API binding without a verified snapshot publishes nothing.
+                // Quota data stays independent of slow or failed credential reads.
                 if let Some(sender) = sender {
                     sender.send_replace(trusted_preload_source(result.as_ref().ok(), api_service, port));
                 }
@@ -643,8 +648,12 @@ mod tests {
     }
 
     #[test]
-    fn browser_preload_requires_completed_profile_evidence_even_for_api_service() {
-        assert!(trusted_preload_source(None, true, 9333).is_none());
+    fn quota_data_preload_does_not_wait_for_credentials_or_claim_native_features() {
+        let quota = trusted_preload_source(None, true, 9333).unwrap();
+        assert!(quota.contains("__cockpitQuotaState"));
+        assert!(!quota.contains("__cockpitNativeInstallStarted"));
+        assert!(!quota.contains("__cockpitStartupPreloadStarted"));
+        assert!(!quota.contains("apiKeyAuthVerified"));
         assert!(trusted_preload_source(None, false, 9333).is_none());
         assert!(trusted_preload_source(Some(&Profile::default()), false, 9333).is_none());
         let verified = Profile { native_fast:true, api_key_auth_verified:true, quota_compat:false, ..Profile::default() };

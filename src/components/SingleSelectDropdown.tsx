@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useEscCloseTopmost } from "../hooks/useEscClose";
 import { Check, ChevronDown } from "lucide-react";
@@ -8,6 +8,7 @@ import { dropdownLayer, dropdownPlacement, type DropdownPlacement } from "../uti
 export interface SingleSelectOption {
   value: string;
   label: string;
+  badge?: ReactNode;
 }
 
 interface SingleSelectDropdownProps {
@@ -154,6 +155,7 @@ export function SingleSelectDropdown({
         <span className="single-select-dropdown-value" title={currentLabel}>
           {currentLabel}
         </span>
+        {selectedOption?.badge}
         <span className="single-select-dropdown-arrow">
           <ChevronDown size={16} />
         </span>
@@ -211,6 +213,7 @@ export function SingleSelectDropdown({
                     >
                       {option.label}
                     </span>
+                    {option.badge}
                     <span className="single-select-dropdown-item-check">
                       {active ? <Check size={15} /> : null}
                     </span>

@@ -385,7 +385,7 @@ export function CodexInstancesContent({
   const renderCodexPlanBadge = (account: CodexAccount) => {
     const presentation = resolvePresentation(account);
     return (
-      <span className={`instance-plan-badge ${presentation.planClass}`}>
+      <span className={`tier-badge codex-account-plan-badge ${presentation.planClass}`}>
         {presentation.planLabel}
       </span>
     );

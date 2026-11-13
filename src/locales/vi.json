@@ -1519,7 +1519,7 @@
       "codexPreserveExternalBridgeDesc": "Giữ cầu nối Codex Web GPT đã xác minh bằng bản ghi cục bộ khi đổi tài khoản OAuth. Mặc định tắt.",
       "codexEnhancements": {
         "quotaCompat": "Hạn mức chế độ kết hợp",
-        "quotaCompatDesc": "Khi đăng nhập OAuth thật và dùng tuyến API bên ngoài, hạn mức gói đăng ký không chặn tin nhắn API cục bộ. Không đổi mức dùng thực tế hay hạn mức hình ảnh.",
+        "quotaCompatDesc": "Các phiên bản dịch vụ API hiển thị hạn mức khả dụng cho giao diện và kiểm tra cục bộ của ứng dụng. Mức sử dụng thực tế tại nhà cung cấp và giới hạn hình ảnh không thay đổi. Tùy chọn này chỉ áp dụng cho các cấu hình OAuth kết hợp API bên ngoài khác.",
         "restartHint": "Dự đoán gốc mặc định tắt. Khởi động lại các phiên bản Codex liên quan sau khi đổi và giữ Cockpit Tools chạy. Tính năng nhập giọng nói gốc phụ thuộc vào khả năng và cài đặt của ứng dụng; Cockpit không thay thế hay ép bật tính năng này.",
         "configFailed": "Không thể đọc hoặc lưu cài đặt: {{error}}",
         "nativePredictions": "Dự đoán bước tiếp theo gốc (Tab)",
@@ -2222,7 +2222,13 @@
     "refreshTime": "Lần làm mới",
     "lastSwitchTimeFull": "Lần chuyển: {{time}}",
     "refreshTimeFull": "Lần làm mới: {{time}}",
-    "toggleTimeMode": "Hiển thị thời gian chuyển hoặc làm mới"
+    "toggleTimeMode": "Hiển thị thời gian chuyển hoặc làm mới",
+    "quotaSummary": {
+      "geminiModels": "Mô hình Gemini",
+      "claudeAndGptModels": "Mô hình Claude và GPT",
+      "weeklyLimit": "Giới hạn tuần",
+      "fiveHourLimit": "Giới hạn 5 giờ"
+    }
   },
   "overview": {
     "title": "Tổng quan tài khoản",
@@ -2680,6 +2686,10 @@
     "quotaHistory": {
       "storage": {
         "title": "Lưu trữ lịch sử",
+        "recordCount": "Số bản ghi",
+        "diskSpace": "Dung lượng đĩa",
+        "defaultAccount": "Tài khoản mặc định",
+        "recording": "Ghi lịch sử",
         "usage": "{{records}} bản ghi · {{size}} trên đĩa",
         "loadFailed": "Không thể đọc kho lưu trữ lịch sử.",
         "enabled": "Ghi lịch sử",
@@ -2714,7 +2724,14 @@
       "details": "Chi tiết",
       "onlyChanges": "Chỉ xem thay đổi",
       "noChanges": "Hạn mức không thay đổi trong khoảng này.",
-      "sampledAt": "Giờ ghi nhận",
+      "recordedAt": "Giờ ghi nhận",
+      "noValue": "Không có",
+      "shortConsumed": "Đã dùng hạn mức 5 giờ",
+      "weeklyConsumed": "Đã dùng hạn mức tuần",
+      "shortRemaining": "Còn 5h",
+      "shortDelta": "Đổi 5h",
+      "weeklyRemaining": "Còn tuần",
+      "weeklyDelta": "Đổi tuần",
       "changeFromPrevious": "Thay đổi so với lần ghi trước",
       "points": "{{value}} điểm phần trăm",
       "account": "Tài khoản",
@@ -8442,6 +8459,7 @@
       "addToClaude": "Thêm vào Claude CLI",
       "addToClaudeDesktop": "Thêm vào Claude",
       "addToClaudeCli": "Thêm vào Claude CLI",
+      "addToGrok": "Thêm vào Grok",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "Triển khai nhanh tới Codex",
@@ -8485,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "Dịch vụ thanh toán Grok không trả về dữ liệu hạn mức. Hãy thử lại sau.",
     "search": "Tìm tài khoản Grok CLI...",
     "flowNotice": {
       "title": "Quản lý tài khoản Grok CLI",

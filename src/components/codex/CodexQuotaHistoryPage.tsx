@@ -5,16 +5,18 @@ import { useTranslation } from "react-i18next";
 import { SingleSelectDropdown } from "../SingleSelectDropdown";
 import { CodexQuotaHistoryDetails } from "./CodexQuotaHistoryDetails";
 import { CodexQuotaHistorySettings } from "./CodexQuotaHistorySettings";
+import { CodexAccountPlanBadge } from "./CodexAccountPlanBadge";
 import { useCodexAccountStore } from "../../stores/useCodexAccountStore";
 import { isCodexApiKeyAccount, type CodexAccount } from "../../types/codex";
 import { subscribeTauriEvent } from "../../utils/tauriEventListener";
 import {
-  nearestQuotaHistoryPoint, QUOTA_PLOT, quotaHistoryDateRange, quotaHistorySeries, quotaHistoryTicks,
-  type QuotaHistoryPoint, type QuotaHistoryRange,
+  nearestQuotaHistoryPoint, QUOTA_PLOT, quotaHistoryCustomRange, quotaHistoryDateInput,
+  quotaHistoryDateRange, quotaHistorySeries, quotaHistoryTicks,
+  type QuotaHistory, type QuotaHistoryPoint, type QuotaHistoryPreset,
 } from "./codexQuotaHistoryChart";
 import "./CodexQuotaHistoryPage.css";
 
-const PERIODS: QuotaHistoryRange[] = ["today", "thisWeek", "thisMonth"];
+const PERIODS: QuotaHistoryPreset[] = ["today", "thisWeek", "thisMonth"];
 const MINUTE = 60_000;
 const SERIES = [
   { key: "shortRemaining", label: "codex.thresholds.shortCycle", css: "short" },
@@ -30,24 +32,47 @@ export function CodexQuotaHistoryPage({ accounts, resolveDisplayName }: {
   const currentAccountId = useCodexAccountStore((state) => state.currentAccount?.id);
   const refreshQuota = useCodexAccountStore((state) => state.refreshQuota);
   const [preferredAccountId, setPreferredAccountId] = useState<string>();
+  const [defaultAccountId, setDefaultAccountId] = useState<string | null>(null);
   const [view, setView] = useState<"chart" | "details">("chart");
-  const [onlyChanges, setOnlyChanges] = useState(false);
-  const [period, setPeriod] = useState<QuotaHistoryRange>("today");
+  const [onlyChanges, setOnlyChanges] = useState(true);
+  const [period, setPeriod] = useState<QuotaHistoryPreset>("today");
   const [offset, setOffset] = useState(0);
+  const [customRange, setCustomRange] = useState<{ from: number; to: number }>();
+  const [dateInputs, setDateInputs] = useState({ start: "", end: "" });
   const [interval, setInterval] = useState(5);
   const [intervalInput, setIntervalInput] = useState("5");
   const intervalValid = /^\d+$/.test(intervalInput) && Number(intervalInput) >= 1 && Number(intervalInput) <= 1440;
   const [retry, setRetry] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<{ accountId: string; message: string }>();
-  const [result, setResult] = useState<{ key: string; points?: QuotaHistoryPoint[] }>();
+  const [result, setResult] = useState<{ key: string; history?: QuotaHistory }>();
   const eligible = accounts.filter((account) => !isCodexApiKeyAccount(account));
   const selectedAccount = eligible.find((account) => account.id === preferredAccountId)
+    ?? eligible.find((account) => account.id === defaultAccountId)
     ?? eligible.find((account) => account.id === currentAccountId) ?? eligible[0];
   const accountId = selectedAccount?.id;
-  const { from, to } = quotaHistoryDateRange(period, offset);
+  const { from, to } = customRange ?? quotaHistoryDateRange(period, offset);
+  const customDraft = quotaHistoryCustomRange(dateInputs.start, dateInputs.end);
+  const now = Date.now();
+  const includesCurrent = customRange ? from <= now && now < to : offset === 0;
   const key = JSON.stringify([accountId, selectedAccount?.created_at, selectedAccount?.user_id,
     selectedAccount?.account_id, selectedAccount?.organization_id, from, to, interval, retry]);
+
+  useEffect(() => {
+    let sequence = 0;
+    const loadDefault = async () => {
+      const request = ++sequence;
+      try {
+        const settings = await invoke<{ defaultAccountId: string | null }>("codex_quota_history_settings");
+        if (request === sequence) setDefaultAccountId(settings.defaultAccountId);
+      } catch (error) {
+        console.warn("[Codex quota history] Could not read the default account", error);
+      }
+    };
+    const stop = subscribeTauriEvent("codex:quota-history-settings-changed", () => void loadDefault());
+    void loadDefault();
+    return () => { sequence++; stop(); };
+  }, []);
 
   useEffect(() => {
     if (!accountId) return;
@@ -57,10 +82,10 @@ export function CodexQuotaHistoryPage({ accounts, resolveDisplayName }: {
     const read = async () => {
       const request = ++sequence;
       try {
-        const points = await invoke<QuotaHistoryPoint[]>("get_codex_quota_history", {
+        const history = await invoke<QuotaHistory>("get_codex_quota_history", {
           accountId, from, to, intervalMinutes: interval,
         });
-        if (current && request === sequence) setResult({ key, points });
+        if (current && request === sequence) setResult({ key, history });
       } catch (error) {
         if (current && request === sequence) {
           console.warn("[Codex quota history] Query failed", error);
@@ -69,7 +94,8 @@ export function CodexQuotaHistoryPage({ accounts, resolveDisplayName }: {
       }
     };
     const stop = subscribeTauriEvent<string[]>("codex:quota-history-recorded", ({ payload }) => {
-      if (offset !== 0 || !payload.includes(accountId)) return;
+      const currentTime = Date.now();
+      if (currentTime < from || currentTime >= to || !payload.includes(accountId)) return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => { void read(); }, 250);
     });
@@ -84,13 +110,13 @@ export function CodexQuotaHistoryPage({ accounts, resolveDisplayName }: {
       stop();
       stopCleanup();
     };
-  }, [accountId, from, to, offset, interval, key]);
+  }, [accountId, from, to, interval, key]);
 
   const visible = result?.key === key ? result : undefined;
   const refresh = async () => {
     if (!accountId || refreshing) return;
     setRefreshError(undefined);
-    if (offset !== 0) {
+    if (!includesCurrent) {
       setRetry((value) => value + 1);
       return;
     }
@@ -107,7 +133,8 @@ export function CodexQuotaHistoryPage({ accounts, resolveDisplayName }: {
   const start = new Date(from);
   const end = new Date(to - 1);
   const fullDate = new Intl.DateTimeFormat(lang, { dateStyle: "short" });
-  const rangeLabel = period === "today" ? new Intl.DateTimeFormat(lang, { dateStyle: "medium" }).format(start)
+  const rangeLabel = customRange ? `${fullDate.format(start)} – ${fullDate.format(end)}`
+    : period === "today" ? new Intl.DateTimeFormat(lang, { dateStyle: "medium" }).format(start)
     : period === "thisMonth" ? new Intl.DateTimeFormat(lang, { year: "numeric", month: "long" }).format(start)
     : `${fullDate.format(start)} – ${start.getFullYear() === end.getFullYear()
       ? new Intl.DateTimeFormat(lang, { month: "numeric", day: "numeric" }).format(end) : fullDate.format(end)}`;
@@ -115,43 +142,54 @@ export function CodexQuotaHistoryPage({ accounts, resolveDisplayName }: {
     <section className="codex-quota-history">
       <header className="codex-quota-history__header">
         <h2>{t("codex.quotaHistory.title")}</h2>
-        {accountId && <div className="codex-quota-history__header-controls">
-          <SingleSelectDropdown value={accountId} onChange={setPreferredAccountId}
-            className="codex-quota-history__account"
-            ariaLabel={t("codex.quotaHistory.account")}
-            options={eligible.map((account) => ({ value: account.id, label: resolveDisplayName(account) }))} />
-          <div className="codex-quota-history__periods" role="group" aria-label={t("codex.quotaHistory.title")}>
-            <button type="button" className="codex-quota-history__control" aria-pressed={view === "chart"}
-              onClick={() => setView("chart")}>{t("codex.quotaHistory.chart")}</button>
-            <button type="button" className="codex-quota-history__control" aria-pressed={view === "details"}
-              onClick={() => setView("details")}>{t("codex.quotaHistory.details")}</button>
-          </div>
-        </div>}
+        <div className="codex-quota-history__header-controls">
+          {accountId && <>
+            <SingleSelectDropdown value={accountId} onChange={setPreferredAccountId}
+              className="codex-quota-history__account"
+              ariaLabel={t("codex.quotaHistory.account")}
+              options={eligible.map((account) => ({ value: account.id, label: resolveDisplayName(account), badge: <CodexAccountPlanBadge account={account} /> }))} />
+            <div className="codex-quota-history__periods" role="group" aria-label={t("codex.quotaHistory.title")}>
+              <button type="button" className="codex-quota-history__control" aria-pressed={view === "chart"}
+                onClick={() => setView("chart")}>{t("codex.quotaHistory.chart")}</button>
+              <button type="button" className="codex-quota-history__control" aria-pressed={view === "details"}
+                onClick={() => setView("details")}>{t("codex.quotaHistory.details")}</button>
+            </div>
+          </>}
+          <CodexQuotaHistorySettings />
+        </div>
       </header>
-      <CodexQuotaHistorySettings />
       {!accountId ? <p className="codex-quota-history__message">{t("codex.quotaHistory.noAccount")}</p> : <>
         <div className="codex-quota-history__filters">
           <div className="codex-quota-history__date-controls">
             <div className="codex-quota-history__periods">
               {PERIODS.map((value) => (
                 <button type="button" key={value} className="codex-quota-history__control"
-                  aria-pressed={period === value} onClick={() => { setPeriod(value); setOffset(0); }}>
+                  aria-pressed={!customRange && period === value}
+                  onClick={() => { setCustomRange(undefined); setPeriod(value); setOffset(0); }}>
                   {value === "today" ? t("codex.localAccess.statsRange.daily")
                     : value === "thisWeek" ? t("codex.localAccess.statsRange.weekly")
                     : t("codex.localAccess.statsRange.monthly")}
                 </button>
               ))}
+              <button type="button" className="codex-quota-history__control" aria-pressed={!!customRange}
+                onClick={() => {
+                  if (customRange) return;
+                  setDateInputs({ start: quotaHistoryDateInput(from), end: quotaHistoryDateInput(to - 1) });
+                  setCustomRange({ from, to });
+                }}>{t("codex.localAccess.statsRange.custom")}</button>
             </div>
-            <div className="codex-quota-history__range">
-              <button type="button" className="codex-quota-history__control" aria-label={t("pagination.prev")}
-                onClick={() => setOffset((value) => value - 1)}>
-                <ChevronLeft size={16} />
-              </button>
+            <div className="codex-quota-history__range" data-custom={!!customRange}>
+              {!customRange && (
+                <button type="button" className="codex-quota-history__control" aria-label={t("pagination.prev")}
+                  onClick={() => setOffset((value) => value - 1)}>
+                  <ChevronLeft size={16} />
+                </button>)}
               <span>{rangeLabel}</span>
-              <button type="button" className="codex-quota-history__control" aria-label={t("pagination.next")}
-                disabled={offset === 0} onClick={() => setOffset((value) => Math.min(0, value + 1))}>
-                <ChevronRight size={16} />
-              </button>
+              {!customRange && (
+                <button type="button" className="codex-quota-history__control" aria-label={t("pagination.next")}
+                  disabled={offset === 0} onClick={() => setOffset((value) => Math.min(0, value + 1))}>
+                  <ChevronRight size={16} />
+                </button>)}
             </div>
             <button type="button" className="codex-quota-history__control codex-quota-history__refresh"
               aria-label={t("common.refresh")} title={t("common.refresh")}
@@ -175,18 +213,43 @@ export function CodexQuotaHistoryPage({ accounts, resolveDisplayName }: {
             </span>}
           </label>
         </div>
-        {offset === 0 && refreshError?.accountId === accountId && <p role="alert" className="codex-quota-history__error">
+        {customRange && <form className="codex-quota-history__custom-dates" onSubmit={(event) => {
+          event.preventDefault();
+          if (customDraft) setCustomRange(customDraft);
+        }}>
+          <label>
+            <span>{t("codex.quotaHistory.storage.fromDate")}</span>
+            <input type="date" value={dateInputs.start} aria-invalid={!customDraft}
+              aria-describedby={!customDraft ? "codex-quota-history-date-error" : undefined}
+              onChange={(event) => setDateInputs({ ...dateInputs, start: event.target.value })} />
+          </label>
+          <label>
+            <span>{t("codex.quotaHistory.storage.toDate")}</span>
+            <input type="date" value={dateInputs.end} aria-invalid={!customDraft}
+              aria-describedby={!customDraft ? "codex-quota-history-date-error" : undefined}
+              onChange={(event) => setDateInputs({ ...dateInputs, end: event.target.value })} />
+          </label>
+          <button type="submit" className="codex-quota-history__control codex-quota-history__refresh"
+            disabled={!customDraft || (customDraft.from === from && customDraft.to === to)}>
+            {t("codex.localAccess.statsRange.apply")}
+          </button>
+          {!customDraft && <span id="codex-quota-history-date-error" role="alert" className="codex-quota-history__error">
+            {t("codex.quotaHistory.storage.invalidDates")}
+          </span>}
+        </form>}
+        {includesCurrent && refreshError?.accountId === accountId && <p role="alert" className="codex-quota-history__error">
           {refreshError.message}
         </p>}
         {!visible ? <p role="status" className="codex-quota-history__message">{t("common.loading")}</p>
-          : !visible.points ? <div role="alert" className="codex-quota-history__message">
+          : !visible.history ? <div role="alert" className="codex-quota-history__message">
             {t("codex.quotaHistory.readFailed")}
             <button type="button" className="btn btn-secondary" onClick={() => setRetry((value) => value + 1)}>{t("common.retry")}</button>
           </div>
-          : view === "details" ? <CodexQuotaHistoryDetails key={key} points={visible.points}
+          : view === "details" ? <CodexQuotaHistoryDetails key={key} history={visible.history}
             onlyChanges={onlyChanges} onOnlyChangesChange={setOnlyChanges} />
-          : visible.points.length === 0 ? <p className="codex-quota-history__message">{t("codex.quotaHistory.empty")}</p>
-          : <QuotaHistoryChart key={key} points={visible.points} period={period} interval={interval} />}
+          : visible.history.points.length === 0 ? <p className="codex-quota-history__message">{t("codex.quotaHistory.empty")}</p>
+          : <QuotaHistoryChart key={key} points={visible.history.points} period={customRange ? "custom" : period}
+            interval={visible.history.intervalMinutes} />}
       </>}
     </section>
   );
@@ -194,7 +257,7 @@ export function CodexQuotaHistoryPage({ accounts, resolveDisplayName }: {
 
 function QuotaHistoryChart({ points, period, interval }: {
   points: QuotaHistoryPoint[];
-  period: QuotaHistoryRange;
+  period: QuotaHistoryPreset | "custom";
   interval: number;
 }) {
   const { t, i18n } = useTranslation();
@@ -242,7 +305,7 @@ function QuotaHistoryChart({ points, period, interval }: {
             return <div key={line.key} className={`codex-quota-history__metric codex-quota-history__${line.css}`}>
               <span><i aria-hidden="true" />{t(line.label)}</span>
               <strong data-missing={remaining === null}>
-                {remaining === null ? t("common.unknown") : percent.format(remaining / 100)}
+                {remaining === null ? t("codex.quotaHistory.noValue") : percent.format(remaining / 100)}
               </strong>
             </div>;
           })}

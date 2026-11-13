@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import {
@@ -18,6 +18,7 @@ export interface AutoSwitchScopeAccount {
   searchableText?: string;
   tags?: string[];
   type?: string;
+  badge?: ReactNode;
 }
 
 export interface AutoSwitchScopeGroup {
@@ -367,6 +368,7 @@ export function AutoSwitchAccountScopeSelector({
                 <span className="settings-account-scope-item-label" title={account.label}>
                   {account.label}
                 </span>
+                {account.badge}
               </label>
             );
           })

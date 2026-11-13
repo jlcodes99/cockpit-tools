@@ -1519,7 +1519,7 @@
       "codexPreserveExternalBridgeDesc": "OAuth hesabı değiştirirken yerel kayıtlarla doğrulanan Codex Web GPT köprüsünü korur. Varsayılan olarak kapalıdır.",
       "codexEnhancements": {
         "quotaCompat": "Karma mod kota uyumu",
-        "quotaCompatDesc": "Gerçek OAuth oturumu ve harici API yolu birlikte kullanıldığında abonelik kotasının yerel API mesajlarını engellemesini önler. Gerçek kullanım ve görsel kotaları değişmez.",
+        "quotaCompatDesc": "API hizmeti örnekleri istemci görünümü ve yerel kontroller için kullanılabilir kota gösterir. Sağlayıcıdaki gerçek kullanım ve görsel sınırları değişmez. Bu anahtar yalnızca diğer OAuth ve harici API birleşimleri için geçerlidir.",
         "restartHint": "Yerel tahminler varsayılan olarak kapalıdır. Değişiklikten sonra ilgili Codex örneklerini yeniden başlatın ve Cockpit Tools açık kalsın. Yerel dikte, istemcinin yeteneklerine ve ayarlarına bağlıdır; Cockpit bu işlevi devralmaz veya zorla etkinleştirmez.",
         "configFailed": "Ayarlar okunamadı veya kaydedilemedi: {{error}}",
         "nativePredictions": "Yerel sonraki adım tahminleri (Tab)",
@@ -2222,7 +2222,13 @@
     "refreshTime": "Yenileme",
     "lastSwitchTimeFull": "Değiştirme: {{time}}",
     "refreshTimeFull": "Yenileme: {{time}}",
-    "toggleTimeMode": "Değiştirme veya yenileme zamanını göster"
+    "toggleTimeMode": "Değiştirme veya yenileme zamanını göster",
+    "quotaSummary": {
+      "geminiModels": "Gemini Modelleri",
+      "claudeAndGptModels": "Claude ve GPT modelleri",
+      "weeklyLimit": "Haftalık sınır",
+      "fiveHourLimit": "5 sa. sınır"
+    }
   },
   "overview": {
     "title": "Hesap Genel Bakışı",
@@ -2680,6 +2686,10 @@
     "quotaHistory": {
       "storage": {
         "title": "Geçmiş depolama",
+        "recordCount": "Kayıtlar",
+        "diskSpace": "Disk alanı",
+        "defaultAccount": "Varsayılan hesap",
+        "recording": "Kayıt ayarları",
         "usage": "{{records}} kayıt · diskte {{size}}",
         "loadFailed": "Geçmiş depolama bilgileri okunamadı.",
         "enabled": "Geçmişi kaydet",
@@ -2714,7 +2724,14 @@
       "details": "Ayrıntılar",
       "onlyChanges": "Yalnızca değişimler",
       "noChanges": "Bu dönemde kota değişmedi.",
-      "sampledAt": "Ölçüm zamanı",
+      "recordedAt": "Kayıt zamanı",
+      "noValue": "Yok",
+      "shortConsumed": "5 sa. tüketimi",
+      "weeklyConsumed": "Haftalık tüketim",
+      "shortRemaining": "Kalan 5 sa",
+      "shortDelta": "Değ. 5 sa",
+      "weeklyRemaining": "Haftalık Kalan",
+      "weeklyDelta": "Haftalık Değ.",
       "changeFromPrevious": "Önceki ölçüme göre değişim",
       "points": "{{value}} yüzde puanı",
       "account": "Hesap",
@@ -8442,6 +8459,7 @@
       "addToClaude": "Claude CLI’ye ekle",
       "addToClaudeDesktop": "Claude’a ekle",
       "addToClaudeCli": "Claude CLI’ye ekle",
+      "addToGrok": "Grok’a ekle",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "Codex'e hızlı kurulum",
@@ -8485,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "Grok faturalandırma hizmeti kota verisi döndürmedi. Daha sonra tekrar deneyin.",
     "search": "Grok CLI hesaplarını ara...",
     "flowNotice": {
       "title": "Grok CLI Hesap Yönetimi",

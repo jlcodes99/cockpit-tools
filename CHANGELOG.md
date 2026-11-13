@@ -8,6 +8,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+## [1.3.83] - 2026-11-13
+
+### Changed
+
+- **DeepSeek in Codex**: Account launch, provider instances, and the API Service use DeepSeek model IDs and the same reasoning options, with `max` as the default. Saved supported efforts are preserved. Instances bound to official DeepSeek can still resolve old model IDs when resuming a conversation.
+- **Relay keys**: Add saved keys to Grok CLI with the key, address, and an available model prefilled for review. [#3104](https://github.com/jlcodes99/cockpit-tools/issues/3104)
+- **Codex quota history**: Choose a custom date range and see how much 5-hour and weekly quota was consumed across it, including usage before resets. Totals appear as signed percentages. Details show recording times, remaining quota and changes. History storage lets you manage recording and cleanup and pick a default account. Recording only quota changes starts enabled, including after upgrading, and can be turned off. Account selectors use the overview's subscription badges.
+- **Antigravity account quotas**: Cards and lists use a more compact quota layout. Hover over a reset time for the full details.
+- **Codex quota recovery alerts**: View the enabled status and manage the PushPlus token from both Codex settings and quick settings.
+- **Account selectors**: Show subscription badges when choosing accounts for groups, automatic switching, instances, proxy settings, and WorkBuddy model tests. Badge styling follows the account list for each platform.
+- **Settings**: Quota thresholds, refresh intervals, and other options use consistent dropdowns in Codex settings and platform quick settings. Codex API and proxy options also use consistent rows in quick settings.
+
+### Fixed
+
+- **DeepSeek in the Codex API Service**: Conversations in thinking mode can continue after parallel tool calls. The gateway keeps the calls together and sends their results after the batch.
+- **Grok quota**: An empty billing response keeps the last valid quota and reports a refresh failure. [#2819](https://github.com/jlcodes99/cockpit-tools/issues/2819)
+- **Claude CLI**: Quota refresh picks up newer credentials for the same account from a bound instance before renewing. Failed refreshes are counted as failures. [#3105](https://github.com/jlcodes99/cockpit-tools/issues/3105)
+- **Claude compatibility**: Signature-only reasoning uses redacted thinking blocks to avoid empty thinking rows while preserving continuation data and subsequent tool calls. [#3086](https://github.com/jlcodes99/cockpit-tools/issues/3086)
+- **GitHub Copilot sign-in**: When GitHub refuses to issue a Copilot token, the sign-in dialog shows the status code and GitHub’s explanation. [#3103](https://github.com/jlcodes99/cockpit-tools/issues/3103)
+- **Codex API Service**: Conversations containing built-in browser tab records can resume on another account when the original account becomes unavailable and the client sends the full history. [#3099](https://github.com/jlcodes99/cockpit-tools/issues/3099)
+- **Codex API Service**: Native gateway connection and stream idle timeout hints link to the matching text or image timeout setting. [#3088](https://github.com/jlcodes99/cockpit-tools/pull/3088)
+- **Codex API Service**: Instances launched with API Service receive an available-quota view for local submission checks, including initial reads, refreshes and real-time updates. Submission no longer depends on the signed-in OAuth account’s subscription quota or the mixed-mode compatibility switch. Actual upstream usage and image limits stay unchanged.
+- **Dialogs**: Codex SSH sync, account benchmark confirmations, experimental model editing, notification image previews, and automatic switching account selection can scroll in short windows. Clicking outside the Trae and WorkBuddy automatic check-in settings keeps the dialog open.
+
 ## [1.3.82] - 2026-11-12
 
 ### Added

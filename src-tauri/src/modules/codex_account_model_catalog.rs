@@ -2953,7 +2953,7 @@ fn sync_api_key_model_catalog_to_dir(
     // 官方 DeepSeek 使用官方 DeepSeek 目录/工具声明，避免客户端发出上游不认的
     // GPT 专属字段（如 web_search 的 search_content_types）。
     if is_deepseek_responses_account(account) {
-        return sync_deepseek_shell_remap_catalog_to_dir(base_dir, account);
+        return sync_deepseek_gateway_catalog_to_dir(base_dir, account);
     }
 
     let config_path = get_config_toml_path(base_dir);
@@ -3070,7 +3070,7 @@ fn sync_or_cleanup_account_model_catalog_for_dir(
             write_deepseek_official_responses_runtime_to_dir(base_dir, account)?;
             return Ok(());
         }
-        let _ = sync_deepseek_shell_remap_catalog_to_dir(base_dir, account)?;
+        let _ = sync_deepseek_gateway_catalog_to_dir(base_dir, account)?;
         return Ok(());
     }
     let _ = cleanup_deepseek_official_model_catalog_for_dir(base_dir)?;
@@ -3286,7 +3286,15 @@ fn rebuild_managed_catalog_from_existing(catalog_path: &Path) -> Result<(), Stri
                 let levels = if customized && old["supported_reasoning_levels"].is_array() { &old["supported_reasoning_levels"] } else { &template["supported_reasoning_levels"] };
                 model["supported_reasoning_levels"] = levels.clone();
                 let old_default = old["default_reasoning_level"].as_str();
-                model["default_reasoning_level"] = if levels.as_array().is_some_and(|items| items.iter().any(|item| item["effort"].as_str() == old_default)) { old["default_reasoning_level"].clone() } else { template["default_reasoning_level"].clone() };
+                model["default_reasoning_level"] = if customized
+                    && levels.as_array().is_some_and(|items| {
+                        items.iter().any(|item| item["effort"].as_str() == old_default)
+                    })
+                {
+                    old["default_reasoning_level"].clone()
+                } else {
+                    template["default_reasoning_level"].clone()
+                };
             }
             // Preserve provider-supplied modalities when rebuilding from disk.
             // For an attached API service the current key's route wins below.

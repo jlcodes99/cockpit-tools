@@ -26,8 +26,8 @@ pub(super) fn normalize_empty_function_arguments(body: &mut Value) {
     }
 }
 
-/// DeepSeek requires tool results immediately after their calls. Repair inline
-/// history only; continuation references may own results outside this request.
+/// DeepSeek requires results immediately after the entire batch of calls.
+/// Repair inline history only; continuation references may own results outside this request.
 pub(super) fn normalize_deepseek_tool_history(body: &mut Value) {
     if !body["previous_response_id"].is_null() || !body["conversation"].is_null() {
         return;
@@ -46,59 +46,82 @@ pub(super) fn normalize_deepseek_tool_history(body: &mut Value) {
             *last = index;
         }
     }
-    let mut moves = HashMap::new();
+    let mut batches = HashMap::new();
     let mut moved_outputs = HashSet::new();
-    let mut missing = HashSet::new();
-    for (index, item) in input.iter().enumerate() {
-        let output_type = match item["type"].as_str() {
-            Some("function_call") if item["arguments"].is_string() => "function_call_output",
-            Some("custom_tool_call") if item["input"].is_string() => "custom_tool_call_output",
-            _ => continue,
-        };
-        let Some(id) = item["call_id"].as_str().filter(|id| !id.trim().is_empty()) else {
-            continue;
-        };
-        if !item["name"].as_str().is_some_and(|name| !name.is_empty()) || opaque_call(item) {
+    let mut batch_start = 0;
+    while batch_start < input.len() {
+        let batch_len = input[batch_start..]
+            .iter()
+            .take_while(|item| {
+                matches!(item["type"].as_str(), Some("function_call" | "custom_tool_call"))
+            })
+            .count();
+        if batch_len == 0 {
+            batch_start += 1;
             continue;
         }
-        match occurrences[id] {
-            (1, _) if output_type == "function_call_output" => {
-                missing.insert(index);
-            }
-            (2, output) if output > index + 1
-                && input[output]["type"] == output_type
-                && !opaque_call(&input[output]) =>
-            {
-                moves.insert(index, output);
-                moved_outputs.insert(output);
-            }
-            _ => {}
+        let batch_end = batch_start + batch_len;
+        let pairs = (batch_start..batch_end)
+            .map(|index| {
+                let call = &input[index];
+                let output_type = match call["type"].as_str() {
+                    Some("function_call") if call["arguments"].is_string() => "function_call_output",
+                    Some("custom_tool_call") if call["input"].is_string() => "custom_tool_call_output",
+                    _ => return None,
+                };
+                let id = call["call_id"].as_str().filter(|id| !id.trim().is_empty())?;
+                if !call["name"].as_str().is_some_and(|name| !name.is_empty()) || opaque_call(call) {
+                    return None;
+                }
+                match occurrences[id] {
+                    (1, _) if output_type == "function_call_output" => Some((id, None)),
+                    (2, output) if output >= batch_end
+                        && input[output]["type"] == output_type
+                        && !opaque_call(&input[output]) =>
+                    {
+                        Some((id, Some(output)))
+                    }
+                    _ => None,
+                }
+            })
+            .collect::<Option<Vec<_>>>();
+        batch_start = batch_end;
+        let Some(pairs) = pairs else {
+            continue;
+        };
+        let mut outputs: Vec<_> = pairs.iter().filter_map(|(_, output)| *output).collect();
+        outputs.sort_unstable();
+        let missing: Vec<_> = pairs
+            .into_iter()
+            .filter_map(|(id, output)| output.is_none().then(|| id.to_owned()))
+            .collect();
+        if missing.is_empty() && outputs.iter().copied().eq(batch_end..batch_end + outputs.len()) {
+            continue;
         }
+        moved_outputs.extend(outputs.iter().copied());
+        batches.insert(batch_end - 1, (outputs, missing));
     }
-    if moves.is_empty() && missing.is_empty() {
+    if batches.is_empty() {
         return;
     }
     let mut original = std::mem::take(input);
-    input.reserve(original.len() + missing.len());
+    input.reserve(original.len());
     for index in 0..original.len() {
         if moved_outputs.contains(&index) {
             continue;
         }
-        let item = original[index].take();
-        let result = if let Some(&output) = moves.get(&index) {
-            Some(original[output].take())
-        } else if missing.contains(&index) {
-            // Let the model decide how to proceed with the incomplete call.
-            Some(json!({
-                "type": "function_call_output",
-                "call_id": item["call_id"],
-                "output": "Tool result unavailable: the client did not record a result for this call."
-            }))
-        } else {
-            None
-        };
-        input.push(item);
-        input.extend(result);
+        input.push(original[index].take());
+        if let Some((outputs, missing)) = batches.remove(&index) {
+            input.extend(outputs.into_iter().map(|output| original[output].take()));
+            for call_id in missing {
+                // Let the model decide how to proceed with the incomplete call.
+                input.push(json!({
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": "Tool result unavailable: the client did not record a result for this call."
+                }));
+            }
+        }
     }
 }
 

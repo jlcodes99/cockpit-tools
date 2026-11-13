@@ -26,7 +26,7 @@ function run({ documentElement = null, pathname = '/index.html', initialMode = '
   const root = {
     location: { protocol: 'app:', hostname: '-', pathname },
     document: { documentElement },
-    __cockpitEnhancements: { quotaCompat: true, apiService: true, owner: 'preload-test' },
+    __cockpitEnhancements: { quotaCompat: true, apiService: false, owner: 'preload-test' },
     XMLHttpRequest: class {
       open(method, url) {
         this.url = url;

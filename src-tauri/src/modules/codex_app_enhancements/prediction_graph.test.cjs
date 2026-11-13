@@ -108,14 +108,14 @@ test('disabled setting performs no source discovery and no runtime activation', 
 });
 
 
-test('bound OAuth predictions stay available when Fast is disabled and quota is unsupported', async () => {
+test('bound OAuth predictions do not depend on composer quota patches', async () => {
   const {root} = setup();
   Object.assign(root.__cockpitEnhancements, { apiService: true, apiKeyAuthVerified: false, quotaCompat: true });
   root.__cockpitQuotaCompat.transform = () => ({ok: false, diagnostics: {reason: 'quota-contract-changed'}});
   const result = await root.__cockpitNativeFast.prepareDocument();
   assert.equal(result.ok, true);
-  assert.equal(result.mode, 'prediction-only');
-  assert.equal(result.quotaReason, 'quota-contract-changed');
+  assert.equal(result.mode, 'full');
+  assert.equal(result.quotaReason, undefined);
   assert.equal(result.modules.length, 3);
   assert.ok(result.patchedSource.includes('cockpit-native-predictions-graph-v1'));
   assert.ok(!result.patchedSource.includes('__cockpitQuotaCompat'));

@@ -1519,7 +1519,7 @@
       "codexPreserveExternalBridgeDesc": "Przy zmianie konta OAuth zachowaj most Codex Web GPT potwierdzony lokalnymi zapisami integracji. Domyślnie wyłączone.",
       "codexEnhancements": {
         "quotaCompat": "Limity w trybie mieszanym",
-        "quotaCompatDesc": "Przy prawdziwym logowaniu OAuth i zewnętrznej trasie API limit subskrypcji nie blokuje lokalnych wiadomości API. Rzeczywiste zużycie i limity obrazów nie zmieniają się.",
+        "quotaCompatDesc": "Instancje usługi API pokazują klientowi dostępną kwotę na potrzeby lokalnych kontroli. Rzeczywiste zużycie u dostawcy i limity obrazów nie zmieniają się. Ten przełącznik dotyczy tylko innych połączeń OAuth z zewnętrznym API.",
         "restartHint": "Natywne przewidywanie jest domyślnie wyłączone. Po zmianach uruchom ponownie odpowiednie instancje Codex i pozostaw Cockpit Tools włączony. Natywne dyktowanie zależy od możliwości i ustawień klienta; Cockpit go nie przejmuje ani nie wymusza jego włączenia.",
         "configFailed": "Nie udało się odczytać lub zapisać ustawień: {{error}}",
         "nativePredictions": "Natywne przewidywanie następnego kroku (Tab)",
@@ -2222,7 +2222,13 @@
     "refreshTime": "Odświeżenie",
     "lastSwitchTimeFull": "Przełączenie: {{time}}",
     "refreshTimeFull": "Odświeżenie: {{time}}",
-    "toggleTimeMode": "Pokaż czas przełączenia lub odświeżenia"
+    "toggleTimeMode": "Pokaż czas przełączenia lub odświeżenia",
+    "quotaSummary": {
+      "geminiModels": "Modele Gemini",
+      "claudeAndGptModels": "Modele Claude i GPT",
+      "weeklyLimit": "Limit tygodniowy",
+      "fiveHourLimit": "Limit 5 godz."
+    }
   },
   "overview": {
     "title": "Przegląd kont",
@@ -2680,6 +2686,10 @@
     "quotaHistory": {
       "storage": {
         "title": "Przechowywanie historii",
+        "recordCount": "Wpisy",
+        "diskSpace": "Miejsce na dysku",
+        "defaultAccount": "Konto domyślne",
+        "recording": "Rejestrowanie",
         "usage": "{{records}} wpisów · {{size}} na dysku",
         "loadFailed": "Nie można odczytać danych o historii.",
         "enabled": "Zapisuj historię",
@@ -2714,7 +2724,14 @@
       "details": "Szczegóły",
       "onlyChanges": "Tylko zmiany",
       "noChanges": "Brak zmian limitu w tym okresie.",
-      "sampledAt": "Czas pomiaru",
+      "recordedAt": "Czas zapisu",
+      "noValue": "Brak",
+      "shortConsumed": "Zużycie limitu 5 h",
+      "weeklyConsumed": "Zużycie tygodniowe",
+      "shortRemaining": "Pozost. 5h",
+      "shortDelta": "Zmiana 5h",
+      "weeklyRemaining": "Pozost. tyg.",
+      "weeklyDelta": "Zmiana tyg.",
       "changeFromPrevious": "Zmiana względem poprzedniego pomiaru",
       "points": "{{value}} p.p.",
       "account": "Konto",
@@ -8442,6 +8459,7 @@
       "addToClaude": "Dodaj do Claude CLI",
       "addToClaudeDesktop": "Dodaj do Claude",
       "addToClaudeCli": "Dodaj do Claude CLI",
+      "addToGrok": "Dodaj do Grok",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "Szybkie wdrożenie do Codex",
@@ -8485,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "Usługa rozliczeniowa Grok nie zwróciła danych o limicie. Spróbuj ponownie później.",
     "search": "Szukaj kont Grok CLI...",
     "flowNotice": {
       "title": "Zarządzanie kontami Grok CLI",

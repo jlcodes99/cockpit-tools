@@ -366,6 +366,17 @@
   cursor: not-allowed;
 }
 
+.settings-dropdown .single-select-dropdown-trigger {
+  min-width: 120px;
+  min-height: 34px;
+  padding: 6px 10px 6px 12px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
 .settings-select--input-mode {
   background-image: none;
   padding-right: 12px;

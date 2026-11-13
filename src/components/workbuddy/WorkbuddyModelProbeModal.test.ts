@@ -14,6 +14,7 @@ test('probe avoids duplicate submissions and keeps cleanup failures visible insi
   const h = loadHookModule(new URL('./WorkbuddyModelProbeModal.tsx', import.meta.url), {
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
     '../../types/workbuddy': { getWorkbuddyAccountDisplayEmail: (account: any) => account.email },
+    '../../presentation/platformAccountPresentation': { buildWorkbuddyAccountPresentation: () => ({ planLabel: 'PRO', planClass: 'pro' }) },
     '../SingleSelectFilterDropdown': { SingleSelectFilterDropdown: 'picker' },
     '../../hooks/useEscClose': { useEscCloseTopmost() {} },
     '../../services/workbuddyService': {

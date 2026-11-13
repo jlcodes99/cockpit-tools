@@ -973,6 +973,7 @@
       "addToClaude": "添加到 Claude CLI",
       "addToClaudeDesktop": "添加到 Claude",
       "addToClaudeCli": "添加到 Claude CLI",
+      "addToGrok": "添加到 Grok",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "快速部署到 Codex",
@@ -1755,7 +1756,7 @@
       "codexPreserveExternalBridgeDesc": "OAuth 切号时保留经本地记录验证的 Codex Web GPT 桥接；默认关闭。",
       "codexEnhancements": {
         "quotaCompat": "混合模式额度兼容",
-        "quotaCompatDesc": "仅真实 OAuth 登录且走外部 API 路由时，避免订阅额度拦截本地 API 消息；不改变真实用量和图像额度。",
+        "quotaCompatDesc": "API 服务实例使用可用额度视图，仅调整客户端显示和本地判断；真实上游用量及图像额度不变。此开关仅用于其他 OAuth＋外部 API 混合模式。",
         "restartHint": "原生下一步预测默认关闭。修改后需重启各目标 Codex 实例，并保持 Cockpit Tools 运行。原生听写由客户端能力与设置决定，Cockpit 不接管或强制启用。",
         "configFailed": "设置读取或保存失败：{{error}}",
         "nativePredictions": "原生下一步预测（Tab）",
@@ -2462,6 +2463,12 @@
     "tagUpdated": "标签已更新",
     "plan": {
       "personal": "个人"
+    },
+    "quotaSummary": {
+      "geminiModels": "Gemini 模型",
+      "claudeAndGptModels": "Claude 与 GPT 模型",
+      "weeklyLimit": "每周限额",
+      "fiveHourLimit": "5 小时限额"
     }
   },
   "overview": {
@@ -2920,6 +2927,10 @@
     "quotaHistory": {
       "storage": {
         "title": "历史存储",
+        "recordCount": "记录数",
+        "diskSpace": "占用空间",
+        "defaultAccount": "默认账号",
+        "recording": "记录设置",
         "usage": "{{records}} 条记录 · 占用 {{size}}",
         "loadFailed": "无法读取历史存储。",
         "enabled": "记录额度历史",
@@ -2954,7 +2965,14 @@
       "details": "明细",
       "onlyChanges": "仅看变化",
       "noChanges": "此时段暂无额度变化。",
-      "sampledAt": "采样时间",
+      "recordedAt": "记录时间",
+      "noValue": "无",
+      "shortConsumed": "5h消耗",
+      "weeklyConsumed": "周消耗",
+      "shortRemaining": "5h 剩余",
+      "shortDelta": "5h 变化",
+      "weeklyRemaining": "周剩余",
+      "weeklyDelta": "周变化",
       "changeFromPrevious": "较上一条采样的变化",
       "points": "{{value}} 个百分点",
       "account": "账号",
@@ -8485,6 +8503,7 @@
     "btnExportTitle": "导出已保存为 JSON"
   },
   "grok": {
+    "emptyBillingQuota": "Grok 账单接口未返回额度数据，请稍后重试。",
     "search": "搜索 Grok CLI 账号...",
     "flowNotice": {
       "title": "Grok CLI 账号管理说明",

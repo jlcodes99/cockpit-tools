@@ -196,7 +196,9 @@ fn go_claude_initial_signature_is_emitted_only_after_done_when_final_is_missing(
     let done = stream.push(&json!({"type":"response.output_item.done","output_index":0,"item":{"id":"a","type":"reasoning"}})).unwrap();
     assert!(done
         .iter()
-        .any(|frame| frame.data["delta"]["signature"] == "fallback-cipher"));
+        .any(|frame| frame.data["content_block"] == json!({
+            "type":"redacted_thinking","data":"fallback-cipher"
+        })));
 }
 
 #[test]

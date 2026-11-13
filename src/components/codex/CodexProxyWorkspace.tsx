@@ -7,6 +7,7 @@ import { formatTrafficBytes } from '../../utils/codexProxyTraffic';
 import { canUseCodexAccountProxy } from '../../utils/codexAccountProxy';
 import { useCodexProxyAccountName } from './useCodexProxyExitEditor';
 import { SingleSelectDropdown } from '../SingleSelectDropdown';
+import { CodexAccountPlanBadge } from './CodexAccountPlanBadge';
 import '../../styles/pages/codex-proxy-workspace.css';
 
 /** Full-width task lists; operational tools live one level below the two primary tabs. */
@@ -61,7 +62,7 @@ export function CodexProxyWorkspace({ onBack }: { onBack: () => void }) {
             aria-current={section === id ? 'page' : undefined} onClick={() => goSection(id)}>{t(PROXY_SECTION_LABEL_KEYS[id])}</button>)}
         </nav>
         {eligible.length > 0 && <SingleSelectDropdown value={selectedId} onChange={selectAccount}
-          ariaLabel={t('codex.proxy.accountsTitle')} options={eligible.map((entry) => ({ value: entry.id, label: resolveName(entry) }))} />}
+          ariaLabel={t('codex.proxy.accountsTitle')} options={eligible.map((entry) => ({ value: entry.id, label: resolveName(entry), badge: <CodexAccountPlanBadge account={entry} /> }))} />}
       </div>
     </div>}
     <section className={`codex-proxy-manager-content${primary ? '' : ' is-diagnostic'}`} aria-label={t(PROXY_SECTION_LABEL_KEYS[section])}>

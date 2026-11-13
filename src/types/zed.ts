@@ -86,6 +86,23 @@ export function getZedAccountDisplayEmail(account: ZedAccount): string {
   return account.display_name || account.github_login || account.user_id || account.id;
 }
 
+export function getZedPlanTone(planRaw?: string | null): string {
+  const normalized = (planRaw || '').trim().toLowerCase();
+  if (!normalized) return 'unknown';
+  if (normalized.includes('enterprise') || normalized.includes('team')) return 'enterprise';
+  if (normalized.includes('trial')) return 'trial';
+  if (
+    normalized.includes('pro') ||
+    normalized.includes('plus') ||
+    normalized.includes('ultra') ||
+    normalized.includes('ultimate')
+  ) {
+    return 'pro';
+  }
+  if (normalized.includes('free')) return 'free';
+  return 'unknown';
+}
+
 export function getZedPlanBadge(account: ZedAccount): string {
   const raw = account.plan_raw?.trim();
   if (!raw) return 'UNKNOWN';

@@ -497,6 +497,7 @@
   border-color: rgba(239, 68, 68, 0.3);
 }
 
+.tier-badge.account-picker-plan,
 .ghcp-account-card .tier-badge,
 .ghcp-accounts-page .account-table .tier-badge {
   flex-shrink: 0;
@@ -513,11 +514,13 @@
   white-space: nowrap;
 }
 
+.tier-badge.account-picker-plan::before,
 .ghcp-account-card .tier-badge::before,
 .ghcp-accounts-page .account-table .tier-badge::before {
   display: none;
 }
 
+.tier-badge.account-picker-plan.raw-value,
 .ghcp-account-card .tier-badge.raw-value,
 .ghcp-accounts-page .account-table .tier-badge.raw-value {
   text-transform: none;
@@ -1026,6 +1029,7 @@
   border: 1px solid var(--plan-business-border);
 }
 
+.tier-badge.account-picker-plan.plus,
 .ghcp-account-card .tier-badge.plus,
 .ghcp-accounts-page .account-table .tier-badge.plus {
   background: var(--plan-plus-bg);

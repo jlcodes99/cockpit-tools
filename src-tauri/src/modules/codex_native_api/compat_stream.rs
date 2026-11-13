@@ -155,7 +155,10 @@ impl CompatStreamAdapter {
         let key = item["id"]
             .as_str()
             .map(|id| format!("reasoning:{id}"))
-            .or_else(|| output_index.map(|index| format!("reasoning-index:{index}")))
+            .or_else(|| output_index.map(|index| {
+                self.reasoning_keys.get(&index).cloned()
+                    .unwrap_or_else(|| format!("reasoning-index:{index}"))
+            }))
             .unwrap_or_else(|| self.reasoning_key.clone());
         if self.signed_reasoning.contains(&key) {
             return;
@@ -172,28 +175,19 @@ impl CompatStreamAdapter {
         if signature.is_empty() {
             return;
         }
-        let mut block = self.blocks.get(&key).copied().or_else(|| {
-            self.blocks
-                .get(&self.reasoning_key)
-                .copied()
-                .filter(|index| !self.closed_blocks.contains(index))
-        });
-        if block.is_none() && !signature.is_empty() {
-            let index = self.next_block;
-            self.next_block += 1;
-            self.blocks.insert(key.clone(), index);
-            out.push(self.frame(json!({"type":"content_block_start","index":index,"content_block":{"type":"thinking","thinking":"","signature":""}})));
-            block = Some(index);
-        }
-        if let Some(index) = block {
-            if !signature.is_empty() {
-                out.push(self.frame(json!({"type":"content_block_delta","index":index,"delta":{"type":"signature_delta","signature":signature}})));
-            }
+        if let Some(index) = self.blocks.get(&key).copied() {
             if self.closed_blocks.insert(index) {
+                out.push(self.frame(json!({"type":"content_block_delta","index":index,"delta":{"type":"signature_delta","signature":signature}})));
                 out.push(self.frame(json!({"type":"content_block_stop","index":index})));
             }
-            self.signed_reasoning.insert(key);
+        } else {
+            let index = self.next_block;
+            self.next_block += 1;
+            self.closed_blocks.insert(index);
+            out.push(self.frame(json!({"type":"content_block_start","index":index,"content_block":{"type":"redacted_thinking","data":signature}})));
+            out.push(self.frame(json!({"type":"content_block_stop","index":index})));
         }
+        self.signed_reasoning.insert(key);
     }
     fn hosted_search(&mut self, item: &Value, out: &mut Vec<CompatFrame>) {
         if self.context.flavor != CompatFlavor::Claude {

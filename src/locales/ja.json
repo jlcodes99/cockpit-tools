@@ -1519,7 +1519,7 @@
       "codexPreserveExternalBridgeDesc": "OAuth アカウント切替時、ローカル記録で検証済みの Codex Web GPT ブリッジを保持します。既定はオフです。",
       "codexEnhancements": {
         "quotaCompat": "併用時の上限互換",
-        "quotaCompatDesc": "実際の OAuth ログインと外部 API 経路の併用時のみ、契約の利用上限によるローカル API 送信の制限を防ぎます。実際の使用量と画像上限は変更しません。",
+        "quotaCompatDesc": "API サービスのインスタンスでは、クライアントの表示とローカル判定に利用可能な枠を提供します。上流の実際の使用量や画像の利用枠は変わりません。この設定は、その他の OAuth と外部 API の併用にのみ適用されます。",
         "restartHint": "ネイティブの予測は初期状態では無効です。変更後は対象の Codex インスタンスを再起動し、Cockpit Tools を起動したままにしてください。ネイティブの音声入力はクライアントの機能と設定に従います。Cockpit は処理を置き換えたり、強制的に有効化したりしません。",
         "configFailed": "設定の読み込みまたは保存に失敗：{{error}}",
         "nativePredictions": "ネイティブの次のステップ予測（Tab）",
@@ -2222,7 +2222,13 @@
     "refreshTime": "更新時刻",
     "lastSwitchTimeFull": "切替：{{time}}",
     "refreshTimeFull": "更新：{{time}}",
-    "toggleTimeMode": "切替時刻と更新時刻を切り替える"
+    "toggleTimeMode": "切替時刻と更新時刻を切り替える",
+    "quotaSummary": {
+      "geminiModels": "Gemini モデル",
+      "claudeAndGptModels": "Claude・GPT モデル",
+      "weeklyLimit": "週間上限",
+      "fiveHourLimit": "5時間上限"
+    }
   },
   "overview": {
     "title": "アカウント概要",
@@ -2680,6 +2686,10 @@
     "quotaHistory": {
       "storage": {
         "title": "履歴の保存",
+        "recordCount": "記録数",
+        "diskSpace": "使用容量",
+        "defaultAccount": "既定のアカウント",
+        "recording": "記録設定",
         "usage": "{{records}} 件 · ディスク使用量 {{size}}",
         "loadFailed": "履歴の保存情報を読み取れません。",
         "enabled": "履歴を記録",
@@ -2714,7 +2724,14 @@
       "details": "明細",
       "onlyChanges": "変動のみ",
       "noChanges": "この期間に割り当ての変動はありません。",
-      "sampledAt": "記録時刻",
+      "recordedAt": "記録時刻",
+      "noValue": "なし",
+      "shortConsumed": "5時間枠の消費",
+      "weeklyConsumed": "週間枠の消費",
+      "shortRemaining": "5h 残量",
+      "shortDelta": "5h 変化",
+      "weeklyRemaining": "週間残量",
+      "weeklyDelta": "週間変化",
       "changeFromPrevious": "前回の記録からの変動",
       "points": "{{value}} ポイント",
       "account": "アカウント",
@@ -8442,6 +8459,7 @@
       "addToClaude": "Claude CLI に追加",
       "addToClaudeDesktop": "Claude に追加",
       "addToClaudeCli": "Claude CLI に追加",
+      "addToGrok": "Grok に追加",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "Codex へクイック展開",
@@ -8485,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "Grok の請求サービスから使用枠のデータが返されませんでした。後で再試行してください。",
     "search": "Grok CLI アカウントを検索...",
     "flowNotice": {
       "title": "Grok CLI アカウント管理",

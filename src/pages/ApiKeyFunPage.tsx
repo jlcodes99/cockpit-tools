@@ -31,6 +31,7 @@ import {
   getApiKeyFunPrefillPage,
   type ApiKeyFunPrefillTarget,
 } from '../utils/apiKeyFunPrefill';
+import { resolveApiKeyFunGrokModel } from '../utils/apikeyFunClientConfigs';
 import { ApiKeyFunKeyConfigModal } from '../components/apiKeyFun/ApiKeyFunKeyConfigModal';
 import { ApiKeyFunPromotionHeader } from '../components/apiKeyFun/ApiKeyFunPromotionHeader';
 import { useSponsorStore } from '../stores/useSponsorStore';
@@ -182,7 +183,8 @@ export function ApiKeyFunPage() {
   );
   const canAddCurrentKeyToCodex = modelCatalogText.includes('gpt');
   const canAddCurrentKeyToClaude = apiKeyFunModelCatalog.some(isClaudeModelId);
-  const canShowTargetActions = canAddCurrentKeyToCodex || canAddCurrentKeyToClaude;
+  const canAddCurrentKeyToGrok = Boolean(resolveApiKeyFunGrokModel(apiKeyFunModelCatalog));
+  const canShowTargetActions = canAddCurrentKeyToCodex || canAddCurrentKeyToClaude || canAddCurrentKeyToGrok;
   const canPrefillCurrentKey =
     Boolean(currentSavedKey) && !queryingModels && apiKeyFunModelCatalog.length > 0;
 
@@ -448,7 +450,7 @@ export function ApiKeyFunPage() {
       ? 'Codex'
       : target === 'claude_desktop'
         ? 'Claude'
-        : 'Claude CLI';
+        : target === 'grok' ? 'Grok CLI' : 'Claude CLI';
     window.dispatchEvent(new CustomEvent<typeof page>('app-request-navigate', { detail: page }));
     window.setTimeout(() => {
       dispatchApiKeyFunPrefillEvent({
@@ -456,7 +458,7 @@ export function ApiKeyFunPage() {
         apiKey: key,
         apiKeyName: item.name || buildManagedKeyName(key),
         providerName: 'APIKEY.FUN',
-        baseUrl: target === 'codex' ? providerBaseUrl : claudeBaseUrl,
+        baseUrl: target === 'codex' || target === 'grok' ? providerBaseUrl : claudeBaseUrl,
         sourceTag: APIKEY_FUN_SOURCE_TAG,
         modelCatalog: apiKeyFunModelCatalog,
       });
@@ -637,6 +639,18 @@ export function ApiKeyFunPage() {
               </div>
               {canShowTargetActions && (
                 <div className="apikey-fun-target-actions">
+                  {canAddCurrentKeyToGrok && (
+                    <button
+                      type="button"
+                      className="btn apikey-fun-target-btn"
+                      disabled={!canPrefillCurrentKey}
+                      onClick={() => {
+                        if (currentSavedKey) handlePrefillTarget('grok', currentSavedKey);
+                      }}
+                    >
+                      <span>{t('apiKeyFun.keyManager.addToGrok', 'Add to Grok')}</span>
+                    </button>
+                  )}
                   {canAddCurrentKeyToCodex && (
                     <button
                       type="button"

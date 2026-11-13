@@ -651,6 +651,17 @@ fn native_model_for_key(
         .iter()
         .find(|alias| alias.alias.eq_ignore_ascii_case(base_model))
         .map(|alias| alias.source_model.as_str())
+        .or_else(|| {
+            // Old Codex threads can still send a GPT-shaped ID to the DeepSeek
+            // instance they were bound to. Shared API service keys keep GPT IDs.
+            let key = key.filter(|key| {
+                matches!(key.account_ids.as_slice(), [id] if key.id == provider_gateway_api_key_id(id))
+            })?;
+            let gateway = key.provider_gateway.as_ref().filter(|gateway| {
+                codex_account::is_official_deepseek_base_url(&gateway.base_url)
+            })?;
+            legacy_deepseek_model_id(base_model, gateway.upstream_models.iter().map(String::as_str))
+        })
         .unwrap_or(base_model);
     if native_excluded(&collection.excluded_models, canonical)
         || key.is_some_and(|key| native_excluded(&key.excluded_models, canonical))

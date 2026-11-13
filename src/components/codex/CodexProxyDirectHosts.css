@@ -17,3 +17,18 @@
 .codex-proxy-direct-hosts textarea:disabled { opacity: .6; cursor: not-allowed; }
 .codex-proxy-direct-hosts textarea[aria-invalid="true"] { border-color: var(--danger, #dc2626); }
 .codex-proxy-direct-hosts p.codex-proxy-direct-hosts-error { color: var(--danger, #dc2626); }
+
+.qs-section > .codex-proxy-direct-hosts {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.qs-section > .codex-proxy-direct-hosts:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.qs-section > .codex-proxy-direct-hosts label {
+  font-size: 13px;
+  font-weight: 500;
+}

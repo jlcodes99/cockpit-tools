@@ -10,6 +10,7 @@ pub(crate) struct HistorySettings {
     cleanup_every_days: i64,
     pub(super) account_ids: Option<Vec<String>>,
     pub(super) only_changes: bool,
+    default_account_id: Option<String>,
 }
 
 impl Default for HistorySettings {
@@ -21,7 +22,8 @@ impl Default for HistorySettings {
             auto_cleanup: true,
             cleanup_every_days: 1,
             account_ids: None,
-            only_changes: false,
+            only_changes: true,
+            default_account_id: None,
         }
     }
 }
@@ -376,6 +378,33 @@ mod tests {
             to: 4 * MINUTE,
         };
         assert_eq!(range_statement(&conn, &all, false).unwrap(), 4);
+    }
+
+    #[test]
+    fn upgrade_enables_changes_only_once_and_keeps_other_settings_and_samples() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("history.sqlite");
+        let conn = open_writer(&path).unwrap();
+        let old = HistorySettings {
+            only_changes: false,
+            interval_minutes: 15,
+            retention_days: 45,
+            account_ids: Some(vec!["a".into()]),
+            ..HistorySettings::default()
+        };
+        save_settings(&conn, &old).unwrap();
+        insert(&conn, "a", "identity", DAY);
+        conn.pragma_update(None, "user_version", 1).unwrap();
+        drop(conn);
+
+        let upgraded = open_writer(&path).unwrap();
+        assert_eq!(read_settings(&upgraded).unwrap(), HistorySettings { only_changes: true, ..old.clone() });
+        let count: i64 = upgraded.query_row("SELECT COUNT(*) FROM quota_samples", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 1);
+        let opted_out = HistorySettings { default_account_id: Some("a".into()), ..old };
+        save_settings(&upgraded, &opted_out).unwrap();
+        drop(upgraded);
+        assert_eq!(read_settings(&open_writer(&path).unwrap()).unwrap(), opted_out);
     }
 
     #[test]

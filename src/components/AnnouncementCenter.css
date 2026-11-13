@@ -360,8 +360,10 @@
   z-index: 10040;
   background: rgba(0, 0, 0, 0.8);
   display: flex;
-  align-items: center;
+  align-items: safe center;
   justify-content: center;
+  overflow-y: auto;
+  padding: 24px;
   -webkit-app-region: no-drag;
 }
 

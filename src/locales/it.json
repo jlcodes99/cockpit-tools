@@ -1519,7 +1519,7 @@
       "codexPreserveExternalBridgeDesc": "Mantieni il ponte Codex Web GPT verificato dai dati locali quando cambi account OAuth. Disattivato per impostazione predefinita.",
       "codexEnhancements": {
         "quotaCompat": "Quote in modalità mista",
-        "quotaCompatDesc": "Con accesso OAuth reale e un percorso API esterno, evita che la quota dell’abbonamento blocchi i messaggi API locali. Consumi reali e quote immagini restano invariati.",
+        "quotaCompatDesc": "Le istanze del servizio API mostrano una quota disponibile per la visualizzazione e i controlli locali del client. L’utilizzo effettivo del fornitore e i limiti delle immagini restano invariati. Questa opzione riguarda solo le altre combinazioni di OAuth e API esterna.",
         "restartHint": "Le previsioni native sono disattivate per impostazione predefinita. Riavvia ogni istanza Codex interessata dopo le modifiche e tieni Cockpit Tools aperto. La dettatura nativa dipende dalle funzionalità e impostazioni del client; Cockpit non la sostituisce né ne forza l’attivazione.",
         "configFailed": "Impossibile leggere o salvare le impostazioni: {{error}}",
         "nativePredictions": "Previsioni native del passo successivo (Tab)",
@@ -2222,7 +2222,13 @@
     "refreshTime": "Aggiornamento",
     "lastSwitchTimeFull": "Cambio: {{time}}",
     "refreshTimeFull": "Aggiornamento: {{time}}",
-    "toggleTimeMode": "Mostra orario del cambio o dell’aggiornamento"
+    "toggleTimeMode": "Mostra orario del cambio o dell’aggiornamento",
+    "quotaSummary": {
+      "geminiModels": "Modelli Gemini",
+      "claudeAndGptModels": "Modelli Claude e GPT",
+      "weeklyLimit": "Limite settimanale",
+      "fiveHourLimit": "Limite 5 h"
+    }
   },
   "overview": {
     "title": "Panoramica Account",
@@ -2680,6 +2686,10 @@
     "quotaHistory": {
       "storage": {
         "title": "Archivio della cronologia",
+        "recordCount": "Record salvati",
+        "diskSpace": "Spazio su disco",
+        "defaultAccount": "Account predefinito",
+        "recording": "Registrazione",
         "usage": "{{records}} rilevazioni · {{size}} su disco",
         "loadFailed": "Impossibile leggere l’archivio della cronologia.",
         "enabled": "Registra cronologia",
@@ -2714,7 +2724,14 @@
       "details": "Dettagli",
       "onlyChanges": "Solo variazioni",
       "noChanges": "Nessuna variazione della quota in questo periodo.",
-      "sampledAt": "Ora del rilevamento",
+      "recordedAt": "Ora della registrazione",
+      "noValue": "Nessuno",
+      "shortConsumed": "Consumo 5 ore",
+      "weeklyConsumed": "Consumo settimanale",
+      "shortRemaining": "Residuo 5h",
+      "shortDelta": "Var. 5h",
+      "weeklyRemaining": "Residuo sett.",
+      "weeklyDelta": "Var. sett.",
       "changeFromPrevious": "Variazione rispetto al rilevamento precedente",
       "points": "{{value}} p.p.",
       "account": "Account",
@@ -8442,6 +8459,7 @@
       "addToClaude": "Aggiungi a Claude CLI",
       "addToClaudeDesktop": "Aggiungi a Claude",
       "addToClaudeCli": "Aggiungi a Claude CLI",
+      "addToGrok": "Aggiungi a Grok",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "Distribuzione rapida su Codex",
@@ -8485,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "La fatturazione Grok non ha restituito dati sulla quota. Riprova più tardi.",
     "search": "Cerca account Grok CLI...",
     "flowNotice": {
       "title": "Gestione account Grok CLI",

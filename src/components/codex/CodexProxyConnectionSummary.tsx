@@ -2,11 +2,11 @@ import type { Ref } from 'react';
 import { ArrowLeftRight, Gauge, RefreshCw, Server } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { CodexProxyRuntimeStatus } from '../../services/codexAccountProxyService';
-import { getCodexPlanBadgePresentation, type CodexAccount } from '../../types/codex';
+import type { CodexAccount } from '../../types/codex';
+import { CodexAccountPlanBadge } from './CodexAccountPlanBadge';
 import { proxyPreviewBinding, proxyRuntimeLabelKey } from '../../utils/codexProxyPreview';
 import { codexProxyCardPresentation } from '../../utils/codexProxyDisplay';
 import { proxySummary } from '../../utils/codexProxyPresentation';
-import { withCodexPlanBadgeStyle } from '../../utils/codexPreferences';
 
 export function CodexProxyConnectionSummary({ account, status, failed, onSwitch, onFollow, onDisable, onMeasure, measuring = false, switchButtonRef }: {
   account: CodexAccount;
@@ -24,9 +24,6 @@ export function CodexProxyConnectionSummary({ account, status, failed, onSwitch,
   const saved = binding.summary;
   // Cards and preview use the same leaf/measurement selection, including merged channels.
   const { nodes } = codexProxyCardPresentation(account, status);
-  const badge = getCodexPlanBadgePresentation(account, { preserveRawNonProLabel: true });
-  const rawPlan = account.plan_type?.trim() ? badge.label : undefined;
-  const planClass = rawPlan ? withCodexPlanBadgeStyle(badge.className) : '';
   const sourceKey = account.egress_proxy_error ? 'codex.proxy.modeStale' : account.egress_proxy_disabled ? 'codex.proxy.modeDisabled' : binding.source === 'account' ? 'codex.proxy.modeIndependent' : binding.source === 'unified'
     ? 'codex.proxy.modeUnified' : binding.source === 'unknown'
       ? failed ? 'codex.proxy.runtimeUnavailable' : 'codex.proxy.runtimeLoading' : 'codex.proxy.filter_unbound';
@@ -34,7 +31,7 @@ export function CodexProxyConnectionSummary({ account, status, failed, onSwitch,
     <div className="codex-proxy-preview-node">
       <div className="codex-proxy-preview-eyebrow"><Server size={16} />
         <span className={`codex-proxy-preview-badge${saved ? ' is-bound' : ''}`}>{t(sourceKey)}</span>
-        {rawPlan && <span className={`tier-badge ${planClass}`} title={rawPlan}>{rawPlan}</span>}
+        <CodexAccountPlanBadge account={account} />
       </div>
       <h3>{account.egress_proxy_disabled ? t('codex.proxy.modeDisabled') : saved?.name || (saved ? proxySummary(saved) : t(binding.source === 'none' ? 'codex.proxy.unboundHint' : sourceKey))}</h3>
       <div className="codex-proxy-preview-metadata">

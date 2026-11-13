@@ -17,7 +17,7 @@ test("quota details page newest first and compare to the original preceding samp
   const h = loadHookModule(new URL("./CodexQuotaHistoryDetails.tsx", import.meta.url), {
     "../PaginationControls": { PaginationControls: Pagination },
     "react-i18next": { useTranslation: () => ({
-      t: (key: string, args?: { value: string }) => args ? `${args.value} pp` : key,
+      t: (key: string) => key,
       i18n: { language: "en-US" },
     }) },
   });
@@ -29,31 +29,99 @@ test("quota details page newest first and compare to the original preceding samp
   }));
   let onlyChanges = false;
   h.render(() => h.exports.CodexQuotaHistoryDetails({
-    points, onlyChanges, onOnlyChangesChange: (value: boolean) => { onlyChanges = value; },
+    history: { points, shortConsumed: 3, weeklyConsumed: 40, intervalMinutes: 1 },
+    onlyChanges, onOnlyChangesChange: (value: boolean) => { onlyChanges = value; },
   }));
   const pagination = () => elements(h.flush()).find((element) => element.type === Pagination)!.props;
   const rowAt = (index: number) => elements(h.flush()).filter((element) => element.type === "tr").find((row) =>
     elements(row).some((element) => element.type === "time" && element.props.dateTime === new Date(points[index].observedAt).toISOString()));
   const deltas = (index: number) => elements(rowAt(index)).filter((element) =>
-    element.props.className === "codex-quota-history__delta").map((element) => element.props.children);
+    element.props.className === "codex-quota-history__delta").map((element) => ({
+      text: element.props.children,
+      direction: element.props["data-direction"],
+    }));
   const timeCount = () => elements(h.flush()).filter((element) => element.type === "time").length;
+  const totals = () => elements(h.flush()).filter((element) => element.type === "dd").map((element) => element.props.children);
 
   assert.equal(timeCount(), 20);
+  assert.deepEqual(totals(), ["-3%", "-40%"]);
   assert.ok(rowAt(21));
-  assert.deepEqual(deltas(21), ["-1 pp", "0 pp"]);
-  assert.deepEqual(deltas(3), ["—", "0 pp"]);
+  assert.deepEqual(deltas(21), [
+    { text: "-1%", direction: "down" },
+    { text: "--", direction: undefined },
+  ]);
+  assert.deepEqual(deltas(3), [
+    { text: "--", direction: undefined },
+    { text: "--", direction: undefined },
+  ]);
   assert.equal(rowAt(1), undefined);
   pagination().onNextPage();
   assert.equal(timeCount(), 2);
-  assert.deepEqual(deltas(1), ["-2 pp", "-40 pp"]);
+  assert.deepEqual(totals(), ["-3%", "-40%"]);
+  assert.deepEqual(deltas(1), [
+    { text: "-2%", direction: "down" },
+    { text: "-40%", direction: "down" },
+  ]);
   assert.ok(elements(rowAt(1)).some((element) => element.type === "strong" && element.props.children === "0%"));
-  assert.deepEqual(deltas(0), ["—", "—"]);
+  assert.deepEqual(deltas(0), [
+    { text: "--", direction: undefined },
+    { text: "--", direction: undefined },
+  ]);
 
   elements(h.flush()).find((element) => element.props.role === "switch")!.props.onClick();
   assert.equal(pagination().currentPage, 1);
-  assert.equal(timeCount(), 4);
-  assert.deepEqual(deltas(2), ["—", "+41 pp"]);
-  assert.deepEqual(deltas(20), ["+1 pp", "0 pp"]);
+  // 4 changed rows (21, 20, 2, 1) + 1 baseline row (0)
+  assert.equal(timeCount(), 5);
+  assert.deepEqual(totals(), ["-3%", "-40%"]);
+  assert.deepEqual(deltas(2), [
+    { text: "--", direction: undefined },
+    { text: "+41%", direction: "up" },
+  ]);
+  assert.deepEqual(deltas(20), [
+    { text: "+1%", direction: "up" },
+    { text: "--", direction: undefined },
+  ]);
+  assert.ok(rowAt(0));
   assert.equal(rowAt(3), undefined);
+  h.unmount();
+});
+
+test("quota details formats decimal changes and retains single decimal precision", () => {
+  const Pagination = () => null;
+  const h = loadHookModule(new URL("./CodexQuotaHistoryDetails.tsx", import.meta.url), {
+    "../PaginationControls": { PaginationControls: Pagination },
+    "react-i18next": { useTranslation: () => ({
+      t: (key: string) => key,
+      i18n: { language: "en-US" },
+    }) },
+  });
+  const points: QuotaHistoryPoint[] = [
+    { observedAt: 0, bucketStart: 0, shortRemaining: 100, weeklyRemaining: 80 },
+    { observedAt: 60_000, bucketStart: 60_000, shortRemaining: 99.9, weeklyRemaining: 79.5 },
+    { observedAt: 120_000, bucketStart: 120_000, shortRemaining: 100, weeklyRemaining: 79.5 },
+  ];
+  h.render(() => h.exports.CodexQuotaHistoryDetails({
+    history: { points, shortConsumed: 0, weeklyConsumed: null, intervalMinutes: 1 },
+    onlyChanges: true, onOnlyChangesChange: () => {},
+  }));
+  const rowAt = (index: number) => elements(h.flush()).filter((element) => element.type === "tr").find((row) =>
+    elements(row).some((element) => element.type === "time" && element.props.dateTime === new Date(points[index].observedAt).toISOString()));
+  const remainings = (index: number) => elements(rowAt(index)).filter((element) =>
+    element.props.className === "codex-quota-history__remaining").map((element) => element.props.children);
+  const deltas = (index: number) => elements(rowAt(index)).filter((element) =>
+    element.props.className === "codex-quota-history__delta").map((element) => ({
+      text: element.props.children,
+      direction: element.props["data-direction"],
+    }));
+
+  assert.deepEqual(remainings(1), ["99.9%", "79.5%"]);
+  assert.deepEqual(deltas(1), [
+    { text: "-0.1%", direction: "down" },
+    { text: "-0.5%", direction: "down" },
+  ]);
+  assert.deepEqual(deltas(2), [
+    { text: "+0.1%", direction: "up" },
+    { text: "--", direction: undefined },
+  ]);
   h.unmount();
 });

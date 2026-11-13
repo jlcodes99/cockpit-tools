@@ -40,8 +40,8 @@
     let initial = fast.prepareLive(initialSource, initialUrl);
     if (!initial.ok) return fail(initial.diagnostics?.reason || 'initial-transform-failed');
     const modules = [];
-    if ((initial.mode || 'full') === 'full' && (root.__cockpitEnhancements?.quotaCompat === true
-      || root.__cockpitEnhancements?.apiService === true)) {
+    if ((initial.mode || 'full') === 'full' && root.__cockpitEnhancements?.quotaCompat === true
+      && root.__cockpitEnhancements?.apiService !== true) {
       try {
         const contract = quota.transform(initialSource, initialUrl);
         if (!contract.ok) throw Error(contract.diagnostics?.reason || 'quota-contract-failed');

@@ -54,6 +54,7 @@ import {
   QoderAccount,
   getQoderAccountDisplayEmail,
   getQoderPlanBadge,
+  resolveQoderPlanBadgeClass,
   getQoderSubscriptionInfo,
   getQoderUsage,
   hasQoderQuotaData,
@@ -174,21 +175,6 @@ function formatDisplayDate(value: number): string {
 
 function formatQuotaValue(value: number | null | undefined): string {
   return formatNumber(value ?? 0);
-}
-
-function resolveQoderPlanBadgeClass(plan: string): string {
-  const normalized = plan.trim().toLowerCase();
-  if (!normalized) return 'unknown';
-  if (normalized.includes('free')) return 'free';
-  if (normalized.includes('trial')) return 'trial';
-  if (normalized.includes('pro')) return 'pro';
-  if (normalized.includes('team')) return 'team';
-  if (normalized.includes('enterprise')) return 'enterprise';
-  if (normalized.includes('business')) return 'business';
-  if (normalized.includes('individual') || normalized.includes('personal')) return 'individual';
-  if (normalized.includes('plus')) return 'plus';
-  if (normalized.includes('ultra')) return 'ultra';
-  return 'unknown';
 }
 
 function computeQuotaClass(percent: number | null): 'high' | 'medium' | 'critical' {

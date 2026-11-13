@@ -338,13 +338,6 @@ fn automatic_api_service_route_models(
     models
 }
 
-/// DeepSeek 模型在客户端模型列表里的默认推理档位。
-///
-/// 官方 DeepSeek 模板声明为 `high`，但 Cockpit 的 API 服务默认选最高档：DeepSeek 官方目录
-/// 已声明支持 `max`，接管 profile 时也会补齐客户端的 `max` 档位开关。该值只决定
-/// 「尚未选择过档位」或「当前档位对该模型不可用」时的回落值，不会覆盖用户已保存的档位。
-const DEEPSEEK_DEFAULT_REASONING_EFFORT: &str = "max";
-
 /// 账号模型的官方模板（目前覆盖 DeepSeek 官方目录）。
 fn account_model_template(account: &CodexAccount, model: &str) -> Option<Value> {
     let model = model.trim();
@@ -368,7 +361,7 @@ fn account_model_template(account: &CodexAccount, model: &str) -> Option<Value> 
     }
     let catalog = codex_account::deepseek_official_catalog_json_for_account(account).ok()?;
     let catalog: Value = serde_json::from_str(&catalog).ok()?;
-    let mut entry = catalog
+    catalog
         .get("models")
         .and_then(Value::as_array)
         .into_iter()
@@ -379,10 +372,7 @@ fn account_model_template(account: &CodexAccount, model: &str) -> Option<Value> 
                 .and_then(Value::as_str)
                 .is_some_and(|slug| slug.eq_ignore_ascii_case(model))
         })
-        .cloned()?;
-    // 其余字段沿用官方模板，只把默认档位提升为最高档。
-    entry["default_reasoning_level"] = json!(DEEPSEEK_DEFAULT_REASONING_EFFORT);
-    Some(entry)
+        .cloned()
 }
 
 fn automatic_api_service_model_routing_value(

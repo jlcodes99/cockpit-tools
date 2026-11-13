@@ -49,7 +49,7 @@ export function CursorInstancesContent({
       renderAccountBadge={(account) => {
         const presentation = buildCursorAccountPresentation(account, t);
         return (
-          <span className={`instance-plan-badge cursor-plan-badge ${presentation.planClass}`}>
+          <span className={`tier-badge account-picker-plan raw-value ${presentation.planClass}`}>
             {presentation.planLabel}
           </span>
         );

@@ -28,11 +28,14 @@ import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
 import * as grokInstanceService from "../services/grokInstanceService";
 import * as grokService from "../services/grokService";
 import { useGrokAccountStore } from "../stores/useGrokAccountStore";
+import { APIKEY_FUN_PREFILL_EVENT, consumeApiKeyFunPrefill } from "../utils/apiKeyFunPrefill";
+import { resolveApiKeyFunGrokModel } from "../utils/apikeyFunClientConfigs";
 import {
   formatGrokQuotaResetTime,
   formatGrokQuotaUsedTotal,
   getGrokAccountDisplayEmail,
   getGrokPlanBadge,
+  getGrokPlanBadgeClass,
   getGrokPlanRawValue,
   getGrokQuotaClass,
   getGrokQuotaGroups,
@@ -237,6 +240,25 @@ export function GrokAccountsPage() {
       setApiModelTouched(false);
     }
   }, [page.showAddModal]);
+
+  const { openAddModal, setTokenInput } = page;
+  useEffect(() => {
+    const prefill = () => {
+      const request = consumeApiKeyFunPrefill("grok");
+      if (!request) return;
+      setActiveTab("overview");
+      openAddModal("token");
+      setApiProviderMode("custom");
+      setApiBaseUrl(request.baseUrl?.trim() ?? "");
+      setApiModel(resolveApiKeyFunGrokModel(request.modelCatalog ?? []) ?? "");
+      setApiBaseUrlTouched(false);
+      setApiModelTouched(false);
+      setTokenInput(request.apiKey);
+    };
+    window.addEventListener(APIKEY_FUN_PREFILL_EVENT, prefill);
+    prefill();
+    return () => window.removeEventListener(APIKEY_FUN_PREFILL_EVENT, prefill);
+  }, [openAddModal, setTokenInput]);
 
   const handleReauthorize = useCallback(
     (account: GrokAccount) => {
@@ -1018,14 +1040,7 @@ export function GrokAccountsPage() {
       getGrokPlanBadge(account) || t("common.none", "暂无"),
     getPlanBadgeTitle: (account) =>
       getGrokPlanRawValue(account) || t("common.none", "暂无"),
-    getPlanBadgeClass: (planBadge, account) => {
-      if (isGrokApiKeyAccount(account) || planBadge === "API_KEY") return "pro";
-      // Missing tier (暂无) uses Free styling — not the red "unknown" tone.
-      if (!getGrokPlanRawValue(account)) return "free";
-      if (planBadge === "Free") return "free";
-      if (planBadge === "--") return "free";
-      return "pro";
-    },
+    getPlanBadgeClass: getGrokPlanBadgeClass,
     getSearchText: (account) =>
       [
         getGrokAccountDisplayEmail(account),

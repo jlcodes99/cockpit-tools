@@ -1519,7 +1519,7 @@
       "codexPreserveExternalBridgeDesc": "Beim OAuth-Kontowechsel eine durch lokale Integrationsdaten geprüfte Codex Web GPT-Brücke behalten. Standardmäßig aus.",
       "codexEnhancements": {
         "quotaCompat": "Kontingente im Mischbetrieb",
-        "quotaCompatDesc": "Bei echter OAuth-Anmeldung mit externer API-Route verhindert dies, dass das Abokontingent lokale API-Nachrichten blockiert. Tatsächlicher Verbrauch und Bildkontingente bleiben unverändert.",
+        "quotaCompatDesc": "Instanzen des API-Dienstes zeigen dem Client für lokale Prüfungen ein verfügbares Kontingent. Tatsächliche Nutzung beim Anbieter und Bildlimits bleiben unverändert. Dieser Schalter gilt nur für andere Kombinationen aus OAuth und externer API.",
         "restartHint": "Native Vorhersagen sind standardmäßig ausgeschaltet. Nach Änderungen jede betroffene Codex-Instanz neu starten und Cockpit Tools geöffnet lassen. Natives Diktieren richtet sich nach den Funktionen und Einstellungen des Clients; Cockpit übernimmt es nicht und erzwingt keine Aktivierung.",
         "configFailed": "Einstellungen konnten nicht geladen oder gespeichert werden: {{error}}",
         "nativePredictions": "Native Vorhersagen für den nächsten Schritt (Tab)",
@@ -2222,7 +2222,13 @@
     "refreshTime": "Aktualisierung",
     "lastSwitchTimeFull": "Kontowechsel: {{time}}",
     "refreshTimeFull": "Aktualisierung: {{time}}",
-    "toggleTimeMode": "Wechsel- oder Aktualisierungszeit anzeigen"
+    "toggleTimeMode": "Wechsel- oder Aktualisierungszeit anzeigen",
+    "quotaSummary": {
+      "geminiModels": "Gemini-Modelle",
+      "claudeAndGptModels": "Claude- und GPT-Modelle",
+      "weeklyLimit": "Wochenlimit",
+      "fiveHourLimit": "5h-Limit"
+    }
   },
   "overview": {
     "title": "Kontoübersicht",
@@ -2680,6 +2686,10 @@
     "quotaHistory": {
       "storage": {
         "title": "Verlaufsspeicher",
+        "recordCount": "Einträge",
+        "diskSpace": "Speicherplatz",
+        "defaultAccount": "Standardkonto",
+        "recording": "Aufzeichnung",
         "usage": "{{records}} Einträge · {{size}} Speicherplatz",
         "loadFailed": "Der Verlaufsspeicher konnte nicht gelesen werden.",
         "enabled": "Verlauf aufzeichnen",
@@ -2714,7 +2724,14 @@
       "details": "Messwerte",
       "onlyChanges": "Nur Änderungen",
       "noChanges": "Keine Kontingentänderung in diesem Zeitraum.",
-      "sampledAt": "Messzeit",
+      "recordedAt": "Erfasst am",
+      "noValue": "Keine",
+      "shortConsumed": "5h-Verbrauch",
+      "weeklyConsumed": "Wochenverbrauch",
+      "shortRemaining": "5h-Rest",
+      "shortDelta": "5h-Änd.",
+      "weeklyRemaining": "Wochenrest",
+      "weeklyDelta": "Wochenänd.",
       "changeFromPrevious": "Änderung zum vorherigen Messwert",
       "points": "{{value}} Pp.",
       "account": "Konto",
@@ -8442,6 +8459,7 @@
       "addToClaude": "Zu Claude CLI",
       "addToClaudeDesktop": "Zu Claude",
       "addToClaudeCli": "Zu Claude CLI",
+      "addToGrok": "Zu Grok",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "Schnell zu Codex bereitstellen",
@@ -8485,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "Die Grok-Abrechnung lieferte keine Kontingentdaten. Versuche es später erneut.",
     "search": "Grok CLI-Konten durchsuchen...",
     "flowNotice": {
       "title": "Grok CLI-Kontoverwaltung",

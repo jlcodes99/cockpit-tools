@@ -256,6 +256,10 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
         account.api_wire_api = Some("responses".to_string());
         account.api_model_mappings = vec![
             CodexApiModelMapping {
+                client_model: "gpt-5.6-luna".to_string(),
+                upstream_model: "deepseek-flash".to_string(),
+            },
+            CodexApiModelMapping {
                 client_model: "gpt-5.5".to_string(),
                 upstream_model: "deepseek-v4-flash".to_string(),
             },
@@ -277,14 +281,19 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
             },
         ];
 
+        account.api_model_context_windows.insert("gpt-5.6-luna".into(), 300_000);
         assert!(super::normalize_deepseek_account(&mut account));
+        assert_eq!(
+            account.api_model_context_windows,
+            std::collections::HashMap::from([("deepseek-v4-flash".to_string(), 300_000)])
+        );
 
         let client_models: Vec<&str> = account
             .api_model_mappings
             .iter()
             .map(|mapping| mapping.client_model.as_str())
             .collect();
-        for legacy in ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"] {
+        for legacy in ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"] {
             assert!(
                 !client_models
                     .iter()
@@ -299,9 +308,6 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
             "用户自定义别名不能被清理"
         );
         for expected in [
-            "gpt-5.6-luna",
-            "gpt-5.6-sol",
-            "gpt-5.6-terra",
             "deepseek-flash",
             "deepseek-v4-flash",
             "deepseek-v4-pro",
@@ -314,10 +320,10 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
                 "缺少默认模型映射: {expected}"
             );
         }
-        // 目录壳位仍指向 DeepSeek 上游；历史 GPT 模型 id 不再被解析成 DeepSeek 模型。
+        // API 服务的账号映射不再接管 GPT 模型 ID。
         assert_eq!(
             super::resolve_account_upstream_model(&account, "gpt-5.6-luna"),
-            "deepseek-flash"
+            "gpt-5.6-luna"
         );
         assert_eq!(
             super::resolve_account_upstream_model(&account, "gpt-5.4"),
@@ -447,7 +453,10 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
 
     #[test]
     fn deepseek_reasoning_preserves_and_maps_compatible_efforts() {
-        for (input, expected) in [("ultra", "max"), ("minimal", "low"), ("xhigh", "high"), ("none", "none"), ("max", "max")] {
+        let mut empty = crate::modules::codex_config_format::read_codex_config_doc_from_str("").unwrap();
+        super::apply_deepseek_reasoning_effort(&mut empty);
+        assert_eq!(empty["model_reasoning_effort"].as_str(), Some("max"));
+        for (input, expected) in [("ultra", "max"), ("minimal", "low"), ("medium", "high"), ("xhigh", "high"), ("none", "none"), ("low", "low"), ("high", "high"), ("max", "max"), ("unknown", "max")] {
             let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&format!("model_reasoning_effort = \"{input}\"\n")).unwrap();
             super::apply_deepseek_reasoning_effort(&mut doc);
             assert_eq!(doc["model_reasoning_effort"].as_str(), Some(expected));
@@ -475,6 +484,7 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
         let rebuilt: serde_json::Value = serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
         let levels: Vec<_> = rebuilt["models"][0]["supported_reasoning_levels"].as_array().unwrap().iter().map(|level| level["effort"].as_str().unwrap()).collect();
         assert_eq!(levels, ["low", "high", "max"]);
+        assert_eq!(rebuilt["models"][0]["default_reasoning_level"], "max");
     }
 
     #[test]
@@ -512,6 +522,14 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
             .and_then(|item| item.as_array())
             .expect("models array");
         assert!(models.len() >= 2);
+        for model in models {
+            assert_eq!(model["default_reasoning_level"], "max");
+            let levels = model["supported_reasoning_levels"].as_array().unwrap();
+            assert_eq!(
+                levels.iter().filter_map(|level| level["effort"].as_str()).collect::<Vec<_>>(),
+                ["low", "high", "max"]
+            );
+        }
         assert_eq!(
             models[0].get("slug").and_then(|item| item.as_str()),
             Some("deepseek-flash")
@@ -1487,21 +1505,21 @@ wire_api = "responses"
         account.api_sync_model_catalog_to_codex = true;
 
         assert!(
-            super::sync_deepseek_shell_remap_catalog_to_dir(&base_dir, &account)
-                .expect("write shell remap catalog")
+            super::sync_deepseek_gateway_catalog_to_dir(&base_dir, &account)
+                .expect("write gateway catalog")
         );
 
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model = \"gpt-5.6-luna\""));
+        assert!(config.contains("model = \"deepseek-v4-flash\""));
         assert!(!config.contains("model = \"gpt-5.6-sol\""));
         assert!(config.contains("model_catalog_json = \"cockpit-model-catalog.json\""));
         let catalog_path = super::deepseek_official_model_catalog_path(&base_dir);
         let catalog = fs::read_to_string(&catalog_path).expect("read official catalog");
-        assert!(catalog.contains("\"slug\": \"gpt-5.6-luna\""));
+        assert!(catalog.contains("\"slug\": \"deepseek-v4-flash\""));
         assert!(catalog.contains("DeepSeek-V4-Flash"));
         assert!(catalog.contains("apply_patch_tool_type"));
         assert!(catalog.contains("shell_command"));
-        assert!(!catalog.contains("\"slug\": \"deepseek-v4-flash\""));
+        assert!(!catalog.contains("\"slug\": \"gpt-5.6-luna\""));
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
@@ -1535,19 +1553,19 @@ model_catalog_json = "cockpit-local-access-model-catalog.json"
         account.api_sync_model_catalog_to_codex = true;
 
         assert!(
-            super::sync_deepseek_shell_remap_catalog_to_dir(&base_dir, &account)
-                .expect("sync shell remap catalog")
+            super::sync_deepseek_gateway_catalog_to_dir(&base_dir, &account)
+                .expect("sync gateway catalog")
         );
 
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model = \"gpt-5.6-luna\""));
+        assert!(config.contains("model = \"deepseek-v4-flash\""));
         assert!(!config.contains("model = \"gpt-5.6-sol\""));
         assert!(config.contains("model_catalog_json = \"cockpit-model-catalog.json\""));
         let catalog_path = super::deepseek_official_model_catalog_path(&base_dir);
 
         let catalog = fs::read_to_string(&catalog_path).expect("read official catalog");
-        assert!(catalog.contains("\"slug\": \"gpt-5.6-luna\""));
-        assert!(catalog.contains("\"slug\": \"gpt-5.6-sol\""));
+        assert!(catalog.contains("\"slug\": \"deepseek-v4-flash\""));
+        assert!(catalog.contains("\"slug\": \"deepseek-v4-pro\""));
         assert!(catalog.contains("DeepSeek-V4-Flash"));
         assert!(catalog.contains("apply_patch_tool_type"));
         assert!(catalog.contains("shell_command"));
@@ -1602,7 +1620,7 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
 
         let catalog_path = super::deepseek_official_model_catalog_path(&instance_dir);
         let config = fs::read_to_string(instance_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model = \"gpt-5.6-luna\""));
+        assert!(config.contains("model = \"deepseek-v4-flash\""));
         assert!(config.contains("model_catalog_json = \"cockpit-model-catalog.json\""));
         assert_eq!(
             catalog_path.file_name().and_then(|name| name.to_str()),
@@ -1621,8 +1639,8 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
             .expect("models");
         let flash = models
             .iter()
-            .find(|model| model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-5.6-luna"))
-            .expect("flash shell slug");
+            .find(|model| model.get("slug").and_then(serde_json::Value::as_str) == Some("deepseek-v4-flash"))
+            .expect("Flash model ID");
         assert_eq!(
             flash
                 .get("display_name")
@@ -1640,7 +1658,7 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
             Some("freeform")
         );
         assert!(models.iter().any(|model| {
-            model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-5.6-sol")
+            model.get("slug").and_then(serde_json::Value::as_str) == Some("deepseek-v4-pro")
                 && model
                     .get("display_name")
                     .and_then(serde_json::Value::as_str)
@@ -1689,7 +1707,7 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
     }
 
     #[test]
-    fn deepseek_gateway_bundle_writes_startup_shell_model() {
+    fn deepseek_gateway_bundle_migrates_legacy_startup_model() {
         let instance_dir = make_temp_dir("codex-deepseek-gateway-startup-model");
         let mut account = CodexAccount::new_api_key(
             "deepseek-api-key".to_string(),
@@ -1707,12 +1725,12 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
         account.api_wire_api = Some("responses".to_string());
         account.api_sync_model_catalog_to_codex = true;
         account.api_instance_access_mode = Some("gateway".to_string());
-        account.api_startup_model = Some("deepseek-v4-pro".to_string());
+        account.api_startup_model = Some("gpt-5.6-sol".to_string());
 
         write_account_bundle_to_dir(&instance_dir, &account).expect("write gateway bundle");
 
         let config = fs::read_to_string(instance_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model = \"gpt-5.6-sol\""));
+        assert!(config.contains("model = \"deepseek-v4-pro\""));
         assert!(config.contains("model_catalog_json"));
         assert!(instance_dir
             .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)

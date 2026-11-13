@@ -113,6 +113,45 @@ fn bound_cli_config_dirs(
     dirs
 }
 
+async fn read_bound_cli_oauth_before_refresh(account_id: &str) -> Result<ClaudeAccount, String> {
+    let account_id = account_id.to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        let account_id = account_id.as_str();
+        match crate::modules::claude_instance::load_instance_store() {
+            Ok(store) => {
+                let dirs = bound_cli_config_dirs(
+                    &store,
+                    account_id,
+                    get_default_claude_code_config_dir().ok(),
+                );
+                for config_dir in dirs {
+                    if !config_dir.is_dir() {
+                        continue;
+                    }
+                    if let Err(error) = sync_cli_account_from_config_dir(
+                        account_id,
+                        &config_dir,
+                        true,
+                        read_claude_code_credentials_for_sync,
+                    ) {
+                        logger::log_warn(&format!(
+                            "[Claude CLI] 刷新前读取绑定实例失败: account_id={}, error={error}",
+                            account_id
+                        ));
+                    }
+                }
+            }
+            Err(error) => logger::log_warn(&format!(
+                "[Claude CLI] 刷新前读取实例配置失败: account_id={}, error={error}",
+                account_id
+            )),
+        }
+        load_account(account_id).ok_or_else(|| "Claude 账号不存在".to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 fn sync_account_oauth_to_bound_cli_instances(account_id: &str) -> Result<(), String> {
     let store = crate::modules::claude_instance::load_instance_store()?;
     let dirs = bound_cli_config_dirs(

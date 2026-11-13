@@ -48,7 +48,7 @@ export function WorkbuddyInstancesContent({
       renderAccountBadge={(account) => {
         const planBadge = getWorkbuddyPlanBadge(account);
         const normalizedClass = planBadge.toLowerCase();
-        return <span className={`instance-plan-badge ${normalizedClass}`}>{planBadge}</span>;
+        return <span className={`tier-badge account-picker-plan ${normalizedClass}`}>{planBadge}</span>;
       }}
       getAccountSearchText={(account) => `${getWorkbuddyAccountDisplayEmail(account)} ${getWorkbuddyPlanBadge(account)}`}
       appType="workbuddy"

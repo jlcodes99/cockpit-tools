@@ -185,9 +185,9 @@ pub fn response_from_responses(
                         .join("");
                 }
                 let signature = item["encrypted_content"].as_str().unwrap_or("");
-                if !summary.is_empty()
-                    || (context.flavor == CompatFlavor::Claude && !signature.is_empty())
-                {
+                if context.flavor == CompatFlavor::Claude && summary.is_empty() && !signature.is_empty() {
+                    parts.push(json!({"type":"redacted_thinking","data":signature}));
+                } else if !summary.is_empty() {
                     thinking.push_str(&summary);
                     parts.push(match context.flavor {
                         CompatFlavor::Claude => {

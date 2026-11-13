@@ -1566,7 +1566,7 @@
       "codexPreserveExternalBridgeDesc": "إبقاء جسر Codex Web GPT الذي تم التحقق منه بالسجلات المحلية عند تبديل حساب OAuth. معطل افتراضياً.",
       "codexEnhancements": {
         "quotaCompat": "حصص الوضع المختلط",
-        "quotaCompatDesc": "مع تسجيل دخول OAuth فعلي ومسار API خارجي، يمنع حصة الاشتراك من حظر رسائل API المحلية. لا يغير الاستخدام الفعلي أو حصص الصور.",
+        "quotaCompatDesc": "تعرض مثيلات خدمة API حصة متاحة للعميل وفحوصه المحلية فقط. لا يتغير الاستخدام الفعلي لدى المزوّد أو حدود الصور. يخص هذا المفتاح إعدادات OAuth مع واجهات API الخارجية الأخرى فقط.",
         "restartHint": "توقعات الرسالة التالية الأصلية معطّلة افتراضيًا. أعد تشغيل نسخ Codex المعنية بعد التغيير وأبقِ Cockpit Tools قيد التشغيل. يعتمد الإملاء الأصلي على إمكانات العميل وإعداداته؛ ولا يتولى Cockpit تشغيله أو يفرض تفعيله.",
         "configFailed": "تعذرت قراءة الإعدادات أو حفظها: {{error}}",
         "nativePredictions": "توقعات الخطوة التالية الأصلية (Tab)",
@@ -2269,7 +2269,13 @@
     "refreshTime": "وقت التحديث",
     "lastSwitchTimeFull": "التبديل: {{time}}",
     "refreshTimeFull": "التحديث: {{time}}",
-    "toggleTimeMode": "عرض وقت التبديل أو التحديث"
+    "toggleTimeMode": "عرض وقت التبديل أو التحديث",
+    "quotaSummary": {
+      "geminiModels": "نماذج Gemini",
+      "claudeAndGptModels": "نماذج Claude وGPT",
+      "weeklyLimit": "الحد الأسبوعي",
+      "fiveHourLimit": "حد 5 ساعات"
+    }
   },
   "overview": {
     "title": "نظرة عامة على الحسابات",
@@ -2727,6 +2733,10 @@
     "quotaHistory": {
       "storage": {
         "title": "تخزين السجل",
+        "recordCount": "عدد السجلات",
+        "diskSpace": "مساحة القرص",
+        "defaultAccount": "الحساب الافتراضي",
+        "recording": "التسجيل",
         "usage": "{{records}} سجل · {{size}} على القرص",
         "loadFailed": "تعذّرت قراءة تخزين السجل.",
         "enabled": "تسجيل سجل الحصة",
@@ -2761,7 +2771,14 @@
       "details": "التفاصيل",
       "onlyChanges": "التغييرات فقط",
       "noChanges": "لا تغيّر في الحصة خلال هذه الفترة.",
-      "sampledAt": "وقت العينة",
+      "recordedAt": "وقت التسجيل",
+      "noValue": "لا يوجد",
+      "shortConsumed": "استهلاك 5 س",
+      "weeklyConsumed": "الاستهلاك الأسبوعي",
+      "shortRemaining": "المتبقي (5 س)",
+      "shortDelta": "التغيير (5 س)",
+      "weeklyRemaining": "المتبقي الأسبوعي",
+      "weeklyDelta": "التغيير الأسبوعي",
       "changeFromPrevious": "التغيّر عن العينة السابقة",
       "points": "{{value}} نقطة مئوية",
       "account": "الحساب",
@@ -8442,6 +8459,7 @@
       "addToClaude": "إضافة إلى Claude CLI",
       "addToClaudeDesktop": "إضافة إلى Claude",
       "addToClaudeCli": "إضافة إلى Claude CLI",
+      "addToGrok": "إضافة إلى Grok",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "نشر سريع إلى Codex",
@@ -8485,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "لم تُرجع خدمة فوترة Grok بيانات الحصة. حاول مجددًا لاحقًا.",
     "search": "البحث في حسابات Grok CLI...",
     "flowNotice": {
       "title": "إدارة حسابات Grok CLI",

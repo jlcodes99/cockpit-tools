@@ -1566,7 +1566,7 @@
       "codexPreserveExternalBridgeDesc": "Pertahankan jembatan Codex Web GPT yang terverifikasi melalui catatan lokal saat berganti akun OAuth. Nonaktif secara bawaan.",
       "codexEnhancements": {
         "quotaCompat": "Kuota mode campuran",
-        "quotaCompatDesc": "Dengan login OAuth asli dan rute API eksternal, kuota langganan tidak memblokir pesan API lokal. Penggunaan nyata dan kuota gambar tidak berubah.",
+        "quotaCompatDesc": "Instans layanan API menampilkan kuota tersedia untuk tampilan dan pemeriksaan lokal klien. Penggunaan aktual di penyedia dan batas gambar tidak berubah. Sakelar ini hanya untuk kombinasi OAuth dan API eksternal lainnya.",
         "restartHint": "Prediksi bawaan nonaktif secara default. Mulai ulang tiap instans Codex terkait setelah perubahan dan biarkan Cockpit Tools berjalan. Dikte bawaan mengikuti kemampuan dan pengaturan klien; Cockpit tidak mengambil alih atau memaksakan pengaktifannya.",
         "configFailed": "Gagal membaca atau menyimpan pengaturan: {{error}}",
         "nativePredictions": "Prediksi langkah berikutnya bawaan (Tab)",
@@ -2269,7 +2269,13 @@
     "refreshTime": "Pembaruan",
     "lastSwitchTimeFull": "Pergantian: {{time}}",
     "refreshTimeFull": "Pembaruan: {{time}}",
-    "toggleTimeMode": "Tampilkan waktu pergantian atau pembaruan"
+    "toggleTimeMode": "Tampilkan waktu pergantian atau pembaruan",
+    "quotaSummary": {
+      "geminiModels": "Model Gemini",
+      "claudeAndGptModels": "Model Claude dan GPT",
+      "weeklyLimit": "Batas mingguan",
+      "fiveHourLimit": "Batas 5 jam"
+    }
   },
   "overview": {
     "title": "Ringkasan",
@@ -2727,6 +2733,10 @@
     "quotaHistory": {
       "storage": {
         "title": "Penyimpanan riwayat",
+        "recordCount": "Jumlah catatan",
+        "diskSpace": "Ruang disk",
+        "defaultAccount": "Akun bawaan",
+        "recording": "Pencatatan",
         "usage": "{{records}} catatan · {{size}} di disk",
         "loadFailed": "Penyimpanan riwayat tidak dapat dibaca.",
         "enabled": "Catat riwayat",
@@ -2761,7 +2771,14 @@
       "details": "Rincian",
       "onlyChanges": "Hanya perubahan",
       "noChanges": "Tidak ada perubahan kuota pada periode ini.",
-      "sampledAt": "Waktu sampel",
+      "recordedAt": "Waktu pencatatan",
+      "noValue": "Tidak ada",
+      "shortConsumed": "Pemakaian 5 jam",
+      "weeklyConsumed": "Pemakaian mingguan",
+      "shortRemaining": "Sisa 5j",
+      "shortDelta": "Ubah 5j",
+      "weeklyRemaining": "Sisa Mingguan",
+      "weeklyDelta": "Ubah Mingguan",
       "changeFromPrevious": "Perubahan dari sampel sebelumnya",
       "points": "{{value}} poin persentase",
       "account": "Akun",
@@ -8442,6 +8459,7 @@
       "addToClaude": "Tambah ke Claude CLI",
       "addToClaudeDesktop": "Tambah ke Claude",
       "addToClaudeCli": "Tambah ke Claude CLI",
+      "addToGrok": "Tambah ke Grok",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "Deploy cepat ke Codex",
@@ -8485,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "Layanan penagihan Grok tidak mengembalikan data kuota. Coba lagi nanti.",
     "search": "Cari akun Grok CLI...",
     "flowNotice": {
       "title": "Pengelolaan akun Grok CLI",

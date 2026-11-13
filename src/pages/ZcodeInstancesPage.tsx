@@ -41,7 +41,7 @@ export function ZcodeInstancesContent({
       )}
       renderAccountBadge={(account) => {
         const plan = getZcodePlanBadge(account);
-        return <span className="instance-plan-badge">{plan}</span>;
+        return <span className={`tier-badge account-picker-plan ${plan.toLowerCase()}`}>{plan}</span>;
       }}
       getAccountDisplayText={getZcodeAccountDisplayEmail}
       getAccountSearchText={(account) =>

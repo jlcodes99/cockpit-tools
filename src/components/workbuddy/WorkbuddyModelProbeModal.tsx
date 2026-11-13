@@ -3,6 +3,7 @@ import { Crosshair, Loader2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { WorkbuddyAccount } from '../../types/workbuddy';
 import { getWorkbuddyAccountDisplayEmail } from '../../types/workbuddy';
+import { buildWorkbuddyAccountPresentation } from '../../presentation/platformAccountPresentation';
 import { SingleSelectFilterDropdown } from '../SingleSelectFilterDropdown';
 import { useEscCloseTopmost } from '../../hooks/useEscClose';
 import {
@@ -108,7 +109,11 @@ export function WorkbuddyModelProbeModal({ accounts, currentAccountId, onClose }
           <div className="wb-probe-field">
             <span>{t('workbuddy.modelProbe.account')}</span>
             <SingleSelectFilterDropdown value={accountId}
-              options={accounts.map((account) => ({ value: account.id, label: getWorkbuddyAccountDisplayEmail(account) }))}
+              options={accounts.map((account) => {
+                const { planLabel, planClass } = buildWorkbuddyAccountPresentation(account, t);
+                return { value: account.id, label: getWorkbuddyAccountDisplayEmail(account),
+                  badge: <span className={`tier-badge account-picker-plan ${planClass}`}>{planLabel}</span> };
+              })}
               ariaLabel={t('workbuddy.modelProbe.account')} disabled={running}
               onChange={(id) => { clear(); setAccountId(id); }} />
           </div>
