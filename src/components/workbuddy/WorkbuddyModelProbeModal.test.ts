@@ -14,6 +14,7 @@ test('batch probe submits once and keeps cleanup failures visible in the cell de
   const h = loadHookModule(new URL('./WorkbuddyModelProbeModal.tsx', import.meta.url), {
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
     '../../types/workbuddy': { getWorkbuddyAccountDisplayEmail: (account: any) => account.email },
+    '../../presentation/platformAccountPresentation': { buildWorkbuddyAccountPresentation: () => ({ planLabel: 'PRO', planClass: 'pro' }) },
     '../../hooks/useEscClose': { useEscCloseTopmost() {} },
     '../../services/workbuddyService': {
       fetchWorkbuddyCloudModels: async () => [

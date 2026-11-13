@@ -12,6 +12,7 @@ import { ArrowLeft, CheckCircle2, Crosshair, HelpCircle, Loader2, Search, X, XCi
 import { useTranslation } from 'react-i18next';
 import type { WorkbuddyAccount } from '../../types/workbuddy';
 import { getWorkbuddyAccountDisplayEmail } from '../../types/workbuddy';
+import { buildWorkbuddyAccountPresentation } from '../../presentation/platformAccountPresentation';
 import { useEscCloseTopmost } from '../../hooks/useEscClose';
 import {
   fetchCodebuddyCnCloudModels,
@@ -134,6 +135,16 @@ export function WorkbuddyModelProbeModal({
 
   const probeModelFn = platform === 'codebuddy_cn' ? probeCodebuddyCnModel : probeWorkbuddyModel;
   const fetchModelsFn = platform === 'codebuddy_cn' ? fetchCodebuddyCnCloudModels : fetchWorkbuddyCloudModels;
+
+  // 账号套餐标识（与账号总览一致；探测矩阵账号列与锁定账号展示用）
+  const planBadges = useMemo(() => {
+    const map = new Map<string, { label: string; className: string }>();
+    for (const account of accounts) {
+      const { planLabel, planClass } = buildWorkbuddyAccountPresentation(account, t);
+      if (planLabel) map.set(account.id, { label: planLabel, className: planClass });
+    }
+    return map;
+  }, [accounts, t]);
 
   // 模型目录：用范围内第一个账号拉取（额度共享，同一套目录）
   useEffect(() => {
@@ -334,7 +345,15 @@ export function WorkbuddyModelProbeModal({
               <strong className="wb-probe-locked">
                 {(() => {
                   const account = accounts.find((item) => item.id === lockedAccountId);
-                  return account ? displayEmail(account) : lockedAccountId;
+                  const badge = account ? planBadges.get(account.id) : undefined;
+                  return (
+                    <>
+                      {account ? displayEmail(account) : lockedAccountId}
+                      {badge && (
+                        <span className={`tier-badge account-picker-plan ${badge.className}`}>{badge.label}</span>
+                      )}
+                    </>
+                  );
                 })()}
               </strong>
             </div>
@@ -475,6 +494,11 @@ export function WorkbuddyModelProbeModal({
                       <tr key={account.id}>
                         <td className="wb-probe-matrix-account">
                           <span title={displayEmail(account)}>{displayEmail(account)}</span>
+                          {planBadges.get(account.id) && (
+                            <span className={`tier-badge account-picker-plan ${planBadges.get(account.id)!.className}`}>
+                              {planBadges.get(account.id)!.label}
+                            </span>
+                          )}
                           {account.id === currentAccountId && (
                             <em className="wb-probe-matrix-current">{t('accounts.status.current', '当前')}</em>
                           )}
