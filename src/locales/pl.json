@@ -7813,6 +7813,12 @@
       "timeRangeError": "Czas rozpoczęcia nie może być późniejszy niż czas zakończenia"
     },
     "modelProbe": {
+      "scopeAll": "Wszystkie ({{count}})",
+
+      "scopeSelected": "Wybrane ({{count}})",
+
+      "scopeCurrent": "Bieżące konto",
+
       "title": "Test modelu",
       "hint": "Wysyła krótką wiadomość i odczytuje odpowiedź. Zużywa niewielką część limitu. Rozmowa testowa jest domyślnie usuwana.",
       "account": "Konto",

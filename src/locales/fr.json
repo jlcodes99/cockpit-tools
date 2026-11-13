@@ -7813,6 +7813,12 @@
       "timeRangeError": "L'heure de début ne peut pas être postérieure à l'heure de fin"
     },
     "modelProbe": {
+      "scopeAll": "Tous ({{count}})",
+
+      "scopeSelected": "Sélectionnés ({{count}})",
+
+      "scopeCurrent": "Compte actuel",
+
       "title": "Test de modèle",
       "hint": "Envoie un court message et lit la réponse. Cela consomme un peu de quota. La conversation de test est supprimée par défaut.",
       "account": "Compte",

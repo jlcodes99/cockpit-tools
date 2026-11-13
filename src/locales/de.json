@@ -7813,6 +7813,12 @@
       "timeRangeError": "Die Startzeit darf nicht nach der Endzeit liegen"
     },
     "modelProbe": {
+      "scopeAll": "Alle ({{count}})",
+
+      "scopeSelected": "Ausgewählt ({{count}})",
+
+      "scopeCurrent": "Aktuelles Konto",
+
       "title": "Modelltest",
       "hint": "Sendet eine kurze Nachricht und liest die Antwort. Dies verbraucht etwas Kontingent. Die Testunterhaltung wird standardmäßig gelöscht.",
       "account": "Konto",

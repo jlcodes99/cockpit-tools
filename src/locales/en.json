@@ -8182,6 +8182,12 @@
       }
     },
     "modelProbe": {
+      "scopeAll": "All ({{count}})",
+
+      "scopeSelected": "Selected ({{count}})",
+
+      "scopeCurrent": "Current account",
+
       "title": "Model probe",
       "hint": "Send a short message and read the reply. This uses a small amount of quota. Test conversations are deleted by default.",
       "account": "Account",

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Crosshair, X } from 'lucide-react';
 import { PlatformOverviewTabsHeader, PlatformOverviewTab } from '../components/platform/PlatformOverviewTabsHeader';
 import { CodebuddyCnInstancesContent } from './CodebuddyCnInstancesPage';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
@@ -16,8 +17,21 @@ import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
 import { CodebuddySuiteAccountsSharedView, type CodebuddySuiteAccountsPlatformConfig } from '../components/codebuddy-suite/CodebuddySuiteAccountsSharedView';
 import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessionManager';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
+import { WorkbuddyModelProbeModal } from '../components/workbuddy/WorkbuddyModelProbeModal';
+import {
+  dismissWorkbuddyProbeRecord,
+  getWorkbuddyProbeRecords,
+  subscribeWorkbuddyProbeStatus,
+} from '../utils/workbuddyProbeStatus';
 
 const CB_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.codebuddycn.flow_notice_collapsed';
+
+/** 受限提示里的短时间格式：MM/DD HH:mm */
+function formatProbeTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 function compareQuotaItems(a: CodebuddyOfficialQuotaResource, b: CodebuddyOfficialQuotaResource): number {
   const aAvailable = !!a.unlimited || a.remain > 0;
@@ -93,7 +107,14 @@ const codebuddyCnPlatformConfig: CodebuddySuiteAccountsPlatformConfig<CodebuddyA
 
 export function CodebuddyCnAccountsPage() {
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
+  const [probeOpen, setProbeOpen] = useState(false);
+  const [probeAccountId, setProbeAccountId] = useState<string | null>(null);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
+  const [probeVersion, setProbeVersion] = useState(0);
   const store = useCodebuddyCnAccountStore();
+
+  // 探测结果变化时刷新卡片上的受限标识
+  useEffect(() => subscribeWorkbuddyProbeStatus(() => setProbeVersion((v) => v + 1)), []);
 
   const page = useProviderAccountsPage<CodebuddyAccount>({
     platformKey: 'CodeBuddy CN',
@@ -142,8 +163,76 @@ export function CodebuddyCnAccountsPage() {
     [page.sortDirection, store.accounts, store.currentAccountId],
   );
 
+  // 探测/受限标识（CodeBuddy CN 与 WorkBuddy 额度共享，复用同一套弹窗）
+  const platformConfig = useMemo<CodebuddySuiteAccountsPlatformConfig<CodebuddyAccount>>(
+    () => ({
+      ...codebuddyCnPlatformConfig,
+      renderCardActionExtra: (account) => (
+        <button
+          type="button"
+          className="card-action-btn"
+          onClick={() => {
+            setProbeAccountId(account.id);
+            setProbeOpen(true);
+          }}
+          title={page.t('workbuddy.modelProbe.title', '探测模型')}
+        >
+          <Crosshair size={14} />
+        </button>
+      ),
+      renderCardNotice: (account) => {
+        const records = getWorkbuddyProbeRecords(account.id, 'codebuddy_cn');
+        if (records.length === 0) return null;
+        return (
+          <div className="wb-probe-notice">
+            {records.slice(0, 2).map((record) => (
+              <div key={record.model} className={`wb-probe-notice-item ${record.status}`}>
+                <AlertTriangle size={12} aria-hidden="true" />
+                <span title={record.message}>
+                  {record.resetAt
+                    ? page.t('workbuddy.probeNotice.until', '{{model}} 不可用至 {{time}}', {
+                        model: record.model,
+                        time: formatProbeTime(record.resetAt),
+                      })
+                    : page.t('workbuddy.probeNotice.unavailable', '{{model}} 暂不可用', {
+                        model: record.model,
+                      })}
+                </span>
+                <button
+                  type="button"
+                  className="wb-probe-notice-close"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    dismissWorkbuddyProbeRecord(record.accountId, record.model, 'codebuddy_cn');
+                  }}
+                  title={page.t('common.close')}
+                >
+                  <X size={12} aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+          </div>
+        );
+      },
+    }),
+    [page.t, probeVersion],
+  );
+
   return (
     <div className={`ghcp-accounts-page ${codebuddyCnPlatformConfig.pageClassName}`}>
+      <div className="page-toolbar workbuddy-probe-toolbar">
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => {
+            setProbeAccountId(null);
+            setProbeOpen(true);
+          }}
+        >
+          <Crosshair size={14} aria-hidden="true" />
+          {page.t('workbuddy.modelProbe.open', '批量探测模型')}
+        </button>
+      </div>
       <PlatformOverviewTabsHeader
         platform="codebuddy_cn"
         active={activeTab}
@@ -159,8 +248,24 @@ export function CodebuddyCnAccountsPage() {
           accounts={store.accounts}
           loading={store.loading}
           page={page}
-          platformConfig={codebuddyCnPlatformConfig}
+          platformConfig={platformConfig}
+          onSelectionChange={setSelectedAccountIds}
           onRefreshAccounts={() => { store.fetchAccounts(); }}
+        />
+      )}
+      {probeOpen && (
+        <WorkbuddyModelProbeModal
+          accounts={store.accounts as any}
+          currentAccountId={probeAccountId ?? store.currentAccountId}
+          selectedAccountIds={selectedAccountIds}
+          initialScope={probeAccountId ? 'current' : undefined}
+          lockedAccountId={probeAccountId}
+          platform="codebuddy_cn"
+          displayEmail={(account) => getCodebuddyAccountDisplayEmail(account as any)}
+          onClose={() => {
+            setProbeOpen(false);
+            setProbeAccountId(null);
+          }}
         />
       )}
     </div>

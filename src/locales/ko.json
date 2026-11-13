@@ -7813,6 +7813,12 @@
       "timeRangeError": "시작 시간은 종료 시간보다 늦을 수 없습니다"
     },
     "modelProbe": {
+      "scopeAll": "전체 ({{count}})",
+
+      "scopeSelected": "선택됨 ({{count}})",
+
+      "scopeCurrent": "현재 계정",
+
       "title": "모델 확인",
       "hint": "짧은 메시지를 보내 실제 응답을 확인합니다. 소량의 할당량이 사용되며 테스트 대화는 기본으로 삭제됩니다.",
       "account": "계정",

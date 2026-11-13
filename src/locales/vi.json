@@ -7813,6 +7813,12 @@
       "timeRangeError": "Thời gian bắt đầu không thể sau thời gian kết thúc"
     },
     "modelProbe": {
+      "scopeAll": "Tất cả ({{count}})",
+
+      "scopeSelected": "Đã chọn ({{count}})",
+
+      "scopeCurrent": "Tài khoản hiện tại",
+
       "title": "Thử mô hình",
       "hint": "Gửi tin nhắn ngắn và đọc phản hồi. Thao tác dùng một ít hạn mức. Cuộc trò chuyện thử sẽ được xóa mặc định.",
       "account": "Tài khoản",

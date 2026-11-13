@@ -7813,6 +7813,12 @@
       "timeRangeError": "Başlangıç zamanı bitiş zamanından sonra olamaz"
     },
     "modelProbe": {
+      "scopeAll": "Tümü ({{count}})",
+
+      "scopeSelected": "Seçili ({{count}})",
+
+      "scopeCurrent": "Geçerli hesap",
+
       "title": "Model testi",
       "hint": "Kısa bir mesaj gönderip yanıtı okur. Az miktarda kota kullanır. Test konuşması varsayılan olarak silinir.",
       "account": "Hesap",
