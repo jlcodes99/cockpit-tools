@@ -8020,7 +8020,8 @@
     "probeNotice": {
       "until": "{{model}} dibatasi pada uji terakhir, pulih {{time}}",
       "unavailable": "{{model}} dibatasi pada uji terakhir",
-      "failed": "Uji terakhir {{model}} gagal"
+      "failed": "Uji terakhir {{model}} gagal",
+    "recovered": "{{model}} dibatasi pada pemeriksaan terakhir (reset {{time}}) — sudah pulih"
     }
   },
   "minimaxCode": {

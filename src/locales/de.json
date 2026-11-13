@@ -7845,7 +7845,8 @@
     "probeNotice": {
       "until": "{{model}} beim letzten Test begrenzt, Freigabe {{time}}",
       "unavailable": "{{model}} beim letzten Test begrenzt",
-      "failed": "Letzter Test von {{model}} fehlgeschlagen"
+      "failed": "Letzter Test von {{model}} fehlgeschlagen",
+    "recovered": "{{model}} war beim letzten Test begrenzt (Reset {{time}}) — wiederhergestellt"
     }
   },
   "minimaxCode": {

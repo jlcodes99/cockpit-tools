@@ -539,6 +539,9 @@
 .wb-probe-result pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .wb-probe-notice { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
 .wb-probe-notice-item { display: flex; align-items: center; gap: 6px; color: var(--danger); font-size: 12px; }
+/* 自动复测确认恢复后的提示：绿色、弱化 */
+.wb-probe-notice-item.recovered { color: var(--success); opacity: .85; }
+.wb-probe-notice-item.recovered .wb-probe-notice-close:hover { background: color-mix(in srgb, var(--success) 14%, transparent); }
 .wb-probe-notice-item > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .wb-probe-notice-close {
   appearance: none;

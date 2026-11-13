@@ -7845,7 +7845,8 @@
     "probeNotice": {
       "until": "{{model}} při posledním testu omezen, obnova {{time}}",
       "unavailable": "{{model}} při posledním testu omezen",
-      "failed": "Poslední test {{model}} selhal"
+      "failed": "Poslední test {{model}} selhal",
+    "recovered": "{{model}} byl omezen při posledním testu (reset {{time}}) — obnoveno"
     }
   },
   "minimaxCode": {

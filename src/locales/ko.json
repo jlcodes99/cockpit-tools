@@ -7845,7 +7845,8 @@
     "probeNotice": {
       "until": "{{model}} 이전 확인 시 제한됨, 해제 {{time}}",
       "unavailable": "{{model}} 이전 확인 시 제한됨",
-      "failed": "{{model}} 이전 확인 실패"
+      "failed": "{{model}} 이전 확인 실패",
+    "recovered": "{{model}} 마지막 검사에서 제한됐지만(재설정 {{time}}) 복구됨"
     }
   },
   "minimaxCode": {

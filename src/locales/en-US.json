@@ -8214,7 +8214,8 @@
     "probeNotice": {
       "until": "{{model}} was limited at last probe, resets {{time}}",
       "unavailable": "{{model}} was limited at last probe",
-      "failed": "Last probe of {{model}} failed"
+      "failed": "Last probe of {{model}} failed",
+    "recovered": "{{model}} was limited at last probe (reset {{time}}) — recovered"
     }
   },
   "minimaxCode": {

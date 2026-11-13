@@ -7845,7 +7845,8 @@
     "probeNotice": {
       "until": "{{model}} の前回確認は制限中、解除 {{time}}",
       "unavailable": "{{model}} の前回確認は制限中",
-      "failed": "{{model}} の前回確認に失敗"
+      "failed": "{{model}} の前回確認に失敗",
+    "recovered": "{{model}} は前回のプローブで制限中でしたが（リセット {{time}}）、復旧済み"
     }
   },
   "minimaxCode": {

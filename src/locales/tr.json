@@ -7845,7 +7845,8 @@
     "probeNotice": {
       "until": "{{model}} son testte sınırlıydı, yenileme {{time}}",
       "unavailable": "{{model}} son testte sınırlıydı",
-      "failed": "{{model}} son testi başarısız"
+      "failed": "{{model}} son testi başarısız",
+    "recovered": "{{model}} son testte sınırlıydı (sıfırlama {{time}}) — kurtarıldı"
     }
   },
   "minimaxCode": {

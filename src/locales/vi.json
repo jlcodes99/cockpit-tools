@@ -7845,7 +7845,8 @@
     "probeNotice": {
       "until": "{{model}} bị giới hạn ở lần thử trước, đặt lại {{time}}",
       "unavailable": "{{model}} bị giới hạn ở lần thử trước",
-      "failed": "Lần thử trước của {{model}} thất bại"
+      "failed": "Lần thử trước của {{model}} thất bại",
+    "recovered": "{{model}} bị giới hạn ở lần kiểm tra trước (đặt lại {{time}}) — đã phục hồi"
     }
   },
   "minimaxCode": {

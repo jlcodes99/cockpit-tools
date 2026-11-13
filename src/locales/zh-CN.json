@@ -8214,7 +8214,8 @@
     "probeNotice": {
       "until": "{{model}} 上次探测受限，恢复时间 {{time}}",
       "unavailable": "{{model}} 上次探测受限",
-      "failed": "{{model}} 上次探测失败"
+      "failed": "{{model}} 上次探测失败",
+    "recovered": "{{model}} 上次探测受限，恢复时间 {{time}}，已恢复"
     }
   },
   "minimaxCode": {
