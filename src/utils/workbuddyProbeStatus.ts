@@ -101,12 +101,33 @@ function writeStore(store: ProbeStore) {
   }
 }
 
-/** 仅解析带时区且明确说明重置或恢复的 ISO 时间，不猜测服务端时区。 */
+/**
+ * 从限流文案解析额度恢复时间。
+ * 服务端真实文案是「将在 2026-11-13 18:00:00 重置」（空格分隔、无时区、时间在关键词前），
+ * 按本地时区解释；也兼容带时区的 ISO 格式（2026-11-13T18:00:00+08:00）。
+ */
 export function parseProbeResetAt(message: string): number | null {
   if (!message) return null;
-  const match = message.match(/(?:reset|恢复|重置).*?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2}))/i);
-  const time = match ? Date.parse(match[1]) : NaN;
-  return Number.isFinite(time) ? time : null;
+  // ISO 带时区：按时区解析
+  const iso = message.match(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2}))/);
+  if (iso) {
+    const time = Date.parse(iso[1]);
+    if (Number.isFinite(time)) return time;
+  }
+  // 本地时间格式（v1.3.82 曾收紧为「关键词在前 + 必须带时区 ISO」导致时间丢失，此处恢复宽松匹配）
+  const local = message.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (local) {
+    const time = new Date(
+      Number(local[1]),
+      Number(local[2]) - 1,
+      Number(local[3]),
+      Number(local[4]),
+      Number(local[5]),
+      Number(local[6] ?? 0),
+    ).getTime();
+    if (Number.isFinite(time)) return time;
+  }
+  return null;
 }
 
 export function setWorkbuddyProbeRecord(record: WorkbuddyProbeRecord) {

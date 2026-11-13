@@ -96,3 +96,18 @@ test('probeSharedIdentityKey 只剥平台前缀', () => {
   assert.equal(store.probeSharedIdentityKey('something_else'), null);
   assert.equal(store.probeSharedIdentityKey('workbuddy_'), null);
 });
+
+test('parseProbeResetAt 兼容服务端真实文案格式', () => {
+  // 服务端中文文案：空格分隔、无时区、时间在「重置」关键词前面（v1.3.82 曾解析失败）
+  const local = store.parseProbeResetAt('您的使用量已超出频率限制，将在 2026-11-13 18:00:00 重置');
+  assert.ok(local !== null, 'space-format message must parse');
+  assert.equal(new Date(local!).toISOString().slice(0, 16), new Date(2026, 10, 13, 18, 0).toISOString().slice(0, 16));
+
+  // 带时区的 ISO 仍然支持
+  const iso = store.parseProbeResetAt('quota exceeded, resets 2026-11-13T18:00:00+08:00');
+  assert.equal(iso, Date.parse('2026-11-13T18:00:00+08:00'));
+
+  // 没有时间 → null
+  assert.equal(store.parseProbeResetAt('您的使用量已超出频率限制'), null);
+  assert.equal(store.parseProbeResetAt(''), null);
+});

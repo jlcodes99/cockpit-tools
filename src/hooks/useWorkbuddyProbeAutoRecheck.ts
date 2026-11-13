@@ -28,6 +28,8 @@ const FIRST_SCAN_DELAY_MS = 8_000;
 const RETRY_THROTTLE_MS = 5 * 60_000;
 /** 「已恢复」提示保留时长 */
 const RECOVERED_TTL_MS = 24 * 60 * 60 * 1000;
+/** 没解析出恢复时间的记录：用更长的间隔自愈复测（刷新文案与时间） */
+const NO_RESET_RETRY_MS = 30 * 60_000;
 
 /** 只需要 id，任意账号对象都可用 */
 interface AccountLike {
@@ -86,9 +88,13 @@ export function useWorkbuddyProbeAutoRecheck(
       for (const account of accountsRef.current) {
         for (const record of getWorkbuddyProbeRecords(account.id)) {
           if (record.status !== 'rate_limited' || record.recoveredAt) continue;
-          // 没有明确恢复时间的记录无法判断何时复测，交给手动探测
-          if (record.resetAt === null || record.resetAt > now) continue;
-          if (now - record.checkedAt < RETRY_THROTTLE_MS) continue;
+          if (record.resetAt !== null) {
+            if (record.resetAt > now) continue;
+            if (now - record.checkedAt < RETRY_THROTTLE_MS) continue;
+          } else {
+            // 没解析出恢复时间的旧记录（如旧版解析回归丢失的时间）：低频自愈复测刷新
+            if (now - record.checkedAt < NO_RESET_RETRY_MS) continue;
+          }
           if (pendingRef.current.has(`${currentPlatform}:${account.id}:${record.model}`)) continue;
           due.push({ accountId: account.id, model: record.model });
         }
