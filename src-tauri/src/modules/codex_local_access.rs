@@ -123,6 +123,7 @@ mod tests {
     include!("codex_local_access_tests_service_tier_evidence.rs");
     include!("codex_local_access_tests_service_tier_control.rs");
     include!("codex_local_access_tests_request_diagnostics_poll.rs");
+    include!("codex_local_access_tests_pool_quota_sum.rs");
 }
 
 include!("codex_local_access_multi_agent_settings.rs");
