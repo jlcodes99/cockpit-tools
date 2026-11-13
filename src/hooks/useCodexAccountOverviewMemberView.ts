@@ -1,3 +1,6 @@
+import { useActiveGroupTab } from "./useActiveGroupTab";
+import { useDurableUiSetting } from "./useDurableUiSetting";
+import { useAccountsOverviewFilterState } from "./useAccountsOverviewFilterState";
 import {
   useCallback,
   useEffect,
@@ -20,8 +23,7 @@ import {
   readAccountsOverviewFilterField,
   readAccountsOverviewFilterPersistenceEnabled,
   readAccountsOverviewFilterStringArray,
-  removeAccountsOverviewFilterField,
-  writeAccountsOverviewFilterField,
+  resolveAccountSortMode,
 } from "../utils/accountsOverviewFilterPersistence";
 import {
   CODEX_OVERVIEW_FILTER_FIELDS,
@@ -36,9 +38,8 @@ import {
   isCodexOverviewAccountAbnormal,
   isCodexOverviewAccountSubscriptionExpired,
   isCodexOverviewAccountZeroQuota,
-  readCodexCustomSortActive,
+  CODEX_CUSTOM_SORT_ACTIVE_KEY,
   readCodexCustomSortOrder,
-  writeCodexCustomSortActive,
   type CodexOverviewSortDirection,
 } from "../utils/codexAccountOverview";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
@@ -87,66 +88,35 @@ export function useCodexAccountOverviewMemberView({
   currentAccountId,
 }: UseCodexAccountOverviewMemberViewOptions): CodexLocalAccessMemberViewConfig {
   const { t } = useTranslation();
-  const [filterPersistenceEnabled] = useState(() =>
-    readAccountsOverviewFilterPersistenceEnabled(CODEX_OVERVIEW_FILTER_SCOPE),
+  const [searchQuery, setSearchQuery] = useAccountsOverviewFilterState(
+    CODEX_OVERVIEW_FILTER_SCOPE, CODEX_OVERVIEW_FILTER_FIELDS.searchQuery,
+    () => readPersistedString(CODEX_OVERVIEW_FILTER_FIELDS.searchQuery, ""),
   );
-  const [searchQuery, setSearchQuery] = useState(() =>
-    readPersistedString(CODEX_OVERVIEW_FILTER_FIELDS.searchQuery, ""),
+  const [filterTypes, setFilterTypes] = useAccountsOverviewFilterState(
+    CODEX_OVERVIEW_FILTER_SCOPE, CODEX_OVERVIEW_FILTER_FIELDS.filterTypes,
+    () => readPersistedStringArray(CODEX_OVERVIEW_FILTER_FIELDS.filterTypes),
   );
-  const [filterTypes, setFilterTypes] = useState(() =>
-    readPersistedStringArray(CODEX_OVERVIEW_FILTER_FIELDS.filterTypes),
+  const [tagFilter, setTagFilter] = useAccountsOverviewFilterState(
+    CODEX_OVERVIEW_FILTER_SCOPE, CODEX_OVERVIEW_FILTER_FIELDS.tagFilter,
+    () => readPersistedStringArray(CODEX_OVERVIEW_FILTER_FIELDS.tagFilter),
   );
-  const [tagFilter, setTagFilter] = useState(() =>
-    readPersistedStringArray(CODEX_OVERVIEW_FILTER_FIELDS.tagFilter),
+  const [groupFilter, setGroupFilter] = useAccountsOverviewFilterState(
+    CODEX_OVERVIEW_FILTER_SCOPE, CODEX_OVERVIEW_FILTER_FIELDS.groupFilter,
+    () => readPersistedStringArray(CODEX_OVERVIEW_FILTER_FIELDS.groupFilter),
   );
-  const [groupFilter, setGroupFilter] = useState(() =>
-    readPersistedStringArray(CODEX_OVERVIEW_FILTER_FIELDS.groupFilter),
+  const [rememberedSortBy] = useAccountsOverviewFilterState(
+    CODEX_OVERVIEW_FILTER_SCOPE, CODEX_OVERVIEW_FILTER_FIELDS.sortBy,
+    () => readPersistedString(CODEX_OVERVIEW_FILTER_FIELDS.sortBy, "created_at"),
   );
-  const [sortBy] = useState(() =>
-    readPersistedString(
-      CODEX_OVERVIEW_FILTER_FIELDS.sortBy,
-      readCodexCustomSortActive() ? "custom" : "created_at",
-    ),
+  const sortBy = resolveAccountSortMode(
+    rememberedSortBy, useDurableUiSetting(CODEX_CUSTOM_SORT_ACTIVE_KEY), "created_at",
   );
-  const [sortDirection] =
-    useState<CodexOverviewSortDirection>(readPersistedSortDirection);
-  const activeGroupId = useMemo(() => {
-    const value = readPersistedString(
-      CODEX_OVERVIEW_FILTER_FIELDS.activeGroupId,
-      "",
-    ).trim();
-    return value || null;
-  }, []);
-
-  useEffect(() => {
-    const persist = (field: string, value: unknown) => {
-      if (!filterPersistenceEnabled) {
-        removeAccountsOverviewFilterField(CODEX_OVERVIEW_FILTER_SCOPE, field);
-        return;
-      }
-      writeAccountsOverviewFilterField(
-        CODEX_OVERVIEW_FILTER_SCOPE,
-        field,
-        value,
-      );
-    };
-
-    persist(CODEX_OVERVIEW_FILTER_FIELDS.searchQuery, searchQuery);
-    persist(CODEX_OVERVIEW_FILTER_FIELDS.filterTypes, filterTypes);
-    persist(CODEX_OVERVIEW_FILTER_FIELDS.tagFilter, tagFilter);
-    persist(CODEX_OVERVIEW_FILTER_FIELDS.groupFilter, groupFilter);
-    persist(CODEX_OVERVIEW_FILTER_FIELDS.sortBy, sortBy);
-    persist(CODEX_OVERVIEW_FILTER_FIELDS.sortDirection, sortDirection);
-    writeCodexCustomSortActive(sortBy === "custom");
-  }, [
-    filterPersistenceEnabled,
-    filterTypes,
-    groupFilter,
-    searchQuery,
-    sortBy,
-    sortDirection,
-    tagFilter,
-  ]);
+  const [sortDirection] = useAccountsOverviewFilterState(
+    CODEX_OVERVIEW_FILTER_SCOPE, CODEX_OVERVIEW_FILTER_FIELDS.sortDirection, readPersistedSortDirection,
+  );
+  const selectedGroupId = useActiveGroupTab("codex");
+  const activeGroupId = useDurableUiSetting("agtools.codex.accounts_overview_filters.persist_enabled") === "0"
+    ? null : selectedGroupId;
 
   const accountPresentations = useMemo(() => {
     const result = new Map<

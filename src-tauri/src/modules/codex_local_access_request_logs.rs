@@ -240,6 +240,7 @@ fn open_local_access_logs_db_once(
     let conn = Connection::open(path)?;
     conn.busy_timeout(LOCAL_ACCESS_LOGS_DB_BUSY_TIMEOUT)?;
     create_request_logs_table(&conn, include_service_tier_column)?;
+    ensure_request_connection_sources(&conn)?;
     create_overload_attempt_table(&conn)?;
     ensure_request_logs_column(&conn, "event_key", "event_key TEXT NOT NULL DEFAULT ''")?;
     ensure_request_logs_column(&conn, "request_id", "request_id TEXT NOT NULL DEFAULT ''")?;
@@ -939,7 +940,11 @@ fn insert_live_local_access_usage_event(
 }
 
 fn insert_live_usage_event_in_transaction(conn:&Connection,event:&CodexLocalAccessUsageEvent,official:Option<&str>)->Result<(),String> {
+    if event.local_rejection {
+        return insert_request_rejection(conn, event).map_err(|error| error.to_string());
+    }
     insert_local_access_usage_event_with_identity(conn, event,official)?;
+    insert_request_connection_source(conn, event).map_err(|error| error.to_string())?;
     if let Some(settlement) = &event.budget_settlement {
         conn.execute("UPDATE request_logs SET settled_microusd=?1, settlement_status=?2, settled_at=?3
             WHERE event_key=?4 AND settlement_status='unrecorded'",
@@ -1701,6 +1706,8 @@ fn clear_local_access_usage_events_db() -> Result<(), String> {
     crate::modules::codex_request_summary::clear_if_present(&conn)?;
     conn.execute("DELETE FROM request_logs", [])
         .map_err(|e| format!("清空 API 服务请求日志失败: {}", e))?;
+    conn.execute("DELETE FROM request_log_rejections", [])
+        .map_err(|e| format!("清空 API 服务策略拒绝日志失败: {e}"))?;
     conn.execute_batch("COMMIT")
         .map_err(|e| format!("提交清空 API 服务请求日志失败: {}", e))?;
     REMOTE_ANALYTICS_REVISION.fetch_add(1,Ordering::AcqRel);
@@ -1720,6 +1727,8 @@ fn usage_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CodexLocalA
         Ok(value.max(0) as u64)
     };
     let mut event = CodexLocalAccessUsageEvent {
+        local_rejection: false,
+        connection_source: request_connection_source_from_row(row),
         budget_settlement: None,
         service_tier_adaptation: row.get::<_, String>("authorization_route").ok()
             .filter(|route| route == "official")
@@ -2113,7 +2122,32 @@ fn push_session_filter(
     }
 }
 
+fn push_account_log_filter(
+    clauses: &mut Vec<String>,
+    params: &mut Vec<SqlValue>,
+    account_query: Option<String>,
+    account_name_matches: &[String],
+) -> Result<(), String> {
+    let Some(query) = normalize_log_filter(account_query) else {
+        return Ok(());
+    };
+    let like = format!("%{query}%");
+    params.extend([SqlValue::Text(like.clone()), SqlValue::Text(like)]);
+    if account_name_matches.is_empty() {
+        clauses.push("(account_id LIKE ? OR email LIKE ?)".into());
+    } else {
+        clauses.push(
+            "(account_id LIKE ? OR email LIKE ? OR account_id IN (SELECT value FROM json_each(?)))"
+                .into(),
+        );
+        let ids = serde_json::to_string(account_name_matches).map_err(|error| error.to_string())?;
+        params.push(SqlValue::Text(ids));
+    }
+    Ok(())
+}
+
 fn query_local_access_usage_events_blocking(
+    conn: &Connection,
     page: u32,
     page_size: u32,
     stats_range: Option<String>,
@@ -2121,6 +2155,7 @@ fn query_local_access_usage_events_blocking(
     end_at: Option<i64>,
     model_query: Option<String>,
     account_query: Option<String>,
+    account_name_matches: Option<Vec<String>>,
     account_id: Option<String>,
     api_key_id: Option<String>,
     api_key_query: Option<String>,
@@ -2130,6 +2165,7 @@ fn query_local_access_usage_events_blocking(
     request_kind: Option<CodexLocalAccessRequestKind>,
     success: Option<bool>,
     error_category: Option<String>,
+    connection_source_filter: RequestConnectionSourceFilter,
 ) -> Result<CodexLocalAccessUsageEventPage, String> {
     let page_size = page_size.clamp(1, 200);
     let page = page.max(1);
@@ -2165,15 +2201,12 @@ fn query_local_access_usage_events_blocking(
         params.push(SqlValue::Text(format!("%{}%", model_query)));
         params.push(SqlValue::Text(format!("%{}%", model_query)));
     }
-    push_like_filter(
+    push_account_log_filter(
         &mut clauses,
         &mut params,
-        "(account_id LIKE ? OR email LIKE ?)",
-        account_query.clone(),
-    );
-    if let Some(account_query) = normalize_log_filter(account_query) {
-        params.push(SqlValue::Text(format!("%{}%", account_query)));
-    }
+        account_query,
+        account_name_matches.as_deref().unwrap_or_default(),
+    )?;
     push_like_filter(
         &mut clauses,
         &mut params,
@@ -2210,16 +2243,6 @@ fn query_local_access_usage_events_blocking(
         error_category,
     );
 
-    let conn = match open_local_access_logs_db() {
-        Ok(conn) => conn,
-        Err(error) => {
-            logger::log_codex_api_warn(&format!(
-                "API 服务请求日志数据库不可用，本次查询未完成: {}",
-                error
-            ));
-            return Err(error.to_string());
-        }
-    };
     ensure_session_query_index(&conn).map_err(|e| e.to_string())?;
     let indexed = session_query_index_ready(&conn);
     if !indexed && diagnostics_table_exists(&conn).unwrap_or(false) { schedule_session_query_backfill(); }
@@ -2228,10 +2251,13 @@ fn query_local_access_usage_events_blocking(
     } else if normalize_log_filter(session_query).is_some() {
         clauses.push("0".into());
     }
+    connection_source_filter.append_sql(&mut clauses, &mut params);
     let where_sql = if clauses.is_empty() { String::new() } else { format!(" WHERE {}", clauses.join(" AND ")) };
     with_request_log_sql_budget(&conn, ACCOUNT_WINDOW_QUERY_BUDGET, || {
-    conn.execute_batch("BEGIN").map_err(|e|e.to_string())?;
-    let total_sql = format!("SELECT COUNT(*) FROM request_logs{}", where_sql);
+    let transaction = conn.unchecked_transaction().map_err(|error| error.to_string())?;
+    let conn = &transaction;
+    let audit_cte = request_logs_with_rejections_cte(conn).map_err(|error| error.to_string())?;
+    let total_sql = format!("{audit_cte}SELECT COUNT(*) FROM request_logs{where_sql}");
     let total: u64 = match conn.query_row(
         total_sql.as_str(),
         params_from_iter(params.clone()),
@@ -2283,6 +2309,7 @@ fn query_local_access_usage_events_blocking(
     let authorization_fallback_select = request_logs_authorization_fallback_select(&conn)?;
     let list_sql = format!(
         r#"
+        {audit_cte}
         SELECT
             timestamp,
             request_id,
@@ -2291,6 +2318,8 @@ fn query_local_access_usage_events_blocking(
             api_key_id,
             api_key_label,
             client_instance_id,
+            request_connection_sources.peer_ip,
+            request_connection_sources.source_kind,
             model_id,
             requested_model,
             upstream_model,
@@ -2320,7 +2349,8 @@ fn query_local_access_usage_events_blocking(
             input_usd_per_million,
             output_usd_per_million,
             cached_input_usd_per_million
-        FROM request_logs{}
+        FROM request_logs LEFT JOIN request_connection_sources
+            ON request_connection_sources.log_id = request_logs.id {}
         ORDER BY timestamp DESC, id DESC
         LIMIT ? OFFSET ?
         "#,
@@ -2375,6 +2405,7 @@ pub async fn query_local_access_usage_events(
     end_at: Option<i64>,
     model_query: Option<String>,
     account_query: Option<String>,
+    account_name_matches: Option<Vec<String>>,
     account_id: Option<String>,
     api_key_id: Option<String>,
     api_key_query: Option<String>,
@@ -2384,12 +2415,18 @@ pub async fn query_local_access_usage_events(
     request_kind: Option<CodexLocalAccessRequestKind>,
     success: Option<bool>,
     error_category: Option<String>,
+    source_kind: Option<String>,
+    peer_ip: Option<String>,
 ) -> Result<CodexLocalAccessUsageEventPage, String> {
     let permit=report_query_slots().clone().try_acquire_owned().map_err(|_|crate::modules::background_maintenance::busy_message())?;
     ensure_runtime_loaded_without_start().await?;
     tauri::async_runtime::spawn_blocking(move || {
         let _permit=permit;
+        let conn = open_local_access_logs_db().inspect_err(|error| {
+            logger::log_codex_api_warn(&format!("API 服务请求日志数据库不可用，本次查询未完成: {error}"));
+        })?;
         query_local_access_usage_events_blocking(
+            &conn,
             page,
             page_size,
             stats_range,
@@ -2397,6 +2434,7 @@ pub async fn query_local_access_usage_events(
             end_at,
             model_query,
             account_query,
+            account_name_matches,
             account_id,
             api_key_id,
             api_key_query,
@@ -2406,6 +2444,7 @@ pub async fn query_local_access_usage_events(
             request_kind,
             success,
             error_category,
+            RequestConnectionSourceFilter { kind: source_kind, peer_ip },
         )
     })
     .await
@@ -2681,6 +2720,8 @@ fn append_usage_event_with_meta(
     let usage = usage.cloned().unwrap_or_default();
     let model_id = model_id.unwrap_or_default().trim().to_string();
     let event = CodexLocalAccessUsageEvent {
+        local_rejection: false,
+        connection_source: None,
         budget_settlement: None,
         authorization_route: None,
         authorization_fallback: None,
@@ -3173,6 +3214,36 @@ mod official_service_tier_adaptation_tests {
 #[cfg(test)]
 mod session_filter_tests {
     use super::*;
+
+    #[test]
+    fn request_logs_account_filter_combines_matching_names_with_legacy_text_search() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE request_logs(account_id TEXT, email TEXT);
+             INSERT INTO request_logs VALUES
+               ('first', 'one@example.com'), ('second', 'two@example.com'),
+               ('team', 'provider@example.com'), ('second-copy', 'other@example.com');",
+        ).unwrap();
+        let mut clauses = Vec::new();
+        let mut params = Vec::new();
+        push_account_log_filter(
+            &mut clauses,
+            &mut params,
+            Some("provider".into()),
+            &["first".into(), "second".into()],
+        ).unwrap();
+        let query = format!(
+            "SELECT account_id FROM request_logs WHERE {} ORDER BY account_id",
+            clauses.join(" AND "),
+        );
+        let mut stmt = conn.prepare(&query).unwrap();
+        let ids: Vec<String> = stmt
+            .query_map(params_from_iter(params), |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(ids, ["first", "second", "team"]);
+    }
 
     #[test]
     fn request_logs_filter_exact_chat_or_threadless_session_before_pagination() {

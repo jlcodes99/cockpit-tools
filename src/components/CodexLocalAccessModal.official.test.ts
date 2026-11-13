@@ -123,6 +123,28 @@ test('saving waits for official endpoint metadata instead of dropping persisted 
   assert.equal(h.saved[0].imageGenerationAccountPolicies.chatgpt_plan_grant, 'disabled');
 });
 
+test('an API Key selection survives a stale roster and saves once the imported account is available', async () => {
+  const selected = new Set(['new-key']);
+  const accounts = new Map<string, { id: string }>();
+  const h = saveMembersContext({ selected, accounts });
+  await h.action();
+  assert.equal(h.error(), 'codex.localAccess.noEligibleAccountsSelected');
+  assert.equal(h.saved.length, 0);
+  assert.equal(h.closed(), false);
+  assert.deepEqual([...selected], ['new-key']);
+
+  accounts.set('new-key', { id: 'new-key' });
+  await h.action();
+  assert.equal(h.error(), '');
+  assert.equal(h.closed(), true);
+  assert.deepEqual(Array.from(h.saved[0].accountIds), ['new-key']);
+
+  const cleared = saveMembersContext({ selected: new Set(), accounts });
+  await cleared.action();
+  assert.equal(cleared.closed(), true);
+  assert.deepEqual(Array.from(cleared.saved[0].accountIds), []);
+});
+
 
 test('the production picker rebuilds source filters instead of losing healthy official rows to source OAuth failures', () => {
   const file = ts.createSourceFile('modal.tsx', readFileSync(new URL('./CodexLocalAccessModal.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

@@ -41,7 +41,8 @@ fn get_accounts_index_path() -> Result<PathBuf, String> {
 }
 
 pub fn accounts_index_path_string() -> Result<String, String> {
-    Ok(get_accounts_index_path()?.to_string_lossy().to_string())
+    Ok(crate::modules::provider_account_index::storage_path::<WindsurfAccountIndex>(&get_accounts_index_path()?)?
+        .to_string_lossy().into_owned())
 }
 
 pub fn load_account(account_id: &str) -> Option<WindsurfAccount> {
@@ -80,22 +81,32 @@ pub fn load_account(account_id: &str) -> Option<WindsurfAccount> {
 
 fn save_account_file(account: &WindsurfAccount) -> Result<(), String> {
     let path = get_accounts_dir()?.join(format!("{}.json", account.id));
-    crate::modules::account_query_identity::invalidate_before_write(
-        &get_accounts_index_path()?,
-        &account.id,
-        &query_identity(account),
-    )?;
     crate::modules::secure_account_storage::write_account_preserving_switch_time(&path, "windsurf", account)
         .map_err(|e| format!("保存账号失败: {}", e))
 }
 
+fn save_account_file_indexed(account: &WindsurfAccount, index: &mut WindsurfAccountIndex) -> Result<(), String> {
+    if let Some(summary) = index.accounts.iter_mut().find(|row| row.id == account.id) {
+        if summary.query_identity.as_ref().is_some_and(|previous| previous != &query_identity(account)) {
+            summary.query_identity = None;
+            index.identity_revision = index.identity_revision.wrapping_add(1);
+            index.identity_maintenance_version = 0;
+            save_account_index(index)?;
+        }
+    }
+    save_account_file(account)
+}
+
+
 // Record credential-switch success separately from refresh activity.
 pub fn touch_last_used(account_id: &str) -> Result<(), String> {
+    let _lock = WINDSURF_ACCOUNT_INDEX_LOCK.lock().map_err(|_| "获取账号写入锁失败")?;
+    let _storage_lock = index_store()?.lock_writes()?;
     let mut account = load_account(account_id)
         .ok_or_else(|| format!("Windsurf account not found: {}", account_id))?;
     account.last_switched_at = Some(now_ts());
-    save_account_file(&account)?;
-    Ok(())
+    let mut index = load_account_index_checked()?;
+    save_account_file_indexed(&account, &mut index)
 }
 
 fn delete_account_file(account_id: &str) -> Result<(), String> {
@@ -107,102 +118,31 @@ fn delete_account_file(account_id: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn index_store() -> Result<crate::modules::antigravity_account_index_store::IndexStore<WindsurfAccountIndex>, String> {
+    crate::modules::provider_account_index::store(&get_accounts_index_path()?)
+}
+
 fn load_account_index() -> WindsurfAccountIndex {
-    let path = match get_accounts_index_path() {
-        Ok(p) => p,
-        Err(_) => return WindsurfAccountIndex::new(),
-    };
-
-    if !path.exists() {
-        return repair_account_index_from_details("索引文件不存在")
-            .unwrap_or_else(WindsurfAccountIndex::new);
-    }
-
-    match fs::read_to_string(&path) {
-        Ok(content) if content.trim().is_empty() => {
-            repair_account_index_from_details("索引文件为空")
-                .unwrap_or_else(WindsurfAccountIndex::new)
-        }
-        Ok(content) => match crate::modules::atomic_write::parse_json_with_auto_restore::<
-            WindsurfAccountIndex,
-        >(&path, &content)
-        {
-            Ok(index) if !index.accounts.is_empty() => index,
-            Ok(_) => repair_account_index_from_details("索引账号列表为空")
-                .unwrap_or_else(WindsurfAccountIndex::new),
-            Err(err) => {
-                logger::log_warn(&format!(
-                    "[Windsurf Account] 账号索引解析失败，尝试按详情文件自动修复: path={}, error={}",
-                    path.display(),
-                    err
-                ));
-                repair_account_index_from_details("索引文件损坏")
-                    .unwrap_or_else(WindsurfAccountIndex::new)
-            }
-        },
-        Err(_) => WindsurfAccountIndex::new(),
-    }
+    load_account_index_checked().unwrap_or_else(|error| {
+        logger::log_warn(&format!("[Windsurf Account] {error}"));
+        WindsurfAccountIndex::new()
+    })
 }
 
 fn load_account_index_checked() -> Result<WindsurfAccountIndex, String> {
-    let path = get_accounts_index_path()?;
-    if !path.exists() {
-        if let Some(index) = repair_account_index_from_details("索引文件不存在") {
-            return Ok(index);
-        }
-        return Ok(WindsurfAccountIndex::new());
-    }
-
-    let content = match fs::read_to_string(&path) {
-        Ok(content) => content,
-        Err(err) => {
-            if let Some(index) = repair_account_index_from_details("索引文件读取失败") {
-                return Ok(index);
-            }
-            return Err(format!("读取账号索引失败: {}", err));
-        }
-    };
-
-    if content.trim().is_empty() {
-        if let Some(index) = repair_account_index_from_details("索引文件为空") {
-            return Ok(index);
-        }
-        return Ok(WindsurfAccountIndex::new());
-    }
-
-    match crate::modules::atomic_write::parse_json_with_auto_restore::<WindsurfAccountIndex>(
-        &path, &content,
-    ) {
-        Ok(index) if !index.accounts.is_empty() => Ok(index),
-        Ok(index) => {
-            if let Some(repaired) = repair_account_index_from_details("索引账号列表为空") {
-                return Ok(repaired);
-            }
-            Ok(index)
-        }
-        Err(err) => {
-            if let Some(index) = repair_account_index_from_details("索引文件损坏") {
-                return Ok(index);
-            }
-            Err(crate::error::file_corrupted_error(
-                ACCOUNTS_INDEX_FILE,
-                &path.to_string_lossy(),
-                &err.to_string(),
-            ))
-        }
-    }
+    crate::modules::provider_account_index::checked(
+        &get_accounts_index_path()?,
+        crate::modules::provider_index_maintenance::schedule,
+        repair_account_index_from_details,
+        |index| index.accounts.is_empty(),
+    )
 }
 
 fn save_account_index(index: &WindsurfAccountIndex) -> Result<(), String> {
-    let path = get_accounts_index_path()?;
-    let content =
-        serde_json::to_string_pretty(index).map_err(|e| format!("序列化账号索引失败: {}", e))?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
-        .map_err(|e| format!("写入账号索引失败: {}", e))
+    index_store()?.replace(index)
 }
 
 fn repair_account_index_from_details(reason: &str) -> Option<WindsurfAccountIndex> {
-    let index_path = get_accounts_index_path().ok()?;
     let accounts_dir = get_accounts_dir().ok()?;
     let mut accounts = crate::modules::account_index_repair::load_accounts_from_details(
         &accounts_dir,
@@ -224,35 +164,14 @@ fn repair_account_index_from_details(reason: &str) -> Option<WindsurfAccountInde
     let mut index = WindsurfAccountIndex::new();
     index.accounts = accounts.iter().map(|account| account.summary()).collect();
 
-    let backup_path = crate::modules::account_index_repair::backup_existing_index(&index_path)
-        .unwrap_or_else(|err| {
-            logger::log_warn(&format!(
-                "[Windsurf Account] 自动修复前备份索引失败，继续尝试重建: path={}, error={}",
-                index_path.display(),
-                err
-            ));
-            None
-        });
-
-    if let Err(err) = save_account_index(&index) {
-        logger::log_warn(&format!(
-            "[Windsurf Account] 自动修复索引保存失败，将以内存结果继续运行: reason={}, recovered_accounts={}, error={}",
-            reason,
-            index.accounts.len(),
-            err
-        ));
+    if let Err(error) = save_account_index(&index) {
+        logger::log_warn(&format!("[Windsurf Account] 保存恢复索引失败: reason={reason}, error={error}"));
+        return None;
     }
-
-    logger::log_warn(&format!(
-        "[Windsurf Account] 检测到账号索引异常，已根据详情文件自动重建: reason={}, recovered_accounts={}, backup_path={}",
-        reason,
-        index.accounts.len(),
-        backup_path
-            .as_ref()
-            .map(|path| path.display().to_string())
-            .unwrap_or_else(|| "-".to_string())
+    logger::log_info(&format!(
+        "[Windsurf Account] 已恢复账号索引: reason={reason}, accounts={}",
+        index.accounts.len()
     ));
-
     Some(index)
 }
 
@@ -277,8 +196,9 @@ fn upsert_account_record(account: WindsurfAccount) -> Result<WindsurfAccount, St
     let _lock = WINDSURF_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "获取 Windsurf 账号锁失败".to_string())?;
-    let mut index = load_account_index();
-    save_account_file(&account)?;
+    let _storage_lock = index_store()?.lock_writes()?;
+    let mut index = load_account_index_checked()?;
+    save_account_file_indexed(&account, &mut index)?;
     refresh_summary(&mut index, &account);
     save_account_index(&index)?;
     Ok(account)
@@ -510,7 +430,7 @@ fn merge_account_group(group: Vec<WindsurfAccount>) -> WindsurfAccount {
     merged
 }
 
-include!("windsurf_account_identity.rs");
+include!("../../../crates/cockpit-core/src/modules/windsurf_account_identity.rs");
 
 fn merge_local_auth_status_into_account(account: &mut WindsurfAccount) {
     let account_api_key = account
@@ -724,7 +644,7 @@ pub fn list_accounts() -> Vec<WindsurfAccount> {
 pub fn list_accounts_checked() -> Result<Vec<WindsurfAccount>, String> {
     schedule_identity_maintenance();
     let index = load_account_index_checked()?;
-    Ok(index
+    let accounts: Vec<_> = index
         .accounts
         .iter()
         .filter_map(|summary| load_account(&summary.id))
@@ -732,17 +652,22 @@ pub fn list_accounts_checked() -> Result<Vec<WindsurfAccount>, String> {
             merge_local_auth_status_into_account(&mut account);
             account
         })
-        .collect())
+        .collect();
+    if !index.accounts.is_empty() && accounts.is_empty() {
+        return Err("账号索引存在，但详情暂时无法读取".into());
+    }
+    Ok(accounts)
 }
 
 pub fn upsert_account(payload: WindsurfOAuthCompletePayload) -> Result<WindsurfAccount, String> {
     let _lock = WINDSURF_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "获取 Windsurf 账号锁失败".to_string())?;
+    let _storage_lock = index_store()?.lock_writes()?;
     schedule_identity_maintenance();
 
     let now = now_ts();
-    let mut index = load_account_index();
+    let mut index = load_account_index_checked()?;
     let normalized_login = normalize_login(&payload);
     let payload_api_key = resolve_payload_api_key(&payload);
     // lgtm[rs/weak-cryptographic-algorithm] 仅用于生成本地稳定账号 ID（非密码学用途，不参与认证/签名/加密）
@@ -811,7 +736,7 @@ pub fn upsert_account(payload: WindsurfOAuthCompletePayload) -> Result<WindsurfA
     account.quota_query_last_error_at = None;
     account.last_used = now;
 
-    save_account_file(&account)?;
+    save_account_file_indexed(&account, &mut index)?;
     refresh_summary(&mut index, &account);
     save_account_index(&index)?;
 
@@ -944,7 +869,8 @@ pub fn remove_account(account_id: &str) -> Result<(), String> {
     let _lock = WINDSURF_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "获取 Windsurf 账号锁失败".to_string())?;
-    let mut index = load_account_index();
+    let _storage_lock = index_store()?.lock_writes()?;
+    let mut index = load_account_index_checked()?;
     index.accounts.retain(|item| item.id != account_id);
     index.identity_revision = index.identity_revision.wrapping_add(1);
     index.identity_maintenance_version = 0;

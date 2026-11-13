@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { updateModelPricingDraft, type ModelPricingDraft } from './codexModelPricingDraft';
+import { formatPriceDraftValue, updateModelPricingDraft, type ModelPricingDraft } from './codexModelPricingDraft';
 
 const draft = (): ModelPricingDraft => ({
   modelId: 'gpt-5.5', longContextThresholdTokens: '272000',
@@ -18,6 +18,15 @@ test('changing base rates keeps unedited long rates derived, not marked custom',
   const cacheFallback = updateModelPricingDraft(changed, 'cachedInputUsdPerMillion', '');
   assert.equal(cacheFallback.standardLongCachedInputUsdPerMillion, '16');
   assert.equal(draft().standardLongInputUsdPerMillion, '10');
+});
+
+test('Luna long-context output displays the official decimal rate', () => {
+  const model = { ...draft(), modelId: 'gpt-5.6-luna' };
+  const derivedPrice = 1.2 * 1.5;
+  assert.equal(formatPriceDraftValue(derivedPrice, true), '1.8');
+  assert.equal(formatPriceDraftValue(derivedPrice), String(derivedPrice));
+  assert.equal(updateModelPricingDraft(model, 'outputUsdPerMillion', '1.2')
+    .standardLongOutputUsdPerMillion, '1.8');
 });
 
 test('explicit zero long prices survive subsequent base-price edits', () => {

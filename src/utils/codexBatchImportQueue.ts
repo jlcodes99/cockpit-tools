@@ -27,6 +27,13 @@ export interface CodexBatchImportSelectableItemLike {
   status: string;
 }
 
+export function matchesCodexBatchImportQuota(
+  item: { quotaWindows?: ReadonlyArray<{ percentage: number }> },
+  minimum: number,
+): boolean {
+  return item.quotaWindows?.every(({ percentage }) => percentage >= minimum) ?? true;
+}
+
 export interface CodexBatchImportApiServicePreviewItemLike {
   itemId: string;
   accountId?: string | null;

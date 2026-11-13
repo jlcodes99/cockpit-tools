@@ -4,29 +4,39 @@ import { formatResetTimeDisplay, getQuotaClass } from '../utils/account';
 
 interface Props {
   items: AgQuotaDisplayItem[];
+  modelItems?: AgQuotaDisplayItem[];
   isList?: boolean;
   isNeedsReauth?: boolean;
   t: TFunction;
 }
 
 const PAID_BUCKET_WINDOWS: ReadonlyArray<{ key: string; label: string }> = [
-  { key: 'claude:5h', label: 'Claude (5h)' },
-  { key: 'claude:weekly', label: 'Claude (Weekly)' },
-  { key: 'gemini:5h', label: 'Gemini (5h)' },
-  { key: 'gemini:weekly', label: 'Gemini (Weekly)' },
-  { key: 'argon:weekly', label: 'Gemini 4 Argon (Weekly)' },
+  { key: 'gemini:5h', label: 'Gemini · 5h' },
+  { key: 'gemini:weekly', label: 'Gemini · Weekly' },
+  { key: 'claude:5h', label: 'Claude · 5h' },
+  { key: 'claude:weekly', label: 'Claude · Weekly' },
 ];
 
 const FREE_BUCKET_WINDOWS: ReadonlyArray<{ key: string; label: string }> = [
-  { key: 'claude:weekly', label: 'Claude (Weekly)' },
-  { key: 'gemini:weekly', label: 'Gemini (Weekly)' },
-  { key: 'argon:weekly', label: 'Gemini 4 Argon (Weekly)' },
+  { key: 'gemini:weekly', label: 'Gemini · Weekly' },
+  { key: 'claude:weekly', label: 'Claude · Weekly' },
 ];
 
 const BUCKET_KEYS = new Set(PAID_BUCKET_WINDOWS.map((window) => window.key));
 
-export function AntigravityQuotaSection({ items, isNeedsReauth = false, t }: Props) {
-  if (items.length === 0) {
+function compactResetText(fullReset: string): string {
+  const idx = fullReset.indexOf(' (');
+  return idx > 0 ? fullReset.slice(0, idx) : fullReset;
+}
+
+export function AntigravityQuotaSection({
+  items,
+  modelItems = [],
+  isList = false,
+  isNeedsReauth = false,
+  t,
+}: Props) {
+  if (items.length === 0 && modelItems.length === 0) {
     return (
       <div className="quota-empty" style={{ gridColumn: '1 / -1', textAlign: 'center' }}>
         {t('overview.noQuotaData')}
@@ -34,36 +44,44 @@ export function AntigravityQuotaSection({ items, isNeedsReauth = false, t }: Pro
     );
   }
 
-  const renderBar = (key: string, label: string, item?: AgQuotaDisplayItem) => {
+  const renderCell = (
+    key: string,
+    label: string,
+    item?: AgQuotaDisplayItem,
+    fullWidth = false,
+  ) => {
     const percentage = item?.percentage;
     const quotaClass = percentage == null ? 'neutral' : getQuotaClass(percentage);
-    const resetLabel = item?.resetTime ? formatResetTimeDisplay(item.resetTime, t) : '';
+    const fullReset = item?.resetTime ? formatResetTimeDisplay(item.resetTime, t) : '';
+    const shortReset = fullReset ? compactResetText(fullReset) : '';
+
     return (
-      <div key={key} className="codex-quota-mini">
-        <div className="codex-quota-mini-head">
-          <span className="codex-quota-mini-label" title={label}>
+      <div
+        key={key}
+        className={`ag-quota-cell ${quotaClass}${fullWidth ? ' ag-quota-cell--full' : ''}`}
+      >
+        <div className="ag-quota-cell-head">
+          <span className="ag-quota-cell-label" title={label}>
             {label}
           </span>
-        </div>
-        <div className="codex-quota-mini-meter">
-          <div className="codex-quota-mini-track" aria-hidden="true">
-            {percentage != null && (
-              <div
-                className={`codex-quota-mini-bar ${quotaClass}`}
-                style={{ width: `${Math.max(0, Math.min(100, percentage))}%` }}
-              />
-            )}
-          </div>
           <span
-            className={`codex-quota-mini-pct ${quotaClass}`}
+            className={`ag-quota-cell-pct ${quotaClass}`}
             title={percentage == null ? t('overview.noQuotaData') : undefined}
           >
             {percentage == null ? '—' : `${percentage}%`}
           </span>
         </div>
-        {resetLabel ? (
-          <div className="codex-quota-mini-reset" title={resetLabel}>
-            {resetLabel}
+        <div className="ag-quota-bar-track" aria-hidden="true">
+          {percentage != null && (
+            <div
+              className={`ag-quota-bar-fill ${quotaClass}`}
+              style={{ width: `${Math.max(0, Math.min(100, percentage))}%` }}
+            />
+          )}
+        </div>
+        {shortReset ? (
+          <div className="ag-quota-cell-reset" title={fullReset}>
+            {shortReset}
           </div>
         ) : null}
       </div>
@@ -90,17 +108,34 @@ export function AntigravityQuotaSection({ items, isNeedsReauth = false, t }: Pro
             : t('common.shared.quota.cachedRefreshFailed')}
         </div>
       )}
-      <div className="codex-quota-mini-list">
-        {hasBuckets &&
-          targetWindows.map((window) =>
-            renderBar(
-              window.key,
-              window.label,
-              items.find((item) => item.key === window.key),
+      {items.length > 0 && (
+        <div className={`ag-quota-grid${isList ? ' ag-quota-grid--list' : ''}`}>
+          {hasBuckets &&
+            targetWindows.map((window) =>
+              renderCell(
+                window.key,
+                window.label,
+                items.find((item) => item.key === window.key),
+              ),
+            )}
+          {extraItems.map((item, idx) =>
+            renderCell(
+              item.key,
+              item.label,
+              item,
+              extraItems.length % 2 === 1 && idx === extraItems.length - 1,
             ),
           )}
-        {extraItems.map((item) => renderBar(item.key, item.label, item))}
-      </div>
+        </div>
+      )}
+      {modelItems.length > 0 && (
+        <details className="antigravity-model-quota-details">
+          <summary>{t('modals.quota.title')}</summary>
+          <div className="ag-quota-grid ag-quota-grid--list">
+            {modelItems.map((item) => renderCell(item.key, item.label, item))}
+          </div>
+        </details>
+      )}
     </>
   );
 }

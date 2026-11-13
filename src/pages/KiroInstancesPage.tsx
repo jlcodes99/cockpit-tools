@@ -63,7 +63,7 @@ export function KiroInstancesContent({
       renderAccountQuotaPreview={renderKiroQuotaPreview}
       renderAccountBadge={(account) => {
         const presentation = buildKiroAccountPresentation(account, t);
-        return <span className={`instance-plan-badge ${presentation.planClass}`}>{presentation.planLabel}</span>;
+        return <span className={`tier-badge account-picker-plan ${presentation.planClass}`}>{presentation.planLabel}</span>;
       }}
       getAccountSearchText={(account) => {
         const presentation = buildKiroAccountPresentation(account, t);

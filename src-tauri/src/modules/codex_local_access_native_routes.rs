@@ -75,7 +75,12 @@ fn native_gateway_model(
     if models.iter().any(|candidate| candidate == model) {
         return Ok(model.to_owned());
     }
-    if shells && !crate::modules::codex_remote_service::is_known(&gateway.base_url,&gateway.api_key) {
+    if shells && !crate::modules::codex_remote_service::is_known(&gateway.base_url, &gateway.api_key) {
+        // Standalone Responses catalogs describe discovery. A recognized remote
+        // Cockpit service instead advertises the model scope granted to its key.
+        if gateway.wire_api.as_deref() == Some("responses") {
+            return Ok(model.to_owned());
+        }
         if let Some(slot) = provider_gateway_model_slots(&models)
             .into_iter()
             .find(|slot| slot.client_model == model)
@@ -436,7 +441,8 @@ fn native_plan_account_model(
     // Explicit provider routes do not broaden this grant's catalog. A cold
     // catalog uses only the pre-existing local Codex model allowlist.
     if native_is_chatgpt_plan_account(account) {
-        return native_chatgpt_plan_model(account, &plan.model);
+        let upstream = native_account_mapped_model(account, &plan.model).unwrap_or(&plan.model);
+        return native_chatgpt_plan_model(account, upstream);
     }
     if plan.provider {
         // An explicit provider catalog can contain additional models not yet in the account catalog.
@@ -448,12 +454,19 @@ fn native_plan_account_model(
             plan.model.clone()
         };
         if plan.automatic {
-            let slots = automatic_api_service_account_model_slots(account);
-            if !slots.is_empty() {
-                return slots
-                    .into_iter()
-                    .find(|(client, _)| client.trim().eq_ignore_ascii_case(model.trim()))
-                    .map(|(_, upstream)| upstream);
+            if !account.is_api_key_auth() {
+                if let Some(upstream) = native_account_mapped_model(account, &model) {
+                    return native_default_codex_model(upstream).then(|| upstream.to_owned());
+                }
+            }
+            if account.is_api_key_auth() || !account.api_model_catalog.is_empty() {
+                let slots = automatic_api_service_account_model_slots(account);
+                if !slots.is_empty() {
+                    return slots
+                        .into_iter()
+                        .find(|(client, _)| client.trim().eq_ignore_ascii_case(model.trim()))
+                        .map(|(_, upstream)| upstream);
+                }
             }
             if !account.is_api_key_auth()
                 && !codex_account::is_grok_upstream_provider(account)
@@ -474,6 +487,15 @@ fn native_plan_account_model(
         }
         native_account_model(account, &model)
     }
+}
+
+fn native_plan_requires_account_mapping(plan: &NativeModelRoutePlan, accounts: &[CodexAccount]) -> bool {
+    plan.oauth_only && !native_default_codex_model(&plan.model)
+        && accounts.iter().any(|account| {
+            plan.account_ids.contains(&account.id)
+                && native_is_oauth_authorization_account(account)
+                && native_account_mapped_model(account, &plan.model).is_some()
+        })
 }
 
 include!("codex_local_access_native_automatic.rs");
@@ -794,8 +816,10 @@ fn native_catalog_model_account<'a>(
     plan: &NativeModelRoutePlan,
     accounts: &'a [CodexAccount],
 ) -> Option<&'a CodexAccount> {
+    let requires_mapping = native_plan_requires_account_mapping(plan, accounts);
     plan.account_ids.iter().find_map(|id| accounts.iter().find(|account| {
         &account.id == id
+            && (!requires_mapping || native_account_mapped_model(account, &plan.model).is_some())
             && (!plan.provider || account.official_registration_id.is_none())
             && (plan.provider
                 || !accounts.iter().any(|other| {
@@ -819,7 +843,9 @@ fn native_catalog(
     if let Some(gateway) = key.and_then(|key| key.provider_gateway.as_ref()) {
         let models = native_gateway_models(gateway);
         candidates.extend(models.iter().cloned());
-        if !crate::modules::codex_remote_service::is_known(&gateway.base_url,&gateway.api_key) {
+        if gateway.wire_api.as_deref() != Some("responses")
+            && !crate::modules::codex_remote_service::is_known(&gateway.base_url, &gateway.api_key)
+        {
             candidates.extend(provider_gateway_model_slots(&models)
                 .into_iter()
                 .map(|slot| slot.client_model));
@@ -883,6 +909,11 @@ fn native_catalog(
             .iter()
             .map(|alias| alias.alias.clone()),
     );
+    let scoped_ids = native_scoped_account_ids(collection, key);
+    candidates.extend(accounts.iter()
+        .filter(|account| scoped_ids.contains(&account.id) && native_is_oauth_authorization_account(account))
+        .flat_map(|account| &account.api_model_mappings)
+        .map(|mapping| mapping.client_model.clone()));
     let mut ids = Vec::new();
     let mut selected = Vec::new();
     for candidate in candidates {
@@ -922,16 +953,6 @@ fn native_catalog(
                 model["prefer_websockets"] = json!(native_catalog_prefers_websockets(
                     collection, key, plan, account
                 ));
-                if let Some(window) = account
-                    .api_model_context_windows
-                    .get(upstream)
-                    .filter(|window| **window > 0)
-                {
-                    model["context_window"] = json!(window);
-                    model["max_context_window"] = json!(window);
-                    model["auto_compact_token_limit"] =
-                        json!(codex_protocol::derived_auto_compact_token_limit(*window));
-                }
                 if account.is_api_key_auth() {
                     let vision = native_catalog_vision(collection, plan, account, upstream);
                     apply_provider_catalog_image_input(model, vision);
@@ -951,12 +972,14 @@ fn native_catalog(
                         }
                     }
                 }
+                native_apply_oauth_mapping_metadata(model, account, &plan.model, upstream);
                 if let Some(template) = remote_templates.get(&(account.id.clone(),upstream.clone()))
                 {
                     for field in REMOTE_MODEL_FIELDS {
                         if let Some(value) = template.get(*field) { model[*field] = value.clone(); }
                     }
                 }
+                native_apply_catalog_account_context(model, account, &plan.model, upstream);
             }
         }
         models.sort_by_key(|model| model["priority"].as_i64().unwrap_or(i64::MAX));
@@ -1227,8 +1250,10 @@ async fn native_select_route_once(
                 .expect("auxiliary operation checked"),
         ));
     }
+    let requires_mapping = native_plan_requires_account_mapping(&plan, &accounts);
     accounts.retain(|account| {
         native_eligible(account)
+            && (!requires_mapping || native_account_mapped_model(account, &plan.model).is_some())
             && native_auxiliary_eligible(account, request.auxiliary.as_deref())
             && !request.excluded_account_ids.contains(&account.id)
             && !account.official_registration_id.as_ref().is_some_and(|id| {
@@ -1366,7 +1391,11 @@ async fn native_select_route_once(
         request.target_account_id.as_deref(),
     );
     native_sort_accounts_scoped(host, &mut accounts, &collection, key, &routing_namespace);
-    if plan.automatic {
+    if request.auxiliary.as_deref() == Some("search") {
+        // Preserve the native OAuth search path when a scoped OAuth account
+        // is available. A compatible relay can serve API-key-only pools.
+        accounts.sort_by_key(CodexAccount::is_api_key_auth);
+    } else if plan.automatic {
         // The old automatic gateway exhausts native candidates before provider routes.
         // Preserve the configured selection order within each group.
         accounts.sort_by_key(|account| {
@@ -1430,9 +1459,10 @@ async fn native_select_route_once(
         if let Some(position) = accounts.iter().position(|account| &account.id == preferred) {
             // A hard opaque/recovery pin overrides scheduling. A soft cached
             // account does not bypass the preferred/regular/backup tier policy.
+            let now = chrono::Utc::now().timestamp();
             if request.preferred_account_id.is_some()
-                || native_account_rank(&accounts[position], &collection, key).0
-                    == native_account_rank(&accounts[0], &collection, key).0
+                || native_account_rank(&accounts[position], &collection, key, now).0
+                    == native_account_rank(&accounts[0], &collection, key, now).0
             {
                 accounts.swap(0, position);
             }
@@ -2116,7 +2146,9 @@ fn native_auxiliary_eligible(account: &CodexAccount, operation: Option<&str>) ->
         Some("responses.websocket") => true,
         Some("audio.transcriptions") => ordinary_oauth || account.is_api_key_auth(),
         Some("audio.translations" | "audio.speech") => account.is_api_key_auth(),
-        Some("search" | "realtime") => ordinary_oauth,
+        Some("search") => ordinary_oauth
+            || (account.is_api_key_auth() && !codex_account::is_grok_upstream_provider(account)),
+        Some("realtime") => ordinary_oauth,
         Some(_) => false,
     }
 }
@@ -2127,11 +2159,23 @@ fn native_operation_model(
     operation: Option<&str>,
     image_input: bool,
 ) -> Option<String> {
-    if operation.is_none() || operation == Some("responses.websocket") {
+    let provider_search_model = operation == Some("search") && account.is_api_key_auth();
+    // Only the existing OAuth search accepts an omitted model. A provider
+    // could otherwise choose an upstream default outside the caller's scope.
+    if provider_search_model && plan.model.is_empty() {
+        return None;
+    }
+    if operation.is_none() || operation == Some("responses.websocket") || provider_search_model {
         let model = native_plan_account_model(plan, account)?;
         if !plan.provider
             && native_is_reserve_model(&model)
             && !account_has_gpt_reserve_entitlement(account)
+        {
+            return None;
+        }
+        if native_is_spark_model(&model)
+            && !account.is_api_key_auth()
+            && !account_has_available_spark_quota(account)
         {
             return None;
         }
@@ -2186,18 +2230,32 @@ fn native_append_image_models(
         let Some(actual) = native_image_source_model(collection, account, family) else {
             continue;
         };
-        for model in [family.clone(), actual] {
+        let compatibility_name = (family.trim() == "gpt-image-2.5").then_some("gpt-image-2");
+        for model in [family.as_str(), actual.as_str()]
+            .into_iter()
+            .chain(compatibility_name)
+        {
+            if !native_image_model_allowed(collection, key, account, model) {
+                continue;
+            }
             let exposed = key
                 .and_then(|key| key.model_prefix.as_ref())
                 .filter(|v| !v.is_empty())
                 .map(|prefix| format!("{}/{model}", prefix.trim_end_matches('/')))
-                .unwrap_or(model);
-            if native_model_for_key(collection, key, &exposed).is_ok() {
-                if let Some(entry) = data.iter_mut().find(|entry| entry["id"] == exposed) {
-                    entry["cockpit_image"] = json!(true);
-                } else {
-                    data.push(json!({"id":exposed,"object":"model","owned_by":"configured-image-source","cockpit_image":true}));
-                }
+                .unwrap_or_else(|| model.to_owned());
+            let Ok(resolved) = native_image_model_for_public_name(collection, key, &exposed, false)
+            else {
+                continue;
+            };
+            if Some(model) == compatibility_name
+                && native_image_selection_model(collection, &resolved) != family.trim()
+            {
+                continue;
+            }
+            if let Some(entry) = data.iter_mut().find(|entry| entry["id"] == exposed) {
+                entry["cockpit_image"] = json!(true);
+            } else {
+                data.push(json!({"id":exposed,"object":"model","owned_by":"configured-image-source","cockpit_image":true}));
             }
         }
     }
@@ -2216,7 +2274,7 @@ pub(crate) use native_chatgpt_plan_tests::assert_chatgpt_plan_mixed_key_real_hos
 mod native_image_catalog_tests {
     use super::*;
     #[test]
-    fn native_image_catalog_exposes_only_selected_allowed_full_model_ids() {
+    fn native_image_catalog_respects_source_and_model_permissions() {
         let mut collection:CodexLocalAccessCollection=serde_json::from_value(json!({"enabled":true,"port":1455,"apiKey":"fixture","accountIds":[],"createdAt":1,"updatedAt":1})).unwrap();
         collection.image_generation_account_ids = vec!["image".into()];
         collection.image_generation_model = "gpt-image-2.5".into();
@@ -2235,7 +2293,46 @@ mod native_image_catalog_tests {
         );
         let mut catalog = json!({"object":"list","data":[]});
         native_append_image_models(&mut catalog, &collection, None, &[account.clone()]);
-        assert_eq!(catalog["data"].as_array().unwrap().len(), 2);
+        let image_models = catalog["data"].as_array().unwrap();
+        assert_eq!(image_models.len(), 3);
+        for id in ["gpt-image-2.5", "gpt-image-2.5-flare", "gpt-image-2"] {
+            assert!(image_models
+                .iter()
+                .any(|model| model["id"] == id && model["cockpit_image"] == true));
+        }
+
+        let mut no_source = json!({"data":[]});
+        native_append_image_models(&mut no_source, &collection, None, &[]);
+        assert_eq!(no_source["data"], json!([]));
+
+        collection.model_aliases = serde_json::from_value(json!([
+            {"sourceModel":"gpt-6.1-sol","alias":"gpt-image-2"}
+        ])).unwrap();
+        let mut conflicting_alias = json!({"data":[{"id":"gpt-image-2","object":"model"}]});
+        native_append_image_models(
+            &mut conflicting_alias,
+            &collection,
+            None,
+            std::slice::from_ref(&account),
+        );
+        assert!(conflicting_alias["data"][0]["cockpit_image"].is_null());
+        collection.model_aliases.clear();
+
+        collection.excluded_models.push("gpt-image-2".into());
+        let mut no_alias = json!({"data":[]});
+        native_append_image_models(
+            &mut no_alias,
+            &collection,
+            None,
+            std::slice::from_ref(&account),
+        );
+        assert_eq!(no_alias["data"].as_array().unwrap().len(), 2);
+        assert!(no_alias["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|model| model["id"] != "gpt-image-2"));
+
         collection.excluded_models.push("gpt-image-*".into());
         let mut denied = json!({"data":[]});
         native_append_image_models(&mut denied, &collection, None, &[account]);

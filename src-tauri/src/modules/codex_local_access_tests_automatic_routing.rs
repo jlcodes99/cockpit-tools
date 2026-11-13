@@ -319,6 +319,10 @@ fn deepseek_future_relay_models_keep_reasoning_in_mixed_catalog() {
     let slots = super::allocate_provider_model_slots(&["vendor/deepseek-v5-pro".into(), "other-model".into()]);
     let catalog: serde_json::Value = serde_json::from_str(&super::build_provider_model_catalog_json(&slots).unwrap()).unwrap();
     let slot = slots.iter().find(|slot| slot.upstream_model == "vendor/deepseek-v5-pro").unwrap();
+    assert_eq!(slot.client_model, "vendor/deepseek-v5-pro");
+    assert!(slots.iter().any(|slot| {
+        slot.upstream_model == "other-model" && slot.client_model == "gpt-5.6-terra"
+    }));
     let model = catalog["models"].as_array().unwrap().iter().find(|model| model["slug"] == slot.client_model).unwrap();
     let efforts: Vec<_> = model["supported_reasoning_levels"].as_array().unwrap().iter().map(|level| level["effort"].as_str().unwrap()).collect();
     assert_eq!(efforts, ["low", "high", "max"]);
@@ -667,6 +671,7 @@ fn managed_catalog_save_preserves_scoped_image_input_and_explicit_disable() {
     let model = crate::models::codex::CodexExperimentalModelDefinition {
         model_id: "team/custom-input-model".into(), display_name: "My custom model".into(),
         reasoning_efforts: None, default_reasoning_effort: None,
+        ultra_reasoning_effort: None,
         context_window: None, auto_compact_token_limit: None,
     };
     let path = profile.path().join("cockpit-model-catalog.json");

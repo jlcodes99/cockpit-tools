@@ -9,6 +9,8 @@ fn approved_issue_timeout_values_round_trip_to_sidecar_without_changing_service_
     assert_eq!(collection.timeouts.sidecar_stream_open_timeout_ms, 60_000);
     collection.timeouts.sidecar_stream_open_timeout_ms = 1_000;
     collection.timeouts.sidecar_image_stream_open_timeout_ms = 600_000;
+    collection.timeouts.upstream_send_retry_attempts = 0;
+    collection.timeouts.sidecar_streaming_bootstrap_retries = 0;
     super::normalize_timeouts(&mut collection.timeouts);
     super::save_collection_to_disk(&collection).unwrap();
     let before = fs::read(super::local_access_file_path().unwrap()).unwrap();
@@ -16,6 +18,10 @@ fn approved_issue_timeout_values_round_trip_to_sidecar_without_changing_service_
     assert_eq!(loaded.timeouts.sidecar_stream_open_timeout_ms, 1_000);
     assert_eq!(loaded.timeouts.sidecar_image_stream_open_timeout_ms, 600_000);
     assert_eq!(loaded.timeouts.sidecar_stream_open_max_attempts, 1);
+    let mut profile = test_local_access_collection(Vec::new());
+    super::apply_provider_gateway_template_settings(&mut profile, &loaded);
+    assert_eq!(profile.timeouts.upstream_send_retry_attempts, 0);
+    assert_eq!(profile.timeouts.sidecar_streaming_bootstrap_retries, 0);
     assert_eq!(loaded.port, collection.port);
     assert_eq!(loaded.api_key, collection.api_key);
     assert_eq!(serde_json::to_value(&loaded.api_keys).unwrap(), serde_json::to_value(&collection.api_keys).unwrap());

@@ -27,6 +27,25 @@ import type {
   CodexInstanceGatewayView,
 } from "../types/codexLocalAccess";
 
+export interface CodexClaudeCodeSettingsPreview {
+  path: string;
+  revision: string;
+  changes: Record<string, string | null>;
+  changed: boolean;
+}
+
+export function previewCodexClaudeCodeSettings(keyId: string): Promise<CodexClaudeCodeSettingsPreview> {
+  return invoke("codex_local_access_preview_claude_code_settings", { keyId });
+}
+
+export function applyCodexClaudeCodeSettings(keyId: string, revision: string): Promise<void> {
+  return invoke("codex_local_access_apply_claude_code_settings", { keyId, revision });
+}
+
+export function restoreCodexClaudeCodeSettings(): Promise<void> {
+  return invoke("codex_local_access_restore_claude_code_settings");
+}
+
 export async function getCodexLocalAccessState(): Promise<CodexLocalAccessState> {
   return await invoke("codex_local_access_get_state");
 }
@@ -142,10 +161,13 @@ export async function queryCodexLocalAccessRequestLogs(
     endAt: query.endAt ?? null,
     modelQuery: query.modelQuery ?? null,
     accountQuery: query.accountQuery ?? null,
+    accountNameMatches: query.accountNameMatches ?? null,
     accountId: query.accountId ?? null,
     apiKeyId: query.apiKeyId ?? null,
     apiKeyQuery: query.apiKeyQuery ?? null,
     instanceQuery: query.instanceQuery ?? null,
+    sourceKind: query.sourceKind ?? null,
+    peerIp: query.peerIp?.trim() || null,
     sessionQuery: query.sessionQuery?.trim() || null,
     gatewayMode: query.gatewayMode ?? null,
     requestKind: query.requestKind ?? null,
@@ -384,6 +406,7 @@ export async function updateCodexLocalAccessApiKey(
     modelPrefix?: string | null;
     allowedModels?: string[] | null;
     excludedModels?: string[] | null;
+    maxReasoningEffort?: import("../types/codexLocalAccess").CodexApiKeyReasoningCeiling | "";
     tokenLimit?: number | null;
     budget?: import('../types/codexRemoteService').CodexApiKeyBudget;
     accountIds?: string[] | null;
@@ -397,6 +420,7 @@ export async function updateCodexLocalAccessApiKey(
     modelPrefix: payload.modelPrefix ?? null,
     allowedModels: payload.allowedModels ?? null,
     excludedModels: payload.excludedModels ?? null,
+    maxReasoningEffort: payload.maxReasoningEffort ?? null,
     tokenLimit: payload.tokenLimit ?? null,
     budget: payload.budget ?? null,
     accountIds: payload.accountIds ?? null,
@@ -431,13 +455,7 @@ export async function deleteCodexLocalAccessApiKey(
 export async function setCodexLocalAccessEnabled(
   enabled: boolean,
 ): Promise<CodexLocalAccessState> {
-  const state = enabled
-    ? await withCodexPathRecovery(
-        () => invoke<CodexLocalAccessState>("codex_local_access_set_enabled", { enabled }),
-        { key: codexPathRecoveryKey("codex_local_access_set_enabled", { enabled }) },
-      )
-    : await invoke<CodexLocalAccessState>("codex_local_access_set_enabled", { enabled });
-  return state;
+  return await invoke<CodexLocalAccessState>("codex_local_access_set_enabled", { enabled });
 }
 
 export async function activateCodexLocalAccess(

@@ -132,6 +132,41 @@ fn claude_stream_emits_only_final_signatures_per_item_and_search_once() {
 }
 
 #[test]
+fn claude_signature_only_reasoning_roundtrips_without_a_visible_thinking_block() {
+    let response = json!({"id":"redacted","model":"model","status":"completed","output":[
+        {"id":"rs-hidden","type":"reasoning","summary":[],"encrypted_content":"opaque-cipher"},
+        {"id":"fc-tool","type":"function_call","call_id":"call-tool","name":"lookup","arguments":"{}"}
+    ],"usage":{}});
+    let message = response_from_responses(&response, &context()).unwrap();
+    assert_eq!(message["content"][0], json!({"type":"redacted_thinking","data":"opaque-cipher"}));
+    assert_eq!(message["content"][1]["id"], "call-tool");
+    let request = prepare_request(json!({"model":"model","messages":[
+        {"role":"assistant","content":message["content"]},
+        {"role":"user","content":[{"type":"tool_result","tool_use_id":"call-tool","content":"ok"}]}
+    ]}), CompatFlavor::Claude, None, None).unwrap();
+    assert_eq!(request.responses["input"][0], json!({"type":"reasoning","summary":[],"encrypted_content":"opaque-cipher"}));
+    assert_eq!(request.responses["input"][1]["call_id"], "call-tool");
+    assert_eq!(request.responses["input"][2]["call_id"], "call-tool");
+
+    for with_item_events in [false, true] {
+        let mut adapter = CompatStreamAdapter::new(context());
+        let mut frames = Vec::new();
+        if with_item_events {
+            let item = &response["output"][0];
+            frames.extend(adapter.push(&json!({"type":"response.output_item.added","output_index":0,"item":item})).unwrap());
+            frames.extend(adapter.push(&json!({"type":"response.output_item.done","output_index":0,"item":item})).unwrap());
+        }
+        frames.extend(adapter.push(&json!({"type":"response.completed","response":response})).unwrap());
+        adapter.finish().unwrap();
+        let starts: Vec<_> = frames.iter().filter_map(|frame| frame.data.get("content_block")).collect();
+        assert_eq!(starts, [&message["content"][0], &message["content"][1]]);
+        assert!(!frames.iter().any(|frame| frame.data["delta"]["type"] == "signature_delta"));
+        let stopped: Vec<_> = frames.iter().filter(|frame| frame.data["type"] == "content_block_stop").map(|frame| frame.data["index"].as_u64().unwrap()).collect();
+        assert_eq!(stopped, [0, 1]);
+    }
+}
+
+#[test]
 fn gemini_sdk_reasoning_aliases_match_current_go_semantics() {
     for config in [
         json!({"thinkingConfig":{"thinking_level":"HIGH"}}),

@@ -289,7 +289,7 @@ export const createCodexModelSourceResolver = (
   const separator = normalized.indexOf("/");
   if (separator < 0) {
     return {
-      label: t("instances.form.modelRouting.subscriptionSource", "订阅"),
+      label: t("accounts.columns.subscription"),
       kind: "subscription",
       managed: false,
     };
@@ -300,14 +300,14 @@ export const createCodexModelSourceResolver = (
   );
   if (!route) {
     return {
-      label: t("instances.form.modelRouting.missingSource", "路由缺失"),
+      label: t("instances.form.modelRouting.missingSource"),
       kind: "missing",
       managed: false,
     };
   }
   if (!route.enabled) {
     return {
-      label: t("instances.form.modelRouting.disabledSource", "路由已停用"),
+      label: t("instances.form.modelRouting.disabledSource"),
       kind: "missing",
       managed: true,
     };
@@ -317,7 +317,7 @@ export const createCodexModelSourceResolver = (
   );
   if (!provider) {
     return {
-      label: t("instances.form.modelRouting.unavailableSource", "账号不可用"),
+      label: t("instances.form.modelRouting.unavailableSource"),
       kind: "missing",
       managed: true,
     };
@@ -333,10 +333,7 @@ export const createCodexModelSourceResolver = (
     )
   ) {
     return {
-      label: t(
-        "instances.form.modelRouting.modelUnavailable",
-        "模型已不在 API 目录",
-      ),
+      label: t("instances.form.modelRouting.modelUnavailable"),
       kind: "missing",
       managed: true,
     };
@@ -429,6 +426,7 @@ export function toggleRouteModelInRoutes(
   fullModelId: string,
   accounts: CodexModelRoutingAccount[],
   action: "remove" | "add",
+  discoveredRouteId?: string,
 ): CodexInstanceApiRoute[] {
   const norm = fullModelId.trim();
   const sep = norm.indexOf("/");
@@ -439,7 +437,8 @@ export function toggleRouteModelInRoutes(
   const providerAccounts = eligibleCodexModelRoutingAccounts(accounts);
 
   return routes.map((route) => {
-    if (route.namespace.trim().toLowerCase() !== targetNs) return route;
+    if (route.namespace.trim().toLowerCase() !== targetNs ||
+      (discoveredRouteId && route.id !== discoveredRouteId)) return route;
 
     const provider = providerAccounts.find((a) => a.id === route.providerAccountId);
     const allUpstream = collectRouteUpstreamModels(route, provider);
@@ -457,10 +456,14 @@ export function toggleRouteModelInRoutes(
       const alreadyHas = currentSelected.some(
         (m) => m.trim().toLowerCase() === targetUpstream.toLowerCase(),
       );
-      if (alreadyHas) return route;
+      const registerDiscovered = discoveredRouteId && !allUpstream.some(
+        (model) => model.toLowerCase() === targetUpstream.toLowerCase(),
+      );
+      if (alreadyHas && !registerDiscovered) return route;
       return {
         ...route,
-        selectedModels: [...currentSelected, targetUpstream],
+        ...(registerDiscovered ? { extraModels: [...(route.extraModels ?? []), targetUpstream] } : {}),
+        selectedModels: alreadyHas ? currentSelected : [...currentSelected, targetUpstream],
       };
     }
   });
@@ -612,10 +615,7 @@ export function CodexModelRoutingEditor({
     const baseUrl = account.api_base_url?.trim();
     if (!apiKey || !baseUrl) {
       setRouteActionError(
-        t(
-          "instances.form.modelRouting.fetchCredentialsRequired",
-          "这个 API 账号缺少 Key 或 Base URL，无法获取模型列表。",
-        ),
+        t("instances.form.modelRouting.fetchCredentialsRequired"),
       );
       return;
     }
@@ -640,10 +640,7 @@ export function CodexModelRoutingEditor({
       );
       if (models.length === 0) {
         setRouteActionError(
-          t(
-            "instances.form.modelRouting.fetchEmpty",
-            "上游没有返回模型，可以在下面手动填写。",
-          ),
+          t("instances.form.modelRouting.fetchEmpty"),
         );
         return;
       }
@@ -666,8 +663,7 @@ export function CodexModelRoutingEditor({
     } catch (error) {
       if (!isCurrentRequest()) return;
       setRouteActionError(
-        t("instances.form.modelRouting.fetchFailed", {
-          defaultValue: "获取模型列表失败：{{error}}",
+        t("codex.api.modelCatalog.fetchFailed", {
           error: String(error).replace(/^Error:\s*/, ""),
         }),
       );
@@ -720,10 +716,7 @@ export function CodexModelRoutingEditor({
     return (
       <div className="codex-model-routing-empty-accounts">
         <p>
-          {t(
-            "instances.form.modelRouting.noProviderAccounts",
-            "未检测到可用的 API 账号。请先在「API 账号」页面添加支持的模型服务。",
-          )}
+          {t("instances.form.modelRouting.noProviderAccounts")}
         </p>
       </div>
     );
@@ -786,14 +779,8 @@ export function CodexModelRoutingEditor({
                       )
                     }
                     options={providerOptions}
-                    placeholder={t(
-                      "instances.form.modelRouting.provider",
-                      "选择 API 账号",
-                    )}
-                    ariaLabel={t(
-                      "instances.form.modelRouting.provider",
-                      "选择 API 账号",
-                    )}
+                    placeholder={t("instances.form.modelRouting.provider")}
+                    ariaLabel={t("instances.form.modelRouting.provider")}
                   />
                 </div>
                 <div className="codex-model-routing-card__namespace-wrap">
@@ -811,10 +798,7 @@ export function CodexModelRoutingEditor({
                         ),
                       );
                     }}
-                    placeholder={t(
-                      "instances.form.modelRouting.namespacePlaceholder",
-                      "前缀 (如 cpa)",
-                    )}
+                    placeholder={t("instances.form.modelRouting.namespacePlaceholder")}
                     maxLength={32}
                   />
                   <span className="codex-model-routing-card__namespace-suffix">/</span>
@@ -826,7 +810,7 @@ export function CodexModelRoutingEditor({
                   onClick={() =>
                     onRoutesChange(routes.filter((item) => item.id !== route.id))
                   }
-                  title={t("instances.form.modelRouting.deleteRoute", "删除渠道")}
+                  title={t("instances.form.modelRouting.deleteRoute")}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -835,8 +819,8 @@ export function CodexModelRoutingEditor({
               <div className="codex-model-routing-card__models-section">
                 <div className="codex-model-routing-card__models-bar">
                   <span className="codex-model-routing-card__models-label">
-                    {t("instances.form.modelRouting.loadedModels", "已加载模型")}
-                    <span className="codex-model-routing-summary__count-badge" title="已启用 / 总数">
+                    {t("instances.form.modelRouting.loadedModels")}
+                    <span className="codex-model-routing-summary__count-badge" title={t("instances.form.modelRouting.enabledTotal")}>
                       {route.selectedModels ? `${route.selectedModels.length}/${models.length}` : models.length}
                     </span>
                   </span>
@@ -853,7 +837,7 @@ export function CodexModelRoutingEditor({
                               [route.id]: e.target.value,
                             }))
                           }
-                          placeholder={t("common.filter", "过滤...")}
+                          placeholder={t("common.shared.filterLabel")}
                         />
                       </div>
                     )}
@@ -864,7 +848,7 @@ export function CodexModelRoutingEditor({
                           className="codex-model-routing-card__action-btn"
                           disabled={disabled}
                           onClick={() => selectAllModels(route.id)}
-                          title="全选该渠道所有模型"
+                          title={t("common.selectAll")}
                         >
                           {t("common.selectAll", "全选")}
                         </button>
@@ -873,9 +857,9 @@ export function CodexModelRoutingEditor({
                           className="codex-model-routing-card__action-btn"
                           disabled={disabled}
                           onClick={() => clearAllModels(route.id)}
-                          title="清空已选模型"
+                          title={t("common.clearAll")}
                         >
-                          {t("common.clear", "清空")}
+                          {t("common.clearAll")}
                         </button>
                       </>
                     )}
@@ -897,7 +881,7 @@ export function CodexModelRoutingEditor({
                       />
                       {fetchingAccountId === provider?.id
                         ? t("common.loading", "获取中...")
-                        : t("instances.form.modelRouting.fetchModels", "获取列表")}
+                        : t("instances.form.modelRouting.fetchModels")}
                     </button>
                     {!showManual && (
                       <button
@@ -907,7 +891,7 @@ export function CodexModelRoutingEditor({
                         onClick={() => setAddingManualRouteId(route.id)}
                       >
                         <Plus size={12} />
-                        {t("instances.form.modelRouting.addModels", "添加模型")}
+                        {t("codex.experimentalModelCatalog.models.add")}
                       </button>
                     )}
                   </div>
@@ -936,10 +920,7 @@ export function CodexModelRoutingEditor({
                           setAddingManualRouteId(null);
                         }
                       }}
-                      placeholder={t(
-                        "instances.form.modelRouting.manualPlaceholder",
-                        "gpt-5.6-sol, grok-4.6",
-                      )}
+                      placeholder={t("instances.form.modelRouting.manualPlaceholder")}
                     />
                     <button
                       type="button"
@@ -964,10 +945,7 @@ export function CodexModelRoutingEditor({
 
                 {models.length === 0 ? (
                   <p className="codex-model-routing-card__empty-models">
-                    {t(
-                      "instances.form.modelRouting.noCatalog",
-                      "尚未获取上游模型，点击「获取列表」或手动添加。",
-                    )}
+                    {t("instances.form.modelRouting.noCatalog")}
                   </p>
                 ) : (
                   <div className="codex-model-routing-card__pills">
@@ -985,7 +963,7 @@ export function CodexModelRoutingEditor({
                           aria-disabled={disabled}
                           key={model}
                           onClick={() => toggleModelSelection(route.id, model, models)}
-                          title={isSelected ? t("instances.form.modelRouting.clickToDeselect", "已勾选（点击取消）") : t("instances.form.modelRouting.clickToSelect", "未勾选（点击选择）")}
+                          title={isSelected ? t("instances.form.modelRouting.deselectModel") : t("instances.form.modelRouting.selectModel")}
                         >
                           <span className="codex-model-routing-card__pill-checkbox">
                             {isSelected ? "✓" : ""}
@@ -1000,7 +978,7 @@ export function CodexModelRoutingEditor({
                                 e.stopPropagation();
                                 removeManualModel(route.id, model);
                               }}
-                              title={t("common.remove", "删除")}
+                              title={t("common.delete", "删除")}
                             >
                               <X size={10} />
                             </button>
@@ -1038,7 +1016,7 @@ export function CodexModelRoutingEditor({
         }}
       >
         <Plus size={14} />
-        {t("instances.form.modelRouting.addRoute", "添加 API 渠道")}
+        {t("instances.form.modelRouting.addRoute")}
       </button>
 
       {routeActionError && (
@@ -1136,12 +1114,9 @@ export function CodexModelRoutingModal({
       <div className="modal codex-model-routing-modal">
         <div className="modal-header">
           <div>
-            <h2>{t("instances.form.modelRouting.modalTitle", "第三方 API 路由配置")}</h2>
+            <h2>{t("instances.form.modelRouting.title")}</h2>
             <p>
-              {t(
-                "instances.form.modelRouting.modalDescription",
-                "配置第三方 API 账号与模型前缀。未配置前缀的模型继续走当前订阅。",
-              )}
+              {t("instances.form.modelRouting.modalDescription")}
             </p>
           </div>
           <div className="codex-model-routing-modal__header-actions">
@@ -1152,7 +1127,7 @@ export function CodexModelRoutingModal({
                 </span>
                 <label
                   className="codex-model-routing__switch"
-                  title={enabled ? t("instances.form.modelRouting.clickToDisable", "点击关闭第三方路由") : t("instances.form.modelRouting.clickToEnable", "点击开启第三方路由")}
+                  title={enabled ? t("common.disable") : t("common.enable")}
                   onClick={(e) => {
                     e.preventDefault();
                     void handleModalToggle(!enabled);
@@ -1242,7 +1217,7 @@ export function CodexModelRoutingSummary({
       <div className="codex-model-routing-summary">
         <div className="codex-model-routing-summary__header">
           <span className="codex-model-routing-summary__title">
-            {t("instances.form.modelRouting.channelsSummary", "第三方 API 渠道")}
+            {t("instances.form.modelRouting.channelsSummary")}
             <span className="codex-model-routing-summary__count-badge">
               {routes.length}
             </span>
@@ -1254,13 +1229,13 @@ export function CodexModelRoutingSummary({
             onClick={() => setModalOpen(true)}
           >
             <SlidersHorizontal size={13} />
-            {t("instances.form.modelRouting.manageChannels", "配置渠道")}
+            {t("instances.form.modelRouting.manageChannels")}
           </button>
         </div>
 
         {routes.length === 0 ? (
           <div className="codex-model-routing-summary__empty">
-            <span>{t("instances.form.modelRouting.noChannels", "暂未添加第三方 API 渠道")}</span>
+            <span>{t("instances.form.modelRouting.noChannels")}</span>
             <button
               type="button"
               className="btn btn-outline btn-xs"
@@ -1279,7 +1254,7 @@ export function CodexModelRoutingSummary({
               }}
             >
               <Plus size={11} />
-              {t("instances.form.modelRouting.addRoute", "添加渠道")}
+              {t("instances.form.modelRouting.addRoute")}
             </button>
           </div>
         ) : (
@@ -1299,14 +1274,14 @@ export function CodexModelRoutingSummary({
                   onClick={() => {
                     if (!disabled) setModalOpen(true);
                   }}
-                  title={t("instances.form.modelRouting.clickToEdit", "点击配置此渠道")}
+                  title={t("common.edit")}
                 >
                   <div className="codex-model-routing-summary__row-left">
                     <code className="codex-model-routing-summary__namespace">
                       {route.namespace ? `${route.namespace}/` : "—"}
                     </code>
                     <span className="codex-model-routing-summary__account-name">
-                      {accountName || t("instances.form.modelRouting.unnamedAccount", "未选择账号")}
+                      {accountName || t("instances.form.modelRouting.unnamedAccount")}
                     </span>
                   </div>
                   <div className="codex-model-routing-summary__row-right">
@@ -1397,7 +1372,7 @@ export function CodexModelRoutingFields({
   const switchControl = (
     <label
       className="codex-model-routing__switch"
-      title={enabled ? t("instances.form.modelRouting.clickToDisable", "点击关闭第三方路由") : t("instances.form.modelRouting.clickToEnable", "点击开启第三方路由")}
+      title={enabled ? t("common.disable") : t("common.enable")}
       onClick={(event) => {
         event.preventDefault();
         void handleToggle(!enabled);
@@ -1424,7 +1399,7 @@ export function CodexModelRoutingFields({
           </div>
           <div className="codex-launch-preview-tool-copy">
             <div className="codex-model-routing-row__title-row">
-              <h3>{t("instances.form.modelRouting.title", "第三方 API 路由")}</h3>
+              <h3>{t("instances.form.modelRouting.title")}</h3>
               {switchControl}
             </div>
             <p>
@@ -1436,19 +1411,19 @@ export function CodexModelRoutingFields({
             <div className="codex-launch-preview-tool-meta">
               <span className={enabled ? "is-enabled" : ""}>
                 {enabled
-                  ? t("codex.launchPreview.modelRoutingEnabled", "已启用")
-                  : t("codex.launchPreview.modelRoutingDisabled", "未启用")}
+                  ? t("common.enabled", "已启用")
+                  : t("common.disabled", "未启用")}
               </span>
               {enabled && routes.length > 0 && (
                 <>
                   <span>
-                    {t("instances.form.modelRouting.routesCount", "{{count}} 个渠道", {
+                    {t("instances.form.modelRouting.routesCount", {
                       count: routes.length,
                     })}
                   </span>
                   {totalModelsCount > 0 && (
                     <span>
-                      {t("instances.form.modelRouting.modelsCount", "{{count}} 个路由模型", {
+                      {t("codex.api.modelCatalog.count", {
                         count: totalModelsCount,
                       })}
                     </span>
@@ -1470,8 +1445,8 @@ export function CodexModelRoutingFields({
             }}
           >
             {enabled
-              ? t("instances.form.modelRouting.manageAction", "管理 API 渠道")
-              : t("instances.form.modelRouting.enableAction", "配置 API 渠道")}
+              ? t("instances.form.modelRouting.manageAction")
+              : t("instances.form.modelRouting.manageChannels")}
           </button>
         </section>
 
@@ -1497,7 +1472,7 @@ export function CodexModelRoutingFields({
       <div className="codex-model-routing__header">
         <div>
           <label htmlFor="codex-model-routing-enabled">
-            {t("instances.form.modelRouting.title", "第三方 API 路由")}
+            {t("instances.form.modelRouting.title")}
           </label>
           <p className="form-hint">
             {t(

@@ -235,6 +235,48 @@ fn assert_cipher_owner(fixture: &Fixture, cipher: &str, account: &str) {
 }
 
 #[tokio::test]
+async fn codex_http_continuation_with_unavailable_owner_and_no_verified_history_is_terminal() {
+    for immediate_sse in [false, true] {
+        let fixture = Fixture::new(
+            true,
+            vec![Step::RawEvents(raw_events("a-opaque", Repair::Unindexed)), Step::Complete("a-restored", None)],
+            vec![],
+        ).await;
+        let root = body(vec![message("user", "first")], None, true);
+        completed_turn(&fixture, Delivery::Sse, &root).await;
+        assert_no_replay_state(&fixture);
+        fixture.host.missing_owner_status.store(409, Ordering::SeqCst);
+        fixture.host.removed_a.store(true, Ordering::SeqCst);
+        fixture.host.immediate_sse.store(immediate_sse, Ordering::SeqCst);
+
+        let continuation = body(delta(), Some("a-opaque"), true);
+        let response = client()
+            .post(format!("http://{}/v1/responses", fixture.handle.addr))
+            .header("originator", "Codex Desktop")
+            .bearer_auth("synthetic-caller")
+            .json(&continuation)
+            .send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(!response.headers().contains_key("retry-after"));
+        let error: Value = response.json().await.unwrap();
+        assert_eq!(error["error"]["code"], "account_binding_unavailable");
+        assert_eq!(error["error"]["retryable"], false);
+        assert!(error["error"]["message"].as_str().unwrap().contains("Restore access to that account"));
+        assert_eq!(fixture.sent().len(), 1);
+        assert_no_replay_state(&fixture);
+        fixture.assert_owner("a-opaque", "a");
+
+        fixture.host.immediate_sse.store(false, Ordering::SeqCst);
+        let generic_response = fixture.post(&continuation, None).await;
+        assert_eq!(generic_response.status(), StatusCode::CONFLICT);
+        assert_eq!(fixture.sent().len(), 1);
+        fixture.host.removed_a.store(false, Ordering::SeqCst);
+        assert_eq!(completed_turn(&fixture, Delivery::Sse, &continuation).await["id"], "a-restored");
+        fixture.finish().await;
+    }
+}
+
+#[tokio::test]
 async fn output_evidence_repaired_root_cannot_become_portable_after_restart_or_reconnect() {
     for delivery in DELIVERIES {
         for repair in [
@@ -484,7 +526,7 @@ async fn output_evidence_repair_does_not_adopt_unknown_input_or_invent_a_missing
             assert_eq!(sent[0].account, "a");
             assert_eq!(sent[0].body["input"], request["input"]);
             assert!(sent[0].body.get("previous_response_id").is_none());
-            assert_ne!(identity(&sent[0]).1, json!("client-thread"));
+            assert_eq!(identity(&sent[0]).1, json!("client-thread"));
             fixture.assert_owner("a-recovered", "a");
             let digest = format!(
                 "{:x}",

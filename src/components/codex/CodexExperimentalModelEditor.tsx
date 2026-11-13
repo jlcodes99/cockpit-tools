@@ -37,6 +37,7 @@ import { dropdownLayer, dropdownPlacement, type DropdownPlacement } from "../../
 import { useEscCloseTopmost } from "../../hooks/useEscClose";
 import { SingleSelectDropdown } from "../SingleSelectDropdown";
 import { CodexModelConfigTransferModal } from "./CodexModelConfigTransferModal";
+import { CodexProviderModelFetch } from "./CodexProviderModelFetch";
 import "./CodexExperimentalModelEditor.css";
 
 export interface CodexExperimentalModelSource {
@@ -50,6 +51,13 @@ export interface CodexAvailableChannel {
   namespace: string;
   providerName: string;
   models: string[];
+  discovery?: {
+    accountId: string;
+    baseUrl: string;
+    apiKey: string;
+    wireApi?: string;
+    authScheme?: "x-api-key" | "bearer";
+  };
 }
 
 interface CodexExperimentalModelEditorProps {
@@ -66,10 +74,11 @@ interface CodexExperimentalModelEditorProps {
   onDefaultModelChange?: (modelId: string | null) => void;
   onValidationChange?: (error: string | null) => void;
   onModelRemoved?: (removedModelId: string) => void;
-  onModelAdded?: (addedModelId: string) => void;
+  onModelAdded?: (addedModelId: string, discoveredRouteId?: string) => void;
 }
 
 const MODEL_ID_PATTERN = /^[A-Za-z0-9._:/-]+$/;
+const channelModelId = (namespace: string, model: string) => namespace ? `${namespace}/${model.trim()}` : model.trim();
 const CONTEXT_PRESETS = {
   preset_516k: { context_window: 516000, auto_compact_token_limit: 464400 },
   preset_1m: { context_window: 1000000, auto_compact_token_limit: 900000 },
@@ -275,7 +284,7 @@ function resolveContextPreset(
 
 export function validateCodexExperimentalModels(
   models: CodexExperimentalModelDefinition[],
-  translate: (key: string, fallback: string) => string,
+  translate: (key: string, fallback?: string) => string,
   effectiveEfforts?: Record<string, CodexReasoningEffort[]>,
 ): string | null {
   if (models.length === 0) {
@@ -311,6 +320,10 @@ export function validateCodexExperimentalModels(
     const efforts = effectiveEfforts?.[model.model_id] ?? model.reasoning_efforts;
     if (model.default_reasoning_effort && efforts && !efforts.includes(model.default_reasoning_effort)) {
       return translate("codex.experimentalModels.defaultReasoningInvalid", "默认推理档位必须属于当前支持的档位。");
+    }
+    if (model.ultra_reasoning_effort && (model.ultra_reasoning_effort === "ultra"
+      || (efforts && (!efforts.includes("ultra") || !efforts.includes(model.ultra_reasoning_effort))))) {
+      return translate("codex.experimentalModels.ultraReasoningInvalid");
     }
     seen.add(key);
   }
@@ -411,6 +424,7 @@ export function CodexExperimentalModelEditor({
   const [customContextDraft, setCustomContextDraft] =
     useState<CustomContextDraft | null>(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [discoveredChannels, setDiscoveredChannels] = useState<Record<string, { source: string; models: string[] }>>({});
   const [draggingModelId, setDraggingModelId] = useState<string | null>(null);
   const [channelSearchQuery, setChannelSearchQuery] = useState("");
   const addMenuRef = useRef<HTMLDivElement | null>(null);
@@ -521,6 +535,20 @@ export function CodexExperimentalModelEditor({
     () => new Set(models.map((m) => m.model_id.trim().toLowerCase())),
     [models],
   );
+  const catalogAdditions = useMemo(() => {
+    const seen = new Set(existingModelIds);
+    return resetModels.filter((model) => {
+      const id = model.model_id.trim().toLowerCase();
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [existingModelIds, resetModels]);
+  const hasAddChoices = catalogAdditions.length > 0 || Boolean(availableChannels?.length);
+  const catalogQuery = channelSearchQuery.trim().toLowerCase();
+  const visibleCatalogAdditions = catalogAdditions.filter((model) =>
+    model.model_id.toLowerCase().includes(catalogQuery) || model.display_name?.toLowerCase().includes(catalogQuery),
+  );
 
   const resetAvailable = resetModels.length > 0;
   const isResetState = useMemo(
@@ -590,8 +618,17 @@ export function CodexExperimentalModelEditor({
     setAddMenuOpen(false);
   };
 
-  const handleToggleChannelModel = (namespace: string, upstreamModel: string) => {
-    const modelId = `${namespace}/${upstreamModel.trim()}`;
+  const appendCatalogModels = (additions: CodexExperimentalModelDefinition[]) => {
+    if (disabled || additions.length === 0) return;
+    onChange([...models, ...additions]);
+    additions.forEach((model) => onModelAdded?.(model.model_id));
+    if (additions.length === catalogAdditions.length && !availableChannels?.length) {
+      setAddMenuOpen(false);
+    }
+  };
+
+  const handleToggleChannelModel = (namespace: string, upstreamModel: string, discoveredRouteId?: string) => {
+    const modelId = channelModelId(namespace, upstreamModel);
     const isAdded = existingModelIds.has(modelId.toLowerCase());
 
     if (isAdded) {
@@ -604,9 +641,9 @@ export function CodexExperimentalModelEditor({
       if (defaultModelId === modelId) {
         onDefaultModelChange?.(null);
       }
-      onModelRemoved?.(modelId);
+      if (namespace) onModelRemoved?.(modelId);
     } else {
-      const displayName = `${namespace} / ${upstreamModel.trim()}`;
+      const displayName = namespace ? `${namespace} / ${upstreamModel.trim()}` : modelId;
       onChange(
         insertModelsBySource(
           models,
@@ -614,22 +651,23 @@ export function CodexExperimentalModelEditor({
           resolveModelSource,
         ),
       );
-      onModelAdded?.(modelId);
+      if (namespace) onModelAdded?.(modelId, discoveredRouteId);
     }
   };
 
-  const handleAddAllChannelModels = (namespace: string, channelModels: string[]) => {
+  const handleAddAllChannelModels = (channel: CodexAvailableChannel, channelModels: string[]) => {
     const toAdd: CodexExperimentalModelDefinition[] = [];
     const seen = new Set(existingModelIds);
+    const configured = new Set(channel.models.map((model) => model.toLowerCase()));
     for (const upstreamModel of channelModels) {
-      const modelId = `${namespace}/${upstreamModel.trim()}`;
+      const modelId = channelModelId(channel.namespace, upstreamModel);
       if (seen.has(modelId.toLowerCase())) continue;
       seen.add(modelId.toLowerCase());
       toAdd.push({
         model_id: modelId,
-        display_name: `${namespace} / ${upstreamModel.trim()}`,
+        display_name: channel.namespace ? `${channel.namespace} / ${upstreamModel.trim()}` : modelId,
       });
-      onModelAdded?.(modelId);
+      if (channel.namespace) onModelAdded?.(modelId, configured.has(upstreamModel.toLowerCase()) ? undefined : channel.id);
     }
     if (toAdd.length > 0) {
       onChange(insertModelsBySource(models, toAdd, resolveModelSource));
@@ -638,7 +676,7 @@ export function CodexExperimentalModelEditor({
 
   const handleRemoveAllChannelModels = (namespace: string, channelModels: string[]) => {
     const targetIds = new Set(
-      channelModels.map((m) => `${namespace}/${m.trim()}`.toLowerCase()),
+      channelModels.map((m) => channelModelId(namespace, m).toLowerCase()),
     );
     const remaining = models.filter(
       (m) => !targetIds.has(m.model_id.trim().toLowerCase()),
@@ -646,10 +684,13 @@ export function CodexExperimentalModelEditor({
     if (remaining.length === 0) return;
 
     for (const upstream of channelModels) {
-      const fullId = `${namespace}/${upstream.trim()}`;
-      if (existingModelIds.has(fullId.toLowerCase())) {
+      const fullId = channelModelId(namespace, upstream);
+      if (namespace && existingModelIds.has(fullId.toLowerCase())) {
         onModelRemoved?.(fullId);
       }
+    }
+    if (defaultModelId && targetIds.has(defaultModelId.toLowerCase())) {
+      onDefaultModelChange?.(null);
     }
     onChange(remaining);
   };
@@ -692,7 +733,7 @@ export function CodexExperimentalModelEditor({
 
   const validationError = validateCodexExperimentalModels(
     models,
-    (key, fallback) => t(key, fallback),
+    (key, fallback) => fallback === undefined ? t(key) : t(key, fallback),
     effectiveEfforts,
   );
   useEffect(() => {
@@ -938,7 +979,7 @@ export function CodexExperimentalModelEditor({
             type="button"
             className="codex-experimental-model-editor__add-btn"
             onClick={() => {
-              if (availableChannels && availableChannels.length > 0) {
+              if (hasAddChoices) {
                 setAddMenuOpen((prev) => !prev);
               } else {
                 handleAddBlankModel();
@@ -950,7 +991,7 @@ export function CodexExperimentalModelEditor({
           >
             <Plus size={14} />
             <span>{t("codex.experimentalModelCatalog.models.add", "添加模型")}</span>
-            {availableChannels && availableChannels.length > 0 && (
+            {hasAddChoices && (
               <ChevronDown size={13} className={addMenuOpen ? "is-open" : undefined} />
             )}
           </button>
@@ -974,24 +1015,54 @@ export function CodexExperimentalModelEditor({
                   onClick={handleAddBlankModel}
                 >
                   <Plus size={14} />
-                  <span>{t("codex.experimentalModelCatalog.models.addCustomBlank", "新建自定义空白模型")}</span>
+                  <span>{t("codex.experimentalModelCatalog.models.addCustomBlank")}</span>
                 </button>
 
+                {visibleCatalogAdditions.length > 0 && (
+                  <div className="codex-experimental-model-editor__channel-group">
+                    <div className="codex-experimental-model-editor__channel-head">
+                      <span className="codex-experimental-model-editor__channel-title">
+                        {t("codex.apiService.compat.modelCatalogLabel")}
+                      </span>
+                      <button
+                        type="button"
+                        className="codex-experimental-model-editor__channel-add-all"
+                        disabled={disabled}
+                        onClick={() => appendCatalogModels(visibleCatalogAdditions)}
+                      >
+                        {t("codex.experimentalModelCatalog.models.addAll", { count: visibleCatalogAdditions.length })}
+                      </button>
+                    </div>
+                    {visibleCatalogAdditions.map((model) => (
+                      <button
+                        type="button"
+                        key={model.model_id}
+                        className="codex-experimental-model-editor__add-menu-item"
+                        disabled={disabled}
+                        onClick={() => appendCatalogModels([model])}
+                        title={t("codex.experimentalModelCatalog.models.add")}
+                      >
+                        <span className="codex-experimental-model-editor__menu-model-id">{model.model_id}</span>
+                        <span className="codex-experimental-model-editor__menu-status">{t("common.add")}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {availableChannels?.map((channel) => {
-                  const query = channelSearchQuery.trim().toLowerCase();
-                  const filtered = query
-                    ? channel.models.filter(
-                        (m) =>
-                          m.toLowerCase().includes(query) ||
-                          channel.namespace.toLowerCase().includes(query) ||
-                          channel.providerName.toLowerCase().includes(query),
-                      )
-                    : channel.models;
+                  const query = catalogQuery;
+                  const source = JSON.stringify(channel.discovery);
+                  const result = discoveredChannels[channel.id];
+                  const configured = new Set(channel.models.map((model) => model.toLowerCase()));
+                  const fetched = result?.source === source && channel.discovery ? result.models : [];
+                  const channelModels = [...channel.models, ...fetched.filter((model) => !configured.has(model.toLowerCase()))];
+                  const channelMatches = channel.namespace.toLowerCase().includes(query) || channel.providerName.toLowerCase().includes(query);
+                  const filtered = channelMatches ? channelModels : channelModels.filter((model) => model.toLowerCase().includes(query));
 
-                  if (filtered.length === 0 && query) return null;
+                  if (!channelMatches && filtered.length === 0) return null;
 
-                  const unaddedModels = channel.models.filter(
-                    (m) => !existingModelIds.has(`${channel.namespace}/${m}`.toLowerCase()),
+                  const unaddedModels = channelModels.filter(
+                    (m) => !existingModelIds.has(channelModelId(channel.namespace, m).toLowerCase()),
                   );
                   const allAdded = unaddedModels.length === 0;
 
@@ -999,14 +1070,14 @@ export function CodexExperimentalModelEditor({
                     <div className="codex-experimental-model-editor__channel-group" key={channel.id}>
                       <div className="codex-experimental-model-editor__channel-head">
                         <span className="codex-experimental-model-editor__channel-title">
-                          <span className="codex-experimental-model-editor__channel-ns">{channel.namespace}/</span>
+                          {channel.namespace && <span className="codex-experimental-model-editor__channel-ns">{channel.namespace}/</span>}
                           <span className="codex-experimental-model-editor__channel-name">{channel.providerName}</span>
                         </span>
-                        {allAdded ? (
+                        {channelModels.length === 0 ? null : allAdded ? (
                           <button
                             type="button"
                             className="codex-experimental-model-editor__channel-add-all is-remove"
-                            onClick={() => handleRemoveAllChannelModels(channel.namespace, channel.models)}
+                            onClick={() => handleRemoveAllChannelModels(channel.namespace, channelModels)}
                           >
                             {t("common.clearAll", "全部取消")}
                           </button>
@@ -1014,17 +1085,32 @@ export function CodexExperimentalModelEditor({
                           <button
                             type="button"
                             className="codex-experimental-model-editor__channel-add-all"
-                            onClick={() => handleAddAllChannelModels(channel.namespace, unaddedModels)}
+                            onClick={() => handleAddAllChannelModels(channel, unaddedModels)}
                           >
-                            {t("codex.experimentalModelCatalog.models.addAll", "+ 全部 ({{count}})", {
+                            {t("codex.experimentalModelCatalog.models.addAll", {
                               count: unaddedModels.length,
                             })}
                           </button>
                         )}
                       </div>
 
+                      {channel.discovery && (
+                        <CodexProviderModelFetch
+                          {...channel.discovery}
+                          disabled={disabled}
+                          onModels={(ids) => setDiscoveredChannels((current) => ({
+                            ...current,
+                            [channel.id]: {
+                              source,
+                              models: Array.from(new Map(ids.filter((id) => MODEL_ID_PATTERN.test(id) && channelModelId(channel.namespace, id).length <= 128)
+                                .map((id) => [id.toLowerCase(), id])).values()),
+                            },
+                          }))}
+                        />
+                      )}
+
                       {filtered.map((upstreamModel) => {
-                        const fullId = `${channel.namespace}/${upstreamModel}`;
+                        const fullId = channelModelId(channel.namespace, upstreamModel);
                         const isAdded = existingModelIds.has(fullId.toLowerCase());
                         return (
                           <button
@@ -1033,8 +1119,9 @@ export function CodexExperimentalModelEditor({
                             className={`codex-experimental-model-editor__add-menu-item${
                               isAdded ? " is-added" : ""
                             }`}
-                            onClick={() => handleToggleChannelModel(channel.namespace, upstreamModel)}
-                            title={isAdded ? t("common.clickToRemove", "点击取消选择") : t("common.clickToAdd", "点击添加模型")}
+                            onClick={() => handleToggleChannelModel(channel.namespace, upstreamModel,
+                              configured.has(upstreamModel.toLowerCase()) ? undefined : channel.id)}
+                            title={isAdded ? t("codex.experimentalModelCatalog.models.remove") : t("codex.experimentalModelCatalog.models.add")}
                           >
                             <span className="codex-experimental-model-editor__menu-item-left">
                               <span className="codex-experimental-model-editor__menu-checkbox">
@@ -1043,7 +1130,7 @@ export function CodexExperimentalModelEditor({
                               <span className="codex-experimental-model-editor__menu-model-id">{fullId}</span>
                             </span>
                             <span className="codex-experimental-model-editor__menu-status">
-                              {isAdded ? t("common.added", "已添加") : t("common.add", "+ 添加")}
+                              {isAdded ? t("codex.experimentalModelCatalog.models.added") : t("common.add", "+ 添加")}
                             </span>
                           </button>
                         );
@@ -1076,7 +1163,7 @@ export function CodexExperimentalModelEditor({
           {t("codex.experimentalModelCatalog.models.displayName", "展示名")}
         </span>
         {showModelSource && (
-          <span>{t("codex.experimentalModelCatalog.models.source", "来源")}</span>
+          <span>{t("codex.experimentalModelCatalog.models.source")}</span>
         )}
         <span>
           {t("codex.experimentalModelCatalog.models.reasoning", "推理强度")}
@@ -1100,6 +1187,8 @@ export function CodexExperimentalModelEditor({
       >
         {models.map((model, index) => {
           const source = resolveModelSource?.(model.model_id);
+          const supportedEfforts = effectiveEfforts[model.model_id];
+          const supportsUltra = supportedEfforts?.includes("ultra");
           return (
           <div
             className={`codex-experimental-model-editor__row${
@@ -1180,7 +1269,7 @@ export function CodexExperimentalModelEditor({
               {showModelSource && (
                 <div className="codex-experimental-model-editor__source">
                   <span className="codex-experimental-model-editor__field-label">
-                    {t("codex.experimentalModelCatalog.models.source", "来源")}
+                    {t("codex.experimentalModelCatalog.models.source")}
                   </span>
                   {source ? (
                     <span
@@ -1192,7 +1281,7 @@ export function CodexExperimentalModelEditor({
                     </span>
                   ) : (
                     <span className="codex-experimental-model-editor__source-badge" data-kind="subscription">
-                      {t("instances.form.modelRouting.subscriptionSource", "订阅")}
+                      {t("accounts.columns.subscription")}
                     </span>
                   )}
                 </div>
@@ -1323,6 +1412,24 @@ export function CodexExperimentalModelEditor({
                     ? { ...item, default_reasoning_effort: value ? value as CodexReasoningEffort : undefined } : item))} />
                 {model.default_reasoning_effort && effectiveEfforts[model.model_id] && !effectiveEfforts[model.model_id].includes(model.default_reasoning_effort)
                   && <small role="alert" className="codex-experimental-model-editor__error">{t("codex.experimentalModels.defaultReasoningInvalid")}</small>}
+                {(supportsUltra || model.ultra_reasoning_effort) && <>
+                  <small>{t("codex.experimentalModels.ultraReasoning")}</small>
+                  <SingleSelectDropdown
+                    value={model.ultra_reasoning_effort ?? ""}
+                    className="codex-experimental-model-default-effort-select"
+                    options={[{ value: "", label: t("codex.experimentalModels.defaultReasoningFollow") },
+                      ...sortCodexReasoningEfforts(supportedEfforts ?? [])
+                        .filter((effort) => supportsUltra && effort !== "ultra")
+                        .map((effort) => ({ value: effort, label: reasoningLabel(effort) }))]}
+                    disabled={disabled}
+                    ariaLabel={t("codex.experimentalModels.ultraReasoning")}
+                    onChange={(value) => onChange(models.map((item, itemIndex) => itemIndex === index
+                      ? { ...item, ultra_reasoning_effort: value ? value as CodexReasoningEffort : undefined } : item))}
+                  />
+                  {model.ultra_reasoning_effort && supportedEfforts
+                    && (!supportsUltra || !supportedEfforts.includes(model.ultra_reasoning_effort))
+                    && <small role="alert" className="codex-experimental-model-editor__error">{t("codex.experimentalModels.ultraReasoningInvalid")}</small>}
+                </>}
               </div>
               <div
                 className="codex-experimental-model-editor__context"
@@ -1520,7 +1627,7 @@ export function CodexExperimentalModelEditor({
               {t("codex.experimentalModelCatalog.models.displayName", "展示名")}
             </span>
             {showModelSource && (
-              <span>{t("codex.experimentalModelCatalog.models.source", "来源")}</span>
+              <span>{t("codex.experimentalModelCatalog.models.source")}</span>
             )}
             <span>
               {t("codex.experimentalModelCatalog.models.reasoning", "推理强度")}
@@ -1579,9 +1686,9 @@ export function CodexExperimentalModelEditor({
                   <span
                     className="codex-experimental-model-summary__source"
                     data-kind={source?.kind ?? "subscription"}
-                    title={source?.label ?? t("instances.form.modelRouting.subscriptionSource", "订阅")}
+                    title={source?.label ?? t("accounts.columns.subscription")}
                   >
-                    {source?.label ?? t("instances.form.modelRouting.subscriptionSource", "订阅")}
+                    {source?.label ?? t("accounts.columns.subscription")}
                   </span>
                 )}
                 <span className="codex-experimental-model-summary__reasoning">

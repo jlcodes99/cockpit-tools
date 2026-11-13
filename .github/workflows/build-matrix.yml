@@ -20,7 +20,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  CGO_ENABLED: "0"
 
 jobs:
   prepare:

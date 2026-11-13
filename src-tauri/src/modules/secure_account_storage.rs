@@ -4,28 +4,15 @@
 //! at rest. Legacy plaintext files still load and are rewritten encrypted on the
 //! next save (or when rotation is due).
 
-use aes_gcm::aead::Aead;
-use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
-use base64::{engine::general_purpose, Engine as _};
-use rand::RngCore;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use aes_gcm::{Aes256Gcm, KeyInit};
+use serde::{de::DeserializeOwned, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const KEY_FILE: &str = "secure-account-storage.key";
-const VERSION: u32 = 1;
-const ROTATION_SECONDS: i64 = 30 * 24 * 60 * 60;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SecureAccountEnvelope {
-    version: u32,
-    kind: String,
-    algorithm: String,
-    key_id: String,
-    nonce: String,
-    ciphertext: String,
-    encrypted_at: i64,
-}
+use super::account_file_crypto::{
+    decrypt_envelope, lock_account_file_for_write, read_key, read_or_create_key_at, serialize_with_cipher, SecureAccountEnvelope,
+    KEY_FILE, ROTATION_SECONDS,
+};
 
 fn key_path() -> Result<PathBuf, String> {
     Ok(crate::modules::account::get_data_dir()?.join(KEY_FILE))
@@ -34,47 +21,6 @@ fn key_path() -> Result<PathBuf, String> {
 fn read_or_create_key() -> Result<[u8; 32], String> {
     let path = key_path()?;
     read_or_create_key_at(&path)
-}
-
-fn read_key(path: &Path) -> Result<[u8; 32], String> {
-    let raw = fs::read_to_string(path).map_err(|e| format!("读取账号详情加密密钥失败: {}", e))?;
-    let bytes = general_purpose::STANDARD
-        .decode(raw.trim())
-        .map_err(|e| format!("解析账号详情加密密钥失败: {}", e))?;
-    bytes
-        .try_into()
-        .map_err(|_| "账号详情加密密钥长度无效".to_string())
-}
-
-fn read_or_create_key_at(path: &Path) -> Result<[u8; 32], String> {
-    if path.exists() {
-        return read_key(path);
-    }
-    // Account saves and zero-account proxy imports share this key. Serialize
-    // first creation across threads/processes without blocking the caller.
-    let lock_path = path.with_extension("key.lock");
-    if lock_path.is_symlink() {
-        return Err("账号详情加密密钥锁无效".into());
-    }
-    let lock = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(lock_path)
-        .map_err(|e| format!("创建账号详情加密密钥锁失败: {}", e))?;
-    fs2::FileExt::try_lock_exclusive(&lock)
-        .map_err(|_| "账号详情加密密钥正在初始化，请重试".to_string())?;
-    if path.exists() {
-        return read_key(path);
-    }
-
-    let mut key = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut key);
-    let encoded = general_purpose::STANDARD.encode(key);
-    crate::modules::atomic_write::write_secret_string_atomic(path, &encoded)
-        .map_err(|e| format!("写入账号详情加密密钥失败: {}", e))?;
-    Ok(key)
 }
 
 fn cipher() -> Result<Aes256Gcm, String> {
@@ -91,58 +37,65 @@ pub(crate) fn read_account_file_readonly<T: DeserializeOwned>(
 ) -> Result<T, String> {
     let content = fs::read_to_string(path).map_err(|e| format!("读取账号详情失败: {}", e))?;
     if let Ok(envelope) = serde_json::from_str::<SecureAccountEnvelope>(&content) {
-        let raw =
-            fs::read_to_string(key_path).map_err(|e| format!("读取账号详情加密密钥失败: {}", e))?;
-        let key = general_purpose::STANDARD
-            .decode(raw.trim())
-            .map_err(|e| format!("解析账号详情加密密钥失败: {}", e))?;
-        let cipher = Aes256Gcm::new_from_slice(&key)
+        let cipher = Aes256Gcm::new_from_slice(&read_key(key_path)?)
             .map_err(|e| format!("初始化账号详情加密失败: {}", e))?;
         return decrypt_envelope(&envelope, cipher);
     }
     serde_json::from_str(&content).map_err(|e| format!("解析账号详情失败: {}", e))
 }
 
-fn decrypt_envelope<T: DeserializeOwned>(
-    envelope: &SecureAccountEnvelope,
-    cipher: Aes256Gcm,
-) -> Result<T, String> {
-    if envelope.version != VERSION || envelope.algorithm != "AES-256-GCM" {
-        return Err("账号详情加密版本不受支持".to_string());
-    }
-    let nonce = general_purpose::STANDARD
-        .decode(envelope.nonce.trim())
-        .map_err(|e| format!("解析账号详情 nonce 失败: {}", e))?;
-    if nonce.len() != 12 {
-        return Err("账号详情 nonce 长度无效".to_string());
-    }
-    let ciphertext = general_purpose::STANDARD
-        .decode(envelope.ciphertext.trim())
-        .map_err(|e| format!("解析账号详情密文失败: {}", e))?;
-    let plaintext = cipher
-        .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
-        .map_err(|e| format!("解密账号详情失败: {:?}", e))?;
-    serde_json::from_slice(&plaintext).map_err(|e| format!("解析账号详情明文失败: {}", e))
-}
-
 pub fn serialize_account_file<T: Serialize>(kind: &str, account: &T) -> Result<String, String> {
     let plaintext =
         serde_json::to_vec(account).map_err(|e| format!("序列化账号详情失败: {}", e))?;
-    let mut nonce_bytes = [0u8; 12];
-    rand::thread_rng().fill_bytes(&mut nonce_bytes);
-    let ciphertext = cipher()?
-        .encrypt(Nonce::from_slice(&nonce_bytes), plaintext.as_ref())
-        .map_err(|e| format!("加密账号详情失败: {:?}", e))?;
-    let envelope = SecureAccountEnvelope {
-        version: VERSION,
-        kind: kind.to_string(),
-        algorithm: "AES-256-GCM".to_string(),
-        key_id: "local-secure-account-storage-v1".to_string(),
-        nonce: general_purpose::STANDARD.encode(nonce_bytes),
-        ciphertext: general_purpose::STANDARD.encode(ciphertext),
-        encrypted_at: chrono::Utc::now().timestamp(),
-    };
-    serde_json::to_string_pretty(&envelope).map_err(|e| format!("序列化账号详情密文失败: {}", e))
+    serialize_with_cipher(kind, &plaintext, cipher()?)
+}
+
+pub(crate) struct LocalVaultCipher([u8; 32]);
+
+impl LocalVaultCipher {
+    pub(crate) fn open(root: &Path, initialize: bool) -> Result<Self, String> {
+        let path = local_vault_key_path(root);
+        let key = if initialize {
+            read_or_create_key_at(&path)?
+        } else {
+            read_key(&path)?
+        };
+        Ok(Self(key))
+    }
+
+    fn cipher(&self, kind: &str) -> Result<Aes256Gcm, String> {
+        Aes256Gcm::new_from_slice(&self.fingerprint(b"cockpit-local-vault-encryption:", kind.as_bytes()))
+            .map_err(|_| "无法初始化本地密钥库加密".to_string())
+    }
+
+    pub(crate) fn seal<T: Serialize>(&self, kind: &str, value: &T) -> Result<String, String> {
+        let bytes = serde_json::to_vec(value).map_err(|_| "序列化本地密钥库失败".to_string())?;
+        serialize_with_cipher(kind, &bytes, self.cipher(kind)?)
+    }
+
+    pub(crate) fn unseal<T: DeserializeOwned>(&self, kind: &str, value: &str) -> Result<T, String> {
+        let envelope: SecureAccountEnvelope =
+            serde_json::from_str(value).map_err(|_| "本地密钥库格式无效".to_string())?;
+        if envelope.kind != kind {
+            return Err("本地密钥库类型无效".into());
+        }
+        decrypt_envelope(&envelope, self.cipher(kind)?)
+    }
+
+    pub(crate) fn fingerprint(&self, domain: &[u8], value: &[u8]) -> [u8; 32] {
+        use ring::hmac::{Context, Key, HMAC_SHA256};
+        let key = Key::new(HMAC_SHA256, &self.0);
+        let mut context = Context::with_key(&key);
+        context.update(domain);
+        context.update(value);
+        let mut fingerprint = [0; 32];
+        fingerprint.copy_from_slice(context.sign().as_ref());
+        fingerprint
+    }
+}
+
+pub(crate) fn local_vault_key_path(root: &Path) -> std::path::PathBuf {
+    root.join(KEY_FILE)
 }
 
 /// Refresh and import snapshots may predate a completed switch. Merge only this
@@ -153,6 +106,7 @@ pub(crate) fn write_account_preserving_switch_time<T: Serialize>(
     kind: &str,
     account: &T,
 ) -> Result<(), String> {
+    let _account_lock = lock_account_file_for_write(path)?;
     let mut next = serde_json::to_value(account).map_err(|error| error.to_string())?;
     crate::modules::atomic_write::update_string_atomic(path, |current| {
         if let Some(current) = current {
@@ -205,7 +159,9 @@ pub fn deserialize_account_file<T: DeserializeOwned>(
     content: &str,
 ) -> Result<(T, bool), String> {
     if let Ok(envelope) = serde_json::from_str::<SecureAccountEnvelope>(content) {
-        let value = decrypt_envelope(&envelope, cipher()?)?;
+        let cipher = Aes256Gcm::new_from_slice(&read_key(&key_path()?)?)
+            .map_err(|error| format!("初始化账号详情解密失败: {error}"))?;
+        let value = decrypt_envelope(&envelope, cipher)?;
         let needs_rotation =
             chrono::Utc::now().timestamp() - envelope.encrypted_at > ROTATION_SECONDS;
         return Ok((value, needs_rotation));

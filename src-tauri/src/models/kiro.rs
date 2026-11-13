@@ -94,6 +94,8 @@ pub struct KiroAccountIndex {
     pub identity_maintenance_version: u32,
     pub version: String,
     pub accounts: Vec<KiroAccountSummary>,
+    #[serde(skip)]
+    pub(crate) storage_revision: crate::modules::provider_account_index::Revision,
 }
 
 impl KiroAccountIndex {
@@ -103,6 +105,7 @@ impl KiroAccountIndex {
             identity_maintenance_version: 0,
             version: "1.0".to_string(),
             accounts: Vec::new(),
+            storage_revision: Default::default(),
         }
     }
 }

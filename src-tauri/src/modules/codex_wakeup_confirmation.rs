@@ -20,9 +20,16 @@ pub struct ConfirmationRequest {
     pub expires_at: i64,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum Decision {
+    Approve,
+    Decline,
+    Expire,
+}
+
 struct Pending {
     request: ConfirmationRequest,
-    reply: oneshot::Sender<bool>,
+    reply: oneshot::Sender<Decision>,
 }
 static PENDING: OnceLock<Mutex<HashMap<String, Pending>>> = OnceLock::new();
 fn pending() -> &'static Mutex<HashMap<String, Pending>> {
@@ -46,9 +53,15 @@ pub fn respond(request_id: &str, approved: bool) -> Result<(), String> {
         .map_err(|_| "CODEX_CONFIRMATION_LOCK")?
         .remove(request_id)
         .ok_or("CODEX_CONFIRMATION_EXPIRED")?;
-    let approved = approved && chrono::Utc::now().timestamp() < item.request.expires_at;
+    let decision = if chrono::Utc::now().timestamp() >= item.request.expires_at {
+        Decision::Expire
+    } else if approved {
+        Decision::Approve
+    } else {
+        Decision::Decline
+    };
     item.reply
-        .send(approved)
+        .send(decision)
         .map_err(|_| "CODEX_CONFIRMATION_EXPIRED".to_string())
 }
 
@@ -70,7 +83,7 @@ impl Drop for PendingGuard<'_> {
 // The dispatch future remains unpolled for rejected, expired, closed or cancelled
 // confirmations. The same guard also covers cancellation while awaiting a reply.
 async fn after_approval<T>(
-    reply: oneshot::Receiver<bool>,
+    reply: oneshot::Receiver<Decision>,
     timeout: Duration,
     cancel: Arc<AtomicBool>,
     dispatch: impl Future<Output = Result<T, String>>,
@@ -83,13 +96,16 @@ async fn after_approval<T>(
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     };
-    let approved = tokio::select! {
+    let decision = tokio::select! {
         biased;
         _ = cancellation => return Err("CODEX_CONFIRMATION_CANCELLED".into()),
-        result = tokio::time::timeout(timeout, reply) => matches!(result, Ok(Ok(true))),
+        result = tokio::time::timeout(timeout, reply) => result,
     };
-    if !approved {
-        return Err("CODEX_CONFIRMATION_DECLINED_OR_EXPIRED".into());
+    match decision {
+        Ok(Ok(Decision::Approve)) => {}
+        Ok(Ok(Decision::Decline)) => return Err("CODEX_CONFIRMATION_DECLINED".into()),
+        Ok(Ok(Decision::Expire)) | Err(_) => return Err("CODEX_CONFIRMATION_EXPIRED".into()),
+        Ok(Err(_)) => return Err("CODEX_CONFIRMATION_CANCELLED".into()),
     }
     if cancel.load(Ordering::SeqCst) {
         return Err("CODEX_CONFIRMATION_CANCELLED".into());
@@ -145,11 +161,20 @@ mod tests {
     use super::*;
     #[tokio::test]
     async fn rejected_expired_closed_and_cancelled_confirmations_never_poll_model() {
-        for outcome in ["reject", "expire", "close", "cancel"] {
+        for (outcome, expected) in [
+            ("reject", "CODEX_CONFIRMATION_DECLINED"),
+            ("expire", "CODEX_CONFIRMATION_EXPIRED"),
+            ("late-response", "CODEX_CONFIRMATION_EXPIRED"),
+            ("close", "CODEX_CONFIRMATION_CANCELLED"),
+            ("cancel", "CODEX_CONFIRMATION_CANCELLED"),
+        ] {
             let (reply, receiver) = oneshot::channel();
             match outcome {
                 "reject" => {
-                    reply.send(false).unwrap();
+                    reply.send(Decision::Decline).unwrap();
+                }
+                "late-response" => {
+                    reply.send(Decision::Expire).unwrap();
                 }
                 "close" => drop(reply),
                 _ => {}
@@ -165,7 +190,7 @@ mod tests {
                 },
             )
             .await;
-            assert!(result.is_err(), "{outcome}");
+            assert_eq!(result.unwrap_err(), expected, "{outcome}");
         }
     }
     #[tokio::test]
@@ -173,7 +198,7 @@ mod tests {
         let sends = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         for cancelled in [true, false] {
             let (reply, receiver) = oneshot::channel();
-            reply.send(true).unwrap();
+            reply.send(Decision::Approve).unwrap();
             let sent = sends.clone();
             let result = after_approval(
                 receiver,
@@ -245,7 +270,7 @@ mod tests {
             },
         );
         respond(&id, true).unwrap();
-        assert_eq!(receiver.try_recv(), Ok(true));
+        assert_eq!(receiver.try_recv(), Ok(Decision::Approve));
         assert!(respond(&id, true).is_err());
         assert!(respond("old-run", true).is_err());
     }

@@ -108,7 +108,7 @@ pub(super) fn complete_input(headers: &HeaderMap, body: &Value) -> bool {
             .get("input")
             .and_then(Value::as_array)
             .is_some_and(|items| {
-                !items.is_empty() && rebuild::replay_items(items) && rebuild::paired_tools(items)
+                !items.is_empty() && super::super::responses_custom_results::replayable(items)
             })
 }
 

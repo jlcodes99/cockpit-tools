@@ -28,6 +28,7 @@ async function harness() {
     '@tauri-apps/plugin-dialog': {},
     '@tauri-apps/api/event': { listen: async () => () => {} },
     '../../hooks/useEscClose': { useEscClose() {} },
+    '../../hooks/useDurableUiSetting': { useDurableUiSetting: () => null },
     '../../stores/useCodexInstanceStore': { useCodexInstanceStore: (selector: any) => selector(store) },
     '../../services/codexInstanceService': {},
     '../../utils/codexSessionFilters': { filterCodexSessionsByKind },

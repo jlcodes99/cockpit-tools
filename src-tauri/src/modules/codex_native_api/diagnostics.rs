@@ -17,6 +17,7 @@ pub use super::request_metrics::{OverloadRetry, RequestSize};
 mod error;
 pub(crate) use error::error_object;
 pub(crate) use error::is_cloudflare_challenge;
+pub(super) use error::cloudflare_gateway_message;
 pub(crate) use error::upstream_error_metadata_status;
 pub(super) use error::{
     failure_phase, sanitize_error_text, transport_failure, upstream_error_metadata,
@@ -61,6 +62,10 @@ pub struct DiagnosticContext {
 #[serde(rename_all = "camelCase")]
 pub struct DiagnosticAttempt {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_request: Option<crate::models::codex_local_access::CodexLocalAccessImageRequestDiagnostic>,
+    #[serde(skip)]
+    pub failure_cooldown_recorded: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_size: Option<RequestSize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub upstream_request_bytes: Option<u64>,
@@ -87,6 +92,8 @@ pub struct DiagnosticAttempt {
     pub account_id: String,
     pub account_email: Option<String>,
     pub model_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_model: Option<String>,
     pub transport: String,
     #[serde(default)]
     pub upstream_identity_captured: bool,

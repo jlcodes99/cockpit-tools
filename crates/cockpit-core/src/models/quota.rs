@@ -26,6 +26,10 @@ pub struct QuotaData {
     pub models: Vec<ModelQuota>,
     pub last_updated: i64,
     #[serde(default)]
+    pub quota_summary_stale: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_summary_updated_at: Option<i64>,
+    #[serde(default)]
     pub is_forbidden: bool,
     /// 订阅等级 (FREE/PRO/ULTRA)
     #[serde(default)]
@@ -36,6 +40,10 @@ pub struct QuotaData {
     /// 账号层级 ID（如 free-tier、g1-pro-tier）
     #[serde(default)]
     pub tier_id: Option<String>,
+    #[serde(default)]
+    pub is_gcp_tos: Option<bool>,
+    #[serde(default)]
+    pub project_id: Option<String>,
 }
 
 impl QuotaData {
@@ -43,10 +51,14 @@ impl QuotaData {
         Self {
             models: Vec::new(),
             last_updated: chrono::Utc::now().timestamp(),
+            quota_summary_stale: false,
+            quota_summary_updated_at: None,
             is_forbidden: false,
             subscription_tier: None,
             credits: Vec::new(),
             tier_id: None,
+            is_gcp_tos: None,
+            project_id: None,
         }
     }
 

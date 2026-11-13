@@ -129,14 +129,8 @@ export function CodexCliLaunchDialog({
                   className="btn btn-secondary"
                   onClick={workingDir.onChoose}
                   disabled={busy}
-                  title={t(
-                    "codex.cli.selectWorkingDir",
-                    "选择 Codex CLI 工作目录",
-                  )}
-                  aria-label={t(
-                    "codex.cli.selectWorkingDir",
-                    "选择 Codex CLI 工作目录",
-                  )}
+                  title={t("codex.cli.selectWorkingDir")}
+                  aria-label={t("codex.cli.selectWorkingDir")}
                 >
                   <FolderOpen size={16} />
                 </button>

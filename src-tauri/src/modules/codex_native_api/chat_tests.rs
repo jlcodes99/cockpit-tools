@@ -1,12 +1,60 @@
 use super::*;
 
 #[test]
+fn kimi_k3_chat_conversion_keeps_shell_and_file_tool_declarations() {
+    let request = json!({
+        "model": "kimi-k3",
+        "input": "Inspect the sample project.",
+        "tools": [
+            {"type":"function","name":"shell_command","parameters":{"type":"object"}},
+            {"type":"function","name":"read_file","parameters":{"type":"object"}},
+            {"type":"function","name":"spawn_agent","parameters":{"type":"object"}}
+        ]
+    });
+    let wire = chat_upstream::responses_to_native_chat(&request).unwrap();
+    let names = wire["tools"].as_array().unwrap().iter().map(|tool| {
+        tool["function"]["name"].as_str().unwrap()
+    }).collect::<Vec<_>>();
+    assert_eq!(wire["model"], "kimi-k3");
+    assert_eq!(names, ["shell_command", "read_file", "spawn_agent"]);
+}
+
+#[test]
 fn deepseek_chat_can_disable_thinking() {
     let request = json!({"model":"vendor/deepseek-v5-pro", "input":"hello", "reasoning":{"effort":"none"}});
     let wire = chat_upstream::responses_to_chat(&request).unwrap();
     assert_eq!(wire["thinking"]["type"], "disabled");
     assert!(wire.get("reasoning_effort").is_none());
+    for (requested, sent) in [("minimal", "low"), ("medium", "high"), ("xhigh", "high"), ("ultra", "max")] {
+        let wire = chat_upstream::responses_to_chat(&json!({
+            "model":"vendor/deepseek-v5-pro", "input":"hello", "reasoning":{"effort":requested}
+        })).unwrap();
+        assert_eq!(wire["reasoning_effort"], sent);
+    }
 }
+
+#[test]
+fn deepseek_chat_replays_reasoning_with_the_tool_call_on_the_next_turn() {
+    let request = json!({
+        "model": "deepseek-v4-flash",
+        "reasoning": {"effort": "high"},
+        "input": [
+            {"role": "user", "content": "Read the sample file."},
+            {"type": "reasoning", "summary": [{"type": "summary_text", "text": "Read the file first."}]},
+            {"type": "function_call", "call_id": "read-1", "name": "read_file", "arguments": "{\"path\":\"sample.txt\"}"},
+            {"type": "function_call_output", "call_id": "read-1", "output": "123"}
+        ]
+    });
+    let wire = chat_upstream::responses_to_chat(&request).unwrap();
+    let messages = wire["messages"].as_array().unwrap();
+    assert_eq!(messages.len(), 3);
+    assert_eq!(messages[1]["role"], "assistant");
+    assert_eq!(messages[1]["reasoning_content"], "Read the file first.");
+    assert_eq!(messages[1]["tool_calls"][0]["id"], "read-1");
+    assert_eq!(messages[2]["role"], "tool");
+    assert_eq!(messages[2]["tool_call_id"], "read-1");
+}
+
 use crate::modules::codex_native_api::chat_upstream::{self, ResponsesStreamAdapter};
 use serde_json::json;
 fn ctx() -> ChatContext {

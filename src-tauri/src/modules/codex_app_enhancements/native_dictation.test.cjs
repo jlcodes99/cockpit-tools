@@ -88,7 +88,7 @@ const original = fastFixture + fixture + quotaFixture.initial;
 function evaluate(options) {
   const result = load(options);
   const transformed = result.api.prepareLive(original, moduleUrl);
-  if (options?.apiService !== false || options?.nativeFast !== false || options?.quotaCompat !== false) {
+  if (options?.nativeFast !== false || options?.quotaCompat !== false && options?.apiService === false) {
     assert.equal(transformed.ok, true, JSON.stringify(transformed.diagnostics));
   }
   // The native initial module exports quota atoms. This VM executes the same
@@ -155,7 +155,7 @@ test('Fast and quota switches cannot hide or force the native dictation entry', 
     assert.equal(transformed.patchedSource.includes('__cockpitApiDictation'), false);
     assert.equal(transformed.patchedSource.includes('__cockpitNativeDictation'), false);
     if (nativeFast) assert.equal((transformed.patchedSource.match(/window\.__cockpitNativeFast\?\.allow\(/g) || []).length, 4);
-    if (quotaCompat || apiService) assert.equal((transformed.patchedSource.match(/globalThis\.__cockpitQuotaCompat\.initialReady=true/g) || []).length, 1);
+    if (quotaCompat && !apiService) assert.equal((transformed.patchedSource.match(/globalThis\.__cockpitQuotaCompat\.initialReady=true/g) || []).length, 1);
   }
 });
 

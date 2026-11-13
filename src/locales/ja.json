@@ -158,10 +158,28 @@
     "providerClear": "選択を解除"
   },
   "common": {
+    "collapseAll": "すべて折りたたむ",
+    "expandAll": "すべて展開",
+    "syncing": "同期中…",
+    "notice": "お知らせ",
+    "gotIt": "了解",
+    "unknown": "不明",
+    "noData": "データなし",
+    "search": "検索",
+    "rename": "名前変更",
+    "yes": "はい",
+    "no": "いいえ",
+    "saved": "保存済み",
+    "done": "完了",
+    "edit": "編集",
+    "windowMinimize": "最小化",
+    "windowMaximize": "最大化",
+    "windowRestore": "元に戻す",
     "profileRestoreBusy": "ログイン状態を復元中です。しばらくして再試行してください。",
     "profileRestoreInvalid": "ログイン状態の保存先が無効です。アカウントを再インポートしてください。",
     "profileRestoreRecoveryFailed": "ログイン状態の復元に失敗しました。バックアップは保持されています：{{detail}}",
     "dataQueryBusy": "データを処理中です。しばらくしてから再試行してください。",
+    "historyRestoring": "履歴を復元中…",
     "apiBudget": {
       "keyScope": "この Key",
       "upgradeRequired": "統計とリクエスト履歴を表示するには、ゲートウェイ側の Cockpit Tools を更新してください。",
@@ -389,6 +407,33 @@
       "workspaceDesc": "アカウント切替時に、この端末の {{platform}} アカウント間で workspace の会話インデックスと復元状態をコピーして統合します。暗号化された Builder/Agent 会話データベースは変更せず、内容もアップロードしません。"
     },
     "shared": {
+      "quotaCategories": {
+        "other": "その他",
+        "extra": "追加パック",
+        "activity": "特典パック",
+        "base": "基本パック"
+      },
+      "webSession": {
+        "openFailed": "ウェブセッションを開けませんでした：{{error}}",
+        "opened": "ウェブセッションを開きました：{{email}}",
+        "open": "ウェブセッションを開く"
+      },
+      "addAccountTargetGroup": "グループ「{{group}}」に追加されます",
+      "checkin": {
+        "saveFailed": "自動チェックイン設定の保存に失敗しました：{{message}}",
+        "manualTestPartialFailure": "一部のアカウントのチェックインに失敗しました。記録を確認してください。後ほどバックグラウンドで再試行されます。",
+        "manualTestAlreadyRunning": "自動チェックインタスクが実行中です。後ほど記録を確認してください。",
+        "manualTestFailed": "テスト実行に失敗しました：{{message}}",
+        "clearLogsFailed": "チェックイン履歴のクリアに失敗しました：{{message}}",
+        "tabSettings": "自動チェックイン設定",
+        "tabHistory": "自動チェックイン履歴",
+        "historyRangeHint": "直近 30 日間の自動チェックイン記録のみ保持されます（全 {{count}} 件）",
+        "manualTest": "テスト実行",
+        "clearLogs": "クリア",
+        "historyLoadFailed": "自動チェックイン履歴の読み込みに失敗しました：{{message}}",
+        "historyLoading": "自動チェックイン履歴を読み込んでいます...",
+        "noHistory": "直近 30 日間の自動チェックイン記録はありません"
+      },
       "addAccount": "アカウントを追加",
       "columns": {
         "actions": "操作",
@@ -421,6 +466,7 @@
       },
       "filterLabel": "フィルター",
       "import": {
+        "file": "ファイルを選択",
         "failedMsg": "インポート失敗: {{error}}",
         "label": "インポート",
         "importing": "ローカルアカウントをインポート中...",
@@ -519,6 +565,15 @@
       "refreshQuota": "クォータ更新",
       "search": "アカウントを検索...",
       "sort": {
+        "name": "名前順",
+        "customReset": "順序をリセット",
+        "customModalDesc": "アカウントをドラッグするか上下ボタンで表示順を調整します。",
+        "customModalTitle": "アカウントのカスタム順",
+        "customSettingsTooltip": "カスタム順を設定",
+        "custom": "カスタム順",
+        "dragToReorder": "ドラッグして並び替え",
+        "moveUp": "上へ",
+        "moveDown": "下へ",
         "ascTooltip": "昇順（クリックで降順へ）",
         "createdAt": "作成日時",
         "descTooltip": "降順（クリックで昇順へ）",
@@ -686,9 +741,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
-    "traeSolo": "TRAE SOLO​",
+    "traeSolo": "TraeWork",
     "traeCn": "Trae CN​",
-    "traeSoloCn": "TRAE SOLO CN​",
+    "traeSoloCn": "TraeWork CN",
     "codebuddyCn": "CodeBuddy CN​",
     "minimaxcode": "MiniMax Code",
     "zed": "Zed プラットフォーム",
@@ -719,6 +774,7 @@
     "openSponsor": "開く"
   },
   "platformLayout": {
+    "customIconStorageFailed": "カスタムアイコンを保存できませんでした。ローカルストレージがいっぱいの可能性があります。未使用のアイコンを削除して再試行してください。",
     "title": "プラットフォームレイアウト",
     "sidebarSelected": "サイドバーで選択済み {{count}}/{{max}}",
     "reset": "デフォルトにリセット",
@@ -783,6 +839,7 @@
       "toggleDirection": "並び順の方向を切り替え"
     },
     "actions": {
+      "duplicate": "インスタンスを複製",
       "create": "新規インスタンス",
       "refresh": "更新",
       "startAll": "すべて開始",
@@ -841,6 +898,7 @@
       "editTitle": "インスタンスを編集"
     },
     "form": {
+      "copyName": "{{name}} のコピー",
       "name": "インスタンス名",
       "namePlaceholder": "例: 仕事用アカウント",
       "path": "インスタンスディレクトリ",
@@ -912,8 +970,43 @@
       "appSpeed": "速度",
       "appSpeedDesc": "公式 Codex の起動前に選択した速度を書き込みます",
       "autoSyncThreads": "セッション自動同期",
-      "autoSyncThreadsDesc": "オフの場合、複数インスタンスのセッションは分離されます。オンの場合、すべての Codex インスタンスが停止しているときだけ、インスタンスの起動または終了時にローカルセッション記録を自動的に統合します。",
+      "autoSyncThreadsDesc": "オフの場合、インスタンスごとの履歴は分離されます。オンの場合、インスタンスの終了後、すべての Codex インスタンスが停止しているときだけ、不足するセッションと一致する履歴の追加分を同期します。既存の内容は保持されます。同期で大きなセッションファイルがコピーされることがあります。",
       "modelRouting": {
+        "deselectModel": "選択を解除",
+        "selectModel": "選択",
+        "manageAction": "チャネルを管理",
+        "missingSource": "ルートが見つかりません",
+        "disabledSource": "ルートは無効です",
+        "unavailableSource": "アカウントを利用できません",
+        "modelUnavailable": "モデルは API カタログにありません",
+        "provider": "API アカウントを選択",
+        "namespacePlaceholder": "接頭辞",
+        "deleteRoute": "チャネルを削除",
+        "loadedModels": "読み込み済みモデル",
+        "enabledTotal": "有効数 / 総数",
+        "fetchModels": "一覧を取得",
+        "manualPlaceholder": "例：gpt-5.6-sol, grok-4.6",
+        "channelsSummary": "サードパーティ API チャネル",
+        "manageChannels": "チャネルを設定",
+        "noChannels": "サードパーティ API チャネルは未登録です",
+        "addRoute": "チャネルを追加",
+        "unnamedAccount": "アカウント未選択",
+        "routesCount": "{{count}} チャネル",
+        "statusBadge": "混合ルーティング",
+        "catalogUnavailable": "このインスタンスで表示されるモデルのカタログを Cockpit が管理できないため、ルーティングを有効にできません。",
+        "desktopOnly": "モデルルーティングはデスクトップインスタンスでのみ利用できます。",
+        "oauthRequired": "直接ログインできる OAuth のサブスクリプションアカウントを紐付けてください。",
+        "routeRequired": "API ルートを 1 件以上追加してください。",
+        "invalidNamespace": "英小文字、数字、アンダースコア、ハイフンを 2～32 文字で指定してください。予約名は使用できません。先頭は英小文字または数字にしてください。",
+        "duplicateNamespace": "各ルートに異なる接頭辞を指定してください。",
+        "providerRequired": "各ルートで API アカウントを選択してください。",
+        "enabledRouteRequired": "API ルートを 1 件以上有効にしてください。",
+        "createHint": "作成時に既定のインスタンスをコピーすると Codex の設定を省略できます。空のインスタンスは先に一度起動してください。",
+        "fetchCredentialsRequired": "このアカウントには API キーまたはベース URL がありません。",
+        "fetchEmpty": "プロバイダーからモデルが返されませんでした。下で手動追加できます。",
+        "noProviderAccounts": "利用できる API アカウントがありません。API アカウント画面で対応するプロバイダーを追加してください。",
+        "noCatalog": "モデルは未取得です。一覧を取得するか、手動で追加してください。",
+        "modalDescription": "サードパーティ API のアカウントとモデルの接頭辞を設定します。接頭辞なしのモデルは現在のサブスクリプションを使い続けます。",
         "title": "サードパーティ API ルーティング",
         "summary": "プレフィックスのないモデルは現在のサブスクリプションを使用し、cpa/gpt-5.6-sol などのプレフィックス付きモデルはサードパーティ API に転送されます。どちらもローカル ルーティング サービスに依存します。",
         "rowSummary": "プレフィックスのないモデルは現在のサブスクリプションを使用し、cpa/gpt-5.6-sol などのプレフィックス付きモデルはサードパーティ API に転送されます。どちらもローカル ルーティング サービスに依存します。",
@@ -1092,6 +1185,11 @@
       "data": "データ管理"
     },
     "general": {
+      "accountLevelRefreshSummary": "設定を表示",
+      "accountLevelRefreshSummaryActive": "設定済み：{{count}} 件",
+      "accountLevelRefreshDesc": "アカウントごとに、プラットフォームの既定値に代わる自動更新間隔を指定できます。",
+      "accountLevelRefreshTitle": "アカウント別の更新",
+      "accountLevelRefreshInherit": "プラットフォームを継承",
       "errorReporting": "診断情報",
       "errorReportingDesc": "有効にすると、起動と画面の診断情報を機密情報の除去処理後に送信します。無効にすると送信を停止します。",
       "appearance": "外観",
@@ -1133,6 +1231,8 @@
       "minimizeBehaviorDesc": "ウィンドウを最小化した際にDockとメニューバーの両方に残すか、メニューバーのみにするかを選択",
       "minimizeBehaviorDockAndTray": "Dock + メニューバー（推奨・既定）",
       "minimizeBehaviorTrayOnly": "メニューバーのみ",
+      "showTrayIcon": "トレイアイコンを表示",
+      "showTrayIconDesc": "アイコンを非表示にしてもバックグラウンド処理は続きます。Dock またはタスクバーからウィンドウを復元できます。",
       "hideDockIcon": "Dockアイコンを隠すか（macOSのみ）",
       "hideDockIconDesc": "Dockアイコンの表示状態を独立して制御します。ウィンドウの最小化動作の影響を受けません",
       "hideDockIconOff": "いいえ（Dockアイコンを表示）",
@@ -1183,7 +1283,7 @@
       "vscodeAppPathPlaceholder": "既定のパス",
       "vscodePathSelect": "選択",
       "vscodePathReset": "既定に戻す",
-      "antigravityAppPath": "Antigravity IDE アプリのパス",
+      "antigravityAppPath": "{{appName}} アプリのパス",
       "antigravityTitle": "Antigravity IDE 起動",
       "commonTitle": "共通",
       "antigravitySettingsTitle": "Antigravity IDE 設定",
@@ -1245,7 +1345,7 @@
       "traeAppPathPlaceholder": "デフォルトパス",
       "traePathSelect": "選択",
       "traePathReset": "デフォルトに戻す",
-      "workbuddyAppPath": "WorkBuddy 起動パス",
+      "workbuddyAppPath": "WorkBuddy 中国版のパス",
       "workbuddyAppPathDesc": "空欄の場合はデフォルトパスを使用します",
       "workbuddyAppPathPlaceholder": "デフォルトパス",
       "workbuddyPathSelect": "選択",
@@ -1357,9 +1457,9 @@
       "tokenKeeper": "認証の維持",
       "tokenKeeperDesc": "認証の期限が近い場合だけアカウント Token を小分けに更新し、多数アカウント時のバックグラウンド要求を減らします。",
       "platformAutoRefresh": "{{platform}} クォータ自動更新",
-      "traeSoloAppPath": "TRAE SOLO 起動パス",
+      "traeSoloAppPath": "TraeWork 起動パス",
       "traeCnAppPath": "Trae CN 起動パス",
-      "traeSoloCnAppPath": "TRAE SOLO CN 起動パス",
+      "traeSoloCnAppPath": "TraeWork CN 起動パス",
       "reducedMotion": "アニメ軽減",
       "reducedMotionDesc": "フェード・モーダル遷移・影・ぼかし・スムーズスクロールを抑え、必要な読み込み表示のみ残します",
       "autoImportFromLocal": "ローカルアカウント自動取り込み",
@@ -1396,13 +1496,15 @@
       "menuBarQuotaConfigure": "設定",
       "menuBarQuotaModalTitle": "メニューバー枠",
       "menuBarQuotaModalDesc": "メニューバー枠専用の設定です。選択プラットフォームの現在アカウントに追従します。Codex が API サービスのときは「API + プール残%」、API Key アカウントは「API + 残額」、通常はメール先頭と残%（複数は最小、低赤・中橙・高緑）。",
+      "menuBarAntigravityMetric": "メニューバーの使用枠",
+      "menuBarQuotaLowest": "残り最少の枠",
       "menuBarQuotaPlatform": "枠のアカウントプラットフォーム",
       "menuBarQuotaPlatformDesc": "そのプラットフォームで使用中のアカウントに追従し、更新や切替後に自動反映",
       "menuBarAccountPrefix": "メール先頭4文字を表示",
       "menuBarAccountPrefixDesc": "通常アカウントのみ：オフでメール先頭を非表示。Codex API サービス / API Key は API ラベルを維持",
       "menuBarQuotaConfirmEnable": "有効にする",
-      "codexHideRelayQuota": "中継クォータを隠す",
-      "codexHideRelayQuotaDesc": "オンにすると、Codex アカウント一覧で中継 / New API 系の残高パネルを非表示にし、表示の重なりを減らします。",
+      "codexHideRelayQuota": "残高表示",
+      "codexHideRelayQuotaDesc": "オフにすると、Codex の中継サービスの残高が非表示になり、自動・手動での残高照会が停止します。",
       "floatingCardStyle": "フロート表示",
       "floatingCardStyleDesc": "すべてのフロートウィンドウに適用されます。ウィンドウ内でも切り替えられます。",
       "floatingCardFull": "全項目",
@@ -1417,7 +1519,7 @@
       "codexPreserveExternalBridgeDesc": "OAuth アカウント切替時、ローカル記録で検証済みの Codex Web GPT ブリッジを保持します。既定はオフです。",
       "codexEnhancements": {
         "quotaCompat": "併用時の上限互換",
-        "quotaCompatDesc": "実際の OAuth ログインと外部 API 経路の併用時のみ、契約の利用上限によるローカル API 送信の制限を防ぎます。実際の使用量と画像上限は変更しません。",
+        "quotaCompatDesc": "API サービスのインスタンスでは、クライアントの表示とローカル判定に利用可能な枠を提供します。上流の実際の使用量や画像の利用枠は変わりません。この設定は、その他の OAuth と外部 API の併用にのみ適用されます。",
         "restartHint": "ネイティブの予測は初期状態では無効です。変更後は対象の Codex インスタンスを再起動し、Cockpit Tools を起動したままにしてください。ネイティブの音声入力はクライアントの機能と設定に従います。Cockpit は処理を置き換えたり、強制的に有効化したりしません。",
         "configFailed": "設定の読み込みまたは保存に失敗：{{error}}",
         "nativePredictions": "ネイティブの次のステップ予測（Tab）",
@@ -1441,12 +1543,13 @@
       "saveFailed": "保存に失敗しました: {{error}}",
       "reportTitle": "Web照会サービス",
       "reportService": "HTTPレポートサービス",
-      "reportServiceDesc": "利用状況サマリー用に、トークン保護されたHTTPエンドポイントを公開します",
+      "reportServiceDesc": "保存するとサービスが起動し、以降はアプリの起動時に開始します。アクセスにはトークンが必要です。",
       "reportPort": "レポートポート",
-      "reportPortDesc": "既定値は{{port}}、変更後は再起動が必要です",
+      "reportPortDesc": "既定のポートは {{port}} です。保存時に変更が反映されます。",
       "reportToken": "アクセストークン",
       "reportTokenDesc": "/report のリクエスト時に必須です。安全に保管してください",
       "reportTokenRequired": "Web照会サービスを有効にする場合、アクセストークンは必須です。",
+      "reportApplyFailed": "設定を保存しましたが、レポートサービスを起動できませんでした。{{error}}",
       "generateToken": "生成",
       "reportUrlPreview": "エンドポイントプレビュー",
       "reportUrlPreviewDesc": "format=md / format=yaml に対応し、render=true でHTML表示できます",
@@ -1652,6 +1755,7 @@
         "unsupportedLegacyFile": "この旧形式のアカウントバックアップは認識できません",
         "codexTopLayoutInvalid": "バックアップのタブ配置形式が無効です。設定はインポートされませんでした。",
         "codexTopLayoutImportFailed": "他の設定はインポートされましたが、タブ配置を保存できませんでした。インポートを再試行してください。",
+        "platformLayoutImportFailed": "一部の設定は取り込まれている場合があります。プラットフォームのレイアウトを保存できませんでした。もう一度取り込んでください。",
         "unsupportedVersion": "このアプリのバージョンではそのパッケージ版をサポートしていません"
       }
     },
@@ -1767,6 +1871,8 @@
   },
   "appPath": {
     "missing": {
+      "scanEmpty": "実行中のアプリが見つかりません。起動して再試行するか、パスを手動で選択してください。",
+      "scanEmptyGeneric": "実行中の {{app}} が見つかりません。起動して再試行するか、パスを手動で選択してください。",
       "title": "アプリのパスが見つかりません",
       "desc": "{{app}} のアプリパスが見つかりません。続行するには今すぐ設定してください。",
       "action": "今すぐ設定",
@@ -1870,6 +1976,8 @@
     "clearFilter": "フィルターをクリア",
     "editTags": "タグを編集",
     "tagModal": {
+      "renamePlaceholder": "新しいタグ名",
+      "renamingGlobal": "すべてのアカウントでタグ名を変更：",
       "title": "タグを編集",
       "hint": "タグは最大{{max}}件まで。1件あたり最大{{maxLength}}文字です。",
       "empty": "利用可能なタグはありません",
@@ -2114,7 +2222,13 @@
     "refreshTime": "更新時刻",
     "lastSwitchTimeFull": "切替：{{time}}",
     "refreshTimeFull": "更新：{{time}}",
-    "toggleTimeMode": "切替時刻と更新時刻を切り替える"
+    "toggleTimeMode": "切替時刻と更新時刻を切り替える",
+    "quotaSummary": {
+      "geminiModels": "Gemini モデル",
+      "claudeAndGptModels": "Claude・GPT モデル",
+      "weeklyLimit": "週間上限",
+      "fiveHourLimit": "5時間上限"
+    }
   },
   "overview": {
     "title": "アカウント概要",
@@ -2151,8 +2265,8 @@
       "oauthAction": "OAuth 認証",
       "fromExtension": "プラグインからインポート",
       "syncBadge": "Antigravity Cockpit プラグインのアカウントを同期",
-      "fromLocalDB": "ローカル DB からインポート",
-      "localDBDesc": "このマシンの Antigravity IDE クライアントからログインアカウントを読み込む",
+      "fromLocalApp": "アプリからインポート",
+      "localAppDesc": "このマシンの {{appName}} クライアントからログインアカウントを読み込む",
       "toolsDescMigrate": "~/.antigravity_tools/ からアカウントを移行",
       "importingTools": "Antigravity Tools からインポート中...",
       "importingLocal": "ローカルアカウントをインポート中...",
@@ -2169,6 +2283,7 @@
       "resetTime": "リセット時間"
     },
     "errors": {
+      "viewVerificationDetail": "認証の詳細",
       "title": "エラー詳細",
       "empty": "エラー詳細はありません",
       "account": "アカウント",
@@ -2196,6 +2311,8 @@
     "switchFailed": "切り替えに失敗しました: {{error}}",
     "antigravitySwitchBusy": "Antigravity のアカウントを切り替え中です。しばらくしてから再試行してください。",
     "antigravitySwitchPrepareTimeout": "Antigravity アカウントの準備がタイムアウトしました。再試行してください。",
+    "antigravityWindowsCredentialStoreCapacity": "Windows 資格情報マネージャーの容量が不足している可能性があります。コントロール パネルの「ユーザー アカウント」から「資格情報マネージャー」を開き、不要な Windows 資格情報だけを削除して再試行してください。",
+    "antigravityWindowsCredentialTooLarge": "この資格情報は Windows の 1 件あたりの上限（2,560 バイト）を超えています。",
     "antigravitySwitchStateSaveFailed": "クライアントの認証情報は切り替わりましたが、ローカルのアカウント状態を保存できませんでした：{{error}}。切り替えを再試行してください。",
     "antigravityLegacyUnsupported": "ここでは Antigravity 2.0.0 以降はサポートしていません。Antigravity 2.0.0 未満のバージョンを選ぶか、Antigravity IDE を使用してください。",
     "importSuccess": "{{count}} 個のアカウントをインポートしました",
@@ -2262,6 +2379,7 @@
     "historyClear": "履歴をクリア",
     "historyPromptLabel": "ウェイクアップ語：{{prompt}}",
     "errorUi": {
+      "officialLanguageServerUnavailable": "ウェイクアップに必要な言語サーバーが見つかりません。Antigravity デスクトップアプリか、言語サーバーを含む IDE をインストールしてください。確認したフォルダー：{{path}}。",
       "verificationRequiredTitle": "認証が必要です",
       "quotaTitle": "クォータ制限",
       "temporaryTitle": "一時的なエラー",
@@ -2327,6 +2445,8 @@
       "crontabRequired": "crontab 式を入力してください",
       "crontabValid": "crontab 式は有効です",
       "crontabInvalid": "crontab 式が無効です",
+      "stateLoadFailed": "ウェイクアップタスクを読み込めませんでした：{{error}}",
+      "stateSaveFailed": "ウェイクアップタスクを保存できませんでした：{{error}}",
       "taskSaved": "タスク「{{name}}」を保存しました",
       "featureOff": "ウェイクアップをオフにしました",
       "featureOn": "ウェイクアップをオンにしました",
@@ -2368,7 +2488,9 @@
       "modeScheduled": "📅 定時",
       "modeCrontab": "🧩 クロンタブ",
       "modeQuotaReset": "🔄 クォータリセット",
-      "antigravityVersion": "Antigravity IDE バージョン",
+      "transportMode": "ウェイクアップ方式",
+      "transportLanguageServer": "言語サーバー",
+      "transportClientless": "クライアントなし",
       "modelSelect": "モデル選択",
       "modelHint": "同じクォータグループでは 1 つのモデルを推奨。複数選択すると順に実行されます。",
       "modelsEmpty": "おすすめモデルがありません",
@@ -2462,6 +2584,7 @@
     "skipFailed": "この更新をスキップできませんでした: {{error}}"
   },
   "closeDialog": {
+    "minimizeWindow": "最小化",
     "title": "ウィンドウを閉じる",
     "description": "ウィンドウを閉じるときの操作を選択してください",
     "minimize": "トレイに最小化",
@@ -2478,6 +2601,10 @@
     "other_group": "その他のモデル"
   },
   "codex": {
+    "cli": {
+      "launchSuccess": "Codex CLI を起動しました",
+      "selectWorkingDir": "Codex CLI の作業フォルダーを選択"
+    },
     "resetAutomation": {
       "nothingToReset": "現在リセットが必要な利用枠はありません。",
       "unknownOutcome": "リセット結果を確認できませんでした。もう一度お試しください。",
@@ -2556,6 +2683,70 @@
         "threadSyncFileBusy": "別の同期処理が対象セッションを使用しています。しばらくしてから再試行してください。"
       }
     },
+    "quotaHistory": {
+      "storage": {
+        "title": "履歴の保存",
+        "recordCount": "記録数",
+        "diskSpace": "使用容量",
+        "defaultAccount": "既定のアカウント",
+        "recording": "記録設定",
+        "usage": "{{records}} 件 · ディスク使用量 {{size}}",
+        "loadFailed": "履歴の保存情報を読み取れません。",
+        "enabled": "履歴を記録",
+        "onlyChanges": "変動時のみ記録",
+        "autoCleanup": "期限切れの記録を自動削除",
+        "intervalMinutes": "記録間隔（分）",
+        "retentionDays": "保存期間（日）",
+        "cleanupEveryDays": "削除間隔（日）",
+        "validRange": "1〜{{max}} の整数を入力してください。",
+        "recordScope": "記録対象",
+        "allAccounts": "すべてのアカウント",
+        "selectedAccounts": "選択したアカウント",
+        "saveFailed": "履歴設定を保存できません。",
+        "saved": "履歴設定を保存しました。",
+        "cleanup": "履歴の削除",
+        "cleanupAccounts": "削除対象アカウント",
+        "cleanupRange": "削除範囲",
+        "expired": "期限切れ",
+        "dates": "日付範囲",
+        "all": "すべての記録",
+        "fromDate": "開始日",
+        "toDate": "終了日",
+        "invalidDates": "有効な日付範囲を選択してください。",
+        "cleanupFailed": "削除に失敗しました。再試行する前にプレビューを表示してください。",
+        "previewCount": "約 {{records}} 件の記録を削除します。",
+        "confirmCleanup": "削除を確定",
+        "preview": "削除をプレビュー",
+        "deleted": "{{records}} 件の記録を削除しました。"
+      },
+      "title": "利用枠の推移",
+      "chart": "グラフ",
+      "details": "明細",
+      "onlyChanges": "変動のみ",
+      "noChanges": "この期間に割り当ての変動はありません。",
+      "recordedAt": "記録時刻",
+      "noValue": "なし",
+      "shortConsumed": "5時間枠の消費",
+      "weeklyConsumed": "週間枠の消費",
+      "shortRemaining": "5h 残量",
+      "shortDelta": "5h 変化",
+      "weeklyRemaining": "週間残量",
+      "weeklyDelta": "週間変化",
+      "changeFromPrevious": "前回の記録からの変動",
+      "points": "{{value}} ポイント",
+      "account": "アカウント",
+      "interval": "間隔（分）",
+      "intervalInvalid": "1～1440 の整数を入力してください。",
+      "empty": "この期間の利用枠データはありません。",
+      "readFailed": "利用枠の履歴を読み込めませんでした。",
+      "noAccount": "Codex のサブスクリプションアカウントを追加すると、利用枠の履歴を表示できます。"
+    },
+    "quotaRecovery": {
+      "title": "利用枠の回復通知",
+      "description": "更新時に残りの利用枠が増えて90%以上になった場合、PushPlusで通知します。外部ネットワークへのアクセス許可が必要です。",
+      "token": "PushPlus トークン",
+      "settingsError": "通知設定を読み込めないか、保存できませんでした。"
+    },
     "thresholds": {
       "shortCycle": "短期枠",
       "weekly": "週次枠",
@@ -2607,7 +2798,7 @@
     "contextOverride": {
       "title": "コンテキスト管理",
       "description": "モデル、並び順、既定モデル、推論レベルは公式カタログに従います。手動設定した場合のみコンテキストを上書きします。",
-      "dialogDescription": "現在の Codex インスタンス内の全アカウントに適用され、アカウントを切り替えても維持されます。公式設定、プリセット、またはカスタムを選択してください。",
+      "dialogDescription": "現在の Codex インスタンス内の全アカウントに適用され、アカウントを切り替えても維持されます。公式設定、プリセット、またはカスタムを選択してください。 プリセットまたはカスタムを選ぶと、すべてのモデルでカタログのコンテキストウィンドウが上書きされます。",
       "followOfficial": "公式に従う",
       "custom": "カスタムコンテキスト",
       "automatic": "自動",
@@ -2635,6 +2826,10 @@
       "enabledHint": "現在の表示モデル一覧を使用します。Codex を再起動してください。",
       "disabledHint": "無効にすると Cockpit 管理のモデルカタログを削除し、公式のモデル表示に戻します。利用できるモデルは公式アカウントの権限で決まります。",
       "models": {
+        "addCustomBlank": "新規カスタムモデル",
+        "addAll": "すべて追加（{{count}}）",
+        "added": "追加済み",
+        "source": "ソース",
         "title": "モデル一覧",
         "model": "モデル",
         "default": "既定モデル",
@@ -2701,9 +2896,9 @@
         "autoDisabled": "すべてのインスタンス記録の自動同期はオフです",
         "autoEnabled": "すべてのインスタンス記録の自動同期はオンです",
         "autoTooltip": "すべてのインスタンス記録を自動同期",
-        "autoDesc": "無効時は各インスタンスの履歴を分離します。有効時は、すべての Codex インスタンスが停止している場合に限り、インスタンスの起動や終了時に不足するセッションと履歴が一致する追加内容を同期します。既存のバイトは保持します。",
+        "autoDesc": "オフの場合、インスタンスごとの履歴は分離されます。オンの場合、インスタンスの終了後、すべての Codex インスタンスが停止しているときだけ、不足するセッションと一致する履歴の追加分を同期します。既存の内容は保持されます。同期で大きなセッションファイルがコピーされることがあります。",
         "closeFirst": "実行中のインスタンスが古い記録を書き戻さないように、記録を同期する前にすべての Codex インスタンスを閉じてください。",
-        "confirmMessage": "すべてのインスタンスに不足するセッションを追加します。対象インスタンスが停止しており、履歴が一致する場合のみ新しい内容を追記し、既存のバイトは保持します。履歴が分岐している場合や対象が実行中の場合、既存セッションの更新は拒否されます。書き込み前に対象ファイルをバックアップします。続行しますか？",
+        "confirmMessage": "すべてのインスタンスに不足するセッションを追加します。対象インスタンスが停止しており、履歴が一致する場合のみ新しい内容を追記し、既存のバイトは保持します。履歴が分岐している場合や対象が実行中の場合、既存セッションの更新は拒否されます。書き込み前に対象ファイルをバックアップします。同期時にサイズの大きいセッションファイルがコピーされることがあります。続行しますか？",
         "needTwo": "記録を同期するには少なくとも 2 つのインスタンスが必要です",
         "settingsSection": "同期設定",
         "settingsSubtitle": "Codex の複数インスタンス記録の同期方法を管理",
@@ -2729,6 +2924,10 @@
     "refreshAllSuccess": "更新完了、{{count}} アカウント成功",
     "refreshAllPartialFailed": "更新完了、{{success}} / {{total}} アカウント成功、一部失敗",
     "launchPreview": {
+      "providerAccessAutomatic": "自動",
+      "providerAccessDirect": "直接接続",
+      "providerAccessGatewayHint": "リクエストはインスタンスのゲートウェイを経由します。",
+      "providerAccessCdpHint": "CDP でデスクトップ版にモデル一覧を読み込みます。",
       "configLoading": "インスタンス設定を読み込み中…",
       "configRefreshing": "インスタンス設定を確認中です。既存の内容は引き続き表示できます。",
       "configLoadTimeout": "インスタンス設定の読み込みがタイムアウトしました。再試行してください。",
@@ -2846,6 +3045,7 @@
       "reauthEmailLabel": "再認証アカウント"
     },
     "token": {
+      "importPartial": "インポート完了。成功：{{success}} 件、失敗：{{failed}} 件。{{errors}}",
       "desc": "auth.json、アカウント JSON、または refresh_token を貼り付けます。",
       "placeholder": "例: 1 行に 1 つの refresh_token、または {\"refresh_token\":\"rt_...\"}",
       "formatSummary": "必須項目と例",
@@ -2939,7 +3139,7 @@
       "entryAction": "API サービスに追加",
       "testAction": "テスト",
       "testDialogTitle": "API サービスをテスト",
-      "testDialogDesc": "Playground のように現在の API サービスで実際の会話を行い、モデル、アカウントルーティング、上流応答を確認します。",
+      "testDialogDesc": "現在の API サービスでチャットや画像生成を試せます。",
       "testProgressTitle": "サービスをテスト中",
       "testProgressDesc": "ローカル API サービスへ実リクエストを送信しています。しばらくお待ちください。",
       "testOutputTitle": "返却結果",
@@ -3060,6 +3260,7 @@
         "planHighFirst": "上位プラン優先",
         "planLowFirst": "下位プラン優先",
         "expirySoonFirst": "期限が近い順",
+        "fiveHourResetSoonFirst": "5時間枠の更新が早い順",
         "random": "ランダム",
         "custom": "カスタム"
       },
@@ -3106,7 +3307,7 @@
         "custom": "カスタム",
         "save": "モデルを保存",
         "placeholder": "カスタムモデル ID を入力",
-        "description": "/v1/images/generations と /v1/images/edits に使用します。デフォルトは gpt-image-2.5 です。",
+        "description": "既定のモデル：{{model}}",
         "required": "画像モデル名を入力してください",
         "tooLong": "画像モデル名が長すぎます",
         "saveSuccess": "画像モデルを更新しました"
@@ -3297,7 +3498,7 @@
       },
       "testChatModel": "モデル",
       "testChatClear": "会話を消去",
-      "testChatEmpty": "メッセージを入力すると、現在の API サービスで実際の会話を開始します。",
+      "testChatEmpty": "モデルを選び、メッセージまたは画像の説明を送信してください。",
       "testChatLatency": "所要時間 {{latency}}",
       "testChatSending": "API サービスへ要求中",
       "testChatInputPlaceholder": "テストメッセージを入力、Enter で送信",
@@ -3448,15 +3649,7 @@
       "hourly": "5時間クォータ",
       "weeklyReset": "週間クォータのリセット時間",
       "hourlyReset": "5時間クォータのリセット時間",
-      "subscriptionExpiry": "契約期限",
-      "custom": "カスタム順",
-      "customSettingsTooltip": "カスタム順を設定",
-      "customModalTitle": "アカウントのカスタム順",
-      "customModalDesc": "アカウントをドラッグするか上下ボタンで表示順を調整します。",
-      "customDragHandle": "ドラッグして並べ替え",
-      "customMoveUp": "上へ",
-      "customMoveDown": "下へ",
-      "customReset": "順序をリセット"
+      "subscriptionExpiry": "契約期限"
     },
     "opencodeSwitch": "OpenCode 切り替えスイッチ",
     "opencodeSwitchDesc": "OpenCode 内の Codex アカウント情報を同期して切り替え",
@@ -3514,6 +3707,12 @@
       "nextRunLabel": "次回実行 {{time}}",
       "lastRunLabel": "前回実行 {{time}}",
       "lastStatusLabel": "最新結果",
+      "confirmationTimedOut": "確認がタイムアウトしました",
+      "confirmationDeclined": "実行が拒否されました",
+      "confirmationDeclinedOrExpired": "実行が拒否されたか確認がタイムアウトしました",
+      "confirmationUnavailable": "確認を要求できませんでした",
+      "taskRunCancelled": "タスクがキャンセルされました",
+      "taskRunInterrupted": "タスクが中断されました",
       "lastStatusIdle": "まだ実行されていません",
       "lastStatusSuccessSummary": "{{count}} アカウント成功",
       "lastStatusFailedSummary": "{{count}} アカウント失敗",
@@ -3527,6 +3726,10 @@
       "taskNamePlaceholder": "例: 平日朝のウェイクアップ",
       "taskNameRequired": "タスク名を入力してください。",
       "taskAccountsLabel": "アカウント",
+      "taskAccountsManual": "手動選択",
+      "taskAccountsApiPool": "API サービスプール",
+      "taskAccountsApiPoolHint": "プール内の一時停止されていないサブスクリプションアカウントを順番に起動します。",
+      "taskAccountsApiPoolEmpty": "プールに有効なサブスクリプションアカウントがありません。",
       "taskAccountsHint": "OAuth の Codex アカウントのみ対応しています。複数アカウントは順番に実行されます。",
       "taskAccountsRequired": "少なくとも 1 つのアカウントを選択してください。",
       "scheduleLabel": "スケジュール",
@@ -3654,6 +3857,8 @@
       "scheduleQuotaResetSummary": "クォータリセット後に実行",
       "quotaResetWindowLabel": "リセットウィンドウのトリガー条件",
       "quotaResetWindowHint": "primary_window は通常 5時間枠の配額を指します。無料ユーザーでは primary_window が週次配額を指す場合があり、サブスクリプションによって異なることがあります。",
+      "quotaResetDelayLabel": "リセット後の待機",
+      "quotaResetDelayInvalid": "対応範囲内で、0 以上の整数を分単位で入力してください。",
       "quotaResetWindowOptions": {
         "either": "primary_window または secondary_window のいずれかがリセットされたときに実行",
         "primary_window": "primary_window がリセットされたときのみ実行",
@@ -3767,6 +3972,14 @@
         "confirm": "セッションをコピー"
       },
       "repairModal": {
+        "historyDuplicateOrdinals": "以下の履歴には重複した連番があります。履歴インデックスの修復ではスキップされ、完全修復は続行できません。他のセッションでは「会話インデックス修復」を選択してください。\n{{details}}",
+        "projectsDeferredAction": "インスタンスを終了し、セッション修復で「ローカルプロジェクト」を選択してください。",
+        "projectsStateSize": "最大の状態ファイル：{{file}}（{{bytes}} バイト）。",
+        "projectsQuickBudget": "プロジェクトのクイックスキャンが上限に達しました。",
+        "projectsStateTooLarge": "プロジェクトの状態ファイルが対応サイズを超えています。",
+        "projectsStopHint": "復元前に選択したインスタンスを終了してください。変更内容は今すぐプレビューできます。",
+        "modeProjectsDesc": "ローカルプロジェクトとチャットの所属を復元します。会話履歴は保持されます。",
+        "modeProjects": "ローカルプロジェクト",
         "running": "修復中...",
         "progress": {
           "queued": "修復タスクを開始しています...",
@@ -3844,7 +4057,8 @@
         "projectsPreview": "プレビュー：プロジェクト {{projects}} 件、所属 {{assignments}} 件。除外：プロジェクト {{skipped}} 件、所属不明の会話 {{ambiguous}} 件。",
         "projectsSuccess": "復元完了：プロジェクト {{projects}} 件、所属 {{assignments}} 件。除外：プロジェクト {{skipped}} 件、所属不明の会話 {{ambiguous}} 件。",
         "projectsPending": "前回の復旧が中断されました。対象を終了して完全修復を実行し、未完了の書き込みを復旧してください。",
-        "projectsDeferred": "一部のプロジェクト情報は保留されました。対象を終了してクイック修復を再試行するか、完全修復を使用してください。"
+        "projectsDeferred": "一部のプロジェクト情報は保留されました。対象を終了してクイック修復を再試行するか、完全修復を使用してください。",
+        "switchProjectsDeferred": "認証情報は更新されましたが、ローカルプロジェクトの状態を同期できませんでした。対象の Codex インスタンスを終了し、Cockpit から起動して再試行してください。"
       },
       "importModal": {
         "title": "セッションを読み込み",
@@ -4034,6 +4248,7 @@
       "hideApiKey": "API Keyを非表示",
       "apiKeyHiddenHint": "API Keyは非表示です。クリックすると表示します。",
       "modelCatalog": {
+        "restartHint": "モデルカタログを更新しました。Codex が実行中の場合は、再起動すると反映されます。",
         "label": "モデル一覧",
         "fetch": "プロバイダーから取得",
         "fetching": "取得中...",
@@ -4190,6 +4405,8 @@
       }
     },
     "modelProviders": {
+      "updateApiKeyFailed": "API キーを更新できませんでした：{{error}}",
+      "editApiKey": "API キーを編集",
       "keyModels": {
         "title": "Key のモデル",
         "override": "個別設定",
@@ -4235,6 +4452,8 @@
         "supportsWebsockets": "WebSocket 転送"
       },
       "validation": {
+        "apiKeyExists": "このプロバイダーには同じ API キーが既にあります",
+        "apiKeyRequired": "API キーを入力してください",
         "nameRequired": "プロバイダー名は必須です。",
         "baseUrlInvalid": "Base URL が無効です。",
         "baseUrlExists": "この Base URL はすでに存在します。",
@@ -4272,6 +4491,8 @@
         "anthropic": "Anthropic プロトコル",
         "gatewayRequired": "このプロトコルにはローカルゲートウェイが必要です。起動モデルを選択してください。"
       },
+      "searchSavedProviders": "プロバイダーを検索",
+      "noMatchingSavedProviders": "該当するプロバイダーがありません",
       "selectSavedProvider": "保存済みプロバイダー",
       "selectSavedApiKey": "保存済み API キー",
       "selectSavedApiKeyPlaceholder": "API キーを選択",
@@ -4355,6 +4576,7 @@
         "checkModelsApi": "このプロバイダーが OpenAI 互換のモデル一覧レスポンスを返すか確認してください。"
       },
       "batchTest": {
+        "firstText": "最初のテキスト",
         "entry": "一括テスト",
         "entryHint": "プロバイダーの実チャット能力をまとめてテスト",
         "selectedCount": "{{count}} 件選択済み",
@@ -4441,6 +4663,15 @@
         "detailTitle": "サービスパネル",
         "rawFields": "サービスデータ",
         "fields": {
+          "intervalRemaining": "期間残量",
+          "intervalLimit": "期間上限",
+          "intervalRemainingPercent": "期間残量（%）",
+          "intervalExpiresAt": "期間のリセット",
+          "weeklyRemaining": "週間残量",
+          "weeklyLimit": "週間上限",
+          "weeklyRemainingPercent": "週間残量（%）",
+          "weeklyExpiresAt": "週間リセット",
+          "currency": "通貨",
           "status": "状態",
           "planName": "プラン",
           "remaining": "残高",
@@ -4463,6 +4694,7 @@
           "expiresAt": "有効期限",
           "totalGranted": "付与枠",
           "totalAvailable": "利用可能",
+          "isAvailable": "残高の利用可否",
           "modelLimitsEnabled": "モデル制限"
         },
         "accountBalance": "アカウント残高",
@@ -4709,6 +4941,8 @@
       "launchHint": "アカウント切替と Cockpit からの起動時に設定を保存します。実行中のクライアントは再起動が必要です。新規チャットは既定値を使い、既存チャットの個別速度はクライアントで変更してください。"
     },
     "apiService": {
+      "providerQuotaStale": "古い利用枠データ",
+      "providerQuotaUnitUnknown": "単位不明",
       "inspection": {
         "internalScope": "内部クライアントのリクエストです。サービスのアカウントプールとインスタンスの紐付けを確認してください。公開クライアント Key には対応しません。",
         "keyUnavailable": "このリクエストのクライアント Key が存在しないか削除されています。現在の Key とアカウントプールを確認してください。",
@@ -4739,6 +4973,11 @@
         "responsesTitle": "Responses 入口",
         "responsesNote": "Codex ネイティブの Responses 入口です。",
         "anthropicTitle": "Anthropic メッセージ",
+        "claudeCodeNoModels": "このキーで利用できる Claude Code プリセットのモデルがありません。先にモデルルールでエイリアスを保存してください。",
+        "claudeCodeSettingsChanged": "プレビュー後に設定が変更されました。再度プレビューしてください。",
+        "claudeCodeServiceUnavailable": "このキーのモデルを読み込めません。API サービスとキーの状態を確認してください。",
+        "claudeCodeNoBackup": "現在の設定と一致するバックアップがありません。",
+        "claudeCodeSettingsHint": "保存すると、表示された変数が統合され、元の設定が暗号化してバックアップされます。null の変数は削除されます。",
         "anthropicNote": "同じサービスキーを使います。",
         "geminiTitle": "Gemini 入口",
         "geminiNote": "Base URL は /v1beta を使います。",
@@ -4763,6 +5002,7 @@
         "capabilityTitle": "機能スイッチ",
         "capabilityDesc": "gpt-image-2 は、サービススイッチ、アカウントプラン、記録された画像機能状態に基づいて自動的に表示または非表示になります。",
         "rulesTitle": "モデルルール",
+        "claudeCodePreset": "Claude Code プリセット",
         "aliasTitle": "モデル別名",
         "aliasPlaceholder": "gpt-5 => g5。元モデルを残すには +",
         "excludedTitle": "非表示モデル",
@@ -4835,9 +5075,15 @@
         "unsaved": "未保存",
         "resetPolicy": "変更を破棄",
         "modelPrefix": "モデル接頭辞",
+        "maxReasoningEffort": "推論レベル上限",
+        "maxReasoningHint": "上限を超えるリクエストや推論レベルを確認できないリクエストは拒否されます。",
+        "reasoningNone": "なし",
+        "reasoningMinimal": "最小",
         "modelPrefixPlaceholder": "例: codex",
         "allowedModels": "許可モデル",
         "allowedModelsPlaceholder": "空なら全許可。1行にモデルまたはワイルドカード",
+        "modelsOutsideAllowlist": "許可リスト外のモデル",
+        "allowCurrentAndFutureModels": "現在と今後のモデルを許可",
         "excludedModels": "除外モデル",
         "excludedModelsPlaceholder": "1行にモデルまたはワイルドカード",
         "savePolicy": "ポリシー保存",
@@ -4848,8 +5094,8 @@
       "routing": {
         "optionsTitle": "ルーティング設定",
         "sessionIdentityMapping": "セッション ID 変換",
-        "sessionIdentityMappingEnableHint": "有効にすると、接続先のアカウントを切り替える際に独立した Session-Id と Thread-Id を使用します。識別子の分離は強まりますが、アカウント間でのキャッシュ再利用が減る場合があります。同じアカウント内では既存の対応付けを再利用します。",
-        "sessionIdentityMappingDisableHint": "無効にすると、クライアントの元の Session-Id と Thread-Id を維持します。接続先の異なるアカウントで同じ識別子が使われる可能性があり、分離は弱まりますが、キャッシュ再利用が増える場合があります。",
+        "sessionIdentityMappingEnableHint": "有効にすると、Codex の公式アカウントを切り替える際に独立した Session-Id と Thread-Id を使用します。識別子の分離は強まりますが、アカウント間でのキャッシュ再利用が減る場合があります。同じアカウント内では既存の対応付けを再利用します。",
+        "sessionIdentityMappingDisableHint": "無効にすると、クライアントの元の Session-Id と Thread-Id を維持します。異なる Codex の公式アカウントで同じ識別子が使われる可能性があり、分離は弱まりますが、キャッシュ再利用が増える場合があります。",
         "sessionIdentityMappingCacheNote": "キャッシュヒット率は接続先の規則、アカウントの範囲、リクエスト内容にも依存し、この設定の切り替えによる増減は保証されません。",
         "sessionIdentityMappingSaveNote": "確認後、設定を保存すると変更が適用されます。",
         "sessionAffinity": "セッション固定",
@@ -4877,7 +5123,7 @@
         "modelFilter": "モデル",
         "modelPlaceholder": "モデル ID",
         "accountFilter": "アカウント",
-        "accountPlaceholder": "メールまたはアカウント ID",
+        "accountPlaceholder": "名前、メール、ID",
         "apiKeyFilter": "APIキー",
         "apiKeyPlaceholder": "名前または ID",
         "kindFilter": "タイプ",
@@ -4891,6 +5137,12 @@
         "requestIdShort": "リクエストID {{id}}",
         "httpStatus": "HTTP状態 {{status}}",
         "allInstances": "全インスタンス",
+        "allSources": "すべてのソース",
+        "connectionSource": "接続元",
+        "peerIp": "接続元 IP",
+        "sourceLocal": "この端末",
+        "sourceLan": "ローカルネットワーク",
+        "sourceRemote": "リモート",
         "instanceFilter": "インスタンス",
         "instanceUnknown": "インスタンス -",
         "reasoningEffort": "思考強度",
@@ -4927,6 +5179,7 @@
         "originalTier": "元の速度：{{tier}}"
       },
       "timeouts": {
+        "retryTitle": "送信とアカウントの再試行",
         "entryLabel": "詳細",
         "openAction": "タイムアウトと再試行",
         "title": "タイムアウトと再試行",
@@ -4948,6 +5201,10 @@
         "bootstrapRetries": "起動再試行",
         "websocketTitle": "WebSocket 設定",
         "websocketConnect": "接続タイムアウト",
+        "requestBody": "本文受信の制限時間",
+        "requestBodyHelp": "HTTP リクエスト本文全体を受信する時間の上限（1～600 秒）。",
+        "websocketFragment": "分割受信の制限時間",
+        "websocketFragmentHelp": "分割された WebSocket メッセージ 1 件を受信する合計時間の上限（1～600 秒）。",
         "websocketInitial": "初回メッセージ待ち",
         "websocketIdle": "アイドル待ち",
         "websocketHeartbeat": "ハートビート間隔",
@@ -4999,7 +5256,7 @@
         "upstreamModel": "送信",
         "addRow": "行を追加",
         "fillDeepSeek": "DeepSeek を入力",
-        "empty": "このプールにはマッピングできる API キーアカウントがありません",
+        "empty": "モデルのマッピングに対応するアカウントがありません",
         "incomplete": "リクエストモデルと送信モデルの両方を入力してください",
         "duplicate": "リクエストモデルは一意である必要があります",
         "saveSuccess": "アカウントモデルマッピングを保存しました",
@@ -5051,6 +5308,9 @@
       "imported": "インポート済み",
       "failed": "失敗",
       "quotaOk": "アカウント正常",
+      "minimumQuota": "最低残量（%）",
+      "minimumQuotaHint": "確認できた残量のいずれかがこの値を下回るアカウントを除外します。",
+      "minimumQuotaEmpty": "残量の条件に合うアカウントがありません。",
       "quotaFailed": "異常",
       "checkQuotaToggle": "インポート前に確認",
       "preparing": "インポートタスクを準備中...",
@@ -5189,18 +5449,21 @@
       "syncNow": "今すぐ同期する",
       "connectionOk": "接続済み",
       "syncVerified": "SSH同期が確認されました",
+      "connectionRefreshFailed": "認証情報は同期済みです。SSH 接続の更新は保留中です。しばらくしてから再試行してください。",
       "syncFailed": "SSH同期に失敗しました",
       "syncedAs": "同期済み {{email}} · {{time}}",
       "neverSynced": "まだ同期されていません",
       "latestVerified": "最後に確認された SSH 同期",
       "syncSwitchActive": "オン · {{name}} ({{user}}@{{host}})",
+      "syncSwitchActiveMultiple": "オン · {{count}} 台",
+      "selectedServerCount": "{{total}} 台中 {{selected}} 台を選択済み",
       "footerHint": "保存後にスイッチがオンになります。いつでもオフにして自動同期を停止できます。",
       "formLead": "リモートホストの詳細",
       "namePlaceholder": "例えばホームNAS",
       "syncOnSwitchHint": "保存して選択した後、Codex スイッチは認証をこのホストにプッシュします",
       "addAndSave": "追加して保存",
       "serverList": "サーバー",
-      "serverListLead": "同期ターゲットを選択",
+      "serverListLead": "同期先を選択（複数選択可）",
       "serverCount": "{{count}} 台",
       "autoSyncBadge": "自動"
     },
@@ -5236,6 +5499,13 @@
       "restartFailed": "ゲートウェイの再起動に失敗しました：{{error}}"
     },
     "proxy": {
+      "directHosts": {
+        "title": "Codex の直接接続先",
+        "hint": "ホスト名または CIDR 範囲を 1 行ずつ入力します。内部 MCP サーバーなど、一致する接続先には Codex の管理プロキシを経由せず接続します。クライアント設定は Codex の再起動後に反映されます。",
+        "invalid": "各行に有効なホスト名、IP アドレス、または CIDR 範囲を入力してください。",
+        "loadFailed": "直接接続先を読み込めませんでした。",
+        "saveFailed": "直接接続先を保存できませんでした。"
+      },
       "legacyBoundHint": "以前に紐付けたアカウントのプロキシを引き続き使用しています。再保存すると選択したモードが適用されます。",
       "boundAccountUnavailable": "紐付けたアカウントを利用できません。プロキシを選び直してください。",
       "boundProxyUnavailable": "紐付けたアカウントに利用可能なプロキシがありません。選び直してください。",
@@ -5934,6 +6204,12 @@
       "done": "完了"
     },
     "cliDaemon": {
+      "profileChanged": "このプロファイルを更新しました。実行中の CLI デーモンは、以前のアカウントやモデル一覧を使用している可能性があります。",
+      "restartWarning": "先に実行中の CLI タスクを完了してください。再起動すると、このデーモンに接続中のセッションが中断されます。",
+      "restart": "CLI を再起動",
+      "restarting": "再起動中…",
+      "restarted": "CLI デーモンを再起動しました。",
+      "restartFailed": "再起動できませんでした。再試行するか、コマンドをターミナルにコピーしてください。",
       "title": "CLI アカウントの更新",
       "description": "認証情報は保存されましたが、このプロファイルの Codex CLI バックグラウンドサービスが稼働中のため、以前のアカウントを引き続き使用する可能性があります。",
       "restartHint": "実行中の CLI タスクを終了してから、ターミナルで次のコマンドを実行してください。再起動すると、このサービスに接続しているセッションが中断されます。",
@@ -5960,6 +6236,9 @@
       }
     },
     "requestDiagnostics": {
+      "cloudflareGatewayError": "Cloudflare ゲートウェイエラー（HTTP {{status}}、Ray ID {{ray}}）",
+      "responseModel": "応答のモデル",
+      "responseModelDiffers": "応答のモデルは送信したモデルと異なります。",
       "requestSizeTitle": "リクエストサイズ",
       "requestSizeHint": "展開後のクライアント JSON のサイズ。各項目は空白を省いた JSON のバイト数で、サイズのみ記録します。",
       "requestBytes": "リクエスト",
@@ -6063,7 +6342,9 @@
       "defaultReasoning": "既定の推論強度",
       "defaultReasoningFollow": "既定値を使用",
       "defaultReasoningHint": "空欄にするとモデルの既定値を使用します。選択する推論強度は現在の対応範囲内である必要があります。",
-      "defaultReasoningInvalid": "既定の推論強度は、このモデルが対応する値である必要があります。"
+      "defaultReasoningInvalid": "既定の推論強度は、このモデルが対応する値である必要があります。",
+      "ultraReasoning": "Ultra の強度",
+      "ultraReasoningInvalid": "Ultra に対応するモデルで利用可能な推論強度を選択してください。"
     },
     "modelConfig": {
       "transfer": "インポート / エクスポート",
@@ -6181,6 +6462,38 @@
     },
     "officialApi": {
       "hint": "実際の接続先アドレスで識別した、OpenAI 公式 API キーのアカウントです。"
+    },
+    "resetHistory": {
+      "redeemedCardId": "使用済みカード ID",
+      "windowsReset": "リセットしたクォータ枠",
+      "observations": "使用の詳細",
+      "effectiveRule": "適用ルール",
+      "before": "リクエスト前",
+      "after": "確認後",
+      "availableCardIds": "利用可能なカード ID",
+      "title": "リセット履歴",
+      "available": "利用可能",
+      "official": "公式履歴",
+      "local": "ローカル使用",
+      "officialHint": "過去30日間の公式記録です。",
+      "localHint": "今後このアプリで行う手動・自動操作を記録します。過去のデータは補完しません。",
+      "officialEmpty": "過去30日間のリセット履歴はありません",
+      "localEmpty": "ローカル使用履歴はありません",
+      "received": "リセット回数を獲得",
+      "used": "リセットを使用",
+      "alreadyRedeemed": "交換済み（再試行で確認）",
+      "nothingToReset": "リセット不要・未使用",
+      "noCredit": "利用可能な回数なし",
+      "pending": "確認待ち",
+      "unconfirmed": "結果未確認",
+      "manual": "手動使用",
+      "expiry": "自動・期限間近",
+      "weekly": "自動・週間割当",
+      "unknown": "不明な記録",
+      "requestId": "リクエストID",
+      "more": "さらに表示",
+      "loadFailed": "履歴を読み込めませんでした",
+      "officialUnavailable": "このアカウントでは公式リセット履歴を利用できません"
     }
   },
   "githubCopilot": {
@@ -6311,6 +6624,9 @@
     }
   },
   "quickSettings": {
+    "codexWindow": {
+      "orDivider": "いずれかの条件で実行"
+    },
     "antigravity": {
       "title": "Antigravity IDE 設定",
       "appPath": "アプリパス"
@@ -6470,16 +6786,16 @@
       "appTargetPlaceholder": "Claude.exe のパスまたは shell:AppsFolder\\..."
     },
     "traeSolo": {
-      "appPath": "TRAE SOLO パス",
-      "title": "TRAE SOLO 設定"
+      "appPath": "TraeWork パス",
+      "title": "TraeWork 設定"
     },
     "traeCn": {
       "appPath": "Trae CN パス",
       "title": "Trae CN 設定"
     },
     "traeSoloCn": {
-      "appPath": "TRAE SOLO CN パス",
-      "title": "TRAE SOLO CN 設定"
+      "appPath": "TraeWork CN パス",
+      "title": "TraeWork CN 設定"
     }
   },
   "quotaAlert": {
@@ -6611,6 +6927,8 @@
   },
   "kiro": {
     "account": {
+      "signedInWithUnknown": "ログインプロバイダー不明",
+      "signedInWithProvider": "{{provider}} でログイン",
       "signedInWith": "{{provider}} でサインインしました",
       "providerUnknown": "未知",
       "userId": "ユーザーID"
@@ -6685,6 +7003,19 @@
     "subscription": "サブスクリプション",
     "injectToCursor": "Cursor に切り替え",
     "quota": {
+      "weeklyUsage": "週の使用量",
+      "monthlyUsage": "月の使用量",
+      "additionalBalance": "追加利用残高",
+      "additionalMonthlyUsed": "今月の追加利用",
+      "additionalMonthlyLimit": "月間追加利用の上限",
+      "limitUnset": "未設定",
+      "autoTopUp": "自動チャージ",
+      "autoTopUpDetails": "{{threshold}} 未満で {{amount}} をチャージ",
+      "usedPercent": "{{percent}}% 使用済み",
+      "details": "使用量の詳細",
+      "sandUsage": "Grok Bot 使用量",
+      "cursorModels": "Cursor モデル",
+      "otherModels": "その他のモデル",
       "onDemand": "オンデマンド"
     },
     "title": "Cursor アカウント管理",
@@ -6700,11 +7031,12 @@
       "title": "Cursor アカウントを追加"
     },
     "token": {
-      "desc": "Cursor アクセストークン（JWT）またはエクスポートされた JSON データを貼り付けてください。",
+      "desc": "Cursor の JWT、ブラウザーのセッショントークン、またはエクスポートした JSON を貼り付けます。",
       "formatHint": "必須フィールドと例（クリックで展開）",
-      "formatRequired": "単一トークン：JWT を直接貼り付け；一括インポート：JSON 配列形式を使用",
+      "formatRequired": "1 件は JWT またはブラウザーのセッショントークンを使用します。複数件は JSON 配列を使用します。",
       "singleExample": "単一の例（JWT）",
-      "batchExample": "一括の例（JSON）"
+      "batchExample": "一括の例（JSON）",
+      "invalidBrowserToken": "ブラウザーのセッショントークンの形式が無効か、ユーザー ID が JWT と一致しません。"
     },
     "import": {
       "localDesc": "ローカルの Cursor クライアントまたは JSON ファイルからアカウントデータをインポートします。",
@@ -7024,6 +7356,22 @@
     }
   },
   "codebuddy": {
+    "sessionManager": {
+      "statusAll": "すべての状態",
+      "statusCompleted": "完了",
+      "statusInProgress": "進行中",
+      "statusFilter": "セッションの状態",
+      "noMatching": "一致するセッションがありません",
+      "noSessions": "セッションはまだありません",
+      "untitled": "（無題）",
+      "labels": {
+        "session": "セッション",
+        "user": "ユーザー",
+        "dir": "フォルダー"
+      },
+      "unknownTime": "時刻不明",
+      "searchPlaceholder": "タイトルまたは作業フォルダーで検索"
+    },
     "title": "CodeBuddyアカウント管理",
     "noAccounts": "CodeBuddy アカウントがありません",
     "addAccount": "CodeBuddy アカウントを追加",
@@ -7124,6 +7472,22 @@
     }
   },
   "qoder": {
+    "diagnostics": {
+      "profileUninitialized": "Qoder IDE の初期化が完了していません。現在の OS ユーザーで開き、終了してから再試行してください。フォルダー：{{detail}}",
+      "storageUnavailable": "Qoder IDE の認証情報を利用できません。両アプリを同じ OS ユーザーで実行してください。{{detail}}",
+      "profileConflict": "起動設定が別のプロファイルを指しています。実際のフォルダー：{{detail}}",
+      "dataRootUnavailable": "Qoder IDE のプロファイルフォルダーが見つかりません。",
+      "busy": "別の Qoder 操作を実行中です。しばらくしてから再試行してください。",
+      "reauthRequired": "Qoder のログインが失効しました。再認証するか、IDE でログインし直してインポートしてください。",
+      "apiUnauthorized": "Qoder サービスはこのリクエストを承認しませんでした。",
+      "renewalFailed": "Qoder の認証情報を更新できませんでした。しばらくしてから再試行してください。",
+      "sessionChanged": "Qoder セッションが変更されました。アカウント一覧を更新して再試行してください。",
+      "endpointUnavailable": "Qoder の接続先を確認できません。IDE のログインと組織設定を確認してください。",
+      "switchLaunchFailed": "アカウントは書き込まれましたが、Qoder IDE を起動できませんでした。{{detail}}",
+      "refreshCount": "{{total}} 件中 {{count}} 件を更新しました。",
+      "launchUnconfirmed": "Qoder IDE の起動を確認できませんでした。",
+      "workerFailed": "Qoder のバックグラウンド処理に失敗しました。{{detail}}"
+    },
     "title": "Qoderアカウント管理",
     "comingSoon": {
       "title": "マルチインスタンス機能は近日公開",
@@ -7139,6 +7503,7 @@
       "copyLoginUrl": "ログインリンクをコピー"
     },
     "usageOverview": {
+      "enterpriseManaged": "組織で管理",
       "title": "利用状況の概要",
       "viewDetails": "詳細を見る",
       "includedCredits": "プラン内クレジット",
@@ -7150,8 +7515,8 @@
     "flowNotice": {
       "title": "Qoder アカウントガイド（クリックで展開/折りたたみ）",
       "desc": "公式 OAuth ログイン（コールバック）、ローカルインポート、JSON インポート、アカウント切り替え注入、マルチインスタンス関連付け、クォータ概要に対応しています。ログインフローは Qoder クライアントの実際の保存データ形式に従います。",
-      "permission": "権限範囲: Qoder のローカル認証ストレージ（auth 資格情報とユーザー情報）を読み取り、アカウント切り替えとセッション注入に使用します。すべてのデータはローカル端末上で処理されます。",
-      "network": "ネットワーク範囲: OAuth ログインではコールバック処理のために Qoder 公式サービスへの接続が必要です。クォータ照会は Qoder API を使用します。ローカルの鍵や資格情報はアップロードされません。"
+      "permission": "Cockpit は Qoder IDE のログイン、プラン、使用量、端末識別のキャッシュを読み取ります。切り替え時は OS の保護を使用して選択したプロファイルに書き込みます。",
+      "network": "ブラウザー認証には Qoder のログインページを使用します。認証結果の確認、資格情報の更新、使用量取得のため、認証パラメーター、該当する端末識別子、トークンをセッションの Qoder サービスへ送信します。"
     },
     "addModal": {
       "title": "Qoder アカウントを追加"
@@ -7272,6 +7637,7 @@
     "syncToWorkbuddy": "WorkBuddyに同期"
   },
   "workbuddy": {
+    "desktopEdition": "WorkBuddy（中国版）",
     "credits": {
       "planBase": "プラン基本クレジット",
       "planBonus": "プラン特典クレジット",
@@ -7308,7 +7674,7 @@
       "title": "WorkBuddy アカウント管理ガイド（クリックで展開/折りたたみ）",
       "desc": "アカウント切り替えでは、最新の WorkBuddy 公式クライアントの形式に従ってローカルのログインファイルを書き込みます。ローカルインポートも同じファイルを読み取ります。データはローカルでのみ処理されます。",
       "permission": "権限範囲：ローカルインポートとアカウント切り替えのために WorkBuddy のログインファイル（CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info）を読み書きします。旧 state.vscdb は読み取りも変更もしません。",
-      "network": "OAuth ログインとトークン更新では WorkBuddy に接続します。残高と明細の取得には、アカウントのトークンを使って課金サービスに接続します。ログインファイルとシステムキーは端末内に保存されます。"
+      "network": "OAuth ログインとトークン更新では WorkBuddy に接続します。残高と明細の取得には、アカウントのトークンを使って課金サービスに接続します。ログインファイルとシステムキーは端末内に保存されます。 モデル確認では選択モデルとテストメッセージを WorkBuddy の会話サービスとセッション接続先に送り、返信を読み取ります。"
     },
     "nickname": "ニックネーム",
     "enterprise": "企業",
@@ -7443,21 +7809,37 @@
       "endTime": "終了時間",
       "timeRangeHint": "バックグラウンドチェックインを完了するため、この時間帯から毎日ランダムな時間を自動選択します。",
       "errors": "エラー",
-      "tabSettings": "自動チェックイン設定",
-      "tabHistory": "自動チェックイン履歴",
-      "manualTest": "テスト実行",
-      "clearLogs": "クリア",
-      "clearLogsFailed": "チェックイン履歴のクリアに失敗しました：{{message}}",
-      "historyLoading": "自動チェックイン履歴を読み込んでいます...",
-      "historyLoadFailed": "自動チェックイン履歴の読み込みに失敗しました：{{message}}",
       "totalCredits": "{{credits}} ポイント",
-      "historyRangeHint": "直近 30 日間の自動チェックイン記録のみ保持されます（全 {{count}} 件）",
-      "noHistory": "直近 30 日間の自動チェックイン記録はありません",
-      "saveFailed": "自動チェックイン設定の保存に失敗しました：{{message}}",
-      "manualTestPartialFailure": "一部のアカウントのチェックインに失敗しました。記録を確認してください。後ほどバックグラウンドで再試行されます。",
-      "manualTestAlreadyRunning": "自動チェックインタスクが実行中です。後ほど記録を確認してください。",
-      "manualTestFailed": "テスト実行に失敗しました：{{message}}",
       "timeRangeError": "開始時間は終了時間より後にできません"
+    },
+    "modelProbe": {
+      "title": "モデル確認",
+      "hint": "短いメッセージを送信して返信を確認します。少量の利用枠を消費します。テスト会話は既定で削除されます。",
+      "account": "アカウント",
+      "model": "モデル",
+      "catalog": "モデルを選択",
+      "modelPlaceholder": "モデル ID を入力",
+      "catalog_loading": "モデルを取得中…",
+      "catalog_loaded": "モデルを選ぶか ID を入力してください。",
+      "catalog_error": "モデルを取得できません。ID を入力して再試行できます。",
+      "keep": "テスト会話を残す",
+      "run": "確認開始",
+      "running": "確認中…",
+      "failed": "確認に失敗",
+      "status_available": "利用可能",
+      "status_rate_limited": "制限中",
+      "status_error": "要求失敗",
+      "status_unknown": "未確認",
+      "deleted": "テスト会話を削除しました",
+      "retained": "テスト会話を保存しました",
+      "cleanupFailed": "会話を削除できません。後で手動削除できます。",
+      "protocolFailure": "プロトコルの確認が未完了です。再試行するか認証を確認してください。",
+      "open": "モデルを確認"
+    },
+    "probeNotice": {
+      "until": "{{model}} の前回確認は制限中、解除 {{time}}",
+      "unavailable": "{{model}} の前回確認は制限中",
+      "failed": "{{model}} の前回確認に失敗"
     }
   },
   "minimaxCode": {
@@ -7825,6 +8207,14 @@
     "btnExportTitle": "Export Saved as JSON [ja]"
   },
   "mfaVault": {
+    "checkpointAvailable": "2FA 保管ファイルが見つかりません。復元前にローカルのバックアップを検証します。バックアップ後の変更は失われる場合があります。",
+    "restoreCheckpoint": "ローカルから復元",
+    "checkpointRestoring": "2FA バックアップを検証して復元しています…",
+    "checkpointRestoreFailed": "2FA のローカルバックアップを検証または復元できませんでした。",
+    "checkpointLiveVaultExists": "現在の 2FA 保管ファイルが見つかりました。もう一度読み込んでください。",
+    "checkpointSidecarExists": "SQLite の復旧ファイルが残っており、そのまま保持しました。",
+    "recoveryFailed": "2FA キーを復元できませんでした。",
+    "storageWriteFailed": "2FA の変更を保存できませんでした。",
     "pageDesc": "MFA のバックアップ復旧コード、パスコードセット、その他の機密認証データを安全に保存・管理します。MFA レコードはローカルのみに保存されます。削除、キャッシュクリア、端末の変更/紛失により MFA を失う可能性があります。バックアップを作成し、必要に応じてバックアップからインポートしてください。",
     "manualAdd": "認証情報を手動追加",
     "add": "追加",
@@ -8037,6 +8427,14 @@
       "queryFailed": "モデル一覧の読み込みに失敗しました: {{error}}"
     },
     "keyManager": {
+      "prefillOpened": "{{target}} の追加ダイアログを開きました。内容を確認して保存してください。",
+      "checkpointAvailable": "キー保管ファイルが見つかりません。復元前にローカルのバックアップを検証します。バックアップ後の変更は失われる場合があります。",
+      "restoreCheckpoint": "ローカルから復元",
+      "checkpointRestoreFailed": "キーのローカルバックアップを検証または復元できませんでした。",
+      "exportLegacy": "平文 JSON を書き出す",
+      "legacyExportFailed": "キー一覧を旧形式で書き出せませんでした。",
+      "vaultLoadFailed": "保存済みキーを読み込めませんでした。",
+      "vaultWriteFailed": "キーの変更を保存できませんでした。",
       "title": "キー管理",
       "desc": "よく使う API Key を保存し、クリックで切り替えて残高を自動確認できます。",
       "saveButton": "キーを保存",
@@ -8061,6 +8459,7 @@
       "addToClaude": "Claude CLI に追加",
       "addToClaudeDesktop": "Claude に追加",
       "addToClaudeCli": "Claude CLI に追加",
+      "addToGrok": "Grok に追加",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "Codex へクイック展開",
@@ -8070,6 +8469,7 @@
       "useKey": "キーを使用"
     },
     "prefill": {
+      "codexReady": "APIKEY.FUN の設定を入力しました。内容を確認して Codex に追加してください。",
       "claudeDesktopReady": "APIKEY.FUN の設定を入力しました。Claude への追加を確認してください。"
     },
     "copyKey": "Copy Key​",
@@ -8103,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "Grok の請求サービスから使用枠のデータが返されませんでした。後で再試行してください。",
     "search": "Grok CLI アカウントを検索...",
     "flowNotice": {
       "title": "Grok CLI アカウント管理",
@@ -8147,6 +8548,8 @@
       "apiBaseUrlInvalid": "認証情報、クエリパラメータ、フラグメントを含まない完全な http:// または https:// URL を入力してください"
     },
     "instances": {
+      "accountHomeReady": "分離フォルダーの準備ができました：{{email}}",
+      "installLaunchHint": "以下の公式コマンドをターミナルで実行してください。インストール後にもう一度「ターミナルで実行」を選択してください。",
       "unsupported": "Grok CLI の複数インスタンスは macOS、Windows、Linux のみ対応しています。",
       "launchDialogTitle": "インスタンスを起動",
       "launchHint": "コマンドをコピーして手動実行するか、ターミナルで直接実行できます。",
@@ -8176,6 +8579,7 @@
       "sectionTitle": "クォータ"
     },
     "quota": {
+      "cliUnavailable": "CLI の使用量を取得できません",
       "weekly": "週間使用量",
       "sharedPool": "共有枠",
       "monthly": "月間使用量",
@@ -8298,6 +8702,7 @@
       "baseUrlInvalid": "Base URL が有効な URL ではありません"
     },
     "desktopOAuth": {
+      "cliUnsupported": "このアカウントでは Claude Code CLI を起動できません。",
       "title": "Claude ログイン",
       "desc": "このツール内で Claude ログイン。Google、Apple、メール、free に対応。",
       "start": "ログインを開く",
@@ -8347,6 +8752,7 @@
       }
     },
     "oauth": {
+      "switchHint": "ローカルの Claude Code に切り替え",
       "title": "Claude OAuth 認可",
       "desc": "Claude 公式 OAuth 認可ページを開き、完了後にコールバック URL または code を貼り付けてアカウントをインポートします。",
       "start": "OAuth 認可",
@@ -8375,6 +8781,9 @@
       "cliUnsupported": "旧 OAuth アカウントでは Claude CLI を起動できません"
     },
     "cli": {
+      "applyUserConfig": "ユーザー設定に適用",
+      "userConfigHint": "Claude Code と VS Code 用にこのアカウントを ~/.claude に書き込みます。",
+      "userConfigApplied": "ユーザー設定を更新しました",
       "quickLaunch": "CLI 起動",
       "selectWorkingDir": "Claude CLI の作業フォルダを選択",
       "launchSuccess": "Claude CLI を起動しました",
@@ -8414,6 +8823,8 @@
     "noDesktopAccounts": "Claude アカウントはまだありません",
     "noCliAccounts": "Claude CLI アカウントはまだありません",
     "desktopGateway": {
+      "switchHint": "プロバイダー設定を適用して Claude Desktop を起動",
+      "switchSuccess": "Claude Desktop のプロバイダー設定を適用しました：{{name}}。",
       "label": "ゲートウェイ",
       "authScheme": "認証方式",
       "importAction": "Gatewayをインポート",

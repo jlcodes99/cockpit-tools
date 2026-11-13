@@ -54,7 +54,7 @@ export function CodexModelContextWindowTable({
     },
     { value: "preset_516k", label: "516K" },
     { value: "preset_1m", label: "1M" },
-    { value: "custom", label: t("codex.api.modelCatalog.contextCustom", "自定义") },
+    { value: "custom", label: t("codex.experimentalModelCatalog.models.contextCustomShort", "自定义") },
   ];
 
   return (
@@ -64,12 +64,12 @@ export function CodexModelContextWindowTable({
       } ${showContext ? "" : "no-context"}`}
     >
       <div className="api-model-context-window-head">
-        <span>{t("codex.api.modelCatalog.modelColumn", "模型")}</span>
+        <span>{t("common.codexUsage.model", "模型")}</span>
         {showContext ? (
           <span>
-            {t("codex.api.modelCatalog.contextWindow", "上下文")}
+            {t("codex.experimentalModelCatalog.models.contextWindow", "上下文")}
             <em className="api-model-context-window-optional">
-              {t("codex.api.modelCatalog.contextWindowOptional", "可选")}
+              {t("instances.form.optional", "可选")}
             </em>
           </span>
         ) : null}
@@ -118,7 +118,7 @@ export function CodexModelContextWindowTable({
                     className="api-model-context-window-select"
                     disabled={disabled}
                     ariaLabel={`${model} ${t(
-                      "codex.api.modelCatalog.contextWindow",
+                      "codex.experimentalModelCatalog.models.contextWindow",
                       "上下文",
                     )}`}
                     menuPlacement="up"
@@ -132,7 +132,7 @@ export function CodexModelContextWindowTable({
                       onChange={(event) => onChange(model, event.target.value)}
                       disabled={disabled}
                       aria-label={`${model} ${t(
-                        "codex.api.modelCatalog.contextWindow",
+                        "codex.experimentalModelCatalog.models.contextWindow",
                         "上下文",
                       )}`}
                     />

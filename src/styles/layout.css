@@ -33,6 +33,67 @@
   -webkit-app-region: no-drag;
 }
 
+.app-container-linux {
+  --linux-titlebar-height: 36px;
+  border-radius: 0;
+}
+
+.app-container-linux > .main-wrapper {
+  margin-block-start: var(--linux-titlebar-height);
+  height: calc(100vh - var(--linux-titlebar-height));
+}
+
+.linux-window-titlebar {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 13050;
+  height: var(--linux-titlebar-height);
+  display: flex;
+  align-items: stretch;
+  direction: ltr;
+  background: var(--bg-surface);
+}
+
+.linux-window-drag {
+  flex: 1;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.linux-window-control {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.linux-window-control:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.linux-window-control-close:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 76%, black);
+  color: white;
+}
+
+.linux-window-control:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -3px;
+}
+
+.linux-window-control:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .app-container-side-nav-classic {
   --side-nav-classic-width-expanded: 205px;
   --side-nav-classic-width-collapsed: 84px;
@@ -496,6 +557,7 @@
   gap: var(--side-nav-classic-nav-item-gap-scaled);
   padding: 0 var(--side-nav-classic-nav-item-padding-inline-scaled);
   border-radius: var(--side-nav-classic-nav-item-radius-scaled);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .side-nav.side-nav-classic .nav-item:hover {

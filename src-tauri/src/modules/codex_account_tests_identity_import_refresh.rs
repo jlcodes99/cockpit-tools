@@ -625,12 +625,17 @@ fn portable_api_key_import_projects_its_own_relay_credentials() {
     )
     .expect("parse imported auth");
     assert_eq!(auth["OPENAI_API_KEY"], "sk-imported-relay");
+    let runtime = read_api_provider_from_config_toml(&profile_dir);
+    assert_eq!(runtime.base_url.as_deref(), Some("https://imported-relay.example.com/v1"));
     let config = fs::read_to_string(profile_dir.join("config.toml")).expect("read imported config");
-    assert!(config.contains("openai_base_url = \"https://imported-relay.example.com/v1\""));
-    assert!(!config.contains("codex_local_access"));
-    assert!(!config.contains("[model_providers.imported_relay]"));
+    let doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&config).unwrap();
+    if let Some(provider) = doc.get("model_provider").and_then(|item| item.as_str()).filter(|id| *id != "openai") {
+        assert_eq!(provider, CODEX_RUNTIME_MODEL_PROVIDER_ID);
+        assert_eq!(doc["model_providers"][provider]["experimental_bearer_token"].as_str(), Some("sk-imported-relay"));
+    }
 
-    sync_api_key_account_from_local_state(&mut imported, &profile_dir);
+    sync_api_key_account_from_local_state(&mut imported, &profile_dir).unwrap();
+    assert_eq!(imported.api_base_url.as_deref(), Some("https://imported-relay.example.com/v1"));
     assert_eq!(imported.api_provider_mode, CodexApiProviderMode::Custom);
     assert_eq!(imported.api_provider_id.as_deref(), Some("imported_relay"));
     assert_eq!(
@@ -1447,7 +1452,7 @@ fn reauth_switch_preserves_new_tokens_and_marks_account_current() {
         "rt-old",
     ))
     .expect("seed old account");
-    let mut index = build_test_account_index(&old_account);
+    let mut index = super::read_saved_account_index().unwrap().unwrap();
     index.current_account_id = Some(old_account.id.clone());
     save_account_index(&index).expect("save old current account");
 
@@ -3005,6 +3010,15 @@ fn reauth_updates_explicit_target_account_even_when_identity_changes() {
         email, "acc-old", "org-old", "old", "rt-old",
     ))
     .expect("seed existing account");
+    let wrong_account = upsert_account_for_reauth(
+        make_codex_tokens("other@example.com", "acc-other", "org-other", "other", "rt-other"),
+        &existing.id,
+    )
+    .expect_err("reauth must reject a different email");
+    assert!(wrong_account.starts_with("CODEX_OAUTH_RESTART_REQUIRED: "));
+    let unchanged = load_account(&existing.id).expect("original account remains available");
+    assert_eq!(unchanged.tokens.refresh_token.as_deref(), Some("rt-old"));
+
     let generated_new_id = build_account_storage_id(email, Some("acc-new"), Some("org-new"));
     assert_ne!(existing.id, generated_new_id);
 
@@ -3043,7 +3057,7 @@ fn reauth_preserves_note_details_when_target_is_missing_from_index() {
     detail.phone_number = Some("13800000000".to_string());
     save_account(&detail).expect("save noted account");
 
-    let mut broken_index = CodexAccountIndex::new();
+    let mut broken_index = load_account_index();
     broken_index.accounts.clear();
     broken_index.current_account_id = None;
     save_account_index(&broken_index).expect("save broken index");

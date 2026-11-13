@@ -1,5 +1,18 @@
 use std::path::{Path, PathBuf};
 
+pub(crate) fn vscode_launch_path_is_insiders(path: &str) -> bool {
+    path.split(['/', '\\']).any(|part| {
+        matches!(
+            part.to_ascii_lowercase().as_str(),
+            "visual studio code - insiders.app"
+                | "microsoft vs code insiders"
+                | "code - insiders.exe"
+                | "code-insiders.exe"
+                | "code-insiders"
+        )
+    })
+}
+
 pub fn vscode_data_root_candidates() -> Result<Vec<PathBuf>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -41,6 +54,14 @@ pub fn vscode_data_root_candidates() -> Result<Vec<PathBuf>, String> {
 
 pub fn resolve_preferred_vscode_data_root() -> Result<PathBuf, String> {
     let candidates = vscode_data_root_candidates()?;
+    let configured = crate::modules::config::get_user_config().vscode_app_path;
+    if !configured.trim().is_empty() {
+        let index = usize::from(vscode_launch_path_is_insiders(&configured));
+        return candidates
+            .into_iter()
+            .nth(index)
+            .ok_or_else(|| "未找到 VS Code 候选目录".to_string());
+    }
     for root in &candidates {
         if root.exists() {
             return Ok(root.clone());
@@ -125,5 +146,28 @@ pub fn vscode_shared_storage_db_exists(data_root: &Path) -> bool {
     {
         let _ = data_root;
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::vscode_launch_path_is_insiders;
+
+    #[test]
+    fn vscode_launch_path_selects_the_matching_editor_edition() {
+        for path in [
+            r"C:\Programs\Microsoft VS Code Insiders\Code - Insiders.exe",
+            "/Applications/Visual Studio Code - Insiders.app/Contents/MacOS/Electron",
+            "/usr/bin/code-insiders",
+        ] {
+            assert!(vscode_launch_path_is_insiders(path), "{path}");
+        }
+        for path in [
+            r"C:\Programs\Microsoft VS Code\Code.exe",
+            "/Applications/Visual Studio Code.app/Contents/MacOS/Electron",
+            "/tmp/project-insiders/code",
+        ] {
+            assert!(!vscode_launch_path_is_insiders(path), "{path}");
+        }
     }
 }

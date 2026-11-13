@@ -203,6 +203,8 @@
   display: inline-flex;
   align-items: center;
   max-width: 220px;
+  min-width: 0;
+  text-overflow: ellipsis;
   border: 1px solid transparent;
   background: transparent;
   color: inherit;
@@ -410,20 +412,17 @@
 }
 
 /* Style-only plan badge variants (#772); plan text stays raw. */
-.tier-badge.plan-badge-style-outline,
-.instance-plan-badge.plan-badge-style-outline {
+.tier-badge.plan-badge-style-outline {
   background: transparent !important;
   border-width: 1px;
   border-style: solid;
 }
-.tier-badge.plan-badge-style-soft,
-.instance-plan-badge.plan-badge-style-soft {
+.tier-badge.plan-badge-style-soft {
   filter: saturate(0.85);
   opacity: 0.92;
   border-radius: 999px;
 }
-.tier-badge.plan-badge-style-mono,
-.instance-plan-badge.plan-badge-style-mono {
+.tier-badge.plan-badge-style-mono {
   background: var(--bg-secondary, #2a2a2a) !important;
   color: var(--text-primary, #e8e8e8) !important;
   border: 1px solid var(--border-light, #444) !important;
@@ -776,6 +775,134 @@
 
 .accounts-page .account-table .codex-quota-mini-list {
   min-width: 220px;
+}
+
+.accounts-page .antigravity-model-quota-details > summary {
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.accounts-page .antigravity-model-quota-details > summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.accounts-page .antigravity-model-quota-details > .codex-quota-mini-list,
+.accounts-page .antigravity-model-quota-details > .ag-quota-grid {
+  margin-top: 6px;
+}
+
+/* Antigravity Compact 2-Column Quota Matrix */
+.ag-quota-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.ag-quota-grid--list {
+  min-width: 240px;
+}
+
+.ag-quota-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-tertiary) 75%, transparent);
+}
+
+.ag-quota-cell--full {
+  grid-column: 1 / -1;
+}
+
+.ag-quota-cell.low,
+.ag-quota-cell.critical {
+  background: color-mix(in srgb, var(--danger, #ef4444) 8%, var(--bg-tertiary));
+}
+
+.ag-quota-cell-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ag-quota-cell-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ag-quota-cell-pct {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.ag-quota-cell-pct.high {
+  color: var(--text-primary);
+}
+
+.ag-quota-cell-pct.medium {
+  color: var(--warning, #f59e0b);
+}
+
+.ag-quota-cell-pct.low,
+.ag-quota-cell-pct.critical {
+  color: var(--danger, #ef4444);
+}
+
+.ag-quota-cell-pct.neutral {
+  color: var(--text-muted, var(--text-secondary));
+  font-weight: 500;
+}
+
+.ag-quota-bar-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-secondary) 18%, transparent);
+  overflow: hidden;
+}
+
+.ag-quota-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+.ag-quota-bar-fill.high {
+  background: var(--success, #22c55e);
+}
+
+.ag-quota-bar-fill.medium {
+  background: var(--warning, #f59e0b);
+}
+
+.ag-quota-bar-fill.low,
+.ag-quota-bar-fill.critical {
+  background: var(--danger, #ef4444);
+}
+
+.ag-quota-cell-reset {
+  font-size: 10.5px;
+  color: var(--text-muted, var(--text-secondary));
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Custom Sort Modal Styles (added for Antigravity custom sorting) */

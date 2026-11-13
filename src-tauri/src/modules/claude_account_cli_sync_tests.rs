@@ -115,6 +115,51 @@ fn cli_sync_targets_only_bound_cli_instances_and_deduplicates_paths() {
 }
 
 #[test]
+fn cli_sync_before_quota_refresh_adopts_rotation_only_from_still_bound_identity() {
+    let _lock = crate::modules::test_support::env_lock().lock().unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let previous = std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR");
+    struct RestoreEnv(Option<std::ffi::OsString>);
+    impl Drop for RestoreEnv {
+        fn drop(&mut self) {
+            match &self.0 {
+                Some(previous) => std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", previous),
+                None => std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR"),
+            }
+        }
+    }
+    let _restore = RestoreEnv(previous);
+    std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", temp.path());
+    let dir = temp.path().join("cli");
+    fs::create_dir(&dir).unwrap();
+    let config_path = dir.join(CLAUDE_CODE_CONFIG_FILE);
+    let config = json!({"oauthAccount":{
+        "accountUuid":"quota-cli","emailAddress":"quota@example.com","organizationUuid":"org-a"
+    }});
+    fs::write(&config_path, config.to_string()).unwrap();
+    let old = credentials("old", "old-refresh", Some(1000));
+    let account = save_account_and_index(derive_account_from_snapshots(old.clone(), config.clone(), None).unwrap()).unwrap();
+    let store: crate::models::InstanceStore = serde_json::from_value(json!({"instances":[{
+        "id":"cli","name":"CLI","userDataDir":dir,"extraArgs":"","bindAccountId":account.id,
+        "launchMode":"cli","createdAt":0
+    }]})).unwrap();
+    crate::modules::claude_instance::save_instance_store(&store).unwrap();
+    let rotated = credentials("new", "new-refresh", Some(now_ts_ms() + 3_600_000));
+    let mut other_org = config.clone();
+    other_org["oauthAccount"]["organizationUuid"] = json!("org-b");
+    assert!(sync_cli_account_from_config_dir(&account.id, &dir, true, |_| {
+        fs::write(&config_path, other_org.to_string()).unwrap();
+        Ok(rotated.clone())
+    }).unwrap().is_none());
+    assert_eq!(load_account(&account.id).unwrap().claude_credentials_raw, Some(old));
+    fs::write(&config_path, config.to_string()).unwrap();
+    let adopted = sync_cli_account_from_config_dir(&account.id, &dir, true, |_| Ok(rotated.clone())).unwrap().unwrap();
+    let saved = load_account(&account.id).unwrap().claude_credentials_raw.unwrap();
+    assert_eq!(credentials_refresh_token(&saved), credentials_refresh_token(&rotated));
+    assert!(!token_is_expired(adopted.claude_credentials_raw.as_ref().unwrap()));
+}
+
+#[test]
 fn cli_sync_queue_coalesces_requests_and_allows_retry_after_completion() {
     let mut queue = CliCredentialSyncQueue::default();
     assert!(queue.enqueue("a"));

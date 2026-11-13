@@ -14,8 +14,10 @@
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(4px);
   display: flex;
-  align-items: center;
+  align-items: safe center;
   justify-content: center;
+  overflow-y: auto;
+  padding: 16px;
   animation: qsOverlayIn 0.2s ease both;
 }
 
@@ -253,6 +255,24 @@
 .qs-select:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+.qs-dropdown .single-select-dropdown-trigger {
+  min-width: 112px;
+  min-height: 32px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm, 8px);
+  font-size: 12.5px;
+  background: var(--bg-tertiary);
+  box-shadow: none;
+}
+
+.qs-field-group .qs-dropdown {
+  width: 100%;
+}
+
+.qs-field-group .qs-dropdown .single-select-dropdown-trigger {
+  width: 100%;
 }
 
 .qs-select--input-mode {

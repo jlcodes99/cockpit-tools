@@ -6,7 +6,7 @@ import type { ReactElement } from "react";
 import type { TFunction } from "i18next";
 import { Database } from "lucide-react";
 import { isCodexChatCompletionsApiKeyAccount, type CodexAccount } from "../types/codex";
-import { isApiKeyFunUsageAccount, isCodexTokenPlanAccount, isDeepSeekAccount } from "../utils/codexDeepSeekAccess";
+import { isCodexApiKeyUsageQueryEligible, isDeepSeekAccount } from "../utils/codexDeepSeekAccess";
 import {
   formatCockpitApiInteger,
   formatCockpitApiTokenCount,
@@ -81,9 +81,7 @@ export function renderCodexApiKeyUsagePanel({
   }
   if (
     isCodexChatCompletionsApiKeyAccount(account) &&
-    !isDeepSeekAccount(account) &&
-    !isCodexTokenPlanAccount(account) &&
-    !isApiKeyFunUsageAccount(account)
+    !isCodexApiKeyUsageQueryEligible(account, provider?.integrationType, usageState?.summary)
   ) {
     return <></>;
   }
@@ -478,7 +476,7 @@ export function renderCodexApiKeyUsagePanel({
             ? t("codex.modelProviders.usage.loading", "正在查询额度...")
             : usageState?.error
               ? t("common.shared.quota.queryFailed", "配额查询失败")
-              : canRefresh
+              : canRefresh && !usageState?.unavailable
                 ? t("codex.modelProviders.usage.pending", "等待查询额度")
                 : t("codex.modelProviders.usage.noKey", "暂无可查询额度")}
         </div>

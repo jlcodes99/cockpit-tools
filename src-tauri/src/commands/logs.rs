@@ -112,23 +112,20 @@ fn read_log_snapshot(
 ) -> Result<LogSnapshot, String> {
     let line_limit = logger::clamp_log_tail_lines(line_limit);
     let log_dir = logger::get_log_dir()?;
-    let log_file = logger::resolve_managed_log_file(file_name.as_deref())?;
-    let content = logger::read_log_tail_lines(&log_file, line_limit)?;
-    let metadata = fs::metadata(&log_file).map_err(|e| format!("读取日志文件元数据失败: {}", e))?;
-    let available_files = build_available_log_files(logger::list_managed_log_files()?)?;
+    let log_files = logger::list_managed_log_files()?;
+    let log_file = logger::resolve_managed_log_file(&log_files, file_name.as_deref())?;
+    let content = logger::read_log_tail_lines(log_file, line_limit)?;
+    let selected_file = build_managed_log_file(log_file)?;
+    let available_files = build_available_log_files(log_files)?;
 
     Ok(LogSnapshot {
         log_dir_path: log_dir.to_string_lossy().to_string(),
-        log_file_path: log_file.to_string_lossy().to_string(),
-        log_file_name: log_file
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default()
-            .to_string(),
+        log_file_path: selected_file.log_file_path,
+        log_file_name: selected_file.log_file_name,
         content,
         line_limit,
-        file_size: metadata.len(),
-        modified_at_ms: metadata.modified().ok().and_then(to_unix_millis),
+        file_size: selected_file.file_size,
+        modified_at_ms: selected_file.modified_at_ms,
         available_files,
     })
 }

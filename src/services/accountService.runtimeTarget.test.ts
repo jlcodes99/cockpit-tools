@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { refreshAllQuotas } from './accountService.ts';
+import { importFromLocal, refreshAllQuotas } from './accountService.ts';
 
 test('background quota refresh sends the selected APP or IDE context to automatic switching', async () => {
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
@@ -21,6 +21,25 @@ test('background quota refresh sends the selected APP or IDE context to automati
       assert.equal(called, true);
       clearMocks();
     }
+  } finally {
+    clearMocks();
+    if (previous) Object.defineProperty(globalThis, 'window', previous);
+    else Reflect.deleteProperty(globalThis, 'window');
+  }
+});
+
+test('local import sends its explicit client target rather than the saved preference', async () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  try {
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: {
+      localStorage: { getItem: () => 'antigravity_ide' },
+    } });
+    mockIPC((command, args) => {
+      assert.equal(command, 'import_from_local');
+      assert.deepEqual(args, { runtimeTarget: 'antigravity' });
+      return { id: 'desktop-account' };
+    });
+    assert.equal((await importFromLocal('antigravity')).id, 'desktop-account');
   } finally {
     clearMocks();
     if (previous) Object.defineProperty(globalThis, 'window', previous);

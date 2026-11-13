@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { useDurableUiSetting } from '../../hooks/useDurableUiSetting';
+import { previewDurableUiSetting } from '../../utils/durableUiSettings';
 import { createPortal } from 'react-dom';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useModalFocusTrap } from '../../hooks/useModalFocusTrap';
@@ -12,9 +14,7 @@ import { catalogErrorKey, catalogUnsupportedKey, previewProxyImport, type ProxyI
 export interface ProxySourceDraft { name: string; kind: 'subscription' | 'manual'; input: string; options: ProxyImportOptions }
 interface Props { busy: boolean; error: string; onSubmit: (draft: ProxySourceDraft) => void; onClose: () => void; onCancel?: () => void; onEdit: () => void }
 const protocols = ['http', 'https', 'socks5', 'socks5h'];
-function rememberedProtocol() {
-  try { const v = localStorage.getItem('codex.proxyImportProtocol'); return v && protocols.includes(v) ? v : 'socks5'; } catch { return 'socks5'; }
-}
+const PROXY_IMPORT_PROTOCOL_KEY = 'codex.proxyImportProtocol';
 export function CodexProxyResourceForm({ busy, error, onSubmit, onClose, onCancel, onEdit }: Props) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<'paste' | 'manual'>('paste');
@@ -23,7 +23,8 @@ export function CodexProxyResourceForm({ busy, error, onSubmit, onClose, onCance
   const [resourceDirectory, setResourceDirectory] = useState('');
   const [input, setInput] = useState('');
   const [form, setForm] = useState(emptyProxyForm);
-  const [protocol, setProtocol] = useState(rememberedProtocol);
+  const savedProtocol = useDurableUiSetting(PROXY_IMPORT_PROTOCOL_KEY);
+  const protocol = savedProtocol && protocols.includes(savedProtocol) ? savedProtocol : 'socks5';
   const [format, setFormat] = useState('auto');
   const [skipInvalid, setSkipInvalid] = useState(false);
   const [skipDuplicates, setSkipDuplicates] = useState(true);
@@ -91,7 +92,7 @@ export function CodexProxyResourceForm({ busy, error, onSubmit, onClose, onCance
       {!!value && <p className="codex-proxy-page-note">{t(resolvedKind === 'subscription' ? 'codex.proxy.catalog.detectedSubscription' : 'codex.proxy.catalog.detectedNodes')}</p>}
       {resolvedKind === 'manual' && <div className="codex-resource-import-controls">
         <label className="codex-proxy-field"><span>{t('codex.proxy.catalog.defaultProtocol')}</span><SingleSelectDropdown value={protocol} disabled={busy} options={protocols.map((p) => ({ value: p, label: p.toUpperCase() }))} onChange={(next) => {
-          setProtocol(next); edit(); try { localStorage.setItem('codex.proxyImportProtocol', next); } catch { /* preference only */ }
+          previewDurableUiSetting(PROXY_IMPORT_PROTOCOL_KEY, next); edit();
         }} /></label>
         <label className="codex-proxy-field"><span>{t('codex.proxy.catalog.credentialFormat')}</span><SingleSelectDropdown value={format} disabled={busy}
           options={[{ value: 'auto', label: t('codex.proxy.catalog.autoDetect') }, { value: 'host_auth', label: 'host:port:username:password' }, { value: 'auth_at_host', label: 'username:password@host:port' }, { value: 'host_at_auth', label: 'host:port@username:password' }]}

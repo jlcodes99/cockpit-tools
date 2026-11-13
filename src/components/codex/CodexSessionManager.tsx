@@ -1,3 +1,4 @@
+import { useDurableUiSetting } from '../../hooks/useDurableUiSetting';
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { confirm as confirmDialog, open as openFileDialog, save as saveFileDialog } from '@tauri-apps/plugin-dialog';
@@ -58,32 +59,23 @@ type SessionTransferTask = {
   error?: string;
 };
 
-function readCodexInstanceSortPreference(): {
-  field: InstanceSortField;
-  direction: InstanceSortDirection;
-} {
-  const sortField = localStorage.getItem('agtools.codex.instances.sort_field');
-  const sortDirection = localStorage.getItem('agtools.codex.instances.sort_direction');
-  return {
-    field: sortField === 'lastLaunchedAt' ? 'lastLaunchedAt' : 'createdAt',
-    direction: sortDirection === 'desc' ? 'desc' : 'asc',
-  };
-}
-
-function sortInstancesForDisplay(instances: InstanceProfile[]): InstanceProfile[] {
-  const sortPreference = readCodexInstanceSortPreference();
+function sortInstancesForDisplay(
+  instances: InstanceProfile[],
+  field: InstanceSortField,
+  direction: InstanceSortDirection,
+): InstanceProfile[] {
   return [...instances].sort((left, right) => {
     if (left.isDefault && !right.isDefault) return -1;
     if (!left.isDefault && right.isDefault) return 1;
     const leftValue =
-      sortPreference.field === 'createdAt'
+      field === 'createdAt'
         ? left.createdAt || 0
         : left.lastLaunchedAt || 0;
     const rightValue =
-      sortPreference.field === 'createdAt'
+      field === 'createdAt'
         ? right.createdAt || 0
         : right.lastLaunchedAt || 0;
-    return sortPreference.direction === 'asc'
+    return direction === 'asc'
       ? leftValue - rightValue
       : rightValue - leftValue;
   });
@@ -278,6 +270,8 @@ export function CodexSessionManager() {
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const exportPreviewActive = useRef(false);
+  const importPreviewActive = useRef(false);
   const [repairDialogKind, setRepairDialogKind] = useState<'visibility' | 'history' | null>(null);
   const [trashedSessions, setTrashedSessions] = useState<CodexTrashedSessionRecord[]>([]);
   const [selectedTrashIds, setSelectedTrashIds] = useState<string[]>([]);
@@ -398,7 +392,13 @@ export function CodexSessionManager() {
       return next.length === previous.length ? previous : next;
     });
   }, [visibleSessions]);
-  const orderedInstances = useMemo(() => sortInstancesForDisplay(instances), [instances]);
+  const instanceSortField = useDurableUiSetting('agtools.codex.instances.sort_field') === 'lastLaunchedAt'
+    ? 'lastLaunchedAt' : 'createdAt';
+  const instanceSortDirection = useDurableUiSetting('agtools.codex.instances.sort_direction') === 'desc' ? 'desc' : 'asc';
+  const orderedInstances = useMemo(
+    () => sortInstancesForDisplay(instances, instanceSortField, instanceSortDirection),
+    [instances, instanceSortField, instanceSortDirection],
+  );
   const targetInstanceOptions = useMemo<SingleSelectOption[]>(
     () => [
       {
@@ -828,6 +828,8 @@ export function CodexSessionManager() {
       const latestInstances = await refreshInstances();
       const targetCandidates = sortInstancesForDisplay(
         latestInstances.length > 0 ? latestInstances : instances,
+        instanceSortField,
+        instanceSortDirection,
       );
       const firstMissingTarget = targetCandidates.find((instance) =>
         selectedSessions.some((session) =>
@@ -1163,23 +1165,17 @@ export function CodexSessionManager() {
 
   const previewImportPackage = useCallback(
     async (filePath: string, targetInstanceId: string) => {
-      setLoadingImportPreview(true);
-      setImportModalError(null);
-      try {
-        const preview = await previewSessionImport(filePath, targetInstanceId);
-        setImportPreview(preview);
-        setImportTargetInstanceId(preview.targetInstanceId);
-        setSelectedImportIds(
-          preview.items
-            .filter((item) => item.status === 'ready')
-            .map((item) => item.sessionId),
-        );
-        return preview;
-      } finally {
-        setLoadingImportPreview(false);
-      }
+      const preview = await previewSessionImport(filePath, targetInstanceId);
+      if (!importPreviewActive.current) return;
+      setImportPreview(preview);
+      setImportTargetInstanceId(preview.targetInstanceId);
+      setSelectedImportIds(
+        preview.items
+          .filter((item) => item.status === 'ready')
+          .map((item) => item.sessionId),
+      );
     },
-    [previewSessionImport, setImportModalError],
+    [previewSessionImport],
   );
 
   const resetExportModalSelection = useCallback(() => {
@@ -1245,6 +1241,7 @@ export function CodexSessionManager() {
     }
 
     setMessage(null);
+    exportPreviewActive.current = true;
     setShowExportModal(true);
     setExportPreview(null);
     setExportPath('');
@@ -1253,17 +1250,19 @@ export function CodexSessionManager() {
     setLoadingExportPreview(true);
     try {
       const preview = await previewSessionExport(selectedIds);
+      if (!exportPreviewActive.current) return;
       setExportPreview(preview);
       setSelectedExportIds(preview.items.map((item) => item.sessionId));
     } catch (error) {
-      setExportModalError(String(error));
+      if (exportPreviewActive.current) setExportModalError(String(error));
     } finally {
       setLoadingExportPreview(false);
     }
   };
 
   const handleCloseExportModal = () => {
-    if (loadingExportPreview || exporting) return;
+    if (exporting) return;
+    exportPreviewActive.current = false;
     setShowExportModal(false);
     setExportPreview(null);
     setExportPath('');
@@ -1364,6 +1363,8 @@ export function CodexSessionManager() {
     if (!filePath) return;
 
     setMessage(null);
+    importPreviewActive.current = true;
+    setLoadingImportPreview(true);
     setShowImportModal(true);
     setImportPreview(null);
     setImportCwdMappings({});
@@ -1372,8 +1373,11 @@ export function CodexSessionManager() {
     setImportModalError(null);
     try {
       const latestInstances = await refreshInstances();
+      if (!importPreviewActive.current) return;
       const targetCandidates = sortInstancesForDisplay(
         latestInstances.length > 0 ? latestInstances : instances,
+        instanceSortField,
+        instanceSortDirection,
       );
       const defaultTarget = targetCandidates.find((instance) => instance.isDefault) ?? targetCandidates[0];
       const targetInstanceId = importTargetInstanceId || defaultTarget?.id || '';
@@ -1383,12 +1387,15 @@ export function CodexSessionManager() {
       }
       await previewImportPackage(filePath, targetInstanceId);
     } catch (error) {
-      setImportModalError(String(error));
+      if (importPreviewActive.current) setImportModalError(String(error));
+    } finally {
+      setLoadingImportPreview(false);
     }
   };
 
   const handleCloseImportModal = () => {
-    if (importing || loadingImportPreview) return;
+    if (importing) return;
+    importPreviewActive.current = false;
     setShowImportModal(false);
     setImportPreview(null);
     setImportCwdMappings({});
@@ -1405,10 +1412,13 @@ export function CodexSessionManager() {
     setImportModalError(null);
     const filePath = importPreview?.importFilePath;
     if (!filePath || !targetInstanceId) return;
+    setLoadingImportPreview(true);
     try {
       await previewImportPackage(filePath, targetInstanceId);
     } catch (error) {
-      setImportModalError(String(error));
+      if (importPreviewActive.current) setImportModalError(String(error));
+    } finally {
+      setLoadingImportPreview(false);
     }
   };
 
@@ -2098,7 +2108,7 @@ export function CodexSessionManager() {
                 className="modal-close"
                 type="button"
                 onClick={handleCloseExportModal}
-                disabled={loadingExportPreview || exporting}
+                disabled={exporting}
                 aria-label={t('common.close', '关闭')}
               >
                 <X size={18} />
@@ -2186,6 +2196,12 @@ export function CodexSessionManager() {
                       })}
                     </div>
                   ) : null}
+                  {exportPreview.unavailable?.map((item) => (
+                    <div key={item.sessionId} className="codex-session-export-modal__notice">
+                      <strong>{item.title}</strong>
+                      <div>{item.reason}</div>
+                    </div>
+                  ))}
                   {exportAvailableItems.length > 0 ? (
                     <>
                       <div className="codex-session-export-filter">
@@ -2342,7 +2358,7 @@ export function CodexSessionManager() {
                 className="btn btn-secondary"
                 type="button"
                 onClick={handleCloseExportModal}
-                disabled={loadingExportPreview || exporting}
+                disabled={exporting}
               >
                 {t('common.cancel', '取消')}
               </button>
@@ -2369,7 +2385,7 @@ export function CodexSessionManager() {
                 className="modal-close"
                 type="button"
                 onClick={handleCloseImportModal}
-                disabled={importing || loadingImportPreview}
+                disabled={importing}
                 aria-label={t('common.close', '关闭')}
               >
                 <X size={18} />
@@ -2528,7 +2544,7 @@ export function CodexSessionManager() {
                 className="btn btn-secondary"
                 type="button"
                 onClick={handleCloseImportModal}
-                disabled={importing || loadingImportPreview}
+                disabled={importing}
               >
                 {t('common.cancel', '取消')}
               </button>

@@ -48,7 +48,7 @@ export function CodebuddyInstancesContent({
       renderAccountBadge={(account) => {
         const planBadge = getCodebuddyPlanBadge(account);
         const normalizedClass = planBadge.toLowerCase();
-        return <span className={`instance-plan-badge ${normalizedClass}`}>{planBadge}</span>;
+        return <span className={`tier-badge account-picker-plan ${normalizedClass}`}>{planBadge}</span>;
       }}
       getAccountSearchText={(account) => `${getCodebuddyAccountDisplayEmail(account)} ${getCodebuddyPlanBadge(account)}`}
       appType="codebuddy"

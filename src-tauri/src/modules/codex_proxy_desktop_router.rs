@@ -302,10 +302,10 @@ async fn route_port(account_id: &str) -> Option<u16> {
     ROUTES.lock().await.get(account_id).copied()
 }
 
-/// Returns the same loopback URL for an account throughout this host process, and the
+/// Returns the same loopback port for an account throughout this host process, and the
 /// recorded port after a host restart. The entry only needs to be installed once per
 /// process; each connection resolves the current binding on its own.
-pub async fn ensure(account_id: &str) -> Result<Option<String>, String> {
+pub async fn ensure(account_id: &str) -> Result<Option<u16>, String> {
     let account_id = account_id.trim();
     if account_id.is_empty() {
         return Ok(None);
@@ -335,7 +335,7 @@ async fn ensure_for_account(
     account: &CodexAccount,
     unified_active: bool,
     path: Option<&Path>,
-) -> Result<Option<String>, String> {
+) -> Result<Option<u16>, String> {
     if !codex_account_proxy::eligible(account) {
         return Ok(None);
     }
@@ -353,7 +353,9 @@ async fn ensure_for_account(
 pub(crate) async fn ensure_account_entry(account_id: &str) -> Result<String, String> {
     let path = registry_path()?;
     tokio::time::timeout(Duration::from_secs(25), ensure_route(account_id, Some(&path)))
-        .await.map_err(|_| "PROXY_ENGINE_TIMEOUT".to_string())?
+        .await
+        .map_err(|_| "PROXY_ENGINE_TIMEOUT".to_string())?
+        .map(entry_url)
 }
 
 /// Synchronous, read-only manifest lookup; never creates or waits for a listener.
@@ -365,7 +367,7 @@ pub(crate) fn prepared_url(account_id: &str) -> Result<String, String> {
         .ok_or_else(|| "PROXY_RUNTIME_NOT_READY".to_string())
 }
 
-async fn ensure_route(account_id: &str, path: Option<&Path>) -> Result<String, String> {
+async fn ensure_route(account_id: &str, path: Option<&Path>) -> Result<u16, String> {
     let start = entry_start_lock(account_id).await;
     let _start = start.lock().await;
     let existing = ROUTES.lock().await.get(account_id).copied();
@@ -373,7 +375,7 @@ async fn ensure_route(account_id: &str, path: Option<&Path>) -> Result<String, S
         if entry_status(account_id)
             .is_some_and(|status| status.state == "listening" && status.port == Some(port))
         {
-            return Ok(entry_url(port));
+            return Ok(port);
         }
     }
     let (listener, port) = match install(account_id, path).await {
@@ -385,7 +387,7 @@ async fn ensure_route(account_id: &str, path: Option<&Path>) -> Result<String, S
     };
     spawn_listener(account_id, port, listener);
     ROUTES.lock().await.insert(account_id.to_owned(), port);
-    Ok(entry_url(port))
+    Ok(port)
 }
 
 fn spawn_listener(account_id: &str, port: u16, listener: TcpListener) {
@@ -498,7 +500,12 @@ async fn handle_connection(
     let request = observed_entry.request();
     let upstream = tokio::time::timeout(CONNECT_TIMEOUT, async {
         diagnostic.phase("resolve_route");
-        let target = resolve_desktop_target(account_id).await?;
+        let direct_hosts = super::config::get_codex_proxy_direct_hosts();
+        let target = if super::codex_proxy_direct_hosts::matches(&direct_hosts, &destination.host) {
+            None
+        } else {
+            resolve_desktop_target(account_id).await?
+        };
         diagnostic.route(target.as_ref().and_then(|(_, lease)| lease.as_ref().map(|tunnel| tunnel.diagnostic_id())), None);
         diagnostic.phase("connect_upstream");
         let target_url = target.as_ref().map(|(url, _)| url.clone());

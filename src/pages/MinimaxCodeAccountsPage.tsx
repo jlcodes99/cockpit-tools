@@ -17,7 +17,6 @@ import { CodebuddySuiteAccountsSharedView, type CodebuddySuiteAccountsPlatformCo
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 
 const MINIMAX_CODE_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.minimaxcode.flow_notice_collapsed';
-const MINIMAX_CODE_CURRENT_ACCOUNT_ID_KEY = 'agtools.minimaxcode.current_account_id';
 
 const minimaxCodePlatformConfig: CodebuddySuiteAccountsPlatformConfig<MinimaxCodeAccount> = {
   pageClassName: 'minimax-code-accounts-page',
@@ -82,7 +81,6 @@ export function MinimaxCodeAccountsPage() {
     platformKey: 'MiniMax Code',
     oauthLogPrefix: 'MinimaxCodeOAuth',
     flowNoticeCollapsedKey: MINIMAX_CODE_FLOW_NOTICE_COLLAPSED_KEY,
-    currentAccountIdKey: MINIMAX_CODE_CURRENT_ACCOUNT_ID_KEY,
     exportFilePrefix: 'minimax_code_accounts',
     oauthTabKeys: ['oauth'],
     store: {

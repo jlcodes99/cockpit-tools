@@ -1,7 +1,5 @@
-use aes_gcm::aead::Aead;
-use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
-use base64::{engine::general_purpose, Engine as _};
-use serde::{Deserialize, Serialize};
+use crate::modules::antigravity_account_index_store::{AccountIndexStore, IndexRead, LEGACY_FILE};
+use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
@@ -12,9 +10,8 @@ use uuid::Uuid;
 
 use crate::models::{Account, AccountIndex, AccountSummary, QuotaData, QuotaErrorInfo, TokenData};
 use crate::modules;
+use crate::modules::quota::{summary_bucket_family, SummaryBucketFamily};
 
-static ACCOUNT_INDEX_LOCK: std::sync::LazyLock<Mutex<()>> =
-    std::sync::LazyLock::new(|| Mutex::new(()));
 // The desktop and IDE entry points share the current-account index and may
 // target the same legacy client database.
 pub(crate) static ANTIGRAVITY_SWITCH_GATE: std::sync::LazyLock<
@@ -52,61 +49,7 @@ static LIST_ACCOUNTS_LOAD_LOCK: std::sync::LazyLock<Mutex<()>> =
 const QUOTA_ALERT_COOLDOWN_SECONDS: i64 = 300;
 const LIST_ACCOUNTS_CACHE_TTL_MS: u64 = 800;
 
-const ACCOUNTS_INDEX: &str = "accounts.json";
 const ACCOUNTS_DIR: &str = "accounts";
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct EncryptedTokenEnvelope {
-    version: u32,
-    algorithm: String,
-    key_id: String,
-    nonce: String,
-    ciphertext: String,
-    encrypted_at: i64,
-}
-
-// 仅用于读取历史“只加密 token”格式；新写入统一使用 secure_account_storage 整文件加密。
-const LEGACY_TOKEN_KEY_FILE: &str = "account-token.key";
-const LEGACY_TOKEN_VERSION: u32 = 1;
-
-fn legacy_token_cipher() -> Result<Aes256Gcm, String> {
-    let path = get_data_dir()?.join(LEGACY_TOKEN_KEY_FILE);
-    let key = if path.exists() {
-        let raw = fs::read_to_string(&path).map_err(|e| format!("读取历史账号密钥失败: {}", e))?;
-        let bytes = general_purpose::STANDARD
-            .decode(raw.trim())
-            .map_err(|e| format!("解析历史账号密钥失败: {}", e))?;
-        if bytes.len() != 32 {
-            return Err("历史账号密钥长度无效".to_string());
-        }
-        let mut key = [0u8; 32];
-        key.copy_from_slice(&bytes);
-        key
-    } else {
-        return Err("历史账号密钥不存在".to_string());
-    };
-    Aes256Gcm::new_from_slice(&key).map_err(|e| format!("初始化历史账号加密失败: {}", e))
-}
-
-fn decrypt_legacy_token_envelope(envelope: &EncryptedTokenEnvelope) -> Result<TokenData, String> {
-    if envelope.version != LEGACY_TOKEN_VERSION {
-        return Err("历史账号 token 加密版本不受支持".to_string());
-    }
-    let cipher = legacy_token_cipher()?;
-    let nonce = general_purpose::STANDARD
-        .decode(envelope.nonce.trim())
-        .map_err(|e| format!("解析历史账号 nonce 失败: {}", e))?;
-    if nonce.len() != 12 {
-        return Err("历史账号 nonce 长度无效".to_string());
-    }
-    let ciphertext = general_purpose::STANDARD
-        .decode(envelope.ciphertext.trim())
-        .map_err(|e| format!("解析历史账号密文失败: {}", e))?;
-    let plaintext = cipher
-        .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
-        .map_err(|e| format!("解密历史账号 token 失败: {:?}", e))?;
-    serde_json::from_slice::<TokenData>(&plaintext)
-        .map_err(|e| format!("解析历史账号 token 明文失败: {}", e))
-}
 
 #[derive(Clone)]
 struct ListAccountsCacheEntry {
@@ -222,25 +165,7 @@ fn decode_account_storage_snapshot(content: &str) -> Result<(Account, bool), Str
         );
     }
     // 兼容历史明文详情与仅 token 加密的详情；读取成功后后台迁移为整文件密文。
-    if value.get("token").is_none() {
-        let encrypted = value
-            .get("token_encrypted")
-            .cloned()
-            .ok_or_else(|| "账号数据缺少 token".to_string())?;
-        let envelope = serde_json::from_value::<EncryptedTokenEnvelope>(encrypted)
-            .map_err(|e| format!("解析账号 token 密文失败: {}", e))?;
-        let token = decrypt_legacy_token_envelope(&envelope)?;
-        if let Some(object) = value.as_object_mut() {
-            object.insert(
-                "token".to_string(),
-                serde_json::to_value(token).map_err(|e| format!("还原账号 token 失败: {}", e))?,
-            );
-        }
-    }
-
-    if let Some(object) = value.as_object_mut() {
-        object.remove("token_encrypted");
-    }
+    modules::account_file_crypto::restore_legacy_antigravity_token(&get_data_dir()?, &mut value)?;
 
     let account =
         serde_json::from_value::<Account>(value).map_err(|e| format!("解析账号数据失败: {}", e))?;
@@ -302,7 +227,6 @@ pub fn get_accounts_dir() -> Result<PathBuf, String> {
 }
 
 fn repair_account_index_from_details(reason: &str) -> Result<Option<AccountIndex>, String> {
-    let index_path = get_data_dir()?.join(ACCOUNTS_INDEX);
     let accounts_dir = get_accounts_dir()?;
     let mut accounts = crate::modules::account_index_repair::load_accounts_from_details(
         &accounts_dir,
@@ -333,17 +257,7 @@ fn repair_account_index_from_details(reason: &str) -> Result<Option<AccountIndex
         .collect();
     index.current_account_id = None;
 
-    let backup_path = crate::modules::account_index_repair::backup_existing_index(&index_path)
-        .unwrap_or_else(|err| {
-            modules::logger::log_warn(&format!(
-                "自动修复账号索引前备份失败，继续尝试重建: path={}, error={}",
-                index_path.display(),
-                err
-            ));
-            None
-        });
-
-    if let Err(err) = save_account_index(&index) {
+    if let Err(err) = save_account_index_locked(&index) {
         modules::logger::log_warn(&format!(
             "自动修复账号索引保存失败，将以内存结果继续运行: reason={}, recovered_accounts={}, error={}",
             reason,
@@ -353,77 +267,80 @@ fn repair_account_index_from_details(reason: &str) -> Result<Option<AccountIndex
     }
 
     modules::logger::log_warn(&format!(
-        "检测到账号索引异常，已根据详情文件自动重建: reason={}, recovered_accounts={}, backup_path={}",
-        reason,
-        index.accounts.len(),
-        backup_path
-            .as_ref()
-            .map(|path| path.display().to_string())
-            .unwrap_or_else(|| "-".to_string())
+        "已根据账号详情重建索引并保留旧文件: reason={}, recovered_accounts={}",
+        reason, index.accounts.len(),
     ));
 
     Ok(Some(index))
 }
 
-/// 加载账号索引
+fn index_store() -> Result<AccountIndexStore, String> {
+    Ok(AccountIndexStore::new(get_data_dir()?))
+}
+
+fn lock_account_index() -> Result<fs::File, String> {
+    index_store()?.lock_writes()
+}
+
 pub fn load_account_index() -> Result<AccountIndex, String> {
-    let data_dir = get_data_dir()?;
-    let index_path = data_dir.join(ACCOUNTS_INDEX);
-
-    if !index_path.exists() {
-        if let Some(index) = repair_account_index_from_details("索引文件不存在")? {
+    let store = index_store()?;
+    match store.load()? {
+        IndexRead::Active(index) => return Ok(index),
+        IndexRead::Legacy(index) if !index.accounts.is_empty() => {
+            schedule_index_store(store);
             return Ok(index);
         }
-        return Ok(AccountIndex::new());
+        _ => {}
     }
+    let _lock = store.lock_writes()?;
+    load_account_index_locked()
+}
 
-    let content =
-        fs::read_to_string(&index_path).map_err(|e| format!("读取账号索引失败: {}", e))?;
-
-    if content.trim().is_empty() {
-        if let Some(index) = repair_account_index_from_details("索引文件为空")? {
-            return Ok(index);
-        }
-        return Ok(AccountIndex::new());
-    }
-
-    match crate::modules::atomic_write::parse_json_with_auto_restore::<AccountIndex>(
-        &index_path,
-        &content,
-    ) {
-        Ok(index) => {
-            if index.accounts.is_empty() {
-                if let Some(repaired) = repair_account_index_from_details("索引账号列表为空")?
-                {
-                    return Ok(repaired);
-                }
-            }
+fn load_account_index_locked() -> Result<AccountIndex, String> {
+    let store = index_store()?;
+    match store.load()? {
+        IndexRead::Active(index) => Ok(index),
+        IndexRead::Legacy(index) if !index.accounts.is_empty() => {
+            schedule_index_store(store);
             Ok(index)
         }
-        Err(e) => {
-            if let Some(index) = repair_account_index_from_details("索引文件损坏")? {
+        IndexRead::Legacy(index) => Ok(
+            repair_account_index_from_details("索引账号列表为空")?.unwrap_or(index),
+        ),
+        IndexRead::Missing => Ok(
+            repair_account_index_from_details("旧索引缺失或为空")?.unwrap_or_default(),
+        ),
+        IndexRead::InvalidLegacy(error) => {
+            if let Some(index) = repair_account_index_from_details("旧索引损坏")? {
                 return Ok(index);
             }
             Err(crate::error::file_corrupted_error(
-                ACCOUNTS_INDEX,
-                &index_path.to_string_lossy(),
-                &e.to_string(),
+                LEGACY_FILE,
+                &store.legacy_path().to_string_lossy(),
+                &error,
             ))
         }
     }
 }
 
-/// 保存账号索引
-pub fn save_account_index(index: &AccountIndex) -> Result<(), String> {
-    let data_dir = get_data_dir()?;
-    let index_path = data_dir.join(ACCOUNTS_INDEX);
-
-    let content =
-        serde_json::to_string_pretty(index).map_err(|e| format!("序列化账号索引失败: {}", e))?;
-
-    crate::modules::atomic_write::write_string_atomic(&index_path, &content)
-        .map_err(|e| format!("写入账号索引失败: {}", e))?;
+fn save_account_index_locked(index: &AccountIndex) -> Result<(), String> {
+    index_store()?.replace(index)?;
     invalidate_list_accounts_cache();
+    Ok(())
+}
+
+#[cfg(test)]
+fn save_account_index(index: &AccountIndex) -> Result<(), String> {
+    let _lock = lock_account_index()?;
+    save_account_index_locked(index)
+}
+
+fn schedule_index_store(store: AccountIndexStore) {
+    modules::background_maintenance::schedule(store.migration_key(), move || store.migrate_batch());
+}
+
+pub fn schedule_index_migration() -> Result<(), String> {
+    schedule_index_store(index_store()?);
     Ok(())
 }
 
@@ -769,10 +686,8 @@ pub fn create_pending_oauth_account(
     if email.is_empty() || !email.contains('@') {
         return Err("账号邮箱不能为空或格式无效".to_string());
     }
-    let _lock = ACCOUNT_INDEX_LOCK
-        .lock()
-        .map_err(|e| format!("获取锁失败: {}", e))?;
-    let mut index = load_account_index()?;
+    let _lock = lock_account_index()?;
+    let mut index = load_account_index_locked()?;
     let target_id = build_account_storage_id(&email);
     let existing_id = index
         .accounts
@@ -812,7 +727,7 @@ pub fn create_pending_oauth_account(
             last_used: account.last_used,
         });
     }
-    save_account_index(&index)?;
+    save_account_index_locked(&index)?;
 
     Ok(account)
 }
@@ -824,10 +739,8 @@ pub fn upsert_account(
     token: TokenData,
 ) -> Result<Account, String> {
     let email = email.trim().to_string();
-    let _lock = ACCOUNT_INDEX_LOCK
-        .lock()
-        .map_err(|e| format!("获取锁失败: {}", e))?;
-    let mut index = load_account_index()?;
+    let _lock = lock_account_index()?;
+    let mut index = load_account_index_locked()?;
     let existing_account_id = index
         .accounts
         .iter()
@@ -897,16 +810,14 @@ pub fn upsert_account(
     if index.current_account_id.is_none() {
         index.current_account_id = Some(account.id.clone());
     }
-    save_account_index(&index)?;
+    save_account_index_locked(&index)?;
     Ok(account)
 }
 
 /// 删除账号
 pub fn delete_account(account_id: &str) -> Result<(), String> {
-    let _lock = ACCOUNT_INDEX_LOCK
-        .lock()
-        .map_err(|e| format!("获取锁失败: {}", e))?;
-    let mut index = load_account_index()?;
+    let _lock = lock_account_index()?;
+    let mut index = load_account_index_locked()?;
 
     let original_len = index.accounts.len();
     index.accounts.retain(|s| s.id != account_id);
@@ -919,7 +830,7 @@ pub fn delete_account(account_id: &str) -> Result<(), String> {
         index.current_account_id = None;
     }
 
-    save_account_index(&index)?;
+    save_account_index_locked(&index)?;
 
     let accounts_dir = get_accounts_dir()?;
     let account_path = accounts_dir.join(format!("{}.json", account_id));
@@ -934,12 +845,8 @@ pub fn delete_account(account_id: &str) -> Result<(), String> {
 
 /// 批量删除账号
 pub fn delete_accounts(account_ids: &[String]) -> Result<(), String> {
-    let _lock = ACCOUNT_INDEX_LOCK
-        .lock()
-        .map_err(|e| format!("获取锁失败: {}", e))?;
-    let mut index = load_account_index()?;
-
-    let accounts_dir = get_accounts_dir()?;
+    let _lock = lock_account_index()?;
+    let mut index = load_account_index_locked()?;
 
     for account_id in account_ids {
         index.accounts.retain(|s| &s.id != account_id);
@@ -948,21 +855,34 @@ pub fn delete_accounts(account_ids: &[String]) -> Result<(), String> {
             index.current_account_id = None;
         }
 
-        let account_path = accounts_dir.join(format!("{}.json", account_id));
-        if account_path.exists() {
-            let _ = crate::modules::atomic_write::remove_file_locked(&account_path);
-        }
+
     }
 
-    save_account_index(&index)
+    save_account_index_locked(&index)?;
+    let accounts_dir = get_accounts_dir()?;
+    let mut cleanup_error = None;
+    for account_id in account_ids {
+        let path = accounts_dir.join(format!("{account_id}.json"));
+        if let Err(error) = remove_deleted_account_file(&path) {
+            cleanup_error.get_or_insert(error);
+        }
+    }
+    match cleanup_error {
+        Some(error) => Err(format!("账号索引已更新，清理账号文件失败: {error}")),
+        None => Ok(()),
+    }
 }
+
+fn remove_deleted_account_file(path: &std::path::Path) -> Result<(), String> {
+    crate::modules::atomic_write::remove_file_locked(path).map(|_| ())
+}
+
+
 
 /// 重新排序账号列表
 pub fn reorder_accounts(account_ids: &[String]) -> Result<(), String> {
-    let _lock = ACCOUNT_INDEX_LOCK
-        .lock()
-        .map_err(|e| format!("获取锁失败: {}", e))?;
-    let mut index = load_account_index()?;
+    let _lock = lock_account_index()?;
+    let mut index = load_account_index_locked()?;
 
     let id_to_summary: std::collections::HashMap<_, _> = index
         .accounts
@@ -985,13 +905,15 @@ pub fn reorder_accounts(account_ids: &[String]) -> Result<(), String> {
 
     index.accounts = new_accounts;
 
-    save_account_index(&index)
+    save_account_index_locked(&index)
 }
 
 /// 获取当前账号 ID
 pub fn get_current_account_id() -> Result<Option<String>, String> {
-    let index = load_account_index()?;
-    Ok(index.current_account_id)
+    if let Some(current) = index_store()?.active_current()? {
+        return Ok(current);
+    }
+    Ok(load_account_index()?.current_account_id)
 }
 
 /// 获取当前激活账号
@@ -1007,12 +929,17 @@ pub fn get_current_account() -> Result<Option<Account>, String> {
 
 /// 设置当前激活账号 ID
 pub fn set_current_account_id(account_id: &str) -> Result<(), String> {
-    let _lock = ACCOUNT_INDEX_LOCK
-        .lock()
-        .map_err(|e| format!("获取锁失败: {}", e))?;
-    let mut index = load_account_index()?;
-    index.current_account_id = Some(account_id.to_string());
-    save_account_index(&index)?;
+    let _lock = lock_account_index()?;
+    if index_store()?.set_active_current(account_id)? {
+        invalidate_list_accounts_cache();
+    } else {
+        let mut index = load_account_index_locked()?;
+        if !index.accounts.iter().any(|account| account.id == account_id) {
+            return Err(format!("找不到账号 ID: {account_id}"));
+        }
+        index.current_account_id = Some(account_id.to_string());
+        save_account_index_locked(&index)?;
+    }
 
     // 同时写入 current_account.json 供扩展读取
     if let Ok(account) = load_account(account_id) {
@@ -1046,8 +973,13 @@ fn save_current_account_file(email: &str) -> Result<(), String> {
 }
 
 /// 更新账号配额
-pub fn update_account_quota(account_id: &str, mut quota: QuotaData) -> Result<(), String> {
-    let mut account = load_account(account_id)?;
+pub fn update_account_quota(account_id: &str, quota: QuotaData) -> Result<(), String> {
+    let _lock = lock_account_index()?;
+    let account = load_account(account_id)?;
+    save_account_quota(account, quota)
+}
+
+fn save_account_quota(mut account: Account, mut quota: QuotaData) -> Result<(), String> {
     modules::quota::preserve_failed_quota_summary(&mut quota, account.quota.as_ref());
 
     // 容错：如果新获取的 models 为空，但之前有数据，保留原来的 models
@@ -1090,6 +1022,30 @@ pub fn update_account_quota(account_id: &str, mut quota: QuotaData) -> Result<()
     Ok(())
 }
 
+pub(super) async fn refresh_quota_after_wakeup(account_id: String) -> Result<(), String> {
+    let mut account = tokio::task::spawn_blocking(move || load_account(&account_id))
+        .await
+        .map_err(|error| error.to_string())??;
+    let quota = fetch_quota_with_fresh_token(&mut account, true)
+        .await
+        .map_err(|error| error.to_string())?;
+    tokio::task::spawn_blocking(move || save_quota_after_wakeup(&account, quota))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn save_quota_after_wakeup(queried: &Account, quota: QuotaData) -> Result<(), String> {
+    let _lock = lock_account_index()?;
+    let latest = load_account(&queried.id)?;
+    if !same_oauth_credentials(&latest.token, &queried.token)
+        || latest.token.project_id != queried.token.project_id
+        || latest.quota.as_ref().is_some_and(|stored| stored.last_updated > quota.last_updated)
+    {
+        return Ok(());
+    }
+    save_account_quota(latest, quota)
+}
+
 #[derive(Serialize)]
 pub struct RefreshStats {
     pub total: usize,
@@ -1112,11 +1068,58 @@ impl QuotaRefreshTrigger {
 
 #[cfg(test)]
 mod quota_refresh_cache_tests {
-    use super::QuotaRefreshTrigger;
+    use super::*;
+
     #[test]
     fn manual_batch_bypasses_cache_while_automatic_refresh_reuses_it() {
         assert!(QuotaRefreshTrigger::ManualBatch.skip_cache());
         assert!(!QuotaRefreshTrigger::Auto.skip_cache());
+    }
+
+    #[test]
+    fn wakeup_quota_refresh_persists_reported_reset_and_preserves_newer_data() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        const KEY: &str = "COCKPIT_TOOLS_TEST_DATA_DIR";
+        struct Restore(Option<std::ffi::OsString>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                match &self.0 {
+                    Some(value) => std::env::set_var(KEY, value),
+                    None => std::env::remove_var(KEY),
+                }
+            }
+        }
+        let _restore = Restore(std::env::var_os(KEY));
+        std::env::set_var(KEY, dir.path());
+        let mut account = Account::new(
+            "fixture".into(),
+            "fixture@example.invalid".into(),
+            TokenData::new("access".into(), "refresh".into(), 3600, None, None, None),
+        );
+        save_account(&account).unwrap();
+        let snapshot = |last_updated, reset: &str| {
+            let mut quota = QuotaData::new();
+            quota.last_updated = last_updated;
+            quota.add_model("gemini-3-flash".into(), None, 80, reset.into());
+            quota
+        };
+        save_quota_after_wakeup(&account, snapshot(2, "2026-11-12T05:00:00Z")).unwrap();
+        save_quota_after_wakeup(&account, snapshot(1, "2026-11-12T04:00:00Z")).unwrap();
+        let current = load_account(&account.id).unwrap().quota.unwrap();
+        assert_eq!(current.last_updated, 2);
+        assert_eq!(current.models[0].reset_time, "2026-11-12T05:00:00Z");
+
+        let previous = account.clone();
+        account = load_account(&account.id).unwrap();
+        account.token.access_token = "reauthorized".into();
+        save_account(&account).unwrap();
+        save_quota_after_wakeup(&previous, snapshot(3, "2026-11-12T06:00:00Z")).unwrap();
+        let current = load_account(&account.id).unwrap();
+        assert_eq!(current.token.access_token, "reauthorized");
+        assert_eq!(current.quota.unwrap().last_updated, 2);
     }
 }
 
@@ -1164,6 +1167,7 @@ struct AutoSwitchGroupDefinition {
     id: String,
     name: String,
     models: Vec<String>,
+    summary_family: SummaryBucketFamily,
 }
 
 #[derive(Debug, Clone)]
@@ -1224,17 +1228,17 @@ fn default_auto_switch_groups() -> Vec<AutoSwitchGroupDefinition> {
         AutoSwitchGroupDefinition {
             id: "g4_argon".into(),
             name: "Gemini 4 Argon".into(),
+            summary_family: SummaryBucketFamily::Argon,
             models: vec![
                 "gemini-4-argon".into(),
                 "gemini-4-argon-medium".into(),
                 "gemini-4-argon-high".into(),
-                "argon:weekly".into(),
-                "gemini-argon-wtu-weekly".into(),
             ],
         },
         AutoSwitchGroupDefinition {
             id: "claude_45".to_string(),
             name: "Claude".to_string(),
+            summary_family: SummaryBucketFamily::Claude,
             models: vec![
                 "claude-opus-5-5".into(),
                 "claude-opus-5-5-medium".into(),
@@ -1261,6 +1265,7 @@ fn default_auto_switch_groups() -> Vec<AutoSwitchGroupDefinition> {
         AutoSwitchGroupDefinition {
             id: "g3_pro".to_string(),
             name: "Gemini Pro".to_string(),
+            summary_family: SummaryBucketFamily::Gemini,
             models: vec![
                 "gemini-3.1-pro-high".to_string(),
                 "gemini-3.1-pro-low".to_string(),
@@ -1277,6 +1282,7 @@ fn default_auto_switch_groups() -> Vec<AutoSwitchGroupDefinition> {
         AutoSwitchGroupDefinition {
             id: "g3_flash".to_string(),
             name: "Gemini Flash".to_string(),
+            summary_family: SummaryBucketFamily::Gemini,
             models: vec![
                 "gemini-3.8-flash".into(),
                 "gemini-3.8-flash-low".into(),
@@ -1451,7 +1457,16 @@ fn collect_group_quotas(
         .filter_map(|group| {
             let mut sum = 0i32;
             let mut count = 0usize;
+            let mut summary_min: Option<i32> = None;
             for model in &quota.models {
+                if let Some(family) = summary_bucket_family(&model.name) {
+                    if family == group.summary_family && !quota.quota_summary_stale {
+                        summary_min = Some(summary_min.map_or(model.percentage, |current| {
+                            current.min(model.percentage)
+                        }));
+                    }
+                    continue;
+                }
                 if group
                     .models
                     .iter()
@@ -1461,14 +1476,12 @@ fn collect_group_quotas(
                     count += 1;
                 }
             }
-            if count == 0 {
-                return None;
-            }
-            let average = ((sum as f64) / (count as f64)).round() as i32;
+            let model_average = (count > 0).then(|| ((sum as f64) / (count as f64)).round() as i32);
+            let percentage = summary_min.into_iter().chain(model_average).min()?;
             Some(AutoSwitchGroupQuota {
                 id: group.id.clone(),
                 name: group.name.clone(),
-                percentage: average,
+                percentage,
             })
         })
         .collect()
@@ -1623,7 +1636,7 @@ fn can_be_auto_switch_candidate(
     }
     if !group_quotas
         .iter()
-        .all(|group| group.percentage >= threshold)
+        .all(|group| group.percentage > 0 && group.percentage >= threshold)
     {
         return false;
     }
@@ -2155,7 +2168,14 @@ pub async fn refresh_all_quotas_logic(
                     return false;
                 }
                 if let Some(ref q) = account.quota {
-                    if q.is_forbidden {
+                    if q.is_forbidden
+                        && account.quota_error.as_ref().is_some_and(|error| {
+                            modules::quota::is_explicit_quota_denial(
+                                error.reason.as_deref(),
+                                error.validation_url.as_deref(),
+                            )
+                        })
+                    {
                         modules::logger::log_info("  - Skipping Forbidden account (auto)");
                         return false;
                     }
@@ -2171,9 +2191,14 @@ pub async fn refresh_all_quotas_logic(
                 let _guard = permit.acquire().await.unwrap();
                 match fetch_quota_with_fresh_token(&mut account, trigger.skip_cache()).await {
                     Ok(quota) => {
+                        let unresolved_forbidden = account.quota_error.as_ref().filter(|error| {
+                            error.code == Some(403) && !quota.is_forbidden && quota.models.is_empty()
+                        });
                         if let Err(e) = update_account_quota(&account_id, quota) {
                             let msg = format!("Account {}: Save quota failed - {}", email, e);
                             Err(msg)
+                        } else if let Some(error) = unresolved_forbidden {
+                            Err(format!("Account {}: Fetch quota failed - {}", email, error.message))
                         } else {
                             Ok(())
                         }
@@ -2228,15 +2253,28 @@ fn same_oauth_credentials(left: &TokenData, right: &TokenData) -> bool {
         && left.oauth_client_key == right.oauth_client_key
 }
 
-fn merge_quota_refresh_state(
+async fn merge_quota_refresh_state(
+    account: &mut Account,
+    expected_token: &TokenData,
+) -> crate::error::AppResult<()> {
+    let mut pending = account.clone();
+    let expected = expected_token.clone();
+    *account = tokio::task::spawn_blocking(move || {
+        merge_quota_refresh_state_blocking(&mut pending, &expected)?;
+        Ok::<_, crate::error::AppError>(pending)
+    })
+    .await
+    .map_err(|error| crate::error::AppError::Account(error.to_string()))??;
+    Ok(())
+}
+
+fn merge_quota_refresh_state_blocking(
     account: &mut Account,
     expected_token: &TokenData,
 ) -> crate::error::AppResult<()> {
     use crate::error::AppError;
 
-    let _lock = ACCOUNT_INDEX_LOCK
-        .lock()
-        .map_err(|error| AppError::Account(error.to_string()))?;
+    let _lock = lock_account_index().map_err(AppError::Account)?;
     let mut latest = load_account(&account.id).map_err(AppError::Account)?;
     if !same_oauth_credentials(&latest.token, expected_token) {
         return Err(AppError::Account(
@@ -2288,14 +2326,14 @@ pub async fn fetch_quota_with_fresh_token(
                 validation_url: None,
                 timestamp: chrono::Utc::now().timestamp(),
             });
-            merge_quota_refresh_state(account, &expected_token)?;
+            merge_quota_refresh_state(account, &expected_token).await?;
             return Err(AppError::OAuth(e));
         }
     };
 
     if !same_oauth_credentials(&token, &expected_token) {
         account.token = token;
-        merge_quota_refresh_state(account, &expected_token)?;
+        merge_quota_refresh_state(account, &expected_token).await?;
         expected_token = account.token.clone();
     }
 
@@ -2308,7 +2346,10 @@ pub async fn fetch_quota_with_fresh_token(
         Ok(payload) => {
             // 配额获取成功，Token 有效
             // 只解除 invalid_grant 类禁用，其他（verification_required / tos_violation / unknown）不解除
-            if account.is_invalid_grant_disabled() {
+            if account.is_invalid_grant_disabled()
+                && !payload.quota.is_forbidden
+                && (payload.error.is_none() || !payload.quota.models.is_empty())
+            {
                 modules::logger::log_info(&format!(
                     "账号配额获取成功，自动解除禁用状态: {}",
                     account.email
@@ -2360,7 +2401,7 @@ pub async fn fetch_quota_with_fresh_token(
                 }
             }
 
-            merge_quota_refresh_state(account, &expected_token)?;
+            merge_quota_refresh_state(account, &expected_token).await?;
             Ok(payload.quota)
         }
         Err(err) => {
@@ -2379,7 +2420,7 @@ pub async fn fetch_quota_with_fresh_token(
                 validation_url: None,
                 timestamp: chrono::Utc::now().timestamp(),
             });
-            merge_quota_refresh_state(account, &expected_token)?;
+            merge_quota_refresh_state(account, &expected_token).await?;
             Err(err)
         }
     }
@@ -2415,9 +2456,11 @@ pub async fn switch_account_internal(account_id: &str) -> Result<Account, String
 }
 
 fn persist_switch_history(item: modules::antigravity_switch_history::AntigravitySwitchHistoryItem) {
-    if let Err(err) = modules::antigravity_switch_history::add_history_item(item) {
-        modules::logger::log_warn(&format!("写入 Antigravity IDE 切号记录失败: {}", err));
-    }
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Err(error) = modules::antigravity_switch_history::add_history_item(item) {
+            modules::logger::log_warn(&format!("保存 Antigravity 切号记录失败: {error}"));
+        }
+    });
 }
 
 fn ensure_antigravity_running_for_no_restart_switch() -> Result<bool, String> {
@@ -2800,16 +2843,17 @@ async fn perform_ide_switch(
 }
 
 pub(crate) fn commit_switched_account(account_id: &str) -> Result<Account, String> {
-    let _lock = ACCOUNT_INDEX_LOCK
-        .lock()
-        .map_err(|error| error.to_string())?;
-    let mut index = load_account_index()?;
+    let _lock = lock_account_index()?;
+    let mut index = load_account_index_locked()?;
+    if !index.accounts.iter().any(|account| account.id == account_id) {
+        return Err(format!("找不到账号 ID: {account_id}"));
+    }
     let mut account = load_account(account_id)?;
     account.update_last_used();
     account.last_switched_at = Some(account.last_used);
     save_account(&account)?;
     index.current_account_id = Some(account_id.to_string());
-    save_account_index(&index)?;
+    save_account_index_locked(&index)?;
     let _ = save_current_account_file(&account.email);
     Ok(account)
 }
@@ -2845,9 +2889,7 @@ pub async fn prepare_account_for_injection(account_id: &str) -> Result<Account, 
     }
 
     tokio::task::spawn_blocking(move || {
-        let _lock = ACCOUNT_INDEX_LOCK
-            .lock()
-            .map_err(|error| error.to_string())?;
+        let _lock = lock_account_index()?;
         let mut latest = load_account(&account_id)?;
         if token_changed && same_oauth_credentials(&latest.token, &original_token) {
             if refreshed {
@@ -3136,6 +3178,46 @@ mod account_storage_regression_tests;
 #[cfg(test)]
 mod new_antigravity_model_tests {
     use super::*;
+
+    #[test]
+    fn antigravity_quota_windows_trigger_switch_and_filter_candidates() {
+        let account = |id: &str, windows: &[(&str, i32)], stale| {
+            let mut account = Account::new(
+                id.into(), "fixture@example.test".into(),
+                TokenData::new("access".into(), "refresh".into(), 3600, None, None, None),
+            );
+            let mut quota = QuotaData::new();
+            quota.quota_summary_stale = stale;
+            for (name, percentage) in windows {
+                quota.add_model((*name).into(), None, *percentage, String::new());
+            }
+            account.quota = Some(quota);
+            account
+        };
+        let groups = default_auto_switch_groups();
+        let current = account("current", &[("gemini:5h", 78), ("gemini-weekly", 0)], false);
+        let reported = collect_group_quotas(&current, &groups);
+        let groups = reported_auto_switch_groups(AUTO_SWITCH_SCOPE_ANY_GROUP, groups, &reported);
+        let trigger = evaluate_auto_switch_trigger(&current, 0, AUTO_SWITCH_SCOPE_ANY_GROUP, &groups, false, 0).unwrap();
+        assert_eq!(trigger.hit_groups.len(), 2);
+        assert!(trigger.hit_groups.iter().all(|group| group.percentage == 0));
+
+        let ready = account("ready", &[("gemini-5h", 80), ("gemini:weekly", 57), ("3p-5h", 0)], false);
+        assert!(can_be_auto_switch_candidate(&ready, "current", 0, &groups, false, 0));
+        for rejected in [
+            account("exhausted", &[("gemini-weekly", 0)], false),
+            account("stale", &[("gemini-weekly", 90)], true),
+            account("other-pool", &[("gemini-argon-wtu-weekly", 90)], false),
+        ] {
+            assert!(!can_be_auto_switch_candidate(&rejected, "current", 0, &groups, false, 0));
+        }
+
+        let legacy = account("legacy", &[("gemini-3.1-pro-high", 85), ("gemini-3-flash", 67)], true);
+        assert!(can_be_auto_switch_candidate(&legacy, "current", 0, &groups, false, 0));
+        let stale_current = account("current", &[("gemini-weekly", 0), ("gemini-3.1-pro-high", 81)], true);
+        assert!(evaluate_auto_switch_trigger(&stale_current, 0, AUTO_SWITCH_SCOPE_ANY_GROUP, &groups, false, 0).is_none());
+    }
+
     #[test]
     fn new_default_families_do_not_block_legacy_auto_switch_candidates() {
         let reported = vec![AutoSwitchGroupQuota {

@@ -226,12 +226,12 @@ export function getGrokPlanRawValue(account: GrokAccount): string | null {
   );
 }
 
-/**
- * Display badge for a Grok account plan.
- * Missing tier returns empty string — UI should show a localized "none" label
- * (e.g. 暂无). Do not invent Free; a false Free happens when billing tier
- * fields were not resolved.
- */
+export function getGrokPlanBadgeClass(planBadge: string, account: GrokAccount): string {
+  if (isGrokApiKeyAccount(account) || planBadge === "API_KEY") return "pro";
+  return !getGrokPlanRawValue(account) || planBadge === "Free" || planBadge === "--" ? "free" : "pro";
+}
+
+/** The empty tier is rendered with the platform's localized unknown label. */
 export function getGrokPlanBadge(account: GrokAccount): string {
   // Keep legacy, unified and future tiers exactly as the backend supplied them.
   return getGrokPlanRawValue(account) || "";

@@ -1,13 +1,17 @@
+use super::checkin_state_store::{validate_config, CheckinStore};
+pub use super::checkin_state_store::{
+    AccountSchedule as WorkbuddyAccountScheduleState, CheckinConfig as WorkbuddyAutoCheckinConfig,
+};
+use super::wakeup_history_store::{self, checkin_timestamp, HistoryRow, HistoryStore};
 use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Mutex, MutexGuard, OnceLock,
+    Mutex, OnceLock,
 };
 use std::time::{Duration, Instant};
 
-use chrono::{Local, TimeZone, Timelike};
+use chrono::{Local, Timelike};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Notify;
@@ -27,39 +31,6 @@ struct CheckinGuard;
 impl Drop for CheckinGuard {
     fn drop(&mut self) {
         IS_CHECKIN_RUNNING.store(false, Ordering::SeqCst);
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkbuddyAccountScheduleState {
-    pub scheduled_date: String,
-    pub scheduled_minute: i32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_checked_date: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkbuddyAutoCheckinConfig {
-    pub enabled: bool,
-    pub start_time: String,
-    pub end_time: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_checked_date: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub account_schedules: Option<HashMap<String, WorkbuddyAccountScheduleState>>,
-}
-
-impl Default for WorkbuddyAutoCheckinConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            start_time: "06:00".to_string(),
-            end_time: "12:00".to_string(),
-            last_checked_date: None,
-            account_schedules: None,
-        }
     }
 }
 
@@ -92,12 +63,16 @@ pub struct WorkbuddyAutoCheckinLogRecord {
     pub details: Vec<WorkbuddyAutoCheckinAccountDetail>,
 }
 
+pub(crate) const CONFIG_FILE: &str = "workbuddy_auto_checkin_config.json";
+
 fn get_config_file_path() -> PathBuf {
-    config::get_shared_dir().join("workbuddy_auto_checkin_config.json")
+    config::get_shared_dir().join(CONFIG_FILE)
 }
 
+pub(crate) const LOGS_FILE: &str = "workbuddy_auto_checkin_logs.json";
+
 fn get_logs_file_path() -> PathBuf {
-    config::get_shared_dir().join("workbuddy_auto_checkin_logs.json")
+    config::get_shared_dir().join(LOGS_FILE)
 }
 
 fn scheduler_wake() -> &'static Notify {
@@ -108,203 +83,155 @@ fn wake_scheduler() {
     scheduler_wake().notify_one();
 }
 
-fn lock_storage() -> Result<MutexGuard<'static, ()>, String> {
-    STORAGE_LOCK
-        .lock()
-        .map_err(|_| "WorkBuddy 自动签到存储锁已损坏".to_string())
+fn state_store() -> CheckinStore {
+    state_store_at(get_config_file_path())
 }
 
-fn validate_time(value: &str) -> Option<i32> {
-    if value.len() != 5 || value.as_bytes().get(2) != Some(&b':') {
-        return None;
-    }
-    let hour = value.get(0..2)?.parse::<i32>().ok()?;
-    let minute = value.get(3..5)?.parse::<i32>().ok()?;
-    if (0..=23).contains(&hour) && (0..=59).contains(&minute) {
-        Some(hour * 60 + minute)
-    } else {
-        None
-    }
-}
-
-fn validate_config(config: &WorkbuddyAutoCheckinConfig) -> Result<(), String> {
-    let start = validate_time(&config.start_time)
-        .ok_or_else(|| format!("自动签到开始时间无效: {}", config.start_time))?;
-    let end = validate_time(&config.end_time)
-        .ok_or_else(|| format!("自动签到结束时间无效: {}", config.end_time))?;
-    if start > end {
-        return Err("自动签到开始时间不能晚于结束时间".to_string());
-    }
-    if let Some(schedules) = &config.account_schedules {
-        for (account_id, schedule) in schedules {
-            if !(0..=1439).contains(&schedule.scheduled_minute) {
-                return Err(format!(
-                    "账号 {} 的自动签到分钟无效: {}",
-                    account_id, schedule.scheduled_minute
-                ));
-            }
-        }
-    }
-    Ok(())
-}
-
-fn read_config_from_path(path: &Path) -> Result<Option<WorkbuddyAutoCheckinConfig>, String> {
-    if !path.exists() {
-        return Ok(None);
-    }
-    let content =
-        fs::read_to_string(path).map_err(|e| format!("读取 WorkBuddy 自动签到配置失败: {}", e))?;
-    let config = crate::modules::atomic_write::parse_json_with_auto_restore(path, &content)
-        .map_err(|e| format!("解析 WorkBuddy 自动签到配置失败: {}", e))?;
-    validate_config(&config)?;
-    Ok(Some(config))
-}
-
-fn write_config_to_path(path: &Path, config: &WorkbuddyAutoCheckinConfig) -> Result<(), String> {
-    validate_config(config)?;
-    let content = serde_json::to_string_pretty(config)
-        .map_err(|e| format!("序列化 WorkBuddy 自动签到配置失败: {}", e))?;
-    crate::modules::atomic_write::write_string_atomic(path, &content)
-        .map_err(|e| format!("保存 WorkBuddy 自动签到配置失败: {}", e))
+pub(super) fn state_store_at(path: PathBuf) -> CheckinStore {
+    CheckinStore::new(path, "workbuddy")
 }
 
 pub fn get_config_checked() -> Result<WorkbuddyAutoCheckinConfig, String> {
-    let _guard = lock_storage()?;
-    Ok(read_config_from_path(&get_config_file_path())?.unwrap_or_default())
+    state_store().load()
 }
 
 pub fn save_config(config: &WorkbuddyAutoCheckinConfig) -> Result<(), String> {
-    let result = save_config_without_wake(config);
-    if result.is_ok() {
-        wake_scheduler();
-    }
-    result
-}
-
-fn save_config_without_wake(config: &WorkbuddyAutoCheckinConfig) -> Result<(), String> {
-    let _guard = lock_storage()?;
-    write_config_to_path(&get_config_file_path(), config)
-}
-
-fn migrate_config_at_path(
-    path: &Path,
-    legacy_config: &WorkbuddyAutoCheckinConfig,
-) -> Result<WorkbuddyAutoCheckinConfig, String> {
-    validate_config(legacy_config)?;
-    if let Some(existing) = read_config_from_path(path)? {
-        return Ok(existing);
-    }
-    write_config_to_path(path, legacy_config)?;
-    Ok(legacy_config.clone())
+    validate_config(config)?;
+    let _guard = STORAGE_LOCK.lock().map_err(|_| "自动签到存储锁已损坏")?;
+    state_store().save_rules(config)?;
+    wake_scheduler();
+    Ok(())
 }
 
 pub fn migrate_config_if_missing(
     legacy_config: &WorkbuddyAutoCheckinConfig,
 ) -> Result<WorkbuddyAutoCheckinConfig, String> {
-    let (config, was_missing) = {
-        let _guard = lock_storage()?;
-        let path = get_config_file_path();
-        let was_missing = !path.exists();
-        let config = migrate_config_at_path(&path, legacy_config)?;
-        (config, was_missing)
-    };
-    if was_missing {
-        logger::log_info("[WorkbuddyAutoCheckin] 已完成 WebView 旧配置的一次性迁移");
-    }
+    let _guard = STORAGE_LOCK.lock().map_err(|_| "自动签到存储锁已损坏")?;
+    let config = state_store().seed_webview(legacy_config)?;
     wake_scheduler();
     Ok(config)
 }
 
-fn read_logs_from_path(path: &Path) -> Result<Vec<WorkbuddyAutoCheckinLogRecord>, String> {
-    if !path.exists() {
-        return Ok(Vec::new());
+async fn save_schedules(
+    previous: Option<HashMap<String, WorkbuddyAccountScheduleState>>,
+    schedules: Option<HashMap<String, WorkbuddyAccountScheduleState>>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        state_store().save_schedules(previous.as_ref(), schedules)
+    })
+    .await
+    .map_err(|error| format!("自动签到状态任务失败: {error}"))?
+}
+
+impl HistoryRow for WorkbuddyAutoCheckinLogRecord {
+    fn id(&self) -> &str {
+        &self.date
     }
-    let content =
-        fs::read_to_string(path).map_err(|e| format!("读取 WorkBuddy 自动签到日志失败: {}", e))?;
-    crate::modules::atomic_write::parse_json_with_auto_restore(path, &content)
-        .map_err(|e| format!("解析 WorkBuddy 自动签到日志失败: {}", e))
+    fn timestamp(&self) -> i64 {
+        checkin_timestamp(&self.timestamp)
+    }
 }
 
-fn write_logs_to_path(path: &Path, logs: &[WorkbuddyAutoCheckinLogRecord]) -> Result<(), String> {
-    let content = serde_json::to_string_pretty(logs)
-        .map_err(|e| format!("序列化 WorkBuddy 自动签到日志失败: {}", e))?;
-    crate::modules::atomic_write::write_string_atomic(path, &content)
-        .map_err(|e| format!("保存 WorkBuddy 自动签到日志失败: {}", e))
+fn history_store() -> HistoryStore {
+    history_store_at(get_logs_file_path())
 }
 
-pub fn get_logs_checked() -> Result<Vec<WorkbuddyAutoCheckinLogRecord>, String> {
-    let _guard = lock_storage()?;
-    read_logs_from_path(&get_logs_file_path())
+pub(crate) fn history_store_at(path: PathBuf) -> HistoryStore {
+    let fallback = path.with_extension("webview.json");
+    wakeup_history_store::daily_checkin(path, "workbuddy")
+        .with_fallback(fallback, "workbuddy-webview", history_cutoff)
 }
 
-pub fn save_logs(logs: &[WorkbuddyAutoCheckinLogRecord]) -> Result<(), String> {
-    let _guard = lock_storage()?;
-    write_logs_to_path(&get_logs_file_path(), logs)
+fn legacy_webview_logs_path() -> PathBuf {
+    get_logs_file_path().with_extension("webview.json")
+}
+
+pub fn stage_legacy_webview_logs(snapshot: &str) -> Result<(), String> {
+    let path = legacy_webview_logs_path();
+    if !path.try_exists().map_err(|error| error.to_string())? {
+        serde_json::from_str::<Vec<WorkbuddyAutoCheckinLogRecord>>(snapshot)
+            .map_err(|error| format!("旧版 WorkBuddy 签到历史格式无效: {error}"))?;
+        crate::modules::atomic_write::replace_secret_string_if_matches(
+            &path,
+            None,
+            Some(snapshot),
+        )?;
+    }
+    schedule_log_migration();
+    Ok(())
+}
+
+pub fn schedule_log_migration() {
+    history_store().schedule::<WorkbuddyAutoCheckinLogRecord>();
+}
+
+pub fn get_logs_checked(
+    retry: bool,
+) -> Result<wakeup_history_store::HistoryRead<WorkbuddyAutoCheckinLogRecord>, String> {
+    wakeup_history_store::read_available(history_store(), retry)
+}
+
+pub fn clear_logs() -> Result<(), String> {
+    history_store().clear()
+}
+
+fn merge_log_record(
+    existing: &mut WorkbuddyAutoCheckinLogRecord,
+    record: WorkbuddyAutoCheckinLogRecord,
+) {
+    let mut details: HashMap<String, WorkbuddyAutoCheckinAccountDetail> = existing
+        .details
+        .drain(..)
+        .map(|detail| (detail.account_id.clone(), detail))
+        .collect();
+    for detail in record.details {
+        details.insert(detail.account_id.clone(), detail);
+    }
+
+    existing.timestamp = record.timestamp;
+    existing.duration_ms = existing.duration_ms.saturating_add(record.duration_ms);
+    existing.details = details.into_values().collect();
+    existing.success_count = existing
+        .details
+        .iter()
+        .filter(|detail| detail.status == "success")
+        .count();
+    existing.already_checked_count = existing
+        .details
+        .iter()
+        .filter(|detail| detail.status == "already_checked")
+        .count();
+    existing.failed_count = existing
+        .details
+        .iter()
+        .filter(|detail| detail.status == "failed")
+        .count();
+    existing.total_accounts = existing.details.len();
+    existing.status = if existing.total_accounts == 0 {
+        "no_accounts"
+    } else if existing.failed_count == 0 {
+        "success"
+    } else if existing.success_count > 0 || existing.already_checked_count > 0 {
+        "partial"
+    } else {
+        "failed"
+    }
+    .to_string();
+}
+
+fn history_cutoff() -> i64 {
+    const THIRTY_DAYS_SECS: i64 = 30 * 24 * 60 * 60;
+    Local::now().timestamp() - THIRTY_DAYS_SECS
 }
 
 fn add_log_record(record: WorkbuddyAutoCheckinLogRecord) -> Result<(), String> {
-    let _guard = lock_storage()?;
-    let path = get_logs_file_path();
-    let mut logs = read_logs_from_path(&path)?;
-    if let Some(existing) = logs.iter_mut().find(|log| log.date == record.date) {
-        let mut details: HashMap<String, WorkbuddyAutoCheckinAccountDetail> = existing
-            .details
-            .drain(..)
-            .map(|detail| (detail.account_id.clone(), detail))
-            .collect();
-        for detail in record.details {
-            details.insert(detail.account_id.clone(), detail);
-        }
+    history_store().merge_day(record, history_cutoff(), merge_log_record)
+}
 
-        existing.timestamp = record.timestamp;
-        existing.duration_ms = existing.duration_ms.saturating_add(record.duration_ms);
-        existing.details = details.into_values().collect();
-        existing.success_count = existing
-            .details
-            .iter()
-            .filter(|detail| detail.status == "success")
-            .count();
-        existing.already_checked_count = existing
-            .details
-            .iter()
-            .filter(|detail| detail.status == "already_checked")
-            .count();
-        existing.failed_count = existing
-            .details
-            .iter()
-            .filter(|detail| detail.status == "failed")
-            .count();
-        existing.total_accounts = existing.details.len();
-        existing.status = if existing.total_accounts == 0 {
-            "no_accounts"
-        } else if existing.failed_count == 0 {
-            "success"
-        } else if existing.success_count > 0 || existing.already_checked_count > 0 {
-            "partial"
-        } else {
-            "failed"
-        }
-        .to_string();
-    } else {
-        logs.insert(0, record);
-    }
-
-    const THIRTY_DAYS_SECS: i64 = 30 * 24 * 60 * 60;
-    let cutoff = Local::now().timestamp() - THIRTY_DAYS_SECS;
-
-    logs.retain(|r| {
-        if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(&r.timestamp, "%Y-%m-%d %H:%M:%S") {
-            if let Some(local_dt) = Local.from_local_datetime(&ndt).single() {
-                local_dt.timestamp() >= cutoff
-            } else {
-                ndt.and_utc().timestamp() >= cutoff
-            }
-        } else {
-            true
-        }
-    });
-
-    write_logs_to_path(&path, &logs)
+async fn persist_log_record(record: WorkbuddyAutoCheckinLogRecord) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || add_log_record(record))
+        .await
+        .map_err(|error| format!("保存签到历史任务失败: {error}"))?
 }
 
 pub fn parse_time_to_minutes(time_str: &str) -> i32 {
@@ -417,7 +344,9 @@ pub async fn run_workbuddy_auto_checkin_cycle_if_needed(
         return Ok("platform_disabled".to_string());
     }
 
-    let mut config = get_config_checked()?;
+    let mut config = tauri::async_runtime::spawn_blocking(get_config_checked)
+        .await
+        .map_err(|error| format!("自动签到状态任务失败: {error}"))??;
     if !config.enabled && !force {
         return Ok("disabled".to_string());
     }
@@ -425,7 +354,7 @@ pub async fn run_workbuddy_auto_checkin_cycle_if_needed(
     let accounts = workbuddy_account::list_accounts();
     if accounts.is_empty() {
         if force {
-            add_log_record(WorkbuddyAutoCheckinLogRecord {
+            persist_log_record(WorkbuddyAutoCheckinLogRecord {
                 id: format!(
                     "log_{}_{}",
                     Local::now().timestamp_millis(),
@@ -440,15 +369,17 @@ pub async fn run_workbuddy_auto_checkin_cycle_if_needed(
                 failed_count: 0,
                 status: "no_accounts".to_string(),
                 details: Vec::new(),
-            })?;
+            })
+            .await?;
             let _ = app.emit("workbuddy-auto-checkin-logs-changed", ());
         }
         return Ok("no_accounts".to_string());
     }
 
+    let previous = config.account_schedules.clone();
     let schedule_changed = ensure_account_schedules(&mut config, &accounts);
     if schedule_changed {
-        save_config_without_wake(&config)?;
+        save_schedules(previous, config.account_schedules.clone()).await?;
         let _ = app.emit("workbuddy-auto-checkin-config-changed", ());
     }
 
@@ -665,8 +596,7 @@ pub async fn run_workbuddy_auto_checkin_cycle_if_needed(
         }
     }
 
-    config.account_schedules = Some(new_schedules);
-    save_config_without_wake(&config)?;
+    save_schedules(config.account_schedules, Some(new_schedules)).await?;
 
     let duration_ms = start_instant.elapsed().as_millis() as u64;
     let overall_status = if failed_count == 0 {
@@ -677,7 +607,7 @@ pub async fn run_workbuddy_auto_checkin_cycle_if_needed(
         "failed"
     };
 
-    add_log_record(WorkbuddyAutoCheckinLogRecord {
+    persist_log_record(WorkbuddyAutoCheckinLogRecord {
         id: format!(
             "log_{}_{}",
             Local::now().timestamp_millis(),
@@ -692,7 +622,8 @@ pub async fn run_workbuddy_auto_checkin_cycle_if_needed(
         failed_count,
         status: overall_status.to_string(),
         details,
-    })?;
+    })
+    .await?;
 
     if did_checkin_any {
         let _ = crate::modules::tray::update_tray_menu(app);
@@ -761,22 +692,6 @@ pub fn start_auto_checkin_scheduler(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn make_temp_config_path(test_name: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system time should be after unix epoch")
-            .as_nanos();
-        std::env::temp_dir()
-            .join(format!(
-                "cockpit-workbuddy-auto-checkin-{}-{}-{}",
-                test_name,
-                std::process::id(),
-                unique
-            ))
-            .join("workbuddy_auto_checkin_config.json")
-    }
 
     #[test]
     fn test_parse_time_to_minutes() {
@@ -795,6 +710,7 @@ mod tests {
             end_time: "12:00".to_string(),
             last_checked_date: None,
             account_schedules: None,
+            device_ids: None,
         };
 
         let accounts = vec![
@@ -891,6 +807,7 @@ mod tests {
             end_time: "10:00".to_string(),
             last_checked_date: Some("2026-07-28".to_string()),
             account_schedules: None,
+            device_ids: None,
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -902,36 +819,6 @@ mod tests {
     }
 
     #[test]
-    fn test_migration_only_writes_when_backend_config_is_missing() {
-        let path = make_temp_config_path("migration");
-        let legacy = WorkbuddyAutoCheckinConfig {
-            enabled: true,
-            start_time: "06:00".to_string(),
-            end_time: "09:00".to_string(),
-            last_checked_date: Some("2026-07-28".to_string()),
-            account_schedules: None,
-        };
-        let migrated = migrate_config_at_path(&path, &legacy).unwrap();
-        assert_eq!(migrated, legacy);
-
-        let backend = WorkbuddyAutoCheckinConfig {
-            enabled: false,
-            start_time: "08:00".to_string(),
-            end_time: "10:00".to_string(),
-            last_checked_date: Some("2026-07-29".to_string()),
-            account_schedules: None,
-        };
-        write_config_to_path(&path, &backend).unwrap();
-
-        let preserved = migrate_config_at_path(&path, &legacy).unwrap();
-        assert_eq!(preserved, backend);
-        assert_eq!(read_config_from_path(&path).unwrap(), Some(backend));
-
-        let temp_dir = path.parent().unwrap();
-        std::fs::remove_dir_all(temp_dir).unwrap();
-    }
-
-    #[test]
     fn test_config_validation_rejects_invalid_time_and_schedule() {
         let mut config = WorkbuddyAutoCheckinConfig {
             enabled: true,
@@ -939,6 +826,7 @@ mod tests {
             end_time: "06:00".to_string(),
             last_checked_date: None,
             account_schedules: None,
+            device_ids: None,
         };
         assert!(validate_config(&config).is_err());
 

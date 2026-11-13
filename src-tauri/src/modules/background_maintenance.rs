@@ -2,7 +2,7 @@
 //! paths/cursors; each invocation must perform a bounded batch and drop locks.
 use std::collections::{HashSet, VecDeque};
 use std::sync::{mpsc, Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub(crate) const BATCH_ROWS: usize = 32;
 pub(crate) const BATCH_BYTES: u64 = 2 * 1024 * 1024;
@@ -23,6 +23,7 @@ struct Job {
     key: String,
     batch: Batch,
     failures: u32,
+    retry_at: Instant,
 }
 static KEYS: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 static SENDER: OnceLock<Option<mpsc::SyncSender<Job>>> = OnceLock::new();
@@ -39,6 +40,11 @@ fn remove(key: &str) {
             keys.remove(key);
         }
     }
+}
+
+pub(crate) fn is_scheduled(key: &str) -> bool {
+    KEYS.lock()
+        .is_ok_and(|keys| keys.as_ref().is_some_and(|keys| keys.contains(key)))
 }
 
 /// `true` completes a job; `false` yields until a later round. Failures back off
@@ -66,9 +72,11 @@ pub(crate) fn schedule(key: String, batch: impl FnMut() -> Result<bool, String> 
                         queue.push_back(job);
                     }
                     std::thread::sleep(PAUSE);
-                    let Some(mut job) = queue.pop_front() else {
+                    let now = Instant::now();
+                    let Some(index) = queue.iter().position(|job| job.retry_at <= now) else {
                         continue;
                     };
+                    let mut job = queue.remove(index).expect("ready job is still queued");
                     if super::app_lifecycle::is_shutdown_started() {
                         remove(&job.key);
                         continue;
@@ -95,9 +103,8 @@ pub(crate) fn schedule(key: String, batch: impl FnMut() -> Result<bool, String> 
                             if job.failures >= 5 {
                                 remove(&job.key);
                             } else {
-                                std::thread::sleep(Duration::from_millis(
-                                    200 * u64::from(job.failures),
-                                ));
+                                job.retry_at = Instant::now()
+                                    + Duration::from_millis(200 * u64::from(job.failures));
                                 queue.push_back(job);
                             }
                         }
@@ -111,6 +118,7 @@ pub(crate) fn schedule(key: String, batch: impl FnMut() -> Result<bool, String> 
         key: key.clone(),
         batch: Box::new(batch),
         failures: 0,
+        retry_at: Instant::now(),
     };
     if !sender
         .as_ref()

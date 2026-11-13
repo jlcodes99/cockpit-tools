@@ -82,6 +82,9 @@ async fn claude_signature_http_continuation_survives_restart_and_replays_for_onl
                     requests.len()
                 };
                 let mut response = output();
+                response["output"].as_array_mut().unwrap().insert(1, json!({
+                    "id":"reasoning-hidden","type":"reasoning","summary":[],"encrypted_content":"hidden-cipher"
+                }));
                 // A new upstream completion has its own resource IDs. Echoing
                 // an input signature must not transfer its original provenance.
                 response["id"] = json!(format!("response-claude-{index}"));
@@ -128,6 +131,7 @@ async fn claude_signature_http_continuation_survives_restart_and_replays_for_onl
     assert_eq!(response.status(), 200);
     let reply: Value = response.json().await.unwrap();
     assert_eq!(reply["content"][0]["signature"], "cipher-1");
+    assert_eq!(reply["content"][1], json!({"type":"redacted_thinking","data":"hidden-cipher"}));
     service.shutdown(Duration::from_secs(2)).await.unwrap();
     drop(service);
     let mut service = native::start(
@@ -158,6 +162,10 @@ async fn claude_signature_http_continuation_survives_restart_and_replays_for_onl
         "cipher-1"
     );
     assert_eq!(
+        seen.lock().unwrap()[1].1["input"][2]["encrypted_content"],
+        "hidden-cipher"
+    );
+    assert_eq!(
         host.selections.lock().unwrap()[1]
             .preferred_account_id
             .as_deref(),
@@ -181,8 +189,9 @@ async fn claude_signature_http_continuation_survives_restart_and_replays_for_onl
         let requests = seen.lock().unwrap();
         assert_eq!(requests.len(), 3);
         assert_eq!(requests[2].1["input"], requests[1].1["input"]);
-        for header in ["session-id", "thread-id"] {
-            assert_ne!(requests[2].0[header], requests[1].0[header]);
+        for (headers, _) in requests.iter() {
+            assert!(!headers.contains_key("session-id"));
+            assert_eq!(headers["thread-id"], "original-thread");
         }
     }
     assert_eq!(
@@ -196,7 +205,11 @@ async fn claude_signature_http_continuation_survives_restart_and_replays_for_onl
         Some("account-b")
     );
     let connection = rusqlite::Connection::open(&path).unwrap();
-    for (kind, value) in [("encrypted", "cipher-1"), ("response", "response-claude-1")] {
+    for (kind, value) in [
+        ("encrypted", "cipher-1"),
+        ("encrypted", "hidden-cipher"),
+        ("response", "response-claude-1"),
+    ] {
         let digest = format!("{:x}", Sha256::digest(value.as_bytes()));
         let owner: (String, String) = connection
             .query_row(

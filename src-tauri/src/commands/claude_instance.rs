@@ -155,6 +155,27 @@ fn is_cli_launch_mode(mode: &InstanceLaunchMode) -> bool {
     matches!(mode, InstanceLaunchMode::Cli)
 }
 
+#[tauri::command]
+pub async fn claude_apply_cli_account_to_user_config(
+    app: tauri::AppHandle,
+    account_id: String,
+) -> Result<(), String> {
+    if account_id.trim().is_empty() {
+        return Err(modules::i18n::translate(
+            &modules::config::get_user_config().language,
+            "instances.quota.accountMissing",
+            &[],
+        ));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        inject_bound_account_for_cli_instance_start(None, Some(&account_id))
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+    let _ = modules::tray::update_tray_menu(&app);
+    Ok(())
+}
+
 fn default_user_data_dir_for_launch_mode(
     mode: &InstanceLaunchMode,
 ) -> Result<std::path::PathBuf, String> {

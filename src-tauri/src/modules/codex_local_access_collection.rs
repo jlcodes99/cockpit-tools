@@ -1505,6 +1505,11 @@ fn normalize_timeouts(timeouts: &mut CodexLocalAccessTimeouts) -> bool {
         defaults.websocket_initial_message_timeout_ms,
         LOCAL_ACCESS_TIMEOUT_MAX_MS,
     );
+    timeouts.websocket_fragment_timeout_ms = clamp_timeout_ms(
+        timeouts.websocket_fragment_timeout_ms,
+        defaults.websocket_fragment_timeout_ms,
+        LOCAL_ACCESS_TIMEOUT_MAX_MS,
+    );
     timeouts.websocket_idle_timeout_ms = clamp_timeout_ms(
         timeouts.websocket_idle_timeout_ms,
         defaults.websocket_idle_timeout_ms,

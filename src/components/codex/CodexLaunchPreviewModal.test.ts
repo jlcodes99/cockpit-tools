@@ -12,7 +12,7 @@ import { isCodexLaunchCancelled } from '../../utils/codexLaunchCancellation';
 const source = ts.createSourceFile("CodexLaunchPreviewModal.tsx", readFileSync(
   new URL("./CodexLaunchPreviewModal.tsx", import.meta.url), "utf8",
 ), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-const names = ["requestClose", "persistDraft", "handleExecute", "handleAuxiliaryAction", "handleInstanceChange", "applyContextConfig", "openModelConfig", "closeModelConfig", "reloadContextConfig", "closeContextConfig"];
+const names = ["requestClose", "persistDraft", "handleExecute", "handleAuxiliaryAction", "handleInstanceChange", "applyContextConfig", "openModelConfig", "closeModelConfig", "persistModelConfig", "reloadContextConfig", "closeContextConfig"];
 const callbacks: string[] = [];
 let configReadSetup = '';
 const closeButtons: (string | undefined)[] = [];
@@ -87,7 +87,7 @@ function harness(routing = false, overlay = "global-progress-overlay") {
     getCodexExperimentalModelErrorMessage: () => "synthetic failure", t: (key: string) => key,
   };
   for (const name of ["setCheckingConfig", "setNotice", "setError", "setSaving", "setExecuting",
-    "setChangingInstance", "setContextConfigError", "setContextConfigSaving", "setConfigLoadError",
+    "setChangingInstance", "setModelConfigError", "setContextConfigError", "setContextConfigSaving", "setConfigLoadError",
     "setLoadedInstanceKey", "setRoutingRoutes", "setModels", "applyLoadedConfig", "setContextConfigSnapshot", "setContextConfigOpen",
     "setContextConfigReloading", "setLoadedTarget", "setRoutingEnabled", "setLoading"]) {
     c[name] = () => { if (closed) lateUpdates.push(name); else events.push(name); };
@@ -329,22 +329,54 @@ for (const accept of [false, true]) {
     h.c.handlers.closeModelConfig(false);
     assert.equal(h.c.catalogEnabled, false, 'cancel restores the original opt-out');
     await h.c.handlers.openModelConfig();
-    h.c.handlers.closeModelConfig(true);
-    assert.equal(h.c.catalogEnabled, true);
     h.c.resolveRoutingCatalog = resolveRoutingCatalog;
     let payload: any[] = [];
-    h.c.saveCodexInstanceQuickConfig = async (...args: any[]) => {
+    h.c.saveCodexInstanceModelCatalog = async (...args: any[]) => {
       payload = args;
-      return { experimental_model_catalog_enabled: args[3], experimental_model_catalog_models: args[4] };
+      return { experimental_model_catalog_enabled: args[1], experimental_model_catalog_models: args[2] };
     };
-    const pending = h.c.handlers.persistDraft(); h.read.resolve({});
-    assert.equal(await pending, true);
-    assert.equal(payload[3], true, 'backend must receive an enabled persistence policy');
-    assert.equal(payload[4][0].context_window, 272000);
-    assert.equal(payload[4][0].auto_compact_token_limit, 262000);
+    const pending = h.c.handlers.persistModelConfig(true);
+    assert.equal(h.c.modelConfigOpen, true, 'wait for the model-only write before dismissing');
+    h.read.resolve({});
+    await pending;
+    assert.equal(h.c.modelConfigOpen, false);
+    assert.equal(payload[1], true, 'backend must receive an enabled persistence policy');
+    assert.equal(payload[2][0].context_window, 272000);
+    assert.equal(payload[2][0].auto_compact_token_limit, 262000);
     assert.equal((h.cached[0] as any).experimental_model_catalog_models[0].context_window, 272000);
   });
 }
+
+test('turning model management off saves only the model policy and keeps failures in the child dialog', async () => {
+  for (const fail of [false, true]) {
+    const h = harness();
+    const calls: unknown[][] = [];
+    const errors: (string | null)[] = [];
+    Object.assign(h.c, {
+      catalogEnabled: true, modelConfigOpen: true,
+      models: [{ model_id: 'old/relay' }],
+      resolveRoutingCatalog,
+      contextOverrideEnabled: true, contextWindowInput: 'unfinished',
+      setModelConfigError: (error: string | null) => errors.push(error),
+      setModelConfigOpen: (value: boolean) => { h.c.modelConfigOpen = value; },
+      setModelConfigSnapshot: () => {},
+      setModelsError: () => {},
+      saveCodexInstanceModelCatalog: async (...args: unknown[]) => {
+        calls.push(args);
+        if (fail) throw new Error('disk write failed');
+        return { experimental_model_catalog_enabled: false };
+      },
+    });
+    const pending = h.c.handlers.persistModelConfig(false);
+    h.read.resolve({});
+    await pending;
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][1], false);
+    assert.equal(h.c.modelConfigOpen, fail);
+    assert.equal(errors[errors.length - 1], fail ? 'synthetic failure' : null);
+    assert.equal(h.events.includes('quick-write'), false);
+  }
+});
 
 test('late model-management confirmation cannot reopen a closed or replaced preview', async () => {
   for (const close of [false, true]) {

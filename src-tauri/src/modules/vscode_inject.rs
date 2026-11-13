@@ -1107,11 +1107,32 @@ fn read_secret_storage_value_by_db_path_and_mode(
     }
 }
 
-pub fn read_qoder_secret_storage_value_by_db_path(
+pub(crate) fn read_qoder_secret_snapshot<const N: usize>(
     db_path: &Path,
-    db_key: &str,
-) -> Result<Option<String>, String> {
-    read_secret_storage_value_by_db_path_and_mode(db_path, db_key, SafeStorageReadMode::QoderOnly)
+    keys: [&str; N],
+) -> Result<[Option<String>; N], String> {
+    let mut values: [Option<String>; N] = std::array::from_fn(|_| None);
+    if !db_path.try_exists().map_err(|error| error.to_string())? {
+        return Ok(values);
+    }
+    let data_root = resolve_data_root_from_state_db_path(db_path)?;
+    let mut conn = Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|error| error.to_string())?;
+    conn.busy_timeout(std::time::Duration::from_secs(2)).map_err(|error| error.to_string())?;
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+    for (key, value) in keys.into_iter().zip(values.iter_mut()) {
+        *value = match tx.query_row("SELECT value FROM ItemTable WHERE key = ?1", [key], |row| row.get(0)) {
+            Ok(value) => Some(value),
+            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+            Err(error) => return Err(error.to_string()),
+        };
+    }
+    tx.commit().map_err(|error| error.to_string())?;
+    for value in values.iter_mut().flatten() {
+        *value = decode_secret_storage_value_with_mode(value, Some(data_root), SafeStorageReadMode::QoderOnly)
+            .map_err(|error| format!("QODER_STORAGE_UNAVAILABLE: {error}"))?;
+    }
+    Ok(values)
 }
 
 fn load_existing_sessions(
@@ -1253,6 +1274,40 @@ pub fn inject_secret_to_state_db_for_qoder(
     plaintext: &str,
 ) -> Result<(), String> {
     inject_secret_to_state_db_with_mode(db_path, db_key, plaintext, SafeStorageReadMode::QoderOnly)
+}
+
+pub(crate) fn qoder_storage_ready(data_root: &Path) -> Result<bool, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let path = data_root.join("Local State");
+        match path.try_exists() {
+            Ok(false) => return Ok(false),
+            Err(error) => return Err(format!("QODER_STORAGE_UNAVAILABLE: {}", error)),
+            Ok(true) => {}
+        }
+        match get_windows_encryption_key(Some(data_root)) {
+            Ok(_) => return Ok(true),
+            Err(error) if error == "Cannot find os_crypt.encrypted_key in Local State" => {
+                return Ok(false);
+            }
+            Err(error) => return Err(format!("QODER_STORAGE_UNAVAILABLE: {}", error)),
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        match get_macos_safe_storage_password(Some(data_root), SafeStorageReadMode::QoderOnly) {
+            Ok(_) => Ok(true),
+            Err(_) if !data_root.join("User/globalStorage/state.vscdb").is_file() => Ok(false),
+            Err(error) => Err(format!("QODER_STORAGE_UNAVAILABLE: {error}")),
+        }
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        let _ = data_root;
+        Ok(true)
+    }
 }
 
 pub fn inject_qoder_secret_snapshot(

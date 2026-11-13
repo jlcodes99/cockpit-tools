@@ -5,6 +5,7 @@ import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore
 import * as codebuddyCnService from '../services/codebuddyCnService';
 import {
   CodebuddyAccount,
+  type CodebuddyOfficialQuotaResource,
   getCodebuddyAccountDisplayEmail,
   getCodebuddyOfficialQuotaModel,
   getCodebuddyPlanBadge,
@@ -17,7 +18,18 @@ import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessio
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 
 const CB_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.codebuddycn.flow_notice_collapsed';
-const CB_CURRENT_ACCOUNT_ID_KEY = 'agtools.codebuddycn.current_account_id';
+
+function compareQuotaItems(a: CodebuddyOfficialQuotaResource, b: CodebuddyOfficialQuotaResource): number {
+  const aAvailable = !!a.unlimited || a.remain > 0;
+  const bAvailable = !!b.unlimited || b.remain > 0;
+  if (aAvailable !== bAvailable) return aAvailable ? -1 : 1;
+
+  const aExpires = a.expireAt ?? Number.POSITIVE_INFINITY;
+  const bExpires = b.expireAt ?? Number.POSITIVE_INFINITY;
+  if (aExpires !== bExpires) return aExpires - bExpires;
+
+  return b.remain - a.remain;
+}
 
 const codebuddyCnPlatformConfig: CodebuddySuiteAccountsPlatformConfig<CodebuddyAccount> = {
   pageClassName: 'codebuddy-accounts-page',
@@ -66,7 +78,10 @@ const codebuddyCnPlatformConfig: CodebuddySuiteAccountsPlatformConfig<CodebuddyA
   getDisplayEmail: (account) => getCodebuddyAccountDisplayEmail(account),
   getPlanBadge: (account) => getCodebuddyPlanBadge(account),
   getUsage: (account) => getCodebuddyUsage(account),
-  getQuotaGroups: (account, t) => getCodebuddyQuotaCategoryGroups(account, t),
+  getQuotaGroups: (account, t) => getCodebuddyQuotaCategoryGroups(account, t).map((group) => ({
+    ...group,
+    items: [...group.items].sort(compareQuotaItems),
+  })),
   hasQuotaData: (account) => {
     const model = getCodebuddyOfficialQuotaModel(account);
     return model.resources.length > 0 || model.extra.total > 0 || model.extra.remain > 0 || model.extra.used > 0;
@@ -84,7 +99,6 @@ export function CodebuddyCnAccountsPage() {
     platformKey: 'CodeBuddy CN',
     oauthLogPrefix: 'CodebuddyCnOAuth',
     flowNoticeCollapsedKey: CB_FLOW_NOTICE_COLLAPSED_KEY,
-    currentAccountIdKey: CB_CURRENT_ACCOUNT_ID_KEY,
     exportFilePrefix: 'codebuddy_cn_accounts',
     oauthTabKeys: ['oauth'],
     store: {

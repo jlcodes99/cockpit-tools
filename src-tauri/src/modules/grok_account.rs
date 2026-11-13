@@ -1,7 +1,7 @@
 use crate::models::grok::{
     GrokAccount, GrokAccountIndex, GrokAccountView, GrokAuthMode, GrokOAuthCompletePayload,
 };
-use crate::modules::{account, config, grok_oauth, logger, provider_current_state};
+use crate::modules::{account, config, grok_oauth, i18n, logger, provider_current_state};
 use chrono::{DateTime, Utc};
 use reqwest::header::{ACCEPT, AUTHORIZATION, USER_AGENT};
 use serde_json::{Map, Value};
@@ -300,32 +300,16 @@ fn load_index() -> Result<GrokAccountIndex, String> {
 }
 
 fn load_index_from_paths(path: &Path, details_dir: &Path) -> Result<GrokAccountIndex, String> {
-    let content = match fs::read_to_string(path) {
-        Ok(content) => Some(content),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-        Err(error) => return Err(format!("读取 Grok 账号索引失败: {}", error)),
-    };
-    if let Some(content) = content.as_deref() {
-        if let Ok(index) = serde_json::from_str::<GrokAccountIndex>(content) {
-            if !index.accounts.is_empty() {
-                return Ok(index);
-            }
-        }
+    use crate::modules::antigravity_account_index_store::IndexRead;
+    match crate::modules::provider_account_index::load(path, crate::modules::provider_index_maintenance::schedule)? {
+        IndexRead::Active(index) => Ok(index),
+        IndexRead::Legacy(index) if !index.accounts.is_empty() => Ok(index),
+        _ => rebuild_index_from_details_at(details_dir),
     }
-    // Recovery is read-only. A later account mutation persists the recovered
-    // summaries under the normal store lock; listing must never race a delete
-    // or overwrite a newer index with an old directory scan.
-    rebuild_index_from_details_at(details_dir)
 }
 
 fn save_index(index: &GrokAccountIndex) -> Result<(), String> {
-    save_index_at(&index_path()?, index)
-}
-
-fn save_index_at(path: &Path, index: &GrokAccountIndex) -> Result<(), String> {
-    let content = serde_json::to_string_pretty(index)
-        .map_err(|error| format!("序列化 Grok 账号索引失败: {}", error))?;
-    write_secret_atomic(path, &content)
+    crate::modules::provider_account_index::save(&index_path()?, index)
 }
 
 pub fn load_account(account_id: &str) -> Option<GrokAccount> {
@@ -515,6 +499,7 @@ fn rebuild_index_from_details_at(details_dir: &Path) -> Result<GrokAccountIndex,
     let mut index = GrokAccountIndex {
         version: "1.0".into(),
         accounts: Vec::new(),
+        storage_revision: Default::default(),
     };
     let entries = match fs::read_dir(details_dir) {
         Ok(entries) => entries,
@@ -2304,12 +2289,35 @@ async fn query_quota(account: &mut GrokAccount) -> Result<(), String> {
         subscriptions_for(account, &client_version).await
     };
     let task_usage_result = task_usage_for(account).await;
+    apply_quota_response(account, billing, subscriptions, cli_user, task_usage_result)
+}
+
+fn apply_quota_response(
+    account: &mut GrokAccount,
+    billing: Value,
+    subscriptions: Option<Value>,
+    cli_user: Option<Value>,
+    task_usage_result: Result<Value, String>,
+) -> Result<(), String> {
     let quota = quota_from_payload(
         &billing,
         subscriptions.as_ref(),
         cli_user.as_ref(),
         task_usage_result.as_ref().ok(),
     );
+    let billing_config = billing.get("config").unwrap_or(&billing);
+    let has_cached_billing_quota = account.quota.as_ref().is_some_and(|quota| {
+        quota.weekly_limit_percent.is_some() || !quota.products.is_empty()
+    });
+    if has_cached_billing_quota
+        && quota.weekly_limit_percent.is_none()
+        && quota.products.is_empty()
+        && billing_config.as_object().is_some_and(Map::is_empty)
+    {
+        return Err(task_usage_result.err().unwrap_or_else(|| {
+            i18n::translate(&config::get_user_config().language, "grok.emptyBillingQuota", &[])
+        }));
+    }
     let has_usage_quota = quota.weekly_limit_percent.is_some()
         || quota
             .products
@@ -2319,6 +2327,10 @@ async fn query_quota(account: &mut GrokAccount) -> Result<(), String> {
         || quota.prepaid_balance.is_some_and(|value| value > 0.0)
         || quota.frequent_limit.is_some_and(|value| value > 0.0)
         || quota.occasional_limit.is_some_and(|value| value > 0.0);
+    let task_usage = match task_usage_result {
+        Err(error) if !has_usage_quota => return Err(error),
+        result => result.ok(),
+    };
     // Supplemental subscription lookups can fail while billing succeeds.
     // Preserve the last known tier until the server supplies a replacement.
     if quota.subscription_tier.is_some() {
@@ -2327,7 +2339,7 @@ async fn query_quota(account: &mut GrokAccount) -> Result<(), String> {
     account.quota = Some(quota);
     account.billing_raw = Some(billing);
     account.subscription_raw = subscriptions;
-    account.task_usage_raw = task_usage_result.as_ref().ok().cloned();
+    account.task_usage_raw = task_usage;
     if let Some(user) = cli_user {
         if let Some(has_access) = user_payload(&user)
             .get("hasGrokCodeAccess")
@@ -2343,11 +2355,6 @@ async fn query_quota(account: &mut GrokAccount) -> Result<(), String> {
     account.quota_query_last_error_at = None;
     account.status = None;
     account.status_reason = None;
-    if !has_usage_quota {
-        if let Err(error) = task_usage_result {
-            return Err(error);
-        }
-    }
     Ok(())
 }
 
@@ -2614,7 +2621,8 @@ pub fn current_account_id() -> Result<Option<String>, String> {
 }
 
 pub fn accounts_index_path_string() -> Result<String, String> {
-    Ok(index_path()?.to_string_lossy().to_string())
+    Ok(crate::modules::provider_account_index::storage_path::<GrokAccountIndex>(&index_path()?)?
+        .to_string_lossy().into_owned())
 }
 
 fn remaining_percent_from_used_total(used: f64, total: f64) -> Option<i32> {
@@ -3404,6 +3412,7 @@ mod tests {
                 follow_local_account: false,
                 ..DefaultInstanceSettings::default()
             },
+            ..InstanceStore::new()
         };
         crate::modules::grok_instance::save_instance_store(&store).expect("save instance store");
 

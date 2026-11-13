@@ -189,7 +189,7 @@ fn slow_sql_batch_is_interrupted_and_same_rows_can_be_retried_without_partial_ch
         0
     );
     conn.execute_batch("DROP TRIGGER slow_usage").unwrap();
-    assert_eq!(write_usage_log_batch(&conn, &rows, 1).unwrap(), 1);
+    finish_writes(&conn, &rows, 1);
     assert_eq!(
         query_remote_key_stats(&conn, "writer-key", 0, 2 * REMOTE_HOUR).unwrap()["summary"]
             ["settledMicrousd"],

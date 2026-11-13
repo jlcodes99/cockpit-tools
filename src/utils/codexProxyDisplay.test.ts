@@ -57,32 +57,50 @@ test('desktop forwarding failure is preserved even when its kernel still runs', 
   assert.equal(view.rows.find((row) => row.kind === 'desktop')?.state, 'failed');
 });
 
-test('display preference defaults to compact, persists across reads and broadcasts to all entries', () => {
-  let stored: string | null = null;
+test('display preference defaults to compact and broadcasts only after native persistence', async () => {
+  let legacy: string | null = 'invalid';
+  let saved: string | null = null;
+  let revision = 0;
+  let reject = false;
   const events: Event[] = [];
   const storageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
-    getItem: (key: string) => { assert.equal(key, CODEX_PROXY_DISPLAY_KEY); return stored; },
-    setItem: (key: string, value: string) => { assert.equal(key, CODEX_PROXY_DISPLAY_KEY); stored = value; },
+    getItem: (key: string) => key === CODEX_PROXY_DISPLAY_KEY ? legacy : null,
   } });
-  Object.defineProperty(globalThis, 'window', { configurable: true, value: { dispatchEvent: (event: Event) => events.push(event) } });
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: {
+    dispatchEvent: (event: Event) => events.push(event),
+    __TAURI_INTERNALS__: {
+      invoke: async (command: string, args: { value?: string; expectedRevision?: number }) => {
+        if (command === 'update_ui_preference') {
+          assert.equal(args.expectedRevision, revision);
+          if (reject) throw Error('blocked');
+          saved = args.value!;
+          revision++;
+        } else {
+          assert.equal(command, 'migrate_ui_preference_values');
+        }
+        return {
+          values: saved === null ? {} : { [CODEX_PROXY_DISPLAY_KEY]: saved },
+          revisions: saved === null ? {} : { [CODEX_PROXY_DISPLAY_KEY]: revision },
+        };
+      },
+    },
+  } });
   try {
     assert.equal(getCodexProxyDisplay(), 'compact');
-    stored = 'invalid';
-    assert.equal(getCodexProxyDisplay(), 'compact');
     for (const mode of ['summary', 'detailed', 'compact'] as const) {
-      assert.equal(persistCodexProxyDisplay(mode), true);
+      assert.equal(await persistCodexProxyDisplay(mode), true);
       assert.equal(getCodexProxyDisplay(), mode);
     }
-    assert.deepEqual(events.map((event) => event.type), Array(3).fill(CODEX_PROXY_DISPLAY_EVENT));
-    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
-      getItem: () => { throw new Error('blocked'); },
-      setItem: () => { throw new Error('blocked'); },
-    } });
+    assert.equal(legacy, 'invalid');
+    assert.deepEqual(events.filter(event => event.type === CODEX_PROXY_DISPLAY_EVENT).map(event => event.type),
+      Array(3).fill(CODEX_PROXY_DISPLAY_EVENT));
+    reject = true;
+    assert.equal(await persistCodexProxyDisplay('detailed'), false);
     assert.equal(getCodexProxyDisplay(), 'compact');
-    assert.equal(persistCodexProxyDisplay('detailed'), false);
-    assert.equal(events.length, 3, 'failed saves must not announce a successful change');
+    assert.equal(events.filter(event => event.type === CODEX_PROXY_DISPLAY_EVENT).length, 3);
+    legacy = null;
   } finally {
     if (storageDescriptor) Object.defineProperty(globalThis, 'localStorage', storageDescriptor); else Reflect.deleteProperty(globalThis, 'localStorage');
     if (windowDescriptor) Object.defineProperty(globalThis, 'window', windowDescriptor); else Reflect.deleteProperty(globalThis, 'window');

@@ -183,7 +183,7 @@ async fn socket_policy(
     disable_images: bool,
 ) -> Result<Socket, String> {
     yawc::WebSocket::connect(url.parse().map_err(|_| "ws_url")?)
-        .with_options(super::websocket_io::options(4 * 1024 * 1024))
+        .with_options(super::websocket_io::options(4 * 1024 * 1024, Duration::from_secs(60)))
         .with_request(
             axum::http::Request::builder()
                 .header("authorization", format!("Bearer {key}"))
@@ -219,6 +219,81 @@ async fn send(socket: &mut Socket, body: Value) -> Result<(), String> {
         .await
         .map_err(|_| "ws_send".into())
 }
+
+async fn compare_websocket_speed(url: &str, key: &str, model: &str) -> Result<Value, String> {
+    let session = format!("live-speed-{}", uuid::Uuid::new_v4());
+    let mut socket = socket(url, key, &session).await?;
+    let mut samples = Vec::new();
+    for tier in [
+        "default", "priority", "default", "priority", "default", "priority", "default",
+    ] {
+        let body = json!({"type":"response.create","model":model,"service_tier":tier,
+            "input":[{"role":"user","content":"Output the integers 1 through 300 inclusive in ascending order, separated by comma and space. Output only the integers and separators. Do not abbreviate or skip any."}],
+            "reasoning":{"effort":"low"},"stream":true});
+        let started = std::time::Instant::now();
+        send(&mut socket, body).await?;
+        let mut first_text = None;
+        let mut last_text = None;
+        let mut created_tier = Value::Null;
+        let event = loop {
+            let event = next(&mut socket).await?;
+            match event["type"].as_str() {
+                Some("response.created") => {
+                    created_tier = event["response"]["service_tier"].clone()
+                }
+                Some("response.output_text.delta")
+                    if event["delta"]
+                        .as_str()
+                        .is_some_and(|delta| !delta.is_empty()) =>
+                {
+                    let elapsed = started.elapsed();
+                    first_text.get_or_insert(elapsed);
+                    last_text = Some(elapsed);
+                }
+                _ => {}
+            }
+            if terminal(&event) {
+                break event;
+            }
+        };
+        let total = started.elapsed();
+        let output = response_text(&event);
+        let complete_output = output
+            .trim()
+            .split(',')
+            .map(|item| item.trim().parse::<u32>())
+            .eq((1..=300).map(Ok));
+        let usage = &event["response"]["usage"];
+        let output_tokens = usage["output_tokens"].as_u64();
+        let visible_tokens = output_tokens.map(|tokens| {
+            tokens.saturating_sub(
+                usage["output_tokens_details"]["reasoning_tokens"]
+                    .as_u64()
+                    .unwrap_or(0),
+            )
+        });
+        let tokens_per_second =
+            first_text
+                .zip(last_text)
+                .zip(visible_tokens)
+                .and_then(|((first, last), tokens)| {
+                    (last > first).then(|| tokens as f64 / (last - first).as_secs_f64())
+                });
+        samples.push(json!({"requested":tier,"created_tier":created_tier,"reported_tier":event["response"]["service_tier"],
+            "model":event["response"]["model"],"terminal":event["type"],"error":error_code(&event),"complete_output":complete_output,
+            "output_tokens":output_tokens,"visible_tokens":visible_tokens,"first_text_ms":first_text.map(|value|value.as_millis()),
+            "total_ms":total.as_millis(),"visible_tokens_per_second":tokens_per_second}));
+    }
+    let pass = samples.iter().all(|sample| {
+        sample["complete_output"] == true
+            && matches!(
+                sample["terminal"].as_str(),
+                Some("response.completed" | "response.done")
+            )
+    });
+    Ok(json!({"pass":pass,"samples":samples}))
+}
+
 async fn switching(
     url: &str,
     key: &str,
@@ -409,6 +484,15 @@ pub(crate) async fn run(
             serde_json::to_vec_pretty(value).unwrap(),
         )
     };
+    if phase == "speed" {
+        evidence["cases"]["websocket_speed"] = compare_websocket_speed(&ws_url, key, model)
+            .await
+            .unwrap_or_else(|code| json!({"pass":false,"error":code}));
+        save(&evidence)?;
+        handle.shutdown(Duration::from_secs(10)).await?;
+        return if evidence["cases"]["websocket_speed"]["pass"] == true { Ok(()) }
+        else { Err("WebSocket speed comparison did not complete every sample".into()) };
+    }
     evidence["cases"]["upstream_ws_negotiation"] =
         upstream_negotiation(host.clone(), key, model, phase == "wire")
             .await

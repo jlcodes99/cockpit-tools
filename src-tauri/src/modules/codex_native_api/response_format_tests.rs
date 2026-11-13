@@ -233,8 +233,9 @@ async fn mislabeled_sse_records_cipher_and_continues_after_restart_without_cross
             );
             let requests = source.requests.lock().unwrap();
             assert_eq!(requests[0].0["accept"], "text/event-stream");
-            assert_eq!(requests[0].0["session-id"], requests[1].0["session-id"]);
-            assert_eq!(requests[0].0["thread-id"], requests[1].0["thread-id"]);
+            assert!(requests.iter().all(|(headers, _)| {
+                !headers.contains_key("session-id") && !headers.contains_key("thread-id")
+            }));
             assert_eq!(requests[1].1["input"], continuation["input"]);
         }
         let response = client

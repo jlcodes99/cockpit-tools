@@ -1,5 +1,3 @@
-import type { TFunction } from 'i18next';
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -40,8 +38,8 @@ export function buildSessionGroups<T extends SessionLike>(sessions: T[]): Sessio
     );
 }
 
-export function formatRelativeTime(value: number | null | undefined, t: TFunction): string {
-  if (!value) return t('sessionManager.time.unknown', '时间未知');
+export function formatRelativeTime(value: number | null | undefined, format: Intl.RelativeTimeFormat, unknownTime: string): string {
+  if (!value || !Number.isFinite(value)) return unknownTime;
   const diffMs = Date.now() - value;
   const diffSeconds = Math.max(0, Math.floor(diffMs / 1000));
   const minute = 60;
@@ -50,18 +48,18 @@ export function formatRelativeTime(value: number | null | undefined, t: TFunctio
   const week = 7 * day;
   if (diffSeconds < hour) {
     const m = Math.max(1, Math.floor(diffSeconds / minute));
-    return t('sessionManager.time.minutesAgo', '{{count}} 分钟前', { count: m });
+    return format.format(-m, 'minute');
   }
   if (diffSeconds < day) {
     const h = Math.floor(diffSeconds / hour);
-    return t('sessionManager.time.hoursAgo', '{{count}} 小时前', { count: h });
+    return format.format(-h, 'hour');
   }
   if (diffSeconds < week) {
     const d = Math.floor(diffSeconds / day);
-    return t('sessionManager.time.daysAgo', '{{count}} 天前', { count: d });
+    return format.format(-d, 'day');
   }
   const w = Math.floor(diffSeconds / week);
-  return t('sessionManager.time.weeksAgo', '{{count}} 周前', { count: w });
+  return format.format(-w, 'week');
 }
 
 export function resolveGroupLabel(cwd: string): string {

@@ -22,6 +22,60 @@ struct HostFixture {
 }
 
 #[tokio::test]
+async fn responses_chat_stream_accepts_prefixed_model_with_mislabeled_chat_chunks() {
+    let app = Router::new().route(
+        "/v1/chat/completions",
+        post(|Json(body): Json<Value>| async move {
+            assert_eq!(body["model"], "global:gpt-6.1-sol");
+            assert_eq!(body["stream"], true);
+            let frames = [
+                json!({"delta":{},"finish_reason":null,"index":0}),
+                json!({"delta":{"content":"OK"},"finish_reason":null,"index":0}),
+                json!({"delta":{"role":"assistant"},"finish_reason":"stop","index":0}),
+            ];
+            let mut stream = String::new();
+            for choice in frames {
+                let frame = json!({
+                    "id":"fixture", "created":1791900305, "model":"gpt-6.1-sol",
+                    "object":"response", "choices":[choice],
+                    "usage":{"prompt_tokens":18,"completion_tokens":5,"total_tokens":23}
+                });
+                stream.push_str(&format!("data: {frame}\n\n"));
+            }
+            stream.push_str("data: [DONE]\n\n");
+            ([("content-type", "text/event-stream")], stream)
+        }),
+    );
+    let mut fixture = Fixture::new(app, WireApi::Chat).await;
+    let response = client()
+        .post(fixture.url("/v1/responses"))
+        .bearer_auth("key")
+        .json(&json!({"model":"global:gpt-6.1-sol","input":"Say OK","stream":true}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    let body = response.text().await.unwrap();
+    let events: Vec<Value> = body
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .filter(|data| *data != "[DONE]")
+        .map(|data| serde_json::from_str(data).unwrap())
+        .collect();
+    assert!(events.iter().any(|event| {
+        event["type"] == "response.output_text.delta" && event["delta"] == "OK"
+    }), "{body}");
+    let completed = events
+        .iter()
+        .find(|event| event["type"] == "response.completed")
+        .expect("Responses stream must complete");
+    assert_eq!(completed["response"]["output"][0]["content"][0]["text"], "OK");
+    assert_eq!(completed["response"]["usage"]["input_tokens"], 18);
+    assert_eq!(completed["response"]["usage"]["output_tokens"], 5);
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
 async fn parity22_http_responses_chat_restores_namespaced_custom_and_keeps_native_custom() {
     for streaming in [false, true] {
         let seen = Arc::new(Mutex::new(Value::Null));

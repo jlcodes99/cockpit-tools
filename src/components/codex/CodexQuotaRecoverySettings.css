@@ -1,0 +1,112 @@
+.codex-quota-recovery {
+  display: grid;
+  gap: 8px;
+  padding-block: 12px;
+}
+
+.codex-quota-recovery-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.codex-quota-recovery-title span,
+.codex-quota-recovery-description {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.codex-quota-recovery-description,
+.codex-quota-recovery-error {
+  margin: 0;
+}
+
+.codex-quota-recovery-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.codex-quota-recovery-controls input {
+  flex: 1 1 160px;
+  min-width: 0;
+  padding: 7px 10px;
+  appearance: none;
+  font: inherit;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+}
+
+.codex-quota-recovery-controls input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.codex-quota-recovery-controls input:disabled {
+  opacity: 0.6;
+}
+
+.codex-quota-recovery-error {
+  color: var(--danger);
+}
+
+.codex-quota-recovery-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+}
+
+.codex-quota-recovery-status.is-enabled {
+  color: var(--success, #16a34a);
+  background: color-mix(in srgb, var(--success, #16a34a) 12%, transparent);
+  border-color: color-mix(in srgb, var(--success, #16a34a) 28%, transparent);
+}
+
+.codex-quota-recovery-qs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.codex-quota-recovery-qs-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+
+.codex-quota-recovery-qs-form .qs-path-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.codex-quota-recovery-qs-form .qs-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.codex-quota-recovery-settings-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.codex-quota-recovery-settings-row .row-control {
+  flex: 0 1 360px;
+}
+
+.codex-quota-recovery-settings-row .codex-quota-recovery-controls {
+  justify-content: flex-end;
+}

@@ -3,7 +3,7 @@ use super::ServiceError;
 use axum::http::{HeaderMap, HeaderValue};
 use serde_json::Value;
 
-const ROUTING_HINT: &str = "x-codex-routing-hint";
+pub(in crate::modules::codex_native_api) const ROUTING_HINT: &str = "x-codex-routing-hint";
 
 pub(crate) fn finalize_routing_hint(
     headers: &mut HeaderMap,

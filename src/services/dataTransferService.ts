@@ -1,7 +1,16 @@
+import { exportDurableUiSettings, hydrateDurableUiSettings, importDurableUiSettings, readDurableUiSetting, saveDurableUiSetting } from '../utils/durableUiSettings';
 import { invoke } from '@tauri-apps/api/core';
+import { normalizeMfaRecords } from '../utils/mfaVault';
+import {
+  readMfaHistoryRecordsForBackup,
+  readSavedMfaRecordsForBackup,
+  replaceMfaHistoryRecords,
+  replaceSavedMfaRecords,
+} from './mfaRecoveryService';
 import { loadCodexTopLayoutPreference, normalizeCodexTopLayout, writeCodexTopLayoutPreference, type CodexTopLayoutPreference } from '../utils/codexTopLayoutPreferences';
 import { readCodexCustomSortActive, readCodexCustomSortOrder, restoreCodexCustomSortOrder } from '../utils/codexAccountOverview';
 import { hydrateUserMemory, mergeIdLists } from '../utils/userMemory';
+import { exportPlatformLayout, restorePlatformLayout, validateImportedPlatformLayout } from '../utils/uiPreferences';
 import {
   ACCOUNT_TRANSFER_SCHEMA,
   AccountTransferBundle,
@@ -40,18 +49,16 @@ import {
 } from './codexWakeupService';
 import { CodexWakeupModelPreset, CodexWakeupTask } from '../types/codexWakeup';
 import {
+  loadAntigravityWakeupState,
+  WAKEUP_TASKS_UPDATED,
+  type AntigravityWakeupState,
+} from './antigravityWakeupStateService';
+import {
   CURRENT_ACCOUNT_REFRESH_STORAGE_KEY,
   CurrentAccountRefreshMinutesMap,
   loadCurrentAccountRefreshMinutesMap,
-  saveCurrentAccountRefreshMinutesMap,
+  persistCurrentAccountRefreshMinutesMap,
 } from '../utils/currentAccountRefresh';
-import {
-  DEFAULT_WAKEUP_OFFICIAL_LS_VERSION_MODE,
-  WakeupOfficialLsVersionMode,
-  WAKEUP_OFFICIAL_LS_VERSION_STORAGE_KEY,
-  loadWakeupOfficialLsVersionMode,
-  saveWakeupOfficialLsVersionMode,
-} from '../utils/wakeupOfficialLsVersion';
 import * as accountService from './accountService';
 import * as codexService from './codexService';
 import * as zedService from './zedService';
@@ -72,8 +79,6 @@ import type { ClaudeAccount } from '../types/claude';
 
 const DATA_TRANSFER_SCHEMA = 'cockpit-tools.data-transfer';
 const DATA_TRANSFER_VERSION = 1;
-const WAKEUP_ENABLED_KEY = 'agtools.wakeup.enabled';
-const WAKEUP_TASKS_KEY = 'agtools.wakeup.tasks';
 
 const INSTANCE_PLATFORMS = [
   'antigravity',
@@ -111,6 +116,7 @@ async function listClaudeManagerTransferAccounts(): Promise<TransferAccountRecor
 }
 
 interface RawUserConfig extends Record<string, unknown> {
+  language?: string;
   auto_switch_selected_account_ids?: string[];
   codex_auto_switch_selected_account_ids?: string[];
   webdav_sync_password?: string;
@@ -182,7 +188,6 @@ type WakeupTaskRecord = GenericRecord & { enabled?: boolean; schedule?: GenericR
 
 interface ExportedAntigravityWakeupState {
   enabled: boolean;
-  official_ls_version_mode: WakeupOfficialLsVersionMode;
   tasks: WakeupTaskRecord[];
 }
 
@@ -250,6 +255,7 @@ export interface DataTransferConfigBundle {
   verification_history?: unknown;
   platform_layout_config?: unknown;
   codex_top_layout?: CodexTopLayoutPreference;
+  ui_preferences?: Record<string, string>;
   codex_account_sort?: ExportedCodexAccountSort;
   platform_layout_custom_icons?: unknown;
   compact_group_order?: unknown;
@@ -392,24 +398,12 @@ function parseJsonOrThrow(jsonContent: string, errorCode: string): unknown {
   }
 }
 
-function safeGetLocalStorageItem(key: string): unknown {
-  const value = localStorage.getItem(key);
-  if (!value) return undefined;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}
+type LegacyLayoutSetting = 'agtools.platform_layout.custom_icons.v1'
+  | 'compactGroupOrder' | 'compactGroupColors' | 'compactHiddenGroups';
 
-function safeSetLocalStorageItem(key: string, value: unknown): void {
-  if (value === null || value === undefined) {
-    localStorage.removeItem(key);
-  } else if (typeof value === 'string') {
-    localStorage.setItem(key, value);
-  } else {
-    localStorage.setItem(key, JSON.stringify(value));
-  }
+function exportLegacyLayoutSetting(key: LegacyLayoutSetting): unknown {
+  const value = readDurableUiSetting(key);
+  return value === null ? undefined : JSON.parse(value);
 }
 
 function ensureSelection(selection: DataTransferSelection): void {
@@ -899,37 +893,20 @@ function importInstanceStore(
   };
 }
 
-function loadAntigravityWakeupState(): ExportedAntigravityWakeupState {
-  const enabled = localStorage.getItem(WAKEUP_ENABLED_KEY) === 'true';
-  const tasksRaw = localStorage.getItem(WAKEUP_TASKS_KEY);
-  let tasks: WakeupTaskRecord[] = [];
-
-  if (tasksRaw) {
-    try {
-      const parsed = JSON.parse(tasksRaw) as unknown;
-      tasks = Array.isArray(parsed) ? (parsed.filter((item) => isRecord(item)) as WakeupTaskRecord[]) : [];
-    } catch {
-      tasks = [];
-    }
-  }
-
-  return {
-    enabled,
-    tasks,
-    official_ls_version_mode: loadWakeupOfficialLsVersionMode(),
-  };
-}
-
 function exportAntigravityWakeupState(
+  rawState: AntigravityWakeupState,
   registry: AccountRegistry,
 ): ExportedAntigravityWakeupState {
-  const rawState = loadAntigravityWakeupState();
   return {
     enabled: rawState.enabled,
-    official_ls_version_mode: rawState.official_ls_version_mode,
-    tasks: rawState.tasks.map((task) => {
-      const nextTask: WakeupTaskRecord = { ...task };
-      const rawSchedule = isRecord(task.schedule) ? { ...task.schedule } : {};
+    tasks: rawState.tasks.map(({ executionMode, confirmTimeoutMinutes, ...task }) => {
+      const rawSchedule: GenericRecord = { ...task.schedule };
+      const nextTask: WakeupTaskRecord = {
+        ...task,
+        schedule: rawSchedule,
+        execution_mode: executionMode ?? task.execution_mode,
+        confirm_timeout_minutes: confirmTimeoutMinutes ?? task.confirm_timeout_minutes,
+      };
       const refs = mapAccountIdsToRefs(
         'antigravity',
         Array.isArray(rawSchedule.selectedAccounts)
@@ -975,8 +952,6 @@ function importAntigravityWakeupState(
   return {
     state: {
       enabled: state.enabled,
-      official_ls_version_mode:
-        state.official_ls_version_mode ?? DEFAULT_WAKEUP_OFFICIAL_LS_VERSION_MODE,
       tasks,
     },
     unresolved,
@@ -1024,7 +999,7 @@ function importCodexWakeupState(
       account_ids: resolved.ids,
     };
     delete (restoredTask as unknown as Record<string, unknown>).account_refs;
-    if (resolved.ids.length === 0 && restoredTask.enabled) {
+    if (resolved.ids.length === 0 && !restoredTask.use_api_service_pool && restoredTask.enabled) {
       restoredTask.enabled = false;
       disabledTasks += 1;
     }
@@ -1043,10 +1018,21 @@ function importCodexWakeupState(
   };
 }
 
+async function exportMfaRecords(read: typeof readSavedMfaRecordsForBackup) {
+  try {
+    return await read();
+  } catch {
+    // An unreadable vault must not turn into an empty backup.
+    return undefined;
+  }
+}
+
 async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransferConfigBundle> {
   await hydrateUserMemory();
+  invalidatePlatformGroupCache();
   let codexTopLayout: CodexTopLayoutPreference;
   try {
+    await hydrateDurableUiSettings();
     codexTopLayout = loadCodexTopLayoutPreference();
   } catch {
     throw new Error('codex_top_layout_read_failed');
@@ -1058,9 +1044,11 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
     codexAccountGroups,
     platformAccountGroups,
     codexModelProviders,
+    antigravityWakeupState,
     codexWakeupState,
     codexWakeupCliStatus,
     instanceStoreEntries,
+    platformLayout,
   ] = await Promise.all([
     invoke<RawUserConfig>('data_transfer_get_user_config'),
     getGroupSettings(),
@@ -1088,6 +1076,7 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
       return Object.fromEntries(entries);
     })(),
     listCodexModelProviders(),
+    loadAntigravityWakeupState(),
     getCodexWakeupState(),
     getCodexWakeupCliStatus(),
     (async () => {
@@ -1098,6 +1087,7 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
       }
       return entries;
     })(),
+    exportPlatformLayout(),
   ]);
 
   return {
@@ -1110,7 +1100,7 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
     instance_stores: Object.fromEntries(instanceStoreEntries) as Partial<
       Record<InstancePlatform, ExportedInstanceStore>
     >,
-    antigravity_wakeup: exportAntigravityWakeupState(registry),
+    antigravity_wakeup: exportAntigravityWakeupState(antigravityWakeupState, registry),
     codex_wakeup: exportCodexWakeupState(
       codexWakeupState,
       registry,
@@ -1120,21 +1110,22 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
       },
     ),
     current_account_refresh_minutes: loadCurrentAccountRefreshMinutesMap(),
-    verification_records: safeGetLocalStorageItem('agtools.mfa.vault.v2'),
-    verification_history: safeGetLocalStorageItem('agtools.mfa.vault.history'),
-    platform_layout_config: safeGetLocalStorageItem('agtools.platform_layout.v1'),
+    verification_records: await exportMfaRecords(readSavedMfaRecordsForBackup),
+    verification_history: await exportMfaRecords(readMfaHistoryRecordsForBackup),
+    platform_layout_config: platformLayout,
     codex_top_layout: codexTopLayout,
+    ui_preferences: await exportDurableUiSettings(),
     codex_account_sort: {
       active: readCodexCustomSortActive(),
       account_refs: mapAccountIdsToRefs('codex', mergeIdLists(
         readCodexCustomSortOrder(), registry.byPlatform.codex.map(account => account.id),
       ), registry).filter(ref => CODEX_SORT_IDENTITY_FIELDS.some(key => normalizeString(ref[key]))),
     },
-    platform_layout_custom_icons: safeGetLocalStorageItem('agtools.platform_layout.custom_icons.v1'),
-    compact_group_order: safeGetLocalStorageItem('compactGroupOrder'),
-    compact_group_colors: safeGetLocalStorageItem('compactGroupColors'),
-    compact_hidden_groups: safeGetLocalStorageItem('compactHiddenGroups'),
-    app_language: localStorage.getItem('app-language') ?? undefined,
+    platform_layout_custom_icons: exportLegacyLayoutSetting('agtools.platform_layout.custom_icons.v1'),
+    compact_group_order: exportLegacyLayoutSetting('compactGroupOrder'),
+    compact_group_colors: exportLegacyLayoutSetting('compactGroupColors'),
+    compact_hidden_groups: exportLegacyLayoutSetting('compactHiddenGroups'),
+    app_language: rawUserConfig.language,
   };
 }
 
@@ -1182,17 +1173,38 @@ function resolveCodexSortOrder(sort: ExportedCodexAccountSort, registry: Account
   return { ids: mergeIdLists(ids, mergeIdLists(localOrder, [...localIds])), unresolved };
 }
 
+function validateMfaBackupRecords(value: unknown, errorCode: string) {
+  if (value === undefined) return undefined;
+  if (value !== null && !Array.isArray(value)) throw new Error(errorCode);
+  const records = normalizeMfaRecords(value ?? []);
+  if (value?.length && !records.length) throw new Error(errorCode);
+  return records;
+}
+
 async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<DataTransferConfigImportResult> {
   // Validate before any writes. Older bundles intentionally retain the current layout.
+  const platformLayout = bundle.platform_layout_config === undefined ? undefined
+    : validateImportedPlatformLayout(bundle.platform_layout_config);
   const codexTopLayout = bundle.codex_top_layout === undefined ? undefined
     : validateImportedCodexTopLayout(bundle.codex_top_layout);
   const codexAccountSort = bundle.codex_account_sort === undefined ? undefined
     : validateImportedCodexAccountSort(bundle.codex_account_sort);
+  const rawVerificationRecords: unknown = bundle.verification_records === undefined
+    ? Reflect.get(bundle, ['mfa', 'vault', 'records'].join('_'))
+    : bundle.verification_records;
+  const rawVerificationHistory: unknown = bundle.verification_history === undefined
+    ? Reflect.get(bundle, ['mfa', 'vault', 'history'].join('_'))
+    : bundle.verification_history;
+  const verificationRecords = validateMfaBackupRecords(rawVerificationRecords, 'mfa_saved_records_invalid');
+  const verificationHistory = validateMfaBackupRecords(rawVerificationHistory, 'mfa_history_invalid');
   const registry = await loadAccountRegistry();
   let unresolvedAccountRefs = 0;
   let disabledTaskCount = 0;
 
   const userConfigImport = importUserConfig(bundle.user_config, registry);
+  if (userConfigImport.config.language === undefined && typeof bundle.app_language === 'string') {
+    userConfigImport.config.language = bundle.app_language;
+  }
   unresolvedAccountRefs += userConfigImport.unresolved;
 
   const needsRestart = await invoke<boolean>('data_transfer_apply_user_config', {
@@ -1259,17 +1271,9 @@ async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<Dat
   const antigravityWakeupImport = importAntigravityWakeupState(bundle.antigravity_wakeup, registry);
   unresolvedAccountRefs += antigravityWakeupImport.unresolved;
   disabledTaskCount += antigravityWakeupImport.disabledTasks;
-  localStorage.setItem(WAKEUP_ENABLED_KEY, antigravityWakeupImport.state.enabled ? 'true' : 'false');
-  localStorage.setItem(WAKEUP_TASKS_KEY, JSON.stringify(antigravityWakeupImport.state.tasks));
-  localStorage.setItem(
-    WAKEUP_OFFICIAL_LS_VERSION_STORAGE_KEY,
-    antigravityWakeupImport.state.official_ls_version_mode,
-  );
-  saveWakeupOfficialLsVersionMode(antigravityWakeupImport.state.official_ls_version_mode);
   await invoke('wakeup_sync_state', {
     enabled: antigravityWakeupImport.state.enabled,
     tasks: antigravityWakeupImport.state.tasks,
-    officialLsVersionMode: antigravityWakeupImport.state.official_ls_version_mode,
     runStartupTasks: false,
   });
 
@@ -1286,30 +1290,28 @@ async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<Dat
     normalizeString(codexWakeupImport.state.runtime.node_path) ?? undefined,
   );
 
-  const legacyRecordsKey = ['mfa', 'vault', 'records'].join('_');
-  const legacyRecords = (bundle as Record<string, any>)[legacyRecordsKey];
-  const records = bundle.verification_records !== undefined ? bundle.verification_records : legacyRecords;
-  if (records !== undefined) safeSetLocalStorageItem('agtools.mfa.vault.v2', records);
-
-  const legacyHistoryKey = ['mfa', 'vault', 'history'].join('_');
-  const legacyHistory = (bundle as Record<string, any>)[legacyHistoryKey];
-  const history = bundle.verification_history !== undefined ? bundle.verification_history : legacyHistory;
-  if (history !== undefined) safeSetLocalStorageItem('agtools.mfa.vault.history', history);
-  if (bundle.platform_layout_config !== undefined) safeSetLocalStorageItem('agtools.platform_layout.v1', bundle.platform_layout_config);
-  if (bundle.platform_layout_custom_icons !== undefined) safeSetLocalStorageItem('agtools.platform_layout.custom_icons.v1', bundle.platform_layout_custom_icons);
-  if (bundle.compact_group_order !== undefined) safeSetLocalStorageItem('compactGroupOrder', bundle.compact_group_order);
-  if (bundle.compact_group_colors !== undefined) safeSetLocalStorageItem('compactGroupColors', bundle.compact_group_colors);
-  if (bundle.compact_hidden_groups !== undefined) safeSetLocalStorageItem('compactHiddenGroups', bundle.compact_hidden_groups);
-  if (bundle.app_language !== undefined) {
-    localStorage.setItem('app-language', bundle.app_language);
+  if (verificationRecords !== undefined) await replaceSavedMfaRecords(verificationRecords);
+  if (verificationHistory !== undefined) await replaceMfaHistoryRecords(verificationHistory);
+  if (platformLayout !== undefined) {
+    try {
+      await restorePlatformLayout(platformLayout);
+    } catch {
+      throw new Error('platform_layout_import_failed');
+    }
   }
-
-  saveCurrentAccountRefreshMinutesMap(bundle.current_account_refresh_minutes);
+  if (bundle.platform_layout_custom_icons !== undefined) await saveDurableUiSetting('agtools.platform_layout.custom_icons.v1', JSON.stringify(bundle.platform_layout_custom_icons));
+  if (bundle.compact_group_order !== undefined) await saveDurableUiSetting('compactGroupOrder', JSON.stringify(bundle.compact_group_order));
+  if (bundle.compact_group_colors !== undefined) await saveDurableUiSetting('compactGroupColors', JSON.stringify(bundle.compact_group_colors));
+  if (bundle.compact_hidden_groups !== undefined) await saveDurableUiSetting('compactHiddenGroups', JSON.stringify(bundle.compact_hidden_groups));
+  await persistCurrentAccountRefreshMinutesMap(bundle.current_account_refresh_minutes);
   window.dispatchEvent(new Event('config-updated'));
-  window.dispatchEvent(new Event('wakeup-tasks-updated'));
+  window.dispatchEvent(new Event(WAKEUP_TASKS_UPDATED));
+  if (bundle.ui_preferences !== undefined) {
+    await importDurableUiSettings(bundle.ui_preferences);
+  }
   if (codexTopLayout !== undefined) {
     try {
-      writeCodexTopLayoutPreference(codexTopLayout);
+      await writeCodexTopLayoutPreference(codexTopLayout);
     } catch {
       // Other settings have already been applied; do not report a complete import.
       throw new Error('codex_top_layout_import_failed');
@@ -1449,7 +1451,7 @@ export function getDataTransferFileNameBase(selection: DataTransferSelection): s
   return 'cockpit_config_backup';
 }
 
-export async function exportDataTransferJson(selection: DataTransferSelection): Promise<string> {
+export async function exportDataTransferBundle(selection: DataTransferSelection): Promise<DataTransferBundle> {
   ensureSelection(selection);
   const bundle: DataTransferBundle = {
     schema: DATA_TRANSFER_SCHEMA,
@@ -1470,7 +1472,11 @@ export async function exportDataTransferJson(selection: DataTransferSelection): 
     bundle.config = await exportConfigBundle(registry);
   }
 
-  return JSON.stringify(bundle, null, 2);
+  return bundle;
+}
+
+export async function exportDataTransferJson(selection: DataTransferSelection): Promise<string> {
+  return JSON.stringify(await exportDataTransferBundle(selection), null, 2);
 }
 
 export async function importDataTransferJson(

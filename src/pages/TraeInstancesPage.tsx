@@ -71,7 +71,7 @@ export function TraeInstancesContent({
       fetchAccounts={fetchAccounts}
       renderAccountQuotaPreview={renderTraeQuotaPreview}
       renderAccountBadge={(account) => (
-        <span className={`instance-plan-badge ${getTraePlanBadgeClass(getTraePlanDisplayName(account))}`}>
+        <span className={`tier-badge account-picker-plan raw-value ${getTraePlanBadgeClass(getTraePlanDisplayName(account))}`}>
           {getTraePlanDisplayName(account)}
         </span>
       )}

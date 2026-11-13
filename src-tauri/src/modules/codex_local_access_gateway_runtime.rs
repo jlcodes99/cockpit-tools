@@ -692,6 +692,7 @@ fn build_account_pool_health_snapshot(
 
 #[derive(Debug, Clone, Copy, Default)]
 struct RequestStatsMeta<'a> {
+    connection_source: Option<CodexLocalAccessConnectionSource>,
     gateway_mode: Option<CodexLocalAccessGatewayMode>,
     proxy_route: Option<&'a CodexLocalAccessProxyRoute>,
     request_id: Option<&'a str>,
@@ -859,12 +860,14 @@ async fn record_request_stats_with_meta(
             meta.proxy_route,
         );
         event.authorization_route = meta.authorization_route.map(str::to_owned);
+        event.connection_source = meta.connection_source;
         event.budget_settlement = budget_settlement;
         event.requested_service_tier = recorded_service_tier_value(meta.requested_service_tier);
         event.response_service_tier = recorded_service_tier_value(meta.response_service_tier);
         event.output_generation_ms = meta.output_generation_ms;
         event.first_response_ms = meta.first_response_ms.or(event.first_response_ms);
         if let Some(recent) = runtime.stats.events.last_mut() {
+            recent.connection_source = event.connection_source;
             recent.first_response_ms = event.first_response_ms;
             recent.output_generation_ms = event.output_generation_ms;
             recent.authorization_route = event.authorization_route.clone();
@@ -975,6 +978,7 @@ fn build_state_snapshot_inner(
 
     let (recovering, recovery_attempt) = gateway_key_recovery_snapshot();
     CodexLocalAccessState {
+        project_state_deferred: false,
         service_members: collection.as_ref().map(service_member_snapshot).unwrap_or_default(),
         collection,
         recovering: service_enabled && recovering,

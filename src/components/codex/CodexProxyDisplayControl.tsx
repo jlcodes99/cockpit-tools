@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { ChevronRight, Shield } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCodexProxyDisplay } from '../../hooks/useCodexProxyDisplay';
@@ -12,13 +12,20 @@ export function CodexProxyDisplayControl({ showSample = true }: { showSample?: b
   const value = useCodexProxyDisplay();
   const [failed, setFailed] = useState(false);
   const id = useId();
+  const saveSequence = useRef(0);
   return <section className="codex-proxy-display-control" aria-labelledby={id}>
     <div className="codex-proxy-display-control-heading">
       <strong id={id}>{t('codex.proxy.display.title')}</strong>
       <div className="codex-proxy-display-options" role="group" aria-labelledby={id}>
         {CODEX_PROXY_DISPLAYS.map((mode) => <button type="button" key={mode}
           className={`btn btn-secondary${mode === value ? ' is-selected' : ''}`} aria-pressed={mode === value}
-          onClick={() => { setFailed(false); setFailed(!persistCodexProxyDisplay(mode)); }}>
+          onClick={() => {
+            const sequence = ++saveSequence.current;
+            setFailed(false);
+            void persistCodexProxyDisplay(mode).then(saved => {
+              if (saveSequence.current === sequence) setFailed(!saved);
+            });
+          }}>
           {t(`codex.proxy.display.${mode}`)}
         </button>)}
       </div>

@@ -1,10 +1,11 @@
 use super::*;
 
 #[test]
-fn default_exe_clears_profile_environment_and_stale_user_data_arguments() {
+fn default_exe_clears_cli_and_profile_overrides_and_stale_user_data_arguments() {
     let mut command = Command::new("never-executed-chatgpt.exe");
     command.env("CODEX_HOME", "old-home");
     command.env("CODEX_ELECTRON_USER_DATA_PATH", "old-data");
+    command.env("CODEX_CLI_PATH", "old-codex.exe");
     let args = vec![
         "--user-data-dir=old".into(),
         "--user-data-dir".into(),
@@ -12,7 +13,7 @@ fn default_exe_clears_profile_environment_and_stale_user_data_arguments() {
         "--remote-debugging-port=9222".into(),
     ];
     prepare_codex_windows_default_command(&mut command, &args, None);
-    for name in ["CODEX_HOME", "CODEX_ELECTRON_USER_DATA_PATH"] {
+    for name in ["CODEX_HOME", "CODEX_ELECTRON_USER_DATA_PATH", "CODEX_CLI_PATH"] {
         assert!(command
             .get_envs()
             .any(|(key, value)| key == name && value.is_none()));
@@ -197,7 +198,9 @@ function Get-AppxPackageManifest {
 function Test-Path { return $true }
 "#;
     let probe = build_codex_registered_launch_probe(Path::new(r"D:\Codex\app\ChatGPT.exe"));
-    let output = codex_launch_powershell_output(&format!("{setup}\n{probe}")).unwrap();
+    let output = codex_launch_powershell_output(&format!(
+        "{setup}\nWrite-Output 'probe starting'\n{probe}\nWrite-Output 'probe finished'"
+    )).unwrap();
     let registered = parse_codex_registered_launch(&output).unwrap().unwrap();
     assert_eq!(registered.app_id, "Gui");
     assert!(registered.executable.ends_with(r"app\ChatGPT.exe"));
@@ -212,16 +215,22 @@ function Test-Path { return $true }
 
 #[test]
 fn registration_response_requires_gui_identity() {
-    assert!(parse_codex_registered_launch("null").unwrap().is_none());
-    let registered = parse_codex_registered_launch(r#"{"family_name":"OpenAI.Codex_publisher","app_id":"Gui","executable":"D:\\WindowsApps\\new\\app\\ChatGPT.exe"}"#).unwrap().unwrap();
+    let frame = |payload| format!("{CODEX_REGISTRATION_RESULT_PREFIX}{payload}");
+    let empty = frame("null");
+    assert!(parse_codex_registered_launch(&empty).unwrap().is_none());
+    let valid = frame(r#"{"family_name":"OpenAI.Codex_publisher","app_id":"Gui","executable":"D:\\WindowsApps\\new\\app\\ChatGPT.exe"}"#);
+    let registered = parse_codex_registered_launch(&format!("probe started\r\n\u{feff}{valid}\r\nprobe finished\r\n"))
+        .unwrap().unwrap();
     assert_eq!(registered.app_id, "Gui");
     for invalid in [
-        "",
-        "warning: null",
-        r#"{"family_name":"","app_id":"App","executable":"ChatGPT.exe"}"#,
-        r#"{"family_name":"pkg","app_id":"App","executable":"resources/codex.exe"}"#,
+        String::new(),
+        "warning: null".to_string(),
+        frame(r#"{"family_name":"","app_id":"App","executable":"ChatGPT.exe"}"#),
+        frame(r#"{"family_name":"pkg","app_id":"App","executable":"resources/codex.exe"}"#),
+        frame("null unexpected"),
+        format!("{empty}\n{valid}"),
     ] {
-        assert!(parse_codex_registered_launch(invalid).is_err(), "{invalid}");
+        assert!(parse_codex_registered_launch(&invalid).is_err(), "{invalid}");
     }
 }
 
@@ -445,6 +454,7 @@ fn managed_and_default_commands_keep_selected_profiles_and_proxy_environment() {
         ),
         ("CODEX_HOME".into(), "wrong-home".into()),
         ("CODEX_ELECTRON_USER_DATA_PATH".into(), "wrong-data".into()),
+        ("CODEX_CLI_PATH".into(), "old-codex.exe".into()),
     ];
     let args = vec![
         "--user-data-dir=old".into(),
@@ -483,6 +493,7 @@ fn managed_and_default_commands_keep_selected_profiles_and_proxy_environment() {
             Some("http://user:secret@127.0.0.1:9123")
         );
         assert!(env[codex_package_launcher::PAYLOAD_ENV].is_none());
+        assert!(env["CODEX_CLI_PATH"].is_none());
         assert_eq!(
             request
                 .args

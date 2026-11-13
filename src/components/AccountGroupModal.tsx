@@ -23,8 +23,20 @@ import {
 import { invalidateCache as invalidateLegacyCache } from '../services/accountGroupService';
 import { listAccounts } from '../services/accountService';
 import { getAntigravityTierBadge } from '../utils/account';
+import { CodexAccountPlanBadge } from './codex/CodexAccountPlanBadge';
+import type { CodexAccount } from '../types/codex';
+import {
+  buildClaudeAccountPresentation, buildCodebuddyAccountPresentation, buildCursorAccountPresentation,
+  buildGitHubCopilotAccountPresentation, buildKiroAccountPresentation, buildTraeAccountPresentation,
+  buildWindsurfAccountPresentation, buildWorkbuddyAccountPresentation, buildZcodeAccountPresentation,
+} from '../presentation/platformAccountPresentation';
+import { getQoderPlanBadge, resolveQoderPlanBadgeClass, type QoderAccount } from '../types/qoder';
+import { getGrokPlanBadge, getGrokPlanBadgeClass, type GrokAccount } from '../types/grok';
+import { getZedPlanBadge, getZedPlanTone, type ZedAccount } from '../types/zed';
+import { getMinimaxCodePlanBadge, type MinimaxCodeAccount } from '../types/minimaxCode';
 import { SingleSelectDropdown } from './SingleSelectDropdown';
 import {
+  moveAccountsBetweenCodexGroups,
   setCodexGroupQuotaAutoRefreshMinutes,
   resolveCodexGroupQuotaAutoRefreshMinutes,
   normalizeCodexGroupQuotaAutoRefreshMinutes,
@@ -400,7 +412,7 @@ export const AccountGroupModal = ({
                     {/* 拖动手柄 */}
                     <div
                       className="group-drag-handle"
-                      title={t('accounts.groups.dragToSort', '按住拖动排序')}
+                      title={t('common.shared.sort.dragToReorder', '按住拖动排序')}
                     >
                       <GripVertical size={14} />
                     </div>
@@ -479,7 +491,7 @@ export const AccountGroupModal = ({
                             className="group-action-btn"
                             disabled={busy || loading || loadFailed || index === 0}
                             onClick={() => handleMove(index, 'up')}
-                            title={t('accounts.groups.moveUp', '上移')}
+                            title={t('common.shared.sort.moveUp', '上移')}
                           >
                             <ChevronUp size={14} />
                           </button>
@@ -488,7 +500,7 @@ export const AccountGroupModal = ({
                             className="group-action-btn"
                             disabled={busy || loading || loadFailed || index === groups.length - 1}
                             onClick={() => handleMove(index, 'down')}
-                            title={t('accounts.groups.moveDown', '下移')}
+                            title={t('common.shared.sort.moveDown', '下移')}
                           >
                             <ChevronDown size={14} />
                           </button>
@@ -590,16 +602,34 @@ export interface UniversalGroupAccountPickerModalProps {
   onConfirm: (payload: { accountIds: string[] }) => Promise<void> | void;
 }
 
+const groupAccountPresentations = {
+  claude_manager: buildClaudeAccountPresentation,
+  github_copilot: buildGitHubCopilotAccountPresentation,
+  windsurf: buildWindsurfAccountPresentation,
+  cursor: buildCursorAccountPresentation,
+  kiro: buildKiroAccountPresentation,
+  trae: buildTraeAccountPresentation,
+  trae_cn: buildTraeAccountPresentation,
+  trae_solo: buildTraeAccountPresentation,
+  trae_solo_cn: buildTraeAccountPresentation,
+  codebuddy: buildCodebuddyAccountPresentation,
+  codebuddy_cn: buildCodebuddyAccountPresentation,
+  workbuddy: buildWorkbuddyAccountPresentation,
+  zcode: buildZcodeAccountPresentation,
+};
+
 export function UniversalGroupAccountPickerModal({
   isOpen,
   targetGroup,
   accounts,
   accountGroups,
+  platform = 'antigravity',
   onClose,
   onConfirm,
 }: UniversalGroupAccountPickerModalProps) {
   const { t } = useTranslation();
   useEscClose(isOpen, onClose);
+  const preservePlanText = ['cursor', 'windsurf', 'qoder', 'grok'].includes(platform) || platform.startsWith('trae');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -780,23 +810,25 @@ export function UniversalGroupAccountPickerModal({
                   displayName = name || account.id || '';
                 }
 
-                let planLabel = '';
-                let planClass = '';
-                if (account.quota) {
-                  const badge = getAntigravityTierBadge(account.quota);
-                  if (badge.tier !== 'UNKNOWN') {
-                    planLabel = badge.label;
-                    planClass = badge.className;
-                  }
-                } else if (account.plan_type) {
-                  planLabel = String(account.plan_type).toUpperCase();
-                  planClass = 'plan-badge-default';
-                } else if (account.subscription_tier) {
-                  planLabel = String(account.subscription_tier).toUpperCase();
-                  planClass = 'plan-badge-default';
-                } else if (account.plan) {
-                  planLabel = String(account.plan).toUpperCase();
-                  planClass = 'plan-badge-default';
+                const rawPlan = [account.plan_type, account.subscription_tier, account.plan]
+                  .find((value): value is string => typeof value === 'string' && value.trim() !== '')?.trim();
+                const present = groupAccountPresentations[platform as keyof typeof groupAccountPresentations];
+                const presentation = present?.(account as never, t);
+                const badge = platform === 'antigravity' ? getAntigravityTierBadge(account.quota)
+                  : presentation ? { label: presentation.planLabel, className: presentation.planClass }
+                  : { label: rawPlan ?? t('common.unknown'), className: rawPlan ? 'plan-badge-default' : 'unknown' };
+                if (platform === 'qoder') {
+                  badge.label = getQoderPlanBadge(account as QoderAccount);
+                  badge.className = resolveQoderPlanBadgeClass(badge.label);
+                } else if (platform === 'grok') {
+                  badge.label = getGrokPlanBadge(account as GrokAccount) || t('common.none');
+                  badge.className = getGrokPlanBadgeClass(badge.label, account as GrokAccount);
+                } else if (platform === 'minimaxcode') {
+                  badge.label = getMinimaxCodePlanBadge(account as MinimaxCodeAccount) || t('common.unknown');
+                  badge.className = 'free';
+                } else if (platform === 'zed') {
+                  badge.label = getZedPlanBadge(account as ZedAccount);
+                  badge.className = getZedPlanTone((account as ZedAccount).plan_raw);
                 }
 
                 return (
@@ -815,9 +847,9 @@ export function UniversalGroupAccountPickerModal({
                         {displayName}
                       </span>
                       <div className="group-account-meta">
-                        {planLabel && (
-                          <span className={`tier-badge ${planClass} group-account-tier-badge`}>
-                            {planLabel}
+                        {platform === 'codex' ? <CodexAccountPlanBadge account={account as CodexAccount} /> : (
+                          <span className={`tier-badge ${badge.className} ${platform === 'antigravity' ? 'group-account-tier-badge' : 'account-picker-plan'}${preservePlanText ? ' raw-value' : ''}`}>
+                            {badge.label}
                           </span>
                         )}
                         {isUngrouped ? (
@@ -940,7 +972,9 @@ export const AddToGroupModal = ({ isOpen, onClose, accountIds, sourceGroupId, on
     clearErrors();
     try {
       const groupId = await operation();
-      const updated = await assignAccountsToPlatformGroup(platformKey, groupId, accountIds);
+      const updated = platformKey === 'codex' && sourceGroupId
+        ? await moveAccountsBetweenCodexGroups(sourceGroupId, groupId, accountIds)
+        : await assignAccountsToPlatformGroup(platformKey, groupId, accountIds);
       if (!updated) throw new Error(t('accounts.groups.error.notFound'));
       await onAdded();
       onClose();

@@ -1904,55 +1904,38 @@ fn detect_codebuddy_cn_exec_path() -> Option<std::path::PathBuf> {
 fn detect_qoder_exec_path() -> Option<std::path::PathBuf> {
     #[cfg(target_os = "macos")]
     {
-        let candidates = [
-            "/Applications/Qoder.app/Contents/MacOS/Qoder",
-            "/Applications/Qoder.app/Contents/MacOS/Electron",
-            "/Applications/Qoder.app",
-        ];
-        for candidate in candidates {
-            let path = std::path::PathBuf::from(candidate);
-            if path.exists() {
-                return Some(path);
-            }
+        let mut roots = vec![std::path::PathBuf::from("/Applications")];
+        if let Some(home) = dirs::home_dir() {
+            roots.push(home.join("Applications"));
         }
+        return ["Qoder IDE.app", "Qoder.app"]
+            .into_iter()
+            .flat_map(|name| roots.iter().map(move |root| root.join(name)))
+            .find_map(|path| resolve_qoder_macos_exec_path(&path.to_string_lossy()));
     }
 
     #[cfg(target_os = "windows")]
     {
-        let mut candidates: Vec<std::path::PathBuf> = Vec::new();
-        if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
-            candidates.push(
-                std::path::PathBuf::from(&local_appdata)
-                    .join("Programs")
-                    .join("Qoder")
-                    .join("Qoder.exe"),
-            );
-        }
-        if let Ok(program_files) = std::env::var("PROGRAMFILES") {
-            candidates.push(
-                std::path::PathBuf::from(program_files)
-                    .join("Qoder")
-                    .join("Qoder.exe"),
-            );
-        }
-        for candidate in candidates {
-            if candidate.exists() {
-                return Some(candidate);
-            }
-        }
+        let roots = [
+            std::env::var_os("LOCALAPPDATA").map(|dir| std::path::PathBuf::from(dir).join("Programs")),
+            std::env::var_os("PROGRAMFILES").map(std::path::PathBuf::from),
+            std::env::var_os("PROGRAMFILES(X86)").map(std::path::PathBuf::from),
+        ];
+        return [r"Qoder IDE\Qoder IDE.exe", r"Qoder\Qoder.exe"]
+            .into_iter()
+            .flat_map(|name| roots.iter().flatten().map(move |root| root.join(name)))
+            .find(|path| path.is_file());
     }
 
     #[cfg(target_os = "linux")]
     {
-        let candidates = ["/usr/bin/qoder", "/usr/local/bin/qoder", "/opt/qoder/qoder"];
-        for candidate in candidates {
-            let path = std::path::PathBuf::from(candidate);
-            if path.exists() {
-                return Some(path);
-            }
-        }
+        return ["/usr/share/qoder-ide/qoder-ide", "/usr/bin/qoder-ide", "/usr/bin/qoder", "/usr/local/bin/qoder", "/opt/qoder/qoder"]
+            .into_iter()
+            .map(std::path::PathBuf::from)
+            .find(|path| path.is_file());
     }
 
+    #[allow(unreachable_code)]
     None
 }
 

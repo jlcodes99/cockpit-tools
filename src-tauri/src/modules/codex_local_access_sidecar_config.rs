@@ -565,6 +565,7 @@ fn sidecar_routing_strategy_value(strategy: CodexLocalAccessRoutingStrategy) -> 
         CodexLocalAccessRoutingStrategy::PlanHighFirst => "plan_high_first",
         CodexLocalAccessRoutingStrategy::PlanLowFirst => "plan_low_first",
         CodexLocalAccessRoutingStrategy::ExpirySoonFirst => "expiry_soon_first",
+        CodexLocalAccessRoutingStrategy::FiveHourResetSoonFirst => "five_hour_reset_soon_first",
         CodexLocalAccessRoutingStrategy::Custom => "custom",
     }
 }

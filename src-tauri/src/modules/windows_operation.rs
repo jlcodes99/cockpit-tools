@@ -143,7 +143,14 @@ fn supported_elevation_process_name(name: &str) -> bool {
 }
 
 #[cfg(target_os = "windows")]
-fn validate_elevation_targets(pids: &[u32]) -> Result<Vec<u32>, String> {
+#[derive(Default)]
+struct ElevationTargets {
+    codex: Vec<u32>,
+    other: Vec<u32>,
+}
+
+#[cfg(target_os = "windows")]
+fn validate_elevation_targets(pids: &[u32]) -> Result<ElevationTargets, String> {
     use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
     let mut targets = pids
@@ -170,7 +177,7 @@ fn validate_elevation_targets(pids: &[u32]) -> Result<Vec<u32>, String> {
             .with_cmd(UpdateKind::Always),
     );
 
-    let mut running = Vec::new();
+    let mut running = ElevationTargets::default();
     for pid in targets {
         let Some(process) = system.process(Pid::from_u32(pid)) else {
             continue;
@@ -182,7 +189,11 @@ fn validate_elevation_targets(pids: &[u32]) -> Result<Vec<u32>, String> {
                 pid, name
             ));
         }
-        running.push(pid);
+        if name.eq_ignore_ascii_case("chatgpt.exe") {
+            running.codex.push(pid);
+        } else {
+            running.other.push(pid);
+        }
     }
     Ok(running)
 }
@@ -194,7 +205,7 @@ fn wide(value: &std::ffi::OsStr) -> Vec<u16> {
 }
 
 #[cfg(target_os = "windows")]
-fn run_elevated_taskkill(pids: &[u32]) -> Result<(), String> {
+fn run_elevated_taskkill(pids: &[u32], include_tree: bool) -> Result<(), String> {
     use std::mem::size_of;
     use std::path::PathBuf;
     use windows::core::PCWSTR;
@@ -213,15 +224,11 @@ fn run_elevated_taskkill(pids: &[u32]) -> Result<(), String> {
         ));
     }
 
-    let mut args = String::new();
-    for pid in pids {
-        args.push_str(&format!(" /PID {}", pid));
-    }
-    args.push_str(" /T /F");
+    let args = taskkill_args(pids, true, include_tree).join(" ");
 
     let verb = wide(std::ffi::OsStr::new("runas"));
     let file = wide(taskkill.as_os_str());
-    let parameters = wide(std::ffi::OsStr::new(args.trim()));
+    let parameters = wide(std::ffi::OsStr::new(&args));
     let mut info = SHELLEXECUTEINFOW {
         cbSize: size_of::<SHELLEXECUTEINFOW>() as u32,
         fMask: SEE_MASK_NOCLOSEPROCESS,
@@ -258,11 +265,11 @@ fn run_elevated_taskkill(pids: &[u32]) -> Result<(), String> {
         let exit_result = GetExitCodeProcess(info.hProcess, &mut exit_code);
         let _ = CloseHandle(info.hProcess);
         exit_result.map_err(|error| format!("WINDOWS_ELEVATION_EXIT_READ_FAILED: {}", error))?;
-        if exit_code != 0
-            && pids
+        if !taskkill_accepted_or_targets_exited(exit_code == 0, || {
+            pids
                 .iter()
                 .any(|pid| crate::modules::process::is_pid_running(*pid))
-        {
+        }) {
             return Err(format!(
                 "WINDOWS_ELEVATION_TASKKILL_FAILED: exit_code={}",
                 exit_code
@@ -272,14 +279,40 @@ fn run_elevated_taskkill(pids: &[u32]) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(any(target_os = "windows", test))]
+pub(crate) fn taskkill_args(pids: &[u32], force: bool, include_tree: bool) -> Vec<String> {
+    let mut args = Vec::new();
+    for pid in pids {
+        args.extend(["/PID".to_string(), pid.to_string()]);
+    }
+    if include_tree {
+        args.push("/T".to_string());
+    }
+    if force {
+        args.push("/F".to_string());
+    }
+    args
+}
+
+#[cfg(any(target_os = "windows", test))]
+pub(crate) fn taskkill_accepted_or_targets_exited(
+    success: bool,
+    any_target_running: impl FnOnce() -> bool,
+) -> bool {
+    success || !any_target_running()
+}
+
 pub fn elevated_close_supported_processes(pids: &[u32]) -> Result<u32, String> {
     #[cfg(target_os = "windows")]
     {
-        let targets = validate_elevation_targets(pids)?;
-        if targets.is_empty() {
-            return Ok(0);
+        let ElevationTargets { codex, other } = validate_elevation_targets(pids)?;
+        if !codex.is_empty() {
+            run_elevated_taskkill(&codex, false)?;
         }
-        run_elevated_taskkill(&targets)?;
+        if !other.is_empty() {
+            run_elevated_taskkill(&other, true)?;
+        }
+        let targets = codex.into_iter().chain(other).collect::<Vec<_>>();
         let remaining = targets
             .iter()
             .filter(|pid| crate::modules::process::is_pid_running(**pid))
@@ -315,6 +348,16 @@ mod tests {
         assert!(is_access_denied_message("PermissionDenied"));
         assert!(is_access_denied_message("Access is denied"));
         assert!(!is_access_denied_message("file not found"));
+    }
+
+    #[test]
+    fn taskkill_rechecks_targets_after_nonzero_exit_without_adding_tree_scope() {
+        assert_eq!(taskkill_args(&[17], false, false), ["/PID", "17"]);
+        assert_eq!(taskkill_args(&[17, 19], true, false), ["/PID", "17", "/PID", "19", "/F"]);
+        assert_eq!(taskkill_args(&[17], true, true), ["/PID", "17", "/T", "/F"]);
+        let exit_128 = 128;
+        assert!(taskkill_accepted_or_targets_exited(exit_128 == 0, || false));
+        assert!(!taskkill_accepted_or_targets_exited(exit_128 == 0, || true));
     }
 
     #[cfg(target_os = "windows")]

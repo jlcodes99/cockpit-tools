@@ -151,6 +151,9 @@ fn project_remote_model_catalog(
         }
         models.sort_by_key(|model| model["priority"].as_i64().unwrap_or(i64::MAX));
     }
+    // The remote interface speaks public Responses regardless of the relay's
+    // upstream. Local model templates cannot advertise the relay's internals.
+    codex_protocol::project_public_responses_catalog(&mut catalog);
     Some(catalog)
 }
 

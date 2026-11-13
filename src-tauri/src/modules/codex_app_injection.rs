@@ -23,6 +23,17 @@ mod dialog_data;
 #[path = "codex_app_injection_remote.rs"]
 mod remote_view;
 
+#[path = "codex_app_injection_ssh.rs"]
+mod ssh_reconnect;
+
+pub(crate) async fn refresh_ssh_connection(
+    server: &crate::models::ssh_server::SshServer,
+    account: &CodexAccount,
+    wait_for_desktop: bool,
+) -> Result<bool, String> {
+    ssh_reconnect::refresh(server, account, wait_for_desktop).await
+}
+
 pub(crate) fn remote_key_session_metrics(conn: &rusqlite::Connection, key: &str,
     query: &crate::modules::codex_remote_service::KeyQuery) -> Result<serde_json::Value, String> {
     output_speed::key_session_metrics(conn,key,query.thread_id.as_deref().ok_or("session requires threadId")?,
@@ -284,6 +295,7 @@ pub fn should_enable_cdp(bind_account_id: Option<&str>) -> bool {
         || auth_diagnostics_enabled(bind_account_id)
         || should_enable_injection(bind_account_id)
         || crate::modules::codex_app_enhancements::enabled()
+        || crate::modules::ssh_server::has_auto_sync_targets()
 }
 
 fn observed_oauth_account_id(bind_account_id: Option<&str>) -> Option<String> {
@@ -799,7 +811,7 @@ const VOICE_INSTALL_SCRIPT: &str = r#"(() => {
     if (!body || typeof body.sdp !== "string" || !body.sdp.trim() || !body.session || typeof body.session !== "object" || Array.isArray(body.session)) return forward();
     const target = request.url;
     const validTarget = typeof target === "string" && target.startsWith("/") && !target.startsWith("//") && !/[\\#\u0000-\u0020\u007f]/.test(target);
-    const allowed = new Set(["content-type", "openai-alpha", "thread-id", "session-id", "x-session-id", "x-codex-turn-metadata", "originator"]);
+    const allowed = new Set(["content-type", "openai-alpha", "thread-id", "session-id", "x-session-id", "voice-session-id", "x-codex-turn-metadata", "originator"]);
     const nextHeaders = {};
     headers.forEach((value, name) => { if (allowed.has(name.toLowerCase())) nextHeaders[name] = value; });
     nextHeaders.Authorization = "Bearer " + config.apiKey;
@@ -963,27 +975,30 @@ struct QuotaResponse {
     cooldown_account_count: Option<i64>,
     #[serde(default)]
     plans: Vec<QuotaPlanSummary>,
+    #[serde(default)]
+    provider_quotas: Vec<crate::modules::codex_provider_pool_quota::ProviderPoolQuota>,
 }
 
 impl QuotaResponse {
     fn empty_pool() -> Self {
         Self {
             remote: None,
-            weekly_remaining_percent: Some(0),
-            five_hour_remaining_percent: Some(0),
-            weekly_capacity_percent: Some(0),
-            five_hour_capacity_percent: Some(0),
+            weekly_remaining_percent: None,
+            five_hour_remaining_percent: None,
+            weekly_capacity_percent: None,
+            five_hour_capacity_percent: None,
             account_count: Some(0),
             available_account_count: Some(0),
             abnormal_account_count: Some(0),
             cooldown_account_count: Some(0),
             plans: Vec::new(),
+            provider_quotas: Vec::new(),
         }
     }
 
     fn normalize_empty_pool(self) -> Self {
         if self.account_count == Some(0) {
-            Self::empty_pool()
+            Self { provider_quotas: self.provider_quotas, ..Self::empty_pool() }
         } else {
             self
         }
@@ -1323,6 +1338,7 @@ fn deepseek_model_injection_script(
     handled_selected_model: Option<&str>,
 ) -> String {
     let payload = serde_json::to_string(payload).unwrap_or_else(|_| "{\"models\":[]}".to_string());
+    let reasoning_levels = serde_json::json!(crate::modules::codex_protocol::DEEPSEEK_REASONING_EFFORTS);
     let handled =
         serde_json::to_string(&handled_selected_model).unwrap_or_else(|_| "null".to_string());
     format!(
@@ -1358,7 +1374,8 @@ fn deepseek_model_injection_script(
       }}
       const displayName = {{}};
       for (const item of models) displayName[String(item.id)] = item.name || String(item.id);
-      const reasoningLevels = ["low", "high", "max"];
+      const reasoningLevels = payload.reasoningLevels || {reasoning_levels};
+      const defaultReasoningEffort = payload.defaultReasoningEffort || "high";
       const reasoningDescriptors = () => reasoningLevels.map((effort) => ({{
         effort,
         reasoningEffort: effort,
@@ -1370,9 +1387,9 @@ fn deepseek_model_injection_script(
         // The desktop app has used both camelCase and snake_case model metadata
         // across releases. Keep both shapes in sync so DeepSeek exposes its
         // actual low/high/max picker instead of inheriting Codex defaults.
-        item.defaultReasoningEffort = "high";
+        item.defaultReasoningEffort = defaultReasoningEffort;
         item.supportedReasoningEfforts = levels;
-        item.default_reasoning_level = "high";
+        item.default_reasoning_level = defaultReasoningEffort;
         item.supported_reasoning_levels = levels;
       }};
       const applyVisionMetadata = (item, official) => {{
@@ -1762,7 +1779,7 @@ fn deepseek_balance_injection_script(
         let host = document.querySelector('[data-cockpit-deepseek-balance]');
         let details = document.querySelector('[data-cockpit-deepseek-balance-details]');
         const card = usageMetrics.visibleCard(root.card);
-        const footer = card?.querySelector('[class*="_ComposerLayoutFooter_"], [class*="_footer_"]') || card;
+        const footer = usageMetrics.composerFooter(card);
         const permissions = footer && [...footer.querySelectorAll('[data-composer-navigation-target="permissions"]')].find((node) => node.getClientRects().length > 0);
         if (root.card !== card) root.detailsOpen = false;
         root.card = card;

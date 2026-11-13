@@ -1,3 +1,5 @@
+import { previewDurableUiSetting, readDurableUiSetting } from './durableUiSettings';
+
 const CLAUDE_CLI_LAST_WORKING_DIR_KEY = 'agtools.claude.cli.last_working_dir';
 
 /**
@@ -10,7 +12,7 @@ export function sanitizeClaudeCliInstanceName(value: string): string {
 /** 读取上次成功选择的 Claude CLI 工作目录，供下次打开启动弹框时复用。 */
 export function readLastClaudeCliWorkingDir(): string {
   try {
-    return localStorage.getItem(CLAUDE_CLI_LAST_WORKING_DIR_KEY)?.trim() || '';
+    return readDurableUiSetting(CLAUDE_CLI_LAST_WORKING_DIR_KEY)?.trim() || '';
   } catch {
     return '';
   }
@@ -20,9 +22,5 @@ export function readLastClaudeCliWorkingDir(): string {
 export function persistLastClaudeCliWorkingDir(value: string): void {
   const trimmed = value.trim();
   if (!trimmed) return;
-  try {
-    localStorage.setItem(CLAUDE_CLI_LAST_WORKING_DIR_KEY, trimmed);
-  } catch {
-    // 工作目录只用于改善下次启动体验，浏览器存储不可用时允许静默降级。
-  }
+  previewDurableUiSetting(CLAUDE_CLI_LAST_WORKING_DIR_KEY, trimmed);
 }

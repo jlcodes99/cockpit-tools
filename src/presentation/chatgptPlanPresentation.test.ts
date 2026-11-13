@@ -11,6 +11,17 @@ import { isCodexLocalAccessEligibleAccount } from '../utils/codexLocalAccessAcco
 const plan = { id: 'chatgpt_plan_registration', account_name: 'Plan account', email: 'user@example.com', auth_mode: 'apikey', api_provider_id: 'cockpit_chatgpt_plan' } as CodexAccount;
 const t = (key: string) => key === 'chatgptPlan.title' ? 'ChatGPT 套餐' : key;
 
+test('workspace account labels distinguish teams that share the same login email', () => {
+  const account = { id: 'first', email: 'user@example.com', plan_type: 'team' } as CodexAccount;
+  const first = { ...account, account_name: 'Alpha' };
+  const second = { ...account, id: 'second', account_name: 'Beta', plan_type: 'Business' };
+
+  assert.equal(buildCodexAccountPresentation(first, t).displayName, 'Alpha (user@example.com)');
+  assert.equal(buildCodexAccountPresentation(second, t).displayName, 'Beta (user@example.com)');
+  assert.equal(buildCodexAccountPresentation(account, t).displayName, account.email);
+  assert.equal(buildCodexAccountPresentation({ ...first, plan_type: 'plus' }, t).displayName, account.email);
+});
+
 test('every common account presentation identifies the plan source without inventing a Free subscription or quota', () => {
   const presentation = buildCodexAccountPresentation(plan, t);
   assert.equal(presentation.displayName, 'Plan account');

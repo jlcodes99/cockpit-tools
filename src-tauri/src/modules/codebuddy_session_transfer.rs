@@ -4,9 +4,9 @@
 //! codebuddy-sessions.vscdb 中按 userId 过滤会话。切号时必须同时处理两处。
 
 use rusqlite::Connection;
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -22,6 +22,7 @@ pub struct CodebuddySessionTransferReport {
     pub replaced_conversations: usize,
     pub updated_session_rows: usize,
     pub scanned_workspaces: usize,
+    skipped_empty_index_workspaces: usize,
 }
 
 pub fn extract_codebuddy_uid(session_json: &str) -> Option<String> {
@@ -68,10 +69,9 @@ pub fn transfer_local_sessions(
         &operation_id,
     )?;
 
-    let mut report =
-        sync_history_between_accounts(&extension_data_dir, source_uid, target_uid, &backup_root)?;
-    report.updated_session_rows = remap_session_database_user_id(
-        &user_data_dir.join("codebuddy-sessions.vscdb"),
+    let report = transfer_codebuddy_history(
+        &extension_data_dir,
+        user_data_dir,
         source_uid,
         target_uid,
         &backup_root,
@@ -83,14 +83,43 @@ pub fn transfer_local_sessions(
     );
 
     logger::log_info(&format!(
-        "[CodeBuddy Session Transfer] 合并完成: source_uid={}, target_uid={}, workspaces={}, added={}, replaced={}, db_rows={}",
+        "[CodeBuddy Session Transfer] 合并完成: source_uid={}, target_uid={}, workspaces={}, skipped_empty_index={}, added={}, replaced={}, db_rows={}",
         source_uid,
         target_uid,
         report.scanned_workspaces,
+        report.skipped_empty_index_workspaces,
         report.added_conversations,
         report.replaced_conversations,
         report.updated_session_rows
     ));
+    Ok(report)
+}
+
+fn transfer_codebuddy_history(
+    extension_data_dir: &Path,
+    user_data_dir: &Path,
+    source_uid: &str,
+    target_uid: &str,
+    backup_root: &Path,
+) -> Result<CodebuddySessionTransferReport, String> {
+    let mut available = HashSet::new();
+    let mut report = sync_history(
+        extension_data_dir,
+        source_uid,
+        target_uid,
+        backup_root,
+        Some(&mut available),
+    )?;
+    // A skipped workspace still belongs to its original account. Move only
+    // rows whose source conversation is confirmed available in the target.
+    let selected = (report.skipped_empty_index_workspaces > 0).then_some(&available);
+    report.updated_session_rows = remap_session_database_rows(
+        &user_data_dir.join("codebuddy-sessions.vscdb"),
+        source_uid,
+        target_uid,
+        backup_root,
+        selected,
+    )?;
     Ok(report)
 }
 
@@ -139,6 +168,16 @@ pub(crate) fn sync_history_between_accounts(
     source_uid: &str,
     target_uid: &str,
     backup_root: &Path,
+) -> Result<CodebuddySessionTransferReport, String> {
+    sync_history(extension_data_dir, source_uid, target_uid, backup_root, None)
+}
+
+fn sync_history(
+    extension_data_dir: &Path,
+    source_uid: &str,
+    target_uid: &str,
+    backup_root: &Path,
+    mut available: Option<&mut HashSet<String>>,
 ) -> Result<CodebuddySessionTransferReport, String> {
     let mut report = CodebuddySessionTransferReport::default();
     let source_outer = extension_data_dir.join(source_uid);
@@ -209,10 +248,12 @@ pub(crate) fn sync_history_between_accounts(
                 &target_account_root,
                 &workspace_name,
                 &workspace_backup,
+                available.as_deref_mut(),
             )?;
             report.scanned_workspaces += 1;
             report.added_conversations += delta.added_conversations;
             report.replaced_conversations += delta.replaced_conversations;
+            report.skipped_empty_index_workspaces += delta.skipped_empty_index_workspaces;
         }
     }
     Ok(report)
@@ -225,26 +266,79 @@ fn merge_workspace_history(
     target_account_root: &Path,
     workspace_name: &std::ffi::OsStr,
     backup_root: &Path,
+    mut available: Option<&mut HashSet<String>>,
 ) -> Result<CodebuddySessionTransferReport, String> {
     let source_index_path = source_workspace.join("index.json");
     if !source_index_path.is_file() {
         return Ok(CodebuddySessionTransferReport::default());
     }
-    let source_index = read_workspace_index(&source_index_path)?;
+    let allow_empty = available.is_some();
+    let Some(source_index) = read_workspace_index(&source_index_path, allow_empty)? else {
+        return Ok(skip_empty_workspace(&source_index_path));
+    };
 
     if !target_workspace.exists() {
         copy_dir_atomic(source_workspace, target_workspace)?;
         copy_auxiliary_workspace_roots(source_account_root, target_account_root, workspace_name)?;
+        let entries = conversations(&source_index);
+        if let Some(available) = available {
+            for id in entries.iter().filter_map(conversation_id) {
+                if validate_conversation_id(id).is_ok() && target_workspace.join(id).is_dir() {
+                    available.insert(id.to_owned());
+                }
+            }
+        }
         return Ok(CodebuddySessionTransferReport {
-            added_conversations: conversations(&source_index).len(),
+            added_conversations: entries.len(),
             ..CodebuddySessionTransferReport::default()
         });
     }
 
     let target_index_path = target_workspace.join("index.json");
-    let mut target_index = read_workspace_index(&target_index_path)?;
-    let source_conversations = conversations(&source_index);
-    let target_conversations = conversations(&target_index);
+    let mut index_backup_created = false;
+    let mut target_index = match read_workspace_index(&target_index_path, allow_empty)? {
+        Some(index) => index,
+        None => {
+            // An index can be initialized only when the workspace has no
+            // existing history whose metadata we cannot reconstruct.
+            for entry in fs::read_dir(target_workspace).map_err(|error| {
+                format!("读取 CodeBuddy 目标工作区失败: path={}, error={error}", target_workspace.display())
+            })? {
+                if entry.map_err(|error| format!("读取 CodeBuddy 工作区条目失败: {error}"))?
+                    .file_name() != "index.json"
+                {
+                    return Ok(skip_empty_workspace(&target_index_path));
+                }
+            }
+            if let Some(index) = read_workspace_index(&target_index_path, true)? {
+                index
+            } else {
+                let mut index = source_index.as_object().cloned().unwrap_or_default();
+                index.remove("current");
+                index.insert("conversations".to_string(), Value::Array(Vec::new()));
+                let index = Value::Object(index);
+                ensure_workspace_index_backup(&target_index_path, backup_root, &mut index_backup_created)?;
+                // Initialize first so an interrupted merge can use the normal
+                // indexed path and retry without losing existing directories.
+                let serialized = serde_json::to_string_pretty(&index)
+                    .map_err(|error| format!("序列化 CodeBuddy 工作区索引失败: {error}"))?;
+                atomic_write::write_string_atomic(&target_index_path, &serialized)?;
+                index
+            }
+        }
+    };
+    let source_recent = read_workspace_recent(&source_workspace.join("recent.json"))?;
+    let target_recent_path = target_workspace.join("recent.json");
+    let mut target_recent = read_workspace_recent(&target_recent_path)?;
+    let target_had_recent = target_recent_path.is_file();
+    let mut source_conversations = conversations(&source_index);
+    let mut target_conversations = conversations(&target_index);
+    apply_workspace_recent(&mut source_conversations, source_recent.as_ref());
+    apply_workspace_recent(&mut target_conversations, target_recent.as_ref());
+    if source_recent.is_some() && target_recent.is_none() {
+        target_recent = Some(Map::new());
+    }
+    let mut recent_changed = false;
     let mut target_positions = HashMap::new();
     let mut merged = Vec::with_capacity(target_conversations.len());
     let mut index_changed = false;
@@ -263,7 +357,6 @@ fn merge_workspace_history(
     }
 
     let mut report = CodebuddySessionTransferReport::default();
-    let mut index_backup_created = false;
     for source_conversation in source_conversations {
         let Some(id) = conversation_id(&source_conversation) else {
             continue;
@@ -276,6 +369,9 @@ fn merge_workspace_history(
                 source_conversation_dir.display()
             ));
             continue;
+        }
+        if let Some(available) = available.as_deref_mut() {
+            available.insert(id.to_owned());
         }
 
         match target_positions.get(id).copied() {
@@ -312,6 +408,9 @@ fn merge_workspace_history(
                     backup_root,
                 )?;
                 target_positions.insert(id.to_string(), merged.len());
+                if let Some(recent) = &mut target_recent {
+                    recent_changed |= update_workspace_recent(recent, id, &source_conversation);
+                }
                 merged.push(source_conversation);
                 report.added_conversations += 1;
                 index_changed = true;
@@ -348,6 +447,9 @@ fn merge_workspace_history(
                         true,
                         backup_root,
                     )?;
+                    if let Some(recent) = &mut target_recent {
+                        recent_changed |= update_workspace_recent(recent, id, &source_conversation);
+                    }
                     merged[target_index] = source_conversation;
                     report.replaced_conversations += 1;
                     index_changed = true;
@@ -388,6 +490,15 @@ fn merge_workspace_history(
             .map_err(|error| format!("序列化 CodeBuddy 工作区索引失败: {}", error))?;
         atomic_write::write_string_atomic(&target_index_path, &serialized)?;
     }
+    if let Some(recent) = target_recent.filter(|_| recent_changed) {
+        if target_had_recent {
+            fs::copy(&target_recent_path, backup_root.join("recent.json"))
+                .map_err(|error| format!("备份 CodeBuddy 最近会话索引失败: {error}"))?;
+        }
+        let serialized = serde_json::to_string_pretty(&recent)
+            .map_err(|error| format!("序列化 CodeBuddy 最近会话索引失败: {error}"))?;
+        atomic_write::write_string_atomic(&target_recent_path, &serialized)?;
+    }
 
     Ok(report)
 }
@@ -418,7 +529,19 @@ fn ensure_workspace_index_backup(
     Ok(())
 }
 
-fn read_workspace_index(path: &Path) -> Result<Value, String> {
+fn skip_empty_workspace(path: &Path) -> CodebuddySessionTransferReport {
+    logger::log_warn(&format!(
+        "[CodeBuddy Session Transfer] 工作区索引为零字节，保留原会话及账号归属: {}",
+        path.display()
+    ));
+    CodebuddySessionTransferReport {
+        skipped_empty_index_workspaces: 1,
+        ..CodebuddySessionTransferReport::default()
+    }
+}
+
+fn read_workspace_index(path: &Path, allow_empty: bool) -> Result<Option<Value>, String> {
+    reject_symlink_if_exists(path)?;
     let content = fs::read_to_string(path).map_err(|error| {
         format!(
             "读取 CodeBuddy 工作区索引失败: path={}, error={}",
@@ -426,6 +549,9 @@ fn read_workspace_index(path: &Path) -> Result<Value, String> {
             error
         )
     })?;
+    if allow_empty && content.is_empty() {
+        return Ok(None);
+    }
     let value: Value = serde_json::from_str(&content).map_err(|error| {
         format!(
             "解析 CodeBuddy 工作区索引失败: path={}, error={}",
@@ -441,7 +567,7 @@ fn read_workspace_index(path: &Path) -> Result<Value, String> {
     {
         return Err(format!("CodeBuddy 工作区索引结构无效: {}", path.display()));
     }
-    Ok(value)
+    Ok(Some(value))
 }
 
 fn conversations(index: &Value) -> Vec<Value> {
@@ -450,6 +576,62 @@ fn conversations(index: &Value) -> Vec<Value> {
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default()
+}
+
+fn read_workspace_recent(path: &Path) -> Result<Option<Map<String, Value>>, String> {
+    reject_symlink_if_exists(path)?;
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("读取 CodeBuddy 最近会话索引失败: {error}")),
+    };
+    match serde_json::from_str(&content) {
+        Ok(recent) => Ok(Some(recent)),
+        Err(error) => {
+            // CodeBuddy rebuilds this cache from index.json if it cannot decode it.
+            logger::log_warn(&format!(
+                "CodeBuddy 最近会话索引损坏，按工作区索引合并: path={}, error={error}",
+                path.display()
+            ));
+            Ok(None)
+        }
+    }
+}
+
+// Newer clients persist message times separately and overlay them on index.json.
+fn apply_workspace_recent(items: &mut [Value], recent: Option<&Map<String, Value>>) {
+    let Some(recent) = recent else { return };
+    for item in items {
+        if let Some(timestamp) = conversation_id(item)
+            .and_then(|id| recent.get(id))
+            .and_then(Value::as_str)
+            .filter(|value| chrono::DateTime::parse_from_rfc3339(value).is_ok())
+        {
+            item["lastMessageAt"] = Value::String(timestamp.to_owned());
+        }
+    }
+}
+
+fn update_workspace_recent(recent: &mut Map<String, Value>, id: &str, conversation: &Value) -> bool {
+    let time = &conversation["lastMessageAt"];
+    let timestamp = time
+        .as_str()
+        .filter(|value| chrono::DateTime::parse_from_rfc3339(value).is_ok())
+        .map(str::to_owned)
+        .or_else(|| {
+            chrono::DateTime::from_timestamp_millis(time.as_i64()?)
+                .map(|time| time.to_rfc3339())
+        });
+    if let Some(timestamp) = timestamp {
+        let value = Value::String(timestamp);
+        if recent.get(id) == Some(&value) {
+            return false;
+        }
+        recent.insert(id.to_owned(), value);
+        true
+    } else {
+        recent.remove(id).is_some()
+    }
 }
 
 fn conversation_id(conversation: &Value) -> Option<&str> {
@@ -697,7 +879,17 @@ pub(crate) fn remap_session_database_user_id(
     target_uid: &str,
     backup_root: &Path,
 ) -> Result<usize, String> {
-    if !db_path.is_file() {
+    remap_session_database_rows(db_path, source_uid, target_uid, backup_root, None)
+}
+
+fn remap_session_database_rows(
+    db_path: &Path,
+    source_uid: &str,
+    target_uid: &str,
+    backup_root: &Path,
+    selected: Option<&HashSet<String>>,
+) -> Result<usize, String> {
+    if selected.is_some_and(HashSet::is_empty) || !db_path.is_file() {
         return Ok(0);
     }
     reject_symlink_if_exists(db_path)?;
@@ -732,6 +924,14 @@ pub(crate) fn remap_session_database_user_id(
                 continue;
             };
             if object.get("userId").and_then(Value::as_str) != Some(source_uid) {
+                continue;
+            }
+            if selected.is_some_and(|ids| {
+                !object
+                    .get("conversationId")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| ids.contains(id))
+            }) {
                 continue;
             }
             object.insert("userId".to_string(), Value::String(target_uid.to_string()));
@@ -887,10 +1087,11 @@ mod tests {
             &temp.0.join("target-account"),
             std::ffi::OsStr::new("workspace"),
             &backup,
+            None,
         )
         .unwrap();
         assert_eq!(first.added_conversations, 1);
-        let merged = read_workspace_index(&target.join("index.json")).unwrap();
+        let merged = read_workspace_index(&target.join("index.json"), false).unwrap().unwrap();
         assert_eq!(conversations(&merged).len(), 2);
         assert_eq!(
             merged.get("current").and_then(Value::as_str),
@@ -905,11 +1106,12 @@ mod tests {
             &temp.0.join("target-account"),
             std::ffi::OsStr::new("workspace"),
             &backup,
+            None,
         )
         .unwrap();
         assert_eq!(second, CodebuddySessionTransferReport::default());
         assert_eq!(
-            conversations(&read_workspace_index(&target.join("index.json")).unwrap()).len(),
+            conversations(&read_workspace_index(&target.join("index.json"), false).unwrap().unwrap()).len(),
             2
         );
     }
@@ -940,6 +1142,7 @@ mod tests {
             &temp.0.join("target-account"),
             std::ffi::OsStr::new("workspace"),
             &backup,
+            None,
         )
         .unwrap();
         assert_eq!(replaced.replaced_conversations, 1);
@@ -966,6 +1169,7 @@ mod tests {
             &temp.0.join("target-account"),
             std::ffi::OsStr::new("workspace"),
             &temp.0.join("backup-2"),
+            None,
         )
         .unwrap();
         assert_eq!(unchanged.replaced_conversations, 0);
@@ -973,6 +1177,164 @@ mod tests {
             fs::read_to_string(target.join("same/messages/message.json")).unwrap(),
             "newer"
         );
+    }
+
+    #[test]
+    fn recent_index_drives_codebuddy_session_progress_and_preserves_newer_target() {
+        let temp = TestDir::new();
+        let source = temp.0.join("source");
+        let target = temp.0.join("target");
+        let backup = temp.0.join("backup");
+        let before = "2026-01-01T00:00:00Z";
+        let old = "2026-01-02T00:00:00Z";
+        let new = "2026-01-03T00:00:00Z";
+        let latest = "2026-01-04T00:00:00Z";
+        write_workspace(
+            &source,
+            vec![conversation("source-newer", before), conversation("target-newer", before)],
+            "source-newer",
+        );
+        write_workspace(
+            &target,
+            vec![conversation("source-newer", old), conversation("target-newer", before)],
+            "source-newer",
+        );
+        write_conversation(&source, "source-newer", "progress-40");
+        write_conversation(&target, "source-newer", "progress-30");
+        write_conversation(&source, "target-newer", "older-source");
+        write_conversation(&target, "target-newer", "newer-target");
+        let source_recent = serde_json::json!({"source-newer":new, "target-newer":new});
+        let target_recent = serde_json::json!({"source-newer":old, "target-newer":latest});
+        fs::write(source.join("recent.json"), source_recent.to_string()).unwrap();
+        fs::write(target.join("recent.json"), target_recent.to_string()).unwrap();
+
+        let merge = || merge_workspace_history(
+            &source,
+            &target,
+            &temp.0.join("source-account"),
+            &temp.0.join("target-account"),
+            std::ffi::OsStr::new("workspace"),
+            &backup,
+            None,
+        ).unwrap();
+        assert_eq!(merge().replaced_conversations, 1);
+        assert_eq!(fs::read_to_string(target.join("source-newer/messages/message.json")).unwrap(), "progress-40");
+        assert_eq!(fs::read_to_string(target.join("target-newer/messages/message.json")).unwrap(), "newer-target");
+        let saved = read_workspace_recent(&target.join("recent.json")).unwrap().unwrap();
+        assert_eq!(saved["source-newer"], new);
+        assert_eq!(saved["target-newer"], latest);
+        assert_eq!(
+            Value::Object(read_workspace_recent(&backup.join("recent.json")).unwrap().unwrap()),
+            target_recent
+        );
+        assert_eq!(merge(), CodebuddySessionTransferReport::default());
+        assert_eq!(fs::read_to_string(source.join("recent.json")).unwrap(), source_recent.to_string());
+    }
+
+    #[test]
+    fn malformed_recent_cache_can_be_rebuilt_with_original_bytes_preserved() {
+        let temp = TestDir::new();
+        let source = temp.0.join("source");
+        let target = temp.0.join("target");
+        let backup = temp.0.join("backup");
+        let old = "2026-01-01T00:00:00Z";
+        let new = "2026-01-02T00:00:00Z";
+        write_workspace(&source, vec![conversation("same", old)], "same");
+        write_workspace(&target, vec![conversation("same", old)], "same");
+        write_conversation(&source, "same", "newer");
+        write_conversation(&target, "same", "older");
+        fs::write(source.join("recent.json"), serde_json::json!({"same":new}).to_string()).unwrap();
+        let truncated = br#"{"same":"unfinished"#;
+        fs::write(target.join("recent.json"), truncated).unwrap();
+
+        let report = merge_workspace_history(
+            &source, &target, &temp.0, &temp.0, std::ffi::OsStr::new("workspace"), &backup, None,
+        ).unwrap();
+        assert_eq!(report.replaced_conversations, 1);
+        assert_eq!(fs::read(backup.join("recent.json")).unwrap(), truncated);
+        assert_eq!(read_workspace_recent(&target.join("recent.json")).unwrap().unwrap()["same"], new);
+        assert_eq!(fs::read_to_string(target.join("same/messages/message.json")).unwrap(), "newer");
+    }
+
+    #[test]
+    fn zero_byte_workspace_indexes_preserve_unshared_sessions_and_transfer_healthy_ones() {
+        let temp = TestDir::new();
+        let extension = temp.0.join("CodeBuddyExtension/Data");
+        let source = extension.join("source/CodeBuddyIDE/source/history");
+        let target = extension.join("target/CodeBuddyIDE/target/history");
+        let backup = temp.0.join("backup");
+        let stamp = "2026-09-28T00:00:00Z";
+        write_conversation(&source.join("source-blank"), "original", "original-body");
+        fs::write(source.join("source-blank/index.json"), []).unwrap();
+        for (workspace, id) in [
+            ("target-with-history", "blocked"),
+            ("target-empty", "recovered"),
+            ("healthy", "healthy"),
+        ] {
+            let workspace = source.join(workspace);
+            write_workspace(&workspace, vec![conversation(id, stamp)], id);
+            write_conversation(&workspace, id, id);
+        }
+        write_conversation(&target.join("target-with-history"), "existing", "target-body");
+        fs::write(target.join("target-with-history/index.json"), []).unwrap();
+        fs::create_dir_all(target.join("target-empty")).unwrap();
+        fs::write(target.join("target-empty/index.json"), []).unwrap();
+
+        let db = temp.0.join("codebuddy-sessions.vscdb");
+        let conn = Connection::open(&db).unwrap();
+        conn.execute_batch("CREATE TABLE ItemTable (key TEXT PRIMARY KEY, value BLOB);").unwrap();
+        for id in ["original", "blocked", "recovered", "healthy", "existing"] {
+            let uid = if id == "existing" { "target" } else { "source" };
+            let value = serde_json::json!({"conversationId": id, "userId": uid});
+            conn.execute(
+                "INSERT INTO ItemTable (key, value) VALUES (?1, ?2)",
+                rusqlite::params![format!("session:{id}"), value.to_string()],
+            ).unwrap();
+        }
+        drop(conn);
+
+        let report = transfer_codebuddy_history(&extension, &temp.0, "source", "target", &backup).unwrap();
+        assert_eq!(report.scanned_workspaces, 4);
+        assert_eq!(report.skipped_empty_index_workspaces, 2);
+        assert_eq!(report.added_conversations, 2);
+        assert_eq!(report.updated_session_rows, 2);
+        assert_eq!(fs::read(source.join("source-blank/index.json")).unwrap(), b"");
+        assert_eq!(fs::read(target.join("target-with-history/index.json")).unwrap(), b"");
+        assert_eq!(fs::read(source.join("source-blank/original/messages/message.json")).unwrap(), b"original-body");
+        assert_eq!(fs::read(target.join("target-with-history/existing/messages/message.json")).unwrap(), b"target-body");
+        assert!(!target.join("target-with-history/blocked").exists());
+        assert_eq!(fs::read(backup.join("history/CodeBuddyIDE/target-empty/index.json")).unwrap(), b"");
+        let repaired = read_workspace_index(&target.join("target-empty/index.json"), false).unwrap().unwrap();
+        assert_eq!(repaired["current"], "recovered");
+        assert_eq!(fs::read(target.join("target-empty/recovered/messages/message.json")).unwrap(), b"recovered");
+        assert_eq!(fs::read(target.join("healthy/healthy/messages/message.json")).unwrap(), b"healthy");
+        let conn = Connection::open(&db).unwrap();
+        for (id, owner) in [
+            ("original", "source"), ("blocked", "source"), ("recovered", "target"),
+            ("healthy", "target"), ("existing", "target"),
+        ] {
+            let value: String = conn.query_row("SELECT value FROM ItemTable WHERE key=?1", [format!("session:{id}")], |row| row.get(0)).unwrap();
+            assert_eq!(serde_json::from_str::<Value>(&value).unwrap()["userId"], owner);
+        }
+        drop(conn);
+        let retry = transfer_codebuddy_history(&extension, &temp.0, "source", "target", &temp.0.join("retry-backup")).unwrap();
+        assert_eq!(retry.skipped_empty_index_workspaces, 2);
+        assert_eq!(retry.added_conversations, 0);
+        assert_eq!(retry.updated_session_rows, 0);
+    }
+
+    #[test]
+    fn nonempty_invalid_workspace_index_still_returns_the_parse_error() {
+        let temp = TestDir::new();
+        let extension = temp.0.join("CodeBuddyExtension/Data");
+        let workspace = extension.join("source/CodeBuddyIDE/source/history/workspace");
+        fs::create_dir_all(&workspace).unwrap();
+        fs::write(workspace.join("index.json"), b"{").unwrap();
+        let error = transfer_codebuddy_history(
+            &extension, &temp.0, "source", "target", &temp.0.join("backup"),
+        ).unwrap_err();
+        assert!(error.contains("解析 CodeBuddy 工作区索引失败"));
+        assert!(!extension.join("target").exists());
     }
 
     #[test]

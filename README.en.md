@@ -7,7 +7,7 @@ English · [Portuguese (BR)](README.pt-br.md) · [简体中文](README.md)
 [![GitHub release](https://img.shields.io/github/v/release/jlcodes99/cockpit-tools?style=flat)](https://github.com/jlcodes99/cockpit-tools/releases)
 [![GitHub issues](https://img.shields.io/github/issues/jlcodes99/cockpit-tools)](https://github.com/jlcodes99/cockpit-tools/issues)
 
-A **universal AI IDE account management tool**, currently supporting **Antigravity IDE**, **Codex**, **GitHub Copilot**, **Windsurf**, **Kiro**, **Cursor**, **Grok CLI**, **CodeBuddy**, **CodeBuddy CN**, **Qoder**, **Trae**, **TRAE SOLO**, **Trae CN**, **TRAE SOLO CN**, **Zed**, and **ZCode**, with multi-instance parallel workflows.
+A **universal AI IDE account management tool**, currently supporting **Antigravity IDE**, **Codex**, **GitHub Copilot**, **Windsurf**, **Kiro**, **Cursor**, **Grok CLI**, **CodeBuddy**, **CodeBuddy CN**, **Qoder**, **Trae**, **TraeWork**, **Trae CN**, **TraeWork CN**, **Zed**, and **ZCode**, with multi-instance parallel workflows.
 
 > Designed to help users efficiently manage multiple AI IDE accounts, this tool supports one-click switching, quota monitoring, wake-up tasks, and multi-instance parallel runs, helping you fully utilize resources from different accounts.
 
@@ -54,7 +54,7 @@ A **universal AI IDE account management tool**, currently supporting **Antigravi
 
 A brand new visual dashboard providing a one-stop status overview:
 
-- **Sixteen-Platform Support**: Simultaneously displays Antigravity IDE, Codex, GitHub Copilot, Windsurf, Kiro, Cursor, Grok CLI, CodeBuddy, CodeBuddy CN, Qoder, Trae, TRAE SOLO, Trae CN, TRAE SOLO CN, Zed, and ZCode account status
+- **Sixteen-Platform Support**: Simultaneously displays Antigravity IDE, Codex, GitHub Copilot, Windsurf, Kiro, Cursor, Grok CLI, CodeBuddy, CodeBuddy CN, Qoder, Trae, TraeWork, Trae CN, TraeWork CN, Zed, and ZCode account status
 - **Quota Monitoring**: Real-time view of remaining quotas and reset times for each model
 - **Quick Actions**: One-click refresh, one-click wake-up
 - **Visual Progress**: Intuitive progress bars showing quota consumption
@@ -239,7 +239,7 @@ Manage Qoder instances with isolated profiles and lifecycle controls.
 - **Account Import**: supports local import and JSON import
 - **Quota View**: shows raw plan values, USD spent/total budget, and reset time
 - **Batch Operations**: supports tags, filters, export, and batch delete/refresh
-- **Trae Suite**: supports local import and switch injection for the default clients of Trae, TRAE SOLO, Trae CN, and TRAE SOLO CN; they appear independently by default and can be grouped manually in Top Layout
+- **Trae Suite**: supports local import and switch injection for the default clients of Trae, TraeWork, Trae CN, and TraeWork CN; they appear independently by default and can be grouped manually in Top Layout
 - **Switch Injection**: supports writing back local auth state using each client's real on-disk rules and launching the target client
 
 #### 11.1 Trae Multi-Instance
@@ -294,6 +294,7 @@ These are the most common security questions answered directly:
   - `~/.codex`: official Codex current login `auth.json`
   - `~/.grok`: the official Grok CLI default instance and current sign-in `auth.json`
   - `~/.zcode/v2`: ZCode encrypted credentials for the current official sign-in and quota cache
+  - Saved 2FA entries and query history are encrypted in `mfa_vault.sqlite` under the application data directory. Saved APIKEY.FUN keys are stored in the encrypted `apikey_fun_vault.json` file. The encryption material lives in a private key file in the same application data directory, and old WebView data is retained during migration.
   - system application data under `com.jlcodes.cockpit-tools`: host WebView state and related data; historical `com.antigravity.cockpit-tools` directories are used only for legacy data imports
 - **Grok CLI credentials are not encrypted**: access and refresh tokens are stored locally as plaintext JSON and rely primarily on operating-system account isolation and local file permissions. On Unix systems, credential directories are set to `0700` and credential files to `0600`. Redacted exports contain no tokens and cannot serve as sign-in backups.
 - **WebSocket is local-only by default**: binds to `127.0.0.1`, default port `19528`; you can disable it or change the port in Settings.
@@ -318,19 +319,6 @@ To switch the Antigravity desktop app and the `agy` CLI that shares its system c
 - `launch_on_switch`: only supported with `"antigravity"`, defaults to `false`; the client is neither closed nor started, and a running desktop app may use the new account on its next start. Explicit `true` uses the same close/write/relaunch flow as the desktop UI. Omit this field for IDE requests to keep using existing settings.
 - `request_id`: optional; when supplied, receives the corresponding `response.success` or `response.error`. Unsupported targets, credential-write failures and concurrent desktop switches return errors instead of success. A launch failure after a successful credential switch is explicitly reported as a launch error. Invalid targets return `WS_SWITCH_TARGET_INVALID`; supplying a launch policy for an IDE request returns `WS_SWITCH_LAUNCH_POLICY_INVALID`. Concurrent desktop switches return `ANTIGRAVITY_SWITCH_BUSY`, and account-preparation timeouts return `ANTIGRAVITY_SWITCH_PREPARATION_TIMEOUT`.
 - `ANTIGRAVITY_SWITCH_STATE_SAVE_FAILED` means the client credential changed but saving Tools' current-account state failed; retry the switch. A shared sign-in updates the default bindings for both clients.
-
-### OpenCode conversation identity on the native Codex API
-
-On HTTP Responses, Chat Completions and Completions endpoints, an unambiguous
-`x-opencode-session` supplies a deterministic, authenticated-caller-scoped
-Session/Thread fallback only when explicit identity or continuation is absent.
-Existing Session ID Mapping and continuation ownership checks remain in charge;
-the header is not authentication, an account selector or a cache-hit guarantee.
-An explicit `conversation_id` header, case-insensitively and even when empty or
-invalid, suppresses this fallback without changing native validation or errors.
-Duplicate/ambiguous identity inputs disable only the fallback, preserving native
-validation. WebSockets, compact and unrelated API endpoints are unchanged. No
-additional setting is required.
 
 ## Settings Guide (Beginner Friendly)
 

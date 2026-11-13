@@ -15,12 +15,12 @@ function harness(overrides: Record<string, any> = {}) {
   const context = vm.createContext({
     getCodexSwitchOrLaunchBlockedReason: () => null,
     isCodexWebSessionAccount: () => false,
-    isDeepSeekAccount: (account: any) => account.api_provider_id === 'deepseek',
+    isCodexApiKeyAccount: (account: any) => account.api_provider_id === 'deepseek' || account.auth_mode === 'apikey',
     updateAccountInstanceAccess: async (...args: any[]) => {
       calls.updates.push(args);
       return { id: args[0], api_provider_id: 'deepseek', api_instance_access_mode: args[1] };
     },
-    resolveDeepSeekBindAccountId: (account: any) => `${account.id}:${account.api_instance_access_mode}`,
+    resolveCodexProviderBindAccountId: (account: any) => account.api_instance_access_mode ? `${account.id}:${account.api_instance_access_mode}` : account.id,
     buildCodexAccountPresentation: (account: any) => ({ displayName: account.id }),
     openCodexCliLaunchModal: (...args: any[]) => { calls.cli.push(args); },
     restoreLaunchPreviewInstanceId: () => {},
@@ -64,13 +64,20 @@ test('CLI from an account list still opens the preview before preparing CLI', as
 test('DeepSeek CLI uses the confirmed access mode and image configuration', async () => {
   const h = harness();
   await h.context.handleLaunchCodexCli({ id: 'deepseek-account', api_provider_id: 'deepseek' }, {
-    deepSeekAccessMode: 'gateway', imageGenerationAccountIds: ['image-account'],
+    providerAccessMode: 'gateway', imageGenerationAccountIds: ['image-account'],
     imageGenerationAccountModels: { 'image-account': 'gpt-image-2.5' },
   });
   assert.deepEqual(h.calls.updates, [['deepseek-account', 'gateway', null,
     ['image-account'], { 'image-account': 'gpt-image-2.5' }]]);
   assert.equal(h.calls.cli[0][3], 'deepseek-account:gateway');
   assert.deepEqual(h.calls.preview, []);
+});
+
+test('a third-party CLI preview saves direct access without rewriting image settings', async () => {
+  const h = harness();
+  await h.context.handleLaunchCodexCli({ id: 'relay-account', auth_mode: 'apikey' }, { providerAccessMode: 'direct' });
+  assert.deepEqual(h.calls.updates, [['relay-account', 'direct', null, undefined, undefined]]);
+  assert.equal(h.calls.cli[0][3], 'relay-account:direct');
 });
 
 test('preview CLI errors propagate to the current modal instead of the hidden page', async () => {
@@ -97,7 +104,7 @@ test('failed DeepSeek settings save prevents opening CLI and can be retried', as
     return { id: 'deepseek-account', api_provider_id: 'deepseek', api_instance_access_mode: 'gateway' };
   } });
   const account = { id: 'deepseek-account', api_provider_id: 'deepseek' };
-  const options = { deepSeekAccessMode: 'gateway' };
+  const options = { providerAccessMode: 'gateway' };
   await assert.rejects(h.context.handleLaunchCodexCli(account, options), /disk full/);
   assert.deepEqual(h.calls.cli, []);
   assert.deepEqual(h.calls.errors, []);

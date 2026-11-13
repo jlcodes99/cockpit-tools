@@ -4,6 +4,7 @@
  * 翻译文件检查脚本
  * - 检测不同语言翻译文件之间的 key 差异
  * - 检测非英语语言是否复用英文值（同 key）
+ * - 检测源码中的静态翻译键（包括带默认文案的引用）是否已翻译
  */
 
 const fs = require('fs');
@@ -186,9 +187,9 @@ function isAllowedEnglishReuse(key, value) {
     'Windsurf',
     'Devin',
     'Trae',
-    'TRAE SOLO',
+    'TraeWork',
     'Trae CN',
-    'TRAE SOLO CN',
+    'TraeWork CN',
     'Codex CLI',
     '2FA',
     'Crontab',
@@ -655,16 +656,35 @@ function main() {
   log(`✅ 详细报告已生成: ${reportPath}\n`, 'green');
 
   log('🔎 无回退文案的源码翻译引用检查', 'bright');
-  const referenceIssues = findMissingTranslationReferences(
-    [...collectRequiredTranslationReferences(path.join(__dirname, '../src')), ...collectBackendTranslationReferences(path.join(__dirname, '..'))], localeData,
+  const missingReferences = findMissingTranslationReferences(
+    [...collectRequiredTranslationReferences(path.join(__dirname, '../src'), true), ...collectBackendTranslationReferences(path.join(__dirname, '..'))], localeData,
   );
+  const referenceIssues = missingReferences.filter(issue => !issue.hasDefault);
   for (const issue of referenceIssues.slice(0, 20)) {
     log(`❌ ${path.relative(path.join(__dirname, '..'), issue.file)}:${issue.line} ${issue.key} 缺失于 ${issue.languages.join(', ')}`, 'red');
   }
   if (!referenceIssues.length) log('✅ 源码中的静态必需翻译键均已定义。', 'green');
   else log(`❌ 共 ${referenceIssues.length} 处源码引用缺少翻译（即使所有语言同时缺失也会阻断）。`, 'red');
 
-  const hasBlockingIssues = referenceIssues.length > 0 || differences.size > 0
+  const fallbackIssues = [...new Map(missingReferences.filter(issue => issue.hasDefault)
+    .map(issue => [issue.key, issue])).values()];
+  if (fallbackIssues.length) {
+    log(`❌ 带默认文案的静态引用中有 ${fallbackIssues.length} 个键缺少翻译。`, 'red');
+    for (const issue of fallbackIssues.slice(0, 20)) {
+      log(`  ${path.relative(path.join(__dirname, '..'), issue.file)}:${issue.line} ${issue.key} 缺失于 ${issue.languages.join(', ')}`, 'red');
+    }
+    const missingRows = fallbackIssues.map((issue) =>
+      `| \`${issue.key}\` | \`${path.relative(path.join(__dirname, '..'), issue.file)}:${issue.line}\` | ${issue.languages.join(', ')} |`);
+    fs.appendFileSync(reportPath, [
+      '', '## 带默认文案的缺失翻译', '', '| 翻译键 | 引用位置 | 缺失语言 |', '| --- | --- | --- |',
+      ...missingRows, '',
+    ].join('\n'));
+  } else {
+    log('✅ 带默认文案的静态引用均有翻译。', 'green');
+  }
+
+  const hasBlockingIssues = referenceIssues.length > 0 || fallbackIssues.length > 0
+    || differences.size > 0
     || englishReuseIssues.length > 0
     || (FAIL_ON_PLATFORM_COMMON_DUP && platformCommonIssues.length > 0);
   if (hasBlockingIssues) {

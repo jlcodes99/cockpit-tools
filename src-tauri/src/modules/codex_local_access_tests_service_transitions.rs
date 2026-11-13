@@ -10,6 +10,44 @@ fn disable_restores_profiles_even_when_gateway_shutdown_fails() {
 }
 
 #[tokio::test]
+async fn native_startup_recovers_from_an_occupied_configured_port() {
+    let _env_lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _env = LocalAccessTestDataGuard::new("native-gateway-startup-port-recovery");
+    let occupied = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let original_port = occupied.local_addr().unwrap().port();
+    super::with_chatgpt_plan_test_runtime(|| async {
+        let mut original = test_local_access_collection(Vec::new());
+        original.gateway_mode = CodexLocalAccessGatewayMode::Native;
+        original.port = original_port;
+        super::save_collection_to_disk(&original).unwrap();
+        {
+            let mut runtime = super::gateway_runtime().lock().await;
+            runtime.loaded = true;
+            runtime.collection = Some(original.clone());
+        }
+
+        let result = super::ensure_gateway_matches_runtime().await;
+        let (running, active_port) = {
+            let runtime = super::gateway_runtime().lock().await;
+            (runtime.running, runtime.actual_port)
+        };
+        let saved = super::load_collection_from_disk().unwrap().unwrap();
+        let old_port_still_listening =
+            std::net::TcpStream::connect(("127.0.0.1", original_port)).is_ok();
+        super::stop_gateway().await;
+
+        result.unwrap();
+        assert!(running);
+        assert_ne!(saved.port, original_port);
+        assert_eq!(active_port, Some(saved.port));
+        assert_eq!(saved.api_key, original.api_key);
+        assert!(old_port_still_listening);
+    }).await;
+}
+
+#[tokio::test]
 async fn port_recovery_preserves_an_unrelated_listener_and_switches_to_a_new_port() {
     let _env_lock = crate::modules::test_support::env_lock()
         .lock()

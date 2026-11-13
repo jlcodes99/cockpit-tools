@@ -1,17 +1,28 @@
 //! Account-scoped reset-card rules and a durable redemption journal.
-use super::{atomic_write, codex_account, codex_quota, config, logger};
+use super::{codex_account, codex_quota, config, logger};
 use crate::models::codex::CodexQuota;
-use codex_quota::ResetCreditConsumeOutcome;
+use codex_quota::{ResetCreditConsumeOutcome, ResetCreditReceipt};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex, OnceLock};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
+use tauri_plugin_notification::NotificationExt;
 
-const FILE: &str = "codex_reset_automation.json";
+#[path = "codex_reset_journal_store.rs"]
+mod journal;
+#[path = "codex_reset_journal_legacy.rs"]
+mod legacy;
+#[path = "codex_reset_usage_history.rs"]
+mod usage_history;
+pub use usage_history::UsagePage;
+
+pub(crate) const FILE: &str = "codex_reset_automation.json";
 const EVENT: &str = "codex:reset-automation-updated";
 const AUTOMATIC_COOLDOWN_MS: i64 = 30 * 60 * 1_000;
+const NO_OP_RETRY_SECONDS: i64 = 120;
+const FINAL_EXPIRY_MINUTE: i64 = 60;
 static STORAGE: Mutex<()> = Mutex::new(());
 static ACTIVE: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 static APP: OnceLock<AppHandle> = OnceLock::new();
@@ -61,6 +72,100 @@ struct Pending {
     request_id: String,
     reason: String,
     evidence: Option<String>,
+    #[serde(default)]
+    unconfirmed_reported: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    context: Option<AttemptContext>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct AttemptContext {
+    rule: Rule,
+    before: ResetObservation,
+}
+
+impl AttemptContext {
+    fn retry_cutoff(&self, reason: &str, now: i64) -> Option<i64> {
+        let final_expiry_minute = reason == "expiry"
+            && self
+                .before
+                .next_expires_at
+                .is_some_and(|at| at.saturating_sub(now) <= FINAL_EXPIRY_MINUTE);
+        (!final_expiry_minute).then_some(now - NO_OP_RETRY_SECONDS)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ResetObservation {
+    available_count: Option<i64>,
+    next_expires_at: Option<i64>,
+    available_card_ids: Vec<String>,
+    hourly: Option<WindowObservation>,
+    weekly: Option<WindowObservation>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+struct WindowObservation {
+    remaining: i32,
+    resets_at: Option<i64>,
+}
+
+impl ResetObservation {
+    fn before(
+        cards: &codex_quota::CodexResetCreditsSnapshot,
+        quota: Option<&CodexQuota>,
+        now: i64,
+    ) -> Self {
+        let mut available_card_ids: Vec<_> = cards
+            .credits
+            .iter()
+            .filter(|card| {
+                card.status.as_deref() == Some("available")
+                    && card.expires_at.is_none_or(|at| at > now)
+            })
+            .filter_map(|card| card.id.clone())
+            .collect();
+        available_card_ids.sort_unstable();
+        available_card_ids.dedup();
+        Self {
+            available_count: cards.available_count,
+            next_expires_at: cards.next_expires_at,
+            available_card_ids,
+            ..Self::from_quota(quota, now)
+        }
+    }
+
+    fn from_quota(quota: Option<&CodexQuota>, now: i64) -> Self {
+        let window = |remaining, present, resets_at: Option<i64>| {
+            (present != Some(false)
+                && (present == Some(true) || resets_at.is_some())
+                && resets_at.is_none_or(|at| at > now)
+                && (0..=100).contains(&remaining))
+            .then_some(WindowObservation {
+                remaining,
+                resets_at,
+            })
+        };
+        Self {
+            available_count: quota.and_then(|q| q.reset_credits_available),
+            next_expires_at: None,
+            available_card_ids: Vec::new(),
+            hourly: quota.and_then(|q| {
+                window(
+                    q.hourly_percentage,
+                    q.hourly_window_present,
+                    q.hourly_reset_time,
+                )
+            }),
+            weekly: quota.and_then(|q| {
+                window(
+                    q.weekly_percentage,
+                    q.weekly_window_present,
+                    q.weekly_reset_time,
+                )
+            }),
+        }
+    }
 }
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -72,6 +177,9 @@ struct Document {
     last_evidence: HashMap<String, String>,
     last_automatic_success_ms: Option<HashMap<String, i64>>,
     records: Vec<Record>,
+    // Only live redemption transactions populate this. Legacy records are not backfilled.
+    #[serde(skip)]
+    usage_updates: Vec<usage_history::UsageUpdate>,
 }
 impl Document {
     fn automatic_successes_mut(&mut self) -> &mut HashMap<String, i64> {
@@ -118,41 +226,47 @@ pub(crate) fn message(key: &str) -> String {
 fn path() -> Result<PathBuf, String> {
     Ok(config::get_data_dir()?.join(FILE))
 }
-fn read(path: &Path) -> Result<Document, String> {
-    match std::fs::read(path) {
-        Ok(bytes) => {
-            serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", message("storageError")))
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Document::default()),
-        Err(e) => Err(format!("{}: {e}", message("storageError"))),
-    }
-}
-fn update_at<T>(
-    path: &Path,
-    edit: impl FnOnce(&mut Document) -> Result<T, String>,
-) -> Result<T, String> {
-    let _guard = STORAGE.lock().map_err(|_| message("storageError"))?;
-    let mut d = read(path)?;
-    d.automatic_successes_mut();
-    d.revision = d
-        .revision
-        .checked_add(1)
-        .ok_or_else(|| message("storageError"))?;
-    let result = edit(&mut d)?;
-    let bytes = serde_json::to_string_pretty(&d).map_err(|e| e.to_string())?;
-    atomic_write::write_string_atomic(path, &bytes)?;
-    Ok(result)
-}
-fn update<T>(edit: impl FnOnce(&mut Document) -> Result<T, String>) -> Result<T, String> {
-    let result = update_at(&path()?, edit)?;
+
+fn publish_update() {
     if let Some(app) = APP.get() {
         let _ = app.emit(EVENT, ());
     }
+}
+
+fn notify_redemption(outcome_key: &str) {
+    let Some(app) = APP.get() else {
+        return;
+    };
+    let locale = config::get_user_config().language;
+    let title = super::i18n::translate(&locale, "codex.resetAutomation.title", &[]);
+    let body = super::i18n::translate(&locale, outcome_key, &[]);
+    if let Err(error) = app.notification().builder().title(title).body(body).show() {
+        logger::log_warn(&format!(
+            "[Codex Reset Automation] notification failed: {error}"
+        ));
+    }
+}
+fn update<T>(
+    account_id: &str,
+    edit: impl FnOnce(&mut Document) -> Result<T, String>,
+) -> Result<T, String> {
+    let path = path()?;
+    let result = journal::update_account(&path, account_id, edit)?;
+    journal::schedule(&path);
+    publish_update();
+    Ok(result)
+}
+fn update_rules<T>(edit: impl FnOnce(&mut Document) -> Result<T, String>) -> Result<T, String> {
+    let path = path()?;
+    let result = journal::update_rules(&path, edit)?;
+    journal::schedule(&path);
+    publish_update();
     Ok(result)
 }
 pub fn view() -> Result<View, String> {
-    let _guard = STORAGE.lock().map_err(|_| message("storageError"))?;
-    Ok(read(&path()?)?.into())
+    let path = path()?;
+    journal::schedule(&path);
+    Ok(journal::read(&path, None, true)?.into())
 }
 fn validate(rule: &Rule) -> Result<(), String> {
     if rule.expiry_enabled && (rule.before_seconds == 0 || rule.before_seconds > i64::MAX as u64) {
@@ -222,13 +336,13 @@ pub fn save_public(
         // The account mutation lock keeps deletion/import from changing the target set
         // between the authoritative index snapshot and the atomic settings write.
         codex_account::with_reset_automation_account_ids(|ids| {
-            update(|d| {
+            update_rules(|d| {
                 set_public_for_accounts(d, rule, &expected, ids, &expected_accounts)?;
                 Ok(d.clone().into())
             })
         })
     } else {
-        update(|d| {
+        update_rules(|d| {
             set_public(d, rule, &expected)?;
             Ok(d.clone().into())
         })
@@ -239,7 +353,7 @@ pub fn save_account(id: &str, rule: AccountRule, expected: AccountRule) -> Resul
     if codex_account::load_account(id).is_none() {
         return Err(message("accountMissing"));
     }
-    update(|d| {
+    update_rules(|d| {
         set_account(d, id, rule, &expected)?;
         Ok(d.clone().into())
     })
@@ -327,7 +441,7 @@ fn record(d: &mut Document, id: &str, reason: &str, status: &str, detail: Option
             detail,
         },
     );
-    d.records.truncate(100);
+    journal::retain_activity_records(&mut d.records);
 }
 pub(crate) struct Lease(String);
 impl Drop for Lease {
@@ -363,22 +477,32 @@ fn begin_redemption(
     identity: &str,
     reason: &str,
     before: Option<String>,
+    context: Option<AttemptContext>,
 ) -> Pending {
     if let Some(pending) = d
         .pending
         .get(id)
         .filter(|pending| pending.identity == identity)
     {
-        return pending.clone();
+        let pending = pending.clone();
+        d.usage_updates.push(usage_history::UsageUpdate::new(
+            id, &pending, "pending", None,
+        ));
+        return pending;
     }
     let pending = Pending {
         identity: identity.into(),
         request_id: uuid::Uuid::new_v4().to_string(),
         reason: reason.into(),
         evidence: before,
+        unconfirmed_reported: false,
+        context,
     };
     d.pending.insert(id.into(), pending.clone());
     record(d, id, reason, "pending", None);
+    d.usage_updates.push(usage_history::UsageUpdate::new(
+        id, &pending, "pending", None,
+    ));
     pending
 }
 fn finish_redemption(
@@ -386,15 +510,41 @@ fn finish_redemption(
     id: &str,
     pending: &Pending,
     result: Result<ResetCreditConsumeOutcome, String>,
-) -> Result<(), String> {
-    if d.pending
-        .get(id)
-        .is_none_or(|current| current.request_id != pending.request_id)
-    {
-        return Err(message("conflict"));
-    }
+    receipt: Option<ResetCreditReceipt>,
+) -> Result<Option<&'static str>, String> {
+    let current = d
+        .pending
+        .get_mut(id)
+        .filter(|current| current.request_id == pending.request_id)
+        .ok_or_else(|| message("conflict"))?;
     // A known no-op closes this attempt without marking the card used. An
     // ambiguous response or transport failure keeps the same idempotency key.
+    let (outcome, notice) = match &result {
+        Ok(ResetCreditConsumeOutcome::Reset) => ("reset", Some("codex.resetHistory.used")),
+        Ok(ResetCreditConsumeOutcome::AlreadyRedeemed) => (
+            "already_redeemed",
+            Some("codex.resetHistory.alreadyRedeemed"),
+        ),
+        Ok(ResetCreditConsumeOutcome::NothingToReset) => (
+            "nothing_to_reset",
+            Some("codex.resetHistory.nothingToReset"),
+        ),
+        Ok(ResetCreditConsumeOutcome::NoCredit) => {
+            ("no_credit", Some("codex.resetHistory.noCredit"))
+        }
+        Err(_) => (
+            "unconfirmed",
+            (!current.unconfirmed_reported).then_some("codex.resetHistory.unconfirmed"),
+        ),
+    };
+    let notice = notice.filter(|_| is_automatic_reason(&pending.reason));
+    if result.is_err() && notice.is_some() {
+        current.unconfirmed_reported = true;
+    }
+    let mut usage =
+        usage_history::UsageUpdate::new(id, pending, outcome, result.as_ref().err().cloned());
+    usage.receipt = receipt;
+    d.usage_updates.push(usage);
     if result.is_ok() {
         d.pending.remove(id);
     }
@@ -415,29 +565,37 @@ fn finish_redemption(
         if result.is_ok() { "success" } else { "failed" },
         result.err(),
     );
-    Ok(())
+    Ok(notice)
 }
 async fn redeem(
     id: &str,
     reason: &str,
     before: Option<String>,
-    expected: Option<(Rule, String)>,
-) -> Result<(), String> {
+    expected: Option<(AttemptContext, String)>,
+) -> Result<Pending, String> {
     let account_id = id.to_string();
     let reason = reason.to_string();
     let pending = blocking(move || {
         let account =
             codex_account::load_account(&account_id).ok_or_else(|| message("accountMissing"))?;
         let identity = account_identity(&account);
-        update(|d| {
+        update(&account_id, |d| {
             // A rule changed or was disabled while fresh network evidence was loading.
             // Manual redemption has no automatic-rule prerequisites.
-            if expected.as_ref().is_some_and(|(rule, owner)| {
-                effective(d, &account_id) != Some(rule) || owner != &identity
+            if expected.as_ref().is_some_and(|(context, owner)| {
+                effective(d, &account_id) != Some(&context.rule) || owner != &identity
             }) {
                 return Err(message("conflict"));
             }
-            Ok(begin_redemption(d, &account_id, &identity, &reason, before))
+            let context = expected.map(|(context, _)| context);
+            Ok(begin_redemption(
+                d,
+                &account_id,
+                &identity,
+                &reason,
+                before,
+                context,
+            ))
         })
     })
     .await?;
@@ -452,13 +610,32 @@ async fn redeem(
     .await
     .unwrap_or_else(|_| Err(message("timeout")));
     let id = id.to_string();
+    let receipt = result
+        .as_ref()
+        .ok()
+        .and_then(|response| response.receipt.clone());
+    let result = result.map(|response| response.outcome);
     let saved_result = result.clone();
-    blocking(move || update(|d| finish_redemption(d, &id, &pending, saved_result))).await?;
-    result.and_then(ResetCreditConsumeOutcome::into_result)
+    let (pending, notice) = blocking(move || {
+        let notice = update(&id, |d| {
+            finish_redemption(d, &id, &pending, saved_result, receipt)
+        })?;
+        Ok((pending, notice))
+    })
+    .await?;
+    if let Some(outcome_key) = notice {
+        notify_redemption(outcome_key);
+    }
+    result.and_then(ResetCreditConsumeOutcome::into_result)?;
+    Ok(pending)
 }
 pub async fn consume_manual(id: &str) -> Result<(), String> {
     let _lease = acquire(id)?.ok_or_else(|| message("busy"))?;
-    redeem(id, "manual", None, None).await
+    redeem(id, "manual", None, None).await.map(|_| ())
+}
+pub fn usage_history(id: &str, cursor: Option<i64>) -> Result<UsagePage, String> {
+    let account = codex_account::load_account(id).ok_or_else(|| message("accountMissing"))?;
+    journal::usage_history(&path()?, id, &account_identity(&account), cursor)
 }
 async fn check_account(id: &str) -> Result<(), String> {
     let Some(_lease) = acquire(id)? else {
@@ -469,7 +646,7 @@ async fn check_account(id: &str) -> Result<(), String> {
         let Some(_resource) = super::background_maintenance::try_resource() else {
             return Ok(None);
         };
-        let d = read(&path()?)?;
+        let d = journal::read(&path()?, Some(&id_owned), false)?;
         let Some(rule) =
             automatic_rule(&d, &id_owned, chrono::Utc::now().timestamp_millis()).cloned()
         else {
@@ -503,7 +680,8 @@ async fn check_account(id: &str) -> Result<(), String> {
     let id_owned = id.to_string();
     let observed_copy = observed.clone();
     let reason = blocking(move || {
-        let d = read(&path()?)?;
+        let journal_path = path()?;
+        let d = journal::read(&journal_path, Some(&id_owned), false)?;
         let current =
             codex_account::load_account(&id_owned).ok_or_else(|| message("accountMissing"))?;
         if account_identity(&current) != identity {
@@ -515,30 +693,92 @@ async fn check_account(id: &str) -> Result<(), String> {
         if d.last_evidence.get(&id_owned) == Some(&observed_copy) {
             return Ok(None);
         }
-        Ok(
-            trigger(rule, quota.as_ref(), &cards, chrono::Utc::now().timestamp())
-                .map(|reason| (reason.to_string(), (rule.clone(), identity))),
-        )
+        let now = chrono::Utc::now().timestamp();
+        let Some(reason) = trigger(rule, quota.as_ref(), &cards, now) else {
+            return Ok(None);
+        };
+        let context = AttemptContext {
+            rule: rule.clone(),
+            before: ResetObservation::before(&cards, quota.as_ref(), now),
+        };
+        if let Some(cutoff) = context.retry_cutoff(reason, now) {
+            if !d.pending.contains_key(&id_owned)
+                && journal::recent_no_op(
+                    &journal_path,
+                    &id_owned,
+                    &identity,
+                    reason,
+                    &context,
+                    cutoff,
+                )?
+            {
+                return Ok(None);
+            }
+        }
+        Ok(Some((reason, (context, identity))))
     })
     .await?;
-    if let Some((reason, rule)) = reason {
-        redeem(id, &reason, Some(observed), Some(rule)).await?;
+    if let Some((reason, expected)) = reason {
+        let pending = redeem(id, reason, Some(observed), Some(expected)).await?;
+        if pending.context.is_some() {
+            match tokio::time::timeout(
+                Duration::from_secs(8),
+                capture_after_redemption(id, pending),
+            )
+            .await
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => logger::log_warn(&format!(
+                    "[Codex Reset Automation] after-use observation failed: account={id}, {error}"
+                )),
+                Err(_) => logger::log_warn(&format!(
+                    "[Codex Reset Automation] after-use observation timed out: account={id}"
+                )),
+            }
+        }
         Box::pin(codex_quota::refresh_account_quota_background(id)).await?;
     }
     Ok(())
+}
+
+async fn capture_after_redemption(id: &str, pending: Pending) -> Result<(), String> {
+    use super::codex_device_restrictions as restrictions;
+    restrictions::ensure_allowed(id, restrictions::QUOTA).await?;
+    let id = id.to_owned();
+    let lookup_id = id.clone();
+    let account = blocking(move || {
+        codex_account::load_account(&lookup_id).ok_or_else(|| message("accountMissing"))
+    })
+    .await?;
+    if account_identity(&account) != pending.identity {
+        return Err(message("conflict"));
+    }
+    // The normal refresh may join a request already in flight or return cached
+    // quota. Record a fresh observation through the same account instead.
+    let quota = codex_quota::fetch_quota(&account).await?.quota;
+    let observed = ResetObservation::from_quota(Some(&quota), chrono::Utc::now().timestamp());
+    blocking(move || journal::store_after_observation(&path()?, &id, &pending, &observed)).await
 }
 pub async fn run(app: AppHandle) {
     if APP.set(app).is_err() {
         return;
     }
     tokio::time::sleep(Duration::from_secs(10)).await;
+    if let Err(error) = blocking(|| {
+        journal::schedule(&path()?);
+        Ok(())
+    })
+    .await
+    {
+        logger::log_warn(&format!("[Codex Reset Automation] {error}"));
+    }
     while !super::app_lifecycle::is_shutdown_started() {
         if super::tray_layout::is_platform_enabled("codex") {
             let ids = blocking(|| {
                 let Some(_resource) = super::background_maintenance::try_resource() else {
                     return Ok(Vec::new());
                 };
-                let d = read(&path()?)?;
+                let d = journal::read(&path()?, None, false)?;
                 if !d.public_rule.enabled
                     && !d
                         .accounts
@@ -546,9 +786,6 @@ pub async fn run(app: AppHandle) {
                         .any(|r| matches!(r, AccountRule::Custom { rule } if rule.enabled))
                 {
                     return Ok(Vec::new());
-                }
-                if d.last_automatic_success_ms.is_none() {
-                    update(|_| Ok(()))?;
                 }
                 Ok(codex_account::load_account_index()
                     .accounts
@@ -581,7 +818,7 @@ pub async fn run(app: AppHandle) {
                                 "[Codex Reset Automation] account={id}, {error}"
                             ));
                             if let Err(storage_error) = blocking(move || {
-                                update(|d| {
+                                update(&id, |d| {
                                     if !d.records.first().is_some_and(|last| {
                                         last.account_id == id
                                             && last.status == "failed"

@@ -1,4 +1,5 @@
 import { MiniMaxCodeQuota } from '../components/minimax/MiniMaxCodeQuota';
+import { useTranslation } from 'react-i18next';
 import { PlatformInstancesContent } from '../components/platform/PlatformInstancesContent';
 import { useMinimaxCodeInstanceStore } from '../stores/useMinimaxCodeInstanceStore';
 import { useMinimaxCodeAccountStore } from '../stores/useMinimaxCodeAccountStore';
@@ -16,6 +17,7 @@ interface MinimaxCodeInstancesContentProps {
 export function MinimaxCodeInstancesContent({
   accountsForSelect,
 }: MinimaxCodeInstancesContentProps = {}) {
+  const { t } = useTranslation();
   const instanceStore = useMinimaxCodeInstanceStore();
   const { accounts: storeAccounts, fetchAccounts } = useMinimaxCodeAccountStore();
   const sourceAccounts = accountsForSelect ?? storeAccounts;
@@ -31,8 +33,7 @@ export function MinimaxCodeInstancesContent({
       renderAccountQuotaPreview={renderMinimaxCodeQuotaPreview}
       renderAccountBadge={(account) => {
         const planBadge = getMinimaxCodePlanBadge(account);
-        const normalizedClass = planBadge.toLowerCase();
-        return planBadge ? <span className={`instance-plan-badge ${normalizedClass}`}>{planBadge}</span> : null;
+        return <span className="tier-badge account-picker-plan free">{planBadge || t('common.unknown')}</span>;
       }}
       getAccountDisplayText={getMinimaxCodeAccountDisplayEmail}
       getAccountSearchText={(account) => `${getMinimaxCodeAccountDisplayEmail(account)} ${getMinimaxCodePlanBadge(account)}`}

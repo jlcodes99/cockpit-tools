@@ -11,6 +11,45 @@
             .unwrap_or_else(|| "--".to_string())
     }
 
+    fn codex_menu_bar_value<'a>(
+        lang: &str,
+        windows: impl IntoIterator<Item = (&'a str, i32)>,
+        remaining_percent: Option<i32>,
+    ) -> String {
+        let mut weekly = None;
+        let mut other = None;
+        for (label, percent) in windows {
+            if label == "Weekly" {
+                weekly.get_or_insert(percent);
+            } else if label != "Code Review" {
+                other.get_or_insert((label, percent));
+            }
+        }
+        let Some(weekly) = weekly else {
+            return menu_bar_value_from_remaining(remaining_percent);
+        };
+        let label = localize_codex_pool_window_label(lang, "Weekly");
+        match other {
+            Some((other_label, percent)) => format!("{other_label} {percent}% · {label} {weekly}%"),
+            None => format!("{label} {weekly}%"),
+        }
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn codex_menu_bar_quota_labels_present_windows_without_inventing_missing_usage() {
+        assert_eq!(
+            codex_menu_bar_value("en", [("5h", 95), ("Weekly", 0)], Some(0)),
+            "5h 95% · Week 0%"
+        );
+        assert_eq!(
+            codex_menu_bar_value("zh-CN", [("Weekly", 140), ("Code Review", 10)], Some(10)),
+            "周 140%"
+        );
+        assert_eq!(codex_menu_bar_value("en", [("5h", 95)], Some(95)), "95%");
+        assert_eq!(codex_menu_bar_value("en", [], None), "--");
+    }
+
     fn is_codex_api_service_current() -> bool {
         let index = modules::codex_account::load_account_index();
         if index
@@ -39,7 +78,7 @@
     ) -> MenuBarStatus {
         // 「API」是类型标签，不是邮箱前缀，不受「显示邮箱前 4 位」开关影响。
         let prefix = "API".to_string();
-        let Some(summary) = codex_api_key_provider_usage(account) else {
+        let Some(summary) = codex_api_key_provider_usage(account).filter(|_| !hide_codex_menu_relay_balance(account)) else {
             return MenuBarStatus {
                 account_prefix: prefix,
                 value_text: "--".to_string(),
@@ -121,29 +160,42 @@
         }
     }
 
-    fn build_codex_api_service_menu_bar_status() -> MenuBarStatus {
+    fn build_codex_api_service_menu_bar_status(lang: &str) -> MenuBarStatus {
         let quota = modules::codex_local_access::menu_bar_api_service_quota();
         MenuBarStatus {
             // 「API」是类型标签，不受邮箱前缀开关影响。
             account_prefix: "API".to_string(),
-            value_text: menu_bar_value_from_remaining(quota.remaining_percent),
+            value_text: codex_menu_bar_value(
+                lang,
+                quota
+                    .windows
+                    .iter()
+                    .map(|window| (window.label.as_str(), window.percentage)),
+                quota.remaining_percent,
+            ),
             remaining_percent: quota.remaining_percent,
         }
     }
 
     fn build_menu_bar_status() -> Option<MenuBarStatus> {
         let config = modules::config::get_user_config();
-        if !config.menu_bar_quota_enabled {
+        if !config.show_tray_icon || !config.menu_bar_quota_enabled {
             return None;
         }
 
-        let platform = PlatformId::from_str(config.menu_bar_quota_platform.trim())
-            .unwrap_or(PlatformId::Codex);
+        let quota_source = config.menu_bar_quota_platform.trim();
+        let claude_cli = quota_source == modules::config::MENU_BAR_QUOTA_CLAUDE_CLI;
+        let platform = if claude_cli {
+            PlatformId::Claude
+        } else {
+            PlatformId::from_str(quota_source).unwrap_or(PlatformId::Codex)
+        };
         let show_prefix = config.menu_bar_show_account_prefix;
+        let lang = normalize_lang(&config.language);
 
         // Codex：当前为 API 服务时，固定展示「API + 池剩余额度」，不回落到普通账号卡片。
         if matches!(platform, PlatformId::Codex) && is_codex_api_service_current() {
-            return Some(build_codex_api_service_menu_bar_status());
+            return Some(build_codex_api_service_menu_bar_status(&lang));
         }
 
         // Codex：当前为 API Key 账号时，展示「API + 供应商剩余额度」。
@@ -155,14 +207,27 @@
             }
         }
 
-        let lang = normalize_lang(&config.language);
-        let (cards, current_account_id, _) = build_platform_cards(platform, &lang);
+        let (cards, current_account_id, _) = if claude_cli {
+            build_claude_cards(&lang, false)
+        } else {
+            build_platform_cards(platform, &lang)
+        };
         let card = current_account_id
             .as_deref()
             .and_then(|id| cards.iter().find(|card| card.id == id))
             .or_else(|| cards.first());
 
         let remaining_percent = card.and_then(|card| card.remaining_percent);
+        let value_text = match (platform, card) {
+            (PlatformId::Codex, Some(card)) => codex_menu_bar_value(
+                &lang,
+                card.quota_rows
+                    .iter()
+                    .filter_map(|row| row.progress.map(|percent| (row.label.as_str(), percent))),
+                remaining_percent,
+            ),
+            _ => menu_bar_value_from_remaining(remaining_percent),
+        };
         Some(MenuBarStatus {
             account_prefix: if show_prefix {
                 card.map(|card| menu_bar_account_prefix(&card.title))
@@ -170,7 +235,7 @@
             } else {
                 String::new()
             },
-            value_text: menu_bar_value_from_remaining(remaining_percent),
+            value_text,
             remaining_percent,
         })
     }
@@ -207,6 +272,9 @@
 
         app.clone()
             .run_on_main_thread(move || {
+                if !modules::config::get_user_config().show_tray_icon {
+                    return;
+                }
                 let Some(tray) = app.tray_by_id(TRAY_ID) else {
                     return;
                 };
@@ -545,6 +613,7 @@
             }
             "quit" => {
                 if let Some(app) = crate::get_app_handle() {
+                    modules::floating_card_window::request_app_exit();
                     app.exit(0);
                 }
             }
@@ -873,6 +942,14 @@
             .and_then(|raw| json_path(Some(raw), &["provider_usage"]))
     }
 
+    fn hide_codex_menu_relay_balance(account: &crate::models::codex::CodexAccount) -> bool {
+        modules::codex_quota::relay_balance_disabled()
+            && (modules::codex_quota::account_relay_balance_disabled(account)
+                || codex_api_key_provider_usage(account).is_some_and(|summary| {
+                    matches!(summary.get("mode").and_then(Value::as_str), Some("new_api" | "sub2api"))
+                }))
+    }
+
     fn codex_api_key_usage_detail<'a>(summary: &'a Value, key: &str) -> Option<&'a Value> {
         summary
             .get("details")
@@ -901,6 +978,9 @@
         lang: &str,
         account: &crate::models::codex::CodexAccount,
     ) -> Vec<QuotaRow> {
+        if hide_codex_menu_relay_balance(account) {
+            return Vec::new();
+        }
         let Some(summary) = codex_api_key_provider_usage(account) else {
             return vec![make_text_row(
                 translate_or(lang, "common.shared.quota.noData", "No quota data", &[]),
@@ -1516,15 +1596,95 @@
             .collect()
     }
 
+    #[derive(serde::Deserialize)]
+    struct AntigravityQuotaWindow {
+        id: String,
+        model: String,
+        weekly: bool,
+        aliases: Vec<String>,
+    }
+
+    fn antigravity_quota_windows() -> &'static [AntigravityQuotaWindow] {
+        static WINDOWS: std::sync::OnceLock<Vec<AntigravityQuotaWindow>> = std::sync::OnceLock::new();
+        WINDOWS.get_or_init(|| {
+            serde_json::from_str(include_str!("../../../src/utils/antigravityQuotaWindows.json"))
+                .expect("valid Antigravity quota windows")
+        })
+    }
+
+    impl AntigravityQuotaWindow {
+        fn find<'a>(&self, quota: &'a crate::models::quota::QuotaData) -> Option<&'a crate::models::quota::ModelQuota> {
+            self.aliases.iter().find_map(|alias| {
+                quota.models.iter().find(|model| model.name.eq_ignore_ascii_case(alias))
+            })
+        }
+
+        fn label(&self, lang: &str) -> String {
+            let period = if self.weekly {
+                translate_or(lang, "common.quota.weeklyWindow", "Weekly", &[])
+            } else {
+                "5h".to_string()
+            };
+            format!("{} ({period})", self.model)
+        }
+    }
+
+    fn selected_antigravity_menu_quota<'a>(
+        quota: &'a crate::models::quota::QuotaData,
+        metric: &str,
+    ) -> Option<&'a crate::models::quota::ModelQuota> {
+        if metric.is_empty() {
+            return None;
+        }
+        if let Some(window) = antigravity_quota_windows().iter().find(|window| window.id == metric) {
+            return window.find(quota);
+        }
+        quota.models.iter().find(|model| model.name.eq_ignore_ascii_case(metric))
+    }
+
+    fn build_antigravity_window_rows(
+        lang: &str,
+        quota: &crate::models::quota::QuotaData,
+        metric: &str,
+    ) -> Vec<QuotaRow> {
+        let windows = antigravity_quota_windows();
+        let mut rows = Vec::new();
+        let mut add_row = |label, model: &crate::models::quota::ModelQuota| {
+            let percent = model.percentage.clamp(0, 100);
+            rows.push(make_progress_row(
+                label,
+                format!("{percent}%"),
+                percent,
+                format_reset_subtext(lang, parse_rfc3339_ts(&model.reset_time)),
+                antigravity_remaining_tone(percent),
+            ));
+        };
+        if let Some(model) = selected_antigravity_menu_quota(quota, metric) {
+            let label = windows.iter().find(|window| window.id == metric)
+                .map(|window| window.label(lang))
+                .or_else(|| model.display_name.as_deref().map(str::trim)
+                    .filter(|name| !name.is_empty()).map(str::to_string))
+                .unwrap_or_else(|| model.name.clone());
+            add_row(label, model);
+        }
+        for window in windows.iter().filter(|window| window.id != metric) {
+            if let Some(model) = window.find(quota) {
+                add_row(window.label(lang), model);
+            }
+        }
+        rows
+    }
+
     fn build_antigravity_quota_rows(
         lang: &str,
         quota: Option<&crate::models::quota::QuotaData>,
+        metric: &str,
     ) -> Vec<QuotaRow> {
         let Some(quota) = quota else {
             return Vec::new();
         };
-
-        let mut rows = build_antigravity_group_quota_rows(lang, quota);
+        let mut rows = build_antigravity_window_rows(lang, quota, metric);
+        rows.extend(build_antigravity_group_quota_rows(lang, quota));
         if rows.is_empty() {
             rows = build_antigravity_fallback_quota_rows(lang, quota);
         }
@@ -1537,6 +1697,23 @@
             subtext: None,
         });
         rows
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn antigravity_menu_pins_a_real_model_or_window_without_inventing_missing_values() {
+        let mut quota = crate::models::quota::QuotaData::new();
+        quota.add_model("3p-5h".into(), None, 0, String::new());
+        quota.add_model("gemini-weekly".into(), None, 83, String::new());
+        quota.add_model("gemini-3.8-flash".into(), Some("Gemini Flash".into()), 45, String::new());
+        assert_eq!(selected_antigravity_menu_quota(&quota, "gemini:weekly").unwrap().percentage, 83);
+        assert_eq!(selected_antigravity_menu_quota(&quota, "gemini-3.8-flash").unwrap().percentage, 45);
+        assert!(selected_antigravity_menu_quota(&quota, "gemini:5h").is_none());
+        let rows = build_antigravity_window_rows("en", &quota, "gemini:weekly");
+        assert_eq!(rows[0].label, "Gemini (Weekly)");
+        assert_eq!(rows[0].progress, Some(83));
+        assert_eq!(rows[1].label, "Claude (5h)");
+        assert_eq!(rows[1].progress, Some(0));
     }
 
     fn format_codex_quota_metric_label(window_minutes: Option<i64>, fallback: &str) -> String {

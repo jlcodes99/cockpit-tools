@@ -241,7 +241,7 @@ fn resolve_codebuddy_cn_launch_path() -> Result<std::path::PathBuf, String> {
     Err(app_path_missing_error("codebuddy_cn"))
 }
 
-fn resolve_qoder_launch_path() -> Result<std::path::PathBuf, String> {
+pub(crate) fn resolve_qoder_launch_path() -> Result<std::path::PathBuf, String> {
     if let Some(custom) = normalize_custom_path(Some(&config::get_user_config().qoder_app_path)) {
         if let Some(exec) = resolve_qoder_macos_exec_path(&custom) {
             return Ok(exec);

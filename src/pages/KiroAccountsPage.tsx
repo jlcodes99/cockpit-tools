@@ -1,3 +1,4 @@
+import { useAccountsOverviewFilterState } from '../hooks/useAccountsOverviewFilterState';
 import { formatKiroImportError } from '../services/kiroImportErrors';
 import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import {
@@ -66,12 +67,9 @@ import {
   normalizeAccountsOverviewScope,
   readAccountsOverviewFilterPersistenceEnabled,
   readAccountsOverviewFilterStringArray,
-  removeAccountsOverviewFilterField,
-  writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
 
 const KIRO_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.kiro.flow_notice_collapsed';
-const KIRO_CURRENT_ACCOUNT_ID_KEY = 'agtools.kiro.current_account_id';
 const KIRO_KNOWN_PLAN_FILTERS = ['FREE', 'INDIVIDUAL', 'PRO', 'BUSINESS', 'ENTERPRISE'] as const;
 const KIRO_FILTER_PERSISTENCE_SCOPE = normalizeAccountsOverviewScope('Kiro');
 const FILTER_TYPES_FIELD = 'filter_types';
@@ -87,7 +85,7 @@ export function KiroAccountsPage() {
   const [idcRegion, setIdcRegion] = useState('us-east-1');
   const [idcStartUrl, setIdcStartUrl] = useState('');
   const [idcFormError, setIdcFormError] = useState<string | null>(null);
-  const [filterTypes, setFilterTypes] = useState<string[]>(() =>
+  const [filterTypes, setFilterTypes] = useAccountsOverviewFilterState<string[]>(KIRO_FILTER_PERSISTENCE_SCOPE, FILTER_TYPES_FIELD, () =>
     readAccountsOverviewFilterPersistenceEnabled(KIRO_FILTER_PERSISTENCE_SCOPE)
       ? readAccountsOverviewFilterStringArray(KIRO_FILTER_PERSISTENCE_SCOPE, FILTER_TYPES_FIELD)
       : [],
@@ -100,7 +98,6 @@ export function KiroAccountsPage() {
     platformKey: 'Kiro',
     oauthLogPrefix: 'KiroOAuth',
     flowNoticeCollapsedKey: KIRO_FLOW_NOTICE_COLLAPSED_KEY,
-    currentAccountIdKey: KIRO_CURRENT_ACCOUNT_ID_KEY,
     exportFilePrefix: 'kiro_accounts',
     store: {
       accounts: store.accounts,
@@ -145,7 +142,6 @@ export function KiroAccountsPage() {
   const {
     t, locale, privacyModeEnabled, togglePrivacyMode, maskAccountText,
     viewMode, setViewMode, searchQuery, setSearchQuery,
-    filterPersistenceEnabled, filterPersistenceScope,
     sortBy, setSortBy, sortDirection, setSortDirection,
     selected, toggleSelect, toggleSelectAll,
     tagFilter, groupByTag, setGroupByTag, showTagFilter, setShowTagFilter,
@@ -199,14 +195,6 @@ export function KiroAccountsPage() {
     setIdcFormError(null);
     prepareOauthUrl();
   }, [idcRegion, idcStartUrl, prepareOauthUrl, t]);
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(filterPersistenceScope, FILTER_TYPES_FIELD);
-      return;
-    }
-    writeAccountsOverviewFilterField(filterPersistenceScope, FILTER_TYPES_FIELD, filterTypes);
-  }, [filterPersistenceEnabled, filterPersistenceScope, filterTypes]);
 
   const toggleFilterTypeValue = useCallback((value: string) => {
     setFilterTypes((prev) => {

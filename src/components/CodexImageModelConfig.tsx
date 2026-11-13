@@ -90,7 +90,7 @@ function CodexImageMainModelInput({ model, disabled, onSave }: {
           {t("common.save")}
         </button>
       </div>
-      <small id={hintId} className="codex-image-main-model-hint">
+      <small id={hintId} className="codex-image-model-hint">
         <strong>{t(`${key}.notice`)}</strong>{" "}{t(`${key}.hint`)}
       </small>
       <ModalErrorMessage message={error} position="bottom" />
@@ -178,6 +178,9 @@ export function CodexImageToolModelSelect({ model, models, deletedModels, catalo
           aria-label={t(`${keyPrefix}.manage`)} title={t(`${keyPrefix}.manage`)} aria-expanded={manageOpen}
           onClick={() => { setError(""); setManageOpen((open) => !open); }}><Settings2 size={15} /></button>
       </div>
+      <small className="codex-image-model-hint">
+        {t("codex.localAccess.imageGenerationModel.description", { model: PRESETS[0] })}
+      </small>
       {selection === CUSTOM && <div className="codex-image-model-custom-row">
         <input ref={customInput} className="codex-image-model-inline-input" value={customModel} maxLength={200} disabled={busy}
           placeholder={t(`${keyPrefix}.placeholder`)} aria-label={t(`${keyPrefix}.placeholder`)} aria-invalid={draftInvalid === "custom"}

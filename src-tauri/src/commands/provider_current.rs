@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use tauri::AppHandle;
 
 fn resolve_provider_current_account_id(platform: &str) -> Result<Option<String>, String> {
@@ -26,12 +27,7 @@ fn resolve_provider_current_account_id(platform: &str) -> Result<Option<String>,
             let accounts = crate::modules::codebuddy_cn_account::list_accounts();
             Ok(crate::modules::codebuddy_cn_account::resolve_current_account_id(&accounts))
         }
-        "qoder" => {
-            let accounts = crate::modules::qoder_account::list_accounts();
-            Ok(crate::modules::qoder_account::resolve_current_account_id(
-                &accounts,
-            ))
-        }
+        "qoder" => crate::modules::qoder_account::reconcile_current_account(),
         "trae" | "trae_solo" | "trae-solo" | "trae_cn" | "trae-cn" | "trae_solo_cn"
         | "trae-solo-cn" => {
             let platform = crate::modules::trae_account::TraePlatformKind::parse(Some(platform))?;
@@ -64,9 +60,53 @@ pub async fn get_provider_current_account_id(
     app: AppHandle,
     platform: String,
 ) -> Result<Option<String>, String> {
-    let current_account_id = resolve_provider_current_account_id(platform.trim())?;
+    let current_account_id = if platform.trim() == "qoder" {
+        tauri::async_runtime::spawn_blocking(crate::modules::qoder_account::reconcile_current_account)
+            .await.map_err(|error| error.to_string())??
+    } else {
+        resolve_provider_current_account_id(platform.trim())?
+    };
     let _ = crate::modules::tray::update_tray_menu(&app);
     Ok(current_account_id)
+}
+
+#[derive(serde::Serialize)]
+pub struct TraeCurrentAccount {
+    id: String,
+    email: String,
+}
+
+fn resolve_trae_current_accounts(
+    platforms: Vec<String>,
+) -> Result<BTreeMap<String, Option<TraeCurrentAccount>>, String> {
+    use crate::modules::trae_account::{self, TraePlatformKind};
+
+    let mut targets = BTreeMap::new();
+    for value in platforms {
+        let platform = TraePlatformKind::parse(Some(&value))?;
+        targets.insert(platform.provider_key(), platform);
+    }
+    if targets.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    Ok(trae_account::read_current_accounts_for_platforms(targets.into_values())?
+        .into_iter()
+        .map(|(key, account)| {
+            (key, account.map(|account| TraeCurrentAccount {
+                id: account.id,
+                email: account.email,
+            }))
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub async fn get_trae_current_accounts(
+    platforms: Vec<String>,
+) -> Result<BTreeMap<String, Option<TraeCurrentAccount>>, String> {
+    tauri::async_runtime::spawn_blocking(move || resolve_trae_current_accounts(platforms))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[cfg(test)]

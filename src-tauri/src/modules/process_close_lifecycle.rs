@@ -31,6 +31,7 @@ pub fn close_antigravity_instances(
         "无法关闭受管 Antigravity IDE 实例进程，请手动关闭后重试",
         user_data_dirs,
         timeout_secs,
+        close_pids,
         move || {
             collect_antigravity_process_entries_for_managed_dirs(
                 &collect_dirs,
@@ -84,6 +85,7 @@ pub fn close_antigravity_legacy_instances(
         "无法关闭受管 Antigravity 实例进程，请手动关闭后重试",
         user_data_dirs,
         timeout_secs,
+        close_pids,
         collect_antigravity_legacy_process_entries,
         |entries, target_dirs| {
             select_main_pids_by_target_dirs(entries, target_dirs, default_dir.as_deref())
@@ -130,6 +132,7 @@ fn close_user_data_dir_scoped_instances(
         failure_message,
         user_data_dirs,
         timeout_secs,
+        close_pids,
         collect_entries,
         |entries, target_dirs| {
             select_main_pids_by_target_dirs(entries, target_dirs, default_dir.as_deref())
@@ -180,7 +183,7 @@ pub fn close_codebuddy_cn_instances(
 }
 
 pub fn close_qoder_instances(user_data_dirs: &[String], timeout_secs: u64) -> Result<(), String> {
-    let default_dir = get_default_qoder_user_data_dir_for_os()
+    let default_dir = get_unflagged_qoder_user_data_dir()
         .map(|value| normalize_path_for_compare(&value))
         .filter(|value| !value.is_empty());
     close_user_data_dir_scoped_instances(
@@ -452,6 +455,7 @@ pub fn close_trae_platform_instances(
         ),
         user_data_dirs,
         timeout_secs,
+        close_pids,
         || collect_trae_process_entries_for_platform(platform),
         |entries, target_dirs| {
             select_main_pids_by_target_dirs(entries, target_dirs, default_dir.as_deref())
@@ -696,23 +700,33 @@ pub fn close_pid(pid: u32, timeout_secs: u64) -> Result<(), String> {
 }
 
 fn send_close_signal(pid: u32) -> Option<String> {
+    send_close_signal_with_tree(pid, true)
+}
+
+fn send_close_signal_with_tree(pid: u32, include_tree: bool) -> Option<String> {
     if pid == 0 || !is_pid_running(pid) {
         return None;
     }
 
+    #[cfg(not(target_os = "windows"))]
+    let _ = include_tree;
+
     #[cfg(target_os = "windows")]
     {
+        use crate::modules::windows_operation::{taskkill_accepted_or_targets_exited, taskkill_args};
         use std::os::windows::process::CommandExt;
 
         crate::modules::logger::log_info(&format!("[AG Close] taskkill start pid={}", pid));
-        let output = Command::new("taskkill")
-            .args(["/PID", &pid.to_string(), "/T", "/F"])
-            .creation_flags(CREATE_NO_WINDOW)
-            .stdin(Stdio::null())
-            .output();
+        let mut command = Command::new("taskkill");
+        command.args(taskkill_args(&[pid], true, include_tree));
+        let output = if include_tree {
+            command.creation_flags(CREATE_NO_WINDOW).stdin(Stdio::null()).output()
+        } else {
+            crate::modules::process_timeout::output_with_timeout(&mut command, Duration::from_secs(10))
+        };
         match output {
             Ok(value) => {
-                if value.status.success() {
+                if taskkill_accepted_or_targets_exited(value.status.success(), || is_pid_running(pid)) {
                     crate::modules::logger::log_info(&format!(
                         "[AG Close] taskkill success pid={} status={}",
                         pid, value.status
@@ -737,6 +751,7 @@ fn send_close_signal(pid: u32) -> Option<String> {
                     ));
                 }
             }
+            Err(_) if !is_pid_running(pid) => return None,
             Err(err) => {
                 crate::modules::logger::log_warn(&format!(
                     "[AG Close] taskkill error pid={} err={}",
@@ -887,6 +902,14 @@ fn collect_running_pids(pids: &[u32]) -> Vec<u32> {
 }
 
 fn close_pids(pids: &[u32], timeout_secs: u64) -> Result<(), String> {
+    close_pids_with_signal(pids, timeout_secs, send_close_signal)
+}
+
+fn close_pids_with_signal(
+    pids: &[u32],
+    timeout_secs: u64,
+    send_signal: fn(u32) -> Option<String>,
+) -> Result<(), String> {
     if pids.is_empty() {
         return Ok(());
     }
@@ -908,7 +931,7 @@ fn close_pids(pids: &[u32], timeout_secs: u64) -> Result<(), String> {
 
     let close_errors = targets
         .iter()
-        .filter_map(|pid| send_close_signal(*pid))
+        .filter_map(|pid| send_signal(*pid))
         .collect::<Vec<_>>();
 
     if wait_pids_exit(&targets, timeout_secs) {
@@ -2426,7 +2449,7 @@ pub fn start_codex_with_args_and_env_and_egress(
                     &launch_args,
                     true,
                     &env_refs,
-                    launch_proxy,
+                    Some(launch_proxy),
                 )
                 .map_err(|e| format!("启动 Codex 失败: {}", e))?;
                 crate::modules::logger::log_info(&format!(
@@ -2458,7 +2481,7 @@ pub fn start_codex_with_args_and_env_and_egress(
             &args,
             true,
             &[],
-            launch_proxy,
+            Some(launch_proxy),
         )
         .map_err(|e| format!("启动 Codex 失败: {}", e))?;
         crate::modules::logger::log_info("Codex 启动命令已发送（open -n -a）");
@@ -2605,6 +2628,7 @@ fn build_windows_codex_instance_command(
     for (key, value) in extra_env {
         cmd.env(key, value);
     }
+    cmd.env_remove("CODEX_CLI_PATH");
     cmd.env("CODEX_HOME", codex_home);
     cmd.env("CODEX_ELECTRON_USER_DATA_PATH", app_user_data_dir);
     if should_detach_child() {

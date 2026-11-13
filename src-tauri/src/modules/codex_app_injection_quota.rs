@@ -211,7 +211,7 @@ mod quota_refresh_tests {
         ));
         assert!(pending);
         assert_eq!(quota.account_count, Some(0));
-        assert_eq!(quota.five_hour_remaining_percent, Some(0));
+        assert_eq!(quota.five_hour_remaining_percent, None);
         assert_eq!(error, None);
         assert!(!finish_quota_snapshot(
             None,

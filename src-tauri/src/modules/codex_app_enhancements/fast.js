@@ -13,9 +13,9 @@
     `window.__cockpitNativeFast?.allow(${host},${auth})===true`;
   const enabled = () => root.__cockpitEnhancements?.nativeFast === true;
   const predictionsEnabled = () => root.__cockpitEnhancements?.nativePredictions === true
-    && root.__cockpitEnhancements?.apiKeyAuthVerified === true;
+    && (root.__cockpitEnhancements?.apiKeyAuthVerified === true || root.__cockpitEnhancements?.apiService === true);
   const quotaModuleEnabled = () => root.__cockpitEnhancements?.quotaCompat === true
-    || root.__cockpitEnhancements?.apiService === true;
+    && root.__cockpitEnhancements?.apiService !== true;
   const allow = (host, auth) => enabled() && host === "local"
     && (auth === "apiKey" || auth === "apikey"
       // The current renderer can expose no auth method for a functioning API

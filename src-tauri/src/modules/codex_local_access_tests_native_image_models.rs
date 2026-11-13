@@ -321,9 +321,9 @@ impl native_contract::Host for ImageModelHttpHost {
     }
     fn models<'a>(
         &'a self,
-        _: &'a native_contract::Caller,
+        caller: &'a native_contract::Caller,
     ) -> futures_util::future::BoxFuture<'a, Result<Value, native_contract::ServiceError>> {
-        Box::pin(async { Ok(json!({"data":[]})) })
+        native_contract::Host::models(&self.bridge, caller)
     }
     fn image_route<'a>(
         &'a self,
@@ -457,6 +457,27 @@ async fn native_image_bare_alias_http_generation_edit_and_responses_send_configu
             .timeout(Duration::from_secs(10))
             .build()
             .unwrap();
+        let catalog: Value = client
+            .get(format!("http://{}/v1/models", service.addr))
+            .bearer_auth("fixture")
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let image_listed = |id: &str| {
+            catalog["data"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|entry| entry["id"] == id && entry["cockpit_image"] == true)
+        };
+        assert!(image_listed(selected), "{catalog}");
+        assert!(image_listed(actual), "{catalog}");
+        assert_eq!(image_listed("gpt-image-2"), selected == "gpt-image-2.5");
         let mut expected = Vec::new();
         let requests = if oauth_source {
             vec!["gpt-image-2", "gpt-image-2.5"]

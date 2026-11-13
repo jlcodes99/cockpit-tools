@@ -192,6 +192,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   margin-left: auto;
 }
 
+.tier-badge.codex-account-plan-badge,
 .codex-account-card .tier-badge,
 .pelican-account-summary .tier-badge,
 .codex-accounts-page .account-table .tier-badge,
@@ -210,6 +211,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   white-space: nowrap;
 }
 
+.tier-badge.codex-account-plan-badge::before,
 .codex-account-card .tier-badge::before,
 .pelican-account-summary .tier-badge::before,
 .codex-accounts-page .account-table .tier-badge::before,
@@ -217,6 +219,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   display: none;
 }
 
+.tier-badge.codex-account-plan-badge.free,
 .codex-account-card .tier-badge.free,
 .pelican-account-summary .tier-badge.free,
 .codex-accounts-page .account-table .tier-badge.free,
@@ -237,6 +240,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
 }
 
+.tier-badge.codex-account-plan-badge.plus,
 .codex-account-card .tier-badge.plus,
 .pelican-account-summary .tier-badge.plus,
 .codex-accounts-page .account-table .tier-badge.plus,
@@ -246,6 +250,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   border: 1px solid var(--plan-plus-border);
 }
 
+.tier-badge.codex-account-plan-badge.codex-plus,
 .tier-badge.codex-plus,
 .codex-account-card .tier-badge.codex-plus,
 .pelican-account-summary .tier-badge.codex-plus,
@@ -262,6 +267,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
     0 1px 3px rgba(5, 150, 105, 0.14);
 }
 
+.tier-badge.codex-account-plan-badge.team,
 .codex-account-card .tier-badge.team,
 .pelican-account-summary .tier-badge.team,
 .codex-accounts-page .account-table .tier-badge.team,
@@ -271,6 +277,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   border: 1px solid var(--plan-team-border);
 }
 
+.tier-badge.codex-account-plan-badge.enterprise,
 .codex-account-card .tier-badge.enterprise,
 .pelican-account-summary .tier-badge.enterprise,
 .codex-accounts-page .account-table .tier-badge.enterprise,
@@ -280,6 +287,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   border: 1px solid var(--plan-enterprise-border);
 }
 
+.tier-badge.codex-account-plan-badge.pro,
 .codex-account-card .tier-badge.pro,
 .pelican-account-summary .tier-badge.pro,
 .codex-accounts-page .account-table .tier-badge.pro,
@@ -289,6 +297,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   border: 1px solid var(--plan-pro-border);
 }
 
+.tier-badge.codex-account-plan-badge.codex-pro-lite,
 .tier-badge.codex-pro-lite,
 .codex-account-card .tier-badge.codex-pro-lite,
 .pelican-account-summary .tier-badge.codex-pro-lite,
@@ -304,6 +313,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
     0 1px 3px rgba(71, 85, 105, 0.16);
 }
 
+.tier-badge.codex-account-plan-badge.codex-pro-max,
 .tier-badge.codex-pro-max,
 .codex-account-card .tier-badge.codex-pro-max,
 .pelican-account-summary .tier-badge.codex-pro-max,
@@ -319,6 +329,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
     0 1px 3px rgba(180, 116, 11, 0.12);
 }
 
+.tier-badge.codex-account-plan-badge.new-api-exclusive,
 .tier-badge.new-api-exclusive,
 .codex-account-card .tier-badge.new-api-exclusive,
 .codex-accounts-page .account-table .tier-badge.new-api-exclusive,
@@ -333,6 +344,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
     0 1px 4px rgba(15, 118, 110, 0.16);
 }
 
+.tier-badge.codex-account-plan-badge.sponsor-api,
 .tier-badge.sponsor-api,
 .codex-account-card .tier-badge.sponsor-api,
 .codex-accounts-page .account-table .tier-badge.sponsor-api,
@@ -1779,7 +1791,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
 
 /* Keep navigation scrolling within its tab rail, not the whole page. */
 .codex-accounts-page .codex-page-navigation.page-tabs-row-with-leading {
-  grid-template-columns: minmax(140px, 1fr) minmax(0, max-content) minmax(140px, 1fr);
+  grid-template-columns: minmax(140px, 1fr) minmax(0, max-content) minmax(max-content, 1fr);
   justify-content: center;
   min-width: 0;
   gap: 12px;
@@ -2351,6 +2363,59 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.codex-accounts-page .tag-group-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.codex-accounts-page .tag-group-grip {
+  display: inline-flex;
+  flex: none;
+  cursor: grab;
+  touch-action: none;
+}
+
+.codex-accounts-page .tag-group-header .tag-group-toggle {
+  flex: 1;
+  min-width: 0;
+  min-height: 28px;
+  justify-content: flex-start;
+  padding: 2px 6px;
+  font-size: inherit;
+}
+
+.codex-accounts-page .tag-group-toggle .tag-group-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-accounts-page .tag-group-toggle .tag-group-count {
+  margin-inline-start: auto;
+}
+
+.codex-accounts-page .tag-group-header .btn-icon {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+}
+
+.codex-accounts-page .tag-group-chevron-collapsed {
+  transform: rotate(-90deg);
+}
+
+[dir="rtl"] .codex-accounts-page .tag-group-chevron-collapsed {
+  transform: rotate(90deg);
+}
+
+.codex-accounts-page .tag-group-header.tag-group-drop-target {
+  outline: 1px solid var(--primary);
+  outline-offset: -1px;
 }
 
 .codex-accounts-page .tag-group-count {

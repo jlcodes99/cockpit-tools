@@ -63,7 +63,7 @@ export function WindsurfInstancesContent({
       renderAccountQuotaPreview={renderWindsurfQuotaPreview}
       renderAccountBadge={(account) => {
         const presentation = buildWindsurfAccountPresentation(account, t);
-        return <span className={`instance-plan-badge ${presentation.planClass}`}>{presentation.planLabel}</span>;
+        return <span className={`tier-badge account-picker-plan raw-value ${presentation.planClass}`}>{presentation.planLabel}</span>;
       }}
       getAccountSearchText={(account) => {
         const presentation = buildWindsurfAccountPresentation(account, t);

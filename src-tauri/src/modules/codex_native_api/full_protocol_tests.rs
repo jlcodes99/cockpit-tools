@@ -321,3 +321,65 @@ async fn full_compat_explicit_field_repair_retries_same_route_without_changing_i
     task.abort();
     let _ = std::fs::remove_dir_all(path);
 }
+
+#[tokio::test]
+async fn full_compat_retries_only_unambiguous_named_function_with_null_schema_type() {
+    const NAME: &str = "codex_app__automation_update";
+    const ERROR: &str = r#"Invalid schema for function 'codex_app__automation_update': schema must be a JSON Schema of 'type: "object"', got 'type: null'."#;
+    let seen = Arc::new(Mutex::new(Vec::<Value>::new()));
+    let (addr, task) = mock(Router::new().route(
+        "/v1/responses",
+        post({
+            let seen = seen.clone();
+            move |axum::Json(body): axum::Json<Value>| {
+                let repaired = body["tools"][1]["parameters"]["type"] == "object";
+                seen.lock().unwrap().push(body);
+                async move {
+                    if repaired {
+                        (StatusCode::OK, axum::Json(json!({"id":"r","status":"completed","output":[]})))
+                    } else {
+                        (StatusCode::BAD_REQUEST, axum::Json(json!({"error":{"message":ERROR}})))
+                    }
+                }
+            }
+        }),
+    ))
+    .await;
+    let (mut handle, _, path) = native(addr, false, false, Options::default()).await;
+    let schema = json!({"type":null,"anyOf":[{"required":["name"]},{"required":["id"]}]});
+    let target = json!({"type":"function","name":NAME,"parameters":schema});
+    let other = json!({"type":"function","name":"lookup","parameters":{"properties":{"id":{"type":"string"}}}});
+    let input = json!([{"type":"message","role":"user","content":"fixture"}]);
+    for ambiguous in [false, true] {
+        let mut tools = vec![other.clone(), target.clone()];
+        if ambiguous {
+            tools.push(target.clone());
+        }
+        let response = client()
+            .post(format!("http://{}/v1/responses", handle.addr))
+            .bearer_auth("local-test-key")
+            .json(&json!({"model":"m","input":input,"tools":tools,"tool_choice":"none"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            if ambiguous { StatusCode::BAD_REQUEST } else { StatusCode::OK },
+            "{}",
+            response.text().await.unwrap()
+        );
+    }
+    {
+        let requests = seen.lock().unwrap();
+        assert_eq!(requests.len(), 3);
+        assert_eq!(requests[0]["tools"][1], target);
+        let mut repaired = requests[0].clone();
+        repaired["tools"][1]["parameters"]["type"] = json!("object");
+        assert_eq!(requests[1], repaired);
+        assert_eq!(requests[2]["tools"][1], target);
+        assert_eq!(requests[2]["tools"][2], target);
+    }
+    handle.shutdown(Duration::from_secs(2)).await.unwrap();
+    task.abort();
+    let _ = std::fs::remove_dir_all(path);
+}

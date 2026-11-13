@@ -1,3 +1,5 @@
+import { previewDurableUiSetting, readDurableUiSetting } from './durableUiSettings';
+
 import {
   getClaudeQuotaClass,
   getClaudeRemainingPercentage,
@@ -11,19 +13,14 @@ export const CLAUDE_QUOTA_DISPLAY_REMAINING_CHANGED_EVENT =
 /** Default: used% (previous product behavior). Remaining% is opt-in. */
 export function isClaudeQuotaDisplayRemainingEnabled(): boolean {
   try {
-    return window.localStorage.getItem(STORAGE_KEY) === '1';
+    return readDurableUiSetting(STORAGE_KEY) === '1';
   } catch {
     return false;
   }
 }
 
 export function setClaudeQuotaDisplayRemainingEnabled(enabled: boolean): void {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, enabled ? '1' : '0');
-  } catch {
-    // ignore quota / private mode failures
-  }
-  window.dispatchEvent(new Event(CLAUDE_QUOTA_DISPLAY_REMAINING_CHANGED_EVENT));
+  previewDurableUiSetting(STORAGE_KEY, enabled ? '1' : '0');
 }
 
 export function resolveClaudeDisplayPercentage(usedPercent: number): number {

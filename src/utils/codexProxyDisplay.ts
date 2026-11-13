@@ -1,3 +1,4 @@
+import { readDurableUiSetting, saveDurableUiSetting } from './durableUiSettings';
 import { isCodexApiKeyAccount } from '../types/codex';
 import type { CodexAccount } from '../types/codex';
 import type { CodexProxyRuntimeStatus } from '../services/codexAccountProxyService';
@@ -10,17 +11,16 @@ export const CODEX_PROXY_DISPLAYS: readonly CodexProxyDisplay[] = ['compact', 's
 
 export function getCodexProxyDisplay(): CodexProxyDisplay {
   try {
-    const value = localStorage.getItem(CODEX_PROXY_DISPLAY_KEY);
+    const value = readDurableUiSetting(CODEX_PROXY_DISPLAY_KEY);
     if (CODEX_PROXY_DISPLAYS.includes(value as CodexProxyDisplay)) return value as CodexProxyDisplay;
   } catch { /* Unavailable storage retains the existing compact layout. */ }
   return 'compact';
 }
 
-export function persistCodexProxyDisplay(value: CodexProxyDisplay): boolean {
+export async function persistCodexProxyDisplay(value: CodexProxyDisplay): Promise<boolean> {
   if (!CODEX_PROXY_DISPLAYS.includes(value)) return false;
   try {
-    localStorage.setItem(CODEX_PROXY_DISPLAY_KEY, value);
-    window.dispatchEvent(new Event(CODEX_PROXY_DISPLAY_EVENT));
+    await saveDurableUiSetting(CODEX_PROXY_DISPLAY_KEY, value);
     return true;
   } catch (error) {
     console.warn('[Codex proxy display] Could not save preference', error);

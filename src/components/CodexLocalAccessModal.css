@@ -764,6 +764,13 @@
   line-height: 1.55;
 }
 
+.codex-local-access-test-chat-bubble img {
+  display: block;
+  max-width: 100%;
+  max-height: 42vh;
+  object-fit: contain;
+}
+
 .codex-local-access-test-chat-error-title {
   color: #b91c1c;
   font-size: 13px;

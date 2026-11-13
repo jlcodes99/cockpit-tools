@@ -74,6 +74,7 @@ fn prepare_codex_windows_default_command(
         }
     }
     cmd.env_remove("CODEX_ELECTRON_USER_DATA_PATH")
+        .env_remove("CODEX_CLI_PATH")
         .args(build_codex_windows_profile_args(extra_args, None));
 }
 
@@ -295,7 +296,7 @@ fn start_codex_default_internal(
             &args,
             true,
             &[],
-            launch_proxy,
+            Some(launch_proxy),
         )
         .map_err(|e| format!("启动 Codex 失败: {}", e))?;
         crate::modules::logger::log_info("Codex 默认实例启动命令已发送（open -n -a）");
@@ -440,7 +441,7 @@ pub fn close_codex_default_fast_by_pid(
 
         let remaining = collect_running_pids(&[pid]);
         if !remaining.is_empty() {
-            close_pids(&remaining, timeout_secs)?;
+            close_windows_codex_main_pids(&remaining, timeout_secs)?;
         }
         if is_pid_running(pid) {
             return Err(
@@ -512,7 +513,7 @@ fn close_windows_codex_default_pids(pids: &[u32], timeout_secs: u64) -> Result<(
             "[Codex Close] 默认 ChatGPT 正常退出未完成，强制关闭: {}",
             summarize_pid_list_for_log(&remaining)
         ));
-        close_pids(&remaining, timeout_secs)?;
+        close_windows_codex_main_pids(&remaining, timeout_secs)?;
     }
     let still_running = collect_running_pids(&targets);
     if !still_running.is_empty() {
@@ -644,7 +645,13 @@ fn close_codex_default_windows(timeout_secs: u64) -> Result<(), String> {
         return Ok(());
     }
 
+    let app_servers = capture_windows_codex_app_servers(&pids, &launch_path)?;
+    crate::modules::logger::log_info(&format!(
+        "[Codex Close] captured Windows app-server count={}",
+        app_servers.len()
+    ));
     close_windows_codex_default_pids(&pids, timeout_secs)?;
+    close_captured_windows_codex_app_servers(&app_servers, timeout_secs)?;
 
     let mut remaining = Vec::new();
     for attempt in 0..3 {
@@ -671,21 +678,6 @@ fn close_codex_default_windows(timeout_secs: u64) -> Result<(), String> {
             true,
             true,
         ));
-    }
-
-    if std::env::var("COCKPIT_CODEX_CLOSE_RESOURCE_CLEANUP")
-        .ok()
-        .as_deref()
-        == Some("1")
-    {
-        let resource_pids = collect_codex_windows_resource_process_pids();
-        if !resource_pids.is_empty() {
-            crate::modules::logger::log_info(&format!(
-                "[Codex Close] closing bundled resource codex processes for default instance: {}",
-                summarize_pid_list_for_log(&resource_pids)
-            ));
-            let _ = close_pids(&resource_pids, timeout_secs.min(5).max(1));
-        }
     }
 
     Ok(())
@@ -765,22 +757,19 @@ fn request_codex_graceful_close(pid: u32) -> bool {
         return true;
     }
 
-    use std::os::windows::process::CommandExt;
+    use crate::modules::windows_operation::{taskkill_accepted_or_targets_exited, taskkill_args};
 
     crate::modules::logger::log_info(&format!(
         "[Codex Close] graceful taskkill start pid={}",
         pid
     ));
-    let output = Command::new("taskkill")
-        .args(["/PID", &pid.to_string(), "/T"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .output();
+    let output = crate::modules::process_timeout::output_with_timeout(
+        Command::new("taskkill").args(taskkill_args(&[pid], false, false)),
+        Duration::from_secs(10),
+    );
     match output {
         Ok(value) => {
-            if value.status.success() {
+            if taskkill_accepted_or_targets_exited(value.status.success(), || is_pid_running(pid)) {
                 crate::modules::logger::log_info(&format!(
                     "[Codex Close] graceful taskkill success pid={} status={}",
                     pid, value.status
@@ -794,6 +783,7 @@ fn request_codex_graceful_close(pid: u32) -> bool {
                 false
             }
         }
+        Err(_) if !is_pid_running(pid) => true,
         Err(err) => {
             crate::modules::logger::log_warn(&format!(
                 "[Codex Close] graceful taskkill error pid={} err={}",
@@ -802,6 +792,11 @@ fn request_codex_graceful_close(pid: u32) -> bool {
             false
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+fn close_windows_codex_main_pids(pids: &[u32], timeout_secs: u64) -> Result<(), String> {
+    close_pids_with_signal(pids, timeout_secs, |pid| send_close_signal_with_tree(pid, false))
 }
 
 #[cfg(target_os = "linux")]
@@ -1054,7 +1049,7 @@ pub fn close_codex_instances(codex_homes: &[String], timeout_secs: u64) -> Resul
                 "[Codex Close] graceful close incomplete, retry force close for remaining pids={}",
                 summarize_pid_list_for_log(&remaining)
             ));
-            let force_close_error = close_pids(&remaining, timeout_secs).err();
+            let force_close_error = close_windows_codex_main_pids(&remaining, timeout_secs).err();
             if let Some(err) = force_close_error.as_deref() {
                 crate::modules::logger::log_warn(&format!(
                     "[Codex Close] force close_pids failed: {}",
@@ -1518,13 +1513,11 @@ pub fn start_opencode_with_path(custom_path: Option<&str>) -> Result<(), String>
             candidates.push(custom);
         }
 
-        if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
-            candidates.push(format!("{}/Programs/OpenCode/OpenCode.exe", local_appdata));
-        }
-
-        if let Ok(program_files) = std::env::var("PROGRAMFILES") {
-            candidates.push(format!("{}/OpenCode/OpenCode.exe", program_files));
-        }
+        candidates.extend(
+            windows_opencode_install_candidates()
+                .into_iter()
+                .map(|path| path.to_string_lossy().into_owned()),
+        );
 
         for candidate in candidates {
             if candidate.contains('/') || candidate.contains('\\') {

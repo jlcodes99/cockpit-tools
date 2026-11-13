@@ -8,6 +8,10 @@ import { getGrokQuotaClass } from '../src/types/grok';
 const source = readFileSync(new URL('../src-tauri/src/modules/codex_app_injection.rs', import.meta.url), 'utf8');
 const translations = JSON.parse(readFileSync(new URL('../src/locales/en.json', import.meta.url), 'utf8'));
 const usageLabels = translations.common.codexUsage;
+const compactTokenCount = new Intl.NumberFormat(undefined, {
+  maximumFractionDigits: 1,
+  notation: 'compact',
+});
 const statuslineSource = readFileSync(new URL('../src-tauri/src/modules/codex_app_injection_statusline.rs', import.meta.url), 'utf8');
 type ScriptKind = 'injection_script' | 'deepseek_balance_injection_script';
 const values: Record<string, unknown> = {
@@ -27,7 +31,7 @@ const values: Record<string, unknown> = {
   balance: { totalBalance: 10, currency: 'CNY', isAvailable: true },
   granted_balance_label: 'Granted', topped_up_balance_label: 'Top-up',
   available_label: 'Available', unavailable_label: 'Unavailable',
-  usage_state: {}, refresh_error: null,
+  usage_state: {}, refresh_error: null, provider_quotas: [],
   usage_labels: {
     ...usageLabels,
     requestTier:translations.codex.apiService.logs.requestedTier,responseTier:translations.codex.apiService.logs.responseTier,
@@ -806,7 +810,13 @@ test('overview uses real quotas, current chat metrics and service totals without
   assert.equal(h.details().querySelectorAll('.business-section').length, 3);
   assert.match(h.details().querySelector('.quota-block')!.textContent, /lowercase-custom3143%211%/);
   assert.match(h.details().querySelector('.session-metrics')!.textContent, /verified-current-modelxhigh.*50\.0\s?tok\/s.*80\.0%.*900\s?ms/);
-  assert.match(h.details().querySelector('.stats-grid')!.textContent, /Requests6Success rate 83%Total tokens4\.6KEst\. value\$1\.28Avg\. latency1\.50\s?s/);
+  const stats = h.details().querySelector('.stats-grid')!.querySelectorAll('dl');
+  assert.deepEqual(stats.map(node => node.textContent), [
+    'Requests6Success rate 83%',
+    `Total tokens${compactTokenCount.format(4567)}`,
+    'Est. value$1.28',
+    'Avg. latency1.50 s',
+  ]);
   assert.equal(h.details().querySelectorAll('.request-row').length, 0);
   assert.doesNotMatch(h.details().textContent, /not-an-overview-card|Recent account|Loading/);
   assert.equal(h.root().dialogState.summary.requests, 6);
@@ -983,7 +993,9 @@ test('historical totals with missing dispatch evidence are visibly identified as
   assert.equal(heading.textContent, usageLabels.verifiedStatistics);
   assert.equal(heading.getAttribute('title'),
     usageLabels.excludedHistory.replace('{{count}}', '49'));
-  assert.match(h.details().querySelector('.stats-grid')!.textContent, /Requests12Success rate 75%.*4\.5K/);
+  const stats = h.details().querySelector('.stats-grid')!.querySelectorAll('dl');
+  assert.equal(stats[0].textContent, 'Requests12Success rate 75%');
+  assert.equal(stats[1].textContent, `Total tokens${compactTokenCount.format(4500)}`);
   dialogAction(h, 'period', 'today');
   dialogResponse(h, { summary: { requests: 2, incomplete: false, excludedUnknownRequests: 0 } });
   assert.equal(h.details().querySelector('.stats-block')!.querySelector('.section-title')!.getAttribute('title'), '');

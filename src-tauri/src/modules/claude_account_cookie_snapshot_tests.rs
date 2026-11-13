@@ -93,6 +93,47 @@ fn cookie_snapshot_reads_live_wal_and_keeps_source_untouched() {
 }
 
 #[test]
+fn background_web_probe_cannot_replace_saved_cookies_or_export() {
+    let saved = CookieTestDirectory::new();
+    let cookies = saved.0.join("Default/Network/Cookies");
+    fs::create_dir_all(cookies.parent().unwrap()).unwrap();
+    let connection = Connection::open(&cookies).unwrap();
+    connection
+        .execute_batch(
+            "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;
+             CREATE TABLE cookies(name TEXT);
+             INSERT INTO cookies VALUES ('sessionKey');",
+        )
+        .unwrap();
+    let export = desktop_auth_export_path(&saved.0);
+    fs::write(&export, b"saved export").unwrap();
+    fs::write(saved.0.join("Local State"), b"{}").unwrap();
+    let original = fs::read(&cookies).unwrap();
+    let wal = cookies.with_file_name("Cookies-wal");
+    let original_wal = fs::read(&wal).unwrap();
+
+    let staged = stage_desktop_web_probe(&saved.0).unwrap();
+    let probe_path = staged.path().to_path_buf();
+    assert!(!desktop_auth_export_path(&probe_path).exists());
+    assert!(probe_path.join("Local State").is_file());
+    {
+        let probe = Connection::open(probe_path.join("Default/Network/Cookies")).unwrap();
+        assert_eq!(
+            probe
+                .execute("DELETE FROM cookies WHERE name='sessionKey'", [])
+                .unwrap(),
+            1
+        );
+        fs::write(desktop_auth_export_path(&probe_path), b"anonymous export").unwrap();
+    }
+    drop(staged);
+    assert!(!probe_path.exists());
+    assert_eq!(fs::read(&cookies).unwrap(), original);
+    assert_eq!(fs::read(&wal).unwrap(), original_wal);
+    assert_eq!(fs::read(export).unwrap(), b"saved export");
+}
+
+#[test]
 fn desktop_verification_allows_profile_without_login_cookie() {
     let directory = CookieTestDirectory::new();
     assert!(ensure_desktop_verification_profile(&directory.0).is_ok());

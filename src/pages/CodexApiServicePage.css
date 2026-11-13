@@ -1569,6 +1569,12 @@
   align-items: stretch;
 }
 
+.codex-key-model-allowlist-editor {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
 .codex-api-service-policy-grid label {
   display: grid;
   grid-template-rows: 18px auto;
@@ -1997,6 +2003,10 @@
 .codex-api-service-timeout-section {
   display: grid;
   gap: 10px;
+}
+
+.codex-api-service-timeouts-body input[aria-invalid="true"] {
+  border-color: var(--danger);
 }
 
 .codex-api-service-timeout-section h3 {

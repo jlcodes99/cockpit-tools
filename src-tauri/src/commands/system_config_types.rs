@@ -62,6 +62,14 @@ pub struct NetworkConfig {
     pub global_proxy_no_proxy: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkConfigSaveResult {
+    pub needs_restart: bool,
+    pub report_actual_port: Option<u16>,
+    pub report_error: Option<String>,
+}
+
 /// 通用设置配置（前端使用）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeneralConfig {
@@ -137,6 +145,7 @@ pub struct GeneralConfig {
     pub minimize_behavior: String,
     /// 是否隐藏 Dock 图标（macOS）
     pub hide_dock_icon: bool,
+    pub show_tray_icon: bool,
     /// 菜单栏图标样式（macOS）: "template", "color"
     pub tray_icon_style: String,
     /// 是否在 macOS 菜单栏显示当前账号剩余额度
@@ -145,6 +154,7 @@ pub struct GeneralConfig {
     pub menu_bar_show_account_prefix: bool,
     /// 菜单栏额度监控平台
     pub menu_bar_quota_platform: String,
+    pub menu_bar_antigravity_metric: String,
     /// 是否在启动时显示悬浮卡片
     pub floating_card_show_on_startup: bool,
     /// 是否在启动后自动最小化主窗口
@@ -177,6 +187,7 @@ pub struct GeneralConfig {
     pub opencode_app_path: String,
     /// Antigravity IDE 启动路径（为空则使用默认路径）
     pub antigravity_app_path: String,
+    pub antigravity_legacy_app_path: String,
     /// Codex 启动路径（为空则使用默认路径）
     pub codex_app_path: String,
     /// OAuth hosted login 使用的官方桌面版本（为空则跟随远端默认值）
@@ -874,6 +885,16 @@ fn antigravity_metadata_root_matches_target_with_product_metadata(
     let Some(target) = normalize_antigravity_metadata_target(target) else {
         return true;
     };
+    #[cfg(target_os = "macos")]
+    if root.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("app")) {
+        let info = plist::Value::from_file(root.join("Contents/Info.plist")).ok();
+        if let Some(kind) = modules::process::antigravity_macos_bundle_target(
+            root,
+            info.as_ref().and_then(plist::Value::as_dictionary),
+        ) {
+            return kind == target;
+        }
+    }
     if prefer_product_metadata {
         if let Some(metadata_target) = antigravity_product_json_target(root) {
             return metadata_target == target;
@@ -909,11 +930,17 @@ fn antigravity_metadata_candidates(
     let _ = scan_mode;
 
     let mut candidates = Vec::new();
-    let config_path = config::get_user_config().antigravity_app_path;
-    let config_path = config_path.trim();
-    if !config_path.is_empty() {
-        let config_path = Path::new(config_path);
-        if let Some(root) = normalize_antigravity_metadata_root(config_path) {
+    let configured = config::get_user_config();
+    for (kind, path) in [
+        ("antigravity", &configured.antigravity_legacy_app_path),
+        ("antigravity_ide", &configured.antigravity_app_path),
+    ] {
+        if path.trim().is_empty()
+            || normalize_antigravity_metadata_target(target).is_some_and(|target| target != kind)
+        {
+            continue;
+        }
+        if let Some(root) = normalize_antigravity_metadata_root(Path::new(path.trim())) {
             if antigravity_metadata_root_matches_target(&root, target) {
                 push_unique_antigravity_candidate(&mut candidates, root);
             }
@@ -1213,10 +1240,12 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "close_behavior"
             | "minimize_behavior"
             | "hide_dock_icon"
+            | "show_tray_icon"
             | "tray_icon_style"
             | "menu_bar_quota_enabled"
             | "menu_bar_show_account_prefix"
             | "menu_bar_quota_platform"
+            | "menu_bar_antigravity_metric"
             | "floating_card_show_on_startup"
             | "startup_minimized"
             | "remember_main_window_state"
@@ -1234,6 +1263,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "floating_card_confirm_on_close"
             | "opencode_app_path"
             | "antigravity_app_path"
+            | "antigravity_legacy_app_path"
             | "codex_app_path"
             | "codex_oauth_app_version"
             | "claude_app_path"
@@ -1396,9 +1426,16 @@ fn apply_general_config_updates(
     }
     if updates.contains_key("menu_bar_quota_platform") {
         let platform = next.menu_bar_quota_platform.trim();
-        next.menu_bar_quota_platform = modules::tray::PlatformId::from_str(platform)
-            .map(|value| value.as_str().to_string())
-            .unwrap_or_else(|| "codex".to_string());
+        next.menu_bar_quota_platform = if platform == config::MENU_BAR_QUOTA_CLAUDE_CLI {
+            platform.to_string()
+        } else {
+            modules::tray::PlatformId::from_str(platform)
+                .map(|value| value.as_str().to_string())
+                .unwrap_or_else(|| "codex".to_string())
+        };
+    }
+    if updates.contains_key("menu_bar_antigravity_metric") {
+        next.menu_bar_antigravity_metric = next.menu_bar_antigravity_metric.trim().to_string();
     }
     if updates.contains_key("webdav_allowed_domains") {
         next.webdav_allowed_domains = next
@@ -1426,6 +1463,7 @@ fn apply_general_config_updates(
     }
     normalize_app_path_field!("opencode_app_path", opencode_app_path);
     normalize_app_path_field!("antigravity_app_path", antigravity_app_path);
+    normalize_app_path_field!("antigravity_legacy_app_path", antigravity_legacy_app_path);
     normalize_app_path_field!("codex_app_path", codex_app_path);
     trim_string_field!("codex_oauth_app_version", codex_oauth_app_version);
     normalize_app_path_field!("claude_app_path", claude_app_path);

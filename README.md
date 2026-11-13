@@ -7,7 +7,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/jlcodes99/cockpit-tools?style=flat)](https://github.com/jlcodes99/cockpit-tools/releases)
 [![GitHub issues](https://img.shields.io/github/issues/jlcodes99/cockpit-tools)](https://github.com/jlcodes99/cockpit-tools/issues)
 
-一款**通用的 AI IDE 账号管理工具**，目前支持 **Antigravity IDE**、**Codex**、**GitHub Copilot**、**Windsurf**、**Kiro**、**Cursor**、**Grok CLI**、**CodeBuddy**、**CodeBuddy CN**、**Qoder**、**Trae**、**TRAE SOLO**、**Trae CN**、**TRAE SOLO CN**、**Zed** 和 **ZCode**，并支持多账号多实例并行运行。
+一款**通用的 AI IDE 账号管理工具**，目前支持 **Antigravity IDE**、**Codex**、**GitHub Copilot**、**Windsurf**、**Kiro**、**Cursor**、**Grok CLI**、**CodeBuddy**、**CodeBuddy CN**、**Qoder**、**Trae**、**TraeWork**、**Trae CN**、**TraeWork CN**、**Zed** 和 **ZCode**，并支持多账号多实例并行运行。
 
 
 > 本工具旨在帮助用户高效管理多个 AI IDE 账号，支持一键切换、配额监控、自动唤醒与应用多开并行运行，助您充分利用不同账号的资源。
@@ -55,7 +55,7 @@
 
 全新的可视化仪表盘，为您提供一站式的状态概览：
 
-- **十六平台支持**：同时展示 Antigravity IDE、Codex、GitHub Copilot、Windsurf、Kiro、Cursor、Grok CLI、CodeBuddy、CodeBuddy CN、Qoder、Trae、TRAE SOLO、Trae CN、TRAE SOLO CN、Zed 与 ZCode 的账号状态
+- **十六平台支持**：同时展示 Antigravity IDE、Codex、GitHub Copilot、Windsurf、Kiro、Cursor、Grok CLI、CodeBuddy、CodeBuddy CN、Qoder、Trae、TraeWork、Trae CN、TraeWork CN、Zed 与 ZCode 的账号状态
 - **配额监控**：实时查看各模型剩余配额、重置时间
 - **快捷操作**：一键刷新、一键唤醒
 - **可视化进度**：直观的进度条展示配额消耗情况
@@ -240,7 +240,7 @@ Grok CLI 默认实例通常直接沿用官方 `~/.grok` 目录，启动时不设
 - **账号导入**：支持本机导入与 JSON 导入
 - **配额视图**：展示套餐原始值、美元消耗/总额度与重置时间
 - **批量管理**：支持标签、筛选、导出与批量删除/刷新
-- **Trae 套件**：支持 Trae、TRAE SOLO、Trae CN、TRAE SOLO CN 默认客户端的本机导入与切号注入，默认独立展示，可在顶部布局中手动分组
+- **Trae 套件**：支持 Trae、TraeWork、Trae CN、TraeWork CN 默认客户端的本机导入与切号注入，默认独立展示，可在顶部布局中手动分组
 - **切号注入**：支持切号后按各客户端真实落盘规则写回并启动目标客户端
 
 #### 11.1 Trae 应用多开
@@ -295,6 +295,7 @@ Grok CLI 默认实例通常直接沿用官方 `~/.grok` 目录，启动时不设
   - `~/.codex`：Codex 官方当前登录 `auth.json`
   - `~/.grok`：Grok CLI 官方默认实例与当前登录 `auth.json`
   - `~/.zcode/v2`：ZCode 官方当前登录加密凭据与配额缓存
+  - 已保存的 2FA 及查询历史在应用数据目录的 `mfa_vault.sqlite` 中加密保存，APIKEY.FUN 保存的密钥写入加密文件 `apikey_fun_vault.json`。加密材料保存在应用数据目录中的私有密钥文件，旧 WebView 数据在迁移期间保留。
   - 系统应用数据目录下 `com.jlcodes.cockpit-tools`：宿主应用的 WebView 状态等；历史 `com.antigravity.cockpit-tools` 目录仅用于旧数据兼容导入
 - **Grok CLI 凭据不加密**：access token/refresh token 以明文 JSON 保存在本机，主要依赖操作系统账号隔离与本地文件权限保护；Unix 系统上凭据目录设为 `0700`、凭据文件设为 `0600`。脱敏导出不包含 token，不能作为登录备份
 - **WebSocket 默认仅本机访问**：监听 `127.0.0.1`，默认端口 `19528`，可在设置中关闭或改端口。

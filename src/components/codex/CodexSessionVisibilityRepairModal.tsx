@@ -237,7 +237,7 @@ export function CodexSessionVisibilityRepairModal({
   const runIdRef = useRef<string | null>(null);
   const contextRef = useRef({ open: false, repairKind, initialInstanceId });
   const [status, setStatus] = useState<RepairStatus>("idle");
-  const [visibilityMode, setSelectedMode] = useState<"quick" | "deep">("quick");
+  const [visibilityMode, setSelectedMode] = useState<"quick" | "deep" | "projects">("quick");
   const selectedMode: CodexSessionVisibilityRepairMode =
     repairKind === "history" ? "history" : visibilityMode;
   const [selectedInstanceScope, setSelectedInstanceScope] =
@@ -312,12 +312,13 @@ export function CodexSessionVisibilityRepairModal({
   );
   const effectiveScope = canUseSelectedScope ? selectedScope : "all";
   const isHistoryRepair = selectedMode === "history";
+  const usesProvider = selectedMode === "quick" || selectedMode === "deep";
   const startDisabled =
     running ||
     loadingInstances ||
-    (!isHistoryRepair && loadingProviders) ||
+    (usesProvider && loadingProviders) ||
     !selectedInstanceId ||
-    (!isHistoryRepair && !selectedProvider) ||
+    (usesProvider && !selectedProvider) ||
     (effectiveScope === "selected" && uniqueSelectedSessionIds.length === 0);
   const hasRunningRepairTarget = useMemo(() => {
     if (selectedInstanceScope === "all") {
@@ -331,7 +332,7 @@ export function CodexSessionVisibilityRepairModal({
     selectedInstanceId,
     selectedInstanceScope,
   ]);
-  const repairRequiresStop = selectedMode === "deep" && hasRunningRepairTarget;
+  const repairRequiresStop = (selectedMode === "deep" || selectedMode === "projects") && hasRunningRepairTarget;
   const repairDisabled = startDisabled || repairRequiresStop;
   const hasPreview = previewSummary !== null;
 
@@ -411,7 +412,7 @@ export function CodexSessionVisibilityRepairModal({
   }, [initialInstanceId, listSessionVisibilityRepairInstances, open, repairKind, setError, t]);
 
   useEffect(() => {
-    if (!open || isHistoryRepair) {
+    if (!open || !usesProvider) {
       setLoadingProviders(false);
       return;
     }
@@ -452,7 +453,7 @@ export function CodexSessionVisibilityRepairModal({
     return () => {
       cancelled = true;
     };
-  }, [isHistoryRepair, listSessionVisibilityRepairProviders, open, setError, t]);
+  }, [usesProvider, listSessionVisibilityRepairProviders, open, setError, t]);
 
   useEffect(() => {
     if (!open) return;
@@ -509,7 +510,7 @@ export function CodexSessionVisibilityRepairModal({
         mode: selectedMode,
         dryRun,
         targetInstanceId: isHistoryRepair ? null : selectedInstanceId,
-        targetProvider: isHistoryRepair ? null : selectedProvider,
+        targetProvider: usesProvider ? selectedProvider : null,
         repairInstanceIds,
         sessionIds,
       };
@@ -522,6 +523,7 @@ export function CodexSessionVisibilityRepairModal({
       selectedMode,
       selectedProvider,
       uniqueSelectedSessionIds,
+      usesProvider,
     ],
   );
 
@@ -755,9 +757,23 @@ export function CodexSessionVisibilityRepairModal({
                     {t("codex.sessionManager.repairModal.modeDeepDesc")}
                   </small>
                 </button>
+                <button
+                  type="button"
+                  className={`codex-visibility-repair-scope-card${selectedMode === "projects" ? " is-selected" : ""}`}
+                  onClick={() => {
+                    setSelectedMode("projects");
+                    setError(null);
+                    clearPreview();
+                  }}
+                  disabled={running}
+                  aria-pressed={selectedMode === "projects"}
+                >
+                  <strong>{t("codex.sessionManager.repairModal.modeProjects")}</strong>
+                  <small>{t("codex.sessionManager.repairModal.modeProjectsDesc")}</small>
+                </button>
               </div>
             </div>}
-            {!isHistoryRepair && <div className="codex-visibility-repair-field">
+            {usesProvider && <div className="codex-visibility-repair-field">
               <span>
                 {t(
                   "codex.sessionManager.repairModal.targetProvider",
@@ -957,12 +973,14 @@ export function CodexSessionVisibilityRepairModal({
           {running && (
             <CodexSessionVisibilityRepairProgressView progress={progress} />
           )}
-          {(isHistoryRepair || selectedMode === "deep") && hasRunningRepairTarget && !running && (
+          {(isHistoryRepair || repairRequiresStop) && hasRunningRepairTarget && !running && (
             <div className="codex-api-switch-notice-repair-status is-warning">
               <span>
                 {isHistoryRepair
                   ? t("codex.sessionManager.repairModal.historyLiveHint")
-                  : t(
+                  : selectedMode === "projects"
+                    ? t("codex.sessionManager.repairModal.projectsStopHint")
+                    : t(
                       "codex.sessionManager.repairModal.stopInstanceHint",
                       "完整修复前请先完全退出所选 Codex App/ChatGPT 实例；仍可先预览变更。",
                     )}

@@ -12,7 +12,9 @@ import {
   DEEPSEEK_API_PROVIDER_ID,
   DEEPSEEK_CODEX_MODEL_CATALOG,
   DEEPSEEK_CODEX_VISION_MODEL_CATALOG,
+  OPENCODE_GO_API_PROVIDER_ID,
   findCodexApiProviderPresetById,
+  opencodeGoCatalog,
   resolveCodexApiProviderPresetId,
 } from '../utils/codexProviderPresets';
 import {
@@ -47,6 +49,7 @@ export interface CodexModelProvider {
   sourceTag?: string;
   integrationType?: 'sub2api' | 'new_api';
   modelCatalog?: string[];
+  opencodeGoCatalogVersion?: number;
   modelContextWindows?: Record<string, number>;
   supportsVision?: boolean;
   modelCapabilities?: Record<string, { supportsVision?: boolean }>;
@@ -346,6 +349,33 @@ function presetModelCatalogForBaseUrl(baseUrl: string): string[] | undefined {
   );
 }
 
+function upgradeOpenCodeGoCatalog(provider: CodexModelProvider): boolean {
+  if (resolveCodexApiProviderPresetId(provider.baseUrl) !== OPENCODE_GO_API_PROVIDER_ID
+    || (provider.opencodeGoCatalogVersion ?? 0) >= opencodeGoCatalog.version) return false;
+
+  const { legacyModels, imageModel, version } = opencodeGoCatalog;
+  const upgrade = (config: CodexProviderModelConfig, inheritedCatalog?: string[]) => {
+    if (config.modelCatalog?.length === legacyModels.length
+      && config.modelCatalog.every((model, index) => model === legacyModels[index])) {
+      config.modelCatalog = [...config.modelCatalog, imageModel];
+    }
+    const catalog = config.modelCatalog ?? inheritedCatalog;
+    if (catalog?.some((model) => model.toLowerCase() === imageModel)
+      && !Object.keys(config.modelCapabilities ?? {}).some((model) => model.toLowerCase() === imageModel)) {
+      config.modelCapabilities = { ...config.modelCapabilities, [imageModel]: { supportsVision: true } };
+    }
+  };
+  upgrade(provider);
+  for (const key of provider.apiKeys) {
+    if (key.modelCatalog !== undefined || key.modelCapabilities !== undefined) {
+      upgrade(key, provider.modelCatalog);
+    }
+  }
+  provider.wireApi ??= 'chat_completions';
+  provider.opencodeGoCatalogVersion = version;
+  return true;
+}
+
 export function normalizeCodexModelProviderBaseUrl(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -458,6 +488,8 @@ function toValidProviderList(raw: unknown): CodexModelProvider[] {
       modelCatalog:
         normalizeModelCatalog((item as { modelCatalog?: unknown }).modelCatalog) ??
         presetModelCatalogForBaseUrl(baseUrl),
+      opencodeGoCatalogVersion: typeof item.opencodeGoCatalogVersion === 'number'
+        ? item.opencodeGoCatalogVersion : undefined,
       modelContextWindows: normalizeModelContextWindows(
         (item as { modelContextWindows?: unknown }).modelContextWindows,
         normalizeModelCatalog((item as { modelCatalog?: unknown }).modelCatalog) ??
@@ -552,10 +584,12 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
   const migration = migrateApiKeyFunProvider(loaded);
   loaded = migration.providers;
   let migratedDeepSeek = false;
+  let migratedOpenCodeGo = false;
   let migratedVisionCapabilities = false;
   for (const provider of loaded) {
     if (provider.deletedAt) continue;
     migratedDeepSeek = enforceDeepSeekProvider(provider) || migratedDeepSeek;
+    migratedOpenCodeGo = upgradeOpenCodeGoCatalog(provider) || migratedOpenCodeGo;
     if (migrateCodexModelProviderVisionCapabilities(provider)) {
       provider.updatedAt = Date.now();
       migratedVisionCapabilities = true;
@@ -565,6 +599,7 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
     loaded.length !== loadedProviders.length ||
     migration.changed ||
     migratedDeepSeek ||
+    migratedOpenCodeGo ||
     migratedVisionCapabilities ||
     loadResult.removedImageGenerationSetting ||
     loadResult.migratedSupportsWebsockets
@@ -1051,6 +1086,7 @@ export interface CodexModelProviderChatTestRecord {
   reply?: string | null;
   error?: string | null;
   durationMs?: number | null;
+  firstTextMs?: number | null;
   timestamp: number;
 }
 
@@ -1059,6 +1095,15 @@ export interface CodexModelProviderChatTestBatchResult {
   records: CodexModelProviderChatTestRecord[];
   successCount: number;
   failureCount: number;
+}
+
+export function compareCodexModelProviderChatTestRecords(
+  left: CodexModelProviderChatTestRecord,
+  right: CodexModelProviderChatTestRecord,
+): number {
+  if (left.success !== right.success) return left.success ? -1 : 1;
+  if (!left.success) return 0;
+  return (left.durationMs ?? Number.MAX_SAFE_INTEGER) - (right.durationMs ?? Number.MAX_SAFE_INTEGER);
 }
 
 export interface CodexModelProviderChatTestProgressPayload {
@@ -1101,12 +1146,15 @@ const officialUsageQueries = new Map<string, Promise<CodexModelProviderUsageSumm
 export async function queryCodexModelProviderUsage(input: {
   baseUrl: string;
   apiKey: string;
+  accountId?: string;
   usageApiKey?: string;
   integrationType?: 'sub2api' | 'new_api' | null;
 }): Promise<CodexModelProviderUsageSummary> {
-  if (!isOpenAIOfficialUsageUrl(input.baseUrl)) return await queryModelProviderUsage(input);
+  if (!isOpenAIOfficialUsageUrl(input.baseUrl)) {
+    return queryModelProviderUsage({ ...input, respectRelayBalanceSwitch: true });
+  }
   if (!input.usageApiKey?.trim()) throw new Error('OPENAI_USAGE_NOT_CONFIGURED');
-  const id = input.usageApiKey.trim();
+  const id = JSON.stringify([input.usageApiKey.trim(), input.accountId]);
   const existing = officialUsageQueries.get(id);
   if (existing) return await existing;
   const pending = queryModelProviderUsage(input);

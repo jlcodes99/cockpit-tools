@@ -185,7 +185,7 @@
     let host = document.querySelector('[data-cockpit-quota-footer]');
     let details = document.querySelector('[data-cockpit-quota-details]');
     const card = usageMetrics.visibleCard(root.card);
-    const footer = card?.querySelector('[class*="_ComposerLayoutFooter_"], [class*="_footer_"]') || card;
+    const footer = usageMetrics.composerFooter(card);
     const permissions = footer && [...footer.querySelectorAll('[data-composer-navigation-target="permissions"]')].find(node => node.getClientRects().length > 0);
     if (!card || !permissions) {
       if (host) host.style.display = 'none';

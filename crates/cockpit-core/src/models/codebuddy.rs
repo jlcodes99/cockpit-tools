@@ -85,6 +85,8 @@ pub struct CodebuddyAccountSummary {
 pub struct CodebuddyAccountIndex {
     pub version: String,
     pub accounts: Vec<CodebuddyAccountSummary>,
+    #[serde(skip)]
+    pub(crate) storage_revision: crate::modules::provider_account_index::Revision,
 }
 
 impl CodebuddyAccountIndex {
@@ -92,6 +94,7 @@ impl CodebuddyAccountIndex {
         Self {
             version: "1.0".to_string(),
             accounts: Vec::new(),
+            storage_revision: Default::default(),
         }
     }
 }

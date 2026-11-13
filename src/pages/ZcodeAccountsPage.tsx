@@ -23,7 +23,6 @@ import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 import { ZcodeInstancesContent } from './ZcodeInstancesPage';
 
 const FLOW_NOTICE_KEY = 'agtools.zcode.flow_notice_collapsed';
-const CURRENT_ACCOUNT_KEY = 'agtools.zcode.current_account_id';
 
 export function ZcodeAccountsPage() {
   const { t } = useTranslation();
@@ -36,7 +35,6 @@ export function ZcodeAccountsPage() {
     platformKey: 'zcode',
     oauthLogPrefix: 'ZcodeOAuth',
     flowNoticeCollapsedKey: FLOW_NOTICE_KEY,
-    currentAccountIdKey: CURRENT_ACCOUNT_KEY,
     exportFilePrefix: 'zcode_accounts',
     oauthTabKeys: ['oauth'],
     store: {

@@ -1,6 +1,257 @@
 use super::*;
 use std::io::Write;
 
+const INGRESS_NETWORK_HEADERS: &[&str] = &[
+    "forwarded",
+    "x-forwarded-for",
+    "x-forwarded-host",
+    "x-forwarded-proto",
+    "x-forwarded-port",
+    "x-forwarded-server",
+    "x-real-ip",
+    "true-client-ip",
+    "cf-connecting-ip",
+    "cf-connecting-ipv6",
+    "cf-pseudo-ipv4",
+    "cf-ipcountry",
+    "cf-ray",
+    "cf-visitor",
+    "cf-warp-tag-id",
+    "cf-worker",
+    "cf-ew-via",
+    "cdn-loop",
+];
+
+const PROVIDER_CLIENT_HEADERS: &[(&str, &str)] = &[
+    ("user-agent", "codex-test-client/1.0"),
+    ("originator", "codex_cli_rs"),
+    ("x-openai-actor-authorization", "actor-test-value"),
+    ("x-codex-turn-state", "turn-state-value"),
+    ("x-codex-installation-id", "installation-test-value"),
+    ("x-provider-option", "custom-provider-value"),
+    ("cf-aig-authorization", "custom-provider-cf-value"),
+    ("x-forwarded-custom-option", "custom-option-value"),
+];
+
+#[tokio::test]
+async fn cloudflare_gateway_html_is_not_reported_as_a_challenge() {
+    const HTML: &str = "<html><title>fixture.invalid | 502: Bad gateway</title><p>Cloudflare</p></html>";
+    assert!(!super::super::diagnostics::is_cloudflare_challenge(HTML));
+    assert!(super::super::diagnostics::is_cloudflare_challenge(
+        "<html><script src='/cdn-cgi/challenge-platform/h/g/orchestrate'></script></html>"
+    ));
+    let (addr, upstream) = mock(Router::new().route(
+        "/v1/responses", post(|| async {
+            (StatusCode::BAD_GATEWAY, [("content-type","text/html; charset=utf-8"), ("cf-ray","fixture-ray-SJC")], HTML)
+        }),
+    )).await;
+    let (mut service, host, _root) = native(addr, false, false, Options::default()).await;
+    let response = client().post(format!("http://{}/v1/responses", service.addr))
+        .bearer_auth("local-test-key").json(&body(false)).send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    assert_eq!(response.text().await.unwrap(), HTML);
+    service.shutdown(Duration::from_secs(2)).await.unwrap();
+    let reports = host.reports.lock().unwrap();
+    assert_eq!(reports.len(), 1);
+    let diagnostic = reports[0].error_message.as_deref().unwrap();
+    assert!(diagnostic.contains("Cloudflare") && diagnostic.contains("502") && diagnostic.contains("fixture-ray-SJC"));
+    assert!(!diagnostic.contains("<html>"), "{diagnostic}");
+    assert!(!reports[0].credential_scope);
+    upstream.abort();
+}
+
+#[test]
+fn ingress_network_headers_filter_exact_names_without_losing_provider_identity() {
+    let mut incoming = HeaderMap::new();
+    for name in INGRESS_NETWORK_HEADERS {
+        // HeaderMap normalizes mixed casing from incoming proxy headers.
+        incoming.insert(
+            axum::http::HeaderName::from_bytes(name.to_ascii_uppercase().as_bytes()).unwrap(),
+            HeaderValue::from_static("ingress-only"),
+        );
+    }
+    for (name, value) in PROVIDER_CLIENT_HEADERS {
+        incoming.insert(
+            axum::http::HeaderName::from_bytes(name.as_bytes()).unwrap(),
+            HeaderValue::from_str(value).unwrap(),
+        );
+    }
+    incoming.insert("session-id", HeaderValue::from_static("session-test"));
+    incoming.insert("thread-id", HeaderValue::from_static("thread-test"));
+    incoming.insert(
+        "authorization",
+        HeaderValue::from_static("Bearer local-key"),
+    );
+    incoming.insert("x-api-key", HeaderValue::from_static("local-key"));
+    incoming.insert(
+        "chatgpt-account-id",
+        HeaderValue::from_static("client-account"),
+    );
+    let outgoing = super::super::server::outbound_headers(&incoming);
+    for name in INGRESS_NETWORK_HEADERS {
+        assert!(!outgoing.contains_key(*name), "leaked {name}");
+    }
+    for (name, value) in PROVIDER_CLIENT_HEADERS {
+        assert_eq!(outgoing[*name], *value, "lost {name}");
+    }
+    assert_eq!(outgoing["session-id"], "session-test");
+    assert_eq!(outgoing["thread-id"], "thread-test");
+    for name in ["authorization", "x-api-key", "chatgpt-account-id"] {
+        assert!(!outgoing.contains_key(name), "leaked {name}");
+    }
+}
+
+#[tokio::test]
+async fn ingress_network_headers_never_reach_responses_or_chat_upstream() {
+    for chatgpt in [false, true] {
+        let seen = Arc::new(Mutex::new(Vec::<(HeaderMap, Value)>::new()));
+        let capture = seen.clone();
+        let app = Router::new().route(
+            "/v1/responses",
+            post(
+                move |headers: HeaderMap, axum::Json(body): axum::Json<Value>| {
+                    let capture = capture.clone();
+                    async move {
+                        capture.lock().unwrap().push((headers, body));
+                        (
+                            [("content-type", "text/event-stream")],
+                            format!("{}{}", created(), completed()),
+                        )
+                    }
+                },
+            ),
+        );
+        let (addr, upstream) = mock(app).await;
+        let (mut service, host, root) = native(addr, chatgpt, false, Options::default()).await;
+        for endpoint in ["responses", "chat/completions"] {
+            let chat = endpoint == "chat/completions";
+            let request_body = if chat {
+                json!({
+                    "model":"test-model", "stream":true, "store":false,
+                    "messages":[{"role":"user","content":"test"}],
+                    "reasoning_effort":"high",
+                    "tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{}}}}],
+                    "tool_choice":"auto"
+                })
+            } else {
+                let mut request = body(true);
+                request["store"] = json!(false);
+                request["reasoning"] = json!({"effort":"xhigh","summary":"auto"});
+                request["include"] = json!(["reasoning.encrypted_content"]);
+                request["tools"] = json!([{"type":"function","name":"lookup","parameters":{"type":"object","properties":{}}}]);
+                request["tool_choice"] = json!("auto");
+                request
+            };
+            let mut request = client()
+                .post(format!("http://{}/{endpoint}", service.addr))
+                .bearer_auth("local-test-key")
+                .header("session-id", "client-session")
+                .header("thread-id", "client-session")
+                .header("x-api-key", "local-test-key")
+                .header("chatgpt-account-id", "untrusted-client-account");
+            for name in INGRESS_NETWORK_HEADERS {
+                request = request.header(*name, "ingress-only");
+            }
+            for (name, value) in PROVIDER_CLIENT_HEADERS {
+                // Continuation tokens need prior registration. The filter unit test
+                // checks preservation without bypassing token ownership checks.
+                if *name != "x-codex-turn-state" {
+                    request = request.header(*name, *value);
+                }
+            }
+            let response = request.json(&request_body).send().await.unwrap();
+            assert_eq!(response.status(), 200, "OAuth={chatgpt}, {endpoint}");
+            let output = response.text().await.unwrap();
+            assert!(
+                output.contains(if chat { "[DONE]" } else { "response.completed" }),
+                "{output}"
+            );
+            let (headers, sent) = seen.lock().unwrap().last().unwrap().clone();
+            for name in INGRESS_NETWORK_HEADERS {
+                assert!(
+                    !headers.contains_key(*name),
+                    "OAuth={chatgpt}, {endpoint}: leaked {name}"
+                );
+            }
+            for (name, value) in PROVIDER_CLIENT_HEADERS {
+                if *name != "x-codex-turn-state" {
+                    assert_eq!(
+                        headers[*name], *value,
+                        "OAuth={chatgpt}, {endpoint}: lost {name}"
+                    );
+                }
+            }
+            assert_eq!(headers["authorization"], "Bearer upstream-test-key");
+            assert!(!headers.contains_key("x-api-key"));
+            assert!(!headers.contains_key("chatgpt-account-id"));
+            if chatgpt {
+                assert_ne!(headers["session-id"], "client-session");
+            } else {
+                assert_eq!(headers["session-id"], "client-session");
+            }
+            assert_eq!(headers["session-id"], headers["thread-id"]);
+            assert_eq!(sent["model"], "test-model");
+            assert_eq!(sent["stream"], true);
+            assert_eq!(sent["store"], false);
+            assert_eq!(sent["reasoning"]["effort"], if chat { "high" } else { "xhigh" });
+            assert_eq!(sent["input"][0]["role"], "user");
+            assert!(sent["input"][0]["content"].to_string().contains("test"));
+            assert_eq!(sent["tools"][0]["name"], "lookup");
+            assert_eq!(sent["tools"][0]["parameters"]["type"], "object");
+            assert_eq!(sent["tool_choice"], "auto");
+            if !chat {
+                assert_eq!(sent["unknown"], request_body["unknown"]);
+                assert_eq!(sent["reasoning"], request_body["reasoning"]);
+                assert_eq!(sent["include"], request_body["include"]);
+            }
+            if chatgpt {
+                assert_eq!(sent["service_tier"], "priority");
+            }
+        }
+        assert_eq!(seen.lock().unwrap().len(), 2);
+        assert_eq!(host.selections.lock().unwrap().len(), 2);
+        service.shutdown(Duration::from_secs(2)).await.unwrap();
+        let reports = host.reports.lock().unwrap();
+        assert_eq!(reports.len(), 2);
+        assert!(reports.iter().all(|report| report.peer_ip == Some(std::net::Ipv4Addr::LOCALHOST.into())));
+        assert_eq!(reports[0].reasoning_effort.as_deref(), Some("xhigh"));
+        assert_eq!(reports[1].reasoning_effort.as_deref(), Some("high"));
+        upstream.abort();
+        let _ = std::fs::remove_dir_all(root);
+    }
+}
+
+#[tokio::test]
+async fn policy_rejection_records_direct_peer_without_an_upstream_attempt() {
+    let upstream_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = upstream_calls.clone();
+    let app = Router::new().route("/v1/responses", post(move || async move {
+        counted.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        axum::http::StatusCode::BAD_GATEWAY
+    }));
+    let (addr, upstream) = mock(app).await;
+    let (mut service, host, root) = native(addr, false, false, Options::default()).await;
+    let mut request = body(false);
+    request["model"] = json!("blocked-test-model");
+    let response = client().post(format!("http://{}/v1/responses", service.addr))
+        .bearer_auth("local-test-key")
+        .header("x-forwarded-for", "10.0.0.77")
+        .header("x-cockpit-instance-id", "arbitrary-client-value")
+        .json(&request)
+        .send().await.unwrap();
+    assert_eq!(response.status(), 403);
+    service.shutdown(Duration::from_secs(2)).await.unwrap();
+    assert_eq!(upstream_calls.load(std::sync::atomic::Ordering::Relaxed), 0);
+    assert!(host.reports.lock().unwrap().is_empty());
+    let rejected = host.rejections.lock().unwrap();
+    assert_eq!(rejected.len(), 1);
+    assert_eq!(rejected[0].peer_ip, Some(std::net::Ipv4Addr::LOCALHOST.into()));
+    assert_eq!(rejected[0].error.as_deref(), Some("model_excluded"));
+    assert_eq!(rejected[0].requested_model, "blocked-test-model");
+    upstream.abort();
+    let _ = std::fs::remove_dir_all(root);
+}
+
 #[tokio::test]
 async fn request_decodes_mixed_case_chained_content_encoding() {
     let seen = Arc::new(Mutex::new(None));

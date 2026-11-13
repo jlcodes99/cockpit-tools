@@ -1,3 +1,5 @@
+import { useCodexRelayBalanceDisabled } from '../hooks/useCodexRelayBalanceDisabled';
+import { isCodexNewApiAccount } from '../types/codex';
 import { type CSSProperties, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, ExternalLink, Pin, PinOff, RefreshCw, Star, Undo2, X, Minimize2, Maximize2, Blend } from 'lucide-react';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
@@ -8,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { dismissBootSplash } from '../utils/bootSplash';
 import { useCodexQuotaSync } from '../hooks/useCodexQuotaSync';
 import { isCodexLaunchCancelled } from '../utils/codexLaunchCancellation';
+import { formatAntigravitySwitchError } from '../utils/antigravitySwitchError';
 import {
   buildAntigravityAccountPresentation,
   buildClaudeAccountPresentation,
@@ -108,12 +111,13 @@ import {
 } from '../utils/floatingCardSelectors';
 import { changeLanguage, normalizeLanguage } from '../i18n';
 import { useFloatingCardAppearance } from '../hooks/useFloatingCardAppearance';
-import { floatingCardTargetHeight, nextFloatingCardOpacity } from '../utils/floatingCardAppearance';
+import { useDurableUiSetting } from '../hooks/useDurableUiSetting';
+import { FLOATING_CARD_PLATFORM_STORAGE_KEY } from '../utils/durableUiSettings';
+import { FLOATING_CARD_WIDTH, floatingCardTargetHeight, measureFloatingCardContentHeight, nextFloatingCardOpacity } from '../utils/floatingCardAppearance';
 import {
   ACCOUNTS_CHANGED_EVENT,
   ACTIVE_PLATFORM_FOCUS_EVENT,
   CURRENT_ACCOUNT_CHANGED_EVENT,
-  FLOATING_CARD_PLATFORM_STORAGE_KEY,
   persistFloatingCardPlatform,
   type AccountSyncEventPayload,
   type ActivePlatformFocusPayload,
@@ -166,18 +170,6 @@ function isTraeSuitePlatform(platformId: PlatformId): platformId is TraePlatform
     platformId === 'trae_cn' ||
     platformId === 'trae_solo_cn'
   );
-}
-
-function loadInitialPlatform(): PlatformId {
-  try {
-    const saved = localStorage.getItem(FLOATING_CARD_PLATFORM_STORAGE_KEY);
-    if (saved && ALL_PLATFORM_IDS.includes(saved as PlatformId)) {
-      return saved as PlatformId;
-    }
-  } catch {
-    // ignore storage read failures
-  }
-  return 'antigravity';
 }
 
 function resolveCurrentAccountById<T extends { id: string }>(
@@ -247,6 +239,7 @@ function findInstanceById(instances: InstanceProfile[], instanceId: string): Ins
 }
 
 export function FloatingCardWindow() {
+  const relayBalanceDisabled = useCodexRelayBalanceDisabled();
   useCodexQuotaSync();
   const { t } = useTranslation();
   const currentWindowLabel = windowInstance.label;
@@ -318,11 +311,11 @@ export function FloatingCardWindow() {
     currentAccountId: zedCurrentId,
   } = useZedAccountStore();
   const shellRef = useRef<HTMLDivElement | null>(null);
-  const minimalBodyRef = useRef<HTMLDivElement | null>(null);
   const appearance = useFloatingCardAppearance();
   const previousInstanceContextRef = useRef<FloatingCardInstanceContext | null>(null);
   const [displayGroups, setDisplayGroups] = useState<DisplayGroup[]>([]);
-  const [selectedPlatform, setSelectedPlatform] = useState<PlatformId>(loadInitialPlatform);
+  const savedPlatform = useDurableUiSetting(FLOATING_CARD_PLATFORM_STORAGE_KEY) as PlatformId | null;
+  const [selectedPlatform, setSelectedPlatform] = useState<PlatformId>(savedPlatform ?? 'antigravity');
   const [instanceContext, setInstanceContext] = useState<FloatingCardInstanceContext | null>(null);
   const [viewedAccountIds, setViewedAccountIds] = useState<Partial<Record<PlatformId, string | null>>>({});
   const [privacyModeEnabled, setPrivacyModeEnabled] = useState<boolean>(() =>
@@ -373,24 +366,13 @@ export function FloatingCardWindow() {
   }, [fetchRemoteConfigState]);
 
   useEffect(() => {
-    if (platformOrder.length === 0) {
-      return;
+    if (instanceContext) return;
+    if (savedPlatform && (platformOrder.length === 0 || platformOrder.includes(savedPlatform))) {
+      setSelectedPlatform(savedPlatform);
+    } else if (platformOrder.length > 0) {
+      setSelectedPlatform(current => platformOrder.includes(current) ? current : platformOrder[0]);
     }
-    if (platformOrder.includes(selectedPlatform)) {
-      return;
-    }
-    // 当前选中平台被隐藏时，优先保留存储中的平台，再回退到列表首项
-    try {
-      const saved = localStorage.getItem(FLOATING_CARD_PLATFORM_STORAGE_KEY) as PlatformId | null;
-      if (saved && platformOrder.includes(saved)) {
-        setSelectedPlatform(saved);
-        return;
-      }
-    } catch {
-      // ignore
-    }
-    setSelectedPlatform(platformOrder[0] ?? 'antigravity');
-  }, [platformOrder, selectedPlatform]);
+  }, [instanceContext, platformOrder, savedPlatform]);
 
   useEffect(() => {
     let disposed = false;
@@ -439,14 +421,15 @@ export function FloatingCardWindow() {
         };
       });
     } else if (previousContext) {
-      const restoredPlatform = loadInitialPlatform();
+      const restoredPlatform = savedPlatform && (platformOrder.length === 0 || platformOrder.includes(savedPlatform))
+        ? savedPlatform : platformOrder[0] ?? 'antigravity';
       if (selectedPlatform !== restoredPlatform) {
         setSelectedPlatform(restoredPlatform);
       }
     }
 
     previousInstanceContextRef.current = instanceContext;
-  }, [instanceContext, selectedPlatform]);
+  }, [instanceContext, platformOrder, savedPlatform, selectedPlatform]);
 
   const syncPrivacyMode = useCallback(() => {
     setPrivacyModeEnabled(isPrivacyModeEnabledByDefault());
@@ -597,6 +580,7 @@ export function FloatingCardWindow() {
           if (payload.platformId !== selectedPlatform) {
             if (disposed) return;
             setSelectedPlatform(payload.platformId);
+            persistFloatingCardPlatform(payload.platformId);
           }
           await fetchPlatformData(payload.platformId);
           if (disposed) return;
@@ -791,13 +775,6 @@ export function FloatingCardWindow() {
       unlistenMoved?.();
     };
   }, [confirmOnClose, isPrimaryFloatingCardWindow, t]);
-
-  useEffect(() => {
-    if (instanceContext) {
-      return;
-    }
-    persistFloatingCardPlatform(selectedPlatform);
-  }, [instanceContext, selectedPlatform]);
 
   const githubCopilotCurrent = useMemo(
     () => resolveCurrentOrMostRecentAccount(githubCopilotAccounts, githubCopilotCurrentId),
@@ -1123,7 +1100,7 @@ export function FloatingCardWindow() {
       case 'codebuddy':
         return buildCodebuddyAccountPresentation(viewedAccount as typeof codebuddyAccounts[number], t);
       case 'codebuddy_cn':
-        return buildCodebuddyAccountPresentation(viewedAccount as typeof codebuddyCnAccounts[number], t);
+        return buildCodebuddyAccountPresentation(viewedAccount as typeof codebuddyCnAccounts[number], t, true);
       case 'qoder':
         return buildQoderAccountPresentation(viewedAccount as typeof qoderAccounts[number], t);
       case 'trae':
@@ -1132,7 +1109,7 @@ export function FloatingCardWindow() {
       case 'trae_solo_cn':
         return buildTraeAccountPresentation(viewedAccount as typeof traeAccounts[number], t);
       case 'workbuddy':
-        return buildWorkbuddyAccountPresentation(viewedAccount as typeof workbuddyAccounts[number], t);
+        return buildWorkbuddyAccountPresentation(viewedAccount as typeof workbuddyAccounts[number], t, true);
       case 'minimaxcode':
         return buildMiniMaxCodeAccountPresentation(viewedAccount as typeof minimaxCodeAccounts[number], t);
       case 'zed':
@@ -1168,13 +1145,15 @@ export function FloatingCardWindow() {
 
   const isCurrentViewed = Boolean(viewedAccount?.id && viewedAccount.id === currentAccount?.id);
   // Antigravity's independent windows (including weekly/Argon) must not be
-  // truncated. Both runtime targets share the same quota presentation.
-  // Keep Cursor's 3 primary bars (excluding On-Demand) and other platform caps.
-  const quotaItems = presentation?.quotaItems ?? [];
+  // truncated. WorkBuddy and CodeBuddy CN use the account page's grouped totals.
+  const hideRelayBalance = relayBalanceDisabled && selectedPlatform === 'codex' && viewedAccount != null
+    && isCodexNewApiAccount(viewedAccount as typeof codexAccounts[number]);
+  const quotaItems = hideRelayBalance ? [] : presentation?.quotaItems ?? [];
   const visibleQuotaItems =
     selectedPlatform === 'antigravity' || selectedPlatform === 'antigravity_ide'
+      || selectedPlatform === 'workbuddy' || selectedPlatform === 'codebuddy_cn' || selectedPlatform === 'cursor'
       ? quotaItems
-      : quotaItems.slice(0, selectedPlatform === 'cursor' ? 3 : 2);
+      : quotaItems.slice(0, 2);
   const accountStateLabel = viewedAccount
     ? isCurrentViewed
       ? t('floatingCard.currentAccount', '当前账号')
@@ -1197,7 +1176,7 @@ export function FloatingCardWindow() {
 
   const refreshDisplayedAccount = useCallback(
     async (options?: { silent?: boolean }) => {
-      if (!viewedAccount || refreshingAccountId || switchingAccountId) return;
+      if (!viewedAccount || refreshingAccountId || switchingAccountId || hideRelayBalance) return;
 
       const silent = options?.silent === true;
       if (!silent) {
@@ -1275,7 +1254,7 @@ export function FloatingCardWindow() {
         }
       }
     },
-    [refreshingAccountId, selectedPlatform, switchingAccountId, t, viewedAccount],
+    [hideRelayBalance, refreshingAccountId, selectedPlatform, switchingAccountId, t, viewedAccount],
   );
 
   const handleRefresh = useCallback(async () => {
@@ -1416,7 +1395,9 @@ export function FloatingCardWindow() {
               defaultValue:
                 '该账号已不在本地账号库中，账号列表已刷新。请重新导入或重新登录该 Codex 账号。',
             })
-          : rawError;
+          : selectedPlatform === 'antigravity' || selectedPlatform === 'antigravity_ide'
+            ? formatAntigravitySwitchError(t, rawError)
+            : rawError;
       setErrorText(
         t('floatingCard.errors.switchFailed', {
           error: displayError,
@@ -1526,29 +1507,33 @@ export function FloatingCardWindow() {
 
   useEffect(() => {
     const shell = shellRef.current;
-    if (!shell) return;
+    if (!shell || appearance.busy) return;
 
-    let cancelled = false;
-    const frameId = window.requestAnimationFrame(() => {
-      if (cancelled) return;
-      const contentHeight = appearance.minimal
-        ? (minimalBodyRef.current?.scrollHeight ?? 0) + (shell.querySelector('.floating-card-header')?.getBoundingClientRect().height ?? 30) + 2
-        : Math.max(shell.scrollHeight, document.documentElement.scrollHeight, document.body.scrollHeight);
-      const targetHeight = floatingCardTargetHeight(appearance.minimal, contentHeight, closeConfirmOpen);
-      if (Math.abs(targetHeight - window.innerHeight) <= 2) {
-        return;
-      }
+    let frameId: number | null = null;
+    const scheduleResize = () => {
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        const targetHeight = floatingCardTargetHeight(
+          appearance.minimal, measureFloatingCardContentHeight(shell), closeConfirmOpen,
+        );
+        if (Math.abs(targetHeight - window.innerHeight) <= 2
+          && Math.abs(FLOATING_CARD_WIDTH - window.innerWidth) <= 2) return;
 
-      void resizeCurrentFloatingCardWindow(targetHeight)
-        .catch((error) => console.error('Failed to resize floating card window:', error));
-    });
+        void resizeCurrentFloatingCardWindow(targetHeight)
+          .catch((error) => console.error('Failed to resize floating card window:', error));
+      });
+    };
+    scheduleResize();
+    window.addEventListener('resize', scheduleResize);
 
     return () => {
-      cancelled = true;
-      window.cancelAnimationFrame(frameId);
+      window.removeEventListener('resize', scheduleResize);
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
     };
   }, [
     accountIndex,
+    appearance.busy,
     appearance.minimal,
     appearance.error,
     closeConfirmOpen,
@@ -1609,7 +1594,7 @@ export function FloatingCardWindow() {
           </div>
         </div>
 
-        {appearance.minimal && <div className="floating-card-minimal-body" ref={minimalBodyRef}>
+        {appearance.minimal && <div className="floating-card-minimal-body">
           <div className="floating-card-minimal-quotas" title={presentation ? maskAccountText(presentation.displayName) : platformLabel}>
             {viewedAccount && visibleQuotaItems.length > 0 ? visibleQuotaItems.map((item) => (
               <div className="floating-card-quota-top" key={item.key}>
@@ -1635,7 +1620,11 @@ export function FloatingCardWindow() {
                 <select
                   className="floating-card-platform-select"
                   value={selectedPlatform}
-                  onChange={(event) => setSelectedPlatform(event.target.value as PlatformId)}
+                  onChange={(event) => {
+                    const platformId = event.target.value as PlatformId;
+                    setSelectedPlatform(platformId);
+                    persistFloatingCardPlatform(platformId);
+                  }}
                   aria-label={t('floatingCard.selectPlatform', '切换平台')}
                 >
                   {platformOrder.map((platformId) => (
@@ -1817,7 +1806,7 @@ export function FloatingCardWindow() {
               className="floating-card-button floating-card-button--ghost floating-card-button--icon"
               type="button"
               onClick={() => void handleRefresh()}
-              disabled={!viewedAccount || Boolean(refreshingAccountId)}
+              disabled={hideRelayBalance || !viewedAccount || Boolean(refreshingAccountId)}
               title={t('common.refresh', '刷新')}
               aria-label={t('common.refresh', '刷新')}
             >

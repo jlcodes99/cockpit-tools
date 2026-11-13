@@ -1,6 +1,31 @@
 // Codex 账号测试：Storage synchronization and API provider projection behavior。
 // 测试与生产实现共享 super 作用域，验证真实持久化和运行态行为。
     #[test]
+    fn oauth_add_preserves_external_router_and_live_identity() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock().unwrap_or_else(|error| error.into_inner());
+        let env = TestEnvGuard::new("codex-oauth-add-external-router");
+        let profile = env.codex_home();
+        let original = make_codex_tokens(
+            "live@example.test", "live-account", "live-org", "live", "fixture-live-refresh",
+        );
+        write_oauth_auth_file(&profile, &original, "live-account");
+        let auth_path = profile.join("auth.json");
+        let existing_auth = fs::read(&auth_path).unwrap();
+        let config_path = profile.join("config.toml");
+        let existing_config = b"model_provider = 'cc-switch'\n\n[model_providers.cc-switch]\nbase_url = 'http://127.0.0.1:15721/v1'\nexperimental_bearer_token = 'PROXY_MANAGED'\n";
+        fs::write(&config_path, existing_config).unwrap();
+
+        let added = upsert_account(make_codex_tokens(
+            "new@example.test", "new-account", "new-org", "new", "fixture-new-refresh",
+        )).unwrap();
+        assert_eq!(load_account(&added.id).unwrap().email, "new@example.test");
+        assert!(load_account_index().current_account_id.is_none());
+        assert_eq!(fs::read(&auth_path).unwrap(), existing_auth);
+        assert_eq!(fs::read(&config_path).unwrap(), existing_config);
+    }
+
+    #[test]
     fn current_account_does_not_sync_tokens_from_official_store() {
         let data_dir = make_temp_dir("codex-current-account-sync-test");
         let codex_home = data_dir.join(".codex");
@@ -1266,6 +1291,7 @@ supports_websockets = false
         );
         previous_relay.api_wire_api = Some("responses".to_string());
         previous_relay.api_supports_websockets = true;
+        previous_relay.api_instance_access_mode = Some("direct".to_string());
         write_account_bundle_to_dir(&base_dir, &previous_relay)
             .expect("write previous built-in relay bundle");
         let previous_config =
@@ -1395,9 +1421,13 @@ supports_websockets = false
 
         let config =
             fs::read_to_string(env.codex_home().join("config.toml")).expect("read current config");
-        assert!(config.contains("openai_base_url = \"https://relay.example.com/v1\""));
-        assert!(!config.contains("codex_local_access"));
-        assert!(!config.contains("supports_websockets = "));
+        let config = crate::modules::codex_config_format::read_codex_config_doc_from_str(&config)
+            .expect("parse current config");
+        assert_eq!(config["model_provider"].as_str(), Some(CODEX_RUNTIME_MODEL_PROVIDER_ID));
+        let provider = &config["model_providers"][CODEX_RUNTIME_MODEL_PROVIDER_ID];
+        assert_eq!(provider["base_url"].as_str(), Some("https://relay.example.com/v1"));
+        assert_eq!(provider["supports_websockets"].as_bool(), Some(true));
+        assert!(config.get("openai_base_url").is_none());
     }
 
     #[test]
@@ -2200,10 +2230,14 @@ supports_websockets = false
         write_account_bundle_to_dir(&base_dir, &account).expect("write account bundle");
 
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("openai_base_url = \"https://relay.example.com/v1\""));
-        assert!(!config.contains("codex_local_access"));
-        assert!(!config.contains("supports_websockets = "));
-        assert!(!config.contains("model_catalog_json"));
+        let config = crate::modules::codex_config_format::read_codex_config_doc_from_str(&config)
+            .expect("parse config");
+        assert_eq!(config["model_provider"].as_str(), Some(CODEX_RUNTIME_MODEL_PROVIDER_ID));
+        let provider = &config["model_providers"][CODEX_RUNTIME_MODEL_PROVIDER_ID];
+        assert_eq!(provider["base_url"].as_str(), Some("https://relay.example.com/v1"));
+        assert_eq!(provider["supports_websockets"].as_bool(), Some(true));
+        assert!(config.get("openai_base_url").is_none());
+        assert!(config.get("model_catalog_json").is_none());
         assert!(!base_dir
             .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
             .exists());

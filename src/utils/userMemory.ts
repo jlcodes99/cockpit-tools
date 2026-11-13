@@ -9,6 +9,7 @@ export const USER_MEMORY_FLAGS = {
 export const USER_MEMORY_LISTS = {
   antigravityCustomSort: "antigravity.accounts.custom_sort",
   codexCustomSort: "codex.accounts.custom_sort",
+  codexTagGroupOrder: "codex.accounts.tag_group_order",
 } as const;
 
 const LOCAL_STORAGE_KEYS: Record<string, string[]> = {
@@ -40,6 +41,7 @@ export interface UserMemorySnapshot {
 
 const diskDismissed = new Map<string, boolean>();
 const listCache = new Map<string, string[]>();
+const listPreviews = new Map<string, string[]>();
 const listWrites = new Map<string, Promise<void>>();
 const listeners = new Set<() => void>();
 let hydrated = false;
@@ -111,16 +113,6 @@ function readLocalStorageFlag(id: string): boolean {
   }
 }
 
-function writeLocalStorageFlag(id: string): void {
-  try {
-    for (const key of LOCAL_STORAGE_KEYS[id] ?? []) {
-      globalThis.localStorage?.setItem(key, "1");
-    }
-  } catch {
-    // ignore quota / private-mode failures
-  }
-}
-
 function parseStoredIdList(raw: string | null): string[] {
   if (!raw) return [];
   try {
@@ -148,125 +140,74 @@ function readLocalStorageList(id: string): string[] {
   return [];
 }
 
-function writeLocalStorageList(id: string, items: string[]): void {
-  const raw = JSON.stringify(items);
-  try {
-    for (const key of LOCAL_STORAGE_LIST_KEYS[id] ?? []) {
-      globalThis.localStorage?.setItem(key, raw);
-    }
-  } catch {
-    // ignore quota / private-mode failures
-  }
-}
-
 export function isUserMemoryDismissed(id: string): boolean {
-  if (diskDismissed.get(id) === true) return true;
-  return readLocalStorageFlag(id);
+  return diskDismissed.get(id) ?? (!hydrated && readLocalStorageFlag(id));
 }
 
 export function readUserMemoryList(id: string): string[] {
-  const cached = listCache.get(id);
-  if (cached && cached.length > 0) return [...cached];
-  return readLocalStorageList(id);
+  const cached = listPreviews.get(id) ?? listCache.get(id);
+  return cached ? [...cached] : hydrated ? [] : readLocalStorageList(id);
 }
 
 export async function hydrateUserMemory(): Promise<UserMemorySnapshot> {
-  if (!hydratePromise) {
+  if (!hydrated && !hydratePromise) {
     hydratePromise = (async () => {
-      try {
-        const snapshot = await invoke<UserMemorySnapshot>("load_user_memory");
-        Object.entries(snapshot.dismissed ?? {}).forEach(([key, value]) => {
-          if (value) diskDismissed.set(key, true);
-        });
-        Object.values(USER_MEMORY_FLAGS).forEach((flag) => {
-          if (readLocalStorageFlag(flag) && diskDismissed.get(flag) !== true) {
-            diskDismissed.set(flag, true);
-            void invoke("mark_user_memory_dismissed", { id: flag }).catch(
-              () => undefined,
-            );
-          }
-          if (diskDismissed.get(flag) === true) {
-            writeLocalStorageFlag(flag);
-          }
-        });
-        Object.values(USER_MEMORY_LISTS).forEach((listId) => {
-          const diskItems = snapshot.lists?.[listId] ?? [];
-          const localItems = readLocalStorageList(listId);
-          const merged = mergeIdLists(
-            diskItems.length > 0 ? diskItems : localItems,
-            localItems,
-          );
-          if (merged.length === 0) return;
-          listCache.set(listId, merged);
-          writeLocalStorageList(listId, merged);
-          const sameAsDisk =
-            diskItems.length === merged.length &&
-            diskItems.every((item, index) => item === merged[index]);
-          if (!sameAsDisk) {
-            void saveUserMemoryList(listId, merged).catch(() => undefined);
-          }
-        });
-      } catch {
-        Object.values(USER_MEMORY_FLAGS).forEach((flag) => {
-          if (readLocalStorageFlag(flag)) diskDismissed.set(flag, true);
-        });
-        Object.values(USER_MEMORY_LISTS).forEach((listId) => {
-          const localItems = readLocalStorageList(listId);
-          if (localItems.length > 0) listCache.set(listId, localItems);
-        });
-      } finally {
-        hydrated = true;
-        notifyUserMemoryListeners();
+      const legacy: UserMemorySnapshot = { dismissed: {}, lists: {} };
+      for (const id of Object.values(USER_MEMORY_FLAGS)) {
+        if (readLocalStorageFlag(id)) legacy.dismissed[id] = true;
       }
-    })();
+      for (const id of Object.values(USER_MEMORY_LISTS)) {
+        const items = readLocalStorageList(id);
+        if (items.length > 0) legacy.lists[id] = items;
+      }
+      const snapshot = await invoke<UserMemorySnapshot>("load_user_memory", { legacy });
+      Object.entries(snapshot.dismissed ?? {}).forEach(([id, dismissed]) => diskDismissed.set(id, dismissed));
+      Object.entries(snapshot.lists ?? {}).forEach(([id, items]) => listCache.set(id, mergeIdLists(items)));
+      hydrated = true;
+      notifyUserMemoryListeners();
+    })().finally(() => { hydratePromise = null; });
   }
   await hydratePromise;
   return {
-    dismissed: Object.fromEntries(diskDismissed.entries()),
-    lists: Object.fromEntries(
-      Array.from(listCache.entries()).map(([key, value]) => [key, [...value]]),
-    ),
+    dismissed: Object.fromEntries(diskDismissed),
+    lists: Object.fromEntries(Array.from(listCache, ([id, items]) => [id, [...items]])),
   };
 }
 
-export function hasHydratedUserMemory(): boolean {
-  return hydrated;
-}
-
 export async function markUserMemoryDismissed(id: string): Promise<void> {
-  diskDismissed.set(id, true);
-  writeLocalStorageFlag(id);
   try {
+    await hydrateUserMemory();
+    if (diskDismissed.get(id) === true) return;
     await invoke("mark_user_memory_dismissed", { id });
-  } catch {
-    // localStorage already written; disk can catch up next launch
+    diskDismissed.set(id, true);
+  } catch (error) {
+    console.warn("[User memory]", error);
   }
 }
 
 export function persistUserMemoryList(id: string, items: string[]): void {
   const next = mergeIdLists(items);
-  writeLocalStorageList(id, next);
-  if (next.length === 0) {
-    return;
-  }
-  // 启动尚未读完磁盘时，只写 localStorage，避免把未就绪的账号顺序覆盖落盘记忆。
-  if (!hydrated) {
-    return;
-  }
-  listCache.set(id, next);
-  void saveUserMemoryList(id, next).catch(
-    () => undefined,
-  );
+  // A list can be empty while its accounts are still loading.
+  if (next.length === 0) return;
+  const previous = listPreviews.get(id) ?? listCache.get(id);
+  if (previous?.length === next.length && previous.every((value, index) => value === next[index])) return;
+  listPreviews.set(id, next);
+  void (async () => {
+    await hydrateUserMemory();
+    await saveUserMemoryList(id, next);
+    listCache.set(id, next);
+  })().catch(error => console.warn("[User memory]", error)).finally(() => {
+    if (listPreviews.get(id) === next) listPreviews.delete(id);
+    notifyUserMemoryListeners();
+  });
 }
 
 /** Restore only after durable storage succeeds, then refresh mounted readers. */
 export async function restoreUserMemoryList(id: string, items: string[]): Promise<void> {
   await hydrateUserMemory();
   const next = mergeIdLists(items);
-  // Match the backend's guard against empty lists erasing existing memory.
   if (next.length === 0) return;
   await saveUserMemoryList(id, next);
   listCache.set(id, next);
-  writeLocalStorageList(id, next);
   notifyUserMemoryListeners();
 }

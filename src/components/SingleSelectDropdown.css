@@ -89,6 +89,11 @@
     background 0.2s ease;
 }
 
+.single-select-dropdown-trigger > .tier-badge,
+.single-select-dropdown-item > .tier-badge {
+  flex-shrink: 0;
+}
+
 .single-select-dropdown-trigger.open .single-select-dropdown-arrow {
   transform: rotate(180deg);
   background: rgba(37, 99, 235, 0.14);

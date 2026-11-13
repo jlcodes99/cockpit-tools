@@ -701,6 +701,7 @@ pub fn ensure_instance_shared_skills(profile_dir: &Path) -> Result<(), String> {
 }
 
 pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, String> {
+    let _creation_guard = instance_store::protect_instance_creation()?;
     let _lock = CODEX_INSTANCE_STORE_LOCK
         .lock()
         .map_err(|_| "无法获取实例锁")?;

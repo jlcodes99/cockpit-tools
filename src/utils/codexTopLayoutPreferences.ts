@@ -1,3 +1,4 @@
+import { readDurableUiSetting, saveDurableUiSetting } from './durableUiSettings';
 import type { CodexTab } from '../components/CodexOverviewTabsHeader';
 
 export type CodexTopTabPlacement = 'top' | 'more';
@@ -19,6 +20,7 @@ export const CODEX_TOP_LAYOUT_TABS: CodexTab[] = [
   'sessions',
   'proxy',
   'top-layout',
+  'quota-history',
 ];
 
 export function createDefaultCodexTopLayout(availableTabs: CodexTab[] = CODEX_TOP_LAYOUT_TABS): CodexTopLayoutPreference {
@@ -69,7 +71,7 @@ export function moveCodexTopLayoutTab(
 
 /** Strict read for callers that must surface unavailable or corrupt storage. */
 export function loadCodexTopLayoutPreference(): CodexTopLayoutPreference {
-  const raw = localStorage.getItem(CODEX_TOP_LAYOUT_STORAGE_KEY);
+  const raw = readDurableUiSetting(CODEX_TOP_LAYOUT_STORAGE_KEY);
   if (!raw) return createDefaultCodexTopLayout();
   const parsed: unknown = JSON.parse(raw);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)
@@ -89,10 +91,7 @@ export function readCodexTopLayoutPreference(): CodexTopLayoutPreference {
 }
 
 /** Failure propagates; only persisted changes are broadcast to other mounted views. */
-export function writeCodexTopLayoutPreference(layout: CodexTopLayoutPreference): void {
+export async function writeCodexTopLayoutPreference(layout: CodexTopLayoutPreference): Promise<void> {
   const normalized = normalizeCodexTopLayout(layout);
-  localStorage.setItem(CODEX_TOP_LAYOUT_STORAGE_KEY, JSON.stringify({ order: normalized.order }));
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(CODEX_TOP_LAYOUT_UPDATED_EVENT, { detail: normalized }));
-  }
+  await saveDurableUiSetting(CODEX_TOP_LAYOUT_STORAGE_KEY, JSON.stringify({ order: normalized.order }));
 }

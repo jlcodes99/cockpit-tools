@@ -23,6 +23,7 @@ const ERROR_KEYS: Record<string, string> = {
 };
 const MODEL_ERROR_KEYS: Record<string, string> = {
   EXPERIMENTAL_MODEL_CATALOG_DEFAULT_REASONING_INVALID: 'codex.experimentalModels.defaultReasoningInvalid',
+  EXPERIMENTAL_MODEL_CATALOG_ULTRA_REASONING_INVALID: 'codex.experimentalModels.ultraReasoningInvalid',
   EXPERIMENTAL_MODEL_CATALOG_MODELS_REQUIRED: 'codex.experimentalModelCatalog.models.validation.required',
   EXPERIMENTAL_MODEL_CATALOG_MODEL_ID_INVALID: 'codex.experimentalModelCatalog.models.validation.modelId',
   EXPERIMENTAL_MODEL_CATALOG_DISPLAY_NAME_INVALID: 'codex.experimentalModelCatalog.models.validation.displayName',

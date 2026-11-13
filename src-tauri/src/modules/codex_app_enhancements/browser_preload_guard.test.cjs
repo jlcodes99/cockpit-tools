@@ -91,3 +91,12 @@ test('a throwing dispose hook cannot retain enabled gates or the pending complet
   assert.equal(window.__cockpitEnhancements.quotaCompat, false);
   assert.equal(window.__cockpitEnhancements.apiService, false);
 });
+test('revoking a quota-only browser preload disposes its data view after disabling the binding', () => {
+  const window = pending(); let disposed = false;
+  window.__cockpitQuotaState = {dispose() {
+    assert.equal(window.__cockpitEnhancements.apiService, false);
+    disposed = true;
+  }};
+  assert.equal(revoke(window), true);
+  assert.equal(disposed, true);
+});

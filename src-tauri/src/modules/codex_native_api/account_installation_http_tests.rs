@@ -68,7 +68,7 @@ async fn account_installation_http_and_sse_rebuild_keep_cipher_and_fresh_account
             sent[0].headers["x-codex-installation-id"],
             sent[1].headers["x-codex-installation-id"]
         );
-        assert_ne!(identity(&sent[0]), identity(&sent[1]));
+        assert_eq!(identity(&sent[0]), identity(&sent[1]));
         assert!(sent[1].body["input"]
             .as_array()
             .unwrap()
@@ -128,7 +128,7 @@ async fn account_installation_websocket_and_http_bridge_rebuild_use_selected_pro
             sent[0].headers["x-codex-installation-id"],
             sent[1].headers["x-codex-installation-id"]
         );
-        assert_ne!(identity(&sent[0]), identity(&sent[1]));
+        assert_eq!(identity(&sent[0]), identity(&sent[1]));
         socket.close(None).await.unwrap();
         fixture.finish().await;
     }

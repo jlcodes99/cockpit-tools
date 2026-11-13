@@ -12,9 +12,11 @@ pub async fn codex_repair_session_visibility_across_instances(
 ) -> Result<modules::codex_session_visibility::CodexSessionVisibilityRepairSummary, String> {
     let mode =
         mode.unwrap_or(modules::codex_session_visibility::CodexSessionVisibilityRepairMode::Quick);
-    let resolved_target_provider = if mode
-        == modules::codex_session_visibility::CodexSessionVisibilityRepairMode::History
-    {
+    let resolved_target_provider = if matches!(
+        mode,
+        modules::codex_session_visibility::CodexSessionVisibilityRepairMode::History
+            | modules::codex_session_visibility::CodexSessionVisibilityRepairMode::Projects
+    ) {
         None
     } else {
         match target_provider

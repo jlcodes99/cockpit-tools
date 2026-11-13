@@ -101,6 +101,26 @@
   background: transparent;
 }
 
+.qs-section > .codex-api-setting {
+  margin: 0;
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-light);
+  border-radius: 0;
+  background: transparent;
+}
+
+.qs-section > .codex-api-setting:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.qs-section > .codex-api-setting :is(.codex-capability-setting-head, .codex-request-payload-row) > strong,
+.qs-section > .codex-api-setting .codex-api-setting-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+
 @media (max-width: 600px) {
   .settings-group > .codex-api-setting {
     padding: 16px;

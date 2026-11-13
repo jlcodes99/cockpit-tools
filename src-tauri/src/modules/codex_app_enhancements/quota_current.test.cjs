@@ -109,7 +109,7 @@ test('actual current submit expression removes only verified OAuth quota guards 
   const pure = settings(); pure.resolvedConfig.model_providers.relay.requires_openai_auth = false;
   const blocked = [false, false, false, false, false, false, false, false, { isLoading: false }, true, true];
   assert.equal(funcs[0](...blocked, 'local', pure, 'relay', {}, scope(), h.context), true);
-  assert.equal(funcs[1](...blocked, 'local', pure, 'relay', {}, scope(), h.context), false);
+  assert.equal(funcs[1](...blocked, 'local', pure, 'relay', {}, scope(), h.context), true);
   assert.equal(funcs[1](...blocked, 'local', pure, 'openai', {}, scope(), h.context), true);
   blocked[0] = true;
   assert.equal(funcs[1](...blocked, 'local', pure, 'relay', {}, scope(), h.context), true);
@@ -156,60 +156,8 @@ test('actual current shared renderer keeps hooks and safety fallback while isola
     assert.match(render(options), /native usage notice/);
   const pure = settings(); pure.resolvedConfig.model_providers.relay.requires_openai_auth = false;
   Object.assign(h.context.__cockpitEnhancements, { apiService: true, apiKeyAuthVerified: true, quotaCompat: false });
-  assert.equal(render({ config: pure }), '<p>Safety notice</p>');
-  assert.equal(render({ config: pure, model: 'gpt-test' }), '<p>Safety notice</p>');
+  assert.match(render({ config: pure }), /native usage notice/);
+  assert.match(render({ config: pure, model: 'gpt-test' }), /native usage notice/);
   assert.match(render({ config: pure, provider: 'openai' }), /native usage notice/);
   assert.equal(JSON.stringify(usage), '{"rate_limit":{"allowed":false}}');
-});
-
-
-test('new layout live activation requires a complete reload without touching DOM or real usage data', { skip: !fixtureDir }, async () => {
-  const h = transformAll();
-  h.context.__cockpitEnhancements.apiService = true;
-  h.context.document = { scripts: [{ src: 'app://-/assets/index-current.js' }] };
-  const files = new Map([[h.raw.initialUrl, h.raw.initial], [h.raw.primaryUrl, h.raw.primary], [h.raw.adapterUrl, h.raw.adapter],
-    ['app://-/assets/index-current.js', `import './${path.basename(h.raw.initialUrl)}';`]]);
-  h.context.fetch = async url => ({ ok: files.has(url), text: async () => files.get(url) });
-  const before = JSON.stringify(h.context.__cockpitEnhancements);
-  const result = await h.api.prepareLiveQuotaGate();
-  assert.equal(result.ok, false);
-  assert.equal(result.reason, 'quota-restart-required');
-  assert.equal(JSON.stringify(h.context.__cockpitEnhancements), before);
-});
-
-test('API service binding does not override an explicit official composer scope in the current layout', () => {
-  const { api, context } = load();
-  context.__cockpitEnhancements.apiService = true;
-  const usage = { rate_limit: { allowed: false }, rate_limit_upsell: { banner_type: 'pro_rate_limit_reached' } };
-  assert.equal(api.shouldHideCurrentBanner({ host: 'local', compatible: false }, 'local', usage, null), false);
-  assert.equal(api.shouldHideCurrentBanner(null, undefined, usage, null), false);
-  context.__cockpitEnhancements.nativePatchMode = 'full';
-  context.__cockpitEnhancements.nativePatchFeatures = '0101';
-  assert.equal(api.installLiveQuotaGuard({}).preservedNativeModule, true, 'quota-only full module survives reconnect too');
-});
-
-
-test('verified API-only routes with no OAuth bypass stale subscription gates and notices only in their own composer', () => {
-  const React = require('react'), { renderToStaticMarkup } = require('react-dom/server');
-  const { api, context } = load(), config = settings(), local = scope();
-  config.resolvedConfig.model_providers.relay.requires_openai_auth = false;
-  Object.assign(context.__cockpitEnhancements, { apiService: true, apiKeyAuthVerified: true, quotaCompat: false });
-  const usage = { rate_limit: { allowed: false }, rate_limit_upsell: { banner_type: 'pro_rate_limit_reached', blocked_model_slug: 'gpt-test' } };
-  const render = (provider = 'relay', cfg = config, props = {}, route = local) => {
-    function Notice() { const value = api.useBannerScope(React); return api.shouldHideCurrentBanner(value, 'local', usage, null) ? null : React.createElement('aside', null, 'native notice'); }
-    return renderToStaticMarkup(api.wrapCurrentComposer(React, React.createElement, 'local', cfg, provider,
-      api.enabledForComposer('local', cfg, provider, props, route), React.createElement(Notice)));
-  };
-  assert.equal(api.enabledForComposer('local', config, 'relay', {}, local), true);
-  assert.equal(render(), '');
-  assert.match(render('openai'), /native notice/);
-  assert.match(render(null), /native notice/);
-  assert.match(render('relay', config, { useAsbDirect: true }), /native notice/);
-  assert.match(render('relay', config, {}, { value: { kind: 'cloud' } }), /native notice/);
-  assert.match(render('relay', { ...config, isConfigDataPending: true }), /native notice/);
-  context.__cockpitEnhancements.apiKeyAuthVerified = false;
-  assert.match(render(), /native notice/);
-  context.__cockpitEnhancements.apiKeyAuthVerified = true;
-  config.resolvedConfig.model_providers.relay.experimental_bearer_token = '';
-  assert.match(render(), /native notice/);
 });

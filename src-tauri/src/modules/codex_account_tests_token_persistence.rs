@@ -91,6 +91,42 @@ fn refresh_response_preserves_concurrent_metadata_and_quota_write() {
 }
 
 #[test]
+fn confirmed_free_subscription_survives_rotated_tokens_with_old_entitlement() {
+    use base64::{engine::general_purpose, Engine as _};
+
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _storage = StorageGuard::new();
+    let mut account = seed();
+    account.plan_type = Some("free".into());
+    account.subscription_query_last_success_at = Some(101);
+    save_account(&account).unwrap();
+    let mut rotated = tokens("rotated");
+    let claims = serde_json::json!({
+        "email": account.email,
+        "https://api.openai.com/auth": {
+            "chatgpt_plan_type": "plus",
+            "chatgpt_subscription_active_until": "2000-01-01T00:00:00Z"
+        }
+    });
+    rotated.id_token = format!(
+        "e30.{}.fixture",
+        general_purpose::URL_SAFE_NO_PAD.encode(claims.to_string())
+    );
+    let (_, _, claimed_plan, claimed_expiry, _, _) = extract_user_info(&rotated.id_token).unwrap();
+    assert_eq!(claimed_plan.as_deref(), Some("plus"));
+    assert!(claimed_expiry.is_some());
+
+    let (saved, committed) = persist_refreshed_account(&account, rotated.clone()).unwrap();
+    assert!(committed);
+    assert_eq!(saved.plan_type.as_deref(), Some("free"));
+    assert!(saved.subscription_active_until.is_none());
+    assert_eq!(saved.tokens.access_token, rotated.access_token);
+    assert_eq!(saved.tokens.refresh_token, rotated.refresh_token);
+}
+
+#[test]
 fn refresh_response_cannot_overwrite_reauthorized_credentials_at_same_generation() {
     let _lock = crate::modules::test_support::env_lock()
         .lock()

@@ -1,19 +1,32 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { deferred, loadHookModule, settlePromises } from '../../../tests/helpers/reactHookHarness';
+import { toCodexAccountDisplayCache } from '../../utils/codexProxyCache';
+import * as codexTypes from '../../types/codex';
 
 function nodes(tree: any): any[] {
   if (Array.isArray(tree)) return tree.flatMap(nodes);
   return tree && typeof tree === 'object' ? [tree, ...nodes(tree.props?.children)] : [];
 }
-function harness(mode: string, options: { actions?: any[]; instances?: any[]; loaded?: boolean; account?: any; save?: () => Promise<any>; refresh?: () => Promise<any>; latestAccount?: any; accounts?: any[]; imageLoaded?: boolean; imageModel?: string; execute?: (launchAfterSwitch: boolean, options?: any) => Promise<boolean> } = {}) {
+
+test('a preview opened from the startup cache shows loading and keeps close available', () => {
+  const account = toCodexAccountDisplayCache({ id: 'cached', email: 'preview@example.test',
+    created_at: 0, last_used: 0, tokens: { access_token: '', id_token: '' } });
+  const preview = harness('account', { account });
+  const rendered = nodes(preview.tree);
+  assert.ok(rendered.some(node => node.props?.role === 'status' && node.props.children === 'common.loading'));
+  assert.ok(!rendered.some(node => node.type === 'button' && node.props.children === 'codex.switch'));
+  rendered.find(node => node.type === 'button' && node.props.children === 'common.close').props.onClick();
+  assert.equal(preview.closed, 1);
+});
+function harness(mode: string, options: { actions?: any[]; instances?: any[]; loaded?: boolean; account?: any; save?: () => Promise<any>; refresh?: () => Promise<any>; latestAccount?: any; accounts?: any[]; imageLoaded?: boolean; imageModel?: string; execute?: (launchAfterSwitch: boolean, options?: any) => Promise<boolean | { projectStateDeferred: true }> } = {}) {
   let traps: any[] = [];
   let escapes: any[] = [];
   let closed = 0;
   const remembered: any[] = [];
   const remember = (event?: any) => { if (event?.currentTarget) remembered.push(event.currentTarget); };
   const t = (key: string) => key;
-  const modalError = { message: null, scrollKey: 0, set() {} };
+  const modalError = { message: null as string | null, scrollKey: 0, set: (message: string | null) => { modalError.message = message; } };
   const config = { experimental_model_catalog_available: true, experimental_model_catalog_enabled: false, experimental_model_catalog_models: [],
     experimental_model_catalog_default_model_id: null };
   const emptyAccounts: any[] = options.accounts ?? [];
@@ -28,6 +41,7 @@ function harness(mode: string, options: { actions?: any[]; instances?: any[]; lo
     '@tauri-apps/plugin-dialog': { confirm: async () => true },
     '../../hooks/useModalFocusTrap': { useModalFocusTrap: (ref: any, open: boolean, restore = true, active = true) => { traps.push({ ref, open, restore, active }); } },
     '../../hooks/useEscClose': { useEscCloseTopmost: (open: boolean, close: () => void, ref: any) => escapes.push({ open, close, ref }) },
+    '../../hooks/useAccountFormLoad': { useAccountFormLoad: () => ({ status: 'loading', start() {}, reset() {}, retry() {} }) },
     '../../services/codexInstanceService': { saveCodexInstanceQuickConfig: options.save ?? (async () => config),
       saveCodexInstanceConfiguration: async () => ({ quickConfig: config, instance: { id: '__default__' } }) },
     '../../services/codexService': { forceRefreshCodexTokens: options.refresh ?? (async () => options.account) },
@@ -38,10 +52,12 @@ function harness(mode: string, options: { actions?: any[]; instances?: any[]; lo
       CODEX_LAUNCH_PREVIEW_CONFIG_TIMEOUT: 'timeout',
     },
     '../../stores/useCodexAccountStore': { useCodexAccountStore: accountStore },
+    '../../types/codex': codexTypes,
     '../../stores/useCodexInstanceStore': { useCodexInstanceStore: instanceStore },
     './CodexModelRoutingFields': {
       CodexModelRoutingFields: 'routing', buildCodexModelRoutingValue: () => ({ enabled: false, routes: [] }),
       createCodexModelSourceResolver: () => () => null, normalizeCodexModelRoutingRoutes: () => [],
+      shortCodexRouteAccountLabel: (_account: unknown, fallback: string) => fallback,
       eligibleCodexModelRoutingAccounts: () => [], syncExperimentalModelsWithRouting: (_routes: any, models: any[]) => models,
     },
     './useLaunchPreviewChildReturnFocus': { useLaunchPreviewChildReturnFocus: () => remember },
@@ -60,8 +76,26 @@ function harness(mode: string, options: { actions?: any[]; instances?: any[]; lo
     return h.exports.CodexLaunchPreviewModal({ mode, account: options.account, accountLabel: 'Synthetic account', summary: {}, actions: options.actions ?? [],
       onClose: () => { closed++; }, onExecute: options.execute ?? (async () => false) });
   });
-  return { h, remembered, setInstances(instances: any[]) { emptyInstances = instances; }, get tree() { return h.flush(); }, get trap() { const active = traps.filter((entry) => entry.open && entry.active); assert.equal(active.length, 1); return active[0]; }, get traps() { return traps; }, async ready() { await settlePromises(); h.flush(); }, get escapes() { for (const entry of escapes.filter((item) => item.open)) assert.equal(entry.ref, traps.find((trap) => trap.open && trap.active)?.ref); return escapes; }, get closed() { return closed; } };
+  return { h, remembered, modalError, setInstances(instances: any[]) { emptyInstances = instances; }, get tree() { return h.flush(); }, get trap() { const active = traps.filter((entry) => entry.open && entry.active); assert.equal(active.length, 1); return active[0]; }, get traps() { return traps; }, async ready() { await settlePromises(); h.flush(); }, get escapes() { for (const entry of escapes.filter((item) => item.open)) assert.equal(entry.ref, traps.find((trap) => trap.open && trap.active)?.ref); return escapes; }, get closed() { return closed; } };
 }
+
+test('a deferred project sync is shown inside the switch preview without closing it', async () => {
+  let requestedLaunch: boolean | undefined;
+  const h = harness('account', {
+    loaded: true,
+    execute: async (launch) => {
+      requestedLaunch = launch;
+      return { projectStateDeferred: true };
+    },
+  });
+  await h.ready();
+  nodes(h.tree).find((node) => node.type === 'button' && node.props.children === 'codex.switch').props.onClick();
+  await h.ready();
+  assert.equal(requestedLaunch, false);
+  assert.equal(h.closed, 0);
+  assert.equal(h.modalError.message, 'codex.sessionManager.repairModal.switchProjectsDeferred');
+  h.h.unmount();
+});
 
 for (const mode of ['account', 'instance', 'apiService']) {
   test(`${mode} launch previews register their actual root before configuration loads and preserve Escape`, () => {
@@ -367,6 +401,35 @@ test('launch forwards the saved full image variant together with source IDs', as
   assert.deepEqual(launchOptions.imageGenerationAccountModels, { 'source-api': 'gpt-image-2.5-high' });
   h.unmount();
 });
+
+for (const wire of ['responses', 'chat_completions', 'anthropic']) {
+  test(`third-party ${wire} preview offers its supported modes and passes the chosen mode to execution`, async () => {
+    let launchOptions: any;
+    const account = {
+      id: 'third-party', email: 'relay@example.invalid', auth_mode: 'apikey',
+      api_wire_api: wire, api_base_url: 'https://relay.example.invalid/v1',
+    };
+    const preview = harness('account', { account, loaded: true,
+      execute: async (_start, options) => { launchOptions = options; return true; },
+    });
+    await preview.ready();
+    const buttons = () => nodes(preview.tree).filter((node) => node.type === 'button');
+    const trigger = buttons().find((button) => nodes(button).some((node) => node.props?.children === 'codex.launchPreview.providerAccessAutomatic'));
+    assert.ok(trigger);
+    trigger.props.onClick({ currentTarget: 'mode-trigger' });
+    const findMode = (key: string) => buttons().find((button) => nodes(button).some((node) => node.props?.children === key));
+    const direct = findMode('codex.launchPreview.providerAccessDirect');
+    const cdp = findMode('codex.deepSeek.start.cdpMode');
+    assert.equal(Boolean(direct), wire === 'responses');
+    assert.ok(cdp);
+    (direct ?? cdp).props.onClick();
+    buttons().find((node) => node.props.children === 'codex.switch').props.onClick();
+    await preview.ready();
+    assert.equal(launchOptions.providerAccessMode, wire === 'responses' ? 'direct' : 'cdp');
+    assert.equal(launchOptions.imageGenerationAccountIds, undefined);
+    preview.h.unmount();
+  });
+}
 
 
 for (const mode of ['account', 'instance', 'apiService']) {

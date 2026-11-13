@@ -38,7 +38,7 @@ impl Drop for TestData {
     }
 }
 
-async fn mock_provider(wire: &str) -> (String, tokio::task::JoinHandle<Value>) {
+async fn mock_provider(wire: &str, model: &'static str) -> (String, tokio::task::JoinHandle<Value>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let wire = wire.to_string();
@@ -99,15 +99,21 @@ async fn mock_provider(wire: &str) -> (String, tokio::task::JoinHandle<Value>) {
                 "Do not inject Codex installation headers into Chat providers"
             );
         }
-        assert_eq!(body["model"], "provider-model");
+        assert_eq!(body["model"], model);
         assert_eq!(body["stream"], true);
         assert!(!body.to_string().contains("max_output_tokens\":256"));
+        if wire == "responses" && native_contains_image_tool(&body) {
+            let error = r#"{"error":{"message":"Image generation is not enabled for this group","type":"permission_error"}}"#;
+            let response = format!("HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{error}", error.len());
+            stream.write_all(response.as_bytes()).await.unwrap();
+            return body;
+        }
         let html = "<!doctype html><html><body>pelican fixture</body></html>";
         let events = if wire == "responses" {
             format!(
                 "data: {}\n\ndata: {}\n\n",
                 json!({"type":"response.output_text.delta","delta":html}),
-                json!({"type":"response.completed","response":{"id":"resp-fixture","status":"completed","model":"provider-model","output":[{"type":"message","content":[{"type":"output_text","text":html}]}],"usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}})
+                json!({"type":"response.completed","response":{"id":"resp-fixture","status":"completed","model":model,"output":[{"type":"message","content":[{"type":"output_text","text":html}]}],"usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}})
             )
         } else {
             format!(
@@ -127,8 +133,11 @@ async fn mock_provider(wire: &str) -> (String, tokio::task::JoinHandle<Value>) {
 async fn pelican_provider_protocols_stream_and_clean_up_without_enrolling_accounts() {
     let _lock = crate::modules::test_support::env_lock().lock().unwrap();
     let data = TestData::new();
-    for wire in ["responses", "chat_completions"] {
-        let (base_url, upstream) = mock_provider(wire).await;
+    for (wire, model, prompt) in [
+        ("responses", "gpt-5.5", "hi"),
+        ("chat_completions", "provider-model", "Create HTML"),
+    ] {
+        let (base_url, upstream) = mock_provider(wire, model).await;
         let request = CodexModelProviderGatewayChatTestRequest {
         auth_scheme: None,
             run_id: uuid::Uuid::new_v4().to_string(),
@@ -139,9 +148,9 @@ async fn pelican_provider_protocols_stream_and_clean_up_without_enrolling_accoun
             api_key_name: Some("Fixture key".into()),
             api_key: "fixture-key".into(),
             wire_api: wire.into(),
-            model_catalog: vec!["provider-model".into()],
-            model_id: "provider-model".into(),
-            prompt: "Create HTML".into(),
+            model_catalog: vec![model.into()],
+            model_id: model.into(),
+            prompt: prompt.into(),
         };
         let (_cancel, receiver) = watch::channel(false);
         let result = timeout(
@@ -152,8 +161,10 @@ async fn pelican_provider_protocols_stream_and_clean_up_without_enrolling_accoun
         .unwrap()
         .unwrap();
         assert!(result.reply.contains("pelican fixture"));
-        let sent = upstream.await.unwrap().to_string();
-        assert!(sent.contains("Create HTML"));
+        let sent = upstream.await.unwrap();
+        assert!(!native_contains_image_tool(&sent));
+        let sent = sent.to_string();
+        assert!(sent.contains(prompt));
         assert!(sent.contains("medium"));
         let dir = provider_gateway_sidecars_dir().unwrap();
         assert!(std::fs::read_dir(dir).unwrap().all(|entry| !entry

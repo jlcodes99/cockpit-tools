@@ -5,7 +5,7 @@ include!("trae_account_platform_storage.rs");
 include!("trae_account_import_payload.rs");
 include!("trae_account_product_paths.rs");
 include!("trae_account_token_injection.rs");
-include!("trae_account_identity.rs");
+include!("../../../crates/cockpit-core/src/modules/trae_account_identity.rs");
 
 #[cfg(test)]
 mod tests {

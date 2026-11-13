@@ -249,15 +249,14 @@ async fn actual_entry_route() {
     save_mode(id, Mode::Independent, Some(&format!("http://{address}")))
         .await
         .unwrap();
-    let CodexLaunchProxy::Proxy(entry) =
+    let CodexLaunchProxy::Managed(port) =
         codex_instance::resolve_egress_proxy_for_bind_account(Some(id))
             .await
             .unwrap()
     else {
         panic!("missing managed client proxy");
     };
-    let parsed = url::Url::parse(&entry).unwrap();
-    let mut client = tokio::net::TcpStream::connect(("127.0.0.1", parsed.port().unwrap()))
+    let mut client = tokio::net::TcpStream::connect(("127.0.0.1", port))
         .await
         .unwrap();
     let upstream = tokio::spawn(async move {

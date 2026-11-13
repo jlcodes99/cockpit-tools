@@ -245,12 +245,12 @@ async fn unified_proxy_installs_an_entry_for_an_account_without_its_own_binding(
     let account_id = "entry-unified";
     let account = eligible_account(account_id);
     assert!(codex_account_proxy::has_effective_proxy(&account, true));
-    let url = ensure_for_account(account_id, &account, true, Some(&path))
+    let entry_port = ensure_for_account(account_id, &account, true, Some(&path))
         .await
         .expect("install entry")
-        .expect("entry url");
+        .expect("entry port");
     let port = route_port(account_id).await.expect("route registered");
-    assert_eq!(url, entry_url(port));
+    assert_eq!(entry_port, port);
 }
 
 #[tokio::test]
@@ -265,15 +265,15 @@ async fn bound_account_gets_a_stable_entry_reused_within_the_host_process() {
     let first = ensure_for_account(account_id, &account, false, Some(&path))
         .await
         .expect("install entry")
-        .expect("entry url");
+        .expect("entry port");
     let second = ensure_for_account(account_id, &account, false, Some(&path))
         .await
         .expect("reuse entry")
-        .expect("entry url");
+        .expect("entry port");
     assert_eq!(first, second);
 
     let port = route_port(account_id).await.expect("route registered");
-    assert_eq!(first, entry_url(port));
+    assert_eq!(first, port);
     TcpStream::connect((Ipv4Addr::LOCALHOST, port))
         .await
         .expect("entry is listening");
@@ -293,7 +293,7 @@ async fn listener_cancellation_is_visible_and_next_launch_reinstalls_entry() {
     let restarted = ensure_route(id, None).await.unwrap();
     let snapshot = entry_status(id).unwrap();
     assert_eq!(snapshot.state, "listening");
-    assert_eq!(Some(restarted), snapshot.port.map(entry_url));
+    assert_eq!(Some(restarted), snapshot.port);
     // Status observations stay immediate even while another launch owns the install lock.
     let _installation = ROUTES.lock().await;
     assert_eq!(entry_status(id).unwrap().state, "listening");
@@ -427,7 +427,7 @@ async fn ensure_rechecks_binding_after_a_cached_entry_is_unbound() {
     let port = route_port(&account.id).await.expect("cached route");
     assert_eq!(
         ensure(&account.id).await.expect("repeat launch"),
-        Some(first.clone())
+        Some(first)
     );
 
     account.egress_proxy_url = None;

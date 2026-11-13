@@ -142,3 +142,48 @@ export async function closeWorkbuddyWebview(accountId: string): Promise<void> {
 export async function listWorkbuddyWebviewSessions(): Promise<WorkviewSessionInfo[]> {
   return await invoke('list_workbuddy_webview_sessions');
 }
+
+export type WorkbuddyModelProbeStatus = 'available' | 'rate_limited' | 'error' | 'unknown';
+
+export interface WorkbuddyModelProbeResult {
+  status: WorkbuddyModelProbeStatus;
+  httpStatus: number | null;
+  conversationId: string | null;
+  message: string;
+  /** 模型实际回复内容（可用时会有值） */
+  reply: string;
+  keepConversation: boolean;
+  conversationDeleted: boolean;
+  cleanupError: string | null;
+}
+
+/**
+ *  probing 某个 WorkBuddy 账号对指定模型的可用性：
+ *  向对话接口发送一条最小对话，根据返回判定 available / rate_limited / error。
+ *  keepConversation=false 时探针会尽量删除测试会话，避免留下垃圾会话。
+ */
+export async function probeWorkbuddyModel(
+  accountId: string,
+  model: string,
+  keepConversation: boolean,
+): Promise<WorkbuddyModelProbeResult> {
+  return await invoke('probe_workbuddy_model', { accountId, model, keepConversation });
+}
+
+export interface WorkbuddyCloudModel {
+  id: string;
+  name: string | null;
+  /** 计费倍率（如 "x0.15"），对应客户端 credits 字段 */
+  credits: string | null;
+  description: string | null;
+  supportsImages: boolean;
+  isDefault: boolean;
+}
+
+/**
+ * 拉取对话选择器的实时模型列表（对齐客户端 ModelsService.getTeamsModels）。
+ * 企业账号用真实 enterpriseId，个人账号服务端按字面量 `personal` 处理。
+ */
+export async function fetchWorkbuddyCloudModels(accountId: string): Promise<WorkbuddyCloudModel[]> {
+  return await invoke('fetch_workbuddy_cloud_models', { accountId });
+}

@@ -83,6 +83,8 @@ pub struct ZcodeAccountIndex {
     #[serde(default)]
     pub current_account_id: Option<String>,
     pub accounts: Vec<ZcodeAccountSummary>,
+    #[serde(skip)]
+    pub(crate) storage_revision: crate::modules::provider_account_index::Revision,
 }
 
 impl Default for ZcodeAccountIndex {
@@ -91,6 +93,7 @@ impl Default for ZcodeAccountIndex {
             version: "1.0".to_string(),
             current_account_id: None,
             accounts: Vec::new(),
+            storage_revision: Default::default(),
         }
     }
 }

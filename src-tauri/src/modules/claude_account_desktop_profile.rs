@@ -997,21 +997,52 @@ fn probe_desktop_web_profile_with_decrypted_cookies(_profile_dir: &Path) -> Resu
     Err("当前平台不支持解密 Claude Cookies。".to_string())
 }
 
+fn stage_desktop_web_probe(profile_dir: &Path) -> Result<tempfile::TempDir, String> {
+    let staged = tempfile::Builder::new()
+        .prefix("cockpit-claude-probe-")
+        .tempdir()
+        .map_err(|error| format!("创建 Claude 探测目录失败: {error}"))?;
+    for relative in ["Local State", "Preferences", "Default/Preferences"] {
+        let source = profile_dir.join(relative);
+        if source.is_file() {
+            copy_path_overwrite(&source, &staged.path().join(relative))?;
+        }
+    }
+    for source in desktop_cookie_path_candidates(profile_dir) {
+        if !source.is_file() {
+            continue;
+        }
+        let relative = source
+            .strip_prefix(profile_dir)
+            .map_err(|error| error.to_string())?;
+        let destination = staged.path().join(relative);
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+        copy_desktop_cookie_files(&source, &destination)?;
+    }
+    Ok(staged)
+}
+
 fn probe_desktop_web_profile(profile_dir: &Path) -> Result<Value, String> {
     ensure_desktop_profile_logged_in(profile_dir)?;
-    let status_file = profile_dir.join("claude_desktop_profile_probe_status.json");
-    let export_file = desktop_auth_export_path(profile_dir);
-    let _ = remove_path_if_exists(&status_file);
-    let _ = remove_path_if_exists(&export_file);
-    let helper_pid =
-        launch_platform_desktop_auth_helper(profile_dir, &status_file, &export_file, "probe")?;
-    let result = wait_for_desktop_web_profile_export(profile_dir, Duration::from_secs(18))
-        .and_then(|export| {
-            export
-                .web_profile
-                .ok_or_else(|| "Claude 资料接口未返回数据".to_string())
-        });
-    terminate_desktop_auth_helper(Some(helper_pid));
+    let result = (|| {
+        // Chromium may refresh or replace cookies on startup. Keep its writes and
+        // the probe's status/export files away from the saved sign-in snapshot.
+        let staged = stage_desktop_web_probe(profile_dir)?;
+        let status_file = staged.path().join(CLAUDE_DESKTOP_AUTH_STATUS_FILE);
+        let export_file = desktop_auth_export_path(staged.path());
+        let helper_pid =
+            launch_platform_desktop_auth_helper(staged.path(), &status_file, &export_file, "probe")?;
+        let result = wait_for_desktop_web_profile_export(staged.path(), Duration::from_secs(18))
+            .and_then(|export| {
+                export
+                    .web_profile
+                    .ok_or_else(|| "Claude 资料接口未返回数据".to_string())
+            });
+        terminate_desktop_auth_helper(Some(helper_pid));
+        result
+    })();
     match result {
         Ok(profile)
             if desktop_web_usage_to_quota(&profile).is_some()
@@ -1689,6 +1720,8 @@ fn backup_current_desktop_profile(target_dir: &Path) -> Result<Option<PathBuf>, 
 const CLAUDE_DESKTOP_LOCK_SENSITIVE_PATHS: &[&str] = &[
     "Network/Cookies",
     "Network/Cookies-journal",
+    "Cookies",
+    "Cookies-journal",
     "Local Storage/leveldb/LOCK",
     "Session Storage/LOCK",
 ];

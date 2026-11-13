@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { PlatformId } from '../types/platform';
 import { emitAccountsChanged, emitCurrentAccountChanged } from '../utils/accountSyncEvents';
+import { replaceLegacyAccountDisplayCache, toProviderAccountDisplayCache } from '../utils/providerAccountDisplayCache';
 
 type ProviderUsage = {
   inlineSuggestionsUsedPercent: number | null;
@@ -96,7 +97,11 @@ export function createProviderAccountStore<TAccount extends ProviderAccountAugme
       const raw = localStorage.getItem(cacheKey);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? (parsed as TAccount[]) : [];
+      if (!Array.isArray(parsed)) return [];
+      const cached = parsed.filter((account): account is TAccount => typeof account?.id === 'string')
+        .map(account => toProviderAccountDisplayCache(account, options.platformId));
+      replaceLegacyAccountDisplayCache(cacheKey, raw, JSON.stringify(cached));
+      return cached;
     } catch {
       return [];
     }
@@ -104,7 +109,7 @@ export function createProviderAccountStore<TAccount extends ProviderAccountAugme
 
   const persistAccountsCache = (accounts: TAccount[]) => {
     try {
-      localStorage.setItem(cacheKey, JSON.stringify(accounts));
+      localStorage.setItem(cacheKey, JSON.stringify(accounts.map(account => toProviderAccountDisplayCache(account, options.platformId))));
     } catch {
       // ignore cache write failures
     }

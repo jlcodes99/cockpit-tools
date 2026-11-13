@@ -6,8 +6,11 @@ use std::time::Duration;
 use tauri::AppHandle;
 use tauri::Emitter;
 
+#[path = "account_auto_refresh.rs"]
+pub(crate) mod auto_refresh;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum AntigravityRuntimeTarget {
+pub(crate) enum AntigravityRuntimeTarget {
     Legacy,
     Ide,
 }
@@ -26,10 +29,27 @@ enum AntigravityDesktopAuthMode {
     SystemCredential,
 }
 
-fn normalize_antigravity_runtime_target(raw: Option<&str>) -> AntigravityRuntimeTarget {
+pub(crate) fn normalize_antigravity_runtime_target(raw: Option<&str>) -> AntigravityRuntimeTarget {
     match raw.unwrap_or("").trim().to_ascii_lowercase().as_str() {
         "antigravity" => AntigravityRuntimeTarget::Legacy,
         _ => AntigravityRuntimeTarget::Ide,
+    }
+}
+
+impl AntigravityRuntimeTarget {
+    fn platform_id(self) -> &'static str {
+        match self {
+            Self::Legacy => "antigravity",
+            Self::Ide => "antigravity_ide",
+        }
+    }
+
+    fn bound_account_id(self) -> Option<String> {
+        let settings = match self {
+            Self::Legacy => modules::antigravity_legacy_instance::load_default_settings(),
+            Self::Ide => modules::instance::load_default_settings(),
+        };
+        settings.ok().and_then(|settings| settings.bind_account_id)
     }
 }
 
@@ -195,8 +215,11 @@ pub async fn add_account(refresh_token: String) -> Result<models::Account, Strin
     )
     .with_oauth_metadata(token_res.oauth_client_key, token_res.id_token);
 
-    let account =
-        modules::upsert_account(user_info.email.clone(), user_info.get_display_name(), token)?;
+    let account = tauri::async_runtime::spawn_blocking(move || {
+        modules::upsert_account(user_info.email.clone(), user_info.get_display_name(), token)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
     modules::logger::log_info(&format!("添加账号成功: {}", account.email));
 
     // 广播通知
@@ -206,7 +229,7 @@ pub async fn add_account(refresh_token: String) -> Result<models::Account, Strin
 }
 
 #[tauri::command]
-pub fn create_pending_oauth_account(
+pub async fn create_pending_oauth_account(
     email: String,
     note: Option<String>,
     two_factor_secret: Option<String>,
@@ -215,17 +238,21 @@ pub fn create_pending_oauth_account(
     mail_url: Option<String>,
     aux_email: Option<String>,
 ) -> Result<models::Account, String> {
-    modules::account::create_pending_oauth_account(
-        email,
-        modules::account::AccountNoteUpdate {
-            note,
-            two_factor_secret,
-            account_password,
-            phone_number,
-            mail_url,
-            aux_email,
-        },
-    )
+    tauri::async_runtime::spawn_blocking(move || {
+        modules::account::create_pending_oauth_account(
+            email,
+            modules::account::AccountNoteUpdate {
+                note,
+                two_factor_secret,
+                account_password,
+                phone_number,
+                mail_url,
+                aux_email,
+            },
+        )
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 const ANTIGRAVITY_MAIL_PREVIEW_MAX_BYTES: usize = 512 * 1024;
@@ -291,53 +318,54 @@ pub async fn fetch_account_note_mail_url(
 
 #[tauri::command]
 pub async fn delete_account(account_id: String) -> Result<(), String> {
-    modules::delete_account(&account_id)?;
+    tauri::async_runtime::spawn_blocking(move || modules::delete_account(&account_id))
+        .await
+        .map_err(|error| error.to_string())??;
     modules::websocket::broadcast_data_changed("account_deleted");
     Ok(())
 }
 
 #[tauri::command]
 pub async fn delete_accounts(account_ids: Vec<String>) -> Result<(), String> {
-    modules::delete_accounts(&account_ids)?;
+    tauri::async_runtime::spawn_blocking(move || modules::delete_accounts(&account_ids))
+        .await
+        .map_err(|error| error.to_string())??;
     modules::websocket::broadcast_data_changed("accounts_deleted");
     Ok(())
 }
 
 #[tauri::command]
 pub async fn reorder_accounts(account_ids: Vec<String>) -> Result<(), String> {
-    modules::reorder_accounts(&account_ids)
+    tauri::async_runtime::spawn_blocking(move || modules::reorder_accounts(&account_ids))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
 pub async fn get_current_account(
     runtime_target: Option<String>,
 ) -> Result<Option<models::Account>, String> {
-    let runtime_target = normalize_antigravity_runtime_target(runtime_target.as_deref());
-    let bound_account_id = match runtime_target {
-        AntigravityRuntimeTarget::Legacy => {
-            modules::antigravity_legacy_instance::load_default_settings()
-                .ok()
-                .and_then(|settings| settings.bind_account_id)
-        }
-        AntigravityRuntimeTarget::Ide => modules::instance::load_default_settings()
-            .ok()
-            .and_then(|settings| settings.bind_account_id),
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let runtime_target = normalize_antigravity_runtime_target(runtime_target.as_deref());
+        let bound_account_id = runtime_target.bound_account_id();
 
-    if let Some(account_id) = bound_account_id.as_deref() {
-        match modules::load_account(account_id) {
-            Ok(mut account) => {
-                let _ = modules::quota_cache::apply_cached_quota(&mut account, "authorized");
-                return Ok(Some(account));
+        if let Some(account_id) = bound_account_id.as_deref() {
+            match modules::load_account(account_id) {
+                Ok(mut account) => {
+                    let _ = modules::quota_cache::apply_cached_quota(&mut account, "authorized");
+                    return Ok(Some(account));
+                }
+                Err(error) => modules::logger::log_warn(&format!(
+                    "[Antigravity] 当前账号绑定已失效，将回退全局当前账号: target={:?}, account_id={}, error={}",
+                    runtime_target, account_id, error
+                )),
             }
-            Err(error) => modules::logger::log_warn(&format!(
-                "[Antigravity] 当前账号绑定已失效，将回退全局当前账号: target={:?}, account_id={}, error={}",
-                runtime_target, account_id, error
-            )),
         }
-    }
 
-    modules::get_current_account()
+        modules::get_current_account()
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -346,24 +374,28 @@ pub async fn set_current_account(
     account_id: String,
     runtime_target: Option<String>,
 ) -> Result<(), String> {
-    let runtime_target = normalize_antigravity_runtime_target(runtime_target.as_deref());
-    match runtime_target {
-        AntigravityRuntimeTarget::Legacy => {
-            let _ = modules::antigravity_legacy_instance::update_default_settings(
-                Some(Some(account_id.clone())),
-                None,
-                Some(false),
-            )?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let runtime_target = normalize_antigravity_runtime_target(runtime_target.as_deref());
+        match runtime_target {
+            AntigravityRuntimeTarget::Legacy => {
+                let _ = modules::antigravity_legacy_instance::update_default_settings(
+                    Some(Some(account_id.clone())),
+                    None,
+                    Some(false),
+                )?;
+            }
+            AntigravityRuntimeTarget::Ide => {
+                let _ = modules::instance::update_default_settings(
+                    Some(Some(account_id.clone())),
+                    None,
+                    Some(false),
+                )?;
+            }
         }
-        AntigravityRuntimeTarget::Ide => {
-            let _ = modules::instance::update_default_settings(
-                Some(Some(account_id.clone())),
-                None,
-                Some(false),
-            )?;
-        }
-    }
-    modules::set_current_account_id(&account_id)?;
+        modules::set_current_account_id(&account_id)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
     let _ = crate::modules::tray::update_tray_menu(&app);
     Ok(())
 }
@@ -421,8 +453,18 @@ pub async fn refresh_current_quota(
     app: tauri::AppHandle,
     runtime_target: Option<String>,
 ) -> Result<(), String> {
+    refresh_current_quota_for_target(app, runtime_target)
+        .await?
+        .then_some(())
+        .ok_or_else(|| "未找到当前账号".to_string())
+}
+
+async fn refresh_current_quota_for_target(
+    app: tauri::AppHandle,
+    runtime_target: Option<String>,
+) -> Result<bool, String> {
     let Some(account) = get_current_account(runtime_target.clone()).await? else {
-        return Err("未找到当前账号".to_string());
+        return Ok(false);
     };
     let mut account = account;
     let quota = modules::fetch_quota_with_fresh_token(&mut account, true)
@@ -452,7 +494,7 @@ pub async fn refresh_current_quota(
     }
 
     let _ = crate::modules::tray::update_tray_menu(&app);
-    Ok(())
+    Ok(true)
 }
 
 async fn run_auto_switch_for_runtime_target(
@@ -463,11 +505,7 @@ async fn run_auto_switch_for_runtime_target(
         return Ok(None);
     }
     let target = normalize_antigravity_runtime_target(runtime_target);
-    let platform = match target {
-        AntigravityRuntimeTarget::Legacy => "antigravity",
-        AntigravityRuntimeTarget::Ide => "antigravity_ide",
-    };
-    if !modules::tray_layout::is_platform_enabled(platform) {
+    if !modules::tray_layout::is_platform_enabled(target.platform_id()) {
         return Ok(None);
     }
     let current_id = get_current_account(runtime_target.map(str::to_owned))
@@ -602,14 +640,26 @@ pub async fn switch_account(
 }
 
 #[tauri::command]
-pub fn load_antigravity_switch_history(
-) -> Result<Vec<modules::antigravity_switch_history::AntigravitySwitchHistoryItem>, String> {
-    modules::antigravity_switch_history::load_history()
+pub async fn load_antigravity_switch_history(
+    retry: Option<bool>,
+) -> Result<
+    modules::wakeup_history_store::HistoryRead<
+        modules::antigravity_switch_history::AntigravitySwitchHistoryItem,
+    >,
+    String,
+> {
+    tauri::async_runtime::spawn_blocking(move || {
+        modules::antigravity_switch_history::load_history(retry.unwrap_or(false))
+    })
+    .await
+    .map_err(|error| format!("Antigravity 切号历史任务失败: {error}"))?
 }
 
 #[tauri::command]
-pub fn clear_antigravity_switch_history() -> Result<(), String> {
-    modules::antigravity_switch_history::clear_history()
+pub async fn clear_antigravity_switch_history() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(modules::antigravity_switch_history::clear_history)
+        .await
+        .map_err(|error| format!("Antigravity 切号历史任务失败: {error}"))?
 }
 
 #[tauri::command]
@@ -663,117 +713,71 @@ pub async fn sync_current_from_client(_app: tauri::AppHandle) -> Result<Option<S
 
 // ─── 账号分组持久化 ────────────────────────────────────────────
 
-const GROUPS_FILE: &str = "account_groups.json";
+use modules::account_groups_store::{self, GroupSnapshot};
 
-fn validate_account_groups_payload(data: &str) -> Result<(), String> {
-    let value = serde_json::from_str::<serde_json::Value>(data)
-        .map_err(|e| format!("Invalid groups JSON: {}", e))?;
-    let groups = value
-        .as_array()
-        .ok_or_else(|| "Account groups must be a JSON array".to_string())?;
+#[tauri::command]
+pub async fn load_account_group_snapshot(platform: String) -> Result<GroupSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || account_groups_store::store(&platform)?.snapshot())
+        .await
+        .map_err(|error| error.to_string())?
+}
 
-    for (index, group) in groups.iter().enumerate() {
-        let object = group
-            .as_object()
-            .ok_or_else(|| format!("Account group at index {} must be an object", index))?;
-        if let Some(account_ids) = object.get("accountIds") {
-            if !account_ids.is_array() {
-                return Err(format!(
-                    "Account group at index {} has invalid accountIds",
-                    index
-                ));
-            }
-        }
-    }
-
-    Ok(())
+#[tauri::command]
+pub async fn seed_account_groups(data: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        account_groups_store::store(account_groups_store::ANTIGRAVITY)?.seed_json(&data)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
 pub async fn load_account_groups() -> Result<String, String> {
-    let path = modules::account::get_data_dir()?.join(GROUPS_FILE);
-    if !path.exists() {
-        return Ok("[]".to_string());
-    }
-    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read groups: {}", e))
+    load_platform_account_groups(account_groups_store::ANTIGRAVITY.to_string()).await
 }
 
 #[tauri::command]
-pub async fn save_account_groups(data: String) -> Result<(), String> {
-    validate_account_groups_payload(&data)?;
-    let dir = modules::account::get_data_dir()?;
-    if !dir.exists() {
-        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
-    }
-    let path = dir.join(GROUPS_FILE);
-    modules::atomic_write::write_string_atomic(&path, &data)
-        .map_err(|e| format!("Failed to write groups: {}", e))
-}
-
-fn resolve_platform_groups_filename(platform: &str) -> String {
-    let lower = platform.trim().to_ascii_lowercase();
-    match lower.as_str() {
-        "antigravity" | "gemini" => GROUPS_FILE.to_string(),
-        "codex" => "codex_account_groups.json".to_string(),
-        "claude" => "claude_manager_account_groups.json".to_string(),
-        other => {
-            let sanitized: String = other
-                .chars()
-                .map(|c| {
-                    if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
-                        c
-                    } else {
-                        '_'
-                    }
-                })
-                .collect();
-            format!("{}_account_groups.json", sanitized)
-        }
-    }
+pub async fn save_account_groups(data: String, expected_revision: Option<u64>) -> Result<u64, String> {
+    save_platform_account_groups(account_groups_store::ANTIGRAVITY.to_string(), data, expected_revision).await
 }
 
 #[tauri::command]
 pub async fn load_platform_account_groups(platform: String) -> Result<String, String> {
-    let filename = resolve_platform_groups_filename(&platform);
-    let path = modules::account::get_data_dir()?.join(filename);
-    if !path.exists() {
-        return Ok("[]".to_string());
-    }
-    std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read platform groups for {}: {}", platform, e))
+    Ok(load_account_group_snapshot(platform).await?.data)
 }
 
 #[tauri::command]
-pub async fn save_platform_account_groups(platform: String, data: String) -> Result<(), String> {
-    validate_account_groups_payload(&data)?;
-    let dir = modules::account::get_data_dir()?;
-    if !dir.exists() {
-        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
-    }
-    let filename = resolve_platform_groups_filename(&platform);
-    let path = dir.join(filename);
-    modules::atomic_write::write_string_atomic(&path, &data)
-        .map_err(|e| format!("Failed to write platform groups for {}: {}", platform, e))
+pub async fn save_platform_account_groups(
+    platform: String,
+    data: String,
+    expected_revision: Option<u64>,
+) -> Result<u64, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        account_groups_store::store(&platform)?.replace_json(&data, expected_revision)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::modules::account_groups_store::parse_groups;
     use super::{
         normalize_antigravity_runtime_target, resolve_antigravity_switch_flow,
-        validate_account_groups_payload, AntigravityRuntimeTarget, AntigravitySwitchFlow,
+        AntigravityRuntimeTarget, AntigravitySwitchFlow,
     };
 
     #[test]
     fn account_groups_payload_must_be_a_json_array() {
-        assert!(validate_account_groups_payload("[]").is_ok());
-        assert!(validate_account_groups_payload(r#"[{"id":"group-1","accountIds":[]}]"#).is_ok());
-        assert!(validate_account_groups_payload("{}").is_err());
-        assert!(validate_account_groups_payload("not-json").is_err());
+        assert!(parse_groups("[]").is_ok());
+        assert!(parse_groups(r#"[{"id":"group-1","accountIds":[]}]"#).is_ok());
+        assert!(parse_groups("{}").is_err());
+        assert!(parse_groups("not-json").is_err());
     }
 
     #[test]
     fn account_groups_payload_rejects_invalid_account_ids() {
-        assert!(validate_account_groups_payload(r#"[{"id":"group-1","accountIds":{}}]"#).is_err());
+        assert!(parse_groups(r#"[{"id":"group-1","accountIds":{}}]"#).is_err());
     }
 
     #[test]

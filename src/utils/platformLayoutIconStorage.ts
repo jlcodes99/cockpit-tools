@@ -1,21 +1,18 @@
-export const PLATFORM_LAYOUT_ICON_STORAGE_KEY =
-  "agtools.platform_layout.custom_icons.v1";
+import { readDurableUiSetting, saveDurableUiSetting } from './durableUiSettings';
 
-interface StorageWriter {
-  setItem(key: string, value: string): void;
+export const PLATFORM_LAYOUT_ICON_STORAGE_KEY = 'agtools.platform_layout.custom_icons.v1';
+export const PLATFORM_LAYOUT_ICONS_CHANGED_EVENT = 'agtools:platform-layout-icons-changed';
+
+export function readPlatformLayoutCustomIcons(): string | null {
+  return readDurableUiSetting(PLATFORM_LAYOUT_ICON_STORAGE_KEY);
 }
 
-export function persistPlatformLayoutCustomIcons(
-  storage: StorageWriter,
-  customIcons: unknown,
-): boolean {
+export async function persistPlatformLayoutCustomIcons(customIcons: unknown): Promise<boolean> {
   try {
-    storage.setItem(
-      PLATFORM_LAYOUT_ICON_STORAGE_KEY,
-      JSON.stringify(customIcons),
-    );
+    await saveDurableUiSetting(PLATFORM_LAYOUT_ICON_STORAGE_KEY, JSON.stringify(customIcons), true);
     return true;
-  } catch {
+  } catch (error) {
+    console.warn('[Platform layout] Could not save custom icons:', error);
     return false;
   }
 }

@@ -4,7 +4,7 @@ use super::*;
 #[path = "anthropic_code_mode_tests.rs"]
 mod code_mode_tests;
 
-fn sse(message: Value) -> Response {
+pub(super) fn sse(message: Value) -> Response {
     let mut frames = vec![
         json!({"type":"message_start","message":{"id":message["id"],"usage":message["usage"]}}),
     ];

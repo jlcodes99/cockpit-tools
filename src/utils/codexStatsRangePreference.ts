@@ -5,8 +5,6 @@ import {
   type CodexStatsTimeRange,
 } from "./codexStatsRange.ts";
 
-type RangePreferenceStorage = Pick<Storage, "getItem" | "setItem">;
-
 export interface CodexStatsRangeSelection {
   key: CodexStatsRangeKey;
   range: CodexStatsTimeRange;
@@ -16,32 +14,13 @@ export type CodexSessionUsageRange = "today" | "7d" | "30d" | "month" | "all";
 
 export const CODEX_SESSION_USAGE_RANGE_STORAGE_KEY =
   "agtools.codex.session_usage.range.v1";
+export const CODEX_API_STATS_RANGE_STORAGE_KEY = "agtools.codex.api_service.stats_range.v1";
+export const CODEX_LOCAL_ACCESS_STATS_RANGE_STORAGE_KEY = "agtools.codex.local_access.stats_range.v1";
 
-function readPreference(key: string, storage?: RangePreferenceStorage): string | null {
-  try {
-    return (storage ?? localStorage).getItem(key);
-  } catch {
-    console.warn("[Codex stats] Unable to read the saved range; using the default.");
-    return null;
-  }
-}
-
-function writePreference(key: string, value: string, storage?: RangePreferenceStorage): boolean {
-  try {
-    (storage ?? localStorage).setItem(key, value);
-    return true;
-  } catch {
-    console.warn("[Codex stats] Unable to save the range; the current selection remains usable.");
-    return false;
-  }
-}
-
-export function readCodexStatsRangeSelection(
-  storageKey: string,
+function parseSavedStatsRange(
+  raw: string | null,
   now = new Date(),
-  storage?: RangePreferenceStorage,
-): CodexStatsRangeSelection {
-  const raw = readPreference(storageKey, storage);
+): CodexStatsRangeSelection | null {
   // Keep the existing plain-string preset format, including the previously
   // omitted daily value. Recalculate rolling/calendar ranges for today's date.
   if (raw === "daily" || raw === "rolling7d" || raw === "weekly" || raw === "monthly") {
@@ -62,37 +41,31 @@ export function readCodexStatsRangeSelection(
       // untouched until the user explicitly chooses another range.
     }
   }
-  return { key: "rolling7d", range: buildCodexStatsTimeRange("rolling7d", now) };
+  return null;
 }
 
-export function persistCodexStatsRangeSelection(
-  storageKey: string,
+export function isValidCodexStatsRangePreference(raw: string): boolean {
+  return parseSavedStatsRange(raw) !== null;
+}
+
+export function readCodexStatsRangeSelection(
+  raw: string | null,
+  now = new Date(),
+): CodexStatsRangeSelection {
+  return parseSavedStatsRange(raw, now) ?? { key: "rolling7d", range: buildCodexStatsTimeRange("rolling7d", now) };
+}
+
+export function serializeCodexStatsRangeSelection(
   selection: CodexStatsRangeSelection,
-  storage?: RangePreferenceStorage,
-): boolean {
+): string | null {
   if (selection.key === "custom") {
     const { startInput, endInput } = selection.range;
-    if (!parseCodexStatsTimeRange(startInput, endInput)) return false;
-    return writePreference(
-      storageKey,
-      JSON.stringify({ key: "custom", startInput, endInput }),
-      storage,
-    );
+    if (!parseCodexStatsTimeRange(startInput, endInput)) return null;
+    return JSON.stringify({ key: "custom", startInput, endInput });
   }
-  return writePreference(storageKey, selection.key, storage);
+  return selection.key;
 }
 
 export function normalizeCodexSessionUsageRange(value: unknown): CodexSessionUsageRange {
   return value === "today" || value === "30d" || value === "month" || value === "all" ? value : "7d";
-}
-
-export function readCodexSessionUsageRange(storage?: RangePreferenceStorage): CodexSessionUsageRange {
-  return normalizeCodexSessionUsageRange(readPreference(CODEX_SESSION_USAGE_RANGE_STORAGE_KEY, storage));
-}
-
-export function persistCodexSessionUsageRange(
-  range: CodexSessionUsageRange,
-  storage?: RangePreferenceStorage,
-): boolean {
-  return writePreference(CODEX_SESSION_USAGE_RANGE_STORAGE_KEY, range, storage);
 }

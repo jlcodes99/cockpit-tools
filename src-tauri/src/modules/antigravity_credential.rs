@@ -1,5 +1,7 @@
 use crate::models::Account;
 
+const DESKTOP_FALLBACK_FILE: &str = "jetski-standalone-oauth-token";
+
 #[derive(serde::Serialize)]
 struct AntigravityCredentialToken {
     access_token: String,
@@ -16,7 +18,6 @@ struct AntigravityCredentialPayload {
     id_token: Option<String>,
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 #[derive(Debug, serde::Deserialize)]
 struct StoredAntigravityCredentialToken {
     access_token: Option<String>,
@@ -25,14 +26,12 @@ struct StoredAntigravityCredentialToken {
     expiry: Option<String>,
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 #[derive(Debug, serde::Deserialize)]
 struct StoredAntigravityCredentialPayload {
     token: StoredAntigravityCredentialToken,
     auth_method: Option<String>,
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 #[derive(Debug, Clone)]
 pub struct AntigravitySystemCredential {
     pub access_token: Option<String>,
@@ -42,7 +41,6 @@ pub struct AntigravitySystemCredential {
     pub auth_method: Option<String>,
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn normalize_non_empty(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
@@ -50,7 +48,6 @@ fn normalize_non_empty(value: Option<&str>) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn normalize_antigravity_credential_secret(secret: &str) -> Result<String, String> {
     let trimmed = secret.trim();
     if trimmed.is_empty() {
@@ -68,7 +65,6 @@ fn normalize_antigravity_credential_secret(secret: &str) -> Result<String, Strin
     Ok(trimmed.to_string())
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn parse_antigravity_system_credential(
     secret: &str,
 ) -> Result<AntigravitySystemCredential, String> {
@@ -119,7 +115,7 @@ fn write_antigravity_credentials(account: &Account, sync_cli: bool) -> Result<()
     // Standalone 2.13.0 / 2.25.0's compositeTokenStorage falls back to this file when
     // Keyring is unavailable. This is distinct from Gemini CLI / agy storage.
     let gemini_dir = home.join(".gemini");
-    let fallback_path = gemini_dir.join("jetski-standalone-oauth-token");
+    let fallback_path = gemini_dir.join(DESKTOP_FALLBACK_FILE);
     let cli_session = if sync_cli {
         initialized_cli_session_path(&gemini_dir)?
     } else {
@@ -170,6 +166,24 @@ fn write_antigravity_credential_payload(
             .map_err(|error| format!("ANTIGRAVITY_SWITCH_STATE_SAVE_FAILED: agy: {error}"))?;
     }
     Ok(())
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn validate_windows_credential_size(size: usize) -> Result<(), String> {
+    const CRED_MAX_CREDENTIAL_BLOB_SIZE: usize = 5 * 512;
+    if size > CRED_MAX_CREDENTIAL_BLOB_SIZE {
+        return Err("ANTIGRAVITY_WINDOWS_CREDENTIAL_TOO_LARGE".to_string());
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn windows_credential_write_error(error: std::io::Error) -> String {
+    const ERROR_NOT_ENOUGH_MEMORY: i32 = 8;
+    if error.raw_os_error() == Some(ERROR_NOT_ENOUGH_MEMORY) {
+        return "ANTIGRAVITY_WINDOWS_CREDENTIAL_STORE_CAPACITY".to_string();
+    }
+    format!("写入 Windows Credential Manager 失败: {error}")
 }
 
 fn write_antigravity_system_payload(payload_json: &str) -> Result<(), String> {
@@ -225,6 +239,7 @@ fn write_antigravity_system_payload(payload_json: &str) -> Result<(), String> {
             .chain(std::iter::once(0))
             .collect();
         let secret = payload_json.as_bytes();
+        validate_windows_credential_size(secret.len())?;
 
         let credential = CredentialW {
             flags: 0,
@@ -247,10 +262,7 @@ fn write_antigravity_system_payload(payload_json: &str) -> Result<(), String> {
         unsafe {
             // CredWriteW replaces an existing target without deleting it first.
             if CredWriteW(&credential, 0) == 0 {
-                return Err(format!(
-                    "写入 Windows Credential Manager 失败: {}",
-                    std::io::Error::last_os_error()
-                ));
+                return Err(windows_credential_write_error(std::io::Error::last_os_error()));
             }
         }
     }
@@ -427,12 +439,56 @@ fn read_antigravity_system_credential_secret() -> Result<Option<String>, String>
     Err(format!("读取 Antigravity Keychain 凭据失败: {}", output.status))
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "linux")]
+fn read_antigravity_system_credential_secret() -> Result<Option<String>, String> {
+    let mut command = std::process::Command::new("secret-tool");
+    command.args(["lookup", "service", "gemini", "username", "antigravity"]);
+    let output = match crate::modules::process_timeout::output_with_timeout(
+        &mut command,
+        std::time::Duration::from_secs(15),
+    ) {
+        Ok(output) => output,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("执行 Linux secret-tool 读取失败: {error}")),
+    };
+    if output.status.success() {
+        return String::from_utf8(output.stdout)
+            .map(Some)
+            .map_err(|_| "Antigravity Linux 系统凭据不是有效 UTF-8".to_string());
+    }
+    if output.status.code() == Some(1) && output.stderr.is_empty() {
+        return Ok(None);
+    }
+    Err(format!("读取 Antigravity Linux 系统凭据失败: {}", output.status))
+}
+
 pub fn read_antigravity_system_credential() -> Result<Option<AntigravitySystemCredential>, String> {
     let Some(secret) = read_antigravity_system_credential_secret()? else {
         return Ok(None);
     };
     parse_antigravity_system_credential(&secret).map(Some)
+}
+
+pub fn read_antigravity_desktop_credential() -> Result<Option<AntigravitySystemCredential>, String> {
+    let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
+    read_desktop_credential(
+        &home.join(".gemini").join(DESKTOP_FALLBACK_FILE),
+        read_antigravity_system_credential,
+    )
+}
+
+fn read_desktop_credential(
+    fallback_path: &std::path::Path,
+    read_system: impl FnOnce() -> Result<Option<AntigravitySystemCredential>, String>,
+) -> Result<Option<AntigravitySystemCredential>, String> {
+    if let Some(credential) = read_system()? {
+        return Ok(Some(credential));
+    }
+    match std::fs::read_to_string(fallback_path) {
+        Ok(secret) => parse_antigravity_system_credential(&secret).map(Some),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("读取 Antigravity 桌面凭据文件失败: {error}")),
+    }
 }
 
 #[cfg(test)]

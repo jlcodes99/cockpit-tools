@@ -19,27 +19,16 @@ fn get_old_codex_data_dir() -> PathBuf {
 
 /// 将旧目录中的 codex 数据迁移到新目录（一次性，迁移成功后删除旧文件）
 fn migrate_codex_data_if_needed(new_data_dir: &PathBuf) {
+    #[cfg(test)]
+    if std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR").is_some()
+        || std::env::var_os("COCKPIT_TEST_DATA_DIR").is_some()
+        || std::env::var_os("COCKPIT_TOOLS_DATA_DIR").is_some()
+    {
+        return;
+    }
     let old_dir = get_old_codex_data_dir();
     if !old_dir.exists() {
         return;
-    }
-
-    // 迁移 codex_accounts.json
-    let old_index = old_dir.join("codex_accounts.json");
-    let new_index = new_data_dir.join("codex_accounts.json");
-    if old_index.exists() && !new_index.exists() {
-        match fs::copy(&old_index, &new_index) {
-            Ok(_) => {
-                logger::log_info("[Codex Migration] codex_accounts.json 迁移成功，清理旧文件");
-                let _ = fs::remove_file(&old_index);
-            }
-            Err(e) => {
-                logger::log_warn(&format!(
-                    "[Codex Migration] codex_accounts.json 迁移失败: {}",
-                    e
-                ));
-            }
-        }
     }
 
     // 迁移 codex_accounts/ 目录

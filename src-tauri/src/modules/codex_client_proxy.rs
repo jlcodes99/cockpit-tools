@@ -476,10 +476,10 @@ async fn resolve_prepared_route(
     super::codex_proxy_runtime::desktop_target(&id)
         .await?
         .ok_or("CLIENT_PROXY_STALE")?;
-    let url = super::codex_proxy_desktop_router::ensure(&id)
+    let port = super::codex_proxy_desktop_router::ensure(&id)
         .await?
         .ok_or("CLIENT_PROXY_STALE")?;
-    Ok(super::process::CodexLaunchProxy::Proxy(url))
+    Ok(super::process::CodexLaunchProxy::Managed(port))
 }
 
 async fn reference_for_snapshot(

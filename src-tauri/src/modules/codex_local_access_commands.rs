@@ -350,6 +350,8 @@ async fn save_local_access_accounts_with_reload(
 pub async fn append_local_access_accounts(
     account_ids: Vec<String>,
 ) -> Result<CodexLocalAccessAppendAccountsResult, String> {
+    // Pool edits share this lock, including the member picker and its image settings.
+    let update_guard = image_configuration_update_lock().lock().await;
     ensure_runtime_loaded_without_start().await?;
 
     let existing_collection = {
@@ -380,6 +382,10 @@ pub async fn append_local_access_accounts(
             None => new_local_access_collection()?,
         };
         collection.account_ids = next_account_ids;
+        collection.chatgpt_plan_service_revision = collection
+            .chatgpt_plan_service_revision
+            .checked_add(1)
+            .ok_or("CHATGPT_PLAN_SERVICE_CHANGED")?;
         collection.updated_at = now_ms();
         let (changed, _) = sanitize_collection_with_accounts(&mut collection, &accounts)?;
         if changed {
@@ -398,6 +404,7 @@ pub async fn append_local_access_accounts(
         }
     }
 
+    drop(update_guard);
     Ok(CodexLocalAccessAppendAccountsResult {
         state: snapshot_state_without_gateway_reload().await?,
         synced_account_ids,
@@ -1279,7 +1286,7 @@ pub async fn update_local_access_api_key(
     account_ids: Option<Vec<String>>, inherit_account_pool: Option<bool>,
 ) -> Result<CodexLocalAccessState, String> {
     update_local_access_api_key_with_budget(api_key_id, label, enabled, model_prefix, allowed_models,
-        excluded_models, token_limit, account_ids, inherit_account_pool, None).await
+        excluded_models, token_limit, account_ids, inherit_account_pool, None, None).await
 }
 
 pub async fn update_local_access_api_key_with_budget(
@@ -1293,6 +1300,7 @@ pub async fn update_local_access_api_key_with_budget(
     account_ids: Option<Vec<String>>,
     inherit_account_pool: Option<bool>,
     budget: Option<CodexApiKeyBudget>,
+    max_reasoning_effort: Option<String>,
 ) -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded_without_start().await?;
     let (maybe_collection, historical_token_used) = {
@@ -1343,6 +1351,14 @@ pub async fn update_local_access_api_key_with_budget(
     }
     if let Some(excluded_models) = excluded_models {
         collection.api_keys[index].excluded_models = normalize_model_rule_list(excluded_models);
+    }
+    if let Some(value) = max_reasoning_effort {
+        collection.api_keys[index].max_reasoning_effort = if value.is_empty() {
+            None
+        } else {
+            Some(crate::models::codex_local_access::CodexReasoningLevel::parse(&value)
+                .ok_or("Unsupported maximum reasoning effort")?)
+        };
     }
     if let Some(token_limit) = token_limit {
         if token_limit > 0 && collection.api_keys[index].token_limit.is_none() {
@@ -1708,14 +1724,14 @@ pub async fn set_local_access_enabled(enabled: bool) -> Result<CodexLocalAccessS
             let generation = current_gateway_lifecycle_generation();
             let restore_deadline = Instant::now() + Duration::from_secs(30);
             let restore_worker = tauri::async_runtime::spawn_blocking(move || {
-                restore_takeover_profiles_after_disable_checked(&next_collection, || {
+                restore_takeover_profiles_after_disable_with_projects(&next_collection, || {
                     if Instant::now() >= restore_deadline
                         || gateway_lifecycle_generation_changed(generation)
                     {
                         return Err("恢复客户端配置已超时或被新的启停操作替代，请重试".to_string());
                     }
                     Ok(())
-                })
+                }, true)
             });
             let restore_result = match timeout(Duration::from_secs(30), restore_worker).await {
                 Ok(result) => result
@@ -1723,8 +1739,11 @@ pub async fn set_local_access_enabled(enabled: bool) -> Result<CodexLocalAccessS
                     .and_then(|result| result),
                 Err(_) => Err("恢复客户端配置超时，请重试".to_string()),
             };
-            finish_local_access_disable(gateway_result, || restore_result)?;
-            snapshot_state_without_gateway_reload().await
+            let project_state_deferred = restore_result.as_ref().copied().unwrap_or(false);
+            finish_local_access_disable(gateway_result, || restore_result.map(|_| ()))?;
+            let mut state = snapshot_state_without_gateway_reload().await?;
+            state.project_state_deferred = project_state_deferred;
+            Ok(state)
         }
     }
     .await;

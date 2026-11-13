@@ -338,13 +338,6 @@ fn automatic_api_service_route_models(
     models
 }
 
-/// DeepSeek 模型在客户端模型列表里的默认推理档位。
-///
-/// 官方 DeepSeek 模板声明为 `high`，但 Cockpit 的 API 服务默认选最高档：DeepSeek 官方目录
-/// 已声明支持 `max`，接管 profile 时也会补齐客户端的 `max` 档位开关。该值只决定
-/// 「尚未选择过档位」或「当前档位对该模型不可用」时的回落值，不会覆盖用户已保存的档位。
-const DEEPSEEK_DEFAULT_REASONING_EFFORT: &str = "max";
-
 /// 账号模型的官方模板（目前覆盖 DeepSeek 官方目录）。
 fn account_model_template(account: &CodexAccount, model: &str) -> Option<Value> {
     let model = model.trim();
@@ -368,7 +361,7 @@ fn account_model_template(account: &CodexAccount, model: &str) -> Option<Value> 
     }
     let catalog = codex_account::deepseek_official_catalog_json_for_account(account).ok()?;
     let catalog: Value = serde_json::from_str(&catalog).ok()?;
-    let mut entry = catalog
+    catalog
         .get("models")
         .and_then(Value::as_array)
         .into_iter()
@@ -379,10 +372,7 @@ fn account_model_template(account: &CodexAccount, model: &str) -> Option<Value> 
                 .and_then(Value::as_str)
                 .is_some_and(|slug| slug.eq_ignore_ascii_case(model))
         })
-        .cloned()?;
-    // 其余字段沿用官方模板，只把默认档位提升为最高档。
-    entry["default_reasoning_level"] = json!(DEEPSEEK_DEFAULT_REASONING_EFFORT);
-    Some(entry)
+        .cloned()
 }
 
 fn automatic_api_service_model_routing_value(
@@ -569,9 +559,14 @@ fn automatic_api_service_profile_extra_models(
                 }
             }
         }
-        models.extend(automatic_api_service_account_model_entries(
-            collection, account,
-        ));
+        // Native OAuth mappings are added below after validating the actual
+        // account route, including the separate official authorization catalog.
+        if collection.gateway_mode != CodexLocalAccessGatewayMode::Native
+            || !native_is_oauth_authorization_account(account)
+            || account.api_model_mappings.is_empty()
+        {
+            models.extend(automatic_api_service_account_model_entries(collection, account));
+        }
     }
     // 该 API Key 自己的供应商网关模型同样要在客户端可选。
     if let Some(gateway) = api_key.provider_gateway.as_ref() {
@@ -604,6 +599,40 @@ fn automatic_api_service_profile_extra_models(
             && !model_matches_any_rule(model, &api_key.excluded_models)
             && seen.insert(key)
     });
+    if collection.gateway_mode == CodexLocalAccessGatewayMode::Native {
+        let key = collection.api_keys.iter().find(|key| key.id == api_key.id);
+        for account in accounts.iter().filter(|account| {
+            scoped_ids.contains(&account.id)
+                && native_is_oauth_authorization_account(account)
+                && !account.api_model_mappings.is_empty()
+        }) {
+            let overlay = collection.official_account_bindings.get(&account.id).map(|registration| {
+                crate::modules::chatgpt_plan::official_runtime_overlay(account.clone(), registration)
+            });
+            let account = overlay.as_ref().unwrap_or(account);
+            for mapping in &account.api_model_mappings {
+                let model = &mapping.client_model;
+                let fingerprint = model.to_ascii_lowercase();
+                if seen.contains(&fingerprint) {
+                    continue;
+                }
+                let exposed = api_key.model_prefix.as_deref().filter(|prefix| !prefix.is_empty())
+                    .map(|prefix| format!("{}/{model}", prefix.trim_end_matches('/')))
+                    .unwrap_or_else(|| model.clone());
+                let Ok(public) = native_model_for_key(collection, key, &exposed) else { continue };
+                let Ok(plan) = native_model_route_plan(collection, key, &public) else { continue };
+                if !plan.provider && native_model_visible(collection, key, &plan, account) {
+                    seen.insert(fingerprint);
+                    let vision = codex_protocol::known_codex_model_template(&mapping.upstream_model)
+                        .and_then(|template| template["input_modalities"].as_array().map(|items| {
+                            items.iter().any(|item| item.as_str() == Some("image"))
+                        }))
+                        .unwrap_or(account.api_supports_vision);
+                    models.push((exposed, vision));
+                }
+            }
+        }
+    }
     models
 }
 
@@ -661,6 +690,7 @@ pub(crate) fn overlay_rendered_pool_models_on_experimental_catalog(
             model_id,
             reasoning_efforts: None,
             default_reasoning_effort: None,
+            ultra_reasoning_effort: None,
             context_window: None,
             auto_compact_token_limit: None,
         });

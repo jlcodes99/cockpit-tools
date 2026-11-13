@@ -375,6 +375,9 @@ fn prepare_model_config_import(
     if let Some(dir) = snapshot.profile_dir.as_ref() {
         let effective = model_reasoning_efforts_for_profile(dir, &document.models);
         for model in &document.models {
+            if let Err(code) = validate_ultra_reasoning_override(model, effective.get(&model.model_id)) {
+                model_config_preview_entry(&mut preview, "models", &model.model_id, "error", Some(&code));
+            }
             if model
                 .default_reasoning_effort
                 .as_ref()

@@ -1,6 +1,5 @@
-//! Automatic preservation of a verified, profile-wide Codex Web GPT launcher route.
-//! No network requests or launcher execution: malformed/unverified state follows
-//! the ordinary OAuth projection, which clears the previous endpoint.
+//! Preserve profile-wide loopback routes across ordinary OAuth writes.
+//! Codex Web GPT launcher routes also need their local integration record.
 
 use crate::models::codex::CodexAccount;
 use serde_json::Value;
@@ -70,22 +69,17 @@ fn is_loopback_bridge_url(raw: &str) -> bool {
         && url.fragment().is_none()
 }
 
-fn verified_bridge_at(profile: &Path, journal_path: &Path) -> Option<String> {
-    let config_path = profile.join("config.toml");
-    let content = read_bounded(&config_path, MAX_CONFIG_BYTES)?;
-    if !content
+fn configured_loopback_endpoint(config_path: &Path) -> Option<(String, bool)> {
+    let content = read_bounded(config_path, MAX_CONFIG_BYTES)?;
+    let has_integration_marker = content
         .lines()
-        .any(|line| line.trim() == MANAGED_ROUTE_COMMENT)
-    {
-        return None;
-    }
+        .any(|line| line.trim() == MANAGED_ROUTE_COMMENT);
     let doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&content).ok()?;
-    // A selected custom provider owns its own endpoint, even if an old bridge
-    // comment remains in the file. Never preserve that stale bridge implicitly.
+    // A selected custom provider owns its endpoint. A top-level override
+    // left beside it is not the route used by this OAuth profile.
     if doc
         .get("model_provider")
-        .and_then(|item| item.as_str())
-        .is_some_and(|provider| provider.trim() != "openai")
+        .is_some_and(|item| item.as_str().map(str::trim) != Some("openai"))
     {
         return None;
     }
@@ -93,6 +87,10 @@ fn verified_bridge_at(profile: &Path, journal_path: &Path) -> Option<String> {
     if !is_loopback_bridge_url(endpoint) {
         return None;
     }
+    Some((endpoint.to_owned(), has_integration_marker))
+}
+
+fn matching_bridge_journal(config_path: &Path, journal_path: &Path, endpoint: &str) -> Option<()> {
     let journal: Value =
         serde_json::from_str(&read_bounded(journal_path, MAX_JOURNAL_BYTES)?).ok()?;
     if journal.get("active").and_then(Value::as_bool) != Some(true)
@@ -106,7 +104,7 @@ fn verified_bridge_at(profile: &Path, journal_path: &Path) -> Option<String> {
     {
         return None;
     }
-    Some(endpoint.to_owned())
+    Some(())
 }
 
 pub(super) fn preserved_url(
@@ -114,19 +112,21 @@ pub(super) fn preserved_url(
     incoming: &CodexAccount,
     existing_auth: Option<&Value>,
 ) -> Option<String> {
-    let journal = dirs::home_dir()?.join(".codex-chatgpt-web/codex/integration-journal.json");
-    preserved_url_at(profile, incoming, existing_auth, &journal)
+    let journal = dirs::home_dir()
+        .map(|home| home.join(".codex-chatgpt-web/codex/integration-journal.json"));
+    preserved_url_at(profile, incoming, existing_auth, journal.as_deref())
 }
 
 fn preserved_url_at(
     profile: &Path,
     incoming: &CodexAccount,
     existing_auth: Option<&Value>,
-    journal: &Path,
+    journal: Option<&Path>,
 ) -> Option<String> {
     if incoming.is_api_key_auth()
         || incoming.is_agent_identity_auth()
         || incoming.is_web_session_auth()
+        || incoming.tokens.access_token.trim().is_empty()
         || incoming.tokens.id_token.trim().is_empty()
         || incoming
             .tokens
@@ -137,7 +137,14 @@ fn preserved_url_at(
     {
         return None;
     }
-    verified_bridge_at(profile, journal)
+    let config_path = profile.join("config.toml");
+    let (endpoint, has_integration_marker) = configured_loopback_endpoint(&config_path)?;
+    let has_matching_journal = journal.is_some_and(|path| {
+        matching_bridge_journal(&config_path, path, &endpoint).is_some()
+    });
+    // Marked launcher routes require a journal. A launcher with a matching
+    // journal but missing marker also remains subject to that policy.
+    (has_integration_marker == has_matching_journal).then_some(endpoint)
 }
 
 #[cfg(test)]
@@ -167,7 +174,11 @@ mod tests {
             std::fs::write(self.0.join("journal.json"), journal.to_string()).unwrap();
         }
         fn url(&self) -> Option<String> {
-            verified_bridge_at(&self.0, &self.0.join("journal.json"))
+            let config_path = self.0.join("config.toml");
+            let (endpoint, marked) = configured_loopback_endpoint(&config_path)?;
+            marked.then_some(())?;
+            matching_bridge_journal(&config_path, &self.0.join("journal.json"), &endpoint)?;
+            Some(endpoint)
         }
     }
     impl Drop for Fixture {
@@ -248,6 +259,55 @@ mod tests {
     }
 
     #[test]
+    fn oauth_projection_preserves_a_manually_configured_loopback_endpoint() {
+        use crate::models::codex::CodexTokens;
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let fixture = Fixture::new();
+        let endpoint = "http://127.0.0.1:8787/v1";
+        let config_path = fixture.0.join("config.toml");
+        let auth_path = fixture.0.join("auth.json");
+        let oauth = json!({"auth_mode":"chatgpt", "OPENAI_API_KEY":null,
+            "tokens":{"id_token":"old-id", "access_token":"old-access", "refresh_token":"old-refresh"}});
+        std::fs::write(&auth_path, oauth.to_string()).unwrap();
+        std::fs::write(&config_path, format!(
+            "cli_auth_credentials_store = \"file\"\nopenai_base_url = {endpoint:?}\nmodel = \"gpt-5.5\"\n"
+        )).unwrap();
+        let account = CodexAccount::new(
+            "ordinary-oauth".into(),
+            "fixture@example.invalid".into(),
+            CodexTokens {
+                id_token: "new-id".into(),
+                access_token: "new-access".into(),
+                refresh_token: Some("new-refresh".into()),
+            },
+        );
+        let preserved = preserved_url_at(&fixture.0, &account, Some(&oauth), None);
+        super::super::write_auth_file_to_dir_with_after_commit_and_bridge(
+            &fixture.0,
+            &account,
+            || {},
+            preserved,
+        )
+        .unwrap();
+        let content = std::fs::read_to_string(&config_path).unwrap();
+        let doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&content).unwrap();
+        assert_eq!(doc["openai_base_url"].as_str(), Some(endpoint));
+        let auth: Value = serde_json::from_slice(&std::fs::read(&auth_path).unwrap()).unwrap();
+        assert_eq!(auth["tokens"]["access_token"], "new-access");
+
+        let api_auth = json!({"auth_mode":"apikey", "OPENAI_API_KEY":"fixture-key"});
+        assert_eq!(preserved_url_at(&fixture.0, &account, Some(&api_auth), None), None);
+        std::fs::write(&config_path, format!("model_provider = \"codex_local_access\"\nopenai_base_url = {endpoint:?}\n")).unwrap();
+        assert_eq!(preserved_url_at(&fixture.0, &account, Some(&oauth), None), None);
+        fixture.seed(endpoint);
+        std::fs::write(&config_path, format!("openai_base_url = {endpoint:?}\n")).unwrap();
+        let journal = fixture.0.join("journal.json");
+        assert_eq!(preserved_url_at(&fixture.0, &account, Some(&oauth), Some(&journal)), None);
+    }
+
+    #[test]
     fn oauth_projections_automatically_preserve_verified_bridge_and_api_projection_clears_it() {
         use crate::models::codex::{CodexApiProviderMode, CodexTokens};
         let _lock = crate::modules::test_support::env_lock()
@@ -278,7 +338,7 @@ mod tests {
                 &std::fs::read_to_string(fixture.0.join("auth.json")).unwrap(),
             )
             .unwrap();
-            let bridge = preserved_url_at(&fixture.0, &account, Some(&auth), &journal);
+            let bridge = preserved_url_at(&fixture.0, &account, Some(&auth), Some(&journal));
             assert_eq!(bridge.as_deref(), Some(endpoint));
             super::super::write_auth_file_to_dir_with_after_commit_and_bridge(
                 &fixture.0,
@@ -312,7 +372,7 @@ mod tests {
             vec![],
         );
         assert_eq!(
-            preserved_url_at(&fixture.0, &api, Some(&oauth), &journal),
+            preserved_url_at(&fixture.0, &api, Some(&oauth), Some(&journal)),
             None
         );
         super::super::write_auth_file_to_dir_with_after_commit_and_bridge(
@@ -339,7 +399,7 @@ mod tests {
                 &fixture.0,
                 &account,
                 Some(&json!({"auth_mode":"apikey"})),
-                &journal
+                Some(&journal)
             ),
             None
         );

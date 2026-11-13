@@ -113,12 +113,15 @@ async fn refresh_codex_api_key_usage_for_menu(
     app: AppHandle,
     account_id: String,
 ) -> Result<(), String> {
-    let mut account = modules::codex_account::list_accounts()
-        .into_iter()
-        .find(|account| account.id == account_id)
+    let lookup_id = account_id.clone();
+    let account = tokio::task::spawn_blocking(move || modules::codex_account::load_account_checked(&lookup_id))
+        .await.map_err(|error| error.to_string())??
         .ok_or_else(|| "未找到 Codex API Key 账号".to_string())?;
     if !account.is_api_key_auth() {
         commands::codex::refresh_codex_quota(app, account_id).await?;
+        return Ok(());
+    }
+    if modules::codex_quota::account_relay_balance_disabled(&account) {
         return Ok(());
     }
     let api_key = account
@@ -158,39 +161,14 @@ async fn refresh_codex_api_key_usage_for_menu(
         api_key.to_string(),
         integration_type,
         usage_api_key,
+        Some(true),
+        Some(account_id),
     )
-    .await?;
-    let summary_value = serde_json::to_value(&summary)
-        .map_err(|err| format!("序列化 Codex API Key 用量失败: {}", err))?;
-    let now = chrono::Utc::now().timestamp();
-    let mut raw_data = account
-        .quota
-        .as_ref()
-        .and_then(|quota| quota.raw_data.clone())
-        .unwrap_or_else(|| serde_json::json!({}));
-    if !raw_data.is_object() {
-        raw_data = serde_json::json!({});
-    }
-    if let Some(object) = raw_data.as_object_mut() {
-        object.insert("provider_usage".to_string(), summary_value);
-    }
-    account.quota = Some(crate::models::codex::CodexQuota {
-        hourly_percentage: 0,
-        hourly_reset_time: None,
-        hourly_window_minutes: None,
-        hourly_window_present: Some(false),
-        weekly_percentage: 0,
-        weekly_reset_time: None,
-        weekly_window_minutes: None,
-        weekly_window_present: Some(false),
-        reset_credits_available: None,
-        reset_credits: Vec::new(),
-        reset_credits_next_expires_at: None,
-        raw_data: Some(raw_data),
-    });
-    account.quota_error = None;
-    account.usage_updated_at = Some(now);
-    modules::codex_account::save_account(&account)?;
+    .await;
+    let summary = match summary {
+        Err(error) if error == modules::codex_quota::RELAY_BALANCE_DISABLED => return Ok(()),
+        result => result?,
+    };
     if let Some(mode) = summary.mode.as_deref() {
         let provider_id = provider
             .as_ref()

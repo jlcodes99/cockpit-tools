@@ -158,10 +158,28 @@
     "providerClear": "Limpar seleção"
   },
   "common": {
+    "collapseAll": "Recolher tudo",
+    "expandAll": "Expandir tudo",
+    "syncing": "Sincronizando…",
+    "notice": "Aviso",
+    "gotIt": "Entendi",
+    "unknown": "Desconhecido",
+    "noData": "Sem dados",
+    "search": "Buscar",
+    "rename": "Renomear",
+    "yes": "Sim",
+    "no": "Não",
+    "saved": "Salvo",
+    "done": "Concluir",
+    "edit": "Editar",
+    "windowMinimize": "Minimizar",
+    "windowMaximize": "Maximizar",
+    "windowRestore": "Restaurar",
     "profileRestoreBusy": "A sessão está sendo restaurada. Tente novamente em instantes.",
     "profileRestoreInvalid": "O caminho da cópia da sessão é inválido. Importe a conta novamente.",
     "profileRestoreRecoveryFailed": "Falha ao restaurar a sessão. O backup foi mantido: {{detail}}",
     "dataQueryBusy": "Os dados estão sendo processados. Tente novamente em instantes.",
+    "historyRestoring": "Restaurando o histórico…",
     "apiBudget": {
       "keyScope": "Esta chave",
       "upgradeRequired": "Atualize o Cockpit Tools no computador do gateway para ver estatísticas e histórico de solicitações.",
@@ -389,6 +407,33 @@
       "workspaceDesc": "Copia e mescla os índices de sessões do workspace e o estado de restauração entre contas {{platform}} neste dispositivo. O banco criptografado de sessões Builder/Agent não é alterado e nenhum conteúdo é enviado."
     },
     "shared": {
+      "quotaCategories": {
+        "other": "Outros",
+        "extra": "Pacote adicional",
+        "activity": "Pacote promocional",
+        "base": "Pacote básico"
+      },
+      "webSession": {
+        "openFailed": "Não foi possível abrir a sessão web: {{error}}",
+        "opened": "Sessão web aberta: {{email}}",
+        "open": "Abrir sessão web"
+      },
+      "addAccountTargetGroup": "Será adicionado ao grupo {{group}}",
+      "checkin": {
+        "saveFailed": "Falha ao salvar as configurações de check-in automático: {{message}}",
+        "manualTestPartialFailure": "O check-in falhou para algumas contas. Veja os registros; uma nova tentativa ocorrerá em segundo plano mais tarde.",
+        "manualTestAlreadyRunning": "Uma tarefa de check-in automático está em execução. Verifique os registros mais tarde.",
+        "manualTestFailed": "Falha no teste: {{message}}",
+        "clearLogsFailed": "Falha ao limpar os registros de check-in: {{message}}",
+        "tabSettings": "Configurações de check-in automático",
+        "tabHistory": "Histórico de check-in automático",
+        "historyRangeHint": "Apenas os registros de check-in automático dos últimos 30 dias são mantidos ({{count}} no total)",
+        "manualTest": "Executar teste",
+        "clearLogs": "Limpar",
+        "historyLoadFailed": "Falha ao carregar os registros de check-in automático: {{message}}",
+        "historyLoading": "Carregando registros de check-in automático...",
+        "noHistory": "Nenhum registro de check-in automático nos últimos 30 dias"
+      },
       "addAccount": "Adicionar conta",
       "columns": {
         "actions": "Ações",
@@ -421,6 +466,7 @@
       },
       "filterLabel": "Filtrar",
       "import": {
+        "file": "Escolher arquivo",
         "failedMsg": "Falha na importação: {{error}}",
         "label": "Importar",
         "importing": "Importando...",
@@ -519,6 +565,15 @@
       "refreshQuota": "Atualizar cota",
       "search": "Pesquisar contas...",
       "sort": {
+        "name": "Por nome",
+        "customReset": "Redefinir ordem",
+        "customModalDesc": "Arraste contas ou use os botões para cima/baixo para ajustar a ordem.",
+        "customModalTitle": "Ordem das contas",
+        "customSettingsTooltip": "Configurar ordem personalizada",
+        "custom": "Ordem personalizada",
+        "dragToReorder": "Arrastar para reordenar",
+        "moveUp": "Mover acima",
+        "moveDown": "Mover abaixo",
         "ascTooltip": "Ascendente (clique para Decrescente)",
         "createdAt": "Data de criação",
         "descTooltip": "Decrescente (clique para Ascendente)",
@@ -686,9 +741,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
-    "traeSolo": "TRAE SOLO​",
+    "traeSolo": "TraeWork",
     "traeCn": "Trae CN​",
-    "traeSoloCn": "TRAE SOLO CN​",
+    "traeSoloCn": "TraeWork CN",
     "codebuddyCn": "CodeBuddy CN​",
     "minimaxcode": "MiniMax Code",
     "zed": "Plataforma Zed",
@@ -719,6 +774,7 @@
     "openSponsor": "Abrir"
   },
   "platformLayout": {
+    "customIconStorageFailed": "Não foi possível salvar o ícone personalizado. O armazenamento local pode estar cheio. Remova ícones sem uso e tente de novo.",
     "title": "Layout de plataformas",
     "sidebarSelected": "Selecionadas na barra lateral {{count}}/{{max}}",
     "reset": "Restaurar padrão",
@@ -783,6 +839,7 @@
       "toggleDirection": "Alternar direção da ordenação"
     },
     "actions": {
+      "duplicate": "Duplicar instância",
       "create": "Nova instância",
       "refresh": "Atualizar",
       "startAll": "Iniciar tudo",
@@ -841,6 +898,7 @@
       "editTitle": "Editar instância"
     },
     "form": {
+      "copyName": "Cópia de {{name}}",
       "name": "Nome da instância",
       "namePlaceholder": "ex: Conta de trabalho",
       "path": "Diretório da instância",
@@ -912,8 +970,43 @@
       "appSpeed": "Velocidade",
       "appSpeedDesc": "Grava a velocidade escolhida antes de iniciar o Codex oficial",
       "autoSyncThreads": "Auto-sync sessões",
-      "autoSyncThreadsDesc": "Desativado mantém as sessões de múltiplas instâncias isoladas. Ao ativar, iniciar ou fechar uma instância mescla automaticamente os registros locais de sessão somente depois que todas as instâncias Codex estiverem paradas.",
+      "autoSyncThreadsDesc": "Desativado mantém separados os históricos das instâncias. Ao ativar, parar uma instância sincroniza as sessões ausentes e as adições correspondentes somente quando todas as instâncias do Codex estão paradas. O conteúdo existente é preservado. A sincronização pode copiar arquivos de sessão grandes.",
       "modelRouting": {
+        "deselectModel": "Desmarcar",
+        "selectModel": "Selecionar",
+        "manageAction": "Gerenciar canais",
+        "missingSource": "Rota ausente",
+        "disabledSource": "Rota desativada",
+        "unavailableSource": "Conta indisponível",
+        "modelUnavailable": "O modelo saiu do catálogo da API",
+        "provider": "Selecionar conta de API",
+        "namespacePlaceholder": "Prefixo",
+        "deleteRoute": "Remover canal",
+        "loadedModels": "Modelos carregados",
+        "enabledTotal": "Ativos / total",
+        "fetchModels": "Buscar lista",
+        "manualPlaceholder": "Ex.: gpt-5.6-sol, grok-4.6",
+        "channelsSummary": "Canais de API de terceiros",
+        "manageChannels": "Configurar canais",
+        "noChannels": "Nenhum canal de API de terceiros",
+        "addRoute": "Adicionar canal",
+        "unnamedAccount": "Nenhuma conta selecionada",
+        "routesCount": "Canais: {{count}}",
+        "statusBadge": "Roteamento híbrido",
+        "catalogUnavailable": "O Cockpit não pode gerenciar o catálogo de modelos visíveis desta instância, então não é possível ativar o roteamento.",
+        "desktopOnly": "O roteamento de modelos só está disponível em instâncias do aplicativo desktop.",
+        "oauthRequired": "Vincule uma conta de assinatura OAuth que aceite login direto.",
+        "routeRequired": "Adicione pelo menos uma rota de API.",
+        "invalidNamespace": "Use de 2 a 32 letras latinas minúsculas, números, sublinhados ou hífens. Nomes reservados não são permitidos. Comece com uma letra ou um número.",
+        "duplicateNamespace": "Cada rota precisa de um prefixo exclusivo.",
+        "providerRequired": "Selecione uma conta de API para cada rota.",
+        "enabledRouteRequired": "Ative pelo menos uma rota de API.",
+        "createHint": "Ao criar, copie a instância padrão para pular a configuração do Codex. Uma instância vazia precisa ser iniciada uma vez primeiro.",
+        "fetchCredentialsRequired": "Esta conta não tem chave de API ou URL base.",
+        "fetchEmpty": "O provedor não retornou modelos. Você pode adicioná-los manualmente abaixo.",
+        "noProviderAccounts": "Nenhuma conta de API disponível. Adicione um provedor compatível na página Contas de API.",
+        "noCatalog": "Nenhum modelo foi buscado ainda. Busque a lista ou adicione modelos manualmente.",
+        "modalDescription": "Configure as contas de API de terceiros e os prefixos. Modelos sem prefixo continuam usando a assinatura atual.",
         "title": "Roteamento de API de terceiros",
         "summary": "Modelos sem prefixo usam a assinatura atual; modelos com prefixo como cpa/gpt-5.6-sol são encaminhados para uma API de terceiros. Ambos dependem do serviço de roteamento local.",
         "rowSummary": "Modelos sem prefixo usam a assinatura atual; modelos com prefixo como cpa/gpt-5.6-sol são encaminhados para uma API de terceiros. Ambos dependem do serviço de roteamento local.",
@@ -1092,6 +1185,11 @@
       "data": "Gerenciamento de Dados"
     },
     "general": {
+      "accountLevelRefreshSummary": "Mostrar configurações",
+      "accountLevelRefreshSummaryActive": "Contas configuradas: {{count}}",
+      "accountLevelRefreshDesc": "Defina um intervalo de atualização automática por conta para substituir o padrão da plataforma.",
+      "accountLevelRefreshTitle": "Atualização por conta",
+      "accountLevelRefreshInherit": "Herdar da plataforma",
       "errorReporting": "Diagnóstico",
       "errorReportingDesc": "Quando ativado, envia diagnósticos de inicialização e interface após a remoção de dados sensíveis. Desativar interrompe o envio.",
       "appearance": "Aparência",
@@ -1133,6 +1231,8 @@
       "minimizeBehaviorDesc": "Escolha se, ao minimizar a janela, ela permanece no Dock e na barra de menus ou somente na barra de menus",
       "minimizeBehaviorDockAndTray": "Dock + barra de menus (recomendado)",
       "minimizeBehaviorTrayOnly": "Somente barra de menus",
+      "showTrayIcon": "Mostrar ícone na bandeja",
+      "showTrayIconDesc": "As tarefas continuam em segundo plano com o ícone oculto. Restaure a janela pelo Dock ou pela barra de tarefas.",
       "hideDockIcon": "Ocultar ícone do Dock (somente macOS)?",
       "hideDockIconDesc": "Controla a visibilidade do ícone do Dock de forma independente, sem relação com o comportamento de minimizar a janela",
       "hideDockIconOff": "Não (Mostrar ícone do Dock)",
@@ -1183,7 +1283,7 @@
       "vscodeAppPathPlaceholder": "Caminho padrão",
       "vscodePathSelect": "Selecionar",
       "vscodePathReset": "Redefinir padrão",
-      "antigravityAppPath": "Caminho do app Antigravity IDE",
+      "antigravityAppPath": "Caminho do app {{appName}}",
       "antigravityTitle": "Inicialização do Antigravity IDE",
       "commonTitle": "Geral",
       "antigravitySettingsTitle": "Configurações do Antigravity IDE",
@@ -1245,7 +1345,7 @@
       "traeAppPathPlaceholder": "Caminho padrao",
       "traePathSelect": "Selecionar",
       "traePathReset": "Redefinir para o padrao",
-      "workbuddyAppPath": "Caminho de inicializacao do WorkBuddy",
+      "workbuddyAppPath": "Caminho do WorkBuddy da China",
       "workbuddyAppPathDesc": "Deixe em branco para usar o caminho padrao",
       "workbuddyAppPathPlaceholder": "Caminho padrao",
       "workbuddyPathSelect": "Selecionar",
@@ -1357,9 +1457,9 @@
       "tokenKeeper": "Manter auth",
       "tokenKeeperDesc": "Atualiza tokens de conta em pequenos lotes somente quando a autorização está perto de expirar, reduzindo requisições em segundo plano.",
       "platformAutoRefresh": "Atualização automática de cota do {{platform}}",
-      "traeSoloAppPath": "Caminho de inicialização do TRAE SOLO",
+      "traeSoloAppPath": "Caminho de inicialização do TraeWork",
       "traeCnAppPath": "Caminho de inicialização do Trae CN",
-      "traeSoloCnAppPath": "Caminho de inicialização do TRAE SOLO CN",
+      "traeSoloCnAppPath": "Caminho de inicialização do TraeWork CN",
       "reducedMotion": "Reduzir animação",
       "reducedMotionDesc": "Reduz fades, transições de modal, sombras, desfoque e rolagem suave; mantém só o feedback de carregamento essencial",
       "autoImportFromLocal": "Importar contas locais auto",
@@ -1396,13 +1496,15 @@
       "menuBarQuotaConfigure": "Configurar",
       "menuBarQuotaModalTitle": "Cota da barra de menus",
       "menuBarQuotaModalDesc": "Opções só desta função: segue a conta atual. Serviço API do Codex: “API + % restante do pool”; conta API Key: “API + saldo restante”; normal: prefixo do e-mail + % restante (a menor; vermelho/laranja/verde).",
+      "menuBarAntigravityMetric": "Cota na barra de menus",
+      "menuBarQuotaLowest": "Menor cota",
       "menuBarQuotaPlatform": "Plataforma da conta",
       "menuBarQuotaPlatformDesc": "Usa a conta ativa dessa plataforma; atualiza após atualizar ou trocar",
       "menuBarAccountPrefix": "4 primeiros do e-mail",
       "menuBarAccountPrefixDesc": "Só contas normais: desligado oculta o prefixo do e-mail. Serviço API do Codex / API Key ainda mostram API",
       "menuBarQuotaConfirmEnable": "Ativar",
-      "codexHideRelayQuota": "Ocultar cota relay",
-      "codexHideRelayQuotaDesc": "Oculta painéis de cota relay / New API na visão de contas Codex.",
+      "codexHideRelayQuota": "Saldo",
+      "codexHideRelayQuotaDesc": "Desative para ocultar o saldo dos intermediários no Codex e interromper as consultas automáticas e manuais.",
       "floatingCardStyle": "Estilo flutuante",
       "floatingCardStyleDesc": "Compartilhado por todas as janelas flutuantes. Também pode ser alterado na janela.",
       "floatingCardFull": "Cartão completo",
@@ -1417,7 +1519,7 @@
       "codexPreserveExternalBridgeDesc": "Preservar a ponte Codex Web GPT validada por registros locais ao trocar contas OAuth. Desativado por padrão.",
       "codexEnhancements": {
         "quotaCompat": "Cotas no modo misto",
-        "quotaCompatDesc": "Com login OAuth real e rota de API externa, impede que a cota da assinatura bloqueie mensagens de API locais. Não altera o uso real nem as cotas de imagens.",
+        "quotaCompatDesc": "As instâncias do serviço API mostram uma cota disponível para exibição e verificações locais do cliente. O uso real no provedor e os limites de imagens não mudam. Esta opção se aplica apenas a outras combinações de OAuth e API externa.",
         "restartHint": "As previsões nativas ficam desativadas por padrão. Reinicie cada instância Codex afetada após mudanças e mantenha o Cockpit Tools aberto. O ditado nativo depende dos recursos e configurações do cliente; o Cockpit não assume seu controle nem força sua ativação.",
         "configFailed": "Falha ao ler ou salvar configurações: {{error}}",
         "nativePredictions": "Previsões nativas do próximo passo (Tab)",
@@ -1441,12 +1543,13 @@
       "saveFailed": "Falha ao salvar: {{error}}",
       "reportTitle": "Serviço de consulta web",
       "reportService": "Serviço de relatório HTTP",
-      "reportServiceDesc": "Expõe um endpoint HTTP protegido por token para resumos de uso",
+      "reportServiceDesc": "O serviço inicia ao salvar e nas próximas aberturas do aplicativo. O acesso exige um token.",
       "reportPort": "Porta do relatório",
-      "reportPortDesc": "O padrão é {{port}}; reinício necessário após alterar",
+      "reportPortDesc": "A porta padrão é {{port}}. As alterações entram em vigor ao salvar.",
       "reportToken": "Token de acesso",
       "reportTokenDesc": "Obrigatório ao solicitar /report, mantenha-o privado",
       "reportTokenRequired": "O token de acesso não pode ficar vazio quando o serviço web estiver ativado.",
+      "reportApplyFailed": "Configurações salvas, mas o serviço de relatórios não pôde iniciar. {{error}}",
       "generateToken": "Gerar",
       "reportUrlPreview": "Prévia do endpoint",
       "reportUrlPreviewDesc": "Suporta format=md / format=yaml e render=true para visualização HTML",
@@ -1652,6 +1755,7 @@
         "unsupportedLegacyFile": "Este formato legado de backup de contas não foi reconhecido",
         "codexTopLayoutInvalid": "O backup contém um layout de abas inválido. A configuração não foi importada.",
         "codexTopLayoutImportFailed": "As outras configurações foram importadas, mas o layout das abas não pôde ser salvo. Tente importar novamente.",
+        "platformLayoutImportFailed": "Algumas configurações podem ter sido importadas. Não foi possível salvar o layout das plataformas. Tente importar novamente.",
         "unsupportedVersion": "Esta versão do app não oferece suporte a essa versão do pacote"
       }
     },
@@ -1767,6 +1871,8 @@
   },
   "appPath": {
     "missing": {
+      "scanEmpty": "Nenhum aplicativo em execução foi detectado. Abra-o e tente de novo ou escolha o caminho manualmente.",
+      "scanEmptyGeneric": "O aplicativo {{app}} não foi detectado em execução. Abra-o e tente de novo ou escolha o caminho manualmente.",
       "title": "Caminho do aplicativo não encontrado",
       "desc": "Não foi possível encontrar o caminho do aplicativo {{app}}. Defina agora para continuar.",
       "action": "Definir agora",
@@ -1870,6 +1976,8 @@
     "clearFilter": "Limpar filtro",
     "editTags": "Editar tags",
     "tagModal": {
+      "renamePlaceholder": "Novo nome da etiqueta",
+      "renamingGlobal": "Renomeando a etiqueta em todas as contas:",
       "title": "Tags da conta",
       "hint": "Até {{max}} tags. Cada tag pode ter no máximo {{maxLength}} caracteres.",
       "empty": "Sem tags",
@@ -2114,7 +2222,13 @@
     "refreshTime": "Atualização",
     "lastSwitchTimeFull": "Troca: {{time}}",
     "refreshTimeFull": "Atualização: {{time}}",
-    "toggleTimeMode": "Exibir hora da troca ou da atualização"
+    "toggleTimeMode": "Exibir hora da troca ou da atualização",
+    "quotaSummary": {
+      "geminiModels": "Modelos Gemini",
+      "claudeAndGptModels": "Modelos Claude e GPT",
+      "weeklyLimit": "Limite semanal",
+      "fiveHourLimit": "Limite de 5 h"
+    }
   },
   "overview": {
     "title": "Visão Geral das Contas",
@@ -2151,8 +2265,8 @@
       "oauthAction": "Autorização OAuth",
       "fromExtension": "Importar do Plugin",
       "syncBadge": "Sincronizar contas do plugin Antigravity Cockpit",
-      "fromLocalDB": "Importar do BD Local",
-      "localDBDesc": "Ler contas de login do cliente Antigravity IDE nesta máquina",
+      "fromLocalApp": "Importar do aplicativo",
+      "localAppDesc": "Ler contas de login do cliente {{appName}} nesta máquina",
       "toolsDescMigrate": "Migrar contas de ~/.antigravity_tools/",
       "importingTools": "Importando do Antigravity Tools...",
       "importingLocal": "Importando conta local...",
@@ -2169,6 +2283,7 @@
       "resetTime": "Tempo de redefinição"
     },
     "errors": {
+      "viewVerificationDetail": "Detalhes da verificação",
       "title": "Detalhes do erro",
       "empty": "Sem detalhes do erro",
       "account": "Conta",
@@ -2196,6 +2311,8 @@
     "switchFailed": "Falha ao trocar: {{error}}",
     "antigravitySwitchBusy": "Uma troca de conta do Antigravity está em andamento. Tente novamente em instantes.",
     "antigravitySwitchPrepareTimeout": "A preparação da conta do Antigravity excedeu o tempo limite. Tente novamente.",
+    "antigravityWindowsCredentialStoreCapacity": "O Gerenciador de Credenciais do Windows pode estar cheio. No Painel de Controle, abra Contas de Usuário e depois o Gerenciador de Credenciais. Remova apenas credenciais do Windows que você não usa mais e tente novamente.",
+    "antigravityWindowsCredentialTooLarge": "Esta credencial excede o limite do Windows de 2.560 bytes por entrada.",
     "antigravitySwitchStateSaveFailed": "As credenciais do cliente foram trocadas, mas não foi possível salvar o estado local da conta: {{error}}. Tente trocar novamente.",
     "antigravityLegacyUnsupported": "Antigravity 2.0.0 e versões posteriores não são compatíveis aqui. Escolha uma versão do Antigravity anterior a 2.0.0 ou use Antigravity IDE.",
     "importSuccess": "Importadas com sucesso {{count}} contas",
@@ -2262,6 +2379,7 @@
     "historyClear": "Limpar histórico",
     "historyPromptLabel": "Palavra de despertar: {{prompt}}",
     "errorUi": {
+      "officialLanguageServerUnavailable": "O servidor de linguagem para a ativação não foi encontrado. Instale o aplicativo Antigravity para desktop ou uma versão do IDE que inclua o servidor. Pastas verificadas: {{path}}.",
       "verificationRequiredTitle": "Verificação necessária",
       "quotaTitle": "Limite de cota",
       "temporaryTitle": "Erro temporário",
@@ -2327,6 +2445,8 @@
       "crontabRequired": "Informe uma expressão crontab",
       "crontabValid": "A expressão crontab é válida",
       "crontabInvalid": "A expressão crontab é inválida",
+      "stateLoadFailed": "Não foi possível carregar as tarefas de ativação: {{error}}",
+      "stateSaveFailed": "Não foi possível salvar as tarefas de ativação: {{error}}",
       "taskSaved": "Tarefa \"{{name}}\" salva",
       "featureOff": "Despertar desativado",
       "featureOn": "Despertar ativado",
@@ -2368,7 +2488,9 @@
       "modeScheduled": "📅 Agendado",
       "modeCrontab": "🧩Crontab",
       "modeQuotaReset": "🔄 Reset de cota",
-      "antigravityVersion": "Versão do Antigravity IDE",
+      "transportMode": "Modo de ativação",
+      "transportLanguageServer": "Servidor de linguagem",
+      "transportClientless": "Sem cliente",
       "modelSelect": "Seleção de modelos",
       "modelHint": "No mesmo grupo de cota, escolha um modelo. Vários modelos disparam em sequência.",
       "modelsEmpty": "Nenhum modelo recomendado",
@@ -2462,6 +2584,7 @@
     "skipFailed": "Não foi possível ignorar esta atualização: {{error}}"
   },
   "closeDialog": {
+    "minimizeWindow": "Minimizar",
     "title": "Fechar janela",
     "description": "Escolha uma ação ao fechar a janela",
     "minimize": "Minimizar para a bandeja",
@@ -2478,6 +2601,10 @@
     "other_group": "Outros modelos"
   },
   "codex": {
+    "cli": {
+      "launchSuccess": "Codex CLI iniciado",
+      "selectWorkingDir": "Escolha a pasta de trabalho do Codex CLI"
+    },
     "resetAutomation": {
       "nothingToReset": "Nenhum período de cota precisa ser redefinido agora.",
       "unknownOutcome": "Não foi possível confirmar o resultado da redefinição. Tente novamente.",
@@ -2556,6 +2683,70 @@
         "threadSyncFileBusy": "Outra sincronização está usando a sessão de destino. Tente novamente em instantes."
       }
     },
+    "quotaHistory": {
+      "storage": {
+        "title": "Armazenamento do histórico",
+        "recordCount": "Registros",
+        "diskSpace": "Espaço em disco",
+        "defaultAccount": "Conta padrão",
+        "recording": "Registro",
+        "usage": "{{records}} registros · {{size}} no disco",
+        "loadFailed": "Não foi possível ler o armazenamento do histórico.",
+        "enabled": "Registrar histórico",
+        "onlyChanges": "Registrar só alterações",
+        "autoCleanup": "Limpar registros expirados automaticamente",
+        "intervalMinutes": "Intervalo (min)",
+        "retentionDays": "Manter por (dias)",
+        "cleanupEveryDays": "Limpar a cada (dias)",
+        "validRange": "Digite um inteiro de 1 a {{max}}.",
+        "recordScope": "Contas registradas",
+        "allAccounts": "Todas as contas",
+        "selectedAccounts": "Contas selecionadas",
+        "saveFailed": "Não foi possível salvar as configurações do histórico.",
+        "saved": "Configurações salvas.",
+        "cleanup": "Limpar histórico",
+        "cleanupAccounts": "Contas a limpar",
+        "cleanupRange": "Registros a excluir",
+        "expired": "Expirados",
+        "dates": "Intervalo de datas",
+        "all": "Todos os registros",
+        "fromDate": "Data inicial",
+        "toDate": "Data final",
+        "invalidDates": "Escolha um intervalo de datas válido.",
+        "cleanupFailed": "Falha na limpeza. Veja a prévia novamente antes de tentar de novo.",
+        "previewCount": "Cerca de {{records}} registros serão excluídos.",
+        "confirmCleanup": "Confirmar exclusão",
+        "preview": "Prévia da limpeza",
+        "deleted": "{{records}} registros excluídos."
+      },
+      "title": "Histórico de cota",
+      "chart": "Gráfico",
+      "details": "Detalhes",
+      "onlyChanges": "Só alterações",
+      "noChanges": "Sem alterações de cota neste período.",
+      "recordedAt": "Hora do registro",
+      "noValue": "Sem dados",
+      "shortConsumed": "Consumo de 5 h",
+      "weeklyConsumed": "Consumo semanal",
+      "shortRemaining": "Rest. 5h",
+      "shortDelta": "Var. 5h",
+      "weeklyRemaining": "Rest. sem.",
+      "weeklyDelta": "Var. sem.",
+      "changeFromPrevious": "Alteração desde a amostra anterior",
+      "points": "{{value}} p.p.",
+      "account": "Conta",
+      "interval": "Intervalo (min)",
+      "intervalInvalid": "Insira um número inteiro de 1 a 1440.",
+      "empty": "Não há amostras de cota nesse período.",
+      "readFailed": "Não foi possível carregar o histórico de cota.",
+      "noAccount": "Adicione uma conta com assinatura do Codex para ver o histórico de cota."
+    },
+    "quotaRecovery": {
+      "title": "Aviso de recuperação da cota",
+      "description": "O PushPlus avisa se a atualização mostrar que a cota restante subiu para pelo menos 90%. O acesso à rede externa deve estar habilitado.",
+      "token": "Token do PushPlus",
+      "settingsError": "Não foi possível carregar ou salvar as configurações do aviso."
+    },
     "thresholds": {
       "shortCycle": "Cota curta",
       "weekly": "Cota semanal",
@@ -2607,7 +2798,7 @@
     "contextOverride": {
       "title": "Gerenciamento de contexto",
       "description": "Modelos, ordem, modelo padrão e níveis de raciocínio seguem o catálogo oficial. O contexto só é substituído manualmente.",
-      "dialogDescription": "A configuração vale para todas as contas da instância atual do Codex e é mantida ao trocar de conta. Escolha as configurações oficiais, uma predefinição ou um contexto personalizado.",
+      "dialogDescription": "A configuração vale para todas as contas da instância atual do Codex e é mantida ao trocar de conta. Escolha as configurações oficiais, uma predefinição ou um contexto personalizado. Uma predefinição ou um contexto personalizado substitui a janela de contexto do catálogo para todos os modelos.",
       "followOfficial": "Seguir oficial",
       "custom": "Contexto personalizado",
       "automatic": "Automático",
@@ -2635,6 +2826,10 @@
       "enabledHint": "Usa a lista atual de modelos visíveis. Reinicie o Codex para aplicar.",
       "disabledHint": "Quando desativado, o catálogo de modelos gerenciado pelo Cockpit é removido e a visibilidade oficial dos modelos é restaurada; os modelos disponíveis dependem da autorização da conta oficial.",
       "models": {
+        "addCustomBlank": "Novo modelo personalizado",
+        "addAll": "Adicionar todos ({{count}})",
+        "added": "Adicionado",
+        "source": "Origem",
         "title": "Lista de modelos",
         "model": "Modelo",
         "default": "Modelo padrão",
@@ -2701,9 +2896,9 @@
         "autoDisabled": "A sincronização automática dos registros de todas as instâncias está desativada",
         "autoEnabled": "A sincronização automática dos registros de todas as instâncias está ativada",
         "autoTooltip": "Sincronizar automaticamente registros de todas as instâncias",
-        "autoDesc": "Quando desativado, os históricos das instâncias ficam separados. Quando ativado, iniciar ou parar uma instância sincroniza sessões ausentes e acréscimos de histórico compatíveis somente quando todas as instâncias do Codex estão paradas. Os bytes existentes são preservados.",
+        "autoDesc": "Desativado mantém separados os históricos das instâncias. Ao ativar, parar uma instância sincroniza as sessões ausentes e as adições correspondentes somente quando todas as instâncias do Codex estão paradas. O conteúdo existente é preservado. A sincronização pode copiar arquivos de sessão grandes.",
         "closeFirst": "Feche todas as instâncias do Codex antes de sincronizar os registros para evitar que instâncias em execução gravem registros antigos de volta.",
-        "confirmMessage": "Adiciona as sessões ausentes em todas as instâncias e acrescenta novo conteúdo apenas se a instância de destino estiver parada e o histórico corresponder. Os bytes existentes são preservados. Atualizações de históricos divergentes ou destinos em execução são rejeitadas. Os arquivos de destino são copiados antes da gravação. Continuar?",
+        "confirmMessage": "Adiciona as sessões ausentes em todas as instâncias e acrescenta novo conteúdo apenas se a instância de destino estiver parada e o histórico corresponder. Os bytes existentes são preservados. Atualizações de históricos divergentes ou destinos em execução são rejeitadas. Os arquivos de destino são copiados antes da gravação. A sincronização pode copiar arquivos de sessão grandes. Continuar?",
         "needTwo": "São necessárias pelo menos duas instâncias para sincronizar registros",
         "settingsSection": "Configurações de sincronização",
         "settingsSubtitle": "Gerencie como os registros de múltiplas instâncias do Codex são sincronizados",
@@ -2729,6 +2924,10 @@
     "refreshAllSuccess": "Atualização concluída, {{count}} conta(s) com sucesso",
     "refreshAllPartialFailed": "Atualização concluída, {{success}} / {{total}} conta(s) com sucesso e algumas falharam",
     "launchPreview": {
+      "providerAccessAutomatic": "Automático",
+      "providerAccessDirect": "Acesso direto",
+      "providerAccessGatewayHint": "As solicitações passam pelo gateway da instância.",
+      "providerAccessCdpHint": "O CDP carrega a lista de modelos no aplicativo de desktop.",
       "configLoading": "Carregando a configuração da instância…",
       "configRefreshing": "Verificando a configuração da instância. Os dados atuais continuam disponíveis.",
       "configLoadTimeout": "O carregamento da configuração da instância excedeu o tempo limite. Tente novamente.",
@@ -2846,6 +3045,7 @@
       "reauthEmailLabel": "Conta para reautorizar"
     },
     "token": {
+      "importPartial": "Importação concluída. Sucessos: {{success}}, falhas: {{failed}}. {{errors}}",
       "desc": "Cole auth.json, JSON da conta ou refresh_token.",
       "placeholder": "Exemplo: um refresh_token por linha ou {\"refresh_token\":\"rt_...\"}",
       "formatSummary": "Campos obrigatórios e exemplos",
@@ -2939,7 +3139,7 @@
       "entryAction": "Adicionar ao serviço de API",
       "testAction": "Testar",
       "testDialogTitle": "Testar serviço API",
-      "testDialogDesc": "Inicia uma conversa real no estilo playground pelo serviço de API atual para conferir modelo, roteamento de contas e resposta upstream.",
+      "testDialogDesc": "Teste conversas ou geração de imagens com o serviço de API atual.",
       "testProgressTitle": "Testando serviço",
       "testProgressDesc": "Enviando uma solicitação real ao serviço API local. Aguarde.",
       "testOutputTitle": "Resultado retornado",
@@ -3060,6 +3260,7 @@
         "planHighFirst": "Plano alto primeiro",
         "planLowFirst": "Plano baixo primeiro",
         "expirySoonFirst": "Vence antes primeiro",
+        "fiveHourResetSoonFirst": "5 h: renova antes",
         "random": "Aleatório",
         "custom": "Personalizado"
       },
@@ -3106,7 +3307,7 @@
         "custom": "Personalizado",
         "save": "Salvar modelo",
         "placeholder": "Digite o ID de um modelo personalizado",
-        "description": "Usado para /v1/images/generations e /v1/images/edits; o padrão é gpt-image-2.5.",
+        "description": "Modelo padrão: {{model}}",
         "required": "Digite o nome de um modelo de imagem",
         "tooLong": "O nome do modelo de imagem é muito longo",
         "saveSuccess": "Modelo de imagem atualizado"
@@ -3297,7 +3498,7 @@
       },
       "testChatModel": "Modelo",
       "testChatClear": "Limpar chat",
-      "testChatEmpty": "Envie uma mensagem para iniciar uma conversa real pelo serviço de API atual.",
+      "testChatEmpty": "Selecione um modelo e envie uma mensagem ou descrição da imagem.",
       "testChatLatency": "{{latency}} decorridos",
       "testChatSending": "Solicitando API",
       "testChatInputPlaceholder": "Mensagem de teste, Enter envia",
@@ -3448,15 +3649,7 @@
       "hourly": "Cota de 5 horas",
       "weeklyReset": "Horário de redefinição semanal",
       "hourlyReset": "Horário de redefinição de 5 horas",
-      "subscriptionExpiry": "Expiração da assinatura",
-      "custom": "Ordem personalizada",
-      "customSettingsTooltip": "Configurar ordem personalizada",
-      "customModalTitle": "Ordem das contas",
-      "customModalDesc": "Arraste contas ou use os botões para cima/baixo para ajustar a ordem.",
-      "customDragHandle": "Arraste para ordenar",
-      "customMoveUp": "Subir",
-      "customMoveDown": "Descer",
-      "customReset": "Redefinir ordem"
+      "subscriptionExpiry": "Expiração da assinatura"
     },
     "opencodeSwitch": "Alternador do OpenCode",
     "opencodeSwitchDesc": "Sincronizar a troca de conta do Codex no OpenCode",
@@ -3514,6 +3707,12 @@
       "nextRunLabel": "Próxima execução {{time}}",
       "lastRunLabel": "Última execução {{time}}",
       "lastStatusLabel": "Resultado mais recente",
+      "confirmationTimedOut": "Prazo de confirmação expirado",
+      "confirmationDeclined": "Execução recusada",
+      "confirmationDeclinedOrExpired": "Execução recusada ou confirmação expirada",
+      "confirmationUnavailable": "Não foi possível solicitar confirmação",
+      "taskRunCancelled": "Tarefa cancelada",
+      "taskRunInterrupted": "Tarefa interrompida",
       "lastStatusIdle": "Ainda não executada",
       "lastStatusSuccessSummary": "{{count}} conta(s) com sucesso",
       "lastStatusFailedSummary": "{{count}} conta(s) com falha",
@@ -3527,6 +3726,10 @@
       "taskNamePlaceholder": "Por exemplo: ativação matinal em dias úteis",
       "taskNameRequired": "Informe um nome para a tarefa.",
       "taskAccountsLabel": "Contas",
+      "taskAccountsManual": "Seleção manual",
+      "taskAccountsApiPool": "Pool de API",
+      "taskAccountsApiPoolHint": "Ativa em ordem as contas de assinatura não pausadas no pool.",
+      "taskAccountsApiPoolEmpty": "O pool não tem contas de assinatura ativas.",
       "taskAccountsHint": "Somente contas OAuth do Codex são suportadas. Várias contas rodam em sequência.",
       "taskAccountsRequired": "Selecione pelo menos uma conta.",
       "scheduleLabel": "Agendamento",
@@ -3654,6 +3857,8 @@
       "scheduleQuotaResetSummary": "Executar após redefinição de cota",
       "quotaResetWindowLabel": "Condição de disparo da janela de redefinição",
       "quotaResetWindowHint": "primary_window normalmente corresponde à cota de 5 horas. Em usuários gratuitos, primary_window pode corresponder à cota semanal e variar conforme a assinatura.",
+      "quotaResetDelayLabel": "Espera após redefinição",
+      "quotaResetDelayInvalid": "Insira um número inteiro de minutos não negativo dentro do intervalo aceito.",
       "quotaResetWindowOptions": {
         "either": "Disparar quando primary_window ou secondary_window for redefinida",
         "primary_window": "Disparar apenas na redefinição de primary_window",
@@ -3767,6 +3972,14 @@
         "confirm": "Copiar sessões"
       },
       "repairModal": {
+        "historyDuplicateOrdinals": "Os históricos abaixo têm números de sequência duplicados. O reparo do índice os ignora e o reparo completo não pode continuar. Selecione “Reparar índice de chats” para as outras sessões.\n{{details}}",
+        "projectsDeferredAction": "Feche a instância e selecione Projetos locais na janela de reparo de sessões.",
+        "projectsStateSize": "Maior arquivo de estado: {{file}} ({{bytes}} bytes).",
+        "projectsQuickBudget": "A verificação rápida de projetos atingiu o limite.",
+        "projectsStateTooLarge": "O arquivo de estado dos projetos excede o tamanho aceito.",
+        "projectsStopHint": "Feche as instâncias selecionadas antes de recuperar. Você já pode visualizar as mudanças.",
+        "modeProjectsDesc": "Recupera projetos locais e associações de chats. Mantém o histórico das conversas.",
+        "modeProjects": "Projetos locais",
         "running": "Reparando...",
         "progress": {
           "queued": "Iniciando reparo...",
@@ -3844,7 +4057,8 @@
         "projectsPreview": "Prévia: {{projects}} projetos, {{assignments}} vínculos; {{skipped}} projetos e {{ambiguous}} conversas ambíguas ignorados.",
         "projectsSuccess": "Restauração concluída: {{projects}} projetos, {{assignments}} vínculos; {{skipped}} projetos e {{ambiguous}} conversas ambíguas ignorados.",
         "projectsPending": "Uma restauração foi interrompida. Encerre a instância e execute o reparo completo para recuperar as gravações incompletas.",
-        "projectsDeferred": "Alguns metadados foram adiados. Encerre a instância e repita o reparo rápido ou use o reparo completo."
+        "projectsDeferred": "Alguns metadados foram adiados. Encerre a instância e repita o reparo rápido ou use o reparo completo.",
+        "switchProjectsDeferred": "As credenciais foram atualizadas, mas não foi possível sincronizar o estado dos projetos locais. Feche a instância do Codex afetada e inicie-a pelo Cockpit."
       },
       "importModal": {
         "title": "Importar sessões",
@@ -4034,6 +4248,7 @@
       "hideApiKey": "Ocultar API Key",
       "apiKeyHiddenHint": "API Key oculta. Clique para mostrar.",
       "modelCatalog": {
+        "restartHint": "O catálogo de modelos foi atualizado. Se o Codex estiver em execução, reinicie-o para aplicar as alterações.",
         "label": "Lista de modelos",
         "fetch": "Buscar no provedor",
         "fetching": "Buscando...",
@@ -4190,6 +4405,8 @@
       }
     },
     "modelProviders": {
+      "updateApiKeyFailed": "Não foi possível atualizar a chave de API: {{error}}",
+      "editApiKey": "Editar chave de API",
       "keyModels": {
         "title": "Modelos da chave",
         "override": "Personalizar",
@@ -4235,6 +4452,8 @@
         "supportsWebsockets": "Transporte WebSocket"
       },
       "validation": {
+        "apiKeyExists": "Esta chave de API já existe neste provedor",
+        "apiKeyRequired": "Insira uma chave de API",
         "nameRequired": "O nome do provedor é obrigatório.",
         "baseUrlInvalid": "URL base inválida.",
         "baseUrlExists": "Esta URL base já existe.",
@@ -4272,6 +4491,8 @@
         "anthropic": "Protocolo Anthropic",
         "gatewayRequired": "Este protocolo exige o gateway local. Selecione aqui o modelo inicial."
       },
+      "searchSavedProviders": "Buscar provedores",
+      "noMatchingSavedProviders": "Nenhum provedor encontrado",
       "selectSavedProvider": "Provedores salvos",
       "selectSavedApiKey": "Chaves API salvas",
       "selectSavedApiKeyPlaceholder": "Selecionar chave de API",
@@ -4355,6 +4576,7 @@
         "checkModelsApi": "Confirme que o provedor retorna uma lista de modelos compatível com OpenAI."
       },
       "batchTest": {
+        "firstText": "Primeiro texto",
         "entry": "Testar todos",
         "entryHint": "Testar em lote a capacidade real de chat dos provedores",
         "selectedCount": "{{count}} selecionados",
@@ -4441,6 +4663,15 @@
         "detailTitle": "Painel do serviço",
         "rawFields": "Dados do serviço",
         "fields": {
+          "intervalRemaining": "Restante no período",
+          "intervalLimit": "Limite do período",
+          "intervalRemainingPercent": "Restante no período (%)",
+          "intervalExpiresAt": "Renovação do período",
+          "weeklyRemaining": "Restante na semana",
+          "weeklyLimit": "Limite semanal",
+          "weeklyRemainingPercent": "Restante na semana (%)",
+          "weeklyExpiresAt": "Renovação semanal",
+          "currency": "Moeda",
           "status": "Situação",
           "planName": "Plano",
           "remaining": "Crédito restante",
@@ -4463,6 +4694,7 @@
           "expiresAt": "Expira em",
           "totalGranted": "Concedido",
           "totalAvailable": "Disponível",
+          "isAvailable": "Saldo disponível",
           "modelLimitsEnabled": "Limites de modelo"
         },
         "accountBalance": "Saldo da conta",
@@ -4709,6 +4941,8 @@
       "launchHint": "Salvo ao trocar de conta e iniciar pelo Cockpit. Reinicie o cliente ativo. Novas conversas usam este valor; ajuste no cliente a velocidade própria de conversas existentes."
     },
     "apiService": {
+      "providerQuotaStale": "Dados desatualizados",
+      "providerQuotaUnitUnknown": "Unidade desconhecida",
       "inspection": {
         "internalScope": "Esta é uma solicitação do cliente interno. Verifique o pool de contas do serviço e o vínculo da instância; ela não corresponde a uma Key de cliente público.",
         "keyUnavailable": "A Key do cliente desta solicitação não existe ou foi excluída. Verifique as Keys atuais e o pool de contas.",
@@ -4739,6 +4973,11 @@
         "responsesTitle": "Entrada Responses",
         "responsesNote": "Entrada Responses nativa do Codex.",
         "anthropicTitle": "Mensagens Anthropic",
+        "claudeCodeNoModels": "Esta chave não tem modelos da predefinição do Claude Code. Salve primeiro os aliases nas regras de modelos.",
+        "claudeCodeSettingsChanged": "As configurações mudaram após a prévia. Gere uma nova prévia.",
+        "claudeCodeServiceUnavailable": "Não foi possível carregar os modelos desta chave. Confira o serviço de API e o estado da chave.",
+        "claudeCodeNoBackup": "Nenhum backup corresponde às configurações atuais.",
+        "claudeCodeSettingsHint": "Ao salvar, as variáveis exibidas são mescladas e as configurações originais recebem um backup criptografado. O valor null remove a variável.",
         "anthropicNote": "Use a mesma chave do serviço.",
         "geminiTitle": "Entrada Gemini",
         "geminiNote": "A Base URL usa /v1beta.",
@@ -4763,6 +5002,7 @@
         "capabilityTitle": "Chaves de capacidade",
         "capabilityDesc": "gpt-image-2 é exibido ou ocultado automaticamente conforme a chave do serviço, o plano da conta e o estado registrado da capacidade de imagem.",
         "rulesTitle": "Regras de modelos",
+        "claudeCodePreset": "Predefinição do Claude Code",
         "aliasTitle": "Aliases de modelos",
         "aliasPlaceholder": "gpt-5 => g5; adicione + para manter o modelo original",
         "excludedTitle": "Modelos ocultos",
@@ -4835,9 +5075,15 @@
         "unsaved": "Não salvo",
         "resetPolicy": "Descartar alterações",
         "modelPrefix": "Prefixo do modelo",
+        "maxReasoningEffort": "Raciocínio máx.",
+        "maxReasoningHint": "Solicitações acima do limite ou com nível impossível de verificar são recusadas.",
+        "reasoningNone": "Nenhum",
+        "reasoningMinimal": "Mínimo",
         "modelPrefixPlaceholder": "Exemplo: codex",
         "allowedModels": "Modelos permitidos",
         "allowedModelsPlaceholder": "Vazio libera todos; um modelo ou padrão por linha",
+        "modelsOutsideAllowlist": "Modelos fora da lista",
+        "allowCurrentAndFutureModels": "Permitir modelos atuais e futuros",
         "excludedModels": "Modelos excluídos",
         "excludedModelsPlaceholder": "Um modelo ou padrão por linha",
         "savePolicy": "Salvar política",
@@ -4848,8 +5094,8 @@
       "routing": {
         "optionsTitle": "Opções de rota",
         "sessionIdentityMapping": "Mapeamento de ID",
-        "sessionIdentityMappingEnableHint": "Ao ativar o mapeamento, cada conta do provedor usa valores próprios de Session-Id e Thread-Id ao trocar de conta. Isso reforça o isolamento dos identificadores, mas pode reduzir a reutilização de cache entre contas. Na mesma conta, os mapeamentos existentes são reutilizados.",
-        "sessionIdentityMappingDisableHint": "Ao desativar, os valores originais de Session-Id e Thread-Id do cliente são mantidos. Contas diferentes do provedor podem compartilhar esses identificadores, reduzindo o isolamento, mas possivelmente aumentando a reutilização de cache entre contas.",
+        "sessionIdentityMappingEnableHint": "Ao ativar o mapeamento, cada conta oficial do Codex usa valores próprios de Session-Id e Thread-Id ao trocar de conta. Isso reforça o isolamento dos identificadores, mas pode reduzir a reutilização de cache entre contas. Na mesma conta, os mapeamentos existentes são reutilizados.",
+        "sessionIdentityMappingDisableHint": "Ao desativar, os valores originais de Session-Id e Thread-Id do cliente são mantidos. Contas oficiais diferentes do Codex podem compartilhar esses identificadores, reduzindo o isolamento, mas possivelmente aumentando a reutilização de cache entre contas.",
         "sessionIdentityMappingCacheNote": "A taxa de acertos de cache também depende das regras do provedor, do escopo das contas e do conteúdo das solicitações. Essa configuração não garante aumento ou redução da taxa.",
         "sessionIdentityMappingSaveNote": "Após confirmar, salve as configurações para aplicar a alteração.",
         "sessionAffinity": "Afinidade de sessão",
@@ -4877,7 +5123,7 @@
         "modelFilter": "Modelo",
         "modelPlaceholder": "ID do modelo",
         "accountFilter": "Conta",
-        "accountPlaceholder": "E-mail ou ID da conta",
+        "accountPlaceholder": "Nome, e-mail ou ID",
         "apiKeyFilter": "Chave API",
         "apiKeyPlaceholder": "Nome ou ID",
         "kindFilter": "Tipo",
@@ -4891,6 +5137,12 @@
         "requestIdShort": "ID da requisição {{id}}",
         "httpStatus": "Status HTTP {{status}}",
         "allInstances": "Todas as instâncias",
+        "allSources": "Todas as origens",
+        "connectionSource": "Origem da conexão",
+        "peerIp": "IP do par",
+        "sourceLocal": "Este dispositivo",
+        "sourceLan": "Rede local",
+        "sourceRemote": "Remoto",
         "instanceFilter": "Instância",
         "instanceUnknown": "Instância -",
         "reasoningEffort": "Raciocínio",
@@ -4927,6 +5179,7 @@
         "originalTier": "Nível original: {{tier}}"
       },
       "timeouts": {
+        "retryTitle": "Novas tentativas de envio e por conta",
         "entryLabel": "Avançado",
         "openAction": "Tempos e tentativas",
         "title": "Tempos e tentativas",
@@ -4948,6 +5201,10 @@
         "bootstrapRetries": "Tentativas de início",
         "websocketTitle": "Config. WebSocket",
         "websocketConnect": "Tempo de conexão",
+        "requestBody": "Leitura do corpo",
+        "requestBodyHelp": "Tempo para receber todo o corpo da solicitação HTTP (1–600 s).",
+        "websocketFragment": "Limite de fragmentos",
+        "websocketFragmentHelp": "Tempo total para receber uma mensagem WebSocket fragmentada (1–600 s).",
         "websocketInitial": "Tempo 1ª mensagem",
         "websocketIdle": "Tempo ocioso",
         "websocketHeartbeat": "Intervalo heartbeat",
@@ -4999,7 +5256,7 @@
         "upstreamModel": "Enviar",
         "addRow": "Adicionar linha",
         "fillDeepSeek": "Preencher DeepSeek",
-        "empty": "Nenhuma conta com chave de API neste pool pode ser mapeada",
+        "empty": "Nenhuma conta oferece suporte ao mapeamento de modelos",
         "incomplete": "Preencha o modelo de solicitação e o modelo enviado",
         "duplicate": "Os modelos de solicitação devem ser únicos",
         "saveSuccess": "Mapeamentos de modelos da conta salvos",
@@ -5051,6 +5308,9 @@
       "imported": "Importadas",
       "failed": "Falhas",
       "quotaOk": "Conta OK",
+      "minimumQuota": "Cota mínima (%)",
+      "minimumQuotaHint": "A conta é ignorada se alguma cota restante conhecida estiver abaixo do limite.",
+      "minimumQuotaEmpty": "Nenhuma conta atende ao filtro de cota.",
       "quotaFailed": "Erro",
       "checkQuotaToggle": "Verificar antes de importar",
       "preparing": "Preparando importação...",
@@ -5189,18 +5449,21 @@
       "syncNow": "Sincronize agora",
       "connectionOk": "Conectado",
       "syncVerified": "Sincronização SSH verificada",
+      "connectionRefreshFailed": "Autenticação sincronizada. A atualização da conexão SSH está pendente. Tente novamente mais tarde.",
       "syncFailed": "Falha na sincronização SSH",
       "syncedAs": "{{email}} sincronizado · {{time}}",
       "neverSynced": "Ainda não sincronizado",
       "latestVerified": "Última sincronização SSH verificada",
       "syncSwitchActive": "Ativado · {{name}} ({{user}}@{{host}})",
+      "syncSwitchActiveMultiple": "Ativado · {{count}} servidores",
+      "selectedServerCount": "{{selected}} de {{total}} selecionados",
       "footerHint": "A chave liga após salvar; desligue-o a qualquer momento para interromper a sincronização automática.",
       "formLead": "Detalhes do host remoto",
       "namePlaceholder": "por exemplo NAS doméstico",
       "syncOnSwitchHint": "Depois de salvar e selecionar, o Codex muda a autenticação para este host",
       "addAndSave": "Adicionar e salvar",
       "serverList": "Servidores",
-      "serverListLead": "Escolha o destino de sincronização",
+      "serverListLead": "Selecione os destinos da sincronização (seleção múltipla)",
       "serverCount": "{{count}} servidores",
       "autoSyncBadge": "Automático"
     },
@@ -5236,6 +5499,13 @@
       "restartFailed": "Falha ao reiniciar o gateway: {{error}}"
     },
     "proxy": {
+      "directHosts": {
+        "title": "Hosts diretos do Codex",
+        "hint": "Informe nomes de host ou intervalos CIDR, uma regra por linha. Destinos correspondentes, como servidores MCP internos, ignoram o proxy gerenciado do Codex. As configurações do cliente se aplicam após reiniciar o Codex.",
+        "invalid": "Informe um nome de host, endereço IP ou intervalo CIDR válido em cada linha.",
+        "loadFailed": "Não foi possível carregar os hosts diretos.",
+        "saveFailed": "Não foi possível salvar os hosts diretos."
+      },
       "legacyBoundHint": "O proxy da conta vinculada anteriormente continua ativo. Salvar novamente aplica o modo selecionado.",
       "boundAccountUnavailable": "A conta vinculada não está disponível. Escolha um proxy novamente.",
       "boundProxyUnavailable": "A conta vinculada não tem um proxy disponível. Escolha outro.",
@@ -5934,6 +6204,12 @@
       "done": "Concluir"
     },
     "cliDaemon": {
+      "profileChanged": "Este perfil foi atualizado. O serviço de CLI em execução ainda pode usar a conta ou a lista de modelos anterior.",
+      "restartWarning": "Conclua primeiro as tarefas ativas da CLI. Reiniciar interrompe as sessões conectadas a esse serviço.",
+      "restart": "Reiniciar CLI",
+      "restarting": "Reiniciando…",
+      "restarted": "O serviço de CLI foi reiniciado.",
+      "restartFailed": "Falha ao reiniciar. Tente novamente ou copie o comando para o terminal.",
       "title": "Atualizar conta CLI",
       "description": "As credenciais foram salvas, mas o serviço Codex CLI deste perfil continua ativo e pode manter a conta anterior.",
       "restartHint": "Conclua as tarefas CLI em execução e execute este comando no terminal. A reinicialização interrompe as sessões conectadas a este serviço.",
@@ -5960,6 +6236,9 @@
       }
     },
     "requestDiagnostics": {
+      "cloudflareGatewayError": "Erro no gateway da Cloudflare (HTTP {{status}}, Ray ID {{ray}})",
+      "responseModel": "Modelo informado",
+      "responseModelDiffers": "O modelo informado difere do modelo enviado.",
       "requestSizeTitle": "Tamanho da requisição",
       "requestSizeHint": "Tamanho do JSON do cliente descompactado; campos em bytes JSON compactos. Apenas tamanhos são registrados.",
       "requestBytes": "Requisição",
@@ -6063,7 +6342,9 @@
       "defaultReasoning": "Nível padrão",
       "defaultReasoningFollow": "Usar padrão",
       "defaultReasoningHint": "Deixe em branco para usar o nível padrão do modelo. O nível escolhido deve ser compatível.",
-      "defaultReasoningInvalid": "O nível de raciocínio padrão deve ser compatível com este modelo."
+      "defaultReasoningInvalid": "O nível de raciocínio padrão deve ser compatível com este modelo.",
+      "ultraReasoning": "Nível Ultra",
+      "ultraReasoningInvalid": "Selecione um nível de raciocínio aceito por um modelo com Ultra."
     },
     "modelConfig": {
       "transfer": "Importar / Exportar",
@@ -6181,6 +6462,38 @@
     },
     "officialApi": {
       "hint": "Conta com chave de API oficial da OpenAI, identificada pelo endereço real de conexão."
+    },
+    "resetHistory": {
+      "redeemedCardId": "ID do cartão resgatado",
+      "windowsReset": "Janelas de cota redefinidas",
+      "observations": "Detalhes de uso",
+      "effectiveRule": "Regra aplicada",
+      "before": "Antes da solicitação",
+      "after": "Após a confirmação",
+      "availableCardIds": "IDs dos cartões disponíveis",
+      "title": "Histórico de redefinições",
+      "available": "Disponíveis",
+      "official": "Histórico oficial",
+      "local": "Uso local",
+      "officialHint": "Registros oficiais dos últimos 30 dias.",
+      "localHint": "Registra a partir de agora as ações manuais e automáticas deste aplicativo, sem recuperar dados antigos.",
+      "officialEmpty": "Nenhuma redefinição nos últimos 30 dias",
+      "localEmpty": "Nenhum uso local registrado",
+      "received": "Redefinição recebida",
+      "used": "Redefinição usada",
+      "alreadyRedeemed": "Já resgatada (nova tentativa confirmada)",
+      "nothingToReset": "Redefinição desnecessária; nenhum crédito usado",
+      "noCredit": "Nenhuma redefinição disponível",
+      "pending": "Aguardando confirmação",
+      "unconfirmed": "Resultado não confirmado",
+      "manual": "Uso manual",
+      "expiry": "Automático · vencimento",
+      "weekly": "Automático · cota semanal",
+      "unknown": "Evento desconhecido",
+      "requestId": "ID da solicitação",
+      "more": "Mostrar mais",
+      "loadFailed": "Não foi possível carregar o histórico",
+      "officialUnavailable": "O histórico oficial de redefinições não está disponível para esta conta"
     }
   },
   "githubCopilot": {
@@ -6311,6 +6624,9 @@
     }
   },
   "quickSettings": {
+    "codexWindow": {
+      "orDivider": "Basta atender a uma condição"
+    },
     "antigravity": {
       "title": "Configurações do Antigravity IDE",
       "appPath": "Caminho do aplicativo"
@@ -6470,16 +6786,16 @@
       "appTargetPlaceholder": "Caminho do Claude.exe ou shell:AppsFolder\\..."
     },
     "traeSolo": {
-      "appPath": "Caminho do TRAE SOLO",
-      "title": "Configurações do TRAE SOLO"
+      "appPath": "Caminho do TraeWork",
+      "title": "Configurações do TraeWork"
     },
     "traeCn": {
       "appPath": "Caminho do Trae CN",
       "title": "Configurações do Trae CN"
     },
     "traeSoloCn": {
-      "appPath": "Caminho do TRAE SOLO CN",
-      "title": "Configurações do TRAE SOLO CN"
+      "appPath": "Caminho do TraeWork CN",
+      "title": "Configurações do TraeWork CN"
     }
   },
   "quotaAlert": {
@@ -6611,6 +6927,8 @@
   },
   "kiro": {
     "account": {
+      "signedInWithUnknown": "Provedor de login desconhecido",
+      "signedInWithProvider": "Login feito com {{provider}}",
       "signedInWith": "Conectado com {{provider}}",
       "providerUnknown": "Desconhecido",
       "userId": "ID do usuário"
@@ -6685,6 +7003,19 @@
     "subscription": "Assinatura",
     "injectToCursor": "Alternar para Cursor",
     "quota": {
+      "weeklyUsage": "Uso semanal",
+      "monthlyUsage": "Uso mensal",
+      "additionalBalance": "Saldo de créditos",
+      "additionalMonthlyUsed": "Uso extra neste mês",
+      "additionalMonthlyLimit": "Limite mensal extra",
+      "limitUnset": "Não definido",
+      "autoTopUp": "Recarga automática",
+      "autoTopUpDetails": "Abaixo de {{threshold}} · Recarregar {{amount}}",
+      "usedPercent": "{{percent}}% usado",
+      "details": "Detalhes de uso",
+      "sandUsage": "Uso do Grok Bot",
+      "cursorModels": "Modelos do Cursor",
+      "otherModels": "Outros modelos",
       "onDemand": "Sob demanda"
     },
     "title": "Gerenciamento de contas Cursor",
@@ -6700,11 +7031,12 @@
       "title": "Adicionar conta Cursor"
     },
     "token": {
-      "desc": "Cole seu token de acesso do Cursor (JWT) ou dados JSON exportados.",
+      "desc": "Cole um JWT do Cursor, um token de sessão do navegador ou os dados JSON exportados.",
       "formatHint": "Campos obrigatórios e exemplos (clique para expandir)",
-      "formatRequired": "Token único: cole o JWT diretamente; importação em lote: use o formato de array JSON",
+      "formatRequired": "Para uma conta, use um JWT ou um token de sessão. Para várias contas, use um array JSON.",
       "singleExample": "Exemplo único (JWT)",
-      "batchExample": "Exemplo em lote (JSON)"
+      "batchExample": "Exemplo em lote (JSON)",
+      "invalidBrowserToken": "O token de sessão do navegador é inválido ou seu ID de usuário não corresponde ao JWT."
     },
     "import": {
       "localDesc": "Importar dados da conta do cliente Cursor local ou de um arquivo JSON.",
@@ -7024,6 +7356,22 @@
     }
   },
   "codebuddy": {
+    "sessionManager": {
+      "statusAll": "Todos os estados",
+      "statusCompleted": "Concluída",
+      "statusInProgress": "Em andamento",
+      "statusFilter": "Status da sessão",
+      "noMatching": "Nenhuma sessão correspondente",
+      "noSessions": "Ainda não há sessões",
+      "untitled": "(sem título)",
+      "labels": {
+        "session": "Sessão",
+        "user": "Usuário",
+        "dir": "Pasta"
+      },
+      "unknownTime": "Horário desconhecido",
+      "searchPlaceholder": "Buscar por título ou pasta de trabalho"
+    },
     "title": "Gerenciamento de contas do CodeBuddy",
     "noAccounts": "Nenhuma conta CodeBuddy",
     "addAccount": "Adicionar conta CodeBuddy",
@@ -7124,6 +7472,22 @@
     }
   },
   "qoder": {
+    "diagnostics": {
+      "profileUninitialized": "O Qoder IDE ainda não foi inicializado. Abra este perfil com o usuário atual do sistema, feche o IDE e tente novamente. Pasta: {{detail}}",
+      "storageUnavailable": "As credenciais do Qoder IDE estão indisponíveis. Execute os dois aplicativos com o mesmo usuário do sistema. {{detail}}",
+      "profileConflict": "A configuração de inicialização aponta para outro perfil. Pasta real: {{detail}}",
+      "dataRootUnavailable": "Não foi possível encontrar a pasta do perfil do Qoder IDE.",
+      "busy": "Outra operação do Qoder está em andamento. Tente novamente em instantes.",
+      "reauthRequired": "O login do Qoder expirou. Autorize novamente ou entre no IDE e reimporte a conta.",
+      "apiUnauthorized": "O serviço do Qoder não autorizou esta solicitação.",
+      "renewalFailed": "Não foi possível renovar as credenciais do Qoder. Tente novamente em instantes.",
+      "sessionChanged": "A sessão do Qoder mudou. Atualize a lista de contas e tente novamente.",
+      "endpointUnavailable": "Não foi possível verificar o endereço do serviço do Qoder. Confira o login e a organização no IDE.",
+      "switchLaunchFailed": "A conta foi gravada, mas o Qoder IDE não iniciou. {{detail}}",
+      "refreshCount": "{{count}} de {{total}} contas atualizadas.",
+      "launchUnconfirmed": "Não foi possível confirmar a inicialização do Qoder IDE.",
+      "workerFailed": "A operação do Qoder em segundo plano falhou. {{detail}}"
+    },
     "title": "Gerenciamento de contas do Qoder",
     "comingSoon": {
       "title": "Multi-Instância Em Breve",
@@ -7139,6 +7503,7 @@
       "copyLoginUrl": "Copiar link de login"
     },
     "usageOverview": {
+      "enterpriseManaged": "Gerenciado pela organização",
       "title": "Visão geral de uso",
       "viewDetails": "Ver detalhes",
       "includedCredits": "Créditos incluídos no plano",
@@ -7150,8 +7515,8 @@
     "flowNotice": {
       "title": "Guia de contas Qoder (clique para expandir/recolher)",
       "desc": "Suporta login oficial via OAuth (callback), importacao local, importacao JSON, injecao para troca de conta, vinculacao multi-instancia e visao geral de cota. O fluxo de login segue os dados reais gravados pelo cliente Qoder.",
-      "permission": "Escopo de permissao: le o armazenamento local de autenticacao do Qoder (credenciais auth e informacoes do usuario) para troca de conta e injecao de sessao; todos os dados sao processados localmente no seu dispositivo.",
-      "network": "Escopo de rede: o login OAuth requer acesso aos servicos oficiais do Qoder para concluir o callback; as consultas de cota usam a API do Qoder. Nenhuma chave ou credencial local e enviada."
+      "permission": "O Cockpit lê os caches de login, plano, uso e identificação do dispositivo do Qoder IDE. Na troca, grava no perfil escolhido com a proteção do sistema.",
+      "network": "A autorização no navegador usa a página de login do Qoder. O Cockpit envia parâmetros de autorização, identificadores de dispositivo aplicáveis e tokens ao serviço do Qoder da sessão para verificar e renovar o login e consultar o uso."
     },
     "addModal": {
       "title": "Adicionar conta Qoder"
@@ -7272,6 +7637,7 @@
     "syncToWorkbuddy": "Sincronizar com WorkBuddy"
   },
   "workbuddy": {
+    "desktopEdition": "WorkBuddy (edição chinesa)",
     "credits": {
       "planBase": "Créditos básicos do plano",
       "planBonus": "Bônus do plano",
@@ -7308,7 +7674,7 @@
       "title": "Informacoes de gerenciamento de conta do WorkBuddy (clique para expandir/recolher)",
       "desc": "A troca de conta grava o arquivo local de login seguindo o layout mais recente do cliente oficial do WorkBuddy; a importação local lê o mesmo arquivo. Os dados são processados somente localmente.",
       "permission": "Escopo de permissão: ler e gravar o arquivo de login do WorkBuddy (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) para importação local e troca de conta; o state.vscdb legado não é mais lido nem modificado.",
-      "network": "O login OAuth e a renovação do token se conectam ao WorkBuddy. O saldo e os detalhes dos créditos são consultados no serviço de cobrança com o token da conta. Os arquivos de login e as chaves do sistema ficam no dispositivo."
+      "network": "O login OAuth e a renovação do token se conectam ao WorkBuddy. O saldo e os detalhes dos créditos são consultados no serviço de cobrança com o token da conta. Os arquivos de login e as chaves do sistema ficam no dispositivo. Os testes também enviam o modelo escolhido e uma mensagem ao serviço de conversas WorkBuddy e ao endpoint de sessão, e leem a resposta."
     },
     "nickname": "Apelido",
     "enterprise": "Empresa",
@@ -7443,21 +7809,37 @@
       "endTime": "Horário de término",
       "timeRangeHint": "Seleciona diariamente um horário aleatório dentro deste intervalo para concluir o check-in.",
       "errors": "Erros",
-      "tabSettings": "Configurações de check-in automático",
-      "tabHistory": "Histórico de check-in automático",
-      "manualTest": "Executar teste",
-      "clearLogs": "Limpar",
-      "clearLogsFailed": "Falha ao limpar os registros de check-in: {{message}}",
-      "historyLoading": "Carregando registros de check-in automático...",
-      "historyLoadFailed": "Falha ao carregar os registros de check-in automático: {{message}}",
       "totalCredits": "{{credits}} créditos",
-      "historyRangeHint": "Apenas os registros de check-in automático dos últimos 30 dias são mantidos ({{count}} no total)",
-      "noHistory": "Nenhum registro de check-in automático nos últimos 30 dias",
-      "saveFailed": "Falha ao salvar as configurações de check-in automático: {{message}}",
-      "manualTestPartialFailure": "O check-in falhou para algumas contas. Veja os registros; uma nova tentativa ocorrerá em segundo plano mais tarde.",
-      "manualTestAlreadyRunning": "Uma tarefa de check-in automático está em execução. Verifique os registros mais tarde.",
-      "manualTestFailed": "Falha no teste: {{message}}",
       "timeRangeError": "O horário de início não pode ser posterior ao horário de término"
+    },
+    "modelProbe": {
+      "title": "Teste de modelo",
+      "hint": "Envia uma mensagem curta e lê a resposta. Consome uma pequena cota. A conversa de teste é excluída por padrão.",
+      "account": "Conta",
+      "model": "Modelo",
+      "catalog": "Escolher modelo",
+      "modelPlaceholder": "Digite o ID do modelo",
+      "catalog_loading": "Carregando modelos…",
+      "catalog_loaded": "Escolha um modelo ou digite o ID.",
+      "catalog_error": "Não foi possível carregar os modelos. Digite um ID para tentar novamente.",
+      "keep": "Manter conversa",
+      "run": "Iniciar teste",
+      "running": "Testando…",
+      "failed": "Falha no teste",
+      "status_available": "Disponível",
+      "status_rate_limited": "Limitado",
+      "status_error": "Falha na solicitação",
+      "status_unknown": "Não confirmado",
+      "deleted": "Conversa de teste excluída",
+      "retained": "Conversa de teste mantida",
+      "cleanupFailed": "Não foi possível excluir a conversa. Você pode removê-la manualmente depois.",
+      "protocolFailure": "Verificação de protocolo incompleta. Tente novamente ou confira a autorização da conta.",
+      "open": "Testar modelos"
+    },
+    "probeNotice": {
+      "until": "{{model}} limitado no último teste, restauração {{time}}",
+      "unavailable": "{{model}} limitado no último teste",
+      "failed": "Último teste de {{model}} falhou"
     }
   },
   "minimaxCode": {
@@ -7825,6 +8207,14 @@
     "btnExportTitle": "Export Saved as JSON [pt-br]"
   },
   "mfaVault": {
+    "checkpointAvailable": "O arquivo do cofre 2FA está ausente. O backup local é verificado antes da restauração. Alterações posteriores podem não estar disponíveis.",
+    "restoreCheckpoint": "Restaurar backup local",
+    "checkpointRestoring": "Verificando e restaurando o backup 2FA…",
+    "checkpointRestoreFailed": "Não foi possível verificar ou restaurar o backup 2FA local.",
+    "checkpointLiveVaultExists": "O cofre 2FA atual foi encontrado. Tente carregá-lo novamente.",
+    "checkpointSidecarExists": "Os arquivos de recuperação do SQLite continuam disponíveis e foram preservados.",
+    "recoveryFailed": "Não foi possível recuperar as chaves 2FA.",
+    "storageWriteFailed": "Não foi possível salvar as alterações de 2FA.",
     "pageDesc": "Armazene e gerencie com segurança seus códigos de recuperação MFA de backup, conjuntos de senha e outros dados sensíveis de autenticação. Os registros MFA são armazenados apenas localmente. Excluir registros, limpar cache ou trocar/perder o dispositivo pode causar perda de MFA. Mantenha backup e importe dele quando necessário.",
     "manualAdd": "Adicionar credencial manualmente",
     "add": "Adicionar",
@@ -8037,6 +8427,14 @@
       "queryFailed": "Falha ao carregar modelos: {{error}}"
     },
     "keyManager": {
+      "prefillOpened": "A janela de adição em {{target}} está aberta. Confira os dados e salve.",
+      "checkpointAvailable": "O arquivo do cofre de chaves está ausente. O backup local é verificado antes da restauração. Alterações posteriores podem não estar disponíveis.",
+      "restoreCheckpoint": "Restaurar backup local",
+      "checkpointRestoreFailed": "Não foi possível verificar ou restaurar o backup local de chaves.",
+      "exportLegacy": "Exportar JSON sem criptografia",
+      "legacyExportFailed": "Não foi possível exportar a lista de chaves no formato anterior.",
+      "vaultLoadFailed": "Não foi possível carregar as chaves salvas.",
+      "vaultWriteFailed": "Não foi possível salvar as alterações nas chaves.",
       "title": "Gerenciar chaves",
       "desc": "Salve API Keys para alternar rápido e consultar a cota automaticamente.",
       "saveButton": "Salvar chave",
@@ -8061,6 +8459,7 @@
       "addToClaude": "Adicionar ao Claude CLI",
       "addToClaudeDesktop": "Adicionar ao Claude",
       "addToClaudeCli": "Adicionar ao Claude CLI",
+      "addToGrok": "Adicionar ao Grok",
       "codexShort": "Codex",
       "claudeShort": "Claude CLI",
       "deployToCodex": "Implantação rápida no Codex",
@@ -8070,6 +8469,7 @@
       "useKey": "Usar chave"
     },
     "prefill": {
+      "codexReady": "As configurações do APIKEY.FUN foram preenchidas. Confira-as antes de adicionar ao Codex.",
       "claudeDesktopReady": "A configuração da APIKEY.FUN foi preenchida. Confirme para adicionar ao Claude."
     },
     "copyKey": "Copy Key​",
@@ -8103,6 +8503,7 @@
     }
   },
   "grok": {
+    "emptyBillingQuota": "O faturamento do Grok não retornou dados de cota. Tente novamente mais tarde.",
     "search": "Buscar contas do Grok CLI...",
     "flowNotice": {
       "title": "Gerenciamento de contas do Grok CLI",
@@ -8147,6 +8548,8 @@
       "apiBaseUrlInvalid": "Informe uma URL http:// ou https:// completa, sem credenciais, parâmetros de consulta ou fragmentos"
     },
     "instances": {
+      "accountHomeReady": "Pasta isolada pronta para {{email}}",
+      "installLaunchHint": "Execute o comando oficial abaixo em um terminal. Após a instalação, escolha Executar no terminal novamente.",
       "unsupported": "Várias instâncias do Grok CLI são compatíveis apenas com macOS, Windows e Linux.",
       "launchDialogTitle": "Iniciar instância",
       "launchHint": "Copie o comando para executar manualmente ou inicie-o diretamente em um terminal.",
@@ -8176,6 +8579,7 @@
       "sectionTitle": "Cota"
     },
     "quota": {
+      "cliUnavailable": "Uso da CLI indisponível",
       "weekly": "Uso semanal",
       "sharedPool": "Cota compartilhada",
       "monthly": "Uso mensal",
@@ -8298,6 +8702,7 @@
       "baseUrlInvalid": "Base URL não é uma URL válida"
     },
     "desktopOAuth": {
+      "cliUnsupported": "Esta conta não pode iniciar o Claude Code CLI.",
       "title": "Login Claude",
       "desc": "Login Claude nesta ferramenta; aceita Google, Apple, e-mail e free.",
       "start": "Abrir login",
@@ -8347,6 +8752,7 @@
       }
     },
     "oauth": {
+      "switchHint": "Mudar para o Claude Code local",
       "title": "Autorização Claude OAuth",
       "desc": "Abra a página oficial de autorização OAuth do Claude e depois cole o link de callback ou o código para importar a conta.",
       "start": "Autorizar OAuth",
@@ -8375,6 +8781,9 @@
       "cliUnsupported": "Contas OAuth antigas não podem iniciar o Claude CLI"
     },
     "cli": {
+      "applyUserConfig": "Aplicar às configurações do usuário",
+      "userConfigHint": "Grava esta conta em ~/.claude para o Claude Code e o VS Code.",
+      "userConfigApplied": "Configurações do usuário atualizadas",
       "quickLaunch": "Abrir CLI",
       "selectWorkingDir": "Escolha a pasta de trabalho do Claude CLI",
       "launchSuccess": "Claude CLI iniciado",
@@ -8414,6 +8823,8 @@
     "noDesktopAccounts": "Nenhuma conta Claude ainda",
     "noCliAccounts": "Nenhuma conta Claude CLI ainda",
     "desktopGateway": {
+      "switchHint": "Aplicar a configuração e iniciar o Claude Desktop",
+      "switchSuccess": "Configuração do provedor do Claude Desktop aplicada para {{name}}.",
       "label": "Portal",
       "authScheme": "Esquema auth",
       "importAction": "Importar Gateway",

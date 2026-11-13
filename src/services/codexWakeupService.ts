@@ -1,3 +1,4 @@
+import type { LocalHistoryRead } from '../hooks/useLocalHistory';
 import { invoke } from '@tauri-apps/api/core';
 import {
   CodexCliStatus,
@@ -36,6 +37,7 @@ interface RawCodexWakeupSchedule {
   weeklyTime?: string;
   intervalHours?: number;
   quotaResetWindow?: CodexWakeupTask['schedule']['quota_reset_window'];
+  quotaResetDelayMinutes?: number;
   startupDelayMinutes?: number;
 }
 
@@ -44,6 +46,7 @@ interface RawCodexWakeupTask {
   name: string;
   enabled: boolean;
   accountIds: string[];
+  useApiServicePool?: boolean;
   prompt?: string;
   model?: string;
   modelDisplayName?: string;
@@ -119,7 +122,6 @@ interface RawCodexWakeupBatchResult {
 interface RawCodexWakeupOverview {
   runtime: RawCodexCliStatus;
   state: RawCodexWakeupState;
-  history: RawCodexWakeupHistoryItem[];
 }
 
 interface RawCodexWakeupProgressPayload {
@@ -133,6 +135,7 @@ interface RawCodexWakeupProgressPayload {
   failureCount: number;
   running: boolean;
   phase: string;
+  accountIds?: string[];
   currentAccountId?: string;
   item?: RawCodexWakeupHistoryItem;
 }
@@ -158,6 +161,7 @@ function toRawTask(task: CodexWakeupTask): RawCodexWakeupTask {
     name: task.name,
     enabled: task.enabled,
     accountIds: task.account_ids,
+    useApiServicePool: task.use_api_service_pool,
     prompt: task.prompt,
     model: task.model,
     modelDisplayName: task.model_display_name,
@@ -169,6 +173,7 @@ function toRawTask(task: CodexWakeupTask): RawCodexWakeupTask {
       weeklyTime: task.schedule.weekly_time,
       intervalHours: task.schedule.interval_hours,
       quotaResetWindow: task.schedule.quota_reset_window,
+      quotaResetDelayMinutes: task.schedule.quota_reset_delay_minutes,
       startupDelayMinutes: task.schedule.startup_delay_minutes,
     },
     createdAt: task.created_at,
@@ -191,6 +196,7 @@ function fromRawTask(raw: RawCodexWakeupTask): CodexWakeupTask {
     name: raw.name,
     enabled: raw.enabled,
     account_ids: raw.accountIds ?? [],
+    use_api_service_pool: raw.useApiServicePool,
     prompt: raw.prompt,
     model: raw.model,
     model_display_name: raw.modelDisplayName,
@@ -202,6 +208,7 @@ function fromRawTask(raw: RawCodexWakeupTask): CodexWakeupTask {
       weekly_time: raw.schedule.weeklyTime,
       interval_hours: raw.schedule.intervalHours,
       quota_reset_window: raw.schedule.quotaResetWindow,
+      quota_reset_delay_minutes: raw.schedule.quotaResetDelayMinutes,
       startup_delay_minutes: raw.schedule.startupDelayMinutes,
     },
     created_at: raw.createdAt,
@@ -297,7 +304,6 @@ function fromRawOverview(raw: RawCodexWakeupOverview): CodexWakeupOverview {
   return {
     runtime: fromRawCliStatus(raw.runtime),
     state: fromRawState(raw.state),
-    history: (raw.history ?? []).map(fromRawHistoryItem),
   };
 }
 
@@ -315,6 +321,7 @@ export function fromRawWakeupProgressPayload(
     failure_count: raw.failureCount,
     running: raw.running,
     phase: raw.phase,
+    account_ids: raw.accountIds,
     current_account_id: raw.currentAccountId,
     item: raw.item ? fromRawHistoryItem(raw.item) : undefined,
   };
@@ -322,6 +329,10 @@ export function fromRawWakeupProgressPayload(
 
 export async function getCodexWakeupCliStatus(): Promise<CodexCliStatus> {
   return fromRawCliStatus(await invoke<RawCodexCliStatus>('codex_wakeup_get_cli_status'));
+}
+
+export function loadCodexWakeupPoolAccounts(): Promise<string[]> {
+  return invoke('codex_wakeup_get_pool_accounts');
 }
 
 export async function updateCodexWakeupRuntimeConfig(
@@ -360,8 +371,9 @@ export async function saveCodexWakeupState(
   );
 }
 
-export async function loadCodexWakeupHistory(): Promise<CodexWakeupHistoryItem[]> {
-  return (await invoke<RawCodexWakeupHistoryItem[]>('codex_wakeup_load_history')).map(fromRawHistoryItem);
+export async function loadCodexWakeupHistory(retry = false): Promise<LocalHistoryRead<CodexWakeupHistoryItem>> {
+  const result = await invoke<LocalHistoryRead<RawCodexWakeupHistoryItem>>('codex_wakeup_load_history', { retry });
+  return { ...result, records: result.records.map(fromRawHistoryItem) };
 }
 
 export async function clearCodexWakeupHistory(): Promise<void> {

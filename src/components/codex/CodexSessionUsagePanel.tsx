@@ -31,10 +31,10 @@ import {
 import { CodexUsageTrend, type UsageTrendPoint } from './CodexUsageTrend';
 import {
   normalizeCodexSessionUsageRange,
-  persistCodexSessionUsageRange,
-  readCodexSessionUsageRange,
-  type CodexSessionUsageRange as UsageRange,
+  CODEX_SESSION_USAGE_RANGE_STORAGE_KEY,
 } from '../../utils/codexStatsRangePreference';
+import { useDurableUiSetting } from '../../hooks/useDurableUiSetting';
+import { previewDurableUiSetting } from '../../utils/durableUiSettings';
 
 function TokenAmount({
   value,
@@ -145,7 +145,7 @@ export function CodexSessionUsageSummary({
   const lang = i18n.resolvedLanguage || i18n.language || 'zh-CN';
   const [report, setReport] = useState<CodexSessionUsageReport | null>(null);
   const [loadState, setLoadState] = useState<SessionUsageSummaryLoadState>('scanning');
-  const [range] = useState<UsageRange>(() => readCodexSessionUsageRange());
+  const range = normalizeCodexSessionUsageRange(useDurableUiSetting(CODEX_SESSION_USAGE_RANGE_STORAGE_KEY));
   const query = useMemo(() => buildUsageQuery(range, ''), [range]);
 
   useEffect(() => {
@@ -267,7 +267,7 @@ export function CodexSessionUsagePanel({
   const { t, i18n } = useTranslation();
   const lang = i18n.resolvedLanguage || i18n.language || 'zh-CN';
   const isZh = lang.toLowerCase().startsWith('zh');
-  const [range, setRange] = useState<UsageRange>(() => readCodexSessionUsageRange());
+  const range = normalizeCodexSessionUsageRange(useDurableUiSetting(CODEX_SESSION_USAGE_RANGE_STORAGE_KEY));
   const [instanceId, setInstanceId] = useState('');
   const [report, setReport] = useState<CodexSessionUsageReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -438,8 +438,7 @@ export function CodexSessionUsagePanel({
             options={rangeOptions}
             onChange={(value) => {
               const nextRange = normalizeCodexSessionUsageRange(value);
-              setRange(nextRange);
-              persistCodexSessionUsageRange(nextRange);
+              previewDurableUiSetting(CODEX_SESSION_USAGE_RANGE_STORAGE_KEY, nextRange);
             }}
             ariaLabel={t('codex.sessionUsage.range.label', '时间范围')}
             menuWidth={140}

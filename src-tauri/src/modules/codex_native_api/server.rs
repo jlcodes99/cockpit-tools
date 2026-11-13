@@ -47,7 +47,14 @@ pub struct Options {
     /// Zero preserves the host's per-account concurrency policy without another global cap.
     pub max_in_flight: usize,
     pub request_timeout: Duration,
+    pub request_body_timeout: Option<Duration>,
     pub idle_timeout: Duration,
+}
+
+impl Options {
+    pub(super) fn body_timeout(&self) -> Duration {
+        self.request_body_timeout.unwrap_or(self.request_timeout)
+    }
 }
 
 impl Default for Options {
@@ -63,12 +70,14 @@ impl Default for Options {
             max_provider_event_bytes: 4 * 1024 * 1024,
             max_in_flight: 0,
             request_timeout: Duration::from_secs(30),
+            request_body_timeout: None,
             idle_timeout: Duration::from_secs(180),
         }
     }
 }
 
 pub(super) struct AppState {
+    pub reasoning_proofs: super::reasoning_policy::ProofCache,
     pub host: Arc<dyn Host>,
     pub identity: Arc<IdentityStore>,
     pub options: Options,
@@ -79,6 +88,15 @@ pub(super) struct AppState {
 }
 
 impl AppState {
+    pub(super) fn begin_with_peer(
+        &self,
+        peer: Option<SocketAddr>,
+    ) -> Result<RequestTracker, ServiceError> {
+        let mut tracker = self.begin()?;
+        tracker.set_peer(peer.map(|address| address.ip().to_canonical()));
+        Ok(tracker)
+    }
+
     pub(super) fn blocking_work(&self) -> super::lifecycle::BlockingWorkGuard {
         super::lifecycle::BlockingWorkGuard::new(self.activity.clone())
     }
@@ -145,6 +163,10 @@ impl AppState {
                 result.map_err(|_| ServiceError::new(504, "model_catalog_timeout", "Model catalog lookup timed out"))?,
         }
     }
+}
+
+pub(super) fn request_peer(request: &axum::http::Extensions) -> Option<SocketAddr> {
+    request.get::<axum::extract::ConnectInfo<SocketAddr>>().map(|peer| peer.0)
 }
 
 pub struct Handle {
@@ -250,15 +272,21 @@ pub async fn start(
     )
     .await
     .map_err(|error| error.message)?;
-    let listener = TcpListener::bind(addr)
-        .await
-        .map_err(|error| error.to_string())?;
+    let listener = TcpListener::bind(addr).await.map_err(|error| {
+        match error.kind() {
+            std::io::ErrorKind::AddrInUse | std::io::ErrorKind::PermissionDenied => {
+                format!("listen tcp {addr}: bind: {error}")
+            }
+            _ => error.to_string(),
+        }
+    })?;
     let addr = listener.local_addr().map_err(|error| error.to_string())?;
     let activity = Arc::new(Activity::default());
     identity.set_session_identity_mapping_enabled(options.session_identity_mapping_enabled);
     identity.set_shared_continuation_references(options.shared_continuation_references);
     let identity = Arc::new(identity);
     let state = Arc::new(AppState {
+        reasoning_proofs: Default::default(),
         anthropic_search: Default::default(),
         host: host.clone(),
         identity: identity.clone(),
@@ -554,6 +582,26 @@ pub(super) fn outbound_headers(headers: &HeaderMap) -> HeaderMap {
                         | "sec-websocket-version"
                         | "sec-websocket-extensions"
                         | "sec-websocket-protocol"
+                        // Ingress metadata does not describe the new provider connection.
+                        // Match exact names to preserve identity and custom API headers.
+                        | "forwarded"
+                        | "x-forwarded-for"
+                        | "x-forwarded-host"
+                        | "x-forwarded-proto"
+                        | "x-forwarded-port"
+                        | "x-forwarded-server"
+                        | "x-real-ip"
+                        | "true-client-ip"
+                        | "cf-connecting-ip"
+                        | "cf-connecting-ipv6"
+                        | "cf-pseudo-ipv4"
+                        | "cf-ipcountry"
+                        | "cf-ray"
+                        | "cf-visitor"
+                        | "cf-warp-tag-id"
+                        | "cf-worker"
+                        | "cf-ew-via"
+                        | "cdn-loop"
                 )
                 && !connection_fields
                     .iter()
@@ -680,6 +728,7 @@ mod shutdown_handoff_tests {
             let temp = tempfile::tempdir().unwrap();
             let (_, stopped) = watch::channel(false);
             let state = AppState {
+                reasoning_proofs: Default::default(),
                 anthropic_search: Default::default(),
                 host: Arc::new(UnusedHost),
                 identity: Arc::new(
@@ -716,6 +765,7 @@ mod shutdown_handoff_tests {
             let (stop, stopped) = watch::channel(false);
             let activity = Arc::new(Activity::default());
             let state = Arc::new(AppState {
+                reasoning_proofs: Default::default(),
                 anthropic_search: Default::default(),
                 host: Arc::new(UnusedHost),
                 identity: Arc::new(

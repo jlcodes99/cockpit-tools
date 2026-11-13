@@ -1562,6 +1562,11 @@
   cursor: not-allowed;
 }
 
+.codex-batch-import-quota-hint {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .codex-batch-import-task {
   display: flex;
   align-items: center;
@@ -2028,8 +2033,9 @@
   max-width: none !important;
   max-height: none !important;
   display: flex !important;
-  align-items: center;
+  align-items: safe center;
   justify-content: center;
+  overflow-y: auto;
 }
 
 .codex-ssh-sync-modal {

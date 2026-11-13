@@ -19,6 +19,7 @@ fn injection_script(
     let abnormal_account_count = quota.abnormal_account_count.unwrap_or(0);
     let cooldown_account_count = quota.cooldown_account_count.unwrap_or(0);
     let plans = serde_json::to_string(&quota.plans).unwrap_or_else(|_| "[]".to_string());
+    let provider_quotas = serde_json::to_string(&quota.provider_quotas).unwrap_or_else(|_| "[]".to_string());
     let grok_lines_value = serde_json::to_string(grok_lines).unwrap_or_else(|_| "[]".to_string());
     let grok_badge_line = grok_lines.iter().max_by_key(|line| line.remaining_percent);
     let grok_badge_percent =
@@ -248,6 +249,10 @@ fn injection_script(
             ("imageEdit", "codex.localAccess.requestKind.imageEdit"),
             ("remoteUsed", "common.apiBudget.consumed"),
             ("remoteUnlimited", "codex.apiService.keys.tokenLimitUnlimited"),
+            ("providerQuotaStale", "codex.apiService.providerQuotaStale"),
+            ("providerQuotaUnitUnknown", "codex.apiService.providerQuotaUnitUnknown"),
+            ("providerQuotaFailed", "common.shared.quota.queryFailed"),
+            ("providerQuotaUnavailable", "common.shared.quota.noData"),
             ("remoteBudgetHint", "common.apiBudget.hint"),
             ("requestTier", "codex.apiService.logs.requestedTier"),
             ("responseTier", "codex.apiService.logs.responseTier"),
@@ -272,6 +277,7 @@ fn injection_script(
       const abnormalAccountCount = {abnormal_account_count_value};
       const cooldownAccountCount = {cooldown_account_count_value};
       const plans = {plans};
+      const providerQuotas = {provider_quotas};
       const officialLabel = {official_label};
       const grokLines = {grok_lines_value};
       const grokBadgePercent = {grok_badge_percent};

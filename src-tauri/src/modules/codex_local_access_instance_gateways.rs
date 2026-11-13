@@ -407,6 +407,17 @@ pub async fn restore_instance_gateways_on_startup() {
         if crate::modules::app_lifecycle::is_shutdown_started() {
             return;
         }
+        // A previously direct profile has no gateway to recover. Its next
+        // Cockpit launch prepares the endpoint before starting the client.
+        if target.kind == INSTANCE_GATEWAY_KIND_PROVIDER
+            && account_requires_responses_compatibility_gateway(&target.account)
+            && matches!(
+                load_provider_gateway_profile_state(&target.profile_dir, &target.runtime_id),
+                Ok(None)
+            )
+        {
+            continue;
+        }
         let runtime_key = provider_gateway_runtime_key(&target.profile_dir, &target.runtime_id);
         let instance_running = {
             let home =

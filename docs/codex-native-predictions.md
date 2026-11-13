@@ -26,8 +26,10 @@ into the main process's private internal-request channel. Unlike the previous
 renderer fork implementation, it creates no ordinary temporary conversation or
 prediction turn for the renderer to treat as user work.
 
-ChatGPT-authenticated, remote, SSH, and cloud connections retain their original
-behavior. The original **Show predictions** preference is respected. Unknown
+Verified Cockpit API Service profiles with bound OAuth can also use the adapter
+for local conversations that use the service provider. Direct ChatGPT,
+remote, SSH, and cloud connections retain their original behavior.
+The original **Show predictions** preference is respected. Unknown
 module layouts leave prediction compatibility disabled while preserving normal
 chat and independently supported Cockpit enhancements.
 

@@ -9,18 +9,41 @@ const compiled = ts.transpileModule(
   { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
 ).outputText;
 
-function harness(invoke: (command: string) => Promise<unknown>) {
+function harness(invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown>, bundle?: unknown) {
   const exports: Record<string, any> = {};
   const timers = new Map<number, () => void>();
   let timerId = 0;
   vm.runInNewContext(compiled, {
-    exports, require: () => ({ invoke }),
+    exports, require: (name: string) => name === './dataTransferService'
+      ? { exportDataTransferBundle: async () => bundle } : { invoke },
     setTimeout: (callback: () => void) => { timers.set(++timerId, callback); return timerId; },
     clearTimeout: (id: number) => timers.delete(id),
   });
   exports.timers = timers;
   return exports;
 }
+
+test('backup creation and retention changes use the same cleanup command', async () => {
+  for (const complete of [false, true]) {
+    const calls: Array<[string, Record<string, unknown> | undefined]> = [];
+    const service = harness(async (command, args) => {
+      calls.push([command, args]);
+      if (command === 'write_auto_backup_file') return '/tmp/synthetic-backup';
+      if (command === 'cleanup_auto_backup_files') return [];
+      throw new Error(command);
+    }, { config: complete ? { verification_records: [] } : {} });
+    const result = await service.createManagedBackup({
+      trigger: 'auto', selection: { includeAccounts: false, includeConfig: true },
+      retentionDays: 7, markAsLastRun: false,
+    });
+    assert.equal(result.file_name.endsWith('_mfa-pending.json'), !complete);
+    await service.cleanupAutoBackupFiles(7);
+    assert.deepEqual(calls.slice(1).map(([command, args]) => [command, JSON.stringify(args)]), [
+      ['cleanup_auto_backup_files', '{"retentionDays":7}'],
+      ['cleanup_auto_backup_files', '{"retentionDays":7}'],
+    ]);
+  }
+});
 
 test('backup scan failures preserve loaded settings and other successful data', async () => {
   const settings = { directory_path: '/backups', retention_days: 7 };

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { scrollElementIntoView } from '../../utils/reducedMotion';
 import './CodexWakeupValidation.css';
 
-type TaskField = 'name' | 'accounts' | 'model' | 'reasoning' | 'weeklyDays';
+type TaskField = 'name' | 'accounts' | 'model' | 'reasoning' | 'weeklyDays' | 'quotaResetDelay';
 
 /** Field validation stays beside the field; backend failures use the modal's fixed error area. */
 export function useWakeupTaskValidation(draft: unknown, open: boolean) {

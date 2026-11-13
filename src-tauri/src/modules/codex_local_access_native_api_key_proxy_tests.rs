@@ -192,7 +192,9 @@ async fn native_api_key_proxy_network_case(scenario: &str) {
             codex_client_proxy::resolve(&input.account.id)
                 .await
                 .unwrap(),
-            crate::modules::process::CodexLaunchProxy::Proxy(proxy.clone().unwrap())
+            crate::modules::process::CodexLaunchProxy::Managed(
+                url::Url::parse(proxy.as_deref().unwrap()).unwrap().port().unwrap()
+            )
         );
         assert_eq!(
             url::Url::parse(proxy.as_deref().unwrap()).unwrap().port(),

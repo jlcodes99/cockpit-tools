@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { previewDurableUiSetting, readDurableUiSetting } from '../utils/durableUiSettings';
 import {
   markUserMemoryDismissed,
   USER_MEMORY_FLAGS,
@@ -22,50 +22,47 @@ interface SideNavLayoutState {
   markClassicFirstSyncDone: () => void;
 }
 
-// 兼容迁移旧版本的零散 localStorage 键值
-function getOldStorage<T>(key: string, parse: (val: string) => T, fallback: T): T {
-  if (typeof window === 'undefined') return fallback;
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-    return parse(raw);
-  } catch {
-    return fallback;
-  }
+const MODE = 'agtools.side_nav.layout.v1';
+const COLLAPSED = 'agtools.side_nav.classic_collapsed.v1';
+const HIDE_PROMPT = 'agtools.side_nav.hide_classic_switch_prompt.v1';
+const FIRST_SYNC = 'agtools.side_nav.classic_first_sync_done.v1';
+
+function savedLayout() {
+  const mode: SideNavLayoutMode = readDurableUiSetting(MODE) === 'original' ? 'original' : 'classic';
+  return {
+    mode,
+    classicCollapsed: readDurableUiSetting(COLLAPSED) === '1',
+    hideClassicSwitchPrompt: readDurableUiSetting(HIDE_PROMPT) === '1',
+    classicFirstSyncDone: readDurableUiSetting(FIRST_SYNC) === '1',
+  };
 }
 
-export const useSideNavLayoutStore = create<SideNavLayoutState>()(
-  persist(
-    (set) => ({
-      mode: getOldStorage<SideNavLayoutMode>('agtools.side_nav.layout.v1', (v) => (v === 'classic' ? 'classic' : 'original'), 'classic'),
-      classicCollapsed: getOldStorage('agtools.side_nav.classic_collapsed.v1', (v) => v === '1', false),
-      hideClassicSwitchPrompt: getOldStorage('agtools.side_nav.hide_classic_switch_prompt.v1', (v) => v === '1', false),
-      classicFirstSyncDone: getOldStorage('agtools.side_nav.classic_first_sync_done.v1', (v) => v === '1', false),
-
-      setMode: (mode) => set({ mode }),
-      setClassicCollapsed: (classicCollapsed) => set({ classicCollapsed }),
-      toggleClassicCollapsed: () => set((state) => ({ classicCollapsed: !state.classicCollapsed })),
-      setHideClassicSwitchPrompt: (hideClassicSwitchPrompt) => {
-        if (hideClassicSwitchPrompt) {
-          void markUserMemoryDismissed(USER_MEMORY_FLAGS.classicSwitchPrompt);
-        }
-        set({ hideClassicSwitchPrompt });
-      },
-      markClassicFirstSyncDone: () => set({ classicFirstSyncDone: true }),
-    }),
-    {
-      name: 'agtools.side_nav.store.v2',
-      storage: createJSONStorage(() => localStorage),
-      onRehydrateStorage: () => (state) => {
-        // 在成功合并旧数据并写入新 JSON 结构后，清理残留的旧键
-        if (state && typeof window !== 'undefined') {
-          setTimeout(() => {
-            localStorage.removeItem('agtools.side_nav.layout.v1');
-            localStorage.removeItem('agtools.side_nav.classic_collapsed.v1');
-            localStorage.removeItem('agtools.side_nav.classic_first_sync_done.v1');
-          }, 0);
-        }
-      },
+export const useSideNavLayoutStore = create<SideNavLayoutState>((set, get) => ({
+  ...savedLayout(),
+  setMode(mode) {
+    set({ mode });
+    previewDurableUiSetting(MODE, mode);
+  },
+  setClassicCollapsed(classicCollapsed) {
+    set({ classicCollapsed });
+    previewDurableUiSetting(COLLAPSED, classicCollapsed ? '1' : '0');
+  },
+  toggleClassicCollapsed() {
+    get().setClassicCollapsed(!get().classicCollapsed);
+  },
+  setHideClassicSwitchPrompt(hideClassicSwitchPrompt) {
+    if (hideClassicSwitchPrompt) {
+      void markUserMemoryDismissed(USER_MEMORY_FLAGS.classicSwitchPrompt);
     }
-  )
-);
+    set({ hideClassicSwitchPrompt });
+    previewDurableUiSetting(HIDE_PROMPT, hideClassicSwitchPrompt ? '1' : '0');
+  },
+  markClassicFirstSyncDone() {
+    set({ classicFirstSyncDone: true });
+    previewDurableUiSetting(FIRST_SYNC, '1');
+  },
+}));
+
+export function reloadSideNavPreferences(): void {
+  useSideNavLayoutStore.setState(savedLayout());
+}

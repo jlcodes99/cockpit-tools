@@ -83,7 +83,7 @@ fn api_service_activation_uses_committed_binding_instead_of_previous_account() {
         (None, false),
         (Some(CODEX_API_SERVICE_BIND_ACCOUNT_ID), false),
     ] {
-        let mut store = InstanceStore::new();
+        let mut store = load_instance_store().unwrap();
         store.default_settings.bind_account_id = previous.map(str::to_owned);
         store.default_settings.follow_local_account = follow_local;
         store.default_settings.extra_args = "--existing-option".into();

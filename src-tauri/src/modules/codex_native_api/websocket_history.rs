@@ -42,17 +42,23 @@ impl ReplayOwner {
             account: prepared.route.continuity_id().to_owned(),
             owner: prepared.route.owner_id.clone(),
             caller: prepared.caller.id.clone(),
-            session: mapped_header(prepared, "session-id"),
-            thread: mapped_header(prepared, "thread-id"),
+            session: session(prepared),
+            thread: thread(prepared),
         }
     }
     pub fn matches(&self, prepared: &Prepared) -> bool {
         self.account == prepared.route.continuity_id()
             && self.owner == prepared.route.owner_id
             && self.caller == prepared.caller.id
-            && self.session == mapped_header(prepared, "session-id")
-            && self.thread == mapped_header(prepared, "thread-id")
+            && self.session == session(prepared)
+            && self.thread == thread(prepared)
     }
+}
+fn session(prepared: &Prepared) -> Option<String> {
+    mapped_header(prepared, "session-id").or_else(|| prepared.request.session_id.clone())
+}
+fn thread(prepared: &Prepared) -> Option<String> {
+    mapped_header(prepared, "thread-id").or_else(|| prepared.request.thread_id.clone())
 }
 fn mapped_header(prepared: &Prepared, name: &str) -> Option<String> {
     prepared

@@ -6,7 +6,7 @@ use axum::{
         ws::Message,
         State,
     },
-    http::HeaderMap,
+    http::{HeaderMap, HeaderValue},
     response::Response,
 };
 use futures_util::{FutureExt, SinkExt, StreamExt};
@@ -35,13 +35,21 @@ mod continuation;
 #[path = "websocket_steering.rs"]
 mod steering;
 
+struct ConnectionIdentity {
+    diagnostic: super::diagnostics::HeaderIdentity,
+    codex_routing_hint: Option<HeaderValue>,
+}
+
 pub(super) async fn upgrade(
     State(state): State<Arc<AppState>>,
+    peer: Option<axum::Extension<axum::extract::ConnectInfo<std::net::SocketAddr>>>,
     mut headers: HeaderMap,
     ws: yawc::IncomingUpgrade,
 ) -> Result<Response, ServiceError> {
     headers.remove("x-cockpit-compat-source");
-    let mut tracker = state.begin()?;
+    headers.remove(super::compat_http::CLAUDE_CACHE_SCOPE);
+    clear_routing_header_markers(&mut headers);
+    let mut tracker = state.begin_with_peer(peer.map(|axum::Extension(info)| info.0))?;
     let capture = tokio::time::timeout(
         state.options.request_timeout,
         state.host.payload_logging_enabled(),
@@ -90,7 +98,7 @@ pub(super) async fn upgrade(
     // otherwise a heterogeneous pool can become pinned to an incompatible account.
     tracker.idle();
     let max = state.options.max_body_bytes;
-    let (response, upgrade) = ws.upgrade(super::websocket_io::options(max))
+    let (response, upgrade) = ws.upgrade(super::websocket_io::options(max, policy.websocket_fragment_timeout))
         .map_err(|error| ServiceError::new(400, "invalid_websocket_handshake", error.to_string()))?;
     tokio::spawn(async move {
         match upgrade.await {
@@ -167,16 +175,18 @@ async fn run(
     tracker.prepared_metadata(&prepared);
     // Generic WS clients may omit all Codex metadata. Their connection still
     // represents one logical thread, including retries and shorthand creates.
-    for (name, value) in [
-        ("session-id", prepared.request.session_id.as_deref()),
-        ("thread-id", prepared.request.thread_id.as_deref()),
-    ] {
+    for ((name, marker), value) in ROUTING_HEADERS.into_iter().zip([
+        prepared.request.session_id.as_deref(),
+        prepared.request.thread_id.as_deref(),
+    ]) {
         if !headers.contains_key(name) {
             if let Some(value) =
                 value.and_then(|value| value.parse::<axum::http::HeaderValue>().ok())
             {
                 headers.insert(name, value.clone());
                 prepared.source_headers.insert(name, value);
+                headers.insert(marker, axum::http::HeaderValue::from_static("1"));
+                prepared.source_headers.insert(marker, axum::http::HeaderValue::from_static("1"));
             }
         }
     }
@@ -404,7 +414,7 @@ async fn run(
                                         && preferred.is_none();
                                     let mut reconnect = upstream_lost || upstream_http || route_changed || !transport_bridge::passthrough(&state, &caller, &next).await?;
                                     let mut reconnect_reason = if upstream_lost { "upstream_lost" } else if upstream_http { "http_bridge" } else if route_changed { "route_or_connection_headers_changed" } else { "transport_policy_changed" };
-                                    prepared = next;
+                                    let previous = std::mem::replace(&mut prepared, next);
                                     tracker.routed(&caller, &prepared.route, &requested_model);
                                     tracker.routing_identity(&prepared.request);
                                     tracker.track_rebuild(prepared.binding.rebuild_abort_handle());
@@ -417,13 +427,34 @@ async fn run(
                                         let mut wire_headers = prepared.headers.clone();
                                         let mut wire_body = prepare_ws_body(&state, &mut prepared, &mut wire_headers).await?;
                                         tracker.field_compat.apply(&prepared.route, &mut wire_body);
+                                        let parent = previous.reasoning_ceiling_proof.filter(|_| {
+                                            previous.route.model == prepared.route.model
+                                                && last_completed_id.as_deref().is_some_and(|id|
+                                                    prepared.source_body["previous_response_id"].as_str() == Some(id))
+                                        });
+                                        let proof = super::reasoning_policy::check_dispatch_with_parent(
+                                            &state, &caller, &prepared.route, &prepared.source_body, &wire_body,
+                                            super::contract::WireApi::Responses, parent,
+                                        ).await;
+                                        prepared.reasoning_ceiling_proof = match proof {
+                                            Ok(proof) => proof,
+                                            Err(error) => {
+                                                tracker.fail(&error).await;
+                                                prepared = previous;
+                                                timed_client_until(&state, None, client_sink.send(Message::Text(error_event(&error).to_string().into()))).await?;
+                                                continue;
+                                            }
+                                        };
                                         if !super::multi_agent_compat::has_namespace_conflict(&prepared.body) {
                                             prepared.multi_agent_context.optimized_namespace |= previous_multi_agent_context.optimized_namespace;
                                         }
                                         if wire_body.get("previous_response_id").and_then(Value::as_str).is_some_and(|id| !id.trim().is_empty()) {
                                             prepared.multi_agent_context.inherit_plaintext(&previous_multi_agent_context);
                                         }
-                                        let wire_text = wire_body.to_string();
+                                        apply_websocket_endpoint_headers(&mut wire_headers, &prepared.route);
+                                        let routing_hint_changed = connection_identity.as_ref().is_some_and(|identity| {
+                                            identity.codex_routing_hint.as_ref() != codex_routing_hint(&wire_headers, &prepared.route)
+                                        });
                                         if let Err(error) = tracker.check_quota_before_send() {
                                             let switched = if may_move_idle_turn {
                                                 while_split_connected(
@@ -435,10 +466,23 @@ async fn run(
                                             if !switched { return Err(error); }
                                             reconnect = true;
                                             reconnect_reason = "local_quota_reselect";
+                                        } else if routing_hint_changed {
+                                            reconnect = true;
+                                            reconnect_reason = "codex_routing_hint_changed";
                                         } else {
-                                            reused_wire = Some((wire_headers, wire_text));
+                                            reused_wire = Some((wire_headers, wire_body.to_string()));
                                         }
+                                    } else if let Err(error) = super::reasoning_policy::check_dispatch_with_parent(
+                                        &state, &caller, &prepared.route, &prepared.source_body, &prepared.body,
+                                        super::contract::WireApi::Responses,
+                                        state.reasoning_proofs.parent(&prepared, &prepared.body),
+                                    ).await {
+                                        tracker.fail(&error).await;
+                                        prepared = previous;
+                                        timed_client_until(&state, None, client_sink.send(Message::Text(error_event(&error).to_string().into()))).await?;
+                                        continue;
                                     }
+                                    drop(previous);
                                     wire = super::response_wire::ResponseWire::default();
                                     active = true; response_id = None; interrupt_pending = None; observation = ResponseObservation::default(); last_local_checkpoint_id = None;
                                     output_items = super::output_items::OutputCollector::new();
@@ -481,7 +525,7 @@ async fn run(
                                             tracker.quota_request_started();
                                             tracker.begin_attempt("websocket");
                                             tracker.capability_fallback(prepared.capability_fallback.clone());
-                                            if let Some(identity) = &connection_identity { tracker.upstream_identity(identity.clone()); }
+                                            if let Some(identity) = &connection_identity { tracker.upstream_identity(identity.diagnostic.clone()); }
                                             tracker.upstream_request_bytes(wire_text.len());
                                             tracker.payload("upstream_request", "websocket", &wire_headers, &wire_text);
                                             sink.send(UpstreamMessage::Text(wire_text.into())).await
@@ -509,7 +553,7 @@ async fn run(
                                         let wire_text = control.body.to_string();
                                         tracker.payload("upstream_request", "websocket", &control.headers, &wire_text);
                                         // No create defaults, synthesized ack, HTTP emulation or replay.
-                                        steering.submitted(&body, control.route.permit.clone());
+                                        steering.submitted(&body, control.route.permit.clone(), control.reasoning_ceiling_proof);
                                         probe_reused = false;
                                         prepared.binding.abort_rebuild();
                                         history.invalidate_rebuild_proof();
@@ -834,6 +878,9 @@ async fn run(
                             }
                             tracker.first_response_event(&event);
                             tracker.payload("upstream_response", "websocket", &HeaderMap::new(), text.as_str());
+                            if active && !upstream_local && !observation.terminal {
+                                tracker.record_response_model(&prepared.route, &event);
+                            }
                             let mut events = Vec::new();
                             for (mut event, _text) in std::mem::take(&mut reused_handshake).into_iter().chain(std::iter::once((event, text.to_string()))) {
                                 if !upstream_http { prepared.multi_agent_context.restore(&mut event); }
@@ -995,8 +1042,28 @@ fn pre_business_enabled(prepared: &Prepared, local: bool) -> bool {
 }
 
 fn websocket_route_changed(previous: &Prepared, next: &Prepared) -> bool {
+    let base_url = next.route.websocket_endpoint.as_ref().map_or(
+        next.route.base_url.as_str(), |endpoint| endpoint.base_url.as_str(),
+    );
     websocket_transport_changed(&previous.route, &next.route)
         || websocket_connection_headers_changed(&previous.headers, &next.headers)
+        || (super::opencode_go::is_opencode_go_base_url(base_url)
+            && (previous.headers.get(super::opencode_go::SESSION_HEADER)
+                != next.headers.get(super::opencode_go::SESSION_HEADER)
+                || previous.binding.session_id() != next.binding.session_id()))
+}
+
+// Connection-local routing hints are retained across turns and retries. They
+// are never forwarded as client-supplied headers on a passthrough route.
+pub(super) const ROUTING_HEADERS: [(&str, &str); 2] = [
+    ("session-id", "x-cockpit-internal-routing-session"),
+    ("thread-id", "x-cockpit-internal-routing-thread"),
+];
+
+pub(super) fn clear_routing_header_markers(headers: &mut HeaderMap) {
+    for (_, marker) in ROUTING_HEADERS {
+        headers.remove(marker);
+    }
 }
 
 pub(super) fn websocket_transport_changed(
@@ -1065,7 +1132,10 @@ fn websocket_host_headers_changed(
 fn websocket_connection_headers_changed(previous: &HeaderMap, next: &HeaderMap) -> bool {
     [
         "session-id",
+        "session_id",
         "thread-id",
+        "thread_id",
+        "x-grok-conv-id",
         "x-codex-installation-id",
         "installation-id",
         "user-agent",
@@ -1126,7 +1196,7 @@ async fn open_response(
     (
         super::websocket_io::UpstreamSocket,
         Vec<UpstreamMessage>,
-        super::diagnostics::HeaderIdentity,
+        ConnectionIdentity,
         OpeningRetries,
     ),
     ServiceError,
@@ -1161,18 +1231,21 @@ async fn open_response(
         let mut headers = prepared.headers.clone();
         let mut wire_body = prepare_ws_body(state, prepared, &mut headers).await?;
         tracker.field_compat.apply(&prepared.route, &mut wire_body);
+        let parent = state.reasoning_proofs.parent(prepared, &wire_body);
+        prepared.reasoning_ceiling_proof = super::reasoning_policy::check_dispatch_with_parent(
+            state, &prepared.caller, &prepared.route, &prepared.source_body, &wire_body,
+            super::contract::WireApi::Responses, parent,
+        ).await?;
         let endpoint = prepared.route.websocket_endpoint.as_ref();
         let base_url = endpoint.map_or(prepared.route.base_url.as_str(), |endpoint| {
             endpoint.base_url.as_str()
         });
         let deadline = tracker.overload.deadline(deadline);
         let url = format!("{}/responses", base_url.trim_end_matches('/'));
-        if let Some(endpoint) = endpoint {
-            for name in prepared.route.headers.keys() {
-                headers.remove(name);
-            }
-            headers.extend(endpoint.headers.clone());
-        }
+        apply_websocket_endpoint_headers(&mut headers, &prepared.route);
+        super::opencode_go::apply_session_header(
+            base_url, &prepared.caller.id, &prepared.binding, &mut tracker.opencode_go_session, &mut headers,
+        );
         let headers = websocket_headers(&headers, prepared.route.chatgpt);
         let wire_headers = headers.clone();
         let upstream_identity = super::diagnostics::capture_header_identity(&headers);
@@ -1189,6 +1262,7 @@ async fn open_response(
             &url,
             headers,
             state.options.max_event_bytes,
+            policy.websocket_fragment_timeout,
             policy.websocket_connect_timeout.min(
                 deadline.cap(prepared.execution.prepare_deadline())
                     .saturating_duration_since(tokio::time::Instant::now()),
@@ -1404,7 +1478,11 @@ async fn open_response(
                         continue;
                     }
                 }
-                return Ok((upstream, initial, upstream_identity, retries));
+                let identity = ConnectionIdentity {
+                    diagnostic: upstream_identity,
+                    codex_routing_hint: codex_routing_hint(&wire_headers, &prepared.route).cloned(),
+                };
+                return Ok((upstream, initial, identity, retries));
             }
             Err(error) => {
                 tracker.attempt_error(&error);
@@ -1636,6 +1714,7 @@ async fn retry_opening_failure(
                 else { state.host.route_failed_attempt(&prepared.route, &prepared.route.model, if model_unavailable { 404 } else { error.status }, wait, error.credential_scope, Some(&error.message)).await; }
             }) => result.map_err(|_| super::retry::total_timeout())?,
         }
+        tracker.mark_failure_cooldown_recorded(&prepared.route.account_id);
     }
     // Authentication failures and throttling must never spend network retries.
     // A self-contained opening can move to another route; opaque continuation
@@ -1657,7 +1736,7 @@ async fn retry_opening_failure(
         match replacement {
             Ok(()) => {
                 if let Some(route) = &failed_route {
-                    super::retry::note_failed_route(state,route,503,wait,error.credential_scope,Some(&error.message),deadline).await?;
+                    super::retry::note_failed_route(state,tracker,route,503,wait,error.credential_scope,Some(&error.message),deadline).await?;
                 }
                 if !error.upstream_not_sent { retries.credentials += 1; }
                 retries.send = 0;
@@ -1691,7 +1770,7 @@ async fn retry_opening_failure(
             }
             return Ok(true);
         }
-        super::retry::note_failed_route(state,route,503,wait,error.credential_scope,Some(&error.message),deadline).await?;
+        super::retry::note_failed_route(state,tracker,route,503,wait,error.credential_scope,Some(&error.message),deadline).await?;
         return Ok(false);
     }
     if exhausted.is_none() && matches!(kind, OpeningFailure::Status) && !retries.cooldown_round {
@@ -1853,6 +1932,26 @@ async fn prepare_ws_body(
     prepared.multi_agent_context.capture_final(&body);
     prepared.binding.retain_transmitted_input_blobs(&body);
     Ok(body)
+}
+
+fn apply_websocket_endpoint_headers(headers: &mut HeaderMap, route: &super::contract::Route) {
+    if let Some(endpoint) = &route.websocket_endpoint {
+        for name in route.headers.keys() {
+            headers.remove(name);
+        }
+        headers.extend(endpoint.headers.clone());
+    }
+}
+
+fn codex_routing_hint<'a>(
+    headers: &'a HeaderMap,
+    route: &super::contract::Route,
+) -> Option<&'a HeaderValue> {
+    if route.chatgpt && !super::grok_errors::applies(route) {
+        headers.get(super::codex_wire::ROUTING_HINT)
+    } else {
+        None
+    }
 }
 
 fn websocket_headers(headers: &HeaderMap, chatgpt: bool) -> HeaderMap {

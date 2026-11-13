@@ -16,7 +16,7 @@ function text(tree: unknown): string {
   return tree && typeof tree === 'object' && 'props' in tree ? text((tree as Element).props.children) : '';
 }
 const group = (id: string) => ({ id, name: id, accountIds: [], createdAt: 1, quotaAutoRefreshMinutes: null });
-function harness(add = false) {
+function harness(add = false, sourceGroupId?: string) {
   let readError: Error | null = new Error('read failed');
   let reorderError: Error | null = null;
   let assignMissing = false;
@@ -30,6 +30,10 @@ function harness(add = false) {
     './SingleSelectDropdown': { SingleSelectDropdown: 'dropdown' },
     '../hooks/useEscClose': { useEscClose() {} },
     '../services/codexAccountGroupService': {
+      async moveAccountsBetweenCodexGroups(from: string, to: string, ids: string[]) {
+        calls.push(`move:${from}:${to}:${ids.join(',')}`);
+        return group(to);
+      },
       resolveCodexGroupQuotaAutoRefreshMinutes: (value: any) => value.quotaAutoRefreshMinutes ?? null,
       normalizeCodexGroupQuotaAutoRefreshMinutes: (value: unknown) => Math.min(999, Math.max(1, Number(value))),
       async setCodexGroupQuotaAutoRefreshMinutes(id: string, minutes: number | null) {
@@ -47,7 +51,7 @@ function harness(add = false) {
       async assignAccountsToPlatformGroup(_platform: string, id: string) { calls.push('assign'); return assignMissing ? null : group(id); },
     },
   });
-  const props = { isOpen: true, platform: 'codex', onClose() { closed += 1; }, onGroupsChanged() {}, onAdded() {}, accountIds: ['account'] };
+  const props = { isOpen: true, platform: 'codex', sourceGroupId, onClose() { closed += 1; }, onGroupsChanged() {}, onAdded() {}, accountIds: ['account'] };
   h.render(() => add ? h.exports.AddToGroupModal(props) : h.exports.AccountGroupModal(props));
   const find = (predicate: (value: Element) => boolean) => {
     const node = nodes(h.flush()).find(predicate); assert.ok(node); return node;
@@ -83,10 +87,10 @@ for (const add of [false, true]) {
 test('failed reorder retains original rows and retries with latest service snapshot', async () => {
   const h = harness(); h.allowRead(); await settlePromises(); h.button('common.retry').props.onClick(); await settlePromises();
   h.failReorder(true);
-  await h.button('accounts.groups.moveDown').props.onClick();
+  await h.button('common.shared.sort.moveDown').props.onClick();
   assert.match(text(h.h.flush()), /write failed/);
   assert.deepEqual(nodes(h.h.flush()).filter((node) => node.props.className === 'group-name').map((node) => text(node)), ['A', 'B']);
-  h.failReorder(false); await h.button('accounts.groups.moveDown').props.onClick();
+  h.failReorder(false); await h.button('common.shared.sort.moveDown').props.onClick();
   assert.doesNotMatch(text(h.h.flush()), /write failed/);
   assert.deepEqual(nodes(h.h.flush()).filter((node) => node.props.className === 'group-name').map((node) => text(node)), ['B-saved', 'A-saved']);
   assert.equal(h.closed(), 0); h.h.unmount();
@@ -99,6 +103,18 @@ test('missing target group is an assignment error and keeps the dialog open', as
   assert.equal(h.closed(), 0);
   h.assignMissing(false); await h.button('A').props.onClick();
   assert.equal(h.closed(), 1); h.h.unmount();
+});
+
+test('a Codex move from the active group uses the move operation', async () => {
+  const h = harness(true, 'A');
+  await settlePromises();
+  h.allowRead();
+  h.button('common.retry').props.onClick();
+  await settlePromises();
+  await h.button('B').props.onClick();
+  assert.deepEqual(h.calls, ['move:A:B:account']);
+  assert.equal(h.closed(), 1);
+  h.h.unmount();
 });
 
 test('Codex quota controls retain disabled, inherited and custom minutes', async () => {

@@ -83,16 +83,11 @@ fn collect_targets() -> Result<Vec<Target>, String> {
         .parent()
         .ok_or("PROXY_ENTRY_RECOVERY_FAILED")?
         .join("codex_instances.json");
-    if fs::metadata(&store_path).is_ok_and(|meta| meta.len() > 4 * 1024 * 1024) {
-        return Err("PROXY_ENTRY_RECOVERY_FAILED".into());
+    let (store, _) = crate::modules::instance_registry::read(&store_path, Some(4 * 1024 * 1024))
+        .map_err(|_| "PROXY_ENTRY_RECOVERY_FAILED")?;
+    if store.instances.is_empty() && store.default_settings.last_pid.is_none() {
+        return Ok(Vec::new());
     }
-    let bytes = match fs::read(&store_path) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(_) => return Err("PROXY_ENTRY_RECOVERY_FAILED".into()),
-    };
-    let store: InstanceStore =
-        serde_json::from_slice(&bytes).map_err(|_| "PROXY_ENTRY_RECOVERY_FAILED")?;
     let running = processes::running_entries()?;
     Ok(select_targets(
         &registry,

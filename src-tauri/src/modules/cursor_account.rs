@@ -7,7 +7,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use crate::models::cursor::{CursorAccount, CursorAccountIndex, CursorImportPayload};
+use crate::models::cursor::{CursorAccount, CursorAccountIndex, CursorImportPayload, CursorSandUsage};
 use crate::modules::{account, logger};
 
 const ACCOUNTS_INDEX_FILE: &str = "cursor_accounts.json";
@@ -80,10 +80,6 @@ fn get_accounts_index_path() -> Result<PathBuf, String> {
     Ok(get_data_dir()?.join(ACCOUNTS_INDEX_FILE))
 }
 
-pub fn accounts_index_path_string() -> Result<String, String> {
-    Ok(get_accounts_index_path()?.to_string_lossy().to_string())
-}
-
 fn normalize_account_id(account_id: &str) -> Result<String, String> {
     let trimmed = account_id.trim();
     if trimmed.is_empty() {
@@ -141,7 +137,12 @@ pub fn load_account(account_id: &str) -> Option<CursorAccount> {
             }
             Some(account)
         }
-        Err(_) => None,
+        Err(_) => {
+            let backup = cursor_account_recovery::detail_backup(&account_path)?;
+            let content = fs::read_to_string(backup).ok()?;
+            let restored = decode_recovery_detail(&content).ok()?;
+            (restored.id == account_id).then_some(restored)
+        }
     }
 }
 
@@ -160,109 +161,17 @@ pub fn touch_last_used(account_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn delete_account_file(account_id: &str) -> Result<(), String> {
-    let path = resolve_account_file_path(account_id)?;
-    if path.exists() {
-        crate::modules::atomic_write::remove_file_locked(&path)
-            .map_err(|e| format!("删除账号文件失败: {}", e))?;
-    }
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
 // Index operations
 // ---------------------------------------------------------------------------
 
-fn load_account_index() -> CursorAccountIndex {
-    let path = match get_accounts_index_path() {
-        Ok(p) => p,
-        Err(_) => return CursorAccountIndex::new(),
-    };
-
-    if !path.exists() {
-        return CursorAccountIndex::new();
-    }
-
-    match fs::read_to_string(path.as_path()) {
-        Ok(content) => match crate::modules::atomic_write::parse_json_with_auto_restore::<
-            CursorAccountIndex,
-        >(&path, &content)
-        {
-            Ok(index) => index,
-            Err(err) => {
-                logger::log_warn(&format!(
-                    "[Cursor Account] 账号索引解析失败，使用空索引兜底: path={}, error={}",
-                    path.display(),
-                    err
-                ));
-                CursorAccountIndex::new()
-            }
-        },
-        Err(err) => {
-            logger::log_warn(&format!(
-                "[Cursor Account] 读取账号索引失败，使用空索引兜底: path={}, error={}",
-                path.display(),
-                err
-            ));
-            CursorAccountIndex::new()
-        }
-    }
+fn delete_account_file(account_id: &str) -> Result<(), String> {
+    let path = resolve_account_file_path(account_id)?;
+    let _lock = crate::modules::account_file_crypto::lock_account_file_for_write(&path)?;
+    crate::modules::atomic_write::remove_file_locked(&path).map(|_| ())
 }
 
-fn load_account_index_checked() -> Result<CursorAccountIndex, String> {
-    let path = get_accounts_index_path()?;
-    if !path.exists() {
-        return Ok(CursorAccountIndex::new());
-    }
-
-    let content = match fs::read_to_string(path.as_path()) {
-        Ok(content) => content,
-        Err(err) => {
-            if !collect_account_ids_from_directory().is_empty() {
-                logger::log_warn(&format!(
-                    "[Cursor Account] 读取账号索引失败，将按账号目录补扫恢复: path={}, error={}",
-                    path.display(),
-                    err
-                ));
-                return Ok(CursorAccountIndex::new());
-            }
-            return Err(format!("读取账号索引失败: {}", err));
-        }
-    };
-
-    if content.trim().is_empty() {
-        return Ok(CursorAccountIndex::new());
-    }
-
-    match crate::modules::atomic_write::parse_json_with_auto_restore::<CursorAccountIndex>(
-        &path, &content,
-    ) {
-        Ok(index) => Ok(index),
-        Err(err) => {
-            if !collect_account_ids_from_directory().is_empty() {
-                logger::log_warn(&format!(
-                    "[Cursor Account] 账号索引解析失败，将按账号目录补扫恢复: path={}, error={}",
-                    path.display(),
-                    err
-                ));
-                return Ok(CursorAccountIndex::new());
-            }
-            Err(crate::error::file_corrupted_error(
-                ACCOUNTS_INDEX_FILE,
-                &path.to_string_lossy(),
-                &err.to_string(),
-            ))
-        }
-    }
-}
-
-fn save_account_index(index: &CursorAccountIndex) -> Result<(), String> {
-    let path = get_accounts_index_path()?;
-    let content =
-        serde_json::to_string_pretty(index).map_err(|e| format!("序列化账号索引失败: {}", e))?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
-        .map_err(|e| format!("写入账号索引失败: {}", e))
-}
+include!("../../../crates/cockpit-core/src/modules/cursor_account_index_flow.rs");
 
 fn refresh_summary(index: &mut CursorAccountIndex, account: &CursorAccount) {
     if let Some(summary) = index.accounts.iter_mut().find(|item| item.id == account.id) {
@@ -276,7 +185,7 @@ fn upsert_account_record(account: CursorAccount) -> Result<CursorAccount, String
     let _lock = CURSOR_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "获取 Cursor 账号锁失败".to_string())?;
-    let mut index = load_account_index();
+    let mut index = load_account_index_checked()?;
     save_account_file(&account)?;
     refresh_summary(&mut index, &account);
     save_account_index(&index)?;
@@ -284,12 +193,15 @@ fn upsert_account_record(account: CursorAccount) -> Result<CursorAccount, String
 }
 
 fn persist_quota_query_error(account_id: &str, message: &str) {
+    let Ok(_lock) = CURSOR_ACCOUNT_INDEX_LOCK.lock() else {
+        return;
+    };
     let Some(mut account) = load_account(account_id) else {
         return;
     };
     account.quota_query_last_error = Some(message.to_string());
     account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
-    let _ = upsert_account_record(account);
+    let _ = save_account_file(&account);
 }
 
 // ---------------------------------------------------------------------------
@@ -422,41 +334,6 @@ fn normalize_cursor_sign_up_type(value: Option<&str>) -> Option<String> {
     }
 }
 
-fn accounts_are_duplicates(left: &CursorAccount, right: &CursorAccount) -> bool {
-    let left_auth_id = resolve_account_auth_id(left);
-    let right_auth_id = resolve_account_auth_id(right);
-    if let (Some(left_auth), Some(right_auth)) = (left_auth_id.as_ref(), right_auth_id.as_ref()) {
-        return left_auth == right_auth;
-    }
-    if left_auth_id.is_some() || right_auth_id.is_some() {
-        return false;
-    }
-
-    let left_email = normalize_email_identity(Some(left.email.as_str()));
-    let right_email = normalize_email_identity(Some(right.email.as_str()));
-    let left_token = normalize_token_identity(Some(left.access_token.as_str()));
-    let right_token = normalize_token_identity(Some(right.access_token.as_str()));
-
-    let email_conflict = matches!(
-        (left_email.as_ref(), right_email.as_ref()),
-        (Some(l), Some(r)) if l != r
-    );
-    if email_conflict {
-        return false;
-    }
-
-    let email_match = matches!(
-        (left_email.as_ref(), right_email.as_ref()),
-        (Some(l), Some(r)) if l == r
-    );
-    let token_match = matches!(
-        (left_token.as_ref(), right_token.as_ref()),
-        (Some(l), Some(r)) if l == r
-    );
-
-    email_match || token_match
-}
-
 // ---------------------------------------------------------------------------
 // Merge helpers
 // ---------------------------------------------------------------------------
@@ -544,258 +421,39 @@ fn choose_primary_account_index(group: &[usize], accounts: &[CursorAccount]) -> 
         .unwrap_or(group[0])
 }
 
-fn collect_account_ids_from_directory() -> Vec<String> {
-    let accounts_dir = match get_accounts_dir() {
-        Ok(dir) => dir,
-        Err(err) => {
-            logger::log_warn(&format!(
-                "[Cursor Account] 获取账号目录失败，跳过目录补扫: {}",
-                err
-            ));
-            return Vec::new();
-        }
-    };
-
-    let entries = match fs::read_dir(&accounts_dir) {
-        Ok(value) => value,
-        Err(err) => {
-            logger::log_warn(&format!(
-                "[Cursor Account] 读取账号目录失败，跳过目录补扫: path={}, error={}",
-                accounts_dir.display(),
-                err
-            ));
-            return Vec::new();
-        }
-    };
-
-    let mut ids = Vec::new();
-    for entry in entries {
-        let Ok(item) = entry else {
-            continue;
-        };
-        let path = item.path();
-        if !path.is_file() {
-            continue;
-        }
-
-        let is_json = path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| ext.eq_ignore_ascii_case("json"))
-            .unwrap_or(false);
-        if !is_json {
-            continue;
-        }
-
-        let Some(stem) = path.file_stem().and_then(|name| name.to_str()) else {
-            continue;
-        };
-        let Ok(account_id) = normalize_account_id(stem) else {
-            logger::log_warn(&format!(
-                "[Cursor Account] 检测到非法账号文件名，已忽略: file={}",
-                path.display()
-            ));
-            continue;
-        };
-        ids.push(account_id);
-    }
-
-    ids.sort();
-    ids.dedup();
-    ids
-}
-
-fn normalize_account_index(index: &mut CursorAccountIndex) -> Vec<CursorAccount> {
-    let mut loaded_accounts = Vec::new();
-    let mut seen_account_ids = HashSet::new();
-    let mut seen_summary_ids = HashSet::new();
-
-    for summary in &index.accounts {
-        if !seen_summary_ids.insert(summary.id.clone()) {
-            continue;
-        }
-        if let Some(account) = load_account(&summary.id) {
-            if seen_account_ids.insert(account.id.clone()) {
-                loaded_accounts.push(account);
-            }
-        }
-    }
-
-    let mut recovered_count = 0usize;
-    for account_id in collect_account_ids_from_directory() {
-        if seen_account_ids.contains(&account_id) {
-            continue;
-        }
-        if let Some(account) = load_account(&account_id) {
-            if seen_account_ids.insert(account.id.clone()) {
-                if !seen_summary_ids.contains(&account_id) {
-                    recovered_count += 1;
+fn schedule_cursor_recovery(store: IndexStore<CursorAccountIndex>) -> Result<(), String> {
+    let directory = get_data_dir()?.join(ACCOUNTS_DIR);
+    let mut job = cursor_account_recovery::CursorRecovery::new(
+        store, directory, decode_recovery_detail, normalize_account_id, &CURSOR_ACCOUNT_INDEX_LOCK,
+    );
+    crate::modules::background_maintenance::schedule(
+        job.migration_key(),
+        move || {
+            let result = job.run_batch();
+            if matches!(&result, Ok(true) | Err(_)) && job.take_refresh_needed() {
+                if let Some(app) = crate::get_app_handle() {
+                    use tauri::Emitter;
+                    let _ = app.emit("cursor:index-recovered", ());
                 }
-                loaded_accounts.push(account);
             }
-        }
-    }
-    if recovered_count > 0 {
-        logger::log_warn(&format!(
-            "[Cursor Account] 检测到索引缺失，已从账号目录恢复 {} 个账号",
-            recovered_count
-        ));
-    }
-
-    if loaded_accounts.len() <= 1 {
-        index.accounts = loaded_accounts
-            .iter()
-            .map(|account| account.summary())
-            .collect();
-        return loaded_accounts;
-    }
-
-    let mut parents: Vec<usize> = (0..loaded_accounts.len()).collect();
-
-    fn find(parents: &mut [usize], idx: usize) -> usize {
-        let parent = parents[idx];
-        if parent == idx {
-            return idx;
-        }
-        let root = find(parents, parent);
-        parents[idx] = root;
-        root
-    }
-
-    fn union(parents: &mut [usize], left: usize, right: usize) {
-        let left_root = find(parents, left);
-        let right_root = find(parents, right);
-        if left_root != right_root {
-            parents[right_root] = left_root;
-        }
-    }
-
-    let total = loaded_accounts.len();
-    for left in 0..total {
-        for right in (left + 1)..total {
-            if accounts_are_duplicates(&loaded_accounts[left], &loaded_accounts[right]) {
-                union(&mut parents, left, right);
-            }
-        }
-    }
-
-    let mut grouped: HashMap<usize, Vec<usize>> = HashMap::new();
-    for idx in 0..total {
-        let root = find(&mut parents, idx);
-        grouped.entry(root).or_default().push(idx);
-    }
-
-    let mut processed_roots = HashSet::new();
-    let mut normalized_accounts = Vec::new();
-    let mut removed_ids = Vec::new();
-    for idx in 0..total {
-        let root = find(&mut parents, idx);
-        if !processed_roots.insert(root) {
-            continue;
-        }
-        let Some(group) = grouped.get(&root) else {
-            continue;
-        };
-
-        if group.len() == 1 {
-            normalized_accounts.push(loaded_accounts[group[0]].clone());
-            continue;
-        }
-
-        let primary_idx = choose_primary_account_index(group, &loaded_accounts);
-        let mut primary = loaded_accounts[primary_idx].clone();
-        for member in group {
-            if *member == primary_idx {
-                continue;
-            }
-            merge_duplicate_account(&mut primary, &loaded_accounts[*member]);
-            removed_ids.push(loaded_accounts[*member].id.clone());
-        }
-
-        normalized_accounts.push(primary);
-    }
-
-    if !removed_ids.is_empty() {
-        for account in &normalized_accounts {
-            if let Err(err) = save_account_file(account) {
-                logger::log_warn(&format!(
-                    "[Cursor Account] 保存去重账号失败: id={}, error={}",
-                    account.id, err
-                ));
-            }
-        }
-        for account_id in &removed_ids {
-            if let Err(err) = delete_account_file(account_id) {
-                logger::log_warn(&format!(
-                    "[Cursor Account] 删除重复账号文件失败: id={}, error={}",
-                    account_id, err
-                ));
-            }
-        }
-        logger::log_warn(&format!(
-            "[Cursor Account] 检测到重复账号并已合并: removed_ids={}",
-            removed_ids.join(",")
-        ));
-    }
-
-    index.accounts = normalized_accounts
-        .iter()
-        .map(|account| account.summary())
-        .collect();
-    normalized_accounts
+            result
+        },
+    );
+    Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// CRUD
-// ---------------------------------------------------------------------------
-
-pub fn list_accounts() -> Vec<CursorAccount> {
-    let _lock = CURSOR_ACCOUNT_INDEX_LOCK
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let mut index = load_account_index();
-    let had_index_accounts = !index.accounts.is_empty();
-    let index_before_normalize = serde_json::to_vec(&index).ok();
-    let accounts = normalize_account_index(&mut index);
-    if had_index_accounts && accounts.is_empty() {
-        logger::log_warn(
-            "[Cursor Account] 账号索引中存在账号，但详情文件均无法读取，已跳过空索引写回",
-        );
-        return accounts;
-    }
-    let index_changed = index_before_normalize
-        .as_ref()
-        .map(|before| Some(before.as_slice()) != serde_json::to_vec(&index).ok().as_deref())
-        .unwrap_or(true);
-    if index_changed {
-        if let Err(err) = save_account_index(&index) {
-            logger::log_warn(&format!("[Cursor Account] 保存账号索引失败: {}", err));
-        }
-    }
-    accounts
+fn decode_recovery_detail(content: &str) -> Result<CursorAccount, String> {
+    serde_json::from_str(content).or_else(|_| {
+        crate::modules::secure_account_storage::deserialize_encrypted_snapshot(content)
+    })
 }
 
-pub fn list_accounts_checked() -> Result<Vec<CursorAccount>, String> {
-    let _lock = CURSOR_ACCOUNT_INDEX_LOCK
-        .lock()
-        .map_err(|_| "获取 Cursor 账号锁失败".to_string())?;
-    let mut index = load_account_index_checked()?;
-    let had_index_accounts = !index.accounts.is_empty();
-    let index_before_normalize = serde_json::to_vec(&index).ok();
-    let accounts = normalize_account_index(&mut index);
-    if had_index_accounts && accounts.is_empty() {
-        return Err("Cursor 账号索引中存在账号，但详情文件均无法读取；已保留前端缓存，请从账号备份或本地账号文件恢复。".to_string());
-    }
-    let index_changed = index_before_normalize
-        .as_ref()
-        .map(|before| Some(before.as_slice()) != serde_json::to_vec(&index).ok().as_deref())
-        .unwrap_or(true);
-    if index_changed {
-        if let Err(err) = save_account_index(&index) {
-            logger::log_warn(&format!("[Cursor Account] 保存账号索引失败: {}", err));
-        }
-    }
-    Ok(accounts)
+fn cursor_recovery_busy() -> String {
+    crate::modules::background_maintenance::busy_message()
+}
+
+pub(crate) fn schedule_index_migration() -> Result<(), String> {
+    schedule_cursor_recovery(index_store()?)
 }
 
 fn apply_payload(
@@ -832,7 +490,7 @@ pub fn upsert_account(payload: CursorImportPayload) -> Result<CursorAccount, Str
         .map_err(|_| "获取 Cursor 账号锁失败".to_string())?;
 
     let now = now_ts();
-    let mut index = load_account_index();
+    let mut index = load_account_index_checked()?;
     let incoming_auth_id = resolve_payload_auth_id(&payload);
     let incoming_email = normalize_email_identity(Some(payload.email.as_str()));
     let incoming_token = normalize_token_identity(Some(payload.access_token.as_str()));
@@ -895,6 +553,7 @@ pub fn upsert_account(payload: CursorImportPayload) -> Result<CursorAccount, Str
         sign_up_type: payload.sign_up_type.clone(),
         cursor_auth_raw: payload.cursor_auth_raw.clone(),
         cursor_usage_raw: payload.cursor_usage_raw.clone(),
+        sand_usage: None,
         status: payload.status.clone(),
         status_reason: payload.status_reason.clone(),
         quota_query_last_error: None,
@@ -926,10 +585,13 @@ pub fn remove_account(account_id: &str) -> Result<(), String> {
     let _lock = CURSOR_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "获取 Cursor 账号锁失败".to_string())?;
-    let mut index = load_account_index();
+    let path = resolve_account_file_path(account_id)?;
+    let _file_lock = crate::modules::account_file_crypto::lock_account_file_for_write(&path)?;
+    let mut index = load_account_index_checked()?;
     index.accounts.retain(|item| item.id != account_id);
-    save_account_index(&index)?;
-    delete_account_file(account_id)?;
+    index_store()?.replace_with_removals(&index, &[account_id.to_string()])?;
+    crate::modules::atomic_write::remove_file_locked(&path)
+        .map_err(|error| format!("删除账号文件失败: {error}"))?;
     Ok(())
 }
 
@@ -1372,8 +1034,7 @@ pub fn inject_to_cursor_at_path(db_path: &std::path::Path, account_id: &str) -> 
 // ---------------------------------------------------------------------------
 
 const CURSOR_USAGE_SUMMARY_URL: &str = "https://cursor.com/api/usage-summary";
-const CURSOR_GET_PLAN_INFO_URL: &str =
-    "https://api2.cursor.sh/aiserver.v1.DashboardService/GetPlanInfo";
+const CURSOR_SAND_USAGE_URL: &str = "https://cursor.com/api/dashboard/get-sand-usage-status";
 const CURSOR_GET_USER_META_URL: &str = "https://api2.cursor.sh/aiserver.v1.AuthService/GetUserMeta";
 const CURSOR_FULL_STRIPE_PROFILE_URL: &str = "https://api2.cursor.sh/auth/full_stripe_profile";
 const CURSOR_STRIPE_PROFILE_URL: &str = "https://api2.cursor.sh/auth/stripe_profile";
@@ -1423,7 +1084,7 @@ fn format_error_chain(error: &(dyn std::error::Error + 'static)) -> String {
     parts.join(" | caused by: ")
 }
 
-fn format_reqwest_error(error: &reqwest::Error) -> String {
+pub(super) fn format_reqwest_error(error: &reqwest::Error) -> String {
     let mut tags = Vec::new();
     if error.is_timeout() {
         tags.push("timeout");
@@ -1459,6 +1120,33 @@ fn extract_workos_user_id(jwt: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+pub(crate) fn normalize_pasted_access_token(input: &str) -> Result<String, String> {
+    const INVALID_BROWSER_TOKEN: &str = "CURSOR_INVALID_BROWSER_TOKEN";
+    let token = input.trim();
+    let cookie_value = token.strip_prefix("WorkosCursorSessionToken=");
+    let has_session_prefix =
+        token.starts_with("user_") && (token.contains("::") || token.contains('%'));
+    if cookie_value.is_none() && !has_session_prefix {
+        return Ok(token.to_owned());
+    }
+
+    let decoded = urlencoding::decode(cookie_value.unwrap_or(token))
+        .map_err(|_| INVALID_BROWSER_TOKEN.to_owned())?;
+    let (user_id, jwt) = decoded
+        .split_once("::")
+        .ok_or_else(|| INVALID_BROWSER_TOKEN.to_owned())?;
+    if extract_workos_user_id(jwt).as_deref() != Some(user_id)
+        || jwt.split('.').count() != 3
+        || jwt.split('.').any(str::is_empty)
+        || jwt
+            .bytes()
+            .any(|byte| !byte.is_ascii_alphanumeric() && !matches!(byte, b'-' | b'_' | b'.'))
+    {
+        return Err(INVALID_BROWSER_TOKEN.to_owned());
+    }
+    Ok(jwt.to_owned())
 }
 
 fn build_session_cookie(access_token: &str) -> Option<String> {
@@ -1680,26 +1368,6 @@ async fn fetch_stripe_profile_with_client(
     }
 }
 
-async fn fetch_plan_info_with_client(
-    client: &reqwest::Client,
-    access_token: &str,
-) -> Result<Option<Value>, String> {
-    let response = client
-        .post(CURSOR_GET_PLAN_INFO_URL)
-        .bearer_auth(access_token)
-        .header("Connect-Protocol-Version", "1")
-        .json(&serde_json::json!({}))
-        .send()
-        .await
-        .and_then(reqwest::Response::error_for_status)
-        .map_err(|error| format!("请求 Cursor GetPlanInfo 失败: {}", format_reqwest_error(&error)))?;
-    let body: Value = response
-        .json()
-        .await
-        .map_err(|error| format!("解析 Cursor GetPlanInfo 失败: {}", format_reqwest_error(&error)))?;
-    Ok(body.get("planInfo").filter(|plan| plan.is_object()).cloned())
-}
-
 async fn fetch_usage_summary_with_client(
     client: &reqwest::Client,
     access_token: &str,
@@ -1734,6 +1402,82 @@ async fn fetch_usage_summary_with_client(
 
     serde_json::from_str::<serde_json::Value>(&body)
         .map_err(|e| format!("解析 Cursor usage JSON 失败: {}", e))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CursorSandUsageResponse {
+    usage_percent: Option<f64>,
+    included_limit_zero: Option<bool>,
+    has_non_zero_included_limit: Option<bool>,
+    next_reset_timestamp_utc: Option<String>,
+    sand_trial_expires_at: Option<String>,
+    sand_trial: Option<Value>,
+}
+
+impl CursorSandUsageResponse {
+    fn usage(self, now: i64) -> Result<Option<CursorSandUsage>, String> {
+        if self.included_limit_zero.is_none()
+            && self.has_non_zero_included_limit.is_none()
+            && self.sand_trial_expires_at.is_none()
+            && self.sand_trial.is_none()
+        {
+            return Err("Cursor Sand 用量响应缺少额度状态".into());
+        }
+        let timestamp = |value: Option<&str>| {
+            chrono::DateTime::parse_from_rfc3339(value?)
+                .ok()
+                .map(|date| date.timestamp())
+        };
+        let next_reset = timestamp(self.next_reset_timestamp_utc.as_deref());
+        let included = self
+            .included_limit_zero
+            .map(|zero| !zero)
+            .or(self.has_non_zero_included_limit)
+            .unwrap_or(false);
+        let trial_expiry = timestamp(self.sand_trial_expires_at.as_deref())
+            .or_else(|| self.sand_trial.filter(Value::is_object).and(next_reset));
+        let reset_at = if included {
+            next_reset
+        } else if let Some(expiry) = trial_expiry.filter(|expiry| *expiry > now) {
+            Some(expiry)
+        } else {
+            return Ok(None);
+        };
+        let percent_used = self
+            .usage_percent
+            .filter(|value| value.is_finite() && *value >= 0.0)
+            .ok_or_else(|| "Cursor Sand 用量响应缺少有效比例".to_string())?;
+        Ok(Some(CursorSandUsage {
+            percent_used,
+            reset_at,
+            stale: false,
+        }))
+    }
+}
+
+async fn fetch_sand_usage_with_client(
+    client: &reqwest::Client,
+    endpoint: &str,
+    access_token: &str,
+) -> Result<Option<CursorSandUsage>, String> {
+    let cookie = build_session_cookie(access_token)
+        .ok_or_else(|| "无法从 accessToken 解析 WorkOS 用户 ID".to_string())?;
+    let response = client
+        .post(endpoint)
+        .header("Accept", "application/json")
+        .header("Origin", "https://cursor.com")
+        .header("Cookie", cookie)
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .and_then(reqwest::Response::error_for_status)
+        .map_err(|err| format!("请求 Cursor Sand 用量失败: {}", format_reqwest_error(&err)))?;
+    let status: CursorSandUsageResponse = response
+        .json()
+        .await
+        .map_err(|err| format!("解析 Cursor Sand 用量失败: {}", format_reqwest_error(&err)))?;
+    status.usage(now_ts())
 }
 
 // ---------------------------------------------------------------------------
@@ -1846,47 +1590,15 @@ async fn refresh_account_async_once(account_id: &str) -> Result<CursorAccount, S
         }
     }
 
-    let mut usage_refreshed = false;
-    match fetch_usage_summary_with_client(&client, &account.access_token).await {
-        Ok(mut usage) => {
-            if let Some(mt) = usage.get("membershipType").and_then(|v| v.as_str()) {
-                if !mt.is_empty() {
-                    account.membership_type = Some(mt.to_string());
-                }
-            }
-            if let Some(summary) = usage.as_object_mut() {
-                let is_unified = account.membership_type.as_deref().is_some_and(|tier| {
-                    tier.trim().to_ascii_lowercase().starts_with("unified_")
-                }) || ["unifiedIncludedUsage", "unified_included_usage"]
-                    .iter()
-                    .any(|key| summary.get(*key).and_then(Value::as_bool) == Some(true));
-                let has_reset = ["includedUsageResetsAt", "included_usage_resets_at"]
-                    .iter()
-                    .any(|key| summary.get(*key).is_some_and(|value| !value.is_null()));
-                if is_unified && !has_reset {
-                    match fetch_plan_info_with_client(&client, &account.access_token).await {
-                        Ok(Some(plan)) => {
-                            summary.insert("planInfo".into(), plan);
-                        }
-                        Ok(None) => {}
-                        Err(error) => logger::log_warn(&format!("[Cursor Refresh] {error}")),
-                    }
-                }
-            }
-            account.cursor_usage_raw = Some(usage);
+    let usage_result = refresh_usage_snapshot(&client, &mut account).await;
+    let usage_refreshed = usage_result.is_ok();
+    match usage_result {
+        Ok(()) => {
             account.quota_query_last_error = None;
             account.quota_query_last_error_at = None;
-            usage_refreshed = true;
-            logger::log_info(&format!(
-                "[Cursor Refresh] API 配额拉取成功: id={}",
-                account.id
-            ));
         }
         Err(err) => {
-            logger::log_warn(&format!(
-                "[Cursor Refresh] API 配额拉取失败: id={}, error={}",
-                account.id, err
-            ));
+            logger::log_warn(&format!("[Cursor Refresh] 配额拉取失败: id={}, error={err}", account.id));
             account.quota_query_last_error = Some(err);
             account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
         }
@@ -1897,13 +1609,198 @@ async fn refresh_account_async_once(account_id: &str) -> Result<CursorAccount, S
         account.usage_updated_at = Some(refreshed_at);
     }
     account.last_used = refreshed_at;
-    let updated = account.clone();
-    upsert_account_record(account)?;
+    let updated = tauri::async_runtime::spawn_blocking(move || commit_cursor_refresh(existing, account))
+        .await
+        .map_err(|error| format!("保存 Cursor 刷新结果失败: {error}"))??;
     logger::log_info(&format!(
         "[Cursor Refresh] 刷新完成: id={}, email={}",
         updated.id, updated.email
     ));
     Ok(updated)
+}
+
+async fn refresh_usage_snapshot(
+    client: &reqwest::Client,
+    account: &mut CursorAccount,
+) -> Result<(), String> {
+    use super::cursor_usage::{dashboard_read, read_credits};
+    use serde_json::json;
+
+    let token = &account.access_token;
+    let (plan_result, period_usage) = tokio::join!(
+        dashboard_read(client, token, "GetPlanInfo", json!({})),
+        dashboard_read(client, token, "GetCurrentPeriodUsage", json!({})),
+    );
+    let previous = account.cursor_usage_raw.as_ref().unwrap_or(&Value::Null);
+    let plan = match &plan_result {
+        Ok(plan) => plan,
+        Err(err) => {
+            logger::log_warn(&format!("[Cursor Refresh] {err}"));
+            previous
+        }
+    };
+    let enterprise = account
+        .cursor_auth_raw
+        .as_ref()
+        .and_then(|raw| raw["isEnterprise"].as_bool())
+        == Some(true);
+    let unified = is_unified_usage(plan, account.membership_type.as_deref());
+    let (legacy_summary, sand, credits) = tokio::join!(
+        async {
+            if unified {
+                Ok(None)
+            } else {
+                fetch_usage_summary_with_client(client, token)
+                    .await
+                    .map(Some)
+            }
+        },
+        async {
+            if unified {
+                Ok(None)
+            } else {
+                fetch_sand_usage_with_client(client, CURSOR_SAND_USAGE_URL, token).await
+            }
+        },
+        async {
+            if unified && !enterprise {
+                Some(read_credits(client, token).await)
+            } else {
+                None
+            }
+        },
+    );
+    let legacy_summary = match legacy_summary {
+        Ok(summary) => summary,
+        Err(err) => {
+            logger::log_warn(&format!("[Cursor Refresh] 旧版用量详情拉取失败: {err}"));
+            None
+        }
+    };
+    let legacy_summary = legacy_summary.filter(Value::is_object);
+    let mut usage = match (period_usage, legacy_summary.as_ref()) {
+        (Ok(usage), _) => usage,
+        (Err(err), Some(summary)) => {
+            logger::log_warn(&format!("[Cursor Refresh] 使用旧版用量数据: {err}"));
+            summary.clone()
+        }
+        (Err(err), None) => return Err(err),
+    };
+    if let Some(summary) = &legacy_summary {
+        if let Some(mt) = summary["membershipType"]
+            .as_str()
+            .filter(|value| !value.is_empty())
+        {
+            account.membership_type = Some(mt.to_string());
+        }
+        // Preserve the legacy personal/team spending settings alongside the
+        // desktop's included usage. The client response has no enabled flag.
+        for key in [
+            "individualUsage",
+            "individual_usage",
+            "teamUsage",
+            "team_usage",
+            "limitType",
+            "limit_type",
+            "isUnlimited",
+            "is_unlimited",
+            "unifiedIncludedUsage",
+            "unified_included_usage",
+            "includedUsagePeriod",
+            "included_usage_period",
+            "includedUsageResetsAt",
+            "included_usage_resets_at",
+        ] {
+            if let Some(value) = summary.get(key) {
+                usage[key] = value.clone();
+            }
+        }
+    }
+    if let Some(info) = plan.get("planInfo").filter(|info| info.is_object()) {
+        usage["planInfo"] = info.clone();
+    }
+    if let Some(merged) = plan["isMerged"].as_bool() {
+        usage["isMerged"] = json!(merged && !enterprise);
+    }
+    if let Some(credits) = credits {
+        usage["credits"] = credits;
+    }
+    match sand {
+        Ok(usage) => account.sand_usage = usage,
+        Err(err) => {
+            if let Some(usage) = &mut account.sand_usage {
+                usage.stale = true;
+            }
+            logger::log_warn(&format!("[Cursor Refresh] Sand 用量拉取失败: {err}"));
+        }
+    }
+    account.cursor_usage_raw = Some(usage);
+    Ok(())
+}
+
+fn is_unified_usage(raw: &Value, membership: Option<&str>) -> bool {
+    let info = raw.get("planInfo").or_else(|| raw.get("plan_info"));
+    let period = info
+        .and_then(|info| {
+            info.get("includedUsagePeriod")
+                .or_else(|| info.get("included_usage_period"))
+        })
+        .or_else(|| {
+            raw.get("includedUsagePeriod")
+                .or_else(|| raw.get("included_usage_period"))
+        });
+    if raw["isMerged"].as_bool() == Some(true)
+        || matches!(
+            period.and_then(Value::as_str),
+            Some("INCLUDED_USAGE_PERIOD_WEEKLY" | "weekly" | "2")
+        )
+        || period.and_then(Value::as_i64) == Some(2)
+    {
+        return true;
+    }
+    if matches!(
+        period.and_then(Value::as_str),
+        Some("INCLUDED_USAGE_PERIOD_MONTHLY" | "monthly" | "1")
+    ) || period.and_then(Value::as_i64) == Some(1)
+    {
+        return false;
+    }
+    membership.is_some_and(|tier| tier.trim().to_ascii_lowercase().starts_with("unified_"))
+        || ["unifiedIncludedUsage", "unified_included_usage"]
+            .iter()
+            .any(|key| raw[*key].as_bool() == Some(true))
+        || ["includedUsageResetsAt", "included_usage_resets_at"]
+            .iter()
+            .any(|key| {
+                info.and_then(|info| info.get(*key))
+                    .or_else(|| raw.get(*key))
+                    .is_some_and(|value| !value.is_null())
+            })
+}
+
+fn commit_cursor_refresh(
+    previous: CursorAccount,
+    mut refreshed: CursorAccount,
+) -> Result<CursorAccount, String> {
+    let _lock = CURSOR_ACCOUNT_INDEX_LOCK
+        .lock()
+        .map_err(|_| "获取 Cursor 账号锁失败".to_string())?;
+    let current = load_account(&previous.id).ok_or_else(|| "账号不存在".to_string())?;
+    // A quota request can finish after deletion, another refresh, or re-login.
+    // Keep the account currently in storage if the request used old credentials.
+    if current.access_token != previous.access_token
+        || current.refresh_token != previous.refresh_token
+    {
+        return Ok(current);
+    }
+    refreshed.tags = current.tags;
+    refreshed.last_switched_at = current.last_switched_at;
+    refreshed.last_used = refreshed.last_used.max(current.last_used);
+    let mut index = load_account_index_checked()?;
+    save_account_file(&refreshed)?;
+    refresh_summary(&mut index, &refreshed);
+    save_account_index(&index)?;
+    Ok(refreshed)
 }
 
 pub async fn refresh_account_async(account_id: &str) -> Result<CursorAccount, String> {
@@ -1915,19 +1812,21 @@ pub async fn refresh_account_async(account_id: &str) -> Result<CursorAccount, St
 }
 
 pub async fn refresh_all_tokens() -> Result<Vec<(String, Result<CursorAccount, String>)>, String> {
-    let accounts = list_accounts();
-    let active_accounts: Vec<CursorAccount> = accounts
+    let ids = list_accounts()
         .into_iter()
         .filter(|account| !is_banned_account(account))
+        .map(|account| account.id)
         .collect();
+    Ok(refresh_tokens_for_ids(ids).await)
+}
 
-    let mut results = Vec::with_capacity(active_accounts.len());
-    for account in active_accounts {
-        let id = account.id.clone();
+pub async fn refresh_tokens_for_ids(ids: Vec<String>) -> Vec<(String, Result<CursorAccount, String>)> {
+    let mut results = Vec::with_capacity(ids.len());
+    for id in ids {
         let result = refresh_account_async(&id).await;
         results.push((id, result));
     }
-    Ok(results)
+    results
 }
 
 // ---------------------------------------------------------------------------
@@ -1987,24 +1886,25 @@ fn read_usage_percent(account: &CursorAccount) -> CursorUsagePercent {
         None => return CursorUsagePercent::default(),
     };
 
-    let plan_value = raw_obj
-        .get("individualUsage")
-        .and_then(|value| value.as_object())
-        .and_then(|value| value.get("plan"))
-        .or_else(|| {
-            raw_obj
-                .get("individual_usage")
-                .and_then(|value| value.as_object())
-                .and_then(|value| value.get("plan"))
-        })
-        .or_else(|| raw_obj.get("planUsage"))
-        .or_else(|| raw_obj.get("plan_usage"));
+    let desktop_plan = raw_obj.get("planUsage").or_else(|| raw_obj.get("plan_usage"));
+    if is_unified_usage(raw, account.membership_type.as_deref()) {
+        return CursorUsagePercent {
+            total_used: pick_number(desktop_plan, &["totalPercentUsed", "total_percent_used"])
+                .map(clamp_percent),
+            ..CursorUsagePercent::default()
+        };
+    }
+    let plan_value = desktop_plan.or_else(|| {
+        raw_obj.get("individualUsage")
+            .or_else(|| raw_obj.get("individual_usage"))
+            .and_then(|value| value.get("plan"))
+    });
 
     let total_direct = pick_number(plan_value, &["totalPercentUsed", "total_percent_used"]);
     let auto_direct = pick_number(plan_value, &["autoPercentUsed", "auto_percent_used"]);
     let api_direct = pick_number(plan_value, &["apiPercentUsed", "api_percent_used"]);
 
-    let used = pick_number(plan_value, &["used", "totalSpend", "total_spend"]);
+    let used = pick_number(plan_value, &["includedSpend", "included_spend", "used", "totalSpend", "total_spend"]);
     let limit = pick_number(plan_value, &["limit"]);
     let total_ratio = match (used, limit) {
         (Some(used_val), Some(limit_val)) if limit_val > 0.0 => {
@@ -2235,6 +2135,169 @@ pub fn run_quota_alert_if_needed(
 
     crate::modules::account::dispatch_quota_alert(&payload);
     Ok(Some(payload))
+}
+
+#[cfg(test)]
+mod sand_usage_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn pasted_browser_session_token_keeps_the_jwt_and_checks_account_identity() {
+        let claims = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(br#"{"sub":"auth0|user_fixture"}"#);
+        let jwt = format!("e30.{claims}.fixture");
+        for input in [
+            jwt.clone(),
+            format!("user_fixture::{jwt}"),
+            format!("user_fixture%3a%3A{jwt}"),
+            format!("WorkosCursorSessionToken=user_fixture%3A%3A{jwt}"),
+        ] {
+            let normalized = normalize_pasted_access_token(&input).unwrap();
+            assert_eq!(normalized, jwt);
+            assert_eq!(
+                build_session_cookie(&normalized).unwrap(),
+                format!("WorkosCursorSessionToken=user_fixture%3A%3A{jwt}")
+            );
+        }
+        for input in [
+            format!("user_other%3A%3A{jwt}"),
+            format!("user_fixture%3A%3A{jwt};other=value"),
+            "user_fixture%3A%3A".to_owned(),
+        ] {
+            assert_eq!(
+                normalize_pasted_access_token(&input).unwrap_err(),
+                "CURSOR_INVALID_BROWSER_TOKEN"
+            );
+        }
+    }
+
+    #[test]
+    fn sand_usage_refresh_cannot_overwrite_reauthorized_or_deleted_account() {
+        let _environment = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        struct RestoreDataDir(Option<std::ffi::OsString>);
+        impl Drop for RestoreDataDir {
+            fn drop(&mut self) {
+                if let Some(value) = self.0.take() {
+                    std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", value);
+                } else {
+                    std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
+                }
+            }
+        }
+        let _restore = RestoreDataDir(std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR"));
+        std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", dir.path());
+
+        let previous: CursorAccount = serde_json::from_value(json!({
+            "id": "fixture", "email": "cursor@example.test", "access_token": "old",
+            "created_at": 1, "last_used": 1
+        }))
+        .unwrap();
+        let mut refreshed = previous.clone();
+        refreshed.sand_usage = Some(CursorSandUsage {
+            percent_used: 12.0,
+            reset_at: None,
+            stale: false,
+        });
+        upsert_account_record(previous.clone()).unwrap();
+        commit_cursor_refresh(previous.clone(), refreshed.clone()).unwrap();
+        assert_eq!(
+            load_account(&previous.id).unwrap().sand_usage.unwrap().percent_used,
+            12.0
+        );
+        let mut current = previous.clone();
+        current.access_token = "reauthorized".into();
+        upsert_account_record(current).unwrap();
+
+        let preserved = commit_cursor_refresh(previous.clone(), refreshed.clone()).unwrap();
+        assert_eq!(preserved.access_token, "reauthorized");
+        assert!(load_account(&previous.id).unwrap().sand_usage.is_none());
+        remove_account(&previous.id).unwrap();
+        assert!(commit_cursor_refresh(previous.clone(), refreshed).is_err());
+        assert!(load_account(&previous.id).is_none());
+    }
+
+    #[test]
+    fn sand_usage_distinguishes_paid_exhausted_trial_and_missing_quota() {
+        const RESET: &str = "2026-11-20T12:00:00Z";
+        const TRIAL_END: &str = "2026-11-18T12:00:00Z";
+        let reset = chrono::DateTime::parse_from_rfc3339(RESET).unwrap().timestamp();
+        let trial_end = chrono::DateTime::parse_from_rfc3339(TRIAL_END).unwrap().timestamp();
+        let parse = |payload, now| {
+            serde_json::from_value::<CursorSandUsageResponse>(payload)
+                .unwrap()
+                .usage(now)
+        };
+        for paid in [
+            json!({"includedLimitZero": false, "usagePercent": 0, "nextResetTimestampUtc": RESET,
+                "sandTrialExpiresAt": TRIAL_END}),
+            json!({"hasNonZeroIncludedLimit": true, "usagePercent": 0, "nextResetTimestampUtc": RESET}),
+        ] {
+            let usage = parse(paid, trial_end).unwrap().unwrap();
+            assert_eq!(usage.percent_used, 0.0);
+            assert_eq!(usage.reset_at, Some(reset));
+        }
+
+        let trial = json!({"includedLimitZero": true, "usagePercent": 100,
+            "hasAvailableUsage": false, "sandTrialExpiresAt": TRIAL_END, "nextResetTimestampUtc": RESET});
+        let usage = parse(trial.clone(), trial_end - 1).unwrap().unwrap();
+        assert_eq!(usage.percent_used, 100.0);
+        assert_eq!(usage.reset_at, Some(trial_end));
+        assert!(parse(trial, trial_end).unwrap().is_none());
+        assert!(parse(json!({"includedLimitZero":true,"usagePercent":0}), trial_end).unwrap().is_none());
+        assert!(parse(json!({"includedLimitZero":false}), trial_end).is_err());
+        assert!(parse(json!({"error":"missing authentication"}), trial_end).is_err());
+    }
+
+    #[tokio::test]
+    async fn sand_usage_posts_empty_json_using_cursor_session_cookie() {
+        use axum::{
+            http::{HeaderMap, StatusCode},
+            routing::post,
+            Json, Router,
+        };
+        let jwt = format!(
+            "header.{}.signature",
+            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(br#"{"sub":"workos|user_fixture"}"#)
+        );
+        let expected_cookie = format!("WorkosCursorSessionToken=user_fixture%3A%3A{jwt}");
+        let app = Router::new()
+            .route(
+                "/usage",
+                post(move |headers: HeaderMap, Json(body): Json<Value>| async move {
+                    assert_eq!(headers["cookie"], expected_cookie);
+                    assert_eq!(headers["origin"], "https://cursor.com");
+                    assert_eq!(body, json!({}));
+                    Json(json!({"includedLimitZero":false,"usagePercent":13.55}))
+                }),
+            )
+            .route("/failure", post(|| async { StatusCode::UNAUTHORIZED }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+        let usage = fetch_sand_usage_with_client(&client, &format!("http://{addr}/usage"), &jwt)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(usage.percent_used, 13.55);
+        assert!(!usage.stale);
+        assert!(
+            fetch_sand_usage_with_client(&client, &format!("http://{addr}/failure"), &jwt)
+                .await
+                .unwrap_err()
+                .contains("401")
+        );
+        server.abort();
+    }
 }
 
 #[cfg(test)]

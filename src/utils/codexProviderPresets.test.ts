@@ -47,6 +47,8 @@ test("OpenCode Go preset exposes DeepSeek models and its chat-completions transp
   assert.equal(preset.baseUrls[0], OPENCODE_GO_API_BASE_URL);
   assert.ok(preset.modelCatalog?.includes("deepseek-v4-pro"));
   assert.ok(preset.modelCatalog?.includes("deepseek-v4-flash"));
+  assert.ok(preset.modelCatalog?.includes("deepseek-v4.1-flash"));
+  assert.deepEqual(preset.visionModelCatalog, ["deepseek-v4.1-flash"]);
   assert.ok(preset.modelCatalog?.includes("qwen3.7-plus"));
 
   const profile = resolveCodexProviderCapabilityProfile({
@@ -55,6 +57,9 @@ test("OpenCode Go preset exposes DeepSeek models and its chat-completions transp
   });
   assert.equal(profile.wireApi, "chat_completions");
   assert.equal(profile.requiresGateway, true);
+  assert.equal(resolveCodexProviderCapabilityProfile({
+    baseUrl: "https://opencode.ai/zen/go/v1/",
+  }).wireApi, "chat_completions");
 });
 
 test("DeepSeek keeps its native Responses default", () => {
@@ -66,6 +71,23 @@ test("DeepSeek keeps its native Responses default", () => {
   assert.equal(profile.wireApi, "responses");
   assert.equal(resolveCodexProviderCapabilityProfile({ baseUrl: DEEPSEEK_API_BASE_URL, wireApi: "chat_completions" }).wireApi, "responses");
   assert.equal(resolveCodexProviderCapabilityProfile({ baseUrl: "https://relay.example/v1", presetId: "deepseek", wireApi: "chat_completions" }).wireApi, "chat_completions");
+});
+
+test("Ark and MiMo presets use models for their own official endpoints", () => {
+  const cases = [
+    ["https://ark.cn-beijing.volces.com/api/coding/v3", "ark-code-latest"],
+    ["https://ark.cn-beijing.volces.com/api/v3", "doubao-seed-2-1-pro-260915"],
+    ["https://api.xiaomimimo.com/v1", "mimo-v2.6-pro"],
+    ["https://token-plan-cn.xiaomimimo.com/v1", "mimo-v2.6-pro"],
+  ];
+  for (const [baseUrl, model] of cases) {
+    const preset = findCodexApiProviderPresetByBaseUrl(baseUrl);
+    assert.equal(preset?.modelCatalog?.[0], model);
+    assert.equal(
+      preset?.modelCatalog?.includes("glm-5.3"),
+      baseUrl === "https://ark.cn-beijing.volces.com/api/coding/v3",
+    );
+  }
 });
 
 test("both MiniMax presets declare image input only for the vision-capable model", () => {
@@ -83,7 +105,7 @@ test("both MiniMax presets declare image input only for the vision-capable model
 });
 
 test("presets without a declared vision catalog report no image support", () => {
-  const preset = findCodexApiProviderPresetById(OPENCODE_GO_API_PROVIDER_ID);
+  const preset = findCodexApiProviderPresetById("openrouter");
 
   assert.ok(preset);
   assert.deepEqual(codexApiProviderPresetVisionSupport(preset), {});

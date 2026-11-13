@@ -219,6 +219,36 @@ fn history_projection_repair_missing_records_never_become_a_cache_reset() {
 }
 
 #[test]
+fn history_projection_repair_reports_duplicate_ordinals_and_preserves_affected_chains() {
+    let f = Fixture::new();
+    let mut original = records(ROOT, None, 0);
+    for kind in ["token_count", "thread_settings_applied"] {
+        original.extend(serde_json::to_vec(&json!({
+            "ordinal":3,"type":"event_msg","payload":{"type":kind}
+        })).unwrap());
+        original.push(b'\n');
+    }
+    let compressed = zstd::stream::encode_all(original.as_slice(), 0).unwrap();
+    fs::write(&f.parent, &compressed).unwrap();
+    let other = f.root.join(format!("sessions/rollout-2026-10-24T00-00-02-{OTHER}.jsonl"));
+    let other_bytes = records(OTHER, None, 0);
+    fs::write(other, &other_bytes).unwrap();
+    cache(&f.db(), OTHER, other_bytes.len() as i64 + 100, 3);
+
+    let plan = scan(&f.root, None, &|_, _| {}).unwrap();
+    assert_eq!(plan.duplicate_ordinals, [
+        (ROOT.to_owned(), ROOT.to_owned(), 3),
+        (CHILD.to_owned(), ROOT.to_owned(), 3),
+    ]);
+    assert_eq!(plan.candidate_count(), 1);
+    assert_eq!(apply(&f.root, &plan, &f.root.join("backup")).unwrap(), 1);
+    assert_eq!(fs::read(&f.parent).unwrap(), compressed);
+    assert_eq!(f.count(ROOT), 1);
+    assert_eq!(f.count(CHILD), 1);
+    assert_eq!(f.count(OTHER), 0);
+}
+
+#[test]
 fn history_projection_repair_rejects_truncated_compression_and_partial_json() {
     for compressed in [true, false] {
         let f = Fixture::new();

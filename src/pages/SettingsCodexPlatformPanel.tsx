@@ -2,9 +2,12 @@ import { CodexAppEnhancementSettings } from '../components/codex/CodexAppEnhance
 import { CodexRefreshPlanScopeControl } from '../components/CodexRefreshPlanScopeControl';
 import { CodexRequestPayloadSetting } from '../components/codex/CodexRequestPayloadSetting';
 import { CodexOverloadRetrySetting } from '../components/codex/CodexOverloadRetrySetting';
+import { CodexQuotaRecoverySettings } from '../components/codex/CodexQuotaRecoverySettings';
+import { CodexQuotaHistorySettings } from '../components/codex/CodexQuotaHistorySettings';
 import { AutoSwitchAccountScopeSelector } from '../components/AutoSwitchAccountScopeSelector';
 import { CodexContextManagementControl } from '../components/codex/CodexContextManagementControl';
 import { CodexSshSyncSettingsControl } from '../components/codex/CodexSshSyncSettingsControl';
+import { SingleSelectDropdown } from '../components/SingleSelectDropdown';
 import './settings/Settings.css';
 import { RefreshCw } from 'lucide-react';
 import type { SettingsPageViewProps } from "./SettingsPageView";
@@ -148,12 +151,22 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
                         <span className="settings-input-unit">{t('settings.general.minutes')}</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
-                        style={{ minWidth: '120px', width: 'auto' }}
+                      <SingleSelectDropdown
+                        className="settings-dropdown"
                         value={codexAutoRefresh}
-                        onChange={(e) => {
-                          const val = e.target.value;
+                        ariaLabel={t('settings.general.autoRefresh', '自动刷新')}
+                        options={[
+                          ...(!codexAutoRefreshIsPreset
+                            ? [{ value: codexAutoRefresh, label: `${codexAutoRefresh} ${t('settings.general.minutes')}` }]
+                            : []),
+                          { value: '-1', label: t('settings.general.autoRefreshDisabled') },
+                          { value: '2', label: `2 ${t('settings.general.minutes')}` },
+                          { value: '5', label: `5 ${t('settings.general.minutes')}` },
+                          { value: '10', label: `10 ${t('settings.general.minutes')}` },
+                          { value: '15', label: `15 ${t('settings.general.minutes')}` },
+                          { value: 'custom', label: t('settings.general.autoRefreshCustom') },
+                        ]}
+                        onChange={(val) => {
                           if (val === 'custom') {
                             setCodexAutoRefreshCustomMode(true);
                             setCodexAutoRefresh(codexAutoRefresh !== '-1' ? codexAutoRefresh : '1');
@@ -162,19 +175,7 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
                           setCodexAutoRefreshCustomMode(false);
                           setCodexAutoRefresh(val);
                         }}
-                      >
-                        {!codexAutoRefreshIsPreset && (
-                          <option value={codexAutoRefresh}>
-                            {codexAutoRefresh} {t('settings.general.minutes')}
-                          </option>
-                        )}
-                        <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                        <option value="2">2 {t('settings.general.minutes')}</option>
-                        <option value="5">5 {t('settings.general.minutes')}</option>
-                        <option value="10">10 {t('settings.general.minutes')}</option>
-                        <option value="15">15 {t('settings.general.minutes')}</option>
-                        <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                      />
                     )}
                   </div>
                 </div>
@@ -640,11 +641,21 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
                         <span className="settings-input-unit">%</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
+                      <SingleSelectDropdown
+                        className="settings-dropdown"
                         value={codexQuotaAlertThreshold}
-                        onChange={(e) => {
-                          const val = e.target.value;
+                        ariaLabel={t('quickSettings.quotaAlert.threshold', '预警阈值')}
+                        options={[
+                          ...(!codexQuotaAlertThresholdIsPreset
+                            ? [{ value: codexQuotaAlertThreshold, label: `${codexQuotaAlertThreshold}%` }]
+                            : []),
+                          { value: '0', label: '0%' },
+                          { value: '20', label: '20%' },
+                          { value: '40', label: '40%' },
+                          { value: '60', label: '60%' },
+                          { value: 'custom', label: t('settings.general.autoRefreshCustom') },
+                        ]}
+                        onChange={(val) => {
                           if (val === 'custom') {
                             setCodexQuotaAlertThresholdCustomMode(true);
                             setCodexQuotaAlertThreshold(codexQuotaAlertThreshold || '20');
@@ -653,30 +664,24 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
                           setCodexQuotaAlertThresholdCustomMode(false);
                           setCodexQuotaAlertThreshold(val);
                         }}
-                      >
-                        {!codexQuotaAlertThresholdIsPreset && (
-                          <option value={codexQuotaAlertThreshold}>{codexQuotaAlertThreshold}%</option>
-                        )}
-                        <option value="0">0%</option>
-                        <option value="20">20%</option>
-                        <option value="40">40%</option>
-                        <option value="60">60%</option>
-                        <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                      />
                     )}
                   </div>
                 </div>
               )}
 
+              <CodexQuotaRecoverySettings variant="settings-row" />
+              <CodexQuotaHistorySettings variant="settings-row" />
+
               <div className="settings-row">
                 <div className="row-label">
                   <div className="row-title">
-                    {t('settings.general.codexHideRelayQuota', '隐藏中转站额度')}
+                    {t('settings.general.codexHideRelayQuota', '余额开关')}
                   </div>
                   <div className="row-desc">
                     {t(
                       'settings.general.codexHideRelayQuotaDesc',
-                      '开启后，Codex 账号总览隐藏中转 / New API 类额度面板，减轻列表重叠与视觉干扰。',
+                      '关闭后，隐藏 Codex 中转站余额，并停止自动和手动余额查询。',
                     )}
                   </div>
                 </div>
@@ -684,8 +689,8 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
                   <label className="switch">
                     <input
                       type="checkbox"
-                      checked={codexHideRelayQuota}
-                      onChange={(e) => setCodexHideRelayQuota(e.target.checked)}
+                      checked={!codexHideRelayQuota}
+                      onChange={(e) => setCodexHideRelayQuota(!e.target.checked)}
                     />
                     <span className="slider"></span>
                   </label>

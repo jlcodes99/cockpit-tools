@@ -1,3 +1,9 @@
+import {
+  PAGE_SIZE_PREFERENCE_CHANGED_EVENT,
+  previewDurableUiSetting,
+  readDurableUiSetting,
+  type PageSizeSettingKey,
+} from '../utils/durableUiSettings';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const DEFAULT_PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
@@ -21,9 +27,9 @@ const normalizePageSizeOptions = (options?: readonly number[]) => {
 const normalizePageSize = (value: number, options: readonly number[]) =>
   options.includes(value) ? value : options[0] ?? DEFAULT_PAGE_SIZE;
 
-const readStoredPageSize = (storageKey: string, fallback: number) => {
+const readStoredPageSize = (storageKey: PageSizeSettingKey, fallback: number) => {
   try {
-    const raw = localStorage.getItem(storageKey);
+    const raw = readDurableUiSetting(storageKey);
     if (!raw) return fallback;
     const parsed = Number.parseInt(raw, 10);
     return Number.isFinite(parsed) ? parsed : fallback;
@@ -32,17 +38,9 @@ const readStoredPageSize = (storageKey: string, fallback: number) => {
   }
 };
 
-const writeStoredPageSize = (storageKey: string, value: number) => {
-  try {
-    localStorage.setItem(storageKey, String(value));
-  } catch {
-    // ignore persistence failures
-  }
-};
-
 export interface UsePaginationOptions<TItem> {
   items: readonly TItem[];
-  storageKey: string;
+  storageKey: PageSizeSettingKey;
   pageSizeOptions?: readonly number[];
   defaultPageSize?: number;
 }
@@ -70,7 +68,7 @@ export interface PaginatedGroup<TItem> {
   totalCount: number;
 }
 
-export function buildPaginationPageSizeStorageKey(scope: string) {
+export function buildPaginationPageSizeStorageKey(scope: string): PageSizeSettingKey {
   return `agtools.${normalizeStorageScope(scope)}.accounts_page_size`;
 }
 
@@ -132,8 +130,16 @@ export function usePagination<TItem>({
   }, [resolvedPageSizeOptions]);
 
   useEffect(() => {
-    writeStoredPageSize(storageKey, pageSize);
-  }, [pageSize, storageKey]);
+    const reload = (event?: Event) => {
+      if (event && (event as CustomEvent<{ key: string }>).detail?.key !== storageKey) return;
+      setPageSizeState(normalizePageSize(
+        readStoredPageSize(storageKey, resolvedDefaultPageSize), resolvedPageSizeOptions,
+      ));
+    };
+    reload();
+    window.addEventListener(PAGE_SIZE_PREFERENCE_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(PAGE_SIZE_PREFERENCE_CHANGED_EVENT, reload);
+  }, [storageKey, resolvedDefaultPageSize, resolvedPageSizeOptions]);
 
   const totalItems = items.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
@@ -168,8 +174,9 @@ export function usePagination<TItem>({
         Math.max(1, Math.floor(((prevPage - 1) * pageSize) / normalizedPageSize) + 1),
       );
       setPageSizeState(normalizedPageSize);
+      previewDurableUiSetting(storageKey, String(normalizedPageSize));
     },
-    [pageSize, resolvedPageSizeOptions],
+    [pageSize, resolvedPageSizeOptions, storageKey],
   );
 
   const goToPreviousPage = useCallback(() => {

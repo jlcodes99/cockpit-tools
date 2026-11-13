@@ -78,6 +78,13 @@ pub struct RequestIdentity {
     unregistered_blobs: std::collections::HashSet<String>,
 }
 
+impl RequestIdentity {
+    pub(super) fn restrict_session_mapping(&mut self, allowed: bool) -> bool {
+        self.session_identity_mapping_enabled &= allowed;
+        self.session_identity_mapping_enabled
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Binding {
     caller: String,
@@ -96,6 +103,10 @@ pub struct Binding {
 }
 
 impl Binding {
+    pub(super) fn session_id(&self) -> Option<&str> {
+        self.session_id.as_deref()
+    }
+
     pub(super) fn repair_rejected_reasoning(&mut self, repair: &super::encrypted_reasoning::Repair) {
         if let Some(input) = self.generation.as_mut().and_then(|generation|generation.input.as_mut()) {
             repair.apply_items(input);
@@ -864,6 +875,18 @@ impl IdentityStore {
         if checked_identity(account_id)?.is_none() || checked_identity(owner_id)?.is_none() {
             return Err(invalid("An upstream account and stable owner are required"));
         }
+        // The request and checkpoint input stay fixed throughout the transaction.
+        // Validate them once before taking the shared publication lock.
+        let complete_unregistered_history = context.portable_body
+            && !context.forwarding
+            && context.opaque.iter().any(|reference| {
+                automatic_history::is_unregistered(context, reference)
+            })
+            && (automatic_history::complete_input(headers, body)
+                || (context.rebuild_enabled
+                    && context.rebuild_input.as_ref().is_some_and(|input| {
+                        super::responses_custom_results::replayable(input)
+                    })));
         let mut connection = self.connection.lock().map_err(storage)?;
         let transaction = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
@@ -886,13 +909,8 @@ impl IdentityStore {
                 if context.forwarding {
                     continue;
                 }
-                if context.portable_body
+                if complete_unregistered_history
                     && automatic_history::is_unregistered(context, reference)
-                    && (automatic_history::complete_input(headers, body)
-                        || (context.rebuild_enabled
-                            && context.rebuild_input.as_ref().is_some_and(|input| {
-                                rebuild::replay_items(input) && rebuild::paired_tools(input)
-                            })))
                 {
                     continue;
                 }

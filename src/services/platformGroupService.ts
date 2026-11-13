@@ -1,14 +1,15 @@
 /**
  * 全平台通用账号分组服务
  * - 支持任意平台（Antigravity、Codex、WorkBuddy、Cursor、Windsurf、Trae、Zed、GitHub Copilot 等）
- * - 磁盘原子持久化存储
+ * - 按平台事务持久化存储
  * - 本地 activeGroupTab 独立记忆（不纳入备份同步）
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import { parseAccountGroups, type AccountGroup } from './accountGroupService';
+import { isGroupRevisionConflict, parseAccountGroups, type AccountGroup, type AccountGroupSnapshot } from './accountGroupService';
 import * as antigravityGroups from './accountGroupService';
 import * as codexGroups from './codexAccountGroupService';
+import { previewDurableUiSetting, type ActiveGroupSettingKey } from '../utils/durableUiSettings';
 
 export type { AccountGroup };
 
@@ -25,10 +26,19 @@ export function normalizePlatform(platform: string): string {
 // ─── 内存缓存与任务串行队列 ─────────────────────────────────
 
 const cacheByPlatform = new Map<string, AccountGroup[]>();
+const revisionByPlatform = new Map<string, number>();
 let queue = Promise.resolve();
 
 function enqueue<T>(task: () => Promise<T>): Promise<T> {
-  const result = queue.then(task, task);
+  const run = async () => {
+    try {
+      return await task();
+    } catch (error) {
+      if (!isGroupRevisionConflict(error)) throw error;
+      return task();
+    }
+  };
+  const result = queue.then(run, run);
   queue = result.then(
     () => {},
     () => {}
@@ -49,23 +59,25 @@ function generateId(): string {
 
 // ─── 磁盘 I/O ───────────────────────────────────────────────
 
-async function loadFromDisk(platform: string): Promise<AccountGroup[]> {
+async function loadFromDisk(platform: string): Promise<{ groups: AccountGroup[]; revision: number }> {
   try {
-    const raw: string = await invoke('load_platform_account_groups', { platform });
-    return parseAccountGroups(raw);
+    const { data, revision } = await invoke<AccountGroupSnapshot>('load_account_group_snapshot', { platform });
+    return { groups: parseAccountGroups(data), revision };
   } catch (error) {
     console.error(`[PlatformGroups] Failed to load groups for ${platform}:`, error);
     throw error;
   }
 }
 
-async function saveToDisk(platform: string, groups: AccountGroup[]): Promise<void> {
+async function saveToDisk(platform: string, groups: AccountGroup[], expectedRevision: number | undefined): Promise<number> {
   try {
-    await invoke('save_platform_account_groups', {
+    return await invoke<number>('save_platform_account_groups', {
       platform,
       data: JSON.stringify(groups, null, 2),
+      expectedRevision,
     });
   } catch (error) {
+    if (isGroupRevisionConflict(error)) cacheByPlatform.delete(platform);
     console.error(`[PlatformGroups] Failed to save groups for ${platform}:`, error);
     throw error;
   }
@@ -76,15 +88,17 @@ async function loadGroupsInternal(platform: string): Promise<AccountGroup[]> {
   const cached = cacheByPlatform.get(key);
   if (cached !== undefined) return cloneGroups(cached);
 
-  const groups = await loadFromDisk(key);
+  const { groups, revision } = await loadFromDisk(key);
   cacheByPlatform.set(key, groups);
+  revisionByPlatform.set(key, revision);
   return cloneGroups(groups);
 }
 
 async function saveGroupsInternal(platform: string, groups: AccountGroup[]): Promise<void> {
   const key = normalizePlatform(platform);
   const next = cloneGroups(groups);
-  await saveToDisk(key, next);
+  const revision = await saveToDisk(key, next, revisionByPlatform.get(key));
+  revisionByPlatform.set(key, revision);
   cacheByPlatform.set(key, next);
 }
 
@@ -271,28 +285,15 @@ export function invalidatePlatformGroupCache(platform?: string): void {
 
 // ─── 本地 Active Tab 记忆持久化（不纳入云端同步与备份） ─────────
 
-const ACTIVE_GROUP_TAB_STORAGE_PREFIX = 'agtools.group_tab_active.';
+export function activeGroupTabSettingKey(platform: string): ActiveGroupSettingKey {
+  return `agtools.group_tab_active.${normalizePlatform(platform)}`;
+}
 
-export function getActiveGroupTab(platform: string): string | null {
-  try {
-    const key = `${ACTIVE_GROUP_TAB_STORAGE_PREFIX}${normalizePlatform(platform)}`;
-    const saved = localStorage.getItem(key);
-    if (!saved || saved === '__all__') return null;
-    return saved;
-  } catch {
-    return null;
-  }
+export async function hasPlatformGroupOnDisk(platform: string, groupId: string): Promise<boolean> {
+  const { groups } = await loadFromDisk(normalizePlatform(platform));
+  return groups.some(group => group.id === groupId);
 }
 
 export function setActiveGroupTab(platform: string, groupId: string | null): void {
-  try {
-    const key = `${ACTIVE_GROUP_TAB_STORAGE_PREFIX}${normalizePlatform(platform)}`;
-    if (!groupId) {
-      localStorage.removeItem(key);
-    } else {
-      localStorage.setItem(key, groupId);
-    }
-  } catch {
-    // ignore localStorage errors
-  }
+  previewDurableUiSetting(activeGroupTabSettingKey(platform), groupId || '__all__');
 }

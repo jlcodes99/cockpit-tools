@@ -1,8 +1,10 @@
+import { parseModelAliasText, serializeModelAliases } from "../utils/codexServiceModelAliases";
 import { useCodexLocalAccessPortRecovery } from "../components/codex/CodexLocalAccessPortRecovery";
 import { CODEX_REQUEST_LOGS_NAVIGATION, takeCodexRequestLogsNavigation } from "../utils/codexRequestLogsNavigation";
 import { useRefreshSafeDraft, useRefreshSafeRecordDraft } from "../hooks/useRefreshSafeDraft";
 import { useSampledRevision } from "../hooks/useSampledRevision";
 import { budgetDraft, parseBudgetDraft } from '../utils/codexKeyBudget';
+import { parseModelRuleText } from '../utils/codexApiKeyModelRules';
 import { codexServiceOriginalAccounts } from "../utils/chatgptPlanOverview";
 import { useChatGptPlanOverview } from "../hooks/useChatGptPlanOverview";
 import { codexServiceRelatedEndpointIds } from "../utils/chatgptPlanOverview";
@@ -31,6 +33,7 @@ import {
 } from "../stores/usePlatformLayoutStore";
 import { getPlatformLabel } from "../utils/platformMeta";
 import { presentWindowsOperationError } from "../utils/windowsOperationDialog";
+import { isCodexLaunchUnconfirmed } from "../utils/codexLaunchConfirmation";
 import { useCodexAccountStore } from "../stores/useCodexAccountStore";
 import {
   reconcileCodexApiKeyScopeAccountIds,
@@ -46,13 +49,23 @@ import {
   type CodexAccountGroup,
 } from "../services/codexAccountGroupService";
 import type { CodexAccount, CodexApiModelMapping } from "../types/codex";
-import { isCodexApiKeyAccount } from "../types/codex";
+import {
+  isCodexAgentIdentityAccount,
+  isCodexApiKeyAccount,
+  isCodexPendingOAuthAccount,
+  isCodexWebSessionAccount,
+} from "../types/codex";
 import {
   addCodexAccountFromGrok,
   updateCodexAccountApiModelMappings,
 } from "../services/codexService";
 import { parseContextWindowDrafts } from "../utils/codexModelContextWindows";
-import { updateModelPricingDraft, type ModelPricingDraft, type ModelPricingDraftField } from "../utils/codexModelPricingDraft";
+import {
+  formatPriceDraftValue,
+  updateModelPricingDraft,
+  type ModelPricingDraft,
+  type ModelPricingDraftField,
+} from "../utils/codexModelPricingDraft";
 import {
   CODEX_API_SERVICE_BIND_ID,
   type InstanceProfile,
@@ -66,7 +79,6 @@ import type {
   CodexLocalAccessClientBaseUrlHost,
   CodexLocalAccessCollection,
   CodexLocalAccessImageGenerationPolicy,
-  CodexLocalAccessModelAlias,
   CodexLocalAccessModelPricing,
   CodexLocalAccessRequestKind,
   CodexLocalAccessRoutingStrategy,
@@ -91,11 +103,15 @@ import {
   type CodexStatsTimeRange,
 } from "../utils/codexStatsRange";
 import {
-  persistCodexStatsRangeSelection,
+  CODEX_API_STATS_RANGE_STORAGE_KEY,
   readCodexStatsRangeSelection,
+  serializeCodexStatsRangeSelection,
 } from "../utils/codexStatsRangePreference";
+import { useDurableUiSetting } from "../hooks/useDurableUiSetting";
+import { previewDurableUiSetting } from "../utils/durableUiSettings";
 import "./CodexApiServicePage.css";
 import { CodexApiServiceView } from "./CodexApiServiceView";
+import { getLocalAccessTestModelIds } from "../components/codex/codexLocalAccessModalModel";
 
 
 type ServiceTab = "overview" | "keys" | "accounts" | "models" | "logs";
@@ -118,6 +134,7 @@ interface ApiKeyPolicyDraft {
   modelPrefix: string;
   allowedModels: string;
   excludedModels: string;
+  maxReasoningEffort: import("../types/codexLocalAccess").CodexApiKeyReasoningCeiling | "";
   inheritAccountPool: boolean;
   accountIds: string[];
 }
@@ -126,6 +143,7 @@ interface TestChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  imageDataUrl?: string;
   latencyMs?: number | null;
   failureTitle?: string;
   failureDetail?: string;
@@ -160,7 +178,6 @@ interface ModelPricingRepriceProgress {
 }
 
 const ADDRESS_KIND_STORAGE_KEY = "agtools.codex.local_access.address_kind.v1";
-const STATS_RANGE_STORAGE_KEY = "agtools.codex.api_service.stats_range.v1";
 const REQUEST_LOG_PAGE_SIZE_STORAGE_KEY =
   "agtools.codex.api_service.request_log_page_size.v1";
 const REQUEST_LOG_PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
@@ -172,48 +189,12 @@ function normalizeAddressKind(
   return value === "lan" ? "lan" : "local";
 }
 
-function readStoredAddressKind(): CodexLocalAccessAddressKind {
-  try {
-    return normalizeAddressKind(localStorage.getItem(ADDRESS_KIND_STORAGE_KEY));
-  } catch {
-    return "local";
-  }
-}
-
-function persistAddressKind(value: CodexLocalAccessAddressKind): void {
-  try {
-    localStorage.setItem(ADDRESS_KIND_STORAGE_KEY, value);
-  } catch {
-    // ignore storage failures
-  }
-}
-
 function normalizeRequestLogPageSize(value: number): number {
   return REQUEST_LOG_PAGE_SIZE_OPTIONS.includes(
     value as (typeof REQUEST_LOG_PAGE_SIZE_OPTIONS)[number],
   )
     ? value
     : REQUEST_LOG_PAGE_SIZE_OPTIONS[0];
-}
-
-function readStoredRequestLogPageSize(): number {
-  try {
-    const raw = localStorage.getItem(REQUEST_LOG_PAGE_SIZE_STORAGE_KEY);
-    const parsed = raw
-      ? Number.parseInt(raw, 10)
-      : REQUEST_LOG_PAGE_SIZE_OPTIONS[0];
-    return normalizeRequestLogPageSize(parsed);
-  } catch {
-    return REQUEST_LOG_PAGE_SIZE_OPTIONS[0];
-  }
-}
-
-function persistRequestLogPageSize(value: number): void {
-  try {
-    localStorage.setItem(REQUEST_LOG_PAGE_SIZE_STORAGE_KEY, String(value));
-  } catch {
-    // ignore storage failures
-  }
 }
 
 function formatCompactNumber(value: number): string {
@@ -248,11 +229,6 @@ function formatUsdCost(value: number): string {
   if (value < 0.01) return `$${value.toFixed(6)}`;
   if (value < 1) return `$${value.toFixed(4)}`;
   return `$${value.toFixed(2)}`;
-}
-
-function formatPriceDraftValue(value: number | null | undefined): string {
-  if (!Number.isFinite(value ?? NaN)) return "";
-  return String(value);
 }
 
 function formatIntegerDraftValue(value: number | null | undefined): string {
@@ -302,12 +278,15 @@ function modelPricingDraftFromRow(item: ModelPricingRow): ModelPricingDraft {
     outputUsdPerMillion: formatPriceDraftValue(item.outputUsdPerMillion),
     standardLongInputUsdPerMillion: formatPriceDraftValue(
       item.standardLongInputUsdPerMillion,
+      !item.standardLongPriceOverride,
     ),
     standardLongCachedInputUsdPerMillion: formatPriceDraftValue(
       item.standardLongCachedInputUsdPerMillion,
+      !item.standardLongPriceOverride,
     ),
     standardLongOutputUsdPerMillion: formatPriceDraftValue(
       item.standardLongOutputUsdPerMillion,
+      !item.standardLongPriceOverride,
     ),
     priorityInputUsdPerMillion: formatPriceDraftValue(
       item.priorityInputUsdPerMillion,
@@ -353,20 +332,6 @@ function truncateRequestLogErrorDetail(value: string): string {
 
 function maskAccountText(value?: string | null): string {
   return value?.trim() || "-";
-}
-
-function parseModelRuleText(value: string): string[] {
-  const seen = new Set<string>();
-  return value
-    .split(/[\n,]/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .filter((item) => {
-      const key = item.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
 }
 
 function serializeModelRules(values: string[] | null | undefined): string {
@@ -427,6 +392,7 @@ function apiKeyPolicyDraftFromValue(
     modelPrefix: apiKey.modelPrefix ?? "",
     allowedModels: serializeModelRules(apiKey.allowedModels),
     excludedModels: serializeModelRules(apiKey.excludedModels),
+    maxReasoningEffort: apiKey.maxReasoningEffort ?? "",
     inheritAccountPool: apiKeyInheritsAccountPool(apiKey),
     accountIds: apiKey.accountIds ?? [],
   };
@@ -450,6 +416,7 @@ function apiKeyPolicyDraftIsDirty(
     draft.modelPrefix !== persisted.modelPrefix ||
     draft.allowedModels !== persisted.allowedModels ||
     draft.excludedModels !== persisted.excludedModels ||
+    draft.maxReasoningEffort !== persisted.maxReasoningEffort ||
     draft.inheritAccountPool !== persisted.inheritAccountPool ||
     !sameStringList(draft.accountIds, persisted.accountIds)
   );
@@ -459,29 +426,6 @@ function toggleStringSelection(values: string[], value: string): string[] {
   return values.includes(value)
     ? values.filter((item) => item !== value)
     : [...values, value];
-}
-
-function parseModelAliasText(value: string): CodexLocalAccessModelAlias[] {
-  const seen = new Set<string>();
-  return value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const fork = /\s(\+|fork)$/i.test(line);
-      const cleaned = line.replace(/\s(\+|fork)$/i, "").trim();
-      const parts = cleaned.includes("=>")
-        ? cleaned.split("=>")
-        : cleaned.split(/\s+as\s+/i);
-      const sourceModel = parts[0]?.trim() ?? "";
-      const alias = parts[1]?.trim() ?? "";
-      if (!sourceModel || !alias) return null;
-      const key = alias.toLowerCase();
-      if (seen.has(key)) return null;
-      seen.add(key);
-      return { sourceModel, alias, fork };
-    })
-    .filter((item): item is CodexLocalAccessModelAlias => Boolean(item));
 }
 
 const DEEPSEEK_OFFICIAL_API_MODEL_MAPPINGS: CodexApiModelMapping[] = [
@@ -514,16 +458,6 @@ function mappingDraftsFromAccount(account: CodexAccount): AccountModelMappingDra
     : [{ clientModel: "", upstreamModel: "", contextWindow: "" }];
 }
 
-function serializeModelAliases(
-  values: CodexLocalAccessModelAlias[] | null | undefined,
-): string {
-  return (values ?? [])
-    .map(
-      (item) => `${item.sourceModel} => ${item.alias}${item.fork ? " +" : ""}`,
-    )
-    .join("\n");
-}
-
 function formatSeconds(value: number | null | undefined): string {
   if (!Number.isFinite(value ?? NaN) || !value) return "0";
   return String(Math.round((value ?? 0) / 1000));
@@ -541,6 +475,8 @@ function parseIntegerDraft(
 
 function defaultCodexLocalAccessTimeouts(): CodexLocalAccessTimeouts {
   return {
+    legacyRequestReadTimeoutMs: 60000,
+    legacyUpstreamConnectTimeoutMs: 60000,
     sidecarStreamOpenTimeoutMs: 60000,
     sidecarStreamIdleTimeoutMs: 120000,
     sidecarImageStreamOpenTimeoutMs: 60000,
@@ -549,6 +485,7 @@ function defaultCodexLocalAccessTimeouts(): CodexLocalAccessTimeouts {
     sidecarStreamKeepaliveSeconds: 15,
     websocketConnectTimeoutMs: 30000,
     websocketInitialMessageTimeoutMs: 30000,
+    websocketFragmentTimeoutMs: 60000,
     websocketIdleTimeoutMs: 300000,
     websocketHeartbeatIntervalMs: 30000,
     upstreamSendRetryAttempts: 3,
@@ -590,9 +527,10 @@ function normalizeTimeouts(
 
 function timeoutDraftsFromValue(
   value?: CodexLocalAccessTimeouts | null,
-): Record<keyof CodexLocalAccessTimeouts, string> {
+): Record<Exclude<keyof CodexLocalAccessTimeouts, "legacyUpstreamConnectTimeoutMs">, string> {
   const timeouts = normalizeTimeouts(value);
   return {
+    legacyRequestReadTimeoutMs: String(timeouts.legacyRequestReadTimeoutMs / 1000),
     sidecarStreamOpenTimeoutMs: formatSeconds(
       timeouts.sidecarStreamOpenTimeoutMs,
     ),
@@ -615,6 +553,7 @@ function timeoutDraftsFromValue(
     websocketInitialMessageTimeoutMs: formatSeconds(
       timeouts.websocketInitialMessageTimeoutMs,
     ),
+    websocketFragmentTimeoutMs: String(timeouts.websocketFragmentTimeoutMs / 1000),
     websocketIdleTimeoutMs: formatSeconds(timeouts.websocketIdleTimeoutMs),
     websocketHeartbeatIntervalMs: formatSeconds(
       timeouts.websocketHeartbeatIntervalMs,
@@ -706,16 +645,14 @@ export function useCodexApiServicePageController() {
   const [groups, setGroups] = useState<CodexAccountGroup[]>([]);
   const [activeTab, setActiveTab] = useState<ServiceTab>("overview");
   const [statsLogTab, setStatsLogTab] = useState<StatsLogTab>("logs");
-  const [statsSelection, setStatsSelection] = useState(() =>
-    readCodexStatsRangeSelection(STATS_RANGE_STORAGE_KEY),
-  );
+  const savedStatsRange = useDurableUiSetting(CODEX_API_STATS_RANGE_STORAGE_KEY);
+  const statsSelection = useMemo(() => readCodexStatsRangeSelection(savedStatsRange), [savedStatsRange]);
   const { key: statsRange, range: statsTimeRange } = statsSelection;
   const [filteredStatsWindow, setFilteredStatsWindow] =
     useState<CodexLocalAccessStatsWindow | null>(null);
   const [statsRangeError, setStatsRangeError] = useState("");
-  const [addressKind, setAddressKind] = useState<CodexLocalAccessAddressKind>(
-    () => readStoredAddressKind(),
-  );
+  const addressKind = normalizeAddressKind(useDurableUiSetting(ADDRESS_KIND_STORAGE_KEY));
+  const setAddressKind = (value: CodexLocalAccessAddressKind) => previewDurableUiSetting(ADDRESS_KIND_STORAGE_KEY, value);
   const [busy, setBusy] = useState(false);
   const [routingSaving, setRoutingSaving] = useState(false);
   const [activating, setActivating] = useState(false);
@@ -772,9 +709,13 @@ export function useCodexApiServicePageController() {
     useState<ModelPricingRepriceProgress | null>(null);
   const [timeoutsModalOpen, setTimeoutsModalOpen] = useState(false);
   const [timeoutDrafts, setTimeoutDrafts] = useState<
-    Record<keyof CodexLocalAccessTimeouts, string>
+    ReturnType<typeof timeoutDraftsFromValue>
   >(() => timeoutDraftsFromValue());
   const [timeoutsError, setTimeoutsError] = useState("");
+  const [receiveTimeoutError, setReceiveTimeoutError] = useState<{
+    field: "legacyRequestReadTimeoutMs" | "websocketFragmentTimeoutMs";
+    message: string;
+  } | null>(null);
   const [selectedTimeoutPresetId, setSelectedTimeoutPresetId] =
     useState<TimeoutPresetId>("long_wait");
   const [timeoutPresetNameDraft, setTimeoutPresetNameDraft] = useState("");
@@ -801,9 +742,9 @@ export function useCodexApiServicePageController() {
   const [accountConcurrencyWaitDraft, setAccountConcurrencyWaitDraft] =
     useRefreshSafeDraft(formatSeconds(collection?.accountConcurrencyWaitMs ?? 120 * 1000));
   const [requestLogPage, setRequestLogPage] = useState(1);
-  const [requestLogPageSize, setRequestLogPageSize] = useState(() =>
-    readStoredRequestLogPageSize(),
-  );
+  const requestLogPageSize = normalizeRequestLogPageSize(Number(useDurableUiSetting(REQUEST_LOG_PAGE_SIZE_STORAGE_KEY)));
+  const setRequestLogPageSize = (value: number) =>
+    previewDurableUiSetting(REQUEST_LOG_PAGE_SIZE_STORAGE_KEY, String(normalizeRequestLogPageSize(value)));
   const [requestLogResult, setRequestLogResult] =
     useState<CodexLocalAccessUsageEventPage | null>(null);
   const [requestLogLoading, setRequestLogLoading] = useState(false);
@@ -819,6 +760,8 @@ export function useCodexApiServicePageController() {
   const [requestLogAccountQuery, setRequestLogAccountQuery] = useState("");
   const [requestLogApiKeyQuery, setRequestLogApiKeyQuery] = useState("");
   const [requestLogInstanceQuery, setRequestLogInstanceQuery] = useState("all");
+  const [requestLogSourceKind, setRequestLogSourceKind] = useState("all");
+  const [requestLogPeerIp, setRequestLogPeerIp] = useState("");
   const [requestLogErrorQuery, setRequestLogErrorQuery] = useState("");
   const [codexInstances, setCodexInstances] = useState<InstanceProfile[]>([]);
   const mountedRef = useRef(true);
@@ -902,7 +845,10 @@ export function useCodexApiServicePageController() {
     [memberAccounts],
   );
   const mappingMemberAccounts = useMemo(
-    () => memberAccounts.filter((account) => isCodexApiKeyAccount(account)),
+    () => memberAccounts.filter((account) => isCodexApiKeyAccount(account)
+      || (!isCodexAgentIdentityAccount(account)
+        && !isCodexPendingOAuthAccount(account)
+        && !isCodexWebSessionAccount(account))),
     [memberAccounts],
   );
   const accountDisplayNames = useMemo(() => {
@@ -916,6 +862,15 @@ export function useCodexApiServicePageController() {
     });
     return next;
   }, [localAccessAccounts, t]);
+  const requestLogAccountNameMatches = useMemo(() => {
+    const query = requestLogAccountQuery.trim().toLowerCase();
+    if (!query) return undefined;
+    const matches = localAccessAccounts
+      .filter((account) => [account.api_provider_name, accountDisplayNames.get(account.id)]
+        .some((name) => name?.toLowerCase().includes(query)))
+      .map((account) => account.id);
+    return matches.length > 0 ? matches : undefined;
+  }, [requestLogAccountQuery, localAccessAccounts, accountDisplayNames]);
   const accountModelRuleCount = collection?.accountModelRules.length ?? 0;
   const accountModelRuleAllSelected =
     memberAccounts.length > 0 &&
@@ -939,6 +894,7 @@ export function useCodexApiServicePageController() {
   const clientBaseUrlHost = collection?.clientBaseUrlHost ?? "localhost";
   const routingStrategy = collection?.routingStrategy ?? "auto";
   const modelIds = state?.modelIds ?? [];
+  const testModelIds = useMemo(() => getLocalAccessTestModelIds(modelIds, collection), [modelIds, collection]);
   const exampleModelId = modelIds[0] ?? "gpt-5.6-sol";
   const exampleApiKey = collection?.apiKey || "<api-key>";
   const compatibilityBaseUrls = useMemo(
@@ -1233,6 +1189,7 @@ export function useCodexApiServicePageController() {
 
   const handleRefreshStatsDetails = useCallback(async () => {
     if (statsDetailsRefreshing) return;
+    const requestSeq = ++statsRequestSeqRef.current;
     setStatsDetailsRefreshing(true);
     setStatsRangeError("");
     setRequestLogError("");
@@ -1244,12 +1201,12 @@ export function useCodexApiServicePageController() {
         ),
         reloadState(),
       ]);
-      if (mountedRef.current) {
+      if (mountedRef.current && requestSeq === statsRequestSeqRef.current) {
         setFilteredStatsWindow(nextStats);
         setRequestLogRefreshNonce((value) => value + 1);
       }
     } catch (refreshError) {
-      if (mountedRef.current) {
+      if (mountedRef.current && requestSeq === statsRequestSeqRef.current) {
         setStatsRangeError(String(refreshError).replace(/^Error:\s*/, ""));
       }
     } finally {
@@ -1391,20 +1348,14 @@ export function useCodexApiServicePageController() {
     key: Exclude<CodexStatsRangeKey, "custom">,
     range: CodexStatsTimeRange,
   ) => {
-    const selection = { key, range };
-    setStatsSelection(selection);
-    persistCodexStatsRangeSelection(STATS_RANGE_STORAGE_KEY, selection);
+    const saved = serializeCodexStatsRangeSelection({ key, range });
+    if (saved !== null) previewDurableUiSetting(CODEX_API_STATS_RANGE_STORAGE_KEY, saved);
   };
 
   const handleCustomStatsRangeApply = (range: CodexStatsTimeRange) => {
-    const selection = { key: "custom" as const, range };
-    setStatsSelection(selection);
-    persistCodexStatsRangeSelection(STATS_RANGE_STORAGE_KEY, selection);
+    const saved = serializeCodexStatsRangeSelection({ key: "custom", range });
+    if (saved !== null) previewDurableUiSetting(CODEX_API_STATS_RANGE_STORAGE_KEY, saved);
   };
-
-  useEffect(() => {
-    persistAddressKind(addressKind);
-  }, [addressKind]);
 
   useEffect(() => {
     if (
@@ -1429,10 +1380,6 @@ export function useCodexApiServicePageController() {
   ]);
 
   useEffect(() => {
-    persistRequestLogPageSize(requestLogPageSize);
-  }, [requestLogPageSize]);
-
-  useEffect(() => {
     setRequestLogPage(1);
   }, [
     statsRange,
@@ -1446,6 +1393,8 @@ export function useCodexApiServicePageController() {
     requestLogAccountQuery,
     requestLogApiKeyQuery,
     requestLogInstanceQuery,
+    requestLogSourceKind,
+    requestLogPeerIp,
     requestLogErrorQuery,
   ]);
 
@@ -1474,9 +1423,12 @@ export function useCodexApiServicePageController() {
         modelQuery: requestLogModelQuery,
         sessionQuery: requestLogSessionQuery,
         accountQuery: requestLogAccountQuery,
+        accountNameMatches: requestLogAccountNameMatches,
         apiKeyQuery: requestLogApiKeyQuery,
         instanceQuery:
           requestLogInstanceQuery === "all" ? null : requestLogInstanceQuery,
+        sourceKind: requestLogSourceKind === "all" ? null : requestLogSourceKind,
+        peerIp: requestLogPeerIp,
         requestKind:
           requestLogKindFilter === "all" ? null : requestLogKindFilter,
         success,
@@ -1519,8 +1471,11 @@ export function useCodexApiServicePageController() {
     requestLogAccountQuery,
     requestLogApiKeyQuery,
     requestLogInstanceQuery,
+    requestLogSourceKind,
+    requestLogPeerIp,
     requestLogErrorQuery,
     requestLogRefreshNonce,
+    requestLogAccountNameMatches,
     sampledStatsRevision,
   ]);
 
@@ -1541,14 +1496,15 @@ export function useCodexApiServicePageController() {
   }, [collection?.apiKeys]);
 
   useEffect(() => {
-    if (modelIds.length === 0) {
+    const options = testDialogOpen ? testModelIds : modelIds;
+    if (options.length === 0) {
       setSelectedModelId("");
       return;
     }
     setSelectedModelId((current) =>
-      modelIds.includes(current) ? current : modelIds[0],
+      options.includes(current) ? current : options[0],
     );
-  }, [modelIds]);
+  }, [modelIds, testDialogOpen, testModelIds]);
 
   useEffect(() => {
     if (!testDialogOpen) return;
@@ -1638,6 +1594,9 @@ export function useCodexApiServicePageController() {
           !collection.enabled,
         );
         setState(next);
+        if (next.projectStateDeferred) {
+          throw new Error(t("codex.sessionManager.repairModal.switchProjectsDeferred"));
+        }
       },
       collection.enabled
         ? t("codex.localAccess.disabledSuccess", "API 服务已停用")
@@ -1700,11 +1659,24 @@ export function useCodexApiServicePageController() {
       setState(next);
       await fetchCurrentAccount();
       await refreshApiServiceCurrent();
+      if (next.projectStateDeferred) {
+        setError(t("codex.sessionManager.repairModal.switchProjectsDeferred"));
+        return;
+      }
       setNotice(
         next.recovering ? "" : t("codex.localAccess.activateSuccess", "已切换到 API 服务"),
       );
     } catch (err) {
       if (!mountedRef.current) return;
+      if (isCodexLaunchUnconfirmed(err)) {
+        // The shared launch progress dialog owns confirmation of the client.
+        // Read the API Service state since it was already activated.
+        void Promise.all([reloadState(), fetchCurrentAccount(), refreshApiServiceCurrent()])
+          .catch((refreshError) => {
+            if (mountedRef.current) setError(String(refreshError).replace(/^Error:\s*/, ""));
+          });
+        return;
+      }
       if (
         presentWindowsOperationError({
           error: err,
@@ -1716,6 +1688,9 @@ export function useCodexApiServicePageController() {
             setState(next);
             await fetchCurrentAccount();
             await refreshApiServiceCurrent();
+            if (next.projectStateDeferred) {
+              setError(t("codex.sessionManager.repairModal.switchProjectsDeferred"));
+            }
           },
         })
       ) {
@@ -1735,7 +1710,6 @@ export function useCodexApiServicePageController() {
   };
 
   const handleCloseTestDialog = () => {
-    if (testDialogRunning) return;
     setTestDialogOpen(false);
   };
 
@@ -1817,8 +1791,9 @@ export function useCodexApiServicePageController() {
                 message.id === assistantMessage.id
                   ? {
                       ...message,
+                      imageDataUrl: payload.imageDataUrl,
                       content:
-                        message.content ||
+                        payload.imageDataUrl ? "" : message.content ||
                         t(
                           "codex.localAccess.testChatEmptyResponse",
                           "响应为空",
@@ -1898,6 +1873,7 @@ export function useCodexApiServicePageController() {
 
   const { openTimeoutSettings, timeoutFocusField, timeoutFieldRef } = useCodexTimeoutSettingsNavigation(() => {
     setTimeoutsError("");
+    setReceiveTimeoutError(null);
     setSelectedTimeoutPresetId(collection?.activeTimeoutPresetId || "long_wait");
     setTimeoutPresetNameDraft("");
     setTimeoutDrafts(timeoutDraftsFromValue(collection?.timeouts));
@@ -2214,6 +2190,7 @@ export function useCodexApiServicePageController() {
             modelPrefix: draft.modelPrefix.trim(),
             allowedModels: parseModelRuleText(draft.allowedModels),
             excludedModels: parseModelRuleText(draft.excludedModels),
+            maxReasoningEffort: draft.maxReasoningEffort,
             accountIds,
             inheritAccountPool: draft.inheritAccountPool,
           },
@@ -2477,7 +2454,10 @@ export function useCodexApiServicePageController() {
       windows: Record<string, number>;
     }> = [];
     for (const account of mappingMemberAccounts) {
-      const rows = accountModelMappingDrafts[account.id] ?? [];
+      const rows = accountModelMappingDrafts[account.id];
+      if (!rows || JSON.stringify(rows) === JSON.stringify(mappingDraftsFromAccount(account))) {
+        continue;
+      }
       const mappings: CodexApiModelMapping[] = [];
       const drafts: Record<string, string> = {
         ...(account.api_model_context_windows
@@ -2523,7 +2503,7 @@ export function useCodexApiServicePageController() {
       if (!parsedWindows.ok) {
         setAccountModelMappingError(
           t(
-            "codex.api.modelCatalog.contextWindowInvalid",
+            "codex.experimentalModelCatalog.models.validation.contextWindow",
             "上下文窗口必须是大于 0 的整数",
           ),
         );
@@ -2535,7 +2515,7 @@ export function useCodexApiServicePageController() {
         windows: parsedWindows.windows,
       });
     }
-    await runAction(
+    await runModalAction(
       async () => {
         for (const payload of payloads) {
           await updateCodexAccountApiModelMappings(
@@ -2551,6 +2531,7 @@ export function useCodexApiServicePageController() {
         "codex.apiService.accountModelMappings.saveSuccess",
         "账号模型映射已保存",
       ),
+      setAccountModelMappingError,
     );
   };
 
@@ -2623,12 +2604,15 @@ export function useCodexApiServicePageController() {
               ),
               standardLongInputUsdPerMillion: formatPriceDraftValue(
                 preset?.standardLongInputUsdPerMillion ?? null,
+                true,
               ),
               standardLongCachedInputUsdPerMillion: formatPriceDraftValue(
                 preset?.standardLongCachedInputUsdPerMillion ?? null,
+                true,
               ),
               standardLongOutputUsdPerMillion: formatPriceDraftValue(
                 preset?.standardLongOutputUsdPerMillion ?? null,
+                true,
               ),
               priorityInputUsdPerMillion: formatPriceDraftValue(
                 preset?.priorityInputUsdPerMillion ?? null,
@@ -2990,21 +2974,27 @@ export function useCodexApiServicePageController() {
   };
 
   const updateTimeoutDraft = (
-    key: keyof CodexLocalAccessTimeouts,
+    key: keyof typeof timeoutDrafts,
     value: string,
   ) => {
     setTimeoutsError("");
+    setReceiveTimeoutError(null);
     setTimeoutDrafts((current) => ({ ...current, [key]: value }));
   };
 
   const handleResetTimeoutDrafts = () => {
     setTimeoutsError("");
+    setReceiveTimeoutError(null);
     setSelectedTimeoutPresetId("long_wait");
     setTimeoutDrafts(timeoutDraftsFromValue());
   };
 
   const parseTimeoutDraftPayload = (): CodexLocalAccessTimeouts | null => {
-    const secondFields: Array<keyof CodexLocalAccessTimeouts> = [
+    setTimeoutsError("");
+    setReceiveTimeoutError(null);
+    const secondFields: Array<keyof typeof timeoutDrafts> = [
+      "legacyRequestReadTimeoutMs",
+      "websocketFragmentTimeoutMs",
       "sidecarStreamOpenTimeoutMs",
       "sidecarStreamIdleTimeoutMs",
       "sidecarImageStreamOpenTimeoutMs",
@@ -3017,15 +3007,19 @@ export function useCodexApiServicePageController() {
     const parsedSeconds = new Map<keyof CodexLocalAccessTimeouts, number>();
     for (const key of secondFields) {
       const max = key === "websocketIdleTimeoutMs" ? 1800 : 600;
-      const parsed = parseIntegerDraft(timeoutDrafts[key], 1, max);
-      if (parsed === null) {
-        setTimeoutsError(
-          t("codex.apiService.validation.numberRange", {
-            min: 1,
-            max,
-            defaultValue: "请输入 {{min}} 到 {{max}} 之间的数字",
-          }),
-        );
+      const raw = timeoutDrafts[key];
+      const receiveField = key === "legacyRequestReadTimeoutMs" || key === "websocketFragmentTimeoutMs";
+      const parsed = receiveField ? Number(raw) : parseIntegerDraft(raw, 1, max);
+      if (parsed === null || !Number.isFinite(parsed) || parsed < 1 || parsed > max) {
+        const message = t("codex.apiService.validation.numberRange", {
+          min: 1,
+          max,
+        });
+        if (receiveField) {
+          setReceiveTimeoutError({ field: key, message });
+        } else {
+          setTimeoutsError(message);
+        }
         return null;
       }
       parsedSeconds.set(key, parsed);
@@ -3154,6 +3148,12 @@ export function useCodexApiServicePageController() {
       return null;
     }
     const payload: CodexLocalAccessTimeouts = {
+      legacyRequestReadTimeoutMs:
+        Math.round((parsedSeconds.get("legacyRequestReadTimeoutMs") ?? 60) * 1000),
+      legacyUpstreamConnectTimeoutMs:
+        collection?.timeouts?.legacyUpstreamConnectTimeoutMs ?? 60000,
+      websocketFragmentTimeoutMs:
+        Math.round((parsedSeconds.get("websocketFragmentTimeoutMs") ?? 60) * 1000),
       sidecarStreamOpenTimeoutMs:
         (parsedSeconds.get("sidecarStreamOpenTimeoutMs") ?? 10) * 1000,
       sidecarStreamIdleTimeoutMs:
@@ -3215,6 +3215,7 @@ export function useCodexApiServicePageController() {
       : collection?.timeoutPresets.find((item) => item.id === presetId);
     if (!preset) return;
     setTimeoutsError("");
+    setReceiveTimeoutError(null);
     setSelectedTimeoutPresetId(preset.id);
     setTimeoutPresetNameDraft(preset.name);
     setTimeoutDrafts(timeoutDraftsFromValue(preset.timeouts));
@@ -3373,6 +3374,10 @@ export function useCodexApiServicePageController() {
         "codex.localAccess.routingStrategy.expirySoonFirst",
         "优先近到期",
       ),
+    },
+    {
+      value: "five_hour_reset_soon_first",
+      label: t("codex.localAccess.routingStrategy.fiveHourResetSoonFirst"),
     },
     {
       value: "custom",
@@ -3549,6 +3554,8 @@ export function useCodexApiServicePageController() {
     requestLogKindFilter !== "all" ||
     requestLogStatusFilter !== "all" ||
     requestLogInstanceQuery !== "all" ||
+    requestLogSourceKind !== "all" ||
+    requestLogPeerIp.trim() ||
     requestLogModelQuery.trim() ||
     requestLogSessionQuery.trim() ||
     requestLogAccountQuery.trim() ||
@@ -3563,6 +3570,8 @@ export function useCodexApiServicePageController() {
     setRequestLogAccountQuery("");
     setRequestLogApiKeyQuery("");
     setRequestLogInstanceQuery("all");
+    setRequestLogSourceKind("all");
+    setRequestLogPeerIp("");
     setRequestLogErrorQuery("");
   };
 
@@ -3738,6 +3747,8 @@ export function useCodexApiServicePageController() {
     requestLogEvents,
     requestLogInstanceOptions,
     requestLogInstanceQuery,
+    requestLogSourceKind,
+    requestLogPeerIp,
     requestLogKindFilter,
     requestLogKindOptions,
     requestLogLoaded: requestLogResult !== null,
@@ -3795,6 +3806,8 @@ export function useCodexApiServicePageController() {
     setRequestLogApiKeyQuery,
     setRequestLogErrorQuery,
     setRequestLogInstanceQuery,
+    setRequestLogSourceKind,
+    setRequestLogPeerIp,
     setRequestLogKindFilter,
     setRequestLogModelQuery,
     setRequestLogSessionQuery,
@@ -3831,7 +3844,9 @@ export function useCodexApiServicePageController() {
     testDialogError,
     testDialogOpen,
     testDialogRunning,
+    testModelIds,
     timeoutDrafts,
+    receiveTimeoutError,
     timeoutDraftsFromValue,
     timeoutPresetNameDraft,
     timeoutPresetOptions,

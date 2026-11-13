@@ -7,6 +7,10 @@ import ts from 'typescript';
 import { resolveCodexApiProviderPresetId, CODEX_API_PROVIDER_CUSTOM_ID } from '../../utils/codexProviderPresets';
 import { isCodexApiKeyAccount } from '../../types/codex';
 import type { CodexAccount } from '../../types/codex';
+import {
+  compareCodexModelProviderChatTestRecords,
+  type CodexModelProviderChatTestRecord,
+} from '../../services/codexModelProviderService';
 
 // Execute the actual save handler with isolated IPC, rather than writing real account files.
 const source = readFileSync(new URL('./CodexModelProviderManager.tsx', import.meta.url), 'utf8');
@@ -14,6 +18,112 @@ const start = source.indexOf('  const handleSaveApiKeyEdit =');
 const end = source.indexOf('  }, [', start);
 assert.ok(start > 0 && end > start);
 const handler = `${source.slice(start, end)}  }, []); globalThis.save = handleSaveApiKeyEdit;`;
+
+test('provider test order prefers successful providers with shorter total duration', () => {
+  const fixture = {
+    providerName: 'Fixture', wireApi: 'responses', accessMode: 'gateway',
+    prompt: 'ping', timestamp: 0,
+  } as const;
+  const records: CodexModelProviderChatTestRecord[] = [
+    { ...fixture, providerId: 'failed-first', success: false, durationMs: 1 },
+    { ...fixture, providerId: 'slow', success: true, firstTextMs: 5, durationMs: 100 },
+    { ...fixture, providerId: 'unknown', success: true },
+    { ...fixture, providerId: 'fast', success: true, firstTextMs: 10, durationMs: 30 },
+    { ...fixture, providerId: 'failed-second', success: false },
+  ];
+  assert.deepEqual(records.sort(compareCodexModelProviderChatTestRecords).map((item) => item.providerId),
+    ['fast', 'slow', 'unknown', 'failed-first', 'failed-second']);
+});
+
+test('testing from a provider card selects only that provider', () => {
+  const start = source.indexOf('  const openBatchTestModal =');
+  const end = source.indexOf('  const markBatchTestCancelled =', start);
+  assert.ok(start > 0 && end > start);
+  const first = { id: 'first' };
+  const second = { id: 'second' };
+  let selected: string[] = [];
+  const set = () => {};
+  const open = vm.runInNewContext(ts.transpileModule(
+    `${source.slice(start, end)}globalThis.open = openBatchTestModal;`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2022 } },
+  ).outputText + '\nglobalThis.open;', {
+    useCallback: (fn: unknown) => fn,
+    filteredProviders: [first, second],
+    selectedProviderIds: new Set([second.id]),
+    getSelectedProviderApiKey: () => ({ id: 'key' }),
+    batchTestSession: null,
+    setBatchTestSelectedProviderIds: (ids: Set<string>) => { selected = [...ids]; },
+    setBatchTestResultSelectedProviderIds: set, setBatchTestSearchQuery: set, setBatchTestFilter: set,
+    setBatchTestModelId: set, setBatchTestModelCustom: set, setBatchTestError: set,
+    setBatchTestCancelling: set, setBatchTestSession: set, setBatchTestStep: set, setBatchTestModalOpen: set,
+  });
+  open(first);
+  assert.deepEqual(selected, [first.id]);
+  open();
+  assert.deepEqual(selected, [second.id]);
+});
+
+test('opening a provider’s instance configuration forwards the chosen ID and surfaces opener errors', async () => {
+  const file = ts.createSourceFile('manager.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let action: ts.Expression | undefined;
+  function visit(node: ts.Node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(file) === 'handleOpenInstanceConfig') action = node.initializer;
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  assert.ok(action);
+  const opened: string[] = [];
+  const notices: Array<{ tone: string; text: string } | null> = [];
+  const context = {
+    useCallback: (fn: unknown) => fn,
+    setNotice(value: (typeof notices)[number]) { notices.push(value); },
+    async openCodexInstanceConfigToml(id: string) {
+      opened.push(id);
+      if (id === 'missing') throw new Error('config missing');
+    },
+    parseServiceError: (error: Error) => error.message,
+    t: (key: string, args: { error: string }) => `${key} ${args.error}`,
+  };
+  const run = vm.runInNewContext(ts.transpileModule(`(${action.getText(file)})`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText, context);
+  await run('missing');
+  assert.equal(notices[notices.length - 1]?.tone, 'error');
+  assert.equal(notices[notices.length - 1]?.text, 'instances.form.codexQuickConfig.openFailed config missing');
+  await run('separate-profile');
+  assert.deepEqual(opened, ['missing', 'separate-profile']);
+  assert.equal(notices[notices.length - 1], null);
+});
+
+test('provider dragging persists only the final order, even if mouse-up is handled twice', () => {
+  const from = source.indexOf('  const stopProviderCustomSortDragging =');
+  const to = source.indexOf('  const resetProviderCustomSortOrder =', from);
+  assert.ok(from > 0 && to > from);
+  const saved: string[][] = [];
+  const context = {
+    providerCustomSortProviderIds: ['p1', 'p2', 'p3'],
+    draggedProviderCustomSortId: 'p1',
+    dragOrderRef: { current: null },
+    useCallback: (fn: unknown) => fn,
+    saveProviderOrder: (order: string[]) => saved.push([...order]),
+    setDraggedProviderCustomSortId() {},
+    setProviderCustomSortDropTargetId() {},
+    setDragOrder(order: string[] | null) {
+      if (order) context.providerCustomSortProviderIds = order;
+    },
+    move: (_target: string) => {},
+    stop: () => {},
+  };
+  const handlers = source.slice(from, to)
+    + 'globalThis.move = handleProviderCustomSortDragMove; globalThis.stop = stopProviderCustomSortDragging;';
+  vm.runInNewContext(ts.transpileModule(handlers, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context);
+  context.move('p2');
+  context.move('p3');
+  assert.equal(saved.length, 0);
+  context.stop();
+  context.stop();
+  assert.deepEqual(saved, [['p2', 'p3', 'p1']]);
+});
 
 test('editing only a provider key retains each linked account mode and its model settings', async () => {
   const provider = {

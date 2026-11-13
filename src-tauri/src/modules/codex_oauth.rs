@@ -343,25 +343,29 @@ fn ensure_callback_listener_for_state(app_handle: &AppHandle, state: &OAuthState
 
     match TcpListener::bind(("127.0.0.1", state.port)) {
         Ok(listener) => {
-            drop(listener);
+            let server = match tiny_http::Server::from_listener(listener, None) {
+                Ok(server) => server,
+                Err(error) => {
+                    logger::log_warn(&format!(
+                        "Codex OAuth 回调监听恢复失败: login_id={}, port={}, error={}",
+                        state.login_id, state.port, error
+                    ));
+                    return;
+                }
+            };
             let expected_state = state.state.clone();
             let expected_login_id = state.login_id.clone();
             let callback_url = state.redirect_uri.clone();
             let app_handle_clone = app_handle.clone();
             let port = state.port;
-            tokio::spawn(async move {
-                if let Err(e) = start_callback_server(
-                    port,
-                    expected_state,
-                    expected_login_id,
-                    callback_url,
-                    app_handle_clone,
-                )
-                .await
-                {
-                    logger::log_error(&format!("OAuth 回调服务器错误: {}", e));
-                }
-            });
+            tokio::spawn(start_callback_server(
+                server,
+                port,
+                expected_state,
+                expected_login_id,
+                callback_url,
+                app_handle_clone,
+            ));
             logger::log_info(&format!(
                 "Codex OAuth 已恢复回调监听: login_id={}, port={}",
                 state.login_id, state.port
@@ -382,21 +386,17 @@ fn ensure_callback_listener_for_state(app_handle: &AppHandle, state: &OAuthState
     }
 }
 
-fn find_available_port() -> Result<u16, String> {
+fn bind_callback_listener() -> Result<(u16, TcpListener), String> {
     let mut last_error: Option<String> = None;
 
     for port in [OAUTH_CALLBACK_PORT, OAUTH_FALLBACK_CALLBACK_PORT] {
         match TcpListener::bind(("127.0.0.1", port)) {
-            Ok(listener) => {
-                drop(listener);
-                return Ok(port);
-            }
+            Ok(listener) => return Ok((port, listener)),
             Err(error) if error.kind() == ErrorKind::AddrInUse => {
                 logger::log_warn(&format!(
                     "Codex OAuth 回调端口被占用，尝试下一个端口: port={}",
                     port
                 ));
-                last_error = None;
             }
             Err(error) => {
                 last_error = Some(format!("无法绑定端口 {}: {}", port, error));
@@ -1017,7 +1017,7 @@ pub async fn start_oauth_login(
         }
     }
 
-    let port = find_available_port()?;
+    let (port, listener) = bind_callback_listener()?;
     let code_verifier = generate_base64url_token();
     let code_challenge = generate_code_challenge(&code_verifier);
     let state_token = generate_base64url_token();
@@ -1034,6 +1034,8 @@ pub async fn start_oauth_login(
     {
         return Err("PROXY_OAUTH_SESSION_ACTIVE".into());
     }
+    let server = tiny_http::Server::from_listener(listener, None)
+        .map_err(|error| format!("启动服务器失败: {error}"))?;
     let redirect_uri = format!("http://localhost:{}/auth/callback", port);
     let auth_url = build_auth_url(&redirect_uri, &code_challenge, &state_token);
 
@@ -1056,23 +1058,14 @@ pub async fn start_oauth_login(
     *OAUTH_PROXY.lock().map_err(|_| "PROXY_OAUTH_UNAVAILABLE")? = prepared_proxy;
     set_oauth_state(Some(oauth_state));
 
-    let app_handle_clone = app_handle.clone();
-    let expected_state = state_token.clone();
-    let expected_login_id = login_id.clone();
-    let callback_url = redirect_uri.clone();
-    tokio::spawn(async move {
-        if let Err(e) = start_callback_server(
-            port,
-            expected_state,
-            expected_login_id,
-            callback_url,
-            app_handle_clone,
-        )
-        .await
-        {
-            logger::log_error(&format!("OAuth 回调服务器错误: {}", e));
-        }
-    });
+    tokio::spawn(start_callback_server(
+        server,
+        port,
+        state_token,
+        login_id.clone(),
+        redirect_uri.clone(),
+        app_handle,
+    ));
 
     logger::log_info(&format!(
         "Codex OAuth 登录会话已创建: login_id={}, port={}, redirect_uri={}",
@@ -1087,16 +1080,14 @@ pub async fn start_oauth_login(
 }
 
 async fn start_callback_server(
+    server: tiny_http::Server,
     port: u16,
     expected_state: String,
     expected_login_id: String,
     callback_url: String,
     app_handle: AppHandle,
-) -> Result<(), String> {
-    use tiny_http::{Response, Server};
-
-    let server = Server::http(format!("127.0.0.1:{}", port))
-        .map_err(|e| format!("启动服务器失败: {}", e))?;
+) {
+    use tiny_http::Response;
     let timeout = std::time::Duration::from_secs(OAUTH_TIMEOUT_SECONDS as u64);
 
     logger::log_info(&format!(
@@ -1308,8 +1299,6 @@ async fn start_callback_server(
             logger::log_warn(&error);
         }
     }
-
-    Ok(())
 }
 
 async fn exchange_code_for_token_internal(
@@ -1442,6 +1431,9 @@ fn resolve_exchange_redirect_uri(port: u16, exchange_redirect_uri: Option<&str>)
         .unwrap_or_else(|| format!("http://localhost:{}/auth/callback", port))
 }
 
+const OAUTH_SESSION_MISSING: &str =
+    "CODEX_OAUTH_RESTART_REQUIRED: OAuth 状态不存在，请重新发起授权";
+
 pub async fn complete_oauth_login(login_id: &str) -> Result<CodexOAuthCompletion, String> {
     hydrate_oauth_state_if_missing();
     let attempt_id = COMPLETE_ATTEMPT_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
@@ -1454,7 +1446,7 @@ pub async fn complete_oauth_login(login_id: &str) -> Result<CodexOAuthCompletion
         let oauth_state = OAUTH_STATE.lock().unwrap();
         let state = oauth_state
             .as_ref()
-            .ok_or("OAuth 状态不存在，请重新发起授权")?;
+            .ok_or(OAUTH_SESSION_MISSING)?;
         if state.expires_at <= now_timestamp() {
             return Err("OAuth 登录已超时，请重新发起授权".to_string());
         }
@@ -1581,7 +1573,7 @@ pub fn submit_callback_url(login_id: &str, callback_url: &str) -> Result<(), Str
         let guard = OAUTH_STATE.lock().unwrap();
         let state = guard
             .as_ref()
-            .ok_or_else(|| "OAuth 状态不存在，请重新发起授权".to_string())?;
+            .ok_or_else(|| OAUTH_SESSION_MISSING.to_string())?;
         if state.login_id != login_id {
             return Err("OAuth loginId 不匹配".to_string());
         }
@@ -1613,7 +1605,7 @@ pub fn submit_callback_url(login_id: &str, callback_url: &str) -> Result<(), Str
     let mut guard = OAUTH_STATE.lock().unwrap();
     let current = guard
         .as_mut()
-        .ok_or_else(|| "OAuth 状态不存在，请重新发起授权".to_string())?;
+        .ok_or_else(|| OAUTH_SESSION_MISSING.to_string())?;
     if current.login_id != login_id {
         return Err("OAuth loginId 不匹配".to_string());
     }
@@ -1866,7 +1858,7 @@ pub async fn refresh_access_token_with_account_proxy(
 #[cfg(test)]
 mod tests {
     use super::{
-        authorize_url_matches_pending, build_auth_url, find_available_port, is_callback_navigation,
+        authorize_url_matches_pending, bind_callback_listener, build_auth_url, is_callback_navigation,
         is_id_token_expired, is_id_token_refresh_due, is_token_expired, parse_device_poll_interval,
         resolve_exchange_redirect_uri, resolve_refreshed_id_token, OAuthState,
         DEVICE_DEFAULT_POLL_SECONDS, DEVICE_EXCHANGE_REDIRECT_URI, ID_TOKEN_REFRESH_LEAD_SECONDS,
@@ -1894,15 +1886,16 @@ mod tests {
             // 本机 1455 已被其它进程占用，说明前置条件不成立，跳过该用例。
             return;
         };
-        let result = find_available_port();
+        let result = bind_callback_listener();
         drop(occupied);
 
         match result {
-            Ok(port) => assert_eq!(
-                port, OAUTH_FALLBACK_CALLBACK_PORT,
-                "1455 被占用时必须回退到 {}",
-                OAUTH_FALLBACK_CALLBACK_PORT
-            ),
+            Ok((port, listener)) => {
+                assert_eq!(port, OAUTH_FALLBACK_CALLBACK_PORT);
+                assert_eq!(listener.local_addr().unwrap().port(), port);
+                let server = tiny_http::Server::from_listener(listener, None).unwrap();
+                assert_eq!(server.server_addr().to_ip().unwrap().port(), port);
+            }
             Err(error) => assert!(
                 error.contains(OAUTH_PORT_IN_USE_CODE),
                 "1455/1457 都不可用时必须返回端口占用错误，实际: {error}"

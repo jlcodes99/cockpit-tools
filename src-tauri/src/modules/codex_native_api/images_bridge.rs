@@ -70,6 +70,12 @@ pub(crate) async fn responses(
     if selected.route.chatgpt {
         return http::dispatch_selected(state, input, selected, route_request).await;
     }
+    if let Err(error) = super::super::reasoning_policy::check_external_images(
+        &state, &input.caller, &input.body,
+    ).await {
+        input.tracker.fail(&error).await;
+        return Err(error);
+    }
     if external_history_is_opaque(&input.body, &input.headers) {
         let error=ServiceError::new(409,"continuation_not_supported","An external Images source needs the complete prompt and input images; opaque Responses continuation is not supported");
         input.tracker.fail(&error).await;

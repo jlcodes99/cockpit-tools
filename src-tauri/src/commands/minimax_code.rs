@@ -197,8 +197,15 @@ pub async fn checkin_minimax_code(
 ) -> Result<minimax_code_api::MinimaxCodeCheckinResult, String> {
     let started = std::time::Instant::now();
     let result = minimax_code_api::checkin_account(&account_id).await;
-    minimax_code_auto_checkin::record_manual_result(&account_id, &result, started.elapsed().as_millis() as u64)
-        .map_err(|error| format!("签到请求已结束，但记录保存失败: {error}"))?;
+    let log_account = account_id.clone();
+    let log_result = result.clone();
+    let duration_ms = started.elapsed().as_millis() as u64;
+    tauri::async_runtime::spawn_blocking(move || {
+        minimax_code_auto_checkin::record_manual_result(&log_account, &log_result, duration_ms)
+    })
+    .await
+    .map_err(|error| format!("签到请求已结束，但记录保存任务失败: {error}"))?
+    .map_err(|error| format!("签到请求已结束，但记录保存失败: {error}"))?;
     let _ = app.emit("minimax-code-auto-checkin-logs-changed", ());
     let response = result?;
     if response.success {
@@ -211,24 +218,51 @@ pub async fn checkin_minimax_code(
 }
 
 #[tauri::command]
-pub fn get_minimax_code_auto_checkin_config(
+pub async fn get_minimax_code_auto_checkin_config(
 ) -> Result<minimax_code_auto_checkin::MinimaxCodeAutoCheckinConfig, String> {
-    minimax_code_auto_checkin::get_config_checked()
+    tauri::async_runtime::spawn_blocking(minimax_code_auto_checkin::get_config_checked)
+        .await
+        .map_err(|error| format!("自动签到配置任务失败: {error}"))?
 }
 #[tauri::command]
-pub fn save_minimax_code_auto_checkin_config(
+pub async fn migrate_minimax_code_auto_checkin_config(
+    legacy_config: minimax_code_auto_checkin::MinimaxCodeAutoCheckinConfig,
+) -> Result<minimax_code_auto_checkin::MinimaxCodeAutoCheckinConfig, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        minimax_code_auto_checkin::migrate_config_if_missing(&legacy_config)
+    })
+    .await
+    .map_err(|error| format!("自动签到配置任务失败: {error}"))?
+}
+
+#[tauri::command]
+pub async fn save_minimax_code_auto_checkin_config(
     config: minimax_code_auto_checkin::MinimaxCodeAutoCheckinConfig,
 ) -> Result<(), String> {
-    minimax_code_auto_checkin::save_config(&config)
+    tauri::async_runtime::spawn_blocking(move || minimax_code_auto_checkin::save_config(&config))
+        .await
+        .map_err(|error| format!("自动签到配置任务失败: {error}"))?
 }
 #[tauri::command]
-pub fn get_minimax_code_auto_checkin_logs(
-) -> Result<Vec<minimax_code_auto_checkin::MinimaxCodeAutoCheckinLogRecord>, String> {
-    minimax_code_auto_checkin::get_logs_checked()
+pub async fn get_minimax_code_auto_checkin_logs(
+    retry: Option<bool>,
+) -> Result<
+    crate::modules::wakeup_history_store::HistoryRead<
+        crate::modules::minimax_code_auto_checkin::MinimaxCodeAutoCheckinLogRecord,
+    >,
+    String,
+> {
+    tauri::async_runtime::spawn_blocking(move || {
+        minimax_code_auto_checkin::get_logs_checked(retry.unwrap_or(false))
+    })
+    .await
+    .map_err(|error| format!("签到历史任务失败: {error}"))?
 }
 #[tauri::command]
-pub fn clear_minimax_code_auto_checkin_logs() -> Result<(), String> {
-    minimax_code_auto_checkin::save_logs(&[])
+pub async fn clear_minimax_code_auto_checkin_logs() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(minimax_code_auto_checkin::clear_logs)
+        .await
+        .map_err(|error| format!("签到历史任务失败: {error}"))?
 }
 #[tauri::command]
 pub async fn run_minimax_code_auto_checkin_now(

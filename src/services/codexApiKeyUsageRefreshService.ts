@@ -1,5 +1,5 @@
 import { resolveOpenAIUsageConfig, resolveAccountUsageBaseUrl, isOpenAIOfficialUsageAccount } from '../utils/openaiOfficialUsage';
-import type { CodexAccount } from '../types/codex';
+import { isCodexChatCompletionsApiKeyAccount, type CodexAccount } from '../types/codex';
 import {
   isCodexApiKeyUsageQueryEligible,
   isApiKeyFunUsageAccount,
@@ -12,7 +12,7 @@ import {
   queryCodexModelProviderUsage,
   type CodexModelProviderUsageSummary,
 } from './codexModelProviderService';
-import { isModelProviderUsageUnavailableError } from './modelProviderUsageService';
+import { isModelProviderUsageUnavailableError, isRelayBalanceDisabledError } from './modelProviderUsageService';
 
 export const CODEX_API_KEY_USAGE_CACHE_KEY = 'agtools.codex.apiKeyUsage.cache.v1';
 export const CODEX_API_KEY_USAGE_REFRESHED_EVENT = 'codex-api-key-usage-refreshed';
@@ -85,29 +85,31 @@ function notifyCodexApiKeyUsageRefreshed(): void {
   window.dispatchEvent(new CustomEvent(CODEX_API_KEY_USAGE_REFRESHED_EVENT));
 }
 
-export function isUsageEligibleApiKey(account: CodexAccount): boolean {
-  return isCodexApiKeyUsageQueryEligible(account);
-}
-
 export async function refreshCodexApiKeyUsageForAccounts(
   accounts: CodexAccount[],
   options?: { force?: boolean },
 ): Promise<void> {
   const initialCache = readCodexApiKeyUsageCache();
-  const eligibleAccounts = accounts.filter((account) => {
-    if (!isUsageEligibleApiKey(account) && !initialCache[account.id]?.summary?.cockpit) return false;
+  const candidates = accounts.filter((account) => {
+    const summary = initialCache[account.id]?.summary;
+    const mayHaveProviderUsage = isCodexChatCompletionsApiKeyAccount(account)
+      || isCodexApiKeyUsageQueryEligible(account, null, summary)
+      || Boolean(summary?.cockpit);
+    if (!account.openai_api_key?.trim() || !mayHaveProviderUsage) return false;
     if (options?.force || isDeepSeekAccount(account) || isOpenAIOfficialUsageAccount(account) || isApiKeyFunUsageAccount(account)) return true;
     return !initialCache[account.id]?.unavailable;
   });
-  if (eligibleAccounts.length === 0) return;
+  if (candidates.length === 0) return;
 
   const providers = await listCodexModelProviders();
   const updates: Record<string, CodexApiKeyUsageState> = {};
 
-  for (const account of eligibleAccounts) {
+  for (const account of candidates) {
     const provider =
       findCodexModelProviderById(providers, account.api_provider_id) ??
       findCodexModelProviderByBaseUrl(providers, resolveAccountUsageBaseUrl(account));
+    const cachedSummary = initialCache[account.id]?.summary;
+    if (!isCodexApiKeyUsageQueryEligible(account, provider?.integrationType, cachedSummary) && !cachedSummary?.cockpit) continue;
     const baseUrl = resolveAccountUsageBaseUrl(account, provider?.baseUrl);
     if (!baseUrl) continue;
     const apiKey = account.openai_api_key!.trim();
@@ -118,11 +120,13 @@ export async function refreshCodexApiKeyUsageForAccounts(
       const summary = await queryCodexModelProviderUsage({
         baseUrl,
         apiKey,
+        accountId: account.id,
         usageApiKey: usageConfig?.apiKey,
         integrationType: provider?.integrationType ?? null,
       });
       updates[account.id] = { loading: false, sourceBinding: usageConfig?.binding, summary, updatedAt: Date.now() };
     } catch (error) {
+      if (isRelayBalanceDisabledError(error)) continue;
       const unavailable = isModelProviderUsageUnavailableError(error);
       updates[account.id] = {
         loading: false,

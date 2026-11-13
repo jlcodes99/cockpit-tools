@@ -17,6 +17,8 @@ test('remote-provider previews remain local and allow explicit import despite un
     '../../hooks/useEscClose': { useEscCloseTopmost() {} },
     '../../hooks/useModalFocusTrap': { useModalFocusTrap() {} },
     '../../hooks/useModalScrollLock': { useModalScrollLock() {} },
+    '../../hooks/useDurableUiSetting': { useDurableUiSetting: () => null },
+    '../../utils/durableUiSettings': { previewDurableUiSetting() {} },
     '../SingleSelectDropdown': { SingleSelectDropdown: 'dropdown' },
     '../../services/codexProxyCatalogService': {
       catalogErrorKey: () => 'codex.proxy.catalog.failed', catalogUnsupportedKey: () => 'unsupported',

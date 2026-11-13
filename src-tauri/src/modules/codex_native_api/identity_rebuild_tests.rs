@@ -3,6 +3,9 @@ use super::*;
 use serde_json::json;
 use std::path::Path;
 
+#[path = "identity_custom_results_tests.rs"]
+mod custom_results_tests;
+
 fn fixture() -> (tempfile::TempDir, PathBuf, IdentityStore) {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("identity.sqlite");

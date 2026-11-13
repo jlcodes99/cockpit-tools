@@ -403,6 +403,26 @@ test("official and remote requests delegate to the existing native service", asy
   } finally { env.stop(); }
 });
 
+test("bound OAuth samples only the attached API Service conversation", async () => {
+  const flags = { apiService: true, apiKeyAuthVerified: false };
+  const env = environment({ flags });
+  const fake = nativeManager({ auth: "chatgpt", resumed: { modelProvider: "codex_local_access" } });
+  try {
+    const service = activate(env, fake);
+    assert.equal(await service.isEnabledByRemoteConfig(), true);
+    assert.equal((await service.requestUserMessagePrediction(target)).responseId, "response-sample");
+    assert.deepEqual(fake.calls.map(call => call.method), ["thread/resume"]);
+    assert.equal(env.samples.length, 1);
+  } finally { env.stop(); }
+
+  const other = environment({ flags });
+  const otherProvider = nativeManager({ auth: "chatgpt", resumed: { modelProvider: "openai" } });
+  try {
+    assert.equal(await activate(other, otherProvider).requestUserMessagePrediction(target), null);
+    assert.equal(other.samples.length, 0);
+  } finally { other.stop(); }
+});
+
 test("ineligible source contexts and incompatible resume results never sample", async () => {
   const cases = [
     { plan: true }, { stale: true }, { context: { ephemeral: true } }, { context: { sideConversation: true } },

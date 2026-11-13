@@ -1,3 +1,5 @@
+import { previewDurableUiSetting, readDurableUiSetting } from './durableUiSettings';
+
 const PRIVACY_MODE_STORAGE_KEY = 'agtools.privacy_mode_enabled'
 export const PRIVACY_MODE_CHANGED_EVENT = 'agtools:privacy-mode-changed'
 
@@ -37,19 +39,14 @@ function maskGeneric(value: string): string {
 
 export function isPrivacyModeEnabledByDefault(): boolean {
   try {
-    return localStorage.getItem(PRIVACY_MODE_STORAGE_KEY) === '1'
+    return readDurableUiSetting(PRIVACY_MODE_STORAGE_KEY) === '1'
   } catch {
     return false
   }
 }
 
 export function persistPrivacyModeEnabled(enabled: boolean): void {
-  try {
-    localStorage.setItem(PRIVACY_MODE_STORAGE_KEY, enabled ? '1' : '0')
-    window.dispatchEvent(new CustomEvent(PRIVACY_MODE_CHANGED_EVENT, { detail: enabled }))
-  } catch {
-    // ignore localStorage write failures
-  }
+  previewDurableUiSetting(PRIVACY_MODE_STORAGE_KEY, enabled ? '1' : '0')
 }
 
 export function maskSensitiveValue(value: string | null | undefined, enabled: boolean): string {

@@ -151,14 +151,14 @@ fn identity_isolation_grok_does_not_make_legacy_oauth_ambiguous() {
         .lock()
         .unwrap_or_else(|err| err.into_inner());
     let _env = TestEnvGuard::new("identity-isolation-legacy");
-    let provider = seed_isolation_provider(false);
+    seed_isolation_provider(false);
     let legacy = CodexAccount::new(
         "legacy-oauth".into(),
         "shared@example.com".into(),
         make_codex_tokens("shared@example.com", "", "", "legacy", "rt-old"),
     );
     save_account(&legacy).unwrap();
-    let mut index = build_test_account_index(&provider);
+    let mut index = super::read_saved_account_index().unwrap().unwrap();
     index
         .accounts
         .extend(build_test_account_index(&legacy).accounts);

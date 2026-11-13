@@ -95,12 +95,18 @@ fn usage_log_admission() -> Result<(), native_contract::ServiceError> {
 
 async fn queue_local_access_usage_event(event: CodexLocalAccessUsageEvent) -> Result<(), String> {
     let result = async {
+        let epoch = REQUEST_LOG_WRITE_EPOCH.load(Ordering::Acquire);
+        if event.local_rejection
+            && event.timestamp <= REQUEST_LOG_RECORDS_CLEARED_BEFORE.load(Ordering::Acquire)
+        {
+            return Ok(());
+        }
         let bytes = usage_log_encoded_bytes(&event)?;
         let sender = usage_log_sender().ok_or("usage writer unavailable")?;
         let write = UsageLogWrite {
             event,
             bytes,
-            epoch: REQUEST_LOG_WRITE_EPOCH.load(Ordering::Acquire),
+            epoch,
             official: None,
         };
         tokio::time::timeout(Duration::from_secs(2), sender.send(write))
@@ -111,7 +117,7 @@ async fn queue_local_access_usage_event(event: CodexLocalAccessUsageEvent) -> Re
     }
     .await;
     if let Err(error) = &result {
-        logger::log_codex_api_warn(&format!("请求日志未入队，内存用量已保留: {error}"));
+        logger::log_codex_api_warn(&format!("请求日志未入队: {error}"));
     }
     result
 }

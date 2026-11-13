@@ -1,4 +1,5 @@
 /* Shared by overview cards and instance dropdowns, including portaled menus. */
+.tier-badge.codex-account-plan-badge.codex-cockpit,
 .codex-cockpit:is(.tier-badge, .instance-plan-badge, .floating-card-plan, .group-account-tier-badge),
 .instances-page .instance-plan-badge.codex-cockpit,
 .codex-accounts-page .account-table .tier-badge.codex-cockpit {
@@ -16,6 +17,7 @@
 }
 
 /* Official API keeps the shared capsule dimensions, with a graphite/silver-blue finish. */
+.tier-badge.codex-account-plan-badge.codex-official-api,
 .codex-official-api:is(.tier-badge, .instance-plan-badge, .floating-card-plan, .group-account-tier-badge),
 .codex-accounts-page .account-table .tier-badge.codex-official-api {
   display: inline-flex;
@@ -32,6 +34,7 @@
     inset 0 -1px 0 rgba(0, 0, 0, 0.16), 0 1px 4px rgba(30, 66, 91, 0.18);
 }
 
+.tier-badge.codex-account-plan-badge.codex-official-api.plan-badge-style-outline,
 .codex-official-api.plan-badge-style-outline:is(.tier-badge, .instance-plan-badge, .floating-card-plan, .group-account-tier-badge),
 .codex-accounts-page .account-table .tier-badge.codex-official-api.plan-badge-style-outline {
   color: var(--text-primary);
@@ -39,6 +42,7 @@
 }
 
 /* Retain the existing capsule dimensions; PRO 500 uses smoky purple/champagne. */
+.tier-badge.codex-account-plan-badge.pro.codex-pro-500,
 .tier-badge.pro.codex-pro-500,
 .codex-accounts-page .account-table .tier-badge.pro.codex-pro-500,
 .account-mini-card .tier-badge.pro.codex-pro-500,

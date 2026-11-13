@@ -1,4 +1,20 @@
 use super::*;
+use std::path::Path;
+
+fn read(path: &Path) -> Result<Document, String> {
+    journal::read(path, Some("a"), true)
+}
+
+fn update_at<T>(
+    path: &Path,
+    edit: impl FnOnce(&mut Document) -> Result<T, String>,
+) -> Result<T, String> {
+    journal::update_account(path, "a", edit)
+}
+
+fn finish_migration(path: &Path) {
+    while !journal::migrate(path).unwrap() {}
+}
 fn cards(count: Option<i64>, expiry: Option<i64>) -> codex_quota::CodexResetCreditsSnapshot {
     codex_quota::CodexResetCreditsSnapshot {
         available_count: count,
@@ -209,6 +225,8 @@ fn journal_survives_restart_and_malformed_storage_is_never_replaced() {
                 request_id: "stable-id".into(),
                 reason: "expiry".into(),
                 evidence: Some("old-cards".into()),
+                unconfirmed_reported: false,
+                context: None,
             },
         );
         Ok(())
@@ -216,18 +234,13 @@ fn journal_survives_restart_and_malformed_storage_is_never_replaced() {
     .unwrap();
     let restored = read(&file).unwrap();
     assert_eq!(restored.pending["a"].request_id, "stable-id");
-    let backup = std::fs::read(file.with_file_name(format!("{FILE}.bak"))).ok();
     std::fs::write(&file, "{damaged").unwrap();
-    assert!(update_at(&file, |d| {
-        d.public_rule.enabled = true;
-        Ok(())
-    })
-    .is_err());
+    assert!(update_at(&file, |_| Ok(())).is_err());
+    assert!(journal::migrate(&file).is_err());
     assert_eq!(std::fs::read_to_string(&file).unwrap(), "{damaged");
-    assert_eq!(
-        std::fs::read(file.with_file_name(format!("{FILE}.bak"))).ok(),
-        backup
-    );
+    std::fs::write(&file, "{}").unwrap();
+    finish_migration(&file);
+    assert_eq!(read(&file).unwrap().pending["a"].request_id, "stable-id");
 }
 #[test]
 fn same_card_snapshot_is_stable_and_history_is_bounded() {
@@ -243,20 +256,61 @@ fn same_card_snapshot_is_stable_and_history_is_bounded() {
 }
 
 #[test]
+fn journal_keeps_success_when_other_accounts_fill_history_with_failures() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    let mut legacy = Document::default();
+    record(&mut legacy, "a", "expiry", "success", None);
+    for _ in 0..99 {
+        record(&mut legacy, "b", "check", "failed", None);
+    }
+    std::fs::write(&file, serde_json::to_vec(&legacy).unwrap()).unwrap();
+
+    let write_failure = || {
+        journal::update_account(&file, "b", |document| {
+            record(document, "b", "check", "failed", None);
+            Ok(())
+        })
+        .unwrap();
+    };
+    let assert_success_retained = || {
+        let records = read(&file).unwrap().records;
+        assert_eq!(records.len(), 100);
+        assert_eq!(records[0].account_id, "b");
+        let oldest = records.last().unwrap();
+        assert_eq!(oldest.account_id, "a");
+        assert_eq!(oldest.status, "success");
+    };
+
+    write_failure();
+    assert_success_retained();
+    finish_migration(&file);
+    write_failure();
+    assert_success_retained();
+}
+
+#[test]
 fn automatic_success_cools_both_triggers_for_one_account_even_after_restart() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join(FILE);
-    let success_at = update_at(&file, |d| {
+    journal::update_rules(&file, |d| {
         d.public_rule.enabled = true;
-        let pending = begin_redemption(d, "a", "owner-a", "expiry", Some("two-cards".into()));
-        finish_redemption(d, "a", &pending, Ok(ResetCreditConsumeOutcome::Reset))?;
+        Ok(())
+    })
+    .unwrap();
+    let success_at = update_at(&file, |d| {
+        let pending = begin_redemption(d, "a", "owner-a", "expiry", Some("two-cards".into()), None);
+        finish_redemption(d, "a", &pending, Ok(ResetCreditConsumeOutcome::Reset), None)?;
         let success_at = d.last_automatic_success_ms.as_ref().unwrap()["a"];
 
-        let manual = begin_redemption(d, "a", "owner-a", "manual", None);
+        let manual = begin_redemption(d, "a", "owner-a", "manual", None, None);
         assert_eq!(manual.reason, "manual");
-        finish_redemption(d, "a", &manual, Ok(ResetCreditConsumeOutcome::Reset))?;
+        assert_eq!(
+            finish_redemption(d, "a", &manual, Ok(ResetCreditConsumeOutcome::Reset), None)?,
+            None
+        );
         for _ in 0..100 {
-            record(d, "b", "quota", "failed", None);
+            record(d, "b", "manual", "success", None);
         }
         Ok(success_at)
     })
@@ -290,7 +344,7 @@ fn existing_journal_seeds_cooldown_once_from_recent_automatic_successes() {
     });
     std::fs::write(&file, legacy.to_string()).unwrap();
 
-    update_at(&file, |_| Ok(())).unwrap();
+    finish_migration(&file);
     let restored = read(&file).unwrap();
     assert_eq!(restored.records.len(), 4);
     assert_eq!(
@@ -314,28 +368,43 @@ fn failed_or_interrupted_redemption_reuses_request_id_and_success_rearms_only_on
             "owner-a",
             "expiry",
             Some("cards-3".into()),
+            None,
         ))
     })
     .unwrap();
-    update_at(&file, |d| {
-        finish_redemption(d, "a", &pending, Err("response lost".into()))
-    })
-    .unwrap();
+    assert_eq!(
+        update_at(&file, |d| {
+            finish_redemption(d, "a", &pending, Err("response lost".into()), None)
+        })
+        .unwrap(),
+        Some("codex.resetHistory.unconfirmed")
+    );
     assert!(read(&file)
         .unwrap()
         .last_automatic_success_ms
         .unwrap()
         .is_empty());
     let resumed = update_at(&file, |d| {
-        Ok(begin_redemption(d, "a", "owner-a", "manual", None))
+        Ok(begin_redemption(d, "a", "owner-a", "manual", None, None))
     })
     .unwrap();
     assert_eq!(resumed.request_id, pending.request_id);
     assert_eq!(resumed.reason, "expiry");
-    update_at(&file, |d| {
-        finish_redemption(d, "a", &resumed, Ok(ResetCreditConsumeOutcome::Reset))
-    })
-    .unwrap();
+    assert!(resumed.unconfirmed_reported);
+    assert_eq!(
+        update_at(&file, |d| {
+            finish_redemption(d, "a", &resumed, Err("response lost".into()), None)
+        })
+        .unwrap(),
+        None
+    );
+    assert_eq!(
+        update_at(&file, |d| {
+            finish_redemption(d, "a", &resumed, Ok(ResetCreditConsumeOutcome::Reset), None)
+        })
+        .unwrap(),
+        Some("codex.resetHistory.used")
+    );
     let restored = read(&file).unwrap();
     assert!(!restored.pending.contains_key("a"));
     assert_eq!(restored.last_evidence["a"], "cards-3");
@@ -347,6 +416,7 @@ fn failed_or_interrupted_redemption_reuses_request_id_and_success_rearms_only_on
             "owner-a",
             "quota",
             Some("cards-2".into()),
+            None,
         ))
     })
     .unwrap();
@@ -355,7 +425,8 @@ fn failed_or_interrupted_redemption_reuses_request_id_and_success_rearms_only_on
         d,
         "a",
         &pending,
-        Ok(ResetCreditConsumeOutcome::Reset)
+        Ok(ResetCreditConsumeOutcome::Reset),
+        None,
     ))
     .is_err());
     assert_eq!(
@@ -367,16 +438,17 @@ fn failed_or_interrupted_redemption_reuses_request_id_and_success_rearms_only_on
 #[test]
 fn pending_request_ids_are_scoped_to_the_actual_account_identity() {
     let mut d = Document::default();
-    let old = begin_redemption(&mut d, "same-local-id", "workspace-a", "expiry", None);
-    let retry = begin_redemption(&mut d, "same-local-id", "workspace-a", "manual", None);
+    let old = begin_redemption(&mut d, "same-local-id", "workspace-a", "expiry", None, None);
+    let retry = begin_redemption(&mut d, "same-local-id", "workspace-a", "manual", None, None);
     assert_eq!(old.request_id, retry.request_id);
-    let other = begin_redemption(&mut d, "same-local-id", "workspace-b", "manual", None);
+    let other = begin_redemption(&mut d, "same-local-id", "workspace-b", "manual", None, None);
     assert_ne!(old.request_id, other.request_id);
     assert!(finish_redemption(
         &mut d,
         "same-local-id",
         &old,
-        Ok(ResetCreditConsumeOutcome::Reset)
+        Ok(ResetCreditConsumeOutcome::Reset),
+        None,
     )
     .is_err());
     assert_eq!(d.pending["same-local-id"].identity, "workspace-b");
@@ -425,18 +497,23 @@ fn bulk_save_overwrites_all_existing_accounts_and_keeps_copied_rules_independent
 fn bulk_conflict_aborts_default_and_account_changes_atomically() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("rules.json");
-    update_at(&path, |d| {
+    journal::update_rules(&path, |d| {
         d.accounts.insert("a".into(), AccountRule::Off);
+        Ok(())
+    })
+    .unwrap();
+    update_at(&path, |d| {
         d.last_evidence.insert("a".into(), "kept".into());
         Ok(())
     })
     .unwrap();
-    let before = std::fs::read(&path).unwrap();
+    let rules_path = dir.path().join("codex_reset_rules.json");
+    let before = std::fs::read(&rules_path).unwrap();
     let rule = Rule {
         enabled: true,
         ..Rule::default()
     };
-    assert!(update_at(&path, |d| set_public_for_accounts(
+    assert!(journal::update_rules(&path, |d| set_public_for_accounts(
         d,
         rule.clone(),
         &Rule::default(),
@@ -444,7 +521,8 @@ fn bulk_conflict_aborts_default_and_account_changes_atomically() {
         &HashMap::new()
     ))
     .is_err());
-    assert_eq!(std::fs::read(&path).unwrap(), before);
+    assert_eq!(std::fs::read(&rules_path).unwrap(), before);
+    assert_eq!(read(&path).unwrap().last_evidence["a"], "kept");
     let mut d = read(&path).unwrap();
     let expected = d.accounts.clone();
     d.public_rule.before_seconds = 60;
@@ -457,28 +535,112 @@ fn bulk_conflict_aborts_default_and_account_changes_atomically() {
 
 #[test]
 fn confirmed_no_op_keeps_card_evidence_available_and_allows_a_new_attempt() {
-    for outcome in [
-        ResetCreditConsumeOutcome::NothingToReset,
-        ResetCreditConsumeOutcome::NoCredit,
+    for (outcome, notice) in [
+        (
+            ResetCreditConsumeOutcome::NothingToReset,
+            "codex.resetHistory.nothingToReset",
+        ),
+        (
+            ResetCreditConsumeOutcome::NoCredit,
+            "codex.resetHistory.noCredit",
+        ),
     ] {
         let mut d = Document::default();
-        let pending = begin_redemption(&mut d, "a", "identity", "expiry", Some("card".into()));
-        finish_redemption(&mut d, "a", &pending, Ok(outcome)).unwrap();
+        let pending =
+            begin_redemption(&mut d, "a", "identity", "expiry", Some("card".into()), None);
+        assert_eq!(
+            finish_redemption(&mut d, "a", &pending, Ok(outcome), None).unwrap(),
+            Some(notice)
+        );
         assert_eq!(d.records[0].status, "failed");
         assert!(d.records[0].detail.is_some());
         assert!(!d.last_evidence.contains_key("a"));
         assert!(d.automatic_successes_mut().is_empty());
-        let next = begin_redemption(&mut d, "a", "identity", "expiry", None);
+        let next = begin_redemption(&mut d, "a", "identity", "expiry", None, None);
         assert_ne!(next.request_id, pending.request_id);
-        finish_redemption(
-            &mut d,
-            "a",
-            &next,
-            Ok(ResetCreditConsumeOutcome::AlreadyRedeemed),
-        )
-        .unwrap();
+        assert_eq!(
+            finish_redemption(
+                &mut d,
+                "a",
+                &next,
+                Ok(ResetCreditConsumeOutcome::AlreadyRedeemed),
+                None,
+            )
+            .unwrap(),
+            Some("codex.resetHistory.alreadyRedeemed")
+        );
         assert_eq!(d.records[0].status, "success");
         assert!(!d.pending.contains_key("a"));
         assert!(d.automatic_successes_mut().contains_key("a"));
     }
+}
+
+#[test]
+fn migration_keeps_live_rules_pending_changes_and_cooldown_after_restart() {
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join(FILE);
+    let now = chrono::Utc::now().timestamp_millis();
+    let mut legacy = Document {
+        revision: 41,
+        ..Document::default()
+    };
+    legacy.public_rule.enabled = true;
+    let pending = begin_redemption(
+        &mut legacy,
+        "a",
+        "owner-a",
+        "expiry",
+        Some("cards-3".into()),
+        None,
+    );
+    for index in 0..75 {
+        legacy
+            .accounts
+            .insert(format!("account-{index:02}"), AccountRule::Off);
+    }
+    let original = serde_json::to_vec_pretty(&legacy).unwrap();
+    std::fs::write(&source, &original).unwrap();
+    assert!(!journal::migrate(&source).unwrap());
+
+    journal::update_rules(&source, |d| {
+        set_account(d, "b", AccountRule::Off, &AccountRule::Inherit)
+    })
+    .unwrap();
+    update_at(&source, |d| {
+        finish_redemption(d, "a", &pending, Ok(ResetCreditConsumeOutcome::Reset), None)
+    })
+    .unwrap();
+
+    let midway = read(&source).unwrap();
+    assert_eq!(midway.revision, 43);
+    assert!(!midway.pending.contains_key("a"));
+    assert!(midway.last_automatic_success_ms.as_ref().unwrap()["a"] >= now);
+    finish_migration(&source);
+    let restored = read(&source).unwrap();
+    assert_eq!(restored.revision, 43);
+    assert!(!restored.pending.contains_key("a"));
+    assert_eq!(restored.last_evidence["a"], "cards-3");
+    assert_eq!(
+        restored.last_automatic_success_ms,
+        midway.last_automatic_success_ms
+    );
+    assert_eq!(restored.accounts["b"], AccountRule::Off);
+    assert_eq!(restored.accounts.len(), 76);
+    assert_eq!(restored.records.len(), 2);
+    assert_eq!(std::fs::read(&source).unwrap(), original);
+    std::fs::write(&source, "{damaged after cutover").unwrap();
+    let restored = read(&source).unwrap();
+    assert_eq!(restored.revision, 43);
+    assert_eq!(restored.records[0].status, "success");
+    let pending = journal::update_account(&source, "b", |document| {
+        Ok(begin_redemption(
+            document, "b", "owner-b", "quota", None, None,
+        ))
+    })
+    .unwrap();
+    let mut restarted = journal::read(&source, Some("b"), true).unwrap();
+    assert_eq!(
+        begin_redemption(&mut restarted, "b", "owner-b", "quota", None, None).request_id,
+        pending.request_id
+    );
 }

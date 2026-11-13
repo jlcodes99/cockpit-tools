@@ -197,43 +197,6 @@ test('OAuth, remote, pending config, direct official and cloud routes restore th
   assert.match(h.renderBanner(), /data-oauth-banner/);
 });
 
-test('API Service instances keep the subscription notice off from first render regardless of project config or thread provider', () => {
-  const h = bannerHarness();
-  h.context.__cockpitEnhancements.apiService = true;
-  for (const state of ['pending', 'preloading', 'active', 'unsupported']) {
-    h.context.__cockpitEnhancements.nativePatchState = state;
-    for (const config of [{ isConfigDataPending: true }, { isConfigDataPending: false, resolvedConfig: { model_provider: 'openai' } }, mixedSettings()]) {
-      for (const provider of [null, 'openai', 'relay', 'unknown']) {
-        h.values.provider = provider;
-        assert.equal(h.renderBanner({ settings: config }), '<main></main>');
-      }
-    }
-  }
-  h.context.__cockpitEnhancements.quotaCompat = false;
-  assert.equal(h.renderBanner(), '<main></main>', 'instance binding does not depend on the mixed-mode setting');
-  assert.equal(h.renderOutside(), '', 'an API Service window does not wait for a composer route scope');
-  h.context.__cockpitEnhancements.apiService = false;
-  assert.match(h.renderBanner(), /data-oauth-banner/, 'returning to an ordinary account restores the notice immediately');
-});
-
-test('API Service visibility never rewrites quota data, removes safety content or suppresses model/image notices', () => {
-  const h = bannerHarness();
-  h.context.__cockpitEnhancements.apiService = true;
-  const snapshot = JSON.stringify(h.usage);
-  assert.equal(h.renderBanner(), '<main></main>');
-  assert.equal(JSON.stringify(h.usage), snapshot);
-  for (const type of ['image_generation_limit_reached', 'selected_model_limit_reached', 'luna_reserve', 'unknown']) {
-    h.usage.rate_limit_upsell.banner_type = type;
-    assert.match(h.renderBanner(), /data-oauth-banner/);
-  }
-  h.usage.rate_limit_upsell.banner_type = 'pro_rate_limit_reached';
-  h.bannerProps.lowerPriorityContent = h.React.createElement('p', null, 'Safety notice');
-  assert.equal(h.renderBanner(), '<main><p>Safety notice</p></main>');
-  h.values.host = 'remote';
-  assert.equal(h.renderBanner(), '<main><p>Safety notice</p></main>', 'the policy belongs to the API Service window, not its current project host');
-  h.context.__cockpitEnhancements.apiService = false;
-  assert.match(h.renderBanner(), /data-oauth-banner/);
-});
 
 test('image limits, model limits, warnings, unknown banners and safety fallback remain visible', () => {
   const h = bannerHarness();
@@ -308,138 +271,6 @@ test('unknown or ambiguous module contracts are never partially transformed', ()
   }
 });
 
-test('live quota plan anchors after both submit gates without changing other blocks', () => {
-  const h = composerHarness();
-  const location = h.transformed.diagnostics.location;
-  assert.equal(location.url, primaryUrl);
-  assert.equal(location.hardVariable, 'reserve');
-  assert.equal(location.guardVariable, 'generic');
-  assert.equal(location.hostVariable, 'host');
-  const line = primary.split('\n')[location.lineNumber];
-  assert.equal(line.slice(location.columnNumber, location.columnNumber + 12), 'let disabled');
-});
-
-test('live quota condition updates evaluated V8 locals without pausing or reloading', async () => {
-  const h = composerHarness();
-  h.context.__cockpitEnhancements.apiService = true;
-  const { Session } = require('node:inspector');
-  const session = new Session();
-  session.connect();
-  const post = (method, params = {}) => new Promise((resolve, reject) => {
-    session.post(method, params, (error, result) => error ? reject(error) : resolve(result));
-  });
-  let pauses = 0;
-  session.on('Debugger.paused', () => { pauses++; session.post('Debugger.resume'); });
-  try {
-    await post('Debugger.enable');
-    // Preserve offsets while removing the synthetic module import for the VM.
-    vm.runInNewContext(primary.replace(/^import[^;]+;/m, match => ' '.repeat(match.length)),
-      h.context, { filename: primaryUrl });
-    assert.equal(h.render().submitDisabled, true);
-    const plan = h.transformed.diagnostics.location;
-    const condition = `(window.__cockpitEnhancements?.apiService===true&&window.__cockpitEnhancements?.quotaCompat===true&&(${plan.hardVariable}=false,${plan.guardVariable}=false),false)`;
-    const breakpoint = await post('Debugger.setBreakpointByUrl', {
-      url: plan.url, lineNumber: plan.lineNumber, columnNumber: plan.columnNumber, condition,
-    });
-    assert.ok(breakpoint.locations.length > 0, 'the native gate location resolves');
-    for (const reserve of [false, true]) for (const generic of [false, true]) {
-      Object.assign(h.values, { reserve, generic });
-      assert.equal(h.render().submitDisabled, false);
-      assert.equal(h.render({ submitDisabled: true }).submitDisabled, true);
-    }
-    h.context.__cockpitEnhancements.apiService = false;
-    assert.equal(h.render().submitDisabled, true, 'revoking the binding restores native gates');
-    assert.equal(pauses, 0);
-    await post('Debugger.removeBreakpoint', { breakpointId: breakpoint.breakpointId });
-    h.context.__cockpitEnhancements.apiService = true;
-    assert.equal(h.render().submitDisabled, true, 'removing the condition restores native behavior');
-  } finally {
-    await post('Debugger.disable');
-    session.disconnect();
-  }
-});
-
-test('live quota install rewrites only the main usage snapshot and refreshes the mounted composer', () => {
-  const { api, context } = load();
-  Object.assign(context.__cockpitEnhancements, { apiService: true });
-  let dispatched = 0;
-  const hook = { memoizedState: vm.runInNewContext('new Set()', context),
-    queue: { dispatch: () => { dispatched++; } }, next: null };
-  const type = function Composer() {};
-  type.toString = () => 'function Composer(){let disabled=other||reserve||generic,next;return{submitDisabled:disabled}}';
-  const composer = { __reactFiber$test: { type, memoizedState: hook, return: null } };
-  const aside = {
-    innerText: 'Codex 和工作使用额度已用完 工作空间额度已用完',
-    style: { setProperty() {}, removeProperty() {} },
-    setAttribute() {}, removeAttribute() {},
-  };
-  const usage = {
-    user_id: 'user',
-    rate_limit: { allowed: false, limit_reached: true, primary_window: { used_percent: 100 } },
-    rate_limit_reached_type: { type: 'workspace_member_credits_depleted' },
-    rate_limit_upsell: { banner_type: 'workspace_member_credits_depleted', model_slug: null },
-    credits: { balance: 0 },
-  };
-  const query = { queryKey: ['rate-limit-status'], state: { data: usage } };
-  const imageQuery = { queryKey: ['rate-limit-status', 'image-generation'], state: { data: { rate_limit: { allowed: false } } } };
-  let subscribed = 0, unsubscribed = 0, published = usage, cacheListener;
-  const client = {
-    getQueryCache: () => ({ findAll: () => [query, imageQuery],
-      subscribe: listener => { cacheListener = listener; subscribed++; return () => { unsubscribed++; }; } }),
-    setQueryData(key, value) {
-      const target = key[1] === 'image-generation' ? imageQuery : query;
-      target.state.data = typeof value === 'function' ? value(target.state.data) : value;
-      if (target === query) published = target.state.data;
-    },
-  };
-  const originalSetter = client.setQueryData;
-  Object.assign(context, {
-    document: {
-      body: { innerText: aside.innerText },
-      documentElement: {},
-      querySelectorAll(selector) {
-        if (selector === '[data-codex-composer-root]') return [composer];
-        if (selector === 'aside[role="status"]') return [aside];
-        if (selector === '[data-cockpit-hidden-usage="true"]') return [aside];
-        return [];
-      },
-    },
-    MutationObserver: class { observe() {} disconnect() {} },
-  });
-  const finder = { __reactFiber$test: null };
-  finder.__reactFiber$test = { child: null, sibling: null, memoizedProps: { client }, return: null };
-  context.document.getElementById = () => finder;
-  const result = api.installLiveQuotaGuard({
-    hardVariable: 'reserve', guardVariable: 'generic', hostVariable: 'host',
-  });
-  assert.equal(result.ok, true);
-  assert.equal(result.client, true);
-  assert.equal(published.rate_limit.allowed, true);
-  assert.equal(published.rate_limit.limit_reached, false);
-  assert.equal(published.rate_limit_upsell, null);
-  assert.equal(published.rate_limit_reached_type, null);
-  assert.deepEqual(published.credits, { balance: 0 });
-  assert.equal(imageQuery.state.data.rate_limit.allowed, false, 'image quota data is never changed');
-  assert.equal(dispatched, 1);
-  assert.equal(subscribed, 1);
-  assert.equal(context.__cockpitEnhancements.nativePatchState, 'active');
-  assert.equal(context.__cockpitEnhancements.nativePatchMode, 'live-quota');
-  const updatedUsage = { ...usage, credits: { balance: 7 } };
-  query.state.data = updatedUsage;
-  cacheListener({ query });
-  assert.equal(published.rate_limit.allowed, true, 'fresh cache updates retain compatibility');
-  assert.equal(published.credits.balance, 7, 'real balances remain intact');
-  client.setQueryData(['rate-limit-status'], previous => {
-    assert.equal(previous.rate_limit.allowed, false, 'updaters receive the original snapshot');
-    return { ...previous, credits: { balance: 8 } };
-  });
-  assert.equal(published.rate_limit.allowed, true);
-  context.__cockpitQuotaCompat.disposeLiveQuotaGuard();
-  assert.equal(unsubscribed, 1);
-  assert.equal(published.rate_limit.allowed, false, 'cleanup restores the latest original quota');
-  assert.equal(published.credits.balance, 8, 'cleanup preserves newer data');
-  assert.equal(client.setQueryData, originalSetter);
-});
 
 function bundleBrowser() {
   const result = load(), { context } = result, listeners = new Map(), elements = [], blobs = new Map(), revoked = [];
@@ -495,65 +326,10 @@ test('quota activation requires both real modules to evaluate, with one shared i
   first.fast.cancelHandoff('quota-bundle'); next.fast.cancelHandoff('quota-bundle');
 });
 
-test('API Service binding alone prepares and activates both notice modules without mixed-mode compatibility', async () => {
-  const first = bundleBrowser();
-  Object.assign(first.context.__cockpitEnhancements, { quotaCompat: false, apiService: true });
-  const prepared = await first.fast.prepareHandoff('api-service-only');
-  assert.equal(prepared.ok, true);
-  first.listeners.get('beforeunload')();
-  const next = bundleBrowser();
-  Object.assign(next.context.__cockpitEnhancements, { quotaCompat: false, apiService: true });
-  next.context.name = first.context.name;
-  assert.equal(next.fast.consumeHandoff('api-service-only').ok, true);
-  assert.equal(next.blobs.size, 2);
-  next.context.__cockpitNativeFastComplete();
-  next.context.__cockpitNativeFastComplete('quota');
-  assert.equal(next.context.__cockpitEnhancements.nativePatchState, 'active');
-  assert.equal(next.context.__cockpitEnhancements.nativePatchFeatures, '0001');
-  first.fast.cancelHandoff('api-service-only'); next.fast.cancelHandoff('api-service-only');
-});
-
-test('APIService unsupported Fast or quota contracts leave native dictation and all modules intact', async () => {
-  for (const failure of ['fast', 'quota-initial', 'quota-primary']) {
-    const first = bundleBrowser();
-    Object.assign(first.context.__cockpitEnhancements, { apiService: true, nativeFast: failure === 'fast' });
-    if (failure !== 'fast') {
-      const originalFetch = first.context.fetch;
-      first.context.fetch = async url => {
-        const response = await originalFetch(url);
-        const text = await response.text();
-        return { ok: true, text: async () => failure === 'quota-initial' && url === initialUrl
-          ? text.replace('modelProvider||null', 'unsupportedProvider||null')
-          : failure === 'quota-primary' && url === primaryUrl
-            ? text.replace('submitDisabled:disabled', 'otherDisabled:disabled') : text };
-      };
-    }
-    const prepared = await first.fast.prepareHandoff('unsupported-' + failure);
-    assert.equal(prepared.ok, false, JSON.stringify(prepared));
-    assert.equal(prepared.mode, undefined, 'unsupported contracts cannot activate a partial mode');
-    assert.equal(first.listeners.has('beforeunload'), false, 'failed preparation cannot stage a later partial activation');
-    assert.equal(first.context.name, 'existing-name');
-    assert.equal(first.elements.length, 0);
-    assert.equal(first.blobs.size, 0);
-    assert.equal(first.context.__cockpitNativeDictation, undefined);
-    assert.equal(first.context.__cockpitApiDictation, undefined);
-    const hookStart = first.capabilityFixture.indexOf('function l6u(');
-    const hook = first.fast.functionRange(first.capabilityFixture, hookStart);
-    assert.ok(hook);
-    let native = { isLoading: false, isCapable: true };
-    Object.assign(first.context, { u6u: { c: () => [] }, ty: {}, Eu: () => native });
-    vm.runInNewContext(first.capabilityFixture.slice(hook.start, hook.end), first.context);
-    for (const value of [true, false, null]) {
-      native = { isLoading: value === null, isCapable: value === true };
-      assert.equal(first.context.l6u(), value, 'native dictation entry follows its original capability');
-      assert.equal(first.context.l6u(true), value, 'ChatGPT dictation entry follows its original capability');
-    }
-  }
-});
 
 test('quota handoffs reject retired capability mode, partial modules and instance-scope tampering', async () => {
   const first = bundleBrowser();
-  Object.assign(first.context.__cockpitEnhancements, { apiService: true, nativeFast: false });
+  Object.assign(first.context.__cockpitEnhancements, { apiService: false, nativeFast: false });
   const prepared = await first.fast.prepareHandoff('quota-validation');
   assert.equal(prepared.ok, true);
   assert.equal(prepared.mode, 'full');
@@ -574,7 +350,7 @@ test('quota handoffs reject retired capability mode, partial modules and instanc
   ]) {
     const changed = JSON.parse(JSON.stringify(payload)); mutate(changed);
     const next = bundleBrowser();
-    Object.assign(next.context.__cockpitEnhancements, { apiService: true, nativeFast: false });
+    Object.assign(next.context.__cockpitEnhancements, { apiService: false, nativeFast: false });
     next.context.name = prefix + JSON.stringify(changed);
     assert.equal(next.fast.consumeHandoff('quota-validation').ok, false);
     assert.equal(next.context.name, 'existing-name');
@@ -582,7 +358,7 @@ test('quota handoffs reject retired capability mode, partial modules and instanc
     assert.equal(next.elements.length, 0);
     assert.equal(next.context.__cockpitEnhancements.nativePatchState, 'unsupported');
   }
-  const official = bundleBrowser(); official.context.name = first.context.name;
+  const official = bundleBrowser(); official.context.__cockpitEnhancements.apiService = true; official.context.name = first.context.name;
   assert.equal(official.fast.consumeHandoff('quota-validation').ok, false);
   assert.equal(official.blobs.size, 0);
   first.fast.cancelHandoff('quota-validation');
@@ -776,50 +552,4 @@ test('installed desktop initial and primary modules validate and parse together'
   assert.equal(bundle.patchedSource.includes('cockpitDictationScope'), false);
   new vm.SourceTextModule(bundle.patchedSource);
   for (const module of bundle.modules) new vm.SourceTextModule(module.source);
-});
-
-test('a pending live-quota retry cannot overwrite newly activated Fast features', () => {
-  for (const mode of ['full', 'fast-only']) {
-    const { api, context } = load();
-    const timers = new Map(); let serial = 0;
-    Object.assign(context.__cockpitEnhancements, { apiService: true });
-    Object.assign(context, { setTimeout(fn) { timers.set(++serial, fn); return serial; },
-      clearTimeout(id) { timers.delete(id); }, document: { querySelectorAll: () => [] } });
-    api.installLiveQuotaGuard({ hardVariable: 'h', guardVariable: 'g', hostVariable: 'host' });
-    assert.equal(timers.size, 1);
-    const pending = [...timers.values()][0];
-    const state = context.__cockpitEnhancements;
-    Object.assign(state, { nativePatchState: 'active', nativePatchMode: mode,
-      nativePatchFeatures: mode === 'full' ? '1111' : '1010', nativePatchRequestedFeatures: '1111',
-      nativeQuotaPatchState: mode === 'full' ? 'active' : 'unsupported',
-      nativeQuotaPatchReason: mode === 'full' ? undefined : 'quota-shared-banner-contract-mismatch' });
-    const before = JSON.stringify(state);
-    pending();
-    assert.equal(timers.size, 0);
-    assert.equal(JSON.stringify(state), before);
-    assert.equal(api.installLiveQuotaGuard({}).preservedNativeFast, true);
-    assert.equal(JSON.stringify(state), before);
-  }
-});
-
-
-test('a late live-quota retry preserves quota-only full modules without claiming Fast', () => {
-  const { api, context } = load(), timers = new Map(); let serial = 0;
-  Object.assign(context.__cockpitEnhancements, { apiService: true });
-  Object.assign(context, { setTimeout(fn) { timers.set(++serial, fn); return serial; },
-    clearTimeout(id) { timers.delete(id); }, document: { querySelectorAll: () => [] } });
-  api.installLiveQuotaGuard({ hardVariable: 'h', guardVariable: 'g', hostVariable: 'host' });
-  const pending = [...timers.values()][0];
-  assert.equal(typeof pending, 'function');
-  Object.assign(context.__cockpitEnhancements, { nativeFast: false, nativePatchState: 'active',
-    nativePatchMode: 'full', nativePatchFeatures: '0101', nativePatchRequestedFeatures: '0101',
-    nativePatchReason: 'module-evaluated' });
-  const before = JSON.stringify(context.__cockpitEnhancements);
-  pending();
-  assert.equal(timers.size, 0);
-  assert.equal(JSON.stringify(context.__cockpitEnhancements), before);
-  const retained = api.installLiveQuotaGuard({});
-  assert.equal(retained.preservedNativeModule, true);
-  assert.equal(retained.preservedNativeFast, undefined);
-  assert.equal(JSON.stringify(context.__cockpitEnhancements), before);
 });

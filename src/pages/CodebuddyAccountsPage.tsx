@@ -1,4 +1,5 @@
-import { useMemo, useCallback, Fragment, useState, useEffect } from 'react';
+import { useAccountsOverviewFilterState } from '../hooks/useAccountsOverviewFilterState';
+import { useMemo, useCallback, Fragment, useState } from 'react';
 import {
   Plus, RefreshCw, Download, Upload, Trash2, X, Globe, KeyRound, Database,
   Copy, Check, RotateCw, LayoutGrid, List, Search,
@@ -45,13 +46,10 @@ import {
   normalizeAccountsOverviewScope,
   readAccountsOverviewFilterPersistenceEnabled,
   readAccountsOverviewFilterStringArray,
-  removeAccountsOverviewFilterField,
-  writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
 import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessionManager';
 
 const CB_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.codebuddy.flow_notice_collapsed';
-const CB_CURRENT_ACCOUNT_ID_KEY = 'agtools.codebuddy.current_account_id';
 const CB_KNOWN_PLAN_FILTERS = ['FREE', 'TRIAL', 'PRO', 'ENTERPRISE'] as const;
 const CODEBUDDY_FILTER_PERSISTENCE_SCOPE = normalizeAccountsOverviewScope('CodeBuddy');
 const FILTER_TYPES_FIELD = 'filter_types';
@@ -80,7 +78,7 @@ function getQuotaClassByRemainPercent(remainPercent: number | null): string {
 export function CodebuddyAccountsPage() {
   const timeDisplayMode = useUiConfigStore((s) => s.timeDisplayMode);
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
-  const [filterTypes, setFilterTypes] = useState<string[]>(() =>
+  const [filterTypes, setFilterTypes] = useAccountsOverviewFilterState<string[]>(CODEBUDDY_FILTER_PERSISTENCE_SCOPE, FILTER_TYPES_FIELD, () =>
     readAccountsOverviewFilterPersistenceEnabled(CODEBUDDY_FILTER_PERSISTENCE_SCOPE)
       ? readAccountsOverviewFilterStringArray(
           CODEBUDDY_FILTER_PERSISTENCE_SCOPE,
@@ -95,7 +93,6 @@ export function CodebuddyAccountsPage() {
     platformKey: 'CodeBuddy',
     oauthLogPrefix: 'CodebuddyOAuth',
     flowNoticeCollapsedKey: CB_FLOW_NOTICE_COLLAPSED_KEY,
-    currentAccountIdKey: CB_CURRENT_ACCOUNT_ID_KEY,
     exportFilePrefix: 'codebuddy_accounts',
     oauthTabKeys: ['oauth'],
     store: {
@@ -129,7 +126,6 @@ export function CodebuddyAccountsPage() {
   const {
     t, locale, privacyModeEnabled, togglePrivacyMode, maskAccountText,
     viewMode, setViewMode, searchQuery, setSearchQuery,
-    filterPersistenceEnabled, filterPersistenceScope,
     sortDirection, sortBy,
     selected, toggleSelect, toggleSelectAll,
     tagFilter, groupByTag, setGroupByTag, showTagFilter, setShowTagFilter,
@@ -159,14 +155,6 @@ export function CodebuddyAccountsPage() {
   } = page;
 
   const grouping = usePlatformAccountGroups('codebuddy', () => toggleSelectAll(Array.from(selected)));
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(filterPersistenceScope, FILTER_TYPES_FIELD);
-      return;
-    }
-    writeAccountsOverviewFilterField(filterPersistenceScope, FILTER_TYPES_FIELD, filterTypes);
-  }, [filterPersistenceEnabled, filterPersistenceScope, filterTypes]);
 
   const toggleFilterTypeValue = useCallback((value: string) => {
     setFilterTypes((prev) => {

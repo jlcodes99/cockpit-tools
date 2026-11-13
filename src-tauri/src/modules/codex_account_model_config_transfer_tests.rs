@@ -6,6 +6,7 @@ fn definition(id: &str) -> CodexExperimentalModelDefinition {
         display_name: id.to_string(),
         reasoning_efforts: None,
         default_reasoning_effort: None,
+        ultra_reasoning_effort: None,
         context_window: None,
         auto_compact_token_limit: None,
     }
@@ -159,6 +160,52 @@ fn import_rejects_duplicates_credentials_unknown_version_and_invalid_defaults() 
         prepare_model_config_import(&existing, &source.to_string(), "replace").unwrap_err(),
         "MODEL_CONFIG_VERSION_UNSUPPORTED"
     );
+}
+
+#[test]
+fn ultra_reasoning_override_round_trips_and_survives_catalog_regeneration() {
+    let dir = tempfile::tempdir().unwrap();
+    let profile = dir.path();
+    let mut model = definition("gpt-6.1-sol");
+    model.ultra_reasoning_effort = Some(" Max ".into());
+    save_model_catalog_for_base_dir_preserving_context(
+        profile, true, vec![model.clone()], Some(model.model_id.clone()),
+    ).unwrap();
+
+    let path = experimental_model_catalog_path(profile);
+    let read_catalog = || {
+        serde_json::from_slice::<serde_json::Value>(&fs::read(&path).unwrap()).unwrap()
+    };
+    let assert_override = |catalog: &serde_json::Value, expected: &str| {
+        let entry = &catalog["models"][0];
+        assert_eq!(entry["slug"], "gpt-6.1-sol");
+        assert_eq!(entry["multi_agent_reasoning_effort"], expected);
+        assert!(entry["supported_reasoning_levels"].as_array().unwrap()
+            .iter().any(|level| level["effort"] == "ultra"));
+        assert_eq!(entry["multi_agent_version"], "v2");
+    };
+    assert_eq!(read_experimental_model_definitions(profile)[0].ultra_reasoning_effort.as_deref(), Some("max"));
+    assert_override(&read_catalog(), "max");
+
+    let original = crate::modules::codex_protocol::build_codex_client_models_response(&[model.model_id.clone()]);
+    assert_eq!(original["models"][0]["multi_agent_reasoning_effort"], "xhigh");
+    let reconciled = decorate_managed_model_catalog_for_profile(profile, &original.to_string()).unwrap();
+    assert_override(&serde_json::from_str(&reconciled).unwrap(), "max");
+    fs::write(&path, original.to_string()).unwrap();
+    rebuild_managed_catalog_from_existing(&path).unwrap();
+    assert_override(&read_catalog(), "max");
+
+    let mut invalid = model.clone();
+    invalid.reasoning_efforts = Some(vec!["high".into(), "ultra".into()]);
+    assert_eq!(
+        save_model_catalog_for_base_dir_preserving_context(profile, true, vec![invalid], None)
+            .unwrap_err(),
+        ULTRA_REASONING_INVALID,
+    );
+    assert_override(&read_catalog(), "max");
+    model.ultra_reasoning_effort = None;
+    save_model_catalog_for_base_dir_preserving_context(profile, true, vec![model], None).unwrap();
+    assert_override(&read_catalog(), "xhigh");
 }
 
 #[test]

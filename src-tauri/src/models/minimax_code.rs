@@ -73,10 +73,12 @@ pub struct MinimaxCodeAccountSummary {
 pub struct MinimaxCodeAccountIndex {
     pub version: String,
     pub accounts: Vec<MinimaxCodeAccountSummary>,
+    #[serde(skip)]
+    pub(crate) storage_revision: crate::modules::provider_account_index::Revision,
 }
 
 impl MinimaxCodeAccountIndex {
-    pub fn new() -> Self { Self { version: "1.0".to_string(), accounts: Vec::new() } }
+    pub fn new() -> Self { Self { version: "1.0".to_string(), accounts: Vec::new(), storage_revision: Default::default() } }
 }
 impl Default for MinimaxCodeAccountIndex { fn default() -> Self { Self::new() } }
 

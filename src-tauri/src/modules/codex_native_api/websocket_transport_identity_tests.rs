@@ -169,6 +169,7 @@ struct RotatingHost {
     base: String,
     token_revision: Arc<AtomicUsize>,
     with_digest: bool,
+    chatgpt: bool,
 }
 impl Host for RotatingHost {
     fn authorize<'a>(&'a self, _: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
@@ -189,6 +190,7 @@ impl Host for RotatingHost {
             let mut value = route();
             value.base_url = self.base.clone();
             value.model = request.model;
+            value.chatgpt = self.chatgpt;
             value.headers.insert(
                 "authorization",
                 HeaderValue::from_str(&format!("Bearer token-{revision}")).unwrap(),
@@ -254,6 +256,7 @@ async fn websocket_next_turn_refreshes_authentication_without_changing_installat
             base,
             token_revision: expected_revision.clone(),
             with_digest,
+            chatgpt: false,
         });
         let directory = tempfile::tempdir().unwrap();
         let mut handle = native::start(
@@ -319,4 +322,123 @@ async fn websocket_next_turn_refreshes_authentication_without_changing_installat
             .unwrap();
         task.abort();
     }
+}
+
+#[tokio::test]
+async fn websocket_speed_switch_renegotiates_codex_routing_hint() {
+    let handshakes = Arc::new(Mutex::new(Vec::new()));
+    let captured = handshakes.clone();
+    let last_response = Arc::new(Mutex::new(None::<String>));
+    let app = Router::new().route(
+        "/v1/responses",
+        get(move |headers: HeaderMap, upgrade: WebSocketUpgrade| {
+            let hint = headers[super::super::codex_wire::ROUTING_HINT]
+                .to_str()
+                .unwrap()
+                .to_owned();
+            captured.lock().unwrap().push(hint.clone());
+            let last_response = last_response.clone();
+            async move {
+                upgrade.on_upgrade(move |mut socket| async move {
+                    let mut turn = 0;
+                    while let Some(Ok(Message::Text(text))) = socket.recv().await {
+                        let body: Value = serde_json::from_str(text.as_str()).unwrap();
+                        let tier = if hint.ends_with(";tier=priority") {
+                            "priority"
+                        } else {
+                            "default"
+                        };
+                        assert_eq!(body["service_tier"].as_str().unwrap_or("default"), tier);
+                        turn += 1;
+                        let id = format!("response-{tier}-{turn}");
+                        {
+                            let mut previous = last_response.lock().unwrap();
+                            assert_eq!(body["previous_response_id"].as_str(), previous.as_deref());
+                            *previous = Some(id.clone());
+                        }
+                        let event = json!({"type":"response.completed","response":{
+                            "id":id,"status":"completed","service_tier":tier,"output":[]
+                        }});
+                        if socket
+                            .send(Message::Text(event.to_string().into()))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                })
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}/v1", listener.local_addr().unwrap());
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let directory = tempfile::tempdir().unwrap();
+    let mut handle = native::start(
+        "127.0.0.1:0".parse().unwrap(),
+        Arc::new(RotatingHost {
+            base,
+            token_revision: Arc::default(),
+            with_digest: false,
+            chatgpt: true,
+        }),
+        directory.path().join("speed.sqlite"),
+        native::Options::default(),
+    )
+    .await
+    .unwrap();
+    let mut request = format!("ws://{}/v1/responses", handle.addr)
+        .into_client_request()
+        .unwrap();
+    request
+        .headers_mut()
+        .insert("authorization", HeaderValue::from_static("Bearer client"));
+    let (mut socket, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+    let mut previous_id = Value::Null;
+    for (requested, expected, connections) in [
+        ("default", "default", 1),
+        ("priority", "priority", 2),
+        ("fast", "priority", 2),
+        ("default", "default", 3),
+    ] {
+        let mut body = json!({"type":"response.create","model":"m","service_tier":requested,
+            "client_metadata":{"session_id":"session","thread_id":"thread"},"input":[]});
+        if !previous_id.is_null() {
+            body["previous_response_id"] = previous_id;
+        }
+        socket
+            .send(ClientMessage::Text(body.to_string().into()))
+            .await
+            .unwrap();
+        previous_id = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            loop {
+                match socket.next().await.unwrap().unwrap() {
+                    ClientMessage::Text(text) => {
+                        let event: Value = serde_json::from_str(&text).unwrap();
+                        assert_eq!(event["type"], "response.completed", "{event}");
+                        assert_eq!(event["response"]["service_tier"], expected);
+                        break event["response"]["id"].clone();
+                    }
+                    ClientMessage::Ping(value) => {
+                        socket.send(ClientMessage::Pong(value)).await.unwrap()
+                    }
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(handshakes.lock().unwrap().len(), connections);
+    }
+    assert_eq!(
+        *handshakes.lock().unwrap(),
+        ["model=m", "model=m;tier=priority", "model=m"]
+    );
+    socket.close(None).await.unwrap();
+    handle
+        .shutdown(std::time::Duration::from_secs(2))
+        .await
+        .unwrap();
+    task.abort();
 }

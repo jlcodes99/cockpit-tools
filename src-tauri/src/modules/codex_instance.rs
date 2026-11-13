@@ -116,7 +116,7 @@ pub async fn resolve_egress_proxy_for_bind_account(
         return Ok(CodexLaunchProxy::Direct);
     }
     Ok(match crate::modules::codex_proxy_desktop_router::ensure(&account_id).await? {
-        Some(url) => CodexLaunchProxy::Proxy(url),
+        Some(port) => CodexLaunchProxy::Managed(port),
         None => CodexLaunchProxy::Inherit,
     })
 }
@@ -279,6 +279,61 @@ pub fn get_default_instances_root_dir() -> Result<PathBuf, String> {
     Ok(modules::account::get_data_dir()?
         .join("instances")
         .join("codex"))
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn managed_home_comparison_path(path: &Path) -> PathBuf {
+    #[cfg(target_os = "windows")]
+    return PathBuf::from(path.to_string_lossy().to_lowercase());
+    #[cfg(target_os = "macos")]
+    return path.to_path_buf();
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(crate) fn is_inherited_managed_codex_home(home: &Path) -> bool {
+    let comparison_home = managed_home_comparison_path(home);
+    let canonical_home = fs::canonicalize(home)
+        .ok()
+        .as_deref()
+        .map(managed_home_comparison_path);
+    let within_managed_root = [
+        get_default_instances_root_dir().ok(),
+        legacy_hardcoded_instances_root_dir().ok().flatten(),
+    ]
+    .into_iter()
+    .flatten()
+    .any(|root| {
+        comparison_home.starts_with(managed_home_comparison_path(&root))
+            || canonical_home.as_ref().is_some_and(|home| {
+                fs::canonicalize(&root)
+                    .is_ok_and(|root| home.starts_with(managed_home_comparison_path(&root)))
+            })
+    });
+    if within_managed_root {
+        return true;
+    }
+    let Some(app_data) = std::env::var_os("CODEX_ELECTRON_USER_DATA_PATH") else {
+        return false;
+    };
+    // Managed profiles can also be created outside the default instances root.
+    #[cfg(target_os = "windows")]
+    let managed_app_data = get_windows_app_user_data_dir(home);
+    #[cfg(target_os = "macos")]
+    let managed_app_data = get_macos_app_user_data_dir(home);
+    managed_app_data.is_ok_and(|expected| {
+        managed_home_comparison_path(Path::new(&app_data)) == managed_home_comparison_path(&expected)
+    })
+}
+
+#[cfg(all(test, any(target_os = "macos", target_os = "windows")))]
+#[test]
+fn inherited_managed_codex_home_matches_managed_profiles_only() {
+    let root = get_default_instances_root_dir().unwrap();
+    let legacy_root = legacy_hardcoded_instances_root_dir().unwrap().unwrap();
+    assert!(is_inherited_managed_codex_home(&root.join("managed-profile")));
+    assert!(is_inherited_managed_codex_home(&legacy_root.join("managed-profile")));
+    assert!(!is_inherited_managed_codex_home(&root.with_file_name("codex-custom")));
+    assert!(!is_inherited_managed_codex_home(&dirs::home_dir().unwrap().join(".codex")));
 }
 
 fn legacy_hardcoded_instances_root_dir() -> Result<Option<PathBuf>, String> {
@@ -651,6 +706,57 @@ fn resolve_link_target(link_path: &Path, target: PathBuf) -> PathBuf {
     }
 }
 
+fn ensure_instance_skill_directory(
+    profile_dir: &Path,
+    default_codex_home: &Path,
+    relative_path: &Path,
+) -> Result<(), String> {
+    let instance_dir = profile_dir.join(relative_path);
+    let global_dir = default_codex_home.join(relative_path);
+    let needs_link = match fs::symlink_metadata(&instance_dir) {
+        Ok(metadata) if is_shared_directory_link(&metadata) => {
+            let target = fs::read_link(&instance_dir).map_err(|error| {
+                format!(
+                    "读取实例 Skills 目录链接失败 ({}): {error}",
+                    display_abs_path(&instance_dir)
+                )
+            })?;
+            if !paths_point_to_same_location(&resolve_link_target(&instance_dir, target), &global_dir)
+            {
+                return Ok(());
+            }
+            false
+        }
+        // A real directory is the instance's own choice, even if empty or identical to the default.
+        Ok(metadata) if metadata.is_dir() => return Ok(()),
+        Ok(_) => {
+            return Err(format!(
+                "实例 Skills 路径不是目录 ({})",
+                display_abs_path(&instance_dir)
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
+        Err(error) => {
+            return Err(format!(
+                "读取实例 Skills 目录失败 ({}): {error}",
+                display_abs_path(&instance_dir)
+            ));
+        }
+    };
+    fs::create_dir_all(&global_dir).map_err(|error| {
+        format!("创建全局 Skills 目录失败 ({}): {error}", display_abs_path(&global_dir))
+    })?;
+    if !needs_link {
+        return Ok(());
+    }
+    if let Some(parent) = instance_dir.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!("创建实例 Skills 目录父路径失败 ({}): {error}", display_abs_path(parent))
+        })?;
+    }
+    create_directory_symlink(&global_dir, &instance_dir)
+}
+
 fn sync_shared_directory(
     profile_dir: &Path,
     default_codex_home: &Path,
@@ -928,7 +1034,7 @@ pub fn ensure_instance_shared_skills(profile_dir: &Path) -> Result<(), String> {
     }
     fs::create_dir_all(profile_dir).map_err(|e| format!("创建实例目录失败: {}", e))?;
 
-    sync_shared_directory(
+    ensure_instance_skill_directory(
         profile_dir,
         &default_codex_home,
         Path::new(CODEX_SHARED_SKILLS_DIR_NAME),
@@ -938,11 +1044,27 @@ pub fn ensure_instance_shared_skills(profile_dir: &Path) -> Result<(), String> {
         &default_codex_home,
         Path::new(CODEX_SHARED_RULES_DIR_NAME),
     )?;
-    sync_shared_directory(
-        profile_dir,
-        &default_codex_home,
-        Path::new(CODEX_SHARED_VENDOR_IMPORTS_SKILLS_DIR),
-    )?;
+    let vendor_skills = Path::new(CODEX_SHARED_VENDOR_IMPORTS_SKILLS_DIR);
+    let global_vendor_skills = default_codex_home.join(vendor_skills);
+    // An occupied optional path must survive copying, including a regular file in the source.
+    let vendor_skills_unavailable = match fs::symlink_metadata(&global_vendor_skills) {
+        Ok(metadata) if is_shared_directory_link(&metadata) => {
+            match fs::metadata(&global_vendor_skills) {
+                Ok(target) => target.is_file(),
+                Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+            }
+        }
+        Ok(metadata) => metadata.is_file(),
+        Err(_) => false,
+    };
+    if vendor_skills_unavailable {
+        modules::logger::log_warn(&format!(
+            "[Codex Instance] Skipping vendor skills sharing: {}",
+            display_abs_path(&global_vendor_skills)
+        ));
+    } else {
+        ensure_instance_skill_directory(profile_dir, &default_codex_home, vendor_skills)?;
+    }
     sync_shared_file(
         profile_dir,
         &default_codex_home,
@@ -1044,17 +1166,23 @@ pub fn update_bound_instances_app_speed(
 }
 
 pub fn delete_instance(instance_id: &str) -> Result<(), String> {
+    delete_instance_with(instance_id, modules::instance::delete_instance_directory)
+}
+
+fn delete_instance_with(
+    instance_id: &str,
+    delete_directory: impl Fn(&Path) -> Result<(), String>,
+) -> Result<(), String> {
     let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
-    let _lock = CODEX_INSTANCE_STORE_LOCK
-        .lock()
-        .map_err(|_| "无法获取实例锁")?;
-    let mut store = load_instance_store()?;
-    let index = store
-        .instances
-        .iter()
-        .position(|instance| instance.id == instance_id)
-        .ok_or("实例不存在")?;
-    let user_data_dir = store.instances[index].user_data_dir.clone();
+    let user_data_dir = {
+        let _lock = CODEX_INSTANCE_STORE_LOCK.lock().map_err(|_| "无法获取实例锁")?;
+        load_instance_store()?
+            .instances
+            .into_iter()
+            .find(|instance| instance.id == instance_id)
+            .ok_or("实例不存在")?
+            .user_data_dir
+    };
 
     if !user_data_dir.trim().is_empty() {
         let dir_path = PathBuf::from(&user_data_dir);
@@ -1066,12 +1194,14 @@ pub fn delete_instance(instance_id: &str) -> Result<(), String> {
         let app_user_data_dir = get_macos_app_user_data_dir(&dir_path)?;
         #[cfg(target_os = "linux")]
         let app_user_data_dir = get_linux_app_user_data_dir(&dir_path)?;
-        modules::instance::delete_instance_directory(&dir_path)?;
+        delete_directory(&dir_path)?;
         #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-        modules::instance::delete_instance_directory(&app_user_data_dir)?;
+        delete_directory(&app_user_data_dir)?;
     }
 
-    store.instances.remove(index);
+    let _lock = CODEX_INSTANCE_STORE_LOCK.lock().map_err(|_| "无法获取实例锁")?;
+    let mut store = load_instance_store()?;
+    store.instances.retain(|instance| instance.id != instance_id);
     save_instance_store(&store)?;
     Ok(())
 }

@@ -142,6 +142,38 @@ test('partial history results show missing sources inside the dialog and clear t
   app.h.unmount();
 });
 
+test('project-only preview and recovery use the selected instance without a provider', async () => {
+  const app = harness({ repairKind: 'visibility', selected: [] });
+  await settlePromises();
+  app.mode('modeProjects');
+  app.providers.reject(new Error('provider list unavailable'));
+  await settlePromises();
+  assert.equal(app.error.message, null);
+  assert.equal(app.rendered().some((node) =>
+    node.type === 'dropdown' && node.props.ariaLabel === prefix + 'targetProvider'), false);
+  assert.equal(app.button('preview').props.disabled, false);
+  app.button('preview').props.onClick();
+  await settlePromises();
+  assert.deepEqual(app.calls[0].options, {
+    mode: 'projects', dryRun: true, targetInstanceId: 'default', targetProvider: null,
+    repairInstanceIds: ['default'], sessionIds: null,
+  });
+  app.button('confirmRepair').props.onClick();
+  await settlePromises();
+  assert.deepEqual(app.calls[1].options, { ...app.calls[0].options, dryRun: false });
+  app.h.unmount();
+});
+
+test('running instances can preview projects while applying requires a stopped instance', async () => {
+  const app = harness({ repairKind: 'visibility', running: true });
+  await settlePromises();
+  app.mode('modeProjects');
+  assert.equal(app.button('preview').props.disabled, false);
+  assert.equal(app.button('start').props.disabled, true);
+  assert.ok(app.rendered().some((node) => contains(node, prefix + 'projectsStopHint')));
+  app.h.unmount();
+});
+
 for (const rejectBeforeSwitch of [false, true]) {
   test(`history mode clears or ignores provider failures (${rejectBeforeSwitch ? 'existing' : 'late'})`, async () => {
     const app = harness({ repairKind: 'visibility' });
@@ -367,7 +399,7 @@ test('visibility repair keeps quick and full choices and sends the current insta
   await settlePromises();
   assert.equal(app.button('modeQuick').props['aria-pressed'], true);
   assert.equal(app.button('modeDeep').props['aria-pressed'], false);
-  assert.equal(app.rendered().some((node) => contains(node, prefix + 'modeProjects')), false);
+  assert.equal(app.button('modeProjects').props['aria-pressed'], false);
   app.button('preview').props.onClick(); await settlePromises();
   assert.deepEqual(app.calls[0].options, { mode: 'quick', dryRun: true, targetInstanceId: 'secondary',
     targetProvider: 'provider', repairInstanceIds: ['secondary'], sessionIds: ['chat-a', 'chat-b'] });

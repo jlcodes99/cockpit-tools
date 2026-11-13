@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { floatingCardTargetHeight, nextFloatingCardOpacity, normalizeFloatingCardOpacity } from './floatingCardAppearance';
+import { floatingCardTargetHeight, measureFloatingCardContentHeight, nextFloatingCardOpacity, normalizeFloatingCardOpacity } from './floatingCardAppearance';
 
 test('old floating windows retain full size and background by default', () => {
   assert.equal(normalizeFloatingCardOpacity(undefined), 1);
@@ -13,6 +13,21 @@ test('minimal windows shrink, retain space for close confirmation and cap long c
   assert.equal(floatingCardTargetHeight(true, 130.5, false), 131);
   assert.equal(floatingCardTargetHeight(true, 900, false), 520);
   assert.equal(floatingCardTargetHeight(false, Number.NaN, false), 290);
+});
+test('content height can shrink a viewport stretched by the previous display scale', () => {
+  let height = '100%';
+  const shell = {
+    style: {
+      getPropertyValue: () => height,
+      getPropertyPriority: () => '',
+      setProperty: (_name: string, value: string) => { height = value; },
+      removeProperty: () => { height = ''; },
+    },
+    getBoundingClientRect: () => ({ height: height === 'auto' ? 278 : 435 }),
+  } as unknown as HTMLElement;
+  assert.equal(floatingCardTargetHeight(false, measureFloatingCardContentHeight(shell), false), 290);
+  assert.equal(height, '100%');
+  assert.equal(shell.getBoundingClientRect().height, 435);
 });
 test('background cycling reaches transparent and returns to the existing appearance', () => {
   assert.equal(nextFloatingCardOpacity(1), .85);

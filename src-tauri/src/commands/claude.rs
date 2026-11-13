@@ -371,8 +371,10 @@ fn prepare_claude_cli_launch(
 }
 
 #[tauri::command]
-pub fn list_claude_accounts() -> Result<Vec<ClaudeAccount>, String> {
-    claude_account::list_accounts_checked()
+pub async fn list_claude_accounts() -> Result<Vec<ClaudeAccount>, String> {
+    tauri::async_runtime::spawn_blocking(claude_account::list_accounts_checked)
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -647,12 +649,21 @@ pub async fn refresh_claude_quota(
 
     let account = claude_account::refresh_account_quota(&account_id).await?;
     let _ = crate::modules::tray::update_tray_menu(&app);
-    logger::log_info(&format!(
-        "[Claude Command] 刷新完成: account_id={}, email={}, elapsed={}ms",
-        account.id,
-        account.email,
-        started_at.elapsed().as_millis()
-    ));
+    if let Some(error) = &account.quota_error {
+        logger::log_warn(&format!(
+            "[Claude Command] 刷新失败: account_id={}, code={}, elapsed={}ms",
+            account.id,
+            error.code.as_deref().unwrap_or("unknown"),
+            started_at.elapsed().as_millis()
+        ));
+    } else {
+        logger::log_info(&format!(
+            "[Claude Command] 刷新完成: account_id={}, email={}, elapsed={}ms",
+            account.id,
+            account.email,
+            started_at.elapsed().as_millis()
+        ));
+    }
     Ok(account)
 }
 
@@ -661,7 +672,10 @@ pub async fn refresh_all_claude_quotas(app: AppHandle) -> Result<i32, String> {
     let started_at = Instant::now();
     logger::log_info("[Claude Command] 批量刷新开始");
     let results = claude_account::refresh_all_quotas().await?;
-    let success_count = results.iter().filter(|(_, item)| item.is_ok()).count();
+    let success_count = results
+        .iter()
+        .filter(|(_, item)| item.as_ref().is_ok_and(|account| account.quota_error.is_none()))
+        .count();
     let failed_count = results.len().saturating_sub(success_count);
     let _ = crate::modules::tray::update_tray_menu(&app);
     logger::log_info(&format!(

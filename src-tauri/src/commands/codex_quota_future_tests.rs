@@ -40,7 +40,7 @@ fn quota_refresh_worker_futures_stay_small() {
     });
     assert_small_future(
         "import-refresh",
-        |(app, accounts): (&'static AppHandle, Vec<CodexAccount>)| {
+        |(app, accounts): (&'static AppHandle, Vec<String>)| {
             refresh_imported_codex_accounts(app, accounts)
         },
     );
@@ -98,7 +98,7 @@ fn quota_refresh_keeps_early_boxing_boundaries_and_async_commands() {
         )
     );
     let imported = compact(command_body("refresh_imported_codex_accounts"));
-    assert!(imported.contains("Box::pin(codex_quota::refresh_account_quota(&account.id)).await"));
+    assert!(imported.contains("Box::pin(codex_quota::refresh_account_quota_background(&account_id)).await"));
     assert!(imported.contains("Box::pin(run_codex_post_refresh_checks(app)).await"));
 }
 

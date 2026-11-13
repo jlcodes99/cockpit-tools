@@ -148,6 +148,7 @@ export function ChatGptPlanDialog({ sourceAccount, onBound, onJoined, embedded =
     void run('models', () => reloadModels(account));
   }, [phase, canCall, identityMismatch, bindingRequired, modelsLoaded, account?.id, reloadModels, busy]);
 
+  const reportedCallbackError = useRef<{ loginId: string; error: string } | null>(null);
   useEffect(() => {
     if (!login || phase !== 'waiting') return;
     let stopped = false;
@@ -191,6 +192,11 @@ export function ChatGptPlanDialog({ sourceAccount, onBound, onJoined, embedded =
           setPhase('connect');
           error.report(t(chatGptPlanErrorKey(status.error ?? `CHATGPT_PLAN_LOGIN_${status.status.toUpperCase()}`)));
           return;
+        }
+        const reported = reportedCallbackError.current;
+        if (status.status === 'pending' && status.error && (reported?.loginId !== login.login_id || reported.error !== status.error)) {
+          reportedCallbackError.current = { loginId: login.login_id, error: status.error };
+          error.report(t(chatGptPlanErrorKey(status.error)));
         }
         // The server owns expiration and session cleanup; polling never overlaps.
         timer = setTimeout(() => void poll(), 1500);

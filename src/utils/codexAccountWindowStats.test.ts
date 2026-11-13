@@ -28,6 +28,30 @@ test('statistics scope ignores account order, display data, tokens and percentag
   assert.equal(buildCodexAccountWindowStatsScope(original, ['missing'], clock), null);
 });
 
+test('Team accounts sharing a user receive only their own quota-window usage', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  const teams = [
+    { ...account('team-a'), user_id: 'shared-user', account_id: 'workspace-a', plan_type: 'team' },
+    { ...account('team-b'), user_id: 'shared-user', account_id: 'workspace-b', plan_type: 'team' },
+  ];
+  const snapshots: CodexAccountWindowStatsSnapshot[] = [];
+  const reader = createCodexAccountWindowStatsReader({
+    read: async (queries) => {
+      assert.deepEqual([...new Set(queries.map((query) => query.accountId))], ['team-a', 'team-b']);
+      return [row('team-a')];
+    },
+    now: () => clock * 1000,
+    onChange: (value) => snapshots.push(value),
+  });
+  reader.setScope(buildCodexAccountWindowStatsScope(teams, ['team-a', 'team-b'], clock));
+  reader.refresh();
+  context.mock.timers.tick(250);
+  await settlePromises();
+  assert.equal(last(snapshots)?.byAccountId['team-a'].primary?.requestCount, 1);
+  assert.equal(last(snapshots)?.byAccountId['team-b'], undefined);
+  reader.dispose();
+});
+
 test('bursts coalesce into the latest scope, and metadata-only snapshots never restart the query', async (context) => {
   context.mock.timers.enable({ apis: ['setTimeout'] });
   const queries: CodexLocalAccessAccountWindowQuery[][] = [];

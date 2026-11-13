@@ -27,6 +27,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { DEFAULT_CODEX_INSTANCE_ID } from "../components/codex/CodexLaunchPreviewModal";
 import { isCodexLaunchCancelled } from '../utils/codexLaunchCancellation';
+import { isCodexLaunchUnconfirmed } from '../utils/codexLaunchConfirmation';
 import {
   CODEX_LAUNCH_PREVIEW_API_SERVICE_CARD_KEY,
   persistCodexLaunchPreviewLastInstanceId,
@@ -40,7 +41,7 @@ import { buildCodexOverviewGroupFilterOptions, buildCodexOverviewSortOptions, bu
 import { summarizeCodexQuotaPool } from "../utils/codexQuotaPool";
 import { buildValidAccountsFilterOption } from "../utils/accountValidityFilter";
 import { buildPaginationPageSizeStorageKey, usePagination } from "../hooks/usePagination";
-import { CODEX_LOCAL_ACCESS_FALLBACK_BASE_URL, normalizeLocalAccessAddressKind, OAUTH_BINDING_PAGE_SIZE_OPTIONS, persistLocalAccessAddressKind } from "./codexAccountsControllerModel";
+import { CODEX_LOCAL_ACCESS_FALLBACK_BASE_URL, normalizeLocalAccessAddressKind, OAUTH_BINDING_PAGE_SIZE_OPTIONS } from "./codexAccountsControllerModel";
 import type { useCodexAccountsBaseController } from "./useCodexAccountsBaseController";
 import type { useCodexAccountsOAuthController } from "./useCodexAccountsOAuthController";
 import type { useCodexAccountsAccessController } from "./useCodexAccountsAccessController";
@@ -748,7 +749,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
     const handleLocalAccessAddressKindChange = useCallback((value: string) => {
       const next = normalizeLocalAccessAddressKind(value);
       setLocalAccessAddressKind(next);
-      persistLocalAccessAddressKind(next);
     }, []);
   
     const resolveLocalAccessBaseUrl = useCallback(() => {
@@ -951,36 +951,36 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
       [localAccessHealthActionBusy, setMessage, t],
     );
   
-    const confirmHideLocalAccessEntry = useCallback(async () => {
+    const confirmHideLocalAccessEntry = useCallback(async (reportError: (message: string | null) => void) => {
       if (localAccessHideSubmitting) return;
       setLocalAccessHideSubmitting(true);
+      reportError(null);
       try {
+        let projectStateDeferred = false;
         if (localAccessCollection?.enabled) {
           const nextState =
             await codexLocalAccessService.setCodexLocalAccessEnabled(false);
           setLocalAccessState(nextState);
+          projectStateDeferred = nextState.projectStateDeferred === true;
         }
         await invoke("set_codex_local_access_entry_visible", { enabled: false });
         setLocalAccessEntryVisible(false);
-        setShowLocalAccessHideConfirm(false);
+        if (projectStateDeferred) {
+          reportError(t("codex.sessionManager.repairModal.switchProjectsDeferred"));
+        } else {
+          setShowLocalAccessHideConfirm(false);
+        }
         window.dispatchEvent(new Event("codex-local-access-state-updated"));
         window.dispatchEvent(new Event("config-updated"));
       } catch (error) {
         console.error("Failed to hide codex local access entry:", error);
-        setMessage({
-          text: t("messages.actionFailed", {
-            action: t("codex.localAccess.hideEntryAction", "关闭 API 服务入口"),
-            error: String(error).replace(/^Error:\s*/, ""),
-          }),
-          tone: "error",
-        });
+        reportError(String(error).replace(/^Error:\s*/, ""));
       } finally {
         setLocalAccessHideSubmitting(false);
       }
     }, [
       localAccessCollection?.enabled,
       localAccessHideSubmitting,
-      setMessage,
       t,
     ]);
   
@@ -1709,6 +1709,9 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
             !localAccessCollection.enabled,
           );
         setLocalAccessState(nextState);
+          if (nextState.projectStateDeferred) {
+            throw new Error(t("codex.sessionManager.repairModal.switchProjectsDeferred"));
+          }
         setMessage({
           text: nextState.collection?.enabled
             ? t("codex.localAccess.enabledSuccess", "API 服务已启用")
@@ -1765,7 +1768,7 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
           setLocalAccessState(nextState);
           await fetchCurrentAccount();
           setLocalAccessLaunchCurrent(true);
-          if (options?.showSuccessMessage ?? true) {
+          if (!nextState.projectStateDeferred && (options?.showSuccessMessage ?? true)) {
             setMessage({
               text: t("codex.localAccess.activateSuccess", "已切换到 API 服务"),
             });
@@ -1816,7 +1819,7 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
     }, [handleToggleLocalAccessEnabled, setMessage, t]);
   
     const handleExecuteLocalAccessLaunchPreview =
-      useCallback(async (): Promise<boolean> => {
+      useCallback(async (): Promise<boolean | { projectStateDeferred: true }> => {
         persistCodexLaunchPreviewLastInstanceId(
           CODEX_LAUNCH_PREVIEW_API_SERVICE_CARD_KEY,
           launchPreviewInstanceId,
@@ -1838,9 +1841,15 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
           if (!state) {
             return false;
           }
+          if (state.projectStateDeferred) return { projectStateDeferred: true };
           setLocalAccessLaunchPreviewOpen(false);
           return true;
         } catch (error) {
+          if (isCodexLaunchUnconfirmed(error)) {
+            setLocalAccessLaunchPreviewOpen(false);
+            void reloadLocalAccessState();
+            return false;
+          }
           if (
             presentWindowsOperationError({
               error,
@@ -1860,6 +1869,7 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
         codexInstanceStore,
         handleActivateLocalAccess,
         launchPreviewInstanceId,
+        reloadLocalAccessState,
         t,
       ]);
   

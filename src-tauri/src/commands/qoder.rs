@@ -25,8 +25,17 @@ pub fn import_qoder_from_json(json_content: String) -> Result<Vec<QoderAccount>,
 }
 
 #[tauri::command]
-pub fn import_qoder_from_local(app: AppHandle) -> Result<Vec<QoderAccount>, String> {
-    match qoder_account::import_from_local()? {
+pub async fn import_qoder_from_local(app: AppHandle) -> Result<Vec<QoderAccount>, String> {
+    let account = tauri::async_runtime::spawn_blocking(|| {
+        let account = qoder_account::import_from_local()?;
+        if account.is_some() {
+            qoder_account::reconcile_current_account()?;
+        }
+        Ok::<_, String>(account)
+    })
+    .await
+    .map_err(|error| format!("QODER_IMPORT_WORKER_FAILED: {}", error))??;
+    match account {
         Some(account) => {
             let _ = crate::modules::tray::update_tray_menu(&app);
             Ok(vec![account])
@@ -137,6 +146,9 @@ pub async fn refresh_qoder_token(
                 account.email,
                 started_at.elapsed().as_millis()
             ));
+            if let Some(error) = &account.quota_query_last_error {
+                return Err(error.clone());
+            }
             Ok(account)
         }
         Err(err) => {
@@ -167,79 +179,27 @@ pub async fn refresh_all_qoder_tokens(app: AppHandle) -> Result<i32, String> {
 
 #[tauri::command]
 pub async fn inject_qoder_account(app: AppHandle, account_id: String) -> Result<String, String> {
-    let started_at = Instant::now();
-    logger::log_info(&format!(
-        "[Qoder Switch] 开始切换账号: account_id={}",
-        account_id
-    ));
-
-    let switch_id = account_id.clone();
-    let account = tauri::async_runtime::spawn_blocking(move || {
-        let account_id = switch_id;
-        let account = qoder_account::load_account(&account_id)
-            .ok_or_else(|| format!("Qoder 账号不存在: {}", account_id))?;
-
-        qoder_account::inject_to_qoder(&account_id)?;
-        crate::modules::provider_current_state::set_current_account_id(
-            "qoder",
-            Some(account_id.as_str()),
-        )?;
-
-        if let Err(err) = crate::modules::qoder_instance::update_default_settings(
-            Some(Some(account_id.clone())),
-            None,
-            Some(false),
-        ) {
-            logger::log_warn(&format!("更新 Qoder 默认实例绑定账号失败: {}", err));
-        }
-
-        Ok::<_, String>(account)
-    })
-    .await
-    .map_err(|error| format!("QODER_SWITCH_WORKER_FAILED: {}", error))??;
-
-    let launch_warning = match crate::commands::qoder_instance::qoder_start_instance(
+    let result = super::qoder_instance::start_qoder_instance(
         "__default__".to_string(),
+        Some(account_id.clone()),
     )
-    .await
-    {
-        Ok(_) => None,
-        Err(err) => {
-            if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("启动 Qoder 失败") {
-                logger::log_warn(&format!("Qoder 默认实例启动失败: {}", err));
-                if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("APP_PATH_NOT_FOUND:") {
-                    let _ = app.emit(
-                        "app:path_missing",
-                        serde_json::json!({ "app": "qoder", "retry": { "kind": "default" } }),
-                    );
-                }
-                Some(err)
-            } else {
-                return Err(err);
-            }
+    .await;
+    if let Err(error) = result {
+        if error.starts_with("APP_PATH_NOT_FOUND:") {
+            let _ = app.emit(
+                "app:path_missing",
+                serde_json::json!({ "app": "qoder", "retry": {
+                    "kind": "switchAccount", "accountId": account_id
+                } }),
+            );
         }
-    };
-
-    let _ = crate::modules::tray::update_tray_menu(&app);
-
-    if let Some(err) = launch_warning {
-        logger::log_warn(&format!(
-            "[Qoder Switch] 切号完成但启动失败: account_id={}, email={}, elapsed={}ms, error={}",
-            account.id,
-            account.email,
-            started_at.elapsed().as_millis(),
-            err
-        ));
-        Ok(format!("切换完成，但 Qoder 启动失败: {}", err))
-    } else {
-        logger::log_info(&format!(
-            "[Qoder Switch] 切号成功: account_id={}, email={}, elapsed={}ms",
-            account.id,
-            account.email,
-            started_at.elapsed().as_millis()
-        ));
-        Ok(format!("切换完成: {}", account.email))
+        if error.starts_with("QODER_SWITCH_LAUNCH_FAILED:") {
+            let _ = crate::modules::tray::update_tray_menu(&app);
+        }
+        return Err(error);
     }
+    let _ = crate::modules::tray::update_tray_menu(&app);
+    Ok(account_id)
 }
 
 #[tauri::command]

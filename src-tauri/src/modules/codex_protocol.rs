@@ -416,6 +416,31 @@ pub(crate) fn codex_model_uses_responses_lite(model_id: &str) -> bool {
         })
 }
 
+fn normalize_codex_model_visibility(fields: &mut Map<String, Value>) {
+    if fields.get("visibility").and_then(Value::as_str) == Some("show") {
+        fields.insert("visibility".into(), json!("list"));
+    }
+}
+
+pub(crate) fn project_public_responses_model(model: &mut Value) {
+    if let Some(fields) = model.as_object_mut() {
+        normalize_codex_model_visibility(fields);
+        fields.insert("use_responses_lite".into(), Value::Bool(false));
+        if fields.get("tool_mode").and_then(Value::as_str) == Some("code_mode_only") {
+            // A relay may reuse the official slug without its Code Mode contract.
+            fields.insert("tool_mode".into(), json!("direct"));
+        }
+    }
+}
+
+pub(crate) fn project_public_responses_catalog(catalog: &mut Value) {
+    if let Some(models) = catalog.get_mut("models").and_then(Value::as_array_mut) {
+        for model in models {
+            project_public_responses_model(model);
+        }
+    }
+}
+
 pub(crate) fn responses_lite_metadata_enabled(body: &Value) -> bool {
     body.pointer("/client_metadata/ws_request_header_x_openai_internal_codex_responses_lite")
         .is_some_and(|value| {
@@ -431,19 +456,21 @@ pub(crate) fn filter_responses_lite_tools(body: &mut Value) -> bool {
         .is_some_and(filter_responses_lite_tools_in_object)
 }
 
-fn responses_lite_tool_allowed(tool: &Value) -> bool {
-    match tool
-        .get("type")
-        .and_then(Value::as_str)
-        .map(|tool_type| tool_type.trim().to_ascii_lowercase())
-        .as_deref()
-    {
-        Some("function" | "custom" | "namespace") => true,
-        Some("tool_search") => tool
-            .get("execution")
-            .and_then(Value::as_str)
-            .is_some_and(|execution| execution.trim().eq_ignore_ascii_case("client")),
-        _ => false,
+/// Rewrite a `tool_search` declaration whose execution is missing or
+/// `server` to client execution, so the Lite filter keeps it instead of
+/// silently dropping it. Deferred MCP namespaces are only loadable through
+/// `tool_search`, so dropping it breaks them even though the namespace
+/// declarations themselves survive (see #3012). Returns (rewritten, retained).
+fn normalize_responses_lite_tool_search(tool: &mut Map<String, Value>) -> (bool, bool) {
+    match tool.get("execution") {
+        Some(Value::String(mode)) if mode.trim().eq_ignore_ascii_case("client") => (false, true),
+        Some(value) if !value.as_str().is_some_and(|mode| mode.trim().eq_ignore_ascii_case("server")) => {
+            (false, false)
+        }
+        _ => {
+            tool.insert("execution".into(), Value::String("client".into()));
+            (true, true)
+        }
     }
 }
 
@@ -452,8 +479,23 @@ fn filter_responses_lite_tool_array(value: &mut Value) -> (bool, bool) {
         return (false, false);
     };
     let before = tools.len();
-    tools.retain(responses_lite_tool_allowed);
-    (tools.len() != before, !tools.is_empty())
+    let mut rewritten = false;
+    tools.retain_mut(|tool| {
+        let Some(tool) = tool.as_object_mut() else {
+            return false;
+        };
+        let kind = tool.get("type").and_then(Value::as_str).unwrap_or("");
+        match kind.trim().to_ascii_lowercase().as_str() {
+            "function" | "custom" | "namespace" => true,
+            "tool_search" => {
+                let (changed, keep) = normalize_responses_lite_tool_search(tool);
+                rewritten |= changed;
+                keep
+            }
+            _ => false,
+        }
+    });
+    (rewritten || tools.len() != before, !tools.is_empty())
 }
 
 fn filter_responses_lite_tool_choice(choice: &mut Value) -> (bool, bool) {
@@ -475,13 +517,7 @@ fn filter_responses_lite_tool_choice(choice: &mut Value) -> (bool, bool) {
 
     match choice_type.as_deref() {
         Some("function" | "custom" | "namespace") => return (false, true),
-        Some("tool_search") => {
-            let client_executed = choice_object
-                .get("execution")
-                .and_then(Value::as_str)
-                .is_some_and(|execution| execution.trim().eq_ignore_ascii_case("client"));
-            return (false, client_executed);
-        }
+        Some("tool_search") => return normalize_responses_lite_tool_search(choice_object),
         _ => {}
     }
 
@@ -636,6 +672,7 @@ fn build_codex_client_model(model_id: &str, index: usize) -> Value {
             Value::String(visibility.to_string()),
         );
     }
+    normalize_codex_model_visibility(object);
     object.insert("supported_in_api".to_string(), Value::Bool(true));
     object.insert("availability_nux".to_string(), Value::Null);
     object.insert("upgrade".to_string(), Value::Null);
@@ -805,6 +842,19 @@ pub(crate) fn is_known_deepseek_model(model_id: &str) -> bool {
         "deepseek-flash" | "deepseek-v4-flash" | "deepseek-v4-pro" | "deepseek-v4-flash-vision-exp")
 }
 
+pub(crate) const DEEPSEEK_DEFAULT_REASONING_EFFORT: &str = "max";
+pub(crate) const DEEPSEEK_REASONING_EFFORTS: &[&str] = &["low", "high", "max"];
+
+pub(crate) fn normalize_deepseek_reasoning_effort(effort: &str) -> Option<&'static str> {
+    match effort.trim().to_ascii_lowercase().as_str() {
+        "none" => Some("none"),
+        "minimal" | "low" => Some("low"),
+        "medium" | "high" | "xhigh" => Some("high"),
+        "max" | "ultra" => Some("max"),
+        _ => None,
+    }
+}
+
 pub(crate) fn deepseek_model_template(model_id: &str) -> Option<Value> {
     if !is_deepseek_model(model_id) {
         return None;
@@ -820,7 +870,9 @@ pub(crate) fn deepseek_model_template(model_id: &str) -> Option<Value> {
     let catalog = CATALOG.get_or_init(|| serde_json::from_str(include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/resources/deepseek_codex_models.json"))).expect("valid DeepSeek catalog"));
     let template = catalog["models"].as_array()?.iter().find(|item| item["slug"] == template_id)?;
     if is_known_deepseek_model(model_id) {
-        return Some(template.clone());
+        let mut model = template.clone();
+        model["default_reasoning_level"] = json!(DEEPSEEK_DEFAULT_REASONING_EFFORT);
+        return Some(model);
     }
     // Future models inherit only reasoning defaults, not a known model's
     // context size, image support, tools, or execution capabilities.
@@ -831,7 +883,7 @@ pub(crate) fn deepseek_model_template(model_id: &str) -> Option<Value> {
     fallback["input_modalities"] = json!(["text"]);
     fallback["supports_image_detail_original"] = json!(false);
     fallback["supported_reasoning_levels"] = template["supported_reasoning_levels"].clone();
-    fallback["default_reasoning_level"] = template["default_reasoning_level"].clone();
+    fallback["default_reasoning_level"] = json!(DEEPSEEK_DEFAULT_REASONING_EFFORT);
     Some(fallback)
 }
 
@@ -1366,6 +1418,7 @@ mod tests {
             let model = &build_codex_client_models_response(&[id.to_string()])["models"][0];
             let levels: Vec<_> = model["supported_reasoning_levels"].as_array().unwrap().iter().map(|level| level["effort"].as_str().unwrap()).collect();
             assert_eq!(levels, ["low", "high", "max"]);
+            assert_eq!(model["default_reasoning_level"], "max", "{id}");
         }
         assert!(deepseek_model_template("not-deepseek-v4-pro").is_none());
         assert!(deepseek_model_template("deepseek-").is_none());
@@ -1751,7 +1804,37 @@ mod tests {
         }
 
         assert!(normalize_responses_body_for_codex_with_lite(&mut body, true));
-        for pointer in ["/tools", "/tool_choice/tools", "/input/0/tools"] {
+        assert_eq!(
+            body.pointer("/tools")
+                .and_then(Value::as_array)
+                .map(|tools| {
+                    tools
+                        .iter()
+                        .filter_map(|tool| tool.get("type").and_then(Value::as_str))
+                        .collect::<Vec<_>>()
+                }),
+            Some(vec![
+                "function",
+                "custom",
+                "tool_search",
+                "tool_search",
+                "tool_search",
+                "namespace"
+            ]),
+            "unexpected tools at /tools"
+        );
+        // A `tool_search` without an execution mode, or one marked `server`,
+        // is rewritten to client execution instead of being dropped, so the
+        // deferred MCP namespaces it loads stay reachable (see #3012).
+        for pointer in ["/tools/3", "/tools/4"] {
+            assert_eq!(
+                body.pointer(&format!("{pointer}/execution"))
+                    .and_then(Value::as_str),
+                Some("client"),
+                "unexpected execution at {pointer}"
+            );
+        }
+        for pointer in ["/tool_choice/tools", "/input/0/tools"] {
             assert_eq!(
                 body.pointer(pointer)
                     .and_then(Value::as_array)
@@ -1780,6 +1863,84 @@ mod tests {
         assert_eq!(
             body.get("input").and_then(Value::as_array).map(Vec::len),
             Some(2)
+        );
+    }
+
+    #[test]
+    fn responses_lite_rewrites_tool_search_execution_to_client() {
+        let mut body = json!({
+            "model": "gpt-5.6-sol",
+            "input": [
+                {
+                    "type": "additional_tools",
+                    "tools": [
+                        {"type": "tool_search"},
+                        {"type": "tool_search", "execution": "server"}
+                    ]
+                }
+            ],
+            "tools": [
+                {"type": "tool_search"},
+                {"type": "tool_search", "execution": "server"},
+                {"type": "tool_search", "execution": "client"},
+                {"type": "tool_search", "execution": 1},
+                {"type": "tool_search", "execution": "unknown"}
+            ],
+            "tool_choice": {
+                "type": "allowed_tools",
+                "mode": "auto",
+                "tools": [
+                    {"type": "tool_search"},
+                    {"type": "tool_search", "execution": "server"}
+                ]
+            },
+            "response": {
+                "tools": [
+                    {"type": "tool_search", "execution": "server"}
+                ],
+                "tool_choice": {"type": "tool_search", "execution": "server"}
+            }
+        });
+
+        assert!(normalize_responses_body_for_codex_with_lite(
+            &mut body, true
+        ));
+
+        let tools = body
+            .pointer("/tools")
+            .and_then(Value::as_array)
+            .expect("top-level tools should survive the Lite filter");
+        assert_eq!(tools.len(), 3, "unexpected top-level tools");
+        assert!(tools.iter().all(|tool| {
+            tool.get("type").and_then(Value::as_str) == Some("tool_search")
+                && tool.get("execution").and_then(Value::as_str) == Some("client")
+        }));
+
+        for pointer in ["/tool_choice/tools", "/input/0/tools"] {
+            let tools = body
+                .pointer(pointer)
+                .and_then(Value::as_array)
+                .expect("tools should survive the Lite filter");
+            assert_eq!(tools.len(), 2, "unexpected tools at {pointer}");
+            assert!(tools
+                .iter()
+                .all(|tool| { tool.get("execution").and_then(Value::as_str) == Some("client") }));
+        }
+
+        assert_eq!(
+            body.pointer("/response/tools/0/execution")
+                .and_then(Value::as_str),
+            Some("client")
+        );
+        assert_eq!(
+            body.pointer("/response/tool_choice/type")
+                .and_then(Value::as_str),
+            Some("tool_search")
+        );
+        assert_eq!(
+            body.pointer("/response/tool_choice/execution")
+                .and_then(Value::as_str),
+            Some("client")
         );
     }
 
@@ -2424,6 +2585,8 @@ mod tests {
         let model = &catalog["models"][0];
         assert_eq!(model["slug"], "gpt-6.1-sol");
         assert_eq!(model["display_name"], "GPT-6.1 Sol");
+        assert_eq!(model["context_window"], 500_000);
+        assert_eq!(model["auto_compact_token_limit"], 450_000);
         assert_eq!(model["context_window"], template["context_window"].as_i64().expect("template context window"));
         assert_eq!(model["max_context_window"], template["max_context_window"].as_i64().expect("template maximum context window"));
         assert_eq!(model["auto_compact_token_limit"], template["auto_compact_token_limit"].as_i64().expect("template compact limit"));

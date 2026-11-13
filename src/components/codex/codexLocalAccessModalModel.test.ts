@@ -9,6 +9,7 @@ import {
   buildLocalAccessSummaryStats,
   formatRequestResultDetail,
   formatUsdCost,
+  getLocalAccessTestModelIds,
   normalizeAccessScope,
   normalizeCustomRoutingPriority,
   normalizeCustomRoutingWeight,
@@ -33,6 +34,17 @@ const pool = (accountStatuses: CodexLocalAccessAccountPoolHealth['accountStatuse
   accountStatuses, lastFailureAt: 1,
 });
 const translate = ((key: string, options: unknown) => typeof options === 'string' ? options : JSON.stringify({ key, ...options as object })) as TFunction;
+
+test('the service test picker includes the configured image model and source variants', () => {
+  const chatModels = ['gpt-5.6-luna', 'gpt-image-2.6'];
+  const settings = {
+    imageGenerationMode: 'images_only' as const,
+    imageGenerationModel: 'gpt-image-2.6',
+    imageGenerationAccountModels: { source: 'gpt-image-2.6-flare' },
+  };
+  assert.deepEqual(getLocalAccessTestModelIds(chatModels, settings), [...chatModels, 'gpt-image-2.6-flare']);
+  assert.deepEqual(getLocalAccessTestModelIds(chatModels, { ...settings, imageGenerationMode: 'disabled' }), chatModels);
+});
 
 test('paused members remain in pool counts without becoming available or recoverable auth failures', () => {
   const summary = summarizeAccountPoolHealth([account('source')], ['source'], {
@@ -83,10 +95,22 @@ test('health summary preserves recovery, missing-account, cooldown, quota and au
   assert.equal(JSON.stringify({ accounts, state }), before, 'display aggregation must not mutate account or scheduler state');
 });
 
-test('a pool without member diagnostics retains its existing unavailable summary without inventing auth errors', () => {
-  assert.deepEqual(summarizeAccountPoolHealth([account('a'), account('b')], ['a', 'b'], {
-    accountHealth: [], accountPoolHealth: [pool([])], recoverySuppressedAccountIds: ['b'],
-  }), { total: 2, available: 1, abnormal: 0, cooldown: 0, missing: 0, authError: 0, quotaLimited: 0 });
+test('an unattributed request failure keeps Plus and Free member health independent', () => {
+  const accounts = [account('paid', { plan_type: 'Plus' }), account('free', { plan_type: 'Free' })];
+  const ids = accounts.map(({ id }) => id);
+  const state = { accountHealth: [health('paid'), health('free')], accountPoolHealth: [pool([])] };
+  assert.deepEqual(summarizeAccountPoolHealth(accounts, ids, state), {
+    total: 2, available: 2, abnormal: 0, cooldown: 0, missing: 0, authError: 0, quotaLimited: 0,
+  });
+  assert.equal(summarizeAccountPoolHealth(accounts, ids, {
+    ...state,
+    accountHealth: [health('paid'), health('free', { available: false })],
+  }).available, 1);
+  assert.equal(summarizeAccountPoolHealth(accounts, ids, {
+    ...state,
+    accountPoolHealth: [pool([{ accountId: 'free', accountEmail: '', available: false,
+      reasonCode: 'unavailable', reasonMessage: '' }])],
+  }).available, 1);
   assert.deepEqual(summarizeAccountPoolHealth([account('a')], ['a'], null), {
     total: 1, available: 1, abnormal: 0, cooldown: 0, missing: 0, authError: 0, quotaLimited: 0,
   });

@@ -15,6 +15,20 @@ fn active_service_account_ids(
         .collect()
 }
 
+/// Read the saved membership in pool order without starting the gateway.
+pub(crate) fn configured_active_pool_member_ids() -> Result<Vec<String>, String> {
+    let Some(content) = read_optional_profile_file(&local_access_file_path()?)? else {
+        return Ok(Vec::new());
+    };
+    let mut collection: CodexLocalAccessCollection = serde_json::from_str(&content)
+        .map_err(|error| format!("读取 API 服务成员失败: {error}"))?;
+    let ids = std::mem::take(&mut collection.account_ids);
+    let mut seen = HashSet::new();
+    Ok(active_service_account_ids(&collection, ids).into_iter()
+        .filter(|id| !id.is_empty() && seen.insert(id.clone()))
+        .collect())
+}
+
 fn service_member_snapshot(
     collection: &CodexLocalAccessCollection,
 ) -> Vec<crate::models::codex_local_access::CodexLocalAccessServiceMember> {

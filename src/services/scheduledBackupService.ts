@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { DataTransferSelection, exportDataTransferJson } from './dataTransferService';
+import { type DataTransferSelection, exportDataTransferBundle } from './dataTransferService';
 import { ALL_PLATFORM_IDS, PlatformId } from '../types/platform';
 import { getWebdavSyncSettings, uploadAutoBackupToWebdav } from './webdavSyncService';
 
@@ -173,9 +173,10 @@ function buildManagedBackupFileName(
   selection: DataTransferSelection,
   trigger: AutoBackupTrigger,
   date: Date,
+  savedMfaPending: boolean,
 ): string {
   const mode = selectionToAutoBackupMode(selection);
-  return `cockpit_${trigger}_backup_${mode}_${formatTimestampForFileName(date)}.json`;
+  return `cockpit_${trigger}_backup_${mode}_${formatTimestampForFileName(date)}${savedMfaPending ? '_mfa-pending' : ''}.json`;
 }
 
 function normalizeDate(value: string | null | undefined): Date | null {
@@ -388,11 +389,12 @@ export async function createManagedBackup(params: {
   }
 
   const executedAt = new Date();
-  const content = await exportDataTransferJson(params.selection);
-  const fileName = buildManagedBackupFileName(params.selection, params.trigger, executedAt);
+  const bundle = await exportDataTransferBundle(params.selection);
+  const savedMfaPending = params.selection.includeConfig && bundle.config?.verification_records === undefined;
+  const fileName = buildManagedBackupFileName(params.selection, params.trigger, executedAt, savedMfaPending);
   const path = await invoke<string>('write_auto_backup_file', {
     fileName,
-    content,
+    content: JSON.stringify(bundle, null, 2),
   });
   const deletedFiles = await cleanupAutoBackupFilesInternal(params.retentionDays);
 

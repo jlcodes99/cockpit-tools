@@ -14,16 +14,7 @@ async fn remote_gateway_preserves_client_scope_and_thread_but_strips_management_
             }
         }
     }))).await;
-    let (mut service, host, path) = native(
-        addr,
-        false,
-        false,
-        Options {
-            session_identity_mapping_enabled: false,
-            ..Default::default()
-        },
-    )
-    .await;
+    let (mut service, host, path) = native(addr, false, false, Options::default()).await;
     let descriptor=serde_json::from_value(json!({"product":"cockpit-tools","protocolVersion":1,
         "serviceId":"scope-fixture","serviceName":"Cockpit Tools","keyLabel":"B","status":"active",
         "models":["test-model"],"imageModels":[],"tokenLimit":null,"tokenUsed":0,"budget":{},"updatedAt":1,

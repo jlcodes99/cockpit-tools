@@ -261,7 +261,7 @@ async fn full_compat_websocket_compression_negotiates_on_both_legs() {
     let negotiated = Arc::new(AtomicBool::new(false));
     let (addr,task)=mock(Router::new().route("/v1/responses",get({let negotiated=negotiated.clone();move |headers:HeaderMap,ws:yawc::IncomingUpgrade|{let negotiated=negotiated.clone();async move{
         negotiated.store(headers.get("sec-websocket-extensions").is_some_and(|v|v.to_str().unwrap().contains("permessage-deflate")),Ordering::SeqCst);
-        let (response,upgrade)=ws.upgrade(super::super::websocket_io::options(1024*1024)).unwrap();
+        let (response,upgrade)=ws.upgrade(super::super::websocket_io::options(1024*1024, Duration::from_secs(60))).unwrap();
         tokio::spawn(async move{let mut socket=upgrade.await.unwrap();let request=socket.next().await.unwrap();let value:Value=serde_json::from_slice(request.payload()).unwrap();assert_eq!(value["input"][0]["content"],"long input ".repeat(4096));
             socket.send(yawc::Frame::text(json!({"type":"response.completed","response":{"id":"r","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"long output ".repeat(4096)}]}]}}).to_string())).await.unwrap();let _=socket.next().await;});
         response.map(Body::new)
@@ -272,7 +272,7 @@ async fn full_compat_websocket_compression_negotiates_on_both_legs() {
             .parse()
             .unwrap(),
     )
-    .with_options(super::super::websocket_io::options(1024 * 1024))
+    .with_options(super::super::websocket_io::options(1024 * 1024, Duration::from_secs(60)))
     .with_request(axum::http::Request::builder().header("authorization", "Bearer local-test-key"))
     .await
     .unwrap();
@@ -303,7 +303,7 @@ async fn full_compat_websocket_wire_uses_rsv1_and_bounds_decompressed_messages()
             client,
             yawc::Role::Client,
             Some("permessage-deflate; client_no_context_takeover; server_no_context_takeover"),
-            super::super::websocket_io::options(1024 * 1024),
+            super::super::websocket_io::options(1024 * 1024, Duration::from_secs(60)),
         )
         .unwrap(),
     );
@@ -318,7 +318,7 @@ async fn full_compat_websocket_wire_uses_rsv1_and_bounds_decompressed_messages()
         client,
         yawc::Role::Client,
         Some("permessage-deflate"),
-        super::super::websocket_io::options(8192),
+        super::super::websocket_io::options(8192, Duration::from_secs(60)),
     )
     .unwrap();
     let mut reader = super::super::websocket_io::Socket::<_, ClientMessage>::new(
@@ -326,7 +326,7 @@ async fn full_compat_websocket_wire_uses_rsv1_and_bounds_decompressed_messages()
             server,
             yawc::Role::Server,
             Some("permessage-deflate"),
-            super::super::websocket_io::options(128),
+            super::super::websocket_io::options(128, Duration::from_secs(60)),
         )
         .unwrap(),
     );

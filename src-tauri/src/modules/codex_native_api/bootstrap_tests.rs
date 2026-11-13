@@ -262,8 +262,8 @@ async fn zero_tries_all_distinct_accounts_positive_limits_include_first_for_stre
             if status == 200 {
                 assert!(!text.contains("server_is_overloaded"));
                 let requests = host.requests.lock().unwrap();
-                assert_ne!(requests[0].1["session-id"], requests[1].1["session-id"]);
-                assert_ne!(requests[0].1["thread-id"], requests[1].1["thread-id"]);
+                assert_eq!(requests[0].1["session-id"], requests[1].1["session-id"]);
+                assert_eq!(requests[0].1["thread-id"], requests[1].1["thread-id"]);
             }
             assert!(host
                 .failures
@@ -379,8 +379,8 @@ async fn comments_or_partial_json_do_not_spend_the_response_id_hold_budget() {
         assert_eq!(host.calls[0].load(Ordering::SeqCst), 1);
         assert_eq!(host.calls[1].load(Ordering::SeqCst), 1);
         let requests = host.requests.lock().unwrap();
-        assert_ne!(requests[0].1["session-id"], requests[1].1["session-id"]);
-        assert_ne!(requests[0].1["thread-id"], requests[1].1["thread-id"]);
+        assert_eq!(requests[0].1["session-id"], requests[1].1["session-id"]);
+        assert_eq!(requests[0].1["thread-id"], requests[1].1["thread-id"]);
     }
 }
 

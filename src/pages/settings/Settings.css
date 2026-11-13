@@ -356,9 +356,25 @@
   transition: all 0.2s;
 }
 
-.settings-select:hover {
+.settings-select:hover:not(:disabled) {
   border-color: var(--border-light);
   background-color: var(--bg-secondary);
+}
+
+.settings-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.settings-dropdown .single-select-dropdown-trigger {
+  min-width: 120px;
+  min-height: 34px;
+  padding: 6px 10px 6px 12px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: none;
 }
 
 .settings-select--input-mode {
@@ -420,6 +436,11 @@
 
 input:checked + .slider {
   background-color: var(--primary);
+}
+
+.switch input:focus-visible + .slider {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 input:checked + .slider:before {

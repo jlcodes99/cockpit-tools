@@ -133,11 +133,15 @@ pub fn schedule_account_rewrite_if_unchanged<F>(
                 "[DeferredAccountRewrite] 开始写回: platform={}, account_id={}",
                 platform, account_id
             ));
-            match crate::modules::atomic_write::write_string_atomic_if_hash_matches(
-                &source_path,
-                expected_hash,
-                action,
-            ) {
+            let rewritten = action().and_then(|content| {
+                let _lock = crate::modules::account_file_crypto::lock_account_file(&source_path)?;
+                crate::modules::atomic_write::write_string_atomic_if_hash_matches(
+                    &source_path,
+                    expected_hash,
+                    || Ok(content),
+                )
+            });
+            match rewritten {
                 Ok(true) => {}
                 Ok(false) => logger::log_info(&format!(
                     "[DeferredAccountRewrite] 源文件已变化或删除，跳过旧快照写回: platform={}, account_id={}, path={}",

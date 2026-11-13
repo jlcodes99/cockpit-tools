@@ -206,6 +206,7 @@ mod retired_model_tests {
             display_name: "Custom".into(),
             reasoning_efforts: None,
             default_reasoning_effort: None,
+            ultra_reasoning_effort: None,
             context_window: Some(32768),
             auto_compact_token_limit: Some(28000),
         };

@@ -29,7 +29,8 @@ function voiceRequest() {
       'Content-Type': 'application/json', 'OpenAI-Alpha': 'quicksilver=v2',
       Authorization: 'Bearer original-test-token', 'Chatgpt-Account-Id': 'original-account',
       'OpenAI-Sentinel-Chat-Requirements-Token': 'integrity-test-token',
-      'Thread-Id': 'thread-test', 'x-codex-turn-metadata': '{"thread_source":"cli"}',
+      'Thread-Id': 'thread-test', 'Voice-Session-Id': 'voice-test',
+      'x-codex-turn-metadata': '{"thread_source":"cli"}',
     },
     expectedIdentity: { type: 'oauth' },
     cancelToken: 17,
@@ -42,7 +43,6 @@ test('voice creation preserves RPC and request data while using the instance gat
   const h = harness();
   assert.equal(h.install(), true);
   const request = voiceRequest();
-  request.url = '/next/voice/calls?version=3&mode=client';
   const before = JSON.stringify(request);
   const message = pipeline(request);
   const transfer = [{}];
@@ -56,6 +56,7 @@ test('voice creation preserves RPC and request data while using the instance gat
   assert.equal(rewritten.headers['X-Cockpit-Voice-Target'], request.url);
   assert.equal(rewritten.headers.Authorization, `Bearer ${config.apiKey}`);
   assert.equal(rewritten.headers['thread-id'], 'thread-test');
+  assert.equal(rewritten.headers['voice-session-id'], 'voice-test');
   assert.equal(rewritten.headers['x-codex-turn-metadata'], request.headers['x-codex-turn-metadata']);
   assert.equal(rewritten.headers['content-type'], 'application/json');
   assert.equal(rewritten.headers['openai-alpha'], 'quicksilver=v2');

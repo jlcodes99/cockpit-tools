@@ -1,6 +1,18 @@
-// Project recovery composes with the existing quick/deep pipeline. There is no
-// separate repair mode or switch-time history scan.
+// Project recovery can run independently of the provider and history repair.
 const QUICK_PROJECT_REPAIR_BUDGET: Duration = Duration::from_millis(500);
+
+fn quick_project_repair_budget(data_dir: &Path) -> Duration {
+    let large_state = [GLOBAL_STATE_FILE.to_string(), format!("{GLOBAL_STATE_FILE}.bak")]
+        .iter()
+        .any(|name| std::fs::metadata(data_dir.join(name)).is_ok_and(|m| m.len() > 2_000_000));
+    // Multi-account archives need more time to parse and atomically preserve.
+    // Startup still caps this work at the remaining five-second launch budget.
+    if large_state {
+        Duration::from_secs(2)
+    } else {
+        QUICK_PROJECT_REPAIR_BUDGET
+    }
+}
 
 fn project_recovery_message(key: &str, args: &[(&str, &str)]) -> String {
     modules::i18n::translate(
@@ -22,6 +34,32 @@ fn project_recovery_error(error: String) -> String {
         },
         &[("error", &error)],
     )
+}
+
+fn project_deferral_message(data_dir: &Path, error: &str) -> String {
+    let reason = if error.contains("CODEX_PROJECT_STATE_TOO_LARGE") {
+        project_recovery_message("projectsStateTooLarge", &[])
+    } else if error.contains("CODEX_PROJECT_QUICK_LIMIT")
+        || error.contains(LAUNCH_VISIBILITY_TIMEOUT)
+    {
+        project_recovery_message("projectsQuickBudget", &[])
+    } else {
+        project_recovery_error(error.to_owned())
+    };
+    let size = [GLOBAL_STATE_FILE.to_string(), format!("{GLOBAL_STATE_FILE}.bak")]
+        .into_iter()
+        .filter_map(|name| {
+            std::fs::metadata(data_dir.join(&name))
+                .ok()
+                .map(|metadata| (name, metadata.len()))
+        })
+        .max_by_key(|(_, bytes)| *bytes)
+        .map(|(name, bytes)| project_recovery_message(
+            "projectsStateSize",
+            &[("file", &name), ("bytes", &bytes.to_string())],
+        ));
+    [Some(reason), size, Some(project_recovery_message("projectsDeferredAction", &[]))]
+        .into_iter().flatten().collect::<Vec<_>>().join(" ")
 }
 
 fn verify_project_recovery_stopped(instance: &CodexSyncInstance) -> Result<(), String> {
@@ -104,32 +142,57 @@ fn repair_session_visibility_for_instances_with_options(
         );
     }
     let deep = options.mode == CodexSessionVisibilityRepairMode::Deep;
+    let project_only = options.mode == CodexSessionVisibilityRepairMode::Projects;
+    let thorough_projects = deep || project_only;
     let automatic_start = launch_visibility_budget().is_some();
-    let _leases = if deep && !options.dry_run {
+    if instances.is_empty() {
+        return Err("未找到要修复的 Codex 实例".to_string());
+    }
+    let _leases = if thorough_projects && !options.dry_run {
         let leases = instances
             .iter()
             .map(|instance| {
                 modules::codex_account::try_acquire_profile_mutation_lease(
                     &instance.data_dir,
-                    "deep-session-visibility-repair",
+                    if project_only { "local-project-recovery" } else { "deep-session-visibility-repair" },
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
         for instance in &instances {
             verify_project_recovery_stopped(instance)?;
         }
-        // Recover unfinished project writes before provider repair can prune any
-        // backup or change another field in those same databases.
+        leases
+    } else {
+        Vec::new()
+    };
+    let history_preflight_reporter = |mut progress: CodexSessionVisibilityRepairProgress| {
+        progress.percent = 2;
+        if let Some(report) = reporter {
+            report(progress);
+        }
+    };
+    let mut history_plans = if deep {
+        let plans = scan_history_projections_for_instances(
+            options, &run_id, Some(&history_preflight_reporter), &selection, &instances,
+        )?;
+        if !options.dry_run {
+            if let Some(warning) = history_duplicate_ordinals_warning(&instances, &plans) {
+                return Err(warning);
+            }
+        }
+        Some(plans)
+    } else {
+        None
+    };
+    if thorough_projects && !options.dry_run {
+        // Preflight finished; recover pending project writes before provider repair.
         for instance in &instances {
             if local_projects::has_pending(&instance.data_dir) {
                 local_projects::recover_pending(&instance.data_dir)
                     .map_err(project_recovery_error)?;
             }
         }
-        leases
-    } else {
-        Vec::new()
-    };
+    }
     let base_reporter = |mut progress: CodexSessionVisibilityRepairProgress| {
         progress.percent = (u16::from(progress.percent) * 60 / 100) as u8;
         if progress.stage == "done" {
@@ -139,26 +202,25 @@ fn repair_session_visibility_for_instances_with_options(
             report(progress);
         }
     };
-    // Launch selects a single stopped profile. Prepare its account-scoped
-    // project registry before optional session work can exhaust the launch budget.
-    let mut desktop_preparation = if selection.prepare_desktop_projects {
-        instances.first().map(prepare_local_project_account_state)
-    } else {
-        None
-    };
-    let mut summary = repair_provider_visibility_for_instances_with_options(
-        options,
-        run_id.clone(),
-        Some(&base_reporter),
-        selection.clone(),
-        instances.clone(),
-    )?;
-    if matches!(&desktop_preparation, Some(Ok(true))) {
-        summary.updated_global_state_entry_count += 1;
-        if let Some(item) = summary.items.first_mut() {
-            item.updated_global_state_entry_count += 1;
+    let mut summary = if project_only {
+        CodexSessionVisibilityRepairSummary {
+            instance_count: instances.len(),
+            items: instances.iter().map(|instance| CodexSessionVisibilityRepairItem {
+                instance_id: instance.id.clone(),
+                instance_name: instance.name.clone(),
+                ..Default::default()
+            }).collect(),
+            ..Default::default()
         }
-    }
+    } else {
+        repair_provider_visibility_for_instances_with_options(
+            options,
+            run_id.clone(),
+            Some(&base_reporter),
+            selection.clone(),
+            instances.clone(),
+        )?
+    };
     let mut totals = local_projects::Counts::default();
     for (index, instance) in instances.iter().enumerate() {
         report_repair_progress(
@@ -171,27 +233,27 @@ fn repair_session_visibility_for_instances_with_options(
             instances.len(),
             Some(instance),
         );
-        let project_budget = if deep {
+        let project_budget = if thorough_projects {
             Duration::from_secs(30)
         } else {
+            let quick_budget = quick_project_repair_budget(&instance.data_dir);
             launch_visibility_budget()
                 .map(|budget| {
                     budget
                         .deadline
                         .saturating_duration_since(std::time::Instant::now())
-                        .min(QUICK_PROJECT_REPAIR_BUDGET)
+                        .min(quick_budget)
                 })
-                .unwrap_or(QUICK_PROJECT_REPAIR_BUDGET)
+                .unwrap_or(quick_budget)
         };
         let result = with_launch_visibility_budget(project_budget, || {
             if local_projects::has_pending(&instance.data_dir) {
                 return Err("CODEX_PROJECT_PENDING_RECOVERY".into());
             }
-            desktop_preparation.take().transpose()?;
             let Some(plan) = local_projects::scan_for_repair(
                 &instance.data_dir,
                 selection.session_ids(),
-                !deep,
+                !thorough_projects,
             )?
             else {
                 return Ok(None);
@@ -202,9 +264,9 @@ fn repair_session_visibility_for_instances_with_options(
             if changed && !options.dry_run {
                 // A launch already owns the profile lease. A manual quick repair
                 // takes one only for its small write, without queuing behind a start.
-                let _quick_lease = if !deep && automatic_start {
+                let _quick_lease = if !thorough_projects && automatic_start {
                     None
-                } else if !deep {
+                } else if !thorough_projects {
                     Some(modules::codex_account::try_acquire_profile_mutation_lease(
                         &instance.data_dir,
                         "quick-project-recovery",
@@ -237,7 +299,7 @@ fn repair_session_visibility_for_instances_with_options(
         let outcome = match result {
             Ok(outcome) => outcome,
             Err(error)
-                if !deep
+                if !thorough_projects
                     && !error.contains("ROLLBACK_FAILED")
                     && !local_projects::has_pending(&instance.data_dir) =>
             {
@@ -245,10 +307,14 @@ fn repair_session_visibility_for_instances_with_options(
                 // Its read-only scan or rolled-back write must not delay startup.
                 modules::logger::log_warn(&format!("[Codex Local Projects] bounded quick repair deferred: instance_id={}, error={error}",instance.id));
                 summary.local_project_recovery_deferred = true;
+                summary.local_project_recovery_deferred_message
+                    .get_or_insert_with(|| project_deferral_message(&instance.data_dir, &error));
                 continue;
             }
-            Err(error) if !deep && error.contains("CODEX_PROJECT_PENDING_RECOVERY") => {
+            Err(error) if !thorough_projects && error.contains("CODEX_PROJECT_PENDING_RECOVERY") => {
                 summary.local_project_recovery_deferred = true;
+                summary.local_project_recovery_deferred_message
+                    .get_or_insert_with(|| project_deferral_message(&instance.data_dir, &error));
                 continue;
             }
             Err(error) => {
@@ -298,12 +364,22 @@ fn repair_session_visibility_for_instances_with_options(
                 report(progress);
             }
         };
-        let history = repair_history_projections_for_instances(
+        // Provider migration can rewrite rollout bytes. Otherwise the original
+        // evidence remains usable and apply checks it again before deleting any index.
+        let plans = if options.dry_run || summary.changed_rollout_file_count == 0 {
+            history_plans.take().expect("full repair history was preflighted")
+        } else {
+            scan_history_projections_for_instances(
+                options, &run_id, Some(&history_reporter), &selection, &instances,
+            )
+            .map_err(|error| format!("{error}; completed_backups={:?}", summary.backup_dirs))?
+        };
+        let history = apply_history_projection_plans(
             options,
             run_id.clone(),
             Some(&history_reporter),
-            selection,
-            instances.clone(),
+            &instances,
+            plans,
         )
         .map_err(|error| format!("{error}; completed_backups={:?}", summary.backup_dirs))?;
         summary.history_projection_count = history.history_projection_count;
@@ -330,15 +406,19 @@ fn repair_session_visibility_for_instances_with_options(
         .iter()
         .filter(|item| visibility_item_changed(item))
         .count();
-    summary.message = combined_visibility_message(&summary, options.dry_run);
-    if totals.projects > 0
+    if !project_only {
+        summary.message = combined_visibility_message(&summary, options.dry_run);
+    }
+    if project_only || totals.projects > 0
         || totals.assignments > 0
         || totals.thread_rows > 0
         || totals.catalog_rows > 0
         || totals.skipped_projects > 0
         || totals.ambiguous_threads > 0
     {
-        summary.message.push_str("; ");
+        if !summary.message.is_empty() {
+            summary.message.push_str("; ");
+        }
         summary.message.push_str(&project_recovery_message(
             if options.dry_run {
                 "projectsPreview"
@@ -353,11 +433,9 @@ fn repair_session_visibility_for_instances_with_options(
             ],
         ));
     }
-    if summary.local_project_recovery_deferred {
+    if let Some(detail) = &summary.local_project_recovery_deferred_message {
         summary.message.push_str("; ");
-        summary
-            .message
-            .push_str(&project_recovery_message("projectsDeferred", &[]));
+        summary.message.push_str(detail);
     }
     if let Some(message) = history_message {
         summary.message.push_str("; ");
@@ -380,40 +458,35 @@ fn repair_session_visibility_for_instances_with_options(
 // Switch and launch both hold the profile mutation lease. Resolve the owner
 // from the committed credentials and only write while the Desktop is stopped.
 fn prepare_local_project_account_state(instance: &CodexSyncInstance) -> Result<bool, String> {
-    let budget = launch_visibility_budget().map_or(QUICK_PROJECT_REPAIR_BUDGET, |parent| {
-        parent
-            .deadline
-            .saturating_duration_since(std::time::Instant::now())
-            .min(QUICK_PROJECT_REPAIR_BUDGET)
-    });
-    with_launch_visibility_budget(budget, || {
-        check_launch_visibility_budget("read_project_owner")?;
-        if local_projects::has_pending(&instance.data_dir) {
-            return Err("CODEX_PROJECT_PENDING_RECOVERY".into());
-        }
-        let Some(owner) = modules::codex_account::desktop_renderer_project_owner(&instance.data_dir)? else {
-            return Ok(false);
-        };
-        verify_project_recovery_stopped(instance)?;
-        let prepared = local_projects::account_state::prepare(&instance.data_dir, owner.as_deref())?;
-        if prepared {
-            modules::logger::log_info(&format!(
-                "[Codex Local Projects] prepared account-scoped local groups: instance_id={}",
-                instance.id,
-            ));
-        }
-        Ok(prepared)
-    })
+    check_launch_visibility_budget("read_project_owner")?;
+    if local_projects::has_pending(&instance.data_dir) {
+        return Err("CODEX_PROJECT_PENDING_RECOVERY".into());
+    }
+    let Some(owner) = modules::codex_account::desktop_renderer_project_owner(&instance.data_dir)? else {
+        return Ok(false);
+    };
+    verify_project_recovery_stopped(instance)?;
+    let prepared = local_projects::account_state::prepare(&instance.data_dir, owner.as_deref())?;
+    if prepared {
+        modules::logger::log_info(&format!(
+            "[Codex Local Projects] prepared account-scoped local groups: instance_id={}",
+            instance.id,
+        ));
+    }
+    Ok(prepared)
 }
 
 pub(crate) fn prepare_desktop_project_state_after_switch(
     instance_id: &str,
     data_dir: &Path,
 ) -> Result<bool, String> {
-    prepare_local_project_account_state(&CodexSyncInstance {
+    let instance = CodexSyncInstance {
         id: instance_id.to_string(),
         name: instance_id.to_string(),
         data_dir: data_dir.to_path_buf(),
         last_pid: None,
+    };
+    with_launch_visibility_budget(quick_project_repair_budget(data_dir), || {
+        prepare_local_project_account_state(&instance)
     })
 }

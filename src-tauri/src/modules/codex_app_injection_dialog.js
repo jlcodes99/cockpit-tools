@@ -238,7 +238,21 @@
     if (apiCount > 0 && !gptPlans.some(plan => String(plan.plan).toUpperCase() === 'API_KEY')) gptPlans.push({plan:'API_KEY',count:apiCount});
     const table = gptPlans.length ? '<table class="plan-table"><thead><tr>' + [planLabel,accountPoolLabel,fiveHourLabel,weeklyLabel].map(value => '<th scope="col">' + esc(value) + '</th>').join('') + '</tr></thead><tbody>'
       + gptPlans.map(plan => '<tr><td>' + badge(plan.plan) + (plan.official ? '<span class="cell-muted">' + esc(officialLabel) + '</span>' : '') + '</td><td>' + number(plan.count) + '</td><td>' + quotaPercentage(plan.fiveHourRemainingPercent) + '</td><td>' + quotaPercentage(plan.weeklyRemainingPercent) + '</td></tr>').join('') + '</tbody></table>' : '<p class="empty-state">' + esc(quotaEmptyLabel) + '</p>';
-    return table + statuses();
+    const providers = typeof providerQuotas === 'undefined' ? [] : providerQuotas;
+    return (providers.length && !gptPlans.length ? '' : table)
+      + (providers.length ? resourceTable([label('provider'), quotaOverviewLabel], providers.map(row => [
+        row.name, providerQuotaText(row),
+      ])) : '') + statuses();
+  }
+  function providerQuotaText(row) {
+    if (row.status === 'stale') return label('providerQuotaStale');
+    if (row.status === 'failed') return label('providerQuotaFailed');
+    if (row.status !== 'ready') return label('providerQuotaUnavailable');
+    if (!Number.isFinite(row.remaining)) return label('remoteUnlimited');
+    const suffix = row.unit === '%' ? '%' : row.unit ? ' ' + row.unit : '';
+    const format = value => value.toLocaleString(undefined, {maximumFractionDigits: 6}) + suffix;
+    const amount = format(row.remaining) + (!row.unlimited && Number.isFinite(row.total) ? ' / ' + format(row.total) : '');
+    return amount + (row.unit ? '' : ' · ' + label('providerQuotaUnitUnknown'));
   }
   function resourceTable(headers, rows, tones = []) {
     return '<table class="resource-table"><thead><tr>' + headers.map(value => '<th scope="col">' + esc(value) + '</th>').join('')

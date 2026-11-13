@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
 import { TraeAccount } from '../types/trae';
-import { getProviderCurrentAccountId } from './providerCurrentAccountService';
 
 export type TraePlatformId = 'trae' | 'trae_solo' | 'trae_cn' | 'trae_solo_cn';
 
@@ -121,7 +120,20 @@ export async function getTraeAccountsIndexPath(): Promise<string> {
 export async function getTraeCurrentAccountId(
   platformId: TraePlatformId = 'trae',
 ): Promise<string | null> {
-  return await getProviderCurrentAccountId(platformId);
+  return (await getTraeCurrentAccounts([platformId]))[platformId]?.id ?? null;
+}
+
+type TraeCurrentAccounts = Partial<Record<TraePlatformId, { id: string; email: string } | null>>;
+
+export function getTraeCurrentAccounts(platforms: TraePlatformId[]): Promise<TraeCurrentAccounts> {
+  if (!platforms.length) return Promise.resolve({});
+  const targets = [...new Set(platforms)].sort();
+  const request = invoke<TraeCurrentAccounts>('get_trae_current_accounts', { platforms: targets });
+  let timer: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('trae_current_accounts_timeout')), 3_000);
+  });
+  return Promise.race([request, deadline]).finally(() => clearTimeout(timer));
 }
 
 export async function injectTraeAccount(

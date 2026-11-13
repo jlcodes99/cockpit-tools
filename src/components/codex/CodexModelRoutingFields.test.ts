@@ -99,6 +99,7 @@ function harness(overrides: Props = {}) {
   });
   return {
     calls,
+    toggleRouteModel: exports.toggleRouteModelInRoutes,
     component(name: string, initial: Props = {}) {
       const state = { slots: [], index: 0, effects: [] as (() => void)[] };
       let props: Props = {
@@ -123,6 +124,19 @@ function harness(overrides: Props = {}) {
     },
   };
 }
+
+test('a discovered model becomes eligible only in the route where it was selected', () => {
+  const { toggleRouteModel } = harness();
+  const original = [{ ...route, selectedModels: ['model-1'] }, { ...route, id: 'other', namespace: 'other' }];
+  const unchanged = toggleRouteModel(original, 'api/new-model', [account], 'add', 'other');
+  assert.equal(unchanged[0], original[0]);
+  const next = toggleRouteModel(original, 'api/new-model', [account], 'add', route.id);
+  assert.deepEqual(Array.from(next[0].extraModels), ['manual-model', 'new-model']);
+  assert.deepEqual(Array.from(next[0].selectedModels), ['model-1', 'new-model']);
+  assert.equal(next[1], original[1]);
+  const removed = toggleRouteModel(next, 'api/new-model', [account], 'remove');
+  assert.deepEqual(Array.from(removed[0].selectedModels), ['model-1']);
+});
 
 function elements(tree: Element): Element[] {
   const result: Element[] = [];

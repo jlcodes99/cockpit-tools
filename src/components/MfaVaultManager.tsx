@@ -5,22 +5,30 @@ import { isTauri } from '@tauri-apps/api/core';
 import { save, open, confirm } from '@tauri-apps/plugin-dialog';
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
 import jsQR from 'jsqr';
+import {
+  clearMfaHistoryRecords,
+  loadMfaHistoryRecords,
+  loadSavedMfaRecords,
+  rememberMfaQuery,
+  restoreMfaRecoveryCheckpoint,
+  startMfaRecovery,
+  subscribeMfaRecovery,
+  subscribeMfaVault,
+  updateMfaHistoryRecords,
+  updateSavedMfaRecords,
+  type MfaRecoveryStatus,
+} from '../services/mfaRecoveryService';
 import { buildMfaMigrationQrPages, type MfaMigrationQrPage } from '../utils/mfaMigrationQr';
 import {
-  MFA_STORAGE_KEY_HISTORY,
-  MFA_STORAGE_KEY_SAVED,
   createMfaRecordId,
   dedupeMfaRecordsBySecret,
   filterMfaRecords,
   getMfaOtpToken,
   getMfaTimeRemaining,
-  loadMfaHistoryRecords,
-  loadSavedMfaRecords,
   normalizeMfaRecord,
   parseGoogleAuthenticatorMigrationBatch,
   parseMfaCredentialInput,
   parseMfaCredentialInputs,
-  rememberMfaQuery,
   sortMfaRecords,
   splitMfaAccountName,
   toMfaSecretIdentity,
@@ -102,6 +110,8 @@ export function MfaVaultManager() {
   const [activeListTab, setActiveListTab] = useState<ListTab>('saved');
   const [searchQuery, setSearchQuery] = useState('');
   const [exportError, setExportError] = useState('');
+  const [storageError, setStorageError] = useState('');
+  const [recoveryStatus, setRecoveryStatus] = useState<MfaRecoveryStatus>('idle');
   const [qrPages, setQrPages] = useState<MfaMigrationQrPage[]>([]);
   const [qrPageIndex, setQrPageIndex] = useState(0);
   const [qrExportScope, setQrExportScope] = useState<'selected' | 'all'>('all');
@@ -154,13 +164,11 @@ export function MfaVaultManager() {
     if (qrPages.length === 0 && dialog.open) dialog.close();
   }, [qrPages]);
 
-  useEffect(() => {
-    localStorage.setItem(MFA_STORAGE_KEY_SAVED, JSON.stringify(records));
-  }, [records]);
-
-  useEffect(() => {
-    localStorage.setItem(MFA_STORAGE_KEY_HISTORY, JSON.stringify(historyRecords));
-  }, [historyRecords]);
+  useEffect(() => subscribeMfaRecovery(setRecoveryStatus), []);
+  useEffect(() => subscribeMfaVault(() => {
+    setRecords(loadSavedMfaRecords());
+    setHistoryRecords(loadMfaHistoryRecords());
+  }), []);
 
   useEffect(() => {
     if (selectAllCheckboxRef.current) {
@@ -174,6 +182,45 @@ export function MfaVaultManager() {
     }, 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const changeSaved = async (update: (latest: MfaRecord[]) => MfaRecord[]) => {
+    setStorageError('');
+    try {
+      await updateSavedMfaRecords(update);
+      if (recoveryStatus === 'failed') void startMfaRecovery();
+      return true;
+    } catch {
+      setStorageError(t('mfaVault.storageWriteFailed'));
+      return false;
+    }
+  };
+
+  const changeHistory = async (update?: (latest: MfaRecord[]) => MfaRecord[]) => {
+    setStorageError('');
+    try {
+      if (update) await updateMfaHistoryRecords(update);
+      else await clearMfaHistoryRecords();
+    } catch {
+      setStorageError(t('mfaVault.storageWriteFailed'));
+    }
+  };
+
+  const handleRestoreCheckpoint = async () => {
+    setStorageError('');
+    try {
+      await restoreMfaRecoveryCheckpoint();
+      setSelectedSavedIds(new Set());
+      setEditingAccountId(null);
+    } catch (error) {
+      const reason = String(error);
+      const key = reason.includes('mfa_recovery_live_vault_exists')
+        ? 'mfaVault.checkpointLiveVaultExists'
+        : reason.includes('mfa_recovery_live_vault_sidecar_exists')
+          ? 'mfaVault.checkpointSidecarExists'
+          : 'mfaVault.checkpointRestoreFailed';
+      setStorageError(t(key));
+    }
+  };
 
   const handleSort = (field: MfaSortField) => {
     const setSort = activeListTab === 'saved' ? setSavedSort : setHistorySort;
@@ -219,7 +266,7 @@ export function MfaVaultManager() {
   const applyQueryResult = (parsed: ParsedMfaCredential) => {
     setActiveQuery(parsed);
     setInputError('');
-    setHistoryRecords(rememberMfaQuery(parsed));
+    void rememberMfaQuery(parsed).catch(() => setStorageError(t('mfaVault.storageWriteFailed')));
   };
 
   const collectMigrationBatch = (batch: GoogleAuthenticatorMigrationBatch) => {
@@ -272,7 +319,7 @@ export function MfaVaultManager() {
     parseAndQuery(inputValue);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const migrationBatch = parseGoogleAuthenticatorMigrationBatch(inputValue);
     const collectedMigrationBatch = migrationBatch
       ? migrationBatches[String(migrationBatch.batchId)]
@@ -286,7 +333,7 @@ export function MfaVaultManager() {
       return;
     }
 
-    setRecords(prev => {
+    const saved = await changeSaved(prev => {
       let nextRecords = [...prev];
       for (const parsed of parsedCredentials) {
         const finalAccountName = parsed.accountName || activeQuery?.accountName || '';
@@ -310,6 +357,7 @@ export function MfaVaultManager() {
       return dedupeMfaRecordsBySecret(nextRecords);
     });
 
+    if (!saved) return;
     setInputError('');
 
     if (migrationBatch && collectedMigrationBatch
@@ -342,37 +390,37 @@ export function MfaVaultManager() {
     setEditingAccountName('');
   };
 
-  const saveEditAccountName = () => {
-    if (!editingAccountId) return;
-    setRecords(prev => prev.map(record => (
-      record.id === editingAccountId
+  const saveEditAccountName = async () => {
+    const editing = records.find(record => record.id === editingAccountId);
+    if (!editing) return;
+    const identity = toMfaSecretIdentity(editing.secret);
+    if (await changeSaved(prev => prev.map(record => (
+      toMfaSecretIdentity(record.secret) === identity
         ? { ...record, accountName: editingAccountName.trim() }
         : record
-    )));
-    cancelEditAccountName();
+    )))) cancelEditAccountName();
   };
 
   const confirmDeleteSaved = async (id: string, secret: string) => {
+    let confirmed: boolean;
     try {
-      const yes = await confirm(
+      confirmed = await confirm(
         t('twoFactorAuth.confirmDeleteSavedMsg', '确定要永久删除 \n{{secret}}\n 这条认证记录吗？').replace('{{secret}}', secret),
         { title: t('twoFactorAuth.confirmDeleteSavedTitle', '删除确认'), kind: 'warning' }
       );
-      if (yes) {
-        setRecords(prev => prev.filter(item => item.id !== id));
-        if (editingAccountId === id) cancelEditAccountName();
-      }
     } catch {
-      if (window.confirm(t('twoFactorAuth.confirmDeleteSavedFallback', '确定要永久删除这条认证记录吗？'))) {
-        setRecords(prev => prev.filter(item => item.id !== id));
-        if (editingAccountId === id) cancelEditAccountName();
-      }
+      confirmed = window.confirm(t('twoFactorAuth.confirmDeleteSavedFallback', '确定要永久删除这条认证记录吗？'));
     }
+    if (!confirmed) return;
+    const identity = toMfaSecretIdentity(secret);
+    const saved = await changeSaved(prev => prev.filter(item => toMfaSecretIdentity(item.secret) !== identity));
+    if (saved && editingAccountId === id) cancelEditAccountName();
   };
 
   const confirmDeleteSelectedSaved = async () => {
     if (batchDeletePendingRef.current || selectedSavedRecords.length === 0) return;
     const idsToDelete = new Set(selectedSavedRecords.map(record => record.id));
+    const identitiesToDelete = new Set(selectedSavedRecords.map(record => toMfaSecretIdentity(record.secret)));
     const message = t('messages.batchDeleteConfirm', { count: idsToDelete.size });
     batchDeletePendingRef.current = true;
     setBatchDeleting(true);
@@ -389,7 +437,7 @@ export function MfaVaultManager() {
       }
       if (!confirmed) return;
 
-      setRecords(previous => previous.filter(record => !idsToDelete.has(record.id)));
+      if (!await changeSaved(previous => previous.filter(record => !identitiesToDelete.has(toMfaSecretIdentity(record.secret))))) return;
       setSelectedSavedIds(previous => new Set([...previous].filter(id => !idsToDelete.has(id))));
       setEditingAccountId(current => current && idsToDelete.has(current) ? null : current);
     } finally {
@@ -398,18 +446,19 @@ export function MfaVaultManager() {
     }
   };
 
-  const confirmDeleteHistory = async (id: string, secret: string) => {
+  const confirmDeleteHistory = async (secret: string) => {
+    const identity = toMfaSecretIdentity(secret);
     try {
       const yes = await confirm(
         t('twoFactorAuth.confirmDeleteHistoryMsg', '确定要删除 \n{{secret}}\n 的查询历史吗？').replace('{{secret}}', secret),
         { title: t('twoFactorAuth.confirmDeleteHistoryTitle', '删除历史'), kind: 'info' }
       );
       if (yes) {
-        setHistoryRecords(prev => prev.filter(item => item.id !== id));
+        await changeHistory(prev => prev.filter(item => toMfaSecretIdentity(item.secret) !== identity));
       }
     } catch {
       if (window.confirm(t('twoFactorAuth.confirmDeleteHistoryFallback', '确定要删除这条查询历史吗？'))) {
-        setHistoryRecords(prev => prev.filter(item => item.id !== id));
+        await changeHistory(prev => prev.filter(item => toMfaSecretIdentity(item.secret) !== identity));
       }
     }
   };
@@ -420,10 +469,10 @@ export function MfaVaultManager() {
         title: t('twoFactorAuth.confirmClearAllTitle', '清空确认'),
         kind: 'warning'
       });
-      if (yes) setHistoryRecords([]);
+      if (yes) await changeHistory();
     } catch {
       if (window.confirm(t('twoFactorAuth.confirmClearAllMsg', '确定要清空全部近期查询历史吗？'))) {
-        setHistoryRecords([]);
+        await changeHistory();
       }
     }
   };
@@ -518,12 +567,10 @@ export function MfaVaultManager() {
       const parsed = JSON.parse(dataStr);
       if (!Array.isArray(parsed)) throw new Error('Invalid format');
 
-      setRecords(prev => {
-        const incoming = parsed
-          .map(normalizeMfaRecord)
-          .filter((item): item is MfaRecord => !!item);
-        return dedupeMfaRecordsBySecret([...incoming, ...prev]);
-      });
+      const incoming = parsed.map(normalizeMfaRecord).filter((item): item is MfaRecord => !!item);
+      if (incoming.length > 0) {
+        await changeSaved(prev => dedupeMfaRecordsBySecret([...incoming, ...prev]));
+      }
     } catch (err) {
       console.error('Import error:', err);
       alert(t('mfaVault.importErrorMsg', '导入失败，请检查文件内容格式。'));
@@ -585,6 +632,7 @@ export function MfaVaultManager() {
 
   const renderRows = (source: MfaRecord[], isHistory: boolean) => {
     if (source.length === 0) {
+      if (recoveryStatus === 'checkpoint-required' || recoveryStatus === 'restoring') return null;
       return (
         <tr>
           <td colSpan={isHistory ? 5 : 6}>
@@ -728,7 +776,7 @@ export function MfaVaultManager() {
                 type="button"
                 className="action-btn is-danger"
                 title={t('mfaVault.delete', '删除')}
-                onClick={() => (isHistory ? confirmDeleteHistory(record.id, record.secret) : confirmDeleteSaved(record.id, record.secret))}
+                onClick={() => (isHistory ? confirmDeleteHistory(record.secret) : confirmDeleteSaved(record.id, record.secret))}
               >
                 <Trash2 size={14} />
               </button>
@@ -942,6 +990,28 @@ export function MfaVaultManager() {
               )}
             </div>
           </div>
+          {recoveryStatus === 'running' && <p role="status">{t('common.loading')}</p>}
+          {recoveryStatus === 'restoring' && <p role="status">{t('mfaVault.checkpointRestoring')}</p>}
+          {recoveryStatus === 'checkpoint-required' && (
+            <div className="mfa-export-error" role="alert">
+              {t('mfaVault.checkpointAvailable')}{' '}
+              <button type="button" className="btn btn-secondary btn-sm" onClick={handleRestoreCheckpoint}>
+                {t('mfaVault.restoreCheckpoint')}
+              </button>
+            </div>
+          )}
+          {recoveryStatus === 'failed' && (
+            <div className="mfa-export-error" role="alert">
+              {t('mfaVault.recoveryFailed')}{' '}
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => {
+                setStorageError('');
+                void startMfaRecovery();
+              }}>
+                {t('common.retry')}
+              </button>
+            </div>
+          )}
+          {storageError && <p className="mfa-export-error" role="alert">{storageError}</p>}
           {exportError && qrPages.length === 0 && <p className="mfa-export-error" role="alert">{exportError}</p>}
 
           <div className="list-content">

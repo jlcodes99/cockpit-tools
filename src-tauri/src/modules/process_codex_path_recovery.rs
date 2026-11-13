@@ -76,24 +76,60 @@ fn codex_close_path_or_confirmed_idle(
 #[cfg(any(test, target_os = "windows"))]
 fn codex_pathless_probe_confirms_idle(success: bool, stdout: &[u8]) -> bool {
     #[derive(serde::Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct RuntimeProcess {
+        name: String,
+        executable_path: Option<String>,
+    }
+
+    #[derive(serde::Deserialize)]
     struct Probe {
         completed: bool,
-        count: u64,
+        processes: Vec<RuntimeProcess>,
     }
     let stdout = stdout.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(stdout);
     success
-        && serde_json::from_slice::<Probe>(stdout)
-            .is_ok_and(|probe| probe.completed && probe.count == 0)
+        && serde_json::from_slice::<Probe>(stdout).is_ok_and(|probe| {
+            probe.completed
+                && probe.processes.iter().all(|process| {
+                    process.name.eq_ignore_ascii_case("codex.exe")
+                        && process
+                            .executable_path
+                            .as_deref()
+                            .is_some_and(is_codex_vscode_extension_executable)
+                })
+        })
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn is_codex_vscode_extension_executable(path: &str) -> bool {
+    let path = path.to_ascii_lowercase();
+    let mut parts = path.rsplit(['\\', '/']);
+    let (Some("codex.exe"), Some(platform), Some("bin"), Some(extension), Some(_)) = (
+        parts.next(),
+        parts.next(),
+        parts.next(),
+        parts.next(),
+        parts.next(),
+    ) else {
+        return false;
+    };
+    platform.starts_with("windows-")
+        && (extension == "openai.chatgpt"
+            || extension
+                .strip_prefix("openai.chatgpt-")
+                .and_then(|version| version.as_bytes().first())
+                .is_some_and(u8::is_ascii_digit))
 }
 
 #[cfg(target_os = "windows")]
 fn confirm_no_codex_windows_runtime() -> bool {
-    // This is absence detection only. Never kill by name or assume that a
-    // failed query means no process exists. Include the CLI/app-server binary:
-    // a leftover runtime can still retain the credentials about to be replaced.
+    // Distinguish the editor extension by its binary location. The desktop
+    // backend has the same Codex.exe name and can outlive its GUI.
     let script = r#"$ErrorActionPreference='Stop';
-$items=@(Get-CimInstance Win32_Process -Filter "Name='ChatGPT.exe' OR Name='Codex.exe'");
-@{completed=$true;count=$items.Count}|ConvertTo-Json -Compress"#;
+$items=@(Get-CimInstance Win32_Process -Filter "Name='ChatGPT.exe' OR Name='Codex.exe'" |
+  Select-Object Name, ExecutablePath);
+ConvertTo-Json -InputObject @{completed=$true;processes=$items} -Depth 4 -Compress"#;
     match powershell_output_with_timeout(
         &["-NoProfile", "-Command", script],
         WINDOWS_PROCESS_PROBE_TIMEOUT,

@@ -35,16 +35,6 @@ export function requestAuthorizationRouteKey(accountId?: string | null, authoriz
     ? 'codex.requestDiagnostics.routeOfficial' : 'codex.requestDiagnostics.routeLocal';
 }
 
-/** Legacy serviceTier mixes request and response values; never infer its source. */
-export function requestServiceTierPresentation(event: {
-  requestedServiceTier?: string | null; responseServiceTier?: string | null; serviceTier?: string | null;
-}) {
-  const requested = event.requestedServiceTier?.trim() || '';
-  const response = event.responseServiceTier?.trim() || '';
-  const legacy = !requested && !response ? event.serviceTier?.trim() || '' : '';
-  return { requested, response, legacy };
-}
-
 export function requestedServiceTierLabelKey(tier: string): string | null {
   if (tier.toLowerCase() === 'auto') return 'codex.contextOverride.automatic';
   if (['priority', 'fast'].includes(tier.toLowerCase())) return 'codex.speed.fast';
@@ -113,7 +103,8 @@ export function requestTimeoutDiagnostic(event: {
   }
   const match = message.match(/upstream timed out in (stream_open(?: attempt=\d+\/\d+)?|stream_idle) after ([\d.a-zµμ]+)/);
   const kind = match ? (match[1].startsWith('stream_open') ? 'open' : 'idle')
-    : event.errorCategory === 'upstream_first_byte_timeout' ? 'open' : null;
+    : event.errorCategory === 'upstream_first_byte_timeout' || event.errorCategory === 'upstream_connect_timeout' ? 'open'
+      : event.errorCategory === 'upstream_idle_timeout' ? 'idle' : null;
   if (kind) {
     const duration = match?.[2];
     const parts = duration ? [...duration.matchAll(/(\d+(?:\.\d+)?)(ms|us|µs|μs|ns|h|m|s)/g)] : [];

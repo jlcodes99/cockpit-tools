@@ -25,6 +25,9 @@ fn compressed_session_heads_are_listed_once_and_state_selects_current_rollout() 
         .join("archived_sessions/rollout-old.jsonl.zst");
     fs::create_dir_all(ancestor.parent().unwrap()).unwrap();
     fs::copy(&compressed, &ancestor).unwrap();
+    assert!(resolve_rollout_path_from_snapshots(
+        load_thread_snapshots(&instance).unwrap(), "compressed-head",
+    ).is_err());
     let database = rusqlite::Connection::open(instance.data_dir.join("state_5.sqlite")).unwrap();
     database
         .execute_batch("CREATE TABLE threads(id TEXT, rollout_path TEXT)")
@@ -41,6 +44,10 @@ fn compressed_session_heads_are_listed_once_and_state_selects_current_rollout() 
     let listed = load_thread_snapshots(&instance).unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].rollout_path, compressed);
+    assert_eq!(
+        resolve_rollout_path_from_snapshots(listed, "compressed-head").unwrap(),
+        compressed,
+    );
     // Official materialization may briefly leave both representations present.
     fs::write(compressed.with_extension(""), &plain).unwrap();
     let listed = load_thread_snapshots(&instance).unwrap();
@@ -114,14 +121,14 @@ fn compressed_metadata_is_bounded_and_export_rejects_missing_history_chain() {
     .unwrap();
     assert!(read_rollout_session_meta(&too_large).is_err());
     let (instance, mut snapshot, _) = isolated_export_fixture(&base, "chain");
-    let bytes = b"{\"type\":\"session_meta\",\"payload\":{\"id\":\"chain\",\"history_base\":{\"thread_id\":\"parent\"}}}\n";
+    let bytes = b"{\"type\":\"session_meta\",\"payload\":{\"id\":\"chain\",\"history_base\":{\"thread_id\":\"11111111-1111-4111-8111-111111111111\",\"end_byte_offset\":100,\"end_ordinal_exclusive\":2}}}\n";
     let compressed = snapshot.rollout_path.with_extension("jsonl.zst");
     let encoded = zstd::stream::encode_all(bytes.as_slice(), 0).unwrap();
     fs::write(&compressed, &encoded).unwrap();
     snapshot.rollout_path = compressed.clone();
     assert!(prepare_export_session_entries(vec![(instance, snapshot)])
         .unwrap_err()
-        .contains("分页会话"));
+        .contains("11111111-1111-4111-8111-111111111111"));
     assert_eq!(fs::read(compressed).unwrap(), encoded);
     fs::remove_dir_all(base).unwrap();
 }

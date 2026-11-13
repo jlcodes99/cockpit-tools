@@ -1,20 +1,8 @@
 //! Startup preparation tests. All sockets target loopback; no desktop UI is launched.
 use super::*;
+use crate::modules::process::CodexLaunchProxy;
 
-trait ProxyUrl {
-    fn into_proxy_url(self) -> String;
-}
-impl ProxyUrl for crate::modules::process::CodexLaunchProxy {
-    fn into_proxy_url(self) -> String {
-        match self {
-            Self::Proxy(url) => url,
-            other => panic!("expected a local entry, got {other:?}"),
-        }
-    }
-}
-
-async fn local_socks_greeting(url: &str) -> TcpStream {
-    let port = url::Url::parse(url).unwrap().port().unwrap();
+async fn local_socks_greeting(port: u16) -> TcpStream {
     let mut client = tokio::time::timeout(
         Duration::from_secs(2),
         TcpStream::connect((Ipv4Addr::LOCALHOST, port)),
@@ -47,22 +35,29 @@ async fn local_connect(client: &mut TcpStream) -> u8 {
     reply[1]
 }
 
-fn verify_launch_injection(proxy: &str) {
+fn verify_launch_injection(proxy: CodexLaunchProxy) -> u16 {
+    let CodexLaunchProxy::Managed(port) = proxy else {
+        panic!("expected a managed listener, got {proxy:?}");
+    };
+    let proxy = CodexLaunchProxy::Managed(port);
+    let http_url = format!("http://127.0.0.1:{port}");
+    let socks_url = entry_url(port);
     let mut args = vec!["--no-proxy-server".into(), "--proxy-bypass-list=*".into()];
-    crate::modules::process::append_electron_proxy_args(&mut args, proxy);
+    proxy.append_electron_args(&mut args);
     assert_eq!(
         args,
         [
-            format!(
-                "--proxy-server={}",
-                proxy.replace("socks5h://", "socks5://")
-            ),
+            format!("--proxy-server=socks5://127.0.0.1:{port}"),
             "--proxy-bypass-list=localhost;127.0.0.1;[::1]".into(),
         ]
     );
     // Inspect the real command builder without launching a GUI or contacting any server.
     let mut command = std::process::Command::new("unused-test-client");
-    crate::modules::process::apply_effective_proxy_env_to_command(&mut command, &crate::modules::process::CodexLaunchProxy::Proxy(proxy.into()));
+    command.env("SSL_CERT_FILE", "fixture-ca.pem");
+    crate::modules::process::apply_effective_proxy_env_to_command(&mut command, &proxy);
+    assert!(command.get_envs().any(|(key, value)| {
+        key == "SSL_CERT_FILE" && value == Some(std::ffi::OsStr::new("fixture-ca.pem"))
+    }));
     for key in [
         "HTTP_PROXY",
         "HTTPS_PROXY",
@@ -75,22 +70,25 @@ fn verify_launch_injection(proxy: &str) {
             .get_envs()
             .find(|(name, _)| *name == key)
             .and_then(|(_, value)| value);
-        assert_eq!(value.and_then(|value| value.to_str()), Some(proxy));
+        let expected = if key.eq_ignore_ascii_case("https_proxy") { &http_url } else { &socks_url };
+        assert_eq!(value.and_then(|value| value.to_str()), Some(expected.as_str()));
     }
     #[cfg(target_os = "macos")]
     {
         let mut open = std::process::Command::new("/usr/bin/open");
-        crate::modules::process::append_effective_proxy_env_to_open_args(&mut open, &crate::modules::process::CodexLaunchProxy::Proxy(proxy.into()));
+        crate::modules::process::append_effective_proxy_env_to_open_args(&mut open, &proxy);
         let args: Vec<_> = open
             .get_args()
             .map(|value| value.to_string_lossy().into_owned())
             .collect();
         for key in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"] {
+            let expected = if key == "HTTPS_PROXY" { &http_url } else { &socks_url };
             assert!(args
                 .windows(2)
-                .any(|pair| pair[0] == "--env" && pair[1] == format!("{key}={proxy}")));
+                .any(|pair| pair[0] == "--env" && pair[1] == format!("{key}={expected}")));
         }
     }
+    port
 }
 
 #[tokio::test]
@@ -170,28 +168,33 @@ async fn startup_resolver_routes_through_local_proxy_and_injects_client_settings
     let proxy =
         crate::modules::codex_instance::resolve_egress_proxy_for_bind_account(Some(&account.id))
             .await
-            .unwrap()
-            .into_proxy_url();
-    verify_launch_injection(&proxy);
+            .unwrap();
+    let port = verify_launch_injection(proxy);
     let status = codex_proxy_runtime::status(&account.id).await.unwrap();
     let entry = status.desktop_entry.unwrap();
     assert_eq!(entry.state, "listening");
-    assert_eq!(entry.port, url::Url::parse(&proxy).unwrap().port());
+    assert_eq!(entry.port, Some(port));
     assert_eq!(entry.request_count, 0);
     assert_eq!(entry.last_request_state, "none");
     assert_eq!(status.proxy_source, "account");
     let check = async {
-        let mut client = local_socks_greeting(&proxy).await;
+        drop(local_socks_greeting(port).await);
         assert_eq!(
             entry_status(&account.id).unwrap().request_count,
             0,
             "a greeting alone is not a CONNECT request"
         );
-        assert_eq!(
-            local_connect(&mut client).await,
-            0,
-            "local mock accepted CONNECT"
-        );
+        let mut client = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).await.unwrap();
+        client
+            .write_all(b"CONNECT fixture.invalid:443 HTTP/1.1\r\nHost: fixture.invalid:443\r\n\r\n")
+            .await
+            .unwrap();
+        let mut headers = Vec::new();
+        while !headers.ends_with(b"\r\n\r\n") {
+            headers.push(client.read_u8().await.unwrap());
+            assert!(headers.len() < 8192);
+        }
+        assert!(headers.starts_with(b"HTTP/1.1 200 "));
         client.write_all(b"ping").await.unwrap();
         let mut response = [0; 4];
         client.read_exact(&mut response).await.unwrap();
@@ -205,7 +208,7 @@ async fn startup_resolver_routes_through_local_proxy_and_injects_client_settings
     assert_eq!(entry.request_count, 1);
     assert_eq!(entry.last_request_state, "forwarded");
     assert!(entry.last_error.is_none());
-    assert_eq!(ensure(&account.id).await.unwrap(), Some(proxy));
+    assert_eq!(ensure(&account.id).await.unwrap(), Some(port));
 }
 
 #[tokio::test]
@@ -236,16 +239,16 @@ async fn entry_observes_upstream_failure_and_recovery_without_claiming_connectiv
                 .unwrap();
         }
     });
-    let proxy = ensure(&account.id).await.unwrap().unwrap();
+    let port = ensure(&account.id).await.unwrap().unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
-        let mut failed = local_socks_greeting(&proxy).await;
+        let mut failed = local_socks_greeting(port).await;
         assert_ne!(local_connect(&mut failed).await, 0);
         let entry = entry_status(&account.id).unwrap();
         assert_eq!(entry.state, "listening");
         assert_eq!(entry.request_count, 1);
         assert_eq!(entry.last_request_state, "failed");
         assert_eq!(entry.last_error, Some("PROXY_CONNECT_FAILED"));
-        let mut retry = local_socks_greeting(&proxy).await;
+        let mut retry = local_socks_greeting(port).await;
         assert_eq!(local_connect(&mut retry).await, 0);
         upstream.await.unwrap();
         let entry = entry_status(&account.id).unwrap();
@@ -289,14 +292,13 @@ async fn startup_request_uses_native_authenticated_proxy_without_an_engine() {
     let proxy =
         crate::modules::codex_instance::resolve_egress_proxy_for_bind_account(Some(&account.id))
             .await
-            .unwrap()
-            .into_proxy_url();
-    verify_launch_injection(&proxy);
+            .unwrap();
+    let port = verify_launch_injection(proxy);
     let before = codex_proxy_runtime::status(&account.id).await.unwrap();
     assert_eq!(before.desktop, "direct");
     assert_eq!(before.desktop_entry.unwrap().state, "listening");
     tokio::time::timeout(Duration::from_secs(15), async {
-        let mut client = local_socks_greeting(&proxy).await;
+        let mut client = local_socks_greeting(port).await;
         assert_eq!(local_connect(&mut client).await, 0);
         client.write_all(b"ping").await.unwrap();
         let mut pong = [0; 4];
@@ -309,7 +311,7 @@ async fn startup_request_uses_native_authenticated_proxy_without_an_engine() {
     let after = codex_proxy_runtime::status(&account.id).await.unwrap();
     assert_eq!(after.desktop, "direct");
     let entry = after.desktop_entry.as_ref().unwrap();
-    assert_eq!(entry.port, url::Url::parse(&proxy).unwrap().port());
+    assert_eq!(entry.port, Some(port));
     assert_eq!(entry.port, after.desktop_port);
     assert_eq!(entry.port, after.account_port);
     assert_eq!(entry.port, after.sidecar_port);
@@ -417,17 +419,16 @@ async fn local_account_startup_prepares_ports_without_external_requests() {
     let proxy =
         crate::modules::codex_instance::resolve_egress_proxy_for_bind_account(Some(&account.id))
             .await
-            .unwrap()
-            .into_proxy_url();
-    verify_launch_injection(&proxy);
-    drop(local_socks_greeting(&proxy).await);
+            .unwrap();
+    let port = verify_launch_injection(proxy);
+    drop(local_socks_greeting(port).await);
     let after_launch = codex_proxy_runtime::status(&account.id).await.unwrap();
     assert_eq!(
         after_launch.desktop, "running",
         "desktop launch reuses the account engine already prepared"
     );
     assert_eq!(after_launch.desktop_port, before.account_port);
-    assert_eq!(proxy, account_url);
+    assert_eq!(entry_url(port), account_url);
 
     // Call the same upstream preparation used by the first desktop connection,
     // but never send a destination/CONNECT request to the real proxy.
@@ -439,7 +440,7 @@ async fn local_account_startup_prepares_ports_without_external_requests() {
     let ready = codex_proxy_runtime::status(&account.id).await.unwrap();
     assert_eq!(ready.desktop, "running");
     assert!(ready.desktop_port.is_some());
-    assert_eq!(ensure(&account.id).await.unwrap(), Some(proxy.clone()));
+    assert_eq!(ensure(&account.id).await.unwrap(), Some(port));
     let ports = [url::Url::parse(&desktop_url).unwrap().port().unwrap()];
     drop(lease);
     drop(cleanup);
@@ -460,7 +461,7 @@ async fn local_account_startup_prepares_ports_without_external_requests() {
     .await
     .expect("test-owned engine ports are reclaimed");
     let report = serde_json::json!({
-        "entryPort": url::Url::parse(&proxy).unwrap().port(),
+        "entryPort": port,
         "accountPort": before.account_port,
         "desktopAfterLaunchPreparation": after_launch.desktop,
         "desktopAfterDemandPreparation": ready.desktop,

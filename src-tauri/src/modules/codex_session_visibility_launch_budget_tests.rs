@@ -261,6 +261,8 @@ fn only_pre_mutation_process_snapshot_failures_can_be_deferred() {
         "CODEX_SESSION_VISIBILITY_TIMEOUT: stage=sqlite",
         "CODEX_SESSION_VISIBILITY_TIMEOUT: stage=rollout_write",
         "CODEX_SESSION_VISIBILITY_ROLLBACK_FAILED: CODEX_SESSION_VISIBILITY_TIMEOUT: stage=process_snapshot",
+        "CODEX_DESKTOP_STATE_PREPARATION_FAILED: CODEX_SESSION_VISIBILITY_PROCESS_UNAVAILABLE",
+        "CODEX_DESKTOP_STATE_PREPARATION_FAILED: CODEX_SESSION_VISIBILITY_TIMEOUT: stage=process_snapshot",
         "database is locked",
     ] {
         assert!(!can_defer_launch_snapshot_error(error), "{error}");

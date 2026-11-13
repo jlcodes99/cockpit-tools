@@ -364,15 +364,11 @@ fn apply_thinking(body: &Value, out: &mut Value) -> Result<(), ServiceError> {
     };
     let model = body["model"].as_str().unwrap_or("");
     if crate::modules::codex_protocol::is_deepseek_model(model) {
+        let effort = crate::modules::codex_protocol::normalize_deepseek_reasoning_effort(effort)
+            .ok_or_else(|| invalid("Unsupported DeepSeek reasoning effort"))?;
         if effort == "none" {
             out["thinking"] = json!({"type":"disabled"});
         } else {
-            let effort = match effort {
-                "minimal" | "low" => "low",
-                "medium" | "high" | "xhigh" => "high",
-                "max" | "ultra" => "max",
-                _ => return Err(invalid("Unsupported DeepSeek reasoning effort")),
-            };
             out["thinking"] = json!({"type":"enabled"});
             out["output_config"] = json!({"effort":effort});
         }

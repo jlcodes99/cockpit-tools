@@ -2,7 +2,7 @@ import { OpenAIUsageKeyField } from "../components/codex/OpenAIUsageSettingsDial
 import { isOpenAIOfficialUsageUrl, OPENAI_OFFICIAL_USAGE_BASE_URL } from "../utils/openaiOfficialUsage";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw, Download, X, Globe, KeyRound, Database, Copy, Check, RotateCw, CircleAlert, Info, Star, Eye, EyeOff, FileUp, FileText, ExternalLink, FolderPlus, Monitor, Terminal, ShieldCheck } from "lucide-react";
+import { RefreshCw, Download, X, Globe, KeyRound, Database, Copy, Check, RotateCw, CircleAlert, Info, Star, Eye, EyeOff, FileUp, FileText, ExternalLink, FolderPlus, Monitor, Terminal, ShieldCheck, Search } from "lucide-react";
 import { ModalErrorMessage } from "../components/ModalErrorMessage";
 import { scrollElementIntoView } from "../utils/reducedMotion";
 import { MfaQuickCodeSelect } from "../components/MfaQuickCodeSelect";
@@ -78,7 +78,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     importing,
     isMacOS,
     isOauthTimeoutState,
-    isOauthTokenExchangeErrorState,
+    oauthRetryAction,
     localImportBusy,
     localImportError,
     localImportInstances,
@@ -140,9 +140,23 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     tokenInput,
   } = props;
   const [usageApiKeyDraft, setUsageApiKeyDraft] = useState('');
+
   useEffect(() => { setUsageApiKeyDraft(''); }, [showAddModal, apiKeyInput, apiBaseUrlInput]);
+  const [savedProviderSearch, setSavedProviderSearch] = useState("");
+  useEffect(() => {
+    if (!showAddModal) setSavedProviderSearch("");
+  }, [showAddModal]);
+  const providerQuery = savedProviderSearch.trim().toLowerCase();
+  const visibleManagedProviders = providerQuery
+    ? managedProviders.filter((provider) =>
+        provider.name.toLowerCase().includes(providerQuery) ||
+        provider.baseUrl.toLowerCase().includes(providerQuery) ||
+        provider.apiKeys.some((key) => key.name.toLowerCase().includes(providerQuery)),
+      )
+    : managedProviders;
   const officialUsage = isOpenAIOfficialUsageUrl(apiBaseUrlInput.trim() || OPENAI_OFFICIAL_USAGE_BASE_URL);
   const addStatusRef = useRef<HTMLDivElement>(null);
+  const oauthCallbackInputRef = useRef<HTMLInputElement>(null);
   const addDialogRef = useRef<HTMLDivElement>(null);
   const instancePickerDialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -152,6 +166,9 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [showAddModal, addStatus, addMessage]);
+  useEffect(() => {
+    if (oauthCallbackError) oauthCallbackInputRef.current?.focus();
+  }, [oauthCallbackError]);
   useEffect(() => {
     if (oauthProxyFieldError) {
       document.getElementById("codex-oauth-proxy-url")?.focus();
@@ -255,7 +272,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                       <div className="codex-add-target-group-hint">
                         <FolderPlus size={14} />
                         <span>
-                          {t("codex.addModal.targetGroup", {
+                          {t("common.shared.addAccountTargetGroup", {
                             defaultValue: "将添加到分组：{{group}}",
                             group: codexAddTargetGroup.name,
                           })}
@@ -699,7 +716,8 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                         {oauthMethod === "browser" &&
                           (deviceAuthInfo ||
                           deviceAuthStarting ||
-                          deviceAuthError ? null : oauthPrepareError ? (
+                          deviceAuthError ||
+                          oauthRetryAction === "restart" ? null : oauthPrepareError ? (
                             <div className="add-status error">
                               <CircleAlert size={16} />
                               <span>{oauthPrepareError}</span>
@@ -798,6 +816,9 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                                   <input
                                     type="text"
                                     value={oauthCallbackInput}
+                                    ref={oauthCallbackInputRef}
+                                    aria-invalid={Boolean(oauthCallbackError)}
+                                    aria-describedby={oauthCallbackError ? "codex-oauth-callback-error" : undefined}
                                     onChange={(e) =>
                                       setOauthCallbackInput(e.target.value)
                                     }
@@ -834,7 +855,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                                 </div>
                               </div>
                               {oauthCallbackError && (
-                                <div className="add-status error">
+                                <div id="codex-oauth-callback-error" className="add-status error">
                                   <CircleAlert size={16} />
                                   <span>{oauthCallbackError}</span>
                                 </div>
@@ -895,20 +916,36 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                               )}
                             </div>
                           ) : (
-                            <div className="api-provider-chip-list">
-                              {managedProviders.map((provider) => (
-                                <button
-                                  key={provider.id}
-                                  className={`api-provider-chip ${managedProviderId === provider.id ? "active" : ""}`}
-                                  onClick={() =>
-                                    handleSelectManagedProvider(provider.id)
-                                  }
-                                  type="button"
-                                >
-                                  <span>{provider.name}</span>
-                                </button>
-                              ))}
-                            </div>
+                            <>
+                              <div className="search-box codex-saved-provider-search">
+                                <Search size={16} className="search-icon" aria-hidden="true" />
+                                <input
+                                  type="text"
+                                  value={savedProviderSearch}
+                                  onChange={(event) => setSavedProviderSearch(event.target.value)}
+                                  placeholder={t("codex.modelProviders.searchSavedProviders")}
+                                  aria-label={t("codex.modelProviders.searchSavedProviders")}
+                                />
+                              </div>
+                              {visibleManagedProviders.length > 0 ? (
+                                <div className="api-provider-chip-list">
+                                  {visibleManagedProviders.map((provider) => (
+                                    <button
+                                      key={provider.id}
+                                      className={`api-provider-chip ${managedProviderId === provider.id ? "active" : ""}`}
+                                      onClick={() => handleSelectManagedProvider(provider.id)}
+                                      type="button"
+                                    >
+                                      <span>{provider.name}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="section-desc" role="status">
+                                  {t("codex.modelProviders.noMatchingSavedProviders")}
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                         {selectedManagedProvider &&
@@ -1515,12 +1552,14 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                         <span>{addMessage}</span>
                         {addTab === "oauth" &&
                           addStatus === "error" &&
-                          isOauthTokenExchangeErrorState &&
+                          oauthRetryAction &&
                           oauthLoginIdRef.current && (
                             <button
                               className="btn btn-sm btn-outline"
                               onClick={() =>
-                                void handleRetryOauthTokenExchange()
+                                oauthRetryAction === "restart"
+                                  ? void handleRetryOauthAfterTimeout()
+                                  : void handleRetryOauthTokenExchange()
                               }
                               disabled={oauthCallbackSubmitting}
                             >
@@ -1532,7 +1571,9 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                               ) : (
                                 <RotateCw size={14} />
                               )}
-                              {t("accounts.oauth.continue")}
+                              {t(oauthRetryAction === "restart"
+                                ? "codex.oauth.timeoutRetry"
+                                : "accounts.oauth.continue")}
                             </button>
                           )}
                       </div>

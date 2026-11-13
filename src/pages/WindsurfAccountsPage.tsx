@@ -1,3 +1,4 @@
+import { useAccountsOverviewFilterState } from '../hooks/useAccountsOverviewFilterState';
 import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from 'react';
 import {
   Plus,
@@ -73,12 +74,9 @@ import {
   normalizeAccountsOverviewScope,
   readAccountsOverviewFilterPersistenceEnabled,
   readAccountsOverviewFilterStringArray,
-  removeAccountsOverviewFilterField,
-  writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
 
 const WINDSURF_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.windsurf.flow_notice_collapsed';
-const WINDSURF_CURRENT_ACCOUNT_ID_KEY = 'agtools.windsurf.current_account_id';
 const WINDSURF_FILTER_PERSISTENCE_SCOPE = normalizeAccountsOverviewScope('Windsurf');
 const FILTER_TYPES_FIELD = 'filter_types';
 const WINDSURF_TOKEN_SINGLE_EXAMPLE = `sk-ws-xxxxx 或 eyJxxxxx`;
@@ -308,7 +306,7 @@ function parseWindsurfPasswordBatchTextInput(
 
 export function WindsurfAccountsPage() {
   const [activeTab, setActiveTab] = useState<WindsurfTab>('overview');
-  const [filterTypes, setFilterTypes] = useState<string[]>(() =>
+  const [filterTypes, setFilterTypes] = useAccountsOverviewFilterState<string[]>(WINDSURF_FILTER_PERSISTENCE_SCOPE, FILTER_TYPES_FIELD, () =>
     readAccountsOverviewFilterPersistenceEnabled(WINDSURF_FILTER_PERSISTENCE_SCOPE)
       ? readAccountsOverviewFilterStringArray(
           WINDSURF_FILTER_PERSISTENCE_SCOPE,
@@ -324,7 +322,6 @@ export function WindsurfAccountsPage() {
     platformKey: 'Windsurf',
     oauthLogPrefix: 'WindsurfOAuth',
     flowNoticeCollapsedKey: WINDSURF_FLOW_NOTICE_COLLAPSED_KEY,
-    currentAccountIdKey: WINDSURF_CURRENT_ACCOUNT_ID_KEY,
     exportFilePrefix: 'windsurf_accounts',
     defaultSortBy: 'recommended',
     store: {
@@ -360,7 +357,6 @@ export function WindsurfAccountsPage() {
   const {
     t, locale, privacyModeEnabled, togglePrivacyMode, maskAccountText,
     viewMode, setViewMode, searchQuery, setSearchQuery,
-    filterPersistenceEnabled, filterPersistenceScope,
     sortBy, setSortBy, sortDirection, setSortDirection,
     selected, toggleSelect, toggleSelectAll,
     tagFilter, groupByTag, setGroupByTag, showTagFilter, setShowTagFilter,
@@ -392,14 +388,6 @@ export function WindsurfAccountsPage() {
   } = page;
 
   const grouping = usePlatformAccountGroups('windsurf', () => toggleSelectAll(Array.from(selected)));
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(filterPersistenceScope, FILTER_TYPES_FIELD);
-      return;
-    }
-    writeAccountsOverviewFilterField(filterPersistenceScope, FILTER_TYPES_FIELD, filterTypes);
-  }, [filterPersistenceEnabled, filterPersistenceScope, filterTypes]);
 
   const toggleFilterTypeValue = useCallback((value: string) => {
     setFilterTypes((prev) => {

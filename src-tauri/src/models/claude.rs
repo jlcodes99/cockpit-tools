@@ -194,6 +194,8 @@ pub struct ClaudeAccountSummary {
 pub struct ClaudeAccountIndex {
     pub version: String,
     pub accounts: Vec<ClaudeAccountSummary>,
+    #[serde(skip)]
+    pub(crate) storage_revision: crate::modules::provider_account_index::Revision,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -253,6 +255,7 @@ impl ClaudeAccountIndex {
         Self {
             version: "1.0".to_string(),
             accounts: Vec::new(),
+            storage_revision: Default::default(),
         }
     }
 }

@@ -1099,11 +1099,32 @@ fn read_secret_storage_value_by_db_path_and_mode(
     }
 }
 
-pub fn read_qoder_secret_storage_value_by_db_path(
+pub(crate) fn read_qoder_secret_snapshot<const N: usize>(
     db_path: &Path,
-    db_key: &str,
-) -> Result<Option<String>, String> {
-    read_secret_storage_value_by_db_path_and_mode(db_path, db_key, SafeStorageReadMode::QoderOnly)
+    keys: [&str; N],
+) -> Result<[Option<String>; N], String> {
+    let mut values: [Option<String>; N] = std::array::from_fn(|_| None);
+    if !db_path.try_exists().map_err(|error| error.to_string())? {
+        return Ok(values);
+    }
+    let data_root = resolve_data_root_from_state_db_path(db_path)?;
+    let mut conn = Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|error| error.to_string())?;
+    conn.busy_timeout(std::time::Duration::from_secs(2)).map_err(|error| error.to_string())?;
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+    for (key, value) in keys.into_iter().zip(values.iter_mut()) {
+        *value = match tx.query_row("SELECT value FROM ItemTable WHERE key = ?1", [key], |row| row.get(0)) {
+            Ok(value) => Some(value),
+            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+            Err(error) => return Err(error.to_string()),
+        };
+    }
+    tx.commit().map_err(|error| error.to_string())?;
+    for value in values.iter_mut().flatten() {
+        *value = decode_secret_storage_value_with_mode(value, Some(data_root), SafeStorageReadMode::QoderOnly)
+            .map_err(|error| format!("QODER_STORAGE_UNAVAILABLE: {error}"))?;
+    }
+    Ok(values)
 }
 
 fn load_existing_sessions(
@@ -1239,6 +1260,38 @@ pub fn inject_secret_to_state_db_for_codebuddy_cn(
     )
 }
 
+pub(crate) fn qoder_storage_ready(data_root: &Path) -> Result<bool, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let path = data_root.join("Local State");
+        match path.try_exists() {
+            Ok(false) => return Ok(false),
+            Err(error) => return Err(format!("QODER_STORAGE_UNAVAILABLE: {}", error)),
+            Ok(true) => {}
+        }
+        match get_windows_encryption_key(Some(data_root)) {
+            Ok(_) => return Ok(true),
+            Err(error) if error == "Cannot find os_crypt.encrypted_key in Local State" => {
+                return Ok(false);
+            }
+            Err(error) => return Err(format!("QODER_STORAGE_UNAVAILABLE: {}", error)),
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = data_root;
+        Ok(true)
+    }
+}
+
+pub fn inject_qoder_secret_snapshot(
+    db_path: &Path,
+    entries: &[(&str, &str)],
+) -> Result<(), String> {
+    inject_secret_batch_with_mode(db_path, entries, SafeStorageReadMode::QoderOnly)
+}
+
 pub fn inject_secret_to_state_db_for_qoder(
     db_path: &std::path::Path,
     db_key: &str,
@@ -1266,6 +1319,14 @@ fn inject_secret_to_state_db_with_mode(
     plaintext: &str,
     mode: SafeStorageReadMode,
 ) -> Result<(), String> {
+    inject_secret_batch_with_mode(db_path, &[(db_key, plaintext)], mode)
+}
+
+fn inject_secret_batch_with_mode(
+    db_path: &Path,
+    entries: &[(&str, &str)],
+    mode: SafeStorageReadMode,
+) -> Result<(), String> {
     let data_root = db_path
         .parent()
         .and_then(|p| p.parent())
@@ -1282,7 +1343,7 @@ fn inject_secret_to_state_db_with_mode(
             .map_err(|e| format!("Failed to create state.vscdb parent dir: {}", e))?;
     }
 
-    let conn = rusqlite::Connection::open(db_path)
+    let mut conn = rusqlite::Connection::open(db_path)
         .map_err(|e| format!("Failed to open state.vscdb: {}", e))?;
     conn.execute(
         "CREATE TABLE IF NOT EXISTS ItemTable (key TEXT PRIMARY KEY, value TEXT)",
@@ -1290,46 +1351,69 @@ fn inject_secret_to_state_db_with_mode(
     )
     .map_err(|e| format!("Failed to init ItemTable: {}", e))?;
 
-    let existing_prefix: Option<String> = match conn.query_row(
-        "SELECT value FROM ItemTable WHERE key = ?",
-        [db_key],
-        |row| row.get::<_, String>(0),
-    ) {
-        Ok(val) => {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&val) {
-                if let Ok(bytes) = decode_buffer_data(&parsed) {
-                    detect_prefix(&bytes).map(|s| s.to_string())
+    let mut prepared = Vec::with_capacity(entries.len());
+    // Finish keychain/encryption work before taking the SQLite write transaction.
+    for &(db_key, plaintext) in entries {
+        let existing_prefix: Option<String> = match conn.query_row(
+            "SELECT value FROM ItemTable WHERE key = ?",
+            [db_key],
+            |row| row.get::<_, String>(0),
+        ) {
+            Ok(val) => {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&val) {
+                    if let Ok(bytes) = decode_buffer_data(&parsed) {
+                        detect_prefix(&bytes).map(|s| s.to_string())
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }
-            } else {
-                None
             }
-        }
-        Err(_) => None,
-    };
+            Err(_) => None,
+        };
 
-    let encrypted = encrypt_secret_payload_with_mode(
-        plaintext.as_bytes(),
-        existing_prefix.as_deref(),
-        Some(data_root),
-        mode,
-    )?;
+        let encrypted = encrypt_secret_payload_with_mode(
+            plaintext.as_bytes(),
+            existing_prefix.as_deref(),
+            Some(data_root),
+            mode,
+        )?;
 
-    let buffer_json = serde_json::json!({
-        "type": "Buffer",
-        "data": encrypted
-    });
-    let buffer_str = serde_json::to_string(&buffer_json)
-        .map_err(|e| format!("Failed to serialize Buffer: {}", e))?;
+        let buffer_json = serde_json::json!({
+            "type": "Buffer",
+            "data": encrypted
+        });
+        let buffer_str = serde_json::to_string(&buffer_json)
+            .map_err(|e| format!("Failed to serialize Buffer: {}", e))?;
 
-    conn.execute(
-        "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
-        rusqlite::params![db_key, buffer_str],
-    )
-    .map_err(|e| format!("Failed to write to state.vscdb: {}", e))?;
+        prepared.push((db_key.to_string(), buffer_str));
+    }
+    write_secret_snapshot(&mut conn, &prepared)
+}
 
-    Ok(())
+fn write_secret_snapshot(
+    conn: &mut Connection,
+    entries: &[(String, String)],
+) -> Result<(), String> {
+    if let [(key, value)] = entries {
+        conn.execute(
+            "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
+            rusqlite::params![key, value],
+        ).map_err(|error| format!("Failed to write to state.vscdb: {error}"))?;
+        return Ok(());
+    }
+    conn.busy_timeout(std::time::Duration::from_secs(3))
+        .map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    for (key, value) in entries {
+        tx.execute(
+            "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?1, ?2)",
+            rusqlite::params![key, value],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

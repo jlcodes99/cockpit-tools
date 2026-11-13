@@ -96,6 +96,33 @@ fn native_reserve_catalog_lists_explicit_capability_independently_of_current_ent
     }
 }
 
+#[tokio::test]
+#[ignore = "writes a synthetic API Service profile for an offline official app-server test"]
+async fn prepare_reserve_picker_profile_for_official_app_server() {
+    assert_eq!(std::env::var("COCKPIT_CODEX_OFFLINE_INTEGRATION").as_deref(), Ok("1"));
+    let root = PathBuf::from(std::env::var_os("COCKPIT_CODEX_OFFLINE_ROOT").unwrap());
+    let profile = codex_account::get_codex_home();
+    assert!(root.is_absolute() && profile.starts_with(&root));
+    assert!(account::get_data_dir().unwrap().starts_with(&root));
+    let denied = std::net::TcpStream::connect_timeout(
+        &"127.0.0.1:9".parse().unwrap(), Duration::from_millis(100),
+    ).unwrap_err();
+    assert!(matches!(denied.raw_os_error(), Some(1 | 13)), "{denied}");
+    fs::create_dir_all(&profile).unwrap();
+    fs::write(profile.join("config.toml"),
+        "model = 'gpt-5.6-luna'\ncli_auth_credentials_store = 'file'\n[analytics]\nenabled = false\n[feedback]\nenabled = false\n",
+    ).unwrap();
+    let mut collection = native_test_collection();
+    collection.account_ids = vec!["pool-a".into()];
+    collection.gateway_mode = CodexLocalAccessGatewayMode::Native;
+    let catalog = native_catalog(&collection, None, &[native_reserve_account(false)]).unwrap();
+    write_local_access_profile_credentials(&profile, &collection, None).await.unwrap();
+    write_local_access_profile_client_models(&profile, false, catalog).unwrap();
+    let doc = crate::modules::codex_config_format::load_codex_config_doc(&profile.join("config.toml")).unwrap();
+    assert_eq!(doc["model"].as_str(), Some("gpt-5.6-luna"));
+    assert_eq!(doc["model_provider"].as_str(), Some(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID));
+}
+
 #[test]
 fn native_reserve_catalog_and_aliases_keep_key_scope_prefix_and_model_acl() {
     let mut collection = native_test_collection();

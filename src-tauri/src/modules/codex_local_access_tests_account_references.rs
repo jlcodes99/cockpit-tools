@@ -1,3 +1,55 @@
+#[tokio::test]
+async fn parallel_same_provider_key_imports_and_pool_appends_keep_every_account() {
+    let shared = crate::modules::codex_unified_proxy::TestCacheGuard::new();
+    shared.prepare_disabled();
+    let _env = LocalAccessTestDataGuard::new("parallel-same-provider-key-imports");
+    let mut collection = test_local_access_collection(Vec::new());
+    collection.enabled = false;
+    super::save_collection_to_disk(&collection).unwrap();
+    {
+        let mut runtime = super::gateway_runtime().lock().await;
+        *runtime = super::GatewayRuntime::default();
+    }
+
+    let barrier = std::sync::Barrier::new(4);
+    let accounts = std::thread::scope(|scope| {
+        let tasks = (0..4).map(|index| {
+            let barrier = &barrier;
+            scope.spawn(move || {
+                barrier.wait();
+                codex_account::upsert_api_key_account(
+                    format!("fixture-key-{index}"), Some("https://relay.example.invalid/v1".into()),
+                    Some(CodexApiProviderMode::Custom), Some("relay".into()), Some("Relay".into()),
+                    vec!["model-a".into()], Some(false), Some("responses".into()), false, false,
+                    HashMap::new(), None, Some(format!("Relay {index}")), None, None,
+                ).unwrap()
+            })
+        }).collect::<Vec<_>>();
+        tasks.into_iter().map(|task| task.join().unwrap()).collect::<Vec<_>>()
+    });
+    let expected = accounts.iter().map(|account| account.id.clone()).collect::<std::collections::HashSet<_>>();
+    assert_eq!(expected.len(), 4);
+    let index = codex_account::read_saved_account_index().unwrap().unwrap();
+    assert_eq!(index.accounts.into_iter().map(|account| account.id).collect::<std::collections::HashSet<_>>(), expected);
+
+    for result in futures_util::future::join_all(accounts.iter().map(|account| {
+        super::append_local_access_accounts(vec![account.id.clone()])
+    })).await {
+        let result = result.unwrap();
+        assert_eq!(result.added_account_ids.len(), 1);
+        assert!(result.skipped_accounts.is_empty());
+    }
+    let saved = super::load_collection_from_disk().unwrap().unwrap();
+    assert_eq!(saved.account_ids.iter().cloned().collect::<std::collections::HashSet<_>>(), expected);
+    assert_eq!(saved.chatgpt_plan_service_revision, collection.chatgpt_plan_service_revision + 4);
+    let after_save = super::save_local_access_accounts_with_official_bindings(
+        saved.account_ids.clone(), true, None, None, None, None, None, None, None,
+    ).await.unwrap().collection.unwrap();
+    assert_eq!(after_save.account_ids, saved.account_ids);
+    let mut runtime = super::gateway_runtime().lock().await;
+    *runtime = super::GatewayRuntime::default();
+}
+
 #[test]
 fn key_rotation_preserves_public_key_scopes_and_pool_settings() {
     let mut collection = test_local_access_collection(vec!["old".into(), "other".into()]);

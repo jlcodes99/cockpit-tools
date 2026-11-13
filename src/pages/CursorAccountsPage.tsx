@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useCallback, useState, Fragment } from 'react';
+import { useAccountsOverviewFilterState } from '../hooks/useAccountsOverviewFilterState';
+import { useEffect, useMemo, useCallback, useRef, useState, Fragment } from 'react';
 import {
   Plus,
   RefreshCw,
@@ -30,7 +31,7 @@ import { useCursorAccountStore } from '../stores/useCursorAccountStore';
 import * as cursorService from '../services/cursorService';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
-import { ModalErrorMessage } from '../components/ModalErrorMessage';
+import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
@@ -43,15 +44,18 @@ import {
   getCursorPlanDisplayName,
   getCursorPlanBadgeClass,
   getCursorAccountDisplayEmail,
-  getCursorOnDemandSummary,
   getCursorUsage,
-  formatCursorUsageDollars,
-  hasCursorQuotaData,
   hasCursorQuotaQueryError,
   isCursorAccountBanned,
 } from '../types/cursor';
+import {
+  buildCursorAccountPresentation,
+  type UnifiedQuotaMetric,
+} from '../presentation/platformAccountPresentation';
 import type { CursorAccount } from '../types/cursor';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
+import { ACCOUNTS_CHANGED_EVENT, type AccountSyncEventPayload } from '../utils/accountSyncEvents';
+import { subscribeTauriEvent } from '../utils/tauriEventListener';
 import {
   buildValidAccountsFilterOption,
   splitValidityFilterValues,
@@ -67,8 +71,6 @@ import {
   normalizeAccountsOverviewScope,
   readAccountsOverviewFilterPersistenceEnabled,
   readAccountsOverviewFilterStringArray,
-  removeAccountsOverviewFilterField,
-  writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
 
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
@@ -76,7 +78,6 @@ import { CursorOverviewTabsHeader, CursorTab } from '../components/CursorOvervie
 import { CursorInstancesContent } from './CursorInstancesPage';
 
 const CURSOR_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.cursor.flow_notice_collapsed';
-const CURSOR_CURRENT_ACCOUNT_ID_KEY = 'agtools.cursor.current_account_id';
 const CURSOR_FILTER_PERSISTENCE_SCOPE = normalizeAccountsOverviewScope('Cursor');
 const FILTER_TYPES_FIELD = 'filter_types';
 const CURSOR_KNOWN_PLAN_FILTERS = [
@@ -94,27 +95,16 @@ const CURSOR_TOKEN_BATCH_EXAMPLE = `[
 ]`;
 const CURSOR_QUOTA_FAILED_FILTER_VALUE = 'QUOTA_FAILED';
 
-function getCursorQuotaClass(percentage: number): string {
-  if (percentage >= 90) return 'critical';
-  if (percentage >= 70) return 'medium';
-  return 'high';
-}
-
-function normalizeCursorPercent(raw: number | null | undefined): {
-  bar: number;
-  display: number;
-} {
-  if (raw == null || !Number.isFinite(raw)) {
-    return { bar: 0, display: 0 };
-  }
-  const base = raw > 0 && raw < 1 ? 1 : raw;
-  const bar = Math.min(100, Math.max(0, base));
-  return { bar, display: Math.round(bar) };
-}
-
 export function CursorAccountsPage() {
   const [activeTab, setActiveTab] = useState<CursorTab>('overview');
-  const [filterTypes, setFilterTypes] = useState<string[]>(() =>
+  const [quotaFailureConfirm, setQuotaFailureConfirm] = useState(false);
+  const [retryingQuotaFailures, setRetryingQuotaFailures] = useState(false);
+  const {
+    message: quotaRetryError,
+    scrollKey: quotaRetryErrorScrollKey,
+    set: setQuotaRetryError,
+  } = useModalErrorState();
+  const [filterTypes, setFilterTypes] = useAccountsOverviewFilterState<string[]>(CURSOR_FILTER_PERSISTENCE_SCOPE, FILTER_TYPES_FIELD, () =>
     readAccountsOverviewFilterPersistenceEnabled(CURSOR_FILTER_PERSISTENCE_SCOPE)
       ? readAccountsOverviewFilterStringArray(CURSOR_FILTER_PERSISTENCE_SCOPE, FILTER_TYPES_FIELD)
       : [],
@@ -122,13 +112,19 @@ export function CursorAccountsPage() {
   const untaggedKey = '__untagged__';
 
   const store = useCursorAccountStore();
+  const fetchAccounts = store.fetchAccounts;
+  useEffect(() => subscribeTauriEvent<AccountSyncEventPayload>(ACCOUNTS_CHANGED_EVENT, ({ payload }) => {
+    if (payload.platformId === 'cursor' && payload.reason === 'oauth-refresh') {
+      void fetchAccounts();
+    }
+  }), [fetchAccounts]);
 
   const page = useProviderAccountsPage<CursorAccount>({
     platformKey: 'Cursor',
     oauthLogPrefix: 'CursorOAuth',
     flowNoticeCollapsedKey: CURSOR_FLOW_NOTICE_COLLAPSED_KEY,
-    currentAccountIdKey: CURSOR_CURRENT_ACCOUNT_ID_KEY,
     exportFilePrefix: 'cursor_accounts',
+    disableEnterConfirmDelete: quotaFailureConfirm,
     store: {
       accounts: store.accounts,
       currentAccountId: store.currentAccountId,
@@ -166,9 +162,8 @@ export function CursorAccountsPage() {
   });
 
   const {
-    t, locale, privacyModeEnabled, togglePrivacyMode, maskAccountText,
+    t, privacyModeEnabled, togglePrivacyMode, maskAccountText,
     viewMode, setViewMode, searchQuery, setSearchQuery,
-    filterPersistenceEnabled, filterPersistenceScope,
     sortBy, setSortBy, sortDirection, setSortDirection,
     selected, toggleSelect, toggleSelectAll,
     tagFilter, groupByTag, setGroupByTag, showTagFilter, setShowTagFilter,
@@ -195,14 +190,6 @@ export function CursorAccountsPage() {
     currentAccountId,
     formatDate, normalizeTag,
   } = page;
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(filterPersistenceScope, FILTER_TYPES_FIELD);
-      return;
-    }
-    writeAccountsOverviewFilterField(filterPersistenceScope, FILTER_TYPES_FIELD, filterTypes);
-  }, [filterPersistenceEnabled, filterPersistenceScope, filterTypes]);
 
   const toggleFilterTypeValue = useCallback((value: string) => {
     setFilterTypes((prev) => {
@@ -262,116 +249,30 @@ export function CursorAccountsPage() {
 
   // ─── Platform-specific: Quota ──────────────────────────────────────
 
-  const resolveTotalQuota = useCallback(
-    (account: CursorAccount) => {
-      const usage = getCursorUsage(account);
-      const ratioPct =
-        usage.planUsedCents != null &&
-        usage.planLimitCents != null &&
-        usage.planLimitCents > 0
-          ? (usage.planUsedCents / usage.planLimitCents) * 100
-          : null;
-      const total = normalizeCursorPercent(usage.totalPercentUsed ?? ratioPct);
-      const costText = usage.planUsedCents != null && usage.planLimitCents != null
-        ? `${formatCursorUsageDollars(usage.planUsedCents)} / ${formatCursorUsageDollars(usage.planLimitCents)}`
-        : null;
-      return {
-        percentage: total.bar,
-        quotaClass: getCursorQuotaClass(total.display),
-        valueText: `${total.display}%`,
-        costText,
-      };
-    },
-    [],
-  );
-
-  const resolveAutoQuota = useCallback(
-    (account: CursorAccount) => {
-      const usage = getCursorUsage(account);
-      const auto = normalizeCursorPercent(usage.autoPercentUsed);
-      return {
-        percentage: auto.bar,
-        quotaClass: getCursorQuotaClass(auto.display),
-        valueText: `${auto.display}%`,
-      };
-    },
-    [],
-  );
-
-  const resolveApiQuota = useCallback(
-    (account: CursorAccount) => {
-      const usage = getCursorUsage(account);
-      const api = normalizeCursorPercent(usage.apiPercentUsed);
-      return {
-        percentage: api.bar,
-        quotaClass: getCursorQuotaClass(api.display),
-        valueText: `${api.display}%`,
-      };
-    },
-    [],
-  );
-
-  const resolveOnDemandQuota = useCallback(
-    (account: CursorAccount) => {
-      const usage = getCursorUsage(account);
-      const onDemand = getCursorOnDemandSummary(usage);
-
-      if (onDemand.isDisabled) {
-        return {
-          percentage: 0,
-          quotaClass: 'normal',
-          valueText: onDemand.usedCents > 0
-            ? formatCursorUsageDollars(onDemand.usedCents)
-            : t('common.disabled', 'Disabled'),
-          costText: null as string | null,
-          disabled: true,
-        };
-      }
-
-      if (onDemand.isUnlimited) {
-        return {
-          percentage: 0,
-          quotaClass: 'normal',
-          valueText: 'Unlimited',
-          costText: formatCursorUsageDollars(onDemand.usedCents),
-          disabled: false,
-        };
-      }
-
-      const rawPct = onDemand.limitCents && onDemand.limitCents > 0
-        ? (onDemand.usedCents / onDemand.limitCents) * 100
-        : 0;
-      const fixed = normalizeCursorPercent(rawPct);
-      const costText = `${formatCursorUsageDollars(onDemand.usedCents)} / ${formatCursorUsageDollars(onDemand.limitCents)}`;
-      return {
-        percentage: fixed.bar,
-        quotaClass: getCursorQuotaClass(fixed.display),
-        valueText: `${fixed.display}%`,
-        costText,
-        disabled: false,
-      };
-    },
-    [t],
-  );
-
-  const resolveResetTime = useCallback(
-    (account: CursorAccount) => {
-      const usage = getCursorUsage(account);
-      return usage.allowanceResetAt ?? null;
-    },
-    [],
-  );
-
-  const formatResetTime = useCallback(
-    (timestamp: number | null | undefined) => {
-      if (!timestamp) return '';
-      const d = new Date(timestamp * 1000);
-      if (Number.isNaN(d.getTime())) return '';
-      return d.toLocaleDateString(locale, { year: 'numeric', month: '2-digit', day: '2-digit' }) +
-        ' ' + d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
-    },
-    [locale],
-  );
+  const renderQuotaMetric = (item: UnifiedQuotaMetric, table = false) => {
+    const quotaClass = item.quotaClass === 'low' ? 'critical' : item.quotaClass;
+    return (
+      <div key={item.key} className={table ? 'quota-item windsurf-table-credit-item' : 'quota-item windsurf-credit-item'}>
+        <div className="quota-header">
+          <span className={table ? 'quota-name' : 'quota-label'}>{item.label}</span>
+          <span className={`${table ? 'quota-value' : 'quota-pct'} ${item.showProgress === false ? '' : quotaClass}`}>
+            {item.hintText && <span title={item.hintText} aria-label={item.hintText}><CircleAlert size={12} /></span>}
+            {item.valueText}
+          </span>
+        </div>
+        {item.resetText && (
+          <div className={table ? 'windsurf-credit-meta-row table' : 'windsurf-credit-meta-row'}>
+            <span className="windsurf-credit-used">{item.resetText}</span>
+          </div>
+        )}
+        {item.showProgress !== false && (
+          <div className={table ? 'quota-progress-track' : 'quota-bar-track'}>
+            <div className={`${table ? 'quota-progress-bar' : 'quota-bar'} ${quotaClass}`} style={{ width: `${item.percentage}%` }} />
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // ─── Platform-specific: Dynamic tier filter ────────────────────────
 
@@ -484,9 +385,11 @@ export function CursorAccountsPage() {
     }
     const aUsage = getCursorUsage(a);
     const bUsage = getCursorUsage(b);
-    const aValue = 100 - (aUsage.inlineSuggestionsUsedPercent ?? 0);
-    const bValue = 100 - (bUsage.inlineSuggestionsUsedPercent ?? 0);
-    const diff = bValue - aValue;
+    const aUsed = aUsage.inlineSuggestionsUsedPercent;
+    const bUsed = bUsage.inlineSuggestionsUsedPercent;
+    if (aUsed == null) return bUsed == null ? 0 : 1;
+    if (bUsed == null) return -1;
+    const diff = aUsed - bUsed;
     return sortDirection === 'desc' ? diff : -diff;
   }, [currentAccountId, sortBy, sortDirection]);
 
@@ -553,16 +456,45 @@ export function CursorAccountsPage() {
     () => accounts.filter(hasCursorQuotaQueryError).map((account) => account.id),
     [accounts],
   );
-  const handleClearQuotaFailedAccounts = useCallback(() => {
-    if (quotaFailedAccountIds.length === 0) return;
-    setDeleteConfirm({
-      ids: quotaFailedAccountIds,
-      message: t('cursor.filters.cleanQuotaFailedConfirm', {
-        count: quotaFailedAccountIds.length,
-        defaultValue: '确定要删除全部 {{count}} 个配额查询失败的账号吗？',
-      }),
-    });
-  }, [quotaFailedAccountIds, setDeleteConfirm, t]);
+  const activeDeleteConfirm = useRef(deleteConfirm);
+  activeDeleteConfirm.current = deleteConfirm;
+  useEffect(() => {
+    if (deleteConfirm) return;
+    setQuotaFailureConfirm(false);
+    setQuotaRetryError(null);
+  }, [deleteConfirm, setQuotaRetryError]);
+  const setQuotaFailureIds = (ids: string[]) => {
+    setDeleteConfirm(ids.length > 0 ? {
+      ids,
+      message: t('cursor.filters.cleanQuotaFailedConfirm', { count: ids.length }),
+    } : null);
+  };
+  const handleOpenQuotaFailures = () => {
+    setQuotaFailureConfirm(true);
+    setQuotaFailureIds(quotaFailedAccountIds);
+  };
+  const handleRetryQuotaFailures = async () => {
+    if (!deleteConfirm || retryingQuotaFailures || deleting) return;
+    setRetryingQuotaFailures(true);
+    setQuotaRetryError(null);
+    try {
+      const remainingIds = await cursorService.retryCursorFailedQuotas(deleteConfirm.ids);
+      await fetchAccounts();
+      if (activeDeleteConfirm.current !== deleteConfirm) return;
+      setQuotaFailureIds(remainingIds);
+      if (remainingIds.length > 0) {
+        setQuotaRetryError(t('cursor.filters.quotaFailed', { count: remainingIds.length }));
+      } else {
+        setMessage({ text: t('common.shared.refreshSuccess'), tone: 'success' });
+      }
+    } catch (error) {
+      if (activeDeleteConfirm.current === deleteConfirm) {
+        setQuotaRetryError(t('common.shared.refreshFailed', { error: String(error) }));
+      }
+    } finally {
+      setRetryingQuotaFailures(false);
+    }
+  };
   const exportSelectionCount = getScopedSelectedCount(filteredIds);
   const pagination = usePagination({
     items: filteredAccounts,
@@ -620,19 +552,13 @@ export function CursorAccountsPage() {
       const authIdText = (account.auth_id || '').trim();
       const maskedAuthIdText = authIdText ? maskAccountText(authIdText) : '--';
       const planLabel = resolvePlanLabel(account);
-      const total = resolveTotalQuota(account);
-      const auto = resolveAutoQuota(account);
-      const api = resolveApiQuota(account);
-      const onDemand = resolveOnDemandQuota(account);
-      const resetTs = resolveResetTime(account);
-      const resetText = formatResetTime(resetTs);
+      const { quotaItems } = buildCursorAccountPresentation(account, t);
       const accountTags = (account.tags || []).map((tag) => tag.trim()).filter(Boolean);
       const visibleTags = accountTags.slice(0, 2);
       const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
       const isSelected = selected.has(account.id);
       const isCurrent = currentAccountId === account.id;
       const quotaError = account.quota_query_last_error?.trim();
-      const hasQuotaData = hasCursorQuotaData(account);
       const isBanned = isCursorAccountBanned(account);
       const hasStatusError = (account.status || '').toLowerCase() === 'error';
       const statusReason = account.status_reason ?? null;
@@ -689,66 +615,7 @@ export function CursorAccountsPage() {
           )}
 
           <div className="ghcp-quota-section">
-            {hasQuotaData ? (
-              <>
-                <div className="quota-item windsurf-credit-item">
-                  <div className="quota-header">
-                    <span className="quota-label">Total Usage</span>
-                    <span className={`quota-pct ${total.quotaClass}`}>{total.valueText}</span>
-                  </div>
-                  {total.costText && (
-                    <div className="windsurf-credit-meta-row">
-                      <span className="windsurf-credit-used">{total.costText}</span>
-                    </div>
-                  )}
-                  {resetText && (
-                    <div className="windsurf-credit-meta-row">
-                      <span className="windsurf-credit-used">{t('common.shared.quota.resetAt', { time: resetText, defaultValue: 'Reset: {{time}}' })}</span>
-                    </div>
-                  )}
-                  <div className="quota-bar-track">
-                    <div className={`quota-bar ${total.quotaClass}`} style={{ width: `${Math.min(total.percentage, 100)}%` }} />
-                  </div>
-                </div>
-
-                <div className="quota-item windsurf-credit-item">
-                  <div className="quota-header">
-                    <span className="quota-label">Auto + Composer</span>
-                    <span className={`quota-pct ${auto.quotaClass}`}>{auto.valueText}</span>
-                  </div>
-                  <div className="quota-bar-track">
-                    <div className={`quota-bar ${auto.quotaClass}`} style={{ width: `${Math.min(auto.percentage, 100)}%` }} />
-                  </div>
-                </div>
-
-                <div className="quota-item windsurf-credit-item">
-                  <div className="quota-header">
-                    <span className="quota-label">API Usage</span>
-                    <span className={`quota-pct ${api.quotaClass}`}>{api.valueText}</span>
-                  </div>
-                  <div className="quota-bar-track">
-                    <div className={`quota-bar ${api.quotaClass}`} style={{ width: `${Math.min(api.percentage, 100)}%` }} />
-                  </div>
-                </div>
-
-                <div className="quota-item windsurf-credit-item">
-                  <div className="quota-header">
-                    <span className="quota-label">{t('cursor.quota.onDemand', 'On-Demand')}</span>
-                    <span className={`quota-pct ${onDemand.quotaClass}`}>{onDemand.valueText}</span>
-                  </div>
-                  {onDemand.costText && (
-                    <div className="windsurf-credit-meta-row">
-                      <span className="windsurf-credit-used">{onDemand.costText}</span>
-                    </div>
-                  )}
-                  <div className="quota-bar-track">
-                    <div className={`quota-bar ${onDemand.quotaClass}`} style={{ width: `${Math.min(onDemand.percentage, 100)}%` }} />
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
-            )}
+            {quotaItems.map((item) => renderQuotaMetric(item))}
           </div>
 
           <div className="card-footer">
@@ -787,19 +654,13 @@ export function CursorAccountsPage() {
       const authIdText = (account.auth_id || '').trim();
       const maskedAuthIdText = authIdText ? maskAccountText(authIdText) : '--';
       const planLabel = resolvePlanLabel(account);
-      const total = resolveTotalQuota(account);
-      const auto = resolveAutoQuota(account);
-      const api = resolveApiQuota(account);
-      const onDemand = resolveOnDemandQuota(account);
-      const resetTs = resolveResetTime(account);
-      const resetText = formatResetTime(resetTs);
+      const { quotaItems: [primaryQuota, ...otherQuotas] } = buildCursorAccountPresentation(account, t);
       const accountTags = (account.tags || []).map((tag) => tag.trim()).filter(Boolean);
       const visibleTags = accountTags.slice(0, 3);
       const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
       const isCurrent = currentAccountId === account.id;
       const isBanned = isCursorAccountBanned(account);
       const quotaError = account.quota_query_last_error?.trim();
-      const hasQuotaData = hasCursorQuotaData(account);
       const hasStatusError = (account.status || '').toLowerCase() === 'error';
       const statusReason = account.status_reason ?? null;
       const bannedTitle = statusReason || t('accounts.status.forbidden_tooltip');
@@ -840,71 +701,8 @@ export function CursorAccountsPage() {
             </div>
           </td>
           <td><span className={`tier-badge ${resolvePlanBadgeClass(account)}`}>{planLabel}</span></td>
-          <td>
-            {hasQuotaData ? (
-              <div className="quota-item windsurf-table-credit-item">
-                <div className="quota-header">
-                  <span className="quota-name">Total Usage</span>
-                  <span className={`quota-value ${total.quotaClass}`}>{total.valueText}</span>
-                </div>
-                {total.costText && (
-                  <div className="windsurf-credit-meta-row table">
-                    <span className="windsurf-credit-used">{total.costText}</span>
-                  </div>
-                )}
-                {resetText && (
-                  <div className="windsurf-credit-meta-row table">
-                    <span className="windsurf-credit-used">{t('common.shared.quota.resetAt', { time: resetText, defaultValue: 'Reset: {{time}}' })}</span>
-                  </div>
-                )}
-                <div className="quota-progress-track">
-                  <div className={`quota-progress-bar ${total.quotaClass}`} style={{ width: `${Math.min(total.percentage, 100)}%` }} />
-                </div>
-              </div>
-            ) : (
-              <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
-            )}
-          </td>
-          <td>
-            {hasQuotaData ? (
-              <>
-                <div className="quota-item windsurf-table-credit-item">
-                  <div className="quota-header">
-                    <span className="quota-name">Auto + Composer</span>
-                    <span className={`quota-value ${auto.quotaClass}`}>{auto.valueText}</span>
-                  </div>
-                  <div className="quota-progress-track">
-                    <div className={`quota-progress-bar ${auto.quotaClass}`} style={{ width: `${Math.min(auto.percentage, 100)}%` }} />
-                  </div>
-                </div>
-                <div className="quota-item windsurf-table-credit-item" style={{ marginTop: 4 }}>
-                  <div className="quota-header">
-                    <span className="quota-name">API</span>
-                    <span className={`quota-value ${api.quotaClass}`}>{api.valueText}</span>
-                  </div>
-                  <div className="quota-progress-track">
-                    <div className={`quota-progress-bar ${api.quotaClass}`} style={{ width: `${Math.min(api.percentage, 100)}%` }} />
-                  </div>
-                </div>
-                <div className="quota-item windsurf-table-credit-item" style={{ marginTop: 4 }}>
-                  <div className="quota-header">
-                    <span className="quota-name">{t('cursor.quota.onDemand', 'On-Demand')}</span>
-                    <span className={`quota-value ${onDemand.quotaClass}`}>{onDemand.valueText}</span>
-                  </div>
-                  {onDemand.costText && (
-                    <div className="windsurf-credit-meta-row table">
-                      <span className="windsurf-credit-used">{onDemand.costText}</span>
-                    </div>
-                  )}
-                  <div className="quota-progress-track">
-                    <div className={`quota-progress-bar ${onDemand.quotaClass}`} style={{ width: `${Math.min(onDemand.percentage, 100)}%` }} />
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
-            )}
-          </td>
+          <td>{primaryQuota && renderQuotaMetric(primaryQuota, true)}</td>
+          <td>{otherQuotas.map((item) => renderQuotaMetric(item, true))}</td>
           <td className="sticky-action-cell table-action-cell">
             <div className="action-buttons">
               <button className="action-btn success" onClick={() => handleInjectToVSCode?.(account.id)} disabled={!!injecting || isBanned}
@@ -1065,16 +863,11 @@ export function CursorAccountsPage() {
           {quotaFailedAccountIds.length > 0 && (
             <button
               type="button"
-              className="btn btn-danger icon-only"
-              onClick={handleClearQuotaFailedAccounts}
-              title={t('cursor.filters.cleanQuotaFailedAction', {
-                count: quotaFailedAccountIds.length,
-                defaultValue: '删除配额查询失败账号 ({{count}})',
-              })}
-              aria-label={t('cursor.filters.cleanQuotaFailedAction', {
-                count: quotaFailedAccountIds.length,
-                defaultValue: '删除配额查询失败账号 ({{count}})',
-              })}
+              className="btn btn-secondary icon-only"
+              onClick={handleOpenQuotaFailures}
+              disabled={retryingQuotaFailures}
+              title={t('cursor.filters.quotaFailed', { count: quotaFailedAccountIds.length })}
+              aria-label={t('cursor.filters.quotaFailed', { count: quotaFailedAccountIds.length })}
             >
               <CircleAlert size={14} />
             </button>
@@ -1157,8 +950,8 @@ export function CursorAccountsPage() {
                 </th>
                 <th style={{ width: 240 }}>{t('common.shared.columns.email', '邮箱')}</th>
                 <th style={{ width: 120 }}>{t('common.shared.columns.plan', '计划')}</th>
-                <th>Total Usage</th>
-                <th>Usage Details</th>
+                <th>{t('common.shared.quota.usage')}</th>
+                <th>{t('cursor.quota.details')}</th>
                 <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', '操作')}</th>
               </tr>
             </thead>
@@ -1189,8 +982,8 @@ export function CursorAccountsPage() {
                 </th>
                 <th style={{ width: 240 }}>{t('common.shared.columns.email', '邮箱')}</th>
                 <th style={{ width: 120 }}>{t('common.shared.columns.plan', '计划')}</th>
-                <th>Total Usage</th>
-                <th>Usage Details</th>
+                <th>{t('common.shared.quota.usage')}</th>
+                <th>{t('cursor.quota.details')}</th>
                 <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', '操作')}</th>
               </tr>
             </thead>
@@ -1302,11 +1095,11 @@ export function CursorAccountsPage() {
 
               {addTab === 'token' && (
                 <div className="add-section">
-                  <p className="section-desc">{t('cursor.token.desc', '粘贴您的 Cursor Access Token（JWT）或导出的 JSON 数据。')}</p>
+                  <p className="section-desc">{t('cursor.token.desc')}</p>
                   <details className="token-format-collapse">
                     <summary className="token-format-collapse-summary">{t('cursor.token.formatHint', '必填字段与示例（点击展开）')}</summary>
                     <div className="token-format">
-                      <p className="token-format-required">{t('cursor.token.formatRequired', '单条 Token 直接粘贴 JWT；批量导入使用 JSON 数组格式')}</p>
+                      <p className="token-format-required">{t('cursor.token.formatRequired')}</p>
                       <div className="token-format-group">
                         <div className="token-format-label">{t('cursor.token.singleExample', '单条示例（JWT）')}</div>
                         <pre className="token-format-code">{CURSOR_TOKEN_SINGLE_EXAMPLE}</pre>
@@ -1375,16 +1168,28 @@ export function CursorAccountsPage() {
         <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{t('common.confirm')}</h2>
-              <button className="modal-close" onClick={() => !deleting && setDeleteConfirm(null)} aria-label={t('common.close', '关闭')}><X /></button>
+              <h2>{quotaFailureConfirm ? t('common.shared.quota.queryFailed') : t('common.confirm')}</h2>
+              <button className="modal-close" onClick={() => setDeleteConfirm(null)} disabled={deleting} aria-label={t('common.close', '关闭')}><X /></button>
             </div>
             <div className="modal-body">
               <ModalErrorMessage message={deleteConfirmError} scrollKey={deleteConfirmErrorScrollKey} />
+              {quotaFailureConfirm && <ModalErrorMessage message={quotaRetryError} scrollKey={quotaRetryErrorScrollKey} />}
               <p>{deleteConfirm.message}</p>
             </div>
-            <div className="modal-footer">
+            <div className="modal-footer" style={quotaFailureConfirm ? { flexWrap: 'wrap' } : undefined}>
               <button className="btn btn-secondary" onClick={() => setDeleteConfirm(null)} disabled={deleting}>{t('common.cancel')}</button>
-              <button className="btn btn-danger" onClick={confirmDelete} disabled={deleting}>{t('common.confirm')}</button>
+              {quotaFailureConfirm && (
+                <button type="button" className="btn btn-primary" onClick={() => void handleRetryQuotaFailures()} disabled={deleting || retryingQuotaFailures} aria-busy={retryingQuotaFailures}>
+                  <RefreshCw size={14} className={retryingQuotaFailures ? 'loading-spinner' : ''} />
+                  {t('common.shared.refreshQuota')}
+                </button>
+              )}
+              <button className="btn btn-danger" onClick={() => {
+                setQuotaRetryError(null);
+                void confirmDelete();
+              }} disabled={deleting || (quotaFailureConfirm && retryingQuotaFailures)}>
+                {quotaFailureConfirm ? t('common.delete') : t('common.confirm')}
+              </button>
             </div>
           </div>
         </div>

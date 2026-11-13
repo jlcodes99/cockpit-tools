@@ -43,7 +43,11 @@ function drain(): void {
           baseUrl: account.api_base_url, apiKey: account.openai_api_key,
         });
         if (!remote) return;
-        const summary = await queryModelProviderUsage({ baseUrl: account.api_base_url!, apiKey: account.openai_api_key! });
+        const summary = await queryModelProviderUsage({
+          baseUrl: account.api_base_url!,
+          apiKey: account.openai_api_key!,
+          respectRelayBalanceSwitch: true,
+        });
         if (latest.get(account.id) !== signature) return;
         const cache = readCodexApiKeyUsageCache();
         cache[account.id] = { loading: false, summary, updatedAt: Date.now() };

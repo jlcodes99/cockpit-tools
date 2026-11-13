@@ -28,11 +28,14 @@ import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
 import * as grokInstanceService from "../services/grokInstanceService";
 import * as grokService from "../services/grokService";
 import { useGrokAccountStore } from "../stores/useGrokAccountStore";
+import { APIKEY_FUN_PREFILL_EVENT, consumeApiKeyFunPrefill } from "../utils/apiKeyFunPrefill";
+import { resolveApiKeyFunGrokModel } from "../utils/apikeyFunClientConfigs";
 import {
   formatGrokQuotaResetTime,
   formatGrokQuotaUsedTotal,
   getGrokAccountDisplayEmail,
   getGrokPlanBadge,
+  getGrokPlanBadgeClass,
   getGrokPlanRawValue,
   getGrokQuotaClass,
   getGrokQuotaGroups,
@@ -45,7 +48,6 @@ import {
 import { GrokInstancesContent } from "./GrokInstancesPage";
 
 const FLOW_NOTICE_KEY = "agtools.grok.flow_notice_collapsed";
-const CURRENT_ACCOUNT_KEY = "agtools.grok.current_account_id";
 const GROK_CLI_INSTALL_COMMAND_UNIX =
   "curl -fsSL https://x.ai/cli/install.sh | bash";
 const GROK_CLI_INSTALL_COMMAND_WINDOWS =
@@ -138,7 +140,6 @@ export function GrokAccountsPage() {
     platformKey: "grok",
     oauthLogPrefix: "GrokOAuth",
     flowNoticeCollapsedKey: FLOW_NOTICE_KEY,
-    currentAccountIdKey: CURRENT_ACCOUNT_KEY,
     exportFilePrefix: "grok_accounts",
     oauthTabKeys: ["oauth"],
     store: {
@@ -239,6 +240,25 @@ export function GrokAccountsPage() {
       setApiModelTouched(false);
     }
   }, [page.showAddModal]);
+
+  const { openAddModal, setTokenInput } = page;
+  useEffect(() => {
+    const prefill = () => {
+      const request = consumeApiKeyFunPrefill("grok");
+      if (!request) return;
+      setActiveTab("overview");
+      openAddModal("token");
+      setApiProviderMode("custom");
+      setApiBaseUrl(request.baseUrl?.trim() ?? "");
+      setApiModel(resolveApiKeyFunGrokModel(request.modelCatalog ?? []) ?? "");
+      setApiBaseUrlTouched(false);
+      setApiModelTouched(false);
+      setTokenInput(request.apiKey);
+    };
+    window.addEventListener(APIKEY_FUN_PREFILL_EVENT, prefill);
+    prefill();
+    return () => window.removeEventListener(APIKEY_FUN_PREFILL_EVENT, prefill);
+  }, [openAddModal, setTokenInput]);
 
   const handleReauthorize = useCallback(
     (account: GrokAccount) => {
@@ -531,6 +551,10 @@ export function GrokAccountsPage() {
       const reauthorizationReason = getGrokReauthorizationReason(account);
       const errorMessage = account.quota_query_last_error?.trim() || "";
       const showError = !!errorMessage && items.length === 0;
+      const showCliUsageUnavailable =
+        !errorMessage &&
+        items.some(({ key }) => key === "frequent" || key === "occasional") &&
+        !items.some(({ key }) => key === "weekly" || key.startsWith("product-"));
 
       return (
         <div className={`grok-quota-summary ${variant}`}>
@@ -551,6 +575,9 @@ export function GrokAccountsPage() {
             </div>
           )}
           <div className="grok-quota-items">
+            {showCliUsageUnavailable && (
+              <div className="quota-empty">{t("grok.quota.cliUnavailable")}</div>
+            )}
             {isGrokApiKeyAccount(account) && items.length === 0 && !errorMessage && (
               <div
                 className={variant === "card" ? "quota-empty" : ""}
@@ -731,10 +758,7 @@ export function GrokAccountsPage() {
     <div className="grok-cli-install-guide">
       <strong>{t("grok.instances.installCommand", "官方安装命令")}</strong>
       <p>
-        {t(
-          "grok.instances.installLaunchHint",
-          "可在终端运行以下官方命令，安装完成后重新点击终端执行。",
-        )}
+        {t("grok.instances.installLaunchHint")}
       </p>
       <div className="grok-cli-install-command">
         <code>{grokCliInstallCommand}</code>
@@ -1016,14 +1040,7 @@ export function GrokAccountsPage() {
       getGrokPlanBadge(account) || t("common.none", "暂无"),
     getPlanBadgeTitle: (account) =>
       getGrokPlanRawValue(account) || t("common.none", "暂无"),
-    getPlanBadgeClass: (planBadge, account) => {
-      if (isGrokApiKeyAccount(account) || planBadge === "API_KEY") return "pro";
-      // Missing tier (暂无) uses Free styling — not the red "unknown" tone.
-      if (!getGrokPlanRawValue(account)) return "free";
-      if (planBadge === "Free") return "free";
-      if (planBadge === "--") return "free";
-      return "pro";
-    },
+    getPlanBadgeClass: getGrokPlanBadgeClass,
     getSearchText: (account) =>
       [
         getGrokAccountDisplayEmail(account),

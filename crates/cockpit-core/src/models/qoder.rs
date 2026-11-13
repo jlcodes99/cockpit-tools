@@ -29,12 +29,16 @@ pub struct QoderAccount {
     pub tags: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_user_info_raw: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) verified_openapi_origin: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_user_plan_raw: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_credit_usage_raw: Option<Value>,
     pub created_at: i64,
     pub last_used: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_switched_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +59,8 @@ pub struct QoderAccountSummary {
 pub struct QoderAccountIndex {
     pub version: String,
     pub accounts: Vec<QoderAccountSummary>,
+    #[serde(skip)]
+    pub(crate) storage_revision: crate::modules::provider_account_index::Revision,
 }
 
 impl QoderAccountIndex {
@@ -62,6 +68,7 @@ impl QoderAccountIndex {
         Self {
             version: "1.0".to_string(),
             accounts: Vec::new(),
+            storage_revision: Default::default(),
         }
     }
 }

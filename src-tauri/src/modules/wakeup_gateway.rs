@@ -34,6 +34,7 @@ const LOCAL_GATEWAY_TLS_SETUP_TIMEOUT: Duration = Duration::from_secs(8);
 const OFFICIAL_LS_CLOUD_CODE_DAILY: &str = "https://daily-cloudcode-pa.googleapis.com";
 const OFFICIAL_LS_CLOUD_CODE_PROD: &str = "https://cloudcode-pa.googleapis.com";
 const OFFICIAL_LS_DEFAULT_APP_DATA_DIR: &str = "antigravity-ide";
+const STANDALONE_LS_APP_DATA_DIR: &str = "cockpit-antigravity-wakeup";
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -46,53 +47,6 @@ fn local_gateway_store() -> &'static TokioMutex<Option<String>> {
 
 fn local_gateway_start_lock() -> &'static TokioMutex<()> {
     LOCAL_GATEWAY_START_LOCK.get_or_init(|| TokioMutex::new(()))
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum OfficialLsVersionMode {
-    Gte1216,
-    Lt1216,
-}
-
-impl OfficialLsVersionMode {
-    fn from_str(value: &str) -> Option<Self> {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "gte_1_21_6" | ">=1.21.6" => Some(Self::Gte1216),
-            "lt_1_21_6" | "<1.21.6" => Some(Self::Lt1216),
-            _ => None,
-        }
-    }
-
-    fn requires_random_port(self) -> bool {
-        matches!(self, Self::Lt1216)
-    }
-}
-
-fn official_ls_version_mode_cell() -> &'static Mutex<OfficialLsVersionMode> {
-    static MODE: OnceLock<Mutex<OfficialLsVersionMode>> = OnceLock::new();
-    MODE.get_or_init(|| Mutex::new(OfficialLsVersionMode::Gte1216))
-}
-
-fn current_official_ls_version_mode() -> OfficialLsVersionMode {
-    official_ls_version_mode_cell()
-        .lock()
-        .map(|guard| *guard)
-        .unwrap_or(OfficialLsVersionMode::Gte1216)
-}
-
-fn official_ls_requires_random_port() -> bool {
-    current_official_ls_version_mode().requires_random_port()
-}
-
-pub fn set_official_ls_version_mode(mode: Option<&str>) -> Result<(), String> {
-    let next_mode = mode
-        .and_then(OfficialLsVersionMode::from_str)
-        .unwrap_or(OfficialLsVersionMode::Gte1216);
-    let mut guard = official_ls_version_mode_cell()
-        .lock()
-        .map_err(|_| "官方 LS 版本模式锁失败".to_string())?;
-    *guard = next_mode;
-    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -187,21 +141,11 @@ async fn start_official_ls_cascade_session(
     let mut ls = start_official_ls_process(&prepared.account_id, &token).await?;
     let client = build_official_ls_local_client(30)?;
     let base_url = format!("https://127.0.0.1:{}", ls.started.https_port);
-    // 新版官方 LS（≥1.21.6）要求 StartCascadeRequest.source（枚举 CortexTrajectorySource）非空，
-    // 否则返回 "invalid_argument: CortexTrajectorySource is unspecified"。
-    // 唤醒等价于 IDE 前台交互式 cascade，故默认注入 INTERACTIVE_CASCADE；
-    // 若调用方已显式传入 source 则保留，不覆盖。
-    let mut start_body = start_body.clone();
-    if let Some(obj) = start_body.as_object_mut() {
-        obj.entry("source")
-            .or_insert_with(|| json!("CORTEX_TRAJECTORY_SOURCE_INTERACTIVE_CASCADE"));
-    }
-    let start_resp = match post_json_to_official_ls(
+    let start_resp = match post_start_cascade_to_official_ls(
         &client,
         &base_url,
         &ls.ls_csrf_token,
-        START_CASCADE_PATH,
-        &start_body,
+        start_body,
     )
     .await
     {
@@ -430,6 +374,13 @@ struct OfficialLsExtensionServerHandle {
     task: tokio::task::JoinHandle<()>,
 }
 
+impl Drop for OfficialLsExtensionServerHandle {
+    fn drop(&mut self) {
+        self.shutdown_notify.notify_waiters();
+        self.task.abort();
+    }
+}
+
 struct OfficialLsProcessHandle {
     child: Child,
     stdout_task: Option<tokio::task::JoinHandle<()>>,
@@ -510,7 +461,10 @@ fn resolve_configured_antigravity_root(path_str: &str) -> Option<std::path::Path
 
 #[cfg(test)]
 mod configured_antigravity_root_tests {
-    use super::resolve_configured_antigravity_root;
+    use super::{
+        antigravity_extension_bin_dir, resolve_configured_antigravity_root,
+        resolve_official_ls_runtime, standalone_ls_binary,
+    };
     use std::path::{Path, PathBuf};
 
     struct RootTestDir(PathBuf);
@@ -565,6 +519,50 @@ mod configured_antigravity_root_tests {
             Some(std::fs::canonicalize(install.path()).expect("canonicalize install root"))
         );
     }
+
+    #[test]
+    fn wakeup_distinguishes_missing_ide_from_missing_language_server() {
+        assert_eq!(
+            resolve_official_ls_runtime(None, || None).map(|runtime| runtime.binary),
+            Err("APP_PATH_NOT_FOUND:antigravity".into())
+        );
+
+        let install = RootTestDir::new("language-server");
+        let bin = antigravity_extension_bin_dir(install.path());
+        assert_eq!(
+            resolve_official_ls_runtime(Some(install.path()), || None).map(|runtime| runtime.binary),
+            Err(format!("WAKEUP_OFFICIAL_LS_UNAVAILABLE:{}", bin.display()))
+        );
+
+        let name = if cfg!(target_os = "windows") {
+            "language_server_windows_x64.exe"
+        } else {
+            "language_server"
+        };
+        let server = bin.join(name);
+        std::fs::create_dir_all(&bin).expect("create extension bin directory");
+        std::fs::write(&server, b"fixture").expect("write language server fixture");
+        assert_eq!(
+            resolve_official_ls_runtime(Some(install.path()), || panic!("IDE already has a server"))
+                .map(|runtime| runtime.binary),
+            Ok(server),
+        );
+    }
+
+    #[test]
+    fn wakeup_uses_standalone_server_when_ide_has_no_bundled_server() {
+        let ide = RootTestDir::new("ide-without-server");
+        let desktop = RootTestDir::new("standalone-server");
+        let binary = standalone_ls_binary(desktop.path());
+        std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
+        std::fs::write(&binary, b"fixture").unwrap();
+
+        for ide_root in [Some(ide.path()), None] {
+            let runtime = resolve_official_ls_runtime(ide_root, || Some(desktop.0.clone())).unwrap();
+            assert_eq!(runtime.binary, binary);
+            assert!(runtime.standalone);
+        }
+    }
 }
 
 fn antigravity_extension_dir(root: &std::path::Path) -> std::path::PathBuf {
@@ -610,7 +608,7 @@ fn default_antigravity_app_root() -> std::path::PathBuf {
     std::path::PathBuf::from("/usr/share/antigravity-ide")
 }
 
-fn find_official_ls_binary_under(root: &std::path::Path) -> Option<String> {
+fn find_official_ls_binary_under(root: &std::path::Path) -> Option<std::path::PathBuf> {
     let bin_dir = antigravity_extension_bin_dir(root);
 
     #[cfg(target_os = "windows")]
@@ -640,7 +638,7 @@ fn find_official_ls_binary_under(root: &std::path::Path) -> Option<String> {
     for name in preferred {
         let candidate = bin_dir.join(name);
         if candidate.is_file() {
-            return Some(candidate.to_string_lossy().to_string());
+            return Some(candidate);
         }
     }
 
@@ -667,37 +665,87 @@ fn find_official_ls_binary_under(root: &std::path::Path) -> Option<String> {
     }
 
     dynamic_candidates.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
-    dynamic_candidates
+    dynamic_candidates.into_iter().next()
+}
+
+fn standalone_ls_binary(root: &std::path::Path) -> std::path::PathBuf {
+    let resources = if cfg!(target_os = "macos") {
+        root.join("Contents").join("Resources")
+    } else {
+        root.join("resources")
+    };
+    resources.join("bin").join(if cfg!(target_os = "windows") {
+        "language_server.exe"
+    } else {
+        "language_server"
+    })
+}
+
+struct OfficialLsRuntime {
+    binary: std::path::PathBuf,
+    standalone: bool,
+}
+
+fn resolve_official_ls_runtime(
+    ide_root: Option<&std::path::Path>,
+    desktop_root: impl FnOnce() -> Option<std::path::PathBuf>,
+) -> Result<OfficialLsRuntime, String> {
+    if let Some(binary) = ide_root.and_then(find_official_ls_binary_under) {
+        return Ok(OfficialLsRuntime {
+            binary,
+            standalone: false,
+        });
+    }
+
+    let desktop_binary = desktop_root().map(|root| standalone_ls_binary(&root));
+    if let Some(binary) = desktop_binary.as_ref().filter(|path| path.is_file()) {
+        return Ok(OfficialLsRuntime {
+            binary: binary.clone(),
+            standalone: true,
+        });
+    }
+
+    let paths = ide_root
+        .map(antigravity_extension_bin_dir)
         .into_iter()
-        .next()
-        .map(|path| path.to_string_lossy().to_string())
+        .chain(desktop_binary.and_then(|path| path.parent().map(std::path::Path::to_path_buf)))
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>();
+    if paths.is_empty() {
+        Err(app_path_missing_error("antigravity"))
+    } else {
+        Err(format!("WAKEUP_OFFICIAL_LS_UNAVAILABLE:{}", paths.join(" · ")))
+    }
 }
 
-fn resolve_official_ls_binary_from_config() -> Result<String, String> {
-    let user_config = crate::modules::config::get_user_config();
-    let antigravity_path = user_config.antigravity_app_path.trim();
-    let root = resolve_configured_antigravity_root(antigravity_path)
-        .or_else(|| {
-            let root = default_antigravity_app_root();
-            root.exists().then_some(root)
-        })
-        .ok_or_else(|| app_path_missing_error("antigravity"))?;
-    find_official_ls_binary_under(&root).ok_or_else(|| app_path_missing_error("antigravity"))
-}
-
-fn official_ls_binary_path() -> Result<String, String> {
+fn official_ls_runtime() -> Result<OfficialLsRuntime, String> {
     if let Ok(v) = std::env::var("AG_WAKEUP_OFFICIAL_LS_BINARY_PATH") {
         let trimmed = v.trim();
         if !trimmed.is_empty() {
-            return Ok(trimmed.to_string());
+            let binary = std::path::PathBuf::from(trimmed);
+            let standalone = binary
+                .ancestors()
+                .nth(if cfg!(target_os = "macos") { 4 } else { 3 })
+                .is_some_and(|root| standalone_ls_binary(root) == binary);
+            return Ok(OfficialLsRuntime { binary, standalone });
         }
     }
 
-    resolve_official_ls_binary_from_config()
+    let config = crate::modules::config::get_user_config();
+    let ide_root = resolve_configured_antigravity_root(&config.antigravity_app_path).or_else(|| {
+        let root = default_antigravity_app_root();
+        root.is_dir().then_some(root)
+    });
+    resolve_official_ls_runtime(ide_root.as_deref(), || {
+        resolve_configured_antigravity_root(&config.antigravity_legacy_app_path).or_else(|| {
+            let detected = crate::modules::process::detect_antigravity_legacy_exec_path()?;
+            resolve_configured_antigravity_root(detected.to_str()?)
+        })
+    })
 }
 
 pub fn ensure_official_ls_binary_ready() -> Result<String, String> {
-    official_ls_binary_path()
+    Ok(official_ls_runtime()?.binary.to_string_lossy().into_owned())
 }
 
 fn official_ls_cloud_code_endpoint(token: &crate::models::token::TokenData) -> &'static str {
@@ -708,14 +756,19 @@ fn official_ls_cloud_code_endpoint(token: &crate::models::token::TokenData) -> &
     }
 }
 
-fn official_ls_app_data_dir_name() -> String {
+fn official_ls_app_data_dir_name(standalone: bool) -> String {
     if let Ok(v) = std::env::var("AG_WAKEUP_OFFICIAL_LS_APP_DATA_DIR") {
         let trimmed = v.trim();
         if !trimmed.is_empty() {
             return trimmed.to_string();
         }
     }
-    OFFICIAL_LS_DEFAULT_APP_DATA_DIR.to_string()
+    let default = if standalone {
+        STANDALONE_LS_APP_DATA_DIR
+    } else {
+        OFFICIAL_LS_DEFAULT_APP_DATA_DIR
+    };
+    default.into()
 }
 
 pub(crate) fn official_antigravity_root_for_version() -> Option<std::path::PathBuf> {
@@ -857,7 +910,7 @@ pub(crate) fn official_antigravity_app_version() -> String {
     String::new()
 }
 
-fn build_official_ls_metadata_bytes() -> Vec<u8> {
+fn build_official_ls_metadata_bytes(runtime: &OfficialLsRuntime) -> Vec<u8> {
     use crate::utils::protobuf::{encode_len_delim_field, encode_varint};
 
     let mut out = Vec::new();
@@ -870,10 +923,26 @@ fn build_official_ls_metadata_bytes() -> Vec<u8> {
 
     // exa.codeium_common_pb.Metadata
     // 1=ide_name, 7=ide_version, 12=extension_name, 17=extension_path, 4=locale, 24=device_fingerprint
-    push_str(&mut out, 1, "Antigravity IDE");
-    push_str(&mut out, 7, &official_antigravity_app_version());
+    if runtime.standalone {
+        push_str(&mut out, 1, "Antigravity");
+        #[cfg(target_os = "macos")]
+        if let Some(version) = runtime
+            .binary
+            .ancestors()
+            .nth(3)
+            .and_then(|contents| plist::Value::from_file(contents.join("Info.plist")).ok())
+            .and_then(|value| value.into_dictionary())
+            .and_then(|mut info| info.remove("CFBundleShortVersionString"))
+            .and_then(|value| value.into_string())
+        {
+            push_str(&mut out, 7, &version);
+        }
+    } else {
+        push_str(&mut out, 1, "Antigravity IDE");
+        push_str(&mut out, 7, &official_antigravity_app_version());
+        push_str(&mut out, 17, &official_antigravity_extension_path());
+    }
     push_str(&mut out, 12, "antigravity");
-    push_str(&mut out, 17, &official_antigravity_extension_path());
     push_str(
         &mut out,
         4,
@@ -1089,6 +1158,21 @@ fn build_official_ls_local_client(timeout_secs: u64) -> Result<reqwest::Client, 
         .map_err(|e| format!("创建官方 LS 本地客户端失败: {}", e))
 }
 
+async fn post_start_cascade_to_official_ls(
+    client: &reqwest::Client,
+    base_url: &str,
+    csrf_token: &str,
+    body: &Value,
+) -> Result<Value, String> {
+    let mut body = body.clone();
+    if let Some(fields) = body.as_object_mut() {
+        // The official LS requires a trajectory source. Preserve an explicit one.
+        fields.entry("source")
+            .or_insert_with(|| json!("CORTEX_TRAJECTORY_SOURCE_INTERACTIVE_CASCADE"));
+    }
+    post_json_to_official_ls(client, base_url, csrf_token, START_CASCADE_PATH, &body).await
+}
+
 async fn post_json_to_official_ls(
     client: &reqwest::Client,
     base_url: &str,
@@ -1126,6 +1210,42 @@ async fn post_json_to_official_ls(
     resp.json::<Value>()
         .await
         .map_err(|e| format!("官方 LS 响应解析失败: {} ({})", e, path))
+}
+
+#[cfg(test)]
+mod start_cascade_wire_tests {
+    use super::*;
+    use axum::{http::{HeaderMap, StatusCode}, routing::post, Json, Router};
+
+    #[tokio::test]
+    async fn wakeup_start_cascade_sends_the_required_source_and_preserves_explicit_values() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let app = Router::new().route(START_CASCADE_PATH, post(
+            |headers: HeaderMap, Json(body): Json<Value>| async move {
+                assert_eq!(headers["x-codeium-csrf-token"], "fixture");
+                let Some(source) = body["source"].as_str() else {
+                    return (StatusCode::BAD_REQUEST, Json(json!({
+                        "message":"CortexTrajectorySource is unspecified"
+                    })));
+                };
+                (StatusCode::OK, Json(json!({"cascadeId":"fixture-cascade","source":source})))
+            },
+        ));
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let client = reqwest::Client::builder().no_proxy().timeout(Duration::from_secs(3)).build().unwrap();
+        let rejection = post_json_to_official_ls(&client, &base, "fixture", START_CASCADE_PATH, &json!({})).await.unwrap_err();
+        assert!(rejection.contains("CortexTrajectorySource is unspecified"));
+        for (body, expected) in [
+            (json!({}), "CORTEX_TRAJECTORY_SOURCE_INTERACTIVE_CASCADE"),
+            (json!({"source":"fixture-source"}), "fixture-source"),
+        ] {
+            let response = post_start_cascade_to_official_ls(&client, &base, "fixture", &body).await.unwrap();
+            assert_eq!(response["cascadeId"], "fixture-cascade");
+            assert_eq!(response["source"], expected);
+        }
+        server.abort();
+    }
 }
 
 enum OfficialLsExtensionAction {
@@ -1464,18 +1584,21 @@ async fn start_official_ls_process(
     account_id: &str,
     token: &crate::models::token::TokenData,
 ) -> Result<OfficialLsProcessHandle, String> {
-    let binary_path = official_ls_binary_path()?;
+    let (runtime, metadata) = tokio::task::spawn_blocking(|| {
+        let runtime = official_ls_runtime()?;
+        let metadata = build_official_ls_metadata_bytes(&runtime);
+        Ok::<_, String>((runtime, metadata))
+    })
+    .await
+    .map_err(|error| error.to_string())??;
     let mut extension_server = start_official_ls_extension_server(token).await?;
     let ls_csrf = uuid::Uuid::new_v4().to_string();
     let cloud_code_endpoint = official_ls_cloud_code_endpoint(token);
-    // 对齐官方扩展：app_data_dir 使用固定 IDE 级目录（默认 antigravity-ide），而非按账号拆分。
-    let app_data_dir = official_ls_app_data_dir_name();
+    // 独立版唤醒使用 Cockpit 的数据目录，目标账号仍由扩展桥接提供。
+    let app_data_dir = official_ls_app_data_dir_name(runtime.standalone);
 
-    let mut cmd = Command::new(&binary_path);
+    let mut cmd = Command::new(&runtime.binary);
     cmd.arg("--enable_lsp");
-    if official_ls_requires_random_port() {
-        cmd.arg("--random_port");
-    }
     cmd.arg("--csrf_token")
         .arg(&ls_csrf)
         .arg("--extension_server_port")
@@ -1511,7 +1634,6 @@ async fn start_official_ls_process(
             .map(|stderr| spawn_ls_log_task(stderr, "stderr"));
 
         if let Some(mut stdin) = child.stdin.take() {
-            let metadata = build_official_ls_metadata_bytes();
             stdin
                 .write_all(&metadata)
                 .await
@@ -1519,13 +1641,20 @@ async fn start_official_ls_process(
             let _ = stdin.shutdown().await;
         }
 
-        let started = timeout(
-            OFFICIAL_LS_START_TIMEOUT,
-            &mut extension_server.started_receiver,
-        )
-        .await
-        .map_err(|_| "等待官方 LS LanguageServerStarted 超时".to_string())?
-        .map_err(|_| "官方 LS LanguageServerStarted 通知通道已关闭".to_string())?;
+        let started = tokio::select! {
+            result = &mut extension_server.started_receiver => {
+                result.map_err(|_| "官方 LS LanguageServerStarted 通知通道已关闭".to_string())?
+            }
+            status = child.wait() => {
+                return Err(match status {
+                    Ok(status) => format!("官方 LS 在就绪前退出: {}", status),
+                    Err(error) => format!("等待官方 LS 进程失败: {}", error),
+                });
+            }
+            _ = tokio::time::sleep(OFFICIAL_LS_START_TIMEOUT) => {
+                return Err("等待官方 LS LanguageServerStarted 超时".to_string());
+            }
+        };
 
         crate::modules::logger::log_info(&format!(
             "[WakeupGateway] 官方 LS 启动完成: https_port={}, http_port={}, lsp_port={}",
@@ -1749,13 +1878,24 @@ fn build_tls_acceptor() -> Result<TlsAcceptor, String> {
     let certs = vec![CertificateDer::from(cert_der)];
     let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key_der));
 
-    let mut server_config = rustls::ServerConfig::builder()
+    // The host links both Rustls providers. Select one for this listener
+    // so its first start does not depend on another client initializing TLS.
+    let mut server_config = rustls::ServerConfig::builder_with_provider(Arc::new(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    ))
+        .with_safe_default_protocol_versions()
+        .map_err(|e| format!("创建 TLS 配置失败: {}", e))?
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .map_err(|e| format!("创建 TLS 配置失败: {}", e))?;
     server_config.alpn_protocols = vec![b"http/1.1".to_vec()];
 
     Ok(TlsAcceptor::from(Arc::new(server_config)))
+}
+
+#[test]
+fn cold_wakeup_gateway_builds_tls_acceptor() {
+    build_tls_acceptor().expect("wakeup gateway TLS must initialize on first use");
 }
 
 async fn run_gateway_server(listener: TcpListener, tls_acceptor: TlsAcceptor) {

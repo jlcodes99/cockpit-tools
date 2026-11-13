@@ -70,7 +70,7 @@ pub(super) fn negotiated(
 pub(super) type UpstreamSocket = Socket<reqwest::Upgraded, Message>;
 pub(super) type ClientSocket = Socket<yawc::HttpStream, axum::extract::ws::Message>;
 
-pub(super) fn options(max: usize) -> yawc::Options {
+pub(super) fn options(max: usize, fragment_timeout: std::time::Duration) -> yawc::Options {
     yawc::Options::default()
         .with_low_latency_compression()
         .client_no_context_takeover()
@@ -82,7 +82,7 @@ pub(super) fn options(max: usize) -> yawc::Options {
         .with_backpressure_boundary(128 * 1024)
         .with_utf8()
         .with_max_fragment_size(64 * 1024)
-        .with_fragment_timeout(std::time::Duration::from_secs(60))
+        .with_fragment_timeout(fragment_timeout)
 }
 
 /// Codec CPU work must not stall the application's async workers. The desktop
@@ -282,6 +282,36 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: MessageCodec + Unpin> Sink<M> for Soc
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::SinkExt;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn websocket_fragment_timeout_applies_to_the_complete_message() {
+        for (budget, should_timeout) in [
+            (Duration::from_millis(10), true),
+            (Duration::from_secs(5), false),
+        ] {
+            let (client, server) = tokio::io::duplex(1024);
+            let mut sender =
+                yawc::WebSocket::from_stream(client, yawc::Role::Client, yawc::Options::default())
+                    .unwrap();
+            let mut receiver =
+                yawc::WebSocket::from_stream(server, yawc::Role::Server, options(512, budget))
+                    .unwrap();
+            sender.send(Frame::text("first ").with_fin(false)).await.unwrap();
+            sender.send(Frame::ping("sync")).await.unwrap();
+            assert_eq!(receiver.next_frame().await.unwrap().opcode(), OpCode::Ping);
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            sender.send(Frame::continuation("second")).await.unwrap();
+            let result = receiver.next_frame().await;
+            if should_timeout {
+                assert!(matches!(result, Err(yawc::WebSocketError::FragmentTimeout)));
+            } else {
+                assert_eq!(result.unwrap().payload().as_ref(), b"first second");
+            }
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn full_compat_codec_work_yields_the_only_async_worker() {
         let (send, receive) = std::sync::mpsc::channel();

@@ -13,6 +13,20 @@ const event = (seconds, output, input = 100, cached = 80, extra = {}) => ({
 });
 const read = (events, seconds = 60, turnId = null) => metrics.snapshot(events, base + seconds * 1000, turnId);
 
+test('macOS and Windows Rspack footers take priority over the containing composer', () => {
+  for (const className of ['ComposerLayoutFooter-_8IVRO', 'ComposerLayoutFooter-platform', '_ComposerLayoutFooter_legacy']) {
+    const footer = { className };
+    const card = { querySelector: selector => {
+      const parts = [...selector.matchAll(/class\*="([^"]+)"/g)];
+      return parts.some(([, part]) => className.includes(part)) ? footer : null;
+    } };
+    assert.equal(metrics.composerFooter(card), footer);
+  }
+  const card = { querySelector: () => null };
+  assert.equal(metrics.composerFooter(card), card);
+  assert.equal(metrics.composerFooter(null), null);
+});
+
 test('cache hits use input-token weighting, not the mean of call percentages', () => {
   const value = read([event(0, 100, 100, 100), event(10, 600, 900, 0)]);
   assert.equal(value.cache, 10);

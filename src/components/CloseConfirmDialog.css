@@ -4,14 +4,17 @@
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
   display: flex;
-  align-items: center;
+  align-items: safe center;
   justify-content: center;
+  overflow-y: auto;
   z-index: 9999;
   animation: fadeIn 0.2s ease;
 }
 
 .close-dialog {
   position: relative;
+  display: flex;
+  flex-direction: column;
   background: var(--bg-secondary);
   background-color: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -19,6 +22,7 @@
   padding: 28px;
   width: 400px;
   max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 32px);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   animation: slideUp 0.3s ease;
 }
@@ -48,11 +52,22 @@
   margin: 0 0 8px 0;
 }
 
+.close-dialog .close-dialog-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0;
+}
+
 .close-dialog-desc {
   font-size: 14px;
   color: var(--text-secondary);
   margin: 0 0 20px 0;
   line-height: 1.5;
+}
+
+.close-dialog-error {
+  color: var(--danger);
+  overflow-wrap: anywhere;
 }
 
 .close-dialog-options {

@@ -1,6 +1,64 @@
 //! OpenCode ingress regressions using only native HTTP and a loopback upstream.
 use super::*;
 
+// v1.3.82 restricts native identity mapping to Codex OAuth routes. These
+// regressions exercise that path explicitly, not a generic API-key route.
+async fn identity_fixture(
+    wire: WireApi,
+    native_socket: bool,
+    retry: bool,
+) -> (
+    Handle,
+    Arc<IdentityHost>,
+    Arc<IdentitySource>,
+    tokio::task::JoinHandle<()>,
+    tempfile::TempDir,
+) {
+    identity_fixture_with_options(wire, native_socket, retry, Options::default()).await
+}
+
+async fn identity_fixture_with_options(
+    wire: WireApi,
+    native_socket: bool,
+    retry: bool,
+    options: Options,
+) -> (
+    Handle,
+    Arc<IdentityHost>,
+    Arc<IdentitySource>,
+    tokio::task::JoinHandle<()>,
+    tempfile::TempDir,
+) {
+    let fixture = super::identity_fixture_with_options(wire, native_socket, retry, options).await;
+    fixture.1.oauth.store(true, Ordering::SeqCst);
+    fixture
+}
+
+#[tokio::test]
+async fn opencode_session_generic_routes_preserve_v1382_mapping_restriction() {
+    let (mut handle, _host, source, task, _dir) =
+        super::identity_fixture(WireApi::Responses, false, false).await;
+    for enabled in [true, false] {
+        handle.set_session_identity_mapping_enabled(enabled);
+        for session in ["generic-a", "generic-b", "generic-a"] {
+            session_success(
+                session_request(&handle, "/v1/responses")
+                    .header("x-opencode-session", session)
+                    .json(&json!({"model":"m","input":[]})),
+            )
+            .await;
+        }
+    }
+    let seen = source.seen.lock().unwrap().clone();
+    assert_eq!(seen.len(), 6);
+    assert_session_pair(&seen[0], &seen[1], false);
+    assert_session_pair(&seen[0], &seen[2], true);
+    assert_session_pair(&seen[0], &seen[3], true);
+    assert_session_pair(&seen[1], &seen[4], true);
+    handle.shutdown(Duration::from_secs(2)).await.unwrap();
+    task.abort();
+}
+
 // The shared fixture intentionally authorizes a single fixed caller. Wrap that
 // host only where authenticated caller isolation is part of the assertion.
 struct SessionHost {
@@ -101,6 +159,9 @@ fn assert_session_pair(left: &WireRecord, right: &WireRecord, equal: bool) {
 async fn opencode_session_automatically_reuses_identity_on_conversation_endpoints() {
     for wire in [WireApi::Responses, WireApi::Chat] {
         let (mut handle, host, source, task, _dir) = identity_fixture(wire, false, false).await;
+        // Public Responses/Chat/Completions ingress on third-party API routes.
+        // Native Codex mapping is covered separately below.
+        host.oauth.store(false, Ordering::SeqCst);
         let cases = [
             ("responses", json!({"model":"m","input":[]})),
             (
@@ -167,6 +228,78 @@ async fn opencode_session_seed_is_stable_with_native_mapping_on_and_off() {
 }
 
 #[tokio::test]
+async fn opencode_session_compatibility_responses_alias_preserves_identity() {
+    let (mut handle, host, source, task, _dir) =
+        super::identity_fixture(WireApi::Responses, false, false).await;
+    for path in [
+        "/v1/chat/completions/v1/responses",
+        "/v1/responses",
+        "/v1/chat/completions/v1/responses",
+    ] {
+        session_success(
+            session_request(&handle, path)
+                .header("x-opencode-session", "compatibility-alias-session")
+                .json(&json!({"model":"m","input":[]})),
+        )
+        .await;
+    }
+    let contexts = captured(&host, 3).await;
+    let seen = source.seen.lock().unwrap().clone();
+    assert_eq!(seen.len(), 3);
+    for (context, record) in contexts.iter().zip(&seen) {
+        assert_sent(context, record, None, None);
+        assert_session_pair(&seen[0], record, true);
+    }
+    handle.shutdown(Duration::from_secs(2)).await.unwrap();
+    task.abort();
+}
+
+#[tokio::test]
+async fn opencode_session_switch_and_listener_restart_preserve_identity_in_both_mapping_modes() {
+    for mapping in [true, false] {
+        let options = Options {
+            session_identity_mapping_enabled: mapping,
+            ..Options::default()
+        };
+        let (mut handle, host, source, task, dir) =
+            identity_fixture_with_options(WireApi::Responses, false, false, options.clone()).await;
+        for session in ["restart-a", "restart-b", "restart-a"] {
+            session_success(
+                session_request(&handle, "/v1/responses")
+                    .header("x-opencode-session", session)
+                    .json(&json!({"model":"m","input":[]})),
+            )
+            .await;
+        }
+        handle.shutdown(Duration::from_secs(2)).await.unwrap();
+        let mut restarted = start(
+            "127.0.0.1:0".parse().unwrap(),
+            host.clone(),
+            dir.path().join("identity.sqlite"),
+            options,
+        )
+        .await
+        .unwrap();
+        for session in ["restart-a", "restart-b"] {
+            session_success(
+                session_request(&restarted, "/v1/responses")
+                    .header("x-opencode-session", session)
+                    .json(&json!({"model":"m","input":[]})),
+            )
+            .await;
+        }
+        let seen = source.seen.lock().unwrap().clone();
+        assert_eq!(seen.len(), 5);
+        assert_session_pair(&seen[0], &seen[1], false);
+        assert_session_pair(&seen[0], &seen[2], true);
+        assert_session_pair(&seen[0], &seen[3], true);
+        assert_session_pair(&seen[1], &seen[4], true);
+        restarted.shutdown(Duration::from_secs(2)).await.unwrap();
+        task.abort();
+    }
+}
+
+#[tokio::test]
 async fn opencode_session_is_scoped_to_authenticated_caller_not_bearer_or_display_label() {
     for mapping in [true, false] {
         let (mut handle, _host, source, task, _dir) = session_caller_fixture(false).await;
@@ -210,7 +343,7 @@ async fn opencode_session_large_body_reaches_native_ingress_without_losing_conti
     let (mut handle, host, source, task, _dir) =
         identity_fixture(WireApi::Responses, false, false).await;
     for size in [(1 << 20) - 1, (1 << 20) + 1, 2 << 20] {
-        let body = json!({"model":"m","input":"x".repeat(size)});
+        let body = json!({"model":"m","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"x".repeat(size)}]}]});
         session_success(
             session_request(&handle, "/v1/responses")
                 .header("x-opencode-session", "large-session")
@@ -227,7 +360,13 @@ async fn opencode_session_large_body_reaches_native_ingress_without_losing_conti
         assert_eq!(record.body["model"], "m");
     }
     for (record, size) in seen.iter().zip([(1 << 20) - 1, (1 << 20) + 1, 2 << 20]) {
-        assert_eq!(record.body["input"].as_str().unwrap().len(), size);
+        assert_eq!(
+            record.body["input"][0]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .len(),
+            size
+        );
     }
     handle.shutdown(Duration::from_secs(2)).await.unwrap();
     task.abort();
@@ -239,7 +378,7 @@ async fn opencode_session_conversation_id_header_presence_wins_in_both_mapping_m
         let (mut handle, host, source, task, _dir) =
             identity_fixture(WireApi::Responses, false, false).await;
         handle.set_session_identity_mapping_enabled(mapping);
-        let body = json!({"model":"m","input":"original payload"});
+        let body = json!({"model":"m","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"original payload"}]}]});
         for _ in 0..2 {
             session_success(
                 session_request(&handle, "/v1/responses")
@@ -632,12 +771,15 @@ async fn opencode_session_non_opencode_and_unrelated_paths_keep_native_random_ro
 #[tokio::test]
 async fn opencode_session_continuation_retains_account_owner_and_rejects_other_callers() {
     for mapping in [true, false] {
-        session_continuation(mapping).await;
+        for oauth in [true, false] {
+            session_continuation(mapping, oauth).await;
+        }
     }
 }
 
-async fn session_continuation(mapping: bool) {
+async fn session_continuation(mapping: bool, oauth: bool) {
     let (mut handle, host, source, task, _dir) = session_caller_fixture(true).await;
+    host.inner.oauth.store(oauth, Ordering::SeqCst);
     handle.set_session_identity_mapping_enabled(mapping);
     let first = session_success(
         session_request_as(&handle, "/v1/responses", "key-a")
@@ -674,8 +816,8 @@ async fn session_continuation(mapping: bool) {
     assert_eq!(seen[2].headers["x-test-account"], "b");
     // Mapping OFF deliberately preserves protocol IDs across account attempts;
     // continuation ownership must still stay with the successful account.
-    assert_session_pair(&seen[0], &seen[1], !mapping);
-    if mapping {
+    assert_session_pair(&seen[0], &seen[1], !(mapping && oauth));
+    if mapping && oauth {
         assert_session_pair(&seen[1], &seen[2], true);
     } else {
         // With mapping OFF, native passthrough does not synthesize headers for
@@ -687,7 +829,14 @@ async fn session_continuation(mapping: bool) {
         assert_eq!(first.session_id, continued.session_id);
         assert_eq!(first.thread_id, continued.thread_id);
     }
-    assert_eq!(seen[2].body["previous_response_id"], first["id"]);
+    if oauth {
+        // Native ChatGPT HTTP cannot resolve previous_response_id: upstream
+        // reconstructs the stored empty transcript while retaining ownership.
+        assert!(seen[2].body.get("previous_response_id").is_none());
+        assert_eq!(seen[2].body["input"], json!([]));
+    } else {
+        assert_eq!(seen[2].body["previous_response_id"], first["id"]);
+    }
     assert_eq!(contexts[0].attempts.len(), 2);
     assert_eq!(contexts[1].attempts.len(), 1);
     handle.shutdown(Duration::from_secs(2)).await.unwrap();

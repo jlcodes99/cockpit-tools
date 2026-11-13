@@ -1014,6 +1014,7 @@ struct RoutingCandidate {
     plan_rank: Option<i32>,
     remaining_quota: Option<i32>,
     subscription_expiry_ms: Option<i64>,
+    five_hour_reset_at: Option<i64>,
 }
 
 fn gateway_runtime() -> &'static TokioMutex<GatewayRuntime> {
@@ -2456,7 +2457,11 @@ pub(crate) fn refresh_api_service_experimental_model_ids() {
     if let Ok(store) = crate::modules::codex_instance::load_instance_store() {
         profile_dirs.extend(store.instances.into_iter().filter_map(|instance| {
             let profile = instance.user_data_dir.trim();
-            (!profile.is_empty()).then(|| PathBuf::from(profile))
+            let uses_api_service = instance
+                .bind_account_id
+                .as_deref()
+                .is_some_and(crate::modules::codex_instance::is_api_service_bind_account_id);
+            (uses_api_service && !profile.is_empty()).then(|| PathBuf::from(profile))
         }));
     }
 
@@ -2735,21 +2740,26 @@ fn apply_model_aliases_to_ids(
         return model_ids;
     }
 
-    let alias_map: HashMap<String, &CodexLocalAccessModelAlias> = aliases
-        .iter()
-        .map(|alias| (alias.source_model.to_ascii_lowercase(), alias))
-        .collect();
+    let mut alias_map: HashMap<String, Vec<&CodexLocalAccessModelAlias>> = HashMap::new();
+    for alias in aliases {
+        alias_map
+            .entry(alias.source_model.to_ascii_lowercase())
+            .or_default()
+            .push(alias);
+    }
     let mut seen = HashSet::new();
     let mut visible = Vec::new();
 
     for model in model_ids {
         let key = model.to_ascii_lowercase();
-        if let Some(alias) = alias_map.get(&key) {
-            if alias.fork && seen.insert(key) {
+        if let Some(aliases) = alias_map.get(&key) {
+            if aliases.iter().any(|alias| alias.fork) && seen.insert(key) {
                 visible.push(model.clone());
             }
-            if seen.insert(alias.alias.to_ascii_lowercase()) {
-                visible.push(alias.alias.clone());
+            for alias in aliases {
+                if seen.insert(alias.alias.to_ascii_lowercase()) {
+                    visible.push(alias.alias.clone());
+                }
             }
         } else if seen.insert(key) {
             visible.push(model);

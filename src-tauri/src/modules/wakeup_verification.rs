@@ -1,16 +1,17 @@
 use crate::modules;
+use crate::modules::wakeup_history_store::HistoryRead;
 use futures::stream::{FuturesUnordered, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter};
 
-const WAKEUP_VERIFICATION_STATE_FILE: &str = "wakeup_verification_state.json";
+pub(crate) const WAKEUP_VERIFICATION_STATE_FILE: &str = "wakeup_verification_state.json";
 const WAKEUP_ERROR_JSON_PREFIX: &str = "AG_WAKEUP_ERROR_JSON:";
-const WAKEUP_VERIFICATION_STATE_VERSION: u8 = 2;
 const MAX_HISTORY_BATCHES: usize = 100;
+
+#[path = "wakeup_verification_store.rs"]
+mod store;
 
 const STATUS_IDLE: &str = "idle";
 const STATUS_SUCCESS: &str = "success";
@@ -19,7 +20,7 @@ const STATUS_TOS_VIOLATION: &str = "tos_violation";
 const STATUS_AUTH_EXPIRED: &str = "auth_expired";
 const STATUS_FAILED: &str = "failed";
 
-static VERIFY_STATE_LOCK: std::sync::LazyLock<Mutex<()>> =
+static RESULT_WRITE_LOCK: std::sync::LazyLock<Mutex<()>> =
     std::sync::LazyLock::new(|| Mutex::new(()));
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,6 +85,8 @@ pub struct WakeupVerificationBatchResult {
     pub tos_violation_count: usize,
     pub failed_count: usize,
     pub records: Vec<WakeupVerificationStateItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub storage_error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -97,112 +100,28 @@ struct WakeupUiErrorPayload {
     trajectory_id: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct WakeupVerificationStateFile {
-    #[serde(default = "default_state_file_version")]
-    version: u8,
-    #[serde(default)]
-    items: Vec<WakeupVerificationStateItem>,
-    #[serde(default)]
-    history: Vec<WakeupVerificationBatchHistoryItem>,
+fn verification_store() -> Result<store::VerificationStore, String> {
+    Ok(store::VerificationStore::new(
+        modules::account::get_data_dir()?.join(WAKEUP_VERIFICATION_STATE_FILE),
+    ))
 }
 
-fn default_state_file_version() -> u8 {
-    WAKEUP_VERIFICATION_STATE_VERSION
+pub fn schedule_migration() -> Result<(), String> {
+    verification_store()?.schedule();
+    Ok(())
 }
 
-fn state_file_path() -> Result<PathBuf, String> {
-    let data_dir = modules::account::get_data_dir()?;
-    Ok(data_dir.join(WAKEUP_VERIFICATION_STATE_FILE))
-}
-
-fn load_state_file_unlocked() -> Result<WakeupVerificationStateFile, String> {
-    let path = state_file_path()?;
-    if !path.exists() {
-        return Ok(WakeupVerificationStateFile {
-            version: WAKEUP_VERIFICATION_STATE_VERSION,
-            items: Vec::new(),
-            history: Vec::new(),
-        });
-    }
-
-    let content = fs::read_to_string(&path).map_err(|e| format!("读取验证状态文件失败: {}", e))?;
-    if content.trim().is_empty() {
-        return Ok(WakeupVerificationStateFile {
-            version: WAKEUP_VERIFICATION_STATE_VERSION,
-            items: Vec::new(),
-            history: Vec::new(),
-        });
-    }
-
-    let mut parsed: WakeupVerificationStateFile = match serde_json::from_str(&content) {
-        Ok(parsed) => parsed,
-        Err(error) => {
-            match modules::atomic_write::quarantine_file(&path, "invalid-json") {
-                Ok(Some(backup_path)) => modules::logger::log_warn(&format!(
-                    "验证状态文件解析失败，已隔离并使用空状态: path={}, backup={}, error={}",
-                    path.display(),
-                    backup_path.display(),
-                    error
-                )),
-                Ok(None) => modules::logger::log_warn(&format!(
-                    "验证状态文件解析失败，文件已不存在，使用空状态: path={}, error={}",
-                    path.display(),
-                    error
-                )),
-                Err(backup_error) => modules::logger::log_warn(&format!(
-                    "验证状态文件解析失败，隔离失败，使用空状态: path={}, parse_error={}, backup_error={}",
-                    path.display(),
-                    error,
-                    backup_error
-                )),
-            }
-            WakeupVerificationStateFile {
-                version: WAKEUP_VERIFICATION_STATE_VERSION,
-                items: Vec::new(),
-                history: Vec::new(),
-            }
-        }
-    };
-    if parsed.version == 0 {
-        parsed.version = WAKEUP_VERIFICATION_STATE_VERSION;
-    }
-    Ok(parsed)
-}
-
-fn save_state_file_unlocked(state: &WakeupVerificationStateFile) -> Result<(), String> {
-    let path = state_file_path()?;
-
-    let payload = WakeupVerificationStateFile {
-        version: WAKEUP_VERIFICATION_STATE_VERSION,
-        items: state.items.clone(),
-        history: state.history.clone(),
-    };
-
-    let content =
-        serde_json::to_string_pretty(&payload).map_err(|e| format!("序列化验证状态失败: {}", e))?;
-    modules::atomic_write::write_string_atomic(&path, &content)
-        .map_err(|e| format!("保存验证状态失败: {}", e))
-}
-
-pub fn load_state() -> Result<Vec<WakeupVerificationStateItem>, String> {
-    let _lock = VERIFY_STATE_LOCK.lock().map_err(|_| "获取验证状态锁失败")?;
-    let mut items = load_state_file_unlocked()?.items;
-    sort_state_items(&mut items);
-    Ok(items)
-}
-
-pub fn load_history() -> Result<Vec<WakeupVerificationBatchHistoryItem>, String> {
-    let _lock = VERIFY_STATE_LOCK.lock().map_err(|_| "获取验证状态锁失败")?;
-    let mut history = load_state_file_unlocked()?.history;
-
-    if let Ok(accounts) = modules::list_accounts() {
-        let email_by_id: HashMap<String, String> = accounts
+pub fn load_history(
+    retry: bool,
+) -> Result<HistoryRead<WakeupVerificationBatchHistoryItem>, String> {
+    let mut history = verification_store()?.load_history(retry)?;
+    if let Ok(index) = modules::account::load_account_index() {
+        let email_by_id: HashMap<String, String> = index
+            .accounts
             .into_iter()
             .map(|account| (account.id, account.email))
             .collect();
-        for batch in &mut history {
+        for batch in &mut history.records {
             for item in &mut batch.records {
                 if let Some(email) = email_by_id.get(&item.account_id) {
                     item.account_email = email.clone();
@@ -210,8 +129,6 @@ pub fn load_history() -> Result<Vec<WakeupVerificationBatchHistoryItem>, String>
             }
         }
     }
-
-    history.sort_by(|a, b| b.verified_at.cmp(&a.verified_at));
     Ok(history)
 }
 
@@ -221,24 +138,10 @@ pub fn delete_history(batch_ids: Vec<String>) -> Result<usize, String> {
         .map(|id| id.trim().to_string())
         .filter(|id| !id.is_empty())
         .collect();
-
     if targets.is_empty() {
         return Ok(0);
     }
-
-    let _lock = VERIFY_STATE_LOCK.lock().map_err(|_| "获取验证状态锁失败")?;
-    let mut state = load_state_file_unlocked().unwrap_or_default();
-    let before = state.history.len();
-    state
-        .history
-        .retain(|item| !targets.contains(&item.batch_id));
-    let deleted = before.saturating_sub(state.history.len());
-
-    if deleted > 0 {
-        save_state_file_unlocked(&state)?;
-    }
-
-    Ok(deleted)
+    verification_store()?.delete_batches(&targets)
 }
 
 fn sort_state_items(items: &mut Vec<WakeupVerificationStateItem>) {
@@ -250,44 +153,38 @@ fn sort_state_items(items: &mut Vec<WakeupVerificationStateItem>) {
     });
 }
 
-fn upsert_state_items(items: Vec<WakeupVerificationStateItem>) -> Result<(), String> {
-    if items.is_empty() {
+fn record_result(item: &WakeupVerificationStateItem) -> Result<(), String> {
+    let _lock = RESULT_WRITE_LOCK
+        .lock()
+        .map_err(|_| "获取验证结果写入锁失败")?;
+    if !verification_store()?.upsert_result(item)? {
         return Ok(());
     }
-
-    let _lock = VERIFY_STATE_LOCK.lock().map_err(|_| "获取验证状态锁失败")?;
-    let mut state = load_state_file_unlocked().unwrap_or_default();
-    let mut by_account: HashMap<String, WakeupVerificationStateItem> = state
-        .items
-        .drain(..)
-        .map(|item| (item.account_id.clone(), item))
-        .collect();
-
-    for item in items {
-        by_account.insert(item.account_id.clone(), item);
+    match item.status.as_str() {
+        STATUS_SUCCESS => {
+            if let Ok(mut account) = modules::load_account(&item.account_id) {
+                if account.disabled {
+                    modules::logger::log_info(&format!(
+                        "[WakeupVerification] 验证成功，自动解除禁用状态: {}",
+                        account.email
+                    ));
+                    account.clear_disabled();
+                    account.quota_error = None;
+                    modules::save_account(&account)?;
+                }
+            }
+        }
+        reason @ (STATUS_VERIFICATION_REQUIRED | STATUS_TOS_VIOLATION) => {
+            if let Ok(mut account) = modules::load_account(&item.account_id) {
+                account.disabled = true;
+                account.disabled_reason = Some(reason.to_string());
+                account.disabled_at = Some(chrono::Utc::now().timestamp());
+                modules::save_account(&account)?;
+            }
+        }
+        _ => {}
     }
-
-    let mut merged: Vec<WakeupVerificationStateItem> = by_account.into_values().collect();
-    sort_state_items(&mut merged);
-
-    state.items = merged;
-    save_state_file_unlocked(&state)
-}
-
-fn append_history_batch(batch: WakeupVerificationBatchHistoryItem) -> Result<(), String> {
-    let _lock = VERIFY_STATE_LOCK.lock().map_err(|_| "获取验证状态锁失败")?;
-    let mut state = load_state_file_unlocked().unwrap_or_default();
-
-    state.history.retain(|item| item.batch_id != batch.batch_id);
-    state.history.push(batch);
-    state
-        .history
-        .sort_by(|a, b| b.verified_at.cmp(&a.verified_at));
-    if state.history.len() > MAX_HISTORY_BATCHES {
-        state.history.truncate(MAX_HISTORY_BATCHES);
-    }
-
-    save_state_file_unlocked(&state)
+    Ok(())
 }
 
 fn parse_wakeup_error_payload(error: &str) -> Option<WakeupUiErrorPayload> {
@@ -390,7 +287,9 @@ pub async fn run_batch(
         return Err("未选择账号".to_string());
     }
 
-    let all_accounts = modules::list_accounts()?;
+    let all_accounts = tauri::async_runtime::spawn_blocking(modules::list_accounts)
+        .await
+        .map_err(|error| error.to_string())??;
     let account_email_by_id: HashMap<String, String> = all_accounts
         .into_iter()
         .map(|account| (account.id, account.email))
@@ -409,7 +308,7 @@ pub async fn run_batch(
         return Err("未找到可用账号".to_string());
     }
 
-    let batch_id = format!("verify_{}", chrono::Utc::now().timestamp_millis());
+    let batch_id = format!("verify_{}", uuid::Uuid::new_v4());
     let total = selected_accounts.len();
     let model_owned = model.to_string();
     let prompt_owned = prompt.to_string();
@@ -427,6 +326,7 @@ pub async fn run_batch(
                 &model_for_task,
                 &prompt_for_task,
                 max_output_tokens,
+                None,
                 None,
             )
             .await;
@@ -450,7 +350,10 @@ pub async fn run_batch(
                     let (status, code, validation_url, appeal_url, trajectory_id, message) =
                         classify_failure(&err);
                     let validation_url = validation_url.map(|u| {
-                        crate::modules::quota::format_google_validation_url(&u, &account_email_owned)
+                        crate::modules::quota::format_google_validation_url(
+                            &u,
+                            &account_email_owned,
+                        )
                     });
                     WakeupVerificationStateItem {
                         account_id: account_id_owned,
@@ -476,51 +379,28 @@ pub async fn run_batch(
     let mut tos_violation_count = 0usize;
     let mut failed_count = 0usize;
     let mut records = Vec::new();
+    let mut storage_error = None;
 
     while let Some(item) = futures.next().await {
         completed += 1;
         match item.status.as_str() {
-            STATUS_SUCCESS => {
-                success_count += 1;
-                // 账号检测成功，账号完全可用，解除所有类型的禁用
-                // （包括 verification_required / tos_violation / invalid_grant）
-                if let Ok(mut account) = modules::load_account(&item.account_id) {
-                    if account.disabled {
-                        modules::logger::log_info(&format!(
-                            "[WakeupVerification] 验证成功，自动解除禁用状态: {}",
-                            account.email
-                        ));
-                        account.clear_disabled();
-                        account.quota_error = None;
-                        let _ = modules::save_account(&account);
-                    }
-                }
-            }
-            STATUS_VERIFICATION_REQUIRED => {
-                verification_required_count += 1;
-                // 身份验证失败，禁用账号
-                if let Ok(mut account) = modules::load_account(&item.account_id) {
-                    account.disabled = true;
-                    account.disabled_reason = Some("verification_required".to_string());
-                    account.disabled_at = Some(chrono::Utc::now().timestamp());
-                    let _ = modules::save_account(&account);
-                }
-            }
-            STATUS_TOS_VIOLATION => {
-                tos_violation_count += 1;
-                // TOS 违规，禁用账号
-                if let Ok(mut account) = modules::load_account(&item.account_id) {
-                    account.disabled = true;
-                    account.disabled_reason = Some("tos_violation".to_string());
-                    account.disabled_at = Some(chrono::Utc::now().timestamp());
-                    let _ = modules::save_account(&account);
-                }
-            }
-            STATUS_AUTH_EXPIRED | STATUS_FAILED => failed_count += 1,
+            STATUS_SUCCESS => success_count += 1,
+            STATUS_VERIFICATION_REQUIRED => verification_required_count += 1,
+            STATUS_TOS_VIOLATION => tos_violation_count += 1,
             _ => failed_count += 1,
         }
 
-        let _ = upsert_state_items(vec![item.clone()]);
+        let stored = item.clone();
+        let result = tauri::async_runtime::spawn_blocking(move || record_result(&stored))
+            .await
+            .map_err(|error| error.to_string())
+            .and_then(|result| result);
+        if let Err(error) = result {
+            modules::logger::log_warn(&format!(
+                "[WakeupVerification] 保存账号验证结果失败: {error}"
+            ));
+            storage_error.get_or_insert(error);
+        }
         records.push(item.clone());
 
         let payload = WakeupVerificationProgressPayload {
@@ -568,11 +448,15 @@ pub async fn run_batch(
         records: records.clone(),
     };
 
-    if let Err(err) = append_history_batch(history_item) {
-        crate::modules::logger::log_warn(&format!(
-            "[WakeupVerification] 保存验证历史失败: {}",
-            err
-        ));
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        verification_store()?.append_batch(&history_item)
+    })
+    .await
+    .map_err(|error| error.to_string())
+    .and_then(|result| result);
+    if let Err(error) = result {
+        modules::logger::log_warn(&format!("[WakeupVerification] 保存验证历史失败: {error}"));
+        storage_error.get_or_insert(error);
     }
 
     Ok(WakeupVerificationBatchResult {
@@ -587,12 +471,25 @@ pub async fn run_batch(
         tos_violation_count,
         failed_count,
         records,
+        storage_error,
     })
 }
 
-pub fn build_display_state_for_all_accounts() -> Result<Vec<WakeupVerificationStateItem>, String> {
+pub fn build_display_state_for_all_accounts(
+    retry: bool,
+) -> Result<HistoryRead<WakeupVerificationStateItem>, String> {
     let account_list = modules::list_accounts()?;
-    let saved = load_state().unwrap_or_default();
+    let mut saved = verification_store()?.load_results(retry)?;
+    let complete = saved.is_complete();
+    saved.records = display_state_for_accounts(account_list, saved.records, complete);
+    Ok(saved)
+}
+
+fn display_state_for_accounts(
+    account_list: Vec<crate::models::account::Account>,
+    saved: Vec<WakeupVerificationStateItem>,
+    complete: bool,
+) -> Vec<WakeupVerificationStateItem> {
     let mut saved_map: HashMap<String, WakeupVerificationStateItem> = saved
         .into_iter()
         .map(|item| (item.account_id.clone(), item))
@@ -603,7 +500,7 @@ pub fn build_display_state_for_all_accounts() -> Result<Vec<WakeupVerificationSt
         if let Some(mut item) = saved_map.remove(&account.id) {
             item.account_email = account.email.clone();
             result.push(item);
-        } else {
+        } else if complete {
             result.push(WakeupVerificationStateItem {
                 account_id: account.id,
                 account_email: account.email,
@@ -621,5 +518,5 @@ pub fn build_display_state_for_all_accounts() -> Result<Vec<WakeupVerificationSt
     }
 
     sort_state_items(&mut result);
-    Ok(result)
+    result
 }

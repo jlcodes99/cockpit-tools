@@ -48,6 +48,9 @@ pub struct CodexExperimentalModelDefinition {
     /// None preserves the official catalog default; explicit values must be supported.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_reasoning_effort: Option<String>,
+    /// Request effort used when the client selects Ultra. None inherits the model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ultra_reasoning_effort: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -212,6 +215,8 @@ pub struct CodexAccount {
     /// Last applied Grok default catalog revision; prevents restoring user-deleted models.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grok_model_catalog_version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opencode_go_model_catalog_version: Option<u32>,
     /// 供应商目录里按模型覆盖的 `context_window`。未填写时走官方值或全局兜底。
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub api_model_context_windows: HashMap<String, i64>,
@@ -530,6 +535,8 @@ pub struct CodexAccountIndex {
     pub detail_schema_version: u32,
     pub accounts: Vec<CodexAccountSummary>,
     pub current_account_id: Option<String>,
+    #[serde(skip)]
+    pub(crate) storage_revision: Option<u64>,
 }
 
 /// 账号摘要信息
@@ -551,6 +558,7 @@ impl CodexAccountIndex {
             detail_schema_version: 2,
             accounts: Vec::new(),
             current_account_id: None,
+            storage_revision: None,
         }
     }
 }
@@ -668,6 +676,7 @@ impl CodexAccount {
             api_provider_name: None,
             api_model_catalog: Vec::new(),
             grok_model_catalog_version: None,
+            opencode_go_model_catalog_version: None,
             api_model_context_windows: HashMap::new(),
             api_model_mappings: Vec::new(),
             api_sync_model_catalog_to_codex: false,

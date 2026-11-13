@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { APIKEY_FUN_FAMILIES, buildCodexConfigToml, resolveDefaultModel } from './apikeyFunClientConfigs';
+import { APIKEY_FUN_FAMILIES, buildCodexConfigToml, resolveApiKeyFunGrokModel, resolveDefaultModel } from './apikeyFunClientConfigs';
 import { APIKEY_FUN_DEFAULT_MODEL_CATALOG } from './apikeyFunLinks';
 
 const family = (id: string) => {
@@ -54,4 +54,10 @@ test('Grok template prefers 4.7 only when the upstream catalog offers it', () =>
   assert.ok(!preset.preferredModels.includes('grok-4.7-build-fast'));
   assert.ok(buildCodexConfigToml({ family: preset, client: 'codex_cli', model: 'grok-4.6' })
     .includes('model = "grok-4.6"'));
+});
+
+test('Grok account prefill selects a model actually available to the saved key', () => {
+  assert.equal(resolveApiKeyFunGrokModel(['gpt-5', 'grok-4.6', 'grok-4.7']), 'grok-4.7');
+  assert.equal(resolveApiKeyFunGrokModel(['gpt-5', 'relay/Grok-4.6']), 'relay/Grok-4.6');
+  assert.equal(resolveApiKeyFunGrokModel(['gemini-3', 'gpt-5']), undefined);
 });

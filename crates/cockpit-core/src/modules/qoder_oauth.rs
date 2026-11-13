@@ -4,28 +4,38 @@ use rand::RngCore;
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex, Weak};
 use std::time::{Duration, Instant};
 use url::Url;
 use uuid::Uuid;
 
 use crate::models::qoder::{QoderAccount, QoderOAuthStartResponse};
-use crate::modules::{config, logger, qoder_account, qoder_instance};
+use crate::modules::{logger, qoder_account, qoder_identity, qoder_instance};
+
+const REAUTH_REQUIRED: &str = "QODER_REAUTH_REQUIRED";
+const OPENAPI_UNAVAILABLE: &str = "QODER_SESSION_ENDPOINT_UNAVAILABLE";
+const UNAUTHORIZED: &str = "QODER_OPENAPI_UNAUTHORIZED";
+const RENEWAL_WINDOW_MS: i64 = 3 * 24 * 60 * 60 * 1000;
+type RefreshLock = tokio::sync::Mutex<()>;
+static REFRESH_LOCKS: LazyLock<Mutex<HashMap<String, Weak<RefreshLock>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 const OAUTH_TIMEOUT_SECONDS: i64 = 600;
 const OAUTH_POLL_INTERVAL_MS: u64 = 1000;
 const DEFAULT_LOGIN_BASE_URL: &str = "https://qoder.com/device/selectAccounts";
 const DEFAULT_OPENAPI_BASE_URL: &str = "https://openapi.qoder.sh";
-const QODER_IDE_REDIRECT_URI: &str = "qoder://aicoding.aicoding-agent/login-success";
+const QODER_IDE_REDIRECT_URI: &str = "qoder-ide://aicoding.aicoding-agent/login-success";
 const QODER_DEVICE_LOGIN_CHALLENGE_METHOD: &str = "S256";
+const DEVICE_TOKEN_REFRESH_PATH: &str = "/api/v1/deviceToken/refresh";
 const DEVICE_TOKEN_POLL_PATH: &str = "/api/v1/deviceToken/poll";
 const USER_INFO_PATH: &str = "/api/v1/userinfo";
 const USER_STATUS_PATH: &str = "/api/v3/user/status";
 const DATA_POLICY_PATH: &str = "/api/v2/config/getDataPolicy";
 const USER_PLAN_PATH: &str = "/api/v2/user/plan";
-const CREDIT_USAGE_PATH: &str = "/api/v2/quota/usage";
+const CREDIT_USAGE_PATH: &str = "/sash/api/v2/me/usage";
 const AUTH_STATUS_AUTHORIZED: i64 = 2;
 const AUTH_STATUS_IP_BANNED_ERROR: i64 = 6;
 const AUTH_STATUS_APP_DISABLED_ERROR: i64 = 7;
@@ -147,9 +157,11 @@ fn resolve_qoder_cli_login_endpoint() -> String {
 
 fn build_cli_device_login_url(
     login_base_url: &str,
+    redirect_uri: &str,
     nonce: &str,
     challenge: &str,
     challenge_method: &str,
+    machine_token: Option<&str>,
     machine_id: Option<&str>,
 ) -> Result<String, String> {
     let mut url =
@@ -159,12 +171,37 @@ fn build_cli_device_login_url(
         query_pairs.append_pair("nonce", nonce);
         query_pairs.append_pair("challenge", challenge);
         query_pairs.append_pair("challenge_method", challenge_method);
-        query_pairs.append_pair("redirect_uri", QODER_IDE_REDIRECT_URI);
+        query_pairs.append_pair("redirect_uri", redirect_uri);
+        if let Some(machine_token) =
+            machine_token.and_then(|value| normalize_non_empty(Some(value)))
+        {
+            query_pairs.append_pair("machine_token", &machine_token);
+        }
         if let Some(machine_id) = machine_id.and_then(|value| normalize_non_empty(Some(value))) {
             query_pairs.append_pair("machine_id", &machine_id);
         }
     }
     Ok(url.to_string())
+}
+
+fn installed_ide_redirect_uri() -> &'static str {
+    let Some(executable) = crate::modules::process::resolve_qoder_launch_path().ok() else {
+        return QODER_IDE_REDIRECT_URI;
+    };
+    let legacy = build_qoder_product_file_candidates(&executable)
+        .into_iter()
+        .filter(|path| path.file_name().is_some_and(|name| name == "product.json"))
+        .filter_map(|path| fs::read(path).ok())
+        .find_map(|raw| serde_json::from_slice::<Value>(&raw).ok())
+        .is_some_and(|product| {
+            product.get("deeplinkUrlProtocol").is_none()
+                && product.get("urlProtocol").and_then(Value::as_str) == Some("qoder")
+        });
+    if legacy {
+        "qoder://aicoding.aicoding-agent/login-success"
+    } else {
+        QODER_IDE_REDIRECT_URI
+    }
 }
 
 fn parse_expire_timestamp_ms(raw: Option<&str>) -> Option<String> {
@@ -246,6 +283,9 @@ fn ensure_user_status_allowed(user_status: &Value) -> Result<(), String> {
         .and_then(|value| normalize_non_empty(Some(value)))
         .is_some();
 
+    if whitelist_status.as_deref() == Some("LoginExpire") {
+        return Err(UNAUTHORIZED.into());
+    }
     if !has_user_id {
         return Err("Qoder 用户状态缺少 id，无法确认登录身份".to_string());
     }
@@ -253,7 +293,6 @@ fn ensure_user_status_allowed(user_status: &Value) -> Result<(), String> {
     match whitelist_status.as_deref() {
         Some("NoIpPermission") => Err("企业设置了 IP 白名单，当前 IP 无法登录".to_string()),
         Some("AppDisable") => Err("Qoder 应用已被停用，无法登录".to_string()),
-        Some("LoginExpire") => Err("Qoder 登录已失效，请重试".to_string()),
         Some("NotAllow") | Some("NOT_ALLOW") => Err("当前账号暂无 Qoder 使用权限".to_string()),
         _ => Ok(()),
     }
@@ -293,7 +332,12 @@ fn build_qoder_product_file_candidates(base_path: &Path) -> Vec<PathBuf> {
     }
 
     if app_roots.is_empty() {
-        app_roots.push(base_path.to_path_buf());
+        let root = if base_path.is_file() {
+            base_path.parent().unwrap_or(base_path)
+        } else {
+            base_path
+        };
+        app_roots.push(root.to_path_buf());
     }
 
     let mut candidates = Vec::new();
@@ -329,60 +373,10 @@ fn read_version_from_json_file(path: &Path) -> Option<String> {
 }
 
 fn detect_qoder_product_version() -> Option<String> {
-    let mut base_paths: Vec<PathBuf> = Vec::new();
-    let configured_path = config::get_user_config().qoder_app_path.trim().to_string();
-    if !configured_path.is_empty() {
-        base_paths.push(PathBuf::from(configured_path));
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        base_paths.push(PathBuf::from("/Applications/Qoder IDE.app"));
-        base_paths.push(PathBuf::from(
-            "/Applications/Qoder IDE.app/Contents/MacOS/Qoder IDE",
-        ));
-        base_paths.push(PathBuf::from("/Applications/Qoder.app"));
-        base_paths.push(PathBuf::from(
-            "/Applications/Qoder.app/Contents/MacOS/Qoder",
-        ));
-        base_paths.push(PathBuf::from(
-            "/Applications/Qoder.app/Contents/MacOS/Electron",
-        ));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-            base_paths.push(
-                PathBuf::from(&local_app_data)
-                    .join("Programs")
-                    .join("Qoder")
-                    .join("Qoder.exe"),
-            );
-        }
-        if let Ok(program_files) = std::env::var("ProgramFiles") {
-            base_paths.push(PathBuf::from(program_files).join("Qoder").join("Qoder.exe"));
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        base_paths.push(PathBuf::from("/usr/share/qoder"));
-        base_paths.push(PathBuf::from("/opt/Qoder"));
-        if let Some(home) = dirs::home_dir() {
-            base_paths.push(home.join(".local").join("share").join("Qoder"));
-        }
-    }
-
-    for base_path in base_paths {
-        for candidate in build_qoder_product_file_candidates(&base_path) {
-            if let Some(version) = read_version_from_json_file(&candidate) {
-                return Some(version);
-            }
-        }
-    }
-
-    None
+    let executable = crate::modules::process::resolve_qoder_launch_path().ok()?;
+    build_qoder_product_file_candidates(&executable)
+        .iter()
+        .find_map(|path| read_version_from_json_file(path))
 }
 
 fn build_qoder_headers(
@@ -525,7 +519,9 @@ fn merge_user_status_into_user_info(
     copy_optional_field(user_status, map, "isSubAccount", "isSubAccount");
     copy_optional_field(user_status, map, "quota", "quota");
     copy_optional_field(user_status, map, "isQuotaExceeded", "isQuotaExceeded");
-    copy_optional_field(user_status, map, "orgId", "orgId");
+    if qoder_identity::field(Some(user_status), "orgId").is_some() {
+        copy_optional_field(user_status, map, "orgId", "orgId");
+    }
     copy_optional_field(user_status, map, "orgName", "orgName");
     copy_optional_field(user_status, map, "yxUid", "yxUid");
     copy_optional_field(user_status, map, "staffId", "staffId");
@@ -563,6 +559,17 @@ fn merge_user_status_into_user_info(
 
 fn build_reqwest_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            let same_origin = attempt
+                .previous()
+                .first()
+                .is_some_and(|url| url.origin() == attempt.url().origin());
+            if same_origin && attempt.previous().len() < 10 {
+                attempt.follow()
+            } else {
+                attempt.stop()
+            }
+        }))
         .timeout(Duration::from_secs(20))
         .build()
         .map_err(|err| format!("创建 Qoder HTTP 客户端失败: {}", err))
@@ -638,6 +645,9 @@ async fn fetch_openapi_json(
         .await
         .map_err(|err| format!("请求 Qoder OpenAPI 失败 ({}): {}", path, err))?;
     let status = response.status();
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Err(UNAUTHORIZED.into());
+    }
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
         return Err(format!(
@@ -706,10 +716,25 @@ async fn fetch_qoder_credit_usage(
     client: &reqwest::Client,
     openapi_base_url: &str,
     token: &str,
-    machine_info: Option<&QoderMachineInfo>,
+    _machine_info: Option<&QoderMachineInfo>,
 ) -> Result<Value, String> {
-    let headers = build_qoder_headers(token, machine_info);
-    fetch_openapi_json(client, openapi_base_url, CREDIT_USAGE_PATH, headers, &[]).await
+    // Official 1.38 uses raw Authorization headers for the usage endpoint.
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        reqwest::header::AUTHORIZATION,
+        format!("Bearer {}", token)
+            .parse()
+            .map_err(|_| "QODER_USAGE_INVALID_AUTH_HEADER".to_string())?,
+    );
+    let value =
+        fetch_openapi_json(client, openapi_base_url, CREDIT_USAGE_PATH, headers, &[]).await?;
+    if !crate::modules::qoder_usage::is_envelope(&value)
+        && value.get("totalUsagePercentage").is_none()
+        && value.get("userQuota").is_none()
+    {
+        return Err("QODER_USAGE_RESPONSE_INVALID".into());
+    }
+    Ok(value)
 }
 
 fn get_string_at_path(root: &Value, path: &[&str]) -> Option<String> {
@@ -720,8 +745,8 @@ fn get_string_at_path(root: &Value, path: &[&str]) -> Option<String> {
     value_to_string(current)
 }
 
-fn extract_access_token_from_account(account: &QoderAccount) -> Option<String> {
-    let user_info = account.auth_user_info_raw.as_ref()?;
+pub(crate) fn access_token_from_info(user_info: Option<&Value>) -> Option<String> {
+    let user_info = user_info?;
     let candidate_paths: &[&[&str]] = &[
         &["token"],
         &["securityOauthToken"],
@@ -779,6 +804,16 @@ fn ensure_refresh_identity_consistent(
         }
     }
 
+    let scope = qoder_identity::scope(
+        target.auth_user_info_raw.as_ref(),
+        target.auth_user_plan_raw.as_ref(),
+    );
+    let returned = qoder_identity::scope(Some(user_status), None);
+    if (scope.1.is_some() && user_status.get("orgId").is_some() && scope.1 != returned.1)
+        || matches!((scope.0, returned.0), (Some(left), Some(right)) if left != right)
+    {
+        return Err("QODER_SESSION_CHANGED".into());
+    }
     Ok(())
 }
 
@@ -831,131 +866,324 @@ fn build_refresh_user_info_raw(
     user_info
 }
 
-async fn fetch_qoder_user_status_bundle_with_machine_info(
-    client: &reqwest::Client,
-    openapi_base_url: &str,
-    token: &str,
-    machine_info: Option<&QoderMachineInfo>,
-) -> Result<(Value, Option<Value>), String> {
-    fetch_qoder_user_status_bundle(client, openapi_base_url, token, machine_info).await
+fn refresh_lock(account_id: &str) -> Result<Arc<RefreshLock>, String> {
+    let mut locks = REFRESH_LOCKS.lock().map_err(|_| "QODER_ACCOUNT_BUSY")?;
+    locks.retain(|_, lock| lock.strong_count() > 0);
+    if let Some(lock) = locks.get(account_id).and_then(Weak::upgrade) {
+        return Ok(lock);
+    }
+    let lock = Arc::new(RefreshLock::new(()));
+    locks.insert(account_id.to_string(), Arc::downgrade(&lock));
+    Ok(lock)
 }
 
-async fn refresh_account_from_openapi_once(account_id: &str) -> Result<QoderAccount, String> {
-    let target = qoder_account::load_account(account_id)
-        .ok_or_else(|| format!("Qoder 账号不存在: {}", account_id))?;
+pub(crate) fn token_expiry(info: Option<&Value>, key: &str) -> Option<i64> {
+    let value = info?.get(key)?;
+    let raw = value_to_string(value)?;
+    parse_expire_timestamp_ms(Some(&raw))?.parse().ok()
+}
 
-    let access_token = extract_access_token_from_account(&target)
-        .ok_or_else(|| "Qoder 账号缺少 access token，请重新登录后再刷新".to_string())?;
-
-    let client = build_reqwest_client()?;
-    let machine_info = match read_qoder_machine_info_cache() {
-        Ok(value) => value,
-        Err(err) => {
-            logger::log_warn(&format!(
-                "[Qoder Refresh] 读取官方 machine token 缓存失败，将继续尝试无机器标识链路: {}",
-                err
-            ));
-            None
+fn session_endpoint(account: &QoderAccount) -> Result<String, String> {
+    let (source, _) = qoder_identity::scope(
+        account.auth_user_info_raw.as_ref(),
+        account.auth_user_plan_raw.as_ref(),
+    );
+    if matches!(source, Some("qodercn" | "dedicated_qodercn")) {
+        if let Some(origin) = account.verified_openapi_origin.as_deref() {
+            return Ok(origin.to_string());
         }
-    };
-
-    let (user_status, data_policy) = fetch_qoder_user_status_bundle_with_machine_info(
-        &client,
-        DEFAULT_OPENAPI_BASE_URL,
-        &access_token,
-        machine_info.as_ref(),
-    )
-    .await?;
-
-    ensure_refresh_identity_consistent(&target, &user_status)?;
-
-    let user_info_raw =
-        build_refresh_user_info_raw(&target, &access_token, &user_status, data_policy.as_ref());
-
-    let user_plan_raw = match fetch_qoder_user_plan(
-        &client,
-        DEFAULT_OPENAPI_BASE_URL,
-        &access_token,
-        machine_info.as_ref(),
-    )
-    .await
-    {
-        Ok(value) => Some(value),
-        Err(err) => {
-            logger::log_warn(&format!(
-                "[Qoder Refresh] 获取 /api/v2/user/plan 失败，将沿用本地缓存: {}",
-                err
-            ));
-            target.auth_user_plan_raw.clone()
-        }
-    };
-
-    let mut quota_query_error: Option<String> = None;
-    let credit_usage_raw = match fetch_qoder_credit_usage(
-        &client,
-        DEFAULT_OPENAPI_BASE_URL,
-        &access_token,
-        machine_info.as_ref(),
-    )
-    .await
-    {
-        Ok(value) => Some(value),
-        Err(err) => {
-            logger::log_warn(&format!(
-                "[Qoder Refresh] 获取 /api/v2/quota/usage 失败，将沿用本地缓存: {}",
-                err
-            ));
-            quota_query_error = Some(err.clone());
-            target.auth_credit_usage_raw.clone()
-        }
-    };
-
-    let refreshed = qoder_account::upsert_account_from_snapshot(
-        user_info_raw,
-        user_plan_raw,
-        credit_usage_raw,
-    )?;
-    let refreshed = if refreshed.id == target.id {
-        qoder_account::update_quota_query_error(&refreshed.id, quota_query_error)?
-            .unwrap_or(refreshed)
-    } else {
-        refreshed
-    };
-    if refreshed.id != target.id {
-        return Err(format!(
-            "刷新结果账号不一致: target_id={}, actual_id={}",
-            target.id, refreshed.id
-        ));
     }
-    Ok(refreshed)
+    match source {
+        None | Some("qoder") => Ok(DEFAULT_OPENAPI_BASE_URL.to_string()),
+        Some("dedicated_qodercn") => {
+            let root = qoder_instance::get_default_qoder_user_data_dir()?;
+            if !qoder_account::local_session_matches(&root, account)? {
+                return Err(OPENAPI_UNAVAILABLE.into());
+            }
+            let config = fs::read(root.join("User/app.json")).map_err(|_| OPENAPI_UNAVAILABLE)?;
+            let config: Value = serde_json::from_slice(&config).map_err(|_| OPENAPI_UNAVAILABLE)?;
+            let configured = config
+                .pointer("/config/general/dedicatedUrl")
+                .and_then(Value::as_str)
+                .ok_or(OPENAPI_UNAVAILABLE)?;
+            dedicated_openapi_endpoint(configured).ok_or_else(|| OPENAPI_UNAVAILABLE.into())
+        }
+        Some("qodercn") => {
+            let root = qoder_instance::get_default_qoder_user_data_dir()?;
+            if !qoder_account::local_session_matches(&root, account)? {
+                return Err(OPENAPI_UNAVAILABLE.into());
+            }
+            let executable = crate::modules::process::resolve_qoder_launch_path()?;
+            let flags = build_qoder_product_file_candidates(&executable)
+                .into_iter()
+                .filter_map(|path| fs::read(path.with_file_name("featureFlags.json")).ok())
+                .find_map(|raw| serde_json::from_slice::<Value>(&raw).ok())
+                .ok_or(OPENAPI_UNAVAILABLE)?;
+            let url = flags
+                .get("defaultOpenApiBaseUrl")
+                .and_then(Value::as_str)
+                .and_then(|value| Url::parse(value).ok())
+                .ok_or(OPENAPI_UNAVAILABLE)?;
+            let hostname = url.host_str().unwrap_or_default();
+            let official = ["qoder.cn", "qoder.com.cn"]
+                .iter()
+                .any(|suffix| hostname == *suffix || hostname.ends_with(&format!(".{suffix}")));
+            if url.scheme() == "https" && official {
+                return Ok(url.origin().ascii_serialization());
+            }
+            Err(OPENAPI_UNAVAILABLE.into())
+        }
+        // CN 1.0 sessions use Cosy rather than the device-token OpenAPI.
+        _ => Err(OPENAPI_UNAVAILABLE.into()),
+    }
+}
+
+fn dedicated_openapi_endpoint(configured: &str) -> Option<String> {
+    let mut url = Url::parse(configured.trim()).ok()?;
+    if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
+        return None;
+    }
+    if let Some(url::Host::Domain(host)) = url.host() {
+        if let Some((first, rest)) = host.split_once('.') {
+            url.set_host(Some(&format!("{first}-openapi.{rest}")))
+                .ok()?;
+        }
+    }
+    Some(url.origin().ascii_serialization())
+}
+
+#[derive(Deserialize)]
+struct RenewedDeviceToken {
+    device_token: String,
+    refresh_token: String,
+    expires_at: String,
+    refresh_token_expires_at: Option<String>,
+}
+
+async fn request_renewed_token(
+    client: &reqwest::Client,
+    endpoint: &str,
+    access: &str,
+    refresh_token: &str,
+) -> Result<RenewedDeviceToken, String> {
+    let response = client
+        .post(format!("{endpoint}{DEVICE_TOKEN_REFRESH_PATH}"))
+        .bearer_auth(access)
+        .header(reqwest::header::ACCEPT, "application/json")
+        .json(&serde_json::json!({ "refresh_token": refresh_token }))
+        .send()
+        .await
+        .map_err(|_| "QODER_RENEWAL_FAILED")?;
+    let status = response.status();
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Err(REAUTH_REQUIRED.into());
+    }
+    if status == reqwest::StatusCode::BAD_REQUEST {
+        let body = response.text().await.unwrap_or_default();
+        if body.contains("invalid refresh_token") || body.contains("invalid_grant") {
+            return Err(REAUTH_REQUIRED.into());
+        }
+        return Err(format!("QODER_RENEWAL_FAILED: {status}"));
+    }
+    if !status.is_success() {
+        return Err(format!("QODER_RENEWAL_FAILED: {status}"));
+    }
+
+    response
+        .json()
+        .await
+        .map_err(|_| "QODER_RENEWAL_FAILED".into())
+}
+
+async fn renew_device_token(
+    client: &reqwest::Client,
+    endpoint: &str,
+    account: &QoderAccount,
+) -> Result<QoderAccount, String> {
+    let info = account.auth_user_info_raw.as_ref();
+    let refresh_token = qoder_identity::field(info, "refreshToken").ok_or(REAUTH_REQUIRED)?;
+    if token_expiry(info, "refreshTokenExpireTime")
+        .is_some_and(|expires| expires <= chrono::Utc::now().timestamp_millis())
+    {
+        return Err(REAUTH_REQUIRED.into());
+    }
+    let access = access_token_from_info(info).ok_or(REAUTH_REQUIRED)?;
+    let tokens = request_renewed_token(client, endpoint, &access, refresh_token).await?;
+    let mut updated = info
+        .and_then(Value::as_object)
+        .cloned()
+        .ok_or(REAUTH_REQUIRED)?;
+    let device_token =
+        normalize_non_empty(Some(&tokens.device_token)).ok_or("QODER_RENEWAL_FAILED")?;
+    let refresh_token =
+        normalize_non_empty(Some(&tokens.refresh_token)).ok_or("QODER_RENEWAL_FAILED")?;
+    let expiry =
+        parse_expire_timestamp_ms(Some(&tokens.expires_at)).ok_or("QODER_RENEWAL_FAILED")?;
+    updated.insert("token".into(), Value::String(device_token.clone()));
+    updated.insert("securityOauthToken".into(), Value::String(device_token));
+    updated.insert("refreshToken".into(), Value::String(refresh_token));
+    updated.insert("expireTime".into(), Value::String(expiry));
+    updated.remove("refreshTokenExpireTime");
+    insert_string_field(
+        &mut updated,
+        "refreshTokenExpireTime",
+        parse_expire_timestamp_ms(tokens.refresh_token_expires_at.as_deref()),
+    );
+
+    // Persist the rotated token before making further requests that can fail.
+    let verified_origin = (endpoint != DEFAULT_OPENAPI_BASE_URL).then(|| endpoint.to_string());
+    let account = account.clone();
+    tokio::task::spawn_blocking(move || {
+        qoder_account::save_refresh(
+            &account,
+            Value::Object(updated),
+            None,
+            None,
+            account.quota_query_last_error.clone(),
+            verified_origin,
+        )
+    })
+    .await
+    .map_err(|_| "QODER_ACCOUNT_BUSY")?
+}
+
+async fn load_refresh_target(account_id: &str) -> Result<QoderAccount, String> {
+    let id = account_id.to_string();
+    tokio::task::spawn_blocking(move || {
+        qoder_account::load_account(&id).ok_or_else(|| "QODER_SESSION_CHANGED".to_string())
+    })
+    .await
+    .map_err(|_| "QODER_ACCOUNT_BUSY")?
+}
+
+async fn account_endpoint(account: &QoderAccount) -> Result<String, String> {
+    let account = account.clone();
+    tokio::task::spawn_blocking(move || session_endpoint(&account))
+        .await
+        .map_err(|_| "QODER_ACCOUNT_BUSY")?
+}
+
+pub(crate) async fn prepare_account_for_switch(account_id: &str) -> Result<(), String> {
+    let target = load_refresh_target(account_id).await?;
+    let info = target.auth_user_info_raw.as_ref();
+    access_token_from_info(info).ok_or(REAUTH_REQUIRED)?;
+    if !token_expiry(info, "expireTime")
+        .is_some_and(|expiry| expiry <= chrono::Utc::now().timestamp_millis())
+    {
+        return Ok(());
+    }
+    let lock = refresh_lock(account_id)?;
+    let _guard = lock.lock().await;
+    let target = load_refresh_target(account_id).await?;
+    let info = target.auth_user_info_raw.as_ref();
+    access_token_from_info(info).ok_or(REAUTH_REQUIRED)?;
+    if token_expiry(info, "expireTime")
+        .is_some_and(|expiry| expiry <= chrono::Utc::now().timestamp_millis())
+    {
+        let endpoint = account_endpoint(&target).await?;
+        renew_device_token(&build_reqwest_client()?, &endpoint, &target).await?;
+    }
+    Ok(())
+}
+
+async fn refresh_account_from_openapi_once(
+    mut target: QoderAccount,
+) -> Result<QoderAccount, String> {
+    let endpoint = account_endpoint(&target).await?;
+    let client = build_reqwest_client()?;
+    let machine_info = tokio::task::spawn_blocking(read_qoder_machine_info_cache)
+        .await
+        .map_err(|_| "QODER_ACCOUNT_BUSY")?
+        .map_err(|error| logger::log_warn(&format!("[Qoder Refresh] 读取机器信息失败: {error}")))
+        .ok()
+        .flatten();
+
+    let now = chrono::Utc::now().timestamp_millis();
+    let info = target.auth_user_info_raw.as_ref();
+    let expiry = token_expiry(info, "expireTime");
+    let refresh_expiry = token_expiry(info, "refreshTokenExpireTime");
+    let mut renewed = expiry.is_some_and(|expiry| expiry <= now)
+        || (expiry.is_some_and(|expiry| expiry - now < RENEWAL_WINDOW_MS)
+            && qoder_identity::field(info, "refreshToken").is_some()
+            && refresh_expiry.is_none_or(|expiry| expiry - now >= RENEWAL_WINDOW_MS));
+    if renewed {
+        target = renew_device_token(&client, &endpoint, &target).await?;
+    }
+    let mut access =
+        access_token_from_info(target.auth_user_info_raw.as_ref()).ok_or(REAUTH_REQUIRED)?;
+    let (user_status, data_policy) = loop {
+        match fetch_qoder_user_status_bundle(&client, &endpoint, &access, machine_info.as_ref())
+            .await
+        {
+            Err(error) if error == UNAUTHORIZED && !renewed => {
+                target = renew_device_token(&client, &endpoint, &target).await?;
+                access = access_token_from_info(target.auth_user_info_raw.as_ref())
+                    .ok_or(REAUTH_REQUIRED)?;
+                renewed = true;
+            }
+            Err(error) if error == UNAUTHORIZED => return Err(REAUTH_REQUIRED.into()),
+            result => break result?,
+        }
+    };
+    ensure_refresh_identity_consistent(&target, &user_status)?;
+    let user_info =
+        build_refresh_user_info_raw(&target, &access, &user_status, data_policy.as_ref());
+
+    let (plan, usage) = tokio::join!(
+        fetch_qoder_user_plan(&client, &endpoint, &access, machine_info.as_ref()),
+        fetch_qoder_credit_usage(&client, &endpoint, &access, machine_info.as_ref())
+    );
+    let plan = plan
+        .map_err(|error| logger::log_warn(&format!("[Qoder Refresh] 套餐查询失败: {error}")))
+        .ok();
+    let (usage, quota_error) = match usage {
+        Ok(usage) => (Some(usage), None),
+        Err(error) => (None, Some(error)),
+    };
+    let verified_origin = (endpoint != DEFAULT_OPENAPI_BASE_URL).then_some(endpoint);
+    tokio::task::spawn_blocking(move || {
+        qoder_account::save_refresh(
+            &target,
+            user_info,
+            plan,
+            usage,
+            quota_error,
+            verified_origin,
+        )
+    })
+    .await
+    .map_err(|_| "QODER_ACCOUNT_BUSY")?
 }
 
 pub async fn refresh_account_from_openapi(account_id: &str) -> Result<QoderAccount, String> {
-    let result = refresh_account_from_openapi_once(account_id).await;
-    if let Err(err) = &result {
-        let _ = qoder_account::update_quota_query_error(account_id, Some(err.clone()));
+    let lock = refresh_lock(account_id)?;
+    let _guard = lock.lock().await;
+    let target = load_refresh_target(account_id).await?;
+    let result = refresh_account_from_openapi_once(target.clone()).await;
+    if let Err(error) = &result {
+        if error != "QODER_SESSION_CHANGED" {
+            let error = error.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                qoder_account::mark_quota_query_error(&target, error)
+            })
+            .await;
+        }
     }
     result
 }
 
 pub async fn refresh_all_accounts_from_openapi() -> Result<i32, String> {
-    let accounts = qoder_account::list_accounts();
-    if accounts.is_empty() {
-        return Ok(0);
-    }
-
-    let mut success_count: i32 = 0;
-    for account in accounts {
-        match refresh_account_from_openapi(&account.id).await {
-            Ok(_) => {
-                success_count += 1;
-            }
-            Err(err) => {
-                logger::log_warn(&format!(
-                    "[Qoder Refresh] 批量刷新失败: account_id={}, email={}, error={}",
-                    account.id, account.email, err
-                ));
-            }
+    let account_ids = tokio::task::spawn_blocking(qoder_account::list_account_ids)
+        .await
+        .map_err(|_| "QODER_ACCOUNT_BUSY")??;
+    let mut success_count = 0;
+    for account_id in account_ids {
+        match refresh_account_from_openapi(&account_id).await {
+            Ok(account) if account.quota_query_last_error.is_none() => success_count += 1,
+            Ok(_) => {}
+            Err(error) => logger::log_warn(&format!(
+                "[Qoder Refresh] 批量刷新失败: account_id={account_id}, error={error}"
+            )),
         }
     }
 
@@ -1119,6 +1347,12 @@ fn get_string_from_object(
     get_object_field(object, keys).and_then(value_to_string)
 }
 pub async fn start_login() -> Result<QoderOAuthStartResponse, String> {
+    tokio::task::spawn_blocking(start_login_blocking)
+        .await
+        .map_err(|_| "QODER_ACCOUNT_BUSY")?
+}
+
+fn start_login_blocking() -> Result<QoderOAuthStartResponse, String> {
     logger::log_info("[Qoder OAuth] 开始创建登录会话");
     let login_base_url = resolve_qoder_cli_login_endpoint();
     let machine_info = match read_qoder_machine_info_cache() {
@@ -1131,36 +1365,35 @@ pub async fn start_login() -> Result<QoderOAuthStartResponse, String> {
             None
         }
     };
-    let login_machine_id = if let Some(machine_token) = machine_info
+    let machine_id = machine_info
         .as_ref()
-        .and_then(|value| normalize_non_empty(Some(value.token.as_str())))
-    {
-        Some(machine_token)
+        .and_then(|value| value.machine_id.as_deref());
+    let cached_machine_id = if machine_id.is_none() {
+        read_qoder_cached_machine_id()
+            .map_err(|error| {
+                logger::log_warn(&format!("[Qoder OAuth] 读取机器标识失败: {error}"));
+            })
+            .ok()
+            .flatten()
     } else {
-        match read_qoder_cached_machine_id() {
-            Ok(value) => value,
-            Err(err) => {
-                logger::log_warn(&format!(
-                    "[Qoder OAuth] 读取官方 machine id 缓存失败，将继续使用无机器标识链路: {}",
-                    err
-                ));
-                None
-            }
-        }
+        None
     };
+    let login_machine_id = machine_id.or(cached_machine_id.as_deref());
     let expected_nonce = generate_login_nonce();
     let code_verifier = generate_pkce_verifier();
     let challenge_method = QODER_DEVICE_LOGIN_CHALLENGE_METHOD.to_string();
     let code_challenge = generate_pkce_challenge(&code_verifier);
     let verification_uri = build_cli_device_login_url(
         &login_base_url,
+        installed_ide_redirect_uri(),
         &expected_nonce,
         &code_challenge,
         &challenge_method,
-        login_machine_id.as_deref(),
+        machine_info.as_ref().map(|info| info.token.as_str()),
+        login_machine_id,
     )?;
-    let login_machine_id_source = if machine_info.is_some() {
-        "machine_token"
+    let login_machine_id_source = if machine_id.is_some() {
+        "machine_info"
     } else if login_machine_id.is_some() {
         "cache_id"
     } else {
@@ -1216,10 +1449,8 @@ pub async fn start_login() -> Result<QoderOAuthStartResponse, String> {
 }
 
 pub async fn complete_login(login_id: &str) -> Result<QoderAccount, String> {
-    logger::log_info(&format!(
-        "[Qoder OAuth] 开始等待回调完成: login_id={}",
-        login_id
-    ));
+    let completion = refresh_lock(&format!("login:{login_id}"))?;
+    let _completion = completion.try_lock().map_err(|_| "QODER_ACCOUNT_BUSY")?;
     let wait_started = Instant::now();
     let mut next_wait_log_at = Duration::from_secs(5);
     let client = build_reqwest_client()?;
@@ -1241,6 +1472,7 @@ pub async fn complete_login(login_id: &str) -> Result<QoderAccount, String> {
                 return Err("Qoder OAuth 登录已取消".to_string());
             }
             if now_timestamp() > state.expires_at {
+                drop(guard);
                 clear_pending_if_matches(login_id);
                 return Err(
                     last_poll_error.unwrap_or_else(|| "Qoder OAuth 登录已超时，请重试".to_string())
@@ -1332,19 +1564,44 @@ pub async fn complete_login(login_id: &str) -> Result<QoderAccount, String> {
                     Ok(value) => Some(value),
                     Err(err) => {
                         logger::log_warn(&format!(
-                            "[Qoder OAuth] 获取 /api/v2/quota/usage 失败，将以缺省快照继续: {}",
+                            "[Qoder OAuth] 获取 /sash/api/v2/me/usage 失败，将以缺省快照继续: {}",
                             err
                         ));
                         None
                     }
                 };
 
-                let account = qoder_account::upsert_account_from_snapshot(
-                    user_info_raw,
-                    user_plan_raw,
-                    credit_usage_raw,
-                )?;
-                clear_pending_if_matches(login_id);
+                let id = login_id.to_string();
+                let account = tokio::task::spawn_blocking(move || {
+                    let state = {
+                        let mut pending = PENDING_OAUTH_STATE
+                            .lock()
+                            .map_err(|_| "QODER_ACCOUNT_BUSY")?;
+                        if !pending.as_ref().is_some_and(|state| {
+                            state.login_id == id
+                                && !state.cancelled
+                                && now_timestamp() <= state.expires_at
+                        }) {
+                            return Err("QODER_SESSION_CHANGED".into());
+                        }
+                        pending.take()
+                    };
+                    let result = qoder_account::upsert_account_from_snapshot(
+                        user_info_raw,
+                        user_plan_raw,
+                        credit_usage_raw,
+                    );
+                    if result.is_err() {
+                        if let Ok(mut pending) = PENDING_OAUTH_STATE.lock() {
+                            if pending.is_none() {
+                                *pending = state;
+                            }
+                        }
+                    }
+                    result
+                })
+                .await
+                .map_err(|_| "QODER_ACCOUNT_BUSY")??;
                 logger::log_info(&format!(
                     "[Qoder OAuth] 登录完成并入库成功: login_id={}, account_id={}, email={}",
                     login_id, account.id, account.email
@@ -1427,9 +1684,11 @@ mod tests {
     fn builds_current_ide_device_login_url() {
         let url = build_cli_device_login_url(
             DEFAULT_LOGIN_BASE_URL,
+            QODER_IDE_REDIRECT_URI,
             "test-nonce",
             "test-challenge",
             QODER_DEVICE_LOGIN_CHALLENGE_METHOD,
+            Some("test-machine-token"),
             Some("test-machine-id"),
         )
         .expect("build login url");
@@ -1451,7 +1710,88 @@ mod tests {
             QODER_IDE_REDIRECT_URI.to_string()
         )));
         assert!(query.contains(&("machine_id".to_string(), "test-machine-id".to_string())));
+        assert!(query.contains(&(
+            "machine_token".to_string(),
+            "test-machine-token".to_string()
+        )));
         assert!(!query.iter().any(|(key, _)| key == "client_id"));
+    }
+
+    #[test]
+    fn dedicated_openapi_is_derived_from_the_configured_https_origin() {
+        assert_eq!(
+            dedicated_openapi_endpoint("https://tenant.example.invalid:8443/setup").as_deref(),
+            Some("https://tenant-openapi.example.invalid:8443")
+        );
+        assert!(dedicated_openapi_endpoint("http://tenant.example.invalid").is_none());
+        assert!(dedicated_openapi_endpoint("https://user@tenant.example.invalid").is_none());
+    }
+
+    #[tokio::test]
+    async fn renews_device_credentials_and_distinguishes_reauthorization() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let responses = [
+                (
+                    "200 OK",
+                    r#"{"device_token":"new-device","refresh_token":"new-refresh","expires_at":"2031-01-01T00:00:00Z","refresh_token_expires_at":"2031-02-01T00:00:00Z"}"#,
+                ),
+                ("400 Bad Request", r#"{"error":"invalid_grant"}"#),
+                ("503 Service Unavailable", r#"{"error":"unavailable"}"#),
+            ];
+            for (status, body) in responses {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0; 512];
+                loop {
+                    let count = socket.read(&mut buffer).await.unwrap();
+                    assert!(count > 0);
+                    request.extend_from_slice(&buffer[..count]);
+                    let request = std::str::from_utf8(&request).unwrap();
+                    if request.ends_with(r#"{"refresh_token":"test-refresh"}"#) {
+                        assert!(request.starts_with("POST /api/v1/deviceToken/refresh HTTP/1.1"));
+                        assert!(request.contains("authorization: Bearer test-device"));
+                        break;
+                    }
+                }
+                let response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                socket.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(3))
+            .build()
+            .unwrap();
+        let renewed = request_renewed_token(&client, &endpoint, "test-device", "test-refresh")
+            .await
+            .unwrap();
+        assert_eq!(renewed.device_token, "new-device");
+        assert_eq!(renewed.refresh_token, "new-refresh");
+        assert!(parse_expire_timestamp_ms(Some(&renewed.expires_at)).is_some());
+        assert_eq!(
+            request_renewed_token(&client, &endpoint, "test-device", "test-refresh")
+                .await
+                .err()
+                .as_deref(),
+            Some(REAUTH_REQUIRED)
+        );
+        assert_eq!(
+            request_renewed_token(&client, &endpoint, "test-device", "test-refresh")
+                .await
+                .err()
+                .as_deref(),
+            Some("QODER_RENEWAL_FAILED: 503 Service Unavailable")
+        );
+        server.await.unwrap();
     }
 
     #[test]

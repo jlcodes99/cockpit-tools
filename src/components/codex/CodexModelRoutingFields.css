@@ -686,7 +686,9 @@
 }
 
 @media (max-width: 640px) {
-  .codex-model-routing-card__header {
+  .codex-model-routing-card__header,
+  .codex-model-routing-card__models-bar,
+  .codex-model-routing-card__models-actions {
     flex-wrap: wrap;
   }
 

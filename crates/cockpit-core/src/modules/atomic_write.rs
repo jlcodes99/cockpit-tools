@@ -116,6 +116,45 @@ pub fn write_string_atomic(path: &Path, content: &str) -> Result<(), String> {
     write_string_atomic_internal(path, content, true)
 }
 
+pub(crate) fn write_secret_string_atomic(path: &Path, content: &str) -> Result<(), String> {
+    use std::io::Write;
+    let parent = path.parent().ok_or("无法定位目标目录")?;
+    let temp = build_temp_file_path(parent, path, "secret");
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let result = (|| {
+        let mut file = options.open(&temp)?;
+        file.write_all(content.as_bytes())?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&temp, path)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    result.map_err(|error| format_io_error("保存受保护账号备份", path, &error))
+}
+
+pub(crate) fn remove_file_if_hash_matches(path: &Path, expected: [u8; 32]) -> Result<bool, String> {
+    use sha2::{Digest, Sha256};
+    let content = match fs::read(path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(format_io_error("读取账号详情", path, &error)),
+    };
+    let actual: [u8; 32] = Sha256::digest(content).into();
+    if actual != expected {
+        return Ok(false);
+    }
+    fs::remove_file(path).map_err(|error| format_io_error("删除账号详情", path, &error))?;
+    Ok(true)
+}
+
 pub fn restore_from_backup(path: &Path) -> Result<bool, String> {
     let backup_path = build_backup_path(path)?;
     if !backup_path.exists() {

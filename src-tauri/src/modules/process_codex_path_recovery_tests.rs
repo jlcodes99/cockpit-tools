@@ -27,25 +27,82 @@ fn missing_path_allows_noop_close_only_after_positive_absence_confirmation() {
 
 #[test]
 fn failed_incomplete_or_nonempty_process_probes_never_allow_auth_mutation() {
-    let empty = br#"{"completed":true,"count":0}"#;
+    let empty = br#"{"completed":true,"processes":[]}"#;
     assert!(codex_pathless_probe_confirms_idle(true, empty));
     assert!(codex_pathless_probe_confirms_idle(
         true,
-        b"\xef\xbb\xbf{\"completed\":true,\"count\":0}\r\n"
+        b"\xef\xbb\xbf{\"completed\":true,\"processes\":[]}\r\n"
     ));
     assert!(!codex_pathless_probe_confirms_idle(false, empty));
     for probe in [
-        br#"{"completed":true,"count":1}"#.as_slice(),
-        br#"{"completed":false,"count":0}"#,
-        br#"{"count":0}"#,
+        br#"{"completed":true,"processes":[{"Name":"ChatGPT.exe","ExecutablePath":null}]}"#
+            .as_slice(),
+        br#"{"completed":true,"processes":[{"Name":"Codex.exe","ExecutablePath":null}]}"#,
+        br#"{"completed":false,"processes":[]}"#,
+        br#"{"processes":[]}"#,
         br#"{"completed":true}"#,
-        br#"{"completed":true,"count":-1}"#,
-        br#"{"completed":true,"count":"0"}"#,
+        br#"{"completed":true,"processes":null}"#,
+        br#"{"completed":true,"processes":{}}"#,
         b"",
         b"null",
         b"CIM unavailable",
     ] {
         assert!(!codex_pathless_probe_confirms_idle(true, probe));
+    }
+}
+
+#[test]
+fn pathless_direct_switch_ignores_the_vscode_extension_but_not_a_desktop_runtime() {
+    use serde_json::json;
+
+    let extension = json!({
+        "Name": "codex.exe",
+        "ExecutablePath": r"C:\Users\Example\.vscode\extensions\openai.chatgpt-26.820.71523-win32-x64\bin\windows-x86_64\codex.exe"
+    });
+    let custom_extension_dir = json!({
+        "Name": "Codex.exe",
+        "ExecutablePath": "D:/VS Code extensions/OpenAI.ChatGPT-26.820.71523-win32-arm64/bin/windows-aarch64/Codex.exe"
+    });
+    let close_without_path = |processes| {
+        let output = json!({"completed": true, "processes": processes}).to_string();
+        codex_close_path_or_confirmed_idle(Err("APP_PATH_NOT_FOUND:codex".into()), || {
+            codex_pathless_probe_confirms_idle(true, output.as_bytes())
+        })
+    };
+    assert_eq!(
+        close_without_path(vec![extension.clone(), custom_extension_dir]),
+        Ok(None)
+    );
+
+    for (name, executable) in [
+        (
+            "ChatGPT.exe",
+            r"C:\Program Files\WindowsApps\OpenAI.Codex_26.820.9563.0_x64\app\ChatGPT.exe",
+        ),
+        (
+            "Codex.exe",
+            r"C:\Program Files\WindowsApps\OpenAI.Codex_26.820.9563.0_x64\app\resources\codex.exe",
+        ),
+        (
+            "Codex.exe",
+            r"C:\Users\Example\AppData\Local\OpenAI\Codex\bin\faa963e871dd422c\codex.exe",
+        ),
+        (
+            "Codex.exe",
+            r"C:\Users\Example\.vscode\extensions\other.openai.chatgpt-26.820\bin\windows-x86_64\codex.exe",
+        ),
+        (
+            "Codex.exe",
+            r"C:\Users\Example\.vscode\extensions\openai.chatgpt-26.820\bin\other\codex.exe",
+        ),
+    ] {
+        assert_eq!(
+            close_without_path(vec![
+                extension.clone(),
+                json!({"Name": name, "ExecutablePath": executable})
+            ]),
+            Err("APP_PATH_NOT_FOUND:codex".into())
+        );
     }
 }
 

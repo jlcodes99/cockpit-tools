@@ -35,11 +35,7 @@ fn commit_api_key_credential_index(old_id: &str, account: &CodexAccount) -> Resu
         .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
     // Maintenance readers can discover the new detail before this transaction commits.
     // Read only the saved index here: never run repair/scans under the mutation lock.
-    let path = get_accounts_storage_path();
-    let content =
-        fs::read_to_string(&path).map_err(|error| format!("读取账号索引失败: {}", error))?;
-    let mut index: CodexAccountIndex =
-        serde_json::from_str(&content).map_err(|error| format!("解析账号索引失败: {}", error))?;
+    let mut index = read_saved_account_index()?.ok_or("Codex 账号索引不存在")?;
     if old_id != account.id {
         // Destination IDs are protected for the entire edit; any discovered new row
         // belongs to the detail we already saved, rather than a competing edit.

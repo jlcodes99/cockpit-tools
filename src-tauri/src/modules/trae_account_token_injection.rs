@@ -797,27 +797,13 @@ pub(crate) fn resolve_current_account_id_for_platform(
         if let Some(account_id) = accounts
             .iter()
             .find(|account| {
-                if resolve_account_platform_kind(account) != platform {
-                    return false;
-                }
-
-                if let (Some(existing), Some(incoming)) = (
-                    normalize_non_empty(account.user_id.as_deref()),
-                    normalized_user_id.clone(),
-                ) {
-                    if existing == incoming {
-                        return true;
-                    }
-                }
-
-                if let (Some(existing), Some(incoming)) = (
-                    normalize_email(Some(account.email.as_str())),
-                    normalized_email.clone(),
-                ) {
-                    return existing == incoming;
-                }
-
-                false
+                resolve_account_platform_kind(account) == platform
+                    && matches_current_account_identity(
+                        account.user_id.as_deref(),
+                        &account.email,
+                        normalized_user_id.as_deref(),
+                        normalized_email.as_deref(),
+                    )
             })
             .map(|account| account.id.clone())
         {

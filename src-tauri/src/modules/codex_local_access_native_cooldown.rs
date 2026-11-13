@@ -1,8 +1,14 @@
-// Per-model retry state mirrors the active Go scheduler without sharing its implementation.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct NativeCooldownKey {
     account: String,
-    model: String,
+    scope: NativeCooldownScope,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum NativeCooldownScope {
+    Model(String),
+    Credential,
+    UpstreamFailure,
 }
 
 #[derive(Clone, Debug)]
@@ -11,17 +17,62 @@ struct NativeCooldown {
     recorded_at: Instant,
     quota: bool,
     backoff_level: u8,
+    non_quota_failures: u8,
     reason: &'static str,
 }
 
 fn native_cooldown_key(account: &str, model: &str, credential_scope: bool) -> NativeCooldownKey {
     NativeCooldownKey {
         account: account.into(),
-        model: if credential_scope { "" } else { model }.into(),
+        scope: if credential_scope || model.is_empty() {
+            NativeCooldownScope::Credential
+        } else {
+            NativeCooldownScope::Model(model.into())
+        },
+    }
+}
+
+fn native_upstream_failure_key(account: &str) -> NativeCooldownKey {
+    NativeCooldownKey {
+        account: account.into(),
+        scope: NativeCooldownScope::UpstreamFailure,
     }
 }
 
 const NATIVE_CONFIRMED_QUOTA: &str = "quota_exhausted";
+
+fn native_update_upstream_failure_streak(
+    states: &mut HashMap<NativeCooldownKey, NativeCooldown>,
+    account: &str,
+    status: u16,
+    now: Instant,
+) {
+    let key = native_upstream_failure_key(account);
+    if !matches!(status, 408 | 500..=599) {
+        // Quota and credential/model failures break the streak without
+        // shortening an account pause that was already scheduled.
+        if let Some(previous) = states.get_mut(&key).filter(|state| state.until > now) {
+            previous.non_quota_failures = 0;
+        } else {
+            states.remove(&key);
+        }
+        return;
+    }
+
+    let state = states.entry(key).or_insert(NativeCooldown {
+        until: now,
+        recorded_at: now,
+        quota: false,
+        backoff_level: 0,
+        non_quota_failures: 0,
+        reason: "transient_upstream",
+    });
+    state.recorded_at = now;
+    state.non_quota_failures = state.non_quota_failures.saturating_add(1);
+    if state.non_quota_failures >= 3 {
+        state.until = now + Duration::from_secs(600);
+    }
+}
 
 impl NativeCooldown {
     fn active(&self, now: Instant, cooling_disabled: bool) -> bool {
@@ -36,6 +87,7 @@ fn native_mark_quota_exhausted(
     now: Instant,
 ) {
     let key = native_cooldown_key(account, "", true);
+    native_update_upstream_failure_streak(states, account, 429, now);
     if let Some(previous) = states.get_mut(&key)
         .filter(|state| state.reason == NATIVE_CONFIRMED_QUOTA && state.until > now)
     {
@@ -94,8 +146,24 @@ fn native_upsert_cooldown(
     credential_scope: bool,
     now: Instant,
 ) {
+    native_update_cooldown(states, account, model, status, retry_after, credential_scope, now, true);
+}
+
+fn native_update_cooldown(
+    states: &mut HashMap<NativeCooldownKey, NativeCooldown>,
+    account: &str,
+    model: &str,
+    status: u16,
+    retry_after: Option<Duration>,
+    credential_scope: bool,
+    now: Instant,
+    count_failure: bool,
+) {
     if account.is_empty() || !matches!(status, 401 | 402 | 403 | 404 | 408 | 429 | 500..=599) {
         return;
+    }
+    if count_failure {
+        native_update_upstream_failure_streak(states, account, status, now);
     }
     let key = native_cooldown_key(account, model, credential_scope || model.is_empty());
     let previous = states.get(&key);
@@ -138,6 +206,7 @@ fn native_upsert_cooldown(
             recorded_at: now,
             quota: quota || retain_quota,
             backoff_level,
+            non_quota_failures: 0,
             reason: if quota || retain_quota {
                 "quota"
             } else {
@@ -163,6 +232,7 @@ fn native_cooldown_wait(
     [
         native_cooldown_key(account, model, false),
         native_cooldown_key(account, model, true),
+        native_upstream_failure_key(account),
     ]
     .into_iter()
     .filter_map(|key| states.get(&key))
@@ -175,12 +245,13 @@ fn native_upsert_transient_rate_limit(
     states: &mut HashMap<NativeCooldownKey, NativeCooldown>, account: &str, model: &str,
     retry_after: Option<Duration>, now: Instant,
 ) {
+    native_update_upstream_failure_streak(states, account, 429, now);
     let key = native_cooldown_key(account, model, false);
     if states.get(&key).is_some_and(|state| state.quota && state.until > now) { return; }
     let until = now.checked_add(retry_after.unwrap_or(Duration::from_secs(1)))
         .unwrap_or_else(|| now + Duration::from_secs(10 * 365 * 86400));
     let until = states.get(&key).map_or(until, |state| state.until.max(until));
-    states.insert(key, NativeCooldown { until, recorded_at: now, quota: false, backoff_level: 0, reason: "transient_rate_limit" });
+    states.insert(key, NativeCooldown { until, recorded_at: now, quota: false, backoff_level: 0, non_quota_failures: 0, reason: "transient_rate_limit" });
 }
 
 fn native_upsert_challenge_cooldown(
@@ -209,6 +280,7 @@ fn native_upsert_challenge_cooldown(
             until: now + delay,
             recorded_at: now,
             quota: false,
+            non_quota_failures: 0,
             backoff_level: level.saturating_add(u8::from(delay < Duration::from_secs(1800))),
             reason: "cloudflare_challenge",
         },

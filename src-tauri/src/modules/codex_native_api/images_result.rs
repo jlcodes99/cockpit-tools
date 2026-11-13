@@ -269,7 +269,7 @@ impl ImageAccumulator {
             }
         }
         if self.collected.is_empty() {
-            return Err(invalid_image("Upstream completed without an image result"));
+            return Err(missing_image_output());
         }
         for index in self.collected.keys().copied().collect::<Vec<_>>() {
             self.image_index(Some(index), None)?;
@@ -423,6 +423,10 @@ fn validate_base64(value: &str) -> Result<(), ServiceError> {
 
 fn invalid_image(message: impl Into<String>) -> ServiceError {
     ServiceError::new(502, "invalid_image_response", message)
+}
+
+pub(super) fn missing_image_output() -> ServiceError {
+    ServiceError::new(502, "image_output_missing", "Upstream completed without an image result")
 }
 
 /// Combines independent, requested image operations without dropping their usage.

@@ -503,7 +503,7 @@ pub async fn inject_trae_account(
 pub async fn get_trae_checkin_status(
     account_id: String,
 ) -> Result<trae_account::CheckinStatusResult, String> {
-    let device_id = trae_auto_checkin::ensure_device_id_persisted(&account_id)?;
+    let device_id = trae_auto_checkin::ensure_device_id_persisted(account_id.clone()).await?;
     trae_account::get_trae_checkin_status(&account_id, &device_id).await
 }
 
@@ -512,33 +512,60 @@ pub async fn get_trae_checkin_status(
 pub async fn claim_trae_checkin(
     account_id: String,
 ) -> Result<trae_account::CheckinStatusResult, String> {
-    let device_id = trae_auto_checkin::ensure_device_id_persisted(&account_id)?;
+    let device_id = trae_auto_checkin::ensure_device_id_persisted(account_id.clone()).await?;
     trae_account::claim_trae_checkin(&account_id, &device_id).await
 }
 
 // ============ 自动签到命令 ============
 
 #[tauri::command]
-pub fn get_trae_auto_checkin_config() -> Result<trae_auto_checkin::TraeAutoCheckinConfig, String> {
-    trae_auto_checkin::get_config_checked()
+pub async fn get_trae_auto_checkin_config() -> Result<trae_auto_checkin::TraeAutoCheckinConfig, String> {
+    tauri::async_runtime::spawn_blocking(trae_auto_checkin::get_config_checked)
+        .await
+        .map_err(|error| format!("自动签到配置任务失败: {error}"))?
 }
 
 #[tauri::command]
-pub fn save_trae_auto_checkin_config(
+pub async fn migrate_trae_auto_checkin_config(
+    legacy_config: trae_auto_checkin::TraeAutoCheckinConfig,
+) -> Result<trae_auto_checkin::TraeAutoCheckinConfig, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        trae_auto_checkin::migrate_config_if_missing(&legacy_config)
+    })
+    .await
+    .map_err(|error| format!("自动签到配置任务失败: {error}"))?
+}
+
+#[tauri::command]
+pub async fn save_trae_auto_checkin_config(
     config: trae_auto_checkin::TraeAutoCheckinConfig,
 ) -> Result<(), String> {
-    trae_auto_checkin::save_config(&config)
+    tauri::async_runtime::spawn_blocking(move || trae_auto_checkin::save_config(&config))
+        .await
+        .map_err(|error| format!("自动签到配置任务失败: {error}"))?
 }
 
 #[tauri::command]
-pub fn get_trae_auto_checkin_logs(
-) -> Result<Vec<trae_auto_checkin::TraeAutoCheckinLogRecord>, String> {
-    trae_auto_checkin::get_logs_checked()
+pub async fn get_trae_auto_checkin_logs(
+    retry: Option<bool>,
+) -> Result<
+    crate::modules::wakeup_history_store::HistoryRead<
+        crate::modules::trae_auto_checkin::TraeAutoCheckinLogRecord,
+    >,
+    String,
+> {
+    tauri::async_runtime::spawn_blocking(move || {
+        trae_auto_checkin::get_logs_checked(retry.unwrap_or(false))
+    })
+    .await
+    .map_err(|error| format!("签到历史任务失败: {error}"))?
 }
 
 #[tauri::command]
-pub fn clear_trae_auto_checkin_logs() -> Result<(), String> {
-    trae_auto_checkin::save_logs(&[])
+pub async fn clear_trae_auto_checkin_logs() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(trae_auto_checkin::clear_logs)
+        .await
+        .map_err(|error| format!("签到历史任务失败: {error}"))?
 }
 
 #[tauri::command]

@@ -44,10 +44,15 @@ impl Host for PolicyHost {
     fn execution_policy(&self) -> BoxFuture<'_, Result<ExecutionPolicy, ServiceError>> {
         Box::pin(async { Ok(self.policy.clone()) })
     }
-    fn authorize<'a>(&'a self, _: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
-        Box::pin(async {
+    fn authorize<'a>(&'a self, bearer: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
+        Box::pin(async move {
             Ok(Caller {
-                id: "caller".into(),
+                id: if bearer == MIXED_MODEL_ROUTING_CALLER_ID {
+                    MIXED_MODEL_ROUTING_CALLER_ID
+                } else {
+                    "caller"
+                }
+                .into(),
                 label: "test".into(),
             })
         })
@@ -158,6 +163,71 @@ async fn shutdown(
     handle.shutdown(Duration::from_secs(2)).await.unwrap();
     task.abort();
     let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn mixed_provider_responses_do_not_replay_ambiguous_dispatch() {
+    for before_headers in [true, false] {
+        for mixed in [true, false] {
+            let posts = Arc::new(AtomicUsize::new(0));
+            let app = Router::new().route(
+                "/v1/responses",
+                post({
+                    let posts = posts.clone();
+                    move || {
+                        let posts = posts.clone();
+                        async move {
+                            let first = posts.fetch_add(1, Ordering::SeqCst) == 0;
+                            if first && before_headers {
+                                tokio::time::sleep(Duration::from_millis(300)).await;
+                            }
+                            (
+                                [("content-type", "text/event-stream")],
+                                if first { "" } else { completed() },
+                            )
+                        }
+                    }
+                }),
+            );
+            let policy = ExecutionPolicy {
+                open_timeout: Duration::from_millis(100),
+                idle_timeout: Duration::from_secs(1),
+                total_timeout: Duration::from_secs(2),
+                stream_open_max_attempts: 2,
+                bootstrap_retries: 1,
+                send_retries: 1,
+                ..Default::default()
+            };
+            let (handle, _, task, path) = start(app, policy).await;
+            let text = client()
+                .post(format!("http://{}/v1/responses", handle.addr))
+                .bearer_auth(if mixed {
+                    MIXED_MODEL_ROUTING_CALLER_ID
+                } else {
+                    "test-key"
+                })
+                .json(&json!({"model":"relay/model","input":"hello","stream":true}))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap();
+            assert_eq!(posts.load(Ordering::SeqCst), if mixed { 1 } else { 2 }, "{text}");
+            assert_eq!(text.contains("response.completed"), !mixed, "{text}");
+            if mixed {
+                assert!(
+                    text.contains(if before_headers {
+                        "upstream_connect_timeout"
+                    } else {
+                        "incomplete_upstream_stream"
+                    }),
+                    "{text}"
+                );
+            }
+            shutdown(handle, task, path).await;
+        }
+    }
 }
 
 #[tokio::test]

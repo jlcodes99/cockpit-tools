@@ -16,7 +16,7 @@ import {
 import './CodexResetAutomation.css';
 
 function timeUnit(seconds: number) { return seconds % 86400 === 0 ? 86400 : seconds % 3600 === 0 ? 3600 : 60; }
-function ruleDescriptions(rule: ResetRule, t: TFunction) {
+export function ruleDescriptions(rule: ResetRule, t: TFunction) {
   const unit = timeUnit(rule.before_seconds);
   return [
     rule.expiry_enabled ? t('codex.resetAutomation.previewExpiry', {

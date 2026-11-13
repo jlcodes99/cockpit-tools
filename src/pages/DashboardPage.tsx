@@ -76,7 +76,8 @@ import {
   isCodexChatCompletionsApiKeyAccount,
   isCodexNewApiAccount,
 } from '../types/codex';
-import { isDeepSeekAccount } from '../utils/codexDeepSeekAccess';
+import { useCodexRelayBalanceDisabled } from '../hooks/useCodexRelayBalanceDisabled';
+import { canShowCodexProviderBalance, isDeepSeekAccount } from '../utils/codexDeepSeekAccess';
 import './DashboardPage.css';
 import apiKeyFunIcon from '../assets/icons/apikey-fun.png';
 import { RobotIcon } from '../components/icons/RobotIcon';
@@ -132,17 +133,14 @@ import {
 } from '../services/modelProviderUsageService';
 import * as traeService from '../services/traeService';
 import type { TraePlatformId } from '../services/traeService';
+import { DashboardAllAccounts, dashboardAccountCards } from './DashboardAllAccounts';
+import { prefetchDashboardAccounts } from './dashboardAccountPrefetch';
 
 interface DashboardPageProps {
   onNavigate: (page: Page) => void;
   onOpenPlatformLayout: () => void;
   onEasterEggTriggerClick: () => void;
 }
-
-const DASHBOARD_DEFERRED_PREFETCH_DELAY_MS = 6000;
-const DASHBOARD_DEFERRED_PREFETCH_BATCH_SIZE = 1;
-const DASHBOARD_DEFERRED_PREFETCH_BATCH_DELAY_MS = 1200;
-let dashboardStartupPrefetched = false;
 
 function normalizeDashboardCardPlatformId(platformId: PlatformId): PlatformId {
   return platformId === 'antigravity_ide' ? 'antigravity' : platformId;
@@ -293,6 +291,9 @@ export function DashboardPage({
 }: DashboardPageProps) {
   const { t } = useTranslation();
   const antigravityRuntimeTarget = useAntigravityRuntimeTarget();
+  const relayBalanceDisabled = useCodexRelayBalanceDisabled();
+  const [showAllAccounts, setShowAllAccounts] = React.useState(false);
+  const [prefetchLoading, setPrefetchLoading] = React.useState(true);
 
   const [tagModalState, setTagModalState] = React.useState<{ accountId: string; platform: PlatformId | 'codebuddy_cn'; tags: string[] } | null>(null);
   const [dashboardCardCollapse, setDashboardCardCollapse] = React.useState<DashboardCardCollapseState>({
@@ -442,6 +443,7 @@ export function DashboardPage({
   // Antigravity Data
   const {
     accounts: agAccounts,
+    loading: agAccountsLoading,
     currentAccountsByTarget: agCurrentAccountsByTarget,
     switchAccount: switchAgAccount,
     fetchAccounts: fetchAgAccounts,
@@ -542,15 +544,16 @@ export function DashboardPage({
   const [traeCurrentIdsByPlatform, setTraeCurrentIdsByPlatform] = React.useState<
     Record<TraePlatformId, string | null>
   >(buildEmptyTraeCurrentIdsByPlatform);
+  const traeCurrentReadVersion = React.useRef(0);
 
   const refreshTraeCurrentIdsByPlatform = React.useCallback(async () => {
+    const requestVersion = ++traeCurrentReadVersion.current;
     try {
-      const entries = await Promise.all(
-        TRAE_SUITE_DASHBOARD_PLATFORM_IDS.map(async (platformId) => [
-          platformId,
-          await traeService.getTraeCurrentAccountId(platformId),
-        ] as const),
-      );
+      const accounts = await traeService.getTraeCurrentAccounts([...TRAE_SUITE_DASHBOARD_PLATFORM_IDS]);
+      if (requestVersion !== traeCurrentReadVersion.current) return;
+      const entries = TRAE_SUITE_DASHBOARD_PLATFORM_IDS.map(platformId => [
+        platformId, accounts[platformId]?.id ?? null,
+      ]);
       setTraeCurrentIdsByPlatform((prev) => ({
         ...prev,
         ...Object.fromEntries(entries),
@@ -610,8 +613,6 @@ export function DashboardPage({
 
   React.useEffect(() => {
     let disposed = false;
-    let deferredTimer: number | null = null;
-    let deferredBatchTimer: number | null = null;
 
     const loadDisplayGroups = () => {
       getDisplayGroups()
@@ -648,46 +649,12 @@ export function DashboardPage({
       fetchMinimaxCodeAccounts,
     ];
 
-    const loadDeferredPlatforms = () => {
-      if (disposed) {
-        return;
-      }
-
-      let nextTaskIndex = 0;
-      const runNextBatch = () => {
-        if (disposed || nextTaskIndex >= deferredTasks.length) {
-          return;
-        }
-
-        const batch = deferredTasks.slice(
-          nextTaskIndex,
-          nextTaskIndex + DASHBOARD_DEFERRED_PREFETCH_BATCH_SIZE,
-        );
-        nextTaskIndex += batch.length;
-
-        void Promise.allSettled(batch.map((task) => task()));
-
-        if (nextTaskIndex < deferredTasks.length) {
-          deferredBatchTimer = window.setTimeout(runNextBatch, DASHBOARD_DEFERRED_PREFETCH_BATCH_DELAY_MS);
-        }
-      };
-
-      runNextBatch();
-    };
-
-    if (!dashboardStartupPrefetched) {
-      dashboardStartupPrefetched = true;
-      deferredTimer = window.setTimeout(loadDeferredPlatforms, DASHBOARD_DEFERRED_PREFETCH_DELAY_MS);
-    }
+    void prefetchDashboardAccounts(deferredTasks).then(() => {
+      if (!disposed) setPrefetchLoading(false);
+    });
 
     return () => {
       disposed = true;
-      if (deferredTimer !== null) {
-        window.clearTimeout(deferredTimer);
-      }
-      if (deferredBatchTimer !== null) {
-        window.clearTimeout(deferredBatchTimer);
-      }
     };
   }, []);
 
@@ -891,10 +858,16 @@ export function DashboardPage({
     }
   };
 
+  const showCodexBalance = useCallback((account: CodexAccount) =>
+    !isCodexApiKeyAccount(account) || (!isCodexNewApiAccount(account)
+      ? canShowCodexProviderBalance(relayBalanceDisabled, account.api_base_url, codexApiUsageMap[account.id]?.summary?.mode)
+      : !relayBalanceDisabled), [codexApiUsageMap, relayBalanceDisabled]);
+
   const refreshCodexApiUsage = useCallback(async (
     account: CodexAccount,
     options?: { force?: boolean },
   ) => {
+    if (!showCodexBalance(account)) return;
     if (
       isCodexChatCompletionsApiKeyAccount(account) &&
       !isDeepSeekAccount(account)
@@ -939,7 +912,7 @@ export function DashboardPage({
         },
       }));
     }
-  }, []);
+  }, [showCodexBalance]);
 
   React.useEffect(() => {
     const syncUsageCache = () => {
@@ -1691,7 +1664,7 @@ export function DashboardPage({
     const deduped = new Map<string, CodexAccount>();
     [codexCurrentAccount, codexRecommended].forEach((account) => {
       if (
-        !account ||
+        !account || !showCodexBalance(account) ||
         (isCodexChatCompletionsApiKeyAccount(account) &&
           !isDeepSeekAccount(account))
       ) {
@@ -1700,7 +1673,7 @@ export function DashboardPage({
       deduped.set(account.id, account);
     });
     return Array.from(deduped.values());
-  }, [codexCurrentAccount, codexRecommended]);
+  }, [codexCurrentAccount, codexRecommended, showCodexBalance]);
 
   const canRefreshCodexCard = codexCardRefreshTargets.length > 0;
 
@@ -2231,7 +2204,9 @@ export function DashboardPage({
     presentation: UnifiedAccountPresentation,
     limit = 3,
   ) => {
-    const quotaItems = presentation.quotaItems.slice(0, Math.max(0, limit));
+    const quotaItems = showAllAccounts
+      ? presentation.quotaItems
+      : presentation.quotaItems.slice(0, Math.max(0, limit));
     if (quotaItems.length === 0) {
       return <span className="no-data-text">{t('dashboard.noData', '暂无数据')}</span>;
     }
@@ -2273,11 +2248,12 @@ export function DashboardPage({
     sublineText,
     sublineTitle,
     maxMetrics = 3,
+    showMetrics = true,
     onEditTags,
     extraContent,
   }: {
     presentation: UnifiedAccountPresentation;
-    onRefresh: () => void;
+    onRefresh?: () => void;
     onSwitch: () => void;
     isRefreshing: boolean;
     isSwitching: boolean;
@@ -2285,6 +2261,7 @@ export function DashboardPage({
     sublineText?: string;
     sublineTitle?: string;
     maxMetrics?: number;
+    showMetrics?: boolean;
     onEditTags?: () => void;
     extraContent?: React.ReactNode;
   }) => {
@@ -2313,9 +2290,9 @@ export function DashboardPage({
           </div>
         )}
 
-        <div className="account-mini-quotas">
+        {showMetrics && <div className="account-mini-quotas">
           {renderPresentationQuotaItems(presentation, maxMetrics)}
-        </div>
+        </div>}
 
         {extraContent}
 
@@ -2329,14 +2306,14 @@ export function DashboardPage({
               <Tag size={14} />
             </button>
           )}
-          <button
+          {onRefresh && <button
             className="mini-icon-btn"
             onClick={onRefresh}
             title={t('common.refresh', '刷新')}
             disabled={isRefreshing || isSwitching}
           >
             <RotateCw size={14} className={isRefreshing ? 'loading-spinner' : ''} />
-          </button>
+          </button>}
           <button
             className="mini-icon-btn"
             onClick={onSwitch}
@@ -2354,14 +2331,18 @@ export function DashboardPage({
     if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
 
     const presentation = buildAntigravityAccountPresentation(account, agDisplayGroups, t);
-    const quotaDisplayItems = presentation.quotaItems.slice(0, 4);
+    const maskedEmail = maskAccountText(presentation.displayName);
+    const displayName = /@gmail\.com$/i.test(presentation.displayName.trim())
+      ? maskedEmail.slice(0, maskedEmail.lastIndexOf('@'))
+      : maskedEmail;
+    const quotaDisplayItems = showAllAccounts ? presentation.quotaItems : presentation.quotaItems.slice(0, 4);
 
     return (
       <div className="account-mini-card">
         <div className="account-mini-header">
           <div className="account-info-row">
-            <span className="account-email" title={maskAccountText(presentation.displayName)}>
-              {maskAccountText(presentation.displayName)}
+            <span className="account-email" title={displayName}>
+              {displayName}
             </span>
             <span className={`tier-badge ${presentation.planClass}`}>{presentation.planLabel}</span>
           </div>
@@ -2466,7 +2447,7 @@ export function DashboardPage({
             </div>
           </div>
 
-          {(!isChatCompletionsApiKey || isDeepSeekAccount(account)) && (
+          {showCodexBalance(account) && (!isChatCompletionsApiKey || isDeepSeekAccount(account)) && (
             <div className="account-mini-quotas codex-api-mini-quotas">
               {usageMode === 'new_api' ? (
                 <div className="mini-quota-row-stacked">
@@ -2529,7 +2510,7 @@ export function DashboardPage({
           )}
 
           <div className="account-mini-actions icon-only-row">
-            {(!isChatCompletionsApiKey || isDeepSeekAccount(account)) && (
+            {showCodexBalance(account) && (!isChatCompletionsApiKey || isDeepSeekAccount(account)) && (
               <button
                 className="mini-icon-btn"
                 onClick={() => void refreshCodexApiUsage(account, { force: true })}
@@ -2554,7 +2535,8 @@ export function DashboardPage({
     const presentation = buildCodexAccountPresentation(account, t);
     return renderUnifiedAccountCard({
       presentation,
-      onRefresh: () => handleRefreshCodex(account.id),
+      showMetrics: showCodexBalance(account),
+      onRefresh: showCodexBalance(account) ? () => handleRefreshCodex(account.id) : undefined,
       onSwitch: () => switchCodexAccount(account.id),
       isRefreshing: refreshing.has(account.id),
       isSwitching: false,
@@ -2577,7 +2559,7 @@ export function DashboardPage({
   React.useEffect(() => {
     const targetAccounts = [codexCurrentAccount, codexRecommended].filter(
       (account): account is CodexAccount =>
-        Boolean(account) &&
+        Boolean(account) && showCodexBalance(account!) &&
         isCodexApiKeyAccount(account!) &&
         !isCodexNewApiAccount(account!) &&
         (!isCodexChatCompletionsApiKeyAccount(account!) ||
@@ -2596,7 +2578,7 @@ export function DashboardPage({
       }
       void refreshCodexApiUsage(account, { force: false });
     });
-  }, [codexApiUsageMap, codexCurrentAccount, codexRecommended, refreshCodexApiUsage]);
+  }, [codexApiUsageMap, codexCurrentAccount, codexRecommended, refreshCodexApiUsage, showCodexBalance]);
 
   const renderClaudeAccountContent = (account: ClaudeAccount | null) => {
     if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
@@ -2678,6 +2660,7 @@ export function DashboardPage({
     const maskedAuthIdText = authIdText ? maskAccountText(authIdText) : '--';
     return renderUnifiedAccountCard({
       presentation,
+      maxMetrics: presentation.quotaItems.length,
       onRefresh: () => handleRefreshCursor(account.id),
       onSwitch: () => handleSwitchCursor(account.id),
       isRefreshing: refreshing.has(account.id),
@@ -3736,6 +3719,28 @@ export function DashboardPage({
     );
   };
 
+  const antigravityPlatform = remoteHiddenPlatformSet.has('antigravity') ? 'antigravity_ide' : 'antigravity';
+  const allAccountCards = showAllAccounts ? [
+    ...dashboardAccountCards(antigravityPlatform, agAccounts, renderAgAccountContent),
+    ...dashboardAccountCards('codex', codexAccounts, renderCodexAccountContent),
+    ...dashboardAccountCards('claude_manager', claudeAccounts, renderClaudeAccountContent),
+    ...dashboardAccountCards('zed', zedAccounts, renderZedAccountContent),
+    ...dashboardAccountCards('github-copilot', githubCopilotAccounts, renderGitHubCopilotAccountContent),
+    ...dashboardAccountCards('windsurf', windsurfAccounts, renderWindsurfAccountContent),
+    ...dashboardAccountCards('kiro', kiroAccounts, renderKiroAccountContent),
+    ...dashboardAccountCards('cursor', cursorAccounts, renderCursorAccountContent),
+    ...dashboardAccountCards('grok', grokAccounts, renderGrokAccountContent),
+    ...dashboardAccountCards('codebuddy', codebuddyAccounts, renderCodebuddyAccountContent),
+    ...dashboardAccountCards('codebuddy_cn', codebuddyCnAccounts, renderCodebuddyCnAccountContent),
+    ...dashboardAccountCards('qoder', qoderAccounts, renderQoderAccountContent),
+    ...dashboardAccountCards('zcode', zcodeAccounts, renderZcodeAccountContent),
+    ...TRAE_SUITE_DASHBOARD_PLATFORM_IDS.flatMap((platformId) =>
+      dashboardAccountCards(platformId, traeAccountsByPlatform[platformId], (account) => renderTraeAccountContent(account, platformId)),
+    ),
+    ...dashboardAccountCards('workbuddy', workbuddyAccounts, renderWorkbuddyAccountContent),
+    ...dashboardAccountCards('minimaxcode', minimaxCodeAccounts, renderMinimaxCodeAccountContent),
+  ].filter((account) => !remoteHiddenPlatformSet.has(account.platformId)) : [];
+
   return (
     <main className="main-content dashboard-page fade-in">
       <div className="page-tabs-row" style={{ minHeight: '60px' }}>
@@ -3744,6 +3749,9 @@ export function DashboardPage({
           <ManualHelpIconButton className="header-action-btn dashboard-manual-btn dashboard-title-manual-btn" />
         </div>
         <div className="dashboard-top-actions">
+          <button type="button" className="header-action-btn" onClick={() => setShowAllAccounts((current) => !current)}>
+            <span>{t(showAllAccounts ? 'common.back' : 'dashboard.viewAllAccounts')}</span>
+          </button>
           <button className="header-action-btn" onClick={onOpenPlatformLayout}>
             <span>{t('platformLayout.title', '平台布局')}</span>
           </button>
@@ -3765,8 +3773,7 @@ export function DashboardPage({
         </div>
       )}
 
-      {/* Top Stats */}
-      <div className="stats-row">
+      {!showAllAccounts && <div className="stats-row">
         <div className="stat-card">
           <div className="stat-icon-bg primary"><Users size={24} /></div>
           <div className="stat-info">
@@ -3878,22 +3885,25 @@ export function DashboardPage({
           );
         })}
 
-      </div>
+      </div>}
 
-      {/* Main Comparison Section */}
-      <div className="cards-section">
-        {cardRows.map((row, rowIndex) => (
-          <div
-            className={`cards-split-row${isSinglePlatformMode ? ' single-platform-row' : ''}`}
-            key={`row-${rowIndex}`}
-          >
-            {row.map((cardId) => (
-              renderPlatformCard(cardId)
-            ))}
-            {!isSinglePlatformMode && row.length < 2 && <div className="main-card main-card-placeholder" />}
-          </div>
-        ))}
-      </div>
+      {showAllAccounts ? (
+        <DashboardAllAccounts accounts={allAccountCards} loading={prefetchLoading || agAccountsLoading} />
+      ) : (
+        <div className="cards-section">
+          {cardRows.map((row, rowIndex) => (
+            <div
+              className={`cards-split-row${isSinglePlatformMode ? ' single-platform-row' : ''}`}
+              key={`row-${rowIndex}`}
+            >
+              {row.map((cardId) => (
+                renderPlatformCard(cardId)
+              ))}
+              {!isSinglePlatformMode && row.length < 2 && <div className="main-card main-card-placeholder" />}
+            </div>
+          ))}
+        </div>
+      )}
 
       {tagModalState && (
         <TagEditModal

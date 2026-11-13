@@ -29,8 +29,12 @@ export async function deleteSshServer(serverId: string): Promise<SshServerList> 
   return await invoke('delete_ssh_server', { serverId });
 }
 
-export async function selectSshServer(serverId: string | null): Promise<SshServerList> {
-  return await invoke('select_ssh_server', { serverId });
+export async function selectSshServers(serverIds: string[]): Promise<SshServerList> {
+  return await invoke('select_ssh_servers', { serverIds });
+}
+
+export async function setSshServerSelected(serverId: string, selected: boolean): Promise<SshServerList> {
+  return await invoke('set_ssh_server_selected', { serverId, selected });
 }
 
 export async function testSshServerConnection(serverId: string): Promise<string> {
@@ -38,9 +42,9 @@ export async function testSshServerConnection(serverId: string): Promise<string>
 }
 
 export async function syncCurrentCodexAccountToSshServer(
-  serverId?: string | null,
+  serverId: string,
 ): Promise<SshCodexSyncResult> {
   return await invoke('sync_current_codex_account_to_ssh_server', {
-    serverId: serverId ?? null,
+    serverId,
   });
 }

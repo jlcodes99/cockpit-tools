@@ -1,6 +1,6 @@
 /**
  * Codex 账号分组服务
- * 数据通过 Tauri 命令持久化到磁盘 (~/.cockpit_tools/codex_account_groups.json)
+ * 分组与成员通过 Tauri 命令持久化到本地数据库
  * 内存中维护一份缓存避免频繁 IO
  *
  * 结构与 accountGroupService 相同，但使用独立的后端存储，
@@ -8,7 +8,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core'
-import { parseAccountGroups } from './accountGroupService';
+import { isGroupRevisionConflict, parseAccountGroups, type AccountGroupSnapshot } from './accountGroupService';
 
 let idCounter = 0;
 function generateId(): string {
@@ -156,11 +156,21 @@ function normalizeCodexGroup(
 
 // ─── 内存缓存 ───────────────────────────────────────
 let cachedGroups: CodexAccountGroup[] | null = null;
+let cachedRevision: number | undefined;
 
 // All legacy and shared UI entry points serialize the entire read-modify-write.
 let groupsOperation: Promise<unknown> = Promise.resolve();
 function enqueue<T>(operation: () => Promise<T>): Promise<T> {
-  const next = groupsOperation.then(operation, operation);
+  const run = async () => {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isGroupRevisionConflict(error)) throw error;
+      cachedGroups = null;
+      return operation();
+    }
+  };
+  const next = groupsOperation.then(run, run);
   groupsOperation = next.then(() => undefined, () => undefined);
   return next;
 }
@@ -173,8 +183,12 @@ function cloneGroups(groups: CodexAccountGroup[]): CodexAccountGroup[] {
 }
 
 async function loadGroupsFromDisk(): Promise<CodexAccountGroup[]> {
-  const raw: string = await invoke('load_codex_account_groups');
-  return cloneGroups(parseAccountGroups(raw).map((group) => normalizeCodexGroup(group)));
+  const { data, revision } = await invoke<AccountGroupSnapshot>('load_account_group_snapshot', {
+    platform: 'codex',
+  });
+  const groups = cloneGroups(parseAccountGroups(data).map((group) => normalizeCodexGroup(group)));
+  cachedRevision = revision;
+  return groups;
 }
 
 async function saveGroupsToDisk(groups: CodexAccountGroup[]): Promise<void> {
@@ -186,10 +200,12 @@ async function saveGroupsToDisk(groups: CodexAccountGroup[]): Promise<void> {
       };
       return { ...retained, accountIds: [...group.accountIds] };
     });
-    await invoke('save_codex_account_groups', {
+    cachedRevision = await invoke<number>('save_codex_account_groups', {
       data: JSON.stringify(payload, null, 2),
+      expectedRevision: cachedRevision,
     });
   } catch (e) {
+    if (isGroupRevisionConflict(e)) cachedGroups = null;
     console.error('[CodexAccountGroups] Failed to save to disk:', e);
     throw e;
   }
@@ -441,10 +457,24 @@ export async function cleanupDeletedCodexAccounts(existingAccountIds: Set<string
 export async function moveAccountsBetweenCodexGroups(
   fromGroupId: string,
   toGroupId: string,
-  accountIds: string[]
-): Promise<void> {
-  if (fromGroupId === toGroupId) return;
-  await assignAccountsToCodexGroup(toGroupId, accountIds);
+  accountIds: string[],
+): Promise<CodexAccountGroup | null> {
+  return enqueue(async () => {
+    const groups = await loadGroups();
+    const source = groups.find((group) => group.id === fromGroupId);
+    const target = groups.find((group) => group.id === toGroupId);
+    if (!source || !target) return null;
+    if (source === target) return target;
+
+    const selected = new Set(accountIds);
+    const moving = source.accountIds.filter((id) => selected.has(id));
+    if (moving.length === 0) return target;
+
+    source.accountIds = source.accountIds.filter((id) => !selected.has(id));
+    target.accountIds = [...new Set([...target.accountIds, ...moving])];
+    await saveGroups(groups);
+    return target;
+  });
 }
 
 /** 手动重排分组顺序并持久化 */

@@ -1,4 +1,6 @@
-import { installTauriEventCleanupGuard } from "./utils/tauriEventListener";
+import { reloadSideNavPreferences } from './stores/useSideNavLayoutStore';
+import { reloadUiTimeDisplayPreference } from './stores/useUiConfigStore';
+import { installTauriEventCleanupGuard, subscribeTauriEvent } from "./utils/tauriEventListener";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { initI18n } from "./i18n";
@@ -11,7 +13,8 @@ import {
   recordFrontendStage,
 } from "./utils/errorReporter";
 import { setBootSplashStage } from "./utils/bootSplash";
-import { hydrateUiPreferences } from "./utils/uiPreferences";
+import { applyPlatformLayoutSnapshot, hydrateUiPreferences } from "./utils/uiPreferences";
+import { applyDurableUiSnapshot, hydrateDurableUiSettings } from "./utils/durableUiSettings";
 
 initErrorReporter();
 recordFrontendStage("script_loaded");
@@ -44,4 +47,11 @@ void (async () => {
   });
   // Durable preferences hydrate in the background; never block the first render.
   void hydrateUiPreferences();
+  subscribeTauriEvent<Parameters<typeof applyDurableUiSnapshot>[0]>('ui-preferences:updated', event => {
+    applyDurableUiSnapshot(event.payload);
+    applyPlatformLayoutSnapshot(event.payload);
+  });
+  window.addEventListener('agtools:ui-time-display-changed', reloadUiTimeDisplayPreference);
+  window.addEventListener('agtools:side-nav-preferences-changed', reloadSideNavPreferences);
+  void hydrateDurableUiSettings().catch(error => console.warn('[UI preferences]', error));
 })();

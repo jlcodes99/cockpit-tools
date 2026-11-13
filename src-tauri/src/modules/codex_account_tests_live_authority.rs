@@ -1,4 +1,38 @@
 #[test]
+fn keepalive_leaves_default_profile_refresh_chain_to_the_official_client() {
+    let profile = tempfile::tempdir().unwrap();
+    let profile_dir = profile.path();
+    let tokens = |refresh_token| {
+        make_codex_tokens(
+            "demo@example.com",
+            "acc-current",
+            "org-current",
+            refresh_token,
+            refresh_token,
+        )
+    };
+    assert!(!super::default_profile_uses_keepalive_token(profile_dir, "rt-current"));
+
+    write_oauth_auth_file(profile_dir, &tokens("rt-current"), "acc-current");
+    let path = profile_dir.join("auth.json");
+    let original = fs::read(&path).unwrap();
+    assert!(super::default_profile_uses_keepalive_token(profile_dir, "rt-current"));
+    assert!(!super::default_profile_uses_keepalive_token(profile_dir, "rt-unrelated"));
+    assert_eq!(fs::read(&path).unwrap(), original);
+
+    write_oauth_auth_file(profile_dir, &tokens("rt-renewed"), "acc-current");
+    assert!(!super::default_profile_uses_keepalive_token(profile_dir, "rt-current"));
+    assert!(super::default_profile_uses_keepalive_token(profile_dir, "rt-renewed"));
+
+    fs::write(
+        profile_dir.join("config.toml"),
+        "cli_auth_credentials_store = 'ephemeral'\n",
+    )
+    .unwrap();
+    assert!(!super::default_profile_uses_keepalive_token(profile_dir, "rt-renewed"));
+}
+
+#[test]
 fn live_authority_sync_finds_default_auth_with_electron_process_entries() {
     let _lock = crate::modules::test_support::env_lock()
         .lock()

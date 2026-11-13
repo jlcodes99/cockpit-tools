@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { authorizationFallbackReasonKey, authorizationFallbackSummaryKey, formatRequestPayloadBody, hasRequestFirstResponse, recordedServiceTierAdaptation, requestAuthorizationRouteKey, requestDiagnosticErrorSource, requestDiagnosticPhaseKey, requestServiceTierPresentation, requestedServiceTierLabelKey } from './codexRequestDiagnostics';
+import { authorizationFallbackReasonKey, authorizationFallbackSummaryKey, formatRequestPayloadBody, hasRequestFirstResponse, recordedServiceTierAdaptation, requestAuthorizationRouteKey, requestDiagnosticErrorSource, requestDiagnosticPhaseKey, requestedServiceTierLabelKey } from './codexRequestDiagnostics';
 import type { CodexLocalAccessRequestDetail } from '../types/codexLocalAccess';
 
 test('authorization fallback labels require recorded same-account route evidence', () => {
@@ -30,14 +30,7 @@ test('historical access routes use the recorded endpoint identity, including eac
   assert.deepEqual(attempts.map((id) => requestAuthorizationRouteKey(id)), ['codex.requestDiagnostics.routeLocal', 'codex.requestDiagnostics.routeOfficial']);
 });
 
-test('requested and returned service tiers stay independent, without inferring old log sources', () => {
-  assert.deepEqual(requestServiceTierPresentation({ requestedServiceTier: 'priority', responseServiceTier: 'default', serviceTier: 'standard' }),
-    { requested: 'priority', response: 'default', legacy: '' });
-  assert.deepEqual(requestServiceTierPresentation({ serviceTier: 'standard' }),
-    { requested: '', response: '', legacy: 'standard' });
-  assert.deepEqual(requestServiceTierPresentation({ responseServiceTier: 'default' }),
-    { requested: '', response: 'default', legacy: '' });
-  assert.deepEqual(requestServiceTierPresentation({}), { requested: '', response: '', legacy: '' });
+test('known requested service tiers use their localized speed labels', () => {
   assert.equal(requestedServiceTierLabelKey('priority'), 'codex.speed.fast');
   assert.equal(requestedServiceTierLabelKey('FAST'), 'codex.speed.fast');
   assert.equal(requestedServiceTierLabelKey('ULTRAFAST'), 'codex.speed.ultrafast');
@@ -81,13 +74,11 @@ test('displaying a truncated or non-JSON snapshot preserves exactly the captured
 });
 
 
-test('speed adjustment requires explicit recorded evidence, independent of default upstream feedback', () => {
+test('speed adjustment requires an explicitly recorded tier change', () => {
   const adaptation = { requestedTier: 'priority', sentTier: 'default', reason: 'official_default_only' } as const;
   assert.equal(recordedServiceTierAdaptation(adaptation), adaptation);
   assert.equal(recordedServiceTierAdaptation(), null);
   assert.equal(recordedServiceTierAdaptation(null), null);
   assert.equal(recordedServiceTierAdaptation({ ...adaptation, requestedTier: '' }), null);
   assert.equal(recordedServiceTierAdaptation({ ...adaptation, requestedTier: '  ' }), null);
-  const event = { requestedServiceTier: 'priority', responseServiceTier: 'default' };
-  assert.equal(requestServiceTierPresentation(event).requested, 'priority');
 });

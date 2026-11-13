@@ -474,6 +474,7 @@ fn upsert_account_from_access_token(
             id: existing_id.clone(),
             email: email.clone(),
             plan_type: plan_type.clone(),
+            subscription_active_until: None,
             created_at: acc.created_at,
             last_used: acc.last_used,
         });
@@ -491,6 +492,7 @@ fn upsert_account_from_access_token(
             id: account.id.clone(),
             email: account.email.clone(),
             plan_type: account.plan_type.clone(),
+            subscription_active_until: None,
             created_at: account.created_at,
             last_used: account.last_used,
         });

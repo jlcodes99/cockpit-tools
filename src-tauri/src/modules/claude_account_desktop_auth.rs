@@ -388,7 +388,7 @@ fn launch_default_claude_desktop() -> Result<(), String> {
         .map_err(|e| format!("Failed to launch Claude Desktop: {}", e))
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 fn launch_default_claude_desktop() -> Result<(), String> {
     let pid = crate::modules::claude_instance::start_claude_default_with_args_with_new_window(
         &[],
@@ -401,7 +401,7 @@ fn launch_default_claude_desktop() -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 fn launch_default_claude_desktop() -> Result<(), String> {
     Err("APP_PATH_NOT_FOUND:claude".to_string())
 }
@@ -541,6 +541,20 @@ pub fn sync_cli_account_from_config_dir_if_same(
     account_id: &str,
     config_dir: &Path,
 ) -> Result<Option<ClaudeAccount>, String> {
+    sync_cli_account_from_config_dir(
+        account_id,
+        config_dir,
+        false,
+        read_claude_code_credentials_for_sync,
+    )
+}
+
+fn sync_cli_account_from_config_dir(
+    account_id: &str,
+    config_dir: &Path,
+    require_bound: bool,
+    read_credentials: impl FnOnce(&Path) -> Result<Value, String>,
+) -> Result<Option<ClaudeAccount>, String> {
     let existing = load_account(account_id).ok_or_else(|| "Claude 账号不存在".to_string())?;
     if !matches!(
         existing.auth_mode,
@@ -549,7 +563,19 @@ pub fn sync_cli_account_from_config_dir_if_same(
         return Ok(None);
     }
 
-    let credentials_raw = read_claude_code_credentials_for_sync(config_dir)?;
+    let bound_config = if require_bound {
+        let config_path = get_claude_code_global_config_path(config_dir)?;
+        let Some(config) = read_config_file(&config_path)? else {
+            return Ok(None);
+        };
+        if !cli_config_matches_account(&existing, &config) {
+            return Ok(None);
+        }
+        Some(config)
+    } else {
+        None
+    };
+    let credentials_raw = read_credentials(config_dir)?;
     if credentials_oauth(&credentials_raw).is_none() {
         return Ok(None);
     }
@@ -572,7 +598,12 @@ pub fn sync_cli_account_from_config_dir_if_same(
     let Some(config_raw) = read_config_file(&config_path)? else {
         return Ok(None);
     };
-    if config_oauth_account(&config_raw).is_none() {
+    if config_oauth_account(&config_raw).is_none()
+        || bound_config.as_ref().is_some_and(|before| {
+            config_oauth_account(before) != config_oauth_account(&config_raw)
+                || !cli_config_matches_account(&existing, &config_raw)
+        })
+    {
         return Ok(None);
     }
 
@@ -593,6 +624,17 @@ pub fn sync_cli_account_from_config_dir_if_same(
         return Ok(Some(existing));
     }
 
+    if require_bound
+        && !bound_cli_config_dirs(
+            &crate::modules::claude_instance::load_instance_store()?,
+            account_id,
+            get_default_claude_code_config_dir().ok(),
+        )
+        .contains(config_dir)
+    {
+        return Ok(None);
+    }
+
     logger::log_info(&format!(
         "[Claude CLI] 同步实例目录登录态到账号快照: account_id={}, config_dir={}",
         account_id,
@@ -605,7 +647,8 @@ pub fn sync_cli_account_from_config_dir_if_same(
             Some(current.clone()),
         )?;
         Ok(())
-    }).map(Some)
+    })
+    .map(Some)
 }
 
 pub fn start_desktop_login(
@@ -2649,18 +2692,12 @@ fn inject_api_key_to_claude_code_settings(
 
     fs::create_dir_all(&config_dir).map_err(|e| format!("创建 Claude Code 配置目录失败: {}", e))?;
     let mut settings = read_config_file(&settings_path)?.unwrap_or_else(|| json!({}));
-    if !settings.is_object() {
-        settings = json!({});
-    }
 
     let keys_to_clear = managed_env_keys_for_settings(&settings_path);
     let object = settings
         .as_object_mut()
         .ok_or_else(|| "Claude settings.json 结构非法".to_string())?;
     let env_value = object.entry("env".to_string()).or_insert_with(|| json!({}));
-    if !env_value.is_object() {
-        *env_value = json!({});
-    }
     let env_object = env_value
         .as_object_mut()
         .ok_or_else(|| "Claude settings.json env 结构非法".to_string())?;
@@ -3324,13 +3361,45 @@ pub async fn refresh_account_quota(account_id: &str) -> Result<ClaudeAccount, St
         return save_account_and_index(account);
     }
 
+    if account.auth_mode == ClaudeAuthMode::OAuth
+        && account
+            .claude_credentials_raw
+            .as_ref()
+            .is_some_and(token_is_expired)
+    {
+        account = read_bound_cli_oauth_before_refresh(account_id).await?;
+        if account.auth_mode != ClaudeAuthMode::OAuth {
+            return Ok(account);
+        }
+    }
+
     let mut credentials = account
         .claude_credentials_raw
         .clone()
         .ok_or_else(|| "Claude 账号缺少 credentials 快照".to_string())?;
 
     if token_is_expired(&credentials) {
-        match refresh_oauth_credentials(&credentials).await {
+        let mut result = refresh_oauth_credentials(&credentials).await;
+        if account.auth_mode == ClaudeAuthMode::OAuth
+            && result.as_ref().is_err_and(|error| error.contains("\"invalid_grant\""))
+        {
+            account = read_bound_cli_oauth_before_refresh(account_id).await?;
+            if account.auth_mode != ClaudeAuthMode::OAuth {
+                return Ok(account);
+            }
+            let Some(newer) = account.claude_credentials_raw.as_ref() else {
+                return Ok(account);
+            };
+            if *newer != credentials {
+                credentials = newer.clone();
+                result = if token_is_expired(&credentials) {
+                    refresh_oauth_credentials(&credentials).await
+                } else {
+                    Ok(None)
+                };
+            }
+        }
+        match result {
             Ok(Some(refreshed)) => {
                 // Persist rotated credentials before the separate usage request can
                 // fail or time out, and update bound CLI instances off the async runtime.
@@ -3348,6 +3417,10 @@ pub async fn refresh_account_quota(account_id: &str) -> Result<ClaudeAccount, St
             }
             Ok(None) => {}
             Err(error) => {
+                logger::log_warn(&format!(
+                    "[Claude Quota] OAuth 续期失败: account_id={}",
+                    account_id
+                ));
                 account.quota_error = Some(ClaudeQuotaErrorInfo {
                     code: Some("refresh_failed".to_string()),
                     message: error,

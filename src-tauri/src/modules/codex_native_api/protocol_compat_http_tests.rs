@@ -139,6 +139,67 @@ async fn responses_public_wire_filters_private_events_and_completes_failure_obje
 }
 
 #[tokio::test]
+async fn responses_relay_preserves_long_assistant_item_id_through_completion() {
+    let id = format!("msg_{}", "abcd0123".repeat(12));
+    let message = json!({
+        "id":id, "type":"message", "role":"assistant", "status":"completed",
+        "content":[{"type":"output_text","text":"one answer","annotations":[]}]
+    });
+    let expected = [
+        json!({"type":"response.output_item.added","output_index":0,
+            "item":{"id":id,"type":"message","role":"assistant","status":"in_progress","content":[]}}),
+        json!({"type":"response.output_text.delta","output_index":0,"content_index":0,
+            "item_id":id,"delta":"one answer"}),
+        json!({"type":"response.output_item.done","output_index":0,"item":message}),
+        json!({"type":"response.completed","response":{"id":"resp_relay","status":"completed",
+            "created_at":123,"output":[message]}}),
+    ];
+    let stream: String = expected
+        .iter()
+        .map(|event| format!("data: {event}\n\n"))
+        .collect();
+    let (addr, task) = mock(Router::new().route(
+        "/v1/responses",
+        post(move || {
+            let stream = stream.clone();
+            async move { ([("content-type", "text/event-stream")], stream) }
+        }),
+    ))
+    .await;
+    let (mut handle, _, path) = native(addr, false, false, Options::default()).await;
+    let text = client()
+        .post(format!("http://{}/v1/responses", handle.addr))
+        .bearer_auth("local-test-key")
+        .header("user-agent", "codex_cli_rs/1.0")
+        .json(&body(true))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    let events: Vec<Value> = text
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .filter(|data| *data != "[DONE]")
+        .map(|data| serde_json::from_str(data).unwrap())
+        .collect();
+    assert_eq!(events.len(), expected.len(), "{text}");
+    for (actual, expected) in events.iter().zip(expected) {
+        assert_eq!(actual["type"], expected["type"], "{text}");
+        for key in ["item", "item_id", "delta"] {
+            assert_eq!(actual[key], expected[key], "{text}");
+        }
+    }
+    assert_eq!(events[3]["response"]["output"], json!([message]));
+    handle.shutdown(Duration::from_secs(2)).await.unwrap();
+    task.abort();
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[tokio::test]
 async fn websocket_loss_keeps_client_open_fences_queue_and_reconnects_same_owner() {
     use std::sync::atomic::AtomicUsize;
     let connections = Arc::new(AtomicUsize::new(0));

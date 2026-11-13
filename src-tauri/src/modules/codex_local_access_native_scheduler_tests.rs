@@ -133,10 +133,17 @@ mod native_scheduler_tests {
         assert!(native_model_for_key(&collection, None, "gpt-fixture(high)").is_err());
         assert_eq!(native_model_for_key(&collection, None, "").unwrap(), "");
         let plan = native_model_route_plan(&collection, None, "").unwrap();
+        let mut oauth = account("oauth");
+        oauth.auth_mode = CodexAuthMode::OAuth;
         assert_eq!(
-            native_operation_model(&collection, &plan, &account("a"), Some("search"), false),
+            native_operation_model(&collection, &plan, &oauth, Some("search"), false),
             Some(String::new())
         );
-        assert!(!native_auxiliary_eligible(&account("a"), Some("search")));
+        assert_eq!(
+            native_operation_model(&collection, &plan, &account("a"), Some("search"), false),
+            None
+        );
+        assert!(native_auxiliary_eligible(&account("a"), Some("search")));
+        assert!(!native_auxiliary_eligible(&account("a"), Some("realtime")));
     }
 }

@@ -6,6 +6,7 @@ import './AccountFilterDropdown.css';
 export interface SingleSelectFilterOption {
   value: string;
   label: string;
+  badge?: ReactNode;
 }
 
 interface SingleSelectFilterDropdownProps {
@@ -84,6 +85,7 @@ export function SingleSelectFilterDropdown({
         <span className="single-filter-label" title={selectedOption?.label ?? placeholder ?? ''}>
           {selectedOption?.label ?? placeholder ?? ''}
         </span>
+        {selectedOption?.badge}
       </button>
       {open && (
         <div
@@ -104,6 +106,7 @@ export function SingleSelectFilterDropdown({
                   }}
                 >
                   <span className="tag-filter-name">{option.label}</span>
+                  {option.badge}
                 </button>
               );
             })}

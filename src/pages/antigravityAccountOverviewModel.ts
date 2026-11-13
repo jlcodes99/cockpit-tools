@@ -1,4 +1,5 @@
 import type { Account } from '../types/account';
+import { previewDurableUiSetting, readDurableUiSetting } from '../utils/durableUiSettings';
 import type { AccountFilterType } from '../utils/accountFilters';
 import { VALID_ACCOUNTS_FILTER_VALUE } from '../utils/accountValidityFilter';
 import { normalizeAccountsOverviewScope } from '../utils/accountsOverviewFilterPersistence';
@@ -79,7 +80,7 @@ export const DEFAULT_FILTER_TYPES: AccountsFilterType[] = [];
 export const DEFAULT_TAG_FILTER: string[] = [];
 export const ANTIGRAVITY_ACCOUNT_NOTE_MAX_LENGTH = 200;
 
-const ANTIGRAVITY_CUSTOM_SORT_ACTIVE_KEY = 'agtools.antigravity.accounts.custom_sort_active.v1';
+export const ANTIGRAVITY_CUSTOM_SORT_ACTIVE_KEY = 'agtools.antigravity.accounts.custom_sort_active.v1';
 
 export type AntigravityAccountNoteFormState = {
   note: string;
@@ -184,18 +185,9 @@ export function writeAntigravityCustomSortOrder(accountIds: string[]): void {
   persistUserMemoryList(USER_MEMORY_LISTS.antigravityCustomSort, accountIds);
 }
 
-export function readAntigravityCustomSortActive(): boolean {
-  try {
-    return localStorage.getItem(ANTIGRAVITY_CUSTOM_SORT_ACTIVE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
 export function writeAntigravityCustomSortActive(active: boolean): void {
-  try {
-    localStorage.setItem(ANTIGRAVITY_CUSTOM_SORT_ACTIVE_KEY, active ? '1' : '0');
-  } catch {
-    // 自定义排序只影响显示顺序，存储不可用时允许静默降级。
+  const value = active ? '1' : '0';
+  if (readDurableUiSetting(ANTIGRAVITY_CUSTOM_SORT_ACTIVE_KEY) !== value) {
+    previewDurableUiSetting(ANTIGRAVITY_CUSTOM_SORT_ACTIVE_KEY, value);
   }
 }

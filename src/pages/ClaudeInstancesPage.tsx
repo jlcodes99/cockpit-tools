@@ -212,7 +212,7 @@ export function ClaudeInstancesContent({
           )
         }
         renderAccountBadge={(account) => (
-          <span className={`instance-plan-badge ${getClaudePlanBadgeClass(account)}`}>
+          <span className={`tier-badge account-picker-plan ${getClaudePlanBadgeClass(account)}`}>
             {getClaudePlanBadge(account) || t('claude.desktopOAuth.planUnknown', '订阅未知')}
           </span>
         )}
