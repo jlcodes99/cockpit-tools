@@ -1027,6 +1027,9 @@ fn normalize_antigravity_model_for_match(value: &str) -> String {
     if normalized.starts_with("gemini-3.8-flash") {
         return "gemini-3.8-flash".into();
     }
+    if normalized.starts_with("gemini-4-hydrogen") {
+        return "gemini-4-hydrogen".into();
+    }
     if normalized.starts_with("claude-sonnet-5-5") {
         return "claude-sonnet-5-5".into();
     }

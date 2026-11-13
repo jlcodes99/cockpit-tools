@@ -15,6 +15,11 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'gemini-4-argon-low': 'Gemini 4 Argon (Low)',
   'gemini-4-argon-medium': 'Gemini 4 Argon (Medium)',
   'gemini-4-argon-high': 'Gemini 4 Argon (High)',
+  'gemini-4-hydrogen': 'Gemini 4 Hydrogen',
+  'gemini-4-hydrogen-low': 'Gemini 4 Hydrogen (Low)',
+  'gemini-4-hydrogen-medium': 'Gemini 4 Hydrogen (Medium)',
+  'gemini-4-hydrogen-high': 'Gemini 4 Hydrogen (High)',
+  'gemini-4-hydrogen-xhigh': 'Gemini 4 Hydrogen (XHigh)',
   'gemini-3.8-flash': 'Gemini 3.8 Flash',
   'gemini-3.8-flash-low': 'Gemini 3.8 Flash (Low)',
   'gemini-3.8-flash-medium': 'Gemini 3.8 Flash (Medium)',
@@ -33,6 +38,10 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'MODEL_PLACEHOLDER_M417': 'Gemini 4 Argon (High)',
   'MODEL_PLACEHOLDER_M418': 'Gemini 4 Argon (Medium)',
   'MODEL_PLACEHOLDER_M419': 'Gemini 4 Argon (Low)',
+  'MODEL_PLACEHOLDER_M525': 'Gemini 4 Hydrogen (High)',
+  'MODEL_PLACEHOLDER_M526': 'Gemini 4 Hydrogen (Medium)',
+  'MODEL_PLACEHOLDER_M527': 'Gemini 4 Hydrogen (Low)',
+  'MODEL_PLACEHOLDER_M528': 'Gemini 4 Hydrogen (XHigh)',
   'MODEL_PLACEHOLDER_M402': 'Claude Opus 5.5 (High)',
   'MODEL_PLACEHOLDER_M401': 'Claude Opus 5.5 (Medium)',
   'MODEL_PLACEHOLDER_M400': 'Claude Opus 5.5 (Low)',
@@ -132,7 +141,9 @@ const DEFAULT_GROUP_PREFIX_MATCHERS: Record<string, GroupPrefixMatcher> = {
     GEMINI_ANY_PRO_TIER_NAME_PATTERN.test(normalizedModelName),
   g3_flash: (normalizedModelId, normalizedModelName) =>
     GEMINI_ANY_FLASH_ID_PATTERN.test(normalizedModelId) ||
-    GEMINI_ANY_FLASH_NAME_PATTERN.test(normalizedModelName),
+    GEMINI_ANY_FLASH_NAME_PATTERN.test(normalizedModelName) ||
+    normalizedModelId.startsWith('gemini-4-hydrogen') ||
+    normalizedModelName.startsWith('gemini 4 hydrogen'),
 };
 
 /**
@@ -266,6 +277,11 @@ export function getDefaultGroups(): DefaultGroup[] {
         'gemini-3.8-flash-low',
         'gemini-3.8-flash-medium',
         'gemini-3.8-flash-high',
+        'gemini-4-hydrogen',
+        'gemini-4-hydrogen-low',
+        'gemini-4-hydrogen-medium',
+        'gemini-4-hydrogen-high',
+        'gemini-4-hydrogen-xhigh',
 
         'gemini-3-flash',
       ],
@@ -273,6 +289,10 @@ export function getDefaultGroups(): DefaultGroup[] {
         'MODEL_PLACEHOLDER_M318',
         'MODEL_PLACEHOLDER_M319',
         'MODEL_PLACEHOLDER_M320',
+        'MODEL_PLACEHOLDER_M525',
+        'MODEL_PLACEHOLDER_M526',
+        'MODEL_PLACEHOLDER_M527',
+        'MODEL_PLACEHOLDER_M528',
 
         'MODEL_PLACEHOLDER_M18',
       ],

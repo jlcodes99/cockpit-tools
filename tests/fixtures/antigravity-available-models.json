@@ -8,6 +8,10 @@
             "gemini-4-argon-medium",
             "gemini-4-argon-high",
             "gemini-4-argon-low",
+            "gemini-4-hydrogen-high",
+            "gemini-4-hydrogen-xhigh",
+            "gemini-4-hydrogen-medium",
+            "gemini-4-hydrogen-low",
             "gemini-3.8-flash-high",
             "gemini-3.8-flash-medium",
             "gemini-3.8-flash-low",
@@ -37,6 +41,26 @@
     "gemini-4-argon-low": {
       "displayName": "Gemini 4 Argon (Low)",
       "model": "MODEL_PLACEHOLDER_M419",
+      "recommended": true
+    },
+    "gemini-4-hydrogen-high": {
+      "displayName": "Gemini 4 Hydrogen (High)",
+      "model": "MODEL_PLACEHOLDER_M525",
+      "recommended": true
+    },
+    "gemini-4-hydrogen-xhigh": {
+      "displayName": "Gemini 4 Hydrogen (XHigh)",
+      "model": "MODEL_PLACEHOLDER_M528",
+      "recommended": true
+    },
+    "gemini-4-hydrogen-medium": {
+      "displayName": "Gemini 4 Hydrogen (Medium)",
+      "model": "MODEL_PLACEHOLDER_M526",
+      "recommended": true
+    },
+    "gemini-4-hydrogen-low": {
+      "displayName": "Gemini 4 Hydrogen (Low)",
+      "model": "MODEL_PLACEHOLDER_M527",
       "recommended": true
     },
     "gemini-3.8-flash-high": {

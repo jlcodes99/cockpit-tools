@@ -91,6 +91,15 @@ impl Default for GroupSettings {
         group_mappings.insert("gemini-3.8-flash-medium".into(), "g3_flash".into());
         group_mappings.insert("gemini-3.8-flash-high".into(), "g3_flash".into());
         group_mappings.insert("MODEL_PLACEHOLDER_M318".into(), "g3_flash".into());
+        group_mappings.insert("gemini-4-hydrogen".into(), "g3_flash".into());
+        group_mappings.insert("gemini-4-hydrogen-low".into(), "g3_flash".into());
+        group_mappings.insert("gemini-4-hydrogen-medium".into(), "g3_flash".into());
+        group_mappings.insert("gemini-4-hydrogen-high".into(), "g3_flash".into());
+        group_mappings.insert("gemini-4-hydrogen-xhigh".into(), "g3_flash".into());
+        group_mappings.insert("MODEL_PLACEHOLDER_M525".into(), "g3_flash".into());
+        group_mappings.insert("MODEL_PLACEHOLDER_M526".into(), "g3_flash".into());
+        group_mappings.insert("MODEL_PLACEHOLDER_M527".into(), "g3_flash".into());
+        group_mappings.insert("MODEL_PLACEHOLDER_M528".into(), "g3_flash".into());
         group_mappings.insert("claude-opus-5-5".into(), "claude_45".into());
         group_mappings.insert("claude-opus-5-5-medium".into(), "claude_45".into());
         group_mappings.insert("claude-opus-5-5-high".into(), "claude_45".into());
@@ -509,6 +518,7 @@ mod model_upgrade_tests {
         assert_eq!(saved.group_mappings["gemini-4-argon"], "my-group");
         assert_eq!(saved.group_mappings["claude-sonnet-5-5-high"], "claude_45");
         assert_eq!(saved.group_mappings["gemini-3.8-flash-high"], "g3_flash");
+        assert_eq!(saved.group_mappings["gemini-4-hydrogen-xhigh"], "g3_flash");
         assert_eq!(saved.group_mappings["gemini-3-pro-high"], "g3_pro");
         let once = saved.clone();
         merge_default_groups(&mut saved, &GroupSettings::default());

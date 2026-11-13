@@ -1301,6 +1301,15 @@ fn default_auto_switch_groups() -> Vec<AutoSwitchGroupDefinition> {
                 "gemini-3.8-flash-medium".into(),
                 "gemini-3.8-flash-high".into(),
                 "MODEL_PLACEHOLDER_M318".into(),
+                "gemini-4-hydrogen".into(),
+                "gemini-4-hydrogen-low".into(),
+                "gemini-4-hydrogen-medium".into(),
+                "gemini-4-hydrogen-high".into(),
+                "gemini-4-hydrogen-xhigh".into(),
+                "MODEL_PLACEHOLDER_M525".into(),
+                "MODEL_PLACEHOLDER_M526".into(),
+                "MODEL_PLACEHOLDER_M527".into(),
+                "MODEL_PLACEHOLDER_M528".into(),
                 "gemini-3-flash".to_string(),
                 "gemini-3.1-flash".to_string(),
                 "gemini-3-flash-image".to_string(),
@@ -1429,6 +1438,9 @@ fn normalize_model_for_group_match(value: &str) -> String {
     }
     if normalized.starts_with("gemini-3.8-flash") {
         return "gemini-3.8-flash".into();
+    }
+    if normalized.starts_with("gemini-4-hydrogen") {
+        return "gemini-4-hydrogen".into();
     }
     if normalized.starts_with("claude-sonnet-5-5") {
         return "claude-sonnet-5-5".into();
@@ -3281,9 +3293,19 @@ mod new_antigravity_model_tests {
             normalize_model_for_group_match("claude-sonnet-4-6"),
             normalize_model_for_group_match("claude-sonnet-5-5-high")
         );
+        let flash = groups.iter().find(|group| group.id == "g3_flash").unwrap();
+        assert!(flash.models.contains(&"gemini-4-hydrogen-xhigh".into()));
+        assert_eq!(
+            normalize_model_for_group_match("gemini-4-hydrogen-xhigh"),
+            "gemini-4-hydrogen"
+        );
         assert_ne!(
             normalize_model_for_group_match("gemini-3-flash"),
             normalize_model_for_group_match("gemini-3.8-flash-high")
+        );
+        assert_ne!(
+            normalize_model_for_group_match("gemini-3.8-flash-high"),
+            normalize_model_for_group_match("gemini-4-hydrogen-xhigh")
         );
     }
 }
