@@ -287,6 +287,10 @@ impl Fixture {
     }
 
     async fn start_protocol(mode: Mode, before_output: bool, http2: bool) -> Self {
+        Self::start_failure(mode, before_output, http2, false).await
+    }
+
+    async fn start_failure(mode: Mode, before_output: bool, http2: bool, network: bool) -> Self {
         let certificate = rcgen::generate_simple_self_signed(vec!["127.0.0.1".into()]).unwrap();
         let root = reqwest::Certificate::from_der(certificate.cert.der()).unwrap();
         let mut config = rustls::ServerConfig::builder_with_provider(Arc::new(
@@ -353,10 +357,14 @@ impl Fixture {
                         } else {
                             if before_output { server_headers_observed.notified().await; }
                             else { server_release.notified().await; }
-                            let mut invalid_record = vec![0x17,0x03,0x03,0x00,0x20];
-                            invalid_record.extend_from_slice(&[0;32]);
-                            injector.write_all(&invalid_record).await.unwrap();
-                            injector.flush().await.unwrap();
+                            if network {
+                                injector.shutdown().await.unwrap();
+                            } else {
+                                let mut invalid_record = vec![0x17,0x03,0x03,0x00,0x20];
+                                invalid_record.extend_from_slice(&[0;32]);
+                                injector.write_all(&invalid_record).await.unwrap();
+                                injector.flush().await.unwrap();
+                            }
                             // Wait for the gateway to classify/retire the corrupt pool.
                             server_retired.notified().await;
                             driver.abort();
@@ -397,8 +405,10 @@ impl Fixture {
                         let mut invalid_record=vec![0x17,0x03,0x03,0x00,0x20];
                         invalid_record.extend_from_slice(&[0;32]);
                         let (tcp,_)=tls.get_mut();
-                        tcp.write_all(&invalid_record).await.unwrap();
-                        tcp.flush().await.unwrap();
+                        if !network {
+                            tcp.write_all(&invalid_record).await.unwrap();
+                            tcp.flush().await.unwrap();
+                        }
                         tcp.shutdown().await.unwrap();
                     }
                 }
@@ -478,7 +488,11 @@ impl Fixture {
 }
 
 async fn assert_tls_recovery(mode: Mode, http2: bool) {
-    let fixture = Fixture::start_protocol(mode, false, http2).await;
+    assert_transport_recovery(mode, http2, false).await;
+}
+
+async fn assert_transport_recovery(mode: Mode, http2: bool, network: bool) {
+    let fixture = Fixture::start_failure(mode, false, http2, network).await;
     let client = reqwest::Client::builder()
         .no_proxy()
         .timeout(DEADLINE)
@@ -548,7 +562,7 @@ async fn assert_tls_recovery(mode: Mode, http2: bool) {
         );
         let attempts = &reports[0].diagnostics.as_ref().unwrap().attempts;
         assert_eq!(attempts.len(), 1);
-        assert_eq!(attempts[0].transport_error.as_deref(), Some("tls_decrypt"));
+        assert_eq!(attempts[0].transport_error.as_deref(), Some(if network { "network" } else { "tls_decrypt" }));
         assert_eq!(attempts[0].transport_pool_retired, Some(true));
         assert_eq!(
             attempts[0].upstream_http_version.as_deref(),
@@ -613,7 +627,11 @@ async fn tls_decrypt_survives_chat_canonical_stream_and_next_request_recovers() 
 }
 
 async fn assert_bootstrap_tls_recovery(local_fallback: bool, http2: bool) {
-    let fixture = Fixture::start_protocol(Mode::Codex, true, http2).await;
+    assert_bootstrap_transport_recovery(local_fallback, http2, false).await;
+}
+
+async fn assert_bootstrap_transport_recovery(local_fallback: bool, http2: bool, network: bool) {
+    let fixture = Fixture::start_failure(Mode::Codex, true, http2, network).await;
     fixture.host.local_fallback.store(local_fallback, Ordering::SeqCst);
     let client = reqwest::Client::builder()
         .no_proxy()
@@ -663,7 +681,7 @@ async fn assert_bootstrap_tls_recovery(local_fallback: bool, http2: bool) {
         assert!(attempts
             .iter()
             .all(|attempt| attempt.account_id == "account-a"));
-        assert_eq!(attempts[0].transport_error.as_deref(), Some("tls_decrypt"));
+        assert_eq!(attempts[0].transport_error.as_deref(), Some(if network { "network" } else { "tls_decrypt" }));
         assert_eq!(attempts[0].transport_pool_retired, Some(true));
         assert_eq!(
             attempts[0].upstream_http_version.as_deref(),
@@ -707,4 +725,24 @@ async fn http2_tls_decrypt_through_plan_adapter_recovers_next_request() {
 #[tokio::test]
 async fn http2_tls_decrypt_through_chat_adapter_recovers_next_request() {
     assert_tls_recovery(Mode::Chat, true).await;
+}
+
+#[tokio::test]
+async fn native_network_disconnect_after_tool_output_retires_pool_without_replay() {
+    assert_transport_recovery(Mode::Responses, true, true).await;
+}
+
+#[tokio::test]
+async fn native_network_disconnect_before_first_event_refreshes_the_same_account() {
+    assert_bootstrap_transport_recovery(false, true, true).await;
+}
+
+#[tokio::test]
+async fn native_network_disconnect_through_chat_adapter_recovers_next_request() {
+    assert_transport_recovery(Mode::Chat, false, true).await;
+}
+
+#[tokio::test]
+async fn native_network_disconnect_keeps_the_official_fallback_owner() {
+    assert_bootstrap_transport_recovery(true, true, true).await;
 }

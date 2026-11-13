@@ -345,7 +345,8 @@ fn normalize_request_diagnostics(
                 && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
         });
         attempt.failure_phase = diagnostic_optional(attempt.failure_phase.take(), 80);
-        attempt.transport_error = attempt.transport_error.take().filter(|kind| kind == "tls_decrypt");
+        attempt.transport_error = attempt.transport_error.take()
+            .filter(|kind| matches!(kind.as_str(), "tls_decrypt" | "network"));
         if attempt.transport_error.is_none() {
             attempt.transport_pool_retired = None;
         }

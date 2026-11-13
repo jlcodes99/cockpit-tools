@@ -199,7 +199,7 @@ fn native_transport_fingerprint(
         ])
     });
     let material = json!({
-        "version":5,"account":account.id,"owner":context.owner,
+        "version":6,"account":account.id,"owner":context.owner,
         "profile":[context.profile.version,context.profile.scope,context.profile.installation_id,context.profile.revision],
         "base":native_transport_endpoint(context.base_url),
         "protocol":match context.wire_api { native_contract::WireApi::Responses=>"responses",native_contract::WireApi::Chat=>"chat",native_contract::WireApi::Anthropic=>"anthropic" },
@@ -210,7 +210,7 @@ fn native_transport_fingerprint(
         "credentials":[account.token_generation,native_transport_header_digest(context.headers,agent),agent_material],
         "proxy":[proxy_source,account.egress_proxy_disabled,account_proxy,proxy,no_proxy],
         "connect_timeout_ms":collection.timeouts.legacy_upstream_connect_timeout_ms.clamp(1000,120_000),
-        "pool":"max_idle_per_host=8;redirect=none;cookies=off;no_proxy=environment_only;codex_responses_tls=rustls_native_roots_alpn"
+        "pool":"max_idle_per_host=8;idle=30s;h2_ping=30s/15s/active;tcp_keepalive=30s;redirect=none;cookies=off;no_proxy=environment_only;codex_responses_tls=rustls_native_roots_alpn"
     });
     format!("{:x}", Sha256::digest(material.to_string().as_bytes()))
 }
@@ -451,7 +451,15 @@ fn native_codex_responses_alpn(
 }
 
 fn native_http_client_builder(codex_responses: bool, http1_only: bool) -> reqwest::ClientBuilder {
-    let builder = Client::builder();
+    // The local proxy's TCP socket can stay open after its upstream path dies.
+    // HTTP/2 PING checks that path even while waiting for response headers or
+    // model output. Healthy PONGs do not impose a total generation deadline.
+    let builder = Client::builder()
+        .http2_keep_alive_interval(Duration::from_secs(30))
+        .http2_keep_alive_timeout(Duration::from_secs(15))
+        .http2_keep_alive_while_idle(false)
+        .tcp_keepalive(Duration::from_secs(30))
+        .pool_idle_timeout(Duration::from_secs(30));
     let builder = if codex_responses {
         // The native-tls default does not advertise h2 without an additional
         // global feature. Select ALPN-capable TLS only for Codex Responses,

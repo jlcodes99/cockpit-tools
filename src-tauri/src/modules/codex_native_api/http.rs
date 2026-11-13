@@ -806,7 +806,7 @@ pub(super) async fn open_response_stream(
                         deadline,
                     )
                     .await?;
-                    super::retry::renew_transport_after_tls(state, prepared, tracker, &error).await?;
+                    super::retry::renew_transport_after_failure(state, prepared, tracker, &error).await?;
                     prepared.execution = prepared.execution.renew_open();
                     continue;
                 }
