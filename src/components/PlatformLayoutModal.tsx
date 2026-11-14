@@ -44,7 +44,6 @@ import {
   makePlatformEntryId,
   usePlatformLayoutStore,
 } from '../stores/usePlatformLayoutStore';
-import { CLASSIC_SIDEBAR_ENTRY_LIMIT, ORIGINAL_SIDEBAR_ENTRY_LIMIT, useSideNavLayoutStore } from '../stores/useSideNavLayoutStore';
 import { getPlatformLabel, renderPlatformIcon } from '../utils/platformMeta';
 import { useEscClose } from '../hooks/useEscClose';
 import { scrollElementIntoView } from '../utils/reducedMotion';
@@ -369,10 +368,6 @@ export function PlatformLayoutModal({
   const { t } = useTranslation();
   const [sorting, setSorting] = useState(false);
   useEscClose(open && !sorting, onClose);
-  const sideNavLayoutMode = useSideNavLayoutStore((state) => state.mode);
-  const sidebarSelectionLimit = sideNavLayoutMode === 'classic'
-    ? CLASSIC_SIDEBAR_ENTRY_LIMIT
-    : ORIGINAL_SIDEBAR_ENTRY_LIMIT;
   const {
     orderedEntryIds,
     hiddenEntryIds,
@@ -770,21 +765,10 @@ export function PlatformLayoutModal({
   const handleBulkSidebar = (enabled: boolean) => {
     entries.forEach((entry) => {
       if (entry.type === 'api-relay') {
-        setApiRelaySidebarVisible(false);
-        return;
+        setApiRelaySidebarVisible(enabled);
+      } else {
+        setSidebarEntry(entry.id as PlatformLayoutEntryId, enabled);
       }
-      setSidebarEntry(entry.id as PlatformLayoutEntryId, false);
-    });
-    if (!enabled) {
-      return;
-    }
-    const targetEntries = entries.slice(0, sidebarSelectionLimit);
-    targetEntries.forEach((entry) => {
-      if (entry.type === 'api-relay') {
-        setApiRelaySidebarVisible(true);
-        return;
-      }
-      setSidebarEntry(entry.id as PlatformLayoutEntryId, true);
     });
   };
 
@@ -807,9 +791,8 @@ export function PlatformLayoutModal({
     [entries],
   );
   const sidebarSelectedCount = entries.filter(isSidebarEntrySelected).length;
-  const sidebarBulkTargetCount = Math.min(sidebarSelectionLimit, sidebarVisibleEntries.length);
-  const sidebarBulkEnabled = sidebarBulkTargetCount > 0
-    && sidebarVisibleEntries.slice(0, sidebarBulkTargetCount).every(isSidebarEntrySelected);
+  const sidebarBulkEnabled = sidebarVisibleEntries.length > 0
+    && sidebarVisibleEntries.every(isSidebarEntrySelected);
   const dashboardBulkEnabled = entries.length > 0
     && entries.every(isDashboardEntryVisible);
   const trayBulkEnabled = MENU_VISIBLE_PLATFORM_IDS.every((platformId) => traySet.has(platformId));
@@ -1133,12 +1116,7 @@ export function PlatformLayoutModal({
           )}
           <div className="platform-layout-summary">
             <span>
-              {sidebarSelectedCount > sidebarSelectionLimit
-                ? t('platformLayout.sidebarSelectedUnlimited', { count: sidebarSelectedCount })
-                : t('platformLayout.sidebarSelected', {
-                  count: sidebarSelectedCount,
-                  max: sidebarSelectionLimit,
-                })}
+              {t('platformLayout.sidebarSelectedUnlimited', { count: sidebarSelectedCount })}
             </span>
             <div className="platform-layout-summary-actions">
               <button className="btn btn-secondary" onClick={openCreateGroupEditor}>
@@ -1153,9 +1131,8 @@ export function PlatformLayoutModal({
 
           <div className="platform-layout-tip">
             {t(
-              'platformLayout.tipWithGroups',
-              '拖拽可排序；最多选择 {{max}} 个入口显示在侧边栏。分组子级不参与侧边栏/仪表盘开关，仅用于菜单栏与默认平台切换。',
-              { max: sidebarSelectionLimit },
+              'platformLayout.tipWithGroupsUnlimited',
+              '拖拽可排序；可选择任意数量入口显示在侧边栏。分组子级不参与侧边栏/仪表盘开关，仅用于菜单栏与默认平台切换。',
             )}
           </div>
 
@@ -1235,8 +1212,6 @@ export function PlatformLayoutModal({
             {entries.map((entry) => {
               const isApiRelayEntry = entry.type === 'api-relay';
               const selected = isSidebarEntrySelected(entry);
-              const sidebarFull = sidebarSelectedCount >= sidebarSelectionLimit;
-              const sidebarDisabled = !selected && sidebarFull;
               const isGroup = entry.type === 'group' && !!entry.group;
               const groupId = entry.id;
               const groupExpanded = isGroup && expandedGroupIds.includes(groupId);
@@ -1391,11 +1366,10 @@ export function PlatformLayoutModal({
                         </label>
                       )}
 
-                      <label className={`platform-layout-toggle ${sidebarDisabled ? 'is-disabled' : ''}`}>
+                      <label className="platform-layout-toggle">
                         <input
                           type="checkbox"
                           checked={selected}
-                          disabled={sidebarDisabled}
                           onChange={(event) => {
                             if (isApiRelayEntry) {
                               setApiRelaySidebarVisible(event.target.checked);

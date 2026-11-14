@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { ALL_PLATFORM_IDS, isMenuVisiblePlatform, MENU_VISIBLE_PLATFORM_IDS, PlatformId } from '../types/platform';
 import { persistPlatformLayout, readPlatformLayout } from '../utils/uiPreferences';
-import { CLASSIC_SIDEBAR_ENTRY_LIMIT } from './useSideNavLayoutStore';
 
 const LEGACY_TRAY_CORE_IDS: PlatformId[] = ['antigravity', 'codex', 'github-copilot', 'windsurf'];
 const TRAY_MIGRATED_PLATFORM_IDS: PlatformId[] = [
@@ -535,7 +534,7 @@ function defaultSidebarEntryIds(
   groups: PlatformLayoutGroup[],
   orderedEntryIds = buildEntryOrderFromPlatformOrder(defaultPlatformOrder(), groups),
 ): PlatformLayoutEntryId[] {
-  return orderedEntryIds.slice(0, CLASSIC_SIDEBAR_ENTRY_LIMIT - 1);
+  return orderedEntryIds.slice(0, 5);
 }
 
 function defaultSidebarPlatformIds(): PlatformId[] {

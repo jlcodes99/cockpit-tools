@@ -311,6 +311,18 @@
   position: relative;
 }
 
+.side-nav:not(.side-nav-classic) .nav-items {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  justify-content: safe center;
+  scrollbar-width: none;
+}
+
+.side-nav .nav-items > .nav-item {
+  flex-shrink: 0;
+}
+
 .nav-item-icon {
   width: 20px;
   height: 20px;

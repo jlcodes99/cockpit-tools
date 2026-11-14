@@ -18,7 +18,7 @@ import {
   resolveEntryIdForPlatform,
   usePlatformLayoutStore,
 } from '../../stores/usePlatformLayoutStore';
-import { CLASSIC_SIDEBAR_ENTRY_LIMIT, ORIGINAL_SIDEBAR_ENTRY_LIMIT, useSideNavLayoutStore } from '../../stores/useSideNavLayoutStore';
+import { useSideNavLayoutStore } from '../../stores/useSideNavLayoutStore';
 import { useGlobalModal } from '../../hooks/useGlobalModal';
 import { getPlatformLabel, renderPlatformIcon } from '../../utils/platformMeta';
 import { useRemoteConfigStore } from '../../stores/useRemoteConfigStore';
@@ -294,14 +294,7 @@ export function SideNav({
     [orderedEntries, sidebarSet],
   );
 
-  const sidebarMenuEntries = useMemo(
-    () => (
-      isClassicLayout
-        ? sidebarVisibleEntries.slice(0, CLASSIC_SIDEBAR_ENTRY_LIMIT)
-        : sidebarVisibleEntries.slice(0, ORIGINAL_SIDEBAR_ENTRY_LIMIT)
-    ),
-    [isClassicLayout, sidebarVisibleEntries],
-  );
+  const sidebarMenuEntries = sidebarVisibleEntries;
 
   const navigateToPlatform = useCallback((platformId: PlatformId) => {
     setPage(PLATFORM_PAGE_MAP[platformId]);
@@ -681,7 +674,7 @@ export function SideNav({
   }, [showMore]);
 
   useEffect(() => {
-    if (!showMore || !isClassicLayout) return;
+    if (!showMore) return;
 
     const updatePopoverPosition = () => {
       const button = moreButtonRef.current;
@@ -709,6 +702,7 @@ export function SideNav({
     updatePopoverPosition();
     const rafId = window.requestAnimationFrame(updatePopoverPosition);
     window.addEventListener('resize', updatePopoverPosition);
+    window.addEventListener('scroll', updatePopoverPosition, true);
     const resizeObserver = typeof ResizeObserver !== 'undefined' && morePopoverRef.current
       ? new ResizeObserver(() => {
         updatePopoverPosition();
@@ -721,6 +715,7 @@ export function SideNav({
     return () => {
       window.cancelAnimationFrame(rafId);
       window.removeEventListener('resize', updatePopoverPosition);
+      window.removeEventListener('scroll', updatePopoverPosition, true);
       resizeObserver?.disconnect();
     };
   }, [showMore, isClassicLayout]);
@@ -746,16 +741,7 @@ export function SideNav({
     <div
       className={`side-nav-more-popover${isClassicLayout ? ' side-nav-more-popover-classic' : ''}`}
       ref={morePopoverRef}
-      style={
-        isClassicLayout
-          ? {
-              position: 'fixed',
-              top: `${morePopoverPosition.top}px`,
-              left: `${morePopoverPosition.left}px`,
-              maxHeight: `${morePopoverPosition.maxHeight}px`,
-            }
-          : undefined
-      }
+      style={{ position: 'fixed', top: `${morePopoverPosition.top}px`, left: `${morePopoverPosition.left}px`, maxHeight: `${morePopoverPosition.maxHeight}px`, transform: 'none' }}
     >
       <div className="side-nav-more-title">{t('nav.morePlatforms', '更多平台')}</div>
       <div className="side-nav-more-list">
@@ -984,7 +970,7 @@ export function SideNav({
         </button>
 
         {morePopoverContent && (
-          isClassicLayout && typeof document !== 'undefined'
+          typeof document !== 'undefined'
             ? createPortal(morePopoverContent, document.body)
             : morePopoverContent
         )}
