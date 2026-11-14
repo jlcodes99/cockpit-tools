@@ -255,6 +255,9 @@ interface GeneralConfig {
   antigravity_dual_switch_no_restart_enabled: boolean;
   auto_switch_enabled: boolean;
   auto_switch_threshold: number;
+  auto_switch_window_thresholds_enabled?: boolean;
+  auto_switch_five_hour_threshold?: number;
+  auto_switch_weekly_threshold?: number;
   auto_switch_credits_enabled?: boolean;
   auto_switch_credits_threshold?: number;
   auto_switch_account_scope_mode?: string;
@@ -706,6 +709,9 @@ export function useSettingsPageController() {
   const [antigravityDualSwitchNoRestartEnabled, setAntigravityDualSwitchNoRestartEnabled] = useState(false);
   const [autoSwitchEnabled, setAutoSwitchEnabled] = useState(false);
   const [autoSwitchThreshold, setAutoSwitchThreshold] = useState('20');
+  const [agWindowThresholdsEnabled, setAgWindowThresholdsEnabled] = useState(false);
+  const [agFiveHourThreshold, setAgFiveHourThreshold] = useState('5');
+  const [agWeeklyThreshold, setAgWeeklyThreshold] = useState('5');
   const [autoSwitchCreditsEnabled, setAutoSwitchCreditsEnabled] = useState(false);
   const [autoSwitchCreditsThreshold, setAutoSwitchCreditsThreshold] = useState('5');
   const [autoSwitchAccountScopeMode, setAutoSwitchAccountScopeMode] =
@@ -1206,6 +1212,9 @@ export function useSettingsPageController() {
       auto_switch_threshold: Number.isNaN(parsedAutoSwitchThreshold)
         ? 20
         : parsedAutoSwitchThreshold,
+      auto_switch_window_thresholds_enabled: agWindowThresholdsEnabled,
+      auto_switch_five_hour_threshold: Number(normalizeNumberInput(agFiveHourThreshold || '5', 0, 100)),
+      auto_switch_weekly_threshold: Number(normalizeNumberInput(agWeeklyThreshold || '5', 0, 100)),
       auto_switch_credits_enabled: autoSwitchCreditsEnabled,
       auto_switch_credits_threshold: Number.isNaN(parsedAutoSwitchCreditsThreshold)
         ? 5
@@ -1448,6 +1457,9 @@ export function useSettingsPageController() {
     antigravityDualSwitchNoRestartEnabled,
     autoSwitchEnabled,
     autoSwitchThreshold,
+    agWindowThresholdsEnabled,
+    agFiveHourThreshold,
+    agWeeklyThreshold,
     autoSwitchCreditsEnabled,
     autoSwitchCreditsThreshold,
     autoSwitchAccountScopeMode,
@@ -1804,6 +1816,9 @@ export function useSettingsPageController() {
       );
       setAutoSwitchEnabled(config.auto_switch_enabled ?? false);
       setAutoSwitchThreshold(String(config.auto_switch_threshold ?? 20));
+      setAgWindowThresholdsEnabled(config.auto_switch_window_thresholds_enabled ?? false);
+      setAgFiveHourThreshold(String(config.auto_switch_five_hour_threshold ?? 5));
+      setAgWeeklyThreshold(String(config.auto_switch_weekly_threshold ?? 5));
       setAutoSwitchCreditsEnabled(config.auto_switch_credits_enabled ?? false);
       setAutoSwitchCreditsThreshold(String(config.auto_switch_credits_threshold ?? 5));
       setAutoSwitchAccountScopeMode(
@@ -3289,6 +3304,9 @@ export function useSettingsPageController() {
     autoSwitchEnabled,
     autoSwitchSelectedAccountIds,
     autoSwitchThreshold,
+    agWindowThresholdsEnabled,
+    agFiveHourThreshold,
+    agWeeklyThreshold,
     autoSwitchThresholdCustomMode,
     autoSwitchThresholdIsPreset,
     claudeAppPath,
@@ -3501,6 +3519,9 @@ export function useSettingsPageController() {
     setAutoSwitchEnabled,
     setAutoSwitchSelectedAccountIds,
     setAutoSwitchThreshold,
+    setAgWindowThresholdsEnabled,
+    setAgFiveHourThreshold,
+    setAgWeeklyThreshold,
     setAutoSwitchThresholdCustomMode,
     setClaudeAppPath,
     setClaudeAutoRefresh,

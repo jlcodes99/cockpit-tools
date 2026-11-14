@@ -48,6 +48,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     autoSwitchEnabled,
     autoSwitchSelectedAccountIds,
     autoSwitchThreshold,
+    agWindowThresholdsEnabled,
+    agFiveHourThreshold,
+    agWeeklyThreshold,
     autoSwitchThresholdCustomMode,
     autoSwitchThresholdIsPreset,
     claudeAppPath,
@@ -182,6 +185,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     setAutoSwitchEnabled,
     setAutoSwitchSelectedAccountIds,
     setAutoSwitchThreshold,
+    setAgWindowThresholdsEnabled,
+    setAgFiveHourThreshold,
+    setAgWeeklyThreshold,
     setAutoSwitchThresholdCustomMode,
     setClaudeAppPath,
     setClaudeAutoRefresh,
@@ -1355,6 +1361,40 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   </div>
                 </div>
               )}
+              {autoSwitchEnabled && (
+                <div className="settings-row">
+                  <div className="row-label">
+                    <div className="row-title">{t('quickSettings.autoSwitch.windowThresholdsEnable')}</div>
+                    <div className="row-desc">{t('quickSettings.autoSwitch.windowThresholdsHint')}</div>
+                  </div>
+                  <div className="row-control">
+                    <label className="switch">
+                      <input type="checkbox" checked={agWindowThresholdsEnabled}
+                        aria-label={t('quickSettings.autoSwitch.windowThresholdsEnable')}
+                        onChange={(event) => setAgWindowThresholdsEnabled(event.target.checked)} />
+                      <span className="slider" />
+                    </label>
+                  </div>
+                </div>
+              )}
+              {autoSwitchEnabled && agWindowThresholdsEnabled && ([
+                ['fiveHourThreshold', agFiveHourThreshold, setAgFiveHourThreshold],
+                ['weeklyThreshold', agWeeklyThreshold, setAgWeeklyThreshold],
+              ] as const).map(([key, value, setValue]) => {
+                const label = t(`quickSettings.autoSwitch.${key}`);
+                return (
+                  <div className="settings-row" key={key}>
+                    <div className="row-label"><div className="row-title">{label}</div></div>
+                    <div className="row-control settings-inline-input">
+                      <input type="number" min={0} max={100} value={value} aria-label={label}
+                        className="settings-select settings-select--input-mode settings-select--with-unit"
+                        onChange={(event) => setValue(sanitizeNumberInput(event.target.value))}
+                        onBlur={() => setValue(normalizeNumberInput(value || '5', 0, 100))} />
+                      <span className="settings-input-unit">%</span>
+                    </div>
+                  </div>
+                );
+              })}
               {autoSwitchEnabled && (
                 <div className="settings-row">
                   <div className="row-label">

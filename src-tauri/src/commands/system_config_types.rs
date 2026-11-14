@@ -278,6 +278,12 @@ pub struct GeneralConfig {
     pub auto_switch_credits_enabled: bool,
     /// Credits 自动切号阈值（剩余值）
     pub auto_switch_credits_threshold: i32,
+    /// 是否按 5h / 周 配额窗口分别设置切号阈值
+    pub auto_switch_window_thresholds_enabled: bool,
+    /// 5h 配额窗口切号阈值（百分比）
+    pub auto_switch_five_hour_threshold: i32,
+    /// 周配额窗口切号阈值（百分比）
+    pub auto_switch_weekly_threshold: i32,
     /// 自动切号触发模式：any_group | selected_groups
     pub auto_switch_scope_mode: String,
     /// 自动切号指定模型分组（分组 ID）
@@ -1315,6 +1321,9 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "auto_switch_threshold"
             | "auto_switch_credits_enabled"
             | "auto_switch_credits_threshold"
+            | "auto_switch_window_thresholds_enabled"
+            | "auto_switch_five_hour_threshold"
+            | "auto_switch_weekly_threshold"
             | "auto_switch_scope_mode"
             | "auto_switch_selected_group_ids"
             | "auto_switch_account_scope_mode"

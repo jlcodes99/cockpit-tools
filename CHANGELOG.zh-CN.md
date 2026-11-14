@@ -12,6 +12,7 @@
 
 ### 新增
 
+- **Antigravity 自动切号**：可在通用设置和平台快捷设置中分别设定 5 小时及周额度的切号阈值。 [#3101](https://github.com/jlcodes99/cockpit-tools/pull/3101)
 - **模型探测**：WorkBuddy 和 CodeBuddy CN 支持按账号与模型组合批量探测，逐项查看结果，也可从单个账号卡片发起。 [#3096](https://github.com/jlcodes99/cockpit-tools/pull/3096) · [#3064](https://github.com/jlcodes99/cockpit-tools/pull/3064)
 
 ### 修复

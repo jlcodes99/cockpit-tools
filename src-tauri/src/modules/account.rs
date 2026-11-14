@@ -1170,11 +1170,82 @@ struct AutoSwitchGroupDefinition {
     summary_family: SummaryBucketFamily,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct AutoSwitchGroupQuota {
     id: String,
     name: String,
+    /// 综合值：min(5h, 周, 模型平均)，未启用分窗口阈值时使用
     percentage: i32,
+    five_hour: Option<i32>,
+    weekly: Option<i32>,
+    model_average: Option<i32>,
+}
+
+/// 分窗口阈值（类似 Codex 的 5h / 周 双阈值）；None 表示沿用单一阈值逻辑
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct AutoSwitchWindowThresholds {
+    five_hour: i32,
+    weekly: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SummaryWindow {
+    FiveHour,
+    Weekly,
+}
+
+fn summary_bucket_window(name: &str) -> Option<SummaryWindow> {
+    let normalized = name.trim().to_lowercase();
+    if normalized.ends_with("5h") {
+        Some(SummaryWindow::FiveHour)
+    } else if normalized.ends_with("weekly") {
+        Some(SummaryWindow::Weekly)
+    } else {
+        None
+    }
+}
+
+fn resolve_auto_switch_window_thresholds(
+    cfg: &crate::modules::config::UserConfig,
+) -> Option<AutoSwitchWindowThresholds> {
+    cfg.auto_switch_window_thresholds_enabled
+        .then(|| AutoSwitchWindowThresholds {
+            five_hour: normalize_auto_switch_threshold(cfg.auto_switch_five_hour_threshold),
+            weekly: normalize_auto_switch_threshold(cfg.auto_switch_weekly_threshold),
+        })
+}
+
+/// 返回命中阈值的最低百分比；未命中返回 None
+fn group_hit_percentage(
+    group: &AutoSwitchGroupQuota,
+    threshold: i32,
+    windows: Option<AutoSwitchWindowThresholds>,
+) -> Option<i32> {
+    let Some(windows) = windows else {
+        return (group.percentage <= threshold).then_some(group.percentage);
+    };
+    [
+        group.five_hour.filter(|p| *p <= windows.five_hour),
+        group.weekly.filter(|p| *p <= windows.weekly),
+        group.model_average.filter(|p| *p <= threshold),
+    ]
+    .into_iter()
+    .flatten()
+    .min()
+}
+
+fn group_is_switch_ready(
+    group: &AutoSwitchGroupQuota,
+    threshold: i32,
+    windows: Option<AutoSwitchWindowThresholds>,
+) -> bool {
+    let Some(windows) = windows else {
+        return group.percentage > 0 && group.percentage >= threshold;
+    };
+    let ready = |value: Option<i32>, limit: i32| value.map_or(true, |p| p > 0 && p >= limit);
+    ready(group.five_hour, windows.five_hour)
+        && ready(group.weekly, windows.weekly)
+        && ready(group.model_average, threshold)
 }
 
 #[derive(Debug, Clone)]
@@ -1458,12 +1529,22 @@ fn collect_group_quotas(
             let mut sum = 0i32;
             let mut count = 0usize;
             let mut summary_min: Option<i32> = None;
+            let mut five_hour: Option<i32> = None;
+            let mut weekly: Option<i32> = None;
+            let take_min = |slot: &mut Option<i32>, value: i32| {
+                *slot = Some(slot.map_or(value, |current| current.min(value)));
+            };
             for model in &quota.models {
                 if let Some(family) = summary_bucket_family(&model.name) {
                     if family == group.summary_family && !quota.quota_summary_stale {
-                        summary_min = Some(summary_min.map_or(model.percentage, |current| {
-                            current.min(model.percentage)
-                        }));
+                        take_min(&mut summary_min, model.percentage);
+                        match summary_bucket_window(&model.name) {
+                            Some(SummaryWindow::FiveHour) => {
+                                take_min(&mut five_hour, model.percentage)
+                            }
+                            Some(SummaryWindow::Weekly) => take_min(&mut weekly, model.percentage),
+                            None => {}
+                        }
                     }
                     continue;
                 }
@@ -1482,6 +1563,9 @@ fn collect_group_quotas(
                 id: group.id.clone(),
                 name: group.name.clone(),
                 percentage,
+                five_hour,
+                weekly,
+                model_average,
             })
         })
         .collect()
@@ -1510,6 +1594,7 @@ fn evaluate_auto_switch_trigger(
     monitored_groups: &[AutoSwitchGroupDefinition],
     credits_enabled: bool,
     credits_threshold: i32,
+    windows: Option<AutoSwitchWindowThresholds>,
 ) -> Option<AutoSwitchTriggerContext> {
     if monitored_groups.is_empty() {
         return None;
@@ -1566,14 +1651,14 @@ fn evaluate_auto_switch_trigger(
     let hit_groups: Vec<modules::antigravity_switch_history::AntigravityAutoSwitchHitGroup> =
         group_quotas
             .into_iter()
-            .filter(|group| group.percentage <= threshold)
-            .map(
-                |group| modules::antigravity_switch_history::AntigravityAutoSwitchHitGroup {
+            .filter_map(|group| {
+                let percentage = group_hit_percentage(&group, threshold, windows)?;
+                Some(modules::antigravity_switch_history::AntigravityAutoSwitchHitGroup {
                     group_id: group.id,
                     group_name: group.name,
-                    percentage: group.percentage,
-                },
-            )
+                    percentage,
+                })
+            })
             .collect();
     let current_credits_remaining = if credits_enabled {
         available_ai_credits(account)
@@ -1617,6 +1702,7 @@ fn can_be_auto_switch_candidate(
     monitored_groups: &[AutoSwitchGroupDefinition],
     credits_enabled: bool,
     credits_threshold: i32,
+    windows: Option<AutoSwitchWindowThresholds>,
 ) -> bool {
     if account.id == current_id || account.disabled {
         return false;
@@ -1636,7 +1722,7 @@ fn can_be_auto_switch_candidate(
     }
     if !group_quotas
         .iter()
-        .all(|group| group.percentage > 0 && group.percentage >= threshold)
+        .all(|group| group_is_switch_ready(group, threshold, windows))
     {
         return false;
     }
@@ -1965,6 +2051,7 @@ where
     let credits_enabled = cfg.auto_switch_credits_enabled;
     let credits_threshold =
         normalize_auto_switch_credits_threshold(cfg.auto_switch_credits_threshold);
+    let windows = resolve_auto_switch_window_thresholds(&cfg);
     let scope_mode = normalize_auto_switch_scope_mode(&cfg.auto_switch_scope_mode);
     let account_scope_mode =
         normalize_auto_switch_account_scope_mode(&cfg.auto_switch_account_scope_mode);
@@ -2019,6 +2106,7 @@ where
         &monitored_groups,
         credits_enabled,
         credits_threshold,
+        windows,
     ) else {
         return Ok(None);
     };
@@ -2034,6 +2122,7 @@ where
                 &monitored_groups,
                 credits_enabled,
                 credits_threshold,
+                windows,
             )
         })
         .collect();
@@ -2056,10 +2145,11 @@ where
 
     let target = &candidates[0];
     modules::logger::log_info(&format!(
-        "[AutoSwitch] 触发自动切号: current_id={}, target_id={}, threshold={}%, credits_enabled={}, credits_threshold={}, current_credits={:?}, scope={}, rule={}",
+        "[AutoSwitch] 触发自动切号: current_id={}, target_id={}, threshold={}%, windows={:?}, credits_enabled={}, credits_threshold={}, current_credits={:?}, scope={}, rule={}",
         current_id,
         target.id,
         threshold,
+        windows,
         credits_enabled,
         credits_threshold,
         trigger_context.current_credits_remaining,
@@ -3198,24 +3288,65 @@ mod new_antigravity_model_tests {
         let current = account("current", &[("gemini:5h", 78), ("gemini-weekly", 0)], false);
         let reported = collect_group_quotas(&current, &groups);
         let groups = reported_auto_switch_groups(AUTO_SWITCH_SCOPE_ANY_GROUP, groups, &reported);
-        let trigger = evaluate_auto_switch_trigger(&current, 0, AUTO_SWITCH_SCOPE_ANY_GROUP, &groups, false, 0).unwrap();
+        let trigger = evaluate_auto_switch_trigger(&current, 0, AUTO_SWITCH_SCOPE_ANY_GROUP, &groups, false, 0, None).unwrap();
         assert_eq!(trigger.hit_groups.len(), 2);
         assert!(trigger.hit_groups.iter().all(|group| group.percentage == 0));
 
         let ready = account("ready", &[("gemini-5h", 80), ("gemini:weekly", 57), ("3p-5h", 0)], false);
-        assert!(can_be_auto_switch_candidate(&ready, "current", 0, &groups, false, 0));
+        assert!(can_be_auto_switch_candidate(&ready, "current", 0, &groups, false, 0, None));
         for rejected in [
             account("exhausted", &[("gemini-weekly", 0)], false),
             account("stale", &[("gemini-weekly", 90)], true),
             account("other-pool", &[("gemini-argon-wtu-weekly", 90)], false),
         ] {
-            assert!(!can_be_auto_switch_candidate(&rejected, "current", 0, &groups, false, 0));
+            assert!(!can_be_auto_switch_candidate(&rejected, "current", 0, &groups, false, 0, None));
         }
 
         let legacy = account("legacy", &[("gemini-3.1-pro-high", 85), ("gemini-3-flash", 67)], true);
-        assert!(can_be_auto_switch_candidate(&legacy, "current", 0, &groups, false, 0));
+        assert!(can_be_auto_switch_candidate(&legacy, "current", 0, &groups, false, 0, None));
         let stale_current = account("current", &[("gemini-weekly", 0), ("gemini-3.1-pro-high", 81)], true);
-        assert!(evaluate_auto_switch_trigger(&stale_current, 0, AUTO_SWITCH_SCOPE_ANY_GROUP, &groups, false, 0).is_none());
+        assert!(evaluate_auto_switch_trigger(&stale_current, 0, AUTO_SWITCH_SCOPE_ANY_GROUP, &groups, false, 0, None).is_none());
+    }
+
+    #[test]
+    fn antigravity_split_window_thresholds_apply_per_window() {
+        let account = |id: &str, windows: &[(&str, i32)]| {
+            let mut account = Account::new(
+                id.into(), "fixture@example.test".into(),
+                TokenData::new("access".into(), "refresh".into(), 3600, None, None, None),
+            );
+            let mut quota = QuotaData::new();
+            for (name, percentage) in windows {
+                quota.add_model((*name).into(), None, *percentage, String::new());
+            }
+            account.quota = Some(quota);
+            account
+        };
+        let groups: Vec<_> = default_auto_switch_groups()
+            .into_iter()
+            .filter(|group| group.id == "g3_flash")
+            .collect();
+        let split = Some(AutoSwitchWindowThresholds { five_hour: 30, weekly: 5 });
+        let scope = AUTO_SWITCH_SCOPE_SELECTED_GROUPS;
+
+        // 5h 低于 5h 阈值即触发，即使周额度充足
+        let low_5h = account("current", &[("gemini-5h", 25), ("gemini-weekly", 90)]);
+        let trigger = evaluate_auto_switch_trigger(&low_5h, 0, scope, &groups, false, 0, split).unwrap();
+        assert_eq!(trigger.hit_groups[0].percentage, 25);
+        // 单阈值模式（threshold=10）下同一账号不触发
+        assert!(evaluate_auto_switch_trigger(&low_5h, 10, scope, &groups, false, 0, None).is_none());
+
+        // 周额度 8% 高于周阈值 5%，5h 充足：不触发
+        let ok = account("current", &[("gemini-5h", 80), ("gemini-weekly", 8)]);
+        assert!(evaluate_auto_switch_trigger(&ok, 0, scope, &groups, false, 0, split).is_none());
+        let low_weekly = account("current", &[("gemini-5h", 80), ("gemini-weekly", 4)]);
+        assert!(evaluate_auto_switch_trigger(&low_weekly, 0, scope, &groups, false, 0, split).is_some());
+
+        // 候选账号需各窗口都满足各自阈值
+        assert!(can_be_auto_switch_candidate(&ok, "x", 0, &groups, false, 0, split));
+        assert!(!can_be_auto_switch_candidate(&low_5h, "x", 0, &groups, false, 0, split));
+        let exhausted_weekly = account("c", &[("gemini-5h", 100), ("gemini-weekly", 0)]);
+        assert!(!can_be_auto_switch_candidate(&exhausted_weekly, "x", 0, &groups, false, 0, split));
     }
 
     #[test]
@@ -3224,6 +3355,7 @@ mod new_antigravity_model_tests {
             id: "claude_45".into(),
             name: "Claude".into(),
             percentage: 10,
+            ..Default::default()
         }];
         let groups = reported_auto_switch_groups(
             AUTO_SWITCH_SCOPE_ANY_GROUP,
