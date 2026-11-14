@@ -39,6 +39,12 @@
 - **MiniMax Code**：共用账号的凭据由客户端续期，Cockpit 读取并保存新凭据，避免客户端登录失效。 [#3092](https://github.com/jlcodes99/cockpit-tools/pull/3092)
 - **Codex 会话用量**：汇总、增量统计和单会话 Token 计数均支持压缩会话日志。 [#3079](https://github.com/jlcodes99/cockpit-tools/pull/3079)
 
+## [1.3.84] - 2026-11-14
+
+### 修复
+
+- **Codex API Key 启动**：恢复第三方 Responses 供应商的默认直连。此前由自动模式接入本地实例网关的账号，下次通过 Cockpit 启动时会恢复使用供应商原始地址。手动选择实例网关和需要协议转换的账号仍可使用网关。
+
 ## [1.3.83] - 2026-11-13
 
 ### 变更

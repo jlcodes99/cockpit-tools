@@ -10,7 +10,7 @@ fn instance_test_data_guards_hold_shared_lock_through_cleanup() {
     let (checked, violations) =
         audit_instance_test_guard_lock_order(include_str!("codex_instance.rs"));
     assert_eq!(
-        checked, 11,
+        checked, 12,
         "audit must cover every current data guard fixture"
     );
     assert!(

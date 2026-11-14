@@ -204,6 +204,7 @@ async fn provider_profile_catalog_sync_keeps_responses_image_input_and_client_to
         );
         account.api_wire_api = Some("responses".into());
         account.api_sync_model_catalog_to_codex = sync;
+        account.api_instance_access_mode = Some("gateway".into());
         account
             .api_model_vision_support
             .insert(UPSTREAM_MODEL.into(), true);
@@ -217,7 +218,7 @@ async fn provider_profile_catalog_sync_keeps_responses_image_input_and_client_to
         let profile_config = fs::read_to_string(profile_config_path(profile.path())).unwrap();
         let config = profile_config.parse::<toml_edit::Document>().unwrap();
         let catalog_path = profile.path().join("cockpit-model-catalog.json");
-        let selected_model = if sync {
+        let selected_model = {
             let catalog: Value = serde_json::from_slice(&fs::read(catalog_path).unwrap()).unwrap();
             let selected = config["model"].as_str().unwrap();
             assert_ne!(selected, UPSTREAM_MODEL, "exercise the managed model alias");
@@ -229,9 +230,6 @@ async fn provider_profile_catalog_sync_keeps_responses_image_input_and_client_to
                 .unwrap();
             assert_eq!(model["input_modalities"], json!(["text", "image"]));
             selected
-        } else {
-            assert!(!catalog_path.exists());
-            UPSTREAM_MODEL
         };
         let base = codex_account::configured_provider_base_url(profile.path()).unwrap();
         assert_ne!(base, format!("http://{addr}/v1"));

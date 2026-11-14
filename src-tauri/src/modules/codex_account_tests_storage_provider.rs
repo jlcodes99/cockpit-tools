@@ -1423,11 +1423,9 @@ supports_websockets = false
             fs::read_to_string(env.codex_home().join("config.toml")).expect("read current config");
         let config = crate::modules::codex_config_format::read_codex_config_doc_from_str(&config)
             .expect("parse current config");
-        assert_eq!(config["model_provider"].as_str(), Some(CODEX_RUNTIME_MODEL_PROVIDER_ID));
-        let provider = &config["model_providers"][CODEX_RUNTIME_MODEL_PROVIDER_ID];
-        assert_eq!(provider["base_url"].as_str(), Some("https://relay.example.com/v1"));
-        assert_eq!(provider["supports_websockets"].as_bool(), Some(true));
-        assert!(config.get("openai_base_url").is_none());
+        assert_eq!(config["openai_base_url"].as_str(), Some("https://relay.example.com/v1"));
+        assert!(config.get("model_provider").is_none());
+        assert!(config.get("model_providers").and_then(|providers| providers.get(CODEX_RUNTIME_MODEL_PROVIDER_ID)).is_none());
     }
 
     #[test]
@@ -2232,11 +2230,9 @@ supports_websockets = false
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
         let config = crate::modules::codex_config_format::read_codex_config_doc_from_str(&config)
             .expect("parse config");
-        assert_eq!(config["model_provider"].as_str(), Some(CODEX_RUNTIME_MODEL_PROVIDER_ID));
-        let provider = &config["model_providers"][CODEX_RUNTIME_MODEL_PROVIDER_ID];
-        assert_eq!(provider["base_url"].as_str(), Some("https://relay.example.com/v1"));
-        assert_eq!(provider["supports_websockets"].as_bool(), Some(true));
-        assert!(config.get("openai_base_url").is_none());
+        assert_eq!(config["openai_base_url"].as_str(), Some("https://relay.example.com/v1"));
+        assert!(config.get("model_provider").is_none());
+        assert!(config.get("model_providers").and_then(|providers| providers.get(CODEX_RUNTIME_MODEL_PROVIDER_ID)).is_none());
         assert!(config.get("model_catalog_json").is_none());
         assert!(!base_dir
             .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)

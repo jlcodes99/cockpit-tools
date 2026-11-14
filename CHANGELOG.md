@@ -39,6 +39,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **MiniMax Code**: Preserve the desktop client's login by adopting refreshed shared credentials and leaving refresh-token rotation to the client for shared accounts. [#3092](https://github.com/jlcodes99/cockpit-tools/pull/3092)
 - **Codex session usage**: Include compressed session logs in usage totals, checkpoints and per-session Token counts. [#3079](https://github.com/jlcodes99/cockpit-tools/pull/3079)
 
+## [1.3.84] - 2026-11-14
+
+### Fixed
+
+- **Codex API Key launch**: Restore direct connections by default for third-party Responses providers. Accounts previously routed through the local instance gateway in automatic mode return to their original provider URL the next time Codex is launched from Cockpit. The gateway remains available when selected manually or required for protocol translation.
+
 ## [1.3.83] - 2026-11-13
 
 ### Changed

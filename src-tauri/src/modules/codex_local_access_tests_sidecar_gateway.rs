@@ -1777,6 +1777,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
         account.api_wire_api = Some("responses".to_string());
         account.api_sync_model_catalog_to_codex = true;
 
+        account.api_instance_access_mode = Some("gateway".to_string());
         assert!(account_requires_provider_gateway(&account));
         assert_eq!(
             provider_gateway_model_slots(&provider_gateway_models_for_account(&account))
@@ -2016,17 +2017,17 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
         account.api_wire_api = Some("responses".to_string());
         account.bound_oauth_account_id = Some("oauth-1".to_string());
 
-        assert!(account_requires_provider_gateway(&account));
+        assert!(!account_requires_provider_gateway(&account));
         assert!(!account_requires_bound_oauth_local_gateway(&account));
         assert!(is_local_access_eligible_account(&account, false));
 
         account.bound_oauth_use_local_gateway = true;
-        assert!(account_requires_provider_gateway(&account));
+        assert!(!account_requires_provider_gateway(&account));
         assert!(!account_requires_bound_oauth_local_gateway(&account));
         assert!(is_local_access_eligible_account(&account, false));
 
         account.bound_oauth_account_id = None;
-        assert!(account_requires_provider_gateway(&account));
+        assert!(!account_requires_provider_gateway(&account));
         assert!(!account_requires_bound_oauth_local_gateway(&account));
         assert!(is_local_access_eligible_account(&account, false));
     }
@@ -2299,7 +2300,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
     }
 
     #[test]
-    fn responses_sync_catalog_with_only_official_shells_still_uses_provider_gateway() {
+    fn responses_sync_catalog_with_only_official_shells_skips_provider_gateway() {
         let mut account = CodexAccount::new_api_key(
             "local-account-id".to_string(),
             "relay@example.com".to_string(),
@@ -2313,7 +2314,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
         account.api_wire_api = Some("responses".to_string());
         account.api_sync_model_catalog_to_codex = true;
 
-        assert!(account_requires_provider_gateway(&account));
+        assert!(!account_requires_provider_gateway(&account));
     }
 
     #[test]
