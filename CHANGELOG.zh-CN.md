@@ -20,14 +20,14 @@
 
 ### 修复
 
-- **Codex API 服务**：Windows 原生网关使用不可继承的监听套接字，避免子进程继续占用服务端口。 [#2850](https://github.com/jlcodes99/cockpit-tools/pull/2850)
+- **Windows 上的 Codex API 服务**：原生网关停止后，子进程不会继续占用服务端口。 [#2850](https://github.com/jlcodes99/cockpit-tools/pull/2850)
 - **Codex API 服务**：选中的用量时间范围页签随当前主题配色。 [#2115](https://github.com/jlcodes99/cockpit-tools/pull/2115)
 - **Antigravity 账号授权**：添加或授权同一账号时可重建缺失的账号文件，并保留原账号 ID。 [#2854](https://github.com/jlcodes99/cockpit-tools/pull/2854)
 - **Codex API 服务**：按套餐排序调度时，将已过期的 OAuth 订阅按免费套餐处理。 [#2174](https://github.com/jlcodes99/cockpit-tools/pull/2174)
 - **Codex API Key**：保存密钥时保留供应商协议和 WebSocket 支持设置。 [#1980](https://github.com/jlcodes99/cockpit-tools/pull/1980)
 - **经典侧栏**：收起时导航图标保持居中，展开时长标签不会挤压图标。 [#2384](https://github.com/jlcodes99/cockpit-tools/pull/2384)
 - **Codex API 服务**：OpenCode 请求携带会话标识且未明确指定身份或续聊时，原生 HTTP 网关可保持同一会话。 [#3046](https://github.com/jlcodes99/cockpit-tools/pull/3046)
-- **Codex API 服务**：识别无响应的网络连接并替换失效传输，保留请求输出和重放的安全边界。 [#3106](https://github.com/jlcodes99/cockpit-tools/pull/3106)
+- **Codex API 服务**：检测无响应的网络连接并重新连接，让后续请求可以继续。 [#3106](https://github.com/jlcodes99/cockpit-tools/pull/3106)
 - **Codex SSH**：切号后恢复目标账号的自动连接设置，并刷新匹配的远程会话。 [#3097](https://github.com/jlcodes99/cockpit-tools/pull/3097)
 - **Claude**：正确区分 Pro 和 Max 套餐，并显示对应的额度窗口。 [#3031](https://github.com/jlcodes99/cockpit-tools/pull/3031)
 - **CodeBuddy CN**：在账号摘要中显示剩余积分和资源包到期信息。 [#3023](https://github.com/jlcodes99/cockpit-tools/pull/3023)
@@ -38,6 +38,10 @@
 - **Codex API 服务**：菜单栏和托盘汇总 5 小时额度时，排除周额度已耗尽账号的剩余额度。 [#3112](https://github.com/jlcodes99/cockpit-tools/pull/3112)
 - **MiniMax Code**：共用账号的凭据由客户端续期，Cockpit 读取并保存新凭据，避免客户端登录失效。 [#3092](https://github.com/jlcodes99/cockpit-tools/pull/3092)
 - **Codex 会话用量**：汇总、增量统计和单会话 Token 计数均支持压缩会话日志。 [#3079](https://github.com/jlcodes99/cockpit-tools/pull/3079)
+
+### 文档
+
+- 新增韩文 README，并更新巴西葡萄牙语 README 的支持平台列表。 [#2681](https://github.com/jlcodes99/cockpit-tools/pull/2681) · [#2610](https://github.com/jlcodes99/cockpit-tools/pull/2610)
 
 ## [1.3.84] - 2026-11-14
 
