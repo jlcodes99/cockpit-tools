@@ -2145,21 +2145,8 @@
   transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
 }
 
-.platform-layout-row.is-dragging {
-  border-color: var(--text-primary);
-  background: var(--bg-hover);
-  box-shadow: var(--shadow-sm);
-  transform: scale(1.005);
-}
 
-.platform-layout-row.is-drop-candidate {
-  border-style: dashed;
-}
 
-.platform-layout-row.is-drop-target {
-  border-color: var(--text-primary);
-  background: var(--bg-hover);
-}
 
 .platform-layout-row.is-hidden {
   opacity: 0.68;
@@ -2466,21 +2453,8 @@
   transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
 }
 
-.platform-layout-child-row.is-dragging {
-  border-color: var(--text-primary);
-  background: var(--bg-hover);
-  box-shadow: var(--shadow-sm);
-  transform: scale(1.003);
-}
 
-.platform-layout-child-row.is-drop-candidate {
-  border-style: dashed;
-}
 
-.platform-layout-child-row.is-drop-target {
-  border-color: var(--text-primary);
-  background: var(--bg-hover);
-}
 
 .platform-layout-child-main {
   flex: 1 1 auto;

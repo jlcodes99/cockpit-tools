@@ -1,13 +1,14 @@
 import { hydrateDurableUiSettings } from '../utils/durableUiSettings';
 import {
   ChangeEvent,
-  MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
+import { arrayMove } from '@dnd-kit/sortable';
+import { SortableLayoutItem, SortableLayoutList } from './SortableLayoutList';
 import { useTranslation } from 'react-i18next';
 import {
   Check,
@@ -365,7 +366,8 @@ export function PlatformLayoutModal({
   onClose,
 }: PlatformLayoutModalProps) {
   const { t } = useTranslation();
-  useEscClose(open, onClose);
+  const [sorting, setSorting] = useState(false);
+  useEscClose(open && !sorting, onClose);
   const sideNavLayoutMode = useSideNavLayoutStore((state) => state.mode);
   const sidebarSelectionLimit = sideNavLayoutMode === 'classic'
     ? CLASSIC_SIDEBAR_ENTRY_LIMIT
@@ -393,11 +395,6 @@ export function PlatformLayoutModal({
     resetPlatformLayout,
   } = usePlatformLayoutStore();
   const apiRelayEntryEnabled = useSponsorStore((state) => Boolean(state.state.sponsorModule));
-
-  const [draggingId, setDraggingId] = useState<LayoutEntryId | null>(null);
-  const [dropTargetId, setDropTargetId] = useState<LayoutEntryId | null>(null);
-  const [draggingChild, setDraggingChild] = useState<{ groupId: string; platformId: PlatformId } | null>(null);
-  const [dropChildTarget, setDropChildTarget] = useState<{ groupId: string; platformId: PlatformId } | null>(null);
 
   const [customIcons, setCustomIcons] = useState<PlatformLayoutCustomIcon[]>(() => loadCustomIcons());
   const [customIconStorageFailed, setCustomIconStorageFailed] = useState(false);
@@ -622,18 +619,6 @@ export function PlatformLayoutModal({
   }, [open, platformGroups, changeCustomIcons]);
 
   useEffect(() => {
-    if (!open || (!draggingId && !draggingChild)) return;
-    const handleMouseUp = () => {
-      setDraggingId(null);
-      setDropTargetId(null);
-      setDraggingChild(null);
-      setDropChildTarget(null);
-    };
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => window.removeEventListener('mouseup', handleMouseUp);
-  }, [open, draggingId, draggingChild]);
-
-  useEffect(() => {
     if (!open) {
       setGroupEditorOpen(false);
       setChildEditorOpen(false);
@@ -644,10 +629,7 @@ export function PlatformLayoutModal({
       setPendingAddChildIds([]);
       setGroupDraftError('');
       setChildDraftError('');
-      setDraggingId(null);
-      setDropTargetId(null);
-      setDraggingChild(null);
-      setDropChildTarget(null);
+      setSorting(false);
       setHandledRequestedEditGroupId(null);
     }
   }, [open]);
@@ -749,75 +731,12 @@ export function PlatformLayoutModal({
     }
   };
 
-  const stopDragging = () => {
-    setDraggingId(null);
-    setDropTargetId(null);
-  };
-
-  const stopChildDragging = () => {
-    setDraggingChild(null);
-    setDropChildTarget(null);
-  };
-
   const commitLayoutEntryOrder = (nextIds: LayoutEntryId[]) => {
     const nextApiRelayOrder = nextIds.indexOf(API_RELAY_LAYOUT_ENTRY_ID);
     setLayoutEntryOrder(
       nextIds.filter(isPlatformLayoutEntryId),
       nextApiRelayOrder >= 0 ? nextApiRelayOrder : apiRelayEntryOrder,
     );
-  };
-
-  const handleDragStart = (event: ReactMouseEvent, id: LayoutEntryId) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-    setDraggingId(id);
-    setDropTargetId(null);
-  };
-
-  const handleDragMove = (targetId: LayoutEntryId) => {
-    if (!draggingId) return;
-    if (draggingId === targetId) {
-      setDropTargetId(null);
-      return;
-    }
-    setDropTargetId(targetId);
-    const fromIndex = layoutEntryOrderIds.indexOf(draggingId);
-    const toIndex = layoutEntryOrderIds.indexOf(targetId);
-    if (fromIndex < 0 || toIndex < 0) return;
-    const nextIds = [...layoutEntryOrderIds];
-    const [moved] = nextIds.splice(fromIndex, 1);
-    nextIds.splice(toIndex, 0, moved);
-    commitLayoutEntryOrder(nextIds);
-  };
-
-  const handleChildDragStart = (event: ReactMouseEvent, groupId: string, platformId: PlatformId) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-    setDraggingChild({ groupId, platformId });
-    setDropChildTarget(null);
-  };
-
-  const handleChildDragMove = (groupId: string, targetPlatformId: PlatformId) => {
-    if (!draggingChild) return;
-    if (draggingChild.groupId !== groupId) {
-      setDropChildTarget(null);
-      return;
-    }
-    if (draggingChild.platformId === targetPlatformId) {
-      setDropChildTarget(null);
-      return;
-    }
-
-    const group = platformGroups.find((item) => item.id === groupId);
-    if (!group) return;
-    const fromIndex = group.platformIds.indexOf(draggingChild.platformId);
-    const toIndex = group.platformIds.indexOf(targetPlatformId);
-    if (fromIndex < 0 || toIndex < 0) return;
-
-    setDropChildTarget({ groupId, platformId: targetPlatformId });
-    reorderGroupPlatforms(groupId, fromIndex, toIndex);
   };
 
   const toggleGroupExpanded = (groupId: string) => {
@@ -1282,16 +1201,11 @@ export function PlatformLayoutModal({
             </div>
           </div>
 
-          <div
-            className={`platform-layout-list ${draggingId || draggingChild ? 'is-sorting' : ''}`}
-            onMouseUp={() => {
-              stopDragging();
-              stopChildDragging();
-            }}
-            onMouseLeave={() => {
-              stopDragging();
-              stopChildDragging();
-            }}
+          <SortableLayoutList
+            items={layoutEntryOrderIds}
+            className="platform-layout-list"
+            onSortingChange={setSorting}
+            onReorder={(from, to) => commitLayoutEntryOrder(arrayMove(layoutEntryOrderIds, from, to))}
           >
             {entries.map((entry) => {
               const isApiRelayEntry = entry.type === 'api-relay';
@@ -1319,21 +1233,19 @@ export function PlatformLayoutModal({
                 'platform-layout-row',
                 isApiRelayEntry ? 'is-api-relay-entry' : '',
                 entry.hidden ? 'is-hidden' : '',
-                draggingId === entry.id ? 'is-dragging' : '',
-                draggingId && draggingId !== entry.id ? 'is-drop-candidate' : '',
-                draggingId && draggingId !== entry.id && dropTargetId === entry.id ? 'is-drop-target' : '',
               ]
                 .join(' ')
                 .trim();
 
               return (
-                <div
+                <SortableLayoutItem
                   key={entry.id}
+                  id={entry.id}
                   className={`platform-layout-entry ${entry.type === 'group' ? 'is-group-entry' : ''}`}
                 >
+                  {(handle) => <>
                   <div
                     className={rowClass}
-                    onMouseEnter={() => handleDragMove(entry.id)}
                     onClick={() => {
                       if (entry.group) {
                         toggleGroupExpanded(groupId);
@@ -1344,7 +1256,8 @@ export function PlatformLayoutModal({
                       <button
                         type="button"
                         className="platform-layout-drag-trigger"
-                        onMouseDown={(event) => handleDragStart(event, entry.id)}
+                        {...handle}
+                        onClick={(event) => event.stopPropagation()}
                         aria-label={t('platformLayout.dragHandleLabel', '拖拽排序')}
                       >
                         <GripVertical size={16} className="drag-handle" />
@@ -1595,6 +1508,12 @@ export function PlatformLayoutModal({
                         )}
                       </div>
 
+                      <SortableLayoutList
+                        items={entry.platformIds}
+                        className="platform-layout-child-sortables"
+                        onSortingChange={setSorting}
+                        onReorder={(from, to) => reorderGroupPlatforms(entry.group!.id, from, to)}
+                      >
                       {entry.platformIds.map((platformId) => {
                         const isDefault = entry.group?.defaultPlatformId === platformId;
                         const childIcon = resolveGroupChildIcon(entry.group!, platformId);
@@ -1603,33 +1522,19 @@ export function PlatformLayoutModal({
                           platformId,
                           getPlatformLabel(platformId, t),
                         );
-                        const draggingChildInCurrentGroup = draggingChild?.groupId === entry.group?.id;
-                        const isDraggingChildRow =
-                          draggingChildInCurrentGroup && draggingChild?.platformId === platformId;
-                        const isChildDropCandidate =
-                          draggingChildInCurrentGroup && draggingChild?.platformId !== platformId;
-                        const isChildDropTarget =
-                          dropChildTarget?.groupId === entry.group?.id && dropChildTarget?.platformId === platformId;
-                        const childRowClass = [
-                          'platform-layout-child-row',
-                          isDraggingChildRow ? 'is-dragging' : '',
-                          isChildDropCandidate ? 'is-drop-candidate' : '',
-                          isChildDropTarget ? 'is-drop-target' : '',
-                        ]
-                          .join(' ')
-                          .trim();
-
                         return (
-                          <div
-                            className={childRowClass}
-                            key={`${entry.id}:${platformId}`}
-                            onMouseEnter={() => handleChildDragMove(entry.group!.id, platformId)}
+                          <SortableLayoutItem
+                            className="platform-layout-child-row"
+                            key={platformId}
+                            id={platformId}
                           >
+                            {(childHandle) => <>
                             <div className="platform-layout-child-main">
                               <button
                                 type="button"
                                 className="platform-layout-child-drag-trigger"
-                                onMouseDown={(event) => handleChildDragStart(event, entry.group!.id, platformId)}
+                                {...childHandle}
+                                onClick={(event) => event.stopPropagation()}
                                 aria-label={t('platformLayout.dragHandleLabel', '拖拽排序')}
                               >
                                 <GripVertical size={14} className="drag-handle" />
@@ -1712,15 +1617,18 @@ export function PlatformLayoutModal({
                                 <Trash2 size={13} />
                               </button>
                             </div>
-                          </div>
+                            </>}
+                          </SortableLayoutItem>
                         );
                       })}
+                      </SortableLayoutList>
                     </div>
                   )}
-                </div>
+                  </>}
+                </SortableLayoutItem>
               );
             })}
-          </div>
+          </SortableLayoutList>
         </div>
 
         {groupEditorOpen && (
