@@ -45,10 +45,11 @@ export const MINIMAX_API_PROVIDER_ID = "minimax";
 export const MINIMAX_EN_API_PROVIDER_ID = "minimax_en";
 export const MINIMAX_CODEX_MODEL_CATALOG = [
   "MiniMax-M3",
+  "MiniMax-M3.1-Flash",
   "MiniMax-M2.7",
 ] as const;
 /** MiniMax models whose published input modalities include images. */
-export const MINIMAX_CODEX_VISION_MODEL_CATALOG = ["MiniMax-M3"] as const;
+export const MINIMAX_CODEX_VISION_MODEL_CATALOG = ["MiniMax-M3", "MiniMax-M3.1-Flash"] as const;
 /** OpenCode Go models exposed through its OpenAI-compatible chat completions API. */
 export const OPENCODE_GO_CODEX_MODEL_CATALOG = [...opencodeGoCatalog.legacyModels, opencodeGoCatalog.imageModel];
 
@@ -194,6 +195,22 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     visionModelCatalog: [opencodeGoCatalog.imageModel],
     website: "https://opencode.ai/",
     apiKeyUrl: "https://opencode.ai/auth",
+  },
+  {
+    id: "uberllm",
+    name: "UberLLM",
+    baseUrls: ["https://api.uberllm.dev/v1"],
+    modelCatalog: ["deepseek/deepseek-v4.1-flash", "z-ai/glm-5.3", "anthropic/claude-sonnet-4.6"],
+    website: "https://uberllm.dev/",
+    apiKeyUrl: "https://uberllm.dev/signup",
+  },
+  {
+    id: "runcrate",
+    name: "Runcrate",
+    baseUrls: ["https://api.runcrate.ai/v1"],
+    modelCatalog: ["zai-org/GLM-5.3", "deepseek-ai/DeepSeek-V4.1-Flash"],
+    website: "https://www.runcrate.ai/",
+    apiKeyUrl: "https://www.runcrate.ai/dashboard/api-keys",
   },
   {
     id: "aicodemirror",

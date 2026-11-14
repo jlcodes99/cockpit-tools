@@ -62,6 +62,21 @@ test("OpenCode Go preset exposes DeepSeek models and its chat-completions transp
   }).wireApi, "chat_completions");
 });
 
+test("UberLLM and Runcrate use their documented native Responses endpoints", () => {
+  for (const [id, baseUrl, model] of [
+    ["uberllm", "https://api.uberllm.dev/v1", "deepseek/deepseek-v4.1-flash"],
+    ["runcrate", "https://api.runcrate.ai/v1", "zai-org/GLM-5.3"],
+  ]) {
+    const preset = findCodexApiProviderPresetByBaseUrl(baseUrl);
+    assert.equal(preset?.id, id);
+    assert.ok(preset.modelCatalog?.includes(model));
+    const profile = resolveCodexProviderCapabilityProfile({ baseUrl });
+    assert.equal(profile.wireApi, "responses");
+    assert.equal(profile.supportsDirect, true);
+    assert.equal(profile.requiresGateway, false);
+  }
+});
+
 test("DeepSeek keeps its native Responses default", () => {
   const profile = resolveCodexProviderCapabilityProfile({
     presetId: "deepseek",
@@ -90,16 +105,17 @@ test("Ark and MiMo presets use models for their own official endpoints", () => {
   }
 });
 
-test("both MiniMax presets declare image input only for the vision-capable model", () => {
+test("both MiniMax presets declare image input for their vision-capable models", () => {
   [MINIMAX_API_PROVIDER_ID, MINIMAX_EN_API_PROVIDER_ID].forEach((presetId) => {
     const preset = findCodexApiProviderPresetById(presetId);
 
     assert.ok(preset);
-    assert.deepEqual(preset.modelCatalog, ["MiniMax-M3", "MiniMax-M2.7"]);
-    assert.deepEqual(preset.visionModelCatalog, ["MiniMax-M3"]);
+    assert.deepEqual(preset.modelCatalog, ["MiniMax-M3", "MiniMax-M3.1-Flash", "MiniMax-M2.7"]);
+    assert.deepEqual(preset.visionModelCatalog, ["MiniMax-M3", "MiniMax-M3.1-Flash"]);
 
     const support = codexApiProviderPresetVisionSupport(preset);
     assert.equal(support["minimax-m3"], true);
+    assert.equal(support["minimax-m3.1-flash"], true);
     assert.equal(support["minimax-m2.7"], undefined);
   });
 });

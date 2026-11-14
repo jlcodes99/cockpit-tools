@@ -214,7 +214,7 @@ const CC_SWITCH_DIRECT_CLAUDE_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset
     baseUrl: 'https://api.minimaxi.com/anthropic',
     website: 'https://platform.minimaxi.com/docs',
     apiKeyUrl: 'https://platform.minimaxi.com/subscribe/coding-plan',
-    modelCatalog: ['MiniMax-M3', 'MiniMax-M2.7'],
+    modelCatalog: ['MiniMax-M3', 'MiniMax-M3.1-Flash', 'MiniMax-M2.7'],
     extraEnv: modelEnv('MiniMax-M3', {}, {
       API_TIMEOUT_MS: '3000000',
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
@@ -226,7 +226,7 @@ const CC_SWITCH_DIRECT_CLAUDE_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset
     baseUrl: 'https://api.minimax.io/anthropic',
     website: 'https://platform.minimax.io/docs',
     apiKeyUrl: 'https://platform.minimax.io/subscribe/coding-plan',
-    modelCatalog: ['MiniMax-M3', 'MiniMax-M2.7'],
+    modelCatalog: ['MiniMax-M3', 'MiniMax-M3.1-Flash', 'MiniMax-M2.7'],
     extraEnv: modelEnv('MiniMax-M3', {}, {
       API_TIMEOUT_MS: '3000000',
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
@@ -484,6 +484,16 @@ const CC_SWITCH_DIRECT_CLAUDE_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset
     website: 'https://novita.ai',
     apiKeyUrl: 'https://novita.ai',
     extraEnv: modelEnv('zai-org/glm-5.1'),
+  }),
+  createClaudeApiProviderPreset({
+    id: 'runcrate',
+    name: 'Runcrate',
+    baseUrl: 'https://api.runcrate.ai',
+    website: 'https://www.runcrate.ai',
+    apiKeyUrl: 'https://www.runcrate.ai/dashboard/api-keys',
+    extraEnv: modelEnv('deepseek-ai/DeepSeek-V4.1-Flash', {}, {
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: '1048576',
+    }),
   }),
   createClaudeApiProviderPreset({
     id: 'pipellm',

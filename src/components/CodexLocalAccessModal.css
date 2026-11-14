@@ -522,10 +522,9 @@
 }
 
 .codex-local-access-stats-range-tab.is-active {
-  color: #1d4ed8;
-  border-color: rgba(37, 99, 235, 0.24);
-  background: rgba(219, 234, 254, 0.9);
-  box-shadow: 0 8px 16px -12px rgba(37, 99, 235, 0.65);
+  color: var(--text-primary);
+  border-color: var(--primary);
+  background: var(--primary-light);
 }
 
 .codex-local-access-inline-error,
@@ -3188,13 +3187,6 @@
 [data-theme="dark"] .codex-local-access-stats-range-tab:hover:not(:disabled) {
   color: var(--text-primary);
   background: rgba(71, 85, 105, 0.4);
-}
-
-[data-theme="dark"] .codex-local-access-stats-range-tab.is-active {
-  color: #bfdbfe;
-  border-color: rgba(96, 165, 250, 0.28);
-  background: rgba(30, 64, 175, 0.3);
-  box-shadow: 0 10px 18px -14px rgba(59, 130, 246, 0.68);
 }
 
 [data-theme="dark"] .codex-local-access-section-surface,

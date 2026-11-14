@@ -345,6 +345,10 @@ export const CLAUDE_DESKTOP_GATEWAY_PROVIDER_PRESETS: readonly ClaudeDesktopGate
         labelOverride: 'MiniMax-M3',
         supports1m: true,
       }),
+      createRoute('claude-opus-4-7', 'MiniMax-M3.1-Flash', {
+        labelOverride: 'MiniMax-M3.1-Flash',
+        supports1m: true,
+      }),
       createRoute('claude-haiku-4-5', 'MiniMax-M2.7', {
         labelOverride: 'MiniMax-M2.7',
       }),
@@ -361,6 +365,10 @@ export const CLAUDE_DESKTOP_GATEWAY_PROVIDER_PRESETS: readonly ClaudeDesktopGate
     modelMappings: [
       createRoute('claude-sonnet-4-6', 'MiniMax-M3', {
         labelOverride: 'MiniMax-M3',
+        supports1m: true,
+      }),
+      createRoute('claude-opus-4-7', 'MiniMax-M3.1-Flash', {
+        labelOverride: 'MiniMax-M3.1-Flash',
         supports1m: true,
       }),
       createRoute('claude-haiku-4-5', 'MiniMax-M2.7', {
@@ -723,6 +731,16 @@ export const CLAUDE_DESKTOP_GATEWAY_PROVIDER_PRESETS: readonly ClaudeDesktopGate
     website: 'https://novita.ai',
     apiKeyUrl: 'https://novita.ai',
     modelMappings: repeatedMappedRoute('zai-org/glm-5.1'),
+  },
+  {
+    id: 'runcrate',
+    name: 'Runcrate',
+    baseUrls: ['https://api.runcrate.ai'],
+    authScheme: 'bearer',
+    connectionMode: 'local_mapping',
+    website: 'https://www.runcrate.ai',
+    apiKeyUrl: 'https://www.runcrate.ai/dashboard/api-keys',
+    modelMappings: repeatedMappedRoute('deepseek-ai/DeepSeek-V4.1-Flash'),
   },
   {
     id: 'pipellm',

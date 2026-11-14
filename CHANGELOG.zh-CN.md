@@ -12,11 +12,14 @@
 
 ### 新增
 
+- **供应商预设**：Codex 新增 UberLLM。Codex、Claude Code 和 Claude Desktop 新增 Runcrate。 [#3075](https://github.com/jlcodes99/cockpit-tools/pull/3075) · [#2952](https://github.com/jlcodes99/cockpit-tools/pull/2952)
+- **MiniMax 预设**：Codex、Claude Code 和 Claude Desktop 可选择 MiniMax-M3.1-Flash。 [#2865](https://github.com/jlcodes99/cockpit-tools/pull/2865)
 - **Antigravity 自动切号**：可在通用设置和平台快捷设置中分别设定 5 小时及周额度的切号阈值。 [#3101](https://github.com/jlcodes99/cockpit-tools/pull/3101)
 - **模型探测**：WorkBuddy 和 CodeBuddy CN 支持按账号与模型组合批量探测，逐项查看结果，也可从单个账号卡片发起。 [#3096](https://github.com/jlcodes99/cockpit-tools/pull/3096) · [#3064](https://github.com/jlcodes99/cockpit-tools/pull/3064)
 
 ### 修复
 
+- **Codex API 服务**：选中的用量时间范围页签随当前主题配色。 [#2115](https://github.com/jlcodes99/cockpit-tools/pull/2115)
 - **Antigravity 账号授权**：添加或授权同一账号时可重建缺失的账号文件，并保留原账号 ID。 [#2854](https://github.com/jlcodes99/cockpit-tools/pull/2854)
 - **Codex API 服务**：按套餐排序调度时，将已过期的 OAuth 订阅按免费套餐处理。 [#2174](https://github.com/jlcodes99/cockpit-tools/pull/2174)
 - **Codex API Key**：保存密钥时保留供应商协议和 WebSocket 支持设置。 [#1980](https://github.com/jlcodes99/cockpit-tools/pull/1980)

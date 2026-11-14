@@ -12,11 +12,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Provider presets**: Add UberLLM for Codex and Runcrate for Codex, Claude Code and Claude Desktop. [#3075](https://github.com/jlcodes99/cockpit-tools/pull/3075) · [#2952](https://github.com/jlcodes99/cockpit-tools/pull/2952)
+- **MiniMax presets**: Offer MiniMax-M3.1-Flash in Codex, Claude Code and Claude Desktop. [#2865](https://github.com/jlcodes99/cockpit-tools/pull/2865)
 - **Antigravity automatic account switching**: Set separate 5-hour and weekly quota thresholds in General Settings or the platform quick settings. [#3101](https://github.com/jlcodes99/cockpit-tools/pull/3101)
 - **Model probes**: Run an account-by-model probe matrix from WorkBuddy and CodeBuddy CN, view individual results, and open a probe from a specific account card. [#3096](https://github.com/jlcodes99/cockpit-tools/pull/3096) · [#3064](https://github.com/jlcodes99/cockpit-tools/pull/3064)
 
 ### Fixed
 
+- **Codex API Service**: Apply the selected theme to the active usage range tab. [#2115](https://github.com/jlcodes99/cockpit-tools/pull/2115)
 - **Antigravity account authorization**: Recreate a missing account file when adding or authorizing the same account, preserving its account ID. [#2854](https://github.com/jlcodes99/cockpit-tools/pull/2854)
 - **Codex API Service**: Rank expired OAuth subscriptions as Free for plan-based routing. [#2174](https://github.com/jlcodes99/cockpit-tools/pull/2174)
 - **Codex API keys**: Preserve provider protocol and WebSocket support when saving a key. [#1980](https://github.com/jlcodes99/cockpit-tools/pull/1980)
