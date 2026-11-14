@@ -78,9 +78,10 @@ fn account() -> crate::models::workbuddy::WorkbuddyAccount {
 async fn direct_prompt_reply_requires_model_selection_and_reports_cleanup_failure() {
     let (base, fixture, task) = server(false, true).await;
     let client = reqwest::Client::builder().no_proxy().build().unwrap();
+    let account = account();
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(2),
-        probe_with_client(&client, &base, &account(), "chosen-model", false),
+        probe_with_client(&client, &base, &ProbeAccount::from_workbuddy(&account), "chosen-model", false),
     )
     .await
     .unwrap()
@@ -107,7 +108,8 @@ async fn direct_prompt_reply_requires_model_selection_and_reports_cleanup_failur
 async fn failed_model_selection_never_sends_prompt_and_still_deletes_the_conversation() {
     let (base, fixture, task) = server(true, false).await;
     let client = reqwest::Client::builder().no_proxy().build().unwrap();
-    let result = probe_with_client(&client, &base, &account(), "chosen-model", false)
+    let account = account();
+    let result = probe_with_client(&client, &base, &ProbeAccount::from_workbuddy(&account), "chosen-model", false)
         .await
         .unwrap();
     assert_eq!(result.status, "error");
@@ -130,7 +132,8 @@ async fn failed_model_selection_never_sends_prompt_and_still_deletes_the_convers
 async fn explicitly_kept_conversation_is_not_deleted() {
     let (base, fixture, task) = server(false, false).await;
     let client = reqwest::Client::builder().no_proxy().build().unwrap();
-    let result = probe_with_client(&client, &base, &account(), "chosen-model", true)
+    let account = account();
+    let result = probe_with_client(&client, &base, &ProbeAccount::from_workbuddy(&account), "chosen-model", true)
         .await
         .unwrap();
     assert_eq!(result.status, "available");

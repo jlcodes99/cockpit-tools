@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Model probes**: Run an account-by-model probe matrix from WorkBuddy and CodeBuddy CN, view individual results, and open a probe from a specific account card. [#3096](https://github.com/jlcodes99/cockpit-tools/pull/3096) · [#3064](https://github.com/jlcodes99/cockpit-tools/pull/3064)
+
 ### Fixed
 
 - **Codex API Service**: Detect silent network failures and replace failed native transport connections while preserving in-progress response and replay boundaries. [#3106](https://github.com/jlcodes99/cockpit-tools/pull/3106)

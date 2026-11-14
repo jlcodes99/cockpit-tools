@@ -7813,6 +7813,9 @@
       "timeRangeError": "開始時間不能晚於結束時間"
     },
     "modelProbe": {
+      "scopeAll": "全部（{{count}}）",
+      "scopeSelected": "已勾選（{{count}}）",
+      "scopeCurrent": "目前帳號",
       "title": "模型探測",
       "hint": "傳送一則簡短訊息並讀取實際回覆，會消耗少量額度。預設刪除測試對話。",
       "account": "帳號",

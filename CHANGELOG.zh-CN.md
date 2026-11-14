@@ -10,6 +10,10 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **模型探测**：WorkBuddy 和 CodeBuddy CN 支持按账号与模型组合批量探测，逐项查看结果，也可从单个账号卡片发起。 [#3096](https://github.com/jlcodes99/cockpit-tools/pull/3096) · [#3064](https://github.com/jlcodes99/cockpit-tools/pull/3064)
+
 ### 修复
 
 - **Codex API 服务**：识别无响应的网络连接并替换失效传输，保留请求输出和重放的安全边界。 [#3106](https://github.com/jlcodes99/cockpit-tools/pull/3106)

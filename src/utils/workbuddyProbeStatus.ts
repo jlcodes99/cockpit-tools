@@ -6,6 +6,8 @@
  * 清除：探测成功（available）时删除该模型记录；用户在卡片上点 × 也会删除（下次探测会重新写入）。
  */
 
+export type WorkbuddyProbePlatform = 'workbuddy' | 'codebuddy_cn';
+
 export type WorkbuddyProbeStatusKind = 'rate_limited' | 'error';
 
 export interface WorkbuddyProbeRecord {

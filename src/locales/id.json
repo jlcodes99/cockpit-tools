@@ -7988,6 +7988,9 @@
       "timeRangeError": "Waktu mulai tidak boleh lebih lambat dari waktu selesai"
     },
     "modelProbe": {
+      "scopeAll": "Semua ({{count}})",
+      "scopeSelected": "Dipilih ({{count}})",
+      "scopeCurrent": "Akun saat ini",
       "title": "Uji model",
       "hint": "Mengirim pesan singkat dan membaca balasan. Menggunakan sedikit kuota. Percakapan uji dihapus secara bawaan.",
       "account": "Akun",

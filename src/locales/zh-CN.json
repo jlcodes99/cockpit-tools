@@ -8182,6 +8182,9 @@
       }
     },
     "modelProbe": {
+      "scopeAll": "全部（{{count}}）",
+      "scopeSelected": "已勾选（{{count}}）",
+      "scopeCurrent": "当前账号",
       "title": "模型探测",
       "hint": "发送一条简短消息并读取实际回复，会消耗少量额度。默认删除测试会话。",
       "account": "账号",

@@ -95,11 +95,14 @@ export function WorkbuddyAccountsPage() {
   const [creditAccountId, setCreditAccountId] = useState<string | null>(null);
   const [probeOpen, setProbeOpen] = useState(false);
   const [probeAccountId, setProbeAccountId] = useState<string | null>(null);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
   const [probeVersion, setProbeVersion] = useState(0);
   const store = useWorkbuddyAccountStore();
 
   // 探测结果变化时刷新卡片上的受限标识
   useEffect(() => subscribeWorkbuddyProbeStatus(() => setProbeVersion((v) => v + 1)), []);
+
+  // 恢复时间过后自动复测：确认恢复则在卡片提示后标注「已恢复」
 
   const page = useProviderAccountsPage<WorkbuddyAccount>({
     platformKey: 'WorkBuddy',
@@ -183,32 +186,34 @@ export function WorkbuddyAccountsPage() {
       if (records.length === 0) return null;
       return (
         <div className="wb-probe-notice">
-          {records.slice(0, 2).map((record) => (
-            <div key={record.model} className={`wb-probe-notice-item ${record.status}`}>
-              <AlertTriangle size={12} aria-hidden="true" />
-              <span title={record.message}>
-                {record.status === 'rate_limited' && record.resetAt
-                  ? page.t('workbuddy.probeNotice.until', '{{model}} 不可用至 {{time}}', {
-                      model: record.model,
-                      time: formatProbeTime(record.resetAt),
-                    })
-                  : page.t(record.status === 'error' ? 'workbuddy.probeNotice.failed' : 'workbuddy.probeNotice.unavailable', {
-                      model: record.model,
-                    })}
-              </span>
-              <button
-                type="button"
-                className="wb-probe-notice-close"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  dismissWorkbuddyProbeRecord(record.accountId, record.model);
-                }}
-                title={page.t('common.close', '关闭')}
-              >
-                <X size={12} aria-hidden="true" />
-              </button>
-            </div>
-          ))}
+          {records.slice(0, 2).map((record) => {
+            return (
+              <div key={record.model} className={`wb-probe-notice-item ${record.status}`}>
+                <AlertTriangle size={12} aria-hidden="true" />
+                <span title={record.message}>
+                  {record.status === 'rate_limited' && record.resetAt
+                      ? page.t('workbuddy.probeNotice.until', '{{model}} 不可用至 {{time}}', {
+                          model: record.model,
+                          time: formatProbeTime(record.resetAt),
+                        })
+                      : page.t(record.status === 'error' ? 'workbuddy.probeNotice.failed' : 'workbuddy.probeNotice.unavailable', {
+                          model: record.model,
+                        })}
+                </span>
+                <button
+                  type="button"
+                  className="wb-probe-notice-close"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    dismissWorkbuddyProbeRecord(account.id, record.model);
+                  }}
+                  title={page.t('common.close', '关闭')}
+                >
+                  <X size={12} aria-hidden="true" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       );
     },
@@ -224,7 +229,7 @@ export function WorkbuddyAccountsPage() {
           onClick={() => setProbeOpen(true)}
         >
           <Crosshair size={14} aria-hidden="true" />
-          {page.t('workbuddy.modelProbe.open', '探测模型可用性')}
+          {page.t('workbuddy.modelProbe.open', '批量探测模型')}
         </button>
       </div>
       <PlatformOverviewTabsHeader
@@ -243,6 +248,7 @@ export function WorkbuddyAccountsPage() {
           loading={store.loading}
           page={page}
           platformConfig={platformConfig}
+          onSelectionChange={setSelectedAccountIds}
           onRefreshAccounts={() => { store.fetchAccounts(); }}
         />
       )}
@@ -258,6 +264,9 @@ export function WorkbuddyAccountsPage() {
         <WorkbuddyModelProbeModal
           accounts={store.accounts}
           currentAccountId={probeAccountId ?? store.currentAccountId}
+          selectedAccountIds={selectedAccountIds}
+          initialScope={probeAccountId ? 'current' : undefined}
+          lockedAccountId={probeAccountId}
           onClose={() => {
             setProbeOpen(false);
             setProbeAccountId(null);

@@ -7813,6 +7813,9 @@
       "timeRangeError": "La hora de inicio no puede ser posterior a la hora de finalización"
     },
     "modelProbe": {
+      "scopeAll": "Todos ({{count}})",
+      "scopeSelected": "Seleccionados ({{count}})",
+      "scopeCurrent": "Cuenta actual",
       "title": "Prueba de modelo",
       "hint": "Envía un mensaje corto y lee la respuesta. Consume una pequeña cuota. La conversación de prueba se elimina por defecto.",
       "account": "Cuenta",

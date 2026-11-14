@@ -7813,6 +7813,9 @@
       "timeRangeError": "Počáteční čas nesmí být pozdější než koncový čas"
     },
     "modelProbe": {
+      "scopeAll": "Vše ({{count}})",
+      "scopeSelected": "Vybráno ({{count}})",
+      "scopeCurrent": "Aktuální účet",
       "title": "Test modelu",
       "hint": "Odešle krátkou zprávu a přečte odpověď. Spotřebuje malou část kvóty. Testovací konverzace se ve výchozím stavu smaže.",
       "account": "Účet",

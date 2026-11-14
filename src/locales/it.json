@@ -7813,6 +7813,9 @@
       "timeRangeError": "L'ora di inizio non può essere successiva all'ora di fine"
     },
     "modelProbe": {
+      "scopeAll": "Tutti ({{count}})",
+      "scopeSelected": "Selezionati ({{count}})",
+      "scopeCurrent": "Account corrente",
       "title": "Test modello",
       "hint": "Invia un breve messaggio e legge la risposta. Consuma una piccola quota. La conversazione di prova viene eliminata per impostazione predefinita.",
       "account": "Account",

@@ -7813,6 +7813,9 @@
       "timeRangeError": "O horário de início não pode ser posterior ao horário de término"
     },
     "modelProbe": {
+      "scopeAll": "Todos ({{count}})",
+      "scopeSelected": "Selecionados ({{count}})",
+      "scopeCurrent": "Conta atual",
       "title": "Teste de modelo",
       "hint": "Envia uma mensagem curta e lê a resposta. Consome uma pequena cota. A conversa de teste é excluída por padrão.",
       "account": "Conta",

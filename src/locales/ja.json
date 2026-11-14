@@ -7813,6 +7813,9 @@
       "timeRangeError": "開始時間は終了時間より後にできません"
     },
     "modelProbe": {
+      "scopeAll": "すべて（{{count}}）",
+      "scopeSelected": "選択済み（{{count}}）",
+      "scopeCurrent": "現在のアカウント",
       "title": "モデル確認",
       "hint": "短いメッセージを送信して返信を確認します。少量の利用枠を消費します。テスト会話は既定で削除されます。",
       "account": "アカウント",

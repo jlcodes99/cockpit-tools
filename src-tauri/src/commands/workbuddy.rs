@@ -572,3 +572,30 @@ pub async fn fetch_workbuddy_cloud_models(
     let account = load_billing_account(account_id).await?;
     crate::modules::workbuddy_model_probe::fetch_cloud_models(&account).await
 }
+
+// ---- CodeBuddy CN：与 WorkBuddy 同构（额度共享），复用同一套探测/目录逻辑 ----
+
+#[tauri::command]
+pub async fn probe_codebuddy_cn_model(
+    account_id: String,
+    model: String,
+    keep_conversation: Option<bool>,
+) -> Result<crate::modules::workbuddy_model_probe::WorkbuddyModelProbeResult, String> {
+    let account = crate::modules::codebuddy_cn_account::load_account(&account_id)
+        .ok_or_else(|| format!("账号不存在或读取失败: {}", account_id))?;
+    crate::modules::workbuddy_model_probe::probe_cn_model(
+        &account,
+        &model,
+        keep_conversation.unwrap_or(false),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn fetch_codebuddy_cn_cloud_models(
+    account_id: String,
+) -> Result<Vec<crate::modules::workbuddy_model_probe::WorkbuddyCloudModel>, String> {
+    let account = crate::modules::codebuddy_cn_account::load_account(&account_id)
+        .ok_or_else(|| format!("账号不存在或读取失败: {}", account_id))?;
+    crate::modules::workbuddy_model_probe::fetch_cn_cloud_models(&account).await
+}
