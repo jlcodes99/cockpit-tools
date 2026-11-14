@@ -563,6 +563,23 @@ impl Drop for QuotaAdmissionPermit {
     }
 }
 
+fn quota_reserved_error(
+    reason: &'static str, reserve: &CodexLocalAccessQuotaReserve,
+    primary: Option<&ObservedQuotaWindow>, secondary: Option<&ObservedQuotaWindow>, in_flight: usize,
+) -> native_contract::ServiceError {
+    let remaining = |window: Option<&ObservedQuotaWindow>| window.and_then(|w| w.value.as_ref()).map(|w| w.remaining_percent);
+    tracing::info!(target: "codex_api", reason,
+        primary_remaining=remaining(primary), secondary_remaining=remaining(secondary),
+        primary_cutoff=quota_reserve_cutoff(reserve, reserve.hourly_percent),
+        secondary_cutoff=quota_reserve_cutoff(reserve, reserve.weekly_percent), in_flight,
+        "[NativeAPI][quota] admission=reserved");
+    native_error(429, "quota_reserved", &format!("OAuth quota is reserved ({reason})"))
+        .with_error_details(json!({"code":"quota_reserved","message":format!("OAuth quota is reserved ({reason})"),
+            "reason":reason,"confirmation_pending":reason != "reserve_threshold",
+            "primary_remaining_percent":remaining(primary),"secondary_remaining_percent":remaining(secondary)}))
+        .with_retry_after(Some(Duration::from_secs(5)))
+}
+
 fn acquire_quota_admission(
     collection: &CodexLocalAccessCollection,
     account: &CodexAccount,
@@ -574,14 +591,15 @@ fn acquire_quota_admission(
         .lock()
         .map_err(|_| native_error(503, "quota_unavailable", "Quota admission is unavailable"))?;
     let state = runtime.accounts.entry(account.id.clone()).or_default();
-    let (blocked, near, _, _) = quota_reserve_decision(&reserve, account, Some(state));
+    let (blocked, near, primary, secondary) = quota_reserve_decision(&reserve, account, Some(state));
     if blocked || (near && (state.in_flight > 0 || state.awaiting_confirmation)) {
-        return Err(native_error(
-            429,
-            "quota_reserved",
-            "OAuth quota is reserved or awaiting confirmation",
-        )
-        .with_retry_after(Some(Duration::from_secs(5))));
+        let reason = if !state.verified { "unverified" }
+            else if account.quota_error.is_some() || quota_refresh_fail_closed_for_account(&account.id) { "refresh_failed" }
+            else if primary.is_none() || secondary.is_none() { "snapshot_expired" }
+            else if blocked { "reserve_threshold" }
+            else if state.awaiting_confirmation { "awaiting_confirmation" }
+            else { "concurrent_near_reserve" };
+        return Err(quota_reserved_error(reason, &reserve, primary.as_ref(), secondary.as_ref(), state.in_flight));
     }
     state.in_flight += 1;
     let permit = QuotaAdmissionPermit {
@@ -618,27 +636,24 @@ fn check_gateway_quota_before_send(
     let state = runtime.accounts.get(account_id);
     let primary = fresh_observed_quota_window(state.and_then(|s| s.primary.as_ref()));
     let secondary = fresh_observed_quota_window(state.and_then(|s| s.secondary.as_ref()));
-    let blocked = !state.is_some_and(|state| state.verified)
-        || quota_refresh_fail_closed_for_account(account_id)
-        || (quota_windows_near(
-                reserve,
-                primary,
-                secondary,
-            )
-            && state.is_some_and(|s| s.awaiting_confirmation || s.in_flight > 1))
-        || quota_window_blocks(
-            primary,
-            quota_reserve_cutoff(reserve, reserve.hourly_percent),
-        )
-        || quota_window_blocks(
-            secondary,
-            quota_reserve_cutoff(reserve, reserve.weekly_percent),
-        );
-    if blocked {
-        return Err(
-            native_error(429, "quota_reserved", "OAuth quota is reserved")
-                .with_retry_after(Some(Duration::from_secs(5))),
-        );
+    let reason = if !state.is_some_and(|state| state.verified) {
+        Some("unverified")
+    } else if quota_refresh_fail_closed_for_account(account_id) {
+        Some("refresh_failed")
+    } else if primary.is_none() || secondary.is_none() {
+        Some("snapshot_expired")
+    } else if quota_window_blocks(primary, quota_reserve_cutoff(reserve, reserve.hourly_percent))
+        || quota_window_blocks(secondary, quota_reserve_cutoff(reserve, reserve.weekly_percent)) {
+        Some("reserve_threshold")
+    } else if quota_windows_near(reserve, primary, secondary)
+        && state.is_some_and(|s| s.awaiting_confirmation) {
+        Some("awaiting_confirmation")
+    } else if quota_windows_near(reserve, primary, secondary)
+        && state.is_some_and(|s| s.in_flight > 1) {
+        Some("concurrent_near_reserve")
+    } else { None };
+    if let Some(reason) = reason {
+        return Err(quota_reserved_error(reason, reserve, primary, secondary, state.map_or(0, |s| s.in_flight)));
     }
     Ok(())
 }

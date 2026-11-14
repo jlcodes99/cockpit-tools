@@ -57,6 +57,7 @@ pub(super) async fn recover(
     event: &Value,
     deadline: Deadline,
     reason: &'static str,
+    full_replay_parent: Option<&str>,
 ) -> Result<bool, ServiceError> {
     if prepared.continuation_recovered
         || !rejection(event)
@@ -67,6 +68,23 @@ pub(super) async fn recover(
         || prepared.route.wire_api != super::super::contract::WireApi::Responses
     {
         return Ok(false);
+    }
+    if let Some(previous) = full_replay_parent.filter(|_| {
+        prepared.replay_body().get("previous_response_id").is_none_or(Value::is_null)
+            && prepared.replay_body().get("input").and_then(Value::as_array)
+                .is_some_and(|input| !input.is_empty())
+    }) {
+        // The caller already supplied the complete source, which the transport
+        // retained untouched. A proven pre-execution cache miss gets one full
+        // same-account retry; never reduce that recovery request again.
+        let digest = format!("{:x}", Sha256::digest(previous.as_bytes()));
+        tracker.attempt_error(&super::super::output_error::event_failure(event, 400));
+        prepared.continuation_recovered = true;
+        prepared.reasoning_ceiling_proof = None;
+        prepared.execution = prepared.execution.renew_open();
+        tracing::info!(target: "codex_api", "[NativeAPI][continuation] request_id={} reason={} previous_digest={} history=complete recovery=retry_original_full_source",
+            tracker.diagnostic_request_id(), reason, &digest[..16]);
+        return Ok(true);
     }
     let Some(previous) = prepared
         .replay_body()

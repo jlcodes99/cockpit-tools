@@ -194,6 +194,8 @@ async fn invalid_continuation_recovers_complete_history_on_new_and_reused_socket
                 assert_eq!(replay["instructions"], original["instructions"]);
                 assert_eq!(replay["tools"], original["tools"]);
                 assert_eq!(sent[0].0.get("thread-id"), sent[2].0.get("thread-id"));
+                assert_eq!(sent[0].0.get("session-id"), sent[2].0.get("session-id"),
+                    "recovery must not remap an already-mapped session");
                 assert_eq!(
                     sent[0].0.get("authorization"),
                     sent[2].0.get("authorization")
@@ -365,6 +367,10 @@ async fn invalid_continuation_recovery_preserves_history_for_the_following_turn(
         assert_eq!(replay["input"].as_array().unwrap().len(), 5);
         assert_eq!(replay["input"][0]["content"], "original context");
         assert_eq!(replay["input"][4]["content"], "after recovery");
+        for name in ["session-id", "thread-id"] {
+            assert_eq!(sent[0].0.get(name), sent[2].0.get(name), "{name}");
+            assert_eq!(sent[0].0.get(name), sent[4].0.get(name), "{name}");
+        }
     }
     let _ = socket.close(None).await;
     fixture.finish().await;

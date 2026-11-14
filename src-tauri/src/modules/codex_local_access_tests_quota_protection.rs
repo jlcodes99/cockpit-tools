@@ -25,6 +25,36 @@ fn quota_protection_fixture(
     (collection, account)
 }
 
+#[test]
+fn quota_protection_distinguishes_stale_evidence_from_actual_reserve_thresholds() {
+    let (mut collection, mut account) = quota_protection_fixture("quota-reason", 45, true);
+    collection.bound_oauth_quota_reserve.as_mut().unwrap().hourly_percent = 5;
+    account.quota.as_mut().unwrap().weekly_percentage = 27;
+    confirm_gateway_quota_refresh(&account.id, account.quota.as_ref().unwrap(), Instant::now());
+    let reserve = collection.bound_oauth_quota_reserve.as_ref();
+    assert!(check_gateway_quota_before_send(&account.id, false, reserve).is_ok());
+    quota_reserve_coordinator().lock().unwrap().accounts.get_mut(&account.id).unwrap().primary = None;
+    let error = check_gateway_quota_before_send(&account.id, false, reserve).unwrap_err();
+    assert_eq!(error.response_error.as_ref().unwrap()["reason"], "snapshot_expired");
+    assert_eq!(error.response_error.as_ref().unwrap()["confirmation_pending"], true);
+    confirm_gateway_quota_refresh(&account.id, account.quota.as_ref().unwrap(), Instant::now());
+    assert!(check_gateway_quota_before_send(&account.id, false, reserve).is_ok());
+    observe_gateway_quota(&account.id, quota_protection_snapshot(8.0, 5000), Instant::now());
+    let error = check_gateway_quota_before_send(&account.id, false, reserve).unwrap_err();
+    assert_eq!(error.response_error.as_ref().unwrap()["reason"], "reserve_threshold");
+    assert_eq!(error.response_error.as_ref().unwrap()["confirmation_pending"], false);
+    assert_eq!(quota_reserve_cutoff(reserve.unwrap(), 5), 8.0);
+}
+
+#[test]
+fn quota_protection_local_rejection_does_not_create_remote_quota_cooldown() {
+    let host = NativeHostBridge::default();
+    host.record_failure_cooldown(&native_cooldown_report(429, "quota_reserved"));
+    assert!(host.cooldowns.lock().unwrap().is_empty());
+    host.record_failure_cooldown(&native_cooldown_report(429, "upstream_http_429"));
+    assert!(!host.cooldowns.lock().unwrap().is_empty());
+}
+
 fn quota_protection_snapshot(remaining: f64, reset: i64) -> QuotaSnapshot {
     QuotaSnapshot {
         primary: Some(QuotaWindow {

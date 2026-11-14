@@ -118,6 +118,11 @@ pub(super) async fn open_with_retries(
                     opening_retries,
                 });
             }
+            Err(error) if error.code == "websocket_context_seed_unavailable" => {
+                // No generating request has been sent. The original input is
+                // still intact, so the existing HTTP bridge is a safe fallback.
+                tracker.attempt_error(&error);
+            }
             Err(error) if !prepared.continuation_recovered
                 && ((error.status == 426 && error.code == "websocket_upstream_rejected")
                     || (error.code == "websocket_pool_unavailable"
@@ -127,6 +132,21 @@ pub(super) async fn open_with_retries(
             Err(error) => return Err(error),
         }
     }
+    open_http(state, caller, prepared, tracker, policy, deadline, history).await
+}
+
+/// Used after a positively non-generating preload fails on a reused socket.
+/// Preserve the same complete source and ordinary owner-checked HTTP replay.
+pub(super) async fn open_http(
+    state: &Arc<AppState>,
+    _caller: &Caller,
+    prepared: &mut Prepared,
+    tracker: &mut RequestTracker,
+    policy: &ExecutionPolicy,
+    deadline: Deadline,
+    history: &mut History,
+) -> Result<Transport, ServiceError> {
+    history.begin(prepared);
     if prepared.source_body.get("generate") == Some(&Value::Bool(false)) {
         let events = history.prewarm(&prepared.source_body);
         let source = stream::iter(
