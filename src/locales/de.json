@@ -7843,6 +7843,12 @@
     }
   },
   "minimaxCode": {
+    "credentialRefresh": {
+      "signInClient": "Melde dich im MiniMax Code-Client an und versuche es erneut.",
+      "authorizeAgain": "Autorisiere das MiniMax Code-Konto erneut oder importiere es nach der Anmeldung aus dem Client.",
+      "credentialsChanged": "Die Zugangsdaten für MiniMax Code haben sich geändert. Versuche es erneut.",
+      "missingAccessToken": "MiniMax Code hat bei der Erneuerung kein Zugriffstoken zurückgegeben."
+    },
     "title": "MiniMax Code-Kontenverwaltung",
     "noAccounts": "Keine MiniMax Code-Konten",
     "addAccount": "MiniMax Code-Konto hinzufügen",

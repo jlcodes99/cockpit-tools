@@ -12,10 +12,18 @@ struct ParentScanState {
     anchor: String,
     #[serde(default)]
     discard_line: bool,
+    #[serde(default)]
+    compressed: bool,
 }
 
-fn prepare_parent_index(conn: &Connection, path: &Path) -> Result<Option<ParentScanState>, String> {
-    let path_text = path.to_string_lossy();
+fn prepare_parent_index(
+    conn: &Connection,
+    path: &Path,
+    cache: &mut UsageReaderCache,
+) -> Result<Option<ParentScanState>, String> {
+    let logical_path = logical_rollout_path(path);
+    let path_text = logical_path.to_string_lossy();
+    let compressed = is_compressed_rollout(path);
     let raw: Option<String> = conn
         .query_row(
             "SELECT state FROM session_parent_sync WHERE file_path=?1",
@@ -30,12 +38,18 @@ fn prepare_parent_index(conn: &Connection, path: &Path) -> Result<Option<ParentS
     let meta = fs::metadata(path).map_err(|e| e.to_string())?;
     let modified = metadata_modified_nanos(&meta);
     let size = meta.len();
-    if state.complete && state.modified == modified && state.size == size {
+    if state.complete
+        && state.modified == modified
+        && state.size == size
+        && state.compressed == compressed
+    {
         return Ok(Some(state));
     }
     if state.offset > 0
         && (size < state.size
             || (size == state.size && modified != state.modified)
+            || state.compressed != compressed
+            || (compressed && size != state.size)
             || !checkpoint_anchor(path, state.offset).is_ok_and(|v| v == state.anchor))
     {
         state = ParentScanState {
@@ -43,30 +57,24 @@ fn prepare_parent_index(conn: &Connection, path: &Path) -> Result<Option<ParentS
             ..Default::default()
         };
     }
-    let mut file = File::open(path).map_err(|e| e.to_string())?;
-    file.seek(SeekFrom::Start(state.offset))
-        .map_err(|e| e.to_string())?;
-    let mut reader = BufReader::new(file);
+    let reader = cache.at(path, state.offset)?;
     let started = std::time::Instant::now();
     let initial = state.offset;
     let mut events = Vec::new();
-    loop {
-        let position = reader.stream_position().map_err(|e| e.to_string())?;
+    let (offset, complete) = loop {
+        let position = reader.offset;
         if position > initial
             && (position - initial >= crate::modules::background_maintenance::BATCH_BYTES
                 || events.len() >= INSERT_BATCH_SIZE
                 || started.elapsed() >= crate::modules::background_maintenance::BATCH_TIME)
         {
-            break;
+            break (position, reader.at_eof()?);
         }
-        let Some(line) = read_usage_line(&mut reader, &mut state.discard_line)? else {
-            break;
+        let Some(line) = read_usage_line(reader, &mut state.discard_line)? else {
+            break (position, true);
         };
-        if !line.ends_with('\n') && !line.is_empty() {
-            reader
-                .seek(SeekFrom::Start(position))
-                .map_err(|e| e.to_string())?;
-            break;
+        if !compressed && !line.ends_with('\n') && !line.is_empty() {
+            break (position, false);
         }
         state.line += 1;
         if !line.contains("\"token_count\"") {
@@ -96,14 +104,10 @@ fn prepare_parent_index(conn: &Connection, path: &Path) -> Result<Option<ParentS
             timestamp.timestamp_millis(),
             serde_json::to_string(&signature).map_err(|e| e.to_string())?,
         ));
-    }
-    state.offset = reader.stream_position().map_err(|e| e.to_string())?;
-    state.complete = state.offset
-        >= reader
-            .get_ref()
-            .metadata()
-            .map_err(|e| e.to_string())?
-            .len();
+    };
+    state.offset = offset;
+    state.complete = complete;
+    state.compressed = compressed;
     state.size = size;
     state.modified = modified;
     state.anchor = checkpoint_anchor(path, state.offset)?;
@@ -134,23 +138,25 @@ fn resolve_parent_replay(
     index: &RolloutIndex,
     child: &[ParsedTokenEvent],
     checkpoint: &mut ParserCheckpoint,
+    cache: &mut UsageReaderCache,
 ) -> Result<ParentReplay, String> {
     let paths = index
         .get(parent_id)
         .ok_or_else(|| format!("找不到父 rollout: {parent_id}"))?;
     let mut snapshots = Vec::new();
     for path in paths {
-        let Some(state) = prepare_parent_index(conn, path)? else {
+        let Some(state) = prepare_parent_index(conn, path, cache)? else {
             return Ok(ParentReplay::Pending);
         };
         if state.missing_timestamp {
             return Err("父 rollout 的 token_count 缺少有效 timestamp".into());
         }
-        let count:i64=conn.query_row("SELECT COUNT(*) FROM session_parent_signatures WHERE file_path=?1 AND generation=?2",params![path.to_string_lossy().as_ref(),state.generation],|r|r.get(0)).map_err(|e|e.to_string())?;
+        let logical_path = logical_rollout_path(path);
+        let count:i64=conn.query_row("SELECT COUNT(*) FROM session_parent_signatures WHERE file_path=?1 AND generation=?2",params![logical_path.to_string_lossy().as_ref(),state.generation],|r|r.get(0)).map_err(|e|e.to_string())?;
         if count == 0 {
             return Err("父 rollout 尚无可用 token_count".into());
         }
-        snapshots.push((path, state));
+        snapshots.push((logical_path, state));
     }
     let Some((first, first_state)) = snapshots.first() else {
         return Err("找不到父 rollout".into());

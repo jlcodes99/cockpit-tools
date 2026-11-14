@@ -7843,6 +7843,12 @@
     }
   },
   "minimaxCode": {
+    "credentialRefresh": {
+      "signInClient": "Inicia sesión en el cliente de MiniMax Code y vuelve a intentarlo.",
+      "authorizeAgain": "Vuelve a autorizar la cuenta de MiniMax Code o impórtala tras iniciar sesión en el cliente.",
+      "credentialsChanged": "Las credenciales de MiniMax Code han cambiado. Vuelve a intentarlo.",
+      "missingAccessToken": "MiniMax Code no devolvió un token de acceso al renovar."
+    },
     "title": "Gestión de cuentas de MiniMax Code",
     "noAccounts": "No hay cuentas de MiniMax Code",
     "addAccount": "Agregar cuenta de MiniMax Code",

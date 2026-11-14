@@ -8212,6 +8212,12 @@
     }
   },
   "minimaxCode": {
+    "credentialRefresh": {
+      "signInClient": "请登录 MiniMax Code 客户端后重试。",
+      "authorizeAgain": "请重新授权 MiniMax Code 账号，或在客户端登录后重新导入。",
+      "credentialsChanged": "MiniMax Code 凭据已更新，请重试。",
+      "missingAccessToken": "MiniMax Code 续期未返回访问令牌。"
+    },
     "title": "MiniMax Code 账号管理",
     "noAccounts": "暂无 MiniMax Code 账号",
     "addAccount": "添加 MiniMax Code 账号",

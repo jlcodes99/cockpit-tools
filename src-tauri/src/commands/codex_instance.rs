@@ -2130,7 +2130,11 @@ pub async fn codex_list_sessions_across_instances(
 pub async fn codex_get_session_token_stats_across_instances(
     session_ids: Vec<String>,
 ) -> Result<Vec<modules::codex_session_manager::CodexSessionTokenStats>, String> {
-    modules::codex_session_manager::get_session_token_stats_across_instances(session_ids)
+    tauri::async_runtime::spawn_blocking(move || {
+        modules::codex_session_manager::get_session_token_stats_across_instances(session_ids)
+    })
+    .await
+    .map_err(|error| format!("读取 Codex 会话 Token 用量失败: {error}"))?
 }
 
 #[tauri::command]

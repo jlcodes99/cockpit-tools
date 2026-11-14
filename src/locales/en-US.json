@@ -8212,6 +8212,12 @@
     }
   },
   "minimaxCode": {
+    "credentialRefresh": {
+      "signInClient": "Sign in to the MiniMax Code client, then try again.",
+      "authorizeAgain": "Reauthorize the MiniMax Code account or import it again after signing in to the client.",
+      "credentialsChanged": "MiniMax Code credentials changed. Please try again.",
+      "missingAccessToken": "MiniMax Code did not return an access token during renewal."
+    },
     "title": "MiniMax Code Account",
     "noAccounts": "No MiniMax Code accounts",
     "addAccount": "Add MiniMax Code Account",

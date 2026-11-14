@@ -7843,6 +7843,12 @@
     }
   },
   "minimaxCode": {
+    "credentialRefresh": {
+      "signInClient": "MiniMax Code 클라이언트에 로그인한 뒤 다시 시도하세요.",
+      "authorizeAgain": "MiniMax Code 계정을 다시 인증하거나 클라이언트에 로그인한 뒤 다시 가져오세요.",
+      "credentialsChanged": "MiniMax Code 인증 정보가 변경되었습니다. 다시 시도하세요.",
+      "missingAccessToken": "MiniMax Code가 갱신 중 액세스 토큰을 반환하지 않았습니다."
+    },
     "title": "MiniMax Code 계정 관리",
     "noAccounts": "MiniMax Code 계정이 없습니다",
     "addAccount": "MiniMax Code 계정 추가",

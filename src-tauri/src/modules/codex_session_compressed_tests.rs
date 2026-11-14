@@ -1,4 +1,49 @@
 #[test]
+fn compressed_session_token_stats_match_the_plain_rollout() {
+    let base = make_temp_dir("codex-session-compressed-token-stats");
+    let plain = base.join("rollout-tokens.jsonl");
+    let compressed = plain.with_extension("jsonl.zst");
+    let mut log = String::new();
+    for (input, output) in [(100, 20), (230, 40)] {
+        log.push_str(
+            &json!({
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "total_token_usage": {
+                            "input_tokens": input,
+                            "output_tokens": output,
+                            "total_tokens": input + output,
+                        }
+                    }
+                }
+            })
+            .to_string(),
+        );
+        log.push_str("\r\n");
+    }
+    log.push_str(
+        &json!({"type": "response_item", "payload": "x".repeat(2 * 1024 * 1024)})
+            .to_string(),
+    );
+    log.push('\n');
+    log.push_str("{\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":null}}\n");
+    log.push_str(r#"{"type":"event_msg","payload":{"type":"token_count","total_token_usage":"#);
+    fs::write(&plain, &log).unwrap();
+    fs::write(
+        &compressed,
+        zstd::stream::encode_all(log.as_bytes(), 0).unwrap(),
+    )
+    .unwrap();
+
+    for path in [&plain, &compressed] {
+        assert_eq!(read_token_stats_from_rollout(path), Some((230, 40, 270)));
+    }
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
 fn compressed_session_heads_are_listed_once_and_state_selects_current_rollout() {
     let base = make_temp_dir("codex-session-compressed-list");
     let (instance, mut snapshot, _) = isolated_export_fixture(&base, "compressed-head");

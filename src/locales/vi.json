@@ -7843,6 +7843,12 @@
     }
   },
   "minimaxCode": {
+    "credentialRefresh": {
+      "signInClient": "Đăng nhập vào ứng dụng MiniMax Code rồi thử lại.",
+      "authorizeAgain": "Cấp quyền lại cho tài khoản MiniMax Code hoặc nhập lại sau khi đăng nhập vào ứng dụng.",
+      "credentialsChanged": "Thông tin đăng nhập MiniMax Code đã thay đổi. Hãy thử lại.",
+      "missingAccessToken": "MiniMax Code không trả về mã truy cập khi gia hạn."
+    },
     "title": "Quản lý tài khoản MiniMax Code",
     "noAccounts": "Chưa có tài khoản MiniMax Code",
     "addAccount": "Thêm tài khoản MiniMax Code",

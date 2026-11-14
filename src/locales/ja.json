@@ -7843,6 +7843,12 @@
     }
   },
   "minimaxCode": {
+    "credentialRefresh": {
+      "signInClient": "MiniMax Code クライアントにログインしてから再試行してください。",
+      "authorizeAgain": "MiniMax Code アカウントを再認証するか、クライアントにログインしてから再インポートしてください。",
+      "credentialsChanged": "MiniMax Code の認証情報が更新されました。再試行してください。",
+      "missingAccessToken": "MiniMax Code は更新時にアクセストークンを返しませんでした。"
+    },
     "title": "MiniMax Codeアカウント管理",
     "noAccounts": "MiniMax Code アカウントがありません",
     "addAccount": "MiniMax Code アカウントを追加",

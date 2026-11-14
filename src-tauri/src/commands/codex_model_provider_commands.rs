@@ -1173,8 +1173,13 @@ fn summarize_zhipu_token_plan_usage(
             items
                 .iter()
                 .filter(|item| {
-                    json_string_field(item, &["type"])
-                        .is_some_and(|kind| kind.eq_ignore_ascii_case("TOKENS_LIMIT"))
+                    // 智谱国内站已把额度条目类型从 TOKENS_LIMIT 改名为
+                    // CREDIT_LIMIT（国际站仍为 TOKENS_LIMIT），两个都收，
+                    // 否则新版套餐整包解析失败报 "token limit fields missing"。
+                    json_string_field(item, &["type"]).is_some_and(|kind| {
+                        kind.eq_ignore_ascii_case("TOKENS_LIMIT")
+                            || kind.eq_ignore_ascii_case("CREDIT_LIMIT")
+                    })
                 })
                 .collect()
         })
@@ -2167,6 +2172,53 @@ async fn query_sub2api_model_provider_usage(
 mod new_api_usage_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn zhipu_token_plan_accepts_renamed_credit_limit_type() {
+        // 智谱国内站实测（2026-11）：额度条目类型已从 TOKENS_LIMIT 改名为
+        // CREDIT_LIMIT，旧过滤丢掉全部条目，界面报"配额查询失败"。
+        let body = json!({
+            "code": 200,
+            "msg": "操作成功",
+            "success": true,
+            "data": {
+                "level": "max",
+                "limits": [
+                    {"type":"CREDIT_LIMIT","unit":3,"number":5,"usage":28000,"currentValue":819,
+                     "remaining":27180,"percentage":2,"nextResetTime":1794568802154_i64},
+                    {"type":"CREDIT_LIMIT","unit":6,"number":1,"usage":140000,"currentValue":2398,
+                     "remaining":137601,"percentage":1,"nextResetTime":1795131223984_i64}
+                ]
+            }
+        });
+        let summary = summarize_zhipu_token_plan_usage(&body, 120)
+            .expect("renamed CREDIT_LIMIT entries must parse");
+        assert_eq!(summary.mode.as_deref(), Some("token_plan"));
+        assert_eq!(summary.remaining, Some(98.0));
+        assert_eq!(summary.plan_name.as_deref(), Some("max"));
+        // 周窗条目（nextResetTime 较大，排序第二）也要进 details。
+        assert!(summary
+            .details
+            .iter()
+            .any(|d| d.key == "weeklyRemainingPercent" && d.value == "99"));
+    }
+
+    #[test]
+    fn zhipu_token_plan_still_accepts_legacy_tokens_limit_type() {
+        let body = json!({
+            "success": true,
+            "data": {
+                "level": "pro",
+                "limits": [
+                    {"type":"TOKENS_LIMIT","percentage":10,"nextResetTime":1794568802154_i64}
+                ]
+            }
+        });
+        let summary = summarize_zhipu_token_plan_usage(&body, 100)
+            .expect("legacy TOKENS_LIMIT entries must keep parsing");
+        assert_eq!(summary.remaining, Some(90.0));
+        assert_eq!(summary.plan_name.as_deref(), Some("pro"));
+    }
 
     #[tokio::test]
     async fn provider_test_selected_model_and_visible_text_timing_through_gateway() {

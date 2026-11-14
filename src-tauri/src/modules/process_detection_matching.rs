@@ -3479,6 +3479,31 @@ fn collect_minimax_code_process_entries_from_sysinfo_fallback(
     entries
 }
 
+/// Confirm absence by process name even when the configured launch path is missing
+/// or differs from the running client's path. An empty snapshot is inconclusive.
+pub fn minimax_code_client_confirmed_stopped() -> bool {
+    let configured_name = resolve_minimax_code_launch_path().ok().and_then(|path| {
+        path.file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+    });
+    let mut system = sysinfo::System::new();
+    let count = system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::All,
+        true,
+        sysinfo::ProcessRefreshKind::nothing(),
+    );
+    count > 0
+        && !system.processes().values().any(|process| {
+            let name = process.name().to_string_lossy();
+            ["MiniMax Code.exe", "MiniMax Code", "minimax-code"]
+                .iter()
+                .any(|known| name.eq_ignore_ascii_case(known))
+                || configured_name
+                    .as_deref()
+                    .is_some_and(|configured| name.eq_ignore_ascii_case(configured))
+        })
+}
+
 /// Resolve only processes belonging to the selected data directory. A process
 /// without a managed directory belongs to the default instance. Stored PIDs
 /// are hints and must still appear in that instance's current process set.

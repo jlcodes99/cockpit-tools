@@ -7843,6 +7843,12 @@
     }
   },
   "minimaxCode": {
+    "credentialRefresh": {
+      "signInClient": "MiniMax Code istemcisinde oturum açıp tekrar deneyin.",
+      "authorizeAgain": "MiniMax Code hesabını yeniden yetkilendirin veya istemcide oturum açtıktan sonra yeniden içe aktarın.",
+      "credentialsChanged": "MiniMax Code kimlik bilgileri değişti. Tekrar deneyin.",
+      "missingAccessToken": "MiniMax Code yenileme sırasında erişim belirteci döndürmedi."
+    },
     "title": "MiniMax Code Hesap Yönetimi",
     "noAccounts": "MiniMax Code hesabı yok",
     "addAccount": "MiniMax Code Hesabı Ekle",

@@ -997,6 +997,21 @@ fn api_service_window_bucket(window_minutes: Option<i64>, fallback: &str) -> (St
     (key, label, minutes)
 }
 
+/// 周窗剩余为 0 时，5h 剩余按 0 计入池合计：周窗耗尽的账号实际已不可用，
+/// 其 5h 剩余属于虚假可用容量。与前端 getCodexEffectiveQuotaPercentages
+/// 的 weeklyBlocksHourly 折算保持同一口径，菜单栏/托盘此前漏了这一步。
+pub(crate) fn effective_pool_hourly_percentage(
+    weekly_present: bool,
+    weekly_percentage: i32,
+    hourly_percentage: i32,
+) -> i32 {
+    if weekly_present && weekly_percentage <= 0 {
+        0
+    } else {
+        hourly_percentage
+    }
+}
+
 fn add_api_service_window_sum(
     windows: &mut Vec<ApiServicePoolWindowSum>,
     window_minutes: Option<i64>,
@@ -1046,12 +1061,20 @@ pub(crate) fn menu_bar_api_service_quota() -> ApiServiceMenuBarQuota {
         let has_presence_flags =
             quota.hourly_window_present.is_some() || quota.weekly_window_present.is_some();
         // 与前端 getCodexQuotaWindows 一致：按 present 决定是否纳入，标签看 window_minutes。
+        // 5h 计入前按 effective_pool_hourly_percentage 折算（weeklyBlocksHourly），
+        // 否则周窗耗尽的账号仍把 5h 剩余计入合计，菜单栏会显示虚高的池额度。
         if !has_presence_flags || quota.hourly_window_present == Some(true) {
+            let weekly_present =
+                !has_presence_flags || quota.weekly_window_present == Some(true);
             add_api_service_window_sum(
                 &mut windows,
                 quota.hourly_window_minutes,
                 "5h",
-                quota.hourly_percentage,
+                effective_pool_hourly_percentage(
+                    weekly_present,
+                    quota.weekly_percentage,
+                    quota.hourly_percentage,
+                ),
             );
         }
         if !has_presence_flags || quota.weekly_window_present == Some(true) {

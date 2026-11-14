@@ -8018,6 +8018,12 @@
     }
   },
   "minimaxCode": {
+    "credentialRefresh": {
+      "signInClient": "Masuk ke klien MiniMax Code, lalu coba lagi.",
+      "authorizeAgain": "Otorisasi ulang akun MiniMax Code atau impor kembali setelah masuk ke klien.",
+      "credentialsChanged": "Kredensial MiniMax Code berubah. Silakan coba lagi.",
+      "missingAccessToken": "MiniMax Code tidak mengembalikan token akses saat pembaruan."
+    },
     "title": "Akun MiniMax Code",
     "noAccounts": "Tidak ada akun MiniMax Code",
     "addAccount": "Tambah Akun MiniMax Code",

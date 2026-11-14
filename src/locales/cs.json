@@ -7843,6 +7843,12 @@
     }
   },
   "minimaxCode": {
+    "credentialRefresh": {
+      "signInClient": "Přihlaste se v klientu MiniMax Code a zkuste to znovu.",
+      "authorizeAgain": "Znovu autorizujte účet MiniMax Code nebo jej po přihlášení importujte z klienta.",
+      "credentialsChanged": "Přihlašovací údaje MiniMax Code se změnily. Zkuste to znovu.",
+      "missingAccessToken": "MiniMax Code po obnovení nevrátil přístupový token."
+    },
     "title": "Správa účtů MiniMax Code",
     "noAccounts": "Žádné účty MiniMax Code",
     "addAccount": "Přidat účet MiniMax Code",

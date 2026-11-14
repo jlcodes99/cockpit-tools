@@ -7843,6 +7843,12 @@
     }
   },
   "minimaxCode": {
+    "credentialRefresh": {
+      "signInClient": "請登入 MiniMax Code 用戶端後再試一次。",
+      "authorizeAgain": "請重新授權 MiniMax Code 帳號，或在用戶端登入後重新匯入。",
+      "credentialsChanged": "MiniMax Code 憑證已更新，請再試一次。",
+      "missingAccessToken": "MiniMax Code 續期時未傳回存取權杖。"
+    },
     "title": "MiniMax Code 帳號管理",
     "noAccounts": "暫無 MiniMax Code 帳號",
     "addAccount": "新增 MiniMax Code 帳號",

@@ -7890,6 +7890,12 @@
     }
   },
   "minimaxCode": {
+    "credentialRefresh": {
+      "signInClient": "جدّد تسجيل الدخول في عميل MiniMax Code ثم أعد المحاولة.",
+      "authorizeAgain": "أعد تفويض حساب MiniMax Code أو استورده من العميل بعد تسجيل الدخول.",
+      "credentialsChanged": "تغيّرت بيانات اعتماد MiniMax Code. أعد المحاولة.",
+      "missingAccessToken": "لم يعُد MiniMax Code برمز وصول بعد التجديد."
+    },
     "title": "إدارة حسابات MiniMax Code",
     "noAccounts": "لا توجد حسابات MiniMax Code",
     "addAccount": "إضافة حساب MiniMax Code",
