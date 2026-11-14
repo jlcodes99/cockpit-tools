@@ -549,6 +549,21 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
     }
 
     #[test]
+    fn plan_rank_treats_expired_oauth_subscriptions_as_free() {
+        let mut account = test_account_with_plan("plus");
+        account.subscription_active_until = Some("946684800".to_string());
+        assert_eq!(resolve_plan_rank(&account), Some(100));
+
+        account.auth_mode = crate::models::codex::CodexAuthMode::Apikey;
+        assert_eq!(resolve_plan_rank(&account), Some(300));
+        account.auth_mode = crate::models::codex::CodexAuthMode::OAuth;
+        account.subscription_active_until = Some("2099-01-01T00:00:00Z".to_string());
+        assert_eq!(resolve_plan_rank(&account), Some(300));
+        account.subscription_active_until = Some("invalid".to_string());
+        assert_eq!(resolve_plan_rank(&account), Some(300));
+    }
+
+    #[test]
     fn plan_low_first_places_business_and_team_before_pro() {
         let mut candidates = vec![
             RoutingCandidate {

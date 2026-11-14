@@ -17,6 +17,10 @@
 
 ### 修复
 
+- **Antigravity 账号授权**：添加或授权同一账号时可重建缺失的账号文件，并保留原账号 ID。 [#2854](https://github.com/jlcodes99/cockpit-tools/pull/2854)
+- **Codex API 服务**：按套餐排序调度时，将已过期的 OAuth 订阅按免费套餐处理。 [#2174](https://github.com/jlcodes99/cockpit-tools/pull/2174)
+- **Codex API Key**：保存密钥时保留供应商协议和 WebSocket 支持设置。 [#1980](https://github.com/jlcodes99/cockpit-tools/pull/1980)
+- **经典侧栏**：收起时导航图标保持居中，展开时长标签不会挤压图标。 [#2384](https://github.com/jlcodes99/cockpit-tools/pull/2384)
 - **Codex API 服务**：OpenCode 请求携带会话标识且未明确指定身份或续聊时，原生 HTTP 网关可保持同一会话。 [#3046](https://github.com/jlcodes99/cockpit-tools/pull/3046)
 - **Codex API 服务**：识别无响应的网络连接并替换失效传输，保留请求输出和重放的安全边界。 [#3106](https://github.com/jlcodes99/cockpit-tools/pull/3106)
 - **Codex SSH**：切号后恢复目标账号的自动连接设置，并刷新匹配的远程会话。 [#3097](https://github.com/jlcodes99/cockpit-tools/pull/3097)

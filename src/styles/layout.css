@@ -557,7 +557,12 @@
   gap: var(--side-nav-classic-nav-item-gap-scaled);
   padding: 0 var(--side-nav-classic-nav-item-padding-inline-scaled);
   border-radius: var(--side-nav-classic-nav-item-radius-scaled);
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.side-nav.side-nav-classic .nav-item > svg,
+.side-nav.side-nav-classic .nav-item > img {
+  flex: 0 0 auto;
 }
 
 .side-nav.side-nav-classic .nav-item:hover {
@@ -740,6 +745,7 @@
 
 .side-nav.side-nav-classic.side-nav-classic-collapsed .nav-item {
   width: var(--side-nav-classic-collapsed-item-width-scaled);
+  gap: 0;
   padding: 0;
   justify-content: center;
 }

@@ -17,6 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Antigravity account authorization**: Recreate a missing account file when adding or authorizing the same account, preserving its account ID. [#2854](https://github.com/jlcodes99/cockpit-tools/pull/2854)
+- **Codex API Service**: Rank expired OAuth subscriptions as Free for plan-based routing. [#2174](https://github.com/jlcodes99/cockpit-tools/pull/2174)
+- **Codex API keys**: Preserve provider protocol and WebSocket support when saving a key. [#1980](https://github.com/jlcodes99/cockpit-tools/pull/1980)
+- **Classic sidebar**: Keep navigation icons centered and prevent them from shrinking next to long labels. [#2384](https://github.com/jlcodes99/cockpit-tools/pull/2384)
 - **Codex API Service**: Reuse OpenCode conversation identity on native HTTP ingress when OpenCode supplies a session label and no stronger identity or continuation is present. [#3046](https://github.com/jlcodes99/cockpit-tools/pull/3046)
 - **Codex API Service**: Detect silent network failures and replace failed native transport connections while preserving in-progress response and replay boundaries. [#3106](https://github.com/jlcodes99/cockpit-tools/pull/3106)
 - **Codex SSH**: Restore the selected account’s automatic connection preferences and refresh the matched remote session after switching. [#3097](https://github.com/jlcodes99/cockpit-tools/pull/3097)

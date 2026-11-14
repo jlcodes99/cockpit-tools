@@ -112,6 +112,17 @@ fn resolve_plan_rank(account: &CodexAccount) -> Option<i32> {
         _ => return None,
     };
 
+    if rank > 100
+        && !account.is_api_key_auth()
+        && !account.is_agent_identity_auth()
+        && !account.is_web_session_auth()
+        && !codex_account::is_pending_oauth_account(account)
+        && resolve_subscription_expiry_ms(account)
+            .is_some_and(|expiry| expiry <= chrono::Utc::now().timestamp_millis())
+    {
+        return Some(100);
+    }
+
     Some(rank)
 }
 

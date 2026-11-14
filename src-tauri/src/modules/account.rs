@@ -346,15 +346,17 @@ pub fn schedule_index_migration() -> Result<(), String> {
 
 /// 加载账号数据
 pub fn load_account(account_id: &str) -> Result<Account, String> {
+    load_account_if_present(account_id)?.ok_or_else(|| format!("账号不存在: {}", account_id))
+}
+
+fn load_account_if_present(account_id: &str) -> Result<Option<Account>, String> {
     let accounts_dir = get_accounts_dir()?;
     let account_path = accounts_dir.join(format!("{}.json", account_id));
-
-    if !account_path.exists() {
-        return Err(format!("账号不存在: {}", account_id));
-    }
-
-    let content =
-        fs::read_to_string(&account_path).map_err(|e| format!("读取账号数据失败: {}", e))?;
+    let content = match fs::read_to_string(&account_path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("读取账号数据失败: {}", error)),
+    };
 
     let mut account = deserialize_account_from_storage(&account_path, &content)
         .map_err(|error| format!("{error} (account file: {account_id}.json)"))?;
@@ -409,7 +411,7 @@ pub fn load_account(account_id: &str) -> Result<Account, String> {
             }
         }
     }
-    Ok(account)
+    Ok(Some(account))
 }
 
 /// 保存账号数据
@@ -689,25 +691,32 @@ pub fn create_pending_oauth_account(
     let _lock = lock_account_index()?;
     let mut index = load_account_index_locked()?;
     let target_id = build_account_storage_id(&email);
-    let existing_id = index
+    let existing = index
         .accounts
         .iter()
-        .find(|item| item.email.trim().eq_ignore_ascii_case(&email))
-        .map(|item| item.id.clone());
-
-    let mut account = if let Some(id) = existing_id {
-        // Never replace an unreadable existing account with an empty placeholder.
-        let mut account = load_account(&id)?;
-        account.email = email.clone();
-        account
-    } else {
-        let mut account = Account::new(
-            target_id,
-            email.clone(),
-            TokenData::new(String::new(), String::new(), 0, Some(email), None, None),
-        );
-        account.pending_oauth = true;
-        account
+        .find(|item| item.email.trim().eq_ignore_ascii_case(&email));
+    let loaded = existing
+        .map(|item| load_account_if_present(&item.id))
+        .transpose()?
+        .flatten();
+    let mut account = match loaded {
+        Some(mut account) => {
+            account.email = email.clone();
+            account
+        }
+        None => {
+            let mut account = Account::new(
+                existing.map_or(target_id, |item| item.id.clone()),
+                email.clone(),
+                TokenData::new(String::new(), String::new(), 0, Some(email), None, None),
+            );
+            if let Some(item) = existing {
+                account.name = item.name.clone();
+                account.created_at = item.created_at;
+            }
+            account.pending_oauth = true;
+            account
+        }
     };
 
     update.apply_to(&mut account);
@@ -759,7 +768,17 @@ pub fn upsert_account(
     // Existing IDs are referenced by instances, wakeup tasks and groups. Reimport
     // updates credentials in place; deterministic IDs apply only to new accounts.
     let mut account = if let Some(account_id) = existing_account_id {
-        let mut account = load_account(&account_id)?;
+        let mut account = match load_account_if_present(&account_id)? {
+            Some(account) => account,
+            None => {
+                let mut account = Account::new(account_id.clone(), email.clone(), token.clone());
+                if let Some(item) = index.accounts.iter().find(|item| item.id == account_id) {
+                    account.name = item.name.clone();
+                    account.created_at = item.created_at;
+                }
+                account
+            }
+        };
         let mut next_token = token;
         if next_token.project_id.is_none() {
             next_token.project_id = account.token.project_id.clone();
@@ -3192,6 +3211,43 @@ mod note_tests {
         );
         assert_eq!(authorized.aux_email.as_deref(), Some("backup@example.test"));
 
+        std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
+        let _ = fs::remove_dir_all(&data_dir);
+    }
+
+    #[test]
+    fn pending_oauth_recovers_missing_details_without_overwriting_corrupt_records() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let data_dir = std::env::temp_dir().join(format!(
+            "antigravity-pending-missing-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        ));
+        std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &data_dir);
+        let email = "missing@example.test";
+        let pending = create_pending_oauth_account(email.into(), AccountNoteUpdate::default())
+            .expect("create pending account");
+        let detail = get_accounts_dir().unwrap().join(format!("{}.json", pending.id));
+
+        fs::remove_file(&detail).unwrap();
+        let recreated = create_pending_oauth_account(email.into(), AccountNoteUpdate::default())
+            .expect("recreate the missing pending account");
+        assert_eq!(recreated.id, pending.id);
+        assert_eq!(recreated.created_at, pending.created_at);
+
+        let token = TokenData::new("access".into(), "refresh".into(), 3600, None, None, None);
+        fs::remove_file(&detail).unwrap();
+        let authorized = upsert_account(email.into(), None, token.clone()).unwrap();
+        assert_eq!(authorized.id, pending.id);
+        assert!(!authorized.pending_oauth);
+        assert_eq!(load_account_index().unwrap().accounts.len(), 1);
+
+        fs::write(&detail, "invalid json").unwrap();
+        assert!(create_pending_oauth_account(email.into(), AccountNoteUpdate::default()).is_err());
+        assert!(upsert_account(email.into(), None, token).is_err());
+        assert_eq!(fs::read_to_string(detail).unwrap(), "invalid json");
         std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
         let _ = fs::remove_dir_all(&data_dir);
     }
