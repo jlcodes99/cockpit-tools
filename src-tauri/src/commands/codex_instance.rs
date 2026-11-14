@@ -362,6 +362,23 @@ fn read_applied_launch_credential_kind_for_dir(data_dir: &Path) -> Option<String
     launch_credential_kind_for_bind_account_id(&account_id)
 }
 
+// Older automatic launches could store a gateway binding for an otherwise direct account.
+fn effective_provider_bind_account_id(bind_account_id: &str) -> std::borrow::Cow<'_, str> {
+    let Some(account_id) =
+        modules::codex_instance::parse_provider_gateway_bind_account_id(bind_account_id)
+    else {
+        return bind_account_id.into();
+    };
+    if modules::codex_account::load_account(&account_id)
+        .as_ref()
+        .is_some_and(|account| !modules::codex_local_access::account_requires_provider_gateway(account))
+    {
+        account_id.into()
+    } else {
+        bind_account_id.into()
+    }
+}
+
 async fn inject_bound_account_to_profile(
     profile_dir: &Path,
     bind_account_id: &str,
@@ -376,12 +393,11 @@ async fn inject_bound_account_to_profile(
     if let Some(provider_gateway_account_id) =
         modules::codex_instance::parse_provider_gateway_bind_account_id(bind_account_id)
     {
-        modules::codex_local_access::activate_provider_gateway_for_dir(
+        return modules::codex_local_access::activate_provider_gateway_for_dir(
             profile_dir,
             &provider_gateway_account_id,
         )
-        .await?;
-        return Ok(());
+        .await;
     }
 
     modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(profile_dir)?;
@@ -403,15 +419,16 @@ async fn inject_preflighted_bound_account_to_profile(
         return Ok(());
     }
 
+    let effective_binding = effective_provider_bind_account_id(bind_account_id);
+    let bind_account_id = effective_binding.as_ref();
     if let Some(provider_gateway_account_id) =
         modules::codex_instance::parse_provider_gateway_bind_account_id(bind_account_id)
     {
-        modules::codex_local_access::activate_provider_gateway_for_dir(
+        return modules::codex_local_access::activate_provider_gateway_for_dir(
             profile_dir,
             &provider_gateway_account_id,
         )
-        .await?;
-        return Ok(());
+        .await;
     }
 
     modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(profile_dir)?;
@@ -448,38 +465,26 @@ async fn ensure_provider_gateway_for_bind_account(
         modules::codex_local_access::stop_provider_gateways_for_profile(profile_dir).await;
         return Ok(());
     }
-    let Some(provider_gateway_account_id) =
-        modules::codex_instance::parse_provider_gateway_bind_account_id(bind_account_id)
-    else {
-        let Some(account) = modules::codex_account::load_account(bind_account_id) else {
-            modules::codex_local_access::stop_provider_gateways_for_profile(profile_dir).await;
-            return Ok(());
-        };
-        if modules::codex_local_access::account_requires_provider_gateway(&account) {
-            modules::codex_local_access::stop_provider_gateways_for_profile(profile_dir).await;
-            return modules::codex_local_access::ensure_provider_gateway_for_dir(
-                profile_dir,
-                bind_account_id,
-            )
-            .await;
-        }
-        if modules::codex_local_access::account_requires_bound_oauth_local_gateway(&account) {
-            modules::codex_local_access::stop_provider_gateways_for_profile(profile_dir).await;
-            return modules::codex_local_access::ensure_bound_oauth_local_gateway_for_dir(
-                profile_dir,
-                bind_account_id,
-            )
-            .await;
+    let provider_gateway_account_id =
+        modules::codex_instance::parse_provider_gateway_bind_account_id(bind_account_id);
+    let account_id = provider_gateway_account_id.as_deref().unwrap_or(bind_account_id);
+    let Some(account) = modules::codex_account::load_account(account_id) else {
+        if provider_gateway_account_id.is_some() {
+            return Err(format!("供应商网关账号不存在: {account_id}"));
         }
         modules::codex_local_access::stop_provider_gateways_for_profile(profile_dir).await;
         return Ok(());
     };
     modules::codex_local_access::stop_provider_gateways_for_profile(profile_dir).await;
-    modules::codex_local_access::ensure_provider_gateway_for_dir(
-        profile_dir,
-        &provider_gateway_account_id,
-    )
-    .await
+    if modules::codex_local_access::account_requires_provider_gateway(&account) {
+        return modules::codex_local_access::ensure_provider_gateway_for_dir(profile_dir, account_id)
+            .await;
+    }
+    if modules::codex_local_access::account_requires_bound_oauth_local_gateway(&account) {
+        return modules::codex_local_access::ensure_bound_oauth_local_gateway_for_dir(profile_dir, account_id)
+            .await;
+    }
+    Ok(())
 }
 
 async fn apply_launch_speed_after_auth(
@@ -708,9 +713,10 @@ async fn apply_bound_account_to_initialized_profile(
             .await?;
         }
         let provider_binding = profile_switch::provider_binding_for_switch(account_id);
-        let projected_binding = provider_binding.as_deref().unwrap_or(account_id);
-        inject_bound_account_to_profile(profile_dir, projected_binding, false).await?;
-        if modules::codex_instance::parse_provider_gateway_bind_account_id(projected_binding).is_none() {
+        let projected_binding =
+            effective_provider_bind_account_id(provider_binding.as_deref().unwrap_or(account_id));
+        inject_bound_account_to_profile(profile_dir, &projected_binding, false).await?;
+        if modules::codex_instance::parse_provider_gateway_bind_account_id(&projected_binding).is_none() {
             ensure_provider_gateway_for_bind_account(profile_dir, bind_account_id, model_routing)
                 .await?;
         }
@@ -868,6 +874,35 @@ mod tests {
             }
             let _ = std::fs::remove_dir_all(&self.root);
         }
+    }
+
+    #[tokio::test]
+    async fn old_automatic_responses_gateway_binding_projects_the_upstream() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let env = TestDataDirGuard::new("codex-automatic-responses-rollback");
+        let profile = env.root.join("profile");
+        let upstream = "https://relay.example.invalid/v1";
+        let mut account = CodexAccount::new_api_key(
+            "relay".into(),
+            "relay@example.invalid".into(),
+            "fixture-key".into(),
+            crate::models::codex::CodexApiProviderMode::Custom,
+            Some(upstream.into()),
+            Some("relay".into()),
+            None,
+            Vec::new(),
+        );
+        account.api_wire_api = Some("responses".into());
+        modules::codex_account::save_account(&account).unwrap();
+        let old_binding = modules::codex_instance::provider_gateway_bind_account_id(&account.id).unwrap();
+        inject_preflighted_bound_account_to_profile(&profile, &old_binding).await.unwrap();
+        assert_eq!(modules::codex_account::configured_provider_base_url(&profile).as_deref(), Some(upstream));
+
+        account.api_instance_access_mode = Some("gateway".into());
+        modules::codex_account::save_account(&account).unwrap();
+        assert_eq!(effective_provider_bind_account_id(&old_binding), old_binding.as_str());
     }
 
     #[tokio::test]

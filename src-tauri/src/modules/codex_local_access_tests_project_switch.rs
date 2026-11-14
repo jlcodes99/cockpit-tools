@@ -432,9 +432,9 @@ async fn project_switch_responses_gateway_repairs_receipts_for_legacy_provider_w
             "cli_auth_credentials_store = 'file'\nmodel = 'vendor/model-without-catalog'\nmodel_catalog_json = 'custom-models.json'\n",
         ).unwrap();
         fs::write(profile.join("custom-models.json"), r#"{"models":[{"slug":"vendor/model-without-catalog"}]}"#).unwrap();
-        let account = CodexAccount::new_api_key(
+        let mut account = CodexAccount::new_api_key(
             "responses-fixture".into(), "responses@example.test".into(), "responses-fixture-key".into(),
-            CodexApiProviderMode::Custom, Some(base_url), None, None, Vec::new(),
+            CodexApiProviderMode::Custom, Some(base_url.clone()), None, None, Vec::new(),
         );
         codex_account::save_account(&account).unwrap();
         crate::commands::codex_instance::profile_switch::codex_switch_instance_account(
@@ -443,6 +443,14 @@ async fn project_switch_responses_gateway_repairs_receipts_for_legacy_provider_w
         let key = super::provider_gateway_runtime_key(&profile, &account.id);
         assert!(!super::provider_gateway_runtime_store().lock().await.contains_key(&key));
 
+        let direct_config = crate::modules::codex_config_format::read_codex_config_doc_from_str(
+            &fs::read_to_string(profile.join(CODEX_PROFILE_CONFIG_FILE)).unwrap(),
+        ).unwrap();
+        assert_eq!(codex_account::configured_provider_base_url(&profile).as_deref(), Some(base_url.as_str()));
+        assert_eq!(direct_config["model_catalog_json"].as_str(), Some("custom-models.json"));
+
+        account.api_instance_access_mode = Some("gateway".into());
+        codex_account::save_account(&account).unwrap();
         super::ensure_provider_gateway_for_dir(&profile, &account.id).await.unwrap();
         let auth: Value = serde_json::from_str(
             &fs::read_to_string(profile.join(CODEX_PROFILE_AUTH_FILE)).unwrap(),
@@ -451,7 +459,6 @@ async fn project_switch_responses_gateway_repairs_receipts_for_legacy_provider_w
             &fs::read_to_string(profile.join(CODEX_PROFILE_CONFIG_FILE)).unwrap(),
         ).unwrap();
         assert_eq!(config["model"].as_str(), Some("vendor/model-without-catalog"));
-        assert_eq!(config["model_catalog_json"].as_str(), Some("custom-models.json"));
         let base_url = config["model_providers"]["codex_local_access"]["base_url"].as_str().unwrap();
         let result = reqwest::Client::builder().no_proxy().timeout(Duration::from_secs(5))
             .build().unwrap().post(format!("{base_url}/responses"))

@@ -36,7 +36,9 @@ pub async fn codex_switch_instance_account(
     let target = resolve_codex_instance_start_target(&instance_id)?;
     let profile = &target.user_data_dir;
     let _lease = modules::codex_account::try_acquire_profile_mutation_lease(profile, "instance-switch")?;
-    let binding = provider_binding_for_switch(&bind_account_id).unwrap_or(bind_account_id);
+    let bind_account_id = effective_provider_bind_account_id(&bind_account_id);
+    let binding = provider_binding_for_switch(&bind_account_id)
+        .unwrap_or_else(|| bind_account_id.into_owned());
     validate_instance_model_routing(Some(&binding), &target.launch_mode, target.model_routing.as_ref())?;
 
     if let Some(oauth_id) = modules::codex_account::oauth_account_id_for_runtime_binding(Some(&binding)) {

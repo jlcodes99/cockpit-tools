@@ -202,6 +202,15 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
             Some("relay".into()), Some("Relay".into()), vec!["vendor-model".into()],
         );
         account.api_wire_api = Some("responses".into());
+        assert!(!account_requires_provider_gateway(&account));
+        let automatic_profile = env.codex_home();
+        write_account_bundle_to_dir(&automatic_profile, &account).unwrap();
+        let automatic_config = fs::read_to_string(automatic_profile.join("config.toml")).unwrap();
+        assert!(automatic_config.contains("https://relay.example.invalid/v1"));
+        assert!(!automatic_config.contains("127.0.0.1"));
+
+        account.api_instance_access_mode = Some("gateway".into());
+        assert!(account_requires_provider_gateway(&account));
         account.api_sync_model_catalog_to_codex = true;
         save_account(&account).unwrap();
         assert!(account_requires_provider_gateway(&account));
@@ -225,6 +234,7 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
         assert_eq!(base_url, Some("https://relay.example.invalid/v1"));
 
         account.api_base_url = Some("https://api.openai.com/v1".into());
+        account.api_instance_access_mode = None;
         account.api_sync_model_catalog_to_codex = false;
         assert!(!account_requires_provider_gateway(&account));
         account.api_instance_access_mode = Some("gateway".into());

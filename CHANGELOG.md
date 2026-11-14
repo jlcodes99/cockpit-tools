@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.3.84] - 2026-11-14
+
+### Fixed
+
+- **Codex API Key launch**: Restore direct connections by default for third-party Responses providers. Accounts previously routed through the local instance gateway in automatic mode return to their original provider URL the next time Codex is launched from Cockpit. The gateway remains available when selected manually or required for protocol translation.
+
 ## [1.3.83] - 2026-11-13
 
 ### Changed
