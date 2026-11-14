@@ -12,6 +12,9 @@
 
 ### 修复
 
+- **Codex 供应商配置**：模板提供默认值时，保留明确设置的模型上下文窗口和压缩阈值。 [#3091](https://github.com/jlcodes99/cockpit-tools/pull/3091)
+- **Codex API 服务**：在受影响的 Codex 路由上，重复内联图片以未压缩方式发送，保留完整请求内容。 [#3084](https://github.com/jlcodes99/cockpit-tools/pull/3084)
+- **Codex 供应商切换**：快捷切换弹框位于最上层且未提交切换时，可按 Escape 关闭。 [#2111](https://github.com/jlcodes99/cockpit-tools/pull/2111)
 - **智谱 Coding Plan**：兼容新版积分额度与旧版 Token 额度响应，显示对应的额度窗口。 [#3126](https://github.com/jlcodes99/cockpit-tools/pull/3126)
 - **Codex API 服务**：菜单栏和托盘汇总 5 小时额度时，排除周额度已耗尽账号的剩余额度。 [#3112](https://github.com/jlcodes99/cockpit-tools/pull/3112)
 - **MiniMax Code**：共用账号的凭据由客户端续期，Cockpit 读取并保存新凭据，避免客户端登录失效。 [#3092](https://github.com/jlcodes99/cockpit-tools/pull/3092)

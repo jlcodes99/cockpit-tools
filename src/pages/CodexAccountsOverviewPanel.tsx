@@ -4,6 +4,7 @@ import { CodexResetHistory } from '../components/codex/CodexResetHistory';
 import { createPortal } from "react-dom";
 import { useModalScrollLock } from "../hooks/useModalScrollLock";
 import { useCodexTagGroupLayout } from "../hooks/useCodexTagGroupLayout";
+import { useEscCloseTopmost } from "../hooks/useEscClose";
 import { useModalFocusTrap } from "../hooks/useModalFocusTrap";
 import "./CodexAccountDialogs.css";
 import { Plus, RefreshCw, Upload, Trash2, X, Globe, Power, Copy, Check, Play, Pause, RotateCw, CircleAlert, Info, Rows3, LayoutGrid, List, Search, ArrowDownWideNarrow, ArrowUp, ArrowDown, GripVertical, Clock, Tag, Eye, EyeOff, BookOpen, FileText, ExternalLink, FolderOpen, FolderPlus, LogOut, Terminal, ChevronDown } from "lucide-react";
@@ -372,6 +373,8 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     return () => window.cancelAnimationFrame(frame);
   }, [activeAccountNoteMode, accountNoteFieldErrors.twoFactorSecret]);
   const [resetAutomationOpen, setResetAutomationOpen] = useState(false);
+  const quickSwitchDialogRef = useRef<HTMLDivElement>(null);
+  useEscCloseTopmost(Boolean(quickSwitchAccountId), closeQuickSwitchModal, quickSwitchDialogRef);
   const resetCreditDialogRef = useRef<HTMLDivElement>(null);
   useModalFocusTrap(resetCreditDialogRef, Boolean(resetCreditConfirmAccount), true, !resetAutomationOpen);
   useEffect(() => { setResetAutomationOpen(false); }, [resetCreditConfirmAccount?.id]);
@@ -1204,6 +1207,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
           {quickSwitchAccountId && createPortal(
             <div className="modal-overlay codex-account-dialog-overlay">
               <div
+                ref={quickSwitchDialogRef}
                 className="modal-content codex-add-modal codex-api-key-edit-modal codex-account-dialog"
                 onClick={(e) => e.stopPropagation()}
               >

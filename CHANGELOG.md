@@ -12,6 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Codex provider profiles**: Keep an explicitly configured context window and compaction threshold when a provider template supplies its own defaults. [#3091](https://github.com/jlcodes99/cockpit-tools/pull/3091)
+- **Codex API Service**: Send repeated inline images without zstd compression on the affected Codex route, preserving the full request. [#3084](https://github.com/jlcodes99/cockpit-tools/pull/3084)
+- **Codex provider switching**: Press Escape to close the quick-switch dialog when it is the topmost dialog and no switch is in progress. [#2111](https://github.com/jlcodes99/cockpit-tools/pull/2111)
 - **Zhipu Coding Plan**: Read quota windows from both the new credit limit and legacy token limit responses. [#3126](https://github.com/jlcodes99/cockpit-tools/pull/3126)
 - **Codex API Service**: The menu bar and tray pool totals exclude 5-hour quota from accounts whose weekly allowance is exhausted. [#3112](https://github.com/jlcodes99/cockpit-tools/pull/3112)
 - **MiniMax Code**: Preserve the desktop client's login by adopting refreshed shared credentials and leaving refresh-token rotation to the client for shared accounts. [#3092](https://github.com/jlcodes99/cockpit-tools/pull/3092)
