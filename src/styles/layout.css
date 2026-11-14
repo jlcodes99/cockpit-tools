@@ -311,6 +311,14 @@
   position: relative;
 }
 
+.side-nav:not(.side-nav-classic) {
+  max-height: calc(100dvh - 96px);
+}
+
+.side-nav:not(.side-nav-classic) > :not(.nav-items) {
+  flex-shrink: 0;
+}
+
 .side-nav:not(.side-nav-classic) .nav-items {
   min-height: 0;
   overflow-y: auto;
