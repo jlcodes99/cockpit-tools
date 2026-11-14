@@ -235,12 +235,16 @@ function getRawPlanTag(account: QoderAccount): string | null {
 }
 
 export function getQoderAccountDisplayEmail(account: QoderAccount): string {
-  return (
-    account.email ||
-    account.display_name ||
-    account.user_id ||
-    account.id
-  );
+  const email = toNonEmptyString(account.email);
+  // The native store retains a sentinel when Qoder provides no email (common
+  // for CN accounts). It is not an identity to show ahead of a real name.
+  if (email && email.toLowerCase() !== 'unknown@qoder.local') return email;
+  return firstNonEmptyString(
+    account.display_name,
+    getNestedValue(account.auth_user_info_raw, ['name']),
+    account.user_id,
+    account.id,
+  ) ?? '';
 }
 
 export function resolveQoderPlanBadgeClass(plan: string): string {
