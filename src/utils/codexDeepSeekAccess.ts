@@ -10,6 +10,8 @@ import {
   DEEPSEEK_API_BASE_URL,
   DEEPSEEK_API_PROVIDER_ID,
   DEEPSEEK_CODEX_MODEL_CATALOG,
+  OPENCODE_GO_API_PROVIDER_ID,
+  findCodexApiProviderPresetByBaseUrl,
 } from "./codexProviderPresets.ts";
 import {
   isCodexApiKeyAccount,
@@ -80,6 +82,9 @@ export function isCodexTokenPlanAccount(
   account: Pick<CodexAccount, "api_provider_id" | "api_base_url">,
 ): boolean {
   const providerId = (account.api_provider_id || "").trim().toLowerCase();
+  if (findCodexApiProviderPresetByBaseUrl(account.api_base_url ?? "")?.id === OPENCODE_GO_API_PROVIDER_ID) {
+    return true;
+  }
   if (
     providerId === "minimax" ||
     providerId === "minimax-cn" ||

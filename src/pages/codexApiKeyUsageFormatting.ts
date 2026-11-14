@@ -117,6 +117,11 @@ export function useCodexApiKeyUsageFormatting(
         weeklyLimit: t("codex.modelProviders.usage.fields.weeklyLimit"),
         weeklyRemainingPercent: t("codex.modelProviders.usage.fields.weeklyRemainingPercent"),
         weeklyExpiresAt: t("codex.modelProviders.usage.fields.weeklyExpiresAt"),
+        dailyLimit: t("common.apiBudget.dailyLimit"),
+        dailyRemaining: `${t("common.apiBudget.daily")} · ${t("codex.modelProviders.usage.fields.remaining")}`,
+        dailyExpiresAt: `${t("common.apiBudget.daily")} · ${t("common.apiBudget.resetsAt")}`,
+        monthlyRemainingPercent: `${t("common.apiBudget.monthly")} · ${t("codex.modelProviders.usage.fields.remaining")} (%)`,
+        monthlyExpiresAt: `${t("common.apiBudget.monthly")} · ${t("common.apiBudget.resetsAt")}`,
         status: t("codex.modelProviders.usage.fields.status", "状态"),
         planName: t("codex.modelProviders.usage.fields.planName", "订阅"),
         remaining: t("codex.modelProviders.usage.fields.remaining", "剩余额度"),
@@ -216,7 +221,7 @@ export function useCodexApiKeyUsageFormatting(
       }
       if (
         Number.isFinite(numeric) &&
-        (item.key === "intervalExpiresAt" || item.key === "weeklyExpiresAt")
+        ["intervalExpiresAt", "dailyExpiresAt", "weeklyExpiresAt", "monthlyExpiresAt"].includes(item.key)
       ) {
         return numeric > 0 ? formatDate(numeric * 1000) : "-";
       }

@@ -242,6 +242,24 @@ impl Drop for Handle {
     }
 }
 
+async fn bind_listener(addr: SocketAddr) -> std::io::Result<TcpListener> {
+    #[cfg(windows)]
+    {
+        use socket2::{Domain, Protocol, Socket, Type};
+
+        // This constructor sets WSA_FLAG_NO_HANDLE_INHERIT at socket creation.
+        let socket = Socket::new(Domain::for_address(addr), Type::STREAM, Some(Protocol::TCP))?;
+        socket.set_nonblocking(true)?;
+        socket.bind(&addr.into())?;
+        socket.listen(128)?;
+        TcpListener::from_std(socket.into())
+    }
+    #[cfg(not(windows))]
+    {
+        TcpListener::bind(addr).await
+    }
+}
+
 pub async fn start(
     addr: SocketAddr,
     host: Arc<dyn Host>,
@@ -272,7 +290,7 @@ pub async fn start(
     )
     .await
     .map_err(|error| error.message)?;
-    let listener = TcpListener::bind(addr).await.map_err(|error| {
+    let listener = bind_listener(addr).await.map_err(|error| {
         match error.kind() {
             std::io::ErrorKind::AddrInUse | std::io::ErrorKind::PermissionDenied => {
                 format!("listen tcp {addr}: bind: {error}")

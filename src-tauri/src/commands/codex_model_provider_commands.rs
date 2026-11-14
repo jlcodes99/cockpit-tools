@@ -9,6 +9,8 @@ pub async fn codex_discover_remote_service(base_url: String, api_key: String) ->
 
 #[path = "codex_openai_usage.rs"]
 mod openai_usage;
+#[path = "codex_provider_quota_windows.rs"]
+mod quota_windows;
 
 #[tauri::command]
 pub async fn codex_query_remote_key_data(base_url:String,api_key:String,resource:String,
@@ -1881,6 +1883,10 @@ async fn query_model_provider_usage(
         return openai_usage::query(&client, usage_key).await;
     }
 
+    if quota_windows::is_opencode_go_endpoint(&base_url) {
+        return quota_windows::query_opencode_go(key).await;
+    }
+
     let connection = if relay_balance_disabled {
         // Only contact a known Cockpit service while relay balance discovery is disabled.
         let (base, key) = (base_url.clone(), key.to_owned());
@@ -2165,6 +2171,9 @@ async fn query_sub2api_model_provider_usage(
     }
     let parsed = serde_json::from_str::<serde_json::Value>(&text)
         .map_err(|e| format!("PROVIDER_USAGE_PARSE_FAILED: {}", e))?;
+    if quota_windows::is_codex_proxy_rs_usage(&parsed) {
+        return quota_windows::summarize_codex_proxy_rs(&parsed, latency_ms);
+    }
     Ok(summarize_model_provider_usage(&parsed, latency_ms))
 }
 
