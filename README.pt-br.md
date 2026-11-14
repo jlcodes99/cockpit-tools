@@ -1,6 +1,6 @@
 # Cockpit Tools
 
-[English](README.en.md)  · Portuguese (BR) · [简体中文](README.md)
+[English](README.en.md)  · Portuguese (BR) · [한국어](README.ko.md) · [简体中文](README.md)
 
 [![GitHub stars](https://img.shields.io/github/stars/jlcodes99/cockpit-tools?style=flat&color=gold)](https://github.com/jlcodes99/cockpit-tools)
 [![GitHub downloads](https://img.shields.io/github/downloads/jlcodes99/cockpit-tools/total?style=flat&color=blue)](https://github.com/jlcodes99/cockpit-tools/releases)
@@ -27,7 +27,7 @@ Uma **ferramenta universal de gerenciamento de contas para IDEs de IA**, atualme
 
 Um painel visual totalmente novo que oferece uma visão geral do status em um único lugar:
 
-- **Suporte a doze Plataformas**: Exibe simultaneamente o status das contas do Antigravity IDE, Codex, GitHub Copilot, Windsurf, Kiro, Cursor, CodeBuddy, CodeBuddy CN, Qoder, Trae e Zed
+- **Painel com 16 plataformas**: Exibe o status das contas do Antigravity IDE, Codex, GitHub Copilot, Windsurf, Kiro, Cursor, Grok CLI, CodeBuddy, CodeBuddy CN, Qoder, Trae, TraeWork, Trae CN, TraeWork CN, Zed e ZCode.
 - **Monitoramento de Cotas**: Visualização em tempo real das cotas restantes e dos horários de redefinição para cada modelo
 - **Ações Rápidas**: Atualização com um clique, ativação com um clique
 - **Progresso Visual**: Barras de progresso intuitivas mostrando o consumo de cotas

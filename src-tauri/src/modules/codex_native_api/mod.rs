@@ -65,6 +65,7 @@ mod opencode_go_http_tests;
 mod official_fallback;
 #[cfg(test)]
 mod official_fallback_http_tests;
+mod opencode_session;
 mod output_error;
 mod output_items;
 mod output_usage;

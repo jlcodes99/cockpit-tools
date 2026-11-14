@@ -16,6 +16,7 @@
 
 ### 修复
 
+- **Codex API 服务**：OpenCode 请求携带会话标识且未明确指定身份或续聊时，原生 HTTP 网关可保持同一会话。 [#3046](https://github.com/jlcodes99/cockpit-tools/pull/3046)
 - **Codex API 服务**：识别无响应的网络连接并替换失效传输，保留请求输出和重放的安全边界。 [#3106](https://github.com/jlcodes99/cockpit-tools/pull/3106)
 - **Codex SSH**：切号后恢复目标账号的自动连接设置，并刷新匹配的远程会话。 [#3097](https://github.com/jlcodes99/cockpit-tools/pull/3097)
 - **Claude**：正确区分 Pro 和 Max 套餐，并显示对应的额度窗口。 [#3031](https://github.com/jlcodes99/cockpit-tools/pull/3031)

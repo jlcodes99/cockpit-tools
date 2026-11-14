@@ -72,7 +72,7 @@ struct IdentitySource {
 }
 async fn identity_http(State(source): State<Arc<IdentitySource>>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
-    let bytes = to_bytes(body, 1024 * 1024).await.unwrap();
+    let bytes = to_bytes(body, 4 * 1024 * 1024).await.unwrap();
     let value: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     let account = parts
         .headers
@@ -162,6 +162,8 @@ async fn identity_ws(
 mod installation_auxiliary_tests;
 #[path = "diagnostic_identity_mapping_tests.rs"]
 mod session_identity_mapping_tests;
+#[path = "opencode_session_http_tests.rs"]
+mod opencode_session_http_tests;
 struct IdentityHost {
     base: String,
     wire: WireApi,

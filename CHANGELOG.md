@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Codex API Service**: Reuse OpenCode conversation identity on native HTTP ingress when OpenCode supplies a session label and no stronger identity or continuation is present. [#3046](https://github.com/jlcodes99/cockpit-tools/pull/3046)
 - **Codex API Service**: Detect silent network failures and replace failed native transport connections while preserving in-progress response and replay boundaries. [#3106](https://github.com/jlcodes99/cockpit-tools/pull/3106)
 - **Codex SSH**: Restore the selected account’s automatic connection preferences and refresh the matched remote session after switching. [#3097](https://github.com/jlcodes99/cockpit-tools/pull/3097)
 - **Claude**: Preserve Pro and Max plan classification and display quota from the matching usage scopes. [#3031](https://github.com/jlcodes99/cockpit-tools/pull/3031)
