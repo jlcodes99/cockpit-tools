@@ -340,6 +340,22 @@ mod request_diagnostics_tests {
     }
 
     #[test]
+    fn native_network_recovery_evidence_survives_storage_without_private_error_labels() {
+        let conn = memory_logs();
+        for (label, expected) in [("network", Some("network")), ("untrusted-private-label", None)] {
+            let mut detail = diagnostic(label, 10);
+            detail.payloads.clear();
+            detail.attempts[0].transport_error = Some(label.into());
+            detail.attempts[0].transport_pool_retired = Some(true);
+            insert_request_diagnostic(&conn, detail).unwrap();
+            let stored = read_request_diagnostic(&conn, label).unwrap().unwrap();
+            assert!(stored.payloads.is_empty());
+            assert_eq!(stored.attempts[0].transport_error.as_deref(), expected);
+            assert_eq!(stored.attempts[0].transport_pool_retired, expected.map(|_| true));
+        }
+    }
+
+    #[test]
     fn request_diagnostics_legacy_records_remain_unrecorded() {
         let event: CodexLocalAccessUsageEvent = serde_json::from_str("{}").unwrap();
         assert_eq!(event.first_response_ms, None);

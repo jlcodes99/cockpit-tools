@@ -150,7 +150,7 @@ async fn websocket_handshake_connection_failure_keeps_code_and_context() {
     assert!(error
         .message
         .starts_with("Unable to establish the upstream WebSocket"));
-    assert!(error.transport_failure.is_none());
+    assert_eq!(error.transport_failure, Some(TransportFailureKind::Network));
 }
 
 #[tokio::test]
@@ -189,5 +189,6 @@ async fn websocket_rejection_body_read_failure_keeps_http_status_without_inventi
     assert!(error
         .message
         .starts_with("Unable to read the upstream error response"));
-    assert!(error.transport_failure.is_none());
+    // Keep the received 403 and classify only the truncated transport body.
+    assert_eq!(error.transport_failure, Some(TransportFailureKind::Network));
 }

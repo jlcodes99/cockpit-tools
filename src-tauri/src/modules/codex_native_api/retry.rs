@@ -468,6 +468,13 @@ async fn send_inner(
             Ok(Err(error)) => return Err(error),
             Err(error) => {
                 if connect_failed {
+                    // This candidate has no upstream outcome to retain, but its
+                    // failed pool must not be reused by the next client request.
+                    if error.transport_failure_kind().is_some() {
+                        if let Some(identity) = prepared.route.transport_identity.as_deref() {
+                            state.host.invalidate_transport(identity);
+                        }
+                    }
                     // reqwest proves no HTTP request reached the account.
                     // Keep any earlier real failure, but omit this candidate.
                     tracker.discard_unsent_attempt();
@@ -501,6 +508,7 @@ async fn send_inner(
                 let stream_open_failed = streaming && error.code == "upstream_connect_timeout";
                 if stream_open_failed && open_attempts < policy.stream_open_max_attempts.max(1) {
                     open_attempts += 1;
+                    renew_transport_after_failure(state, prepared, tracker, &error).await?;
                     continue;
                 }
                 // Exhausting this route's open budget must not consume network
@@ -514,7 +522,7 @@ async fn send_inner(
                         deadline,
                     )
                     .await?;
-                    renew_transport_after_tls(state, prepared, tracker, &error).await?;
+                    renew_transport_after_failure(state, prepared, tracker, &error).await?;
                     continue;
                 }
                 if (connect_failed || credential_limit_allows(policy, credential_attempts))
@@ -613,7 +621,7 @@ async fn send_inner(
                         deadline,
                     )
                     .await?;
-                    renew_transport_after_tls(state, prepared, tracker, &error).await?;
+                    renew_transport_after_failure(state, prepared, tracker, &error).await?;
                     continue;
                 }
                 Err(error) => return Err(error),
@@ -925,14 +933,14 @@ async fn send_inner(
 }
 
 /// Called only after an existing retry fence/budget permits another attempt.
-/// Do not turn TLS recovery into an authorization refresh or a replay policy.
-pub(super) async fn renew_transport_after_tls(
+/// Do not turn transport recovery into an authorization refresh or a replay policy.
+pub(super) async fn renew_transport_after_failure(
     state: &AppState,
     prepared: &mut Prepared,
     tracker: &mut RequestTracker,
     error: &ServiceError,
 ) -> Result<(), ServiceError> {
-    if !matches!(error.transport_failure, Some(super::contract::TransportFailureKind::TlsDecrypt | super::contract::TransportFailureKind::TlsDecryptHttp2)) {
+    if error.transport_failure_kind().is_none() {
         return Ok(());
     }
     tracker.release_route();

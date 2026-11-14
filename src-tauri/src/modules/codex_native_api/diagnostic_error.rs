@@ -61,6 +61,7 @@ pub(crate) fn transport_failure(
     let mut timed_out = false;
     let mut tls_decrypt = false;
     let mut http2_decrypt = false;
+    let mut network_failure = false;
     // Bootstrap can rewrap a reqwest body before canonical adaptation. Its
     // real TLS cause sits deeper than eight wrappers; still bound traversal
     // so a malformed/cyclic Error implementation cannot block the request.
@@ -83,6 +84,15 @@ pub(crate) fn transport_failure(
             .and_then(h2::Error::get_io)
             .is_some_and(|io| io.kind() == std::io::ErrorKind::InvalidData
                 && io.to_string() == "cannot decrypt peer's message");
+        network_failure |= error.downcast_ref::<std::io::Error>().is_some_and(|error| {
+            matches!(error.kind(), std::io::ErrorKind::ConnectionReset
+                | std::io::ErrorKind::ConnectionAborted | std::io::ErrorKind::ConnectionRefused
+                | std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::NotConnected
+                | std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::TimedOut)
+        }) || error.downcast_ref::<reqwest::Error>()
+            .is_some_and(|error| error.is_connect() || error.is_timeout())
+            || error.downcast_ref::<hyper::Error>()
+                .is_some_and(|error| error.is_closed() || error.is_incomplete_message() || error.is_timeout());
         let detail = sanitize_error_text(&error.to_string());
         timed_out |= error
             .downcast_ref::<std::io::Error>()
@@ -116,8 +126,10 @@ pub(crate) fn transport_failure(
     let mut error = ServiceError::new(status, code, format!("{context}: {message}"));
     error.transport_failure = if http2_decrypt {
         Some(TransportFailureKind::TlsDecryptHttp2)
+    } else if tls_decrypt {
+        Some(TransportFailureKind::TlsDecrypt)
     } else {
-        tls_decrypt.then_some(TransportFailureKind::TlsDecrypt)
+        network_failure.then_some(TransportFailureKind::Network)
     };
     error
 }
@@ -265,7 +277,6 @@ mod tests {
         assert_eq!(restored.message, failure.message);
         for raw in [
             std::io::Error::other("cannot decrypt peer's message"),
-            std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "unexpected EOF"),
             std::io::Error::other(rustls::Error::InvalidCertificate(
                 rustls::CertificateError::UnknownIssuer,
             )),
@@ -330,9 +341,19 @@ mod tests {
             let error = std::io::Error::other(std::io::Error::new(kind, message));
             let failure = transport_failure(502, "upstream_stream_error", "Read failed", &error);
             assert_eq!((failure.status, failure.code), (status, code));
+            assert_eq!(failure.transport_failure, Some(TransportFailureKind::Network));
             assert!(failure.message.contains(message));
             assert_eq!(failure_phase(code), "stream_read");
         }
+    }
+
+    #[test]
+    fn network_failure_text_cannot_retire_a_healthy_transport() {
+        let raw = std::io::Error::other("connection reset: keepalive timeout");
+        let error = transport_failure(502, "upstream_stream_error", "Read failed", &raw);
+        assert_eq!(error.transport_failure_kind(), None);
+        let remote = ServiceError::new(503, "upstream_http_error", "connection reset: keepalive timeout");
+        assert_eq!(remote.transport_failure_kind(), None);
     }
     #[test]
     fn nested_transport_layers_keep_one_specific_cause() {

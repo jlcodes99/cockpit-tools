@@ -1696,7 +1696,7 @@ async fn retry_opening_failure(
     };
     if let Some((delay, maximum)) = backoff {
         super::retry::delay(state, delay, maximum, deadline).await?;
-        super::retry::renew_transport_after_tls(state, prepared, tracker, error).await?;
+        super::retry::renew_transport_after_failure(state, prepared, tracker, error).await?;
         return Ok(true);
     }
     if exhausted.is_none() && !overload && matches!(kind, OpeningFailure::Status)

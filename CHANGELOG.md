@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Codex API Service**: Detect silent network failures and replace failed native transport connections while preserving in-progress response and replay boundaries. [#3106](https://github.com/jlcodes99/cockpit-tools/pull/3106)
+- **Codex SSH**: Restore the selected account’s automatic connection preferences and refresh the matched remote session after switching. [#3097](https://github.com/jlcodes99/cockpit-tools/pull/3097)
+- **Claude**: Preserve Pro and Max plan classification and display quota from the matching usage scopes. [#3031](https://github.com/jlcodes99/cockpit-tools/pull/3031)
+- **CodeBuddy CN**: Show remaining credits and grant expiry information in the account summary. [#3023](https://github.com/jlcodes99/cockpit-tools/pull/3023)
 - **Codex provider profiles**: Keep an explicitly configured context window and compaction threshold when a provider template supplies its own defaults. [#3091](https://github.com/jlcodes99/cockpit-tools/pull/3091)
 - **Codex API Service**: Send repeated inline images without zstd compression on the affected Codex route, preserving the full request. [#3084](https://github.com/jlcodes99/cockpit-tools/pull/3084)
 - **Codex provider switching**: Press Escape to close the quick-switch dialog when it is the topmost dialog and no switch is in progress. [#2111](https://github.com/jlcodes99/cockpit-tools/pull/2111)

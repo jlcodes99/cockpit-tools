@@ -2,9 +2,7 @@
 //! No new-document hooks: reconnect happens only after a verified auth write.
 use super::*;
 use crate::models::ssh_server::SshServer;
-
-#[path = "ssh_server_identity.rs"]
-mod identity;
+use crate::modules::ssh_server_identity as identity;
 
 #[path = "codex_app_ssh_transport.rs"]
 mod transport;
@@ -39,13 +37,14 @@ async fn resolve_endpoint(
         .ok_or_else(|| "ssh_config_invalid".into())
 }
 
-async fn matching_host(profile: &Path, server: &SshServer) -> Result<Option<String>, String> {
-    let raw = fs::read(profile.join(".codex-global-state.json"))
-        .map_err(|_| "profile_state_unavailable")?;
-    let state: Value = serde_json::from_slice(&raw).map_err(|_| "profile_state_invalid")?;
+async fn matching_host(state: &Value, server: &SshServer) -> Result<Option<String>, String> {
+    let aliases = identity::aliases(state);
+    if aliases.is_empty() {
+        return Ok(None);
+    }
     let target = resolve_endpoint(&server.host, Some(server)).await?;
     let mut matches = Vec::new();
-    for (host, alias) in identity::aliases(&state) {
+    for (host, alias) in aliases {
         if resolve_endpoint(&alias, None)
             .await
             .as_ref()
@@ -127,6 +126,63 @@ fn request_script(host: &str, account: &CodexAccount, request_id: &str) -> Strin
     SCRIPT.replace("__COCKPIT_SSH_RECONNECT__", &request.to_string())
 }
 
+enum RefreshAttempt {
+    Confirmed,
+    NoEnabledConnection,
+    Waiting(&'static str),
+}
+
+fn pending_preferences(state: &Value, expected_owner: Option<&str>) -> Option<&'static str> {
+    match identity::renderer_owner(state) {
+        Some(owner) if expected_owner.is_some_and(|expected| owner != expected) => {
+            Some("desktop_account")
+        }
+        // Older clients can clear the legacy switches while restoring account state.
+        None if identity::auto_connect(state).is_null()
+            && state[identity::CONNECTIONS]
+                .as_array()
+                .is_some_and(|hosts| !hosts.is_empty()) =>
+        {
+            Some("native_ssh_preferences")
+        }
+        _ => None,
+    }
+}
+
+fn native_refresh_result(value: Value) -> Result<bool, String> {
+    if value["ok"] == true {
+        return Ok(true);
+    }
+    let reason = value["reason"]
+        .as_str()
+        .unwrap_or("bridge_invalid_response");
+    if matches!(reason, "bridge_unavailable" | "not_ready") {
+        return Ok(false);
+    }
+    if let Some(error) = value.get("readError") {
+        crate::modules::logger::log_warn(&format!(
+            "[Codex SSH] 原生账号核验失败: code={}, message={}",
+            error["code"], error["message"]
+        ));
+    }
+    Err(reason.to_string())
+}
+
+async fn refresh_page(url: &str, script: &str, account: &CodexAccount) -> Result<bool, String> {
+    ensure_current_target(account)?;
+    let cancelled = async {
+        while ensure_current_target(account).is_ok() {
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+    };
+    match transport::evaluate(url, script, cancelled).await {
+        Ok(value) => native_refresh_result(value),
+        // Startup overlays can close while the main renderer is being replaced.
+        Err(reason) if transport::retryable(&reason) => Ok(false),
+        Err(reason) => Err(reason),
+    }
+}
+
 async fn try_refresh(
     client: &Client,
     port: u16,
@@ -134,49 +190,43 @@ async fn try_refresh(
     server: &SshServer,
     account: &CodexAccount,
     request_id: &str,
-) -> Result<bool, String> {
-    let targets = query_targets(client, port).await;
-    if !targets.iter().any(is_codex_app_target) {
-        return Ok(false);
+    expected_owner: Option<&str>,
+) -> Result<RefreshAttempt, String> {
+    let pages: Vec<_> = query_targets(client, port)
+        .await
+        .into_iter()
+        .filter(is_codex_app_target)
+        .filter_map(|target| target.websocket_url)
+        .collect();
+    if pages.is_empty() {
+        return Ok(RefreshAttempt::Waiting("desktop_page"));
     }
-    let Some(host) = matching_host(profile, server).await? else {
-        return Ok(false);
+    let raw = fs::read(profile.join(".codex-global-state.json"))
+        .map_err(|_| "profile_state_unavailable")?;
+    let state = serde_json::from_slice(&raw).map_err(|_| "profile_state_invalid")?;
+    if let Some(stage) = pending_preferences(&state, expected_owner) {
+        return Ok(RefreshAttempt::Waiting(stage));
+    }
+    let Some(host) = matching_host(&state, server).await? else {
+        return Ok(RefreshAttempt::NoEnabledConnection);
     };
     let script = request_script(&host, account, request_id);
-    for target in targets.iter().filter(|target| is_codex_app_target(target)) {
-        ensure_current_target(account)?;
-        let Some(url) = target.websocket_url.as_deref() else {
-            continue;
-        };
-        let cancelled = async {
-            while ensure_current_target(account).is_ok() {
-                tokio::time::sleep(Duration::from_millis(250)).await;
-            }
-        };
-        let value = match transport::evaluate(url, &script, cancelled).await {
-            Ok(value) => value,
-            // Startup overlays and old renderers can disappear during a switch.
-            // Re-query the native pages and reuse the same request identity.
-            Err(reason) if transport::retryable(&reason) => continue,
-            Err(reason) => return Err(reason),
-        };
-        if value["ok"] == true {
-            return Ok(true);
-        }
-        let reason = value["reason"]
-            .as_str()
-            .unwrap_or("bridge_invalid_response");
-        if !matches!(reason, "bridge_unavailable" | "not_ready") {
-            if let Some(error) = value.get("readError") {
-                crate::modules::logger::log_warn(&format!(
-                    "[Codex SSH] 原生账号核验失败: code={}, message={}",
-                    error["code"], error["message"]
-                ));
-            }
-            return Err(reason.to_string());
+    for url in pages {
+        if refresh_page(&url, &script, account).await? {
+            return Ok(RefreshAttempt::Confirmed);
         }
     }
-    Ok(false)
+    Ok(RefreshAttempt::Waiting("native_ssh_connection"))
+}
+
+async fn projected_owner(profile: &Path) -> Option<String> {
+    let profile = profile.to_path_buf();
+    tokio::task::spawn_blocking(move || codex_account::desktop_renderer_project_owner(&profile))
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .flatten()
+        .map(|owner| owner.unwrap_or_else(|| identity::SIGNED_OUT_OWNER.to_string()))
 }
 
 pub(super) async fn refresh(
@@ -184,8 +234,10 @@ pub(super) async fn refresh(
     account: &CodexAccount,
     wait_for_desktop: bool,
 ) -> Result<bool, String> {
-    timeout(REFRESH_TIMEOUT, async {
+    let mut waiting_on = "desktop_startup";
+    let result = timeout(REFRESH_TIMEOUT, async {
         let profile = crate::modules::codex_instance::get_default_codex_home()?;
+        let expected_owner = projected_owner(&profile).await;
         let client = Client::builder()
             .no_proxy()
             .build()
@@ -197,16 +249,29 @@ pub(super) async fn refresh(
             }
             match desktop_availability(account, wait_for_desktop).await? {
                 DesktopAvailability::Absent => return Ok(false),
-                DesktopAvailability::Starting => {}
+                DesktopAvailability::Starting => waiting_on = "desktop_startup",
                 DesktopAvailability::Ready(port) => {
-                    if try_refresh(&client, port, &profile, server, account, &request_id).await? {
-                        return Ok(true);
+                    waiting_on = "native_ssh_refresh";
+                    match try_refresh(
+                        &client,
+                        port,
+                        &profile,
+                        server,
+                        account,
+                        &request_id,
+                        expected_owner.as_deref(),
+                    )
+                    .await?
+                    {
+                        RefreshAttempt::Confirmed => return Ok(true),
+                        RefreshAttempt::NoEnabledConnection => return Ok(false),
+                        RefreshAttempt::Waiting(stage) => waiting_on = stage,
                     }
                 }
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
         }
     })
-    .await
-    .map_err(|_| "timeout".to_string())?
+    .await;
+    result.map_err(|_| format!("{waiting_on}_timeout"))?
 }

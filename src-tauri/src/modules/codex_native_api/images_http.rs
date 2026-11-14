@@ -615,7 +615,7 @@ impl Execution {
                         deadline,
                     )
                     .await?;
-                    self.renew_transport_after_tls(&error).await?;
+                    self.renew_transport_after_failure(&error).await?;
                     continue;
                 }
             };
@@ -655,7 +655,7 @@ impl Execution {
                                     deadline,
                                 )
                                 .await?;
-                                self.renew_transport_after_tls(&error).await?;
+                                self.renew_transport_after_failure(&error).await?;
                                 continue;
                             }
                             return Err(error);
@@ -878,8 +878,8 @@ impl Execution {
         }
     }
 
-    async fn renew_transport_after_tls(&mut self, error: &ServiceError) -> Result<(), ServiceError> {
-        if !matches!(error.transport_failure, Some(super::super::contract::TransportFailureKind::TlsDecrypt | super::super::contract::TransportFailureKind::TlsDecryptHttp2)) {
+    async fn renew_transport_after_failure(&mut self, error: &ServiceError) -> Result<(), ServiceError> {
+        if error.transport_failure_kind().is_none() {
             return Ok(());
         }
         self.tracker.release_route();

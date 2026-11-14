@@ -517,6 +517,215 @@ fn desktop_login_component_cleanup_removes_only_owned_cache_dirs() {
     }
 
     #[test]
+    fn pro_and_max_plans_are_not_hijacked_by_rate_limit_tier() {
+        let pro_profile = serde_json::json!({
+            "lastActiveOrg": "org-pro",
+            "endpoints": {
+                "account": {
+                    "email_address": "pro@testmail.dev",
+                    "memberships": [
+                        {
+                            "organization": {
+                                "uuid": "org-pro",
+                                "organization_type": "claude_pro",
+                                "rate_limit_tier": "default_claude_ai",
+                                "capabilities": ["chat", "claude_pro"]
+                            }
+                        }
+                    ]
+                }
+            }
+        });
+        let pro_summary = desktop_web_profile_summary(&pro_profile);
+        assert_eq!(
+            read_string_path(&pro_summary, &["planType"]).as_deref(),
+            Some("Pro")
+        );
+
+        let pro_from_subscription_profile = serde_json::json!({
+            "lastActiveOrg": "org-pro-sub",
+            "endpoints": {
+                "account": {
+                    "memberships": [
+                        {
+                            "organization": {
+                                "uuid": "org-pro-sub",
+                                "rate_limit_tier": "default_claude_ai",
+                                "capabilities": ["chat"]
+                            }
+                        }
+                    ]
+                },
+                "subscriptionDetails": {
+                    "plan_type": "claude_pro"
+                }
+            }
+        });
+        assert_eq!(
+            desktop_plan_from_profile(&pro_from_subscription_profile)
+                .0
+                .as_deref(),
+            Some("Pro")
+        );
+
+        let max_profile = serde_json::json!({
+            "lastActiveOrg": "org-max",
+            "endpoints": {
+                "account": {
+                    "memberships": [
+                        {
+                            "organization": {
+                                "uuid": "org-max",
+                                "organization_type": "claude_max",
+                                "rate_limit_tier": "default_claude_max_20x",
+                                "capabilities": ["chat", "claude_max"]
+                            }
+                        }
+                    ]
+                }
+            }
+        });
+        assert_eq!(
+            desktop_plan_from_profile(&max_profile).0.as_deref(),
+            Some("Max 20x")
+        );
+
+        let team_premium_profile = serde_json::json!({
+            "lastActiveOrg": "org-team",
+            "endpoints": {
+                "account": {
+                    "memberships": [
+                        {
+                            "organization": {
+                                "uuid": "org-team",
+                                "organization_type": "claude_team",
+                                "rate_limit_tier": "default_claude_max_5x",
+                                "capabilities": ["chat", "raven"]
+                            }
+                        }
+                    ]
+                }
+            }
+        });
+        assert_eq!(
+            desktop_plan_from_profile(&team_premium_profile).0.as_deref(),
+            Some("Team")
+        );
+
+        // Cached DesktopOAuth accounts previously saved as "Free" self-heal from slimmed webProfile.
+        let mut cached_account = test_desktop_account(
+            "claude_desktop_pro_cached",
+            "pro@testmail.dev",
+            Some("acc-1"),
+            Some("/tmp/snapshot"),
+            10,
+            20,
+        );
+        cached_account.plan_type = Some("Free".to_string());
+        cached_account.claude_usage_raw = Some(slim_web_profile_for_storage(&pro_profile));
+        cached_account.claude_config_raw = Some(serde_json::json!({
+            "desktopProfile": {
+                "webProfileSummary": {
+                    "planType": "Free",
+                    "rawPlan": "default_claude_ai"
+                }
+            }
+        }));
+        assert!(normalize_cached_desktop_plan_from_raw(&mut cached_account));
+        assert_eq!(cached_account.plan_type.as_deref(), Some("Pro"));
+        assert_eq!(
+            read_string_path(
+                cached_account.claude_config_raw.as_ref().unwrap(),
+                &["desktopProfile", "webProfileSummary", "planType"]
+            )
+            .as_deref(),
+            Some("Pro")
+        );
+    }
+
+    #[test]
+    fn merges_scoped_limits_without_dropping_top_level_usage_or_scaling_sub_one_percent() {
+        let mixed_profile = serde_json::json!({
+            "endpoints": {
+                "organizationUsage": {
+                    "five_hour": {
+                        "utilization": 12.4,
+                        "resets_at": "2026-09-09T15:00:00Z"
+                    },
+                    "seven_day": {
+                        "utilization": 25.6,
+                        "resets_at": "2026-09-12T00:00:00Z"
+                    },
+                    "limits": [
+                        {
+                            "kind": "weekly_scoped",
+                            "group": "weekly",
+                            "percent": 0.0,
+                            "resets_at": "2026-09-12T00:00:00Z",
+                            "scope": { "model": { "display_name": "Fable" }, "surface": null }
+                        },
+                        {
+                            "kind": "weekly_scoped",
+                            "group": "weekly",
+                            "percent": 6.0,
+                            "resets_at": "2026-09-12T00:00:00Z",
+                            "scope": { "model": { "display_name": "Opus" }, "surface": null }
+                        },
+                        {
+                            "kind": "weekly_scoped",
+                            "group": "weekly",
+                            "percent": 5.2,
+                            "resets_at": "2026-09-12T00:00:00Z",
+                            "scope": { "model": { "display_name": "Sonnet" }, "surface": null }
+                        },
+                        {
+                            "kind": "weekly_scoped",
+                            "group": "weekly",
+                            "percent": 99.0,
+                            "resets_at": "2026-09-12T00:00:00Z",
+                            "scope": { "model": { "display_name": "Sonnet" }, "surface": "claude_code" }
+                        }
+                    ]
+                }
+            }
+        });
+
+        let quota = desktop_web_usage_to_quota(&mixed_profile).expect("mixed usage should parse");
+        assert_eq!(quota.five_hour_percentage, 12);
+        assert_eq!(quota.seven_day_percentage, 26);
+        assert_eq!(quota.seven_day_sonnet_percentage, Some(5));
+
+        let sub_one_percent_profile = serde_json::json!({
+            "endpoints": {
+                "organizationUsage": {
+                    "five_hour": {
+                        "utilization": 0.42,
+                        "resets_at": "2026-09-09T15:00:00Z"
+                    },
+                    "seven_day": {
+                        "utilization": 0.65,
+                        "resets_at": "2026-09-12T00:00:00Z"
+                    },
+                    "limits": [
+                        {
+                            "kind": "weekly_scoped",
+                            "group": "weekly",
+                            "percent": 0.35,
+                            "resets_at": "2026-09-12T00:00:00Z",
+                            "scope": { "model": { "display_name": "Sonnet" }, "surface": null }
+                        }
+                    ]
+                }
+            }
+        });
+        let low_quota = desktop_web_usage_to_quota(&sub_one_percent_profile)
+            .expect("fractional sub-1% usage should parse");
+        assert_eq!(low_quota.five_hour_percentage, 0);
+        assert_eq!(low_quota.seven_day_percentage, 1);
+        assert_eq!(low_quota.seven_day_sonnet_percentage, Some(0));
+    }
+
+    #[test]
     fn extracts_desktop_profile_snapshot_id_from_legacy_paths() {
         let snapshot_id = "claude_desktop_0b1d3d4df02c2376d62a623bb8c67332";
         assert_eq!(
