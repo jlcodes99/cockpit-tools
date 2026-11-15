@@ -2185,19 +2185,17 @@ fn parse_qoder_quota_bucket(
         })
         .or_else(|| fallback.and_then(|(_, t, _)| *t));
 
-    let percentage = raw
-        .as_ref()
-        .and_then(|r| {
-            json_first_f64(&[
-                r.get("percentage").and_then(json_as_f64),
-                r.get("usagePercent").and_then(json_as_f64),
-                r.get("usage_percentage").and_then(json_as_f64),
-            ])
-        })
-        .or_else(|| match (total, used) {
-            (Some(t), Some(u)) if t > 0.0 => Some((u / t) * 100.0),
-            _ => None,
-        });
+    let percentage = crate::modules::qoder_usage::derived_percent(used, total).or_else(|| {
+        raw.as_ref()
+            .and_then(|r| {
+                json_first_f64(&[
+                    r.get("percentage").and_then(json_as_f64),
+                    r.get("usagePercent").and_then(json_as_f64),
+                    r.get("usage_percentage").and_then(json_as_f64),
+                ])
+            })
+            .map(crate::modules::qoder_usage::percent_points)
+    });
 
     QoderQuotaBucket {
         used,
