@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ChevronRight, Crosshair, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronRight, Crosshair, X } from 'lucide-react';
 import { PlatformOverviewTabsHeader, PlatformOverviewTab } from '../components/platform/PlatformOverviewTabsHeader';
 import { WorkbuddyInstancesContent } from './WorkbuddyInstancesPage';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
@@ -13,6 +13,7 @@ import {
   getWorkbuddyQuotaCategoryGroups,
 } from '../types/workbuddy';
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
+import { useWorkbuddyProbeAutoRecheck } from '../hooks/useWorkbuddyProbeAutoRecheck';
 import { WorkbuddyCheckinModal } from '../components/codebuddy-suite/CodebuddySuiteCheckinModal';
 import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessionManager';
 import { CodebuddySuiteAccountsSharedView, type CodebuddySuiteAccountsPlatformConfig } from '../components/codebuddy-suite/CodebuddySuiteAccountsSharedView';
@@ -103,6 +104,9 @@ export function WorkbuddyAccountsPage() {
   useEffect(() => subscribeWorkbuddyProbeStatus(() => setProbeVersion((v) => v + 1)), []);
 
   // 恢复时间过后自动复测：确认恢复则在卡片提示后标注「已恢复」
+  useWorkbuddyProbeAutoRecheck(store.accounts);
+
+  // 恢复时间过后自动复测：确认恢复则在卡片提示后标注「已恢复」
 
   const page = useProviderAccountsPage<WorkbuddyAccount>({
     platformKey: 'WorkBuddy',
@@ -187,11 +191,18 @@ export function WorkbuddyAccountsPage() {
       return (
         <div className="wb-probe-notice">
           {records.slice(0, 2).map((record) => {
+            const recovered = Boolean(record.recoveredAt);
+            const Icon = recovered ? CheckCircle2 : AlertTriangle;
             return (
-              <div key={record.model} className={`wb-probe-notice-item ${record.status}`}>
-                <AlertTriangle size={12} aria-hidden="true" />
+              <div key={record.model} className={`wb-probe-notice-item ${record.status}${recovered ? ' recovered' : ''}`}>
+                <Icon size={12} aria-hidden="true" />
                 <span title={record.message}>
-                  {record.status === 'rate_limited' && record.resetAt
+                  {recovered
+                    ? page.t('workbuddy.probeNotice.recovered', '{{model}} 上次探测受限，恢复时间 {{time}}，已恢复', {
+                        model: record.model,
+                        time: formatProbeTime(record.resetAt ?? record.recoveredAt!),
+                      })
+                    : record.status === 'rate_limited' && record.resetAt
                       ? page.t('workbuddy.probeNotice.until', '{{model}} 不可用至 {{time}}', {
                           model: record.model,
                           time: formatProbeTime(record.resetAt),

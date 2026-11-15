@@ -297,9 +297,13 @@ pub(super) async fn read_acp_reply(
                         outcome.error = Some(format!("{}: {}", method, err));
                         return;
                     }
-                    // Require the model-selection acknowledgment before
-                    // sending a prompt. Prompt replies may be direct SSE events.
-                    if method != "session/prompt" && !rpc_acknowledged(&response_text, id) {
+                    // 空响应体 = 受理（响应走 SSE）；非空响应必须是对应 id 的 result，
+                    // 否则说明连接/协议出了问题（如网关把错误页当 200 返回）。
+                    // 注意：真实后端对 JSON-RPC POST 返回 200 + 空响应体，
+                    // 若强制要求内联 ack，会对真实环境必然报 HANDSHAKE_INCOMPLETE。
+                    if !response_text.trim().is_empty()
+                        && !rpc_acknowledged(&response_text, id)
+                    {
                         outcome.error = Some(format!(
                             "WORKBUDDY_PROBE_HANDSHAKE_INCOMPLETE ({}): {}",
                             method,
