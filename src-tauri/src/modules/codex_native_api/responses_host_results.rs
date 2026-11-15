@@ -9,7 +9,10 @@ pub(super) fn is_host_result(item: &Value) -> bool {
                 true
             }
             (Some("agent"), Some(name)) => {
-                matches!(name, "browser_tabs" | "codex_apps_open_page") || selected_page_part(name)
+                matches!(
+                    name,
+                    "browser_tabs" | "codex_apps_open_page" | "codex_apps_writing_block_edits"
+                ) || selected_page_part(name)
             }
             _ => false,
         }
@@ -60,6 +63,7 @@ mod agent_browser_tests {
         for name in [
             "browser_tabs",
             "codex_apps_open_page",
+            "codex_apps_writing_block_edits",
             "codex_apps_selected_page_part_1_of_1",
             "codex_apps_selected_page_part_1_of_2",
             "codex_apps_selected_page_part_2_of_2",
@@ -91,6 +95,7 @@ mod agent_browser_tests {
             "codex_apps_selected_page_part_1_of_1_extra",
             "codex_apps_selected_page_part_4294967296_of_4294967296",
             "codex_apps_open_page_extra",
+            "codex_apps_writing_block_edits_extra",
             "codex_apps_selected_page",
             "create_thread",
             "send_message_to_thread",
@@ -107,13 +112,20 @@ mod agent_browser_tests {
             "codex_app",
             "codex_tui",
         ] {
-            let mut item = browser_result("codex_apps_open_page");
-            item["namespace"] = json!(namespace);
-            assert!(!is_host_result(&item), "namespace={namespace:?}");
+            for name in ["codex_apps_open_page", "codex_apps_writing_block_edits"] {
+                let mut item = browser_result(name);
+                item["namespace"] = json!(namespace);
+                assert!(
+                    !is_host_result(&item),
+                    "name={name:?} namespace={namespace:?}"
+                );
+            }
         }
-        let mut wrong_kind = browser_result("codex_apps_open_page");
-        wrong_kind["type"] = json!("custom_tool_call_output");
-        assert!(!is_host_result(&wrong_kind));
+        for name in ["codex_apps_open_page", "codex_apps_writing_block_edits"] {
+            let mut wrong_kind = browser_result(name);
+            wrong_kind["type"] = json!("custom_tool_call_output");
+            assert!(!is_host_result(&wrong_kind), "{name}");
+        }
     }
 
     #[test]
@@ -122,6 +134,7 @@ mod agent_browser_tests {
         for name in [
             "browser_tabs",
             "codex_apps_open_page",
+            "codex_apps_writing_block_edits",
             "codex_apps_selected_page_part_1_of_1",
         ] {
             let base = browser_result(name);
@@ -160,5 +173,28 @@ mod agent_browser_tests {
             json!({"type":"function_call_output","namespace":"agent",
             "name":"unknown","output":"unrecognized host result"})
         ]));
+    }
+
+    #[test]
+    fn writing_block_host_result_replays_losslessly_with_real_tool_calls() {
+        use crate::modules::codex_native_api::responses_custom_results;
+        use std::borrow::Cow;
+
+        let history = vec![
+            json!({"type":"function_call", "name":"lookup", "call_id":"call-1",
+                "arguments":"{}"}),
+            json!({"type":"function_call_output", "namespace":"agent",
+                "name":"codex_apps_writing_block_edits",
+                "output":"{\"edits\":[{\"text\":\"Alpha β\"}]}\n  exact whitespace  "}),
+            json!({"type":"function_call_output", "call_id":"call-1", "output":"done"}),
+        ];
+        let replay = responses_custom_results::replay(&history).expect("complete history replays");
+        assert!(matches!(replay, Cow::Borrowed(_)));
+        assert_eq!(replay.as_ref(), history.as_slice());
+        assert!(responses_custom_results::replay(&history[..2]).is_none());
+
+        let mut unknown_namespace = history.clone();
+        unknown_namespace[1]["namespace"] = json!("other");
+        assert!(responses_custom_results::replay(&unknown_namespace).is_none());
     }
 }

@@ -1,4 +1,4 @@
-//! Synthetic loopback regressions for browser observations injected by the client.
+//! Synthetic loopback regressions for host observations injected by the client.
 //! No real account, browser content or production identity store is used.
 use super::codex_app_failover_tests::assert_oauth_rebuild;
 use super::*;
@@ -9,11 +9,17 @@ fn browser_results() -> Vec<Value> {
         "browser_tabs",
         "codex_apps_open_page",
         "codex_apps_selected_page_part_1_of_1",
+        "codex_apps_writing_block_edits",
     ]
     .into_iter()
     .map(|name| {
+        let output = if name == "codex_apps_writing_block_edits" {
+            "Synthetic writing edits\n  exact whitespace  "
+        } else {
+            "Synthetic browser observation\n  exact whitespace  "
+        };
         json!({"type":"function_call_output","namespace":"agent","name":name,
-            "output":"Synthetic browser observation\n  exact whitespace  "})
+            "output":output})
     })
     .collect()
 }
