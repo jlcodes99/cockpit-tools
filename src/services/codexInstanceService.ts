@@ -1,3 +1,4 @@
+import { withCliLaunchPath } from '../utils/cliLaunchPath';
 import { invoke } from "@tauri-apps/api/core";
 import { CODEX_PATH_RECOVERY_CANCELLED, codexPathRecoveryKey, withCodexPathRecovery } from "../stores/useCodexPathRecoveryStore";
 import { withProxyEnginePrerequisite } from "../utils/codexProxyEnginePrerequisite";
@@ -124,7 +125,7 @@ export async function createInstance(payload: {
   launchMode?: InstanceLaunchMode;
   appSpeed?: CodexAppSpeed;
   copySourceInstanceId: string;
-  initMode?: "copy" | "empty" | "existingDir";
+  initMode?: "copy" | "empty" | "existingDir" | "cliConfig";
 }): Promise<InstanceProfile> {
   return await invoke("codex_create_instance", {
     name: payload.name,
@@ -339,10 +340,11 @@ export async function previewCodexInstanceLaunchCommand(payload: {
 export async function getCodexInstanceLaunchCommand(
   instanceId: string,
   terminal?: string,
+  customCommand?: string,
 ): Promise<CodexInstanceLaunchInfo> {
-  const args = { instanceId, terminal: terminal ?? null };
+  const args = { instanceId, terminal: terminal ?? null, ...(customCommand?.trim() ? { customCommand } : {}) };
   return withCodexPathRecovery(
-    () => invoke<CodexInstanceLaunchInfo>("codex_get_instance_launch_command", args),
+    () => withCliLaunchPath("codex_cli", () => invoke<CodexInstanceLaunchInfo>("codex_get_instance_launch_command", args)),
     { key: codexPathRecoveryKey("codex_get_instance_launch_command", args) },
   );
 }
@@ -350,10 +352,11 @@ export async function getCodexInstanceLaunchCommand(
 export async function executeCodexInstanceLaunchCommand(
   instanceId: string,
   terminal?: string,
+  customCommand?: string,
 ): Promise<string> {
-  const args = { instanceId, terminal: terminal ?? null };
+  const args = { instanceId, terminal: terminal ?? null, ...(customCommand?.trim() ? { customCommand } : {}) };
   return withCodexPathRecovery(
-    () => invoke<string>("codex_execute_instance_launch_command", args),
+    () => withCliLaunchPath("codex_cli", () => invoke<string>("codex_execute_instance_launch_command", args)),
     { key: codexPathRecoveryKey("codex_execute_instance_launch_command", args) },
   );
 }

@@ -73,6 +73,7 @@ import * as qoderService from './qoderService';
 import * as zcodeService from './zcodeService';
 import * as traeService from './traeService';
 import * as workbuddyService from './workbuddyService';
+import * as workbuddyAiService from './workbuddyAiService';
 import * as minimaxCodeService from './minimaxCodeService';
 import type { InstanceLaunchMode } from '../types/instance';
 import type { ClaudeAccount } from '../types/claude';
@@ -324,6 +325,7 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   trae_solo: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
   trae_cn: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
   trae_solo_cn: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
+  workbuddy_ai: async () => (await workbuddyAiService.listAccounts()) as unknown as TransferAccountRecord[],
   workbuddy: async () => (await workbuddyService.listWorkbuddyAccounts()) as unknown as TransferAccountRecord[],
   minimaxcode: async () =>
     (await minimaxCodeService.listMinimaxCodeAccounts()) as unknown as TransferAccountRecord[],
@@ -350,6 +352,7 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   trae_cn: traeService.importTraeFromJson,
   trae_solo_cn: traeService.importTraeFromJson,
   workbuddy: workbuddyService.importWorkbuddyFromJson,
+  workbuddy_ai: workbuddyAiService.importFromJson,
   minimaxcode: minimaxCodeService.importMinimaxCodeFromJson,
 };
 
@@ -516,6 +519,7 @@ function buildAccountRef(platform: PlatformId, account: TransferAccountRecord): 
     case 'codebuddy':
     case 'codebuddy_cn':
     case 'workbuddy':
+    case 'workbuddy_ai':
     case 'minimaxcode':
       ref.email = normalizeString(account.email) ?? undefined;
       ref.uid = normalizeString(account.uid) ?? undefined;
@@ -601,6 +605,7 @@ function scoreAccountRef(ref: DataTransferAccountRef, account: TransferAccountRe
     case 'codebuddy':
     case 'codebuddy_cn':
     case 'workbuddy':
+    case 'workbuddy_ai':
     case 'minimaxcode':
       addStringScore(ref.uid, account.uid, 24);
       addStringScore(ref.email, account.email, 10);
@@ -1361,6 +1366,7 @@ function detectLegacyPlatform(value: unknown): PlatformId | null {
 
   const id = normalizeString(sample.id);
   if (id?.startsWith('codebuddy_cn_')) return 'codebuddy_cn';
+  if (id?.startsWith('workbuddy_ai_')) return 'workbuddy_ai';
   if (id?.startsWith('workbuddy_')) return 'workbuddy';
   if (id?.startsWith('minimax_code_')) return 'minimaxcode';
   if (id?.startsWith('codebuddy_')) return 'codebuddy';

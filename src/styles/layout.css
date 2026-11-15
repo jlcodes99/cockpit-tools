@@ -350,6 +350,10 @@
 
 .nav-footer {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
 }
 
 .side-nav-layout-switch-trigger {
@@ -416,9 +420,39 @@
 }
 
 .side-nav-layout-switch-remember input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
   width: 16px;
   height: 16px;
-  accent-color: var(--primary);
+  margin: 0;
+  flex: 0 0 auto;
+  border: 2px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-primary);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.side-nav-layout-switch-remember input[type='checkbox']::after {
+  content: '';
+  width: 7px;
+  height: 4px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) scale(0);
+  transform-origin: center;
+  transition: transform 0.12s ease;
+}
+
+.side-nav-layout-switch-remember input[type='checkbox']:checked {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.side-nav-layout-switch-remember input[type='checkbox']:checked::after {
+  transform: rotate(-45deg) scale(1);
 }
 
 .side-nav.side-nav-classic {
@@ -992,6 +1026,48 @@ html[data-theme="dark"] .side-nav-classic-handle:hover {
 @keyframes slideInLeft {
   from { opacity: 0; transform: translate(-20px, -50%); }
   to { opacity: 1; transform: translate(0, -50%); }
+}
+
+@media (max-height: 760px) {
+  .side-nav:not(.side-nav-classic) {
+    min-height: 280px;
+    max-height: calc(100vh - 128px);
+    padding: 16px 0 26px;
+    gap: 10px;
+  }
+
+  .side-nav:not(.side-nav-classic) .nav-items,
+  .side-nav:not(.side-nav-classic) .nav-footer {
+    gap: 8px;
+  }
+
+  .side-nav:not(.side-nav-classic) .brand-logo,
+  .side-nav:not(.side-nav-classic) .nav-item {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+  }
+}
+
+@media (max-height: 640px) {
+  .side-nav:not(.side-nav-classic) {
+    min-height: 240px;
+    max-height: calc(100vh - 116px);
+    padding: 12px 0 24px;
+    gap: 6px;
+  }
+
+  .side-nav:not(.side-nav-classic) .nav-items,
+  .side-nav:not(.side-nav-classic) .nav-footer {
+    gap: 4px;
+  }
+
+  .side-nav:not(.side-nav-classic) .brand-logo,
+  .side-nav:not(.side-nav-classic) .nav-item {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
 }
 
 @media (max-width: 640px) {

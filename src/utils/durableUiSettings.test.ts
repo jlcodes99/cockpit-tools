@@ -154,6 +154,22 @@ test('a failed load does not send writes or release privacy masking', async () =
   assert.equal(h.exports.readDurableUiSetting(PRIVACY), '1');
 });
 
+test('Antigravity and CodeBuddy CN restore their launch choices independently', async () => {
+  const runtimeTarget = 'agtools.antigravity.runtime_target.v1';
+  const h = harness({ [runtimeTarget]: 'antigravity_ide' });
+  const antigravity = h.exports.ANTIGRAVITY_LAUNCH_CLIENT_STORAGE_KEY;
+  const codebuddyCn = h.exports.CODEBUDDY_CN_LAUNCH_MODE_STORAGE_KEY;
+  await h.exports.saveDurableUiSetting(antigravity, 'cli', true);
+  await h.exports.saveDurableUiSetting(codebuddyCn, 'cli', true);
+  await h.exports.saveDurableUiSetting(codebuddyCn, 'desktop', true);
+
+  const reopened = harness({}, h.native);
+  await reopened.exports.hydrateDurableUiSettings();
+  assert.equal(reopened.exports.readDurableUiSetting(antigravity), 'cli');
+  assert.equal(reopened.exports.readDurableUiSetting(codebuddyCn), 'desktop');
+  assert.equal(reopened.exports.readDurableUiSetting(runtimeTarget), 'antigravity_ide');
+});
+
 test('a window event before hydration cannot suppress migration of missing settings', async () => {
   const h = harness({ [BADGE]: 'outline' }, { values: { [PRIVACY]: '0' }, revisions: { [PRIVACY]: 1 } });
   h.exports.applyDurableUiSnapshot(h.native);

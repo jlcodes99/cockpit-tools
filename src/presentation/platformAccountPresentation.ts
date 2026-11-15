@@ -152,7 +152,7 @@ import {
 import type { DisplayGroup } from "../services/groupService";
 import type { OfficialQuotaModel } from "../types/codebuddy-suite";
 import { getQuotaCategoryGroups } from "../utils/codebuddy-suite";
-import { getWorkbuddyCredits } from "../utils/workbuddyCredits";
+import { getWorkbuddyAiCredits, getWorkbuddyAiPlan, getWorkbuddyCredits, workbuddyCreditPercent } from "../utils/workbuddyCredits";
 
 type Translate = {
   (key: string): string;
@@ -1470,10 +1470,37 @@ export function buildWorkbuddyAccountPresentation(
   account: WorkbuddyAccount,
   t: Translate,
   groupQuota = false,
+  international = false,
 ): UnifiedAccountPresentation {
-  const planLabel = getWorkbuddyPlanBadge(account);
+  const internationalPlan = international ? getWorkbuddyAiPlan(account) : null;
+  const planLabel = internationalPlan?.label ?? getWorkbuddyPlanBadge(account);
   const usage = getWorkbuddyUsage(account);
-  const quotaItems = groupQuota
+  const credits = international ? getWorkbuddyAiCredits(account) : null;
+  const quotaItems: UnifiedQuotaMetric[] = credits?.left != null ? [{
+    key: "credits",
+    label: t("workbuddy.credits.total"),
+    percentage: 0,
+    quotaClass: "high",
+    valueText: formatQuotaNumber(credits.left),
+    left: credits.left,
+    showProgress: false,
+  }, ...credits.groups.map((group) => {
+    const left = workbuddyCreditPercent(group.total, group.left, Math.floor);
+    const used = workbuddyCreditPercent(group.total, group.used, Math.round);
+    return {
+      key: group.kind,
+      label: t(`workbuddy.credits.${group.kind}`),
+      percentage: used,
+      progressPercent: used,
+      quotaClass: getRemainingQuotaClass(left),
+      valueText: t("workbuddy.credits.remainingPercent", { percent: left }),
+      resetAt: group.time,
+      total: group.total,
+      used: group.used,
+      left: group.left,
+      showProgress: true,
+    };
+  })] : groupQuota
     ? buildWorkbuddyGroupedMetrics(account, t)
     : buildCodebuddySuiteResourceMetrics(getWorkbuddyOfficialQuotaModel(account), t, "workbuddy");
 
@@ -1481,7 +1508,7 @@ export function buildWorkbuddyAccountPresentation(
     id: account.id,
     displayName: getWorkbuddyAccountDisplayEmail(account),
     planLabel,
-    planClass: resolveSimplePlanClass(planLabel),
+    planClass: internationalPlan?.style ?? resolveSimplePlanClass(planLabel),
     quotaItems,
     ...buildUsageStatusSubline(
       usage.isNormal,

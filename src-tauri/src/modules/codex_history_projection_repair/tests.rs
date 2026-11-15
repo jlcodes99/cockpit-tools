@@ -1,6 +1,6 @@
 use super::*;
 use serde_json::json;
-use std::{cell::Cell, fs};
+use std::{cell::Cell, fs, time::Instant};
 
 const ROOT: &str = "11111111-1111-4111-8111-111111111111";
 const LOGICAL: &str = "22222222-2222-4222-8222-222222222222";
@@ -610,11 +610,7 @@ fn history_projection_repair_source_change_before_commit_rolls_back() {
 }
 
 #[test]
-fn history_projection_repair_budget_and_profile_scope_are_enforced() {
-    let budget = Budget {
-        started: Instant::now() - Duration::from_secs(46),
-    };
-    assert!(budget.check().unwrap_err().contains("LIMIT"));
+fn history_projection_repair_rejects_wrong_profile_and_invalid_cursor() {
     let f = Fixture::new();
     let other = Fixture::new();
     assert!(apply(&other.root, &f.plan(), &other.root.join("backup"))
@@ -624,4 +620,42 @@ fn history_projection_repair_budget_and_profile_scope_are_enforced() {
     assert!(scan(&f.root, None, &|_, _| {})
         .unwrap_err()
         .contains("UNSAFE_HISTORY"));
+}
+
+#[test]
+fn history_projection_repair_handles_deep_chains_and_large_backups() {
+    let f = Fixture::new();
+    let mut parent = ROOT.to_owned();
+    let mut ordinal = 3;
+    let mut db = f.db();
+    let tx = db.transaction().unwrap();
+    for index in 1..=130 {
+        let id = uuid::Uuid::from_u128(index).to_string();
+        let path = f.root.join(format!("sessions/rollout-2026-10-24T00-00-00-{id}.jsonl"));
+        let bytes = records(&id, Some(json!({
+            "thread_id": parent,
+            "end_byte_offset": 1,
+            "end_ordinal_exclusive": ordinal
+        })), ordinal);
+        fs::write(path, &bytes).unwrap();
+        ordinal += 3;
+        cache(&tx, &id, bytes.len() as i64 + 1, ordinal as i64);
+        parent = id;
+    }
+    tx.execute("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<20000)
+        INSERT INTO thread_items SELECT ?1,'turn','extra-'||x,1,10,'{}' FROM n", [ROOT]).unwrap();
+    tx.execute("UPDATE thread_items SET item_json=zeroblob(67108865) WHERE thread_id=?1 AND item_id='item'", [ROOT]).unwrap();
+    tx.commit().unwrap();
+    let plan = scan(&f.root, None, &|_, _| {}).unwrap();
+    assert_eq!(plan.candidate_count(), 131);
+    let backup = f.root.join("large-backup");
+    assert_eq!(apply(&f.root, &plan, &backup).unwrap(), 131);
+    assert_eq!(f.count(ROOT), 0);
+    let copy = Connection::open(backup.join("history-projection.sqlite")).unwrap();
+    let (rows, largest): (i64, i64) = copy.query_row(
+        "SELECT count(*), max(length(item_json)) FROM thread_items WHERE thread_id=?1",
+        [ROOT],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    ).unwrap();
+    assert_eq!((rows, largest), (20001, 67108865));
 }

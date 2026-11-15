@@ -1008,6 +1008,7 @@
   letter-spacing: normal;
 }
 
+.tier-badge.account-picker-plan.free,
 .ghcp-account-card .tier-badge.free,
 .ghcp-accounts-page .account-table .tier-badge.free {
   background: var(--plan-free-bg);
@@ -1051,6 +1052,7 @@
   border: 1px solid var(--plan-team-border);
 }
 
+.tier-badge.account-picker-plan.enterprise,
 .ghcp-account-card .tier-badge.enterprise,
 .ghcp-accounts-page .account-table .tier-badge.enterprise {
   background: var(--plan-enterprise-bg);
@@ -1058,6 +1060,7 @@
   border: 1px solid var(--plan-enterprise-border);
 }
 
+.tier-badge.account-picker-plan.pro,
 .ghcp-account-card .tier-badge.pro,
 .ghcp-accounts-page .account-table .tier-badge.pro {
   background: var(--plan-pro-bg);
@@ -1072,6 +1075,7 @@
   border: 1px solid var(--plan-ultra-border);
 }
 
+.tier-badge.account-picker-plan.trial,
 .ghcp-account-card .tier-badge.trial,
 .ghcp-accounts-page .account-table .tier-badge.trial {
   background: var(--plan-trial-bg);
@@ -1095,6 +1099,7 @@
   border: 1px solid var(--plan-ultra-border);
 }
 
+.tier-badge.account-picker-plan.unknown,
 .ghcp-account-card .tier-badge.unknown,
 .ghcp-accounts-page .account-table .tier-badge.unknown {
   background: var(--plan-unknown-bg);
@@ -1218,6 +1223,27 @@
   padding: 12px;
   background: var(--bg-tertiary);
   border-radius: var(--radius-sm);
+}
+
+.ghcp-accounts-page .quota-query-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.ghcp-accounts-page .quota-query-state-icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.ghcp-accounts-page .quota-query-state-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ghcp-accounts-page .quota-query-state.error {
+  color: var(--danger);
 }
 
 .trae-accounts-page .ghcp-account-card {
@@ -3118,6 +3144,11 @@
   overflow-wrap: anywhere;
   word-break: break-word;
   animation: fadeUp 0.3s ease;
+}
+
+.ghcp-add-modal .add-status > svg {
+  flex: none;
+  margin-block-start: calc((1.45em - 16px) / 2);
 }
 
 .ghcp-add-modal .add-status > span {

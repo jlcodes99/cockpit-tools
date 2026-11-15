@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   antigravityAppPathTarget,
   getAntigravityRuntimeTarget,
+  getMissingAntigravityPathTarget,
   hasSavedAntigravityRuntimeTarget,
   normalizeAntigravityRuntimeTarget,
   resolveAntigravityStartupTarget,
@@ -12,6 +13,13 @@ test('desktop and IDE recovery use separate path targets and missing context def
   assert.equal(antigravityAppPathTarget(normalizeAntigravityRuntimeTarget('antigravity')), 'antigravity_legacy');
   assert.equal(antigravityAppPathTarget(normalizeAntigravityRuntimeTarget('antigravity_ide')), 'antigravity');
   assert.equal(antigravityAppPathTarget(normalizeAntigravityRuntimeTarget(undefined)), 'antigravity');
+});
+
+test('path recovery identifies the missing executable even when the launched client is its peer', () => {
+  assert.equal(getMissingAntigravityPathTarget('APP_PATH_NOT_FOUND:antigravity_legacy'), 'antigravity');
+  assert.equal(getMissingAntigravityPathTarget(new Error('APP_PATH_NOT_FOUND:antigravity')), 'antigravity_ide');
+  assert.equal(getMissingAntigravityPathTarget('ANTIGRAVITY_CLI_NOT_FOUND'), undefined);
+  assert.equal(getMissingAntigravityPathTarget('APP_PATH_NOT_FOUND:codex'), undefined);
 });
 
 test('saved client preferences survive unavailable installation discovery', () => {

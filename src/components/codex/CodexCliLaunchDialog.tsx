@@ -1,31 +1,22 @@
-import {
-  Check,
-  ChevronLeft,
-  Copy,
-  FolderOpen,
-  Play,
-  RefreshCw,
-  X,
-} from "lucide-react";
+import { useId, useRef, useState, type ReactNode } from "react";
+import { Check, ChevronLeft, Copy, Play, RefreshCw, Terminal, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { LaunchTerminalOption } from "../../hooks/useLaunchTerminalOptions";
+import { useEscCloseTopmost } from "../../hooks/useEscClose";
+import { useModalFocusTrap } from "../../hooks/useModalFocusTrap";
+import { CliLaunchFields, type CliWorkingDirectoryField } from "../CliLaunchFields";
 import { ModalErrorMessage } from "../ModalErrorMessage";
-import { SingleSelectDropdown } from "../SingleSelectDropdown";
-
-interface CodexCliWorkingDirField {
-  value: string;
-  error?: string | null;
-  placeholder?: string;
-  onChange: (value: string) => void;
-  onBlur?: () => void;
-  onChoose: () => void;
-}
+import "../ClientLaunchDialog.css";
+import "./CodexCliLaunchDialog.css";
 
 interface CodexCliLaunchDialogProps {
   subjectLabel: string;
   subjectValue: string;
+  subjectBadge?: ReactNode;
+  account?: { label: string; badge?: ReactNode };
+  displayWorkingDir?: string;
   statusMessage?: string | null;
-  workingDir?: CodexCliWorkingDirField;
+  workingDir?: CliWorkingDirectoryField;
   terminal: string;
   terminalOptions: LaunchTerminalOption[];
   onTerminalChange: (value: string) => void;
@@ -38,185 +29,84 @@ interface CodexCliLaunchDialogProps {
   errorMessage?: string | null;
   onClose: () => void;
   onBack?: () => void;
-  onCopy: () => void;
-  onExecute: () => void;
+  onCopy: (customCommand: string) => Promise<void>;
+  onExecute: (customCommand: string) => void;
   showCancelButton?: boolean;
 }
 
 export function CodexCliLaunchDialog({
-  subjectLabel,
-  subjectValue,
-  statusMessage,
-  workingDir,
-  terminal,
-  terminalOptions,
-  onTerminalChange,
-  command,
-  commandPlaceholder,
-  preparing,
-  copied,
-  executing,
-  successMessage,
-  errorMessage,
-  onClose,
-  onBack,
-  onCopy,
-  onExecute,
-  showCancelButton = false,
+  subjectLabel, subjectValue, subjectBadge, account, displayWorkingDir, statusMessage, workingDir, terminal, terminalOptions,
+  onTerminalChange, command, commandPlaceholder, preparing, copied, executing, successMessage,
+  errorMessage, onClose, onBack, onCopy, onExecute, showCancelButton = false,
 }: CodexCliLaunchDialogProps) {
   const { t } = useTranslation();
-  const busy = preparing || executing;
+  const [customCommand, setCustomCommand] = useState('');
+  const [editingCommand, setEditingCommand] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const busy = preparing || executing || copying;
+  const title = useId();
+  const dialog = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(dialog, true);
+  useEscCloseTopmost(true, () => { if (!executing && !copying) onClose(); }, dialog);
+
+  async function copyCommand() {
+    setCopying(true);
+    try {
+      await onCopy(editingCommand ? customCommand : '');
+    } finally {
+      setCopying(false);
+    }
+  }
 
   return (
     <div className="modal-overlay">
-      <div className="modal modal-lg">
+      <div className="modal client-launch-dialog codex-cli-launch-dialog" role="dialog" aria-modal="true"
+        aria-labelledby={title} tabIndex={-1} ref={dialog}>
         <div className="modal-header">
-          {onBack && (
-            <button
-              type="button"
-              className="btn btn-secondary icon-only"
-              onClick={onBack}
-              title={t("common.back", "返回")}
-              aria-label={t("common.back", "返回")}
-            >
-              <ChevronLeft size={14} />
-            </button>
-          )}
-          <h2>{t("instances.launchDialog.title", "启动实例")}</h2>
-          <button
-            type="button"
-            className="modal-close"
-            onClick={onClose}
-            aria-label={t("common.close", "关闭")}
-          >
-            <X />
-          </button>
+          {onBack && <button type="button" className="btn btn-secondary icon-only" onClick={onBack}
+            disabled={executing || copying} title={t('common.back')} aria-label={t('common.back')}><ChevronLeft size={16} /></button>}
+          <span className="client-launch-title-icon" aria-hidden="true"><Terminal size={17} /></span>
+          <h2 id={title} className="client-launch-heading">{t('instances.launchDialog.title')}</h2>
+          <button type="button" className="modal-close" onClick={onClose}
+            disabled={executing || copying} aria-label={t('common.close')}><X /></button>
         </div>
-
         <div className="modal-body">
-          <ModalErrorMessage message={errorMessage} />
-
-          {statusMessage && (
-            <div className="add-status success">
-              <Check size={16} />
-              <span>{statusMessage}</span>
-            </div>
-          )}
-
-          <div className="form-group">
-            <label>{subjectLabel}</label>
-            <input className="form-input" value={subjectValue} readOnly />
+          <div className="client-launch-account">
+            <span>{subjectLabel}</span>
+            <strong title={subjectValue}>{subjectValue}</strong>
+            {subjectBadge}
           </div>
-
-          {workingDir && (
-            <div className="form-group">
-              <label>{t("instances.form.workingDir", "工作目录")}</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  className={`form-input${workingDir.error ? " input-error" : ""}`}
-                  value={workingDir.value}
-                  placeholder={
-                    workingDir.placeholder ??
-                    t("instances.form.workingDirPlaceholder", "默认当前路径")
-                  }
-                  onChange={(event) => workingDir.onChange(event.target.value)}
-                  onBlur={workingDir.onBlur}
-                  disabled={busy}
-                  aria-invalid={Boolean(workingDir.error)}
-                />
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={workingDir.onChoose}
-                  disabled={busy}
-                  title={t("codex.cli.selectWorkingDir")}
-                  aria-label={t("codex.cli.selectWorkingDir")}
-                >
-                  <FolderOpen size={16} />
-                </button>
-              </div>
-              {workingDir.error && (
-                <div className="form-error">{workingDir.error}</div>
-              )}
-              <p className="form-hint">
-                {t("instances.form.workingDirDesc", "启动时将首先切换到此目录")}
-              </p>
-            </div>
-          )}
-
-          <div className="form-group">
-            <label>{t("instances.launchDialog.terminal", "终端")}</label>
-            <SingleSelectDropdown
-              value={terminal}
-              onChange={onTerminalChange}
-              options={terminalOptions}
-              disabled={busy}
-              ariaLabel={t("instances.launchDialog.terminal", "终端")}
-            />
-          </div>
-
-          <div className="form-group">
-            <label>{t("instances.launchDialog.command", "启动命令")}</label>
-            <textarea
-              className="form-input instance-args-input"
-              value={command}
-              placeholder={commandPlaceholder}
-              readOnly
-            />
-            <p className="form-hint">
-              {t(
-                "instances.launchDialog.hint",
-                "可复制命令手动执行，或点击下方按钮直接在终端执行。",
-              )}
-            </p>
-          </div>
-
-          {successMessage && (
-            <div className="add-status success">
-              <Check size={16} />
-              <span>{successMessage}</span>
-            </div>
-          )}
+          {account && <div className="client-launch-account">
+            <span>{t('common.shared.columns.account')}</span>
+            <strong title={account.label}>{account.label}</strong>
+            {account.badge}
+          </div>}
+          {displayWorkingDir && <div className="client-launch-account">
+            <span>{t('instances.form.workingDir')}</span>
+            <strong title={displayWorkingDir}>{displayWorkingDir}</strong>
+          </div>}
+          {statusMessage && <p className="client-launch-hint">{statusMessage}</p>}
+          <CliLaunchFields workingDir={workingDir} terminal={terminal} terminalOptions={terminalOptions}
+            onTerminalChange={onTerminalChange} command={command}
+            commandPlaceholder={editingCommand ? 'codex' : commandPlaceholder} disabled={busy}
+            customCommand={customCommand} onCustomCommandChange={editingCommand ? setCustomCommand : undefined}
+            commandAction={<button type="button" className="client-launch-text-button" disabled={busy}
+              onClick={() => setEditingCommand((value) => !value)}>
+              {t(editingCommand ? 'instances.launchDialog.useDefaultCommand' : 'instances.launchDialog.customCommand')}
+            </button>} />
+          {successMessage && <p className="client-launch-hint" role="status">{successMessage}</p>}
+          <ModalErrorMessage message={errorMessage} position="bottom" />
         </div>
-
         <div className="modal-footer">
-          {showCancelButton && (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={onClose}
-              disabled={executing}
-            >
-              {t("common.cancel", "取消")}
-            </button>
-          )}
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={onCopy}
-            disabled={busy}
-          >
-            <Copy size={16} />
-            {preparing
-              ? t("common.loading", "加载中...")
-              : copied
-                ? t("common.success", "成功")
-                : t("common.copy", "复制")}
+          {showCancelButton && <button type="button" className="btn btn-secondary" onClick={onClose}
+            disabled={executing || copying}>{t('common.cancel')}</button>}
+          <button type="button" className="btn btn-secondary" onClick={() => void copyCommand()} disabled={busy}>
+            {copying ? <RefreshCw size={16} className="loading-spinner" /> : copied ? <Check size={16} /> : <Copy size={16} />}
+            {t(copied ? 'common.copied' : 'common.copy')}
           </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={onExecute}
-            disabled={busy}
-          >
-            {busy ? (
-              <RefreshCw size={16} className="loading-spinner" />
-            ) : (
-              <Play size={16} />
-            )}
-            {busy
-              ? t("common.loading", "加载中...")
-              : t("instances.launchDialog.runInTerminal", "终端执行")}
+          <button type="button" className="btn btn-primary" onClick={() => onExecute(editingCommand ? customCommand : '')} disabled={busy}>
+            {busy ? <RefreshCw size={16} className="loading-spinner" /> : <Play size={16} />}
+            {t(busy ? 'common.loading' : 'instances.launchDialog.runInTerminal')}
           </button>
         </div>
       </div>

@@ -72,7 +72,8 @@ interface CodexLaunchModalState {
   instanceName: string;
   switchMessage: string;
   baseLaunchCommand: string;
-  launchCommand: string;
+  workingDir?: string | null;
+  accountId?: string;
   preparing: boolean;
   copied: boolean;
   executing: boolean;
@@ -136,7 +137,6 @@ export function CodexInstancesContent({
     tone?: "error";
   } | null>(null);
 
-  useEscClose(!!launchModal, () => setLaunchModal(null));
   useEscClose(showSyncSettingsModal, () => setShowSyncSettingsModal(false));
   useEffect(
     () => () => {
@@ -408,13 +408,6 @@ export function CodexInstancesContent({
     const boundAccount = boundAccountId
       ? accountMap.get(boundAccountId)
       : undefined;
-    const accountLabel =
-      instance.bindAccountId === CODEX_API_SERVICE_BIND_ID
-        ? t("codex.localAccess.title", "API 服务")
-        : boundAccount
-          ? resolvePresentation(boundAccount).displayName ||
-            boundAccount.email
-          : null;
     const instanceName = instance.isDefault
       ? t("instances.defaultName", "默认实例")
       : instance.name || t("instances.defaultName", "默认实例");
@@ -422,11 +415,11 @@ export function CodexInstancesContent({
     setLaunchModal({
       instanceId: instance.id,
       instanceName,
-      switchMessage: accountLabel
-        ? t("codex.switched", "已切换至 {{email}}", { email: accountLabel })
-        : t("instances.messages.launchPrepared", "启动命令已准备"),
+      switchMessage: !boundAccount && instance.bindAccountId === CODEX_API_SERVICE_BIND_ID
+        ? t("codex.localAccess.title") : "",
       baseLaunchCommand: launchInfo.launchCommand,
-      launchCommand: launchInfo.terminalCommand,
+      workingDir: instance.workingDir,
+      accountId: boundAccountId ?? undefined,
       preparing: false,
       copied: false,
       executing: false,
@@ -435,12 +428,15 @@ export function CodexInstancesContent({
     });
   };
 
-  const handleCopyLaunchCommand = async () => {
+  const handleCopyLaunchCommand = async (customCommand?: string) => {
     if (!launchModal || launchModal.preparing) return;
     try {
-      await navigator.clipboard.writeText(
-        launchModal.baseLaunchCommand || launchModal.launchCommand,
-      );
+      const command = customCommand?.trim()
+        ? (await codexInstanceService.getCodexInstanceLaunchCommand(
+            launchModal.instanceId, selectedTerminal, customCommand,
+          )).launchCommand
+        : launchModal.baseLaunchCommand;
+      await navigator.clipboard.writeText(command);
       setLaunchModal((prev) => (prev ? { ...prev, copied: true } : prev));
       window.setTimeout(() => {
         setLaunchModal((prev) => (prev ? { ...prev, copied: false } : prev));
@@ -460,7 +456,7 @@ export function CodexInstancesContent({
     }
   };
 
-  const handleExecuteInTerminal = async () => {
+  const handleExecuteInTerminal = async (customCommand?: string) => {
     if (!launchModal || launchModal.preparing || launchModal.executing) return;
     setLaunchModal((prev) =>
       prev
@@ -472,6 +468,7 @@ export function CodexInstancesContent({
         await codexInstanceService.executeCodexInstanceLaunchCommand(
           launchModal.instanceId,
           selectedTerminal,
+          customCommand,
         );
       setLaunchModal((prev) =>
         prev
@@ -519,7 +516,6 @@ export function CodexInstancesContent({
             ? {
                 ...prev,
                 baseLaunchCommand: launchInfo.launchCommand,
-                launchCommand: launchInfo.terminalCommand,
                 preparing: false,
               }
             : prev,
@@ -641,6 +637,14 @@ export function CodexInstancesContent({
       </button>
     </div>
   );
+
+  const cliLaunchAccount = launchModal?.accountId ? accountMap.get(launchModal.accountId) : undefined;
+  const cliLaunchAccountLabel = cliLaunchAccount
+    ? maskSensitiveValue(
+        resolvePresentation(cliLaunchAccount).displayName || cliLaunchAccount.email,
+        isPrivacyModeEnabledByDefault(),
+      )
+    : undefined;
 
   return (
     <>
@@ -796,10 +800,15 @@ export function CodexInstancesContent({
           subjectLabel={t("instances.columns.instance", "实例")}
           subjectValue={launchModal.instanceName}
           statusMessage={launchModal.switchMessage}
+          account={cliLaunchAccount && cliLaunchAccountLabel ? {
+            label: cliLaunchAccountLabel,
+            badge: renderCodexPlanBadge(cliLaunchAccount),
+          } : undefined}
+          displayWorkingDir={launchModal.workingDir ?? undefined}
           terminal={selectedTerminal}
           terminalOptions={terminalOptions}
           onTerminalChange={setSelectedTerminal}
-          command={launchModal.launchCommand}
+          command={launchModal.baseLaunchCommand}
           preparing={launchModal.preparing}
           copied={launchModal.copied}
           executing={launchModal.executing}
@@ -807,8 +816,8 @@ export function CodexInstancesContent({
           errorMessage={launchModal.executeError}
           onBack={() => setLaunchModal(null)}
           onClose={() => setLaunchModal(null)}
-          onCopy={() => void handleCopyLaunchCommand()}
-          onExecute={() => void handleExecuteInTerminal()}
+          onCopy={handleCopyLaunchCommand}
+          onExecute={(command) => void handleExecuteInTerminal(command)}
         />
       )}
       {launchPreview && (

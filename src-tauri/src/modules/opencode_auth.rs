@@ -318,8 +318,20 @@ fn run_codex_sync_queue() {
                     logger::log_warn(&format!("[OpenCode] 关闭失败: {error}"));
                 }
             }
-            if let Err(error) = process::start_opencode_with_path(Some(&settings.opencode_app_path)) {
-                logger::log_warn(&format!("[OpenCode] 启动失败: {error}"));
+            launch_after_account_sync(&settings.opencode_app_path);
+        }
+    }
+}
+
+pub fn launch_after_account_sync(path: &str) {
+    if let Err(error) = process::start_opencode_with_path(Some(path)) {
+        logger::log_warn(&format!("[OpenCode] 启动失败: {error}"));
+        if error == "APP_PATH_NOT_FOUND:opencode" {
+            use tauri::Emitter;
+            if let Some(app) = crate::get_app_handle() {
+                let _ = app.emit("app:path_missing", serde_json::json!({
+                    "app": "opencode", "retry": { "kind": "launchOnly" }
+                }));
             }
         }
     }

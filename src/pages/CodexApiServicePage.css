@@ -633,10 +633,48 @@
   font-size: 12px;
 }
 
-.codex-api-service-config-list label > input[type="checkbox"] {
+.codex-api-service-config-list label > input[type="checkbox"],
+.codex-api-service-routing-form label > input[type="checkbox"],
+.codex-api-service-account-model-check input[type="checkbox"] {
+  appearance: none;
   width: 18px;
   height: 18px;
-  accent-color: var(--primary);
+  flex: 0 0 18px;
+  margin: 0;
+  border: 1.5px solid var(--border-strong, var(--border));
+  border-radius: 6px;
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.codex-api-service-config-list label > input[type="checkbox"]:checked,
+.codex-api-service-routing-form label > input[type="checkbox"]:checked,
+.codex-api-service-account-model-check input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3.5 8.2 6.6 11.2 12.6 4.8' fill='none' stroke='white' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 14px 14px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.codex-api-service-config-list label > input[type="checkbox"]:focus-visible,
+.codex-api-service-routing-form label > input[type="checkbox"]:focus-visible,
+.codex-api-service-account-model-check input[type="checkbox"]:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.codex-api-service-config-list label > input[type="checkbox"]:disabled,
+.codex-api-service-routing-form label > input[type="checkbox"]:disabled,
+.codex-api-service-account-model-check input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .codex-api-service-routing-form {
@@ -725,7 +763,7 @@
 }
 
 .codex-api-service-proxy-input-row {
-  max-width: 67%;
+  max-width: 100%;
 }
 
 .codex-api-service-stacked-control {
@@ -1110,7 +1148,7 @@
 
 .api-key-details-row {
   display: grid;
-  grid-template-columns: minmax(190px, 0.55fr) minmax(180px, 0.5fr) minmax(500px, 1.45fr);
+  grid-template-columns: minmax(170px, 0.6fr) minmax(160px, 0.55fr) minmax(0, 1.45fr);
   gap: 10px;
   min-width: 0;
 }
@@ -1914,7 +1952,8 @@
   padding: 24px;
 }
 
-.codex-api-service-pricing-modal {
+.modal.codex-api-service-pricing-modal {
+  width: min(980px, calc(100vw - 48px));
   max-width: min(980px, calc(100vw - 48px));
   max-height: min(760px, calc(100vh - 48px));
 }
@@ -1958,13 +1997,13 @@
 .codex-api-service-pricing-reprice.is-failed {
   border-color: rgba(239, 68, 68, 0.24);
   background: rgba(239, 68, 68, 0.1);
-  color: #b91c1c;
+  color: var(--text-negative);
 }
 
 .codex-api-service-pricing-reprice.is-completed {
   border-color: rgba(34, 197, 94, 0.22);
   background: rgba(34, 197, 94, 0.1);
-  color: #15803d;
+  color: var(--text-positive);
 }
 
 .codex-api-service-pricing-reprice-head {
@@ -1987,7 +2026,8 @@
   font-size: 12px;
 }
 
-.codex-api-service-timeouts-modal {
+.modal.codex-api-service-timeouts-modal {
+  width: min(760px, calc(100vw - 48px));
   max-width: min(760px, calc(100vw - 48px));
   max-height: min(720px, calc(100vh - 48px));
 }
@@ -2031,13 +2071,15 @@
   gap: 12px;
 }
 
-.codex-api-service-timeout-preset-row label {
+.codex-api-service-timeout-preset-row label,
+.codex-api-service-timeout-preset-select {
   display: grid;
   gap: 6px;
   min-width: 0;
 }
 
-.codex-api-service-timeout-preset-row label > span {
+.codex-api-service-timeout-preset-row label > span,
+.codex-api-service-timeout-preset-select > span {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.35;
@@ -2052,9 +2094,10 @@
 .codex-api-service-pricing-table {
   --codex-api-service-pricing-x-padding: 12px;
   display: grid;
+  flex: 1 1 auto;
   min-width: 0;
-  min-height: 0;
-  max-height: 536px;
+  min-height: 160px;
+  max-height: none;
   overflow: auto;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
@@ -2111,14 +2154,6 @@
   align-items: center;
   min-width: 0;
   cursor: pointer;
-}
-
-.codex-api-service-account-model-check input {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
-  margin: 0;
-  accent-color: var(--color-primary);
 }
 
 .codex-api-service-account-model-check > span {
@@ -2715,12 +2750,12 @@
     padding: 12px;
   }
 
-  .codex-api-service-pricing-modal {
+  .modal.codex-api-service-pricing-modal {
     max-width: calc(100vw - 24px);
     max-height: calc(100vh - 24px);
   }
 
-  .codex-api-service-timeouts-modal {
+  .modal.codex-api-service-timeouts-modal {
     max-width: calc(100vw - 24px);
     max-height: calc(100vh - 24px);
   }
@@ -2855,8 +2890,8 @@
 }
 
 .codex-api-service-hero {
-  min-height: 76px;
-  padding: 16px 18px;
+  min-height: 60px;
+  padding: 12px 16px;
   border-radius: var(--codex-api-studio-radius);
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--primary) 10%, transparent), transparent 48%),
@@ -2928,7 +2963,7 @@
 }
 
 .codex-api-service-summary-card:nth-child(2) strong {
-  color: #0f8b6d;
+  color: var(--text-teal);
 }
 
 .codex-api-service-summary-card:nth-child(3)::before {
@@ -2936,7 +2971,7 @@
 }
 
 .codex-api-service-summary-card:nth-child(3) strong {
-  color: #b85d0c;
+  color: var(--text-caution);
 }
 
 .codex-api-service-summary-card:nth-child(4)::before {
@@ -2944,7 +2979,7 @@
 }
 
 .codex-api-service-summary-card:nth-child(4) strong {
-  color: #087ca0;
+  color: var(--text-info);
 }
 
 .codex-api-service-summary-card:nth-child(5)::before {
@@ -2952,7 +2987,7 @@
 }
 
 .codex-api-service-summary-card:nth-child(5) strong {
-  color: #7045bf;
+  color: var(--text-purple);
 }
 
 .codex-api-service-panel {

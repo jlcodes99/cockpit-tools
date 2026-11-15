@@ -36,7 +36,6 @@ import { type CodexWakeupTestOpenRequest } from "../components/codex/CodexWakeup
 import { useProviderAccountsPage } from "../hooks/useProviderAccountsPage";
 import { setActiveGroupTab } from "../services/platformGroupService";
 import { usePlatformRuntimeSupport } from "../hooks/usePlatformRuntimeSupport";
-import { useEscClose } from "../hooks/useEscClose";
 import { useMfaCountdown } from "../hooks/useMfaCountdown";
 import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
 import { useRememberMfaQuery } from "../hooks/useRememberMfaQuery";
@@ -349,7 +348,6 @@ export function useCodexAccountsBaseController() {
       setCliLaunchModal(null);
       setCliLaunchingAccountId(null);
     }, []);
-    useEscClose(Boolean(cliLaunchModal), closeCliLaunchModal);
     const [cockpitApiPanelAccountId, setCockpitApiPanelAccountId] = useState<
       string | null
     >(null);

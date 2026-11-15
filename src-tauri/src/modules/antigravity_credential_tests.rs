@@ -305,6 +305,27 @@ fn desktop_switch_syncs_only_an_initialized_agy_session() {
 }
 
 #[test]
+fn explicit_cli_switch_creates_the_session_file_before_first_launch() {
+    let dir = tempfile::tempdir().unwrap();
+    let gemini = dir.path().join(".gemini");
+    let fallback = gemini.join("jetski-standalone-oauth-token");
+    let cli_session = super::cli_session_path(&gemini.join("antigravity-cli"));
+    assert!(!cli_session.exists());
+    write_antigravity_credential_payload("fixture-payload", &fallback, Some(&cli_session), |_| {
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(&cli_session).unwrap(),
+        "fixture-payload"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&fallback).unwrap(),
+        "fixture-payload"
+    );
+}
+
+#[test]
 fn agy_write_failure_reports_partial_switch() {
     let dir = tempfile::tempdir().unwrap();
     let fallback = dir.path().join("jetski-standalone-oauth-token");

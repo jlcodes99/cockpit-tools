@@ -278,7 +278,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
               }
               title={t("common.shared.sort.toggleDirection", "切换排序方向")}
             >
-              {providerSortDirection === "desc" ? "⬇" : "⬆"}
+              {providerSortDirection === "desc" ? <ArrowDown size={15} /> : <ArrowUp size={15} />}
             </button>
           )}
         </div>

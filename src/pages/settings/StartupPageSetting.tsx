@@ -1,15 +1,13 @@
 import { useTranslation } from 'react-i18next';
 import { SingleSelectDropdown } from '../../components/SingleSelectDropdown';
-import { ALL_PLATFORM_IDS, PLATFORM_PAGE_MAP } from '../../types/platform';
+import { MENU_VISIBLE_PLATFORM_IDS, PLATFORM_PAGE_MAP } from '../../types/platform';
 import { getPlatformLabel } from '../../utils/platformMeta';
-import { useAntigravityRuntimeTarget } from '../../hooks/useAntigravityRuntimeTarget';
 
 export function StartupPageSetting({ value, onChange }: {
   value: string;
   onChange: (value: string) => void;
 }) {
   const { t } = useTranslation();
-  const runtimeTarget = useAntigravityRuntimeTarget();
   return (
     <div className="settings-row">
       <div className="row-label">
@@ -18,17 +16,14 @@ export function StartupPageSetting({ value, onChange }: {
       </div>
       <div className="row-control">
         <SingleSelectDropdown
-          value={value === 'overview'
-            ? runtimeTarget === 'antigravity' ? 'antigravity' : 'antigravity-ide'
-            : value}
+          value={value === 'antigravity' || value === 'antigravity-ide' ? 'overview' : value}
           onChange={onChange}
           ariaLabel={t('settings.general.startupPage')}
           options={[
             { value: 'last', label: t('settings.general.startupPageLast') },
             { value: 'dashboard', label: t('nav.dashboard') },
-            ...ALL_PLATFORM_IDS.map((platform) => ({
-              value: platform === 'antigravity' ? 'antigravity'
-                : platform === 'antigravity_ide' ? 'antigravity-ide' : PLATFORM_PAGE_MAP[platform],
+            ...MENU_VISIBLE_PLATFORM_IDS.map((platform) => ({
+              value: PLATFORM_PAGE_MAP[platform],
               label: platform === 'codex_api_service'
                 ? t('settings.general.startupPageCodexApi') : getPlatformLabel(platform, t),
             })),

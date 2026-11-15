@@ -342,7 +342,8 @@ html[data-theme="dark"] .apikey-fun-page {
 }
 
 .apikey-fun-secret-input input::placeholder {
-  color: #94a3b8;
+  color: var(--text-placeholder);
+  opacity: 1;
 }
 
 .apikey-fun-icon-button {
@@ -878,11 +879,6 @@ html[data-theme="dark"] .apikey-fun-rename-input {
   color: #f8fafc;
 }
 
-[data-theme="dark"] .apikey-fun-secret-input input::placeholder,
-html[data-theme="dark"] .apikey-fun-secret-input input::placeholder {
-  color: #64748b;
-}
-
 [data-theme="dark"] .apikey-fun-icon-button,
 html[data-theme="dark"] .apikey-fun-icon-button,
 [data-theme="dark"] .apikey-fun-key-copy,
@@ -1050,6 +1046,31 @@ html[data-theme="dark"] .apikey-fun-rename-input {
   border-color: rgba(96, 165, 250, 0.72);
   background: rgba(15, 23, 42, 0.94);
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+}
+
+[data-theme="dark"] .apikey-fun-model-count,
+html[data-theme="dark"] .apikey-fun-model-count {
+  border-color: rgba(45, 212, 191, 0.28);
+  color: #5eead4;
+  background: rgba(15, 118, 110, 0.22);
+}
+
+[data-theme="dark"] .apikey-fun-model-chip,
+html[data-theme="dark"] .apikey-fun-model-chip {
+  border-color: rgba(148, 163, 184, 0.22);
+  color: #e2e8f0;
+  background: rgba(30, 41, 59, 0.82);
+}
+
+[data-theme="dark"] .apikey-fun-model-empty,
+html[data-theme="dark"] .apikey-fun-model-empty {
+  border-color: var(--border);
+  color: var(--text-secondary);
+  background: rgba(15, 23, 42, 0.56);
+}
+
+.modal-content.apikey-fun-delete-modal {
+  max-width: 440px;
 }
 
 /* 转圈与动效 */

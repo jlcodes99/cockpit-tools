@@ -12,6 +12,8 @@ import {
   Database,
   Copy,
   Check,
+  ArrowDown,
+  ArrowUp,
   RotateCw,
   CircleAlert,
   LayoutGrid,
@@ -1412,7 +1414,7 @@ export function WindsurfAccountsPage() {
               : (sortDirection === 'desc'
                 ? t('common.shared.sort.descTooltip', '当前：降序，点击切换为升序')
                 : t('common.shared.sort.ascTooltip', '当前：升序，点击切换为降序'))}
-            aria-label={t('common.shared.sort.toggleDirection', '切换排序方向')}>{sortDirection === 'desc' ? '⬇' : '⬆'}</button>
+            aria-label={t('common.shared.sort.toggleDirection', '切换排序方向')}>{sortDirection === 'desc' ? <ArrowDown size={15} /> : <ArrowUp size={15} />}</button>
         </div>
         <div className="toolbar-right">
           <button className="btn btn-primary icon-only" onClick={() => openAddModal('oauth')} title={t('common.shared.addAccount', '添加账号')}><Plus size={14} /></button>
@@ -1578,10 +1580,10 @@ export function WindsurfAccountsPage() {
             {addTab === 'token' && (
               <div className="add-section">
                 <p className="section-desc">{t('windsurf.token.desc', '粘贴您的 Windsurf API Key 或导出的 JSON 数据。')}</p>
-                <details className="token-format-collapse"><summary className="token-format-collapse-summary">必填字段与示例（点击展开）</summary>
-                  <div className="token-format"><p className="token-format-required">必填字段：github_access_token (API Key)</p>
-                    <div className="token-format-group"><div className="token-format-label">单条示例</div><pre className="token-format-code">{WINDSURF_TOKEN_SINGLE_EXAMPLE}</pre></div>
-                    <div className="token-format-group"><div className="token-format-label">批量示例（JSON）</div><pre className="token-format-code">{WINDSURF_TOKEN_BATCH_EXAMPLE}</pre></div>
+                <details className="token-format-collapse"><summary className="token-format-collapse-summary">{t('common.shared.tokenFormat.summary', '必填字段与示例（点击展开）')}</summary>
+                  <div className="token-format"><p className="token-format-required">{t('windsurf.token.requiredFields', '必填字段：github_access_token (API Key)')}</p>
+                    <div className="token-format-group"><div className="token-format-label">{t('common.shared.tokenFormat.single', '单条示例')}</div><pre className="token-format-code">{WINDSURF_TOKEN_SINGLE_EXAMPLE}</pre></div>
+                    <div className="token-format-group"><div className="token-format-label">{t('common.shared.tokenFormat.batchJson', '批量示例（JSON）')}</div><pre className="token-format-code">{WINDSURF_TOKEN_BATCH_EXAMPLE}</pre></div>
                   </div></details>
                 <textarea className="token-input" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} placeholder={t('common.shared.token.placeholder', '粘贴 Token 或 JSON...')} />
                 <button className="btn btn-primary btn-full" onClick={handleTokenImport} disabled={importing || !tokenInput.trim()}>

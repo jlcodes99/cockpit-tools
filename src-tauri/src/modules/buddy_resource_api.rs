@@ -81,6 +81,34 @@ async fn post(
     Ok((data.clone(), bytes.len()))
 }
 
+async fn post_usage(
+    client: &Client,
+    base: &str,
+    route: &str,
+    headers: &HeaderMap,
+    body: &Value,
+    retry: bool,
+) -> Result<(Value, usize), String> {
+    let result = post(client, base, route, headers, body).await;
+    if retry
+        && result.as_ref().err().is_some_and(|error| {
+            error.starts_with("BUDDY_RESOURCE_NETWORK:")
+                || ["408", "429", "500", "502", "503", "504"]
+                    .iter()
+                    .any(|status| {
+                        error
+                            .strip_prefix("BUDDY_RESOURCE_HTTP: ")
+                            .and_then(|value| value.rsplit_once(' '))
+                            .is_some_and(|(_, code)| code == *status)
+                    })
+        })
+    {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        return post(client, base, route, headers, body).await;
+    }
+    result
+}
+
 fn page_body(paid: bool, page: usize, date: &str) -> Value {
     let mut body = json!({"PageNumber": page, "PageSize": PAGE_SIZE, "PackageCodes": if paid { PAID } else { FREE }, "Status": [0, 3]});
     if paid {
@@ -132,6 +160,7 @@ async fn group(
     headers: &HeaderMap,
     paid: bool,
     date: &str,
+    retry: bool,
 ) -> Result<Vec<Value>, String> {
     let route = if paid {
         "get-user-resource-paid-packages"
@@ -142,7 +171,15 @@ async fn group(
     let mut total = None;
     let mut bytes = 0;
     for page in 1..=MAX_PAGES {
-        let (data, size) = post(client, base, route, headers, &page_body(paid, page, date)).await?;
+        let (data, size) = post_usage(
+            client,
+            base,
+            route,
+            headers,
+            &page_body(paid, page, date),
+            retry,
+        )
+        .await?;
         bytes += size;
         if bytes > GROUP_BYTES {
             return Err("BUDDY_RESOURCE_GROUP_LIMIT".into());
@@ -177,23 +214,42 @@ fn merge(summary: Value, paid: Vec<Value>, free: Vec<Value>) -> Value {
 }
 
 pub async fn fetch(client: &Client, base: &str, headers: HeaderMap) -> Result<Value, String> {
+    fetch_usage(client, base, headers, false).await
+}
+
+pub(super) async fn fetch_international(
+    client: &Client,
+    base: &str,
+    headers: HeaderMap,
+) -> Result<Value, String> {
+    fetch_usage(client, base, headers, true).await
+}
+
+async fn fetch_usage(
+    client: &Client,
+    base: &str,
+    headers: HeaderMap,
+    international: bool,
+) -> Result<Value, String> {
     let date = chrono::Local::now().format("%Y-%m-%d").to_string();
     tokio::time::timeout(Duration::from_secs(30), async {
         let summary_request = json!({});
         let ((summary, _), paid, free) = tokio::try_join!(
-            post(
+            post_usage(
                 client,
                 base,
                 "get-user-resource-summary",
                 &headers,
-                &summary_request
+                &summary_request,
+                international
             ),
-            group(client, base, &headers, true, &date),
-            group(client, base, &headers, false, &date),
+            group(client, base, &headers, true, &date, international),
+            group(client, base, &headers, false, &date, international),
         )?;
-        if summary
-            .get("Packages")
-            .is_some_and(|value| !value.is_array() && !value.is_null())
+        if (international && !summary["Packages"].is_array())
+            || summary
+                .get("Packages")
+                .is_some_and(|value| !value.is_array() && !value.is_null())
         {
             return Err("BUDDY_RESOURCE_SUMMARY_MISSING".into());
         }

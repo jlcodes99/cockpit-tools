@@ -102,24 +102,34 @@ fn build_antigravity_credential_payload(account: &Account) -> Result<String, Str
 }
 
 pub fn write_antigravity_system_credential(account: &Account) -> Result<(), String> {
-    write_antigravity_credentials(account, false)
+    write_antigravity_credentials(account, CliSync::Skip)
 }
 
 pub fn write_antigravity_desktop_switch_credentials(account: &Account) -> Result<(), String> {
-    write_antigravity_credentials(account, true)
+    write_antigravity_credentials(account, CliSync::IfInitialized)
 }
 
-fn write_antigravity_credentials(account: &Account, sync_cli: bool) -> Result<(), String> {
+pub(crate) fn write_antigravity_cli_switch_credentials(account: &Account) -> Result<(), String> {
+    write_antigravity_credentials(account, CliSync::Always)
+}
+
+enum CliSync {
+    Skip,
+    IfInitialized,
+    Always,
+}
+
+fn write_antigravity_credentials(account: &Account, sync_cli: CliSync) -> Result<(), String> {
     let payload_json = build_antigravity_credential_payload(account)?;
     let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
     // Standalone 2.13.0 / 2.25.0's compositeTokenStorage falls back to this file when
     // Keyring is unavailable. This is distinct from Gemini CLI / agy storage.
     let gemini_dir = home.join(".gemini");
     let fallback_path = gemini_dir.join(DESKTOP_FALLBACK_FILE);
-    let cli_session = if sync_cli {
-        initialized_cli_session_path(&gemini_dir)?
-    } else {
-        None
+    let cli_session = match sync_cli {
+        CliSync::Skip => None,
+        CliSync::IfInitialized => initialized_cli_session_path(&gemini_dir)?,
+        CliSync::Always => Some(cli_session_path(&gemini_dir.join("antigravity-cli"))),
     };
 
     crate::modules::logger::log_info(&format!(
@@ -142,11 +152,15 @@ fn initialized_cli_session_path(
 ) -> Result<Option<std::path::PathBuf>, String> {
     let directory = gemini_dir.join("antigravity-cli");
     match std::fs::metadata(&directory) {
-        Ok(metadata) if metadata.is_dir() => Ok(Some(directory.join("antigravity-oauth-token"))),
+        Ok(metadata) if metadata.is_dir() => Ok(Some(cli_session_path(&directory))),
         Ok(_) => Ok(None),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(format!("{}: {error}", directory.display())),
     }
+}
+
+fn cli_session_path(directory: &std::path::Path) -> std::path::PathBuf {
+    directory.join("antigravity-oauth-token")
 }
 
 fn write_antigravity_credential_payload(

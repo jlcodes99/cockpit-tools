@@ -91,6 +91,41 @@ fn prepared_history() -> Prepared {
 }
 
 #[test]
+fn bounded_append_requires_a_complete_live_parent_and_exact_owner() {
+    let mut prepared = prepared_history();
+    prepared.source_body["input"] = json!([]);
+    prepared.source_body["generate"] = json!(false);
+    let mut history = History::default();
+    history.begin(&prepared);
+    history.observe(&prepared, &json!({"type":"response.completed","response":{
+        "id":"empty-prewarm","status":"completed","output":[]}}));
+    let body = json!({"previous_response_id":"empty-prewarm","input":[{"role":"user","content":"new history"}]});
+    assert!(history.can_seed_append(&prepared, Some("empty-prewarm"), &body));
+    assert!(!history.can_seed_append(&prepared, None, &body));
+    assert!(!history.can_seed_append(&prepared, Some("another"), &body));
+    assert!(!history.can_seed_append(&prepared, Some("empty-prewarm"), &json!({"input":[]})));
+    for mutate in [
+        (|p: &mut Prepared| p.route.account_id = "other".into()) as fn(&mut Prepared),
+        |p: &mut Prepared| p.route.owner_id = "other".into(),
+        |p: &mut Prepared| p.caller.id = "other".into(),
+        |p: &mut Prepared| { p.headers.insert("thread-id", "other".parse().unwrap()); },
+        |p: &mut Prepared| { p.headers.insert("session-id", "other".parse().unwrap()); },
+        |p: &mut Prepared| p.continuation_recovered = true,
+        |p: &mut Prepared| p.rebuild_applied = true,
+        |p: &mut Prepared| p.compact = true,
+    ] {
+        let mut changed = prepared.clone();
+        mutate(&mut changed);
+        assert!(!history.can_seed_append(&changed, Some("empty-prewarm"), &body));
+    }
+    history.checkpoint.as_mut().unwrap().complete_for_rebuild = false;
+    assert!(!history.can_seed_append(&prepared, Some("empty-prewarm"), &body));
+    history.checkpoint.as_mut().unwrap().complete_for_rebuild = true;
+    history.checkpoint.as_mut().unwrap().connection_local = true;
+    assert!(!history.can_seed_append(&prepared, Some("empty-prewarm"), &body));
+}
+
+#[test]
 fn mapped_thread_change_clears_private_tool_arguments_and_checkpoints() {
     let prepared = prepared_history();
     let mut history = History::default();

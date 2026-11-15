@@ -1076,6 +1076,25 @@
   border-bottom-color: rgba(148, 163, 184, 0.18);
 }
 
+[data-theme="dark"] .accounts-page .tag-filter-btn.active {
+  border-color: color-mix(in srgb, var(--primary) 45%, rgba(96, 165, 250, 0.35));
+  background: color-mix(in srgb, var(--primary) 22%, rgba(15, 23, 42, 0.85));
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .accounts-page .account-card.disabled {
+  background: rgba(15, 23, 42, 0.65);
+}
+
+[data-theme="dark"] .accounts-page .card-date {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+[data-theme="dark"] .accounts-page .card-actions {
+  background: rgba(15, 23, 42, 0.78);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
 /* ============================================
    Account Folder / Group  Section
    ============================================ */
@@ -1480,14 +1499,14 @@
 
 [data-theme="dark"] .account-group-tab.active {
   background: rgba(30, 41, 59, 0.95);
-  color: var(--primary-light, #60a5fa);
+  color: var(--text-info);
   border-color: rgba(96, 165, 250, 0.35);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 [data-theme="dark"] .account-group-tab.active .account-group-tab-badge {
   background: rgba(96, 165, 250, 0.2);
-  color: var(--primary-light, #60a5fa);
+  color: var(--text-info);
 }
 
 [data-theme="dark"] .account-group-tab-manage-btn {
@@ -1496,8 +1515,8 @@
 }
 
 [data-theme="dark"] .account-group-tab-manage-btn:hover {
-  color: var(--primary-light, #60a5fa);
-  border-color: var(--primary-light, #60a5fa);
+  color: var(--text-info);
+  border-color: var(--text-info);
   background: rgba(96, 165, 250, 0.12);
 }
 

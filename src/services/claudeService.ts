@@ -1,3 +1,4 @@
+import { withCliLaunchPath } from '../utils/cliLaunchPath';
 import { invoke } from '@tauri-apps/api/core';
 import { withClaudeProfileErrors } from './claudeProfileErrors';
 import type {
@@ -310,10 +311,10 @@ export async function getClaudeCliLaunchCommand(
   accountId: string,
   workingDir: string,
 ): Promise<ClaudeCliLaunchInfo> {
-  return await invoke('claude_get_cli_launch_command', {
+  return withCliLaunchPath('claude_cli', () => invoke('claude_get_cli_launch_command', {
     accountId,
     workingDir,
-  });
+  }));
 }
 
 export async function executeClaudeCliLaunchCommand(
@@ -321,11 +322,11 @@ export async function executeClaudeCliLaunchCommand(
   workingDir: string,
   terminal?: string,
 ): Promise<string> {
-  return await invoke('claude_execute_cli_launch_command', {
+  return withCliLaunchPath('claude_cli', () => invoke('claude_execute_cli_launch_command', {
     accountId,
     workingDir,
     terminal: terminal?.trim() || null,
-  });
+  }));
 }
 
 export async function launchClaudeCli(
@@ -333,9 +334,9 @@ export async function launchClaudeCli(
   workingDir: string,
   terminal?: string,
 ): Promise<string> {
-  return await invoke('claude_launch_cli', {
+  return withCliLaunchPath('claude_cli', () => invoke('claude_launch_cli', {
     accountId,
     workingDir,
     terminal: terminal?.trim() || null,
-  });
+  }));
 }

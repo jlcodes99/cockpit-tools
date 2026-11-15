@@ -1230,7 +1230,13 @@ async fn image_status_and_network_retries_have_independent_attempt_counters() {
     assert_eq!(response.status(), 200);
     let _: Value = response.json().await.unwrap();
     assert_eq!(calls.load(Ordering::SeqCst), 3);
-    assert_eq!(host.selections.lock().unwrap().len(), 1);
+    {
+        let selections = host.selections.lock().unwrap();
+        assert_eq!(selections.len(), 2);
+        assert!(selections[0].preferred_account_id.is_none());
+        assert_eq!(selections[1].preferred_account_id.as_deref(), Some("image-account"));
+        assert!(!selections[1].force_refresh);
+    }
     assert_eq!(host.capacity.available_permits(), 1);
     cleanup(handle, upstream, root).await;
 }

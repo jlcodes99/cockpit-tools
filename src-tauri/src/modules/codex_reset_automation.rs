@@ -3,6 +3,7 @@ use super::{codex_account, codex_quota, config, logger};
 use crate::models::codex::CodexQuota;
 use codex_quota::{ResetCreditConsumeOutcome, ResetCreditReceipt};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex, OnceLock};
@@ -35,6 +36,7 @@ pub struct Rule {
     pub before_seconds: u64,
     pub quota_enabled: bool,
     pub remaining_percent: u8,
+    pub prefer_usage_credits: bool,
 }
 impl Default for Rule {
     fn default() -> Self {
@@ -44,6 +46,7 @@ impl Default for Rule {
             before_seconds: 3600,
             quota_enabled: true,
             remaining_percent: 5,
+            prefer_usage_credits: false,
         }
     }
 }
@@ -376,6 +379,66 @@ fn automatic_rule<'a>(d: &'a Document, id: &str, now_ms: i64) -> Option<&'a Rule
 fn is_automatic_reason(reason: &str) -> bool {
     matches!(reason, "expiry" | "quota")
 }
+// Usage credits are distinct from the reset-card count. Missing balance data
+// must stay unknown so an opted-in rule never spends a card on that assumption.
+fn usage_credits_available(quota: &CodexQuota) -> Option<bool> {
+    fn number(value: Option<&Value>) -> Option<f64> {
+        let value = value?;
+        value
+            .as_f64()
+            .or_else(|| value.as_str()?.trim().parse().ok())
+            .filter(|v| v.is_finite())
+    }
+    let raw = quota.raw_data.as_ref()?;
+    let credits = raw
+        .get("credits")
+        .and_then(Value::as_object)
+        .and_then(|credits| {
+            if credits
+                .get("overage_limit_reached")
+                .and_then(Value::as_bool)
+                == Some(true)
+            {
+                return Some(false);
+            }
+            if credits.get("unlimited").and_then(Value::as_bool) == Some(true) {
+                return Some(true);
+            }
+            number(credits.get("remaining"))
+                .or_else(|| number(credits.get("balance")))
+                .map(|balance| balance > 0.0)
+                .or_else(|| credits.get("has_credits").and_then(Value::as_bool))
+        });
+    if credits == Some(true) {
+        return credits;
+    }
+    // The usage view and gateway also recognize the effective monthly credit limit.
+    // A zero paid balance does not negate a separately available monthly balance.
+    let monthly = raw
+        .pointer("/spend_control/individual_limit")
+        .and_then(Value::as_object)
+        .and_then(|limit| {
+            if limit.get("limit_reached").and_then(Value::as_bool) == Some(true) {
+                return Some(false);
+            }
+            if limit.get("unlimited").and_then(Value::as_bool) == Some(true) {
+                return Some(true);
+            }
+            let remaining = number(limit.get("remaining")).or_else(|| {
+                let used = number(limit.get("used"))
+                    .or_else(|| number(limit.get("current_month_usage")))?;
+                Some(number(limit.get("limit"))? - used)
+            });
+            remaining.map(|value| value > 0.0).or_else(|| {
+                // A displayed 0% may be rounded; only a positive percentage proves availability.
+                number(limit.get("remaining_percent"))
+                    .filter(|value| *value > 0.0)
+                    .map(|_| true)
+            })
+        });
+    monthly.or(credits)
+}
+
 fn trigger(
     rule: &Rule,
     quota: Option<&CodexQuota>,
@@ -408,11 +471,11 @@ fn trigger(
     };
     // Legacy `window` JSON fields are obsolete and ignored by serde. Preserve
     // every threshold/switch while applying the requested weekly-only behavior.
-    low(
+    (low(
         q.weekly_percentage,
         q.weekly_window_present,
         q.weekly_reset_time,
-    )
+    ) && (!rule.prefer_usage_credits || usage_credits_available(q) == Some(false)))
     .then_some("quota")
 }
 fn evidence(cards: &codex_quota::CodexResetCreditsSnapshot) -> Result<String, String> {
@@ -668,6 +731,7 @@ async fn check_account(id: &str) -> Result<(), String> {
     };
     // Always obtain fresh evidence; unknown/missing windows are never zero.
     let cards = codex_quota::fetch_account_reset_credits(id).await?;
+    let quota_refresh_started = std::time::Instant::now();
     let quota = if rule.quota_enabled
         && trigger(&rule, None, &cards, chrono::Utc::now().timestamp()).is_none()
         && cards.available_count.is_some_and(|count| count > 0)
@@ -676,6 +740,9 @@ async fn check_account(id: &str) -> Result<(), String> {
     } else {
         None
     };
+    // Token ownership deferral can return cached quota from the shared refresh.
+    let quota_is_fresh =
+        quota.is_some() && super::codex_quota_sync::observed_since(id, quota_refresh_started);
     let observed = format!("{}:{}", identity, evidence(&cards)?);
     let id_owned = id.to_string();
     let observed_copy = observed.clone();
@@ -694,7 +761,12 @@ async fn check_account(id: &str) -> Result<(), String> {
             return Ok(None);
         }
         let now = chrono::Utc::now().timestamp();
-        let Some(reason) = trigger(rule, quota.as_ref(), &cards, now) else {
+        let trigger_quota = if rule.prefer_usage_credits && !quota_is_fresh {
+            None
+        } else {
+            quota.as_ref()
+        };
+        let Some(reason) = trigger(rule, trigger_quota, &cards, now) else {
             return Ok(None);
         };
         let context = AttemptContext {

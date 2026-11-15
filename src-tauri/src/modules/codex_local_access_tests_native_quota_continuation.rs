@@ -387,7 +387,7 @@ async fn native_quota_snapshot_unpinned_pool_wait_uses_earliest_eligible_account
         .await
         .err()
         .unwrap();
-    assert_eq!((error.status, error.code), (503, "no_available_account"));
+    assert_eq!((error.status, error.code), (429, "usage_limit_reached"));
     let wait = error.retry_after.unwrap();
     assert!(wait > Duration::from_secs(58) && wait <= Duration::from_secs(60));
     let wait = native_retry_cooldown_wait(&host, &caller, request, Duration::from_secs(61))
@@ -396,6 +396,53 @@ async fn native_quota_snapshot_unpinned_pool_wait_uses_earliest_eligible_account
         .unwrap();
     assert!(wait > Duration::from_secs(58) && wait <= Duration::from_secs(60));
     assert!(host.gates.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn native_quota_snapshot_unknown_pool_reset_is_explicit_without_invented_retry() {
+    let (_root, mut host, mut request) = native_quota_continuation_fixture(None);
+    let mut second = host.account_overrides["pool-a"].clone();
+    second.id = "pool-b".into();
+    host.account_overrides.insert(second.id.clone(), second);
+    request.preferred_account_id = None;
+    let error = native_select_route(&host, &native_test_caller(NATIVE_PRIMARY_CALLER), request)
+        .await.err().unwrap();
+    assert_eq!((error.status, error.code), (429, "usage_limit_reached"));
+    assert!(error.retry_after.is_none());
+    assert_eq!(error.response_error.as_ref().unwrap()["code"], "usage_limit_reached");
+    assert!(host.gates.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn native_quota_snapshot_mixed_transient_pool_does_not_claim_every_account_exhausted() {
+    let (_root, host, mut request) =
+        native_quota_continuation_fixture(Some(chrono::Utc::now().timestamp() + 60));
+    request.preferred_account_id = None;
+    native_upsert_cooldown(
+        &mut host.cooldowns.lock().unwrap(), "pool-b", &request.model,
+        503, None, false, Instant::now(),
+    );
+    let error = native_select_route(&host, &native_test_caller(NATIVE_PRIMARY_CALLER), request)
+        .await.err().unwrap();
+    assert_eq!((error.status, error.code), (503, "no_available_account"));
+    assert!(error.retry_after.is_some());
+}
+
+#[tokio::test]
+async fn native_quota_snapshot_unpinned_known_reset_keeps_existing_bounded_wait() {
+    let reset = chrono::Utc::now().timestamp() + 2;
+    let (_root, mut host, mut request) = native_quota_continuation_fixture(Some(reset));
+    let mut second = host.account_overrides["pool-a"].clone();
+    second.id = "pool-b".into();
+    host.account_overrides.insert(second.id.clone(), second);
+    request.preferred_account_id = None;
+    host.collection_override.as_mut().unwrap().max_retry_interval_ms = 3000;
+    let route = tokio::time::timeout(
+        Duration::from_secs(5),
+        native_select_route(&host, &native_test_caller(NATIVE_PRIMARY_CALLER), request),
+    ).await.unwrap().unwrap();
+    assert!(["pool-a", "pool-b"].contains(&route.account_id.as_str()));
+    assert!(now_ms() >= reset * 1000);
 }
 
 #[test]

@@ -1170,7 +1170,7 @@ pub fn detect_antigravity_legacy_exec_path() -> Option<std::path::PathBuf> {
             }
         }
         if let Some(path) = detect_windows_exec_path_by_signatures(
-            "antigravity",
+            "antigravity_legacy",
             &["Antigravity.exe", "antigravity.exe", "Electron.exe"],
             &["antigravity"],
             &["antigravity"],
@@ -2557,51 +2557,89 @@ fn detect_opencode_exec_path() -> Option<std::path::PathBuf> {
     None
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AntigravityLaunchPath {
+    pub configured_path: Option<String>,
+    pub resolved_path: Option<std::path::PathBuf>,
+    pub uses_configured_path: bool,
+}
+
+pub(crate) fn inspect_antigravity_desktop_launch_path(legacy: bool) -> AntigravityLaunchPath {
+    let current = config::get_user_config();
+    let configured_path = normalize_custom_path(Some(if legacy {
+        &current.antigravity_legacy_app_path
+    } else {
+        &current.antigravity_app_path
+    }));
+    let configured_executable = configured_path
+        .as_deref()
+        .and_then(|path| resolve_antigravity_configured_path(path, legacy));
+    let uses_configured_path = configured_executable.is_some();
+    let resolved_path = configured_executable.or_else(|| {
+        if legacy {
+            detect_antigravity_legacy_exec_path()
+        } else {
+            detect_antigravity_exec_path()
+        }
+    });
+    AntigravityLaunchPath {
+        configured_path,
+        resolved_path,
+        uses_configured_path,
+    }
+}
+
+fn resolve_antigravity_configured_path(custom: &str, legacy: bool) -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        resolve_macos_antigravity_custom_path(Path::new(custom), legacy)
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let executable = resolve_linux_antigravity_exec_path(Path::new(custom)).ok()?;
+        if legacy {
+            let actual = executable.canonicalize().unwrap_or_else(|_| executable.clone());
+            if linux_antigravity_install_root_for_match(&executable).is_some()
+                || linux_antigravity_install_root_for_match(&actual).is_some()
+            {
+                return None;
+            }
+        }
+        Some(executable)
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if !legacy {
+            return resolve_windows_antigravity_ide_custom_path(custom);
+        }
+        let path = std::path::PathBuf::from(custom);
+        let lower = custom.to_ascii_lowercase().replace(['-', '_'], " ");
+        if lower.contains("antigravity ide") {
+            return None;
+        }
+        let names = ["Antigravity.exe", "Electron.exe"];
+        if path.is_file() {
+            let known_name = path.file_name().is_some_and(|name| {
+                names.iter().any(|exe| name.to_string_lossy().eq_ignore_ascii_case(exe))
+            });
+            return (known_name || lower.contains("antigravity")).then_some(path);
+        }
+        names.into_iter().map(|name| path.join(name)).find(|candidate| candidate.is_file())
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        if legacy { None } else { resolve_macos_exec_path(custom, "Electron") }
+    }
+}
+
 fn resolve_antigravity_launch_path() -> Result<std::path::PathBuf, String> {
-    let configured_path = config::get_user_config().antigravity_app_path;
-    if let Some(custom) = normalize_custom_path(Some(&configured_path)) {
-        #[cfg(target_os = "windows")]
-        {
-            if let Some(exec) = resolve_windows_antigravity_ide_custom_path(&custom) {
-                return Ok(exec);
-            }
-        }
-
-        #[cfg(target_os = "macos")]
-        {
-            if let Some(exec) = resolve_macos_antigravity_custom_path(Path::new(&custom), false) {
-                return Ok(exec);
-            }
-        }
-
-        #[cfg(target_os = "linux")]
-        {
-            let custom_path = Path::new(&custom);
-            if custom_path.exists() {
-                return resolve_linux_antigravity_exec_path(custom_path);
-            }
-        }
-
-        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-        {
-            if let Some(exec) = resolve_macos_exec_path(&custom, "Electron") {
-                return Ok(exec);
-            }
-        }
-
-        if let Some(detected) = detect_antigravity_exec_path() {
-            update_app_path_in_config("antigravity", &detected, &configured_path);
-            return Ok(detected);
-        }
-        return Err(app_path_missing_error("antigravity"));
-    }
-
-    if let Some(detected) = detect_antigravity_exec_path() {
-        update_app_path_in_config("antigravity", &detected, &configured_path);
-        return Ok(detected);
-    }
-
-    Err(app_path_missing_error("antigravity"))
+    inspect_antigravity_desktop_launch_path(false)
+        .resolved_path
+        .ok_or_else(|| app_path_missing_error("antigravity"))
 }
 
 pub fn ensure_antigravity_launch_path_configured() -> Result<(), String> {
@@ -2609,49 +2647,9 @@ pub fn ensure_antigravity_launch_path_configured() -> Result<(), String> {
 }
 
 fn resolve_antigravity_legacy_launch_path() -> Result<std::path::PathBuf, String> {
-    let configured_path = config::get_user_config().antigravity_legacy_app_path;
-    if let Some(custom) = normalize_custom_path(Some(&configured_path)) {
-        #[cfg(target_os = "macos")]
-        if let Some(exec) = resolve_macos_antigravity_custom_path(Path::new(&custom), true) {
-            return Ok(exec);
-        }
-
-        #[cfg(target_os = "linux")]
-        {
-            let custom_path = Path::new(&custom);
-            if let Ok(executable) = resolve_linux_antigravity_exec_path(custom_path) {
-                let actual = executable.canonicalize().unwrap_or_else(|_| executable.clone());
-                if linux_antigravity_install_root_for_match(&executable).is_none()
-                    && linux_antigravity_install_root_for_match(&actual).is_none()
-                {
-                    return Ok(executable);
-                }
-            }
-        }
-
-        #[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
-        {
-            let custom_path = std::path::PathBuf::from(&custom);
-            let lower = custom.to_ascii_lowercase().replace(['-', '_'], " ");
-            if lower.contains("antigravity") && !lower.contains("antigravity ide") {
-                if custom_path.is_file() {
-                    return Ok(custom_path);
-                }
-                for exe_name in ["Antigravity.exe", "antigravity.exe", "Electron.exe"] {
-                    let candidate = custom_path.join(exe_name);
-                    if candidate.exists() {
-                        return Ok(candidate);
-                    }
-                }
-            }
-        }
-    }
-
-    if let Some(detected) = detect_antigravity_legacy_exec_path() {
-        return Ok(detected);
-    }
-
-    Err(app_path_missing_error("antigravity"))
+    inspect_antigravity_desktop_launch_path(true)
+        .resolved_path
+        .ok_or_else(|| app_path_missing_error("antigravity_legacy"))
 }
 
 pub fn ensure_antigravity_legacy_launch_path_configured() -> Result<(), String> {

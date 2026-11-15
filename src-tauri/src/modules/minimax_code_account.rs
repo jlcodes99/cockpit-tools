@@ -1705,7 +1705,7 @@ fn resolve_minimax_code_launch_path_from(
             return Ok(candidate.clone());
         }
     }
-    Err("未找到 MiniMax Code 客户端可执行文件".to_string())
+    Err("APP_PATH_NOT_FOUND:minimaxcode".to_string())
 }
 
 /// The MiniMax client's credential record key is
@@ -2679,7 +2679,7 @@ mod minimax_code_switch_tests {
     fn resolve_launch_path_errors_when_nothing_found() {
         let err = resolve_minimax_code_launch_path_from("", &[])
             .expect_err("no configured path and no candidates must error");
-        assert_eq!(err, "未找到 MiniMax Code 客户端可执行文件");
+        assert_eq!(err, "APP_PATH_NOT_FOUND:minimaxcode");
     }
 
     #[test]

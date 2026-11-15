@@ -156,8 +156,19 @@ struct KeyState {
 static KEY_STATE: LazyLock<(Mutex<KeyState>, Condvar)> =
     LazyLock::new(|| (Mutex::new(KeyState::default()), Condvar::new()));
 
-fn load_official_key() -> Result<OfficialKey, String> {
-    let executable = super::process::resolve_workbuddy_launch_path()?;
+static INTERNATIONAL_KEY_STATE: LazyLock<(Mutex<KeyState>, Condvar)> =
+    LazyLock::new(|| (Mutex::new(KeyState::default()), Condvar::new()));
+
+fn key_state(international: bool) -> &'static (Mutex<KeyState>, Condvar) {
+    if international { &INTERNATIONAL_KEY_STATE } else { &KEY_STATE }
+}
+
+fn load_official_key(international: bool) -> Result<OfficialKey, String> {
+    let executable = if international {
+        super::workbuddy_ai_account::resolve_executable()?
+    } else {
+        super::process::resolve_workbuddy_launch_path()?
+    };
     let mut command = Command::new(executable);
     command
         .env("ELECTRON_RUN_AS_NODE", "1")
@@ -223,8 +234,8 @@ fn run_key_command(command: Command, timeout: Duration) -> Result<OfficialKey, S
     result
 }
 
-fn finish_load(result: Result<OfficialKey, String>) -> Result<(), String> {
-    let (lock, changed) = &*KEY_STATE;
+fn finish_load(international: bool, result: Result<OfficialKey, String>) -> Result<(), String> {
+    let (lock, changed) = key_state(international);
     let mut state = lock.lock().map_err(|_| INVALID)?;
     state.loading = false;
     let result = match result {
@@ -250,11 +261,19 @@ pub(crate) fn prepare() -> Result<(), String> {
     if TEST_KEY.with(|key| key.borrow().is_some()) {
         return Ok(());
     }
-    prepare_with_loader(load_official_key)
+    prepare_with_loader(false, || load_official_key(false))
 }
 
-fn prepare_with_loader(load: impl FnOnce() -> Result<OfficialKey, String>) -> Result<(), String> {
-    let (lock, changed) = &*KEY_STATE;
+pub(super) fn prepare_international() -> Result<(), String> {
+    #[cfg(test)]
+    if TEST_KEY.with(|key| key.borrow().is_some()) {
+        return Ok(());
+    }
+    prepare_with_loader(true, || load_official_key(true))
+}
+
+fn prepare_with_loader(international: bool, load: impl FnOnce() -> Result<OfficialKey, String>) -> Result<(), String> {
+    let (lock, changed) = key_state(international);
     let mut state = lock.lock().map_err(|_| INVALID)?;
     if state.loading {
         let (next, wait) = changed
@@ -275,16 +294,16 @@ fn prepare_with_loader(load: impl FnOnce() -> Result<OfficialKey, String>) -> Re
     }
     state.loading = true;
     drop(state);
-    finish_load(load())
+    finish_load(international, load())
 }
 
 /// UI/tray reads never synchronously wait for an external process.
-fn cached_key() -> Result<Arc<OfficialKey>, String> {
+fn cached_key(international: bool) -> Result<Arc<OfficialKey>, String> {
     #[cfg(test)]
     if let Some(key) = TEST_KEY.with(|key| key.borrow().clone()) {
         return Ok(key);
     }
-    let (lock, _) = &*KEY_STATE;
+    let (lock, _) = key_state(international);
     let mut state = lock.lock().map_err(|_| INVALID)?;
     if let Some(key) = &state.key {
         return Ok(key.clone());
@@ -299,12 +318,12 @@ fn cached_key() -> Result<Arc<OfficialKey>, String> {
         drop(state);
         if std::thread::Builder::new()
             .name("workbuddy-auth-key".into())
-            .spawn(|| {
-                let _ = finish_load(load_official_key());
+            .spawn(move || {
+                let _ = finish_load(international, load_official_key(international));
             })
             .is_err()
         {
-            let _ = finish_load(Err(PREPARING.into()));
+            let _ = finish_load(international, Err(PREPARING.into()));
         }
     }
     Err(PREPARING.into())
@@ -357,8 +376,8 @@ fn decode_with_key(value: &mut Value, key: &OfficialKey) -> Result<(), String> {
     Ok(())
 }
 
-fn invalidate_key(key: &Arc<OfficialKey>) {
-    let (lock, _) = &*KEY_STATE;
+fn invalidate_key(international: bool, key: &Arc<OfficialKey>) {
+    let (lock, _) = key_state(international);
     if let Ok(mut state) = lock.lock() {
         if state
             .key
@@ -370,16 +389,20 @@ fn invalidate_key(key: &Arc<OfficialKey>) {
             state.failure = Some((Instant::now(), KEY_MISMATCH.into()));
         }
     }
-    let _ = cached_key(); // subsequent reads retry after backoff; never block a UI read
+    let _ = cached_key(international); // subsequent reads retry after backoff; never block a UI read
 }
 
 pub(crate) fn decode_session(value: &Value) -> Result<Value, String> {
+    decode_for_edition(value, false)
+}
+
+pub(super) fn decode_for_edition(value: &Value, international: bool) -> Result<Value, String> {
     let mut decoded = value.clone();
     if contains_encrypted_wrapper(value) {
-        let key = cached_key()?;
+        let key = cached_key(international)?;
         if let Err(error) = decode_with_key(&mut decoded, &key) {
             if error == KEY_MISMATCH {
-                invalidate_key(&key);
+                invalidate_key(international, &key);
             }
             return Err(error);
         }
@@ -429,7 +452,11 @@ fn encode_with_key(value: &Value, key: &OfficialKey) -> Result<Value, String> {
 }
 
 pub(crate) fn encode_session(value: &Value) -> Result<Value, String> {
-    encode_with_key(value, cached_key()?.as_ref())
+    encode_for_edition(value, false)
+}
+
+pub(super) fn encode_for_edition(value: &Value, international: bool) -> Result<Value, String> {
+    encode_with_key(value, cached_key(international)?.as_ref())
 }
 
 #[cfg(test)]
@@ -572,7 +599,7 @@ mod tests {
                 let barrier = barrier.clone();
                 std::thread::spawn(move || {
                     barrier.wait();
-                    prepare_with_loader(|| {
+                    prepare_with_loader(false, || {
                         calls.fetch_add(1, Ordering::SeqCst);
                         std::thread::sleep(Duration::from_millis(40));
                         Ok(OfficialKey::new([7; 32]))
@@ -589,12 +616,12 @@ mod tests {
             let mut state = KEY_STATE.0.lock().unwrap();
             *state = KeyState::default();
         }
-        assert!(prepare_with_loader(|| Err("synthetic failure".into())).is_err());
+        assert!(prepare_with_loader(false, || Err("synthetic failure".into())).is_err());
         {
             let mut state = KEY_STATE.0.lock().unwrap();
             state.failure.as_mut().unwrap().0 = Instant::now() - Duration::from_secs(2);
         }
-        prepare_with_loader(|| Ok(OfficialKey::new([7; 32]))).unwrap();
+        prepare_with_loader(false, || Ok(OfficialKey::new([7; 32]))).unwrap();
         *KEY_STATE.0.lock().unwrap() = KeyState::default();
     }
 

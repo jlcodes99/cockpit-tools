@@ -141,7 +141,14 @@ pub async fn inject_minimax_code_to_client(
         .ok_or_else(|| format!("账号不存在: {account_id}"))?;
     let email = account.email.clone();
 
-    crate::commands::minimax_code_instance::switch_default_account_and_start(account_id.clone()).await?;
+    if let Err(error) = super::minimax_code_instance::switch_default_account_and_start(account_id.clone()).await {
+        if error == "APP_PATH_NOT_FOUND:minimaxcode" {
+            let _ = app.emit("app:path_missing", serde_json::json!({
+                "app": "minimaxcode", "retry": { "kind": "switchAccount", "accountId": account_id }
+            }));
+        }
+        return Err(error);
+    }
     let _ = crate::modules::tray::update_tray_menu(&app);
     logger::log_info(&format!(
         "[MiniMax Code Switch] 切换完成: account_id={}, email={}", account_id, email

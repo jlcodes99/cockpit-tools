@@ -75,7 +75,10 @@ type CodexInstanceStoreHook = {
   setState: (partial: Partial<CodexInstanceStoreState>) => void;
 };
 
-const baseStore = createInstanceStore(codexInstanceService, 'agtools.codex.instances.cache');
+const baseStore = createInstanceStore({
+  ...codexInstanceService,
+  startInstance: (instanceId) => codexInstanceService.startInstance(instanceId),
+}, 'agtools.codex.instances.cache');
 const typedBaseStore = baseStore as unknown as CodexInstanceStoreHook;
 
 const syncThreadsAcrossInstances = async (): Promise<CodexInstanceThreadSyncSummary> => {

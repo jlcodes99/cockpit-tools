@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { ALL_PLATFORM_IDS } from '../types/platform';
+import { ALL_PLATFORM_IDS, MENU_VISIBLE_PLATFORM_IDS } from '../types/platform';
 
 test('only Codex and its API service are grouped by default and explicit layouts survive hydration', async () => {
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
@@ -53,8 +53,9 @@ test('only Codex and its API service are grouped by default and explicit layouts
     assert.equal(storage.getItem(key), savedAppLayout, 'startup normalization must not rewrite preferences');
     for (const client of ['antigravity_ide', 'antigravity'] as const) {
       await prefs.restorePlatformLayout(prefs.validateImportedPlatformLayout(layout(client, true)));
-      assert.equal(group().defaultPlatformId, client);
-      assert.equal(group().iconPlatformId, client);
+      assert.deepEqual(group().platformIds, ['antigravity']);
+      assert.equal(group().defaultPlatformId, 'antigravity');
+      assert.equal(group().iconPlatformId, 'antigravity');
     }
     const hydrate = async (value: object | null) => {
       await prefs.restorePlatformLayout(prefs.validateImportedPlatformLayout(value));
@@ -63,13 +64,13 @@ test('only Codex and its API service are grouped by default and explicit layouts
     const assertDefaultGrouping = (state: ReturnType<typeof usePlatformLayoutStore.getState>) => {
       assert.equal(state.platformGroups.length, 1);
       assert.deepEqual(state.platformGroups[0].platformIds, ['codex', 'codex_api_service']);
-      for (const id of ALL_PLATFORM_IDS.filter((id) => id !== 'codex' && id !== 'codex_api_service')) {
+      for (const id of MENU_VISIBLE_PLATFORM_IDS.filter((id) => id !== 'codex' && id !== 'codex_api_service')) {
         assert.ok(state.orderedEntryIds.includes(`platform:${id}`));
       }
     };
     const independent = await hydrate(null);
     assertDefaultGrouping(independent);
-    assert.deepEqual(independent.orderedEntryIds, ALL_PLATFORM_IDS.filter((id) => id !== 'codex_api_service')
+    assert.deepEqual(independent.orderedEntryIds, MENU_VISIBLE_PLATFORM_IDS.filter((id) => id !== 'codex_api_service')
       .map((id) => id === 'codex' ? 'group:codex-suite' : `platform:${id}`));
     assert.equal(independent.independentPlatformsMigrated, true);
     assert.equal(independent.codexApiServiceDefaultGrouped, true);
@@ -95,7 +96,8 @@ test('only Codex and its API service are grouped by default and explicit layouts
       if (platformId === 'codex') {
         assert.equal(legacyExpanded.orderedEntryIds[0], 'group:platform-codex');
       } else {
-        assert.deepEqual(legacyExpanded.orderedEntryIds.slice(0, 2), members.map((id) => `platform:${id}`));
+        assert.equal(legacyExpanded.orderedEntryIds[0], 'platform:antigravity');
+        assert.ok(!legacyExpanded.orderedEntryIds.includes('platform:antigravity_ide'));
       }
     }
 
@@ -149,8 +151,24 @@ test('only Codex and its API service are grouped by default and explicit layouts
       const kept = await hydrate({ platformGroups: [customized] });
       const savedGroup = kept.platformGroups.find((item) => item.id === customized.id)!;
       assert.equal(savedGroup.name, customized.name);
-      assert.deepEqual(savedGroup.platformIds, customized.platformIds);
+      assert.deepEqual(savedGroup.platformIds, customized.platformIds.filter((id) => id !== 'antigravity_ide'));
     }
+    const merged = await hydrate({
+      orderedEntryIds: ['platform:antigravity_ide', 'platform:zed', 'platform:antigravity'],
+      sidebarEntryIds: ['platform:antigravity_ide'],
+      disabledPlatformIds: ['antigravity_ide'],
+      apiRelayEntryOrder: 3,
+    });
+    assert.deepEqual(merged.orderedEntryIds.slice(0, 2), ['platform:antigravity', 'platform:zed']);
+    assert.deepEqual(merged.sidebarEntryIds, ['platform:antigravity']);
+    assert.deepEqual(merged.disabledPlatformIds, ['antigravity_ide']);
+    assert.equal(merged.apiRelayEntryOrder, 2);
+    const legacyPlacement = await hydrate({
+      orderedPlatformIds: ['antigravity_ide', 'zed'],
+      sidebarPlatformIds: ['antigravity_ide'],
+    });
+    assert.deepEqual(legacyPlacement.sidebarEntryIds, ['platform:antigravity']);
+    assert.deepEqual(legacyPlacement.orderedEntryIds.slice(0, 2), ['platform:antigravity', 'platform:zed']);
     await hydrate(null);
     usePlatformLayoutStore.getState().upsertPlatformGroup(suites[1] as Parameters<typeof independent.upsertPlatformGroup>[0]);
     const manuallySaved = JSON.parse(prefs.readPlatformLayout()!);

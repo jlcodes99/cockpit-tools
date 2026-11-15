@@ -19,9 +19,11 @@ import { MultiSelectFilterDropdown } from '../components/MultiSelectFilterDropdo
 import { AccountTagFilterDropdown } from '../components/AccountTagFilterDropdown';
 import { getMfaOtpToken } from '../utils/mfaVault';
 import { loadSavedMfaRecords } from '../services/mfaRecoveryService';
+import { ANTIGRAVITY_CLIENT_LABELS, ANTIGRAVITY_DESKTOP_CLIENTS } from '../utils/antigravityRuntimeTarget';
 import type { AccountsFilterType, useAccountsPageController } from "./AccountsPage";
 
-export type AccountsOverviewViewProps = ReturnType<typeof useAccountsPageController>;
+export type AccountsOverviewViewProps = Omit<ReturnType<typeof useAccountsPageController>,
+  'launchAccount' | 'closeLaunchDialog' | 'confirmLaunchSwitch'>;
 
 /** 渲染 AccountsPage 的界面；业务状态与动作统一由 Controller 提供。 */
 export function AccountsOverviewView(props: AccountsOverviewViewProps) {
@@ -346,7 +348,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                 }
                 aria-label={t('accounts.sort.toggleDirection', '切换排序方向')}
               >
-                {sortDirection === 'desc' ? '⬇' : '⬆'}
+                {sortDirection === 'desc' ? <ArrowDown size={15} /> : <ArrowUp size={15} />}
               </button>
             ) : (
               <button
@@ -565,7 +567,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
           >
             <div className="modal-header">
               <h2>{t('modals.addAccount.title')}</h2>
-              <button className="close-btn" onClick={closeAddModal}>
+              <button className="modal-close" onClick={closeAddModal} aria-label={t('common.close', '关闭')}>
                 <X size={20} />
               </button>
             </div>
@@ -786,25 +788,28 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                       </div>
                     </button>
 
-                    <button
-                      className="import-option"
-                      onClick={handleImportFromLocal}
-                      disabled={importing || addStatus === 'loading'}
-                    >
-                      <div className="import-option-icon">
-                        <Database size={20} />
-                      </div>
-                      <div className="import-option-content">
-                        <div className="import-option-title">
-                          {t('modals.import.fromLocalApp')}
+                    {ANTIGRAVITY_DESKTOP_CLIENTS.map((target) => (
+                      <button
+                        key={target}
+                        className="import-option"
+                        onClick={() => void handleImportFromLocal(target)}
+                        disabled={importing || addStatus === 'loading'}
+                      >
+                        <div className="import-option-icon">
+                          <Database size={20} />
                         </div>
-                        <div className="import-option-desc">
-                          {t('modals.import.localAppDesc', {
-                            appName: antigravityRuntimeTarget === 'antigravity' ? 'Antigravity' : 'Antigravity IDE',
-                          })}
+                        <div className="import-option-content">
+                          <div className="import-option-title">
+                            {t('modals.import.fromLocalApp')}
+                          </div>
+                          <div className="import-option-desc">
+                            {t('modals.import.localAppDesc', {
+                              appName: ANTIGRAVITY_CLIENT_LABELS[target],
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    </button>
+                      </button>
+                    ))}
 
                     <button
                       className="import-option"
@@ -1387,7 +1392,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                 onClick={confirmDeleteTag}
                 disabled={deletingTag}
               >
-                {deletingTag ? '处理中...' : t('common.confirm')}
+                {deletingTag ? t('common.processing', '处理中...') : t('common.confirm')}
               </button>
             </div>
           </div>
@@ -1419,8 +1424,9 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                     <span className={`pill ${tierClass}`}>{tierBadge.label}</span>
                   </div>
                   <button
-                    className="close-btn"
+                    className="modal-close"
                     onClick={() => setShowQuotaModal(null)}
+                    aria-label={t('common.close')}
                   >
                     <X size={20} />
                   </button>
@@ -1468,27 +1474,27 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                     )
                   })()}
 
-                  <div className="modal-actions" style={{ marginTop: 20 }}>
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => setShowQuotaModal(null)}
-                    >
-                      {t('common.close')}
-                    </button>
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => {
-                        handleRefresh(account.id)
-                      }}
-                    >
-                      {refreshing.has(account.id) ? (
-                        <div className="loading-spinner small" />
-                      ) : (
-                        <RefreshCw size={16} />
-                      )}
-                      {t('common.refresh')}
-                    </button>
-                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setShowQuotaModal(null)}
+                  >
+                    {t('common.close')}
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => {
+                      handleRefresh(account.id)
+                    }}
+                  >
+                    {refreshing.has(account.id) ? (
+                      <div className="loading-spinner small" />
+                    ) : (
+                      <RefreshCw size={16} />
+                    )}
+                    {t('common.refresh')}
+                  </button>
                 </div>
               </div>
             </div>
@@ -1513,8 +1519,9 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                 <div className="modal-header">
                   <h2>{t('modals.errors.title')}</h2>
                   <button
-                    className="close-btn"
+                    className="modal-close"
                     onClick={() => setShowErrorModal(null)}
+                    aria-label={t('common.close')}
                   >
                     <X size={20} />
                   </button>
@@ -1548,14 +1555,14 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                     </div>
                   )}
 
-                  <div className="modal-actions" style={{ marginTop: 20 }}>
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => setShowErrorModal(null)}
-                    >
-                      {t('common.close')}
-                    </button>
-                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setShowErrorModal(null)}
+                  >
+                    {t('common.close')}
+                  </button>
                 </div>
               </div>
             </div>
@@ -1597,8 +1604,9 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                 <div className="modal-header">
                   <h2>{title}</h2>
                   <button
-                    className="close-btn"
+                    className="modal-close"
                     onClick={() => setShowVerificationErrorModal(null)}
+                    aria-label={t('common.close')}
                   >
                     <X size={20} />
                   </button>
@@ -1624,54 +1632,54 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                   )}
 
                   {/* Action buttons based on error type */}
-                  <div className="modal-actions" style={{ marginTop: 20, gap: 8, flexWrap: 'wrap' }}>
-                    {!isTos && validationUrl && (
-                      <>
-                        <button
-                          className="btn btn-warning"
-                          onClick={() => openLink(validationUrl)}
-                        >
-                          <ExternalLink size={14} />
-                          {t('wakeup.errorUi.completeVerification', '立即验证')}
-                        </button>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => handleCopyValidationUrl(account.id, validationUrl)}
-                        >
-                          {copiedValidationUrlAccountId === account.id ? <Check size={14} /> : <Copy size={14} />}
-                          {copiedValidationUrlAccountId === account.id
-                            ? t('common.copied', '已复制')
-                            : t('wakeup.errorUi.copyValidationUrl', '复制验证地址')}
-                        </button>
-                      </>
-                    )}
-                    {isTos && vDetail?.appealUrl && (
-                      <>
-                        <button
-                          className="btn btn-primary"
-                          onClick={() => openLink(vDetail.appealUrl!)}
-                        >
-                          <ExternalLink size={14} />
-                          {t('wakeup.errorUi.submitAppeal', '立即提交保证书')}
-                        </button>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => handleCopyValidationUrl(account.id, vDetail.appealUrl!)}
-                        >
-                          {copiedValidationUrlAccountId === account.id ? <Check size={14} /> : <Copy size={14} />}
-                          {copiedValidationUrlAccountId === account.id
-                            ? t('common.copied', '已复制')
-                            : t('wakeup.errorUi.copyAppealUrl', '复制链接')}
-                        </button>
-                      </>
-                    )}
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => setShowVerificationErrorModal(null)}
-                    >
-                      {t('common.close')}
-                    </button>
-                  </div>
+                </div>
+                <div className="modal-footer" style={{ gap: 8, flexWrap: 'wrap' }}>
+                  {!isTos && validationUrl && (
+                    <>
+                      <button
+                        className="btn btn-warning"
+                        onClick={() => openLink(validationUrl)}
+                      >
+                        <ExternalLink size={14} />
+                        {t('wakeup.errorUi.completeVerification', '立即验证')}
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => handleCopyValidationUrl(account.id, validationUrl)}
+                      >
+                        {copiedValidationUrlAccountId === account.id ? <Check size={14} /> : <Copy size={14} />}
+                        {copiedValidationUrlAccountId === account.id
+                          ? t('common.copied', '已复制')
+                          : t('wakeup.errorUi.copyValidationUrl', '复制验证地址')}
+                      </button>
+                    </>
+                  )}
+                  {isTos && vDetail?.appealUrl && (
+                    <>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => openLink(vDetail.appealUrl!)}
+                      >
+                        <ExternalLink size={14} />
+                        {t('wakeup.errorUi.submitAppeal', '立即提交保证书')}
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => handleCopyValidationUrl(account.id, vDetail.appealUrl!)}
+                      >
+                        {copiedValidationUrlAccountId === account.id ? <Check size={14} /> : <Copy size={14} />}
+                        {copiedValidationUrlAccountId === account.id
+                          ? t('common.copied', '已复制')
+                          : t('wakeup.errorUi.copyAppealUrl', '复制链接')}
+                      </button>
+                    </>
+                  )}
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setShowVerificationErrorModal(null)}
+                  >
+                    {t('common.close')}
+                  </button>
                 </div>
               </div>
             </div>
@@ -1960,7 +1968,6 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                   maxLength={ANTIGRAVITY_ACCOUNT_NOTE_MAX_LENGTH}
                   rows={4}
                   disabled={savingAccountNote}
-                  autoFocus
                 />
                 <span className="antigravity-account-note-count">
                   {activeAccountNoteForm.note.length}/{ANTIGRAVITY_ACCOUNT_NOTE_MAX_LENGTH}

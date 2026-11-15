@@ -123,6 +123,31 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   box-shadow: 0 14px 34px rgba(180, 83, 9, 0.12);
 }
 
+[data-theme="dark"] .codex-account-card.new-api-exclusive,
+[data-theme="dark"] .codex-account-card.api-key-usage-account {
+  border-color: rgba(45, 212, 191, 0.32);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(13, 148, 136, 0.16) 0%,
+      rgba(15, 23, 42, 0.92) 100%
+    ),
+    var(--bg-card);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.36);
+}
+
+[data-theme="dark"] .codex-account-card.sponsor-api-account {
+  border-color: rgba(245, 158, 11, 0.34);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(217, 119, 6, 0.16) 0%,
+      rgba(15, 23, 42, 0.92) 100%
+    ),
+    var(--bg-card);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.36);
+}
+
 .codex-accounts-page .account-table tr.sponsor-api-account td:first-child {
   border-left: 3px solid rgba(217, 119, 6, 0.52);
 }
@@ -414,25 +439,25 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
 
 .codex-accounts-page .codex-subscription-badge.active {
   background: rgba(16, 185, 129, 0.12);
-  color: #047857;
+  color: var(--text-positive);
   border: 1px solid rgba(16, 185, 129, 0.24);
 }
 
 .codex-accounts-page .codex-subscription-badge.warning {
   background: rgba(245, 158, 11, 0.14);
-  color: #b45309;
+  color: var(--text-caution);
   border: 1px solid rgba(245, 158, 11, 0.28);
 }
 
 .codex-accounts-page .codex-subscription-badge.expired {
   background: rgba(239, 68, 68, 0.12);
-  color: #b91c1c;
+  color: var(--text-negative);
   border: 1px solid rgba(239, 68, 68, 0.25);
 }
 
 .codex-accounts-page .codex-subscription-badge.missing {
   background: rgba(100, 116, 139, 0.12);
-  color: #64748b;
+  color: var(--text-secondary);
   border: 1px solid rgba(100, 116, 139, 0.22);
 }
 
@@ -575,7 +600,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   .codex-subscription-footer.active
   .codex-subscription-footer-main
   strong {
-  color: #047857;
+  color: var(--text-positive);
 }
 
 .codex-accounts-page .codex-subscription-footer.warning {
@@ -590,7 +615,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   .codex-subscription-footer.warning
   .codex-subscription-footer-main
   strong {
-  color: #b45309;
+  color: var(--text-caution);
 }
 
 .codex-accounts-page .codex-subscription-footer.expired {
@@ -605,7 +630,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   .codex-subscription-footer.expired
   .codex-subscription-footer-main
   strong {
-  color: #b91c1c;
+  color: var(--text-negative);
 }
 
 .codex-accounts-page .codex-subscription-footer.missing {
@@ -620,7 +645,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   .codex-subscription-footer.missing
   .codex-subscription-footer-main
   strong {
-  color: #64748b;
+  color: var(--text-secondary);
 }
 
 .codex-accounts-page .codex-subscription-table-cell {
@@ -867,7 +892,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
 
 .codex-quota-section .codex-api-key-quota-item.new-api .quota-header svg,
 .codex-quota-section .codex-api-key-quota-item.new-api .quota-pct.high {
-  color: #0f766e;
+  color: var(--text-teal);
 }
 
 .codex-quota-section .codex-api-key-quota-item.new-api .quota-bar.high {
@@ -1069,7 +1094,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 160px;
+  min-height: 108px;
   overflow: hidden;
   background:
     radial-gradient(circle at 18% 18%, rgba(14, 165, 233, 0.52), transparent 34%),
@@ -1209,9 +1234,8 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   gap: 8px;
   width: 100%;
   max-width: 420px;
-  max-height: min(280px, 36vh);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  max-height: none;
+  overflow-y: visible;
   padding: 10px;
   border: 1px solid var(--border-light);
   border-radius: 12px;
@@ -1301,19 +1325,44 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
 
 .codex-reset-credit-confirm-footer {
   flex: 0 0 auto;
-  padding: 0 32px 32px;
-  border-top: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 28px 24px;
+  border-top: 1px solid var(--border-light);
   background: var(--bg-surface);
 }
 
+.codex-reset-credit-confirm-footer > .btn-secondary {
+  flex: 1 1 0;
+  min-height: 40px;
+  border-radius: 999px;
+}
+
 .codex-reset-credit-confirm-action {
-  width: 100%;
-  min-height: 42px;
+  flex: 1.4 1 0;
+  width: auto;
+  min-height: 40px;
   border: none;
   border-radius: 999px;
   background: #18181b;
   color: #fff;
   font-weight: 800;
+}
+
+@media (max-height: 680px) {
+  .codex-reset-credit-confirm-visual {
+    min-height: 82px;
+  }
+
+  .codex-reset-credit-confirm-body {
+    gap: 10px;
+    padding: 20px 24px 16px;
+  }
+
+  .codex-reset-credit-confirm-footer {
+    padding: 12px 24px 16px;
+  }
 }
 
 .codex-reset-credit-confirm-action:hover:not(:disabled) {
@@ -1650,15 +1699,11 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
 
 .codex-account-card .card-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
   max-width: 100%;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.codex-account-card .card-actions::-webkit-scrollbar {
-  display: none;
 }
 
 .codex-account-card .card-action-btn,
@@ -2019,22 +2064,22 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
 
 .codex-accounts-page .codex-compact-expiry.active {
   background: rgba(16, 185, 129, 0.12);
-  color: #047857;
+  color: var(--text-positive);
 }
 
 .codex-accounts-page .codex-compact-expiry.warning {
   background: rgba(245, 158, 11, 0.14);
-  color: #b45309;
+  color: var(--text-caution);
 }
 
 .codex-accounts-page .codex-compact-expiry.expired {
   background: rgba(239, 68, 68, 0.12);
-  color: #b91c1c;
+  color: var(--text-negative);
 }
 
 .codex-accounts-page .codex-compact-expiry.missing {
   background: rgba(100, 116, 139, 0.12);
-  color: #64748b;
+  color: var(--text-secondary);
 }
 
 .codex-accounts-page .codex-compact-switch-btn {
@@ -2559,7 +2604,7 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
 }
 
 .codex-accounts-page .search-box {
-  width: clamp(120px, 11vw, 160px);
+  width: clamp(160px, 16vw, 240px);
   flex-shrink: 0;
 }
 

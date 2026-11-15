@@ -7,11 +7,13 @@ English · [Portuguese (BR)](README.pt-br.md) · [한국어](README.ko.md) · [�
 [![GitHub release](https://img.shields.io/github/v/release/jlcodes99/cockpit-tools?style=flat)](https://github.com/jlcodes99/cockpit-tools/releases)
 [![GitHub issues](https://img.shields.io/github/issues/jlcodes99/cockpit-tools)](https://github.com/jlcodes99/cockpit-tools/issues)
 
-A **universal AI IDE account management tool**, currently supporting **Antigravity IDE**, **Codex**, **GitHub Copilot**, **Windsurf**, **Kiro**, **Cursor**, **Grok CLI**, **CodeBuddy**, **CodeBuddy CN**, **Qoder**, **Trae**, **TraeWork**, **Trae CN**, **TraeWork CN**, **Zed**, and **ZCode**, with multi-instance parallel workflows.
+A **universal AI IDE account management tool**, currently supporting **Antigravity IDE**, **Codex**, **GitHub Copilot**, **Windsurf**, **Kiro**, **Cursor**, **Grok CLI**, **CodeBuddy**, **CodeBuddy CN**, **Qoder**, **Trae**, **TraeWork**, **Trae CN**, **TraeWork CN**, **Zed**, **ZCode**, and **WorkBuddy AI**, with multi-instance parallel workflows.
 
 > Designed to help users efficiently manage multiple AI IDE accounts, this tool supports one-click switching, quota monitoring, wake-up tasks, and multi-instance parallel runs, helping you fully utilize resources from different accounts.
 
 **Features**: One-click Switch · Multi-account Management · Multi-instance · Quota Monitoring · Wake-up Tasks · Plugin Integration · GitHub Copilot Management · Windsurf Management · Kiro Management · Cursor Management · Grok CLI Management · CodeBuddy Management · CodeBuddy CN Management · Qoder Management · Trae Suite Management · Zed Management · ZCode Management
+
+**WorkBuddy AI** (macOS and Windows) supports browser sign-in, import from the desktop app or JSON, credit balance, and desktop account switching.
 
 **Languages**: Supports 18 languages
 
@@ -63,9 +65,10 @@ A brand new visual dashboard providing a one-stop status overview:
 
 > Screenshots updated on November 2, 2026, captured from Cockpit Tools v1.3.78 with account details hidden.
 
-### 2. Antigravity IDE Account Management
+### 2. Antigravity Account Management
 
-- **One-Click Switch**: Starting with IDE 2.6, the default IDE, desktop App and initialized `agy` share sign-in credentials. With launch enabled, switching also reopens the other client if it was running. Older IDE versions use a separate local sign-in.
+- **One account list**: Open the launch dialog from an account and choose Antigravity, Antigravity IDE, or the official CLI (`agy`). Switch accounts on its own or launch after switching. The CLI supports a working directory.
+- **Shared sign-in**: Starting with IDE 2.6, the default IDE, the App in system credential mode, and `agy` using Google sign-in can share credentials. Older IDE versions use a separate local sign-in.
 - **Multiple Import Methods**: OAuth, Refresh Token, Plugin Sync
 - **Wake-up Tasks**: Schedule AI model wake-ups to trigger quota reset cycles in advance
 
@@ -74,7 +77,9 @@ A brand new visual dashboard providing a one-stop status overview:
 > *(Wakeup Tasks)*
 > ![Wakeup Tasks](docs/images/wakeup_detail.png)
 
-#### 2.1 Antigravity IDE Multi-Instance
+#### 2.1 Antigravity Multi-Instance
+
+Manage App and IDE instances separately from the same page. Use an instance’s launch button to choose a desktop instance for either client or open the CLI in a terminal.
 
 Older IDE versions with separate SQLite sign-ins can run multiple instances under different accounts. Starting with IDE 2.6, instance directories separate projects and local settings while sharing sign-in credentials.
 
@@ -210,6 +215,7 @@ Manage CodeBuddy instances with isolated profiles and lifecycle controls.
 - **Quota View**: shows plan and usage status, with a shortcut to open detailed quota information on the official web page
 - **Batch Operations**: supports tags and bulk actions
 - **Switch Injection**: supports writing local auth state back and launching CodeBuddy CN after account switch
+- **Desktop and CLI launch**: Choose the desktop app or CLI from a saved account. The CLI remembers its working directory and offers installation instructions when needed.
 
 #### 9.1 CodeBuddy CN Multi-Instance
 
@@ -218,6 +224,11 @@ Manage CodeBuddy CN instances with isolated profiles and lifecycle controls.
 - **Isolated Profiles**: each instance uses its own user data directory
 - **Quick Lifecycle**: start/stop/force stop instances
 - **Window Control**: open instance windows and close all instances
+
+#### CLI
+
+- Start the official `codebuddy` CLI from an account in either CodeBuddy or CodeBuddy CN. Install [CodeBuddy Code CLI](https://www.codebuddy.ai/docs/cli/installation) first.
+- Switch to CLI under Multi-Instance in the matching version to manage named instances. Each instance has its own working directory and CLI configuration.
 
 ### 11. Qoder Account Management
 

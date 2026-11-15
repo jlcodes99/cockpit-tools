@@ -208,6 +208,9 @@ pub async fn delete_instance(instance_id: String) -> Result<(), String> {
     modules::instance::delete_instance(&instance_id)
 }
 
+#[path = "antigravity_ide_initialization.rs"]
+pub(crate) mod initialization;
+
 #[tauri::command]
 pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, String> {
     modules::process::ensure_antigravity_launch_path_configured()?;
@@ -217,17 +220,23 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
         let default_dir_str = default_dir.to_string_lossy().to_string();
         let default_settings = modules::instance::load_default_settings()?;
         let default_bind_account_id = resolve_default_account_id(&default_settings);
+        if default_bind_account_id.is_some() && !super::system::antigravity_ide_uses_shared_credentials() {
+            modules::instance::require_ide_switch_database(&default_dir, None)?;
+        }
         if let Some(pid) =
             modules::process::resolve_antigravity_pid(default_settings.last_pid, None)
         {
             modules::process::close_pid(pid, 20)?;
             let _ = modules::instance::update_default_pid(None)?;
         }
-        modules::process::close_antigravity_instances(&[default_dir_str.clone()], 20)?;
+        modules::process::close_antigravity_instances(
+            &[default_dir_str.clone()],
+            20,
+            modules::process::AntigravityCloseMode::Restart,
+        )?;
         let _ = modules::instance::update_default_pid(None)?;
         if let Some(ref account_id) = default_bind_account_id {
-            let account = modules::prepare_account_for_injection(account_id).await?;
-            modules::instance::inject_account_to_profile_with_account(&default_dir, &account)?;
+            inject_instance_account(default_dir.clone(), account_id).await?;
         }
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
         let pid = modules::process::start_antigravity_with_args("", &extra_args)?;
@@ -256,6 +265,10 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
         .into_iter()
         .find(|item| item.id == instance_id)
         .ok_or("实例不存在")?;
+    if instance.bind_account_id.is_some() && !super::system::antigravity_ide_uses_shared_credentials() {
+        let default_dir = modules::instance::get_default_user_data_dir()?;
+        modules::instance::require_ide_switch_database(Path::new(&instance.user_data_dir), Some(&default_dir))?;
+    }
 
     if let Some(pid) =
         modules::process::resolve_antigravity_pid(instance.last_pid, Some(&instance.user_data_dir))
@@ -263,13 +276,16 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
         modules::process::close_pid(pid, 20)?;
         let _ = modules::instance::update_instance_pid(&instance.id, None)?;
     }
-    modules::process::close_antigravity_instances(&[instance.user_data_dir.clone()], 20)?;
+    modules::process::close_antigravity_instances(
+        &[instance.user_data_dir.clone()],
+        20,
+        modules::process::AntigravityCloseMode::Restart,
+    )?;
     let _ = modules::instance::update_instance_pid(&instance.id, None)?;
 
     if let Some(ref account_id) = instance.bind_account_id {
-        let account = modules::prepare_account_for_injection(account_id).await?;
-        let profile_dir = std::path::PathBuf::from(&instance.user_data_dir);
-        modules::instance::inject_account_to_profile_with_account(&profile_dir, &account)?;
+        inject_instance_account(std::path::PathBuf::from(&instance.user_data_dir), account_id)
+            .await?;
     }
 
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);
@@ -284,6 +300,22 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
     ))
 }
 
+async fn inject_instance_account(
+    profile_dir: std::path::PathBuf,
+    account_id: &str,
+) -> Result<(), String> {
+    let account = modules::prepare_account_for_injection(account_id).await?;
+    tokio::task::spawn_blocking(move || {
+        if super::system::antigravity_ide_uses_shared_credentials() {
+            modules::antigravity_credential::write_antigravity_system_credential(&account)
+        } else {
+            modules::instance::inject_account_to_profile_with_account(&profile_dir, &account)
+        }
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub async fn stop_instance(instance_id: String) -> Result<InstanceProfileView, String> {
     if instance_id == DEFAULT_INSTANCE_ID {
@@ -295,7 +327,11 @@ pub async fn stop_instance(instance_id: String) -> Result<InstanceProfileView, S
         {
             modules::process::close_pid(pid, 20)?;
         }
-        modules::process::close_antigravity_instances(&[default_dir_str.clone()], 20)?;
+        modules::process::close_antigravity_instances(
+            &[default_dir_str.clone()],
+            20,
+            modules::process::AntigravityCloseMode::Stop,
+        )?;
         let _ = modules::instance::update_default_pid(None)?;
         let running = false;
         let default_bind_account_id = resolve_default_account_id(&default_settings);
@@ -328,7 +364,11 @@ pub async fn stop_instance(instance_id: String) -> Result<InstanceProfileView, S
     {
         modules::process::close_pid(pid, 20)?;
     }
-    modules::process::close_antigravity_instances(&[instance.user_data_dir.clone()], 20)?;
+    modules::process::close_antigravity_instances(
+        &[instance.user_data_dir.clone()],
+        20,
+        modules::process::AntigravityCloseMode::Stop,
+    )?;
     let updated = modules::instance::update_instance_pid(&instance.id, None)?;
     let initialized = is_profile_initialized(&updated.user_data_dir);
     Ok(InstanceProfileView::from_profile(
@@ -351,7 +391,11 @@ pub async fn close_all_instances() -> Result<(), String> {
         }
     }
 
-    modules::process::close_antigravity_instances(&target_dirs, 20)?;
+    modules::process::close_antigravity_instances(
+        &target_dirs,
+        20,
+        modules::process::AntigravityCloseMode::Stop,
+    )?;
     let _ = modules::instance::clear_all_pids();
     Ok(())
 }

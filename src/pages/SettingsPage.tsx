@@ -28,6 +28,11 @@ import {
   type AutoSwitchScopeAccount,
 } from '../components/AutoSwitchAccountScopeSelector';
 import {
+  SettingsDropdown,
+  SettingsRefreshPresetDropdown,
+  SettingsThresholdPresetDropdown,
+} from './settings/SettingsPresetDropdowns';
+import {
   buildAccountTierCounts,
   buildAccountTierFilterOptions,
 } from '../utils/accountFilters';
@@ -349,6 +354,7 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   trae_cn: 16,
   trae_solo_cn: 17,
   workbuddy: 18,
+  workbuddy_ai: 22,
   zed: 19,
   minimaxcode: 20,
 };
@@ -2528,15 +2534,14 @@ export function useSettingsPageController() {
                 <span className="settings-input-unit">{t('settings.general.minutes')}</span>
               </div>
             ) : (
-              <select
-                className="settings-select"
-                style={{ minWidth: '120px', width: 'auto' }}
+              <SettingsDropdown
                 value={displayValue}
-                onChange={(event) => {
+                ariaLabel={t('settings.general.currentAccountRefreshTitle')}
+                disabled={!currentRefreshAvailable}
+                onChange={(nextValue) => {
                   if (!currentRefreshAvailable) {
                     return;
                   }
-                  const nextValue = event.target.value;
                   if (nextValue === 'custom') {
                     setCurrentAccountRefreshCustomModeValue(platform, true);
                     setCurrentAccountRefreshValue(
@@ -2549,23 +2554,21 @@ export function useSettingsPageController() {
                   setCurrentAccountRefreshCustomModeValue(platform, false);
                   setCurrentAccountRefreshValue(platform, nextValue);
                 }}
-                disabled={!currentRefreshAvailable}
-              >
-                {!currentRefreshAvailable && (
-                  <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                )}
-                {!isPreset && (
-                  <option value={value}>
-                    {value} {t('settings.general.minutes')}
-                  </option>
-                )}
-                <option value="1">1 {t('settings.general.minutes')}</option>
-                <option value="2">2 {t('settings.general.minutes')}</option>
-                <option value="5">5 {t('settings.general.minutes')}</option>
-                <option value="10">10 {t('settings.general.minutes')}</option>
-                <option value="15">15 {t('settings.general.minutes')}</option>
-                <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-              </select>
+                options={[
+                  ...(!currentRefreshAvailable
+                    ? [{ value: '-1', label: t('settings.general.autoRefreshDisabled') }]
+                    : []),
+                  ...(!isPreset
+                    ? [{ value, label: `${value} ${t('settings.general.minutes')}` }]
+                    : []),
+                  { value: '1', label: `1 ${t('settings.general.minutes')}` },
+                  { value: '2', label: `2 ${t('settings.general.minutes')}` },
+                  { value: '5', label: `5 ${t('settings.general.minutes')}` },
+                  { value: '10', label: `10 ${t('settings.general.minutes')}` },
+                  { value: '15', label: `15 ${t('settings.general.minutes')}` },
+                  { value: 'custom', label: t('settings.general.autoRefreshCustom') },
+                ]}
+              />
             )}
           </div>
         </div>
@@ -2772,32 +2775,30 @@ export function useSettingsPageController() {
                         <span className="settings-input-unit">{t('settings.general.minutes')}</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
-                        style={{ minWidth: '100px', width: 'auto', fontSize: '12px' }}
+                      <SettingsDropdown
+                        className="settings-dropdown--compact"
                         value={selectValue}
-                        onChange={(e) =>
-                          handleAccountOverrideChange(platform, account.email, e.target.value)
+                        ariaLabel={account.email}
+                        onChange={(nextValue) =>
+                          handleAccountOverrideChange(platform, account.email, nextValue)
                         }
-                      >
-                        <option value="inherit">
-                          {t('settings.general.accountLevelRefreshInherit')}
-                        </option>
-                        <option value="-1">
-                          {t('settings.general.autoRefreshDisabled', '禁用')}
-                        </option>
-                        <option value="1">1 {t('settings.general.minutes')}</option>
-                        <option value="2">2 {t('settings.general.minutes')}</option>
-                        <option value="5">5 {t('settings.general.minutes')}</option>
-                        <option value="10">10 {t('settings.general.minutes')}</option>
-                        <option value="15">15 {t('settings.general.minutes')}</option>
-                        {!isPreset && overrideValue !== undefined && overrideValue > 0 && (
-                          <option value={String(overrideValue)}>
-                            {overrideValue} {t('settings.general.minutes')}
-                          </option>
-                        )}
-                        <option value="custom">{t('settings.general.autoRefreshCustom', '自定义')}</option>
-                      </select>
+                        options={[
+                          { value: 'inherit', label: t('settings.general.accountLevelRefreshInherit') },
+                          { value: '-1', label: t('settings.general.autoRefreshDisabled', '禁用') },
+                          { value: '1', label: `1 ${t('settings.general.minutes')}` },
+                          { value: '2', label: `2 ${t('settings.general.minutes')}` },
+                          { value: '5', label: `5 ${t('settings.general.minutes')}` },
+                          { value: '10', label: `10 ${t('settings.general.minutes')}` },
+                          { value: '15', label: `15 ${t('settings.general.minutes')}` },
+                          ...(!isPreset && overrideValue !== undefined && overrideValue > 0
+                            ? [{
+                                value: String(overrideValue),
+                                label: `${overrideValue} ${t('settings.general.minutes')}`,
+                              }]
+                            : []),
+                          { value: 'custom', label: t('settings.general.autoRefreshCustom', '自定义') },
+                        ]}
+                      />
                     )}
                   </div>
                 );
@@ -2858,33 +2859,13 @@ export function useSettingsPageController() {
               <span className="settings-input-unit">{t('settings.general.minutes')}</span>
             </div>
           ) : (
-            <select
-              className="settings-select"
-              style={{ minWidth: '120px', width: 'auto' }}
+            <SettingsRefreshPresetDropdown
               value={value}
-              onChange={(event) => {
-                const nextValue = event.target.value;
-                if (nextValue === 'custom') {
-                  setCustomMode(true);
-                  setValue(value !== '-1' ? value : '1');
-                  return;
-                }
-                setCustomMode(false);
-                setValue(nextValue);
-              }}
-            >
-              {!isPreset && (
-                <option value={value}>
-                  {value} {t('settings.general.minutes')}
-                </option>
-              )}
-              <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-              <option value="2">2 {t('settings.general.minutes')}</option>
-              <option value="5">5 {t('settings.general.minutes')}</option>
-              <option value="10">10 {t('settings.general.minutes')}</option>
-              <option value="15">15 {t('settings.general.minutes')}</option>
-              <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-            </select>
+              isPreset={isPreset}
+              setValue={setValue}
+              setCustomMode={setCustomMode}
+              ariaLabel={title}
+            />
           )}
         </div>
       </div>
@@ -2964,27 +2945,13 @@ export function useSettingsPageController() {
                 <span className="settings-input-unit">%</span>
               </div>
             ) : (
-              <select
-                className="settings-select"
+              <SettingsThresholdPresetDropdown
                 value={threshold}
-                onChange={(event) => {
-                  const nextValue = event.target.value;
-                  if (nextValue === 'custom') {
-                    setCustomMode(true);
-                    setThreshold(threshold || '20');
-                    return;
-                  }
-                  setCustomMode(false);
-                  setThreshold(nextValue);
-                }}
-              >
-                {!isPreset && <option value={threshold}>{threshold}%</option>}
-                <option value="0">0%</option>
-                <option value="20">20%</option>
-                <option value="40">40%</option>
-                <option value="60">60%</option>
-                <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-              </select>
+                isPreset={isPreset}
+                setValue={setThreshold}
+                setCustomMode={setCustomMode}
+                ariaLabel={t('quickSettings.quotaAlert.threshold', '预警阈值')}
+              />
             )}
           </div>
         </div>

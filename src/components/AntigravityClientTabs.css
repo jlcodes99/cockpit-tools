@@ -1,0 +1,12 @@
+.antigravity-client-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.antigravity-client-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}

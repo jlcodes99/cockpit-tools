@@ -186,7 +186,7 @@ interface AccountState {
     refreshAllQuotas: (trigger?: 'auto' | 'manual') => Promise<RefreshStats>;
     startOAuthLogin: (update?: AccountNoteUpdate) => Promise<Account>;
     reorderAccounts: (accountIds: string[]) => Promise<void>;
-    switchAccount: (accountId: string, runtimeTarget?: AntigravityRuntimeTarget) => Promise<Account>;
+    switchAccount: (accountId: string, runtimeTarget?: AntigravityRuntimeTarget, launch?: boolean, inlinePathRecovery?: boolean) => Promise<Account>;
     syncCurrentFromClient: () => Promise<void>;
     updateAccountTags: (accountId: string, tags: string[]) => Promise<Account>;
     updateAccountNotes: (accountId: string, update: string | AccountNoteUpdate) => Promise<Account>;
@@ -474,11 +474,11 @@ export const useAccountStore = create<AccountState>()(
         await get().fetchAccounts();
     },
 
-    switchAccount: async (accountId: string, runtimeTarget?: AntigravityRuntimeTarget) => {
+    switchAccount: async (accountId, runtimeTarget, launch, inlinePathRecovery) => {
         const target = resolveRuntimeTarget(runtimeTarget);
         const previousCurrentAccountId = get().currentAccountsByTarget[target]?.id ?? null;
         try {
-            const account = await accountService.switchAccount(accountId, target);
+            const account = await accountService.switchAccount(accountId, target, launch, inlinePathRecovery);
             set((state) => ({
                 currentAccount: account,
                 currentAccountsByTarget: updateCurrentAccountsByTarget(

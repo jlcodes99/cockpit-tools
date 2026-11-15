@@ -2,6 +2,9 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
 fn main() {
+    if let Some(code) = antigravity_cockpit_tools_lib::try_run_codebuddy_cli() {
+        std::process::exit(code);
+    }
     #[cfg(target_os = "windows")]
     if let Some(code) = antigravity_cockpit_tools_lib::try_run_codex_package_launcher() {
         std::process::exit(code);

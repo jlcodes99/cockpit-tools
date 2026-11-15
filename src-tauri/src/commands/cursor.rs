@@ -306,7 +306,7 @@ pub async fn inject_cursor_account(app: AppHandle, account_id: String) -> Result
                     {
                         let _ = app.emit(
                             "app:path_missing",
-                            serde_json::json!({ "app": "cursor", "retry": { "kind": "default" } }),
+                            serde_json::json!({ "app": "cursor", "retry": { "kind": "launchOnly" } }),
                         );
                     }
                     Some(err)

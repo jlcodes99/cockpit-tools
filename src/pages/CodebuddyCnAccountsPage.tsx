@@ -10,13 +10,17 @@ import {
   getCodebuddyAccountDisplayEmail,
   getCodebuddyOfficialQuotaModel,
   getCodebuddyPlanBadge,
+  getCodebuddyTierBadgeClass,
   getCodebuddyUsage,
   getCodebuddyQuotaCategoryGroups,
 } from '../types/codebuddy';
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
 import { CodebuddySuiteAccountsSharedView, type CodebuddySuiteAccountsPlatformConfig } from '../components/codebuddy-suite/CodebuddySuiteAccountsSharedView';
 import { CodebuddyQuotaCreditsSummary } from '../components/codebuddy-suite/CodebuddyQuotaCreditsSummary';
+import { CodebuddyInstancesPanel } from '../components/codebuddy/CodebuddyCliInstances';
+import { CodebuddyLaunchDialog } from '../components/codebuddy/CodebuddyLaunchDialog';
 import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessionManager';
+import { emitCurrentAccountChanged } from '../utils/accountSyncEvents';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 import { WorkbuddyModelProbeModal } from '../components/workbuddy/WorkbuddyModelProbeModal';
 import {
@@ -93,6 +97,7 @@ const codebuddyCnPlatformConfig: CodebuddySuiteAccountsPlatformConfig<CodebuddyA
   runSync: () => codebuddyCnService.syncCodebuddyCnToWorkbuddy(),
   getDisplayEmail: (account) => getCodebuddyAccountDisplayEmail(account),
   getPlanBadge: (account) => getCodebuddyPlanBadge(account),
+  getPlanBadgeClass: getCodebuddyTierBadgeClass,
   getUsage: (account) => getCodebuddyUsage(account),
   getQuotaGroups: (account, t) => getCodebuddyQuotaCategoryGroups(account, t).map((group) => ({
     ...group,
@@ -113,6 +118,7 @@ export function CodebuddyCnAccountsPage() {
   const [probeAccountId, setProbeAccountId] = useState<string | null>(null);
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
   const [probeVersion, setProbeVersion] = useState(0);
+  const [launchAccountId, setLaunchAccountId] = useState<string | null>(null);
   const store = useCodebuddyCnAccountStore();
 
   // 探测结果变化时刷新卡片上的受限标识
@@ -153,6 +159,19 @@ export function CodebuddyCnAccountsPage() {
     },
     getDisplayEmail: (account) => getCodebuddyAccountDisplayEmail(account),
   });
+
+  const launchAccount = store.accounts.find((account) => account.id === launchAccountId);
+  const launchPlan = launchAccount ? getCodebuddyPlanBadge(launchAccount) : '';
+
+  async function launchDesktop(accountId: string) {
+    try {
+      await codebuddyCnService.injectCodebuddyCnToVSCode(accountId, true);
+      store.setCurrentAccountId(accountId);
+      void emitCurrentAccountChanged({ platformId: 'codebuddy_cn', accountId, reason: 'switch' });
+    } finally {
+      void store.fetchAccounts();
+    }
+  }
 
   const accountsForInstances = useMemo(
     () =>
@@ -259,7 +278,16 @@ export function CodebuddyCnAccountsPage() {
         tabs={['overview', 'sessions', 'instances']}
       />
       {activeTab === 'instances' ? (
-        <CodebuddyCnInstancesContent accountsForSelect={accountsForInstances} />
+        <CodebuddyInstancesPanel
+          region="china"
+          accounts={store.accounts}
+          accountsLoading={store.loading}
+          accountsError={store.error}
+          fetchAccounts={store.fetchAccounts}
+          maskAccountText={page.maskAccountText}
+        >
+          <CodebuddyCnInstancesContent accountsForSelect={accountsForInstances} />
+        </CodebuddyInstancesPanel>
       ) : activeTab === 'sessions' ? (
         <CodebuddySessionManager platform="cn" accounts={store.accounts as any} />
       ) : (
@@ -269,6 +297,7 @@ export function CodebuddyCnAccountsPage() {
           page={page}
           platformConfig={platformConfig}
           onSelectionChange={setSelectedAccountIds}
+          onLaunchAccount={(account) => setLaunchAccountId(account.id)}
           onRefreshAccounts={() => { store.fetchAccounts(); }}
         />
       )}
@@ -285,6 +314,17 @@ export function CodebuddyCnAccountsPage() {
             setProbeOpen(false);
             setProbeAccountId(null);
           }}
+        />
+      )}
+      {launchAccount && (
+        <CodebuddyLaunchDialog
+          key={launchAccount.id}
+          account={{ region: 'china', accountId: launchAccount.id }}
+          accountLabel={page.maskAccountText(getCodebuddyAccountDisplayEmail(launchAccount))}
+          plan={launchPlan}
+          planClass={getCodebuddyTierBadgeClass(launchPlan)}
+          onLaunchDesktop={() => launchDesktop(launchAccount.id)}
+          onClose={() => setLaunchAccountId(null)}
         />
       )}
     </div>

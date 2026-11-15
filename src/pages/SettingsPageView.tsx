@@ -5,6 +5,7 @@ import { SettingsWebdavSyncSection } from '../components/SettingsWebdavSyncSecti
 import { SettingsInstanceCleanupSection } from '../components/SettingsInstanceCleanupSection';
 import { AntigravityMenuBarQuotaSelect } from '../components/AntigravityMenuBarQuotaSelect';
 import { CodexProxyDirectHosts } from '../components/codex/CodexProxyDirectHosts';
+import { SingleSelectDropdown } from '../components/SingleSelectDropdown';
 import './settings/Settings.css';
 import { Github, User, Rocket, Save, AlertCircle, RefreshCw, Heart, MessageSquare, FileText, Download, X } from 'lucide-react';
 import type { MenuBarQuotaPlatform, useSettingsPageController } from "./SettingsPage";
@@ -486,7 +487,7 @@ export function SettingsPageView(props: SettingsPageViewProps) {
               
               
               <button className="credit-item" onClick={() => openLink('https://github.com/jlcodes99/cockpit-tools')}>
-                <div className="credit-icon" style={{ color: '#0f172a' }}><Github size={24} /></div>
+                <div className="credit-icon" style={{ color: 'var(--text-primary)' }}><Github size={24} /></div>
                 <h3>{t('settings.about.github')}</h3>
                 <p>cockpit-tools</p>
               </button>
@@ -534,27 +535,27 @@ export function SettingsPageView(props: SettingsPageViewProps) {
                 )}
               </p>
               <div className="settings-menu-bar-quota-modal-field">
-                <label className="settings-menu-bar-quota-modal-label" htmlFor="menu-bar-quota-platform">
+                <span className="settings-menu-bar-quota-modal-label">
                   {t('settings.general.menuBarQuotaPlatform', '额度账号平台')}
-                </label>
+                </span>
                 <p className="settings-menu-bar-quota-modal-field-desc">
                   {t(
                     'settings.general.menuBarQuotaPlatformDesc',
                     '跟随该平台当前正在使用的账号，刷新或切换后自动更新'
                   )}
                 </p>
-                <select
-                  id="menu-bar-quota-platform"
-                  className="settings-select settings-menu-bar-quota-modal-select"
+                <SingleSelectDropdown
+                  className="settings-dropdown settings-menu-bar-quota-modal-select"
                   value={menuBarQuotaDraftPlatform}
-                  onChange={(e) => setMenuBarQuotaDraftPlatform(e.target.value as MenuBarQuotaPlatform)}
-                >
-                  {menuBarQuotaPlatformOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  options={menuBarQuotaPlatformOptions.map((option) => ({
+                    value: option.value,
+                    label: option.label,
+                  }))}
+                  onChange={(nextValue) =>
+                    setMenuBarQuotaDraftPlatform(nextValue as MenuBarQuotaPlatform)
+                  }
+                  ariaLabel={t('settings.general.menuBarQuotaPlatform', '额度账号平台')}
+                />
               </div>
               {menuBarQuotaDraftPlatform === 'antigravity' && (
                 <div className="settings-menu-bar-quota-modal-field">
@@ -569,24 +570,25 @@ export function SettingsPageView(props: SettingsPageViewProps) {
                 </div>
               )}
               <div className="settings-menu-bar-quota-modal-field">
-                <label className="settings-menu-bar-quota-modal-label" htmlFor="menu-bar-quota-prefix">
+                <span className="settings-menu-bar-quota-modal-label">
                   {t('settings.general.menuBarAccountPrefix', '显示账号邮箱前 4 位')}
-                </label>
+                </span>
                 <p className="settings-menu-bar-quota-modal-field-desc">
                   {t(
                     'settings.general.menuBarAccountPrefixDesc',
                     '仅普通账号：关闭后不显示邮箱前缀。Codex API 服务 / API Key 仍会显示 API 标签'
                   )}
                 </p>
-                <select
-                  id="menu-bar-quota-prefix"
-                  className="settings-select settings-menu-bar-quota-modal-select"
+                <SingleSelectDropdown
+                  className="settings-dropdown settings-menu-bar-quota-modal-select"
                   value={menuBarQuotaDraftShowPrefix ? 'true' : 'false'}
-                  onChange={(e) => setMenuBarQuotaDraftShowPrefix(e.target.value === 'true')}
-                >
-                  <option value="true">{t('common.enable', '启用')}</option>
-                  <option value="false">{t('common.disable', '停用')}</option>
-                </select>
+                  options={[
+                    { value: 'true', label: t('common.enable', '启用') },
+                    { value: 'false', label: t('common.disable', '停用') },
+                  ]}
+                  onChange={(nextValue) => setMenuBarQuotaDraftShowPrefix(nextValue === 'true')}
+                  ariaLabel={t('settings.general.menuBarAccountPrefix', '显示账号邮箱前 4 位')}
+                />
               </div>
             </div>
             <div className="modal-footer">

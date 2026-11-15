@@ -134,6 +134,7 @@ pub struct CatalogView {
 pub struct SourceView {
     native_profile: bool,
     network: super::codex_proxy_network::NetworkOptions,
+    ipv6_default: bool,
     id: String,
     name: String,
     kind: String,
@@ -301,6 +302,9 @@ fn view(store: &Store) -> CatalogView {
                 SourceView {
                     native_profile: s.catalog.native.is_some(),
                     network: s.network.clone(),
+                    ipv6_default: s.catalog.native.as_ref().is_none_or(|profile| {
+                        super::codex_proxy_network::ipv6_default(&profile.config)
+                    }),
                     id: s.id.clone(),
                     name: s.name.clone(),
                     kind: s.kind.clone(),
@@ -1832,13 +1836,10 @@ fn revalidate_groups(catalog: &mut ParsedCatalog) -> Result<(), String> {
 pub async fn set_network(
     source_id: String,
     revision: String,
-    network: super::codex_proxy_network::NetworkOptions,
+    mut network: super::codex_proxy_network::NetworkOptions,
 ) -> Result<CatalogView, String> {
     network.validate()?;
-    let network = super::codex_proxy_network::NetworkOptions {
-        doh: network.doh,
-        interface: String::new(),
-    };
+    network.interface.clear();
     blocking(move || {
         mutate(&path()?, |store| {
             let s = store
@@ -1849,8 +1850,10 @@ pub async fn set_network(
             if s.revision != revision {
                 return Err("CATALOG_CHANGED".into());
             }
-            s.network = network;
-            s.revision = uuid::Uuid::new_v4().to_string();
+            if s.network != network {
+                s.network = network;
+                s.revision = uuid::Uuid::new_v4().to_string();
+            }
             Ok(view(store))
         })
     })

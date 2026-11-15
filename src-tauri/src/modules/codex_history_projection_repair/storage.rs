@@ -1,5 +1,5 @@
 use super::*;
-use rusqlite::types::Value;
+use rusqlite::types::{ToSqlOutput, ValueRef};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
@@ -12,8 +12,6 @@ pub(super) const TABLES: [&str; 4] = [
     "thread_turns",
     "thread_history_projection_state",
 ];
-const MAX_BACKUP_BYTES: usize = 64 * 1024 * 1024;
-const MAX_BACKUP_ROWS: usize = 20_000;
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct Schema {
@@ -371,109 +369,80 @@ fn validate_indexes(db: &Connection, table: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Debug, PartialEq)]
-pub(super) struct Snapshot {
-    tables: Vec<Vec<Vec<Value>>>,
-    digest: String,
-}
-
-pub(super) fn capture(
+pub(super) fn fingerprint(
     db: &Connection,
     schema: &Schema,
-    candidates: &[Checkpoint],
-    budget: &mut Budget,
-) -> Result<Snapshot, String> {
-    let mut tables = Vec::new();
-    let mut bytes = 0;
-    let mut count = 0;
+    candidates: Option<&[Checkpoint]>,
+) -> Result<String, String> {
     let mut digest = Sha256::new();
     for table in &schema.tables {
-        let names = table
-            .columns
-            .iter()
-            .map(|c| format!("\"{}\"", c.name))
-            .collect::<Vec<_>>()
-            .join(",");
-        let mut keys = table
-            .columns
-            .iter()
-            .filter(|c| c.pk > 0)
-            .collect::<Vec<_>>();
-        keys.sort_by_key(|c| c.pk);
-        let order = keys
-            .iter()
-            .map(|c| format!("\"{}\"", c.name))
-            .collect::<Vec<_>>()
-            .join(",");
-        let mut statement = db
-            .prepare(&format!(
-                "SELECT {names} FROM {} WHERE thread_id=?1 ORDER BY {order}",
-                table.name
-            ))
-            .map_err(|e| error("DATABASE", e))?;
-        let mut values = Vec::new();
-        digest.update(table.name.as_bytes());
-        for candidate in candidates {
-            let mut rows = statement
-                .query([&candidate.id])
-                .map_err(|e| error("DATABASE", e))?;
-            while let Some(row) = rows.next().map_err(|e| error("DATABASE", e))? {
-                budget.check()?;
-                count += 1;
-                if count > MAX_BACKUP_ROWS {
-                    return Err(error(
-                        "LIMIT",
-                        "too many derived rows; select fewer sessions",
-                    ));
-                }
-                let mut result = Vec::new();
-                for index in 0..table.columns.len() {
-                    let value: Value = row.get(index).map_err(|e| error("DATABASE", e))?;
-                    match &value {
-                        Value::Null => digest.update([0]),
-                        Value::Integer(value) => {
-                            digest.update([1]);
-                            digest.update(value.to_be_bytes());
-                            bytes += 8;
-                        }
-                        Value::Real(value) => {
-                            digest.update([2]);
-                            digest.update(value.to_bits().to_be_bytes());
-                            bytes += 8;
-                        }
-                        Value::Text(value) => {
-                            digest.update([3]);
-                            digest.update((value.len() as u64).to_be_bytes());
-                            digest.update(value.as_bytes());
-                            bytes += value.len();
-                        }
-                        Value::Blob(value) => {
-                            digest.update([4]);
-                            digest.update((value.len() as u64).to_be_bytes());
-                            digest.update(value);
-                            bytes += value.len();
-                        }
+        hash_table(db, table, candidates, &mut digest, |_| Ok(()))?;
+    }
+    Ok(format!("{:x}", digest.finalize()))
+}
+
+fn hash_table(
+    db: &Connection,
+    table: &Table,
+    candidates: Option<&[Checkpoint]>,
+    digest: &mut Sha256,
+    mut visit: impl FnMut(&[ValueRef<'_>]) -> Result<(), String>,
+) -> Result<(), String> {
+    let names = table.columns.iter()
+        .map(|column| format!("\"{}\"", column.name))
+        .collect::<Vec<_>>().join(",");
+    let sql = if candidates.is_some() {
+        let mut keys: Vec<_> = table.columns.iter().filter(|column| column.pk > 0).collect();
+        keys.sort_by_key(|column| column.pk);
+        let order = keys.iter().map(|column| format!("\"{}\"", column.name))
+            .collect::<Vec<_>>().join(",");
+        format!("SELECT {names} FROM {} WHERE thread_id=?1 ORDER BY {order}", table.name)
+    } else {
+        // The backup is a rowid table populated in source order.
+        format!("SELECT {names} FROM {} ORDER BY rowid", table.name)
+    };
+    let mut statement = db.prepare(&sql).map_err(|e| error("DATABASE", e))?;
+    digest.update(table.name.as_bytes());
+    let mut read_rows = |mut rows: rusqlite::Rows<'_>| -> Result<(), String> {
+        let mut count = 0usize;
+        while let Some(row) = rows.next().map_err(|e| error("DATABASE", e))? {
+            let mut values = Vec::with_capacity(table.columns.len());
+            for index in 0..table.columns.len() {
+                let value = row.get_ref(index).map_err(|e| error("DATABASE", e))?;
+                match value {
+                    ValueRef::Null => digest.update([0]),
+                    ValueRef::Integer(value) => {
+                        digest.update([1]);
+                        digest.update(value.to_be_bytes());
                     }
-                    if bytes > MAX_BACKUP_BYTES {
-                        return Err(error(
-                            "LIMIT",
-                            "derived backup exceeds the bounded size; select fewer sessions",
-                        ));
+                    ValueRef::Real(value) => {
+                        digest.update([2]);
+                        digest.update(value.to_bits().to_be_bytes());
                     }
-                    result.push(value);
+                    ValueRef::Text(bytes) | ValueRef::Blob(bytes) => {
+                        digest.update([if matches!(value, ValueRef::Text(_)) { 3 } else { 4 }]);
+                        digest.update((bytes.len() as u64).to_be_bytes());
+                        digest.update(bytes);
+                    }
                 }
-                values.push(result);
-                if count % 64 == 0 {
-                    std::thread::yield_now();
-                }
+                values.push(value);
+            }
+            visit(&values)?;
+            count += 1;
+            if count % 64 == 0 {
+                std::thread::yield_now();
             }
         }
-        tables.push(values);
+        Ok(())
+    };
+    if let Some(candidates) = candidates {
+        for candidate in candidates {
+            read_rows(statement.query([&candidate.id]).map_err(|e| error("DATABASE", e))?)?;
+        }
+    } else {
+        read_rows(statement.query([]).map_err(|e| error("BACKUP", e))?)?;
     }
-    Ok(Snapshot {
-        tables,
-        digest: format!("{:x}", digest.finalize()),
-    })
+    Ok(())
 }
 
 fn create_private(path: &Path) -> Result<fs::File, String> {
@@ -490,9 +459,8 @@ fn create_private(path: &Path) -> Result<fs::File, String> {
 pub(super) fn backup(
     directory: &Path,
     plan: &Plan,
-    snapshot: &Snapshot,
-    budget: &mut Budget,
-) -> Result<(), String> {
+    source: rusqlite::Transaction<'_>,
+) -> Result<String, String> {
     fs::create_dir_all(directory).map_err(|e| error("BACKUP", e))?;
     if fs::symlink_metadata(directory)
         .map_err(|e| error("BACKUP", e))?
@@ -507,7 +475,8 @@ pub(super) fn backup(
         .map_err(|e| error("BACKUP", e))?;
     db.execute_batch("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; CREATE TABLE repair_metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);").map_err(|e|error("BACKUP",e))?;
     let tx = db.transaction().map_err(|e| error("BACKUP", e))?;
-    for (table, rows) in plan.schema.tables.iter().zip(&snapshot.tables) {
+    let mut digest = Sha256::new();
+    for table in &plan.schema.tables {
         // No declared affinity: SQLite stores original NULL/integer/real/text/blob types unchanged.
         let columns = table
             .columns
@@ -527,12 +496,11 @@ pub(super) fn backup(
                 table.name
             ))
             .map_err(|e| error("BACKUP", e))?;
-        for row in rows {
-            budget.check()?;
-            insert
-                .execute(rusqlite::params_from_iter(row))
-                .map_err(|e| error("BACKUP", e))?;
-        }
+        hash_table(&source, table, Some(&plan.candidates), &mut digest, |row| {
+            insert.execute(rusqlite::params_from_iter(row.iter().copied().map(ToSqlOutput::Borrowed)))
+                .map(|_| ())
+                .map_err(|e| error("BACKUP", e))
+        })?;
         tx.execute(
             "INSERT INTO repair_metadata VALUES (?1,?2)",
             [
@@ -547,12 +515,14 @@ pub(super) fn backup(
         )
         .map_err(|e| error("BACKUP", e))?;
     }
+    source.commit().map_err(|e| error("DATABASE", e))?;
+    let digest = format!("{:x}", digest.finalize());
     let source_metadata = plan
         .sources
         .iter()
         .map(|(id, source)| (id.clone(), source.backup_metadata()))
         .collect::<std::collections::BTreeMap<_, _>>();
-    let metadata = serde_json::json!({"formatVersion":1,"profile":plan.profile,"sourceSchema":plan.schema.objects,"sourceMigrations":plan.schema.migrations,"sourceFiles":source_metadata,"projectionIds":plan.candidates.iter().map(|c|&c.id).collect::<Vec<_>>(),"typedRowsSha256":snapshot.digest});
+    let metadata = serde_json::json!({"formatVersion":1,"profile":plan.profile,"sourceSchema":plan.schema.objects,"sourceMigrations":plan.schema.migrations,"sourceFiles":source_metadata,"projectionIds":plan.candidates.iter().map(|c|&c.id).collect::<Vec<_>>(),"typedRowsSha256":digest});
     tx.execute(
         "INSERT INTO repair_metadata VALUES ('repair',?1)",
         [metadata.to_string()],
@@ -573,7 +543,7 @@ pub(super) fn backup(
     let integrity: String = verified
         .query_row("PRAGMA quick_check(1)", [], |r| r.get(0))
         .map_err(|e| error("BACKUP", e))?;
-    if integrity != "ok" || capture(&verified, &plan.schema, &plan.candidates, budget)? != *snapshot
+    if integrity != "ok" || fingerprint(&verified, &plan.schema, None)? != digest
     {
         return Err(error("BACKUP", "typed history backup verification failed"));
     }
@@ -586,7 +556,6 @@ pub(super) fn backup(
         if count == 0 {
             break;
         }
-        budget.check()?;
         hash.update(&buffer[..count]);
     }
     let mut checksum = create_private(&directory.join("history-projection.sqlite.sha256"))?;
@@ -597,5 +566,5 @@ pub(super) fn backup(
     fs::File::open(directory)
         .and_then(|f| f.sync_all())
         .map_err(|e| error("BACKUP", e))?;
-    Ok(())
+    Ok(digest)
 }

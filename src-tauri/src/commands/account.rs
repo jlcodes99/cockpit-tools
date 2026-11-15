@@ -8,6 +8,8 @@ use tauri::Emitter;
 
 #[path = "account_auto_refresh.rs"]
 pub(crate) mod auto_refresh;
+#[path = "account_cli_launch.rs"]
+pub(crate) mod cli_launch;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AntigravityRuntimeTarget {
@@ -57,11 +59,14 @@ fn resolve_antigravity_switch_flow(
     runtime_target: AntigravityRuntimeTarget,
     launch_on_switch: bool,
     dual_switch_no_restart_enabled: bool,
+    launch_override: Option<bool>,
 ) -> AntigravitySwitchFlow {
+    let launch_on_switch = launch_override.unwrap_or(launch_on_switch);
+    let seamless = launch_override.is_none() && dual_switch_no_restart_enabled;
     match runtime_target {
         AntigravityRuntimeTarget::Legacy => AntigravitySwitchFlow::Legacy,
         AntigravityRuntimeTarget::Ide if !launch_on_switch => AntigravitySwitchFlow::LocalNoLaunch,
-        AntigravityRuntimeTarget::Ide if dual_switch_no_restart_enabled => {
+        AntigravityRuntimeTarget::Ide if seamless => {
             AntigravitySwitchFlow::DualNoRestart
         }
         AntigravityRuntimeTarget::Ide => AntigravitySwitchFlow::Restart,
@@ -514,7 +519,7 @@ async fn run_auto_switch_for_runtime_target(
     modules::account::run_auto_switch_if_needed(current_id, |account_id, reason| async move {
         match target {
             AntigravityRuntimeTarget::Legacy => {
-                switch_account_legacy_antigravity(app.clone(), account_id).await
+                switch_account_legacy_antigravity(app.clone(), account_id, true, false).await
             }
             AntigravityRuntimeTarget::Ide => {
                 modules::account::execute_ide_auto_switch(account_id, reason).await
@@ -526,27 +531,63 @@ async fn run_auto_switch_for_runtime_target(
 
 include!("account_desktop_switch.rs");
 
+fn emit_antigravity_missing_path(
+    app: &AppHandle,
+    error: &str,
+    retry: serde_json::Value,
+) {
+    let path_target = match error.trim() {
+        "APP_PATH_NOT_FOUND:antigravity_legacy" | "APP_PATH_MISSING_AFTER_SWITCH:antigravity_legacy" => "antigravity",
+        "APP_PATH_NOT_FOUND:antigravity" | "APP_PATH_MISSING_AFTER_SWITCH:antigravity" => "antigravity_ide",
+        _ => return,
+    };
+    let _ = app.emit(
+        "app:path_missing",
+        serde_json::json!({
+            "app": "antigravity",
+            "pathRuntimeTarget": path_target,
+            "retry": retry,
+        }),
+    );
+}
+
 async fn switch_account_legacy_antigravity(
     app: AppHandle,
     account_id: String,
+    launch: bool,
+    inline_path_recovery: bool,
 ) -> Result<models::Account, String> {
-    let result = switch_account_desktop(account_id.clone(), true).await;
+    let result = switch_account_desktop(account_id.clone(), launch).await;
     if let Err(error) = &result {
-        if error.starts_with("APP_PATH_NOT_FOUND:") {
-            let _ = app.emit(
-                "app:path_missing",
-                serde_json::json!({
-                    "app": "antigravity",
-                    "retry": {
-                        "kind": "switchAccount",
-                        "accountId": account_id,
-                        "runtimeTarget": "antigravity"
-                    }
-                }),
-            );
+        if !inline_path_recovery {
+            let retry = if error.starts_with("APP_PATH_MISSING_AFTER_SWITCH:") {
+                serde_json::json!({ "kind": "launchOnly", "runtimeTarget": "antigravity" })
+            } else {
+                serde_json::json!({ "kind": "switchAccount", "accountId": account_id,
+                    "runtimeTarget": "antigravity", "launch": launch })
+            };
+            emit_antigravity_missing_path(&app, error, retry);
         }
     }
     result
+}
+
+#[tauri::command]
+pub async fn antigravity_launch_current(runtime_target: Option<String>) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        if normalize_antigravity_runtime_target(runtime_target.as_deref()) == AntigravityRuntimeTarget::Legacy {
+            let settings = modules::antigravity_legacy_instance::load_default_settings()?;
+            let args = modules::process::parse_extra_args(&settings.extra_args);
+            let pid = modules::process::start_antigravity_legacy_with_args("", &args)?;
+            modules::antigravity_legacy_instance::update_default_pid(Some(pid))?;
+        } else {
+            let settings = modules::instance::load_default_settings()?;
+            let args = modules::process::parse_extra_args(&settings.extra_args);
+            let pid = modules::process::start_antigravity_with_args("", &args)?;
+            modules::instance::update_default_pid(Some(pid))?;
+        }
+        Ok(())
+    }).await.map_err(|error| error.to_string())?
 }
 
 /// 切换账号（完整流程：Token刷新 + 关闭程序 + 注入 + 重启）
@@ -555,16 +596,20 @@ pub async fn switch_account(
     app: AppHandle,
     account_id: String,
     runtime_target: Option<String>,
+    launch: Option<bool>,
+    inline_path_recovery: Option<bool>,
 ) -> Result<models::Account, String> {
+    let inline_path_recovery = inline_path_recovery.unwrap_or(false);
     let runtime_target = normalize_antigravity_runtime_target(runtime_target.as_deref());
     let user_config = modules::config::get_user_config();
     match resolve_antigravity_switch_flow(
         runtime_target,
         user_config.antigravity_launch_on_switch,
         user_config.antigravity_dual_switch_no_restart_enabled,
+        launch,
     ) {
         AntigravitySwitchFlow::Legacy => {
-            return switch_account_legacy_antigravity(app, account_id).await;
+            return switch_account_legacy_antigravity(app, account_id, launch.unwrap_or(true), inline_path_recovery).await;
         }
         AntigravitySwitchFlow::LocalNoLaunch => {
             let result = modules::account::switch_account_local_no_restart(&account_id).await;
@@ -584,14 +629,11 @@ pub async fn switch_account(
             )
             .await;
             if let Err(error) = &result {
-                if error.starts_with("APP_PATH_NOT_FOUND:") {
-                    let _ = app.emit(
-                        "app:path_missing",
-                        serde_json::json!({
-                            "app": "antigravity",
-                            "retry": { "kind": "switchAccount", "accountId": account_id }
-                        }),
-                    );
+                if !inline_path_recovery {
+                    emit_antigravity_missing_path(&app, &error, serde_json::json!({
+                        "kind": "switchAccount", "accountId": account_id,
+                        "runtimeTarget": "antigravity_ide", "launch": launch
+                    }));
                 }
             }
             return result;
@@ -603,30 +645,31 @@ pub async fn switch_account(
         match modules::account::switch_account_ide(&account_id, true).await {
             Ok(result) => result,
             Err(error) => {
-                if error.starts_with("APP_PATH_NOT_FOUND:") {
-                    let _ = app.emit(
-                        "app:path_missing",
-                        serde_json::json!({
-                            "app": "antigravity",
-                            "retry": { "kind": "switchAccount", "accountId": account_id }
-                        }),
-                    );
+                if !inline_path_recovery {
+                    emit_antigravity_missing_path(&app, &error, serde_json::json!({
+                        "kind": "switchAccount", "accountId": account_id,
+                        "runtimeTarget": "antigravity_ide", "launch": launch
+                    }));
                 }
                 return Err(error);
             }
         };
 
     if let Some(err) = launch_error {
-        if err.starts_with("APP_PATH_NOT_FOUND:") {
-            let _ = app.emit(
-                "app:path_missing",
-                serde_json::json!({ "app": "antigravity", "retry": { "kind": "default" } }),
-            );
+        if !inline_path_recovery {
+            let runtime_target = if err == "APP_PATH_NOT_FOUND:antigravity_legacy" {
+                "antigravity"
+            } else {
+                "antigravity_ide"
+            };
+            emit_antigravity_missing_path(&app, &err, serde_json::json!({
+                "kind": "launchOnly", "runtimeTarget": runtime_target
+            }));
         }
         // 账号状态已经切换成功，仍广播账号切换事件，确保前端状态与本地落盘一致
         modules::websocket::broadcast_account_switched(&account.id, &account.email);
         if err.starts_with("APP_PATH_NOT_FOUND:") {
-            return Err(err);
+            return Err(err.replacen("APP_PATH_NOT_FOUND:", "APP_PATH_MISSING_AFTER_SWITCH:", 1));
         }
         return Err(format!("账号已切换，但启动 Antigravity IDE 失败: {}", err));
     }
@@ -783,7 +826,7 @@ mod tests {
     #[test]
     fn antigravity_switch_flow_uses_legacy_for_legacy_target() {
         assert_eq!(
-            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Legacy, false, true),
+            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Legacy, false, true, None),
             AntigravitySwitchFlow::Legacy
         );
     }
@@ -791,11 +834,11 @@ mod tests {
     #[test]
     fn antigravity_switch_flow_prefers_local_no_launch_for_ide_when_launch_disabled() {
         assert_eq!(
-            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Ide, false, true),
+            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Ide, false, true, None),
             AntigravitySwitchFlow::LocalNoLaunch
         );
         assert_eq!(
-            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Ide, false, false),
+            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Ide, false, false, None),
             AntigravitySwitchFlow::LocalNoLaunch
         );
     }
@@ -803,12 +846,24 @@ mod tests {
     #[test]
     fn antigravity_switch_flow_uses_dual_no_restart_only_when_launch_is_enabled() {
         assert_eq!(
-            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Ide, true, true),
+            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Ide, true, true, None),
             AntigravitySwitchFlow::DualNoRestart
         );
         assert_eq!(
-            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Ide, true, false),
+            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Ide, true, false, None),
             AntigravitySwitchFlow::Restart
+        );
+    }
+
+    #[test]
+    fn antigravity_switch_flow_honors_explicit_dialog_action() {
+        assert_eq!(
+            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Ide, false, true, Some(true)),
+            AntigravitySwitchFlow::Restart
+        );
+        assert_eq!(
+            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Ide, true, true, Some(false)),
+            AntigravitySwitchFlow::LocalNoLaunch
         );
     }
 

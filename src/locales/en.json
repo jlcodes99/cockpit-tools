@@ -1,4 +1,44 @@
 {
+  "antigravityLaunch": {
+    "initializeTitle": "Antigravity IDE needs initialization",
+    "initializeThenSwitch": "Open the IDE once to enable account switching.",
+    "initializeThenBind": "Launch the instance once to bind an account.",
+    "initializeThenUseAccount": "Launch the instance once to use its bound account.",
+    "initializeAction": "Launch once",
+    "initializeHint": "Antigravity IDE needs to initialize. Launch the selected instance once before continuing.",
+    "initializeWaiting": "Waiting for Antigravity IDE to initialize. Continue manually when it is ready.",
+    "initializeRetry": "Initialization is still pending. Make sure the IDE is open, then try again.",
+    "pathLabel": "Launch path",
+    "pathConfigured": "Configured",
+    "pathDetected": "Auto-detected",
+    "pathInvalid": "Configured path is invalid",
+    "pathCheckFailed": "Path check failed",
+    "pathSaveAndRetry": "Save and retry",
+    "switchAndCopy": "Switch and copy",
+    "sharedInstanceStart": "Switch shared account and launch",
+    "sharedInstanceHint": "Other Antigravity instances stay open and may also pick up the new account.",
+    "sharedInstanceRestart": "Only the selected instance will restart.",
+    "lastSharedAccount": "Last shared account switch",
+    "sharedAccountUnknown": "No switch recorded",
+    "sharedInstanceSubtitle": "Instances use separate folders and share one Google sign-in.",
+    "sharedInstanceStarted": "Shared sign-in updated. Launch requested.",
+    "sharedInstanceLaunchFailed": "Shared sign-in updated, but the instance failed to launch: {{error}}",
+    "sharedCopySource": "Copy the selected instance’s configuration folder.",
+    "quickSwitchSetting": "Applies to Antigravity IDE quick switching. The account dialog lets you choose each time.",
+    "title": "Choose client",
+    "switchOnly": "Switch only",
+    "switchAndLaunch": "Switch and launch",
+    "homeDirectory": "Home folder",
+    "invalidDirectory": "Choose an existing folder.",
+    "directoryFailed": "Could not open the folder picker. {{error}}",
+    "shared": "Shared Google sign-in applies to {{clients}}.",
+    "sharedHint": "Clients that share Google sign-in may switch together.",
+    "clientOnly": "This client uses its own sign-in.",
+    "cliAuth": "agy follows its authentication settings. API Key or Cloud credentials take precedence when configured.",
+    "cliMissing": "agy was not found. Install the official Antigravity CLI and try again.",
+    "terminalFailed": "Could not prepare the terminal. {{error}}",
+    "switchedTerminalFailed": "Account switched, but the terminal could not open. {{error}}"
+  },
   "pelican": {
     "caseKinds": {
       "mathExact": "Math · exact probability",
@@ -661,7 +701,14 @@
       },
       "clear": "Clear",
       "loginSuccess": "Login successful",
-      "switchAccount": "Switch Account"
+      "switchAccount": "Switch Account",
+      "tokenFormat": {
+        "summary": "Required fields & examples (click to expand)",
+        "single": "Single example",
+        "singleToken": "Single example (Token)",
+        "singleJson": "Single example (JSON)",
+        "batchJson": "Batch example (JSON)"
+      }
     },
     "appName": "Cockpit Tools",
     "collapse": "Collapse",
@@ -769,6 +816,7 @@
     }
   },
   "nav": {
+    "workbuddyAi": "WorkBuddy AI",
     "overview": "Antigravity IDE",
     "accounts": "Accounts",
     "wakeup": "Wakeup Tasks",
@@ -980,7 +1028,8 @@
       "deploying": "Fetching models…",
       "deploySuccess": "Deployed to Codex: {{count}} models",
       "deployFailed": "Deployment failed: {{error}}",
-      "useKey": "Use key"
+      "useKey": "Use key",
+      "deleteConfirm": "Delete saved key \"{{name}}\"? This cannot be undone."
     },
     "prefill": {
       "codexReady": "APIKEY.FUN settings are filled in. Review them before adding to Codex.",
@@ -1051,6 +1100,10 @@
     "hiddenBadge": "Hidden",
     "openFromMore": "Manage platform layout",
     "dragHandleLabel": "Drag to reorder",
+    "sortKeyboardInstructions": "Press Space to start sorting, use the arrow keys to move, press Space or Enter to drop, and press Escape to cancel.",
+    "sortPosition": "Position {{position}} of {{total}}.",
+    "sortPlaced": "Moved to position {{position}}.",
+    "sortCancelled": "Sorting canceled.",
     "collapseAllChildren": "Collapse all child platforms",
     "expandAllChildren": "Expand all child platforms",
     "addChildPlatform": "Add child platform",
@@ -1060,7 +1113,9 @@
     "customIconDeleteConfirm": "Delete this custom icon?",
     "editChildPlatform": "Edit child platform",
     "setAsDefaultInGroup": "Set as the default platform in this group",
-    "removeFromGroup": "Remove from group"
+    "removeFromGroup": "Remove from group",
+    "confirmResetDesc": "Resetting to default will clear your custom groups and ordering settings. Continue?",
+    "confirmDeleteGroupDesc": "Delete group \"{{name}}\"? Platforms inside will be restored as standalone entries."
   },
   "privacy": {
     "hideSensitive": "Hide emails",
@@ -1349,6 +1404,11 @@
       "restart": "Close & restart"
     },
     "launchDialog": {
+      "customCommand": "Custom command",
+      "useDefaultCommand": "Default command",
+      "customCommandHint": "Leave blank to run the default command.",
+      "rememberDirectory": "The last working directory is remembered.",
+      "chooseDirectory": "Choose directory",
       "title": "Launch Instance",
       "terminal": "Terminal",
       "command": "Launch Command",
@@ -1693,7 +1753,7 @@
       "claudeAutoRefreshDesc": "Automatically refresh cached quota for Claude accounts in the background.",
       "claudeAppPath": "Claude Desktop launch target",
       "claudeAppPathDesc": "The default profile can use a Microsoft Store target; multi-instance profiles need the real Claude.exe.",
-      "antigravityLaunchOnSwitch": "Launch Antigravity on switch",
+      "antigravityLaunchOnSwitch": "Launch Antigravity IDE on switch",
       "antigravityLaunchOnSwitchDesc": "When off, switching only writes the default Antigravity account data and will not close, launch, or restart the app.",
       "tokenKeeper": "Auth keep-alive",
       "tokenKeeperDesc": "Refresh account tokens in small batches only when authorization is close to expiry, reducing background request pressure for large account sets.",
@@ -1757,10 +1817,9 @@
       "codexEnhancements": {
         "quotaCompat": "Mixed-mode quota compatibility",
         "quotaCompatDesc": "API Service instances use an available-quota view for client displays and local checks. Actual upstream usage and image limits stay unchanged. This switch applies only to other OAuth + external API setups.",
-        "restartHint": "Native predictions are off by default. Restart each target Codex instance after changing these settings. Keep Cockpit Tools running. Native dictation follows the client’s capabilities and settings; Cockpit does not take it over or force-enable it.",
         "configFailed": "Could not load or save settings: {{error}}",
         "nativePredictions": "Native next-step predictions (Tab)",
-        "nativePredictionsDesc": "Generate next-message suggestions with the current conversation’s API provider and model. Uses additional API credits; restart Codex after saving."
+        "nativePredictionsDesc": "Off by default. Suggestions use your current conversation’s API provider and model and incur additional API usage. After changing this setting, restart the affected Codex instances and keep Cockpit Tools running."
       }
     },
     "tabs": {
@@ -2112,6 +2171,14 @@
   },
   "appPath": {
     "missing": {
+      "pathLabel": "{{app}} launch path",
+      "configurePath": "Configure path",
+      "configureHint": "Choose an executable or leave the field blank to use automatic detection.",
+      "cliHint": "{{app}} could not be located. Select its executable, or install the CLI and detect it again.",
+      "invalidPath": "This path does not point to a usable {{app}} executable.",
+      "accountAlreadySwitched": "The account has already changed. Only the client launch will be retried.",
+      "saveAndRetry": "Save and retry",
+      "operationCancelled": "Launch canceled.",
       "scanEmpty": "No running app was found. Start it and retry, or choose its path manually.",
       "scanEmptyGeneric": "{{app}} was not detected running. Start it and retry, or choose its path manually.",
       "title": "Application path not found",
@@ -2886,11 +2953,13 @@
       "masterLabel": "Automatically use reset cards",
       "ruleSource": "Rule source",
       "weeklyTrigger": "Weekly quota trigger",
+      "preferUsageCredits": "Use credits first",
       "weeklyRemaining": "Weekly remaining ≤",
       "previewTitle": "Trigger preview",
       "previewAny": "Automatically use one reset card when either enabled condition is met:",
       "previewExpiry": "Within {{value}} {{unit}} of card expiry",
       "previewWeekly": "Weekly remaining quota is at most {{percent}}%",
+      "previewWeeklyAfterCredits": "Weekly quota is at or below {{percent}}% and usage credits are confirmed unavailable",
       "previewOff": "Automatic use is off. The rules below are inactive.",
       "previewEmpty": "No trigger conditions are enabled. Reset cards will not be used automatically.",
       "cardOn": "Auto",
@@ -3004,8 +3073,6 @@
     },
     "launchErrors": {
       "sessionRestoreFailed": "Session repair failed and backup restoration is incomplete. Launch stopped; inspect the logs and backups before retrying.",
-      "sessionCheckTimeout": "Session checks timed out. Launch stopped; retry or inspect the logs.",
-      "sessionFileTooLarge": "A session file header is too large. Launch stopped; inspect the logs.",
       "bindingFailed": "Account binding could not be confirmed. Launch stopped; retry switching accounts.",
       "processScanFailed": "Could not inspect the old background processes. Launch stopped; retry.",
       "proxyEntryFailed": "The configured proxy entry could not start. No alternative route was used; retry."
@@ -3223,7 +3290,8 @@
       "forceRefreshAction": "Refresh now",
       "forceRefreshRunning": "Refreshing Token…",
       "forceRefreshSuccess": "Token refreshed successfully",
-      "forceRefreshRetry": "Retry check"
+      "forceRefreshRetry": "Retry check",
+      "advancedMaintenanceTitle": "Maintenance & Diagnostics"
     },
     "switch": "Switch",
     "switched": "Switched to {{email}}",
@@ -4936,9 +5004,6 @@
       "repairModal": {
         "historyDuplicateOrdinals": "The following histories have duplicate sequence numbers. History index repair skips them and Full repair cannot proceed. Select “Repair chat index” for other sessions.\n{{details}}",
         "projectsDeferredAction": "Exit the instance and select Local projects in the session repair dialog to continue.",
-        "projectsStateSize": "Largest state file: {{file}} ({{bytes}} bytes).",
-        "projectsQuickBudget": "The quick project scan reached its limit.",
-        "projectsStateTooLarge": "The project state file exceeds the supported size.",
         "projectsStopHint": "Exit the selected instances before recovery. You can preview changes now.",
         "modeProjectsDesc": "Recover local projects and chat assignments. Conversation history stays intact.",
         "modeProjects": "Local projects",
@@ -5513,7 +5578,8 @@
         "speedAdjusted": "{{tier}} → Standard",
         "officialDefaultSpeed": "Official subscription access does not support speed overrides. This attempt used the default speed.",
         "sentTier": "Sent: {{tier}}",
-        "originalTier": "Original tier: {{tier}}"
+        "originalTier": "Original tier: {{tier}}",
+        "moreFilters": "More filters"
       },
       "recovery": {
         "progress": "Recovering account configuration ({{attempt}}/{{total}})",
@@ -6177,6 +6243,13 @@
         "nodeCount": "Nodes: {{count}}",
         "updatedAt": "Updated {{time}}",
         "autoUpdate": "Auto-update every 6 hours",
+        "dnsOverride": "DNS Override",
+        "ipv6": "Enable IPv6",
+        "dnsServers": "DNS Servers",
+        "dnsServersHint": "One address per line. Leave blank to use Cloudflare DoH.",
+        "networkScope": "Applies to new proxy connections from this source.",
+        "invalidDnsServer": "Enter a valid DNS server address on each line.",
+        "networkSaveFailed": "Could not save or apply the network settings. Try again.",
         "snapshotNotice": "Subscription updates keep bound configurations unchanged. Bind again to apply an update.",
         "defaultLabel": "Default",
         "defaultEmpty": "Not set",
@@ -6870,7 +6943,8 @@
       "desc": "Click the button below and complete GitHub Copilot authorization in your browser."
     },
     "token": {
-      "desc": "Paste your GitHub Copilot access token or exported JSON data."
+      "desc": "Paste your GitHub Copilot access token or exported JSON data.",
+      "requiredFields": "Required fields: paste a GitHub access token directly in Token mode; JSON mode requires id, github_login, github_id, github_access_token, copilot_token, created_at, and last_used."
     },
     "import": {
       "localDesc": "Import GitHub Copilot account data from local VS Code or a JSON file.",
@@ -7247,7 +7321,8 @@
       "batchFailureMore": "{{count}} more failed"
     },
     "token": {
-      "desc": "Paste your Devin access token or exported JSON data."
+      "desc": "Paste your Devin access token or exported JSON data.",
+      "requiredFields": "Required fields: github_access_token (API Key)"
     },
     "import": {
       "localDesc": "Import Devin account data from a JSON file.",
@@ -7351,7 +7426,8 @@
       "startUrlRequired": "Enter an IAM Identity Center Start URL"
     },
     "token": {
-      "desc": "Paste your Kiro access token or exported JSON data."
+      "desc": "Paste your Kiro access token or exported JSON data.",
+      "requiredFields": "Required fields: for JSON, access_token + refresh_token are recommended (accessToken / refreshToken are supported for compatibility only)."
     },
     "import": {
       "localDesc": "Import locally or from JSON. JSON accounts are saved first, then credentials and quotas refresh in the background.",
@@ -7983,6 +8059,39 @@
       "detailError": "Check-in error"
     }
   },
+  "codebuddyCli": {
+    "launchTitle": "Launch CodeBuddy CN",
+    "launchDesktop": "Launch Desktop",
+    "recheck": "Check again",
+    "checking": "Checking for CodeBuddy CLI…",
+    "rememberDirectory": "The last working directory is saved for this account.",
+    "installGuide": "Official installation guide",
+    "launch": "Launch CLI",
+    "terminalOpened": "Launch sent to terminal. Check the terminal for CLI output.",
+    "account": "Account",
+    "selectAccount": "Select an account",
+    "chooseDirectory": "Choose folder",
+    "homeDirectory": "Home folder",
+    "instances": "CLI instances",
+    "newInstance": "New instance",
+    "editInstance": "Edit instance",
+    "noInstances": "No saved instances.",
+    "removeConfirmation": "Remove this saved instance? Its CLI configuration and history will stay on disk.",
+    "errors": {
+      "cliCheckFailed": "Could not check whether CodeBuddy CLI is available.",
+      "accountMissing": "The saved account could not be found.",
+      "accountUnreadable": "The saved account could not be read.",
+      "credentialMissing": "This account has no access token. Reauthorize it in CodeBuddy or CodeBuddy CN.",
+      "workingDirInvalid": "Choose an existing working directory.",
+      "nameRequired": "Enter a name for the instance.",
+      "instanceMissing": "The instance could not be found.",
+      "storageError": "Could not read or save CLI settings.",
+      "cliMissing": "CodeBuddy CLI was not found. Install it using the official guide.",
+      "launchFailed": "CodeBuddy CLI failed to start.",
+      "terminalFailed": "Could not open the terminal.",
+      "terminalUnsupported": "Choose a supported terminal in General Settings. On macOS use Terminal, iTerm2, or Ghostty."
+    }
+  },
   "codebuddyCn": {
     "title": "CodeBuddy CN Account",
     "noAccounts": "No CodeBuddy CN accounts",
@@ -8008,6 +8117,27 @@
     "syncFailed": "Sync failed: {{error}}",
     "syncSuccess": "{{count}} account(s) synced to WorkBuddy",
     "syncToWorkbuddy": "Sync to WorkBuddy"
+  },
+  "workbuddyAi": {
+    "search": "Search WorkBuddy AI accounts",
+    "noAccounts": "No WorkBuddy AI accounts",
+    "addAccount": "Add a WorkBuddy AI account",
+    "oauthDesc": "Open the WorkBuddy AI sign-in page in your browser.",
+    "tokenDesc": "Paste a WorkBuddy AI access token or an exported JSON record.",
+    "importDesc": "Import from the local WorkBuddy AI app or a JSON export.",
+    "importClient": "Import from WorkBuddy AI",
+    "flowNotice": {
+      "title": "About WorkBuddy AI accounts",
+      "desc": "Switching updates the local WorkBuddy AI sign-in file and starts the international desktop app.",
+      "permission": "Local import and switching use the international edition’s sign-in file. Existing encrypted fields are handled with the installed WorkBuddy AI app’s encryption.",
+      "network": "Browser authorization, token refresh, and credit queries contact WorkBuddy AI. The sign-in file and encryption material stay on this device."
+    },
+    "oauthFeature": {
+      "title": "WorkBuddy AI sign-in",
+      "signIn": "Sign in to your WorkBuddy AI account in the browser.",
+      "switch": "After signing in, switch accounts in the international desktop app from the account list.",
+      "credits": "See remaining credits on the account card."
+    }
   },
   "workbuddy": {
     "desktopEdition": "WorkBuddy (China edition)",

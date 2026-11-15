@@ -47,9 +47,6 @@ fn update_rows(db: &Connection, patch: &DatabasePatch, undo: bool) -> Result<(),
     };
     let sql = format!("UPDATE {} SET project_id=?1,cwd=?2 WHERE {id_col}=?3 AND project_id IS ?4 AND cwd IS ?5{host_clause}", patch.table);
     for row in &patch.rows {
-        if !undo {
-            check()?;
-        }
         let after = Some(row.after_project.as_str());
         let (new_project, new_cwd, old_project, old_cwd) = if undo {
             (
@@ -170,13 +167,12 @@ pub(super) fn recover_pending(home: &Path) -> Result<(), String> {
     let bytes = fs::read(backup.join("project-recovery-plan.json")).map_err(|e| e.to_string())?;
     let plan: Plan = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
     validate(&plan, home)?;
-    super::without_launch_visibility_budget(|| rollback(&plan))?;
+    rollback(&plan)?;
     fs::remove_file(home.join(JOURNAL)).map_err(|e| e.to_string())
 }
 
 pub(super) fn apply(plan: &Plan, backup: &Path) -> Result<(), String> {
     validate(plan, &plan.home)?;
-    check()?;
     if read_bytes(&plan.home.join(STATE))? != plan.before_bytes
         || read_bytes(&plan.home.join(format!("{STATE}.bak")))? != plan.before_backup
     {
@@ -202,7 +198,6 @@ pub(super) fn apply(plan: &Plan, backup: &Path) -> Result<(), String> {
     // Quick repair backs up exact before/after fields in the durable plan and
     // JSON copies. Whole-database VACUUM backups belong to deep maintenance.
     for relative in grouped.keys().filter(|_| !plan.quick) {
-        check()?;
         let db = open(&plan.home.join(relative), false)?;
         let target = backup.join("db").join(relative);
         fs::create_dir_all(target.parent().unwrap()).map_err(|e| e.to_string())?;
@@ -228,24 +223,22 @@ pub(super) fn apply(plan: &Plan, backup: &Path) -> Result<(), String> {
             db.execute_batch("BEGIN IMMEDIATE")
                 .map_err(|e| e.to_string())?;
             if relative == &plan.primary
-                && fingerprint(&projects_with_limit(
-                    &db,
-                    plan.quick.then_some(QUICK_MAX_PROJECTS),
-                )?) != plan.project_fingerprint
+                && fingerprint(&read_projects(&db)?) != plan.project_fingerprint
             {
                 return Err("CODEX_PROJECT_CHANGED".into());
             }
             if relative == &plan.primary {
-                let roots: HashSet<_> =
-                    threads_with_limit(&db, plan.quick.then_some(QUICK_MAX_THREADS))?
-                        .into_iter()
-                        .filter(|t| t.root)
-                        .map(|t| t.id)
-                        .collect();
-                if patches
+                let thread_ids: Vec<_> = patches
                     .iter()
-                    .any(|p| p.table == "threads" && p.rows.iter().any(|r| !roots.contains(&r.id)))
-                {
+                    .filter(|patch| patch.table == "threads")
+                    .flat_map(|patch| patch.rows.iter().map(|row| row.id.as_str()))
+                    .collect();
+                let roots: HashSet<_> = read_threads_by_ids(&db, &thread_ids)?
+                    .into_iter()
+                    .filter(|thread| thread.root)
+                    .map(|thread| thread.id)
+                    .collect();
+                if thread_ids.iter().any(|id| !roots.contains(*id)) {
                     return Err("CODEX_PROJECT_CHANGED".into());
                 }
             }
@@ -259,7 +252,6 @@ pub(super) fn apply(plan: &Plan, backup: &Path) -> Result<(), String> {
         {
             return Err("CODEX_PROJECT_CHANGED".into());
         }
-        check()?;
         atomic_value(&plan.home.join(STATE), &plan.after)?;
         atomic_value(&plan.home.join(format!("{STATE}.bak")), &plan.after)?;
         for db in &connections {
@@ -270,7 +262,7 @@ pub(super) fn apply(plan: &Plan, backup: &Path) -> Result<(), String> {
     // Release all remaining write transactions before conditional compensation.
     drop(connections);
     if let Err(error) = result {
-        if let Err(rollback_error) = super::without_launch_visibility_budget(|| rollback(plan)) {
+        if let Err(rollback_error) = rollback(plan) {
             return Err(format!(
                 "CODEX_PROJECT_ROLLBACK_FAILED: {error}; {rollback_error}; backup={}",
                 backup.display()

@@ -206,7 +206,7 @@ pub fn prune_behavior_backups(source: &str, scope: &str) -> Result<BackupCleanup
         .join(BEHAVIOR_DIR_NAME)
         .join(safe_component(source))
         .join(safe_component(scope));
-    prune_operation_children(&root, Some(source.to_string()))
+    prune_operation_children(&root, source, true)
 }
 
 fn normalize_comparison_path(path: &Path) -> PathBuf {
@@ -1038,7 +1038,7 @@ where
     // 新文件，则保留这些内容并将路径返回给前端，避免整目录删除造成数据丢失。
     let (mut removed_file_count, mut removed_size_bytes, mut remaining_paths) =
         cleanup_migrated_sources(&manifest);
-    match cleanup_managed_behavior_backups_at_root(&manifest.target_root) {
+    match cleanup_managed_behavior_backups_at_root(&manifest.target_root, true) {
         Ok(cleaned) => {
             removed_file_count = removed_file_count.saturating_add(cleaned.deleted_file_count);
             removed_size_bytes = removed_size_bytes.saturating_add(cleaned.deleted_size_bytes);
@@ -1316,7 +1316,8 @@ pub fn get_backup_usage() -> Result<BackupUsageSummary, String> {
 
 fn prune_operation_children(
     root: &Path,
-    source: Option<String>,
+    source: &str,
+    automatic: bool,
 ) -> Result<BackupCleanupResult, String> {
     let mut result = BackupCleanupResult {
         deleted_file_count: 0,
@@ -1342,6 +1343,14 @@ fn prune_operation_children(
             .unwrap_or(SystemTime::UNIX_EPOCH)
     });
     for path in children.into_iter().rev().skip(1) {
+        if automatic
+            && source == "codex"
+            && path.file_name().and_then(|name| name.to_str()).is_some_and(
+                crate::modules::codex_session_visibility::is_session_visibility_repair_backup,
+            )
+        {
+            continue;
+        }
         let file_count = directory_file_count(&path);
         let size = directory_size(&path);
         fs::remove_dir_all(&path)
@@ -1350,9 +1359,7 @@ fn prune_operation_children(
         result.deleted_file_count = result.deleted_file_count.saturating_add(file_count);
         result.deleted_size_bytes = result.deleted_size_bytes.saturating_add(size);
     }
-    if let Some(source) = source {
-        result.sources.push(source);
-    }
+    result.sources.push(source.to_owned());
     Ok(result)
 }
 
@@ -1392,6 +1399,7 @@ fn directory_file_count(path: &Path) -> u64 {
 
 fn cleanup_managed_behavior_backups_at_root(
     backup_root: &Path,
+    automatic: bool,
 ) -> Result<BackupCleanupResult, String> {
     let root = backup_root.join(BEHAVIOR_DIR_NAME);
     let mut result = BackupCleanupResult {
@@ -1420,7 +1428,7 @@ fn cleanup_managed_behavior_backups_at_root(
                     .and_then(|value| value.to_str())
                     .unwrap_or("behavior")
                     .to_string();
-                let cleaned = prune_operation_children(&scope_dir, Some(source.clone()))?;
+                let cleaned = prune_operation_children(&scope_dir, &source, automatic)?;
                 result.deleted_directory_count += cleaned.deleted_directory_count;
                 result.deleted_file_count = result
                     .deleted_file_count
@@ -1439,9 +1447,9 @@ fn cleanup_managed_behavior_backups_at_root(
 
 pub fn cleanup_behavior_backups() -> Result<BackupCleanupResult, String> {
     let backup_root = get_backup_root_dir()?;
-    let mut result = cleanup_managed_behavior_backups_at_root(&backup_root)?;
+    let mut result = cleanup_managed_behavior_backups_at_root(&backup_root, false)?;
     for (source, path) in legacy_backup_roots() {
-        let cleaned = prune_operation_children(&path, Some(source.clone()))?;
+        let cleaned = prune_operation_children(&path, &source, false)?;
         result.deleted_directory_count += cleaned.deleted_directory_count;
         result.deleted_file_count = result
             .deleted_file_count
@@ -1736,6 +1744,30 @@ mod tests {
     }
 
     #[test]
+    fn automatic_behavior_cleanup_preserves_only_session_repair_backups_from_pruning() {
+        let root = make_temp_dir("prune-codex-session-repair");
+        let scope = root.join("behavior/codex/profile");
+        let repairs = [
+            "backup-20200101-000000-session-visibility-repair",
+            "backup-20200102-000000-unique-session-visibility-repair",
+        ];
+        for name in repairs.into_iter().chain(["first-instance-thread-sync", "second-instance-thread-sync"]) {
+            let backup = scope.join(name);
+            fs::create_dir_all(&backup).unwrap();
+            fs::write(backup.join("snapshot"), name).unwrap();
+        }
+        let cleaned = cleanup_managed_behavior_backups_at_root(&root, true).unwrap();
+        assert!((1..=2).contains(&cleaned.deleted_directory_count));
+        for name in repairs {
+            assert_eq!(fs::read_to_string(scope.join(name).join("snapshot")).unwrap(), name);
+        }
+        let remaining = fs::read_dir(&scope).unwrap().count();
+        let manual = cleanup_managed_behavior_backups_at_root(&root, false).unwrap();
+        assert_eq!(manual.deleted_directory_count as usize, remaining - 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn migrated_legacy_behavior_backups_are_pruned_to_one_snapshot() {
         let root = make_temp_dir("prune-migrated-legacy");
         let legacy = root.join("behavior/claude/legacy");
@@ -1745,7 +1777,7 @@ mod tests {
             fs::write(snapshot.join("state.json"), name.as_bytes()).expect("write snapshot");
         }
 
-        let cleaned = cleanup_managed_behavior_backups_at_root(&root)
+        let cleaned = cleanup_managed_behavior_backups_at_root(&root, true)
             .expect("cleanup migrated behavior backups");
         let remaining = fs::read_dir(&legacy)
             .expect("read remaining snapshots")

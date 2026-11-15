@@ -131,6 +131,59 @@ fn expiry_is_independent_of_quota_and_never_uses_expired_cards() {
     );
 }
 #[test]
+fn weekly_auto_reset_preserves_cards_until_usage_credits_are_confirmed_unavailable() {
+    let legacy: Rule = serde_json::from_value(serde_json::json!({"enabled": true})).unwrap();
+    assert!(!legacy.prefer_usage_credits);
+    let preferred = Rule {
+        prefer_usage_credits: true,
+        ..legacy.clone()
+    };
+    let cards = cards(Some(3), Some(20_000));
+    let mut q = quota(0, 0);
+    assert_eq!(trigger(&legacy, Some(&q), &cards, 1000), Some("quota"));
+    for raw in [
+        serde_json::json!({"credits":{"balance":"20"}}),
+        serde_json::json!({"credits":{"unlimited":true,"balance":"0"}}),
+        serde_json::json!({"credits":{"balance":"unknown"}}),
+        serde_json::json!({"rate_limit_reset_credits":{"available_count":3}}),
+        serde_json::json!({"spend_control":{"individual_limit":{"limit":20,"used":12}}}),
+        serde_json::json!({"credits":{"balance":"0"},"spend_control":{"individual_limit":{"remaining":8}}}),
+        serde_json::json!({"credits":{"balance":"20"},"spend_control":{"individual_limit":{"limit_reached":true}}}),
+        serde_json::json!({"spend_control":{"individual_limit":{"remaining_percent":0}}}),
+    ] {
+        q.raw_data = Some(raw);
+        assert_eq!(trigger(&preferred, Some(&q), &cards, 1000), None);
+    }
+    for raw in [
+        serde_json::json!({"credits":{"balance":"0"}}),
+        serde_json::json!({"credits":{"remaining":-1}}),
+        serde_json::json!({"credits":{"has_credits":false}}),
+        serde_json::json!({"credits":{"balance":"20","overage_limit_reached":true}}),
+        serde_json::json!({"spend_control":{"individual_limit":{"limit":20,"used":20}}}),
+    ] {
+        q.raw_data = Some(raw);
+        assert_eq!(trigger(&preferred, Some(&q), &cards, 1000), Some("quota"));
+        q.weekly_percentage = 6;
+        assert_eq!(trigger(&preferred, Some(&q), &cards, 1000), None);
+        q.weekly_percentage = 0;
+    }
+}
+
+#[test]
+fn expiring_reset_card_is_independent_of_usage_credits() {
+    let preferred = Rule {
+        enabled: true,
+        prefer_usage_credits: true,
+        ..Rule::default()
+    };
+    let cards = cards(Some(1), Some(1060));
+    let mut q = quota(0, 0);
+    q.raw_data = Some(serde_json::json!({"credits":{"balance":"20"}}));
+    assert_eq!(trigger(&preferred, Some(&q), &cards, 1000), Some("expiry"));
+    assert_eq!(trigger(&preferred, None, &cards, 1000), Some("expiry"));
+}
+
+#[test]
 fn weekly_threshold_ignores_hourly_and_preserves_unknown_expired_boundaries() {
     let mut rule = Rule {
         enabled: true,

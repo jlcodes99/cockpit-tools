@@ -12,7 +12,6 @@ import {
 } from '../stores/usePlatformLayoutStore';
 import { getPlatformLabel, renderPlatformIcon } from '../utils/platformMeta';
 import { PlatformGroupSwitcher } from './platform/PlatformGroupSwitcher';
-import { useAntigravityRuntimeTarget } from '../hooks/useAntigravityRuntimeTarget';
 
 interface OverviewTabsHeaderProps {
   active: Page;
@@ -38,7 +37,7 @@ export function OverviewTabsHeader({
   void subtitle;
   const { t } = useTranslation();
   const { platformGroups } = usePlatformLayoutStore();
-  const currentPlatformId: PlatformId = useAntigravityRuntimeTarget();
+  const currentPlatformId: PlatformId = 'antigravity';
   const currentGroup = useMemo(
     () => findGroupByPlatform(platformGroups, currentPlatformId),
     [platformGroups, currentPlatformId],
@@ -70,25 +69,21 @@ export function OverviewTabsHeader({
       label: t('overview.title'),
       icon: <span className="tab-icon">{renderPlatformIcon(currentPlatformId, 16)}</span>,
     },
-    ...(currentPlatformId === 'antigravity_ide'
-      ? [
-          {
-            key: 'instances' as const,
-            label: t('instances.title', '应用多开'),
-            icon: <Layers className="tab-icon" />,
-          },
-          {
-            key: 'wakeup' as const,
-            label: t('wakeup.title'),
-            icon: <AlarmClock className="tab-icon" />,
-          },
-          {
-            key: 'verification' as const,
-            label: t('wakeup.verification.title'),
-            icon: <ShieldCheck className="tab-icon" />,
-          },
-        ]
-      : []),
+    {
+      key: 'instances',
+      label: t('instances.title', '应用多开'),
+      icon: <Layers className="tab-icon" />,
+    },
+    {
+      key: 'wakeup',
+      label: t('wakeup.title'),
+      icon: <AlarmClock className="tab-icon" />,
+    },
+    {
+      key: 'verification',
+      label: t('wakeup.verification.title'),
+      icon: <ShieldCheck className="tab-icon" />,
+    },
   ];
 
   return (

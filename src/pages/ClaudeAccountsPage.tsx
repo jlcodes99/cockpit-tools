@@ -1,3 +1,4 @@
+import { LaunchPathSettingsButton } from '../components/LaunchPathSettingsButton';
 import { useDurableUiBooleanSetting, useDurableUiSetting } from '../hooks/useDurableUiSetting';
 import { previewDurableUiSetting } from '../utils/durableUiSettings';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -2947,6 +2948,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                 </button>
               )}
               {isDesktopSubPlatform && <QuickSettingsPopover type="claude" />}
+              {!isDesktopSubPlatform && <LaunchPathSettingsButton app="claude_cli" iconOnly />}
             </div>
           </div>
 
@@ -3207,7 +3209,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                             </td>
                             <td>{isProviderAccount ? null : renderPlanControl(account)}</td>
                             <td>{isProviderAccount ? renderApiKeyStatsPanel(account) : renderQuotaSummary(account, 'table')}</td>
-                            <td>{account.last_used > 0 ? formatDate(account.last_used) : '—'}</td>
+                            <td><AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDate} /></td>
                             <td className="sticky-action-cell table-action-cell">
                               {renderAccountActions(account, 'table')}
                             </td>

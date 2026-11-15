@@ -1,9 +1,9 @@
 //! Terminal launch plans shared by Codex command previews and execution.
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct CodexTerminalLaunchPlan {
-    pub(super) program: String,
-    pub(super) args: Vec<String>,
+pub(crate) struct CodexTerminalLaunchPlan {
+    pub(crate) program: String,
+    pub(crate) args: Vec<String>,
     pub(super) display_command: String,
     pub(super) terminal_name: String,
 }
@@ -233,10 +233,11 @@ fn build_linux_codex_terminal_launch_plan(
         normalized
     };
     let shell_command = format!("{}; exec bash", command);
-    let args = if program.eq_ignore_ascii_case("gnome-terminal") {
-        vec!["--", "bash", "-lc", shell_command.as_str()]
-    } else {
-        vec!["-e", "bash", "-lc", shell_command.as_str()]
+    let args = match program {
+        "gnome-terminal" => vec!["--", "bash", "-lc", shell_command.as_str()],
+        "kitty" => vec!["bash", "-lc", shell_command.as_str()],
+        "xfce4-terminal" => vec!["-x", "bash", "-lc", shell_command.as_str()],
+        _ => vec!["-e", "bash", "-lc", shell_command.as_str()],
     };
     let args = args.into_iter().map(str::to_string).collect::<Vec<_>>();
     let terminal_name = if use_system_terminal {
@@ -253,7 +254,7 @@ fn build_linux_codex_terminal_launch_plan(
     }
 }
 
-pub(super) fn build_codex_terminal_launch_plan(
+pub(crate) fn build_codex_terminal_launch_plan(
     command: &str,
     terminal: &str,
 ) -> Result<CodexTerminalLaunchPlan, String> {
@@ -276,6 +277,113 @@ pub(super) fn build_codex_terminal_launch_plan(
     Err("Codex CLI 终端执行仅支持 macOS、Windows 和 Linux".to_string())
 }
 
+pub(super) fn execute_codex_terminal_command(
+    command: &str,
+    terminal: &str,
+) -> Result<String, String> {
+    use std::process::Command;
+
+    let plan = build_codex_terminal_launch_plan(command, terminal)?;
+
+    #[cfg(target_os = "macos")]
+    {
+        let output = crate::modules::process_timeout::output_with_timeout(
+            Command::new(&plan.program).args(&plan.args),
+            std::time::Duration::from_secs(10),
+        )
+        .map_err(|e| format!("打开终端失败 ({}): {}", plan.terminal_name, e))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("终端执行失败: {}", stderr.trim()));
+        }
+        return Ok(format!("已在 {} 执行 Codex CLI 命令", plan.terminal_name));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let flags = if matches!(plan.program.as_str(), "powershell" | "pwsh") {
+            0x00000010 // The user selected an interactive PowerShell window.
+        } else {
+            0x08000000
+        };
+        let child = Command::new(&plan.program)
+            .args(&plan.args)
+            .creation_flags(flags)
+            .spawn()
+            .map_err(|e| format!("打开终端失败 ({}): {}", plan.terminal_name, e))?;
+        drop(child);
+        return Ok(format!("已在 {} 执行 Codex CLI 命令", plan.terminal_name));
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let shell_command = format!("{}; exec bash", command);
+        let use_system_terminal = terminal.is_empty() || terminal.eq_ignore_ascii_case("system");
+        let launch_result = Command::new(&plan.program)
+            .args(&plan.args)
+            .spawn()
+            .or_else(|_| {
+                if use_system_terminal {
+                    Command::new("gnome-terminal")
+                        .args(["--", "bash", "-lc", &shell_command])
+                        .spawn()
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "指定终端未找到",
+                    ))
+                }
+            })
+            .or_else(|_| {
+                if use_system_terminal {
+                    Command::new("konsole")
+                        .args(["-e", "bash", "-lc", &shell_command])
+                        .spawn()
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "指定终端未找到",
+                    ))
+                }
+            })
+            .or_else(|_| Command::new("sh").args(["-lc", command]).spawn());
+
+        let mut child =
+            launch_result.map_err(|error| format!("执行 Codex CLI 命令失败: {}", error))?;
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+        return Ok(format!("已在 {} 执行 Codex CLI 命令", plan.terminal_name));
+    }
+
+    #[allow(unreachable_code)]
+    Err("Codex CLI 终端执行仅支持 macOS、Windows 和 Linux".to_string())
+}
+
+#[cfg(target_os = "windows")]
+pub(super) fn powershell_cli_script(setup: &[String], binary: &str, script: &str) -> String {
+    use super::powershell_quote;
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    use std::path::Path;
+    let mut commands = setup.to_vec();
+    if let Some(dir) = Path::new(binary).parent().filter(|dir| dir.is_absolute()) {
+        commands.push(format!(
+            "$env:Path = {} + ';' + $env:Path",
+            powershell_quote(&dir.to_string_lossy())
+        ));
+    }
+    commands.push(script.to_owned());
+    let encoded = STANDARD.encode(
+        commands
+            .join("\n")
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>(),
+    );
+    format!("powershell -NoProfile -EncodedCommand {encoded}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -295,12 +403,23 @@ mod tests {
         assert!(output.status.success());
         let stdout = String::from_utf8(output.stdout).unwrap();
         for name in ["NO_PROXY=", "no_proxy="] {
-            let entries = stdout.lines().find_map(|line| line.strip_prefix(name)).unwrap();
-            for host in ["upper.example", "lower.example", "localhost", "127.0.0.1", "::1"] {
+            let entries = stdout
+                .lines()
+                .find_map(|line| line.strip_prefix(name))
+                .unwrap();
+            for host in [
+                "upper.example",
+                "lower.example",
+                "localhost",
+                "127.0.0.1",
+                "::1",
+            ] {
                 assert!(entries.split(',').any(|entry| entry == host));
             }
         }
-        assert!(stdout.lines().any(|line| line == "HTTPS_PROXY=http://proxy.example:8080"));
+        assert!(stdout
+            .lines()
+            .any(|line| line == "HTTPS_PROXY=http://proxy.example:8080"));
     }
 
     #[test]

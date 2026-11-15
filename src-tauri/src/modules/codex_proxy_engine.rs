@@ -2092,7 +2092,7 @@ mod tests {
         let binary = test_engine();
         let network = super::super::codex_proxy_network::NetworkOptions {
             doh: std::env::var("COCKPIT_TEST_DOH").as_deref() == Ok("1"),
-            interface: String::new(),
+            ..Default::default()
         };
         verify_version(&binary).await.unwrap();
         let input =

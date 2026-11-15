@@ -4,6 +4,7 @@
  * 提供向后兼容的函数名称（getWorkbuddy* 等旧命名）
  */
 
+import { getWorkbuddyAiPlan } from '../utils/workbuddyCredits';
 import type { WorkbuddyAccount, CodebuddyPlanDetail, CodebuddyUsage, OfficialQuotaModel, QuotaDisplayItem, QuotaCategoryGroup } from './codebuddy-suite';
 import {
   getAccountDisplayEmail,
@@ -43,6 +44,10 @@ export function getWorkbuddyPlanDetail(account: WorkbuddyAccount): CodebuddyPlan
  */
 export function getWorkbuddyPlanBadge(account: WorkbuddyAccount): string {
   return getPlanBadge(account);
+}
+
+export function getWorkbuddyAiPlanBadge(account: WorkbuddyAccount): string {
+  return getWorkbuddyAiPlan(account).label;
 }
 
 /**

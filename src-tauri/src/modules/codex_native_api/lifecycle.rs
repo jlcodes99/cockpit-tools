@@ -617,6 +617,10 @@ impl RequestTracker {
         Ok(())
     }
 
+    pub(super) fn request_quota_refresh(&self) {
+        if let Some(account) = self.quota_candidate() { self.host.request_quota_refresh(account); }
+    }
+
     /// Mark only when a business request is actually about to be sent. A
     /// successful quota check or a WebSocket upgrade does not spend quota.
     pub(super) fn quota_request_started(&self) {

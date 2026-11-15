@@ -1582,6 +1582,14 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                 {addTab === "apikey" && (
                   <div className="modal-footer api-key-add-actions">
                     <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={closeCodexAddModal}
+                      disabled={importing || addStatus === "loading"}
+                    >
+                      {t("common.cancel", "取消")}
+                    </button>
+                    <button
                       className="btn btn-primary"
                       onClick={() => void handleApiKeyLogin(officialUsage ? usageApiKeyDraft : undefined)}
                       disabled={importing || addStatus === "loading" || apiModelCatalogFetching || !apiKeyInput.trim()}

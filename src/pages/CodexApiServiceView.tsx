@@ -2428,23 +2428,20 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                   {t("codex.apiService.timeouts.presetTitle", "参数方案")}
                 </h3>
                 <div className="codex-api-service-timeout-preset-row">
-                  <label className="codex-api-service-timeout-preset-select">
+                  <div className="codex-api-service-timeout-preset-select">
                     <span>
                       {t("codex.apiService.timeouts.presetSelect", "选择方案")}
                     </span>
-                    <select
+                    <SingleSelectDropdown
                       value={selectedTimeoutPresetId}
-                      onChange={(event) =>
-                        applyTimeoutPreset(event.target.value)
-                      }
-                    >
-                      {timeoutPresetOptions.map((preset) => (
-                        <option key={preset.id} value={preset.id}>
-                          {preset.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      options={timeoutPresetOptions.map((preset) => ({
+                        value: preset.id,
+                        label: preset.name,
+                      }))}
+                      onChange={(value) => applyTimeoutPreset(value)}
+                      ariaLabel={t("codex.apiService.timeouts.presetSelect", "选择方案")}
+                    />
+                  </div>
                   <label className="codex-api-service-timeout-preset-name">
                     <span>
                       {t("codex.apiService.timeouts.presetName", "方案名称")}

@@ -28,11 +28,16 @@ const GLOBAL_STATE_FILE: &str = ".codex-global-state.json";
 const SESSION_DIRS: [&str; 2] = ["sessions", "archived_sessions"];
 const SESSION_VISIBILITY_REPAIR_BACKUP_PREFIX: &str = "backup-";
 const SESSION_VISIBILITY_REPAIR_BACKUP_SUFFIX: &str = "-session-visibility-repair";
-const MAX_SESSION_VISIBILITY_REPAIR_BACKUPS: usize = 1;
 const SESSION_INDEX_ACTIVITY_DRIFT_MS: i128 = 3_600_000;
 pub const SESSION_VISIBILITY_REPAIR_PROGRESS_EVENT: &str =
     "codex:session_visibility_repair_progress";
 static SESSION_VISIBILITY_REPAIR_LOCK: Mutex<()> = Mutex::new(());
+
+pub fn can_defer_launch_snapshot_error(error: &str) -> bool {
+    error.contains("CODEX_SESSION_VISIBILITY_PROCESS_UNAVAILABLE")
+        && !error.contains("CODEX_SESSION_VISIBILITY_ROLLBACK_FAILED")
+        && !error.contains("CODEX_DESKTOP_STATE_PREPARATION_FAILED")
+}
 
 fn acquire_session_visibility_repair_lock() -> Result<MutexGuard<'static, ()>, String> {
     #[cfg(test)]
@@ -476,7 +481,7 @@ pub fn repair_session_visibility_quick_across_instances(
     repair_session_visibility_auto_across_instances(CodexSessionVisibilityAutoRepairMode::Current)
 }
 
-/// Repairs the launch target only, using the same bounded quick-repair plan as the
+/// Repairs the launch target only, using the same quick-repair plan as the
 /// automatic multi-instance repair. The caller supplies the already-resolved data
 /// directory so this path never discovers or mutates another configured instance.
 pub fn repair_session_visibility_quick_for_instance(
@@ -493,7 +498,7 @@ pub fn repair_session_visibility_quick_for_instance(
         instance_name,
         data_dir.display()
     ));
-    let result = with_launch_visibility_budget(LAUNCH_VISIBILITY_REPAIR_BUDGET, || {
+    let result = (|| {
         let instance = CodexSyncInstance {
             id: instance_id.to_string(),
             name: instance_name.to_string(),
@@ -501,8 +506,7 @@ pub fn repair_session_visibility_quick_for_instance(
             last_pid: None,
         };
         // Desktop switches its renderer scope during startup. Restore the local
-        // workspace and SSH state before optional history maintenance can use up
-        // the budget or hit a quick-scan limit. Failure here must stop the launch.
+        // workspace and SSH state before history maintenance begins.
         let prepared = launch_desktop
             && prepare_local_project_account_state(&instance).map_err(|error| {
                 format!("CODEX_DESKTOP_STATE_PREPARATION_FAILED: {error}")
@@ -515,6 +519,7 @@ pub fn repair_session_visibility_quick_for_instance(
             None,
             RepairTargetSelection::default(),
             vec![instance],
+            true,
         )?;
         if prepared {
             summary.updated_global_state_entry_count += 1;
@@ -524,7 +529,7 @@ pub fn repair_session_visibility_quick_for_instance(
             }
         }
         Ok(summary)
-    });
+    })();
     match &result {
         Ok(summary) => modules::logger::log_info(&format!(
             "[Codex Session Visibility] launch-target quick repair finished: instance_id={}, mutated_instances={}, rollout_files={}, sqlite_rows={}, elapsed_ms={}",
@@ -647,6 +652,7 @@ fn repair_session_visibility_across_instances_with_options(
         progress_reporter,
         selection,
         instances,
+        false,
     )
 }
 
@@ -656,6 +662,7 @@ fn repair_provider_visibility_for_instances_with_options(
     progress_reporter: ProgressReporter<'_>,
     selection: RepairTargetSelection,
     instances: Vec<CodexSyncInstance>,
+    automatic_start: bool,
 ) -> Result<CodexSessionVisibilityRepairSummary, String> {
     if options.mode == CodexSessionVisibilityRepairMode::History {
         return repair_history_projections_for_instances(options, run_id, progress_reporter, selection, instances);
@@ -663,12 +670,11 @@ fn repair_provider_visibility_for_instances_with_options(
     if instances.is_empty() {
         return Err("未找到要修复的 Codex 实例".to_string());
     }
-    let process_entries = if launch_visibility_budget().is_some() {
+    let process_entries = if automatic_start {
         modules::process::collect_codex_launch_maintenance_process_entries()?
     } else {
         modules::process::collect_codex_process_entries()
     };
-    check_launch_visibility_budget("process_snapshot")?;
     let mut items = Vec::with_capacity(instances.len());
     let mut backup_dirs = Vec::new();
     let mut mutated_instance_count = 0usize;
@@ -699,7 +705,6 @@ fn repair_provider_visibility_for_instances_with_options(
     );
 
     for (index, instance) in instances.iter().enumerate() {
-        check_launch_visibility_budget("scan_instance")?;
         let current_instance = index + 1;
         report_repair_progress(
             progress_reporter,
@@ -940,20 +945,18 @@ fn repair_provider_visibility_for_instances_with_options(
         let repaired = match repaired {
             Ok(value) => value,
             Err(error) => {
-                let restore_result = without_launch_visibility_budget(|| {
-                    restore_instance_files_from_backup(
-                        &instance.data_dir,
-                        &backup_dir,
-                        sqlite_rows_to_update > 0
-                            || sqlite_timestamp_rows_to_update > 0
-                            || catalog_scan.total() > 0,
-                    )
-                });
+                let restore_result = restore_instance_files_from_backup(
+                    &instance.data_dir,
+                    &backup_dir,
+                    sqlite_rows_to_update > 0
+                        || sqlite_timestamp_rows_to_update > 0
+                        || catalog_scan.total() > 0,
+                );
                 if let Err(restore_error) = restore_result {
-                    let code = if launch_visibility_budget().is_some() {
-                        format!("{LAUNCH_VISIBILITY_ROLLBACK_FAILED}: ")
+                    let code = if automatic_start {
+                        "CODEX_SESSION_VISIBILITY_ROLLBACK_FAILED: "
                     } else {
-                        String::new()
+                        ""
                     };
                     return Err(format!(
                         "{code}修复实例历史会话可见性失败 ({}): {}；自动回滚也失败: {}；备份目录: {}",
@@ -1038,7 +1041,7 @@ fn repair_provider_visibility_for_instances_with_options(
 
     // Backup retention is maintenance, not a precondition for launching a
     // repaired instance. A large legacy backup tree must not delay this path.
-    if !options.dry_run && launch_visibility_budget().is_none()
+    if !options.dry_run && !automatic_start
         && !instances.iter().any(|instance| local_projects::has_pending(&instance.data_dir)) {
         report_repair_progress(
             progress_reporter,
@@ -1050,7 +1053,6 @@ fn repair_provider_visibility_for_instances_with_options(
             total_instances,
             None,
         );
-        prune_session_visibility_repair_backups(&instances);
         for instance in &instances {
             let scope = modules::backup_storage::scope_for_path(&instance.data_dir);
             let _ = modules::backup_storage::prune_behavior_backups("codex", &scope);
@@ -1341,7 +1343,6 @@ fn repair_single_instance(
     options: CodexSessionVisibilityRepairOptions,
     selection: &RepairTargetSelection,
 ) -> Result<RepairSingleInstanceResult, String> {
-    check_launch_visibility_budget("before_write_instance")?;
     let placeholder_instance = CodexSyncInstance {
         id: String::new(),
         name: String::new(),
@@ -1380,7 +1381,6 @@ fn repair_single_instance_with_progress(
     instance_index: usize,
     total_instances: usize,
 ) -> Result<RepairSingleInstanceResult, String> {
-    check_launch_visibility_budget("before_write_instance")?;
     let rollout_facts = if options.collect_rollout_thread_facts {
         collect_rollout_thread_facts(data_dir, selection)?
     } else {
@@ -1416,7 +1416,6 @@ fn repair_single_instance_with_progress(
     let mut changed_rollout_files = 0usize;
     let mut skipped_rollout_files = 0usize;
     for (rollout_index, change) in rollout_changes.iter().enumerate() {
-        check_launch_visibility_budget("write_rollout_timestamps")?;
         report_repair_progress(
             progress_reporter,
             run_id,
@@ -1435,14 +1434,12 @@ fn repair_single_instance_with_progress(
             rollout_total,
             Some(instance),
         );
-        check_launch_visibility_budget("write_rollout_timestamps")?;
         if normalize_rollout_timestamp(change)? {
             changed_rollout_files += 1;
         } else {
             skipped_rollout_files += 1;
         }
     }
-    check_launch_visibility_budget("finish_write_instance")?;
     let sqlite_timestamp_rows_updated = if update_sqlite_timestamps {
         report_repair_progress(
             progress_reporter,

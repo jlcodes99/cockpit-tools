@@ -1,3 +1,4 @@
+import { LaunchPathSettingsButton } from '../components/LaunchPathSettingsButton';
 import { invoke } from '@tauri-apps/api/core';
 import { normalizeLanguage } from '../i18n';
 import * as accountService from '../services/accountService';
@@ -15,6 +16,11 @@ import { ThemeColorSetting } from './settings/ThemeColorSetting';
 import { AppBackgroundSettings } from './settings/AppBackgroundSettings';
 import { SettingsCodexPlatformPanel } from "./SettingsCodexPlatformPanel";
 import { PlatformSettingsSection } from "./settings/PlatformSettingsSection";
+import {
+  SettingsDropdown,
+  SettingsRefreshPresetDropdown,
+  SettingsThresholdPresetDropdown,
+} from "./settings/SettingsPresetDropdowns";
 import { useUiConfigStore } from "../stores/useUiConfigStore";
 
 
@@ -440,15 +446,15 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   <div className="row-desc">{t('settings.general.languageDesc')}</div>
                 </div>
                 <div className="row-control">
-                  <select 
-                    className="settings-select" 
-                    value={language} 
-                    onChange={(e) => setLanguage(normalizeLanguage(e.target.value))}
-                  >
-                    {languageOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
+                  <SettingsDropdown
+                    value={language}
+                    options={languageOptions.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    }))}
+                    onChange={(nextValue) => setLanguage(normalizeLanguage(nextValue))}
+                    ariaLabel={t('settings.general.language')}
+                  />
                 </div>
               </div>
 
@@ -458,15 +464,16 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   <div className="row-desc">{t('settings.general.themeDesc')}</div>
                 </div>
                 <div className="row-control">
-                  <select 
-                    className="settings-select" 
-                    value={theme} 
-                    onChange={(e) => setTheme(e.target.value)}
-                  >
-                    <option value="light">{t('settings.general.themeLight')}</option>
-                    <option value="dark">{t('settings.general.themeDark')}</option>
-                    <option value="system">{t('settings.general.themeSystem')}</option>
-                  </select>
+                  <SettingsDropdown
+                    value={theme}
+                    options={[
+                      { value: 'light', label: t('settings.general.themeLight') },
+                      { value: 'dark', label: t('settings.general.themeDark') },
+                      { value: 'system', label: t('settings.general.themeSystem') },
+                    ]}
+                    onChange={setTheme}
+                    ariaLabel={t('settings.general.theme')}
+                  />
                 </div>
               </div>
 
@@ -500,15 +507,15 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   <div className="row-desc">{t('settings.general.defaultTerminalDesc', 'CLI 打开时使用的终端')}</div>
                 </div>
                 <div className="row-control">
-                  <select 
-                    className="settings-select" 
-                    value={defaultTerminal} 
-                    onChange={(e) => setDefaultTerminal(e.target.value)}
-                  >
-                    {terminalOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
+                  <SettingsDropdown
+                    value={defaultTerminal}
+                    options={terminalOptions.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    }))}
+                    onChange={setDefaultTerminal}
+                    ariaLabel={t('settings.general.defaultTerminal', '默认终端')}
+                  />
                 </div>
               </div>
 
@@ -518,14 +525,15 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   <div className="row-desc">{t('settings.general.sideNavLayoutDesc', '切换原始布局或经典布局')}</div>
                 </div>
                 <div className="row-control">
-                  <select
-                    className="settings-select"
+                  <SettingsDropdown
                     value={sideNavLayoutMode}
-                    onChange={(e) => setSideNavLayoutMode(e.target.value as SideNavLayoutMode)}
-                  >
-                    <option value="original">{t('settings.general.sideNavLayoutOriginal', '原始布局')}</option>
-                    <option value="classic">{t('settings.general.sideNavLayoutClassic', '经典布局')}</option>
-                  </select>
+                    options={[
+                      { value: 'original', label: t('settings.general.sideNavLayoutOriginal', '原始布局') },
+                      { value: 'classic', label: t('settings.general.sideNavLayoutClassic', '经典布局') },
+                    ]}
+                    onChange={(nextValue) => setSideNavLayoutMode(nextValue as SideNavLayoutMode)}
+                    ariaLabel={t('settings.general.sideNavLayout', '侧边栏布局')}
+                  />
                 </div>
               </div>
 
@@ -535,15 +543,15 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   <div className="row-desc">{t('settings.general.uiScaleDesc')}</div>
                 </div>
                 <div className="row-control">
-                  <select
-                    className="settings-select"
+                  <SettingsDropdown
                     value={uiScale}
-                    onChange={(e) => setUiScale(e.target.value)}
-                  >
-                    {UI_SCALE_OPTIONS.map((value) => (
-                      <option key={value} value={value}>{`${Math.round(Number.parseFloat(value) * 100)}%`}</option>
-                    ))}
-                  </select>
+                    options={UI_SCALE_OPTIONS.map((value) => ({
+                      value,
+                      label: `${Math.round(Number.parseFloat(value) * 100)}%`,
+                    }))}
+                    onChange={setUiScale}
+                    ariaLabel={t('settings.general.uiScale')}
+                  />
                 </div>
               </div>
 
@@ -553,17 +561,19 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   <div className="row-desc">{t('settings.general.closeBehaviorDesc')}</div>
                 </div>
                 <div className="row-control">
-                  <select 
-                    className="settings-select" 
-                    value={closeBehavior} 
-                    onChange={(e) => setCloseBehavior(e.target.value as 'ask' | 'minimize' | 'quit')}
-                  >
-                    <option value="ask">{t('settings.general.closeBehaviorAsk')}</option>
-                    <option value="minimize">
-                      {t(showTrayIcon ? 'settings.general.closeBehaviorMinimize' : 'closeDialog.minimizeWindow')}
-                    </option>
-                    <option value="quit">{t('settings.general.closeBehaviorQuit')}</option>
-                  </select>
+                  <SettingsDropdown
+                    value={closeBehavior}
+                    options={[
+                      { value: 'ask', label: t('settings.general.closeBehaviorAsk') },
+                      {
+                        value: 'minimize',
+                        label: t(showTrayIcon ? 'settings.general.closeBehaviorMinimize' : 'closeDialog.minimizeWindow'),
+                      },
+                      { value: 'quit', label: t('settings.general.closeBehaviorQuit') },
+                    ]}
+                    onChange={(nextValue) => setCloseBehavior(nextValue as 'ask' | 'minimize' | 'quit')}
+                    ariaLabel={t('settings.general.closeBehavior')}
+                  />
                 </div>
               </div>
 
@@ -580,14 +590,15 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   </div>
                 </div>
                 <div className="row-control">
-                  <select
-                    className="settings-select"
+                  <SettingsDropdown
                     value={startupMinimized ? 'true' : 'false'}
-                    onChange={(e) => setStartupMinimized(e.target.value === 'true')}
-                  >
-                    <option value="false">{t('common.disable', '停用')}</option>
-                    <option value="true">{t('common.enable', '启用')}</option>
-                  </select>
+                    options={[
+                      { value: 'false', label: t('common.disable', '停用') },
+                      { value: 'true', label: t('common.enable', '启用') },
+                    ]}
+                    onChange={(nextValue) => setStartupMinimized(nextValue === 'true')}
+                    ariaLabel={t('settings.general.startupMinimized', '启动后自动最小化')}
+                  />
                 </div>
               </div>
 
@@ -621,14 +632,15 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   <div className="row-desc">{t('settings.general.timeDisplayModeDesc', '账号卡片与列表中的时间区域显示内容（默认切换时间）')}</div>
                 </div>
                 <div className="row-control">
-                  <select
-                    className="settings-select"
+                  <SettingsDropdown
                     value={timeDisplayMode}
-                    onChange={(e) => setTimeDisplayMode(e.target.value as "switch" | "refresh")}
-                  >
-                    <option value="switch">{t('accounts.lastSwitchTime', '切换时间')}</option>
-                    <option value="refresh">{t('accounts.refreshTime', '刷新时间')}</option>
-                  </select>
+                    options={[
+                      { value: 'switch', label: t('accounts.lastSwitchTime', '切换时间') },
+                      { value: 'refresh', label: t('accounts.refreshTime', '刷新时间') },
+                    ]}
+                    onChange={(nextValue) => setTimeDisplayMode(nextValue as 'switch' | 'refresh')}
+                    ariaLabel={t('settings.general.timeDisplayMode', '时间显示')}
+                  />
                 </div>
               </div>
 
@@ -638,18 +650,19 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   <div className="row-desc">{t('settings.general.autoUpdateDesc')}</div>
                 </div>
                 <div className="row-control">
-                  <select
-                    className="settings-select"
+                  <SettingsDropdown
                     value={autoInstall ? 'true' : 'false'}
                     disabled={!autoInstallLoaded}
-                    onChange={(e) => {
+                    options={[
+                      { value: 'false', label: t('settings.general.autoUpdateOff') },
+                      { value: 'true', label: t('settings.general.autoUpdateOn') },
+                    ]}
+                    onChange={(nextValue) => {
                       autoInstallTouchedRef.current = true;
-                      setAutoInstall(e.target.value === 'true');
+                      setAutoInstall(nextValue === 'true');
                     }}
-                  >
-                    <option value="false">{t('settings.general.autoUpdateOff')}</option>
-                    <option value="true">{t('settings.general.autoUpdateOn')}</option>
-                  </select>
+                    ariaLabel={t('settings.general.autoUpdate')}
+                  />
                 </div>
               </div>
 
@@ -659,18 +672,19 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   <div className="row-desc">{t('settings.general.updateReminderDesc')}</div>
                 </div>
                 <div className="row-control">
-                  <select
-                    className="settings-select"
+                  <SettingsDropdown
                     value={updateRemindersEnabled ? 'true' : 'false'}
                     disabled={!updateRemindersLoaded}
-                    onChange={(e) => {
+                    options={[
+                      { value: 'true', label: t('settings.general.updateReminderOn') },
+                      { value: 'false', label: t('settings.general.updateReminderOff') },
+                    ]}
+                    onChange={(nextValue) => {
                       updateRemindersTouchedRef.current = true;
-                      setUpdateRemindersEnabled(e.target.value === 'true');
+                      setUpdateRemindersEnabled(nextValue === 'true');
                     }}
-                  >
-                    <option value="true">{t('settings.general.updateReminderOn')}</option>
-                    <option value="false">{t('settings.general.updateReminderOff')}</option>
-                  </select>
+                    ariaLabel={t('settings.general.updateReminder')}
+                  />
                 </div>
               </div>
 
@@ -707,19 +721,16 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                       </div>
                     </div>
                     <div className="row-control">
-                      <select
-                        className="settings-select"
+                      <SettingsDropdown
                         value={showTrayIcon && hideDockIcon ? 'true' : 'false'}
                         disabled={!showTrayIcon}
-                        onChange={(e) => setHideDockIcon(e.target.value === 'true')}
-                      >
-                        <option value="false">
-                          {t('settings.general.hideDockIconOff', '否（显示Dock图标）')}
-                        </option>
-                        <option value="true">
-                          {t('settings.general.hideDockIconOn', '是（隐藏Dock图标）')}
-                        </option>
-                      </select>
+                        options={[
+                          { value: 'false', label: t('settings.general.hideDockIconOff', '否（显示Dock图标）') },
+                          { value: 'true', label: t('settings.general.hideDockIconOn', '是（隐藏Dock图标）') },
+                        ]}
+                        onChange={(nextValue) => setHideDockIcon(nextValue === 'true')}
+                        ariaLabel={t('settings.general.hideDockIcon', '是否隐藏Dock图标（仅 macOS）')}
+                      />
                     </div>
                   </div>
 
@@ -736,21 +747,18 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                       </div>
                     </div>
                     <div className="row-control">
-                      <select
-                        className="settings-select"
+                      <SettingsDropdown
                         value={trayIconStyle}
                         disabled={!showTrayIcon}
-                        onChange={(e) =>
-                          setTrayIconStyle(e.target.value === 'color' ? 'color' : 'template')
+                        options={[
+                          { value: 'template', label: t('settings.general.trayIconStyleTemplate', '单色图标') },
+                          { value: 'color', label: t('settings.general.trayIconStyleColor', '彩色图标') },
+                        ]}
+                        onChange={(nextValue) =>
+                          setTrayIconStyle(nextValue === 'color' ? 'color' : 'template')
                         }
-                      >
-                        <option value="template">
-                          {t('settings.general.trayIconStyleTemplate', '单色图标')}
-                        </option>
-                        <option value="color">
-                          {t('settings.general.trayIconStyleColor', '彩色图标')}
-                        </option>
-                      </select>
+                        ariaLabel={t('settings.general.trayIconStyle', '菜单栏图标样式（仅 macOS）')}
+                      />
                     </div>
                   </div>
 
@@ -778,21 +786,22 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                       </div>
                     </div>
                     <div className="row-control">
-                      <select
-                        className="settings-select"
+                      <SettingsDropdown
                         value={showTrayIcon && menuBarQuotaEnabled ? 'true' : 'false'}
                         disabled={!showTrayIcon}
-                        onChange={(e) => {
-                          if (e.target.value === 'true') {
+                        options={[
+                          { value: 'false', label: t('common.disable', '停用') },
+                          { value: 'true', label: t('common.enable', '启用') },
+                        ]}
+                        onChange={(nextValue) => {
+                          if (nextValue === 'true') {
                             openMenuBarQuotaModal(menuBarQuotaEnabled ? 'edit' : 'enable');
                             return;
                           }
                           setMenuBarQuotaEnabled(false);
                         }}
-                      >
-                        <option value="false">{t('common.disable', '停用')}</option>
-                        <option value="true">{t('common.enable', '启用')}</option>
-                      </select>
+                        ariaLabel={t('settings.general.menuBarQuota', '菜单栏显示实时额度')}
+                      />
                       {showTrayIcon && menuBarQuotaEnabled ? (
                         <button
                           type="button"
@@ -818,14 +827,15 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   <div className="row-desc">{t('settings.general.appAutoLaunchDesc')}</div>
                 </div>
                 <div className="row-control">
-                  <select
-                    className="settings-select"
+                  <SettingsDropdown
                     value={appAutoLaunchEnabled ? 'true' : 'false'}
-                    onChange={(e) => setAppAutoLaunchEnabled(e.target.value === 'true')}
-                  >
-                    <option value="false">{t('common.disable', '停用')}</option>
-                    <option value="true">{t('common.enable', '启用')}</option>
-                  </select>
+                    options={[
+                      { value: 'false', label: t('common.disable', '停用') },
+                      { value: 'true', label: t('common.enable', '启用') },
+                    ]}
+                    onChange={(nextValue) => setAppAutoLaunchEnabled(nextValue === 'true')}
+                    ariaLabel={t('settings.general.appAutoLaunch')}
+                  />
                 </div>
               </div>
 
@@ -1099,6 +1109,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               <PlatformSettingsSection platformId={'antigravity'} order={platformSettingsOrder.antigravity}>
                 <div className="group-title">{t('settings.general.antigravitySettingsTitle', 'Antigravity IDE 设置')}</div>
                 <div className="settings-group">
+                  <div className="settings-row"><LaunchPathSettingsButton app="antigravity_cli" /></div>
               <div className="settings-row">
                 <div className="row-label">
                   <div className="row-title">{t('settings.general.autoRefresh')}</div>
@@ -1133,33 +1144,14 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         <span className="settings-input-unit">{t('settings.general.minutes')}</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
-                        style={{ minWidth: '120px', width: 'auto' }}
+                      <SettingsRefreshPresetDropdown
                         value={autoRefresh}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === 'custom') {
-                            setAutoRefreshCustomMode(true);
-                            setAutoRefresh(autoRefresh !== '-1' ? autoRefresh : '1');
-                            return;
-                          }
-                          setAutoRefreshCustomMode(false);
-                          setAutoRefresh(val);
-                        }}
-                      >
-                        {!autoRefreshIsPreset && (
-                          <option value={autoRefresh}>
-                            {autoRefresh} {t('settings.general.minutes')}
-                          </option>
-                        )}
-                        <option value="-1" disabled={hasActiveResetTasks}>{t('settings.general.autoRefreshDisabled')}</option>
-                        <option value="2">2 {t('settings.general.minutes')}</option>
-                        <option value="5" disabled={hasActiveResetTasks}>5 {t('settings.general.minutes')}</option>
-                        <option value="10" disabled={hasActiveResetTasks}>10 {t('settings.general.minutes')}</option>
-                        <option value="15" disabled={hasActiveResetTasks}>15 {t('settings.general.minutes')}</option>
-                        <option value="custom" disabled={hasActiveResetTasks}>{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                        isPreset={autoRefreshIsPreset}
+                        setValue={setAutoRefresh}
+                        setCustomMode={setAutoRefreshCustomMode}
+                        disabledNonPreset={hasActiveResetTasks}
+                        ariaLabel={t('settings.general.autoRefresh')}
+                      />
                     )}
                   </div>
                   
@@ -1196,8 +1188,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   </div>
                   <div className="row-desc">
                     {t(
-                      'settings.general.antigravityLaunchOnSwitchDesc',
-                      '关闭后切号只写入 Antigravity 默认账号数据，不会关闭、启动或重启应用。',
+                      'antigravityLaunch.quickSwitchSetting',
                     )}
                   </div>
                 </div>
@@ -1334,29 +1325,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         <span className="settings-input-unit">%</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
+                      <SettingsThresholdPresetDropdown
                         value={autoSwitchThreshold}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === 'custom') {
-                            setAutoSwitchThresholdCustomMode(true);
-                            setAutoSwitchThreshold(autoSwitchThreshold || '20');
-                            return;
-                          }
-                          setAutoSwitchThresholdCustomMode(false);
-                          setAutoSwitchThreshold(val);
-                        }}
-                      >
-                        {!autoSwitchThresholdIsPreset && (
-                          <option value={autoSwitchThreshold}>{autoSwitchThreshold}%</option>
-                        )}
-                        <option value="0">0%</option>
-                        <option value="20">20%</option>
-                        <option value="40">40%</option>
-                        <option value="60">60%</option>
-                        <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                        isPreset={autoSwitchThresholdIsPreset}
+                        setValue={setAutoSwitchThreshold}
+                        setCustomMode={setAutoSwitchThresholdCustomMode}
+                      />
                     )}
                   </div>
                 </div>
@@ -1455,31 +1429,15 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         />
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
+                      <SettingsThresholdPresetDropdown
                         value={autoSwitchCreditsThreshold}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === 'custom') {
-                            setAutoSwitchCreditsThresholdCustomMode(true);
-                            setAutoSwitchCreditsThreshold(autoSwitchCreditsThreshold || '5');
-                            return;
-                          }
-                          setAutoSwitchCreditsThresholdCustomMode(false);
-                          setAutoSwitchCreditsThreshold(val);
-                        }}
-                      >
-                        {!autoSwitchCreditsThresholdIsPreset && (
-                          <option value={autoSwitchCreditsThreshold}>
-                            {autoSwitchCreditsThreshold}
-                          </option>
-                        )}
-                        <option value="0">0</option>
-                        <option value="5">5</option>
-                        <option value="10">10</option>
-                        <option value="20">20</option>
-                        <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                        isPreset={autoSwitchCreditsThresholdIsPreset}
+                        setValue={setAutoSwitchCreditsThreshold}
+                        setCustomMode={setAutoSwitchCreditsThresholdCustomMode}
+                        presets={['0', '5', '10', '20']}
+                        defaultCustomValue="5"
+                        unit=""
+                      />
                     )}
                   </div>
                 </div>
@@ -1559,29 +1517,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         <span className="settings-input-unit">%</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
+                      <SettingsThresholdPresetDropdown
                         value={quotaAlertThreshold}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === 'custom') {
-                            setQuotaAlertThresholdCustomMode(true);
-                            setQuotaAlertThreshold(quotaAlertThreshold || '20');
-                            return;
-                          }
-                          setQuotaAlertThresholdCustomMode(false);
-                          setQuotaAlertThreshold(val);
-                        }}
-                      >
-                        {!quotaAlertThresholdIsPreset && (
-                          <option value={quotaAlertThreshold}>{quotaAlertThreshold}%</option>
-                        )}
-                        <option value="0">0%</option>
-                        <option value="20">20%</option>
-                        <option value="40">40%</option>
-                        <option value="60">60%</option>
-                        <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                        isPreset={quotaAlertThresholdIsPreset}
+                        setValue={setQuotaAlertThreshold}
+                        setCustomMode={setQuotaAlertThresholdCustomMode}
+                      />
                     )}
                   </div>
                 </div>
@@ -1597,6 +1538,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   {t('settings.general.claudeSettingsTitle', 'Claude 设置')}
                 </div>
                 <div className="settings-group">
+                  <div className="settings-row"><LaunchPathSettingsButton app="claude_cli" /></div>
                   {renderPlatformAutoRefreshRow({
                     title: t(
                       'settings.general.claudeAutoRefresh',
@@ -1774,33 +1716,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         <span className="settings-input-unit">{t('settings.general.minutes')}</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
-                        style={{ minWidth: '120px', width: 'auto' }}
+                      <SettingsRefreshPresetDropdown
                         value={ghcpAutoRefresh}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === 'custom') {
-                            setGhcpAutoRefreshCustomMode(true);
-                            setGhcpAutoRefresh(ghcpAutoRefresh !== '-1' ? ghcpAutoRefresh : '1');
-                            return;
-                          }
-                          setGhcpAutoRefreshCustomMode(false);
-                          setGhcpAutoRefresh(val);
-                        }}
-                      >
-                        {!ghcpAutoRefreshIsPreset && (
-                          <option value={ghcpAutoRefresh}>
-                            {ghcpAutoRefresh} {t('settings.general.minutes')}
-                          </option>
-                        )}
-                        <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                        <option value="2">2 {t('settings.general.minutes')}</option>
-                        <option value="5">5 {t('settings.general.minutes')}</option>
-                        <option value="10">10 {t('settings.general.minutes')}</option>
-                        <option value="15">15 {t('settings.general.minutes')}</option>
-                        <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                        isPreset={ghcpAutoRefreshIsPreset}
+                        setValue={setGhcpAutoRefresh}
+                        setCustomMode={setGhcpAutoRefreshCustomMode}
+                      />
                     )}
                   </div>
                 </div>
@@ -1894,29 +1815,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         <span className="settings-input-unit">%</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
+                      <SettingsThresholdPresetDropdown
                         value={ghcpQuotaAlertThreshold}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === 'custom') {
-                            setGhcpQuotaAlertThresholdCustomMode(true);
-                            setGhcpQuotaAlertThreshold(ghcpQuotaAlertThreshold || '20');
-                            return;
-                          }
-                          setGhcpQuotaAlertThresholdCustomMode(false);
-                          setGhcpQuotaAlertThreshold(val);
-                        }}
-                      >
-                        {!ghcpQuotaAlertThresholdIsPreset && (
-                          <option value={ghcpQuotaAlertThreshold}>{ghcpQuotaAlertThreshold}%</option>
-                        )}
-                        <option value="0">0%</option>
-                        <option value="20">20%</option>
-                        <option value="40">40%</option>
-                        <option value="60">60%</option>
-                        <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                        isPreset={ghcpQuotaAlertThresholdIsPreset}
+                        setValue={setGhcpQuotaAlertThreshold}
+                        setCustomMode={setGhcpQuotaAlertThresholdCustomMode}
+                      />
                     )}
                   </div>
                 </div>
@@ -1962,33 +1866,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         <span className="settings-input-unit">{t('settings.general.minutes')}</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
-                        style={{ minWidth: '120px', width: 'auto' }}
+                      <SettingsRefreshPresetDropdown
                         value={windsurfAutoRefresh}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === 'custom') {
-                            setWindsurfAutoRefreshCustomMode(true);
-                            setWindsurfAutoRefresh(windsurfAutoRefresh !== '-1' ? windsurfAutoRefresh : '1');
-                            return;
-                          }
-                          setWindsurfAutoRefreshCustomMode(false);
-                          setWindsurfAutoRefresh(val);
-                        }}
-                      >
-                        {!windsurfAutoRefreshIsPreset && (
-                          <option value={windsurfAutoRefresh}>
-                            {windsurfAutoRefresh} {t('settings.general.minutes')}
-                          </option>
-                        )}
-                        <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                        <option value="2">2 {t('settings.general.minutes')}</option>
-                        <option value="5">5 {t('settings.general.minutes')}</option>
-                        <option value="10">10 {t('settings.general.minutes')}</option>
-                        <option value="15">15 {t('settings.general.minutes')}</option>
-                        <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                        isPreset={windsurfAutoRefreshIsPreset}
+                        setValue={setWindsurfAutoRefresh}
+                        setCustomMode={setWindsurfAutoRefreshCustomMode}
+                      />
                     )}
                   </div>
                 </div>
@@ -2082,29 +1965,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         <span className="settings-input-unit">%</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
+                      <SettingsThresholdPresetDropdown
                         value={windsurfQuotaAlertThreshold}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === 'custom') {
-                            setWindsurfQuotaAlertThresholdCustomMode(true);
-                            setWindsurfQuotaAlertThreshold(windsurfQuotaAlertThreshold || '20');
-                            return;
-                          }
-                          setWindsurfQuotaAlertThresholdCustomMode(false);
-                          setWindsurfQuotaAlertThreshold(val);
-                        }}
-                      >
-                        {!windsurfQuotaAlertThresholdIsPreset && (
-                          <option value={windsurfQuotaAlertThreshold}>{windsurfQuotaAlertThreshold}%</option>
-                        )}
-                        <option value="0">0%</option>
-                        <option value="20">20%</option>
-                        <option value="40">40%</option>
-                        <option value="60">60%</option>
-                        <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                        isPreset={windsurfQuotaAlertThresholdIsPreset}
+                        setValue={setWindsurfQuotaAlertThreshold}
+                        setCustomMode={setWindsurfQuotaAlertThresholdCustomMode}
+                      />
                     )}
                   </div>
                 </div>
@@ -2150,33 +2016,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         <span className="settings-input-unit">{t('settings.general.minutes')}</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
-                        style={{ minWidth: '120px', width: 'auto' }}
+                      <SettingsRefreshPresetDropdown
                         value={kiroAutoRefresh}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === 'custom') {
-                            setKiroAutoRefreshCustomMode(true);
-                            setKiroAutoRefresh(kiroAutoRefresh !== '-1' ? kiroAutoRefresh : '1');
-                            return;
-                          }
-                          setKiroAutoRefreshCustomMode(false);
-                          setKiroAutoRefresh(val);
-                        }}
-                      >
-                        {!kiroAutoRefreshIsPreset && (
-                          <option value={kiroAutoRefresh}>
-                            {kiroAutoRefresh} {t('settings.general.minutes')}
-                          </option>
-                        )}
-                        <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                        <option value="2">2 {t('settings.general.minutes')}</option>
-                        <option value="5">5 {t('settings.general.minutes')}</option>
-                        <option value="10">10 {t('settings.general.minutes')}</option>
-                        <option value="15">15 {t('settings.general.minutes')}</option>
-                        <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                        isPreset={kiroAutoRefreshIsPreset}
+                        setValue={setKiroAutoRefresh}
+                        setCustomMode={setKiroAutoRefreshCustomMode}
+                      />
                     )}
                   </div>
                 </div>
@@ -2270,29 +2115,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         <span className="settings-input-unit">%</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
+                      <SettingsThresholdPresetDropdown
                         value={kiroQuotaAlertThreshold}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === 'custom') {
-                            setKiroQuotaAlertThresholdCustomMode(true);
-                            setKiroQuotaAlertThreshold(kiroQuotaAlertThreshold || '20');
-                            return;
-                          }
-                          setKiroQuotaAlertThresholdCustomMode(false);
-                          setKiroQuotaAlertThreshold(val);
-                        }}
-                      >
-                        {!kiroQuotaAlertThresholdIsPreset && (
-                          <option value={kiroQuotaAlertThreshold}>{kiroQuotaAlertThreshold}%</option>
-                        )}
-                        <option value="0">0%</option>
-                        <option value="20">20%</option>
-                        <option value="40">40%</option>
-                        <option value="60">60%</option>
-                        <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                        isPreset={kiroQuotaAlertThresholdIsPreset}
+                        setValue={setKiroQuotaAlertThreshold}
+                        setCustomMode={setKiroQuotaAlertThresholdCustomMode}
+                      />
                     )}
                   </div>
                 </div>
@@ -2303,6 +2131,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               <PlatformSettingsSection platformId={'codebuddy'} order={platformSettingsOrder.codebuddy}>
                 <div className="group-title">{t('settings.general.codebuddySettingsTitle', 'CodeBuddy 设置')}</div>
                 <div className="settings-group">
+                  <div className="settings-row"><LaunchPathSettingsButton app="codebuddy_cli" /></div>
               <div className="settings-row">
                 <div className="row-label">
                   <div className="row-title">{t('settings.general.codebuddyAutoRefresh', 'CodeBuddy 自动刷新配额')}</div>
@@ -2339,33 +2168,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         <span className="settings-input-unit">{t('settings.general.minutes')}</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
-                        style={{ minWidth: '120px', width: 'auto' }}
+                      <SettingsRefreshPresetDropdown
                         value={codebuddyAutoRefresh}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === 'custom') {
-                            setCodebuddyAutoRefreshCustomMode(true);
-                            setCodebuddyAutoRefresh(codebuddyAutoRefresh !== '-1' ? codebuddyAutoRefresh : '1');
-                            return;
-                          }
-                          setCodebuddyAutoRefreshCustomMode(false);
-                          setCodebuddyAutoRefresh(val);
-                        }}
-                      >
-                        {!codebuddyAutoRefreshIsPreset && (
-                          <option value={codebuddyAutoRefresh}>
-                            {codebuddyAutoRefresh} {t('settings.general.minutes')}
-                          </option>
-                        )}
-                        <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                        <option value="2">2 {t('settings.general.minutes')}</option>
-                        <option value="5">5 {t('settings.general.minutes')}</option>
-                        <option value="10">10 {t('settings.general.minutes')}</option>
-                        <option value="15">15 {t('settings.general.minutes')}</option>
-                        <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                        isPreset={codebuddyAutoRefreshIsPreset}
+                        setValue={setCodebuddyAutoRefresh}
+                        setCustomMode={setCodebuddyAutoRefreshCustomMode}
+                      />
                     )}
                   </div>
                 </div>
@@ -2482,29 +2290,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         <span className="settings-input-unit">%</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
+                      <SettingsThresholdPresetDropdown
                         value={codebuddyQuotaAlertThreshold}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === 'custom') {
-                            setCodebuddyQuotaAlertThresholdCustomMode(true);
-                            setCodebuddyQuotaAlertThreshold(codebuddyQuotaAlertThreshold || '20');
-                            return;
-                          }
-                          setCodebuddyQuotaAlertThresholdCustomMode(false);
-                          setCodebuddyQuotaAlertThreshold(val);
-                        }}
-                      >
-                        {!codebuddyQuotaAlertThresholdIsPreset && (
-                          <option value={codebuddyQuotaAlertThreshold}>{codebuddyQuotaAlertThreshold}%</option>
-                        )}
-                        <option value="0">0%</option>
-                        <option value="20">20%</option>
-                        <option value="40">40%</option>
-                        <option value="60">60%</option>
-                        <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                        isPreset={codebuddyQuotaAlertThresholdIsPreset}
+                        setValue={setCodebuddyQuotaAlertThreshold}
+                        setCustomMode={setCodebuddyQuotaAlertThresholdCustomMode}
+                      />
                     )}
                   </div>
                 </div>
@@ -2515,6 +2306,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               <PlatformSettingsSection platformId={'codebuddy_cn'} order={platformSettingsOrder.codebuddy_cn}>
                 <div className="group-title">{t('settings.general.codebuddyCnSettingsTitle', 'CodeBuddy CN 设置')}</div>
                 <div className="settings-group">
+                  <div className="settings-row"><LaunchPathSettingsButton app="codebuddy_cli" /></div>
                   <div className="settings-row">
                     <div className="row-label">
                       <div className="row-title">{t('settings.general.codebuddyCnAutoRefresh', 'CodeBuddy CN 自动刷新配额')}</div>
@@ -2551,33 +2343,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                             <span className="settings-input-unit">{t('settings.general.minutes')}</span>
                           </div>
                         ) : (
-                          <select
-                            className="settings-select"
-                            style={{ minWidth: '120px', width: 'auto' }}
+                          <SettingsRefreshPresetDropdown
                             value={codebuddyCnAutoRefresh}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === 'custom') {
-                                setCodebuddyCnAutoRefreshCustomMode(true);
-                                setCodebuddyCnAutoRefresh(codebuddyCnAutoRefresh !== '-1' ? codebuddyCnAutoRefresh : '1');
-                                return;
-                              }
-                              setCodebuddyCnAutoRefreshCustomMode(false);
-                              setCodebuddyCnAutoRefresh(val);
-                            }}
-                          >
-                            {!codebuddyCnAutoRefreshIsPreset && (
-                              <option value={codebuddyCnAutoRefresh}>
-                                {codebuddyCnAutoRefresh} {t('settings.general.minutes')}
-                              </option>
-                            )}
-                            <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                            <option value="2">2 {t('settings.general.minutes')}</option>
-                            <option value="5">5 {t('settings.general.minutes')}</option>
-                            <option value="10">10 {t('settings.general.minutes')}</option>
-                            <option value="15">15 {t('settings.general.minutes')}</option>
-                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                          </select>
+                            isPreset={codebuddyCnAutoRefreshIsPreset}
+                            setValue={setCodebuddyCnAutoRefresh}
+                            setCustomMode={setCodebuddyCnAutoRefreshCustomMode}
+                          />
                         )}
                       </div>
                     </div>
@@ -2679,29 +2450,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                             <span className="settings-input-unit">%</span>
                           </div>
                         ) : (
-                          <select
-                            className="settings-select"
+                          <SettingsThresholdPresetDropdown
                             value={codebuddyCnQuotaAlertThreshold}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === 'custom') {
-                                setCodebuddyCnQuotaAlertThresholdCustomMode(true);
-                                setCodebuddyCnQuotaAlertThreshold(codebuddyCnQuotaAlertThreshold || '20');
-                                return;
-                              }
-                              setCodebuddyCnQuotaAlertThresholdCustomMode(false);
-                              setCodebuddyCnQuotaAlertThreshold(val);
-                            }}
-                          >
-                            {!codebuddyCnQuotaAlertThresholdIsPreset && (
-                              <option value={codebuddyCnQuotaAlertThreshold}>{codebuddyCnQuotaAlertThreshold}%</option>
-                            )}
-                            <option value="0">0%</option>
-                            <option value="20">20%</option>
-                            <option value="40">40%</option>
-                            <option value="60">60%</option>
-                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                          </select>
+                            isPreset={codebuddyCnQuotaAlertThresholdIsPreset}
+                            setValue={setCodebuddyCnQuotaAlertThreshold}
+                            setCustomMode={setCodebuddyCnQuotaAlertThresholdCustomMode}
+                          />
                         )}
                       </div>
                     </div>
@@ -2748,33 +2502,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                             <span className="settings-input-unit">{t('settings.general.minutes')}</span>
                           </div>
                         ) : (
-                          <select
-                            className="settings-select"
-                            style={{ minWidth: '120px', width: 'auto' }}
+                          <SettingsRefreshPresetDropdown
                             value={qoderAutoRefresh}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === 'custom') {
-                                setQoderAutoRefreshCustomMode(true);
-                                setQoderAutoRefresh(qoderAutoRefresh !== '-1' ? qoderAutoRefresh : '1');
-                                return;
-                              }
-                              setQoderAutoRefreshCustomMode(false);
-                              setQoderAutoRefresh(val);
-                            }}
-                          >
-                            {!qoderAutoRefreshIsPreset && (
-                              <option value={qoderAutoRefresh}>
-                                {qoderAutoRefresh} {t('settings.general.minutes')}
-                              </option>
-                            )}
-                            <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                            <option value="2">2 {t('settings.general.minutes')}</option>
-                            <option value="5">5 {t('settings.general.minutes')}</option>
-                            <option value="10">10 {t('settings.general.minutes')}</option>
-                            <option value="15">15 {t('settings.general.minutes')}</option>
-                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                          </select>
+                            isPreset={qoderAutoRefreshIsPreset}
+                            setValue={setQoderAutoRefresh}
+                            setCustomMode={setQoderAutoRefreshCustomMode}
+                          />
                         )}
                       </div>
                     </div>
@@ -2870,29 +2603,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                             <span className="settings-input-unit">%</span>
                           </div>
                         ) : (
-                          <select
-                            className="settings-select"
+                          <SettingsThresholdPresetDropdown
                             value={qoderQuotaAlertThreshold}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === 'custom') {
-                                setQoderQuotaAlertThresholdCustomMode(true);
-                                setQoderQuotaAlertThreshold(qoderQuotaAlertThreshold || '20');
-                                return;
-                              }
-                              setQoderQuotaAlertThresholdCustomMode(false);
-                              setQoderQuotaAlertThreshold(val);
-                            }}
-                          >
-                            {!qoderQuotaAlertThresholdIsPreset && (
-                              <option value={qoderQuotaAlertThreshold}>{qoderQuotaAlertThreshold}%</option>
-                            )}
-                            <option value="0">0%</option>
-                            <option value="20">20%</option>
-                            <option value="40">40%</option>
-                            <option value="60">60%</option>
-                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                          </select>
+                            isPreset={qoderQuotaAlertThresholdIsPreset}
+                            setValue={setQoderQuotaAlertThreshold}
+                            setCustomMode={setQoderQuotaAlertThresholdCustomMode}
+                          />
                         )}
                       </div>
                     </div>
@@ -2939,33 +2655,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                             <span className="settings-input-unit">{t('settings.general.minutes')}</span>
                           </div>
                         ) : (
-                          <select
-                            className="settings-select"
-                            style={{ minWidth: '120px', width: 'auto' }}
+                          <SettingsRefreshPresetDropdown
                             value={zcodeAutoRefresh}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              if (value === 'custom') {
-                                setZcodeAutoRefreshCustomMode(true);
-                                setZcodeAutoRefresh(zcodeAutoRefresh !== '-1' ? zcodeAutoRefresh : '1');
-                                return;
-                              }
-                              setZcodeAutoRefreshCustomMode(false);
-                              setZcodeAutoRefresh(value);
-                            }}
-                          >
-                            {!zcodeAutoRefreshIsPreset && (
-                              <option value={zcodeAutoRefresh}>
-                                {zcodeAutoRefresh} {t('settings.general.minutes')}
-                              </option>
-                            )}
-                            <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                            <option value="2">2 {t('settings.general.minutes')}</option>
-                            <option value="5">5 {t('settings.general.minutes')}</option>
-                            <option value="10">10 {t('settings.general.minutes')}</option>
-                            <option value="15">15 {t('settings.general.minutes')}</option>
-                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                          </select>
+                            isPreset={zcodeAutoRefreshIsPreset}
+                            setValue={setZcodeAutoRefresh}
+                            setCustomMode={setZcodeAutoRefreshCustomMode}
+                          />
                         )}
                       </div>
                     </div>
@@ -3057,33 +2752,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                             <span className="settings-input-unit">{t('settings.general.minutes')}</span>
                           </div>
                         ) : (
-                          <select
-                            className="settings-select"
-                            style={{ minWidth: '120px', width: 'auto' }}
+                          <SettingsRefreshPresetDropdown
                             value={traeAutoRefresh}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === 'custom') {
-                                setTraeAutoRefreshCustomMode(true);
-                                setTraeAutoRefresh(traeAutoRefresh !== '-1' ? traeAutoRefresh : '1');
-                                return;
-                              }
-                              setTraeAutoRefreshCustomMode(false);
-                              setTraeAutoRefresh(val);
-                            }}
-                          >
-                            {!traeAutoRefreshIsPreset && (
-                              <option value={traeAutoRefresh}>
-                                {traeAutoRefresh} {t('settings.general.minutes')}
-                              </option>
-                            )}
-                            <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                            <option value="2">2 {t('settings.general.minutes')}</option>
-                            <option value="5">5 {t('settings.general.minutes')}</option>
-                            <option value="10">10 {t('settings.general.minutes')}</option>
-                            <option value="15">15 {t('settings.general.minutes')}</option>
-                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                          </select>
+                            isPreset={traeAutoRefreshIsPreset}
+                            setValue={setTraeAutoRefresh}
+                            setCustomMode={setTraeAutoRefreshCustomMode}
+                          />
                         )}
                       </div>
                     </div>
@@ -3201,29 +2875,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                             <span className="settings-input-unit">%</span>
                           </div>
                         ) : (
-                          <select
-                            className="settings-select"
+                          <SettingsThresholdPresetDropdown
                             value={traeQuotaAlertThreshold}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === 'custom') {
-                                setTraeQuotaAlertThresholdCustomMode(true);
-                                setTraeQuotaAlertThreshold(traeQuotaAlertThreshold || '20');
-                                return;
-                              }
-                              setTraeQuotaAlertThresholdCustomMode(false);
-                              setTraeQuotaAlertThreshold(val);
-                            }}
-                          >
-                            {!traeQuotaAlertThresholdIsPreset && (
-                              <option value={traeQuotaAlertThreshold}>{traeQuotaAlertThreshold}%</option>
-                            )}
-                            <option value="0">0%</option>
-                            <option value="20">20%</option>
-                            <option value="40">40%</option>
-                            <option value="60">60%</option>
-                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                          </select>
+                            isPreset={traeQuotaAlertThresholdIsPreset}
+                            setValue={setTraeQuotaAlertThreshold}
+                            setCustomMode={setTraeQuotaAlertThresholdCustomMode}
+                          />
                         )}
                       </div>
                     </div>
@@ -3297,6 +2954,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               <PlatformSettingsSection platformId={'workbuddy'} order={platformSettingsOrder.workbuddy}>
                 <div className="group-title">{t('quickSettings.workbuddy.title', 'WorkBuddy 设置')}</div>
                 <div className="settings-group">
+                  <div className="settings-row"><LaunchPathSettingsButton app="workbuddy_ai" /></div>
                   <div className="settings-row">
                     <div className="row-label">
                       <div className="row-title">{t('settings.general.workbuddyAutoRefresh', 'WorkBuddy 自动刷新配额')}</div>
@@ -3333,33 +2991,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                             <span className="settings-input-unit">{t('settings.general.minutes')}</span>
                           </div>
                         ) : (
-                          <select
-                            className="settings-select"
-                            style={{ minWidth: '120px', width: 'auto' }}
+                          <SettingsRefreshPresetDropdown
                             value={workbuddyAutoRefresh}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === 'custom') {
-                                setWorkbuddyAutoRefreshCustomMode(true);
-                                setWorkbuddyAutoRefresh(workbuddyAutoRefresh !== '-1' ? workbuddyAutoRefresh : '1');
-                                return;
-                              }
-                              setWorkbuddyAutoRefreshCustomMode(false);
-                              setWorkbuddyAutoRefresh(val);
-                            }}
-                          >
-                            {!workbuddyAutoRefreshIsPreset && (
-                              <option value={workbuddyAutoRefresh}>
-                                {workbuddyAutoRefresh} {t('settings.general.minutes')}
-                              </option>
-                            )}
-                            <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                            <option value="2">2 {t('settings.general.minutes')}</option>
-                            <option value="5">5 {t('settings.general.minutes')}</option>
-                            <option value="10">10 {t('settings.general.minutes')}</option>
-                            <option value="15">15 {t('settings.general.minutes')}</option>
-                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                          </select>
+                            isPreset={workbuddyAutoRefreshIsPreset}
+                            setValue={setWorkbuddyAutoRefresh}
+                            setCustomMode={setWorkbuddyAutoRefreshCustomMode}
+                          />
                         )}
                       </div>
                     </div>
@@ -3478,29 +3115,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                             <span className="settings-input-unit">%</span>
                           </div>
                         ) : (
-                          <select
-                            className="settings-select"
+                          <SettingsThresholdPresetDropdown
                             value={workbuddyQuotaAlertThreshold}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === 'custom') {
-                                setWorkbuddyQuotaAlertThresholdCustomMode(true);
-                                setWorkbuddyQuotaAlertThreshold(workbuddyQuotaAlertThreshold || '20');
-                                return;
-                              }
-                              setWorkbuddyQuotaAlertThresholdCustomMode(false);
-                              setWorkbuddyQuotaAlertThreshold(val);
-                            }}
-                          >
-                            {!workbuddyQuotaAlertThresholdIsPreset && (
-                              <option value={workbuddyQuotaAlertThreshold}>{workbuddyQuotaAlertThreshold}%</option>
-                            )}
-                            <option value="0">0%</option>
-                            <option value="20">20%</option>
-                            <option value="40">40%</option>
-                            <option value="60">60%</option>
-                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                          </select>
+                            isPreset={workbuddyQuotaAlertThresholdIsPreset}
+                            setValue={setWorkbuddyQuotaAlertThreshold}
+                            setCustomMode={setWorkbuddyQuotaAlertThresholdCustomMode}
+                          />
                         )}
                       </div>
                     </div>
@@ -3547,33 +3167,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                             <span className="settings-input-unit">{t('settings.general.minutes')}</span>
                           </div>
                         ) : (
-                          <select
-                            className="settings-select"
-                            style={{ minWidth: '120px', width: 'auto' }}
+                          <SettingsRefreshPresetDropdown
                             value={minimaxCodeAutoRefresh}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === 'custom') {
-                                setMinimaxCodeAutoRefreshCustomMode(true);
-                                setMinimaxCodeAutoRefresh(minimaxCodeAutoRefresh !== '-1' ? minimaxCodeAutoRefresh : '1');
-                                return;
-                              }
-                              setMinimaxCodeAutoRefreshCustomMode(false);
-                              setMinimaxCodeAutoRefresh(val);
-                            }}
-                          >
-                            {!minimaxCodeAutoRefreshIsPreset && (
-                              <option value={minimaxCodeAutoRefresh}>
-                                {minimaxCodeAutoRefresh} {t('settings.general.minutes')}
-                              </option>
-                            )}
-                            <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                            <option value="2">2 {t('settings.general.minutes')}</option>
-                            <option value="5">5 {t('settings.general.minutes')}</option>
-                            <option value="10">10 {t('settings.general.minutes')}</option>
-                            <option value="15">15 {t('settings.general.minutes')}</option>
-                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                          </select>
+                            isPreset={minimaxCodeAutoRefreshIsPreset}
+                            setValue={setMinimaxCodeAutoRefresh}
+                            setCustomMode={setMinimaxCodeAutoRefreshCustomMode}
+                          />
                         )}
                       </div>
                     </div>
@@ -3669,29 +3268,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                             <span className="settings-input-unit">%</span>
                           </div>
                         ) : (
-                          <select
-                            className="settings-select"
+                          <SettingsThresholdPresetDropdown
                             value={minimaxCodeQuotaAlertThreshold}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === 'custom') {
-                                setMinimaxCodeQuotaAlertThresholdCustomMode(true);
-                                setMinimaxCodeQuotaAlertThreshold(minimaxCodeQuotaAlertThreshold || '20');
-                                return;
-                              }
-                              setMinimaxCodeQuotaAlertThresholdCustomMode(false);
-                              setMinimaxCodeQuotaAlertThreshold(val);
-                            }}
-                          >
-                            {!minimaxCodeQuotaAlertThresholdIsPreset && (
-                              <option value={minimaxCodeQuotaAlertThreshold}>{minimaxCodeQuotaAlertThreshold}%</option>
-                            )}
-                            <option value="0">0%</option>
-                            <option value="20">20%</option>
-                            <option value="40">40%</option>
-                            <option value="60">60%</option>
-                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                          </select>
+                            isPreset={minimaxCodeQuotaAlertThresholdIsPreset}
+                            setValue={setMinimaxCodeQuotaAlertThreshold}
+                            setCustomMode={setMinimaxCodeQuotaAlertThresholdCustomMode}
+                          />
                         )}
                       </div>
                     </div>
@@ -3736,33 +3318,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                             <span className="settings-input-unit">{t('settings.general.minutes')}</span>
                           </div>
                         ) : (
-                          <select
-                            className="settings-select"
-                            style={{ minWidth: '120px', width: 'auto' }}
+                          <SettingsRefreshPresetDropdown
                             value={zedAutoRefresh}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === 'custom') {
-                                setZedAutoRefreshCustomMode(true);
-                                setZedAutoRefresh(zedAutoRefresh !== '-1' ? zedAutoRefresh : '1');
-                                return;
-                              }
-                              setZedAutoRefreshCustomMode(false);
-                              setZedAutoRefresh(val);
-                            }}
-                          >
-                            {!zedAutoRefreshIsPreset && (
-                              <option value={zedAutoRefresh}>
-                                {zedAutoRefresh} {t('settings.general.minutes')}
-                              </option>
-                            )}
-                            <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                            <option value="2">2 {t('settings.general.minutes')}</option>
-                            <option value="5">5 {t('settings.general.minutes')}</option>
-                            <option value="10">10 {t('settings.general.minutes')}</option>
-                            <option value="15">15 {t('settings.general.minutes')}</option>
-                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                          </select>
+                            isPreset={zedAutoRefreshIsPreset}
+                            setValue={setZedAutoRefresh}
+                            setCustomMode={setZedAutoRefreshCustomMode}
+                          />
                         )}
                       </div>
                     </div>
@@ -3856,29 +3417,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                             <span className="settings-input-unit">%</span>
                           </div>
                         ) : (
-                          <select
-                            className="settings-select"
+                          <SettingsThresholdPresetDropdown
                             value={zedQuotaAlertThreshold}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === 'custom') {
-                                setZedQuotaAlertThresholdCustomMode(true);
-                                setZedQuotaAlertThreshold(zedQuotaAlertThreshold || '20');
-                                return;
-                              }
-                              setZedQuotaAlertThresholdCustomMode(false);
-                              setZedQuotaAlertThreshold(val);
-                            }}
-                          >
-                            {!zedQuotaAlertThresholdIsPreset && (
-                              <option value={zedQuotaAlertThreshold}>{zedQuotaAlertThreshold}%</option>
-                            )}
-                            <option value="0">0%</option>
-                            <option value="20">20%</option>
-                            <option value="40">40%</option>
-                            <option value="60">60%</option>
-                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                          </select>
+                            isPreset={zedQuotaAlertThresholdIsPreset}
+                            setValue={setZedQuotaAlertThreshold}
+                            setCustomMode={setZedQuotaAlertThresholdCustomMode}
+                          />
                         )}
                       </div>
                     </div>
@@ -3923,33 +3467,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         <span className="settings-input-unit">{t('settings.general.minutes')}</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
-                        style={{ minWidth: '120px', width: 'auto' }}
+                      <SettingsRefreshPresetDropdown
                         value={cursorAutoRefresh}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === 'custom') {
-                            setCursorAutoRefreshCustomMode(true);
-                            setCursorAutoRefresh(cursorAutoRefresh !== '-1' ? cursorAutoRefresh : '1');
-                            return;
-                          }
-                          setCursorAutoRefreshCustomMode(false);
-                          setCursorAutoRefresh(val);
-                        }}
-                      >
-                        {!cursorAutoRefreshIsPreset && (
-                          <option value={cursorAutoRefresh}>
-                            {cursorAutoRefresh} {t('settings.general.minutes')}
-                          </option>
-                        )}
-                        <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
-                        <option value="2">2 {t('settings.general.minutes')}</option>
-                        <option value="5">5 {t('settings.general.minutes')}</option>
-                        <option value="10">10 {t('settings.general.minutes')}</option>
-                        <option value="15">15 {t('settings.general.minutes')}</option>
-                        <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                        isPreset={cursorAutoRefreshIsPreset}
+                        setValue={setCursorAutoRefresh}
+                        setCustomMode={setCursorAutoRefreshCustomMode}
+                      />
                     )}
                   </div>
                 </div>
@@ -4043,29 +3566,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         <span className="settings-input-unit">%</span>
                       </div>
                     ) : (
-                      <select
-                        className="settings-select"
+                      <SettingsThresholdPresetDropdown
                         value={cursorQuotaAlertThreshold}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === 'custom') {
-                            setCursorQuotaAlertThresholdCustomMode(true);
-                            setCursorQuotaAlertThreshold(cursorQuotaAlertThreshold || '20');
-                            return;
-                          }
-                          setCursorQuotaAlertThresholdCustomMode(false);
-                          setCursorQuotaAlertThreshold(val);
-                        }}
-                      >
-                        {!cursorQuotaAlertThresholdIsPreset && (
-                          <option value={cursorQuotaAlertThreshold}>{cursorQuotaAlertThreshold}%</option>
-                        )}
-                        <option value="0">0%</option>
-                        <option value="20">20%</option>
-                        <option value="40">40%</option>
-                        <option value="60">60%</option>
-                        <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
-                      </select>
+                        isPreset={cursorQuotaAlertThresholdIsPreset}
+                        setValue={setCursorQuotaAlertThreshold}
+                        setCustomMode={setCursorQuotaAlertThresholdCustomMode}
+                      />
                     )}
                   </div>
                 </div>

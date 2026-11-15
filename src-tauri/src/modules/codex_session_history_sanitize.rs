@@ -29,7 +29,6 @@ const HISTORY_DB_STEM: &str = "thread_history";
 const HISTORY_DB_EXTENSION: &str = "sqlite";
 const SQLITE_DIR_NAME: &str = "sqlite";
 const BACKUP_DIR_NAME: &str = "cockpit-history-sanitize-backup";
-const MAX_BACKUP_FILES: usize = 3;
 const BUSY_TIMEOUT_SECONDS: u64 = 5;
 /// 单批写库的行数与字节上限：命中行按批扫描与提交，避免整库 reasoning 行同时驻留内存。
 const HISTORY_SANITIZE_BATCH_ROWS: usize = 200;
@@ -227,7 +226,7 @@ fn write_rollout_signature_backup(
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis())
         .unwrap_or_default();
-    let backup_file = backup_root.join(format!("rollout-signatures-{timestamp}.json"));
+    let backup_file = backup_root.join(format!("rollout-signatures-{timestamp}-{}.json", uuid::Uuid::new_v4()));
     let serialized = serde_json::to_vec_pretty(backups)
         .map_err(|error| format!("序列化会话日志签名备份失败: {}", error))?;
     let temp_path = backup_file.with_extension("json.tmp");
@@ -240,7 +239,6 @@ fn write_rollout_signature_backup(
             error
         )
     })?;
-    prune_backup_files(&backup_root);
     modules::logger::log_info(&format!(
         "[Codex Rollout Sanitize] 已记录签名回滚备份: file={}, entries={}",
         backup_file.display(),
@@ -520,7 +518,7 @@ impl HistoryBackupWriter {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|duration| duration.as_millis())
             .unwrap_or_default();
-        let backup_file = backup_root.join(format!("sanitize-{timestamp_ms}.json"));
+        let backup_file = backup_root.join(format!("sanitize-{timestamp_ms}-{}.json", uuid::Uuid::new_v4()));
         let temp_path = backup_file.with_extension("json.tmp");
         Self {
             backup_root,
@@ -655,7 +653,6 @@ impl HistoryBackupWriter {
             )
         })?;
         self.finished = true;
-        prune_backup_files(&self.backup_root);
         Ok(Some((
             self.backup_file.clone(),
             self.rows_written,
@@ -718,25 +715,6 @@ fn table_has_column(connection: &Connection, table: &str, column: &str) -> Resul
         }
     }
     Ok(false)
-}
-
-fn prune_backup_files(backup_root: &Path) {
-    let Ok(entries) = fs::read_dir(backup_root) else {
-        return;
-    };
-    let mut files = entries
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| path.is_file())
-        .collect::<Vec<_>>();
-    if files.len() <= MAX_BACKUP_FILES {
-        return;
-    }
-    files.sort();
-    let remove_count = files.len() - MAX_BACKUP_FILES;
-    for path in files.into_iter().take(remove_count) {
-        let _ = fs::remove_file(path);
-    }
 }
 
 #[cfg(test)]
@@ -837,6 +815,12 @@ mod tests {
     #[test]
     fn clears_third_party_reasoning_content_and_is_idempotent() {
         let dir = make_temp_dir("codex-history-sanitize-test");
+        let backup_root = dir.join(BACKUP_DIR_NAME);
+        fs::create_dir_all(&backup_root).unwrap();
+        let previous = ["rollout-signatures-1.json", "sanitize-1.json", "sanitize-2.json"];
+        for name in previous {
+            fs::write(backup_root.join(name), name).unwrap();
+        }
         let db = create_history_db(&dir);
         let connection = Connection::open(&db).expect("open db");
         insert_item(
@@ -891,10 +875,22 @@ mod tests {
         assert!(!second.changed_anything());
 
         let backups = backup_files(&dir);
-        assert_eq!(backups.len(), 1, "应生成一份可回滚备份");
+        assert_eq!(backups.len(), previous.len() + 1);
+        for name in previous {
+            assert_eq!(fs::read_to_string(backup_root.join(name)).unwrap(), name);
+        }
+        let fresh = backups.iter()
+            .find(|path| !previous.contains(&path.file_name().unwrap().to_str().unwrap()))
+            .unwrap();
         let payload: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&backups[0]).expect("read backup"))
+            serde_json::from_str(&fs::read_to_string(fresh).expect("read backup"))
                 .expect("parse backup");
+        write_rollout_signature_backup(&dir, &[]).unwrap();
+        assert_eq!(backup_files(&dir).len(), previous.len() + 2);
+        for name in previous {
+            assert_eq!(fs::read_to_string(backup_root.join(name)).unwrap(), name);
+        }
+        assert!(fresh.is_file());
         assert_eq!(
             payload["databases"][0]["rows"][0]["item_json"].as_str(),
             Some(r#"{"type":"reasoning","id":"r1","summary":[],"content":["thinking text"]}"#),

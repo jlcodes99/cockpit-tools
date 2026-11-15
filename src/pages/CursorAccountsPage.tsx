@@ -21,6 +21,8 @@ import {
   Tag,
   ChevronDown,
   Play,
+  ArrowDown,
+  ArrowUp,
   Eye,
   EyeOff,
   Lock,
@@ -841,7 +843,7 @@ export function CursorAccountsPage() {
           <button className="sort-direction-btn" onClick={() => setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
             title={sortDirection === 'desc' ? t('common.shared.sort.descTooltip', '当前：降序，点击切换为升序') : t('common.shared.sort.ascTooltip', '当前：升序，点击切换为降序')}
             aria-label={t('common.shared.sort.toggleDirection', '切换排序方向')}>
-            {sortDirection === 'desc' ? '⬇' : '⬆'}
+            {sortDirection === 'desc' ? <ArrowDown size={15} /> : <ArrowUp size={15} />}
           </button>
         </div>
         <div className="toolbar-right">

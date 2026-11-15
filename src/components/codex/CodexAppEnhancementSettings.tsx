@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import './CodexAppEnhancementSettings.css';
@@ -49,6 +49,7 @@ export function CodexAppEnhancementSettings({ variant = 'settings', onError }: {
   const alive = useRef(true);
   const reportedError = useRef(false);
   const errorRef = useRef<HTMLDivElement>(null);
+  const descriptionId = useId();
   const quick = variant === 'quick';
 
   const load = useCallback(async () => {
@@ -124,21 +125,21 @@ export function CodexAppEnhancementSettings({ variant = 'settings', onError }: {
           <div className={quick ? 'qs-row' : 'settings-row'}>
             <div className={quick ? 'qs-row-label' : 'row-label'}>
               <div className={quick ? undefined : 'row-title'}>{t(KEY + label)}</div>
-              {!quick && <div className="row-desc">{t(KEY + label + 'Desc')}</div>}
+              {!quick && <div id={`${descriptionId}-${label}`} className="row-desc">{t(KEY + label + 'Desc')}</div>}
             </div>
             <div className={quick ? 'qs-row-control' : 'row-control'}>
               <label className={quick ? 'qs-switch' : 'switch'}>
                 <input type="checkbox" checked={config[field]} disabled={disabled}
                   aria-label={t(KEY + label)}
+                  aria-describedby={`${descriptionId}-${label}`}
                   onChange={event => void save({ [field]: event.target.checked })} />
                 <span className={quick ? 'qs-switch-slider' : 'slider'} />
               </label>
             </div>
           </div>
-          {quick && <div className="qs-hint">{t(KEY + label + 'Desc')}</div>}
+          {quick && <div id={`${descriptionId}-${label}`} className="qs-hint">{t(KEY + label + 'Desc')}</div>}
         </div>
       ))}
-      <div className={quick ? 'qs-hint' : 'row-desc'}>{t(KEY + 'restartHint')}</div>
       {(loading || saving) && <div className="codex-app-enhancements-status" role="status">{t(saving ? 'common.saving' : 'common.loading')}</div>}
       {error && <div ref={errorRef} className="codex-app-enhancements-error" role="alert">
         {!onError && <span>{errorMessage}</span>}

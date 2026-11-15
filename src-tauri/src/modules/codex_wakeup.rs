@@ -1314,7 +1314,7 @@ fn append_platform_cli_dirs(dirs: &mut Vec<PathBuf>) {
     append_home_cli_dirs(dirs);
 }
 
-fn collect_runtime_search_dirs() -> Vec<PathBuf> {
+pub(crate) fn collect_runtime_search_dirs() -> Vec<PathBuf> {
     let mut dirs = collect_path_dirs();
     append_platform_cli_dirs(&mut dirs);
     dirs
@@ -1877,7 +1877,13 @@ pub fn get_cli_status() -> CodexCliStatus {
 }
 
 pub fn resolve_cli_runtime() -> Result<CodexCliResolvedRuntime, String> {
-    let binary = resolve_binary().map_err(|err| err.message)?;
+    let binary = resolve_binary().map_err(|err| {
+        if err.required_runtime_paths.iter().any(|path| path == REQUIRED_RUNTIME_PATH_CODEX_CLI) {
+            "CLI_PATH_NOT_FOUND:codex_cli".to_string()
+        } else {
+            err.message
+        }
+    })?;
     Ok(CodexCliResolvedRuntime {
         binary_path: binary.path.display().to_string(),
         node_path: binary.node_path.map(|path| path.display().to_string()),

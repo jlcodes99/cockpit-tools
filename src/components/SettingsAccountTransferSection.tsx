@@ -16,6 +16,7 @@ import { createPortal } from 'react-dom';
 import { listen } from '@tauri-apps/api/event';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { ExportJsonModal } from './ExportJsonModal';
+import { SingleSelectDropdown } from './SingleSelectDropdown';
 import { useExportJsonModal } from '../hooks/useExportJsonModal';
 import { useEscCloseTopmost } from '../hooks/useEscClose';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
@@ -1992,18 +1993,20 @@ export function SettingsAccountTransferSection({
                     <div className="settings-backup-manager-desc">
                       {t('settings.transfer.backup.typeDesc')}
                     </div>
-                    <select
-                      className="settings-select"
+                    <SingleSelectDropdown
+                      className="settings-dropdown"
                       value={backupMode}
-                      onChange={(event) => {
-                        void handleBackupModeChange(event.target.value as AutoBackupMode);
+                      options={[
+                        { value: 'full', label: t('settings.transfer.backup.typeFull') },
+                        { value: 'accounts', label: t('settings.transfer.backup.typeAccounts') },
+                        { value: 'config', label: t('settings.transfer.backup.typeConfig') },
+                      ]}
+                      onChange={(nextValue) => {
+                        void handleBackupModeChange(nextValue as AutoBackupMode);
                       }}
                       disabled={backupControlsDisabled || !backupSettings}
-                    >
-                      <option value="full">{t('settings.transfer.backup.typeFull')}</option>
-                      <option value="accounts">{t('settings.transfer.backup.typeAccounts')}</option>
-                      <option value="config">{t('settings.transfer.backup.typeConfig')}</option>
-                    </select>
+                      ariaLabel={t('settings.transfer.backup.typeTitle')}
+                    />
                   </div>
 
                   <div className="settings-backup-manager-card">
@@ -2138,21 +2141,22 @@ export function SettingsAccountTransferSection({
                   {backupPlatformOptions.length > 0 && (
                     <div className="settings-backup-platform-filter">
                       <span>{t('settings.transfer.backup.platformFilterLabel')}</span>
-                      <select
-                        className="settings-select"
+                      <SingleSelectDropdown
+                        className="settings-dropdown"
                         value={backupPlatformFilter}
-                        onChange={(event) =>
-                          setBackupPlatformFilter(event.target.value as PlatformId | 'all')
+                        options={[
+                          { value: 'all', label: t('settings.transfer.backup.platformFilterAll') },
+                          ...backupPlatformOptions.map((platform) => ({
+                            value: platform,
+                            label: getPlatformLabel(platform, t),
+                          })),
+                        ]}
+                        onChange={(nextValue) =>
+                          setBackupPlatformFilter(nextValue as PlatformId | 'all')
                         }
                         disabled={backupControlsDisabled}
-                      >
-                        <option value="all">{t('settings.transfer.backup.platformFilterAll')}</option>
-                        {backupPlatformOptions.map((platform) => (
-                          <option key={platform} value={platform}>
-                            {getPlatformLabel(platform, t)}
-                          </option>
-                        ))}
-                      </select>
+                        ariaLabel={t('settings.transfer.backup.platformFilterLabel')}
+                      />
                     </div>
                   )}
 

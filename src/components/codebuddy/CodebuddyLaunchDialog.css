@@ -1,0 +1,57 @@
+.codebuddy-launch-modes > button {
+  flex: 1 1 0;
+}
+
+.codebuddy-launch-command,
+.codebuddy-launch-install-actions,
+.codebuddy-launch-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.codebuddy-launch-cli-fields {
+  margin-top: 14px;
+}
+
+.codebuddy-launch-dialog .btn.icon-only {
+  flex: 0 0 34px;
+  padding: 0;
+}
+
+.codebuddy-launch-install,
+.codebuddy-launch-status {
+  margin: 14px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.codebuddy-launch-install {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light);
+}
+
+.codebuddy-launch-install > .btn {
+  justify-self: start;
+}
+
+.codebuddy-launch-command {
+  justify-content: space-between;
+  padding: 4px 4px 4px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+.codebuddy-launch-command code {
+  min-width: 0;
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.codebuddy-launch-install-actions {
+  flex-wrap: wrap;
+}

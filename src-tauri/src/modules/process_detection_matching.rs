@@ -985,7 +985,10 @@ fn collect_antigravity_legacy_process_entries_from_powershell(
             Err(_) => continue,
         };
         let lower = cmdline.to_lowercase();
-        if !lower.contains("antigravity.exe") || lower.contains("antigravity ide.exe") {
+        if !lower.contains("antigravity.exe")
+            || lower.contains("antigravity ide.exe")
+            || lower.contains("--type=")
+        {
             continue;
         }
         let dir = extract_user_data_dir_from_command_line(cmdline);

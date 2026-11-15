@@ -525,6 +525,7 @@ export function MfaVaultManager() {
   };
 
   const handleImport = async () => {
+    setExportError('');
     try {
       let dataStr = '';
       try {
@@ -573,7 +574,7 @@ export function MfaVaultManager() {
       }
     } catch (err) {
       console.error('Import error:', err);
-      alert(t('mfaVault.importErrorMsg', '导入失败，请检查文件内容格式。'));
+      setExportError(t('mfaVault.importErrorMsg', '导入失败，请检查文件内容格式。'));
     }
   };
 

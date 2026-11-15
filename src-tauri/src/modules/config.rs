@@ -327,6 +327,12 @@ pub struct UserConfig {
     /// Claude 桌面应用启动路径（为空则使用默认路径）
     #[serde(default = "default_claude_app_path")]
     pub claude_app_path: String,
+    #[serde(default)]
+    pub claude_cli_path: String,
+    #[serde(default)]
+    pub antigravity_cli_path: String,
+    #[serde(default)]
+    pub codebuddy_cli_path: String,
     #[serde(default = "default_claude_app_scan_roots")]
     pub claude_app_scan_roots: String,
     /// 切换 Codex 后需联动重启的指定应用路径
@@ -395,6 +401,8 @@ pub struct UserConfig {
     /// WorkBuddy 启动路径（为空则使用默认路径）
     #[serde(default = "default_workbuddy_app_path")]
     pub workbuddy_app_path: String,
+    #[serde(default)]
+    pub workbuddy_ai_app_path: String,
     /// MiniMax Code 启动路径（为空则使用默认路径）
     #[serde(default = "default_minimax_code_app_path")]
     pub minimax_code_app_path: String,
@@ -1368,6 +1376,9 @@ impl Default for UserConfig {
             codex_oauth_app_version: String::new(),
             grok_cli_path: None,
             claude_app_path: default_claude_app_path(),
+            claude_cli_path: String::new(),
+            antigravity_cli_path: String::new(),
+            codebuddy_cli_path: String::new(),
             claude_app_scan_roots: default_claude_app_scan_roots(),
             codex_specified_app_path: default_codex_specified_app_path(),
             zed_app_path: default_zed_app_path(),
@@ -1394,6 +1405,7 @@ impl Default for UserConfig {
             trae_cn_app_scan_roots: default_trae_app_scan_roots(),
             trae_solo_cn_app_scan_roots: default_trae_app_scan_roots(),
             workbuddy_app_path: default_workbuddy_app_path(),
+            workbuddy_ai_app_path: String::new(),
             minimax_code_app_path: default_minimax_code_app_path(),
             minimax_code_region: default_minimax_code_region(),
             workbuddy_share_sessions_on_switch: default_workbuddy_share_sessions_on_switch(),

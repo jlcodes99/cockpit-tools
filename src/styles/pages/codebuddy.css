@@ -786,12 +786,10 @@
   z-index: 1100;
 }
 
-.auto-checkin-config-modal {
-  max-width: 480px;
+.modal.auto-checkin-config-modal {
+  max-width: min(480px, calc(100vw - 32px));
   width: 90vw;
-  height: 500px;
-  min-height: 500px;
-  max-height: 85vh;
+  max-height: min(640px, calc(100vh - 32px));
   border-radius: var(--radius-lg, 12px);
   display: flex;
   flex-direction: column;

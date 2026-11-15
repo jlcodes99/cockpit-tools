@@ -1062,7 +1062,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         bindAccountId: draft.bindAccountId,
         launchMode: "cli",
         copySourceInstanceId: "__default__",
-        initMode: "copy",
+        initMode: "cliConfig",
       });
     };
 
@@ -1305,7 +1305,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       await prepareCodexCliLaunch(next, selected);
     };
 
-    const handleCopyCodexCliCommand = async () => {
+    const handleCopyCodexCliCommand = async (customCommand?: string) => {
       if (!cliLaunchModal || cliLaunchModal.preparing) return;
       const prepared = cliLaunchModal.terminalCommand
         ? cliLaunchModal
@@ -1316,9 +1316,12 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         : await prepareCodexCliRuntime(prepared);
       if (!runtime) return;
       try {
-        await navigator.clipboard.writeText(
-          runtime.launchCommand || runtime.terminalCommand,
-        );
+        const command = customCommand?.trim() && runtime.instanceId
+          ? (await codexInstanceService.getCodexInstanceLaunchCommand(
+              runtime.instanceId, selectedTerminal, customCommand,
+            )).launchCommand
+          : runtime.launchCommand || runtime.terminalCommand;
+        await navigator.clipboard.writeText(command);
         setCliLaunchModal((prev) =>
           prev ? { ...prev, copied: true, executeError: null } : prev,
         );
@@ -1420,7 +1423,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       }
     }
 
-    const handleExecuteCodexCli = async () => {
+    const handleExecuteCodexCli = async (customCommand?: string) => {
       if (!cliLaunchModal || cliLaunchModal.preparing || cliLaunchModal.executing)
         return;
       const prepared = cliLaunchModal.terminalCommand
@@ -1447,6 +1450,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           await codexInstanceService.executeCodexInstanceLaunchCommand(
             runtime.instanceId,
             selectedTerminal,
+            customCommand,
           );
         await codexInstanceStore.refreshInstances();
         setCliLaunchModal((prev) =>

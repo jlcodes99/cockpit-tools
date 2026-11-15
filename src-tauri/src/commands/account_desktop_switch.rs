@@ -61,6 +61,7 @@ pub(crate) async fn switch_account_desktop(
                         &[default_dir.clone()],
                         &default_dir,
                         20,
+                        modules::process::AntigravityCloseMode::Restart,
                     )?;
                     let _ = modules::antigravity_legacy_instance::update_default_pid(None);
                 }
@@ -105,7 +106,7 @@ pub(crate) async fn switch_account_desktop(
     modules::websocket::broadcast_account_switched(&account.id, &account.email);
     if let Some(error) = launch_error {
         if error.starts_with("APP_PATH_NOT_FOUND:") {
-            return Err(error);
+            return Err(error.replacen("APP_PATH_NOT_FOUND:", "APP_PATH_MISSING_AFTER_SWITCH:", 1));
         }
         return Err(format!("账号已切换，但启动 Antigravity 失败: {}", error));
     }

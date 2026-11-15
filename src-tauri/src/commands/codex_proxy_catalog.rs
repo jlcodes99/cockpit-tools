@@ -316,9 +316,13 @@ pub async fn codex_proxy_catalog_probe(
 pub async fn codex_proxy_catalog_network(
     source_id: String,
     revision: String,
-    network: crate::modules::codex_proxy_network::NetworkOptions,
+    mut network: crate::modules::codex_proxy_network::NetworkOptions,
 ) -> Result<CatalogView, String> {
-    let view = catalog::set_network(source_id.clone(), revision, network).await?;
+    let _guard = catalog::SourceGuard::new(source_id.clone())?;
+    network.validate()?;
+    network.interface.clear();
+    let view = catalog::set_network(source_id.clone(), revision, network.clone()).await?;
+    crate::modules::codex_proxy_runtime::sync_source_network(&source_id, network).await?;
     crate::modules::codex_unified_proxy::resync_source(&source_id, false).await;
     crate::modules::codex_client_proxy::resync_source(&source_id, false).await?;
     Ok(view)

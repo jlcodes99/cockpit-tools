@@ -118,6 +118,30 @@ mod profile_copy_integration_tests {
         }
     }
 
+    #[test]
+    fn codex_cli_config_profile_keeps_account_binding_and_does_not_copy_live_history() {
+        let _lock = crate::modules::test_support::env_lock().lock().unwrap();
+        let env = TestEnvironment::new();
+        let source = env.root.join("source");
+        let target = env.root.join("target");
+        let config = b"model = \"test-model\"\n";
+        fs::write(source.join("config.toml"), config).unwrap();
+        fs::write(source.join("auth.json"), b"source account credentials").unwrap();
+        fs::create_dir(source.join("sessions")).unwrap();
+        fs::write(source.join("state_5.sqlite"), b"incomplete history").unwrap();
+
+        let mut create = params("CLI config", &target, "cliConfig");
+        create.launch_mode = Some(InstanceLaunchMode::Cli);
+        create.bind_account_id = Some("target-account".into());
+        let profile = create_instance(create).unwrap();
+
+        assert_eq!(profile.bind_account_id.as_deref(), Some("target-account"));
+        assert_eq!(fs::read(target.join("config.toml")).unwrap(), config);
+        assert!(!target.join("auth.json").exists());
+        assert!(!target.join("sessions").exists());
+        assert!(!target.join("state_5.sqlite").exists());
+    }
+
     #[cfg(unix)]
     #[test]
     fn codex_profile_copy_preserves_dangling_vendor_skills_link() {

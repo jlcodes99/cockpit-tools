@@ -1,4 +1,44 @@
 {
+  "antigravityLaunch": {
+    "initializeTitle": "O Antigravity IDE precisa ser inicializado",
+    "initializeThenSwitch": "Abra o IDE uma vez para poder trocar de conta.",
+    "initializeThenBind": "Inicie a instância uma vez para vincular uma conta.",
+    "initializeThenUseAccount": "Inicie a instância uma vez para usar a conta vinculada.",
+    "initializeAction": "Iniciar uma vez",
+    "initializeHint": "O Antigravity IDE precisa ser inicializado. Inicie a instância selecionada uma vez antes de continuar.",
+    "initializeWaiting": "Aguardando a inicialização do Antigravity IDE. Continue manualmente quando estiver pronto.",
+    "initializeRetry": "A inicialização ainda está pendente. Confira se o IDE está aberto e tente novamente.",
+    "pathLabel": "Caminho de inicialização",
+    "pathConfigured": "Configurado",
+    "pathDetected": "Detectado automaticamente",
+    "pathInvalid": "O caminho configurado é inválido",
+    "pathCheckFailed": "Falha ao verificar o caminho",
+    "pathSaveAndRetry": "Salvar e tentar novamente",
+    "switchAndCopy": "Trocar e copiar",
+    "sharedInstanceStart": "Trocar conta compartilhada e iniciar",
+    "sharedInstanceHint": "Outras instâncias do Antigravity ficam abertas e podem adotar a nova conta.",
+    "sharedInstanceRestart": "Apenas a instância selecionada será reiniciada.",
+    "lastSharedAccount": "Última conta compartilhada escolhida",
+    "sharedAccountUnknown": "Nenhuma troca registrada",
+    "sharedInstanceSubtitle": "As instâncias usam pastas separadas e compartilham o login do Google.",
+    "sharedInstanceStarted": "Login compartilhado atualizado. Inicialização solicitada.",
+    "sharedInstanceLaunchFailed": "Login atualizado, mas a instância não iniciou: {{error}}",
+    "sharedCopySource": "Copia a pasta de configuração da instância selecionada.",
+    "quickSwitchSetting": "Aplica-se à troca rápida do Antigravity IDE. No diálogo da conta, você pode escolher se deseja iniciar a cada troca.",
+    "title": "Escolher cliente",
+    "switchOnly": "Só trocar",
+    "switchAndLaunch": "Trocar e iniciar",
+    "homeDirectory": "Pasta pessoal",
+    "invalidDirectory": "Escolha uma pasta existente.",
+    "directoryFailed": "Não foi possível abrir o seletor de pastas. {{error}}",
+    "shared": "Login do Google compartilhado por {{clients}}.",
+    "sharedHint": "Clientes que compartilham o login do Google podem trocar de conta juntos.",
+    "clientOnly": "Este cliente usa um login próprio.",
+    "cliAuth": "O agy segue suas configurações de autenticação. A chave de API ou as credenciais do Google Cloud têm prioridade quando configuradas.",
+    "cliMissing": "O agy não foi encontrado. Instale a Antigravity CLI oficial e tente novamente.",
+    "terminalFailed": "Não foi possível preparar o terminal. {{error}}",
+    "switchedTerminalFailed": "A conta foi trocada, mas o terminal não pôde ser aberto. {{error}}"
+  },
   "pelican": {
     "caseKinds": {
       "mathExact": "Matemática · probabilidade exata",
@@ -654,7 +694,14 @@
       },
       "clear": "Limpar",
       "loginSuccess": "Login bem-sucedido",
-      "switchAccount": "Trocar conta"
+      "switchAccount": "Trocar conta",
+      "tokenFormat": {
+        "summary": "Campos obrigatórios e exemplos (clique para expandir)",
+        "single": "Exemplo único",
+        "singleToken": "Exemplo único (Token)",
+        "singleJson": "Exemplo único (JSON)",
+        "batchJson": "Exemplo em lote (JSON)"
+      }
     },
     "topRightAd": {
       "ariaLabel": "Slot global de anúncio no canto superior direito",
@@ -722,6 +769,7 @@
     }
   },
   "nav": {
+    "workbuddyAi": "WorkBuddy AI",
     "overview": "Antigravity IDE​",
     "accounts": "Contas",
     "wakeup": "Tarefas de despertar",
@@ -786,6 +834,10 @@
     "hiddenBadge": "Oculto",
     "openFromMore": "Gerenciar layout de plataformas",
     "dragHandleLabel": "Arrastar para reordenar",
+    "sortKeyboardInstructions": "Pressione Espaço para iniciar a ordenação, use as setas para mover, pressione Espaço ou Enter para soltar e Esc para cancelar.",
+    "sortPosition": "Posição {{position}} de {{total}}.",
+    "sortPlaced": "Movido para a posição {{position}}.",
+    "sortCancelled": "Ordenação cancelada.",
     "tipWithGroups": "Arraste para reordenar. Até {{max}} entradas podem aparecer na barra lateral. Itens filhos de grupos não têm alternância de barra lateral/painel e são usados apenas para a barra de menus e a plataforma padrão.",
     "addGroup": "Adicionar grupo",
     "editGroup": "Editar grupo",
@@ -819,7 +871,9 @@
     "groupEnabledHint": "Ativar ou desativar todas as plataformas do grupo",
     "disabledHint": "Desativar interrompe as tarefas automáticas e oculta as configurações da plataforma. A visibilidade da entrada é controlada separadamente",
     "enableAll": "Ativar todas",
-    "disableAll": "Desativar todas"
+    "disableAll": "Desativar todas",
+    "confirmResetDesc": "Restaurar o padrão limpará os grupos personalizados e a ordenação. Deseja continuar?",
+    "confirmDeleteGroupDesc": "Excluir o grupo \"{{name}}\"? As plataformas dentro dele voltarão a ser exibidas separadamente."
   },
   "privacy": {
     "hideSensitive": "Ocultar e-mails",
@@ -1150,6 +1204,11 @@
       "submit": "Importar"
     },
     "launchDialog": {
+      "customCommand": "Comando personalizado",
+      "useDefaultCommand": "Comando padrão",
+      "customCommandHint": "Deixe em branco para executar o comando padrão.",
+      "rememberDirectory": "A última pasta de trabalho é lembrada.",
+      "chooseDirectory": "Escolher pasta",
       "title": "Iniciar instância",
       "terminal": "Console",
       "command": "Comando de inicialização",
@@ -1520,10 +1579,9 @@
       "codexEnhancements": {
         "quotaCompat": "Cotas no modo misto",
         "quotaCompatDesc": "As instâncias do serviço API mostram uma cota disponível para exibição e verificações locais do cliente. O uso real no provedor e os limites de imagens não mudam. Esta opção se aplica apenas a outras combinações de OAuth e API externa.",
-        "restartHint": "As previsões nativas ficam desativadas por padrão. Reinicie cada instância Codex afetada após mudanças e mantenha o Cockpit Tools aberto. O ditado nativo depende dos recursos e configurações do cliente; o Cockpit não assume seu controle nem força sua ativação.",
         "configFailed": "Falha ao ler ou salvar configurações: {{error}}",
         "nativePredictions": "Previsões nativas do próximo passo (Tab)",
-        "nativePredictionsDesc": "Gera sugestões para a próxima mensagem com o provedor de API e o modelo da conversa atual. Consome créditos de API adicionais; reinicie o Codex após salvar."
+        "nativePredictionsDesc": "Desativado por padrão. As sugestões usam o provedor de API e o modelo da conversa atual e geram consumo adicional da API. Após alterar esta configuração, reinicie as instâncias afetadas do Codex e mantenha o Cockpit Tools em execução."
       },
       "timeDisplayMode": "Hora exibida",
       "timeDisplayModeDesc": "Hora nos cartões e listas de contas. Por padrão, a hora da troca de conta"
@@ -1871,6 +1929,14 @@
   },
   "appPath": {
     "missing": {
+      "pathLabel": "Caminho de inicialização de {{app}}",
+      "configurePath": "Configurar caminho",
+      "configureHint": "Selecione um executável ou deixe o campo em branco para usar a detecção automática.",
+      "cliHint": "Não foi possível encontrar {{app}}. Selecione o executável ou instale a CLI e detecte novamente.",
+      "invalidPath": "Este caminho não aponta para um executável válido de {{app}}.",
+      "accountAlreadySwitched": "A conta já foi trocada. Apenas a inicialização será tentada novamente.",
+      "saveAndRetry": "Salvar e tentar novamente",
+      "operationCancelled": "Inicialização cancelada.",
       "scanEmpty": "Nenhum aplicativo em execução foi detectado. Abra-o e tente de novo ou escolha o caminho manualmente.",
       "scanEmptyGeneric": "O aplicativo {{app}} não foi detectado em execução. Abra-o e tente de novo ou escolha o caminho manualmente.",
       "title": "Caminho do aplicativo não encontrado",
@@ -2645,11 +2711,13 @@
       "masterLabel": "Usar cartões automaticamente",
       "ruleSource": "Origem da regra",
       "weeklyTrigger": "Limite semanal",
+      "preferUsageCredits": "Créditos primeiro",
       "weeklyRemaining": "Saldo semanal ≤",
       "previewTitle": "Prévia das condições",
       "previewAny": "Um cartão será usado quando qualquer condição ativada for atendida:",
       "previewExpiry": "O cartão vence em até {{value}} {{unit}}",
       "previewWeekly": "Cota semanal restante de {{percent}}% ou menos",
+      "previewWeeklyAfterCredits": "A cota semanal restante é de {{percent}}% ou menos e foi confirmada a indisponibilidade de créditos",
       "previewOff": "O uso automático está desativado. As regras abaixo estão inativas.",
       "previewEmpty": "Nenhuma condição ativada. Os cartões não serão usados automaticamente.",
       "cardOn": "Autom.",
@@ -2763,8 +2831,6 @@
     },
     "launchErrors": {
       "sessionRestoreFailed": "A reparação das sessões falhou e a restauração está incompleta. Inicialização interrompida; verifique os logs e backups antes de tentar novamente.",
-      "sessionCheckTimeout": "A verificação das sessões excedeu o tempo. Inicialização interrompida; tente novamente ou consulte os logs.",
-      "sessionFileTooLarge": "O cabeçalho de um arquivo de sessão é muito grande. Inicialização interrompida; consulte os logs.",
       "bindingFailed": "Não foi possível confirmar a conta vinculada. Inicialização interrompida; tente trocar de conta novamente.",
       "processScanFailed": "Não foi possível verificar os processos anteriores em segundo plano. Inicialização interrompida; tente novamente.",
       "proxyEntryFailed": "Não foi possível iniciar o proxy configurado. Nenhuma rota alternativa foi usada; tente novamente."
@@ -2982,7 +3048,8 @@
       "forceRefreshAction": "Atualizar agora",
       "forceRefreshRunning": "Atualizando Token…",
       "forceRefreshSuccess": "Token atualizado com sucesso",
-      "forceRefreshRetry": "Verificar novamente"
+      "forceRefreshRetry": "Verificar novamente",
+      "advancedMaintenanceTitle": "Manutenção e diagnóstico"
     },
     "switch": "Alternar",
     "switched": "Alternado para {{email}}",
@@ -3974,9 +4041,6 @@
       "repairModal": {
         "historyDuplicateOrdinals": "Os históricos abaixo têm números de sequência duplicados. O reparo do índice os ignora e o reparo completo não pode continuar. Selecione “Reparar índice de chats” para as outras sessões.\n{{details}}",
         "projectsDeferredAction": "Feche a instância e selecione Projetos locais na janela de reparo de sessões.",
-        "projectsStateSize": "Maior arquivo de estado: {{file}} ({{bytes}} bytes).",
-        "projectsQuickBudget": "A verificação rápida de projetos atingiu o limite.",
-        "projectsStateTooLarge": "O arquivo de estado dos projetos excede o tamanho aceito.",
         "projectsStopHint": "Feche as instâncias selecionadas antes de recuperar. Você já pode visualizar as mudanças.",
         "modeProjectsDesc": "Recupera projetos locais e associações de chats. Mantém o histórico das conversas.",
         "modeProjects": "Projetos locais",
@@ -5176,7 +5240,8 @@
         "speedAdjusted": "{{tier}} → Padrão",
         "officialDefaultSpeed": "A rota oficial de assinatura não aceita substituição de velocidade. Esta tentativa foi enviada na velocidade padrão.",
         "sentTier": "Enviado: {{tier}}",
-        "originalTier": "Nível original: {{tier}}"
+        "originalTier": "Nível original: {{tier}}",
+        "moreFilters": "Mais filtros"
       },
       "timeouts": {
         "retryTitle": "Novas tentativas de envio e por conta",
@@ -5936,6 +6001,13 @@
         "nodeCount": "{{count}} nós",
         "updatedAt": "Atualizado: {{time}}",
         "autoUpdate": "Atualizar a cada 6 horas",
+        "dnsOverride": "Sobrescrever DNS",
+        "ipv6": "Ativar IPv6",
+        "dnsServers": "Servidores DNS",
+        "dnsServersHint": "Um endereço por linha. Deixe em branco para usar o Cloudflare DoH.",
+        "networkScope": "Aplica-se às novas conexões de proxy desta origem.",
+        "invalidDnsServer": "Digite um endereço de servidor DNS válido por linha.",
+        "networkSaveFailed": "Não foi possível salvar ou aplicar as configurações de rede. Tente novamente.",
         "snapshotNotice": "Atualizações não alteram configurações vinculadas. Vincule novamente para aplicá-las.",
         "defaultLabel": "Padrão",
         "defaultEmpty": "Não definido",
@@ -6513,7 +6585,8 @@
       "desc": "Clique no botão abaixo e conclua a autorização do GitHub Copilot no navegador."
     },
     "token": {
-      "desc": "Cole seu token de acesso do GitHub Copilot ou dados JSON exportados."
+      "desc": "Cole seu token de acesso do GitHub Copilot ou dados JSON exportados.",
+      "requiredFields": "Campos obrigatórios: no modo Token, cole diretamente um GitHub access token; o modo JSON requer id, github_login, github_id, github_access_token, copilot_token, created_at e last_used."
     },
     "import": {
       "localDesc": "Importe dados de contas do GitHub Copilot do VS Code local ou de um arquivo JSON.",
@@ -6890,7 +6963,8 @@
       "desc": "Clique no botão abaixo e conclua a autorização do Devin no navegador."
     },
     "token": {
-      "desc": "Cole seu token de acesso do Devin ou dados JSON exportados."
+      "desc": "Cole seu token de acesso do Devin ou dados JSON exportados.",
+      "requiredFields": "Campo obrigatório: github_access_token (API Key)"
     },
     "import": {
       "localDesc": "Importe dados de contas do Devin de um arquivo JSON.",
@@ -6994,7 +7068,8 @@
       "startUrlRequired": "Informe uma URL inicial do IAM Identity Center"
     },
     "token": {
-      "desc": "Cole seu token de acesso Kiro ou dados JSON exportados."
+      "desc": "Cole seu token de acesso Kiro ou dados JSON exportados.",
+      "requiredFields": "Campos obrigatórios: para JSON, recomenda-se access_token + refresh_token (accessToken / refreshToken apenas por compatibilidade)."
     },
     "import": {
       "localDesc": "Importe do cliente local ou de JSON. As contas JSON são salvas primeiro; as credenciais e cotas são atualizadas em segundo plano.",
@@ -7614,6 +7689,39 @@
       "detailError": "Erro de check-in"
     }
   },
+  "codebuddyCli": {
+    "launchTitle": "Iniciar CodeBuddy CN",
+    "launchDesktop": "Iniciar aplicativo para desktop",
+    "recheck": "Verificar novamente",
+    "checking": "Procurando o CodeBuddy CLI…",
+    "rememberDirectory": "A última pasta de trabalho fica salva para esta conta.",
+    "installGuide": "Guia oficial de instalação",
+    "launch": "Abrir CLI",
+    "terminalOpened": "Comando enviado. Confira a saída da CLI no terminal.",
+    "account": "Conta",
+    "selectAccount": "Selecionar conta",
+    "chooseDirectory": "Escolher pasta",
+    "homeDirectory": "Pasta pessoal",
+    "instances": "Instâncias da CLI",
+    "newInstance": "Nova instância",
+    "editInstance": "Editar instância",
+    "noInstances": "Nenhuma instância salva.",
+    "removeConfirmation": "Remover esta instância? A configuração e o histórico da CLI continuarão no disco.",
+    "errors": {
+      "cliCheckFailed": "Não foi possível verificar a disponibilidade do CodeBuddy CLI.",
+      "accountMissing": "A conta salva não foi encontrada.",
+      "accountUnreadable": "Não foi possível ler a conta salva.",
+      "credentialMissing": "A conta não tem token de acesso. Autorize-a novamente no CodeBuddy ou no CodeBuddy CN.",
+      "workingDirInvalid": "Escolha uma pasta de trabalho existente.",
+      "nameRequired": "Digite um nome para a instância.",
+      "instanceMissing": "A instância não foi encontrada.",
+      "storageError": "Não foi possível ler ou salvar os dados da instância da CLI.",
+      "cliMissing": "CodeBuddy CLI não encontrada. Instale-a pelo guia oficial.",
+      "launchFailed": "Não foi possível iniciar a CodeBuddy CLI.",
+      "terminalFailed": "Não foi possível abrir o terminal.",
+      "terminalUnsupported": "Escolha um terminal compatível nas configurações gerais. No macOS, use Terminal, iTerm2 ou Ghostty."
+    }
+  },
   "codebuddyCn": {
     "title": "Gerenciamento de contas do CodeBuddy CN",
     "noAccounts": "Nenhuma conta CodeBuddy CN",
@@ -7639,6 +7747,27 @@
     "syncFailed": "Falha na sincronização: {{error}}",
     "syncSuccess": "{{count}} conta(s) sincronizada(s) com WorkBuddy",
     "syncToWorkbuddy": "Sincronizar com WorkBuddy"
+  },
+  "workbuddyAi": {
+    "search": "Buscar contas do WorkBuddy AI",
+    "noAccounts": "Nenhuma conta do WorkBuddy AI",
+    "addAccount": "Adicionar conta do WorkBuddy AI",
+    "oauthDesc": "Abra a página de acesso do WorkBuddy AI no navegador.",
+    "tokenDesc": "Cole um token de acesso do WorkBuddy AI ou um JSON exportado.",
+    "importDesc": "Importe do aplicativo local ou de um arquivo JSON.",
+    "importClient": "Importar do WorkBuddy AI",
+    "flowNotice": {
+      "title": "Sobre as contas do WorkBuddy AI",
+      "desc": "A troca atualiza o arquivo local de acesso e abre a edição internacional.",
+      "permission": "A importação e a troca usam o arquivo de acesso da edição internacional. O aplicativo oficial processa os campos criptografados existentes.",
+      "network": "A autorização, a renovação do token e a consulta de créditos acessam o WorkBuddy AI. O arquivo de acesso e os dados criptográficos ficam no dispositivo."
+    },
+    "oauthFeature": {
+      "title": "Acesso ao WorkBuddy AI",
+      "signIn": "Entre no WorkBuddy AI pelo navegador.",
+      "switch": "Depois de autorizar, troque a conta da edição internacional pela lista.",
+      "credits": "Veja os créditos restantes no cartão da conta."
+    }
   },
   "workbuddy": {
     "desktopEdition": "WorkBuddy (edição chinesa)",
@@ -8479,7 +8608,8 @@
       "deploying": "Buscando modelos…",
       "deploySuccess": "Implantado no Codex: {{count}} modelos",
       "deployFailed": "Falha na implantação: {{error}}",
-      "useKey": "Usar chave"
+      "useKey": "Usar chave",
+      "deleteConfirm": "Excluir a chave salva \"{{name}}\"? Esta ação não pode ser desfeita."
     },
     "prefill": {
       "codexReady": "As configurações do APIKEY.FUN foram preenchidas. Confira-as antes de adicionar ao Codex.",

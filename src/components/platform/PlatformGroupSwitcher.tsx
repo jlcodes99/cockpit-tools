@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 import { PLATFORM_PAGE_MAP, type PlatformId } from '../../types/platform';
 import type { Page } from '../../types/navigation';
 import { renderPlatformIcon } from '../../utils/platformMeta';
-import { setAntigravityRuntimeTargetFromPlatform } from '../../utils/antigravityRuntimeTarget';
 import { isReducedMotionEnabled } from '../../utils/reducedMotion';
 
 export interface PlatformGroupSwitcherOption {
@@ -117,7 +116,6 @@ export function PlatformGroupSwitcher({
       return;
     }
 
-    setAntigravityRuntimeTargetFromPlatform(nextPlatform);
     const targetPage = PLATFORM_PAGE_MAP[nextPlatform];
     window.dispatchEvent(new CustomEvent('app-request-navigate', { detail: targetPage }));
   };

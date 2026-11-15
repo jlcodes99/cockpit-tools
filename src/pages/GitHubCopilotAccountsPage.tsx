@@ -12,7 +12,8 @@ import {
   Database,
   Copy,
   Check,
-  ChevronLeft,
+  ArrowDown,
+  ArrowUp,
   RotateCw,
   CircleAlert,
   LayoutGrid,
@@ -68,7 +69,7 @@ import {
 const GHCP_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.github_copilot.flow_notice_collapsed';
 const GHCP_FILTER_PERSISTENCE_SCOPE = normalizeAccountsOverviewScope('GitHubCopilot');
 const FILTER_TYPES_FIELD = 'filter_types';
-const GHCP_TOKEN_SINGLE_EXAMPLE = `ghu_xxx... 或 github_pat_xxx...`;
+const GHCP_TOKEN_SINGLE_EXAMPLE = `ghu_xxx... / github_pat_xxx...`;
 const GHCP_TOKEN_BATCH_EXAMPLE = `[
   {
     "id": "ghcp_demo_1",
@@ -921,7 +922,7 @@ export function GitHubCopilotAccountsPage() {
             }
             aria-label={t('common.shared.sort.toggleDirection', '切换排序方向')}
           >
-            {sortDirection === 'desc' ? '⬇' : '⬆'}
+            {sortDirection === 'desc' ? <ArrowDown size={15} /> : <ArrowUp size={15} />}
           </button>
         </div>
         <div className="toolbar-right">
@@ -1134,7 +1135,6 @@ export function GitHubCopilotAccountsPage() {
         <div className="modal-overlay">
           <div className="modal-content ghcp-add-modal platform-account-add-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <button className="btn btn-secondary icon-only" onClick={closeAddModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t('githubCopilot.addModal.title', '添加 GitHub Copilot 账号')}</h2>
               <button className="modal-close" onClick={closeAddModal} aria-label={t('common.close', '关闭')}>
                 <X />
@@ -1248,17 +1248,26 @@ export function GitHubCopilotAccountsPage() {
                     {t('githubCopilot.token.desc', '粘贴您的 GitHub Copilot Access Token 或导出的 JSON 数据。')}
                   </p>
                   <details className="token-format-collapse">
-                    <summary className="token-format-collapse-summary">必填字段与示例（点击展开）</summary>
+                    <summary className="token-format-collapse-summary">
+                      {t('common.shared.tokenFormat.summary', '必填字段与示例（点击展开）')}
+                    </summary>
                     <div className="token-format">
                       <p className="token-format-required">
-                        必填字段：Token 模式直接粘贴 GitHub access token；JSON 模式需包含 id、github_login、github_id、github_access_token、copilot_token、created_at、last_used
+                        {t(
+                          'githubCopilot.token.requiredFields',
+                          '必填字段：Token 模式直接粘贴 GitHub access token；JSON 模式需包含 id、github_login、github_id、github_access_token、copilot_token、created_at、last_used',
+                        )}
                       </p>
                       <div className="token-format-group">
-                        <div className="token-format-label">单条示例（Token）</div>
+                        <div className="token-format-label">
+                          {t('common.shared.tokenFormat.singleToken', '单条示例（Token）')}
+                        </div>
                         <pre className="token-format-code">{GHCP_TOKEN_SINGLE_EXAMPLE}</pre>
                       </div>
                       <div className="token-format-group">
-                        <div className="token-format-label">批量示例（JSON）</div>
+                        <div className="token-format-label">
+                          {t('common.shared.tokenFormat.batchJson', '批量示例（JSON）')}
+                        </div>
                         <pre className="token-format-code">{GHCP_TOKEN_BATCH_EXAMPLE}</pre>
                       </div>
                     </div>

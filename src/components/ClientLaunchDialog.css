@@ -1,0 +1,229 @@
+.modal.client-launch-dialog {
+  width: calc(100vw - 32px);
+  max-width: 840px;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  border-color: var(--border-light);
+}
+
+.client-launch-dialog > .modal-header {
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 14px 20px;
+}
+
+.client-launch-dialog .client-launch-heading {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.client-launch-title-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  height: 34px;
+  border-radius: var(--radius-full);
+  color: var(--primary);
+  background: var(--primary-light);
+}
+
+.client-launch-title-icon img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.client-launch-dialog > .modal-body {
+  min-height: 0;
+  padding: 16px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.client-launch-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.client-launch-account > span {
+  flex-shrink: 0;
+}
+
+.client-launch-account > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-launch-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+}
+
+.client-launch-options > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 5px 8px;
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.client-launch-options > button > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-launch-options > button > svg,
+.client-launch-dialog .btn > svg {
+  flex-shrink: 0;
+}
+
+.client-launch-options > button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.client-launch-options > button[aria-pressed='true'] {
+  background: var(--bg-surface);
+  border-color: var(--border);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.client-launch-options > button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.client-launch-dialog > .modal-footer {
+  gap: 6px 8px;
+  flex-wrap: wrap;
+  padding: 11px 20px 13px;
+  background: var(--bg-surface);
+}
+
+.client-launch-dialog .btn {
+  min-height: 34px;
+  padding: 6px 11px;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.client-launch-dialog .btn-secondary {
+  box-shadow: none;
+}
+
+.client-launch-dialog .modal-footer .btn {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.client-launch-dialog .modal-footer .btn-primary {
+  padding-inline: 13px;
+}
+
+.client-launch-dialog :is(button, input):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.client-launch-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 380px) {
+  .client-launch-dialog > :is(.modal-header, .modal-body, .modal-footer) {
+    padding-inline: 14px;
+  }
+}
+
+.client-launch-dialog:focus {
+  outline: none;
+}
+
+.client-launch-text-button {
+  appearance: none;
+  padding: 1px 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.client-launch-text-button:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.client-launch-text-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.client-launch-dialog .client-launch-account {
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+.client-launch-account > span:not(.tier-badge) {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-launch-account > .tier-badge {
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

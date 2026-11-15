@@ -599,6 +599,20 @@
   white-space: nowrap;
 }
 
+.workbuddy-ai-accounts-page .tier-badge:not(.free) {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.workbuddy-credit-breakdown-item > *,
+.workbuddy-credit-group > strong > span,
+.workbuddy-credit-time {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .wb-probe-models-head {
   display: flex;
   align-items: center;
@@ -869,4 +883,29 @@
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.workbuddy-credit-breakdown {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.workbuddy-credit-breakdown-item {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.workbuddy-credit-breakdown-item > strong {
+  color: var(--text-primary);
+}
+
+.workbuddy-credit-entry[data-international] {
+  padding-inline: 0;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--border-light);
+  border-radius: 0;
 }

@@ -1106,7 +1106,10 @@ async fn native_select_route_with_owner_wait(
         .retry_after
         .filter(|wait| !wait.is_zero() && *wait <= max_wait)
     {
-        if matches!(error.code, "no_available_account" | "account_cooling") {
+        if matches!(
+            error.code,
+            "no_available_account" | "account_cooling" | "usage_limit_reached"
+        ) {
             tokio::time::sleep(wait).await;
             return Box::pin(native_select_route_once(host, caller, request, rebuild_available)).await;
         }
@@ -1305,6 +1308,7 @@ async fn native_select_route_once(
         .collect();
     let mut closest_cooldown = None;
     let mut owner_quota_exhausted = false;
+    let mut all_candidates_usage_exhausted = !accounts.is_empty();
     let confirmed_quota_failover;
     {
         let cooldowns = host.cooldowns.lock().map_err(|_| {
@@ -1315,6 +1319,16 @@ async fn native_select_route_once(
                 .is_some_and(|state| state.reason == NATIVE_CONFIRMED_QUOTA)
         });
         accounts.retain(|account| {
+            let snapshot_exhausted = !native_is_reserve_model(&model)
+                && !native_is_chatgpt_plan_account(account)
+                && account_quota_cooldown(account, now_ms())
+                    .is_some_and(|quota| quota.active(now_ms()));
+            let confirmed_exhausted = cooldowns
+                .get(&native_cooldown_key(&account.id, "", true))
+                .is_some_and(|state| {
+                    state.reason == NATIVE_CONFIRMED_QUOTA && state.until > Instant::now()
+                });
+            all_candidates_usage_exhausted &= snapshot_exhausted || confirmed_exhausted;
             let Some((upstream, quota_wait)) = quota_candidates.get(&account.id) else {
                 return false;
             };
@@ -1369,6 +1383,12 @@ async fn native_select_route_once(
         }));
     }
     if accounts.is_empty() {
+        if all_candidates_usage_exhausted
+            && request.preferred_account_id.is_none()
+            && request.capability_fallback_from.is_none()
+        {
+            return Err(native_usage_exhausted_error(closest_cooldown));
+        }
         if request.capability_fallback_from.is_some() {
             return Err(native_error(
                 503,
@@ -1666,6 +1686,19 @@ async fn native_select_route_once(
         }
     }
     Ok(route)
+}
+
+// Keep genuine service/model-scope failures separate from a pool whose
+// compatible credentials are positively known to have exhausted usage.
+fn native_usage_exhausted_error(wait: Option<Duration>) -> native_contract::ServiceError {
+    let message = "All compatible accounts have exhausted their usage quota; wait for quota reset or select an account with available quota";
+    native_error(429, "usage_limit_reached", message)
+        .with_retry_after(wait)
+        .with_error_details(json!({
+            "code":"usage_limit_reached",
+            "type":"usage_limit_error",
+            "message":message
+        }))
 }
 
 async fn native_acquire_selection_guard(

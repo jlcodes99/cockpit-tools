@@ -257,10 +257,11 @@
 }
 
 .instances-list-header {
-  display: flex;
-  justify-content: flex-start; /* 改为靠左 */
+  display: grid;
+  grid-template-columns: 160px 90px minmax(300px, 1fr) 80px 204px;
+  justify-content: stretch;
   align-items: center;
-  min-width: 1024px;
+  min-width: 960px;
   padding: 14px 16px;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
@@ -271,60 +272,29 @@
   gap: 12px; /* 基础间距，保证 Checkbox 和 实例 靠近 */
 }
 
-/* 表头各列固定宽度 */
+/* 表头各列自适应布局 */
+.instances-list-header > div {
+  min-width: 0;
+}
 .instances-list-header > div:nth-child(1) {
   display: none;
 } /* checkbox - 隐藏 */
-.instances-list-header > div:nth-child(2) {
-  width: 160px;
-  flex-shrink: 0;
-  margin-left: 0;
-} /* 实例 - 去除间距 */
-.instances-list-header > div:nth-child(3) {
-  width: 90px;
-  flex-shrink: 0;
-  margin-left: 0;
-} /* 状态 - 紧挨实例 */
-.instances-list-header > div:nth-child(4) {
-  width: 320px;
-  flex-shrink: 0;
-  margin-left: auto;
-} /* 账号 */
-.instances-list-header > div:nth-child(5) {
-  width: 80px;
-  flex-shrink: 0;
-  margin-left: auto;
-} /* PID */
-.instances-list-header > div:nth-child(6) {
-  width: 204px;
-  flex-shrink: 0;
-  margin-left: auto;
-} /* 操作 */
-
-/* 表头各列对齐 - 统一左对齐 */
-.instances-list-header > div:nth-child(2) {
-  text-align: left;
-} /* 实例 */
-.instances-list-header > div:nth-child(3) {
-  text-align: left;
-} /* 状态 */
-.instances-list-header > div:nth-child(4) {
-  text-align: left;
-} /* 账号 */
-.instances-list-header > div:nth-child(5) {
-  text-align: left;
-} /* PID */
+.instances-list-header > div:nth-child(2),
+.instances-list-header > div:nth-child(3),
+.instances-list-header > div:nth-child(4),
+.instances-list-header > div:nth-child(5),
 .instances-list-header > div:nth-child(6) {
   text-align: left;
-} /* 操作 */
+}
 
 /* 列分隔竖线 - 移除，改用间距分隔 */
 
 .instance-item {
-  display: flex;
-  justify-content: flex-start; /* 改为靠左 */
+  display: grid;
+  grid-template-columns: 160px 90px minmax(300px, 1fr) 80px 204px;
+  justify-content: stretch;
   align-items: center;
-  min-width: 1024px;
+  min-width: 960px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-light);
   background: transparent;
@@ -334,35 +304,13 @@
   gap: 12px; /* 基础间距 */
 }
 
-/* 列表项各列固定宽度 */
+/* 列表项各列布局 */
+.instance-item > div {
+  min-width: 0;
+}
 .instance-item > div:nth-child(1) {
   display: none;
 } /* checkbox - 隐藏 */
-.instance-item > div:nth-child(2) {
-  width: 160px;
-  flex-shrink: 0;
-  margin-left: 0;
-} /* 实例 - 去除间距 */
-.instance-item > div:nth-child(3) {
-  width: 90px;
-  flex-shrink: 0;
-  margin-left: 0;
-} /* 状态 - 紧挨实例 */
-.instance-item > div:nth-child(4) {
-  width: 320px;
-  flex-shrink: 0;
-  margin-left: auto;
-} /* 账号 */
-.instance-item > div:nth-child(5) {
-  width: 80px;
-  flex-shrink: 0;
-  margin-left: auto;
-} /* PID */
-.instance-item > div:nth-child(6) {
-  width: 204px;
-  flex-shrink: 0;
-  margin-left: auto;
-} /* 操作 */
 
 /* Sticky action column (match accounts page behavior) */
 .instances-list-header > div:nth-child(6) {
@@ -516,7 +464,7 @@
 .instances-page .instance-launch-mode-badge.cli {
   background: rgba(37, 99, 235, 0.1);
   border-color: rgba(37, 99, 235, 0.2);
-  color: #1d4ed8;
+  color: var(--text-info);
 }
 
 .instances-page .instance-launch-mode-badge.app {
@@ -544,31 +492,31 @@
 
 .instance-status.running {
   background: rgba(34, 197, 94, 0.12);
-  color: var(--success);
+  color: var(--text-positive);
   border-color: rgba(34, 197, 94, 0.25);
 }
 
 .instance-status.restarting {
   background: rgba(245, 158, 11, 0.12);
-  color: var(--warning);
+  color: var(--text-caution);
   border-color: rgba(245, 158, 11, 0.25);
 }
 
 .instance-status.starting {
   background: rgba(59, 130, 246, 0.12);
-  color: #2563eb;
+  color: var(--text-info);
   border-color: rgba(59, 130, 246, 0.25);
 }
 
 .instance-status.ready {
   background: rgba(14, 165, 233, 0.12);
-  color: #0369a1;
+  color: var(--text-info);
   border-color: rgba(14, 165, 233, 0.25);
 }
 
 .instance-status.stopped {
   background: var(--bg-tertiary);
-  color: var(--text-muted);
+  color: var(--text-primary);
   border-color: var(--border);
 }
 
@@ -1389,7 +1337,7 @@
 .instances-page .account-select {
   position: relative;
   width: 100%;
-  min-width: 345px;
+  min-width: 0;
   max-width: 100%;
   display: flex;
   align-items: center;

@@ -11,6 +11,7 @@ mod hub;
 pub(crate) enum SwitchTarget {
     Desktop,
     Ide,
+    Cli,
 }
 
 pub(crate) fn switch(
@@ -58,13 +59,22 @@ pub(crate) fn switch(
         if desktop_running {
             let dir = modules::antigravity_paths::legacy_default_user_data_dir()?;
             let dir = dir.to_string_lossy().into_owned();
-            process::close_antigravity_legacy_instances(std::slice::from_ref(&dir), &dir, 20)?;
+            process::close_antigravity_legacy_instances(
+                std::slice::from_ref(&dir),
+                &dir,
+                20,
+                process::AntigravityCloseMode::Restart,
+            )?;
             desktop_closed = true;
             let _ = antigravity_legacy_instance::update_default_pid(None);
         }
         if ide_running {
             let dir = instance::get_default_user_data_dir()?;
-            process::close_antigravity_instances(&[dir.to_string_lossy().into_owned()], 20)?;
+            process::close_antigravity_instances(
+                &[dir.to_string_lossy().into_owned()],
+                20,
+                process::AntigravityCloseMode::Restart,
+            )?;
             ide_closed = true;
             let _ = instance::update_default_pid(None);
         }
@@ -74,7 +84,12 @@ pub(crate) fn switch(
                 stopped_hubs.push(candidate);
             }
         }
-        antigravity_credential::write_antigravity_desktop_switch_credentials(account)
+        match target {
+            SwitchTarget::Cli => {
+                antigravity_credential::write_antigravity_cli_switch_credentials(account)
+            }
+            _ => antigravity_credential::write_antigravity_desktop_switch_credentials(account),
+        }
     })();
     #[cfg(target_os = "macos")]
     let hub_error = hub::restart(stopped_hubs).err();
@@ -179,6 +194,10 @@ mod tests {
         );
         assert_eq!(
             clients_to_open(SwitchTarget::Ide, false, true, true),
+            (false, false)
+        );
+        assert_eq!(
+            clients_to_open(SwitchTarget::Cli, false, true, true),
             (false, false)
         );
     }

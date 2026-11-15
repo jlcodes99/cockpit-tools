@@ -24,9 +24,23 @@
 }
 
 .account-filter-surface .tag-filter-btn.active {
-  border-color: rgba(59, 130, 246, 0.4);
-  background: linear-gradient(135deg, rgba(191, 219, 254, 0.45), rgba(153, 246, 228, 0.4));
-  color: #0f172a;
+  border-color: color-mix(in srgb, var(--primary) 42%, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--primary) 16%, transparent),
+    color-mix(in srgb, var(--accent) 14%, transparent)
+  );
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .account-filter-surface .tag-filter-btn.active {
+  border-color: color-mix(in srgb, var(--primary) 48%, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--primary) 24%, transparent),
+    color-mix(in srgb, var(--accent) 18%, transparent)
+  );
+  color: var(--text-primary);
 }
 
 .account-filter-surface .tag-filter-panel {

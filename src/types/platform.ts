@@ -21,6 +21,7 @@ export type PlatformId =
   | 'trae_cn'
   | 'trae_solo_cn'
   | 'workbuddy'
+  | 'workbuddy_ai'
   | 'minimaxcode';
 
 export const ALL_PLATFORM_IDS: PlatformId[] = [
@@ -44,6 +45,7 @@ export const ALL_PLATFORM_IDS: PlatformId[] = [
   'trae_cn',
   'trae_solo_cn',
   'workbuddy',
+  'workbuddy_ai',
   'minimaxcode',
 ];
 
@@ -54,7 +56,7 @@ export function isAccountPlatform(platformId: PlatformId): boolean {
   return !ACCOUNTLESS_PLATFORM_IDS.includes(platformId);
 }
 
-export const MENU_HIDDEN_PLATFORM_IDS: PlatformId[] = [];
+export const MENU_HIDDEN_PLATFORM_IDS: PlatformId[] = ['antigravity_ide'];
 
 export const MENU_VISIBLE_PLATFORM_IDS: PlatformId[] = ALL_PLATFORM_IDS.filter(
   (platformId) => !MENU_HIDDEN_PLATFORM_IDS.includes(platformId),
@@ -85,5 +87,6 @@ export const PLATFORM_PAGE_MAP: Record<PlatformId, Page> = {
   trae_cn: 'trae-cn',
   trae_solo_cn: 'trae-solo-cn',
   workbuddy: 'workbuddy',
+  workbuddy_ai: 'workbuddy_ai',
   minimaxcode: 'minimaxcode',
 };

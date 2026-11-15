@@ -445,22 +445,6 @@ fn local_projects_preserve_project_order_ids_and_default_process_context_on_all_
 }
 
 #[test]
-fn local_projects_budget_expires_before_mutation_and_existing_data_stays_available() {
-    let f = Fixture::new();
-    let before = f.state();
-    let result = super::super::with_launch_visibility_budget(std::time::Duration::ZERO, || {
-        scan(f.home(), None)
-    });
-    assert!(result
-        .unwrap_err()
-        .contains("CODEX_SESSION_VISIBILITY_TIMEOUT"));
-    assert_eq!(f.state(), before);
-    assert!(f.project("chat").is_none());
-    f.apply(&f.scan());
-    assert!(!f.scan().changed());
-}
-
-#[test]
 fn quick_projects_use_current_metadata_only_and_keep_precise_backups() {
     let f = Fixture::new();
     f.catalog();
@@ -489,19 +473,16 @@ fn quick_projects_use_current_metadata_only_and_keep_precise_backups() {
 }
 
 #[test]
-fn quick_projects_limits_defer_before_mutation_and_deep_still_repairs_every_thread() {
+fn quick_projects_repair_all_threads_in_large_history() {
     let f = Fixture::new();
     f.db().execute_batch("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<2100)
         INSERT INTO threads SELECT 'many-'||x,cwd,source,thread_source,NULL,has_user_event,first_user_message,archived,model_provider,updated_at FROM n JOIN threads ON id='chat'").unwrap();
     let before = f.state();
-    assert!(scan_for_repair(f.home(), None, true)
-        .unwrap_err()
-        .contains("CODEX_PROJECT_QUICK_LIMIT"));
+    let plan = scan_for_repair(f.home(), None, true).unwrap().unwrap();
+    assert_eq!(plan.counts.assignments, 2102);
     assert_eq!(f.state(), before);
     assert!(f.project("chat").is_none());
-    let full = scan_for_repair(f.home(), None, false).unwrap().unwrap();
-    assert_eq!(full.counts.assignments, 2102);
-    f.apply(&full);
+    f.apply(&plan);
     assert_eq!(f.project("many-2100").as_deref(), Some("server"));
 }
 
@@ -534,6 +515,7 @@ fn integrated_repair(
             data_dir: f.home().to_path_buf(),
             last_pid: None,
         }],
+        false,
     )
 }
 

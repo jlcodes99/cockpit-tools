@@ -415,6 +415,9 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         trae_solo_app_scan_roots: user_config.trae_solo_app_scan_roots,
         trae_cn_app_scan_roots: user_config.trae_cn_app_scan_roots,
         trae_solo_cn_app_scan_roots: user_config.trae_solo_cn_app_scan_roots,
+        workbuddy_ai_app_path: modules::process::normalize_windows_user_facing_path(
+            &user_config.workbuddy_ai_app_path,
+        ),
         workbuddy_app_path: modules::process::normalize_windows_user_facing_path(
             &user_config.workbuddy_app_path,
         ),

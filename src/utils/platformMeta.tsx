@@ -59,6 +59,8 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
       return _t('nav.traeSoloCn', 'TraeWork CN');
     case 'workbuddy':
       return 'WorkBuddy';
+    case 'workbuddy_ai':
+      return _t('nav.workbuddyAi');
     case 'minimaxcode':
       return 'MiniMax Code';
     default:
@@ -107,6 +109,7 @@ export function renderPlatformIcon(platformId: PlatformId, size = 20): ReactNode
     case 'trae_solo_cn':
       return <TraeSoloCnIcon style={{ width: size, height: size }} />;
     case 'workbuddy':
+    case 'workbuddy_ai':
       return <WorkbuddyIcon style={{ width: size, height: size }} />;
     case 'minimaxcode':
       return <MinimaxCodeIcon style={{ width: size, height: size }} />;

@@ -236,6 +236,7 @@ pub struct GeneralConfig {
     pub trae_solo_cn_app_scan_roots: String,
     /// WorkBuddy 启动路径（为空则使用默认路径）
     pub workbuddy_app_path: String,
+    pub workbuddy_ai_app_path: String,
     /// MiniMax Code 启动路径（为空则使用默认路径）
     pub minimax_code_app_path: String,
     /// MiniMax Code 区域

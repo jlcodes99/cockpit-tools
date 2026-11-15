@@ -76,9 +76,25 @@ async fn run_codex_path_validation(
 }
 
 #[tauri::command]
-pub async fn set_app_path(app: String, path: String) -> Result<(), String> {
-    let normalized_path = modules::process::normalize_windows_user_facing_path(&path);
+pub async fn set_app_path(app: String, path: String, validate: Option<bool>) -> Result<(), String> {
+    let normalized_path = modules::process::normalize_windows_user_facing_path(path.trim());
     tauri::async_runtime::spawn_blocking(move || {
+        if app == "workbuddy_ai" && !normalized_path.is_empty()
+            && modules::workbuddy_ai_account::executable_at(std::path::Path::new(&normalized_path)).is_none()
+        {
+            return Err(modules::workbuddy_ai_account::MISSING_APP_PATH.to_string());
+        }
+        if validate.unwrap_or(false) && !normalized_path.is_empty()
+            && !(cfg!(windows) && app == "claude" && normalized_path.starts_with("shell:AppsFolder\\"))
+        {
+            let selected = std::path::Path::new(&normalized_path);
+            let usable = selected.is_file()
+                || cfg!(target_os = "macos") && selected.is_dir()
+                    && selected.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("app"));
+            if !usable {
+                return Err(format!("APP_PATH_NOT_FOUND:{app}"));
+            }
+        }
         config::patch_user_config(move |current| {
             match app.as_str() {
                 "antigravity" | "antigravity_ide" => {
@@ -101,6 +117,7 @@ pub async fn set_app_path(app: String, path: String) -> Result<(), String> {
                 "trae_cn" => current.trae_cn_app_path = normalized_path,
                 "trae_solo_cn" => current.trae_solo_cn_app_path = normalized_path,
                 "workbuddy" => current.workbuddy_app_path = normalized_path,
+                "workbuddy_ai" => current.workbuddy_ai_app_path = normalized_path,
                 "minimaxcode" | "minimax_code" => current.minimax_code_app_path = normalized_path,
                 "opencode" => current.opencode_app_path = normalized_path,
                 _ => return Err("未知应用类型".to_string()),
@@ -167,6 +184,8 @@ pub fn set_codex_local_access_entry_visible(enabled: bool) -> Result<(), String>
 pub fn detect_app_path(app: String, force: Option<bool>) -> Result<Option<String>, String> {
     let force = force.unwrap_or(false);
     match app.as_str() {
+        "workbuddy_ai" => Ok(modules::workbuddy_ai_account::detect_executable()
+            .map(|path| path.to_string_lossy().into_owned())),
         "windsurf" => Ok(modules::windsurf_instance::detect_and_save_windsurf_launch_path(force)),
         "kiro" => Ok(modules::kiro_instance::detect_and_save_kiro_launch_path(
             force,
@@ -180,6 +199,16 @@ pub fn detect_app_path(app: String, force: Option<bool>) -> Result<Option<String
         ),
         _ => Err("未知应用类型".to_string()),
     }
+}
+
+#[tauri::command]
+pub async fn launch_opencode_current() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let config = config::get_user_config();
+        modules::process::start_opencode_with_path(Some(&config.opencode_app_path))
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -230,7 +259,7 @@ pub async fn scan_app_launch_targets(
         "antigravity" | "antigravity_ide" | "antigravity_legacy" | "codex" | "claude"
         | "vscode" | "windsurf" | "kiro" | "cursor" | "codebuddy" | "codebuddy_cn" | "qoder"
         | "zcode" | "trae" | "trae_solo" | "trae_cn" | "trae_solo_cn" | "workbuddy" | "zed"
-        | "opencode" | "minimaxcode" | "minimax_code" => {}
+        | "opencode" | "minimaxcode" | "minimax_code" | "workbuddy_ai" => {}
         _ => return Err("未知应用类型".to_string()),
     }
     let _ = scan_roots;

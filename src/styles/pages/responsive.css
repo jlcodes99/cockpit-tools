@@ -40,10 +40,6 @@
 }
 
 @media (max-width: 640px) {
-  .app-container {
-    padding: 18px;
-  }
-
   .page-heading h1 {
     font-size: 20px;
   }

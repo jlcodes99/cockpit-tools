@@ -130,6 +130,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 18px 24px;
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-secondary);
@@ -160,9 +161,9 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1;
-  padding-right: 16px;
-  min-width: 240px;
+  flex: 1 1 200px;
+  padding-right: 12px;
+  min-width: 0;
 }
 
 .row-title {
@@ -366,6 +367,24 @@
   cursor: not-allowed;
 }
 
+.settings-dropdown {
+  width: auto;
+  min-width: 120px;
+}
+
+.settings-dropdown--compact {
+  min-width: 108px;
+}
+
+.settings-dropdown--compact .single-select-dropdown-trigger {
+  min-width: 108px;
+  font-size: 12px;
+}
+
+.settings-dropdown.settings-menu-bar-quota-modal-select {
+  width: 100%;
+}
+
 .settings-dropdown .single-select-dropdown-trigger {
   min-width: 120px;
   min-height: 34px;
@@ -375,6 +394,23 @@
   font-size: 13px;
   font-weight: 500;
   box-shadow: none;
+}
+
+.settings-dropdown .single-select-dropdown-value {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+@media (max-width: 720px) {
+  .settings-row {
+    flex-wrap: wrap;
+    padding: 14px 16px;
+  }
+
+  .settings-row .row-control {
+    margin-left: auto;
+    max-width: 100%;
+  }
 }
 
 .settings-select--input-mode {

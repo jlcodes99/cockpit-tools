@@ -391,7 +391,7 @@ fn spawn_switch_account(platform: PlatformId, account_id: String) {
     tauri::async_runtime::spawn(async move {
         let status_app = app.clone();
         let _ = match platform {
-            PlatformId::Antigravity => commands::account::switch_account(app, account_id, None)
+            PlatformId::Antigravity => commands::account::switch_account(app, account_id, None, None, None)
                 .await
                 .map(|_| ()),
             PlatformId::Codex
@@ -430,7 +430,7 @@ fn spawn_switch_account(platform: PlatformId, account_id: String) {
                     .map(|_| ())
             }
             PlatformId::CodebuddyCn => {
-                commands::codebuddy_cn::inject_codebuddy_cn_to_vscode(app, account_id)
+                commands::codebuddy_cn::inject_codebuddy_cn_to_vscode(app, account_id, None)
                     .await
                     .map(|_| ())
             }

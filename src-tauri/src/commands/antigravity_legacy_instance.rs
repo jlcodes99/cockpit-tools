@@ -267,6 +267,7 @@ pub async fn antigravity_legacy_start_instance(
             &[default_dir_str.clone()],
             &default_dir_str,
             20,
+            modules::process::AntigravityCloseMode::Restart,
         )?;
         let _ = modules::antigravity_legacy_instance::update_default_pid(None)?;
         if let Some(ref account_id) = default_bind_account_id {
@@ -317,6 +318,7 @@ pub async fn antigravity_legacy_start_instance(
         &[instance.user_data_dir.clone()],
         &default_dir_str,
         20,
+        modules::process::AntigravityCloseMode::Restart,
     )?;
     let _ = modules::antigravity_legacy_instance::update_instance_pid(&instance.id, None)?;
 
@@ -327,6 +329,10 @@ pub async fn antigravity_legacy_start_instance(
     }
 
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);
+    #[cfg(target_os = "macos")]
+    let pid =
+        modules::process::start_managed_antigravity_on_macos(&instance.user_data_dir, &extra_args)?;
+    #[cfg(not(target_os = "macos"))]
     let pid =
         modules::process::start_antigravity_legacy_with_args(&instance.user_data_dir, &extra_args)?;
     let updated =
@@ -357,6 +363,7 @@ pub async fn antigravity_legacy_stop_instance(
             &[default_dir_str.clone()],
             &default_dir_str,
             20,
+            modules::process::AntigravityCloseMode::Stop,
         )?;
         let _ = modules::antigravity_legacy_instance::update_default_pid(None)?;
         let default_bind_account_id = resolve_default_account_id(&default_settings);
@@ -396,6 +403,7 @@ pub async fn antigravity_legacy_stop_instance(
         &[instance.user_data_dir.clone()],
         &default_dir_str,
         20,
+        modules::process::AntigravityCloseMode::Stop,
     )?;
     let updated = modules::antigravity_legacy_instance::update_instance_pid(&instance.id, None)?;
     let initialized = is_profile_initialized(&updated.user_data_dir);
@@ -420,7 +428,12 @@ pub async fn antigravity_legacy_close_all_instances() -> Result<(), String> {
         }
     }
 
-    modules::process::close_antigravity_legacy_instances(&target_dirs, &default_dir_str, 20)?;
+    modules::process::close_antigravity_legacy_instances(
+        &target_dirs,
+        &default_dir_str,
+        20,
+        modules::process::AntigravityCloseMode::Stop,
+    )?;
     let _ = modules::antigravity_legacy_instance::clear_all_pids();
     Ok(())
 }

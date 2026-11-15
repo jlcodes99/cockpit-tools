@@ -47,6 +47,7 @@ const PROVIDER_PAGE_PLATFORM_MAP: Record<string, PlatformId> = {
   trae_solo_cn: 'trae_solo_cn',
   traesolocn: 'trae_solo_cn',
   workbuddy: 'workbuddy',
+  workbuddy_ai: 'workbuddy_ai',
   minimaxcode: 'minimaxcode',
 };
 
