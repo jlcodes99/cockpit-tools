@@ -274,7 +274,8 @@ fn default_sidecar_stream_idle_timeout_ms() -> u64 {
 }
 
 fn default_sidecar_image_stream_open_timeout_ms() -> u64 {
-    60 * 1000
+    // Native image responses may not send headers until generation completes.
+    10 * 60 * 1000
 }
 
 fn default_sidecar_image_stream_idle_timeout_ms() -> u64 {
@@ -1601,6 +1602,26 @@ pub struct CodexInstanceGatewayView {
 mod automatic_policy_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn image_header_timeout_defaults_allow_generation_and_preserve_saved_values() {
+        let defaults = CodexLocalAccessTimeouts::default();
+        let missing: CodexLocalAccessTimeouts = serde_json::from_value(json!({})).unwrap();
+        assert_eq!(defaults.sidecar_image_stream_open_timeout_ms, 600_000);
+        assert_eq!(missing, defaults);
+        assert_eq!(defaults.sidecar_stream_open_timeout_ms, 60_000);
+
+        for saved_ms in [10_000, 60_000, 600_000] {
+            let saved: CodexLocalAccessTimeouts = serde_json::from_value(json!({
+                "sidecarImageStreamOpenTimeoutMs": saved_ms
+            }))
+            .unwrap();
+            assert_eq!(saved.sidecar_image_stream_open_timeout_ms, saved_ms);
+            let restored: CodexLocalAccessTimeouts =
+                serde_json::from_value(serde_json::to_value(saved).unwrap()).unwrap();
+            assert_eq!(restored.sidecar_image_stream_open_timeout_ms, saved_ms);
+        }
+    }
 
     #[test]
     fn session_identity_mapping_defaults_on_and_preserves_saved_opt_out() {

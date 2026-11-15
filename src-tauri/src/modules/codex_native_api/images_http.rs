@@ -527,7 +527,12 @@ impl Execution {
                 #[cfg(test)]
                 super::capture_live_geometry(&built)?;
                 if tokio::time::Instant::now() >= open_deadline {
-                    return Err(ServiceError::new(504,"upstream_connect_timeout","Image upstream response headers timed out"));
+                    return Err(ServiceError::new(
+                        504,
+                        "upstream_connect_timeout",
+                        "Image upstream response headers timed out",
+                    )
+                    .with_upstream_not_sent(true));
                 }
                 self.tracker.begin_attempt("http");
                 self.tracker.payload("upstream_request", "http", built.headers(), &payload.to_string());
@@ -569,6 +574,15 @@ impl Execution {
                     }
                     if tokio::time::Instant::now() >= deadline {
                         return Err(super::super::retry::total_timeout());
+                    }
+                    // Non-streaming generation can finish before sending any headers.
+                    // A header timeout does not prove the POST was rejected; replaying
+                    // it on this or another source could generate a second image.
+                    if !streaming
+                        && error.code == "upstream_connect_timeout"
+                        && !error.upstream_not_sent
+                    {
+                        return Err(error);
                     }
                     let stream_open_timeout = streaming && error.code == "upstream_connect_timeout";
                     if stream_open_timeout {

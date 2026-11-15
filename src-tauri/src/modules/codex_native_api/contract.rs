@@ -100,7 +100,7 @@ impl Default for ExecutionPolicy {
             account_switch_rebuild: true,
             open_timeout: Duration::from_secs(30),
             idle_timeout: Duration::from_secs(180),
-            image_open_timeout: Duration::from_secs(60),
+            image_open_timeout: Duration::from_secs(600),
             image_idle_timeout: Duration::from_secs(180),
             stream_open_max_attempts: 1,
             total_timeout: Duration::ZERO,

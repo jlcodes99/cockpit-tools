@@ -317,6 +317,24 @@ test('timeout drafts and selected presets survive refresh and failed save; reope
   assert.equal(p.read().selectedTimeoutPresetId, 'short_wait'); assert.equal(p.read().timeoutsError, ''); p.h.unmount();
 });
 
+test('image header timeout defaults to ten minutes and preserves a saved shorter wait', async () => {
+  const p = controller();
+  await p.refresh();
+  p.read().openTimeoutSettings();
+  assert.equal(p.read().timeoutDrafts.sidecarImageStreamOpenTimeoutMs, '600');
+  assert.equal(p.read().timeoutDrafts.sidecarStreamOpenTimeoutMs, '60');
+  await p.read().handleSaveTimeouts();
+  assert.equal(p.calls[p.calls.length - 1].args[0].sidecarImageStreamOpenTimeoutMs, 600_000);
+
+  p.change({ timeouts: { sidecarImageStreamOpenTimeoutMs: 60_000 } });
+  await p.refresh();
+  p.read().openTimeoutSettings();
+  assert.equal(p.read().timeoutDrafts.sidecarImageStreamOpenTimeoutMs, '60');
+  await p.read().handleSaveTimeouts();
+  assert.equal(p.calls[p.calls.length - 1].args[0].sidecarImageStreamOpenTimeoutMs, 60_000);
+  p.h.unmount();
+});
+
 test('receive timeout settings preserve legacy connect and millisecond precision on save', async () => {
   const p = controller();
   p.change({ timeouts: {

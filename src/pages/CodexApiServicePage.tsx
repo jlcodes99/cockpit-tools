@@ -479,7 +479,7 @@ function defaultCodexLocalAccessTimeouts(): CodexLocalAccessTimeouts {
     legacyUpstreamConnectTimeoutMs: 60000,
     sidecarStreamOpenTimeoutMs: 60000,
     sidecarStreamIdleTimeoutMs: 120000,
-    sidecarImageStreamOpenTimeoutMs: 60000,
+    sidecarImageStreamOpenTimeoutMs: 600000,
     sidecarImageStreamIdleTimeoutMs: 180000,
     sidecarStreamOpenMaxAttempts: 1,
     sidecarStreamKeepaliveSeconds: 15,
