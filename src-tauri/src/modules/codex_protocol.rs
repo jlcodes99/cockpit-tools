@@ -586,6 +586,114 @@ fn filter_responses_lite_tools_in_object(object: &mut Map<String, Value>) -> boo
     changed
 }
 
+/// The hosted `tool_search` tool is a Codex-client capability. Third-party
+/// Responses APIs reject the tool type itself, so every declaration of it
+/// must be removed before the request reaches such an upstream.
+fn is_client_tool_search(tool: &Value) -> bool {
+    tool.get("type")
+        .and_then(Value::as_str)
+        .is_some_and(|kind| kind.trim().eq_ignore_ascii_case("tool_search"))
+}
+
+fn strip_client_tool_search_array(value: &mut Value) -> bool {
+    let Some(tools) = value.as_array_mut() else {
+        return false;
+    };
+    let before = tools.len();
+    tools.retain(|tool| !is_client_tool_search(tool));
+    tools.len() != before
+}
+
+/// Returns (changed, keep). A choice that only selected the removed tool has
+/// no valid replacement and is dropped with it.
+fn strip_client_tool_search_choice(choice: &mut Value) -> (bool, bool) {
+    if let Some(name) = choice.as_str() {
+        return (false, !name.trim().eq_ignore_ascii_case("tool_search"));
+    }
+    let Some(object) = choice.as_object_mut() else {
+        return (false, false);
+    };
+    let kind = object
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    if kind == "tool_search" {
+        return (true, false);
+    }
+    if kind != "allowed_tools" {
+        return (false, true);
+    }
+    let mut changed = false;
+    for key in ["tools", "allowed_tools"] {
+        if let Some(value) = object.get_mut(key) {
+            changed |= strip_client_tool_search_array(value);
+        }
+    }
+    // An allow-list without any remaining tool is not a valid choice.
+    let empty = ["tools", "allowed_tools"].iter().any(|key| {
+        object
+            .get(*key)
+            .and_then(Value::as_array)
+            .is_some_and(|items| items.is_empty())
+    });
+    (changed, !empty)
+}
+
+/// Remove every client tool-search declaration from a request body. The
+/// history of a completed discovery is dropped with it: the upstream never
+/// learned about those tools, so it cannot have produced them.
+pub(crate) fn strip_client_tool_search(body: &mut Value) -> bool {
+    let mut changed = false;
+    if let Some(tools) = body.get_mut("tools") {
+        changed |= strip_client_tool_search_array(tools);
+    }
+    let remove_choice = body
+        .get_mut("tool_choice")
+        .map(|choice| {
+            let (choice_changed, keep) = strip_client_tool_search_choice(choice);
+            changed |= choice_changed;
+            !keep
+        })
+        .unwrap_or(false);
+    if remove_choice {
+        if let Some(object) = body.as_object_mut() {
+            object.remove("tool_choice");
+        }
+        changed = true;
+    }
+    if let Some(input) = body.get_mut("input").and_then(Value::as_array_mut) {
+        let before = input.len();
+        input.retain_mut(|item| {
+            let kind = item.get("type").and_then(Value::as_str).unwrap_or("");
+            if matches!(kind, "tool_search_call" | "tool_search_output") {
+                changed = true;
+                return false;
+            }
+            if kind == "additional_tools" {
+                if let Some(tools) = item.get_mut("tools") {
+                    changed |= strip_client_tool_search_array(tools);
+                }
+                if item
+                    .get("tools")
+                    .and_then(Value::as_array)
+                    .is_some_and(|tools| tools.is_empty())
+                {
+                    changed = true;
+                    return false;
+                }
+            }
+            true
+        });
+        changed |= input.len() != before;
+    }
+    if let Some(response) = body.get_mut("response").filter(|value| value.is_object()) {
+        changed |= strip_client_tool_search(response);
+    }
+    changed
+}
+
 fn build_codex_client_model(model_id: &str, index: usize) -> Value {
     let visibility = if matches!(
         model_id,
@@ -1941,6 +2049,79 @@ mod tests {
             body.pointer("/response/tool_choice/execution")
                 .and_then(Value::as_str),
             Some("client")
+        );
+    }
+
+    #[test]
+    fn client_tool_search_is_stripped_from_every_declaration_location() {
+        fn kinds(value: &Value) -> Vec<String> {
+            value
+                .get("tools")
+                .and_then(Value::as_array)
+                .map(|tools| {
+                    tools
+                        .iter()
+                        .filter_map(|tool| tool.get("type").and_then(Value::as_str))
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+        let mut body = json!({
+            "model": "k3.1-pro",
+            "input": [
+                {"type": "message", "role": "user", "content": "hi"},
+                {"type": "tool_search_call", "call_id": "call_1", "arguments": "{}"},
+                {"type": "tool_search_output", "call_id": "call_1", "output": "[]"},
+                {
+                    "type": "additional_tools",
+                    "tools": [
+                        {"type": "tool_search", "execution": "client"},
+                        {"type": "function", "name": "extra"}
+                    ]
+                }
+            ],
+            "tools": [
+                {"type": "function", "name": "lookup"},
+                {"type": "tool_search", "execution": "client"},
+                {"type": "web_search"}
+            ],
+            "tool_choice": {"type": "tool_search", "execution": "client"}
+        });
+
+        assert!(strip_client_tool_search(&mut body));
+
+        assert_eq!(kinds(&body), vec!["function", "web_search"]);
+        assert!(body.get("tool_choice").is_none());
+        let input = body.get("input").and_then(Value::as_array).unwrap();
+        assert_eq!(input.len(), 2);
+        assert_eq!(input[1]["type"], "additional_tools");
+        assert_eq!(kinds(&input[1]), vec!["function"]);
+    }
+
+    #[test]
+    fn client_tool_search_strip_keeps_other_tools_and_reports_no_change() {
+        let mut body = json!({
+            "tools": [
+                {"type": "function", "name": "lookup"},
+                {"type": "custom", "name": "apply_patch"}
+            ],
+            "tool_choice": {
+                "type": "allowed_tools",
+                "mode": "auto",
+                "tools": [{"type": "function", "name": "lookup"}]
+            }
+        });
+        assert!(!strip_client_tool_search(&mut body));
+        assert_eq!(
+            body.pointer("/tools").and_then(Value::as_array).map(Vec::len),
+            Some(2)
+        );
+        assert_eq!(
+            body.pointer("/tool_choice/tools")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(1)
         );
     }
 

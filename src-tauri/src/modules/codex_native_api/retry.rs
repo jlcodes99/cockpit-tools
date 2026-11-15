@@ -2,7 +2,7 @@
 use crate::modules::codex_native_api::deadline::{self, Deadline};
 use super::{
     contract::{
-        ExecutionPolicy, OfficialFallbackFailure, ServiceError, WireApi,
+        ExecutionPolicy, OfficialFallbackFailure, Route, ServiceError, WireApi,
         MIXED_MODEL_ROUTING_CALLER_ID,
     },
     events::retry_after_headers,
@@ -86,6 +86,37 @@ fn mixed_provider_responses(prepared: &Prepared) -> bool {
         && prepared.route.wire_api == WireApi::Responses
         && !prepared.route.chatgpt
         && !prepared.route.chatgpt_plan
+}
+
+/// A remote Cockpit gateway negotiates the Codex client tool-search
+/// capability on its own, so its requests keep the hosted tool declaration.
+fn remote_cockpit_upstream(route: &Route) -> bool {
+    let Some(value) = route
+        .headers
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+    else {
+        return false;
+    };
+    let Some(key) = value
+        .strip_prefix("Bearer ")
+        .or_else(|| value.strip_prefix("bearer "))
+    else {
+        return false;
+    };
+    crate::modules::codex_remote_service::is_known(&route.base_url, key.trim())
+}
+
+/// Third-party Responses upstreams have no Codex client tool-search adapter:
+/// their Responses API rejects the hosted `tool_search` tool type. The
+/// official Codex backend, the independent ChatGPT plan grant and Grok keep
+/// their own adapters.
+fn route_rejects_client_tool_search(route: &Route) -> bool {
+    route.wire_api == WireApi::Responses
+        && !route.chatgpt
+        && !route.chatgpt_plan
+        && !super::grok_errors::applies(route)
+        && !remote_cockpit_upstream(route)
 }
 
 async fn send_inner(
@@ -295,6 +326,12 @@ async fn send_inner(
             endpoint.base_url.as_str()
         });
         if path == "responses" && prepared.route.wire_api == WireApi::Responses {
+            if route_rejects_client_tool_search(&prepared.route) {
+                // A stale client catalog can still declare the hosted Codex
+                // tool-search tool. Third-party Responses APIs reject that
+                // tool type, so it never reaches the upstream.
+                crate::modules::codex_protocol::strip_client_tool_search(&mut body);
+            }
             let official_deepseek =
                 crate::modules::codex_account::is_official_deepseek_base_url(base_url);
             if official_deepseek

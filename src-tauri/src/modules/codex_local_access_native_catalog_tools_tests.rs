@@ -113,7 +113,9 @@ fn native_catalog_search_respects_key_account_grants_and_model_prefix() {
     let public = native_model_for_key(&collection, Some(&key), "team/custom-agent").unwrap();
     let plan = native_model_route_plan(&collection, Some(&key), &public).unwrap();
     native_apply_catalog_tool_capabilities(&mut model, &collection, Some(&key), &plan, &accounts);
-    assert_eq!(model["supports_search_tool"], true);
+    // The scoped pool exposes one third-party Responses account. It cannot
+    // serve the hosted client tool-search tool, so the capability is off.
+    assert_eq!(model["supports_search_tool"], false);
     let catalog = native_catalog(&collection, Some(&key), &accounts).unwrap();
     assert_eq!(
         entry(&catalog, "team/custom-agent")["multi_agent_version"],
@@ -153,6 +155,55 @@ fn native_catalog_search_keeps_plan_and_grok_adapters_and_ignores_other_models()
     collection.account_ids = vec!["grok".into()];
     let plan = native_model_route_plan(&collection, None, "custom-agent").unwrap();
     native_apply_catalog_tool_capabilities(&mut model, &collection, None, &plan, &[grok]);
+    assert_eq!(model["supports_search_tool"], true);
+}
+
+#[test]
+fn native_catalog_search_is_disabled_for_third_party_responses_accounts() {
+    let mut collection = collection();
+    collection.account_ids = vec!["responses".into()];
+    let plan = native_model_route_plan(&collection, None, "custom-agent").unwrap();
+    let mut model = json!({"slug":"custom-agent","supports_search_tool":true});
+    // A third-party API-key account speaks Responses without a Codex client
+    // tool-search adapter, so the capability must not be advertised.
+    native_apply_catalog_tool_capabilities(
+        &mut model,
+        &collection,
+        None,
+        &plan,
+        &[account("responses", "responses")],
+    );
+    assert_eq!(model["supports_search_tool"], false);
+    let catalog = native_catalog(&collection, None, &[account("responses", "responses")]).unwrap();
+    assert_eq!(entry(&catalog, "custom-agent")["supports_search_tool"], false);
+    // The same rule applies to a provider gateway that speaks Responses.
+    let gateway = json!({"baseUrl":"https://example.invalid/v1","apiKey":"synthetic","upstreamModel":"custom-agent","upstreamModels":["custom-agent"],"wireApi":"responses","supportsVision":false});
+    let provider:CodexLocalAccessApiKey=serde_json::from_value(json!({"id":"provider","key":"synthetic","label":"provider","inheritAccountPool":false,"accountIds":["responses"],"providerGateway":gateway})).unwrap();
+    let catalog = native_catalog(
+        &collection,
+        Some(&provider),
+        &[account("responses", "responses")],
+    )
+    .unwrap();
+    assert_eq!(entry(&catalog, "custom-agent")["supports_search_tool"], false);
+}
+
+#[test]
+fn native_catalog_search_keeps_the_capability_for_official_responses_accounts() {
+    let mut collection = collection();
+    collection.account_ids = vec!["official".into()];
+    let official = CodexAccount::new(
+        "official".into(),
+        "official@example.invalid".into(),
+        CodexTokens {
+            id_token: "fixture-id".into(),
+            access_token: "fixture-access".into(),
+            refresh_token: None,
+        },
+    );
+    let plan = native_model_route_plan(&collection, None, "gpt-5.6-sol").unwrap();
+    let mut model = json!({"slug":"gpt-5.6-sol","supports_search_tool":true});
+    native_apply_catalog_tool_capabilities(&mut model, &collection, None, &plan, &[official]);
     assert_eq!(model["supports_search_tool"], true);
 }
 
