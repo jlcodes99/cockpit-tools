@@ -213,6 +213,14 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     apiKeyUrl: "https://www.runcrate.ai/dashboard/api-keys",
   },
   {
+    id: "requesty",
+    name: "Requesty",
+    baseUrls: ["https://router.requesty.ai/v1"],
+    modelCatalog: ["openai/gpt-6.1-terra", "openai/gpt-5.4"],
+    website: "https://www.requesty.ai/",
+    apiKeyUrl: "https://app.requesty.ai/api-keys",
+  },
+  {
     id: "aicodemirror",
     name: "AICodeMirror",
     baseUrls: [

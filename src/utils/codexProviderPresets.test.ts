@@ -77,6 +77,16 @@ test("UberLLM and Runcrate use their documented native Responses endpoints", () 
   }
 });
 
+test("Requesty preset uses its native Responses endpoint directly", () => {
+  const preset = findCodexApiProviderPresetByBaseUrl("https://router.requesty.ai/v1/");
+  assert.equal(preset?.id, "requesty");
+  assert.ok(preset.modelCatalog?.includes("openai/gpt-6.1-terra"));
+  const profile = resolveCodexProviderCapabilityProfile({ baseUrl: preset.baseUrls[0] });
+  assert.equal(profile.wireApi, "responses");
+  assert.equal(profile.supportsDirect, true);
+  assert.equal(profile.requiresGateway, false);
+});
+
 test("DeepSeek keeps its native Responses default", () => {
   const profile = resolveCodexProviderCapabilityProfile({
     presetId: "deepseek",
