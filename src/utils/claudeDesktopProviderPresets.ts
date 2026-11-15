@@ -743,6 +743,21 @@ export const CLAUDE_DESKTOP_GATEWAY_PROVIDER_PRESETS: readonly ClaudeDesktopGate
     modelMappings: repeatedMappedRoute('deepseek-ai/DeepSeek-V4.1-Flash'),
   },
   {
+    id: 'requesty',
+    name: 'Requesty',
+    baseUrls: ['https://router.requesty.ai'],
+    authScheme: 'bearer',
+    connectionMode: 'local_mapping',
+    website: 'https://www.requesty.ai',
+    apiKeyUrl: 'https://app.requesty.ai/api-keys',
+    modelMappings: roleMappedRoutes(
+      'anthropic/claude-sonnet-5-5',
+      'anthropic/claude-opus-5-5',
+      'anthropic/claude-haiku-5-5',
+      { supports1m: true },
+    ),
+  },
+  {
     id: 'pipellm',
     name: 'PIPELLM',
     baseUrls: ['https://cc-api.pipellm.ai'],

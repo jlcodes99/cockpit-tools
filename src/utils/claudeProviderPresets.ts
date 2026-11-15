@@ -496,6 +496,17 @@ const CC_SWITCH_DIRECT_CLAUDE_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset
     }),
   }),
   createClaudeApiProviderPreset({
+    id: 'requesty',
+    name: 'Requesty',
+    baseUrl: 'https://router.requesty.ai',
+    website: 'https://www.requesty.ai',
+    apiKeyUrl: 'https://app.requesty.ai/api-keys',
+    extraEnv: modelEnv('anthropic/claude-sonnet-5-5', {
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'anthropic/claude-haiku-5-5',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'anthropic/claude-opus-5-5',
+    }),
+  }),
+  createClaudeApiProviderPreset({
     id: 'pipellm',
     name: 'PIPELLM',
     baseUrl: 'https://cc-api.pipellm.ai',
