@@ -5,6 +5,8 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { deferred, loadHookModule, settlePromises } from '../../tests/helpers/reactHookHarness';
 import { parseModelRuleText } from '../utils/codexApiKeyModelRules';
+import { parseModelAliasText, serializeModelAliases } from '../utils/codexServiceModelAliases';
+import { formatPriceDraftValue } from '../utils/codexModelPricingDraft';
 import { isCodexLaunchUnconfirmed } from '../utils/codexLaunchConfirmation';
 import { parseContextWindowDrafts } from '../utils/codexModelContextWindows';
 import { isCodexAgentIdentityAccount, isCodexApiKeyAccount, isCodexPendingOAuthAccount, isCodexWebSessionAccount } from '../types/codex';
@@ -59,7 +61,7 @@ function controller() {
   const navigation = loadHookModule(new URL('../hooks/useCodexTimeoutSettingsNavigation.ts', import.meta.url), { react: h.hooks });
   let server: any = { collection: {
     port: 8317, upstreamProxyUrl: 'http://saved.invalid', apiKeys: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
-    modelAliases: [], excludedModels: [], accountModelRules: [{ accountId: 'account', excludedModels: ['old'] }],
+    modelAliases: [{ sourceModel: 'source-model', alias: 'alias', fork: false }], excludedModels: [], accountModelRules: [{ accountId: 'account', excludedModels: ['old'] }],
     sessionAffinityTtlMs: 3600000, maxRetryCredentials: 1, timeouts: {}, activeTimeoutPresetId: 'long_wait', timeoutPresets: [],
   } };
   let failure = false;
@@ -101,7 +103,10 @@ function controller() {
     },
     modelPricingRows: [{ modelId: 'model', inputUsdPerMillion: 1, outputUsdPerMillion: 2, hasPreset: false, custom: false }],
     updateModelPricingDraft: (draft: object, field: string, value: string) => ({ ...draft, [field]: value }),
+    formatPriceDraftValue,
     parseModelRuleText,
+    parseModelAliasText,
+    serializeModelAliases,
     isCodexLaunchUnconfirmed, fetchCurrentAccount: async () => {}, refreshApiServiceCurrent: async () => {},
     statsTimeRange: { startAt: 20, endAt: 30 }, sampledStatsRevision: 0,
     window: {

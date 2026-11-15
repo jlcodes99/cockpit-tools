@@ -109,6 +109,8 @@ test('reads details from the top level of the real credit/details body', () => {
 test('lands each credit type in a labelled group instead of 其他', () => {
   // Regression: bare 'free'/'purchased' codes fell through to the `其他` group,
   // so the quota card showed one ugly "其他" row.
+  // getQuotaCategoryGroups buckets by category key with i18n labels
+  // (common.shared.quotaCategories.*); echo the key so labels stay assertable.
   const groups = getMiniMaxCodeQuotaGroups(
     account({
       base_resp: { status_code: 0 },
@@ -118,13 +120,13 @@ test('lands each credit type in a labelled group instead of 其他', () => {
       ],
       total_count: 2,
     }),
-    (_key, defaultValue) => defaultValue ?? '',
+    (key) => key,
   );
 
-  const labels = groups.filter((group) => group.visible).map((group) => group.label);
-  assert.ok(labels.includes('活动赠送包'), `expected 活动赠送包, got ${JSON.stringify(labels)}`);
-  assert.ok(labels.includes('加量包'), `expected 加量包, got ${JSON.stringify(labels)}`);
-  assert.ok(!labels.includes('其他'), `其他 should be empty, got ${JSON.stringify(labels)}`);
+  const visibleKeys = groups.filter((group) => group.visible).map((group) => group.key);
+  assert.ok(visibleKeys.includes('activity'), `expected activity group, got ${JSON.stringify(visibleKeys)}`);
+  assert.ok(visibleKeys.includes('extra'), `expected extra group, got ${JSON.stringify(visibleKeys)}`);
+  assert.ok(!visibleKeys.includes('other'), `other should be empty, got ${JSON.stringify(visibleKeys)}`);
 });
 
 test('drops detail rows the official client would discard', () => {
