@@ -21,8 +21,18 @@ const CONFIG_FILE: &str = "config.json";
 const SETTINGS_FILE: &str = "setting.json";
 const DEVICE_MID_FILE: &str = "zcode_device_mid";
 const CREDENTIAL_PREFIX: &str = "enc:v1:";
-// 与当前官方 ZCode 3.16.3 保持一致；安装路径可读取时优先使用实际版本。
-const DEFAULT_APP_VERSION: &str = "3.16.3";
+// ZCode 3.18+ 的 v2 凭据密文：enc:v2:{来源}:{密钥指纹}:{iv}.{tag}.{密文}。
+const CREDENTIAL_V2_PREFIX: &str = "enc:v2:";
+// 与官方 ZCode 3.18.2 一致：v2 随机密钥保存在系统凭据库（Windows Credential Manager、
+// macOS Keychain），条目按凭据文件路径哈希寻址；同目录 credential-secret 文件是 Linux
+// 无 Secret Service 时的文件密钥回退。
+const CREDENTIAL_V2_SYSTEM_SERVICE: &str = "ZCode Credential Encryption";
+const CREDENTIAL_V2_PRIVATE_KEY_FILE: &str = "credential-secret";
+const CREDENTIAL_V2_SOURCE_OS: &str = "os";
+const CREDENTIAL_V2_SOURCE_ENV: &str = "env";
+const CREDENTIAL_V2_KEY_FINGERPRINT_LEN: usize = 24;
+// 与当前官方 ZCode 3.18.2 保持一致；安装路径可读取时优先使用实际版本。
+const DEFAULT_APP_VERSION: &str = "3.18.2";
 const BILLING_BALANCE_URL: &str = "https://zcode.z.ai/api/v1/zcode-plan/billing/balance";
 const ACTIVE_PROVIDER_KEY: &str = "oauth:active_provider";
 const ZCODE_JWT_KEY: &str = "zcodejwttoken";
@@ -350,31 +360,189 @@ fn decode_component(value: &str) -> Result<Vec<u8>, String> {
         .map_err(|error| format!("解析 ZCode 凭据密文失败: {}", error))
 }
 
+fn sha256_hex_lower(value: &[u8]) -> String {
+    Sha256::digest(value)
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect()
+}
+
+fn aes_gcm_decrypt(
+    nonce: &[u8],
+    tag: &[u8],
+    encrypted: &[u8],
+    key: &[u8; 32],
+) -> Result<String, String> {
+    if nonce.len() != 12 || tag.len() != 16 {
+        return Err("ZCode 凭据密文参数无效".to_string());
+    }
+    let mut payload = encrypted.to_vec();
+    payload.extend_from_slice(tag);
+    let cipher =
+        Aes256Gcm::new_from_slice(key).map_err(|_| "初始化 ZCode 凭据解密器失败".to_string())?;
+    let plain = cipher
+        .decrypt(Nonce::from_slice(nonce), payload.as_ref())
+        .map_err(|_| "ZCode 凭据解密失败，密钥与写入环境不一致".to_string())?;
+    String::from_utf8(plain).map_err(|error| format!("ZCode 凭据不是有效 UTF-8: {}", error))
+}
+
+/// 解密 `enc:v1:` 密文（ZCode 3.16 及更早格式）；非密文原样返回。
 pub fn decrypt_credential(value: &str, home_dir: &Path) -> Result<String, String> {
     decrypt_credential_with_key(value, &credential_key(home_dir))
 }
 
 fn decrypt_credential_with_key(value: &str, key: &[u8; 32]) -> Result<String, String> {
     if !value.starts_with(CREDENTIAL_PREFIX) {
+        if value.starts_with("enc:") {
+            return Err("ZCode 凭据密文格式无效: 不支持的密文版本".to_string());
+        }
         return Ok(value.to_string());
     }
-    let parts: Vec<&str> = value[CREDENTIAL_PREFIX.len()..].split('.').collect();
-    if parts.len() != 3 {
+    let segments: Vec<&str> = value[CREDENTIAL_PREFIX.len()..].split('.').collect();
+    if segments.len() != 3 {
         return Err("ZCode 凭据密文格式无效".to_string());
     }
-    let nonce = decode_component(parts[0])?;
-    let tag = decode_component(parts[1])?;
-    let mut encrypted = decode_component(parts[2])?;
-    if nonce.len() != 12 || tag.len() != 16 {
-        return Err("ZCode 凭据密文参数无效".to_string());
+    let nonce = decode_component(segments[0])?;
+    let tag = decode_component(segments[1])?;
+    let encrypted = decode_component(segments[2])?;
+    aes_gcm_decrypt(&nonce, &tag, &encrypted, key)
+}
+
+/// 系统凭据库条目按凭据文件路径哈希寻址；路径字符串必须与官方 Node resolve()
+/// 的输出一致（Windows 统一反斜杠分隔符）。
+fn system_keyring_account_path(path: &Path) -> String {
+    let text = path.to_string_lossy();
+    #[cfg(target_os = "windows")]
+    {
+        text.replace('/', "\\")
     }
-    encrypted.extend_from_slice(&tag);
-    let cipher =
-        Aes256Gcm::new_from_slice(key).map_err(|_| "初始化 ZCode 凭据解密器失败".to_string())?;
-    let plain = cipher
-        .decrypt(Nonce::from_slice(&nonce), encrypted.as_ref())
-        .map_err(|_| "ZCode 凭据解密失败，当前用户或 HOME 与写入环境不一致".to_string())?;
-    String::from_utf8(plain).map_err(|error| format!("ZCode 凭据不是有效 UTF-8: {}", error))
+    #[cfg(not(target_os = "windows"))]
+    {
+        text.into_owned()
+    }
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn v2_system_key(path: &Path) -> Result<[u8; 32], String> {
+    let account = sha256_hex_lower(system_keyring_account_path(path).as_bytes());
+    let entry = keyring::Entry::new(CREDENTIAL_V2_SYSTEM_SERVICE, &account)
+        .map_err(|_| "系统凭据库不可用，无法读取 ZCode v2 凭据密钥".to_string())?;
+    let encoded = match entry.get_password() {
+        Ok(value) => value,
+        Err(keyring::Error::NoEntry) => {
+            return Err("系统凭据库缺少 ZCode v2 凭据密钥条目".to_string())
+        }
+        Err(_) => return Err("读取系统凭据库失败，请解锁系统凭据库后重试".to_string()),
+    };
+    let key = decode_component(encoded.trim())?;
+    if key.len() != 32 {
+        return Err("系统凭据库中的 ZCode v2 密钥长度无效".to_string());
+    }
+    let mut bytes = [0u8; 32];
+    bytes.copy_from_slice(&key);
+    Ok(bytes)
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn v2_system_key(_path: &Path) -> Result<[u8; 32], String> {
+    Err("当前平台暂不支持读取 ZCode v2 系统凭据库密钥".to_string())
+}
+
+/// 与官方 resolveManagedSecret 对齐：显式环境密钥优先（且禁止与密钥文件并用），
+/// 其次是显式或默认发现的同目录 credential-secret 文件（32–4096 字节）。
+fn v2_managed_secret(path: &Path, discover_default: bool) -> Result<Option<String>, String> {
+    let env_secret = std::env::var("ZCODE_CREDENTIAL_SECRET")
+        .ok()
+        .filter(|value| !value.is_empty());
+    let env_secret_file = std::env::var("ZCODE_CREDENTIAL_SECRET_FILE")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    if env_secret.is_some() && env_secret_file.is_some() {
+        return Err(
+            "ZCode 凭据密钥来源冲突: 不能同时配置 ZCODE_CREDENTIAL_SECRET 与 ZCODE_CREDENTIAL_SECRET_FILE"
+                .to_string(),
+        );
+    }
+    if let Some(secret) = env_secret {
+        return Ok(Some(secret));
+    }
+    let secret_path = match env_secret_file.as_deref() {
+        Some(text) => Some(PathBuf::from(text)),
+        None if discover_default => path
+            .parent()
+            .map(|parent| parent.join(CREDENTIAL_V2_PRIVATE_KEY_FILE)),
+        None => None,
+    };
+    let Some(secret_path) = secret_path else {
+        return Ok(None);
+    };
+    if !secret_path.is_file() {
+        if secret_path.exists() || env_secret_file.is_some() {
+            return Err("ZCode 凭据密钥文件不可读".to_string());
+        }
+        return Ok(None);
+    }
+    #[cfg(unix)]
+    if env_secret_file.is_none() {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = fs::metadata(&secret_path)
+            .map(|metadata| metadata.permissions().mode())
+            .unwrap_or(0o777);
+        if mode & 0o077 != 0 {
+            return Err("ZCode credential-secret 文件权限过宽，拒绝读取".to_string());
+        }
+    }
+    let value = fs::read_to_string(&secret_path)
+        .map_err(|_| "读取 ZCode credential-secret 文件失败".to_string())?;
+    let length = value.as_bytes().len();
+    if !(32..=4096).contains(&length) {
+        return Err("ZCode credential-secret 文件长度必须在 32–4096 字节之间".to_string());
+    }
+    Ok(Some(value))
+}
+
+fn v2_key_fingerprint(key: &[u8; 32]) -> String {
+    sha256_hex_lower(key)[..CREDENTIAL_V2_KEY_FINGERPRINT_LEN].to_string()
+}
+
+fn v2_decrypt_payload(payload: &str, key: &[u8; 32]) -> Result<String, String> {
+    let segments: Vec<&str> = payload.split('.').collect();
+    if segments.len() != 3 {
+        return Err("ZCode v2 凭据密文格式无效".to_string());
+    }
+    let nonce = decode_component(segments[0])?;
+    let tag = decode_component(segments[1])?;
+    let encrypted = decode_component(segments[2])?;
+    aes_gcm_decrypt(&nonce, &tag, &encrypted, key)
+}
+
+/// 解密 ZCode 3.18+ 的 `enc:v2:` 凭据密文。`path` 是凭据文件路径，用于在系统
+/// 凭据库中定位 os 来源的密钥条目。
+pub fn decrypt_credential_v2(value: &str, path: &Path) -> Result<String, String> {
+    let parts: Vec<&str> = value[CREDENTIAL_V2_PREFIX.len()..].split(':').collect();
+    if parts.len() != 3 || parts.iter().any(|part| part.is_empty()) {
+        return Err("ZCode v2 凭据密文格式无效".to_string());
+    }
+    let (source, fingerprint, payload) = (parts[0], parts[1], parts[2]);
+    if fingerprint.len() != CREDENTIAL_V2_KEY_FINGERPRINT_LEN
+        || !fingerprint.chars().all(|ch| ch.is_ascii_hexdigit())
+    {
+        return Err("ZCode v2 凭据密钥指纹无效".to_string());
+    }
+    let key = match source {
+        CREDENTIAL_V2_SOURCE_OS => v2_system_key(path)?,
+        CREDENTIAL_V2_SOURCE_ENV => {
+            let secret = v2_managed_secret(path, true)?.ok_or_else(|| {
+                "ZCode v2 凭据缺少 env 密钥来源（未配置 ZCODE_CREDENTIAL_SECRET）".to_string()
+            })?;
+            Sha256::digest(secret.as_bytes()).into()
+        }
+        other => return Err(format!("不支持的 ZCode v2 凭据密钥来源: {}", other)),
+    };
+    if v2_key_fingerprint(&key) != fingerprint {
+        return Err("ZCode v2 凭据密钥指纹不匹配，密钥可能已更换".to_string());
+    }
+    v2_decrypt_payload(payload, &key)
 }
 
 pub fn encrypt_credential(value: &str, home_dir: &Path) -> Result<String, String> {
@@ -473,12 +641,19 @@ pub(super) fn settings_path_for_instance_root(root: &Path) -> PathBuf {
 fn decrypted_value(
     values: &Map<String, Value>,
     name: &str,
+    credentials_path: &Path,
     home: &Path,
 ) -> Result<Option<String>, String> {
     values
         .get(name)
         .and_then(Value::as_str)
-        .map(|value| decrypt_credential(value, home))
+        .map(|value| {
+            if value.starts_with(CREDENTIAL_V2_PREFIX) {
+                decrypt_credential_v2(value, credentials_path)
+            } else {
+                decrypt_credential(value, home)
+            }
+        })
         .transpose()
 }
 
@@ -498,16 +673,32 @@ fn account_from_credentials_path_with_home(
     home: &Path,
 ) -> Result<ZcodeAccount, String> {
     let values = read_json_map(path)?;
-    let provider = decrypted_value(&values, ACTIVE_PROVIDER_KEY, home)?
+    account_from_credential_map(&values, path, home)
+}
+
+/// 从已解析的 ZCode credentials.json 键值对构建账号。`credentials_path` 是凭据
+/// 文件路径，v2 os 来源密钥在系统凭据库中按该路径寻址。
+fn account_from_credential_map(
+    values: &Map<String, Value>,
+    credentials_path: &Path,
+    home: &Path,
+) -> Result<ZcodeAccount, String> {
+    let provider = decrypted_value(values, ACTIVE_PROVIDER_KEY, credentials_path, home)?
         .ok_or_else(|| "ZCode 本地凭据缺少 active provider".to_string())?;
     let provider = normalize_provider(&provider)?;
-    let access_token = decrypted_value(&values, &format!("oauth:{}:access_token", provider), home)?
-        .ok_or_else(|| "ZCode 本地凭据缺少 access token".to_string())?;
-    let refresh_token =
-        decrypted_value(&values, &format!("oauth:{}:refresh_token", provider), home)?;
-    let zcode_jwt_token = decrypted_value(&values, ZCODE_JWT_KEY, home)?
+    let access_token =
+        decrypted_value(values, &format!("oauth:{}:access_token", provider), credentials_path, home)?
+            .ok_or_else(|| "ZCode 本地凭据缺少 access token".to_string())?;
+    let refresh_token = decrypted_value(
+        values,
+        &format!("oauth:{}:refresh_token", provider),
+        credentials_path,
+        home,
+    )?;
+    let zcode_jwt_token = decrypted_value(values, ZCODE_JWT_KEY, credentials_path, home)?
         .ok_or_else(|| "ZCode 本地凭据缺少 zcode JWT".to_string())?;
-    let user_info_text = decrypted_value(&values, &format!("oauth:{}:user_info", provider), home)?;
+    let user_info_text =
+        decrypted_value(values, &format!("oauth:{}:user_info", provider), credentials_path, home)?;
     let user_info = user_info_text
         .as_deref()
         .and_then(|value| serde_json::from_str::<Value>(value).ok())
@@ -628,34 +819,46 @@ fn api_key_from_provider_config(root: &Map<String, Value>, provider: &str) -> Op
         .and_then(|value| normalize_string(Some(value)))
 }
 
-fn api_key_accounts_from_config(path: &Path) -> Result<Vec<ZcodeAccount>, String> {
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let root = read_json_map(path)?;
+fn api_key_accounts_from_values(root: &Map<String, Value>) -> Result<Vec<ZcodeAccount>, String> {
     ["zai", "bigmodel"]
         .into_iter()
         .filter_map(|provider| {
-            api_key_from_provider_config(&root, provider)
+            api_key_from_provider_config(root, provider)
                 .map(|api_key| api_key_account(provider, &api_key, None))
         })
         .collect()
 }
 
+fn api_key_accounts_from_config(path: &Path) -> Result<Vec<ZcodeAccount>, String> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let root = read_json_map(path)?;
+    api_key_accounts_from_values(&root)
+}
+
 pub async fn import_from_local() -> Result<Vec<ZcodeAccount>, String> {
     let mut imported = Vec::new();
+    let mut oauth_error: Option<String> = None;
     let credentials_path = default_credentials_path()?;
     if credentials_path.exists() {
-        if let Ok(account) = account_from_credentials_path(&credentials_path) {
-            let account = upsert_account(account)?;
-            imported.push(refresh_account_quota(&account.id).await.unwrap_or(account));
+        match account_from_credentials_path(&credentials_path) {
+            Ok(account) => {
+                let account = upsert_account(account)?;
+                imported.push(refresh_account_quota(&account.id).await.unwrap_or(account));
+            }
+            Err(error) => oauth_error = Some(error),
         }
     }
     for account in api_key_accounts_from_config(&default_config_path()?)? {
         imported.push(upsert_account(account)?);
     }
     if imported.is_empty() {
-        return Err("未找到可导入的 ZCode OAuth 凭据或 API Key".to_string());
+        // 显式暴露凭据解析失败原因（如 v2 密钥不可用），避免问题被静默吞掉。
+        return Err(match oauth_error {
+            Some(error) => format!("未找到可导入的 ZCode OAuth 凭据或 API Key: {}", error),
+            None => "未找到可导入的 ZCode OAuth 凭据或 API Key".to_string(),
+        });
     }
     Ok(imported)
 }
@@ -1241,16 +1444,41 @@ pub fn export_accounts(account_ids: &[String]) -> Result<String, String> {
     serialize_accounts_for_export(list_accounts_checked()?, account_ids)
 }
 
+/// ZCode 官方 credentials.json 的特征键：oauth:*、zcodejwttoken、oauth:active_provider。
+fn looks_like_zcode_credential_container(object: &Map<String, Value>) -> bool {
+    object.contains_key(ZCODE_JWT_KEY)
+        || object.contains_key(ACTIVE_PROVIDER_KEY)
+        || object.keys().any(|key| key.starts_with("oauth:"))
+}
+
 fn parse_import_accounts(content: &str) -> Result<Vec<ZcodeAccount>, String> {
     let root: Value =
         serde_json::from_str(content).map_err(|error| format!("JSON 解析失败: {}", error))?;
     let items: Vec<Value> = match root {
         Value::Array(items) => items,
-        Value::Object(object) => object
-            .get("accounts")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_else(|| vec![Value::Object(object)]),
+        Value::Object(object) => {
+            if let Some(accounts) = object.get("accounts").and_then(Value::as_array) {
+                accounts.clone()
+            } else if looks_like_zcode_credential_container(&object) {
+                // 官方 credentials.json（3.16 旧版 enc:v1 或 3.18+ enc:v2）。
+                let home = dirs::home_dir().ok_or_else(|| "无法获取用户主目录".to_string())?;
+                // v2 os 来源密钥按凭据文件路径在系统凭据库寻址；纯内容导入时唯一能
+                // 推断的就是默认安装路径，覆盖最常见的“选择本机凭据文件”场景。
+                let credentials_path = default_credentials_path()?;
+                let mut account = account_from_credential_map(&object, &credentials_path, &home)?;
+                account.id.clear();
+                return Ok(vec![account]);
+            } else if object.get("provider").is_some_and(Value::is_object) {
+                // 官方 config.json：提取内置 provider 的 API Key。
+                let accounts = api_key_accounts_from_values(&object)?;
+                if accounts.is_empty() {
+                    return Err("ZCode config.json 中未找到可导入的 API Key".to_string());
+                }
+                return Ok(accounts);
+            } else {
+                vec![Value::Object(object)]
+            }
+        }
         _ => return Err("ZCode 导入数据必须是对象或数组".to_string()),
     };
     let mut imported = Vec::new();
@@ -1344,6 +1572,90 @@ mod tests {
         assert_eq!(
             decrypt_credential(&encrypted, home).unwrap(),
             "secret-value"
+        );
+    }
+
+    fn seal_v2_payload(value: &str, key: &[u8; 32]) -> String {
+        use aes_gcm::aead::Aead;
+        let mut nonce = [0u8; 12];
+        rand::thread_rng().fill_bytes(&mut nonce);
+        let cipher = Aes256Gcm::new_from_slice(key).unwrap();
+        let encrypted = cipher.encrypt(Nonce::from_slice(&nonce), value.as_bytes()).unwrap();
+        let tag = encrypted[encrypted.len() - 16..].to_vec();
+        let body = &encrypted[..encrypted.len() - 16];
+        [
+            URL_SAFE_NO_PAD.encode(nonce),
+            URL_SAFE_NO_PAD.encode(tag),
+            URL_SAFE_NO_PAD.encode(body),
+        ]
+        .join(".")
+    }
+
+    fn v2_env_ciphertext(value: &str, secret: &str, fingerprint: Option<String>) -> String {
+        let key: [u8; 32] = Sha256::digest(secret.as_bytes()).into();
+        let fingerprint =
+            fingerprint.unwrap_or_else(|| v2_key_fingerprint(&key));
+        format!(
+            "{}{}:{}:{}",
+            CREDENTIAL_V2_PREFIX, CREDENTIAL_V2_SOURCE_ENV, fingerprint,
+            seal_v2_payload(value, &key)
+        )
+    }
+
+    #[test]
+    fn v2_payload_round_trips_with_fixed_key() {
+        let key: [u8; 32] = Sha256::digest(b"fixture-secret").into();
+        let payload = seal_v2_payload("官方 v2 明文", &key);
+        assert_eq!(v2_decrypt_payload(&payload, &key).unwrap(), "官方 v2 明文");
+    }
+
+    #[test]
+    fn v2_decrypt_reads_env_source_from_credential_secret_file() {
+        let root = make_temp_dir("zcode-v2-env-secret");
+        let credentials_path = root.join(CREDENTIALS_FILE);
+        let secret = "a".repeat(48);
+        fs::write(root.join(CREDENTIAL_V2_PRIVATE_KEY_FILE), &secret).unwrap();
+        let value = v2_env_ciphertext("token-value", &secret, None);
+        assert_eq!(
+            decrypt_credential_v2(&value, &credentials_path).unwrap(),
+            "token-value"
+        );
+        // 指纹不匹配（密钥已更换）必须报错，不能静默返回错误明文。
+        let mut mismatched = v2_env_ciphertext("token-value", &secret, None).into_bytes();
+        // 把指纹第一个字符替换成不同的 hex 字符。
+        let index = CREDENTIAL_V2_PREFIX.len() + CREDENTIAL_V2_SOURCE_ENV.len() + 1;
+        mismatched[index] = if mismatched[index] == b'0' { b'1' } else { b'0' };
+        let error = decrypt_credential_v2(std::str::from_utf8(&mismatched).unwrap(), &credentials_path)
+            .unwrap_err();
+        assert!(error.contains("指纹不匹配"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn v2_decrypt_rejects_bad_format_and_unknown_source() {
+        let path = Path::new("/tmp/zcode-v2-format-test/credentials.json");
+        assert!(decrypt_credential_v2("enc:v2:only:two", path).is_err());
+        assert!(decrypt_credential_v2("enc:v2:os::payload", path).is_err());
+        assert!(decrypt_credential_v2("enc:v2:bad:source:value", path).is_err());
+        let bad_fingerprint = format!(
+            "{}{}:{}:{}",
+            CREDENTIAL_V2_PREFIX, CREDENTIAL_V2_SOURCE_OS, "zz", "payload"
+        );
+        assert!(decrypt_credential_v2(&bad_fingerprint, path).is_err());
+    }
+
+    #[test]
+    fn system_keyring_account_path_uses_node_resolve_shape() {
+        let path = Path::new("C:/Users/demo/.zcode/v2/credentials.json");
+        #[cfg(target_os = "windows")]
+        assert_eq!(
+            system_keyring_account_path(path),
+            "C:\\Users\\demo\\.zcode\\v2\\credentials.json"
+        );
+        #[cfg(not(target_os = "windows"))]
+        assert_eq!(
+            system_keyring_account_path(path),
+            "C:/Users/demo/.zcode/v2/credentials.json"
         );
     }
 
@@ -1632,6 +1944,79 @@ mod tests {
         let parsed = parse_import_accounts(&serde_json::to_string(&api_key).unwrap()).unwrap();
         assert_eq!(parsed[0].auth_mode, ZcodeAuthMode::ApiKey);
         assert_eq!(parsed[0].api_key.as_deref(), Some("bigmodel-test-key"));
+    }
+
+    #[test]
+    fn import_parser_accepts_official_v1_credentials_container() {
+        let root = make_temp_dir("zcode-import-container");
+        // v1 密钥始终按真实主目录派生，测试加密必须与解析路径一致。
+        let home = dirs::home_dir().unwrap();
+        let mut container = Map::new();
+        let mut put = |key: &str, value: &str| {
+            container.insert(
+                key.to_string(),
+                Value::String(encrypt_credential(value, &home).unwrap()),
+            );
+        };
+        put(ACTIVE_PROVIDER_KEY, "zai");
+        put("oauth:zai:access_token", "access-token-value");
+        put("oauth:zai:refresh_token", "refresh-token-value");
+        put("oauth:zai:user_info", r#"{"user_id":"user-1","email":"u@z.ai"}"#);
+        put(ZCODE_JWT_KEY, "jwt-token-value");
+
+        let parsed = parse_import_accounts(&Value::Object(container).to_string()).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert!(parsed[0].id.is_empty());
+        assert_eq!(parsed[0].provider, "zai");
+        assert_eq!(parsed[0].access_token, "access-token-value");
+        assert_eq!(parsed[0].refresh_token.as_deref(), Some("refresh-token-value"));
+        assert_eq!(parsed[0].zcode_jwt_token, "jwt-token-value");
+        assert_eq!(parsed[0].user_id.as_deref(), Some("user-1"));
+        assert_eq!(parsed[0].email, "u@z.ai");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn import_parser_accepts_official_config_api_key_container() {
+        let config = json!({
+            "provider": {
+                "builtin:zai": {
+                    "name": "Z.ai - API Key",
+                    "options": { "apiKey": "zai-key-value" }
+                },
+                "builtin:bigmodel": {
+                    "options": { "apiKey": "bigmodel-key-value" }
+                }
+            }
+        });
+        let parsed = parse_import_accounts(&config.to_string()).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert!(parsed
+            .iter()
+            .any(|account| account.provider == "zai"
+                && account.api_key.as_deref() == Some("zai-key-value")));
+        assert!(parsed
+            .iter()
+            .any(|account| account.provider == "bigmodel"
+                && account.api_key.as_deref() == Some("bigmodel-key-value")));
+    }
+
+    #[test]
+    fn import_parser_still_rejects_unrelated_objects() {
+        let error = parse_import_accounts(&json!({"foo": 1}).to_string()).unwrap_err();
+        assert!(error.contains("ZCode 导入账号格式无效"));
+    }
+
+    /// 真机冒烟测试：验证默认安装的 ZCode 3.18+ 凭据（enc:v2:os）可被解密导入。
+    /// 只断言结构，不打印任何凭据值；系统凭据库缺少条目时跳过。
+    #[test]
+    #[ignore = "requires real ZCode credentials and system keyring on this machine"]
+    fn real_local_credentials_smoke() {
+        let path = default_credentials_path().unwrap();
+        let account = account_from_credentials_path(&path).unwrap();
+        assert!(matches!(account.provider.as_str(), "zai" | "bigmodel"));
+        assert!(!account.access_token.trim().is_empty());
+        assert!(!account.zcode_jwt_token.trim().is_empty());
     }
 
     #[test]

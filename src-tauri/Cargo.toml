@@ -115,6 +115,8 @@ junction.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 mac-notification-sys = "0.6"
 plist = "1.8"
+# ZCode 3.18+ 把 v2 OAuth 凭据密钥保存在系统凭据库（macOS Keychain），导入时需要读取。
+keyring = { version = "3.6", features = ["apple-native"] }
 objc2 = "0.6.3"
 objc2-foundation = "0.3.2"
 objc2-app-kit = "0.3.2"
