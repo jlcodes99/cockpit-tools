@@ -507,5 +507,5 @@ async fn confirmed_quota_excludes_the_affinity_account_even_with_cooling_disable
     // An account outside the key scope must remain unavailable to failover.
     host.collection_override.as_mut().unwrap().api_keys[0].account_ids = vec!["a".into()];
     let unavailable = native_contract::Host::route(&host, &caller, request).await.err().unwrap();
-    assert_eq!(unavailable.code, "no_available_account");
+    assert_eq!((unavailable.status, unavailable.code), (429, "usage_limit_reached"));
 }

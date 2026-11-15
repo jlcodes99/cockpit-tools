@@ -38,6 +38,34 @@
   z-index: 2;
 }
 
+.dashboard-all-accounts-state {
+  padding: 40px 20px;
+}
+
+.dashboard-all-accounts-state .icon {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 14px;
+}
+
+.dashboard-all-accounts-state p {
+  margin-bottom: 0;
+}
+
+.dashboard-all-accounts-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .dashboard-all-accounts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
@@ -212,7 +240,7 @@
 }
 
 .cards-split-row.single-platform-row {
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
 }
 
 .main-card {
@@ -238,10 +266,21 @@
   background: transparent;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1120px) {
   .cards-split-row,
   .cards-split-row.single-platform-row {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .split-content {
+    flex-direction: column;
+  }
+
+  .split-divider {
+    width: 100%;
+    height: 1px;
   }
 }
 
@@ -270,9 +309,9 @@
 }
 
 .header-action-btn {
-  background: var(--bg-card, #ffffff);
-  border: 1px solid var(--border-medium, #dce0e5);
-  color: var(--text-primary, #333);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   height: 28px;
   padding: 0 10px;
   border-radius: 6px;
@@ -424,15 +463,15 @@
 
 /* Account Mini Card */
 .account-mini-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-light);
   border-radius: 10px;
-  padding: 12px; /* Reduced even more */
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   flex: 1;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+  box-shadow: none;
 }
 
 .empty-slot {
@@ -692,13 +731,13 @@
 
 .quota-refresh-time {
   font-family: var(--font-mono);
-  color: var(--text-tertiary);
+  color: var(--text-muted);
 }
 
 /* Mini Action Buttons Row */
 .account-mini-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   border-top: 1px dashed var(--border-light); /* Add separator */
   padding-top: 8px; /* Increase to push buttons down for centering */
   margin-top: auto; /* Push to bottom to fill remaining space */
@@ -710,8 +749,8 @@
 }
 
 .mini-icon-btn {
-  width: 20px; /* Reduced from 28px */
-  height: 20px; /* Reduced from 28px */
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -731,9 +770,9 @@
 }
 
 .mini-icon-btn:disabled {
-  color: var(--text-disabled); /* Use disabled color, don't show green */
+  color: var(--text-muted);
   cursor: default;
-  opacity: 0.6;
+  opacity: 0.55;
 }
 
 .mini-quota-row {
@@ -846,11 +885,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.github-copilot-card .model-name {
-  width: 140px;
-}
+.github-copilot-card .model-name,
 .windsurf-card .model-name {
-  width: 150px;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 160px;
 }
 .mini-cycle-time {
   font-size: 12px;

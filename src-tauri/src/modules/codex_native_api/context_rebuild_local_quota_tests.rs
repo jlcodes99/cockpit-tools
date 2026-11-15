@@ -429,6 +429,33 @@ async fn local_quota_reused_websocket_reconnects_only_for_portable_next_turn() {
 }
 
 #[tokio::test]
+async fn local_quota_reused_websocket_materializes_completed_parent_before_backup() {
+    for preparation in [true, false] {
+        let fixture = Fixture::new(true,
+            vec![Step::Complete("a-reserve-parent", None)],
+            vec![Step::Complete("b-reserve-next", None)]).await;
+        fixture.host.oauth.store(true, Ordering::SeqCst);
+        fixture.host.passthrough.store(true, Ordering::SeqCst);
+        let mut socket = fixture.socket().await;
+        ws_send(&mut socket, body(vec![message("user", "original context")], None, true)).await;
+        let first = ws_event(&mut socket, "response.completed").await;
+        assert_eq!(first["response"]["id"], "a-reserve-parent");
+        deny(&fixture, preparation, &["a"]);
+        ws_send(&mut socket, body(vec![message("user", "new delta")], Some("a-reserve-parent"), true)).await;
+        let next = ws_event(&mut socket, "response.completed").await;
+        assert_eq!(next["response"]["id"], "b-reserve-next");
+        let sent = fixture.sent();
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[1].account, "b");
+        assert!(sent[1].body.get("previous_response_id").is_none());
+        assert_eq!(sent[1].body["input"][0]["content"][0]["text"], "original context");
+        assert_eq!(sent[1].body["input"].as_array().unwrap().last().unwrap()["content"][0]["text"], "new delta");
+        assert!(fixture.host.failures.lock().unwrap().is_empty());
+        socket.close(None).await.ok(); fixture.finish().await;
+    }
+}
+
+#[tokio::test]
 async fn local_quota_new_websocket_reselects_before_inference_send() {
     // Preparation rejection, rejection before connect, and rejection after handshake.
     for (preparation, after_handshake) in [(true, false), (false, false), (false, true)] {

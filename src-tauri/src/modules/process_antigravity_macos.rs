@@ -18,13 +18,57 @@ fn collect_macos_antigravity_entries(legacy: bool) -> Vec<(u32, Option<String>)>
     if !output.status.success() {
         return Vec::new();
     }
-    parse_macos_antigravity_entries(
-        &String::from_utf8_lossy(&output.stdout),
-        unsafe { libc::geteuid() },
-        legacy,
-    )
+    let lines = String::from_utf8_lossy(&output.stdout);
+    let owner = unsafe { libc::geteuid() };
+    let mut entries = parse_macos_antigravity_entries(&lines, owner, legacy);
+    if legacy {
+        // ps flattens argv, so --user-data-dir= paths with spaces would be truncated.
+        let pids: Vec<_> = entries
+            .iter()
+            .filter(|(_, dir)| dir.is_some())
+            .map(|(pid, _)| sysinfo::Pid::from_u32(*pid))
+            .collect();
+        if !pids.is_empty() {
+            let mut system = sysinfo::System::new();
+            system.refresh_processes_specifics(
+                sysinfo::ProcessesToUpdate::Some(&pids),
+                true,
+                sysinfo::ProcessRefreshKind::nothing().with_cmd(sysinfo::UpdateKind::Always),
+            );
+            entries.retain_mut(|(pid, dir)| {
+                if dir.is_none() {
+                    return true;
+                }
+                let Some(process) = system.process(sysinfo::Pid::from_u32(*pid)) else {
+                    return false;
+                };
+                let Some(path) = antigravity_macos_profile_from_argv(process.cmd()) else {
+                    return false;
+                };
+                *dir = Some(path);
+                true
+            });
+        }
+    }
+    entries
 }
 
+fn antigravity_macos_profile_from_argv(args: &[std::ffi::OsString]) -> Option<String> {
+    args.iter()
+        .enumerate()
+        .skip(1)
+        .take_while(|(_, arg)| *arg != "--")
+        .filter_map(|(index, arg)| {
+            let arg = arg.to_str()?;
+            if arg == "--user-data-dir" {
+                return args.get(index + 1)?.to_str().filter(|path| !path.starts_with("--"));
+            }
+            arg.strip_prefix("--user-data-dir=")
+        })
+        .filter(|path| !path.trim().is_empty())
+        .last()
+        .map(str::to_owned)
+}
 fn owned_macos_process_command(line: &str, owner: u32) -> Option<&str> {
     let (uid, tail) = line.trim().split_once(char::is_whitespace)?;
     (uid.parse::<u32>().ok()? == owner).then(|| tail.trim_start())
@@ -47,7 +91,8 @@ fn parse_macos_antigravity_entries(
                 owned_macos_process_command(line, owner)?.split_once(char::is_whitespace)?;
             let command = command.trim_start();
             let lower = command.to_lowercase();
-            if !lower.contains(marker)
+            let main_marker = if legacy { "antigravity.app/contents/macos/" } else { marker };
+            if !lower.contains(main_marker)
                 || (legacy && lower.contains(ANTIGRAVITY_APP_CONTENTS_MARKER))
                 || lower.contains("antigravity tools.app/contents/")
                 || lower.contains("crashpad_handler")
@@ -110,10 +155,24 @@ mod antigravity_macos_owner_tests {
     use super::*;
 
     #[test]
+    fn antigravity_instance_profile_path_preserves_spaces_and_uses_effective_argument() {
+        let argv = [
+            "/Applications/Antigravity.app/Contents/MacOS/Antigravity",
+            "--user-data-dir=/tmp/earlier profile",
+            "--user-data-dir=/tmp/managed profile",
+        ].map(std::ffi::OsString::from);
+        assert_eq!(
+            antigravity_macos_profile_from_argv(&argv).as_deref(),
+            Some("/tmp/managed profile"),
+        );
+    }
+
+    #[test]
     fn macos_antigravity_ignores_other_users_for_both_client_bundles() {
         let lines = concat!(
             " 701 10 /Applications/Antigravity.app/Contents/MacOS/Antigravity\n",
             " 705 11 /Applications/Antigravity.app/Contents/MacOS/Antigravity\n",
+            " 705 12 /Applications/Antigravity.app/Contents/Resources/bin/language_server --standalone\n",
             " 701 20 /Applications/Antigravity IDE.app/Contents/MacOS/Antigravity IDE\n",
             " 705 21 /Applications/Antigravity IDE.app/Contents/MacOS/Antigravity IDE --user-data-dir=/tmp/local\n",
         );

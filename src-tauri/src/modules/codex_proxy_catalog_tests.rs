@@ -56,6 +56,50 @@ fn fixture() -> Source {
 }
 
 #[tokio::test]
+async fn network_settings_update_bound_accounts_without_reselecting_nodes() {
+    use crate::models::codex::{CodexAccount, CodexAccountIndex, CodexAccountSummary, CodexTokens};
+    use crate::modules::{codex_account, codex_proxy_runtime};
+
+    let _env = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let temp = Temp::new();
+    let _dir = DataDir::set(&temp.0);
+    let source = fixture();
+    let mut index = CodexAccountIndex::new();
+    let mut snapshots = BTreeMap::new();
+    for (id, source_id) in [("network-bound", source.id.as_str()), ("network-other", "other")] {
+        let raw = binding::encode(source_id, &source.name, &source.catalog.nodes[0].id,
+            &source.catalog, &BTreeMap::new()).unwrap();
+        let mut account = CodexAccount::new(id.into(), format!("{id}@example.test"), CodexTokens {
+            access_token: "access".into(), id_token: "id".into(), refresh_token: Some("refresh".into()),
+        });
+        account.egress_proxy_url = Some(raw.clone());
+        codex_account::save_account(&account).unwrap();
+        index.accounts.push(CodexAccountSummary {
+            id: account.id, email: account.email, plan_type: None, subscription_active_until: None,
+            created_at: account.created_at, last_used: account.last_used,
+        });
+        snapshots.insert(id, raw);
+    }
+    codex_account::save_account_index(&index).unwrap();
+
+    let network = super::super::codex_proxy_network::NetworkOptions {
+        ipv6: Some(false),
+        ..Default::default()
+    };
+    codex_proxy_runtime::sync_source_network(&source.id, network).await.unwrap();
+    let read_snapshot = |id| codex_account::load_account(id).unwrap().egress_proxy_url.unwrap();
+    let updated = read_snapshot("network-bound");
+    assert_eq!(binding::decode(&updated).unwrap().network.ipv6, Some(false));
+    assert_eq!(
+        binding::outbounds(&updated).unwrap(),
+        binding::outbounds(&snapshots["network-bound"]).unwrap()
+    );
+    assert_eq!(read_snapshot("network-other"), snapshots["network-other"]);
+}
+
+#[tokio::test]
 async fn catalog_reorder_persists_order_without_changing_sources_or_bindings() {
     let _env = crate::modules::test_support::env_lock()
         .lock()
@@ -1489,12 +1533,19 @@ fn unnamed_import_partial_opt_in_duplicates_and_rename_preserve_bindings() {
             assert!(!disk.contains("private-password"));
             assert!(!disk.contains("private-user"));
             assert_eq!(list().await.unwrap().sources.len(), 1);
-            let network=super::super::codex_proxy_network::NetworkOptions{doh:true,interface:"en0".into()};
+            let network = super::super::codex_proxy_network::NetworkOptions {
+                doh: true,
+                dns_servers: vec!["https://dns.example.test/dns-query".into()],
+                ipv6: Some(false),
+                interface: "en0".into(),
+            };
             let saved=set_network(id.clone(),renamed.sources[0].revision.clone(),network.clone()).await.unwrap();
             assert!(saved.sources[0].network.interface.is_empty());
             let snap=snapshot(id.clone(),stored.catalog.nodes[0].id.clone(),BTreeMap::new()).await.unwrap();
             assert!(binding::decode(&snap).unwrap().network.doh);
             assert!(binding::decode(&snap).unwrap().network.interface.is_empty());
+            assert_eq!(binding::decode(&snap).unwrap().network.ipv6, Some(false));
+            assert_eq!(binding::decode(&snap).unwrap().network.dns_servers, network.dns_servers);
             assert!(!binding::decode(&frozen).unwrap().network.doh);
             assert!(set_network(id.clone(),renamed.sources[0].revision.clone(),network).await.is_err());
             let config="proxies:\n  - {name: TLS, type: hysteria2, server: example.test, port: 443, password: private-pass, skip-cert-verify: true}\nproxy-groups:\n  - {name: Group, type: select, proxies: [TLS]}";

@@ -7,6 +7,45 @@
   margin-bottom: 12px;
 }
 
+.codex-api-service-log-filters-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.codex-api-service-log-filters-shell .codex-api-service-log-filters {
+  margin-bottom: 0;
+}
+
+.codex-request-log-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.codex-request-log-filter-actions .btn.is-active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.codex-request-log-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .codex-request-log-toolbar .codex-output-speed-summary {
   margin-bottom: 0;
 }

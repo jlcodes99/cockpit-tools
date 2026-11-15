@@ -1,4 +1,4 @@
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 
 use crate::models::zcode::{ZcodeAccount, ZcodeOAuthStartResponse};
 use crate::modules::{logger, process, tray, zcode_account, zcode_instance, zcode_oauth};
@@ -104,6 +104,14 @@ pub async fn refresh_all_zcode_accounts(app: AppHandle) -> Result<i32, String> {
 
 #[tauri::command]
 pub fn inject_zcode_account(app: AppHandle, account_id: String) -> Result<String, String> {
+    if let Err(error) = zcode_instance::resolve_executable() {
+        if error == "APP_PATH_NOT_FOUND:zcode" {
+            let _ = app.emit("app:path_missing", serde_json::json!({
+                "app": "zcode", "retry": { "kind": "switchAccount", "accountId": account_id }
+            }));
+        }
+        return Err(error);
+    }
     let settings = zcode_instance::load_default_settings()?;
     if let Some(pid) = zcode_instance::resolve_pid(None, settings.last_pid) {
         process::close_pid(pid, 20)?;
@@ -118,10 +126,27 @@ pub fn inject_zcode_account(app: AppHandle, account_id: String) -> Result<String
     let args = process::parse_extra_args(&settings.extra_args);
     match zcode_instance::start_default(&args) {
         Ok(pid) => zcode_instance::mark_started(None, pid)?,
-        Err(error) => logger::log_warn(&format!("ZCode 账号已切换，但默认实例重启失败: {}", error)),
+        Err(error) if error == "APP_PATH_NOT_FOUND:zcode" => {
+            let _ = app.emit("app:path_missing", serde_json::json!({
+                "app": "zcode", "retry": { "kind": "launchOnly" }
+            }));
+        }
+        Err(error) => {
+            return Err(format!("ZCode 账号已切换，但默认实例启动失败: {error}"));
+        }
     }
     let _ = tray::update_tray_menu(&app);
     Ok(account.email)
+}
+
+#[tauri::command]
+pub async fn zcode_launch_current() -> Result<(), String> {
+    tokio::task::spawn_blocking(|| {
+        let settings = zcode_instance::load_default_settings()?;
+        let args = process::parse_extra_args(&settings.extra_args);
+        let pid = zcode_instance::start_default(&args)?;
+        zcode_instance::mark_started(None, pid)
+    }).await.map_err(|error| error.to_string())?
 }
 
 #[tauri::command]

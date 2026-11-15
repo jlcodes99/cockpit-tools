@@ -568,7 +568,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                     "切换排序方向",
                   )}
                 >
-                  {sortDirection === "desc" ? "⬇" : "⬆"}
+                  {sortDirection === "desc" ? <ArrowDown size={15} /> : <ArrowUp size={15} />}
                 </button>
               )}
             </div>
@@ -2029,6 +2029,14 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                   />
                 </div>
                 <div className="modal-footer codex-reset-credit-confirm-footer">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={closeResetCreditConfirmModal}
+                    disabled={isResetCreditConfirmSubmitting}
+                  >
+                    {t("common.cancel", "取消")}
+                  </button>
                   <button
                     type="button"
                     className="btn btn-primary codex-reset-credit-confirm-action"

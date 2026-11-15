@@ -9,8 +9,6 @@ use std::{
     time::SystemTime,
 };
 
-const MAX_CHAIN_DEPTH: usize = 128;
-
 #[derive(Debug)]
 pub(super) enum SourceError {
     Missing(String),
@@ -64,9 +62,9 @@ impl Evidence {
         Ok(())
     }
 
-    pub fn recheck(&self, budget: &mut Budget) -> Result<(), String> {
+    pub fn recheck(&self) -> Result<(), String> {
         self.check_stamp()?;
-        if digest(&self.path, budget)? != self.hash {
+        if digest(&self.path)? != self.hash {
             return Err(error("CHANGED", "rollout contents changed since scan"));
         }
         self.check_stamp()
@@ -170,15 +168,10 @@ pub(crate) fn file_ids(path: &Path) -> Option<(String, String)> {
     ))
 }
 
-pub(super) fn registry(
-    profile: &Path,
-    budget: &Budget,
-) -> Result<HashMap<String, PathBuf>, String> {
+pub(super) fn registry(profile: &Path) -> Result<HashMap<String, PathBuf>, String> {
     let mut found = HashMap::new();
     let mut directories = vec![profile.join("sessions"), profile.join("archived_sessions")];
-    let mut visited = 0;
     while let Some(directory) = directories.pop() {
-        budget.check()?;
         let metadata = match fs::symlink_metadata(&directory) {
             Ok(value) => value,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
@@ -188,11 +181,6 @@ pub(super) fn registry(
             return Err(error("UNSAFE_PATH", "symlink in rollout directories"));
         }
         for entry in fs::read_dir(&directory).map_err(|e| error("IO", e))? {
-            budget.check()?;
-            visited += 1;
-            if visited > MAX_ENTRIES {
-                return Err(error("LIMIT", "too many rollout directory entries"));
-            }
             let entry = entry.map_err(|e| error("IO", e))?;
             let kind = entry.file_type().map_err(|e| error("IO", e))?;
             if kind.is_symlink() {
@@ -288,36 +276,40 @@ pub(super) fn load_chain(
     id: &str,
     registry: &HashMap<String, PathBuf>,
     sources: &mut HashMap<String, Evidence>,
-    visiting: &mut HashSet<String>,
-    budget: &mut Budget,
 ) -> Result<(), SourceError> {
-    if sources.contains_key(id) {
-        return Ok(());
-    }
-    if visiting.len() >= MAX_CHAIN_DEPTH || !visiting.insert(id.to_owned()) {
-        return Err(error("UNSAFE_HISTORY", "cyclic or excessive history ancestry").into());
-    }
-    let path = registry
-        .get(id)
-        .ok_or_else(|| SourceError::Missing(id.to_owned()))?;
-    let source = read(path, budget)?;
-    if let Some(base) = &source.base {
-        load_chain(&base.id, registry, sources, visiting, budget)?;
-        let parent = &sources[&base.id];
-        // The official store pages by ordinal; old byte cutoffs need not equal an exact line boundary.
-        if base.ordinal == 0
-            || base.bytes > parent.decoded_bytes
-            || base.ordinal > parent.next_ordinal
-        {
-            return Err(error(
-                "UNSAFE_HISTORY",
-                format!("ancestor cutoff is unavailable for {id}"),
-            )
-            .into());
+    let mut chain = Vec::new();
+    let mut visiting = HashSet::new();
+    let mut current = id.to_owned();
+    while !sources.contains_key(&current) {
+        if !visiting.insert(current.clone()) {
+            return Err(error("UNSAFE_HISTORY", "cyclic history ancestry").into());
         }
+        let path = registry
+            .get(&current)
+            .ok_or_else(|| SourceError::Missing(current.clone()))?;
+        let source = read(path)?;
+        let ancestor = source.base.as_ref().map(|base| base.id.clone());
+        chain.push((current, source));
+        let Some(ancestor) = ancestor else { break };
+        current = ancestor;
     }
-    visiting.remove(id);
-    sources.insert(id.to_owned(), source);
+    while let Some((id, source)) = chain.pop() {
+        if let Some(base) = &source.base {
+            let parent = &sources[&base.id];
+            // An old byte cutoff need not match a line boundary.
+            if base.ordinal == 0
+                || base.bytes > parent.decoded_bytes
+                || base.ordinal > parent.next_ordinal
+            {
+                return Err(error(
+                    "UNSAFE_HISTORY",
+                    format!("ancestor cutoff is unavailable for {id}"),
+                )
+                .into());
+            }
+        }
+        sources.insert(id, source);
+    }
     Ok(())
 }
 
@@ -357,13 +349,9 @@ struct OrdinalRecord {
 
 fn next_record<T: DeserializeOwned, R: Read, F: FnMut(&[u8]) -> io::Result<()>>(
     records: &mut Records<R, F>,
-    budget: &Budget,
 ) -> Result<Option<T>, String> {
     loop {
-        budget.check()?;
-        let record = records.next();
-        budget.check()?;
-        let Some(record) = record.map_err(|e| error("UNSAFE_HISTORY", e))? else {
+        let Some(record) = records.next().map_err(|e| error("UNSAFE_HISTORY", e))? else {
             return Ok(None);
         };
         if !record.complete {
@@ -381,15 +369,16 @@ fn next_record<T: DeserializeOwned, R: Read, F: FnMut(&[u8]) -> io::Result<()>>(
     }
 }
 
-fn read(path: &Path, budget: &Budget) -> Result<Evidence, SourceError> {
+fn read(path: &Path) -> Result<Evidence, SourceError> {
     let before = stamp(path)?;
-    let hash = digest(path, budget)?;
+    let hash = digest(path)?;
     let file = fs::File::open(path).map_err(|e| error("IO", e))?;
     let input: Box<dyn Read> = if path.extension().is_some_and(|e| e == "zst") {
         let mut decoder =
             zstd::stream::read::Decoder::new(file).map_err(|e| error("UNSAFE_HISTORY", e))?;
         decoder
-            .window_log_max(27)
+            // Accept the full window range supported by zstd on this target.
+            .window_log_max(if usize::BITS == 64 { 31 } else { 30 })
             .map_err(|e| error("UNSAFE_HISTORY", e))?;
         Box::new(decoder)
     } else {
@@ -397,9 +386,9 @@ fn read(path: &Path, budget: &Budget) -> Result<Evidence, SourceError> {
     };
     let mut records = Records::new(input, |_: &[u8]| {
         std::thread::yield_now();
-        budget.check().map_err(io::Error::other)
+        Ok(())
     });
-    let Some(header) = next_record::<Header, _, _>(&mut records, budget)? else {
+    let Some(header) = next_record::<Header, _, _>(&mut records)? else {
         return Err(error("UNSAFE_HISTORY", "rollout contains no ordinal evidence").into());
     };
     if header.kind != "session_meta" {
@@ -435,7 +424,7 @@ fn read(path: &Path, budget: &Budget) -> Result<Evidence, SourceError> {
         let next = match ordinal.take() {
             Some(ordinal) => ordinal,
             None => {
-                let Some(record) = next_record::<OrdinalRecord, _, _>(&mut records, budget)? else {
+                let Some(record) = next_record::<OrdinalRecord, _, _>(&mut records)? else {
                     break;
                 };
                 record.ordinal
@@ -472,7 +461,7 @@ fn read(path: &Path, budget: &Budget) -> Result<Evidence, SourceError> {
     })
 }
 
-fn digest(path: &Path, budget: &Budget) -> Result<[u8; 32], String> {
+fn digest(path: &Path) -> Result<[u8; 32], String> {
     regular_file(path)?;
     let mut reader = fs::File::open(path).map_err(|e| error("IO", e))?;
     let mut hash = Sha256::new();
@@ -482,7 +471,6 @@ fn digest(path: &Path, budget: &Budget) -> Result<[u8; 32], String> {
         if count == 0 {
             break;
         }
-        budget.check()?;
         std::thread::yield_now();
         hash.update(&buffer[..count]);
     }

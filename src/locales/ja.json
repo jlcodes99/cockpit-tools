@@ -1,4 +1,44 @@
 {
+  "antigravityLaunch": {
+    "initializeTitle": "Antigravity IDE は未初期化です",
+    "initializeThenSwitch": "IDE を一度起動すると、アカウントを切り替えられます。",
+    "initializeThenBind": "インスタンスを一度起動すると、アカウントを関連付けられます。",
+    "initializeThenUseAccount": "インスタンスを一度起動すると、関連付け済みのアカウントを使えます。",
+    "initializeAction": "一度起動する",
+    "initializeHint": "Antigravity IDE の初期化が必要です。続ける前に、選択したインスタンスを一度起動してください。",
+    "initializeWaiting": "Antigravity IDE の初期化を待っています。準備ができたら手動で続行してください。",
+    "initializeRetry": "初期化がまだ完了していません。IDE が開いていることを確認して、再試行してください。",
+    "pathLabel": "起動パス",
+    "pathConfigured": "設定済み",
+    "pathDetected": "自動検出",
+    "pathInvalid": "設定済みのパスが無効です",
+    "pathCheckFailed": "パスの確認に失敗しました",
+    "pathSaveAndRetry": "保存して再試行",
+    "switchAndCopy": "切り替えてコピー",
+    "sharedInstanceStart": "共有アカウントを切り替えて起動",
+    "sharedInstanceHint": "他の Antigravity インスタンスは起動したままで、新しいアカウントに切り替わる場合があります。",
+    "sharedInstanceRestart": "選択したインスタンスだけを再起動します。",
+    "lastSharedAccount": "最後に切り替えた共有アカウント",
+    "sharedAccountUnknown": "切り替え履歴なし",
+    "sharedInstanceSubtitle": "各インスタンスは別のフォルダーを使用し、Google ログインを共有します。",
+    "sharedInstanceStarted": "共有ログインを更新し、起動を要求しました。",
+    "sharedInstanceLaunchFailed": "共有ログインを更新しましたが、起動できませんでした：{{error}}",
+    "sharedCopySource": "選択したインスタンスの設定フォルダーをコピーします。",
+    "quickSwitchSetting": "Antigravity IDE のクイック切り替えに適用します。アカウントのダイアログでは毎回、起動するか選べます。",
+    "title": "クライアントを選択",
+    "switchOnly": "切り替えのみ",
+    "switchAndLaunch": "切り替えて起動",
+    "homeDirectory": "ホームフォルダ",
+    "invalidDirectory": "既存のフォルダを選択してください。",
+    "directoryFailed": "フォルダ選択画面を開けませんでした。{{error}}",
+    "shared": "Google ログインを共有するクライアント：{{clients}}。",
+    "sharedHint": "Google ログインを共有するクライアントは同時に切り替わる場合があります。",
+    "clientOnly": "このクライアントは個別のログインを使用します。",
+    "cliAuth": "agy は自身の認証設定に従います。API キーや Google Cloud の認証情報を設定している場合は、そちらが優先されます。",
+    "cliMissing": "agy が見つかりません。公式の Antigravity CLI をインストールして再試行してください。",
+    "terminalFailed": "ターミナルを準備できませんでした。{{error}}",
+    "switchedTerminalFailed": "アカウントは切り替わりましたが、ターミナルを開けませんでした。{{error}}"
+  },
   "pelican": {
     "caseKinds": {
       "mathExact": "数学・厳密な確率",
@@ -654,7 +694,14 @@
       },
       "clear": "クリア",
       "loginSuccess": "ログイン成功",
-      "switchAccount": "アカウント切替"
+      "switchAccount": "アカウント切替",
+      "tokenFormat": {
+        "summary": "必須項目と入力例（クリックして展開）",
+        "single": "単件の例",
+        "singleToken": "単件の例（Token）",
+        "singleJson": "単件の例（JSON）",
+        "batchJson": "一括の例（JSON）"
+      }
     },
     "topRightAd": {
       "ariaLabel": "全ページ共通の右上広告枠",
@@ -722,6 +769,7 @@
     }
   },
   "nav": {
+    "workbuddyAi": "WorkBuddy AI",
     "overview": "Antigravity IDE​",
     "accounts": "アカウント管理",
     "wakeup": "ウェイクアップタスク",
@@ -786,6 +834,10 @@
     "hiddenBadge": "非表示",
     "openFromMore": "プラットフォームレイアウトを管理",
     "dragHandleLabel": "ドラッグして並び替え",
+    "sortKeyboardInstructions": "スペースキーで並べ替えを開始し、矢印キーで移動します。スペースキーか Enter キーで確定し、Esc キーで取り消します。",
+    "sortPosition": "全 {{total}} 件中 {{position}} 番目。",
+    "sortPlaced": "{{position}} 番目に移動しました。",
+    "sortCancelled": "並べ替えを取り消しました。",
     "tipWithGroups": "ドラッグして並べ替えます。サイドバーに表示できる入口は最大 {{max}} 件です。グループ配下の項目にはサイドバー/ダッシュボードの切り替えはなく、メニューバー表示と既定プラットフォームの切り替えにのみ使われます。",
     "addGroup": "グループを追加",
     "editGroup": "グループを編集",
@@ -819,7 +871,9 @@
     "groupEnabledHint": "グループ内の全プラットフォームを一括で有効・無効にします",
     "disabledHint": "無効にすると自動処理を停止し、設定欄を非表示にします。入口の表示は個別に設定します",
     "enableAll": "すべて有効",
-    "disableAll": "すべて無効"
+    "disableAll": "すべて無効",
+    "confirmResetDesc": "デフォルトに戻すと、カスタムグループと並び順の設定が消去されます。続行しますか？",
+    "confirmDeleteGroupDesc": "グループ「{{name}}」を削除しますか？グループ内のプラットフォームは個別表示に戻ります。"
   },
   "privacy": {
     "hideSensitive": "メールを隠す",
@@ -1150,6 +1204,11 @@
       "submit": "インポート"
     },
     "launchDialog": {
+      "customCommand": "カスタムコマンド",
+      "useDefaultCommand": "既定のコマンド",
+      "customCommandHint": "空欄の場合は既定のコマンドを実行します。",
+      "rememberDirectory": "最後に使った作業フォルダーを記憶します。",
+      "chooseDirectory": "フォルダーを選択",
       "title": "インスタンスを起動",
       "terminal": "ターミナル",
       "command": "起動コマンド",
@@ -1520,10 +1579,9 @@
       "codexEnhancements": {
         "quotaCompat": "併用時の上限互換",
         "quotaCompatDesc": "API サービスのインスタンスでは、クライアントの表示とローカル判定に利用可能な枠を提供します。上流の実際の使用量や画像の利用枠は変わりません。この設定は、その他の OAuth と外部 API の併用にのみ適用されます。",
-        "restartHint": "ネイティブの予測は初期状態では無効です。変更後は対象の Codex インスタンスを再起動し、Cockpit Tools を起動したままにしてください。ネイティブの音声入力はクライアントの機能と設定に従います。Cockpit は処理を置き換えたり、強制的に有効化したりしません。",
         "configFailed": "設定の読み込みまたは保存に失敗：{{error}}",
         "nativePredictions": "ネイティブの次のステップ予測（Tab）",
-        "nativePredictionsDesc": "現在の会話の API プロバイダーとモデルを使って、次のメッセージを提案します。API クレジットを追加で消費します。保存後に Codex を再起動してください。"
+        "nativePredictionsDesc": "既定ではオフです。候補の生成には現在の会話の API プロバイダーとモデルが使用され、API 使用量が増えます。設定を変更したら、対象の Codex インスタンスを再起動し、Cockpit Tools は起動したままにしてください。"
       },
       "timeDisplayMode": "時刻表示",
       "timeDisplayModeDesc": "アカウントカードと一覧に表示する時刻。既定は切替時刻です"
@@ -1871,6 +1929,14 @@
   },
   "appPath": {
     "missing": {
+      "pathLabel": "{{app}} の起動パス",
+      "configurePath": "パスを設定",
+      "configureHint": "実行ファイルを選択してください。空欄にすると自動で検出します。",
+      "cliHint": "{{app}} が見つかりません。実行ファイルを選択するか、CLI をインストールして再検出してください。",
+      "invalidPath": "このパスに使用できる {{app}} の実行ファイルがありません。",
+      "accountAlreadySwitched": "アカウントは切り替え済みです。クライアントの起動のみ再試行します。",
+      "saveAndRetry": "保存して再試行",
+      "operationCancelled": "起動をキャンセルしました。",
       "scanEmpty": "実行中のアプリが見つかりません。起動して再試行するか、パスを手動で選択してください。",
       "scanEmptyGeneric": "実行中の {{app}} が見つかりません。起動して再試行するか、パスを手動で選択してください。",
       "title": "アプリのパスが見つかりません",
@@ -2645,11 +2711,13 @@
       "masterLabel": "リセットカードを自動使用",
       "ruleSource": "ルールの参照元",
       "weeklyTrigger": "週間残量で実行",
+      "preferUsageCredits": "クレジットを優先",
       "weeklyRemaining": "週間残量 ≤",
       "previewTitle": "実行条件のプレビュー",
       "previewAny": "有効な条件のいずれかを満たすと、リセットカードを1枚使用します：",
       "previewExpiry": "カードの有効期限まで {{value}} {{unit}}以内",
       "previewWeekly": "週間残量が {{percent}}% 以下",
+      "previewWeeklyAfterCredits": "週間残量が {{percent}}% 以下で、クレジットが利用できないことを確認済み",
       "previewOff": "自動使用はオフです。以下の設定は適用されません。",
       "previewEmpty": "実行条件が有効でないため、カードは自動使用されません。",
       "cardOn": "自動",
@@ -2763,8 +2831,6 @@
     },
     "launchErrors": {
       "sessionRestoreFailed": "セッションの修復に失敗し、バックアップの復元が完了していません。起動を停止しました。再試行する前にログとバックアップを確認してください。",
-      "sessionCheckTimeout": "セッションの確認がタイムアウトしました。起動を停止しました。再試行するか、ログを確認してください。",
-      "sessionFileTooLarge": "セッションファイルの先頭行が大きすぎます。起動を停止しました。ログを確認してください。",
       "bindingFailed": "アカウントの関連付けを確認できません。起動を中止しました。切り替えを再試行してください。",
       "processScanFailed": "既存のバックグラウンドプロセスを確認できません。起動を中止しました。再試行してください。",
       "proxyEntryFailed": "設定されたプロキシを起動できません。別の経路は使用していません。再試行してください。"
@@ -2982,7 +3048,8 @@
       "forceRefreshAction": "今すぐ更新",
       "forceRefreshRunning": "Tokenを更新中…",
       "forceRefreshSuccess": "Tokenを更新しました",
-      "forceRefreshRetry": "再検出"
+      "forceRefreshRetry": "再検出",
+      "advancedMaintenanceTitle": "保守・診断ツール"
     },
     "switch": "切替",
     "switched": "{{email}} に切り替えました",
@@ -3974,9 +4041,6 @@
       "repairModal": {
         "historyDuplicateOrdinals": "以下の履歴には重複した連番があります。履歴インデックスの修復ではスキップされ、完全修復は続行できません。他のセッションでは「会話インデックス修復」を選択してください。\n{{details}}",
         "projectsDeferredAction": "インスタンスを終了し、セッション修復で「ローカルプロジェクト」を選択してください。",
-        "projectsStateSize": "最大の状態ファイル：{{file}}（{{bytes}} バイト）。",
-        "projectsQuickBudget": "プロジェクトのクイックスキャンが上限に達しました。",
-        "projectsStateTooLarge": "プロジェクトの状態ファイルが対応サイズを超えています。",
         "projectsStopHint": "復元前に選択したインスタンスを終了してください。変更内容は今すぐプレビューできます。",
         "modeProjectsDesc": "ローカルプロジェクトとチャットの所属を復元します。会話履歴は保持されます。",
         "modeProjects": "ローカルプロジェクト",
@@ -5176,7 +5240,8 @@
         "speedAdjusted": "{{tier}} → 標準",
         "officialDefaultSpeed": "公式のサブスクリプション経路は速度指定に対応していないため、今回は標準速度で送信しました。",
         "sentTier": "送信：{{tier}}",
-        "originalTier": "元の速度：{{tier}}"
+        "originalTier": "元の速度：{{tier}}",
+        "moreFilters": "その他のフィルター"
       },
       "timeouts": {
         "retryTitle": "送信とアカウントの再試行",
@@ -5936,6 +6001,13 @@
         "nodeCount": "ノード {{count}} 件",
         "updatedAt": "更新：{{time}}",
         "autoUpdate": "6 時間ごとに自動更新",
+        "dnsOverride": "DNS 上書き",
+        "ipv6": "IPv6 を有効化",
+        "dnsServers": "DNS サーバー",
+        "dnsServersHint": "1 行に 1 アドレス。空欄の場合は Cloudflare DoH を使用します。",
+        "networkScope": "このソースの新規プロキシ接続に適用されます。",
+        "invalidDnsServer": "各行に有効な DNS サーバーのアドレスを入力してください。",
+        "networkSaveFailed": "ネットワーク設定を保存または適用できませんでした。もう一度お試しください。",
         "snapshotNotice": "更新しても割当済みの設定は変わりません。再度割り当てると更新が適用されます。",
         "defaultLabel": "既定項目",
         "defaultEmpty": "未設定",
@@ -6513,7 +6585,8 @@
       "desc": "下のボタンをクリックし、ブラウザで GitHub Copilot の認可を完了してください。"
     },
     "token": {
-      "desc": "GitHub Copilot のアクセストークン、またはエクスポートした JSON データを貼り付けてください。"
+      "desc": "GitHub Copilot のアクセストークン、またはエクスポートした JSON データを貼り付けてください。",
+      "requiredFields": "必須項目：Token 形式では GitHub access token を直接貼り付けてください。JSON 形式では id、github_login、github_id、github_access_token、copilot_token、created_at、last_used が必要です。"
     },
     "import": {
       "localDesc": "ローカル VS Code または JSON ファイルから GitHub Copilot アカウントデータをインポートします。",
@@ -6890,7 +6963,8 @@
       "desc": "下のボタンをクリックし、ブラウザで Devin の認可を完了してください。"
     },
     "token": {
-      "desc": "Devin のアクセストークン、またはエクスポートした JSON データを貼り付けてください。"
+      "desc": "Devin のアクセストークン、またはエクスポートした JSON データを貼り付けてください。",
+      "requiredFields": "必須項目：github_access_token (API Key)"
     },
     "import": {
       "localDesc": "ローカルでログイン済みのセッションから Devin アカウントをインポート。",
@@ -6994,7 +7068,8 @@
       "startUrlRequired": "IAM Identity Center の開始 URL を入力してください"
     },
     "token": {
-      "desc": "Kiro アクセス トークンまたはエクスポートされた JSON データを貼り付けます。"
+      "desc": "Kiro アクセス トークンまたはエクスポートされた JSON データを貼り付けます。",
+      "requiredFields": "必須項目：JSON では access_token + refresh_token の指定を推奨します（accessToken / refreshToken は互換用）。"
     },
     "import": {
       "localDesc": "ローカルまたは JSON からインポートできます。JSON のアカウントは先に保存し、認証状態と利用枠をバックグラウンドで更新します。",
@@ -7614,6 +7689,39 @@
       "detailError": "チェックインエラー"
     }
   },
+  "codebuddyCli": {
+    "launchTitle": "CodeBuddy CN を起動",
+    "launchDesktop": "デスクトップ版を起動",
+    "recheck": "再確認",
+    "checking": "CodeBuddy CLI を確認中…",
+    "rememberDirectory": "このアカウントで最後に使った作業フォルダーを記憶します。",
+    "installGuide": "公式インストールガイド",
+    "launch": "CLI を起動",
+    "terminalOpened": "起動コマンドを送信しました。CLI の出力はターミナルで確認できます。",
+    "account": "アカウント",
+    "selectAccount": "アカウントを選択",
+    "chooseDirectory": "フォルダーを選択",
+    "homeDirectory": "ホームフォルダー",
+    "instances": "CLI インスタンス",
+    "newInstance": "インスタンスを追加",
+    "editInstance": "インスタンスを編集",
+    "noInstances": "保存済みのインスタンスはありません。",
+    "removeConfirmation": "このインスタンスを削除しますか？CLI の設定と履歴はディスクに残ります。",
+    "errors": {
+      "cliCheckFailed": "CodeBuddy CLI の有無を確認できませんでした。",
+      "accountMissing": "保存済みのアカウントが見つかりません。",
+      "accountUnreadable": "保存済みのアカウントを読み込めません。",
+      "credentialMissing": "アクセストークンがありません。CodeBuddy または CodeBuddy CN で再認証してください。",
+      "workingDirInvalid": "既存の作業ディレクトリを選択してください。",
+      "nameRequired": "インスタンス名を入力してください。",
+      "instanceMissing": "インスタンスが見つかりません。",
+      "storageError": "CLI インスタンスのデータを読み書きできません。",
+      "cliMissing": "CodeBuddy CLI が見つかりません。公式ガイドに沿ってインストールしてください。",
+      "launchFailed": "CodeBuddy CLI を起動できません。",
+      "terminalFailed": "ターミナルを開けません。",
+      "terminalUnsupported": "一般設定で対応するターミナルを選択してください。macOS では Terminal、iTerm2、Ghostty が使えます。"
+    }
+  },
   "codebuddyCn": {
     "title": "CodeBuddy CNアカウント管理",
     "noAccounts": "CodeBuddy CN アカウントがありません",
@@ -7639,6 +7747,27 @@
     "syncFailed": "同期に失敗: {{error}}",
     "syncSuccess": "{{count}} 件のアカウントを WorkBuddy に同期しました",
     "syncToWorkbuddy": "WorkBuddyに同期"
+  },
+  "workbuddyAi": {
+    "search": "WorkBuddy AI アカウントを検索",
+    "noAccounts": "WorkBuddy AI アカウントがありません",
+    "addAccount": "WorkBuddy AI アカウントを追加",
+    "oauthDesc": "ブラウザーで WorkBuddy AI の認証ページを開きます。",
+    "tokenDesc": "WorkBuddy AI のアクセストークンまたはエクスポートした JSON を貼り付けます。",
+    "importDesc": "端末のアプリまたは JSON から読み込みます。",
+    "importClient": "WorkBuddy AI から読み込む",
+    "flowNotice": {
+      "title": "WorkBuddy AI アカウントについて",
+      "desc": "切り替えると端末のログインファイルを更新し、国際版を起動します。",
+      "permission": "読み書きするのは国際版のログインファイルです。既存の暗号化項目には公式アプリの暗号化機能を使います。",
+      "network": "認証、トークン更新、クレジット照会は WorkBuddy AI に接続します。ログインファイルと暗号化情報は端末内に残ります。"
+    },
+    "oauthFeature": {
+      "title": "WorkBuddy AI にログイン",
+      "signIn": "ブラウザーで WorkBuddy AI にログインします。",
+      "switch": "認証後、一覧から国際版のアカウントを切り替えられます。",
+      "credits": "残りのクレジットはアカウントカードで確認できます。"
+    }
   },
   "workbuddy": {
     "desktopEdition": "WorkBuddy（中国版）",
@@ -8479,7 +8608,8 @@
       "deploying": "モデルを取得中…",
       "deploySuccess": "Codex に展開しました：モデル {{count}} 件",
       "deployFailed": "展開に失敗しました：{{error}}",
-      "useKey": "キーを使用"
+      "useKey": "キーを使用",
+      "deleteConfirm": "保存済みキー「{{name}}」を削除しますか？この操作は元に戻せません。"
     },
     "prefill": {
       "codexReady": "APIKEY.FUN の設定を入力しました。内容を確認して Codex に追加してください。",

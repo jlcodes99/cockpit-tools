@@ -1,4 +1,44 @@
 {
+  "antigravityLaunch": {
+    "initializeTitle": "Antigravity IDE가 아직 초기화되지 않았습니다",
+    "initializeThenSwitch": "IDE를 한 번 열면 계정을 전환할 수 있습니다.",
+    "initializeThenBind": "인스턴스를 한 번 실행하면 계정을 연결할 수 있습니다.",
+    "initializeThenUseAccount": "인스턴스를 한 번 실행하면 연결된 계정을 사용할 수 있습니다.",
+    "initializeAction": "한 번 실행",
+    "initializeHint": "Antigravity IDE를 초기화해야 합니다. 계속하기 전에 선택한 인스턴스를 한 번 실행하세요.",
+    "initializeWaiting": "Antigravity IDE의 초기화를 기다리는 중입니다. 준비되면 직접 계속하세요.",
+    "initializeRetry": "초기화가 아직 완료되지 않았습니다. IDE가 열려 있는지 확인한 뒤 다시 시도하세요.",
+    "pathLabel": "실행 경로",
+    "pathConfigured": "설정됨",
+    "pathDetected": "자동 감지",
+    "pathInvalid": "설정된 경로가 올바르지 않습니다",
+    "pathCheckFailed": "경로 확인 실패",
+    "pathSaveAndRetry": "저장 후 다시 시도",
+    "switchAndCopy": "전환 후 복사",
+    "sharedInstanceStart": "공유 계정 전환 후 시작",
+    "sharedInstanceHint": "다른 Antigravity 인스턴스는 열린 상태로 유지되며 새 계정으로 전환될 수 있습니다.",
+    "sharedInstanceRestart": "선택한 인스턴스만 다시 시작합니다.",
+    "lastSharedAccount": "최근 전환한 공유 계정",
+    "sharedAccountUnknown": "전환 기록 없음",
+    "sharedInstanceSubtitle": "인스턴스마다 폴더가 다르며 Google 로그인은 공유됩니다.",
+    "sharedInstanceStarted": "공유 로그인을 업데이트하고 시작을 요청했습니다.",
+    "sharedInstanceLaunchFailed": "공유 로그인은 업데이트했지만 시작에 실패했습니다. {{error}}",
+    "sharedCopySource": "선택한 인스턴스의 설정 폴더를 복사합니다.",
+    "quickSwitchSetting": "Antigravity IDE 빠른 전환에 적용됩니다. 계정 대화 상자에서는 실행 여부를 매번 선택할 수 있습니다.",
+    "title": "클라이언트 선택",
+    "switchOnly": "전환만",
+    "switchAndLaunch": "전환 후 실행",
+    "homeDirectory": "홈 폴더",
+    "invalidDirectory": "기존 폴더를 선택하세요.",
+    "directoryFailed": "폴더 선택기를 열지 못했습니다. {{error}}",
+    "shared": "Google 로그인을 공유하는 클라이언트: {{clients}}.",
+    "sharedHint": "Google 로그인을 공유하는 클라이언트는 함께 전환될 수 있습니다.",
+    "clientOnly": "이 클라이언트는 별도의 로그인을 사용합니다.",
+    "cliAuth": "agy는 자체 인증 설정을 따릅니다. API 키나 Google Cloud 사용자 인증 정보가 설정되어 있으면 우선 사용됩니다.",
+    "cliMissing": "agy를 찾을 수 없습니다. 공식 Antigravity CLI를 설치한 후 다시 시도하세요.",
+    "terminalFailed": "터미널을 준비하지 못했습니다. {{error}}",
+    "switchedTerminalFailed": "계정은 전환되었지만 터미널을 열지 못했습니다. {{error}}"
+  },
   "pelican": {
     "caseKinds": {
       "mathExact": "수학·정확한 확률",
@@ -654,7 +694,14 @@
       },
       "clear": "지우기",
       "loginSuccess": "로그인 성공",
-      "switchAccount": "계정 전환"
+      "switchAccount": "계정 전환",
+      "tokenFormat": {
+        "summary": "필수 필드 및 예시(클릭하여 펼치기)",
+        "single": "단일 예시",
+        "singleToken": "단일 예시(Token)",
+        "singleJson": "단일 예시(JSON)",
+        "batchJson": "일괄 예시(JSON)"
+      }
     },
     "topRightAd": {
       "ariaLabel": "전역 우측 상단 광고 영역",
@@ -722,6 +769,7 @@
     }
   },
   "nav": {
+    "workbuddyAi": "WorkBuddy AI",
     "overview": "Antigravity IDE​",
     "accounts": "계정 관리",
     "wakeup": "깨우기 작업",
@@ -786,6 +834,10 @@
     "hiddenBadge": "숨김",
     "openFromMore": "플랫폼 레이아웃 관리",
     "dragHandleLabel": "드래그하여 순서 변경",
+    "sortKeyboardInstructions": "스페이스바로 정렬을 시작하고 방향키로 이동하세요. 스페이스바나 Enter로 놓고 Esc로 취소할 수 있습니다.",
+    "sortPosition": "전체 {{total}}개 중 {{position}}번째 위치.",
+    "sortPlaced": "{{position}}번째 위치로 이동했습니다.",
+    "sortCancelled": "정렬을 취소했습니다.",
     "tipWithGroups": "드래그하여 순서를 바꿀 수 있습니다. 사이드바에는 최대 {{max}}개 항목을 표시할 수 있습니다. 그룹 하위 항목은 사이드바/대시보드 토글에 포함되지 않으며 메뉴 표시줄과 기본 플랫폼 전환에만 사용됩니다.",
     "addGroup": "그룹 추가",
     "editGroup": "그룹 편집",
@@ -819,7 +871,9 @@
     "groupEnabledHint": "이 그룹의 모든 플랫폼을 함께 켜거나 끕니다",
     "disabledHint": "끄면 자동 작업이 중지되고 설정 영역이 숨겨집니다. 메뉴 표시는 별도로 설정합니다",
     "enableAll": "모두 켜기",
-    "disableAll": "모두 끄기"
+    "disableAll": "모두 끄기",
+    "confirmResetDesc": "기본값으로 복원하면 사용자 지정 그룹과 정렬 설정이 초기화됩니다. 계속하시겠습니까?",
+    "confirmDeleteGroupDesc": "\"{{name}}\" 그룹을 삭제하시겠습니까? 그룹 내 플랫폼은 개별 항목으로 복원됩니다."
   },
   "privacy": {
     "hideSensitive": "이메일 숨기기",
@@ -1150,6 +1204,11 @@
       "submit": "가져오기"
     },
     "launchDialog": {
+      "customCommand": "사용자 지정 명령",
+      "useDefaultCommand": "기본 명령",
+      "customCommandHint": "비워 두면 기본 명령을 실행합니다.",
+      "rememberDirectory": "마지막 작업 폴더를 기억합니다.",
+      "chooseDirectory": "폴더 선택",
       "title": "인스턴스 실행",
       "terminal": "터미널",
       "command": "실행 명령",
@@ -1520,10 +1579,9 @@
       "codexEnhancements": {
         "quotaCompat": "혼합 모드 한도 호환",
         "quotaCompatDesc": "API 서비스 인스턴스는 클라이언트 표시와 로컬 확인에 사용 가능한 할당량을 제공합니다. 실제 공급자 사용량과 이미지 한도는 변경되지 않습니다. 이 설정은 다른 OAuth 및 외부 API 혼합 구성에만 적용됩니다.",
-        "restartHint": "네이티브 예측은 기본적으로 꺼져 있습니다. 변경 후 대상 Codex 인스턴스를 다시 시작하고 Cockpit Tools를 실행해 두세요. 기본 음성 입력은 클라이언트 기능과 설정을 따릅니다. Cockpit은 이를 대신 처리하거나 강제로 활성화하지 않습니다.",
         "configFailed": "설정을 읽거나 저장하지 못했습니다: {{error}}",
         "nativePredictions": "네이티브 다음 단계 예측(Tab)",
-        "nativePredictionsDesc": "현재 대화의 API 제공업체와 모델로 다음 메시지를 제안합니다. API 크레딧을 추가로 사용합니다. 저장 후 Codex를 다시 시작하세요."
+        "nativePredictionsDesc": "기본적으로 꺼져 있습니다. 제안은 현재 대화의 API 제공업체와 모델을 사용하며 API 사용량이 추가됩니다. 설정을 변경한 후 해당 Codex 인스턴스를 다시 시작하고 Cockpit Tools를 계속 실행하세요."
       },
       "timeDisplayMode": "시간 표시",
       "timeDisplayModeDesc": "계정 카드와 목록에 표시할 시간입니다. 기본값은 전환 시간입니다"
@@ -1871,6 +1929,14 @@
   },
   "appPath": {
     "missing": {
+      "pathLabel": "{{app}} 실행 경로",
+      "configurePath": "경로 설정",
+      "configureHint": "실행 파일을 선택하거나 자동 감지를 사용하려면 입력란을 비워 두세요.",
+      "cliHint": "{{app}}을 찾을 수 없습니다. 실행 파일을 선택하거나 CLI를 설치한 뒤 다시 검색하세요.",
+      "invalidPath": "이 경로에 실행 가능한 {{app}} 파일이 없습니다.",
+      "accountAlreadySwitched": "계정이 이미 전환되었습니다. 앱 실행만 다시 시도합니다.",
+      "saveAndRetry": "저장 후 다시 시도",
+      "operationCancelled": "실행이 취소되었습니다.",
       "scanEmpty": "실행 중인 앱을 찾지 못했습니다. 앱을 실행한 뒤 다시 시도하거나 경로를 직접 선택하세요.",
       "scanEmptyGeneric": "실행 중인 {{app}}을(를) 찾지 못했습니다. 앱을 실행한 뒤 다시 시도하거나 경로를 직접 선택하세요.",
       "title": "애플리케이션 경로를 찾을 수 없음",
@@ -2645,11 +2711,13 @@
       "masterLabel": "초기화 카드 자동 사용",
       "ruleSource": "규칙 출처",
       "weeklyTrigger": "주간 잔여량 조건",
+      "preferUsageCredits": "크레딧 우선",
       "weeklyRemaining": "주간 잔여량 ≤",
       "previewTitle": "실행 조건 미리보기",
       "previewAny": "활성화된 조건 중 하나를 충족하면 초기화 카드 한 장을 사용합니다:",
       "previewExpiry": "카드 만료까지 {{value}} {{unit}} 이내",
       "previewWeekly": "주간 잔여량 {{percent}}% 이하",
+      "previewWeeklyAfterCredits": "주간 잔여량이 {{percent}}% 이하이고 사용 가능한 크레딧이 없음을 확인한 경우",
       "previewOff": "자동 사용이 꺼져 있어 아래 설정은 적용되지 않습니다.",
       "previewEmpty": "활성화된 실행 조건이 없어 카드를 자동으로 사용하지 않습니다.",
       "cardOn": "자동",
@@ -2763,8 +2831,6 @@
     },
     "launchErrors": {
       "sessionRestoreFailed": "세션 복구에 실패했고 백업 복원이 완료되지 않아 실행을 중단했습니다. 다시 시도하기 전에 로그와 백업을 확인하세요.",
-      "sessionCheckTimeout": "세션 확인 시간이 초과되어 실행을 중단했습니다. 다시 시도하거나 로그를 확인하세요.",
-      "sessionFileTooLarge": "세션 파일의 첫 줄이 너무 커서 실행을 중단했습니다. 로그를 확인하세요.",
       "bindingFailed": "계정 연결을 확인할 수 없어 시작을 중단했습니다. 계정 전환을 다시 시도하세요.",
       "processScanFailed": "기존 백그라운드 프로세스를 확인할 수 없어 시작을 중단했습니다. 다시 시도하세요.",
       "proxyEntryFailed": "설정된 프록시를 시작할 수 없습니다. 다른 경로를 사용하지 않았습니다. 다시 시도하세요."
@@ -2982,7 +3048,8 @@
       "forceRefreshAction": "지금 새로 고침",
       "forceRefreshRunning": "Token 새로 고침 중…",
       "forceRefreshSuccess": "Token이 성공적으로 새로 고쳐졌습니다",
-      "forceRefreshRetry": "다시 확인"
+      "forceRefreshRetry": "다시 확인",
+      "advancedMaintenanceTitle": "유지보수 및 진단 도구"
     },
     "switch": "전환",
     "switched": "{{email}}(으)로 전환했습니다",
@@ -3974,9 +4041,6 @@
       "repairModal": {
         "historyDuplicateOrdinals": "다음 기록에 중복된 순번이 있습니다. 기록 인덱스 복구에서 해당 기록을 건너뛰며 전체 복구는 진행할 수 없습니다. 다른 세션은 ‘대화 인덱스 복구’를 선택하세요.\n{{details}}",
         "projectsDeferredAction": "인스턴스를 종료한 뒤 세션 복구에서 로컬 프로젝트를 선택하세요.",
-        "projectsStateSize": "가장 큰 상태 파일: {{file}} ({{bytes}}바이트).",
-        "projectsQuickBudget": "빠른 프로젝트 검사가 한도에 도달했습니다.",
-        "projectsStateTooLarge": "프로젝트 상태 파일이 지원 크기를 초과했습니다.",
         "projectsStopHint": "복구 전에 선택한 인스턴스를 종료하세요. 변경 사항은 지금 미리 볼 수 있습니다.",
         "modeProjectsDesc": "로컬 프로젝트와 채팅 연결을 복구합니다. 대화 기록은 그대로 유지됩니다.",
         "modeProjects": "로컬 프로젝트",
@@ -5176,7 +5240,8 @@
         "speedAdjusted": "{{tier}} → 표준",
         "officialDefaultSpeed": "공식 구독 경로는 속도 지정을 지원하지 않아 이번 요청은 기본 속도로 전송했습니다.",
         "sentTier": "전송: {{tier}}",
-        "originalTier": "원래 속도: {{tier}}"
+        "originalTier": "원래 속도: {{tier}}",
+        "moreFilters": "추가 필터"
       },
       "timeouts": {
         "retryTitle": "전송 및 계정 재시도",
@@ -5936,6 +6001,13 @@
         "nodeCount": "노드 {{count}}개",
         "updatedAt": "업데이트: {{time}}",
         "autoUpdate": "6시간마다 자동 갱신",
+        "dnsOverride": "DNS 덮어쓰기",
+        "ipv6": "IPv6 사용",
+        "dnsServers": "DNS 서버",
+        "dnsServersHint": "한 줄에 주소 하나를 입력하세요. 비워 두면 Cloudflare DoH를 사용합니다.",
+        "networkScope": "이 소스의 새 프록시 연결에 적용됩니다.",
+        "invalidDnsServer": "각 줄에 유효한 DNS 서버 주소를 입력하세요.",
+        "networkSaveFailed": "네트워크 설정을 저장하거나 적용하지 못했습니다. 다시 시도하세요.",
         "snapshotNotice": "구독을 갱신해도 연결된 설정은 바뀌지 않습니다. 다시 연결해야 적용됩니다.",
         "defaultLabel": "기본 항목",
         "defaultEmpty": "미설정",
@@ -6513,7 +6585,8 @@
       "desc": "아래 버튼을 클릭해 브라우저에서 GitHub Copilot 인증을 완료하세요."
     },
     "token": {
-      "desc": "GitHub Copilot 액세스 토큰 또는 내보낸 JSON 데이터를 붙여넣으세요."
+      "desc": "GitHub Copilot 액세스 토큰 또는 내보낸 JSON 데이터를 붙여넣으세요.",
+      "requiredFields": "필수 필드: Token 모드에서는 GitHub access token을 바로 붙여넣으세요. JSON 모드에는 id, github_login, github_id, github_access_token, copilot_token, created_at, last_used가 필요합니다."
     },
     "import": {
       "localDesc": "로컬 VS Code 또는 JSON 파일에서 GitHub Copilot 계정 데이터를 가져옵니다.",
@@ -6890,7 +6963,8 @@
       "desc": "아래 버튼을 클릭해 브라우저에서 Devin 인증을 완료하세요."
     },
     "token": {
-      "desc": "Devin 액세스 토큰 또는 내보낸 JSON 데이터를 붙여넣으세요."
+      "desc": "Devin 액세스 토큰 또는 내보낸 JSON 데이터를 붙여넣으세요.",
+      "requiredFields": "필수 필드: github_access_token (API Key)"
     },
     "import": {
       "localDesc": "로컬에 로그인된 세션에서 Devin 계정을 가져오기.",
@@ -6994,7 +7068,8 @@
       "startUrlRequired": "IAM Identity Center 시작 URL을 입력하세요"
     },
     "token": {
-      "desc": "Kiro 액세스 토큰이나 내보낸 JSON 데이터를 붙여넣으세요."
+      "desc": "Kiro 액세스 토큰이나 내보낸 JSON 데이터를 붙여넣으세요.",
+      "requiredFields": "필수 필드: JSON에는 access_token + refresh_token 사용을 권장합니다(accessToken / refreshToken은 호환용)."
     },
     "import": {
       "localDesc": "로컬 또는 JSON에서 가져옵니다. JSON 계정을 먼저 저장한 후 백그라운드에서 로그인 상태와 사용 한도를 갱신합니다.",
@@ -7614,6 +7689,39 @@
       "detailError": "체크인 오류"
     }
   },
+  "codebuddyCli": {
+    "launchTitle": "CodeBuddy CN 실행",
+    "launchDesktop": "데스크톱 앱 실행",
+    "recheck": "다시 확인",
+    "checking": "CodeBuddy CLI 확인 중…",
+    "rememberDirectory": "이 계정에서 마지막으로 사용한 작업 폴더를 기억합니다.",
+    "installGuide": "공식 설치 가이드",
+    "launch": "CLI 실행",
+    "terminalOpened": "실행 명령을 보냈습니다. 터미널에서 CLI 출력을 확인하세요.",
+    "account": "계정",
+    "selectAccount": "계정 선택",
+    "chooseDirectory": "폴더 선택",
+    "homeDirectory": "홈 폴더",
+    "instances": "CLI 인스턴스",
+    "newInstance": "새 인스턴스",
+    "editInstance": "인스턴스 편집",
+    "noInstances": "저장된 인스턴스가 없습니다.",
+    "removeConfirmation": "이 인스턴스를 삭제할까요? CLI 설정과 기록은 디스크에 유지됩니다.",
+    "errors": {
+      "cliCheckFailed": "CodeBuddy CLI의 설치 여부를 확인하지 못했습니다.",
+      "accountMissing": "저장된 계정을 찾을 수 없습니다.",
+      "accountUnreadable": "저장된 계정을 읽을 수 없습니다.",
+      "credentialMissing": "이 계정에 액세스 토큰이 없습니다. CodeBuddy 또는 CodeBuddy CN에서 다시 인증하세요.",
+      "workingDirInvalid": "기존 작업 폴더를 선택하세요.",
+      "nameRequired": "인스턴스 이름을 입력하세요.",
+      "instanceMissing": "인스턴스를 찾을 수 없습니다.",
+      "storageError": "CLI 인스턴스 데이터를 읽거나 저장할 수 없습니다.",
+      "cliMissing": "CodeBuddy CLI를 찾을 수 없습니다. 공식 가이드에 따라 설치하세요.",
+      "launchFailed": "CodeBuddy CLI를 실행하지 못했습니다.",
+      "terminalFailed": "터미널을 열 수 없습니다.",
+      "terminalUnsupported": "일반 설정에서 지원되는 터미널을 선택하세요. macOS에서는 Terminal, iTerm2 또는 Ghostty를 사용할 수 있습니다."
+    }
+  },
   "codebuddyCn": {
     "title": "CodeBuddy CN 계정 관리",
     "noAccounts": "CodeBuddy CN 계정이 없습니다",
@@ -7639,6 +7747,27 @@
     "syncFailed": "동기화 실패: {{error}}",
     "syncSuccess": "{{count}}개의 계정이 WorkBuddy에 동기화되었습니다",
     "syncToWorkbuddy": "WorkBuddy에 동기화"
+  },
+  "workbuddyAi": {
+    "search": "WorkBuddy AI 계정 검색",
+    "noAccounts": "WorkBuddy AI 계정 없음",
+    "addAccount": "WorkBuddy AI 계정 추가",
+    "oauthDesc": "브라우저에서 WorkBuddy AI 인증 페이지를 엽니다.",
+    "tokenDesc": "WorkBuddy AI 액세스 토큰 또는 내보낸 JSON을 붙여넣으세요.",
+    "importDesc": "이 기기의 앱이나 JSON 파일에서 가져옵니다.",
+    "importClient": "WorkBuddy AI에서 가져오기",
+    "flowNotice": {
+      "title": "WorkBuddy AI 계정 안내",
+      "desc": "계정을 전환하면 이 기기의 로그인 파일을 갱신하고 국제판 앱을 실행합니다.",
+      "permission": "국제판 로그인 파일을 읽고 씁니다. 기존 암호화 필드는 공식 앱의 암호화 기능으로 처리합니다.",
+      "network": "인증, 토큰 갱신, 크레딧 조회는 WorkBuddy AI에 연결합니다. 로그인 파일과 암호화 자료는 이 기기에 보관됩니다."
+    },
+    "oauthFeature": {
+      "title": "WorkBuddy AI 로그인",
+      "signIn": "브라우저에서 WorkBuddy AI에 로그인하세요.",
+      "switch": "인증 후 목록에서 국제판 계정을 전환할 수 있습니다.",
+      "credits": "계정 카드에서 남은 크레딧을 확인하세요."
+    }
   },
   "workbuddy": {
     "desktopEdition": "WorkBuddy(중국판)",
@@ -8479,7 +8608,8 @@
       "deploying": "모델을 가져오는 중…",
       "deploySuccess": "Codex에 배포됨: 모델 {{count}}개",
       "deployFailed": "배포 실패: {{error}}",
-      "useKey": "키 사용"
+      "useKey": "키 사용",
+      "deleteConfirm": "저장된 키 \"{{name}}\"을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다."
     },
     "prefill": {
       "codexReady": "APIKEY.FUN 설정을 불러왔습니다. 확인한 뒤 Codex에 추가하세요.",

@@ -23,7 +23,7 @@ export function ruleDescriptions(rule: ResetRule, t: TFunction) {
       value: Number.isFinite(rule.before_seconds) ? rule.before_seconds / unit : '—',
       unit: t(`codex.resetAutomation.${unit === 86400 ? 'days' : unit === 3600 ? 'hours' : 'minutes'}`),
     }) : null,
-    rule.quota_enabled ? t('codex.resetAutomation.previewWeekly', { percent: Number.isFinite(rule.remaining_percent) ? rule.remaining_percent : '—' }) : null,
+    rule.quota_enabled ? t(rule.prefer_usage_credits ? 'codex.resetAutomation.previewWeeklyAfterCredits' : 'codex.resetAutomation.previewWeekly', { percent: Number.isFinite(rule.remaining_percent) ? rule.remaining_percent : '—' }) : null,
   ].filter((value): value is string => value !== null);
 }
 function useAutomation() {
@@ -85,10 +85,10 @@ function RuleEditor({ rule, onChange, t, fieldError, validationAttempt }: {
     const node = fieldError === 'invalidTime' ? timeRef.current : fieldError === 'invalidPercent' ? percentRef.current : null;
     node?.focus(); node?.scrollIntoView({ block: 'nearest' });
   }, [fieldError, validationAttempt]);
-  const toggle = (key: 'enabled' | 'expiry_enabled' | 'quota_enabled', label: string) => <div className={`reset-automation-setting-row ${key === 'enabled' ? 'is-master' : ''}`}>
+  const toggle = (key: 'enabled' | 'expiry_enabled' | 'quota_enabled' | 'prefer_usage_credits', label: string, disabled = key !== 'enabled' && !rule.enabled) => <div className={`reset-automation-setting-row ${key === 'enabled' ? 'is-master' : ''}`}>
     <label htmlFor={`${id}-${key}`}>{label}</label>
     <button type="button" id={`${id}-${key}`} className={`btn reset-automation-switch ${rule[key] ? 'is-on' : ''}`}
-      role="switch" aria-label={label} aria-checked={rule[key]} disabled={key !== 'enabled' && !rule.enabled}
+      role="switch" aria-label={label} aria-checked={rule[key]} disabled={disabled}
       onClick={() => onChange({ ...rule, [key]: !rule[key] })}><span /></button>
   </div>;
   const timeDisabled = !rule.enabled || !rule.expiry_enabled;
@@ -119,6 +119,7 @@ function RuleEditor({ rule, onChange, t, fieldError, validationAttempt }: {
           aria-invalid={fieldError === 'invalidPercent'} aria-describedby={fieldError === 'invalidPercent' ? `${id}-error` : undefined}
           onChange={e => onChange({ ...rule, remaining_percent: e.target.value === '' ? NaN : Number(e.target.value) })} /><span>%</span>
       </div>
+      {toggle('prefer_usage_credits', t('codex.resetAutomation.preferUsageCredits'), quotaDisabled)}
       {fieldError === 'invalidPercent' && <p id={`${id}-error`} className="reset-automation-field-error" role="alert">{t('codex.resetAutomation.invalidPercent')}</p>}
     </div>
     <RulePreview rule={rule} t={t} />

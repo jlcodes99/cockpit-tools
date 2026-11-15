@@ -1,3 +1,4 @@
+import { withCliLaunchPath } from '../utils/cliLaunchPath';
 import { invoke } from '@tauri-apps/api/core';
 import { withClaudeProfileErrors } from './claudeProfileErrors';
 import { createPlatformInstanceService } from './platform/createPlatformInstanceService';
@@ -26,15 +27,15 @@ export interface ClaudeInstanceLaunchInfo {
 export async function getClaudeInstanceLaunchCommand(
   instanceId: string,
 ): Promise<ClaudeInstanceLaunchInfo> {
-  return await invoke('claude_get_instance_launch_command', { instanceId });
+  return withCliLaunchPath('claude_cli', () => invoke('claude_get_instance_launch_command', { instanceId }));
 }
 
 export async function executeClaudeInstanceLaunchCommand(
   instanceId: string,
   terminal?: string,
 ): Promise<string> {
-  return await invoke('claude_execute_instance_launch_command', {
+  return withCliLaunchPath('claude_cli', () => invoke('claude_execute_instance_launch_command', {
     instanceId,
     terminal: terminal ?? null,
-  });
+  }));
 }

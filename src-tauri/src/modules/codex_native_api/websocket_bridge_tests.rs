@@ -28,6 +28,10 @@ mod tool_integrity_tests;
 mod anthropic_tests;
 #[path = "responses_external_results_http_tests.rs"]
 mod external_results_tests;
+#[path = "websocket_full_replay_http_tests.rs"]
+mod full_replay_tests;
+#[path = "websocket_context_seed_http_tests.rs"]
+mod context_seed_tests;
 
 struct BridgeHost {
     base: String,
@@ -38,8 +42,30 @@ struct BridgeHost {
     initial_timeout_ms: std::sync::atomic::AtomicU64,
     reports: Mutex<Vec<RequestReport>>,
     changed: tokio::sync::Notify,
+    quota_gate: Mutex<SeedQuotaGate>,
+}
+#[derive(Default)]
+struct SeedQuotaGate {
+    allow_checks: Option<usize>,
+    checks: usize,
+    refresh_recovers: bool,
+    refreshed: bool,
+    no_backup: bool,
 }
 impl Host for BridgeHost {
+    fn check_quota_before_send(&self, account: &str) -> Result<(), ServiceError> {
+        let mut gate = self.quota_gate.lock().unwrap();
+        gate.checks += 1;
+        if account == "a" && !gate.refreshed && gate.allow_checks.is_some_and(|allowed| gate.checks > allowed) {
+            return Err(ServiceError::new(429, "quota_reserved", "Synthetic reserve gate")
+                .with_error_details(json!({"code":"quota_reserved","confirmation_pending":gate.refresh_recovers})));
+        }
+        Ok(())
+    }
+    fn request_quota_refresh(&self, _: &str) {
+        let mut gate = self.quota_gate.lock().unwrap();
+        if gate.refresh_recovers { gate.refreshed = true; }
+    }
     fn authorize<'a>(&'a self, bearer: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
         Box::pin(async move {
             if bearer != "key" {
@@ -57,13 +83,17 @@ impl Host for BridgeHost {
         request: RouteRequest,
     ) -> BoxFuture<'a, Result<Route, ServiceError>> {
         Box::pin(async move {
+            let backup = request.excluded_account_ids.iter().any(|id| id == "a");
+            if backup && self.quota_gate.lock().unwrap().no_backup {
+                return Err(ServiceError::new(503, "no_available_account", "Synthetic pool exhausted"));
+            }
             let account = if self.honor_preferred.load(Ordering::SeqCst) {
                 request
                     .preferred_account_id
                     .as_deref()
-                    .unwrap_or(if request.model == "other" { "b" } else { "a" })
+                    .unwrap_or(if backup || request.model == "other" { "b" } else { "a" })
             } else {
-                if request.model == "other" {
+                if backup || request.model == "other" {
                     "b"
                 } else {
                     "a"
@@ -87,7 +117,7 @@ impl Host for BridgeHost {
                 client: self.client.clone(),
                 proxy_url: None,
                 proxy_route: None,
-                chatgpt: false,
+                chatgpt: self.quota_gate.lock().unwrap().allow_checks.is_some(),
                 chatgpt_plan: false,
                 wire_api: self.wire,
                 compact_endpoint: None,
@@ -172,6 +202,7 @@ async fn fixture_with_upstream_host(
         initial_timeout_ms: std::sync::atomic::AtomicU64::new(30_000),
         reports: Mutex::new(Vec::new()),
         changed: tokio::sync::Notify::new(),
+        quota_gate: Mutex::new(SeedQuotaGate::default()),
     });
     let dir = tempfile::tempdir().unwrap();
     let handle = native::start(

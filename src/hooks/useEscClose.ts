@@ -9,7 +9,7 @@ export function useEscClose(isOpen: boolean, onClose: () => void) {
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !e.defaultPrevented) {
         e.preventDefault();
         onCloseRef.current();
       }

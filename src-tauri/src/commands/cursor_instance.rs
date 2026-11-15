@@ -215,6 +215,17 @@ pub async fn cursor_delete_instance(instance_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn cursor_launch_current() -> Result<(), String> {
+    tokio::task::spawn_blocking(|| {
+        modules::cursor_instance::ensure_cursor_launch_path_configured()?;
+        let settings = modules::cursor_instance::load_default_settings()?;
+        let args = modules::process::parse_extra_args(&settings.extra_args);
+        let pid = modules::cursor_instance::start_cursor_default_with_args_with_new_window(&args, true)?;
+        modules::cursor_instance::update_default_pid(Some(pid)).map(|_| ())
+    }).await.map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn cursor_start_instance(instance_id: String) -> Result<InstanceProfileView, String> {
     modules::logger::log_info(&format!("开始启动 Cursor 实例: {}", instance_id));
     modules::cursor_instance::ensure_cursor_launch_path_configured()?;

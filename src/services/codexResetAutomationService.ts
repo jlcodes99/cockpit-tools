@@ -8,6 +8,7 @@ export interface ResetRule {
   before_seconds: number;
   quota_enabled: boolean;
   remaining_percent: number;
+  prefer_usage_credits: boolean;
 }
 export type ResetAccountRule = { mode: 'inherit' } | { mode: 'off' } | { mode: 'custom'; rule: ResetRule };
 export interface ResetAutomationRecord {
@@ -18,7 +19,7 @@ export interface ResetAutomationState {
 }
 export const defaultResetRule: ResetRule = {
   enabled: false, expiry_enabled: true, before_seconds: 3_600,
-  quota_enabled: true, remaining_percent: 5,
+  quota_enabled: true, remaining_percent: 5, prefer_usage_credits: false,
 };
 let state: ResetAutomationState | null = null;
 let pending: Promise<ResetAutomationState> | null = null;

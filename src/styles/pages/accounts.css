@@ -199,11 +199,45 @@
   flex-shrink: 0;
 }
 
-.account-last-used .alu-select {
+.account-last-used .alu-select,
+.account-last-used .alu-dropdown {
   display: inline-flex;
   align-items: center;
+  width: auto;
   max-width: 220px;
   min-width: 0;
+}
+
+.account-last-used .alu-dropdown .single-select-dropdown-trigger {
+  min-height: 24px;
+  padding: 2px 6px;
+  gap: 6px;
+  border-radius: 6px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+}
+
+.account-last-used .alu-dropdown .single-select-dropdown-trigger:hover:not(:disabled),
+.account-last-used .alu-dropdown .single-select-dropdown-trigger.open {
+  border-color: var(--border);
+  background: var(--bg-tertiary);
+  box-shadow: none;
+}
+
+.account-last-used .alu-dropdown .single-select-dropdown-value {
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+}
+
+.account-last-used .alu-dropdown .single-select-dropdown-arrow {
+  width: 12px;
+  height: 12px;
+}
+
+.account-last-used .alu-select {
   text-overflow: ellipsis;
   border: 1px solid transparent;
   background: transparent;

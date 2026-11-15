@@ -1,0 +1,8 @@
+.codex-cli-launch-dialog > .modal-body {
+  display: grid;
+  gap: 12px;
+}
+
+.codex-cli-launch-dialog .client-launch-account {
+  margin: 0;
+}

@@ -1,4 +1,44 @@
 {
+  "antigravityLaunch": {
+    "initializeTitle": "Antigravity IDE 尚未初始化",
+    "initializeThenSwitch": "先打开 IDE，初始化后即可切号。",
+    "initializeThenBind": "初始化后即可绑定账号。",
+    "initializeThenUseAccount": "初始化后即可使用已绑定账号。",
+    "initializeAction": "先启动一次",
+    "initializeHint": "Antigravity IDE 尚未初始化。请先启动所选实例一次，完成后再继续。",
+    "initializeWaiting": "正在等待 Antigravity IDE 初始化。完成后可手动继续。",
+    "initializeRetry": "初始化尚未完成。请确认 IDE 已打开，再重试。",
+    "pathLabel": "启动路径",
+    "pathConfigured": "已配置",
+    "pathDetected": "自动检测",
+    "pathInvalid": "已配置的路径无效",
+    "pathCheckFailed": "路径检测失败",
+    "pathSaveAndRetry": "保存并重试",
+    "switchAndCopy": "切换并复制",
+    "sharedInstanceStart": "切换共享账号并启动",
+    "sharedInstanceHint": "其他已打开的 Antigravity 实例会继续运行，也可能同步到新账号。",
+    "sharedInstanceRestart": "只重启选中的实例。",
+    "lastSharedAccount": "最近切换的共享账号",
+    "sharedAccountUnknown": "暂无切换记录",
+    "sharedInstanceSubtitle": "各实例使用独立目录，共用 Google 登录。",
+    "sharedInstanceStarted": "共享登录已更新，启动请求已发送。",
+    "sharedInstanceLaunchFailed": "共享登录已更新，但实例启动失败：{{error}}",
+    "sharedCopySource": "复制所选实例的配置目录。",
+    "quickSwitchSetting": "适用于 Antigravity IDE 快捷切号。通过账号弹框切换时，每次可单独选择是否启动。",
+    "title": "选择客户端",
+    "switchOnly": "仅切号",
+    "switchAndLaunch": "切换并启动",
+    "homeDirectory": "用户主目录",
+    "invalidDirectory": "请选择存在的文件夹。",
+    "directoryFailed": "无法打开文件夹选择器。{{error}}",
+    "shared": "以下客户端共用 Google 登录：{{clients}}。",
+    "sharedHint": "共用 Google 登录的客户端可能会一起切号。",
+    "clientOnly": "此客户端使用独立登录。",
+    "cliAuth": "agy 按自身认证设置启动。若已配置 API Key 或 Google Cloud 凭据，会优先使用该认证方式。",
+    "cliMissing": "未找到 agy，请安装官方 Antigravity CLI 后重试。",
+    "terminalFailed": "无法准备终端。{{error}}",
+    "switchedTerminalFailed": "账号已切换，但终端未打开。{{error}}"
+  },
   "pelican": {
     "caseKinds": {
       "mathExact": "数学·精确概率",
@@ -661,7 +701,14 @@
       },
       "clear": "清除",
       "loginSuccess": "登录成功",
-      "switchAccount": "切换账号"
+      "switchAccount": "切换账号",
+      "tokenFormat": {
+        "summary": "必填字段与示例（点击展开）",
+        "single": "单条示例",
+        "singleToken": "单条示例（Token）",
+        "singleJson": "单条示例（JSON）",
+        "batchJson": "批量示例（JSON）"
+      }
     },
     "appName": "Cockpit Tools",
     "collapse": "收起",
@@ -769,6 +816,7 @@
     }
   },
   "nav": {
+    "workbuddyAi": "WorkBuddy AI",
     "overview": "Antigravity IDE",
     "accounts": "账号管理",
     "wakeup": "唤醒任务",
@@ -980,7 +1028,8 @@
       "deploying": "正在拉取模型…",
       "deploySuccess": "已部署到 Codex：{{count}} 个模型",
       "deployFailed": "部署失败：{{error}}",
-      "useKey": "使用密钥"
+      "useKey": "使用密钥",
+      "deleteConfirm": "确定删除已保存密钥“{{name}}”吗？此操作无法撤销。"
     },
     "prefill": {
       "codexReady": "已填入 APIKEY.FUN 配置，请确认后添加到 Codex。",
@@ -1051,6 +1100,10 @@
     "hiddenBadge": "已隐藏",
     "openFromMore": "管理平台布局",
     "dragHandleLabel": "拖拽排序",
+    "sortKeyboardInstructions": "按空格键开始排序，按方向键移动，按空格键或回车键放下，按 Esc 键取消。",
+    "sortPosition": "位置 {{position}}，共 {{total}} 项。",
+    "sortPlaced": "已移到第 {{position}} 位。",
+    "sortCancelled": "已取消排序。",
     "collapseAllChildren": "收起全部子级",
     "expandAllChildren": "展开全部子级",
     "addChildPlatform": "添加子级平台",
@@ -1060,7 +1113,9 @@
     "customIconDeleteConfirm": "确认删除这个自定义图标吗？",
     "editChildPlatform": "编辑子级平台",
     "setAsDefaultInGroup": "设为分组内默认平台",
-    "removeFromGroup": "移出分组"
+    "removeFromGroup": "移出分组",
+    "confirmResetDesc": "恢复默认将清空自定义分组与排序设置，确定继续吗？",
+    "confirmDeleteGroupDesc": "确定删除分组「{{name}}」？组内平台将恢复为独立显示。"
   },
   "privacy": {
     "hideSensitive": "隐藏邮箱",
@@ -1349,6 +1404,11 @@
       "restart": "关闭并重启"
     },
     "launchDialog": {
+      "customCommand": "自定义命令",
+      "useDefaultCommand": "使用默认命令",
+      "customCommandHint": "留空使用默认命令。",
+      "rememberDirectory": "记住上次使用的工作目录。",
+      "chooseDirectory": "选择目录",
       "title": "启动实例",
       "terminal": "终端",
       "command": "启动命令",
@@ -1693,7 +1753,7 @@
       "claudeAutoRefreshDesc": "后台自动更新 Claude 账号配额缓存",
       "claudeAppPath": "Claude Desktop 启动目标",
       "claudeAppPathDesc": "默认实例可使用 Microsoft Store 应用目标；应用多开请选择真实 Claude.exe。",
-      "antigravityLaunchOnSwitch": "切换时启动 Antigravity",
+      "antigravityLaunchOnSwitch": "切换时启动 Antigravity IDE",
       "antigravityLaunchOnSwitchDesc": "关闭后切号只写入 Antigravity 默认账号数据，不会关闭、启动或重启应用。",
       "tokenKeeper": "后台授权保活",
       "tokenKeeperDesc": "仅在授权快过期时分批刷新账号 Token，降低大量账号场景下的后台请求压力。",
@@ -1757,10 +1817,9 @@
       "codexEnhancements": {
         "quotaCompat": "混合模式额度兼容",
         "quotaCompatDesc": "API 服务实例使用可用额度视图，仅调整客户端显示和本地判断；真实上游用量及图像额度不变。此开关仅用于其他 OAuth＋外部 API 混合模式。",
-        "restartHint": "原生下一步预测默认关闭。修改后需重启各目标 Codex 实例，并保持 Cockpit Tools 运行。原生听写由客户端能力与设置决定，Cockpit 不接管或强制启用。",
         "configFailed": "设置读取或保存失败：{{error}}",
         "nativePredictions": "原生下一步预测（Tab）",
-        "nativePredictionsDesc": "使用当前对话的 API 供应商和模型生成下一条消息建议，会额外消耗 API 额度；保存后重启 Codex 生效。"
+        "nativePredictionsDesc": "默认关闭。使用当前对话的 API 供应商和模型生成下一条消息建议，会产生额外的 API 用量。修改后请重启相关 Codex 实例，并保持 Cockpit Tools 运行。"
       }
     },
     "tabs": {
@@ -2115,6 +2174,14 @@
       "desc": "未找到 {{app}} 应用程序路径，请立即设置后继续。"
     },
     "missing": {
+      "pathLabel": "{{app}} 启动路径",
+      "configurePath": "配置路径",
+      "configureHint": "选择可执行文件，或留空使用自动检测。",
+      "cliHint": "未找到 {{app}}。请选择可执行文件，或安装 CLI 后重新检测。",
+      "invalidPath": "此路径下没有可用的 {{app}} 可执行文件。",
+      "accountAlreadySwitched": "账号已切换。保存路径后只重试启动客户端。",
+      "saveAndRetry": "保存并重试",
+      "operationCancelled": "已取消启动。",
       "scanEmpty": "未检测到正在运行的应用。请先启动后重试，或手动选择路径。",
       "scanEmptyGeneric": "未检测到正在运行的 {{app}}。请先启动后重试，或手动选择路径。",
       "title": "未找到应用程序路径",
@@ -2886,11 +2953,13 @@
       "masterLabel": "设置自动使用重置卡",
       "ruleSource": "规则来源",
       "weeklyTrigger": "周额度触发",
+      "preferUsageCredits": "积分优先",
       "weeklyRemaining": "周剩余额度 ≤",
       "previewTitle": "触发规则预览",
       "previewAny": "满足以下任意一项时，自动使用一张重置卡：",
       "previewExpiry": "距离重置卡到期不超过 {{value}} {{unit}}",
       "previewWeekly": "周剩余额度不高于 {{percent}}%",
+      "previewWeeklyAfterCredits": "周剩余额度不高于 {{percent}}%，且确认积分不可用",
       "previewOff": "自动使用已关闭，以下配置暂不生效。",
       "previewEmpty": "未启用任何触发条件，暂不会自动使用重置卡。",
       "cardOn": "自动",
@@ -3004,8 +3073,6 @@
     },
     "launchErrors": {
       "sessionRestoreFailed": "会话修复失败，备份恢复未完成，已停止启动。请先检查日志和备份，再重试。",
-      "sessionCheckTimeout": "会话检查超时，已停止启动。请重试，或查看日志。",
-      "sessionFileTooLarge": "会话文件首行过大，已停止启动。请查看日志。",
       "bindingFailed": "无法确认账号绑定，已停止启动，请重试切号。",
       "processScanFailed": "无法检查旧后台进程，已停止启动，请重试。",
       "proxyEntryFailed": "配置的代理入口无法启动，未改用其他出口，请重试。"
@@ -3223,7 +3290,8 @@
       "forceRefreshAction": "立即刷新",
       "forceRefreshRunning": "正在刷新 Token…",
       "forceRefreshSuccess": "Token 刷新成功",
-      "forceRefreshRetry": "重新检测"
+      "forceRefreshRetry": "重新检测",
+      "advancedMaintenanceTitle": "维护与诊断工具"
     },
     "switch": "切换",
     "switched": "已切换至 {{email}}",
@@ -4936,9 +5004,6 @@
       "repairModal": {
         "historyDuplicateOrdinals": "以下历史记录存在重复序号。修复历史索引会跳过这些记录，完整修复无法继续。可选择「修复会话索引」处理其他会话。\n{{details}}",
         "projectsDeferredAction": "请退出实例，然后在「修复历史会话」中选择「本地项目」继续。",
-        "projectsStateSize": "最大的状态文件为 {{file}}，大小为 {{bytes}} 字节。",
-        "projectsQuickBudget": "快速项目扫描已达到处理上限。",
-        "projectsStateTooLarge": "项目状态文件超过支持的大小。",
         "projectsStopHint": "恢复前请完全退出所选实例。现在可以预览变更。",
         "modeProjectsDesc": "恢复本地项目与会话归属，保留消息历史。",
         "modeProjects": "本地项目",
@@ -5513,7 +5578,8 @@
         "speedAdjusted": "{{tier}} → 标准",
         "officialDefaultSpeed": "官方套餐通道不支持速度覆盖，本次已按默认速度发送。",
         "sentTier": "发送：{{tier}}",
-        "originalTier": "原档位：{{tier}}"
+        "originalTier": "原档位：{{tier}}",
+        "moreFilters": "更多筛选"
       },
       "recovery": {
         "progress": "正在自动恢复账号配置（{{attempt}}/{{total}}）",
@@ -6177,6 +6243,13 @@
         "nodeCount": "{{count}} 个节点",
         "updatedAt": "更新于 {{time}}",
         "autoUpdate": "每 6 小时自动更新",
+        "dnsOverride": "DNS 覆写",
+        "ipv6": "启用 IPv6",
+        "dnsServers": "DNS 服务器",
+        "dnsServersHint": "每行一个地址，留空使用 Cloudflare DoH。",
+        "networkScope": "适用于此来源代理的新连接。",
+        "invalidDnsServer": "请在每行输入一个有效的 DNS 服务器地址。",
+        "networkSaveFailed": "网络设置保存或应用失败，请重试。",
         "snapshotNotice": "更新订阅不会改变已绑定的配置；选择后重新绑定才能应用更新。",
         "defaultLabel": "默认项",
         "defaultEmpty": "未设置",
@@ -6870,7 +6943,8 @@
       "desc": "点击下方按钮，在浏览器中完成 GitHub Copilot OAuth 授权。"
     },
     "token": {
-      "desc": "粘贴您的 GitHub Copilot Access Token 或导出的 JSON 数据。"
+      "desc": "粘贴您的 GitHub Copilot Access Token 或导出的 JSON 数据。",
+      "requiredFields": "必填字段：Token 模式直接粘贴 GitHub access token；JSON 模式需包含 id、github_login、github_id、github_access_token、copilot_token、created_at、last_used"
     },
     "import": {
       "localDesc": "支持从本机 VS Code 或 JSON 文件导入 GitHub Copilot 账号数据。",
@@ -7247,7 +7321,8 @@
       "batchFailureMore": "还有 {{count}} 项失败"
     },
     "token": {
-      "desc": "粘贴您的 Devin Access Token 或导出的 JSON 数据。"
+      "desc": "粘贴您的 Devin Access Token 或导出的 JSON 数据。",
+      "requiredFields": "必填字段：github_access_token (API Key)"
     },
     "import": {
       "localDesc": "从 JSON 文件导入 Devin 账号数据。",
@@ -7351,7 +7426,8 @@
       "startUrlRequired": "请填写 IAM Identity Center Start URL"
     },
     "token": {
-      "desc": "粘贴您的 Kiro Access Token 或导出的 JSON 数据。"
+      "desc": "粘贴您的 Kiro Access Token 或导出的 JSON 数据。",
+      "requiredFields": "必填字段：JSON 建议使用 access_token + refresh_token（accessToken/refreshToken 仅兼容）"
     },
     "import": {
       "localDesc": "支持本机或 JSON 导入；JSON 账号先保存，再后台刷新登录态与额度。",
@@ -7983,6 +8059,39 @@
       "detailError": "签到异常"
     }
   },
+  "codebuddyCli": {
+    "launchTitle": "启动 CodeBuddy CN",
+    "launchDesktop": "启动桌面版",
+    "recheck": "重新检测",
+    "checking": "正在检测 CodeBuddy CLI…",
+    "rememberDirectory": "记住此账号上次使用的工作目录。",
+    "installGuide": "官方安装指南",
+    "launch": "启动 CLI",
+    "terminalOpened": "启动命令已发送，请在终端查看 CLI 输出。",
+    "account": "账号",
+    "selectAccount": "选择账号",
+    "chooseDirectory": "选择目录",
+    "homeDirectory": "用户主目录",
+    "instances": "CLI 实例",
+    "newInstance": "新建实例",
+    "editInstance": "编辑实例",
+    "noInstances": "暂无已保存的实例。",
+    "removeConfirmation": "移除此实例？其 CLI 配置和会话历史仍保留在磁盘上。",
+    "errors": {
+      "cliCheckFailed": "无法检测 CodeBuddy CLI。",
+      "accountMissing": "找不到已保存的账号。",
+      "accountUnreadable": "无法读取已保存的账号。",
+      "credentialMissing": "该账号缺少访问令牌，请在 CodeBuddy 或 CodeBuddy CN 中重新授权。",
+      "workingDirInvalid": "请选择已存在的工作目录。",
+      "nameRequired": "请输入实例名称。",
+      "instanceMissing": "找不到该实例。",
+      "storageError": "无法读取或保存 CLI 设置。",
+      "cliMissing": "未找到 CodeBuddy CLI，请按官方指南安装。",
+      "launchFailed": "CodeBuddy CLI 启动失败。",
+      "terminalFailed": "无法打开终端。",
+      "terminalUnsupported": "请在通用设置中选择受支持的终端。macOS 可用 Terminal、iTerm2 或 Ghostty。"
+    }
+  },
   "codebuddyCn": {
     "title": "CodeBuddy CN 账号管理",
     "noAccounts": "暂无 CodeBuddy CN 账号",
@@ -8008,6 +8117,27 @@
     "syncFailed": "同步失败: {{error}}",
     "syncSuccess": "成功同步 {{count}} 个账号到 WorkBuddy",
     "syncToWorkbuddy": "同步到 WorkBuddy"
+  },
+  "workbuddyAi": {
+    "search": "搜索 WorkBuddy AI 账号",
+    "noAccounts": "暂无 WorkBuddy AI 账号",
+    "addAccount": "添加 WorkBuddy AI 账号",
+    "oauthDesc": "在浏览器中打开 WorkBuddy AI 的授权页面。",
+    "tokenDesc": "粘贴 WorkBuddy AI 的访问令牌或导出的 JSON。",
+    "importDesc": "从本机 WorkBuddy AI 客户端或导出的 JSON 文件导入。",
+    "importClient": "从本机导入 WorkBuddy AI",
+    "flowNotice": {
+      "title": "WorkBuddy AI 账号管理说明",
+      "desc": "切号会更新 WorkBuddy AI 的本地登录文件并启动国际版客户端。",
+      "permission": "本机导入和切号只读写国际版的登录文件。已有加密字段时，通过本机国际版客户端的加密能力处理。",
+      "network": "浏览器授权、令牌刷新和积分查询会请求 WorkBuddy AI。登录文件和加密材料保留在本机。"
+    },
+    "oauthFeature": {
+      "title": "WorkBuddy AI 授权",
+      "signIn": "在浏览器中登录你的 WorkBuddy AI 账号。",
+      "switch": "授权后可在账号列表中切换国际版客户端。",
+      "credits": "账号卡片可查看剩余积分。"
+    }
   },
   "workbuddy": {
     "desktopEdition": "WorkBuddy 国内版",

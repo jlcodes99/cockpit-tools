@@ -1,5 +1,5 @@
 //! Local project registry recovery. No credentials, providers or rollout contents.
-//! Quick repair uses bounded current metadata; deep repair may inspect snapshots.
+//! Quick repair uses current metadata; deep repair may inspect snapshots.
 //! Neither path reads credentials, providers or rollout contents.
 use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
@@ -14,10 +14,6 @@ const ASSIGN: &str = "thread-project-assignments";
 const MIGRATION: &str = "app-server-projects-migration-by-host";
 const HOSTS: &str = "thread-project-membership-host-ids";
 const JOURNAL: &str = ".cockpit-local-project-recovery.json";
-const MAX_STATE_BYTES: u64 = 20_000_000;
-const QUICK_MAX_PROJECTS: usize = 256;
-const QUICK_MAX_THREADS: usize = 2048;
-const QUICK_MAX_CATALOG_ROWS: usize = 4096;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -78,10 +74,6 @@ impl Plan {
     }
 }
 
-fn check() -> Result<(), String> {
-    super::check_launch_visibility_budget("local_projects")
-}
-
 fn open(path: &Path, write: bool) -> Result<Connection, String> {
     let flags = if write {
         OpenFlags::SQLITE_OPEN_READ_WRITE
@@ -91,14 +83,12 @@ fn open(path: &Path, write: bool) -> Result<Connection, String> {
     let db = Connection::open_with_flags(path, flags).map_err(|e| e.to_string())?;
     db.busy_timeout(std::time::Duration::from_millis(150))
         .map_err(|e| e.to_string())?;
-    super::configure_launch_visibility_connection(&db)?;
     Ok(db)
 }
 
 fn read_bytes(path: &Path) -> Result<Option<Vec<u8>>, String> {
-    match fs::metadata(path) {
-        Ok(meta) if meta.len() > MAX_STATE_BYTES => Err("CODEX_PROJECT_STATE_TOO_LARGE".into()),
-        Ok(_) => fs::read(path).map(Some).map_err(|e| e.to_string()),
+    match fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e.to_string()),
     }

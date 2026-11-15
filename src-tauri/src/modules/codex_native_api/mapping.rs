@@ -1333,7 +1333,7 @@ async fn rewrite_with_context(
     mut context: RequestIdentity,
     mut body: Value,
 ) -> Result<(Value, HeaderMap, Binding), ServiceError> {
-    context.restrict_session_mapping(prepared.route.uses_codex_session_mapping());
+    let mapping_enabled = context.restrict_session_mapping(prepared.route.uses_codex_session_mapping());
     body["model"] = Value::String(prepared.route.model.clone());
     apply_grok_thinking(
         &prepared.route,
@@ -1356,7 +1356,18 @@ async fn rewrite_with_context(
     let store = state.identity.clone();
     let account = prepared.route.continuity_id().to_owned();
     let owner = prepared.route.owner_id.clone();
-    let mut headers = prepared.headers.clone();
+    // Rewriting already-mapped headers maps Session-Id a second time. Build
+    // the same logical header projection as finalize, keeping fresh route
+    // credentials and the caller's deliberate session/cache alias intact.
+    let incoming = prepared.replay_headers();
+    let mut headers = outbound_headers(incoming);
+    if !mapping_enabled {
+        for (name, marker) in super::websocket::ROUTING_HEADERS {
+            if incoming.contains_key(marker) { headers.remove(name); }
+        }
+    }
+    headers.extend(prepared.route.headers.clone());
+    super::server::forward_remote_scope_headers(incoming, &prepared.route, &mut headers);
     let (mut body, mut headers, binding) = super::blocking::run_prepared(state, move || {
         let binding = store.rewrite(&context, &account, &owner, &mut headers, &mut body)?;
         Ok((body, headers, binding))

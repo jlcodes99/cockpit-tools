@@ -1,7 +1,5 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
@@ -18,7 +16,7 @@ use crate::models::{
 use crate::modules;
 
 #[path = "codex_instance_terminal.rs"]
-mod terminal;
+pub(super) mod terminal;
 use terminal::build_codex_terminal_launch_plan;
 
 #[cfg(test)]
@@ -1624,6 +1622,7 @@ fn build_launch_command_text(
     context: &CodexLaunchContext,
     binary_path: &str,
     node_path: Option<&str>,
+    custom_command: Option<&str>,
 ) -> Result<String, String> {
     let parsed_args = modules::process::parse_extra_args(&context.extra_args);
 
@@ -1642,17 +1641,24 @@ fn build_launch_command_text(
         codex_cmd.push_str("CODEX_HOME=");
         codex_cmd.push_str(&posix_shell_quote(&context.user_data_dir));
         codex_cmd.push(' ');
-        if let Some(node_path) = node_path {
-            codex_cmd.push_str(&posix_shell_quote(node_path));
-            codex_cmd.push(' ');
-        }
-        codex_cmd.push_str(&posix_shell_quote(binary_path));
-
-        for arg in parsed_args {
-            let trimmed = arg.trim();
-            if !trimmed.is_empty() {
+        if let Some(script) = custom_command {
+            if let Some(dir) = Path::new(binary_path).parent().filter(|dir| dir.is_absolute()) {
+                codex_cmd.push_str(&format!(
+                    "PATH={}:\"$PATH\" ",
+                    posix_shell_quote(&dir.to_string_lossy()),
+                ));
+            }
+            codex_cmd.push_str("/bin/sh -c ");
+            codex_cmd.push_str(&posix_shell_quote(script));
+        } else {
+            if let Some(node_path) = node_path {
+                codex_cmd.push_str(&posix_shell_quote(node_path));
                 codex_cmd.push(' ');
-                codex_cmd.push_str(&posix_shell_quote(trimmed));
+            }
+            codex_cmd.push_str(&posix_shell_quote(binary_path));
+            for arg in parsed_args.iter().map(|arg| arg.trim()).filter(|arg| !arg.is_empty()) {
+                codex_cmd.push(' ');
+                codex_cmd.push_str(&posix_shell_quote(arg));
             }
         }
 
@@ -1671,10 +1677,15 @@ fn build_launch_command_text(
         if let Some(ref dir) = context.working_dir {
             if !dir.trim().is_empty() {
                 command_parts.push(format!(
-                    "Set-Location -LiteralPath {}",
-                    powershell_quote(dir)
+                    "Set-Location -LiteralPath {}{}",
+                    powershell_quote(dir),
+                    if custom_command.is_some() { " -ErrorAction Stop" } else { "" },
                 ));
             }
+        }
+
+        if let Some(script) = custom_command {
+            return Ok(terminal::powershell_cli_script(&command_parts, binary_path, script));
         }
 
         let mut codex_cmd = String::new();
@@ -1705,13 +1716,25 @@ fn build_launch_command_text(
 }
 
 fn build_launch_command_preview(context: &CodexLaunchContext) -> Result<String, String> {
-    build_launch_command_text(context, "codex", None)
+    build_launch_command_text(context, "codex", None, None)
 }
 
-fn build_launch_command(context: &CodexLaunchContext) -> Result<String, String> {
+#[cfg(all(test, unix))]
+#[path = "codex_instance_cli_command_tests.rs"]
+mod cli_command_tests;
+
+fn build_launch_command(
+    context: &CodexLaunchContext,
+    custom_command: Option<&str>,
+) -> Result<String, String> {
     sanitize_codex_config_before_launch(Path::new(&context.user_data_dir))?;
     let runtime = modules::codex_wakeup::resolve_cli_runtime()?;
-    build_launch_command_text(context, &runtime.binary_path, runtime.node_path.as_deref())
+    build_launch_command_text(
+        context,
+        &runtime.binary_path,
+        runtime.node_path.as_deref(),
+        custom_command.filter(|value| !value.trim().is_empty()),
+    )
 }
 
 fn resolve_codex_launch_terminal(terminal: Option<String>) -> String {
@@ -3144,7 +3167,7 @@ async fn codex_start_instance_internal(
         if default_settings.launch_mode == InstanceLaunchMode::Cli {
             let cli_prepare_started = Instant::now();
             let context = resolve_instance_launch_context(DEFAULT_INSTANCE_ID)?;
-            let _ = build_launch_command(&context)?;
+            let _ = build_launch_command(&context, None)?;
             let _ = modules::codex_instance::update_default_pid(None)?;
             modules::logger::log_info(&format!(
                 "[Codex Start] default cli prepare finished: elapsed_ms={}, total_ms={}",
@@ -3452,7 +3475,7 @@ async fn codex_start_instance_internal(
     if instance.launch_mode == InstanceLaunchMode::Cli {
         let cli_prepare_started = Instant::now();
         let context = resolve_instance_launch_context(&instance.id)?;
-        let _ = build_launch_command(&context)?;
+        let _ = build_launch_command(&context, None)?;
         let updated = modules::codex_instance::update_instance_after_cli_prepare(&instance.id)?;
         let initialized = is_profile_initialized(&updated.user_data_dir);
         modules::logger::log_info(&format!(
@@ -3982,90 +4005,37 @@ pub async fn codex_preview_instance_launch_command(
 pub async fn codex_get_instance_launch_command(
     instance_id: String,
     terminal: Option<String>,
+    custom_command: Option<String>,
 ) -> Result<CodexInstanceLaunchInfo, String> {
-    let context = resolve_instance_launch_context(&instance_id)?;
-    let launch_command = build_launch_command(&context)?;
-    let terminal = resolve_codex_launch_terminal(terminal);
-    let terminal_plan = build_codex_terminal_launch_plan(&launch_command, &terminal)?;
-    Ok(CodexInstanceLaunchInfo {
-        instance_id,
-        user_data_dir: context.user_data_dir.clone(),
-        launch_command,
-        terminal_command: terminal_plan.display_command,
-        terminal,
+    tauri::async_runtime::spawn_blocking(move || {
+        let context = resolve_instance_launch_context(&instance_id)?;
+        let launch_command = build_launch_command(&context, custom_command.as_deref())?;
+        let terminal = resolve_codex_launch_terminal(terminal);
+        let terminal_plan = build_codex_terminal_launch_plan(&launch_command, &terminal)?;
+        Ok(CodexInstanceLaunchInfo {
+            instance_id,
+            user_data_dir: context.user_data_dir,
+            launch_command,
+            terminal_command: terminal_plan.display_command,
+            terminal,
+        })
     })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
 pub async fn codex_execute_instance_launch_command(
     instance_id: String,
     terminal: Option<String>,
+    custom_command: Option<String>,
 ) -> Result<String, String> {
-    let context = resolve_instance_launch_context(&instance_id)?;
-    let command = build_launch_command(&context)?;
-    let terminal = resolve_codex_launch_terminal(terminal);
-    let plan = build_codex_terminal_launch_plan(&command, &terminal)?;
-
-    #[cfg(target_os = "macos")]
-    {
-        let output = Command::new(&plan.program)
-            .args(&plan.args)
-            .output()
-            .map_err(|e| format!("打开终端失败 ({}): {}", plan.terminal_name, e))?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("终端执行失败: {}", stderr.trim()));
-        }
-        return Ok(format!("已在 {} 执行 Codex CLI 命令", plan.terminal_name));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let child = Command::new(&plan.program)
-            .args(&plan.args)
-            .spawn()
-            .map_err(|e| format!("打开终端失败 ({}): {}", plan.terminal_name, e))?;
-        drop(child);
-        return Ok(format!("已在 {} 执行 Codex CLI 命令", plan.terminal_name));
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let shell_command = format!("{}; exec bash", command);
-        let use_system_terminal = terminal.is_empty() || terminal.eq_ignore_ascii_case("system");
-        let launch_result = Command::new(&plan.program)
-            .args(&plan.args)
-            .spawn()
-            .or_else(|_| {
-                if use_system_terminal {
-                    Command::new("gnome-terminal")
-                        .args(["--", "bash", "-lc", &shell_command])
-                        .spawn()
-                } else {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        "指定终端未找到",
-                    ))
-                }
-            })
-            .or_else(|_| {
-                if use_system_terminal {
-                    Command::new("konsole")
-                        .args(["-e", "bash", "-lc", &shell_command])
-                        .spawn()
-                } else {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        "指定终端未找到",
-                    ))
-                }
-            })
-            .or_else(|_| Command::new("sh").args(["-lc", &command]).spawn());
-
-        launch_result.map_err(|error| format!("执行 Codex CLI 命令失败: {}", error))?;
-        return Ok(format!("已在 {} 执行 Codex CLI 命令", plan.terminal_name));
-    }
-
-    #[allow(unreachable_code)]
-    Err("Codex CLI 终端执行仅支持 macOS、Windows 和 Linux".to_string())
+    tauri::async_runtime::spawn_blocking(move || {
+        let context = resolve_instance_launch_context(&instance_id)?;
+        let command = build_launch_command(&context, custom_command.as_deref())?;
+        let terminal = resolve_codex_launch_terminal(terminal);
+        terminal::execute_codex_terminal_command(&command, &terminal)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }

@@ -3,12 +3,14 @@ import { useMemo, useCallback, Fragment, useState } from 'react';
 import {
   Plus, RefreshCw, Download, Upload, Trash2, X, Globe, KeyRound, Database,
   Copy, Check, RotateCw, LayoutGrid, List, Search,
-  Tag, Play, Eye, EyeOff, CircleAlert, ChevronDown,
+  Tag, Play, Eye, EyeOff, CircleAlert, ChevronDown, Terminal,
 } from 'lucide-react';
 import { AccountLastUsed } from '../components/AccountLastUsed';
 import { useUiConfigStore } from '../stores/useUiConfigStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import * as codebuddyService from '../services/codebuddyService';
+import { CodebuddyInstancesPanel } from '../components/codebuddy/CodebuddyCliInstances';
+import { CodebuddyLaunchDialog } from '../components/codebuddy/CodebuddyLaunchDialog';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
@@ -23,6 +25,7 @@ import {
   getCodebuddyAccountDisplayEmail,
   getCodebuddyOfficialQuotaModel,
   getCodebuddyPlanBadge,
+  getCodebuddyTierBadgeClass,
   getCodebuddyUsage,
 } from '../types/codebuddy';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
@@ -78,6 +81,7 @@ function getQuotaClassByRemainPercent(remainPercent: number | null): string {
 export function CodebuddyAccountsPage() {
   const timeDisplayMode = useUiConfigStore((s) => s.timeDisplayMode);
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
+  const [cliAccountId, setCliAccountId] = useState<string | null>(null);
   const [filterTypes, setFilterTypes] = useAccountsOverviewFilterState<string[]>(CODEBUDDY_FILTER_PERSISTENCE_SCOPE, FILTER_TYPES_FIELD, () =>
     readAccountsOverviewFilterPersistenceEnabled(CODEBUDDY_FILTER_PERSISTENCE_SCOPE)
       ? readAccountsOverviewFilterStringArray(
@@ -170,27 +174,14 @@ export function CodebuddyAccountsPage() {
   }, []);
 
   const accounts = store.accounts;
+  const cliAccount = accounts.find((account) => account.id === cliAccountId);
+  const cliPlan = cliAccount ? getCodebuddyPlanBadge(cliAccount) : '';
   const loading = store.loading;
 
   const resolvePlanKey = useCallback(
     (account: CodebuddyAccount) => getCodebuddyPlanBadge(account),
     [],
   );
-
-  const resolveTierBadgeClass = useCallback((plan: string) => {
-    switch (plan.toUpperCase()) {
-      case 'FREE':
-        return 'free';
-      case 'TRIAL':
-        return 'trial';
-      case 'PRO':
-        return 'pro';
-      case 'ENTERPRISE':
-        return 'enterprise';
-      default:
-        return 'unknown';
-    }
-  }, []);
 
   const isAbnormalAccount = useCallback(
     (account: CodebuddyAccount) => !getCodebuddyUsage(account).isNormal,
@@ -505,7 +496,7 @@ export function CodebuddyAccountsPage() {
     items.map((account) => {
       const displayEmail = getCodebuddyAccountDisplayEmail(account);
       const planBadge = resolvePlanKey(account);
-      const tierBadgeClass = resolveTierBadgeClass(planBadge);
+      const tierBadgeClass = getCodebuddyTierBadgeClass(planBadge);
       const accountTags = (account.tags || []).map((tag) => tag.trim()).filter(Boolean);
       const visibleTags = accountTags.slice(0, 2);
       const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
@@ -544,6 +535,8 @@ export function CodebuddyAccountsPage() {
                 title={t('common.shared.switchAccount', '切换账号')}>
                 {injecting === account.id ? <RefreshCw size={14} className="loading-spinner" /> : <Play size={14} />}
               </button>
+              <button type="button" className="card-action-btn" title={t('codebuddyCli.launch')} aria-label={t('codebuddyCli.launch')}
+                onClick={() => setCliAccountId(account.id)}><Terminal size={14} /></button>
               <button className="card-action-btn" onClick={() => openTagModal(account.id)} title={t('accounts.editTags', '编辑标签')}><Tag size={14} /></button>
               <button className="card-action-btn" onClick={() => handleRefresh(account.id)} disabled={refreshing === account.id} title={t('common.shared.refreshQuota', '刷新')}>
                 <RotateCw size={14} className={refreshing === account.id ? 'loading-spinner' : ''} />
@@ -560,15 +553,27 @@ export function CodebuddyAccountsPage() {
     items.map((account) => {
       const displayEmail = getCodebuddyAccountDisplayEmail(account);
       const planBadge = resolvePlanKey(account);
-      const tierBadgeClass = resolveTierBadgeClass(planBadge);
+      const tierBadgeClass = getCodebuddyTierBadgeClass(planBadge);
       const isSelected = selected.has(account.id);
       const isCurrent = currentAccountId === account.id;
       return (
         <tr key={account.id} className={`${isCurrent ? 'current-row' : ''} ${isSelected ? 'selected-row' : ''}`}>
           <td><input type="checkbox" checked={isSelected} onChange={() => toggleSelect(account.id)} /></td>
           <td>
-            <span className="table-email" title={maskAccountText(displayEmail)}>{maskAccountText(displayEmail)}</span>
-            {isCurrent && <span className="current-tag">{t('accounts.status.current', '当前')}</span>}
+            <div className="table-email-cell">
+              <span className="table-email" title={maskAccountText(displayEmail)}>{maskAccountText(displayEmail)}</span>
+              {isCurrent && <span className="current-tag">{t('accounts.status.current', '当前')}</span>}
+            </div>
+            {(account.tags?.length ?? 0) > 0 && (
+              <div className="card-tags">
+                {(account.tags || []).map((tag) => tag.trim()).filter(Boolean).slice(0, 2).map((tag, idx) => (
+                  <span key={`${account.id}-${tag}-${idx}`} className="tag-pill">{tag}</span>
+                ))}
+                {(account.tags || []).map((tag) => tag.trim()).filter(Boolean).length > 2 && (
+                  <span className="tag-pill more">+{(account.tags || []).map((tag) => tag.trim()).filter(Boolean).length - 2}</span>
+                )}
+              </div>
+            )}
           </td>
           <td><span className={`tier-badge ${tierBadgeClass}`}>{planBadge}</span></td>
           <td>
@@ -578,11 +583,15 @@ export function CodebuddyAccountsPage() {
           </td>
           <td className="sticky-action-cell table-action-cell">
             <div className="action-buttons">
-              <button className="action-btn success" onClick={() => handleInjectToVSCode?.(account.id)} disabled={!!injecting}><Play size={14} /></button>
-              <button className="action-btn" onClick={() => openTagModal(account.id)}><Tag size={14} /></button>
-              <button className="action-btn" onClick={() => handleRefresh(account.id)} disabled={refreshing === account.id}><RotateCw size={14} className={refreshing === account.id ? 'loading-spinner' : ''} /></button>
-              <button className="action-btn" onClick={() => handleExportByIds([account.id])}><Upload size={14} /></button>
-              <button className="action-btn danger" onClick={() => handleDelete(account.id)}><Trash2 size={14} /></button>
+              <button className="action-btn success" onClick={() => handleInjectToVSCode?.(account.id)} disabled={!!injecting} title={t('common.shared.switchAccount', '切换账号')}>
+                {injecting === account.id ? <RefreshCw size={14} className="loading-spinner" /> : <Play size={14} />}
+              </button>
+              <button type="button" className="action-btn" title={t('codebuddyCli.launch')} aria-label={t('codebuddyCli.launch')}
+                onClick={() => setCliAccountId(account.id)}><Terminal size={14} /></button>
+              <button className="action-btn" onClick={() => openTagModal(account.id)} title={t('accounts.editTags', '编辑标签')}><Tag size={14} /></button>
+              <button className="action-btn" onClick={() => handleRefresh(account.id)} disabled={refreshing === account.id} title={t('common.shared.refreshQuota', '刷新')}><RotateCw size={14} className={refreshing === account.id ? 'loading-spinner' : ''} /></button>
+              <button className="action-btn" onClick={() => handleExportByIds([account.id])} title={t('common.shared.export.title', '导出')}><Upload size={14} /></button>
+              <button className="action-btn danger" onClick={() => handleDelete(account.id)} title={t('common.delete', '删除')}><Trash2 size={14} /></button>
             </div>
           </td>
         </tr>
@@ -598,7 +607,16 @@ export function CodebuddyAccountsPage() {
         tabs={['overview', 'sessions', 'instances']}
       />
       {activeTab === 'instances' ? (
-        <CodebuddyInstancesContent accountsForSelect={filteredAccounts} />
+        <CodebuddyInstancesPanel
+          region="international"
+          accounts={store.accounts}
+          accountsLoading={store.loading}
+          accountsError={store.error}
+          fetchAccounts={store.fetchAccounts}
+          maskAccountText={maskAccountText}
+        >
+          <CodebuddyInstancesContent accountsForSelect={filteredAccounts} />
+        </CodebuddyInstancesPanel>
       ) : activeTab === 'sessions' ? (
         <CodebuddySessionManager platform="intl" accounts={store.accounts as any} />
       ) : (
@@ -1031,6 +1049,16 @@ export function CodebuddyAccountsPage() {
         onSave={handleSaveTags}
       />
         </>
+      )}
+      {cliAccount && (
+        <CodebuddyLaunchDialog
+          key={cliAccount.id}
+          account={{ region: 'international', accountId: cliAccount.id }}
+          accountLabel={maskAccountText(getCodebuddyAccountDisplayEmail(cliAccount))}
+          plan={cliPlan}
+          planClass={getCodebuddyTierBadgeClass(cliPlan)}
+          onClose={() => setCliAccountId(null)}
+        />
       )}
     </div>
   );

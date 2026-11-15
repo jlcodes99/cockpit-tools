@@ -50,6 +50,20 @@ function setup() {
   return { window, hooks };
 }
 
+test('a consumed Escape cancels the inner interaction without closing its dialog', () => {
+  const { window, hooks } = setup();
+  let closed = 0;
+  const consume = (event: KeyEvent) => event.preventDefault();
+  window.addEventListener('keydown', consume, true);
+  hooks.render(() => hooks.exports.useEscClose(true, () => { closed++; }));
+  window.dispatch();
+  assert.equal(closed, 0);
+  window.removeEventListener('keydown', consume, true);
+  window.dispatch();
+  assert.equal(closed, 1);
+  hooks.unmount();
+});
+
 test('Escape closes the engine prerequisite first and preserves the account draft', () => {
   const { window, hooks } = setup();
   const closed: string[] = [];

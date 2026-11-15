@@ -311,15 +311,14 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
               ) : (
                 <div className="tag-suggestions-list">
                   {suggestedTags.map((tag) => (
-                    <div className="tag-suggestion-wrap" key={tag} style={{ display: 'inline-flex', alignItems: 'center', background: 'var(--tag-bg, #f3f4f6)', borderRadius: 12, paddingRight: 4, marginRight: 6, marginBottom: 6 }}>
+                    <div className="tag-suggestion-wrap" key={tag}>
                       <button
                         type="button"
                         className="tag-suggestion"
-                        style={{ border: 'none', background: 'transparent', paddingRight: 4, margin: 0 }}
                         onClick={() => addTag(tag)}
                         title={t('common.add')}
                       >
-                        <Tag size={12} style={{ marginRight: 4 }} />
+                        <Tag size={12} />
                         {tag}
                       </button>
                       <button
@@ -332,16 +331,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
                           setError('');
                         }}
                         title={t('accounts.tagModal.globalRenameHint', '全局重命名此标签')}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          cursor: 'pointer',
-                          color: 'var(--text-secondary, #6b7280)',
-                          padding: '2px 4px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          borderRadius: '50%'
-                        }}
+                        aria-label={t('accounts.tagModal.globalRenameHint', '全局重命名此标签')}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
                       </button>
@@ -355,16 +345,6 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
                         disabled={saving}
                         title={t('accounts.tagModal.globalDeleteHint', '全局删除此标签')}
                         aria-label={t('accounts.tagModal.globalDeleteHint', '全局删除此标签')}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          cursor: saving ? 'not-allowed' : 'pointer',
-                          color: 'var(--text-secondary, #6b7280)',
-                          padding: '2px 4px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          borderRadius: '50%'
-                        }}
                       >
                         <X size={12} />
                       </button>
@@ -376,7 +356,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
           )}
           {globalRenamingTag ? (
             <div className="tag-input-row">
-              <div className="tag-global-rename-hint" style={{ fontSize: 12, color: 'var(--text-secondary, #6b7280)', marginBottom: 4 }}>
+              <div className="tag-global-rename-hint">
                 {t('accounts.tagModal.renamingGlobal')} <b>{globalRenamingTag}</b>
               </div>
               <div className="tag-input-wrap">

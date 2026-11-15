@@ -16,6 +16,7 @@ import { defaultProxySelections, sourceDefaultDraft } from '../../utils/codexPro
 import { CodexProxyResourceForm, type ProxySourceDraft } from './CodexProxyResourceForm';
 import { StrategyEditorDialog, StrategyDeleteDialog } from './CodexProxyStrategyPanel';
 import { CodexProxyResourceNodes } from './CodexProxyResourceNodes';
+import { CodexProxyResourceNetwork } from './CodexProxyResourceNetwork';
 import { CodexProxyLatencyBadge } from './CodexProxyLatencyBadge';
 import { CodexProxySetupGuide } from './CodexProxySetupGuide';
 import { preflightCodexProxyEngine } from '../../services/codexProxyEngineService';
@@ -24,8 +25,8 @@ import { strategyCandidates, strategyKindKey, strategyKindOf } from '../../servi
 import { formatProxyBytes, formatProxyDateTime } from '../../utils/codexProxyFormat';
 import type { CodexProxyProbeResult } from '../../services/codexAccountProxyService';
 import { cancelProxyCatalog, catalogErrorKey, clearProxyCatalogDefault, getProxyCatalog, importProxyCatalog, probeProxyCatalog,
-  setProxyCatalogDefault, refreshProxyCatalog, removeProxyCatalog, reorderProxyCatalog, renameProxySource, getProxyCatalogDependencies,
-  type ProxyCatalog, type ProxyCatalogSource, type ProxyCatalogDependencies, type ProxyCatalogSelections } from '../../services/codexProxyCatalogService';
+  setProxyCatalogDefault, setProxyCatalogNetwork, refreshProxyCatalog, removeProxyCatalog, reorderProxyCatalog, renameProxySource, getProxyCatalogDependencies,
+  type ProxyCatalog, type ProxyCatalogSource, type ProxyCatalogDependencies, type ProxyCatalogNetwork, type ProxyCatalogSelections } from '../../services/codexProxyCatalogService';
 import '../../styles/pages/codex-proxy-resources.css';
 
 export function CodexProxyResources({ onAssign, onBindingsChanged }: {
@@ -241,6 +242,26 @@ export function CodexProxyResources({ onAssign, onBindingsChanged }: {
       if (mounted.current) setDefaultPending('');
     }
   };
+  const applyNetwork = async (entry: ProxyCatalogSource, network: ProxyCatalogNetwork) => {
+    if (operation.current || catalogPending) throw new Error('CATALOG_BUSY');
+    operation.current = true;
+    setBusy('network');
+    try {
+      const next = await setProxyCatalogNetwork(entry.id, entry.revision, network);
+      if (mounted.current) { apply(next); setResult(null); }
+      await onBindingsChanged(entry.id, false);
+    } catch (cause) {
+      // The source may already be saved even if applying it to existing bindings failed.
+      try {
+        const current = await getProxyCatalog();
+        if (mounted.current) { apply(current); setResult(null); }
+      } catch { /* Preserve the most recent successful catalog and the save error. */ }
+      throw cause;
+    } finally {
+      operation.current = false;
+      if (mounted.current) setBusy('');
+    }
+  };
   const submit = (draft: ProxySourceDraft) => void run('import', async (id) => {
     const next = await importProxyCatalog(id, draft.name, draft.input, draft.kind, draft.options);
     if (!mounted.current) return;
@@ -288,7 +309,7 @@ export function CodexProxyResources({ onAssign, onBindingsChanged }: {
       </div>
     </div>}
     {adding && <CodexProxyResourceForm busy={busy === 'import'} error={formError} onEdit={() => setFormError('')} onSubmit={submit} onCancel={cancelImport} onClose={() => { setAdding(false); setFormError(''); }} />}
-    {busy && busy !== 'import' && <div className="codex-resource-progress" role="status"><RefreshCw size={15} className="loading-spinner" /><span>{t('common.processing')}</span>
+    {busy && busy !== 'import' && busy !== 'network' && <div className="codex-resource-progress" role="status"><RefreshCw size={15} className="loading-spinner" /><span>{t('common.processing')}</span>
       {request.current && <button type="button" className="btn btn-secondary compact" onClick={() => void cancelProxyCatalog(request.current!).catch((caught) => setError(t(catalogErrorKey(caught))))}>{t('common.cancel')}</button>}</div>}
     {error && <div className="codex-proxy-page-error" role="alert" tabIndex={-1}>{error}
       {!source && <button type="button" className="btn btn-secondary compact" disabled={!!busy} onClick={() => void run('load', async () => { const next = await getProxyCatalog(); if (mounted.current) apply(next); })}>{t('common.retry')}</button>}</div>}
@@ -366,6 +387,8 @@ export function CodexProxyResources({ onAssign, onBindingsChanged }: {
             </div>
             {result && <output className="codex-proxy-check-result" aria-live="polite"><ShieldCheck size={18} /><div><strong>{t('codex.proxy.testPassed')}</strong><span>{result.protocol} · {result.ip} · {result.latencyMs} ms</span><time dateTime={new Date(result.checkedAt).toISOString()}>{new Date(result.checkedAt).toLocaleString()}</time></div></output>}
             <details className="codex-resource-advanced" open={advanced} onToggle={(event) => setAdvanced(event.currentTarget.open)}><summary>{t('common.advancedSettings')}</summary>
+              <CodexProxyResourceNetwork key={source.id} source={source} disabled={locked}
+                saving={busy === 'network'} onSave={(network) => applyNetwork(source, network)} />
               {source.kind === 'subscription' && <p className="codex-proxy-page-note">{t('codex.proxy.catalog.autoUpdate')}</p>}
               <div className={`codex-resource-default${source.default ? ' is-set' : ''}`}><div className="codex-resource-default-head"><Star size={16} /><strong>{t('codex.proxy.catalog.defaultLabel')}</strong><span>{source.default ? defaultLabel : t('codex.proxy.catalog.defaultEmpty')}</span></div>
                 <div className="codex-resource-default-actions"><button type="button" className="btn btn-secondary compact" disabled={locked || !selectionReady} onClick={() => void applyDefault('set')}>{defaultPending === 'set' && <RefreshCw size={14} className="loading-spinner" />}{t('codex.proxy.catalog.setDefault')}</button>

@@ -774,6 +774,9 @@ async fn native_transport_exhausted_stream_open_budget_can_fail_over_but_never_r
             url: primary_url,
             chatgpt: false,
             policy: ExecutionPolicy {
+                // This case exercises owner-bound opaque state, independent of the
+                // separate path that rebuilds a validated transcript locally.
+                account_switch_rebuild: false,
                 open_timeout: Duration::from_millis(60),
                 stream_open_max_attempts: 2,
                 send_retries: 3,
@@ -835,7 +838,15 @@ async fn native_transport_exhausted_stream_open_budget_can_fail_over_but_never_r
         3,
         "the continuation only gets its owner's two opening attempts"
     );
-    assert_eq!(host.selections.lock().unwrap().len(), 3);
+    {
+        let selections = host.selections.lock().unwrap();
+        assert_eq!(selections.len(), 5);
+        assert_eq!(selections[1].preferred_account_id.as_deref(), Some("a"));
+        assert!(selections[2].excluded_account_ids.contains(&"a".to_string()));
+        assert!(selections[3..].iter().all(|route| {
+            route.preferred_account_id.as_deref() == Some("b") && !route.force_refresh
+        }));
+    }
     handle.shutdown(Duration::from_secs(2)).await.unwrap();
     primary_task.abort();
     alternate_task.abort();

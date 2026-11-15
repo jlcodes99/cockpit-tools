@@ -27,6 +27,7 @@ function harness(importError?: string) {
     '@tauri-apps/api/event': { listen: async () => () => {} },
     '@tauri-apps/plugin-dialog': { open: async () => '/fixture/new' },
     './ExportJsonModal': { ExportJsonModal: 'ExportJsonModal' },
+    './SingleSelectDropdown': { SingleSelectDropdown: 'SingleSelectDropdown' },
     '../hooks/useExportJsonModal': { useExportJsonModal: () => ({ preparing: false, showModal: false }) },
     '../hooks/useEscClose': { useEscCloseTopmost: (open: boolean, close: () => void, ref: any) => escapes.push({ open, close, ref }) },
     '../hooks/useModalFocusTrap': { useModalFocusTrap: (ref: any, open: boolean, restore: boolean, active: boolean) => traps.push({ ref, open, restore, active }) },

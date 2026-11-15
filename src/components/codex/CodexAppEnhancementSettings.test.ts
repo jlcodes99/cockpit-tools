@@ -49,7 +49,13 @@ for (const variant of ['settings', 'quick'] as const) {
     assert.equal(controls.every(entry => entry.props.type === 'checkbox' && !entry.props.disabled), true);
     assert.deepEqual(controls.map(entry => entry.props.checked), [true, false]);
     assert.equal(tree.some(entry => String(entry.props.children).includes('dictation')), false);
-    assert.equal(tree.some(entry => entry.props.children === 'settings.general.codexEnhancements.restartHint'), true);
+    assert.deepEqual(controls.map(control => {
+      const descriptions = tree.filter(entry => entry.props.id === control.props['aria-describedby']);
+      return descriptions.map(entry => entry.props.children);
+    }), [
+      ['settings.general.codexEnhancements.quotaCompatDesc'],
+      ['settings.general.codexEnhancements.nativePredictionsDesc'],
+    ]);
     assert.deepEqual(patches, []);
     controls[0].props.onChange({ target: { checked: false } });
     await settlePromises();

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use chrono::Utc;
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -131,27 +132,70 @@ fn ensure_profile_global_storage(profile_dir: &Path) -> Result<PathBuf, String> 
     Ok(global_storage)
 }
 
+pub(crate) const IDE_INITIALIZATION_REQUIRED: &str = "ANTIGRAVITY_IDE_INITIALIZATION_REQUIRED";
+
+fn profile_state_db(profile_dir: &Path) -> PathBuf {
+    profile_dir.join("User").join("globalStorage").join("state.vscdb")
+}
+
+fn ide_state_db_ready(profile_dir: &Path) -> Result<Option<bool>, String> {
+    let path = profile_state_db(profile_dir);
+    if !path.try_exists().map_err(|error| error.to_string())? {
+        return Ok(None);
+    }
+    // An IDE starting for the first time may create the file before its schema.
+    let db = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|error| error.to_string())?;
+    db.busy_timeout(std::time::Duration::from_millis(250))
+        .map_err(|error| error.to_string())?;
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='ItemTable')",
+        [],
+        |row| row.get::<_, bool>(0),
+    )
+    .map(Some)
+    .map_err(|error| error.to_string())
+}
+
+pub(crate) fn ide_profile_needs_initialization(
+    profile_dir: &Path,
+    copy_source: Option<&Path>,
+) -> Result<bool, String> {
+    if let Some(ready) = ide_state_db_ready(profile_dir)? {
+        return Ok(!ready);
+    }
+    match copy_source {
+        Some(source) => Ok(ide_state_db_ready(source)? != Some(true)),
+        None => Ok(true),
+    }
+}
+
+pub(crate) fn require_ide_switch_database(
+    profile_dir: &Path,
+    copy_source: Option<&Path>,
+) -> Result<(), String> {
+    if ide_profile_needs_initialization(profile_dir, copy_source)? {
+        Err(IDE_INITIALIZATION_REQUIRED.to_string())
+    } else {
+        Ok(())
+    }
+}
+
 fn ensure_state_db_for_injection(profile_dir: &Path) -> Result<PathBuf, String> {
-    let db_path = profile_dir
-        .join("User")
-        .join("globalStorage")
-        .join("state.vscdb");
+    let db_path = profile_state_db(profile_dir);
     if db_path.exists() {
         return Ok(db_path);
     }
 
     let default_dir = get_default_user_data_dir()?;
-    let default_db = default_dir
-        .join("User")
-        .join("globalStorage")
-        .join("state.vscdb");
+    let default_db = profile_state_db(&default_dir);
     if default_db.exists() {
         let _ = ensure_profile_global_storage(profile_dir)?;
         fs::copy(&default_db, &db_path).map_err(|e| format!("复制 state.vscdb 失败: {}", e))?;
     }
 
     if !db_path.exists() {
-        return Err("未找到 state.vscdb，请先勾选复制当前登录状态或先启动实例一次".to_string());
+        return Err(IDE_INITIALIZATION_REQUIRED.to_string());
     }
 
     let default_storage = default_dir

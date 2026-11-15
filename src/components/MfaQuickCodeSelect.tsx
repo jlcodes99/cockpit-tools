@@ -2,6 +2,7 @@ import { loadSavedMfaRecords, subscribeMfaVault } from '../services/mfaRecoveryS
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Copy, KeyRound } from 'lucide-react';
+import { SingleSelectDropdown } from './SingleSelectDropdown';
 import {
   getMfaOtpToken,
   getMfaTimeRemaining,
@@ -78,17 +79,17 @@ export function MfaQuickCodeSelect({ className = '' }: MfaQuickCodeSelectProps) 
         </span>
       </div>
       <div className="mfa-quick-code-select__controls">
-        <select
+        <SingleSelectDropdown
+          className="mfa-quick-select-dropdown"
+          menuMaxHeight={220}
           value={selectedRecord?.id ?? ''}
-          onChange={(event) => setSelectedId(event.target.value)}
-          aria-label={t('mfaQuick.selectLabel', '选择 2FA 秘钥')}
-        >
-          {records.map((record) => (
-            <option key={record.id} value={record.id}>
-              {formatMfaOption(record, t('mfaQuick.unnamedSecret', '未命名秘钥'))}
-            </option>
-          ))}
-        </select>
+          onChange={setSelectedId}
+          ariaLabel={t('mfaQuick.selectLabel', '选择 2FA 秘钥')}
+          options={records.map((record) => ({
+            value: record.id,
+            label: formatMfaOption(record, t('mfaQuick.unnamedSecret', '未命名秘钥')),
+          }))}
+        />
         <div className="mfa-quick-code-select__code" aria-live="polite">
           <span className={token ? '' : 'invalid'}>
             {token || t('mfaQuick.invalidCode', '无效秘钥')}

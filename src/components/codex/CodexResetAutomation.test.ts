@@ -7,7 +7,7 @@ function nodes(tree: any): any[] {
   return [tree, ...nodes(tree.props?.children)];
 }
 function setup(loadState: any = {}, component: 'dialog' | 'status' | 'section' = 'dialog') {
-  const baseRule = { enabled: false, expiry_enabled: true, before_seconds: 3600, quota_enabled: true, remaining_percent: 5 };
+  const baseRule = { enabled: false, expiry_enabled: true, before_seconds: 3600, quota_enabled: true, remaining_percent: 5, prefer_usage_credits: false };
   let state: any = loadState === null ? null : { revision: 0, public_rule: baseRule, accounts: {}, records: [], ...loadState };
   const saveTask = deferred<any>();
   const errors = { message: null as string | null, scrollKey: 0, clear() { this.message = null; }, report(value: string) { this.message = value; this.scrollKey++; } };
@@ -74,16 +74,17 @@ test('tab changes preserve unsaved custom and public drafts independently', () =
   h.button('codex.resetAutomation.publicTab').props.onClick();
   assert.equal(h.editor().props.rule.before_seconds, 1800); h.hook.unmount();
 });
-test('all three switches and both numeric fields stay visible while disabled', () => {
+test('condition switches and numeric fields stay visible while disabled', () => {
   const h = setup();
   const switches = () => h.tree().filter(n => n.props?.role === 'switch');
   const inputs = () => h.tree().filter(n => n.type === 'input');
-  assert.equal(switches().length, 3); assert.equal(inputs().length, 2);
-  assert.deepEqual(switches().map(n => n.props.disabled), [false, true, true]);
+  assert.equal(switches().length, 4); assert.equal(inputs().length, 2);
+  assert.deepEqual(switches().map(n => n.props.disabled), [false, true, true, true]);
   assert.ok(inputs().every(n => n.props.disabled));
   switches()[0].props.onClick();
   assert.ok(inputs().every(n => !n.props.disabled));
   switches()[1].props.onClick(); switches()[2].props.onClick();
+  assert.equal(switches()[3].props.disabled, true);
   assert.equal(inputs().length, 2); assert.ok(inputs().every(n => n.props.disabled));
   assert.equal(h.editor().props.rule.before_seconds, 3600);
   assert.equal(h.editor().props.rule.remaining_percent, 5);
@@ -157,5 +158,24 @@ test('the details section opens settings without redeeming a card; card unknown 
   const h = setup({ public_rule: { enabled: true, expiry_enabled: true, quota_enabled: true, before_seconds: 43200, remaining_percent: 10 } }, 'section');
   h.button('nav.settings').props.onClick();
   assert.equal(h.calls.settings, 1); assert.equal(h.calls.public.length, 0); assert.equal(h.calls.account.length, 0);
+  h.hook.unmount();
+});
+
+test('credits priority is scoped to weekly quota and saves with the rule', () => {
+  const h = setup();
+  const toggle = (name: string) => h.tree().find(n => n.props.role === 'switch' && n.props['aria-label'] === `codex.resetAutomation.${name}`);
+  toggle('masterLabel').props.onClick();
+  toggle('preferUsageCredits').props.onClick();
+  assert.equal(toggle('preferUsageCredits').props['aria-checked'], true);
+  assert.ok(h.tree().some(n => String(n.props.children).startsWith('codex.resetAutomation.previewWeeklyAfterCredits:')));
+  h.button('codex.resetAutomation.publicTab').props.onClick();
+  assert.equal(toggle('preferUsageCredits').props['aria-checked'], false);
+  h.button('codex.resetAutomation.accountTab').props.onClick();
+  toggle('weeklyTrigger').props.onClick();
+  assert.equal(toggle('preferUsageCredits').props.disabled, true);
+  assert.equal(toggle('preferUsageCredits').props['aria-checked'], true);
+  toggle('weeklyTrigger').props.onClick();
+  h.button('common.save').props.onClick();
+  assert.equal(h.calls.account[0][1].rule.prefer_usage_credits, true);
   h.hook.unmount();
 });

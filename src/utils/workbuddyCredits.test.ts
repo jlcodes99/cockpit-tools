@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PACKAGE_CODE as code, type WorkbuddyAccount } from '../types/codebuddy-suite.ts';
-import { getWorkbuddyCredits, readWorkbuddyCreditPackage } from './workbuddyCredits.ts';
+import { getWorkbuddyAiCredits, getWorkbuddyAiPlan, getWorkbuddyCredits, readWorkbuddyCreditPackage, workbuddyCreditPercent } from './workbuddyCredits.ts';
 
 const now = Date.parse('2026-11-05T12:00:00+08:00');
 const active = (PackageCode: string, total: number, left: number, DeductionEndTime = now + 3600000) => ({
@@ -61,4 +61,56 @@ test('WorkBuddy expired grants show actual consumed credits and the official gra
   assert.equal(details.name, 'Buddy 加油站签到');
   assert.equal(details.used, 0);
   assert.equal(details.left, 100);
+});
+
+test('WorkBuddy AI uses the Codex FREE badge for the official free plan', () => {
+  const cycleEnd = now + 3600000;
+  const free = account([
+    { ...active(code.freeMonIntl, 100, 98.06), CycleEndTime: new Date(cycleEnd).toISOString() },
+  ], { SubscriptionPackageCode: code.freeMonIntl, SubscriptionPackageName: 'Free', Packages: [{ CycleRemainCapacity: '98.06' }] });
+  const credits = getWorkbuddyAiCredits(free, now);
+  assert.deepEqual(getWorkbuddyAiPlan(free), { label: 'FREE', style: 'free' });
+  assert.equal(credits.left, 98.06);
+  const [base] = credits.groups;
+  assert.equal(base.kind, 'planBase');
+  assert.equal(base.time, cycleEnd + 1000);
+  assert.equal(base.used.toFixed(2), '1.94');
+  assert.equal(workbuddyCreditPercent(base.total, base.left, Math.floor), 98);
+  assert.equal(workbuddyCreditPercent(base.total, base.used, Math.round), 2);
+});
+
+test('WorkBuddy AI keeps the gray FREE badge when only the billing name or cached label is available', () => {
+  const billing = account([], { SubscriptionPackageName: 'Free', SubscriptionPackageCode: 'new-free-code' });
+  const display = { label: 'FREE', style: 'free' };
+  assert.deepEqual(getWorkbuddyAiPlan(billing), display);
+  assert.deepEqual(getWorkbuddyAiPlan({ ...account([]), plan_type: display.label }), display);
+  assert.equal(getWorkbuddyAiPlan(account([], { SubscriptionPackageName: 'New Plan', IsPaidUser: true })).style, 'unknown');
+});
+
+test('WorkBuddy AI uses the billing subscription name and counts older free grants as rewards', () => {
+  const paid = account([
+    active(code.proMon, 500, 300),
+    active(code.freeMon, 100, 75),
+    active(code.gift, 10, 5),
+  ], { SubscriptionPackageCode: code.proMon, SubscriptionPackageName: 'Pro Monthly', Packages: [
+    { CycleRemainCapacity: '300' }, { CycleRemainCapacity: '80' },
+  ] });
+  assert.deepEqual(getWorkbuddyAiPlan(paid), { label: 'Pro Monthly', style: 'pro' });
+  assert.deepEqual(getWorkbuddyAiCredits(paid, now).groups.map(({ kind, left }) => [kind, left]), [
+    ['planBase', 300], ['benefit', 80],
+  ]);
+  assert.equal(getWorkbuddyAiPlan(account([])).label, 'UNKNOWN');
+});
+
+test('WorkBuddy AI keeps the usage row for a fully unused plan without package details', () => {
+  const summary = {
+    SubscriptionPackageCode: code.freeMonIntl,
+    Packages: [{ PackageCode: code.freeMonIntl, CycleTotalCapacity: '100', CycleRemainCapacity: '100', CycleUsedCapacity: '0' }],
+  };
+  const [base] = getWorkbuddyAiCredits(account([], summary), now).groups;
+  assert.equal(base.kind, 'planBase');
+  assert.equal(base.used, 0);
+  assert.equal(base.total, 100);
+  assert.equal(workbuddyCreditPercent(base.total, base.left, Math.floor), 100);
+  assert.equal(getWorkbuddyAiCredits(account([], { Packages: [] }), now).groups.length, 0);
 });

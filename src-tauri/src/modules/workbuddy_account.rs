@@ -960,7 +960,7 @@ pub fn get_default_workbuddy_data_dir() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".workbuddy").join("app"))
 }
 
-fn get_workbuddy_shared_auth_dir() -> Option<PathBuf> {
+pub(super) fn get_workbuddy_shared_auth_dir() -> Option<PathBuf> {
     let home = dirs::home_dir()?;
     #[cfg(target_os = "macos")]
     {
@@ -1006,7 +1006,7 @@ pub fn get_default_workbuddy_auth_file_path() -> Option<PathBuf> {
     get_workbuddy_shared_auth_dir().map(|dir| dir.join(WORKBUDDY_AUTH_FILE_NAME))
 }
 
-fn workbuddy_logout_marker_path(auth_file: &Path) -> PathBuf {
+pub(super) fn workbuddy_logout_marker_path(auth_file: &Path) -> PathBuf {
     PathBuf::from(format!("{}.logged-out", auth_file.to_string_lossy()))
 }
 
@@ -1152,7 +1152,7 @@ fn json_object_i64_field(obj: &serde_json::Map<String, Value>, keys: &[&str]) ->
     None
 }
 
-fn build_local_import_payload(
+pub(super) fn build_local_import_payload(
     access_token: String,
     parsed_json: Option<Value>,
     uid_from_token: Option<String>,

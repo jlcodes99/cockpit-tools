@@ -174,12 +174,12 @@ pub async fn inject_zed_account(app: AppHandle, account_id: String) -> Result<St
             Ok(format!("切换完成: {}", account.github_login))
         }
         Err(err) => {
-            if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("启动 Zed 失败") {
+            if err.starts_with("APP_PATH_NOT_FOUND:") {
                 let _ = app.emit(
                     "app:path_missing",
                     serde_json::json!({
                         "app": "zed",
-                        "retry": { "kind": "switchAccount", "accountId": account_id }
+                        "retry": { "kind": "launchOnly" }
                     }),
                 );
                 logger::log_warn(&format!(
@@ -202,7 +202,7 @@ pub async fn zed_logout_current_account(app: AppHandle) -> Result<String, String
     match restart_result {
         Ok(_) => Ok("已退出当前 Zed 账号".to_string()),
         Err(err) => {
-            if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("启动 Zed 失败") {
+            if err.starts_with("APP_PATH_NOT_FOUND:") {
                 let _ = app.emit(
                     "app:path_missing",
                     serde_json::json!({

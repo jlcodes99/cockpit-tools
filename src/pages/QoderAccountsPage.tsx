@@ -2,9 +2,10 @@ import { useDurableUiBooleanSetting } from '../hooks/useDurableUiSetting';
 import { useAccountsOverviewFilterState } from '../hooks/useAccountsOverviewFilterState';
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowDown,
   ArrowDownWideNarrow,
+  ArrowUp,
   ChevronDown,
-  ChevronLeft,
   CircleAlert,
   Copy,
   Database,
@@ -1519,7 +1520,7 @@ export function QoderAccountsPage() {
                   title={t('accounts.actions.export', '导出')}
                   disabled={exportModal.preparing || exportModal.saving}
                 >
-                  <Download size={14} />
+                  <Upload size={14} />
                 </button>
                 <button
                   className="card-action-btn danger"
@@ -1567,6 +1568,9 @@ export function QoderAccountsPage() {
         const quotaError = account.quota_query_last_error?.trim();
         const quotaErrorTitle = quotaError ? formatQoderError(quotaError) : undefined;
         const needsReauthorization = quotaError === 'QODER_REAUTH_REQUIRED';
+        const accountTags = (account.tags || []).map((tag) => tag.trim()).filter(Boolean);
+        const visibleTags = accountTags.slice(0, 3);
+        const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
         return (
           <tr key={groupKey ? `${groupKey}-${account.id}` : account.id} className={isCurrent ? 'current' : undefined}>
             <td>
@@ -1579,7 +1583,8 @@ export function QoderAccountsPage() {
             <td title={maskAccountText(getQoderAccountDisplayEmail(account))}>
               <div className="account-cell">
                 <div className="account-main-line">
-                  {maskAccountText(getQoderAccountDisplayEmail(account))}
+                  <span className="account-email-text">{maskAccountText(getQoderAccountDisplayEmail(account))}</span>
+                  {isCurrent && <span className="current-tag">{t('accounts.status.current', '当前')}</span>}
                 </div>
                 {quotaError && (
                   <div className="account-sub-line">
@@ -1587,6 +1592,16 @@ export function QoderAccountsPage() {
                       <CircleAlert size={12} />
                       {needsReauthorization ? t('common.reauthorize') : t('common.shared.quota.queryFailed', '配额查询失败')}
                     </span>
+                  </div>
+                )}
+                {accountTags.length > 0 && (
+                  <div className="account-tags-inline">
+                    {visibleTags.map((tag, index) => (
+                      <span key={`${account.id}-${tag}-${index}`} className="tag-pill">
+                        {tag}
+                      </span>
+                    ))}
+                    {moreTagCount > 0 && <span className="tag-pill more">+{moreTagCount}</span>}
                   </div>
                 )}
               </div>
@@ -1627,19 +1642,13 @@ export function QoderAccountsPage() {
                 {quota?.resetText && <div className="quota-reset qoder-table-reset">{quota.resetText}</div>}
               </div>
             </td>
-            <td>{account.last_used > 0 ? formatDateTime(account.last_used) : '—'}</td>
             <td>
+              <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDateTime} />
+            </td>
+            <td className="sticky-action-cell table-action-cell">
               <div className="action-buttons">
                 <button
-                  className="action-btn"
-                  onClick={() => void handleRefresh(account.id)}
-                  title={t('common.refresh', '刷新')}
-                  disabled={isRefreshing || isInjecting || deleting}
-                >
-                  <RefreshCw size={14} className={isRefreshing ? 'loading-spinner' : ''} />
-                </button>
-                <button
-                  className="action-btn"
+                  className="action-btn success"
                   onClick={() => void handleSwitch(account.id)}
                   title={t('dashboard.switch', '切换')}
                   disabled={isInjecting || deleting}
@@ -1653,6 +1662,14 @@ export function QoderAccountsPage() {
                   disabled={isInjecting || deleting}
                 >
                   <Tag size={14} />
+                </button>
+                <button
+                  className="action-btn"
+                  onClick={() => void handleRefresh(account.id)}
+                  title={t('common.refresh', '刷新')}
+                  disabled={isRefreshing || isInjecting || deleting}
+                >
+                  <RefreshCw size={14} className={isRefreshing ? 'loading-spinner' : ''} />
                 </button>
                 <button
                   className="action-btn"
@@ -1734,7 +1751,7 @@ export function QoderAccountsPage() {
                 <th>{t('common.shared.columns.plan', '套餐')}</th>
                 <th>{t('instances.labels.quota', '配额')}</th>
                 <th>{t('common.shared.columns.createdAt')}</th>
-                <th>{t('common.shared.columns.actions')}</th>
+                <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions')}</th>
               </tr>
             </thead>
             <tbody>{renderListRows(paginatedAccounts)}</tbody>
@@ -1765,7 +1782,7 @@ export function QoderAccountsPage() {
                     <th>{t('common.shared.columns.plan', '套餐')}</th>
                     <th>{t('instances.labels.quota', '配额')}</th>
                     <th>{t('common.shared.columns.createdAt')}</th>
-                    <th>{t('common.shared.columns.actions')}</th>
+                    <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>{renderListRows(items, groupKey)}</tbody>
@@ -1946,7 +1963,7 @@ export function QoderAccountsPage() {
                 }
                 aria-label={t('common.shared.sort.toggleDirection', '切换排序方向')}
               >
-                {sortDirection === 'desc' ? '⬇' : '⬆'}
+                {sortDirection === 'desc' ? <ArrowDown size={15} /> : <ArrowUp size={15} />}
               </button>
             </div>
             <div className="toolbar-right">
@@ -2071,7 +2088,6 @@ export function QoderAccountsPage() {
         <div className="modal-overlay">
           <div className="modal-content codex-add-modal platform-account-add-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
-              <button className="btn btn-secondary icon-only" onClick={() => setShowAddModal(false)} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t('qoder.addModal.title')}</h2>
               <button className="modal-close" onClick={() => setShowAddModal(false)} aria-label={t('common.close', '关闭')}>
                 <X />

@@ -4,8 +4,10 @@ import test from 'node:test';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { deferred, loadHookModule, settlePromises } from '../../tests/helpers/reactHookHarness';
+import { parseModelAliasText, serializeModelAliases } from '../utils/codexServiceModelAliases';
 import { parseModelRuleText } from '../utils/codexApiKeyModelRules';
 import { isCodexLaunchUnconfirmed } from '../utils/codexLaunchConfirmation';
+import { formatPriceDraftValue, updateModelPricingDraft } from '../utils/codexModelPricingDraft';
 import { parseContextWindowDrafts } from '../utils/codexModelContextWindows';
 import { isCodexAgentIdentityAccount, isCodexApiKeyAccount, isCodexPendingOAuthAccount, isCodexWebSessionAccount } from '../types/codex';
 
@@ -100,8 +102,8 @@ function controller() {
       if (failure) throw new Error('save failed');
     },
     modelPricingRows: [{ modelId: 'model', inputUsdPerMillion: 1, outputUsdPerMillion: 2, hasPreset: false, custom: false }],
-    updateModelPricingDraft: (draft: object, field: string, value: string) => ({ ...draft, [field]: value }),
-    parseModelRuleText,
+    formatPriceDraftValue, updateModelPricingDraft,
+    parseModelAliasText, serializeModelAliases, parseModelRuleText,
     isCodexLaunchUnconfirmed, fetchCurrentAccount: async () => {}, refreshApiServiceCurrent: async () => {},
     statsTimeRange: { startAt: 20, endAt: 30 }, sampledStatsRevision: 0,
     window: {

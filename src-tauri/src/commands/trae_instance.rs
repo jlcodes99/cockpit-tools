@@ -283,6 +283,40 @@ pub async fn trae_delete_instance(
     modules::trae_instance::delete_instance_for_platform(platform, &instance_id)
 }
 
+fn path_error_after_injection(error: String) -> String {
+    if error.starts_with("APP_PATH_NOT_FOUND:") {
+        error.replacen("APP_PATH_NOT_FOUND:", "APP_PATH_MISSING_AFTER_SWITCH:", 1)
+    } else {
+        error
+    }
+}
+
+#[tauri::command]
+pub async fn trae_launch_current(
+    platform_id: Option<String>,
+    instance_id: Option<String>,
+) -> Result<(), String> {
+    let platform = parse_platform(platform_id)?;
+    tokio::task::spawn_blocking(move || {
+        let Some(instance_id) = instance_id.filter(|id| id != DEFAULT_INSTANCE_ID) else {
+            let settings = modules::trae_instance::load_default_settings_for_platform(platform)?;
+            let args = modules::process::parse_extra_args(&settings.extra_args);
+            let pid = modules::process::start_trae_platform_default_with_args_with_new_window(
+                platform.provider_key(), &args, true,
+            )?;
+            return modules::trae_instance::update_default_pid_for_platform(platform, Some(pid)).map(|_| ());
+        };
+        let profile = modules::trae_instance::load_instance_store_for_platform(platform)?
+            .instances.into_iter().find(|profile| profile.id == instance_id)
+            .ok_or("实例不存在")?;
+        let args = modules::process::parse_extra_args(&profile.extra_args);
+        let pid = modules::process::start_trae_platform_with_args_with_new_window(
+            platform.provider_key(), &profile.user_data_dir, &args, true,
+        )?;
+        modules::trae_instance::update_instance_after_start_for_platform(platform, &profile.id, pid).map(|_| ())
+    }).await.map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub async fn trae_start_instance(
     platform_id: Option<String>,
@@ -316,7 +350,7 @@ pub async fn trae_start_instance(
             platform.provider_key(),
             &extra_args,
             true,
-        )?;
+        ).map_err(path_error_after_injection)?;
         let _ = modules::trae_instance::update_default_pid_for_platform(platform, Some(pid))?;
         verify_bound_account_after_start(
             default_dir_str.as_str(),
@@ -376,7 +410,7 @@ pub async fn trae_start_instance(
         &instance.user_data_dir,
         &extra_args,
         true,
-    )?;
+    ).map_err(path_error_after_injection)?;
     let updated = modules::trae_instance::update_instance_after_start_for_platform(
         platform,
         &instance.id,

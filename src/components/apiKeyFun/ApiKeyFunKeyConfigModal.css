@@ -12,7 +12,7 @@
   width: min(920px, calc(100vw - 48px));
   max-height: calc(100vh - 96px);
   border-radius: 18px;
-  background: var(--modal-bg, #fff);
+  background: var(--bg-secondary);
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
   overflow: hidden;
 }
@@ -23,14 +23,14 @@
   justify-content: space-between;
   gap: 16px;
   padding: 20px 24px 14px;
-  border-bottom: 1px solid var(--border-color, rgba(148, 163, 184, 0.22));
+  border-bottom: 1px solid var(--border);
 }
 
 .apikey-fun-config-head h2 {
   margin: 0 0 6px;
   font-size: 18px;
   font-weight: 700;
-  color: var(--text-primary, #0f172a);
+  color: var(--text-primary);
 }
 
 .apikey-fun-config-head p {
@@ -39,20 +39,20 @@
   align-items: center;
   gap: 10px;
   font-size: 12px;
-  color: var(--text-secondary, #64748b);
+  color: var(--text-secondary);
 }
 
 .apikey-fun-config-key-name {
   font-weight: 600;
-  color: var(--text-primary, #0f172a);
+  color: var(--text-primary);
 }
 
 .apikey-fun-config-key-value {
   padding: 2px 8px;
   border-radius: 8px;
-  background: var(--code-bg, rgba(15, 23, 42, 0.06));
-  color: var(--text-secondary, #475569);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 
@@ -80,14 +80,14 @@
 
 .apikey-fun-config-inline-label {
   font-size: 12px;
-  color: var(--text-tertiary, #94a3b8);
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
 .apikey-fun-config-divider {
   width: 1px;
   height: 16px;
-  background: var(--border-color, rgba(148, 163, 184, 0.36));
+  background: var(--border);
 }
 
 /* 紧凑下拉：不再用大号表单控件 */
@@ -114,7 +114,7 @@
   flex-direction: column;
   gap: 6px;
   font-size: 12px;
-  color: var(--text-secondary, #64748b);
+  color: var(--text-secondary);
 }
 
 .apikey-fun-config-detected {
@@ -123,7 +123,7 @@
   gap: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-primary, #0f172a);
+  color: var(--text-primary);
 }
 
 .apikey-fun-config-detected em {
@@ -136,9 +136,13 @@
   padding: 2px 7px;
 }
 
+[data-theme="dark"] .apikey-fun-config-detected em {
+  color: #34d399;
+}
+
 .apikey-fun-config-platform {
   font-size: 12px;
-  color: var(--text-secondary, #64748b);
+  color: var(--text-secondary);
   padding-bottom: 8px;
   white-space: nowrap;
 }
@@ -146,8 +150,8 @@
 .apikey-fun-config-empty {
   padding: 24px;
   border-radius: 12px;
-  background: var(--panel-soft-bg, rgba(248, 250, 252, 0.9));
-  color: var(--text-secondary, #64748b);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
@@ -159,17 +163,17 @@
   justify-content: center;
   gap: 8px;
   min-height: 220px;
-  color: var(--text-secondary, #64748b);
+  color: var(--text-secondary);
   text-align: center;
 }
 
 .apikey-fun-config-loading .loading-spinner {
-  color: var(--accent-color, #2563eb);
+  color: var(--primary);
 }
 
 .apikey-fun-config-loading strong {
   font-size: 14px;
-  color: var(--text-primary, #0f172a);
+  color: var(--text-primary);
 }
 
 .apikey-fun-config-loading span {
@@ -179,7 +183,7 @@
 .apikey-fun-config-clients {
   display: flex;
   gap: 18px;
-  border-bottom: 1px solid var(--border-color, rgba(148, 163, 184, 0.22));
+  border-bottom: 1px solid var(--border);
   margin-bottom: 14px;
 }
 
@@ -188,14 +192,14 @@
   padding: 8px 2px 12px;
   border: none;
   background: transparent;
-  color: var(--text-secondary, #64748b);
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
 
 .apikey-fun-config-client.active {
-  color: var(--accent-color, #2563eb);
+  color: var(--primary);
 }
 
 .apikey-fun-config-client.active::after {
@@ -206,7 +210,7 @@
   bottom: -1px;
   height: 2px;
   border-radius: 2px;
-  background: var(--accent-color, #2563eb);
+  background: var(--primary);
 }
 
 .apikey-fun-config-blocks {
@@ -275,9 +279,17 @@
   color: #047857;
 }
 
+[data-theme="dark"] .apikey-fun-config-result.success {
+  color: #6ee7b7;
+}
+
 .apikey-fun-config-result.error {
   background: rgba(239, 68, 68, 0.14);
   color: #b91c1c;
+}
+
+[data-theme="dark"] .apikey-fun-config-result.error {
+  color: #fca5a5;
 }
 
 .apikey-fun-config-foot {
@@ -286,7 +298,7 @@
   justify-content: flex-end;
   gap: 10px;
   padding: 14px 24px;
-  border-top: 1px solid var(--border-color, rgba(148, 163, 184, 0.22));
+  border-top: 1px solid var(--border);
 }
 
 @media (max-width: 720px) {

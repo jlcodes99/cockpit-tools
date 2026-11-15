@@ -224,6 +224,11 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
     }
   };
 
+  const cliLaunchAccount = cliLaunchModal?.target === "account"
+    ? accounts.find((entry) => entry.id === cliLaunchModal.accountId)
+    : undefined;
+  const cliLaunchPlan = cliLaunchAccount ? buildCodexAccountPresentation(cliLaunchAccount, t) : null;
+
   return (
     <div
       className={`codex-accounts-page codex-accounts-page--${overviewLayoutMode}`}
@@ -960,9 +965,13 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
         <CodexCliLaunchDialog
           subjectLabel={t("common.shared.columns.account", "账号")}
           subjectValue={cliLaunchModal.accountLabel}
+          subjectBadge={cliLaunchPlan && <span className={`tier-badge codex-account-plan-badge ${cliLaunchPlan.planClass}`}>
+            {cliLaunchPlan.planLabel}
+          </span>}
           workingDir={{
             value: cliLaunchModal.workingDir,
             error: cliLaunchModal.workingDirError,
+            hint: t("instances.launchDialog.rememberDirectory"),
             onChange: updateCodexCliWorkingDir,
             onBlur: () => {
               if (
@@ -979,7 +988,7 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
           terminal={selectedTerminal}
           terminalOptions={terminalOptions}
           onTerminalChange={setSelectedTerminal}
-          command={cliLaunchModal.terminalCommand}
+          command={cliLaunchModal.launchCommand}
           commandPlaceholder={
             cliLaunchModal.preparing
               ? t("common.loading", "加载中...")
@@ -991,8 +1000,8 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
           successMessage={cliLaunchModal.executeMessage}
           errorMessage={cliLaunchModal.executeError}
           onClose={closeCliLaunchModal}
-          onCopy={() => void handleCopyCodexCliCommand()}
-          onExecute={() => void handleExecuteCodexCli()}
+          onCopy={handleCopyCodexCliCommand}
+          onExecute={(command) => void handleExecuteCodexCli(command)}
           showCancelButton
         />
       )}

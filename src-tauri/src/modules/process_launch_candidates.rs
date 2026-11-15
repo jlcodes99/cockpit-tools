@@ -890,6 +890,15 @@ fn windows_app_launch_signature(app: &str) -> Option<WindowsAppLaunchSignature> 
             ],
             supports_multi_instance: true,
         }),
+        "workbuddy_ai" => Some(WindowsAppLaunchSignature {
+            exe_names: &["WorkBuddyAI.exe"],
+            command_names: &["workbuddyai"],
+            protocol_names: &[],
+            display_keywords: &["workbuddy ai"],
+            label: "WorkBuddy AI",
+            common_paths: &["WorkBuddy AI\\WorkBuddyAI.exe", "workbuddy-ai\\WorkBuddyAI.exe"],
+            supports_multi_instance: true,
+        }),
         "workbuddy" => Some(WindowsAppLaunchSignature {
             label: "WorkBuddy",
             exe_names: &["WorkBuddy.exe"],

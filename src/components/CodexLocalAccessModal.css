@@ -155,10 +155,11 @@
 }
 
 .codex-local-access-header-meta {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 8px 12px;
   min-width: 0;
   width: 100%;
 }
@@ -167,6 +168,7 @@
   display: flex;
   align-items: center;
   min-width: 0;
+  flex: 1 1 280px;
   flex-wrap: wrap;
   gap: 6px;
 }
@@ -178,7 +180,7 @@
   gap: 8px;
   min-width: 0;
   margin-left: auto;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .codex-local-access-header-routing {
@@ -2504,21 +2506,17 @@
   gap: 8px;
 }
 
-/*
- * Simple flex rows (no subgrid): checkbox sits tight against the mainline.
- * Horizontal scroll is on the whole list.
- */
-.codex-local-access-member-list {
-  max-height: min(34vh, 340px);
+/* The dialog body scrolls vertically through the rows and pagination. */
+.codex-local-access-member-section .codex-local-access-member-list {
+  max-height: none;
   padding-right: 4px;
   overflow-x: auto;
-  overflow-y: auto;
+  overflow-y: hidden;
   scrollbar-width: thin;
 }
 
 .codex-local-access-member-list::-webkit-scrollbar {
   height: 8px;
-  width: 8px;
 }
 
 .codex-local-access-member-list::-webkit-scrollbar-thumb {
@@ -2550,24 +2548,24 @@
 
 .codex-local-access-member-list .group-account-main {
   display: block;
-  flex: 1 0 auto;
+  flex: 1 1 0;
   min-width: 0;
 }
 
 .codex-local-access-member-mainline {
   display: flex;
   align-items: center;
-  gap: 12px;
-  width: max-content;
-  min-width: 980px;
-  flex-wrap: nowrap;
+  gap: 10px 12px;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .codex-local-access-member-list .group-account-email {
-  flex: 0 0 18rem;
-  width: 18rem;
-  min-width: 18rem;
-  max-width: 18rem;
+  flex: 1 1 180px;
+  width: auto;
+  min-width: 140px;
+  max-width: 300px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -3214,6 +3212,13 @@
     var(--bg-card);
 }
 
+[data-theme="dark"] .codex-local-access-quota-pool-card {
+  border-color: rgba(96, 165, 250, 0.24);
+  background: rgba(30, 58, 138, 0.28);
+  color: #bfdbfe;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
 [data-theme="dark"] .codex-local-access-health-pool-card {
   border-color: rgba(34, 197, 94, 0.24);
   background: rgba(20, 83, 45, 0.28);
@@ -3460,8 +3465,8 @@
 }
 .codex-official-member-hint p { flex: 1 1 260px; margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
 
-/* Split the existing 18rem identity slot; priority/image/plan columns keep their positions. */
-.codex-member-identity-slot { flex: 0 0 18rem; width: 18rem; display: flex; align-items: center; gap: 10px; min-width: 0; }
+/* Split the existing identity slot cleanly; priority/image/plan columns keep their positions. */
+.codex-member-identity-slot { flex: 1 1 200px; width: auto; min-width: 140px; max-width: 300px; display: flex; align-items: center; gap: 10px; }
 .codex-local-access-member-list .codex-member-identity-slot .group-account-email { flex: 1 1 0; min-width: 0; width: auto; max-width: none; }
 .codex-member-access-mode { flex: 0 0 98px; width: 98px; }
 .codex-member-access-mode .single-select-dropdown-trigger { min-height: 30px; padding: 5px 8px; font-size: 12px; }

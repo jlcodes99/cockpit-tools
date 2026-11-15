@@ -870,6 +870,44 @@ pub async fn clear_binding_if_source(
     Ok(Some(account))
 }
 
+/// Apply source network settings without replacing a frozen account's nodes or choices.
+pub async fn sync_source_network(
+    source_id: &str,
+    network: super::codex_proxy_network::NetworkOptions,
+) -> Result<(), String> {
+    use super::codex_proxy_catalog_binding as binding;
+
+    let source = source_id.to_owned();
+    let account_ids = read_with_limit(READS.clone(), READ_QUEUE_TIMEOUT, READ_TOTAL_TIMEOUT, move || {
+        Ok::<_, String>(codex_account::list_accounts_for_proxy_removal()?
+            .into_iter()
+            .filter(codex_account_proxy::eligible)
+            .filter(|account| account.egress_proxy_url.as_deref().is_some_and(|raw| {
+                binding::belongs_to_source(raw, &source)
+            }))
+            .map(|account| account.id)
+            .collect::<Vec<_>>())
+    }).await??;
+    for account_id in account_ids {
+        let source = source_id.to_owned();
+        let network = network.clone();
+        let token_lock = codex_account::codex_token_lock_for(&account_id);
+        persist_binding_mutation(token_lock, move || {
+            let Some(account) = codex_account::load_account_checked(&account_id)? else { return Ok(()); };
+            let Some(raw) = account.egress_proxy_url.as_deref().filter(|raw| {
+                codex_account_proxy::eligible(&account) && binding::belongs_to_source(raw, &source)
+            }) else { return Ok(()); };
+            let updated = binding::with_network(raw, network)?;
+            if updated != raw {
+                codex_account::update_account_egress_proxy(&account_id, Some(updated), false)?;
+            }
+            // The stable entry picks up the new snapshot on its next connection.
+            Ok(())
+        }).await?;
+    }
+    Ok(())
+}
+
 /// 统一代理开关或出口变化后，让所有已缓存的隧道回到「待重建」状态。
 ///
 /// 只失效、不预启动：真正需要出口的入口（切号、启动、sidecar 组装）会在自己的

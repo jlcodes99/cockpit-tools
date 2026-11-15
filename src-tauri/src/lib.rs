@@ -16,6 +16,19 @@ pub fn try_run_codex_package_launcher() -> Option<i32> {
     modules::process::codex_package_launcher::try_run()
 }
 
+pub fn try_run_codebuddy_cli() -> Option<i32> {
+    use modules::codebuddy_cli::{run_from_terminal, RUN_ARG};
+    let mut args = std::env::args_os().skip(1);
+    if args.next().as_deref() != Some(std::ffi::OsStr::new(RUN_ARG)) {
+        return None;
+    }
+    let result = match args.next().and_then(|arg| arg.into_string().ok()) {
+        Some(encoded) => run_from_terminal(&encoded),
+        None => Err("launchFailed".into()),
+    };
+    Some(result.unwrap_or_else(|error| modules::codebuddy_cli::report_terminal_error("en", &error)))
+}
+
 use modules::config::CloseWindowBehavior;
 use modules::logger;
 use std::sync::OnceLock;
@@ -921,6 +934,11 @@ pub fn run() {
             commands::account::refresh_all_quotas,
             commands::account::refresh_current_quota,
             commands::account::switch_account,
+            commands::account::antigravity_launch_current,
+            commands::account::cli_launch::get_antigravity_client_launch_path,
+            commands::account::cli_launch::switch_antigravity_cli,
+            commands::account::cli_launch::launch_antigravity_cli,
+            commands::account::cli_launch::antigravity_cli_launch_command,
             commands::account::load_antigravity_switch_history,
             commands::account::clear_antigravity_switch_history,
             commands::account::update_account_tags,
@@ -1060,6 +1078,9 @@ pub fn run() {
             commands::system::save_refresh_interval_config,
             commands::system::save_tray_platform_layout,
             commands::system::set_app_path,
+            commands::cli_launch_path::inspect_cli_launch_path,
+            commands::cli_launch_path::save_cli_launch_path,
+            commands::system::launch_opencode_current,
             commands::system::validate_codex_app_path,
             commands::system::set_claude_app_scan_roots,
             commands::system::set_trae_app_scan_roots,
@@ -1471,6 +1492,13 @@ pub fn run() {
             commands::codebuddy::update_codebuddy_account_tags,
             commands::codebuddy::get_codebuddy_accounts_index_path,
             commands::codebuddy::inject_codebuddy_to_vscode,
+            commands::codebuddy_cli::codebuddy_cli_available,
+            commands::codebuddy_cli::codebuddy_cli_working_dir,
+            commands::codebuddy_cli::codebuddy_cli_list_instances,
+            commands::codebuddy_cli::codebuddy_cli_save_instance,
+            commands::codebuddy_cli::codebuddy_cli_remove_instance,
+            commands::codebuddy_cli::codebuddy_cli_launch,
+            commands::codebuddy_cli::codebuddy_cli_launch_command,
             commands::codebuddy_session::codebuddy_list_sessions,
             commands::ssh_server::list_ssh_servers,
             commands::ssh_server::upsert_ssh_server,
@@ -1497,6 +1525,20 @@ pub fn run() {
             commands::codebuddy_cn::inject_codebuddy_cn_to_vscode,
             commands::codebuddy_cn::sync_codebuddy_cn_to_workbuddy,
             // WorkBuddy Commands
+            commands::workbuddy_ai::list_workbuddy_ai_accounts,
+            commands::workbuddy_ai::delete_workbuddy_ai_accounts,
+            commands::workbuddy_ai::import_workbuddy_ai_from_json,
+            commands::workbuddy_ai::import_workbuddy_ai_from_local,
+            commands::workbuddy_ai::export_workbuddy_ai_accounts,
+            commands::workbuddy_ai::workbuddy_ai_oauth_login_start,
+            commands::workbuddy_ai::workbuddy_ai_oauth_login_complete,
+            commands::workbuddy_ai::workbuddy_ai_oauth_login_cancel,
+            commands::workbuddy_ai::add_workbuddy_ai_account_with_token,
+            commands::workbuddy_ai::refresh_workbuddy_ai_token,
+            commands::workbuddy_ai::refresh_all_workbuddy_ai_tokens,
+            commands::workbuddy_ai::update_workbuddy_ai_account_tags,
+            commands::workbuddy_ai::switch_workbuddy_ai_account,
+            commands::workbuddy_ai::workbuddy_ai_launch_current,
             commands::workbuddy::list_workbuddy_accounts,
             commands::workbuddy::get_workbuddy_credit_packages,
             commands::workbuddy::get_workbuddy_recent_credit_usage,
@@ -1585,6 +1627,7 @@ pub fn run() {
             commands::codebuddy_instance::codebuddy_update_instance,
             commands::codebuddy_instance::codebuddy_delete_instance,
             commands::codebuddy_instance::codebuddy_start_instance,
+            commands::codebuddy_instance::codebuddy_launch_current,
             commands::codebuddy_instance::codebuddy_stop_instance,
             commands::codebuddy_instance::codebuddy_open_instance_window,
             commands::codebuddy_instance::codebuddy_close_all_instances,
@@ -1595,6 +1638,7 @@ pub fn run() {
             commands::codebuddy_cn_instance::codebuddy_cn_update_instance,
             commands::codebuddy_cn_instance::codebuddy_cn_delete_instance,
             commands::codebuddy_cn_instance::codebuddy_cn_start_instance,
+            commands::codebuddy_cn_instance::codebuddy_cn_launch_current,
             commands::codebuddy_cn_instance::codebuddy_cn_stop_instance,
             commands::codebuddy_cn_instance::codebuddy_cn_open_instance_window,
             commands::codebuddy_cn_instance::codebuddy_cn_close_all_instances,
@@ -1652,6 +1696,7 @@ pub fn run() {
             commands::zcode::refresh_zcode_account,
             commands::zcode::refresh_all_zcode_accounts,
             commands::zcode::inject_zcode_account,
+            commands::zcode::zcode_launch_current,
             commands::zcode::update_zcode_account_tags,
             commands::zcode::get_zcode_current_account_id,
             commands::zcode::get_zcode_accounts_index_path,
@@ -1708,6 +1753,7 @@ pub fn run() {
             commands::trae_instance::trae_update_instance,
             commands::trae_instance::trae_delete_instance,
             commands::trae_instance::trae_start_instance,
+            commands::trae_instance::trae_launch_current,
             commands::trae_instance::trae_stop_instance,
             commands::trae_instance::trae_open_instance_window,
             commands::trae_instance::trae_close_all_instances,
@@ -1769,6 +1815,7 @@ pub fn run() {
             commands::cursor_instance::cursor_update_instance,
             commands::cursor_instance::cursor_delete_instance,
             commands::cursor_instance::cursor_start_instance,
+            commands::cursor_instance::cursor_launch_current,
             commands::cursor_instance::cursor_stop_instance,
             commands::cursor_instance::cursor_open_instance_window,
             commands::cursor_instance::cursor_close_all_instances,
@@ -1844,6 +1891,8 @@ pub fn run() {
             commands::instance::update_instance,
             commands::instance::delete_instance,
             commands::instance::start_instance,
+            commands::instance::initialization::antigravity_ide_needs_initialization,
+            commands::instance::initialization::initialize_antigravity_ide,
             commands::instance::stop_instance,
             commands::instance::open_instance_window,
             commands::instance::close_all_instances,

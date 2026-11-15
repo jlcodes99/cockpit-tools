@@ -1,9 +1,6 @@
 //! Feed enabled SSH aliases to Desktop's native startup connection command.
 //! The ownership journal records only entries we add, never credentials.
-use super::{
-    super::{check, read_bytes},
-    identity,
-};
+use super::{super::read_bytes, identity};
 use crate::modules::atomic_write;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
@@ -118,7 +115,6 @@ fn reconcile(
 }
 
 fn replace(path: &Path, before: Option<&str>, after: Option<&str>) -> Result<(), String> {
-    check()?;
     if atomic_write::replace_string_if_matches(path, before, after)? {
         Ok(())
     } else {

@@ -615,6 +615,8 @@ const groupAccountPresentations = {
   codebuddy: buildCodebuddyAccountPresentation,
   codebuddy_cn: buildCodebuddyAccountPresentation,
   workbuddy: buildWorkbuddyAccountPresentation,
+  workbuddy_ai: (...[account, t]: Parameters<typeof buildWorkbuddyAccountPresentation>) =>
+    buildWorkbuddyAccountPresentation(account, t, false, true),
   zcode: buildZcodeAccountPresentation,
 };
 

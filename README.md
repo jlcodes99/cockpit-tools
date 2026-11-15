@@ -7,12 +7,14 @@
 [![GitHub release](https://img.shields.io/github/v/release/jlcodes99/cockpit-tools?style=flat)](https://github.com/jlcodes99/cockpit-tools/releases)
 [![GitHub issues](https://img.shields.io/github/issues/jlcodes99/cockpit-tools)](https://github.com/jlcodes99/cockpit-tools/issues)
 
-一款**通用的 AI IDE 账号管理工具**，目前支持 **Antigravity IDE**、**Codex**、**GitHub Copilot**、**Windsurf**、**Kiro**、**Cursor**、**Grok CLI**、**CodeBuddy**、**CodeBuddy CN**、**Qoder**、**Trae**、**TraeWork**、**Trae CN**、**TraeWork CN**、**Zed** 和 **ZCode**，并支持多账号多实例并行运行。
+一款**通用的 AI IDE 账号管理工具**，目前支持 **Antigravity IDE**、**Codex**、**GitHub Copilot**、**Windsurf**、**Kiro**、**Cursor**、**Grok CLI**、**CodeBuddy**、**CodeBuddy CN**、**Qoder**、**Trae**、**TraeWork**、**Trae CN**、**TraeWork CN**、**Zed**、**ZCode** 和 **WorkBuddy AI**，并支持多账号多实例并行运行。
 
 
 > 本工具旨在帮助用户高效管理多个 AI IDE 账号，支持一键切换、配额监控、自动唤醒与应用多开并行运行，助您充分利用不同账号的资源。
 
 **功能**：一键切号 · 多账号管理 · 应用多开 · 配额监控 · 唤醒任务 · 插件联动 · GitHub Copilot 管理 · Windsurf 管理 · Kiro 管理 · Cursor 管理 · Grok CLI 管理 · CodeBuddy 管理 · CodeBuddy CN 管理 · Qoder 管理 · Trae 套件管理 · Zed 管理 · ZCode 管理
+
+**WorkBuddy AI 国际版**（macOS、Windows）：支持浏览器授权、本机或 JSON 导入、积分余额和桌面客户端切号。
 
 **语言**：支持 18 种语言
 
@@ -64,9 +66,10 @@
 
 > 界面截图更新于 2026-11-02，使用 Cockpit Tools v1.3.78 实机拍摄；账号信息已隐藏。
 
-### 2. Antigravity IDE 账号管理
+### 2. Antigravity 账号管理
 
-- **一键切号**：IDE 2.6 起，默认 IDE、桌面 App 和已初始化的 `agy` 共用登录凭据。启用切号启动时会重新打开正在运行的另一端客户端。旧版 IDE 使用独立的本地登录状态。
+- **统一账号入口**：从账号页打开启动弹框，选择 Antigravity、Antigravity IDE 或官方 CLI（`agy`）。可以仅切号，也可以切号后启动。CLI 支持指定工作目录。
+- **共享登录**：IDE 2.6 起，默认 IDE、采用系统凭据的 App 和使用 Google 登录的 `agy` 可以共用登录凭据。旧版 IDE 使用独立的本地登录状态。
 - **多种导入**：支持 OAuth 授权、Refresh Token、插件同步
 - **唤醒任务**：定时唤醒 AI 模型，提前触发配额重置周期
 
@@ -75,7 +78,9 @@
 > *(唤醒任务)*
 > ![Wakeup Tasks](docs/images/wakeup_detail.png)
 
-#### 2.1 Antigravity IDE 应用多开
+#### 2.1 Antigravity 应用多开
+
+在同一个多开页面内可以分别管理 App 和 IDE 实例。点击实例的启动按钮，可选择对应客户端的桌面实例，也可在终端中启动 CLI。
 
 使用独立 SQLite 登录状态的旧版 IDE 支持多账号多实例并行运行。IDE 2.6 起采用共享登录，独立实例目录仅隔离项目和本地设置。
 
@@ -211,6 +216,7 @@ Grok CLI 默认实例通常直接沿用官方 `~/.grok` 目录，启动时不设
 - **配额视图**：展示套餐与用量状态，并支持跳转官方网页查看配额详情
 - **批量管理**：支持标签与批量操作
 - **切号注入**：支持切号后按客户端本地认证存储规则注入并启动 CodeBuddy CN
+- **桌面版和 CLI 启动**：在账号总览点击「启动」后选择桌面版或 CLI。CLI 按账号记住工作目录，未检测到时可查看安装指引。
 
 #### 9.1 CodeBuddy CN 应用多开
 
@@ -219,6 +225,11 @@ Grok CLI 默认实例通常直接沿用官方 `~/.grok` 目录，启动时不设
 - **独立配置**：每个实例拥有独立的用户目录
 - **快速启停**：一键启动/停止/强制关闭实例
 - **窗口管理**：支持打开实例窗口与批量关闭
+
+#### CLI
+
+- 在 CodeBuddy 或 CodeBuddy CN 的账号总览选择账号，即可启动官方 `codebuddy` CLI。需预先安装 [CodeBuddy Code CLI](https://www.codebuddy.cn/docs/cli/installation)。
+- 在对应版本的「应用多开」切换到 CLI，可管理绑定该版本账号的命名实例。每个实例拥有自己的工作目录和 CLI 配置。
 
 ### 11. Qoder 账号管理
 

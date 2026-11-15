@@ -1,4 +1,44 @@
 {
+  "antigravityLaunch": {
+    "initializeTitle": "يحتاج Antigravity IDE إلى التهيئة",
+    "initializeThenSwitch": "افتح IDE مرة واحدة لتتمكّن من تبديل الحساب.",
+    "initializeThenBind": "شغّل المثيل مرة واحدة لتتمكّن من ربط حساب.",
+    "initializeThenUseAccount": "شغّل المثيل مرة واحدة لتتمكّن من استخدام الحساب المرتبط به.",
+    "initializeAction": "شغّل مرة واحدة",
+    "initializeHint": "يجب تهيئة Antigravity IDE. شغّل المثيل المحدد مرة واحدة قبل المتابعة.",
+    "initializeWaiting": "في انتظار تهيئة Antigravity IDE. تابع يدويًا عند اكتمالها.",
+    "initializeRetry": "لم تكتمل التهيئة. تأكد من فتح IDE ثم أعد المحاولة.",
+    "pathLabel": "مسار التشغيل",
+    "pathConfigured": "مُعدّ",
+    "pathDetected": "اكتُشف تلقائيًا",
+    "pathInvalid": "المسار المُعدّ غير صالح",
+    "pathCheckFailed": "تعذّر التحقق من المسار",
+    "pathSaveAndRetry": "حفظ وإعادة المحاولة",
+    "switchAndCopy": "تبديل ونسخ",
+    "sharedInstanceStart": "تبديل الحساب المشترك والتشغيل",
+    "sharedInstanceHint": "تبقى نُسخ Antigravity الأخرى مفتوحة وقد تتزامن مع الحساب الجديد.",
+    "sharedInstanceRestart": "ستُعاد فقط النسخة المحددة.",
+    "lastSharedAccount": "آخر حساب مشترك تم اختياره",
+    "sharedAccountUnknown": "لا يوجد تبديل مسجل",
+    "sharedInstanceSubtitle": "تستخدم النُسخ مجلدات منفصلة وتشترك في تسجيل دخول Google.",
+    "sharedInstanceStarted": "تم تحديث تسجيل الدخول المشترك وإرسال طلب التشغيل.",
+    "sharedInstanceLaunchFailed": "تم تحديث تسجيل الدخول المشترك، لكن تعذر التشغيل: {{error}}",
+    "sharedCopySource": "نسخ مجلد إعدادات النسخة المحددة.",
+    "quickSwitchSetting": "ينطبق على التبديل السريع في Antigravity IDE. يمكنك اختيار التشغيل في كل مرة من نافذة الحساب.",
+    "title": "اختيار العميل",
+    "switchOnly": "تبديل فقط",
+    "switchAndLaunch": "تبديل وتشغيل",
+    "homeDirectory": "المجلد الرئيسي",
+    "invalidDirectory": "اختر مجلدًا موجودًا.",
+    "directoryFailed": "تعذّر فتح نافذة اختيار المجلد. {{error}}",
+    "shared": "تتشارك هذه التطبيقات تسجيل الدخول إلى Google: {{clients}}.",
+    "sharedHint": "قد تبدّل التطبيقات التي تشترك في تسجيل الدخول إلى Google حساباتها معًا.",
+    "clientOnly": "يستخدم هذا التطبيق تسجيل دخول مستقلًا.",
+    "cliAuth": "يستخدم agy إعدادات المصادقة الخاصة به. إذا ضُبط مفتاح API أو بيانات اعتماد Google Cloud، فستكون لها الأولوية.",
+    "cliMissing": "لم يُعثر على agy. ثبّت Antigravity CLI الرسمي وحاول مرة أخرى.",
+    "terminalFailed": "تعذّر تجهيز الطرفية. {{error}}",
+    "switchedTerminalFailed": "تم تبديل الحساب، لكن تعذّر فتح الطرفية. {{error}}"
+  },
   "pelican": {
     "caseKinds": {
       "mathExact": "رياضيات · احتمال دقيق",
@@ -649,7 +689,14 @@
       },
       "clear": "مسح",
       "loginSuccess": "تسجيل الدخول ناجح",
-      "switchAccount": "تبديل الحساب"
+      "switchAccount": "تبديل الحساب",
+      "tokenFormat": {
+        "summary": "الحقول المطلوبة والأمثلة (انقر للتوسيع)",
+        "single": "مثال مفرد",
+        "singleToken": "مثال مفرد (Token)",
+        "singleJson": "مثال مفرد (JSON)",
+        "batchJson": "مثال دفعي (JSON)"
+      }
     },
     "sessionSharing": {
       "title": "مشاركة الجلسات المحلية عند التبديل",
@@ -769,6 +816,7 @@
     "lockedPlatform": "المنصة مقفلة بواسطة المثيل"
   },
   "nav": {
+    "workbuddyAi": "WorkBuddy AI",
     "overview": "Antigravity IDE​",
     "accounts": "إدارة الحسابات",
     "wakeup": "مهام الاستيقاظ",
@@ -833,6 +881,10 @@
     "hiddenBadge": "مخفي",
     "openFromMore": "إدارة تخطيط المنصات",
     "dragHandleLabel": "اسحب لإعادة الترتيب",
+    "sortKeyboardInstructions": "اضغط مفتاح المسافة لبدء الترتيب، واستخدم الأسهم للنقل، ثم اضغط المسافة أو Enter للإفلات أو Esc للإلغاء.",
+    "sortPosition": "الموضع {{position}} من {{total}}.",
+    "sortPlaced": "تم النقل إلى الموضع {{position}}.",
+    "sortCancelled": "أُلغي الترتيب.",
     "tipWithGroups": "اسحب لإعادة الترتيب. يمكن عرض ما يصل إلى {{max}} مداخل في الشريط الجانبي. لا تحتوي عناصر المجموعات الفرعية على مفاتيح للشريط الجانبي/لوحة المعلومات، وتُستخدم فقط لإظهار شريط القوائم وتبديل المنصة الافتراضية.",
     "addGroup": "إضافة مجموعة",
     "editGroup": "تحرير المجموعة",
@@ -866,7 +918,9 @@
     "groupEnabledHint": "تفعيل أو تعطيل جميع منصات المجموعة",
     "disabledHint": "يوقف التعطيل المهام التلقائية ويخفي إعدادات المنصة. يُضبط ظهور المدخل بشكل مستقل",
     "enableAll": "تفعيل الكل",
-    "disableAll": "تعطيل الكل"
+    "disableAll": "تعطيل الكل",
+    "confirmResetDesc": "سيؤدي استعادة الإعدادات الافتراضية إلى مسح المجموعات المخصصة وترتيب العرض. هل تريد المتابعة؟",
+    "confirmDeleteGroupDesc": "هل تريد حذف المجموعة \"{{name}}\"؟ ستعود المنصات بداخلها للعرض بشكل مستقل."
   },
   "privacy": {
     "hideSensitive": "إخفاء البريد الإلكتروني",
@@ -1197,6 +1251,11 @@
       "submit": "استيراد"
     },
     "launchDialog": {
+      "customCommand": "أمر مخصص",
+      "useDefaultCommand": "الأمر الافتراضي",
+      "customCommandHint": "اتركه فارغًا لتشغيل الأمر الافتراضي.",
+      "rememberDirectory": "يتم تذكر آخر مجلد عمل.",
+      "chooseDirectory": "اختيار المجلد",
       "title": "تشغيل المثيل",
       "terminal": "الطرفية",
       "command": "أمر التشغيل",
@@ -1567,10 +1626,9 @@
       "codexEnhancements": {
         "quotaCompat": "حصص الوضع المختلط",
         "quotaCompatDesc": "تعرض مثيلات خدمة API حصة متاحة للعميل وفحوصه المحلية فقط. لا يتغير الاستخدام الفعلي لدى المزوّد أو حدود الصور. يخص هذا المفتاح إعدادات OAuth مع واجهات API الخارجية الأخرى فقط.",
-        "restartHint": "توقعات الرسالة التالية الأصلية معطّلة افتراضيًا. أعد تشغيل نسخ Codex المعنية بعد التغيير وأبقِ Cockpit Tools قيد التشغيل. يعتمد الإملاء الأصلي على إمكانات العميل وإعداداته؛ ولا يتولى Cockpit تشغيله أو يفرض تفعيله.",
         "configFailed": "تعذرت قراءة الإعدادات أو حفظها: {{error}}",
         "nativePredictions": "توقعات الخطوة التالية الأصلية (Tab)",
-        "nativePredictionsDesc": "ينشئ اقتراحات للرسالة التالية باستخدام مزود API ونموذج المحادثة الحالية. يستهلك رصيد API إضافيًا؛ أعد تشغيل Codex بعد الحفظ."
+        "nativePredictionsDesc": "متوقف افتراضيًا. تستخدم الاقتراحات مزوّد API ونموذج المحادثة الحالية وتزيد استهلاك API. بعد تغيير الإعداد، أعد تشغيل مثيلات Codex المعنية وأبقِ Cockpit Tools قيد التشغيل."
       },
       "timeDisplayMode": "عرض الوقت",
       "timeDisplayModeDesc": "الوقت المعروض في بطاقات الحسابات وقوائمها. الافتراضي هو وقت تبديل الحساب"
@@ -1918,6 +1976,14 @@
   },
   "appPath": {
     "missing": {
+      "pathLabel": "مسار تشغيل {{app}}",
+      "configurePath": "تعيين المسار",
+      "configureHint": "اختر ملفًا تنفيذيًا أو اترك الحقل فارغًا للكشف التلقائي.",
+      "cliHint": "تعذر العثور على {{app}}. اختر الملف التنفيذي أو ثبّت أداة سطر الأوامر ثم أعد الكشف.",
+      "invalidPath": "لا يشير هذا المسار إلى ملف تنفيذي صالح لـ {{app}}.",
+      "accountAlreadySwitched": "تم تبديل الحساب. ستتم إعادة محاولة تشغيل التطبيق فقط.",
+      "saveAndRetry": "حفظ وإعادة المحاولة",
+      "operationCancelled": "أُلغي التشغيل.",
       "scanEmpty": "لم يُعثر على تطبيق قيد التشغيل. شغّله وحاول مجددًا، أو اختر مساره يدويًا.",
       "scanEmptyGeneric": "لم يُعثر على {{app}} قيد التشغيل. شغّله وحاول مجددًا، أو اختر مساره يدويًا.",
       "title": "لم يتم العثور على مسار التطبيق",
@@ -2692,11 +2758,13 @@
       "masterLabel": "استخدام بطاقات إعادة التعيين تلقائيًا",
       "ruleSource": "مصدر القاعدة",
       "weeklyTrigger": "حد الحصة الأسبوعية",
+      "preferUsageCredits": "الأرصدة أولًا",
       "weeklyRemaining": "المتبقي أسبوعيًا ≤",
       "previewTitle": "معاينة شروط التشغيل",
       "previewAny": "تُستخدم بطاقة واحدة عند تحقق أي شرط مفعّل:",
       "previewExpiry": "تنتهي صلاحية البطاقة خلال {{value}} {{unit}}",
       "previewWeekly": "الحصة الأسبوعية المتبقية لا تتجاوز {{percent}}٪",
+      "previewWeeklyAfterCredits": "الحصة الأسبوعية المتبقية لا تتجاوز {{percent}}% وتأكد عدم توفر أرصدة الاستخدام",
       "previewOff": "الاستخدام التلقائي متوقف. القواعد أدناه غير مفعّلة.",
       "previewEmpty": "لا توجد شروط مفعّلة. لن تُستخدم البطاقات تلقائيًا.",
       "cardOn": "تلقائي",
@@ -2810,8 +2878,6 @@
     },
     "launchErrors": {
       "sessionRestoreFailed": "فشل إصلاح الجلسات ولم تكتمل استعادة النسخة الاحتياطية. توقف التشغيل؛ افحص السجلات والنسخ الاحتياطية قبل المحاولة مجددًا.",
-      "sessionCheckTimeout": "انتهت مهلة فحص الجلسات. توقف التشغيل؛ أعد المحاولة أو راجع السجلات.",
-      "sessionFileTooLarge": "رأس ملف الجلسة كبير جدًا. توقف التشغيل؛ راجع السجلات.",
       "bindingFailed": "تعذر تأكيد ربط الحساب. تم إيقاف التشغيل؛ حاول تبديل الحساب مجددًا.",
       "processScanFailed": "تعذر فحص العمليات السابقة في الخلفية. تم إيقاف التشغيل؛ حاول مجددًا.",
       "proxyEntryFailed": "تعذر تشغيل الوكيل الذي تم إعداده. لم يُستخدم مسار بديل؛ حاول مجددًا."
@@ -3029,7 +3095,8 @@
       "forceRefreshAction": "تحديث الآن",
       "forceRefreshRunning": "جارٍ تحديث Token…",
       "forceRefreshSuccess": "تم تحديث Token بنجاح",
-      "forceRefreshRetry": "إعادة الفحص"
+      "forceRefreshRetry": "إعادة الفحص",
+      "advancedMaintenanceTitle": "الصيانة والتشخيص"
     },
     "switch": "تبديل",
     "switched": "تم التبديل إلى {{email}}",
@@ -4021,9 +4088,6 @@
       "repairModal": {
         "historyDuplicateOrdinals": "تتضمن السجلات التالية أرقامًا تسلسلية مكررة. تُستبعد من إصلاح فهرس المحادثات ولا يمكن متابعة الإصلاح الكامل. استخدم «إصلاح فهرس المحادثات» لإصلاح المحادثات الأخرى.\n{{details}}",
         "projectsDeferredAction": "أغلق النسخة، ثم افتح إصلاح سجل المحادثات واختر المشاريع المحلية للمتابعة.",
-        "projectsStateSize": "أكبر ملف حالة: {{file}} ({{bytes}} بايت).",
-        "projectsQuickBudget": "بلغ فحص المشاريع السريع حدّه.",
-        "projectsStateTooLarge": "ملف حالة المشاريع أكبر من الحجم المدعوم.",
         "projectsStopHint": "أغلق النسخ المحددة قبل الاستعادة. يمكنك معاينة التغييرات الآن.",
         "modeProjectsDesc": "استعادة المشاريع المحلية وروابط محادثاتها مع إبقاء سجل المحادثات كما هو.",
         "modeProjects": "المشاريع المحلية",
@@ -5223,7 +5287,8 @@
         "speedAdjusted": "{{tier}} ← قياسي",
         "officialDefaultSpeed": "لا يدعم مسار الاشتراك الرسمي تجاوز السرعة. أُرسلت هذه المحاولة بالسرعة الافتراضية.",
         "sentTier": "الإرسال: {{tier}}",
-        "originalTier": "المستوى الأصلي: {{tier}}"
+        "originalTier": "المستوى الأصلي: {{tier}}",
+        "moreFilters": "المزيد من عوامل التصفية"
       },
       "timeouts": {
         "retryTitle": "إعادة الإرسال والمحاولة بالحساب",
@@ -5983,6 +6048,13 @@
         "nodeCount": "عدد العُقد: {{count}}",
         "updatedAt": "آخر تحديث: {{time}}",
         "autoUpdate": "تحديث تلقائي كل 6 ساعات",
+        "dnsOverride": "تجاوز إعدادات DNS",
+        "ipv6": "تفعيل IPv6",
+        "dnsServers": "خوادم DNS",
+        "dnsServersHint": "عنوان واحد في كل سطر. اترك الحقل فارغًا لاستخدام Cloudflare DoH.",
+        "networkScope": "تنطبق على اتصالات الوكيل الجديدة من هذا المصدر.",
+        "invalidDnsServer": "أدخل عنوان خادم DNS صالحًا في كل سطر.",
+        "networkSaveFailed": "تعذّر حفظ إعدادات الشبكة أو تطبيقها. حاول مجددًا.",
         "snapshotNotice": "لا تغيّر تحديثات الاشتراك الإعدادات المرتبطة. أعد الربط لتطبيق التحديث.",
         "defaultLabel": "افتراضي",
         "defaultEmpty": "غير محدد",
@@ -6560,7 +6632,8 @@
       "desc": "انقر الزر أدناه وأكمل تفويض GitHub Copilot في المتصفح."
     },
     "token": {
-      "desc": "الصق رمز وصول GitHub Copilot أو بيانات JSON المصدّرة."
+      "desc": "الصق رمز وصول GitHub Copilot أو بيانات JSON المصدّرة.",
+      "requiredFields": "الحقول المطلوبة: في وضع Token الصق GitHub access token مباشرة؛ ويتطلب وضع JSON الحقول id و github_login و github_id و github_access_token و copilot_token و created_at و last_used."
     },
     "import": {
       "localDesc": "استيراد بيانات حساب GitHub Copilot من VS Code المحلي أو ملف JSON.",
@@ -6937,7 +7010,8 @@
       "desc": "انقر الزر أدناه وأكمل تفويض Devin في المتصفح."
     },
     "token": {
-      "desc": "الصق رمز وصول Devin أو بيانات JSON المصدّرة."
+      "desc": "الصق رمز وصول Devin أو بيانات JSON المصدّرة.",
+      "requiredFields": "الحقل المطلوب: github_access_token (API Key)"
     },
     "import": {
       "localDesc": "استيراد بيانات حسابات Devin من ملف JSON.",
@@ -7041,7 +7115,8 @@
       "startUrlRequired": "أدخل عنوان بدء IAM Identity Center"
     },
     "token": {
-      "desc": "الصق رمز وصول Kiro أو بيانات JSON المصدّرة."
+      "desc": "الصق رمز وصول Kiro أو بيانات JSON المصدّرة.",
+      "requiredFields": "الحقول المطلوبة: يُوصى لملفات JSON باستخدام access_token + refresh_token (ويُدعم accessToken / refreshToken للتوافق فقط)."
     },
     "import": {
       "localDesc": "استورد من التطبيق المحلي أو JSON. تُحفظ حسابات JSON أولاً، ثم تُحدّث بيانات الدخول والحصص في الخلفية.",
@@ -7661,6 +7736,39 @@
       "detailError": "خطأ في التسجيل"
     }
   },
+  "codebuddyCli": {
+    "launchTitle": "تشغيل CodeBuddy CN",
+    "launchDesktop": "تشغيل تطبيق سطح المكتب",
+    "recheck": "إعادة الفحص",
+    "checking": "جارٍ البحث عن CodeBuddy CLI…",
+    "rememberDirectory": "يتذكر التطبيق آخر مجلد عمل لهذا الحساب.",
+    "installGuide": "دليل التثبيت الرسمي",
+    "launch": "تشغيل CLI",
+    "terminalOpened": "أُرسل أمر التشغيل. راجع مخرجات CLI في الطرفية.",
+    "account": "الحساب",
+    "selectAccount": "اختر حسابًا",
+    "chooseDirectory": "اختر مجلدًا",
+    "homeDirectory": "المجلد الرئيسي",
+    "instances": "مثيلات CLI",
+    "newInstance": "مثيل جديد",
+    "editInstance": "تعديل المثيل",
+    "noInstances": "لا توجد مثيلات محفوظة.",
+    "removeConfirmation": "هل تريد إزالة هذا المثيل؟ ستبقى إعدادات CLI والسجل على القرص.",
+    "errors": {
+      "cliCheckFailed": "تعذّر التحقّق من توفر CodeBuddy CLI.",
+      "accountMissing": "تعذّر العثور على الحساب المحفوظ.",
+      "accountUnreadable": "تعذّرت قراءة الحساب المحفوظ.",
+      "credentialMissing": "لا يحتوي هذا الحساب على رمز وصول. أعد تفويضه في CodeBuddy أو CodeBuddy CN.",
+      "workingDirInvalid": "اختر مجلد عمل موجودًا.",
+      "nameRequired": "أدخل اسمًا للمثيل.",
+      "instanceMissing": "تعذّر العثور على المثيل.",
+      "storageError": "تعذّرت قراءة بيانات مثيل CLI أو حفظها.",
+      "cliMissing": "لم يُعثر على CodeBuddy CLI. ثبّته باتباع الدليل الرسمي.",
+      "launchFailed": "تعذّر تشغيل CodeBuddy CLI.",
+      "terminalFailed": "تعذّر فتح الطرفية.",
+      "terminalUnsupported": "اختر طرفية مدعومة في الإعدادات العامة. على macOS استخدم Terminal أو iTerm2 أو Ghostty."
+    }
+  },
   "codebuddyCn": {
     "title": "إدارة حسابات CodeBuddy CN",
     "noAccounts": "لا توجد حسابات CodeBuddy CN",
@@ -7686,6 +7794,27 @@
     "syncFailed": "فشل المزامنة: {{error}}",
     "syncSuccess": "تمت مزامنة {{count}} حساب/حسابات مع WorkBuddy",
     "syncToWorkbuddy": "مزامنة مع WorkBuddy"
+  },
+  "workbuddyAi": {
+    "search": "البحث في حسابات WorkBuddy AI",
+    "noAccounts": "لا توجد حسابات WorkBuddy AI",
+    "addAccount": "إضافة حساب WorkBuddy AI",
+    "oauthDesc": "افتح صفحة تسجيل الدخول إلى WorkBuddy AI في المتصفح.",
+    "tokenDesc": "ألصق رمز وصول WorkBuddy AI أو ملف JSON مُصدّرًا.",
+    "importDesc": "استورد من التطبيق المحلي أو من ملف JSON.",
+    "importClient": "استيراد من WorkBuddy AI",
+    "flowNotice": {
+      "title": "حول حسابات WorkBuddy AI",
+      "desc": "يحدّث تبديل الحساب ملف الدخول المحلي ويشغّل الإصدار الدولي.",
+      "permission": "يستخدم الاستيراد والتبديل ملف الدخول الخاص بالإصدار الدولي. يعالج التطبيق الرسمي الحقول المشفّرة الموجودة.",
+      "network": "يتصل التفويض وتجديد الرموز والاستعلام عن الرصيد بخدمة WorkBuddy AI. يبقى ملف الدخول ومواد التشفير على الجهاز."
+    },
+    "oauthFeature": {
+      "title": "الدخول إلى WorkBuddy AI",
+      "signIn": "سجّل الدخول إلى WorkBuddy AI في المتصفح.",
+      "switch": "بعد التفويض، اختر حساب الإصدار الدولي من القائمة.",
+      "credits": "يظهر الرصيد المتبقي في بطاقة الحساب."
+    }
   },
   "workbuddy": {
     "desktopEdition": "WorkBuddy (إصدار الصين)",
@@ -8479,7 +8608,8 @@
       "deploying": "جارٍ جلب الطرز…",
       "deploySuccess": "تم النشر إلى Codex: {{count}} طراز",
       "deployFailed": "فشل النشر: {{error}}",
-      "useKey": "استخدام المفتاح"
+      "useKey": "استخدام المفتاح",
+      "deleteConfirm": "هل تريد حذف المفتاح المحفوظ \"{{name}}\"؟ لا يمكن التراجع عن هذا الإجراء."
     },
     "prefill": {
       "codexReady": "تم ملء إعدادات APIKEY.FUN. راجعها قبل إضافتها إلى Codex.",

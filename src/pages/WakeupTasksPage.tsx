@@ -3,8 +3,10 @@ import { invoke } from '@tauri-apps/api/core';
 import { LOCAL_HISTORY_TIMEOUT, useLocalHistory, type LocalHistoryRead } from '../hooks/useLocalHistory';
 import { confirm as confirmDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { ChevronLeft, Plus, Pencil, Trash2, Power, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Power, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { SingleSelectDropdown } from '../components/SingleSelectDropdown';
+import { getAntigravityTierBadge } from '../utils/account';
 import { useAccountStore } from '../stores/useAccountStore';
 import { Page } from '../types/navigation';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
@@ -2327,7 +2329,6 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
-              <button className="btn btn-secondary icon-only" onClick={closeTestModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t('wakeup.dialogs.testTitle')}</h2>
               <button
                 className="modal-close"
@@ -2441,6 +2442,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
                       filteredTestAccounts.map((account) => {
                         const maskedEmail = maskAccountText(account.email);
                         const isSelected = testSelectedAccountSet.has(account.email);
+                        const planBadge = getAntigravityTierBadge(account.quota);
                         return (
                           <label
                             key={account.id}
@@ -2460,6 +2462,11 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
                             <span className="verification-account-item-email" title={maskedEmail}>
                               {maskedEmail}
                             </span>
+                            {planBadge && (
+                              <span className={`tier-badge ${planBadge.className}`}>
+                                {planBadge.label}
+                              </span>
+                            )}
                           </label>
                         );
                       })
@@ -2518,7 +2525,6 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
-              <button className="btn btn-secondary icon-only" onClick={() => setShowHistoryModal(false)} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t('wakeup.dialogs.historyTitle')}</h2>
               <button
                 className="modal-close"
@@ -2607,7 +2613,6 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
         <div className="modal-overlay">
           <div className="modal modal-lg wakeup-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
-              <button className="btn btn-secondary icon-only" onClick={() => setShowModal(false)} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{editingTaskId ? t('wakeup.dialogs.taskTitleEdit') : t('wakeup.dialogs.taskTitleNew')}</h2>
               <button
                 className="modal-close"
@@ -2786,6 +2791,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
                       filteredFormAccounts.map((account) => {
                         const maskedEmail = maskAccountText(account.email);
                         const isSelected = formSelectedAccountSet.has(account.email);
+                        const planBadge = getAntigravityTierBadge(account.quota);
                         return (
                           <label
                             key={account.id}
@@ -2805,6 +2811,11 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
                             <span className="verification-account-item-email" title={maskedEmail}>
                               {maskedEmail}
                             </span>
+                            {planBadge && (
+                              <span className={`tier-badge ${planBadge.className}`}>
+                                {planBadge.label}
+                              </span>
+                            )}
                           </label>
                         );
                       })
@@ -2841,15 +2852,17 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
                 <div className="wakeup-mode-panel">
                   <div className="wakeup-form-group">
                     <label>{t('wakeup.form.repeatMode')}</label>
-                    <select
-                      className="wakeup-input wakeup-select"
+                    <SingleSelectDropdown
+                      className="wakeup-select-dropdown"
                       value={formRepeatMode}
-                      onChange={(event) => setFormRepeatMode(event.target.value as RepeatMode)}
-                    >
-                      <option value="daily">{t('wakeup.form.repeatDaily')}</option>
-                      <option value="weekly">{t('wakeup.form.repeatWeekly')}</option>
-                      <option value="interval">{t('wakeup.form.repeatInterval')}</option>
-                    </select>
+                      options={[
+                        { value: 'daily', label: t('wakeup.form.repeatDaily') },
+                        { value: 'weekly', label: t('wakeup.form.repeatWeekly') },
+                        { value: 'interval', label: t('wakeup.form.repeatInterval') },
+                      ]}
+                      ariaLabel={t('wakeup.form.repeatMode')}
+                      onChange={(value) => setFormRepeatMode(value as RepeatMode)}
+                    />
                   </div>
 
                   {formRepeatMode === 'daily' && (
@@ -3210,16 +3223,16 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
 
               <div className="wakeup-form-group">
                 <label>{t('wakeup.form.executionMode', '执行模式')}</label>
-                <select
-                  className="wakeup-select"
+                <SingleSelectDropdown
+                  className="wakeup-select-dropdown"
                   value={formExecutionMode}
-                  onChange={(event) =>
-                    setFormExecutionMode(event.target.value as 'auto' | 'confirm')
-                  }
-                >
-                  <option value="auto">{t('wakeup.form.executionModeAuto', '直接执行')}</option>
-                  <option value="confirm">{t('wakeup.form.executionModeConfirm', '需要确认')}</option>
-                </select>
+                  options={[
+                    { value: 'auto', label: t('wakeup.form.executionModeAuto', '直接执行') },
+                    { value: 'confirm', label: t('wakeup.form.executionModeConfirm', '需要确认') },
+                  ]}
+                  ariaLabel={t('wakeup.form.executionMode', '执行模式')}
+                  onChange={(value) => setFormExecutionMode(value as 'auto' | 'confirm')}
+                />
               </div>
 
               {formExecutionMode === 'confirm' && (
@@ -3247,14 +3260,14 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
                 position="bottom"
                 scrollKey={formErrorScrollKey}
               />
-              <div className="modal-actions">
-                <button className="btn btn-secondary" onClick={() => setShowModal(false)}>
-                  {t('common.cancel')}
-                </button>
-                <button className="btn btn-primary" onClick={handleSaveTask} disabled={savingTask}>
-                  {savingTask ? t('common.saving') : t('wakeup.form.saveTask')}
-                </button>
-              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowModal(false)}>
+                {t('common.cancel')}
+              </button>
+              <button className="btn btn-primary" onClick={handleSaveTask} disabled={savingTask}>
+                {savingTask ? t('common.saving') : t('wakeup.form.saveTask')}
+              </button>
             </div>
           </div>
         </div>

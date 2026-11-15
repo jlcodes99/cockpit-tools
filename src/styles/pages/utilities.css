@@ -21,7 +21,7 @@
   --plan-plus-border: rgba(16, 185, 129, 0.35);
 
   --plan-team-bg: rgba(139, 92, 246, 0.15);
-  --plan-team-color: #7c3aed;
+  --plan-team-color: var(--text-purple);
   --plan-team-border: rgba(139, 92, 246, 0.35);
 
   --plan-enterprise-bg: rgba(245, 158, 11, 0.18);

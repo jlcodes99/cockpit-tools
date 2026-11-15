@@ -429,16 +429,15 @@ pub async fn inject_trae_account(
         {
             Ok(_) => None,
             Err(err) => {
-                if err.starts_with("APP_PATH_NOT_FOUND:")
+                if err.starts_with("APP_PATH_MISSING_AFTER_SWITCH:")
                     || err.contains("启动 Trae 失败")
                     || (err.contains("启动 ") && err.contains("失败"))
                 {
                     logger::log_warn(&format!("{} 默认实例启动失败: {}", platform_label, err));
-                    if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("APP_PATH_NOT_FOUND:")
-                    {
+                    if err.starts_with("APP_PATH_MISSING_AFTER_SWITCH:") {
                         let _ = app.emit(
                             "app:path_missing",
-                            serde_json::json!({ "app": platform_key, "retry": { "kind": "default" } }),
+                            serde_json::json!({ "app": platform_key, "retry": { "kind": "launchOnly" } }),
                         );
                     }
                     Some(err)

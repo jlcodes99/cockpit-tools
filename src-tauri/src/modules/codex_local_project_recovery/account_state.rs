@@ -4,11 +4,6 @@
 use super::*;
 use crate::modules::ssh_server_identity::AUTO_CONNECT;
 use sha2::{Digest, Sha256};
-use crate::modules::codex_session_visibility::{
-    launch_visibility_budget, with_launch_visibility_budget, configure_launch_visibility_connection,
-    LAUNCH_VISIBILITY_TIMEOUT, QUICK_PROJECT_REPAIR_BUDGET,
-};
-
 #[path = "account_state_ssh.rs"]
 mod ssh;
 
@@ -126,7 +121,6 @@ fn local_view(
     let mut nonlocal_threads = HashSet::new();
     let mut explicit_assignments = HashMap::new();
     for source in sources {
-        check()?;
         if let Some(deletions) =
             source["app-server-pending-project-deletions-by-host"][&host].as_object()
         {
@@ -140,7 +134,6 @@ fn local_view(
         let mut index: HashMap<Vec<String>, Vec<(&str, &Value)>> = HashMap::new();
         if let Some(entries) = source["local-projects"].as_object() {
             for (id, entry) in entries {
-                check()?;
                 if !cloud(entry) {
                     let roots = root_key(root_set(&entry["rootPaths"]));
                     if !roots.is_empty() {
@@ -195,7 +188,6 @@ fn local_view(
         })
         .collect::<Vec<_>>();
     for (project, roots) in registry {
-        check()?;
         if blocked.contains(project.id.as_str()) {
             continue;
         }
@@ -273,7 +265,6 @@ fn local_view(
     let mut order = Vec::new();
     let mut seen_order = HashSet::new();
     for source in sources {
-        check()?;
         for id in source["project-order"]
             .as_array()
             .into_iter()
@@ -307,7 +298,6 @@ fn local_view(
     let mut assignments = BTreeMap::new();
     let mut hosts = BTreeMap::new();
     for thread in threads.iter().filter(|thread| thread.root) {
-        check()?;
         if nonlocal_threads.contains(thread.id.as_str()) || ungrouped.contains(&thread.id) {
             continue;
         }
@@ -430,11 +420,9 @@ fn merge_local(target: &mut Value, view: &Value) {
 /// Native Desktop clears top-level groups during its constructor, so restore the
 /// target owner *and* its globals together, before the existing quick repair.
 pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> {
-    check()?;
     let Some(bytes) = read_bytes(&home.join(STATE))? else {
         return Ok(false);
     };
-    check()?;
     let before = decode(Some(&bytes))?;
     let mut after = before.clone();
     ssh::inherit_scoped_auto_connect(&mut after, owner);
@@ -505,53 +493,14 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
     if let Some(primary) = project_database(home)? {
         let db = open(&home.join(primary), false)?;
         db.execute_batch("BEGIN").map_err(|e| e.to_string())?;
-        // Project visibility depends on the registry. Read thread memberships
-        // within a separate budget so they cannot block restoring the groups.
-        let projects = projects_with_limit(&db, None)?;
-        let large_history: bool = db
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM threads LIMIT 1 OFFSET ?1)",
-                [QUICK_MAX_THREADS as i64],
-                |row| row.get(0),
-            )
-            .map_err(|error| error.to_string())?;
-        let threads = if large_history {
-            let ids = presentation::referenced_threads(&sources[..2])?;
-            let budget = launch_visibility_budget().map(|budget|
-                budget.deadline.saturating_duration_since(std::time::Instant::now()) / 4)
-                .unwrap_or(QUICK_PROJECT_REPAIR_BUDGET);
-            match with_launch_visibility_budget(budget, || {
-                configure_launch_visibility_connection(&db)?;
-                threads_for_presentation(&db, &ids)
-            }) {
-                Err(error) if error.starts_with(LAUNCH_VISIBILITY_TIMEOUT) => {
-                    crate::modules::logger::log_warn("[Codex Local Projects] Thread membership recovery deferred within launch budget");
-                    Vec::new()
-                }
-                result => result?,
-            }
-        } else {
-            threads_with_limit(&db, Some(QUICK_MAX_THREADS))?
-        };
+        let projects = read_projects(&db)?;
+        let threads = read_threads(&db, None)?;
         let view = local_view(home, &sources, &projects, &threads)?;
         // Finish the read transaction before writing the renderer state.
         drop(db);
         merge_local(&mut target["globals"], &view);
     }
-    let remaining = launch_visibility_budget().map(|budget|
-        budget.deadline.saturating_duration_since(std::time::Instant::now()));
-    let verification = if let Some(remaining) = remaining {
-        with_launch_visibility_budget((remaining / 4).min(QUICK_PROJECT_REPAIR_BUDGET),
-            || ssh::verify_threads(home, &mut ssh_state))
-    } else {
-        ssh::verify_threads(home, &mut ssh_state)
-    };
-    match verification {
-        Err(error) if error.starts_with(LAUNCH_VISIBILITY_TIMEOUT) => {
-            crate::modules::logger::log_warn("[Codex SSH] Thread membership recovery deferred within launch budget");
-        }
-        result => result?,
-    }
+    ssh::verify_threads(home, &mut ssh_state)?;
     ssh::merge(&mut target["globals"], &ssh_state)?;
     ssh::remember_hosts(&mut after, &ssh_state);
     for key in SCOPED_GLOBALS {
@@ -589,10 +538,6 @@ fn finish_prepare(home: &Path, bytes: &[u8], before: &Value, after: &Value) -> R
     }
     let expected_hash: [u8; 32] = Sha256::digest(bytes).into();
     let content = serde_json::to_string(after).map_err(|e| e.to_string())?;
-    if content.len() as u64 > MAX_STATE_BYTES {
-        return Err("CODEX_PROJECT_STATE_TOO_LARGE".into());
-    }
-    check()?;
     // Codex owns the adjacent .bak. Do not replace it with a temporary backup
     // or treat it as a plaintext credential backup to remove.
     if !crate::modules::atomic_write::restore_string_atomic_if_hash_matches(

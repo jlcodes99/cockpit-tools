@@ -568,10 +568,7 @@ fn apply_grok_switch_opencode_projection(account_id: &str, user_config: &config:
             } else {
                 logger::log_info("OpenCode 未在运行，准备启动");
             }
-            if let Err(e) = process::start_opencode_with_path(Some(&user_config.opencode_app_path))
-            {
-                logger::log_warn(&format!("OpenCode 启动失败: {}", e));
-            }
+            opencode_auth::launch_after_account_sync(&user_config.opencode_app_path);
         } else if !user_config.grok_opencode_auth_overwrite_on_switch {
             logger::log_info("OpenCode 登录覆盖已关闭，跳过自动重启");
         } else {

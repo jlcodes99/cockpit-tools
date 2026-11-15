@@ -128,7 +128,7 @@
   border: 1px solid rgba(239, 68, 68, 0.25);
   border-radius: 8px;
   background: rgba(239, 68, 68, 0.08);
-  color: #b91c1c;
+  color: var(--text-negative);
   font-size: 13px;
 }
 
@@ -500,7 +500,7 @@
 .codex-batch-import-row-error {
   display: block;
   margin-top: 6px;
-  color: #b91c1c;
+  color: var(--text-negative);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -604,7 +604,8 @@
   text-align: left;
 }
 
-.app-path-missing-modal {
+.modal.app-path-missing-modal {
+  width: min(560px, calc(100vw - 48px));
   max-width: 560px;
 }
 
@@ -881,7 +882,8 @@
 }
 
 @media (max-width: 640px) {
-  .app-path-missing-modal {
+  .modal.app-path-missing-modal {
+    width: min(92vw, 560px);
     max-width: 92vw;
   }
 

@@ -142,3 +142,14 @@ export function getCheckinStreak(account: CodebuddyCnAccount): number | null {
 export function getLastCheckinTime(account: CodebuddyCnAccount): number | null {
   return account.last_checkin_time ?? null;
 }
+
+/** Keep launch pickers and the account overview on the same tier badge styles. */
+export function getCodebuddyTierBadgeClass(plan: string): string {
+  switch (plan.toUpperCase()) {
+    case 'FREE': return 'free';
+    case 'TRIAL': return 'trial';
+    case 'PRO': return 'pro';
+    case 'ENTERPRISE': return 'enterprise';
+    default: return 'unknown';
+  }
+}

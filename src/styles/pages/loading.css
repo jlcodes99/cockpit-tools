@@ -11,6 +11,14 @@
   animation: spin 0.8s linear infinite;
 }
 
+svg.loading-spinner {
+  width: auto;
+  height: auto;
+  border: none;
+  border-radius: 0;
+  animation: spin 0.9s linear infinite;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

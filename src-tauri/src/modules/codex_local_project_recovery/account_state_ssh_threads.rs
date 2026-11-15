@@ -61,7 +61,6 @@ pub(super) fn verify_memberships(
         .into_iter()
         .filter(|p| p.is_file())
     {
-        check()?;
         let db = open(&path, false)?;
         let columns = table_columns(&db, "local_thread_catalog")?;
         if !["host_id", "thread_id", "project_id", "cwd", "source_kind"]
@@ -74,7 +73,6 @@ pub(super) fn verify_memberships(
             column_expr(&columns, "source_detail", "NULL"));
         let mut statement = db.prepare(&sql).map_err(|e| e.to_string())?;
         for (id, _) in globals[ASSIGN].as_object().into_iter().flatten() {
-            check()?;
             let Some(host) = globals[HOSTS][id].as_str() else {
                 continue;
             };
@@ -82,7 +80,6 @@ pub(super) fn verify_memberships(
                 .query([host, id.as_str()])
                 .map_err(|e| e.to_string())?;
             while let Some(row) = rows.next().map_err(|e| e.to_string())? {
-                check()?;
                 let id: String = row.get(0).map_err(|e| e.to_string())?;
                 let Some(assignment) = globals[ASSIGN].get(&id) else {
                     continue;

@@ -2,6 +2,13 @@ import { previewDurableUiSetting, readDurableUiSetting } from './durableUiSettin
 import { PlatformId } from '../types/platform';
 
 export type AntigravityRuntimeTarget = Extract<PlatformId, 'antigravity' | 'antigravity_ide'>;
+export type AntigravityLaunchClient = AntigravityRuntimeTarget | 'cli';
+export const ANTIGRAVITY_DESKTOP_CLIENTS = ['antigravity', 'antigravity_ide'] as const;
+export const ANTIGRAVITY_CLIENT_LABELS = {
+  antigravity: 'Antigravity',
+  antigravity_ide: 'Antigravity IDE',
+  cli: 'Antigravity CLI (agy)',
+} satisfies Record<AntigravityLaunchClient, string>;
 
 export const ANTIGRAVITY_RUNTIME_TARGET_STORAGE_KEY = 'agtools.antigravity.runtime_target.v1';
 export const ANTIGRAVITY_RUNTIME_TARGET_CHANGED_EVENT = 'agtools-antigravity-runtime-target-changed';
@@ -9,6 +16,17 @@ export const DEFAULT_ANTIGRAVITY_RUNTIME_TARGET: AntigravityRuntimeTarget = 'ant
 
 export function antigravityAppPathTarget(target: AntigravityRuntimeTarget): 'antigravity_legacy' | 'antigravity' {
   return target === 'antigravity' ? 'antigravity_legacy' : 'antigravity';
+}
+
+export function getMissingAntigravityPathTarget(error: unknown): AntigravityRuntimeTarget | undefined {
+  switch (String(error).replace(/^Error:\s*/, '').trim()) {
+    case 'APP_PATH_MISSING_AFTER_SWITCH:antigravity_legacy':
+    case 'APP_PATH_NOT_FOUND:antigravity_legacy':
+      return 'antigravity';
+    case 'APP_PATH_MISSING_AFTER_SWITCH:antigravity':
+    case 'APP_PATH_NOT_FOUND:antigravity':
+      return 'antigravity_ide';
+  }
 }
 
 export function isAntigravityRuntimeTarget(value: unknown): value is AntigravityRuntimeTarget {
@@ -56,11 +74,4 @@ export function setAntigravityRuntimeTarget(target: AntigravityRuntimeTarget): v
     return;
   }
   previewDurableUiSetting(ANTIGRAVITY_RUNTIME_TARGET_STORAGE_KEY, target);
-}
-
-export function setAntigravityRuntimeTargetFromPlatform(platformId: PlatformId): void {
-  if (!isAntigravityRuntimeTarget(platformId)) {
-    return;
-  }
-  setAntigravityRuntimeTarget(platformId);
 }

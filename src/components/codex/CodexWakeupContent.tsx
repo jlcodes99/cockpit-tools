@@ -3083,23 +3083,23 @@ export function CodexWakeupContent({
 
               <div className="wakeup-form-group">
                 <label>{t('codex.wakeup.presetDefaultReasoningLabel')}</label>
-                <select
-                  className="wakeup-input"
+                <WakeupSingleSelectDropdown
                   value={presetDraft.defaultReasoningEffort}
-                  onChange={(event) =>
+                  options={[
+                    { value: '', label: t('codex.wakeup.selectReasoningPlaceholder') },
+                    ...presetDraft.allowedReasoningEfforts.map((effort) => ({
+                      value: effort,
+                      label: reasoningEffortLabel(effort, t),
+                    })),
+                  ]}
+                  placeholder={t('codex.wakeup.selectReasoningPlaceholder')}
+                  onSelect={(value) =>
                     setPresetDraft((current) => ({
                       ...current,
-                      defaultReasoningEffort: event.target.value as CodexWakeupReasoningEffort,
+                      defaultReasoningEffort: value as CodexWakeupReasoningEffort,
                     }))
                   }
-                >
-                  <option value="">{t('codex.wakeup.selectReasoningPlaceholder')}</option>
-                  {presetDraft.allowedReasoningEfforts.map((effort) => (
-                    <option key={effort} value={effort}>
-                      {reasoningEffortLabel(effort, t)}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
             </div>
             <div className="modal-footer">
@@ -3509,19 +3509,20 @@ export function CodexWakeupContent({
 
               <div className="wakeup-form-group">
                 <label>{t('wakeup.form.executionMode')}</label>
-                <select
-                  className="wakeup-select"
+                <WakeupSingleSelectDropdown
                   value={taskDraft.executionMode}
-                  onChange={(event) =>
+                  options={[
+                    { value: 'auto', label: t('wakeup.form.executionModeAuto') },
+                    { value: 'confirm', label: t('wakeup.form.executionModeConfirm') },
+                  ]}
+                  placeholder={t('wakeup.form.executionMode')}
+                  onSelect={(value) =>
                     setTaskDraft((current) => ({
                       ...current,
-                      executionMode: event.target.value as 'auto' | 'confirm',
+                      executionMode: value as 'auto' | 'confirm',
                     }))
                   }
-                >
-                  <option value="auto">{t('wakeup.form.executionModeAuto')}</option>
-                  <option value="confirm">{t('wakeup.form.executionModeConfirm')}</option>
-                </select>
+                />
               </div>
 
               {taskDraft.executionMode === 'confirm' && (

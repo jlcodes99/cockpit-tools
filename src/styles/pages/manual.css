@@ -87,7 +87,7 @@
 }
 
 .manual-card-header:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--bg-hover);
 }
 
 .manual-card-title-wrap {
@@ -211,10 +211,6 @@
 
 [data-theme="dark"] .manual-toolbar {
   background: linear-gradient(135deg, rgba(59, 130, 246, 0.14), rgba(20, 184, 166, 0.14));
-}
-
-[data-theme="dark"] .manual-card-header:hover {
-  background: rgba(148, 163, 184, 0.08);
 }
 
 [data-theme="dark"] .manual-card-icon {

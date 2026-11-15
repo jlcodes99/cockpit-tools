@@ -1,0 +1,139 @@
+.cli-launch-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.cli-launch-fields:not(.cli-launch-fields-with-directory) > .cli-launch-field,
+.cli-launch-command-field {
+  grid-column: 1 / -1;
+}
+
+.cli-launch-field {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cli-launch-directory-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cli-launch-fields .cli-launch-input,
+.cli-launch-fields .single-select-dropdown-trigger {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  box-shadow: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.cli-launch-fields .single-select-dropdown-trigger {
+  height: 36px;
+}
+
+.cli-launch-fields .single-select-dropdown-trigger:is(:hover, .open):not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  box-shadow: none;
+}
+
+.cli-launch-fields input.cli-launch-input {
+  height: 36px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cli-launch-fields .cli-launch-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.cli-launch-fields textarea.cli-launch-input {
+  resize: vertical;
+  height: clamp(132px, 28vh, 248px);
+  min-height: 84px;
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.cli-launch-fields textarea[readonly] {
+  background: var(--bg-tertiary);
+}
+
+.cli-launch-fields .single-select-dropdown-value {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.cli-launch-fields .single-select-dropdown-arrow {
+  width: auto;
+  height: auto;
+  background: none;
+  color: var(--text-secondary);
+}
+
+.cli-launch-fields .cli-launch-input:focus-visible,
+.cli-launch-fields .single-select-dropdown-trigger:focus-visible,
+.cli-launch-fields .cli-launch-folder:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.cli-launch-fields .cli-launch-input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.cli-launch-fields .cli-launch-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cli-launch-fields .btn.cli-launch-folder {
+  flex: 0 0 36px;
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+}
+
+.cli-launch-note {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.cli-launch-note[role='alert'] {
+  color: var(--danger);
+}
+
+@media (max-width: 560px) {
+  .cli-launch-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.cli-launch-command-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+}

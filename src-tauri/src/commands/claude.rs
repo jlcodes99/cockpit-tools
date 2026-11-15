@@ -35,40 +35,6 @@ pub(crate) fn powershell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
 
-#[cfg(target_os = "windows")]
-fn resolve_claude_cli_command() -> String {
-    use std::os::windows::process::CommandExt;
-
-    if let Some(user_profile) = std::env::var_os("USERPROFILE") {
-        let candidate = Path::new(&user_profile)
-            .join(".local")
-            .join("bin")
-            .join("claude.exe");
-        if candidate.exists() {
-            return format!("& {}", powershell_quote(&candidate.to_string_lossy()));
-        }
-    }
-
-    if let Ok(output) = Command::new("where")
-        .arg("claude")
-        .creation_flags(0x08000000)
-        .stdin(std::process::Stdio::null())
-        .output()
-    {
-        if output.status.success() {
-            if let Some(path) = String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .map(str::trim)
-                .find(|line| !line.is_empty())
-            {
-                return format!("& {}", powershell_quote(path));
-            }
-        }
-    }
-
-    "claude".to_string()
-}
-
 #[cfg(target_os = "macos")]
 fn escape_applescript(value: &str) -> String {
     value
@@ -94,6 +60,7 @@ pub(crate) fn build_claude_cli_command_for_context(
     config_dir: Option<&str>,
     extra_args: &str,
     env: &BTreeMap<String, String>,
+    binary: &Path,
 ) -> String {
     let parsed_args = crate::modules::process::parse_extra_args(extra_args);
 
@@ -113,7 +80,7 @@ pub(crate) fn build_claude_cli_command_for_context(
             command_parts.push(format!("$env:{}={}", key, powershell_quote(value)));
         }
 
-        let mut command = resolve_claude_cli_command();
+        let mut command = format!("& {}", powershell_quote(&binary.to_string_lossy()));
         for arg in parsed_args {
             let trimmed = arg.trim();
             if !trimmed.is_empty() {
@@ -145,7 +112,7 @@ pub(crate) fn build_claude_cli_command_for_context(
             command.push_str(&env_parts.join(" "));
             command.push(' ');
         }
-        command.push_str("claude");
+        command.push_str(&posix_shell_quote(&binary.to_string_lossy()));
         for arg in parsed_args {
             let trimmed = arg.trim();
             if !trimmed.is_empty() {
@@ -171,6 +138,7 @@ fn build_claude_cli_command(
         None,
         "",
         env,
+        &super::cli_launch_path::resolve_claude_cli()?,
     ))
 }
 
@@ -361,8 +329,8 @@ fn prepare_claude_cli_launch(
         );
     }
     let normalized_working_dir = normalize_cli_working_dir(working_dir)?;
-    claude_account::inject_to_claude_config(account_id, None)?;
     let command = build_claude_cli_command(&normalized_working_dir, &BTreeMap::new())?;
+    claude_account::inject_to_claude_config(account_id, None)?;
     crate::modules::provider_current_state::set_current_account_id(
         "claude_code_account",
         Some(account_id),

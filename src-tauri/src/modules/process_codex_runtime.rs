@@ -1497,7 +1497,7 @@ pub fn start_opencode_with_path(custom_path: Option<&str>) -> Result<(), String>
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             if stderr.contains("Unable to find application") {
-                return Err("未找到 OpenCode 应用，请在设置中配置启动路径".to_string());
+                return Err("APP_PATH_NOT_FOUND:opencode".to_string());
             }
             return Err(format!("启动 OpenCode 失败: {}", stderr));
         }
@@ -1534,7 +1534,7 @@ pub fn start_opencode_with_path(custom_path: Option<&str>) -> Result<(), String>
             }
         }
 
-        return Err("未找到 OpenCode 可执行文件，请在设置中配置启动路径".to_string());
+        return Err("APP_PATH_NOT_FOUND:opencode".to_string());
     }
 
     #[cfg(target_os = "linux")]
@@ -1562,7 +1562,7 @@ pub fn start_opencode_with_path(custom_path: Option<&str>) -> Result<(), String>
             }
         }
 
-        return Err("未找到 OpenCode 可执行文件，请在设置中配置启动路径".to_string());
+        return Err("APP_PATH_NOT_FOUND:opencode".to_string());
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]

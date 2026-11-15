@@ -1,7 +1,7 @@
 {
   "name": "cockpit-tools",
   "private": true,
-  "version": "1.3.84",
+  "version": "1.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -22,9 +22,13 @@
     "tauri:dev": "node scripts/tauri-dev.cjs",
     "tauri": "node scripts/tauri.cjs",
     "sync-version": "node scripts/sync-version.js",
-    "test:rust:core": "cargo test --package cockpit-core -- --test-threads=1"
+    "test:rust:core": "cargo test --package cockpit-core -- --test-threads=1",
+    "test:platform-sort": "node scripts/test-platform-sort-browser.cjs"
   },
   "dependencies": {
+    "@dnd-kit/core": "6.3.1",
+    "@dnd-kit/sortable": "10.0.0",
+    "@dnd-kit/utilities": "3.2.2",
     "@tauri-apps/api": "~2.10.0",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.3",
     "@tauri-apps/plugin-dialog": "^2.7.0",

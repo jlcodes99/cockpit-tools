@@ -1,4 +1,44 @@
 {
+  "antigravityLaunch": {
+    "initializeTitle": "Antigravity IDE henüz başlatılmadı",
+    "initializeThenSwitch": "Hesap değiştirmek için IDE’yi bir kez açın.",
+    "initializeThenBind": "Hesap bağlamak için örneği bir kez başlatın.",
+    "initializeThenUseAccount": "Bağlı hesabı kullanmak için örneği bir kez başlatın.",
+    "initializeAction": "Bir kez başlat",
+    "initializeHint": "Antigravity IDE başlatılmaya hazırlanmalı. Devam etmeden önce seçili örneği bir kez başlatın.",
+    "initializeWaiting": "Antigravity IDE’nin hazırlanması bekleniyor. Hazır olduğunda elle devam edin.",
+    "initializeRetry": "Hazırlık henüz tamamlanmadı. IDE’nin açık olduğundan emin olun ve yeniden deneyin.",
+    "pathLabel": "Başlatma yolu",
+    "pathConfigured": "Yapılandırıldı",
+    "pathDetected": "Otomatik algılandı",
+    "pathInvalid": "Yapılandırılan yol geçersiz",
+    "pathCheckFailed": "Yol denetlenemedi",
+    "pathSaveAndRetry": "Kaydet ve yeniden dene",
+    "switchAndCopy": "Değiştir ve kopyala",
+    "sharedInstanceStart": "Ortak hesabı değiştir ve başlat",
+    "sharedInstanceHint": "Diğer Antigravity örnekleri açık kalır ve yeni hesaba geçebilir.",
+    "sharedInstanceRestart": "Yalnızca seçilen örnek yeniden başlatılır.",
+    "lastSharedAccount": "Son seçilen ortak hesap",
+    "sharedAccountUnknown": "Kayıtlı değişiklik yok",
+    "sharedInstanceSubtitle": "Örneklerin klasörleri ayrıdır ve Google oturumu ortaktır.",
+    "sharedInstanceStarted": "Ortak oturum güncellendi. Başlatma istendi.",
+    "sharedInstanceLaunchFailed": "Ortak oturum güncellendi ancak örnek başlatılamadı: {{error}}",
+    "sharedCopySource": "Seçilen örneğin yapılandırma klasörünü kopyalar.",
+    "quickSwitchSetting": "Antigravity IDE hızlı geçişi için geçerlidir. Hesap penceresinde istemciyi başlatıp başlatmamayı her seferinde seçebilirsiniz.",
+    "title": "İstemci seç",
+    "switchOnly": "Yalnızca değiştir",
+    "switchAndLaunch": "Değiştir ve başlat",
+    "homeDirectory": "Ana klasör",
+    "invalidDirectory": "Var olan bir klasör seçin.",
+    "directoryFailed": "Klasör seçici açılamadı. {{error}}",
+    "shared": "Google oturumunu paylaşan istemciler: {{clients}}.",
+    "sharedHint": "Google oturumunu paylaşan istemciler birlikte hesap değiştirebilir.",
+    "clientOnly": "Bu istemci ayrı bir oturum kullanır.",
+    "cliAuth": "agy kendi kimlik doğrulama ayarlarını kullanır. Yapılandırılmış API anahtarı veya Google Cloud kimlik bilgileri önceliklidir.",
+    "cliMissing": "agy bulunamadı. Resmî Antigravity CLI’ı kurup yeniden deneyin.",
+    "terminalFailed": "Terminal hazırlanamadı. {{error}}",
+    "switchedTerminalFailed": "Hesap değiştirildi ancak terminal açılamadı. {{error}}"
+  },
   "pelican": {
     "caseKinds": {
       "mathExact": "Matematik · kesin olasılık",
@@ -649,7 +689,14 @@
       },
       "clear": "Temizle",
       "loginSuccess": "Giriş başarılı",
-      "switchAccount": "Hesap Değiştir"
+      "switchAccount": "Hesap Değiştir",
+      "tokenFormat": {
+        "summary": "Gerekli alanlar ve örnekler (genişletmek için tıklayın)",
+        "single": "Tekli örnek",
+        "singleToken": "Tekli örnek (Token)",
+        "singleJson": "Tekli örnek (JSON)",
+        "batchJson": "Toplu örnek (JSON)"
+      }
     },
     "sessionSharing": {
       "title": "Geçişte yerel oturumları paylaş",
@@ -722,6 +769,7 @@
     }
   },
   "nav": {
+    "workbuddyAi": "WorkBuddy AI",
     "overview": "Antigravity IDE​",
     "accounts": "Hesaplar",
     "wakeup": "Uyandırma Görevleri",
@@ -786,6 +834,10 @@
     "hiddenBadge": "Gizli",
     "openFromMore": "Platform düzenini yönet",
     "dragHandleLabel": "Sürükleyerek sırala",
+    "sortKeyboardInstructions": "Sıralamayı başlatmak için Boşluk, taşımak için ok tuşları, bırakmak için Boşluk veya Enter, iptal etmek için Esc tuşuna basın.",
+    "sortPosition": "{{total}} öğe içinde {{position}}. konum.",
+    "sortPlaced": "{{position}}. konuma taşındı.",
+    "sortCancelled": "Sıralama iptal edildi.",
     "tipWithGroups": "Sıralamak için sürükleyin. Kenar çubuğunda en fazla {{max}} giriş gösterilebilir. Grup alt öğelerinde kenar çubuğu/pano anahtarı yoktur; yalnızca menü çubuğu ve varsayılan platform seçimi için kullanılır.",
     "addGroup": "Grup ekle",
     "editGroup": "Grubu düzenle",
@@ -819,7 +871,9 @@
     "groupEnabledHint": "Gruptaki tüm platformları birlikte etkinleştir veya devre dışı bırak",
     "disabledHint": "Devre dışı bırakma otomatik görevleri durdurur ve platform ayarlarını gizler. Girişin görünürlüğü ayrı ayarlanır",
     "enableAll": "Tümünü etkinleştir",
-    "disableAll": "Tümünü devre dışı bırak"
+    "disableAll": "Tümünü devre dışı bırak",
+    "confirmResetDesc": "Varsayılana sıfırlamak özel grupları ve sıralama ayarlarını temizler. Devam edilsin mi?",
+    "confirmDeleteGroupDesc": "\"{{name}}\" grubu silinsin mi? İçindeki platformlar yeniden tekil olarak gösterilecektir."
   },
   "privacy": {
     "hideSensitive": "E-postaları gizle",
@@ -1150,6 +1204,11 @@
       "submit": "İçe aktar"
     },
     "launchDialog": {
+      "customCommand": "Özel komut",
+      "useDefaultCommand": "Varsayılan komut",
+      "customCommandHint": "Varsayılan komutu çalıştırmak için boş bırakın.",
+      "rememberDirectory": "Son çalışma klasörü hatırlanır.",
+      "chooseDirectory": "Klasör seç",
       "title": "Örneği başlat",
       "terminal": "Uçbirim",
       "command": "Başlatma komutu",
@@ -1520,10 +1579,9 @@
       "codexEnhancements": {
         "quotaCompat": "Karma mod kota uyumu",
         "quotaCompatDesc": "API hizmeti örnekleri istemci görünümü ve yerel kontroller için kullanılabilir kota gösterir. Sağlayıcıdaki gerçek kullanım ve görsel sınırları değişmez. Bu anahtar yalnızca diğer OAuth ve harici API birleşimleri için geçerlidir.",
-        "restartHint": "Yerel tahminler varsayılan olarak kapalıdır. Değişiklikten sonra ilgili Codex örneklerini yeniden başlatın ve Cockpit Tools açık kalsın. Yerel dikte, istemcinin yeteneklerine ve ayarlarına bağlıdır; Cockpit bu işlevi devralmaz veya zorla etkinleştirmez.",
         "configFailed": "Ayarlar okunamadı veya kaydedilemedi: {{error}}",
         "nativePredictions": "Yerel sonraki adım tahminleri (Tab)",
-        "nativePredictionsDesc": "Geçerli konuşmanın API sağlayıcısı ve modeliyle sonraki mesaj önerileri oluşturur. Ek API kredisi kullanır; kaydettikten sonra Codex’i yeniden başlatın."
+        "nativePredictionsDesc": "Varsayılan olarak kapalıdır. Öneriler mevcut konuşmanın API sağlayıcısını ve modelini kullanır ve API kullanımını artırır. Bu ayarı değiştirdikten sonra ilgili Codex örneklerini yeniden başlatın ve Cockpit Tools’u çalışır durumda tutun."
       },
       "timeDisplayMode": "Zaman gösterimi",
       "timeDisplayModeDesc": "Hesap kartları ve listelerindeki zaman. Varsayılan, hesap değiştirme zamanıdır"
@@ -1871,6 +1929,14 @@
   },
   "appPath": {
     "missing": {
+      "pathLabel": "{{app}} başlatma yolu",
+      "configurePath": "Yolu ayarla",
+      "configureHint": "Bir yürütülebilir dosya seçin veya otomatik algılama için alanı boş bırakın.",
+      "cliHint": "{{app}} bulunamadı. Yürütülebilir dosyasını seçin veya CLI’yi yükleyip tekrar arayın.",
+      "invalidPath": "Bu yol, kullanılabilir bir {{app}} yürütülebilir dosyasına işaret etmiyor.",
+      "accountAlreadySwitched": "Hesap zaten değiştirildi. Yalnızca uygulama yeniden başlatılmayı deneyecek.",
+      "saveAndRetry": "Kaydet ve yeniden dene",
+      "operationCancelled": "Başlatma iptal edildi.",
       "scanEmpty": "Çalışan uygulama bulunamadı. Uygulamayı başlatıp yeniden deneyin veya yolunu elle seçin.",
       "scanEmptyGeneric": "{{app}} çalışır durumda bulunamadı. Uygulamayı başlatıp yeniden deneyin veya yolunu elle seçin.",
       "title": "Uygulama yolu bulunamadı",
@@ -2645,11 +2711,13 @@
       "masterLabel": "Kartları otomatik kullan",
       "ruleSource": "Kural kaynağı",
       "weeklyTrigger": "Haftalık eşik",
+      "preferUsageCredits": "Önce krediler",
       "weeklyRemaining": "Haftalık kalan ≤",
       "previewTitle": "Koşul önizlemesi",
       "previewAny": "Etkin koşullardan biri karşılandığında bir kart kullanılır:",
       "previewExpiry": "Kartın süresinin dolmasına en fazla {{value}} {{unit}} kaldığında",
       "previewWeekly": "Haftalık kalan kota en fazla %{{percent}} olduğunda",
+      "previewWeeklyAfterCredits": "Haftalık kota %{{percent}} veya daha az ve kullanım kredilerinin kullanılamadığı doğrulandı",
       "previewOff": "Otomatik kullanım kapalı. Aşağıdaki kurallar etkin değil.",
       "previewEmpty": "Etkin koşul yok. Kartlar otomatik kullanılmayacak.",
       "cardOn": "Otom.",
@@ -2763,8 +2831,6 @@
     },
     "launchErrors": {
       "sessionRestoreFailed": "Oturum onarımı başarısız oldu ve yedek geri yükleme tamamlanmadı. Başlatma durduruldu; yeniden denemeden önce günlükleri ve yedekleri inceleyin.",
-      "sessionCheckTimeout": "Oturum denetimi zaman aşımına uğradı. Başlatma durduruldu; yeniden deneyin veya günlükleri inceleyin.",
-      "sessionFileTooLarge": "Oturum dosyasının başlığı çok büyük. Başlatma durduruldu; günlükleri inceleyin.",
       "bindingFailed": "Hesap bağlantısı doğrulanamadı. Başlatma durduruldu; hesap değiştirmeyi yeniden deneyin.",
       "processScanFailed": "Önceki arka plan işlemleri denetlenemedi. Başlatma durduruldu; yeniden deneyin.",
       "proxyEntryFailed": "Yapılandırılan vekil sunucu başlatılamadı. Başka bir rota kullanılmadı; yeniden deneyin."
@@ -2982,7 +3048,8 @@
       "forceRefreshAction": "Şimdi yenile",
       "forceRefreshRunning": "Token yenileniyor…",
       "forceRefreshSuccess": "Token başarıyla yenilendi",
-      "forceRefreshRetry": "Yeniden denetle"
+      "forceRefreshRetry": "Yeniden denetle",
+      "advancedMaintenanceTitle": "Bakım ve Tanılama"
     },
     "switch": "Değiştir",
     "switched": "{{email}} hesabına geçildi",
@@ -3974,9 +4041,6 @@
       "repairModal": {
         "historyDuplicateOrdinals": "Aşağıdaki geçmişlerde yinelenen sıra numaraları var. Geçmiş dizini onarımı bunları atlar ve tam onarım devam edemez. Diğer oturumlar için “Sohbet dizinini onar” seçeneğini kullanın.\n{{details}}",
         "projectsDeferredAction": "Örneği kapatıp oturum onarımı penceresinde Yerel projeler’i seçin.",
-        "projectsStateSize": "En büyük durum dosyası: {{file}} ({{bytes}} bayt).",
-        "projectsQuickBudget": "Hızlı proje taraması sınırına ulaştı.",
-        "projectsStateTooLarge": "Proje durum dosyası desteklenen boyutu aşıyor.",
         "projectsStopHint": "Kurtarmadan önce seçili örnekleri kapatın. Değişiklikleri şimdi önizleyebilirsiniz.",
         "modeProjectsDesc": "Yerel projeleri ve sohbet bağlantılarını kurtarır. Sohbet geçmişi korunur.",
         "modeProjects": "Yerel projeler",
@@ -5176,7 +5240,8 @@
         "speedAdjusted": "{{tier}} → Standart",
         "officialDefaultSpeed": "Resmî abonelik yolu hız geçersiz kılmayı desteklemez. Bu deneme varsayılan hızda gönderildi.",
         "sentTier": "Gönderilen: {{tier}}",
-        "originalTier": "Özgün kademe: {{tier}}"
+        "originalTier": "Özgün kademe: {{tier}}",
+        "moreFilters": "Diğer filtreler"
       },
       "timeouts": {
         "retryTitle": "Gönderim ve hesap denemeleri",
@@ -5936,6 +6001,13 @@
         "nodeCount": "{{count}} düğüm",
         "updatedAt": "Güncellendi: {{time}}",
         "autoUpdate": "Her 6 saatte güncelle",
+        "dnsOverride": "DNS ayarını geçersiz kıl",
+        "ipv6": "IPv6’yı etkinleştir",
+        "dnsServers": "DNS sunucuları",
+        "dnsServersHint": "Her satıra bir adres yazın. Cloudflare DoH kullanmak için boş bırakın.",
+        "networkScope": "Bu kaynaktan yapılan yeni proxy bağlantıları için geçerlidir.",
+        "invalidDnsServer": "Her satıra geçerli bir DNS sunucusu adresi girin.",
+        "networkSaveFailed": "Ağ ayarları kaydedilemedi veya uygulanamadı. Tekrar deneyin.",
         "snapshotNotice": "Güncellemeler bağlı yapılandırmaları değiştirmez. Uygulamak için yeniden bağlayın.",
         "defaultLabel": "Varsayılan",
         "defaultEmpty": "Ayarlanmadı",
@@ -6513,7 +6585,8 @@
       "desc": "Aşağıdaki düğmeye tıklayın ve tarayıcıda GitHub Copilot yetkilendirmesini tamamlayın."
     },
     "token": {
-      "desc": "GitHub Copilot erişim belirtecini veya dışa aktarılan JSON verisini yapıştırın."
+      "desc": "GitHub Copilot erişim belirtecini veya dışa aktarılan JSON verisini yapıştırın.",
+      "requiredFields": "Gerekli alanlar: Token modunda doğrudan bir GitHub access token yapıştırın; JSON modu id, github_login, github_id, github_access_token, copilot_token, created_at ve last_used gerektirir."
     },
     "import": {
       "localDesc": "GitHub Copilot hesap verilerini yerel VS Code'dan veya bir JSON dosyasından içe aktarın.",
@@ -6890,7 +6963,8 @@
       "desc": "Aşağıdaki düğmeye tıklayın ve tarayıcıda Devin yetkilendirmesini tamamlayın."
     },
     "token": {
-      "desc": "Devin erişim belirtecini veya dışa aktarılan JSON verisini yapıştırın."
+      "desc": "Devin erişim belirtecini veya dışa aktarılan JSON verisini yapıştırın.",
+      "requiredFields": "Gerekli alan: github_access_token (API Key)"
     },
     "import": {
       "localDesc": "Yerelde oturum açılmış oturumlardan Devin hesaplarını içe aktar.",
@@ -6994,7 +7068,8 @@
       "startUrlRequired": "Bir IAM Identity Center başlangıç URL'si girin"
     },
     "token": {
-      "desc": "Kiro erişim belirtecinizi veya dışa aktarılan JSON verilerinizi yapıştırın."
+      "desc": "Kiro erişim belirtecinizi veya dışa aktarılan JSON verilerinizi yapıştırın.",
+      "requiredFields": "Gerekli alanlar: JSON için access_token + refresh_token önerilir (accessToken / refreshToken yalnızca uyumluluk içindir)."
     },
     "import": {
       "localDesc": "Yerel istemciden veya JSON’dan içe aktarın. JSON hesapları önce kaydedilir, ardından oturum bilgileri ve kotalar arka planda yenilenir.",
@@ -7614,6 +7689,39 @@
       "detailError": "Check-in hatası"
     }
   },
+  "codebuddyCli": {
+    "launchTitle": "CodeBuddy CN’yi başlat",
+    "launchDesktop": "Masaüstü uygulamasını başlat",
+    "recheck": "Tekrar denetle",
+    "checking": "CodeBuddy CLI aranıyor…",
+    "rememberDirectory": "Bu hesap için son çalışma klasörü hatırlanır.",
+    "installGuide": "Resmî kurulum kılavuzu",
+    "launch": "CLI’yi başlat",
+    "terminalOpened": "Komut gönderildi. CLI çıktısını terminalden kontrol edin.",
+    "account": "Hesap",
+    "selectAccount": "Hesap seçin",
+    "chooseDirectory": "Klasör seç",
+    "homeDirectory": "Ana klasör",
+    "instances": "CLI örnekleri",
+    "newInstance": "Yeni örnek",
+    "editInstance": "Örneği düzenle",
+    "noInstances": "Kayıtlı örnek yok.",
+    "removeConfirmation": "Bu örnek kaldırılsın mı? CLI yapılandırması ve geçmişi diskte kalır.",
+    "errors": {
+      "cliCheckFailed": "CodeBuddy CLI kullanılabilirliği denetlenemedi.",
+      "accountMissing": "Kayıtlı hesap bulunamadı.",
+      "accountUnreadable": "Kayıtlı hesap okunamadı.",
+      "credentialMissing": "Bu hesabın erişim belirteci yok. CodeBuddy veya CodeBuddy CN’de yeniden yetkilendirin.",
+      "workingDirInvalid": "Var olan bir çalışma klasörü seçin.",
+      "nameRequired": "Örnek için bir ad girin.",
+      "instanceMissing": "Örnek bulunamadı.",
+      "storageError": "CLI örneği verileri okunamadı veya kaydedilemedi.",
+      "cliMissing": "CodeBuddy CLI bulunamadı. Resmî kılavuzu izleyerek kurun.",
+      "launchFailed": "CodeBuddy CLI başlatılamadı.",
+      "terminalFailed": "Terminal açılamadı.",
+      "terminalUnsupported": "Genel Ayarlar’dan desteklenen bir terminal seçin. macOS’ta Terminal, iTerm2 veya Ghostty kullanın."
+    }
+  },
   "codebuddyCn": {
     "title": "CodeBuddy CN Hesap Yönetimi",
     "noAccounts": "CodeBuddy CN hesabı yok",
@@ -7639,6 +7747,27 @@
     "syncFailed": "Senkronizasyon başarısız: {{error}}",
     "syncSuccess": "{{count}} hesap WorkBuddy ile senkronize edildi",
     "syncToWorkbuddy": "WorkBuddy ile Senkronize Et"
+  },
+  "workbuddyAi": {
+    "search": "WorkBuddy AI hesaplarını ara",
+    "noAccounts": "WorkBuddy AI hesabı yok",
+    "addAccount": "WorkBuddy AI hesabı ekle",
+    "oauthDesc": "WorkBuddy AI oturum açma sayfasını tarayıcıda açın.",
+    "tokenDesc": "WorkBuddy AI erişim belirtecini veya dışa aktarılan JSON’u yapıştırın.",
+    "importDesc": "Yerel uygulamadan veya JSON dosyasından içe aktarın.",
+    "importClient": "WorkBuddy AI’dan içe aktar",
+    "flowNotice": {
+      "title": "WorkBuddy AI hesapları hakkında",
+      "desc": "Hesap değişikliği yerel oturum dosyasını günceller ve uluslararası sürümü başlatır.",
+      "permission": "İçe aktarma ve geçiş, uluslararası sürümün oturum dosyasını kullanır. Mevcut şifreli alanları resmi uygulama işler.",
+      "network": "Yetkilendirme, belirteç yenileme ve kredi sorgusu WorkBuddy AI’a bağlanır. Oturum dosyası ve şifreleme verileri cihazda kalır."
+    },
+    "oauthFeature": {
+      "title": "WorkBuddy AI oturumu",
+      "signIn": "Tarayıcıda WorkBuddy AI hesabınıza giriş yapın.",
+      "switch": "Yetkilendirmeden sonra uluslararası sürümün hesabını listeden değiştirin.",
+      "credits": "Kalan kredileri hesap kartında görün."
+    }
   },
   "workbuddy": {
     "desktopEdition": "WorkBuddy (Çin sürümü)",
@@ -8479,7 +8608,8 @@
       "deploying": "Modeller alınıyor…",
       "deploySuccess": "Codex'e kuruldu: {{count}} model",
       "deployFailed": "Kurulum başarısız: {{error}}",
-      "useKey": "Anahtarı kullan"
+      "useKey": "Anahtarı kullan",
+      "deleteConfirm": "Kayıtlı \"{{name}}\" anahtarı silinsin mi? Bu işlem geri alınamaz."
     },
     "prefill": {
       "codexReady": "APIKEY.FUN ayarları dolduruldu. Codex’e eklemeden önce inceleyin.",

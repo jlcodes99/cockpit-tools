@@ -10,8 +10,11 @@ export interface ProxyCatalogGroup { id: string; name: string; kind: string; mem
 export interface ProxyCatalogDefault { itemId: string; groupId: string | null; selections: ProxyCatalogSelections }
 /** Strategy sources only: the original source and node each copied member came from. */
 export interface ProxyCatalogStrategyMember { sourceId: string; itemId: string; name: string; sourceName: string }
+export interface ProxyCatalogNetwork { doh: boolean; dnsServers?: string[]; ipv6?: boolean }
 export interface ProxyCatalogSource {
   nativeProfile?: boolean;
+  network?: ProxyCatalogNetwork;
+  ipv6Default?: boolean;
   id: string; name: string; kind: 'subscription' | 'manual' | 'strategy'; updatedAt: number; lastAttemptAt: number | null;
   revision: string; autoUpdate: boolean; error: string | null; nodes: ProxyCatalogNode[]; groups: ProxyCatalogGroup[]; needsRefresh?: boolean;
   default: ProxyCatalogDefault | null; defaultInvalidated: boolean;
@@ -74,6 +77,9 @@ export function getProxyCatalogDependencies(sourceId: string): Promise<ProxyCata
 }
 export function setProxyCatalogAutoUpdate(sourceId: string, enabled: boolean): Promise<ProxyCatalog> {
   return call('codex_proxy_catalog_set_auto_update', { sourceId, enabled });
+}
+export function setProxyCatalogNetwork(sourceId: string, revision: string, network: ProxyCatalogNetwork): Promise<ProxyCatalog> {
+  return call('codex_proxy_catalog_network', { sourceId, revision, network });
 }
 export function setProxyCatalogDefault(sourceId: string, itemId: string, selections: ProxyCatalogSelections, groupId?: string): Promise<ProxyCatalog> {
   return call('codex_proxy_catalog_set_default', { sourceId, itemId, selections, ...(groupId === undefined ? {} : { groupId }) });
@@ -166,6 +172,7 @@ export function catalogErrorKey(error: unknown): string {
     PROXY_ECH_DNS: 'errorEchDns', PROXY_DNS_FAILED: 'errorDns', PROXY_TLS_FAILED: 'errorTls', PROXY_HANDSHAKE_FAILED: 'errorHandshake',
     PROXY_CONNECTION_REFUSED: 'errorRefused', PROXY_CONNECT_TIMEOUT: 'errorConnectTimeout', PROXY_TARGET_FAILED: 'errorTarget',
     PROXY_INTERFACE_FAILED: 'errorInterface', PROXY_NETWORK_INVALID: 'errorInterface', PROXY_INTERFACES_FAILED: 'errorInterface',
+    PROXY_DNS_INVALID: 'invalidDnsServer',
     PROXY_PROBE_BUSY: 'busy', PROXY_RESOURCE_INVALID: 'unsupported', PROXY_UNSUPPORTED_OPTION: 'unsupported',
     SUBSCRIPTION_UNSUPPORTED: 'unsupported', SUBSCRIPTION_INVALID: 'invalidInput', SUBSCRIPTION_EMPTY: 'invalidInput',
     SUBSCRIPTION_TOO_LARGE: 'tooLarge', SUBSCRIPTION_DUPLICATE_NAME: 'invalidInput', SUBSCRIPTION_GROUP_UNAVAILABLE: 'unsupported',

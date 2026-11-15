@@ -1,3 +1,4 @@
+import { withCliLaunchPath } from '../utils/cliLaunchPath';
 import { invoke } from '@tauri-apps/api/core';
 import { createPlatformInstanceService } from './platform/createPlatformInstanceService';
 
@@ -87,12 +88,12 @@ export async function getGrokInstanceLaunchCommand(
     accountId?: string | null;
   },
 ): Promise<GrokInstanceLaunchInfo> {
-  return await invoke('grok_get_instance_launch_command', {
+  return withCliLaunchPath('grok_cli', () => invoke('grok_get_instance_launch_command', {
     instanceId,
     workingDir: options?.workingDir?.trim() || null,
     applyWorkingDirOverride: options?.applyWorkingDirOverride ?? false,
     accountId: options?.accountId?.trim() || null,
-  });
+  }), isGrokCliMissingError);
 }
 
 export async function executeGrokInstanceLaunchCommand(
@@ -104,11 +105,11 @@ export async function executeGrokInstanceLaunchCommand(
     accountId?: string | null;
   },
 ): Promise<string> {
-  return await invoke('grok_execute_instance_launch_command', {
+  return withCliLaunchPath('grok_cli', () => invoke('grok_execute_instance_launch_command', {
     instanceId,
     terminal: terminal ?? null,
     workingDir: options?.workingDir?.trim() || null,
     applyWorkingDirOverride: options?.applyWorkingDirOverride ?? false,
     accountId: options?.accountId?.trim() || null,
-  });
+  }), isGrokCliMissingError);
 }

@@ -10,16 +10,18 @@
 
 ## [Unreleased]
 
-### 新增
-
-- **Codex 供应商额度**：查询 OpenCode Go 的 5 小时、周和月额度，以及兼容 codex-proxy-rs 服务的日、周预算。 [#1938](https://github.com/jlcodes99/cockpit-tools/pull/1938) · [#3019](https://github.com/jlcodes99/cockpit-tools/pull/3019)
-- **供应商预设**：Codex 新增 UberLLM。Codex、Claude Code 和 Claude Desktop 新增 Runcrate。 [#3075](https://github.com/jlcodes99/cockpit-tools/pull/3075) · [#2952](https://github.com/jlcodes99/cockpit-tools/pull/2952)
-- **MiniMax 预设**：Codex、Claude Code 和 Claude Desktop 可选择 MiniMax-M3.1-Flash。 [#2865](https://github.com/jlcodes99/cockpit-tools/pull/2865)
-- **Antigravity 自动切号**：可在通用设置和平台快捷设置中分别设定 5 小时及周额度的切号阈值。 [#3101](https://github.com/jlcodes99/cockpit-tools/pull/3101)
-- **模型探测**：WorkBuddy 和 CodeBuddy CN 支持按账号与模型组合批量探测，逐项查看结果，也可从单个账号卡片发起。 [#3096](https://github.com/jlcodes99/cockpit-tools/pull/3096) · [#3064](https://github.com/jlcodes99/cockpit-tools/pull/3064)
+## [1.4.0] - 2026-11-15
 
 ### 修复
 
+- **Codex API 服务**：WebSocket 长会话续接时用更小的分段预载历史，并减少重复上传。遇到额度拦截且有兼容账号可用时可恢复，预载结果未知时不会自动重放。
+- **深色模式可读性**：提高账号分组、搜索提示、标题、订阅和配额标签、Codex 导入错误及 API 统计和计价状态、多开和唤醒状态、中转站密钥输入提示的对比度。
+- **弹框与页面交互**：将中转站密钥删除和 MFA 导入错误提示从浏览器原生弹窗替换为应用内确认弹框与内联错误提示，密钥删除失败时保留弹框并在框内提示；修复部分遮罩误关闭问题与加载图标边框伪影；移除账号子弹框重复的返回关闭按钮；修复 Codex 本地访问成员行和普通平台应用多开列表的横向溢出问题。
+- **Codex 会话备份**：会话修复和历史清理会保留历次备份。
+- 对齐账号配额空态及授权提示中的图标和文字。
+- **Codex 会话修复**：启动前会话维护和手动历史索引修复取消固定时长、记录数和文件大小上限。写入失败时仍会回滚。
+- **Codex 本地项目**：本地项目修复取消记录数、文件大小和处理时长限制，实例启动时也会完成本地项目修复。
+- **Codex API 服务**：「添加至 API 服务」弹框在较矮的窗口中也能滚动查看全部账号和分页，取消与保存按钮始终可见。
 - **Windows 上的 Codex API 服务**：原生网关停止后，子进程不会继续占用服务端口。 [#2850](https://github.com/jlcodes99/cockpit-tools/pull/2850)
 - **Codex API 服务**：选中的用量时间范围页签随当前主题配色。 [#2115](https://github.com/jlcodes99/cockpit-tools/pull/2115)
 - **Antigravity 账号授权**：添加或授权同一账号时可重建缺失的账号文件，并保留原账号 ID。 [#2854](https://github.com/jlcodes99/cockpit-tools/pull/2854)
@@ -38,6 +40,30 @@
 - **Codex API 服务**：菜单栏和托盘汇总 5 小时额度时，排除周额度已耗尽账号的剩余额度。 [#3112](https://github.com/jlcodes99/cockpit-tools/pull/3112)
 - **MiniMax Code**：共用账号的凭据由客户端续期，Cockpit 读取并保存新凭据，避免客户端登录失效。 [#3092](https://github.com/jlcodes99/cockpit-tools/pull/3092)
 - **Codex 会话用量**：汇总、增量统计和单会话 Token 计数均支持压缩会话日志。 [#3079](https://github.com/jlcodes99/cockpit-tools/pull/3079)
+
+### 新增
+
+- **WorkBuddy AI 国际版**：支持浏览器授权、账号导入、自动刷新积分和一键切换桌面客户端账号。
+- **Antigravity**：从账号或多开实例启动时，可选择 Antigravity、Antigravity IDE 或 Antigravity CLI。两个入口共用上次选择的客户端，显示启动路径，并支持补填桌面路径后重试。快捷设置可分别编辑两个桌面客户端的路径。旧版 IDE 尚未初始化时，账号页和多开实例会引导先启动一次，并说明初始化后可切号、绑定账号或使用已绑定账号。桌面客户端可选择对应的实例，CLI 可指定工作目录。
+- **CodeBuddy 和 CodeBuddy CN**：均可从各自的账号总览启动官方 CLI，并在对应版本的「应用多开」中管理 CLI 实例。每个实例保留绑定账号、工作目录和独立配置。CodeBuddy CN 记住上次选择的桌面版或 CLI。
+- **Codex 代理**：可按代理来源设置 DNS 覆写和 IPv6，自定义 DNS 服务器，保存后已绑定代理的新连接会使用新设置。
+- **Codex 供应商额度**：查询 OpenCode Go 的 5 小时、周和月额度，以及兼容 codex-proxy-rs 服务的日、周预算。 [#1938](https://github.com/jlcodes99/cockpit-tools/pull/1938) · [#3019](https://github.com/jlcodes99/cockpit-tools/pull/3019)
+- **供应商预设**：Codex 新增 UberLLM。Codex、Claude Code 和 Claude Desktop 新增 Runcrate。 [#3075](https://github.com/jlcodes99/cockpit-tools/pull/3075) · [#2952](https://github.com/jlcodes99/cockpit-tools/pull/2952)
+- **MiniMax 预设**：Codex、Claude Code 和 Claude Desktop 可选择 MiniMax-M3.1-Flash。 [#2865](https://github.com/jlcodes99/cockpit-tools/pull/2865)
+- **Antigravity 自动切号**：可在通用设置和平台快捷设置中分别设定 5 小时及周额度的切号阈值。 [#3101](https://github.com/jlcodes99/cockpit-tools/pull/3101)
+- **模型探测**：WorkBuddy 和 CodeBuddy CN 支持按账号与模型组合批量探测，逐项查看结果，也可从单个账号卡片发起。 [#3096](https://github.com/jlcodes99/cockpit-tools/pull/3096) · [#3064](https://github.com/jlcodes99/cockpit-tools/pull/3064)
+
+### 变更
+
+- **Codex 重置卡**：可开启「积分优先」。周额度达到阈值后，确认积分不可用才自动用卡；临期规则独立生效。
+- **客户端启动**：桌面版或 CLI 缺少启动路径时，可在当前流程中配置并继续。账号已经切换时只重试启动客户端。WorkBuddy AI 国际版使用独立的桌面启动路径。
+- **平台布局**：支持通过拖拽预览或键盘调整平台、分组和组内条目的顺序。在列表外松手会取消本次拖拽。
+- **CLI 启动**：Codex、Antigravity 和 CodeBuddy 使用更宽的启动弹框和更高的命令区域，集中显示账号、工作目录、终端和自定义命令。Antigravity 记住上次使用的目录，CodeBuddy 按账号或命名实例记忆。
+- **Codex CLI**：从账号页首次启动时，仅继承默认实例的配置，不再复制桌面会话历史。
+- **Antigravity**：Antigravity 和 Antigravity IDE 重启时立即发送关闭信号，确认旧进程退出后继续启动。
+- **Codex 设置**：通用设置和快捷设置都在下一步预测开关旁说明额外 API 用量、重启时机和保持 Cockpit Tools 运行的要求。
+- **界面控件与弹框体验**：将 Codex、应用多开、唤醒测试/任务、悬浮卡片、MFA 及最近使用等页面的原生下拉框与文本排序箭头统一替换为定制下拉组件与矢量图标；为下拉菜单补充焦点恢复与顶层 Esc 关闭逻辑，键盘导航会跳过禁用选项；约束弹框高度并支持内容区滚动与固定底部操作栏，确保矮窗口下按钮始终可达；优化平台布局恢复默认与删除分组的确认提示文案。
+- **双主题与页面布局优化**：完善 Codex 账号卡、Codex API 服务弹框、Aurora 风格账号页、中转站密钥模型标签、唤醒验证筛选徽章、悬浮卡片浅色主题与使用说明悬停态的主题适配；优化侧边栏与仪表盘筛选换行、通用设置与快捷设置控件对齐；将 Codex API 日志次要筛选、Codex 启动预览维护诊断工具及多平台 Token/JSON 导入示例收纳为可折叠区块；统一多平台卡片与表格视图（Antigravity 紧凑模式套餐标识、Qoder/Claude/CodeBuddy 套件列展示与操作按钮、对齐各平台工具栏归属页签）。
 
 ### 文档
 

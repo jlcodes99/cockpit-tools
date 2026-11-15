@@ -656,8 +656,45 @@
   padding: 16px 4px;
 }
 
-.codex-launch-preview-tool-row + .codex-launch-preview-tool-row {
+.codex-launch-preview-tool-row + .codex-launch-preview-tool-row,
+.codex-launch-preview-tool-row + .codex-launch-preview-maintenance-group,
+.codex-launch-preview-maintenance-items .codex-launch-preview-tool-row {
   border-top: 1px solid var(--border-light);
+}
+
+.codex-launch-preview-maintenance-group {
+  min-width: 0;
+}
+
+.codex-launch-preview-maintenance-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+
+.codex-launch-preview-maintenance-summary::-webkit-details-marker {
+  display: none;
+}
+
+.codex-launch-preview-maintenance-summary:hover {
+  color: var(--text-primary);
+}
+
+.codex-launch-preview-maintenance-chevron {
+  margin-left: auto;
+  transition: transform 0.16s ease;
+}
+
+.codex-launch-preview-maintenance-group[open] .codex-launch-preview-maintenance-chevron {
+  transform: rotate(180deg);
 }
 
 .codex-launch-preview-tool-copy {

@@ -405,6 +405,16 @@ pub async fn codebuddy_delete_instance(instance_id: String) -> Result<(), String
 }
 
 #[tauri::command]
+pub async fn codebuddy_launch_current() -> Result<(), String> {
+    tokio::task::spawn_blocking(|| {
+        let settings = modules::codebuddy_instance::load_default_settings()?;
+        let args = modules::process::parse_extra_args(&settings.extra_args);
+        let pid = modules::process::start_codebuddy_default_with_args_with_new_window(&args, true)?;
+        modules::codebuddy_instance::update_default_pid(Some(pid)).map(|_| ())
+    }).await.map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn codebuddy_start_instance(instance_id: String) -> Result<InstanceProfileView, String> {
     codebuddy_start_instance_internal(instance_id, false).await
 }

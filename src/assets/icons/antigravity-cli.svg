@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+  <!-- Terminal treatment using the palette from the installed agy's renderAgyLogoBlock. -->
+  <rect width="16" height="16" rx="3.5" fill="#17233a"/>
+  <path d="m3.5 5 3 3-3 3" stroke="#67b9f4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M8.5 11h4" stroke="#f2922e" stroke-width="1.6" stroke-linecap="round"/>
+</svg>

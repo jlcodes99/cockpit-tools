@@ -3,8 +3,9 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { confirm as confirmDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { ChevronLeft, ShieldCheck, X } from 'lucide-react';
+import { ShieldCheck, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { SingleSelectDropdown } from '../components/SingleSelectDropdown';
 import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorMessage';
 import { useEscClose } from '../hooks/useEscClose';
 import { LOCAL_HISTORY_TIMEOUT, useLocalHistory, type LocalHistoryRead } from '../hooks/useLocalHistory';
@@ -1310,15 +1311,6 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
         <div className="modal-overlay">
           <div className="modal wakeup-modal verification-config-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <button
-                className="btn btn-secondary icon-only"
-                onClick={closeConfigModal}
-                title={t('common.back', '返回')}
-                aria-label={t('common.back', '返回')}
-                disabled={running}
-              >
-                <ChevronLeft size={14} />
-              </button>
               <h2>{t('wakeup.verification.actions.runCheckNow', '立即检测')}</h2>
               <button className="modal-close" onClick={closeConfigModal} disabled={running}>
                 <X />
@@ -1329,21 +1321,18 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
               <div className="wakeup-form-group">
                 <label>{t('wakeup.form.modelSelect')}</label>
                 <div className="verification-select-wrap">
-                  <select
-                    className="wakeup-input verification-select"
+                  <SingleSelectDropdown
+                    className="verification-select-dropdown"
                     value={selectedModel}
-                    onChange={(event) => setSelectedModel(event.target.value)}
-                  >
-                    {filteredModels.length === 0 ? (
-                      <option value="">{t('wakeup.form.modelsEmpty')}</option>
-                    ) : (
-                      filteredModels.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.displayName || getAntigravityModelDisplayName(model.id) || model.id}
-                        </option>
-                      ))
-                    )}
-                  </select>
+                    disabled={filteredModels.length === 0}
+                    placeholder={t('wakeup.form.modelsEmpty')}
+                    ariaLabel={t('wakeup.form.modelSelect')}
+                    options={filteredModels.map((model) => ({
+                      value: model.id,
+                      label: model.displayName || getAntigravityModelDisplayName(model.id) || model.id,
+                    }))}
+                    onChange={setSelectedModel}
+                  />
                 </div>
               </div>
               <div className="verification-confirm-hint verification-run-hint">
@@ -1425,6 +1414,7 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
                   {filteredConfigAccounts.map((account) => {
                     const maskedEmail = maskAccountText(account.email);
                     const isSelected = selectedAccountSet.has(account.id);
+                    const planBadge = resolveAccountPlanBadge(account.id);
                     return (
                       <label
                         key={account.id}
@@ -1440,6 +1430,11 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
                         <span className="verification-account-item-email" title={maskedEmail}>
                           {maskedEmail}
                         </span>
+                        {planBadge && (
+                          <span className={`tier-badge ${planBadge.className}`}>
+                            {planBadge.label}
+                          </span>
+                        )}
                       </label>
                     );
                   })}
@@ -1466,7 +1461,6 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
         <div className="modal-overlay">
           <div className="modal wakeup-modal verification-progress-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <button className="btn btn-secondary icon-only" onClick={closeDetailModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t('accounts.actions.viewDetails')}</h2>
               <button className="modal-close" onClick={closeDetailModal}>
                 <X />

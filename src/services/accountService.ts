@@ -85,9 +85,30 @@ export async function openDataFolder(): Promise<void> {
 export async function switchAccount(
     accountId: string,
     runtimeTarget?: AntigravityRuntimeTarget,
+    launch?: boolean,
+    inlinePathRecovery?: boolean,
 ): Promise<Account> {
-    return await invoke('switch_account', { accountId, runtimeTarget });
+    return await invoke('switch_account', { accountId, runtimeTarget, launch, inlinePathRecovery });
 }
+
+export interface AntigravityCliLaunchOptions {
+    workingDir?: string;
+    terminal?: string;
+    customCommand?: string;
+}
+
+export function switchAntigravityCli(accountId: string, launch: boolean, options?: AntigravityCliLaunchOptions): Promise<Account> {
+    return invoke('switch_antigravity_cli', { accountId, launch, ...options });
+}
+
+export function launchAntigravityCli(options: AntigravityCliLaunchOptions): Promise<void> {
+    return invoke('launch_antigravity_cli', { ...options });
+}
+
+export function getAntigravityCliLaunchCommand(options: AntigravityCliLaunchOptions): Promise<string> {
+    return invoke('antigravity_cli_launch_command', { ...options });
+}
+
 
 export interface AntigravitySwitchHistoryItem {
     id: string;

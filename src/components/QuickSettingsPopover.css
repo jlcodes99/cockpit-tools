@@ -170,10 +170,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding-right: 12px;
   font-size: 13px;
   color: var(--text-primary);
   font-weight: 500;
-  flex-shrink: 0;
+  line-height: 1.4;
 }
 
 .qs-row-label svg {
@@ -218,8 +221,40 @@
   white-space: nowrap;
 }
 
-.qs-check-item input {
+.qs-check-item input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
   margin: 0;
+  flex: 0 0 auto;
+  border: 2px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-primary);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.qs-check-item input[type="checkbox"]::after {
+  content: '';
+  width: 7px;
+  height: 4px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) scale(0);
+  transform-origin: center;
+  transition: transform 0.12s ease;
+}
+
+.qs-check-item input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.qs-check-item input[type="checkbox"]:checked::after {
+  transform: rotate(-45deg) scale(1);
 }
 
 /* Field group */

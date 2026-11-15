@@ -130,9 +130,7 @@
 .two-factor-query-page .query-inputs {
   flex: 1.6 1 430px;
   min-width: 0;
-  padding: 16px 18px;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
+  padding: 4px 2px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -414,7 +412,7 @@
 
 .tfa-table {
   width: 100%;
-  min-width: 1000px;
+  min-width: 680px;
   table-layout: fixed;
   border-collapse: collapse;
 }
@@ -857,7 +855,7 @@
   }
 
   .two-factor-query-page .query-inputs {
-    padding: 14px;
+    padding: 0;
   }
 
   .two-factor-query-page .query-result-box {

@@ -2864,6 +2864,16 @@ async fn perform_ide_switch(
     dual_no_restart: bool,
 ) -> Result<IdeSwitchResult, String> {
     let permit = try_begin_antigravity_switch(&ANTIGRAVITY_SWITCH_GATE)?;
+    let local_profile = tokio::task::spawn_blocking(|| {
+        if crate::commands::system::antigravity_ide_uses_shared_credentials() {
+            return Ok(None);
+        }
+        let profile = modules::instance::get_default_user_data_dir()?;
+        modules::instance::require_ide_switch_database(&profile, None)?;
+        Ok::<_, String>(Some(profile))
+    })
+    .await
+    .map_err(|error| error.to_string())??;
     let account = tokio::time::timeout(
         std::time::Duration::from_secs(60),
         prepare_account_for_injection(account_id),
@@ -2872,7 +2882,7 @@ async fn perform_ide_switch(
     .map_err(|_| "ANTIGRAVITY_SWITCH_PREPARATION_TIMEOUT".to_string())??;
 
     tokio::task::spawn_blocking(move || {
-        if crate::commands::system::antigravity_ide_uses_shared_credentials() {
+        let Some(default_dir) = local_profile else {
             let (account, launch_error) = modules::antigravity_shared_switch::switch(
                 &account,
                 modules::antigravity_shared_switch::SwitchTarget::Ide,
@@ -2885,14 +2895,15 @@ async fn perform_ide_switch(
                 permit,
                 shared: true,
             });
-        }
+        };
         if launch {
             modules::process::ensure_antigravity_launch_path_configured()?;
-        }
-        let default_dir = modules::instance::get_default_user_data_dir()?;
-        if launch {
             let default_dir_str = default_dir.to_string_lossy().into_owned();
-            modules::process::close_antigravity_instances(&[default_dir_str], 20)?;
+            modules::process::close_antigravity_instances(
+                &[default_dir_str],
+                20,
+                modules::process::AntigravityCloseMode::Restart,
+            )?;
             let _ = modules::instance::update_default_pid(None);
         }
         modules::instance::inject_account_to_profile_with_account(&default_dir, &account)?;

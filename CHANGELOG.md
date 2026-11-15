@@ -10,16 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Added
-
-- **Codex provider quotas**: Read 5-hour, weekly and monthly quota from OpenCode Go and daily and weekly budgets from compatible codex-proxy-rs servers. [#1938](https://github.com/jlcodes99/cockpit-tools/pull/1938) · [#3019](https://github.com/jlcodes99/cockpit-tools/pull/3019)
-- **Provider presets**: Add UberLLM for Codex and Runcrate for Codex, Claude Code and Claude Desktop. [#3075](https://github.com/jlcodes99/cockpit-tools/pull/3075) · [#2952](https://github.com/jlcodes99/cockpit-tools/pull/2952)
-- **MiniMax presets**: Offer MiniMax-M3.1-Flash in Codex, Claude Code and Claude Desktop. [#2865](https://github.com/jlcodes99/cockpit-tools/pull/2865)
-- **Antigravity automatic account switching**: Set separate 5-hour and weekly quota thresholds in General Settings or the platform quick settings. [#3101](https://github.com/jlcodes99/cockpit-tools/pull/3101)
-- **Model probes**: Run an account-by-model probe matrix from WorkBuddy and CodeBuddy CN, view individual results, and open a probe from a specific account card. [#3096](https://github.com/jlcodes99/cockpit-tools/pull/3096) · [#3064](https://github.com/jlcodes99/cockpit-tools/pull/3064)
+## [1.4.0] - 2026-11-15
 
 ### Fixed
 
+- **Codex API Service**: Resume long WebSocket conversations with smaller history preloads and less repeated history, recover when a compatible account is available after a quota block, and avoid replaying a preload whose outcome is unknown.
+- **Dark mode readability**: Improved contrast for account groups, search hints, headings, subscription and quota labels, Codex import errors and API statistics and pricing states, multi-instance and wakeup statuses, and relay key input hints.
+- **Modal & dialog interactions**: Replaced browser `alert()`/`confirm()` calls in MFA import error handling and API Key Fun key deletion with inline error banners and in-app confirmation dialogs. Failed key deletions keep the dialog open with an error. Removed unintended overlay click-to-close regressions, fixed spinner icon border artifacts, removed duplicate back/close buttons in account sub-modals, and fixed horizontal overflow in Codex Local Access rows and Multi-Instance table layout.
+- Align icons with text in shared account quota empty states and authorization messages.
+- **Codex session backups**: Session repair and history cleanup preserve previous backups across runs.
+- **Codex session repair**: Startup maintenance and manual history index repair process large histories without fixed time, record count or file size cutoffs. Failed writes still roll back.
+- **Codex local projects**: Project recovery processes records and state files without fixed count, file size or time limits, including when started as part of instance launch.
+- **Codex API Service**: The Add to API Service dialog scrolls through all account rows and pagination in short windows, while Cancel and Save stay visible.
 - **Codex API Service on Windows**: Child processes no longer keep the service port occupied after the native gateway stops. [#2850](https://github.com/jlcodes99/cockpit-tools/pull/2850)
 - **Codex API Service**: Apply the selected theme to the active usage range tab. [#2115](https://github.com/jlcodes99/cockpit-tools/pull/2115)
 - **Antigravity account authorization**: Recreate a missing account file when adding or authorizing the same account, preserving its account ID. [#2854](https://github.com/jlcodes99/cockpit-tools/pull/2854)
@@ -38,6 +40,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Codex API Service**: The menu bar and tray pool totals exclude 5-hour quota from accounts whose weekly allowance is exhausted. [#3112](https://github.com/jlcodes99/cockpit-tools/pull/3112)
 - **MiniMax Code**: Preserve the desktop client's login by adopting refreshed shared credentials and leaving refresh-token rotation to the client for shared accounts. [#3092](https://github.com/jlcodes99/cockpit-tools/pull/3092)
 - **Codex session usage**: Include compressed session logs in usage totals, checkpoints and per-session Token counts. [#3079](https://github.com/jlcodes99/cockpit-tools/pull/3079)
+
+### Added
+
+- **WorkBuddy AI**: Manage international accounts with browser sign-in, account import, automatic credit refresh, and one-click desktop switching.
+- **Antigravity**: Choose Antigravity, Antigravity IDE, or Antigravity CLI when launching from an account or instance. Both entry points remember the last selected client, show its launch path, and let you fix a missing desktop path and retry. Quick settings can edit each desktop client’s path separately. On older IDE installations, the launch dialog guides the first startup and explains how to switch, bind, or use an account after initialization. Launch any configured desktop instance for the chosen client, or open the CLI in a selected working directory.
+- **Codex proxy**: Set DNS overrides and IPv6 per proxy source. Save custom DNS servers and apply the settings to new connections through bound proxies.
+- **CodeBuddy and CodeBuddy CN**: Launch the official CLI from either account overview and manage named CLI instances under the matching version’s Multi-Instance tab. Each instance keeps its account, working directory, and separate CLI configuration. CodeBuddy CN remembers the last choice between desktop and CLI.
+- **Codex provider quotas**: Read 5-hour, weekly and monthly quota from OpenCode Go and daily and weekly budgets from compatible codex-proxy-rs servers. [#1938](https://github.com/jlcodes99/cockpit-tools/pull/1938) · [#3019](https://github.com/jlcodes99/cockpit-tools/pull/3019)
+- **Provider presets**: Add UberLLM for Codex and Runcrate for Codex, Claude Code and Claude Desktop. [#3075](https://github.com/jlcodes99/cockpit-tools/pull/3075) · [#2952](https://github.com/jlcodes99/cockpit-tools/pull/2952)
+- **MiniMax presets**: Offer MiniMax-M3.1-Flash in Codex, Claude Code and Claude Desktop. [#2865](https://github.com/jlcodes99/cockpit-tools/pull/2865)
+- **Antigravity automatic account switching**: Set separate 5-hour and weekly quota thresholds in General Settings or the platform quick settings. [#3101](https://github.com/jlcodes99/cockpit-tools/pull/3101)
+- **Model probes**: Run an account-by-model probe matrix from WorkBuddy and CodeBuddy CN, view individual results, and open a probe from a specific account card. [#3096](https://github.com/jlcodes99/cockpit-tools/pull/3096) · [#3064](https://github.com/jlcodes99/cockpit-tools/pull/3064)
+
+### Changed
+
+- **Codex reset cards**: An optional setting waits until usage credits are confirmed unavailable before automatically using a card at the weekly quota threshold. Expiry rules still apply independently.
+- **Client launch**: Configure a missing desktop or CLI path from the launch flow and retry the same operation. If the account already switched, retry only the client launch. WorkBuddy AI has its own desktop path.
+- **Platform layout**: Reorder platforms, groups, and group members with a drag preview or the keyboard. A pointer drop outside the list cancels the move.
+- **CLI launch**: Codex, Antigravity and CodeBuddy show the account, working directory, terminal and custom command in a wider dialog with a taller command field. Antigravity remembers the last working directory, and CodeBuddy remembers it for each account or named instance.
+- **Codex CLI**: Starting a new CLI profile from an account inherits the default configuration without copying desktop session history.
+- **Antigravity**: Antigravity and Antigravity IDE send the close signal immediately when restarting and continue once the old processes exit.
+- **Codex settings**: The next-step prediction switch explains additional API usage, when to restart Codex, and the need to keep Cockpit Tools running in both settings views.
+- **UI controls & modals**: Replaced remaining native select menus and text sort arrows with custom dropdowns and icons across Codex, Multi-Instance, Wakeup, Floating Card, MFA, and account last-used controls; added focus restoration and Escape layering for dropdowns, and skip disabled choices during keyboard navigation; constrained modal heights with scrollable bodies and sticky footers so actions remain reachable in short windows; unified custom checkboxes and platform layout reset/delete confirmation prompts.
+- **Theme & layout polish**: Improved dark/light theme consistency across Codex account cards, Codex API Service dialogs, Aurora account pages, API Key Fun model chips, Wakeup Verification badges, Floating Card window, and Manual headers; refined SideNav and Dashboard filter wrapping, General vs Quick Settings control alignment, Codex API Service log filters and Launch Preview maintenance sections into collapsible panels, and multi-platform card/table views (Antigravity compact tier badges, Qoder/Claude/CodeBuddy suite columns and actions, collapsible Token/JSON import examples).
 
 ### Documentation
 

@@ -70,6 +70,7 @@ export {
   getWorkbuddyAccountDisplayName,
   getWorkbuddyPlanDetail,
   getWorkbuddyPlanBadge,
+  getWorkbuddyAiPlanBadge,
   getWorkbuddyUsage,
   getWorkbuddyAccountStatus,
   getWorkbuddyOfficialQuotaModel,

@@ -12,6 +12,7 @@ import * as qoderService from './qoderService';
 import * as zcodeService from './zcodeService';
 import * as traeService from './traeService';
 import * as workbuddyService from './workbuddyService';
+import * as workbuddyAiService from './workbuddyAiService';
 import * as minimaxCodeService from './minimaxCodeService';
 import * as zedService from './zedService';
 import type { ClaudeAccount } from '../types/claude';
@@ -124,6 +125,7 @@ const PLATFORM_ADAPTERS: Partial<Record<PlatformId, TransferAdapter>> = {
     exportAccounts: traeService.exportTraeAccounts,
     importFromJson: traeService.importTraeFromJson,
   },
+  workbuddy_ai: workbuddyAiService,
   workbuddy: {
     listAccounts: workbuddyService.listWorkbuddyAccounts,
     exportAccounts: workbuddyService.exportWorkbuddyAccounts,

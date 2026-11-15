@@ -1,0 +1,108 @@
+.antigravity-launch-options > button {
+  flex: 1 1 180px;
+}
+
+.antigravity-launch-cli,
+.antigravity-launch-instance-details {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  min-width: 0;
+}
+
+.antigravity-launch-instance-details .client-launch-account {
+  margin-bottom: 0;
+}
+
+.antigravity-launch-retry {
+  justify-self: start;
+}
+
+.antigravity-launch-path {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.antigravity-launch-path label {
+  font-weight: 600;
+}
+
+.antigravity-launch-path-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.antigravity-launch-path-controls input {
+  flex: 1 1 260px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.antigravity-launch-path-controls input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.antigravity-launch-path-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.antigravity-launch-path-status span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.antigravity-launch-path-required {
+  flex-basis: 100%;
+  color: var(--danger);
+}
+
+.antigravity-launch-initialization {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.antigravity-launch-initialization > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--primary);
+}
+
+.antigravity-launch-initialization > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.antigravity-launch-initialization strong {
+  font-weight: 600;
+}

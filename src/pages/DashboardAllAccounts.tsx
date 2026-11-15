@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Inbox, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PaginationControls } from '../components/PaginationControls';
 import { buildPaginationPageSizeStorageKey, usePagination } from '../hooks/usePagination';
@@ -35,8 +36,28 @@ export function DashboardAllAccounts({ accounts, loading }: {
 
   return (
     <section aria-label={t('dashboard.viewAllAccounts')}>
-      {loading && <p role="status">{t('common.loading')}</p>}
-      {!loading && accounts.length === 0 && <p>{t('dashboard.noAccount')}</p>}
+      {loading && accounts.length === 0 && (
+        <div className="empty-state dashboard-all-accounts-state" role="status">
+          <div className="icon">
+            <Loader2 size={24} className="spin" />
+          </div>
+          <p>{t('common.loading')}</p>
+        </div>
+      )}
+      {loading && accounts.length > 0 && (
+        <div className="dashboard-all-accounts-status" role="status">
+          <Loader2 size={14} className="spin" />
+          <span>{t('common.loading')}</span>
+        </div>
+      )}
+      {!loading && accounts.length === 0 && (
+        <div className="empty-state dashboard-all-accounts-state">
+          <div className="icon">
+            <Inbox size={24} />
+          </div>
+          <p>{t('dashboard.noAccount')}</p>
+        </div>
+      )}
       <div className="dashboard-all-accounts-grid" aria-busy={loading}>
         {pageItems.map(({ id, platformId, render }) => (
           <article className="dashboard-all-accounts-item" key={`${platformId}:${id}`}>

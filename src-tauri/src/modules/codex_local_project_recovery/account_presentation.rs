@@ -1,29 +1,5 @@
 use super::*;
 
-pub(super) fn referenced_threads(sources: &[&Value]) -> Result<Vec<String>, String> {
-    let mut seen = HashSet::new();
-    let mut result = Vec::new();
-    for source in sources {
-        let pins = source[PINNED_THREADS].as_array().into_iter().flatten();
-        let orders = source[THREAD_ORDERS]
-            .as_object()
-            .into_iter()
-            .flat_map(|orders| orders.values())
-            .flat_map(|order| order["threadIds"].as_array().into_iter().flatten());
-        let memberships = source[ASSIGN].as_object().into_iter().flat_map(|items| items.keys()).map(String::as_str);
-        for id in pins.chain(orders).filter_map(Value::as_str).chain(memberships) {
-            check()?;
-            if seen.insert(id) {
-                result.push(id.to_owned());
-                if result.len() == QUICK_MAX_THREADS {
-                    return Ok(result);
-                }
-            }
-        }
-    }
-    Ok(result)
-}
-
 pub(super) fn merge(
     view: &mut Value,
     sources: &[&Value],
@@ -43,7 +19,6 @@ pub(super) fn merge(
     let mut copied_appearances = false;
     let mut copied_orders = false;
     for &(current_id, server_id, target_id) in projects {
-        check()?;
         let appearance = current[PROJECT_APPEARANCES]
             .get(current_id)
             .or_else(|| current[PROJECT_APPEARANCES].get(server_id));
@@ -66,7 +41,6 @@ pub(super) fn merge(
         let mut seen = HashSet::new();
         let mut next_ids = Vec::new();
         for id in current_ids.iter().filter_map(Value::as_str) {
-            check()?;
             if belongs_to_project(id) && seen.insert(id) {
                 next_ids.push(json!(id));
             }
@@ -76,7 +50,6 @@ pub(super) fn merge(
         }
         if let Some(existing) = orders.get(target_id).and_then(|order| order["threadIds"].as_array()) {
             for value in existing {
-                check()?;
                 if value.as_str().is_none_or(|id| !belongs_to_project(id)) {
                     next_ids.push(value.clone());
                 }
@@ -146,13 +119,11 @@ fn merge_legacy_pins(
     let mut seen = HashSet::new();
     let mut pins = Vec::new();
     for value in target_pins {
-        check()?;
         if value.as_str().is_none_or(|id| !local.contains(id)) {
             pins.push(value.clone());
         }
     }
     for id in current_pins.iter().filter_map(Value::as_str) {
-        check()?;
         if local.contains(id) && seen.insert(id) {
             pins.push(json!(id));
         }

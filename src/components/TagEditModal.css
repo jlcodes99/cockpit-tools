@@ -131,28 +131,67 @@
   gap: 8px;
 }
 
+.tag-suggestion-wrap {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding-right: 4px;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.tag-suggestion-wrap:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
 .tag-suggestion {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.45);
-  background: var(--bg-card);
+  gap: 4px;
+  padding: 6px 6px 6px 10px;
+  border: none;
+  background: transparent;
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.2s;
-}
-
-[data-theme="dark"] .tag-suggestion {
-  border-color: rgba(148, 163, 184, 0.28);
+  transition: color 0.2s;
 }
 
 .tag-suggestion:hover {
+  color: var(--text-primary);
+}
+
+.tag-suggestion-edit-btn,
+.tag-suggestion-delete-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 3px 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tag-suggestion-edit-btn:hover,
+.tag-suggestion-delete-btn:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text-primary);
-  border-color: var(--border-hover);
+}
+
+.tag-suggestion-delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tag-global-rename-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
 }
 
 .tag-suggestions-empty {

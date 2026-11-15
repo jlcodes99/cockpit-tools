@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ALL_PLATFORM_IDS, type PlatformId } from "../src/types/platform.ts";
+import { MENU_VISIBLE_PLATFORM_IDS, type PlatformId } from "../src/types/platform.ts";
 import {
   isPlatformDisabled,
   makePlatformEntryId,
@@ -107,7 +107,7 @@ test("disabled set reflects every platform having an App Settings section", () =
 
 // 回归：平台可能以「独立条目」或「分组子级」两种形态出现。
 // 开关必须两种形态都能覆盖，否则分组内的平台会没有入口可点。
-test("every platform is reachable as a standalone entry or a group child", () => {
+test("every menu-visible platform is reachable as a standalone entry or a group child", () => {
   resetState();
 
   const { orderedEntryIds, platformGroups } = usePlatformLayoutStore.getState();
@@ -128,7 +128,7 @@ test("every platform is reachable as a standalone entry or a group child", () =>
     }
   }
 
-  for (const id of ALL_PLATFORM_IDS) {
+  for (const id of MENU_VISIBLE_PLATFORM_IDS) {
     assert.equal(
       standalone.has(id) || inGroup.has(id),
       true,

@@ -59,6 +59,17 @@ test('binding sends only identifiers and group choices, never subscription crede
   ]));
 });
 
+test('network settings forward the source revision and preserve an explicit IPv6 off value', async () => {
+  const calls: unknown[] = [];
+  const { service } = harness(async (command, args) => { calls.push({ command, args }); return { sources: [] }; });
+  const network = { doh: true, dnsServers: ['https://resolver.example/dns-query'], ipv6: false };
+  await service.setProxyCatalogNetwork('source', 'revision', network);
+  assert.equal(JSON.stringify(calls), JSON.stringify([
+    { command: 'codex_proxy_catalog_network', args: { sourceId: 'source', revision: 'revision', network } },
+  ]));
+  assert.equal(service.catalogErrorKey('PROXY_DNS_INVALID'), 'codex.proxy.catalog.invalidDnsServer');
+});
+
 test('a frontend timeout requests backend cancellation and never displays request data', async () => {
   const calls: { command: string; args?: unknown }[] = [];
   const { service, timers } = harness(async (command, args) => {

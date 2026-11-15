@@ -222,16 +222,6 @@ export function WorkbuddyAccountsPage() {
 
   return (
     <div className={`ghcp-accounts-page ${workbuddyPlatformConfig.pageClassName}`}>
-      <div className="page-toolbar workbuddy-probe-toolbar">
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm"
-          onClick={() => setProbeOpen(true)}
-        >
-          <Crosshair size={14} aria-hidden="true" />
-          {page.t('workbuddy.modelProbe.open', '批量探测模型')}
-        </button>
-      </div>
       <PlatformOverviewTabsHeader
         platform="workbuddy"
         active={activeTab}
@@ -243,14 +233,26 @@ export function WorkbuddyAccountsPage() {
       ) : activeTab === 'instances' ? (
         <WorkbuddyInstancesContent accountsForSelect={accountsForInstances} />
       ) : (
-        <CodebuddySuiteAccountsSharedView
-          accounts={store.accounts}
-          loading={store.loading}
-          page={page}
-          platformConfig={platformConfig}
-          onSelectionChange={setSelectedAccountIds}
-          onRefreshAccounts={() => { store.fetchAccounts(); }}
-        />
+        <>
+          <div className="page-toolbar workbuddy-probe-toolbar">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setProbeOpen(true)}
+            >
+              <Crosshair size={14} aria-hidden="true" />
+              {page.t('workbuddy.modelProbe.open', '批量探测模型')}
+            </button>
+          </div>
+          <CodebuddySuiteAccountsSharedView
+            accounts={store.accounts}
+            loading={store.loading}
+            page={page}
+            platformConfig={platformConfig}
+            onSelectionChange={setSelectedAccountIds}
+            onRefreshAccounts={() => { store.fetchAccounts(); }}
+          />
+        </>
       )}
       {creditAccount && (
         <WorkbuddyCreditsDialog

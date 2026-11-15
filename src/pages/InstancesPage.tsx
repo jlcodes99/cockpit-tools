@@ -1,8 +1,11 @@
+import { AntigravityClientTabs } from '../components/AntigravityClientIcon';
+import { AntigravityInstanceLaunchDialog } from '../components/AntigravityInstanceLaunchDialog';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { InstancesManager } from '../components/InstancesManager';
 import { OverviewTabsHeader } from '../components/OverviewTabsHeader';
 import { useAntigravityRuntimeTarget } from '../hooks/useAntigravityRuntimeTarget';
+import { type AntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget';
 import { useDurableUiSetting } from '../hooks/useDurableUiSetting';
 import { useAccountsOverviewFilterState } from '../hooks/useAccountsOverviewFilterState';
 import { readAccountsOverviewFilterField, readAccountsOverviewFilterPersistenceEnabled, resolveAccountSortMode } from '../utils/accountsOverviewFilterPersistence';
@@ -37,7 +40,10 @@ interface InstancesPageProps {
 
 export function InstancesPage({ onNavigate }: InstancesPageProps) {
   const { t } = useTranslation();
-  const runtimeTarget = useAntigravityRuntimeTarget();
+  const preferredTarget = useAntigravityRuntimeTarget();
+  const [selectedTarget, setSelectedTarget] = useState<AntigravityRuntimeTarget>();
+  const runtimeTarget = selectedTarget ?? preferredTarget;
+  const [launchRequest, setLaunchRequest] = useState<{ target: AntigravityRuntimeTarget; instanceId: string }>();
   const legacyInstanceStore = useAntigravityLegacyInstanceStore();
   const ideInstanceStore = useInstanceStore();
   const instanceStore =
@@ -45,6 +51,7 @@ export function InstancesPage({ onNavigate }: InstancesPageProps) {
   const { accounts, currentAccountsByTarget, fetchAccounts, fetchCurrentAccount } = useAccountStore();
   const currentAccount = currentAccountsByTarget[runtimeTarget] ?? null;
   const [displayGroups, setDisplayGroups] = useState<DisplayGroup[]>([]);
+
   const [rememberedSortBy] = useAccountsOverviewFilterState(
     ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE, ANTIGRAVITY_FILTER_FIELD_SORT_BY,
     () => readAccountsOverviewFilterPersistenceEnabled(ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE)
@@ -127,9 +134,11 @@ export function InstancesPage({ onNavigate }: InstancesPageProps) {
       <OverviewTabsHeader
         active="instances"
         onNavigate={onNavigate}
-        subtitle={t('instances.subtitle', '多实例独立配置，多账号并行运行。')}
+        subtitle={t('instances.subtitle')}
       />
+      <AntigravityClientTabs selected={runtimeTarget} onSelect={setSelectedTarget} />
       <InstancesManager
+        key={runtimeTarget}
         instanceStore={instanceStore}
         accounts={sortedAccountsForSelect}
         fetchAccounts={fetchAccounts}
@@ -145,7 +154,9 @@ export function InstancesPage({ onNavigate }: InstancesPageProps) {
           return `${presentation.displayName} ${presentation.planLabel} ${account.name ?? ''}`;
         }}
         appType={runtimeTarget}
+        onLaunchRequest={(instance) => setLaunchRequest({ target: runtimeTarget, instanceId: instance.id })}
       />
+      {launchRequest && <AntigravityInstanceLaunchDialog source={launchRequest} onClose={() => setLaunchRequest(undefined)} />}
     </div>
   );
 }

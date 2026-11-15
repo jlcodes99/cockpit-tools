@@ -1,4 +1,44 @@
 {
+  "antigravityLaunch": {
+    "initializeTitle": "Antigravity IDE chưa được khởi tạo",
+    "initializeThenSwitch": "Mở IDE một lần để có thể chuyển tài khoản.",
+    "initializeThenBind": "Khởi chạy phiên bản một lần để liên kết tài khoản.",
+    "initializeThenUseAccount": "Khởi chạy phiên bản một lần để dùng tài khoản đã liên kết.",
+    "initializeAction": "Khởi chạy một lần",
+    "initializeHint": "Cần khởi tạo Antigravity IDE. Hãy khởi chạy phiên bản đã chọn một lần trước khi tiếp tục.",
+    "initializeWaiting": "Đang chờ Antigravity IDE khởi tạo. Hãy tiếp tục thủ công khi đã sẵn sàng.",
+    "initializeRetry": "Chưa khởi tạo xong. Hãy kiểm tra IDE đã mở rồi thử lại.",
+    "pathLabel": "Đường dẫn khởi chạy",
+    "pathConfigured": "Đã cấu hình",
+    "pathDetected": "Tự động phát hiện",
+    "pathInvalid": "Đường dẫn đã cấu hình không hợp lệ",
+    "pathCheckFailed": "Không kiểm tra được đường dẫn",
+    "pathSaveAndRetry": "Lưu và thử lại",
+    "switchAndCopy": "Chuyển và sao chép",
+    "sharedInstanceStart": "Đổi tài khoản dùng chung và khởi chạy",
+    "sharedInstanceHint": "Các phiên bản Antigravity khác vẫn mở và có thể chuyển sang tài khoản mới.",
+    "sharedInstanceRestart": "Chỉ phiên bản đã chọn được khởi động lại.",
+    "lastSharedAccount": "Tài khoản dùng chung được chọn gần nhất",
+    "sharedAccountUnknown": "Chưa ghi nhận lần chuyển nào",
+    "sharedInstanceSubtitle": "Các phiên bản dùng thư mục riêng và chia sẻ đăng nhập Google.",
+    "sharedInstanceStarted": "Đã cập nhật đăng nhập và gửi yêu cầu khởi chạy.",
+    "sharedInstanceLaunchFailed": "Đã cập nhật đăng nhập nhưng không thể khởi chạy: {{error}}",
+    "sharedCopySource": "Sao chép thư mục cấu hình của phiên bản đã chọn.",
+    "quickSwitchSetting": "Áp dụng khi đổi nhanh tài khoản Antigravity IDE. Trong hộp thoại tài khoản, bạn có thể chọn có mở ứng dụng ở mỗi lần đổi.",
+    "title": "Chọn ứng dụng",
+    "switchOnly": "Chỉ đổi tài khoản",
+    "switchAndLaunch": "Đổi và mở",
+    "homeDirectory": "Thư mục cá nhân",
+    "invalidDirectory": "Chọn một thư mục hiện có.",
+    "directoryFailed": "Không mở được trình chọn thư mục. {{error}}",
+    "shared": "Các ứng dụng dùng chung đăng nhập Google: {{clients}}.",
+    "sharedHint": "Các ứng dụng dùng chung đăng nhập Google có thể đổi tài khoản cùng lúc.",
+    "clientOnly": "Ứng dụng này dùng phiên đăng nhập riêng.",
+    "cliAuth": "agy dùng thiết lập xác thực riêng. Khóa API hoặc thông tin xác thực Google Cloud sẽ được ưu tiên nếu đã cấu hình.",
+    "cliMissing": "Không tìm thấy agy. Hãy cài Antigravity CLI chính thức và thử lại.",
+    "terminalFailed": "Không chuẩn bị được cửa sổ dòng lệnh. {{error}}",
+    "switchedTerminalFailed": "Đã đổi tài khoản nhưng không mở được cửa sổ dòng lệnh. {{error}}"
+  },
   "pelican": {
     "caseKinds": {
       "mathExact": "Toán · xác suất chính xác",
@@ -649,7 +689,14 @@
       },
       "clear": "Xóa",
       "loginSuccess": "Đăng nhập thành công",
-      "switchAccount": "Chuyển tài khoản"
+      "switchAccount": "Chuyển tài khoản",
+      "tokenFormat": {
+        "summary": "Trường bắt buộc & ví dụ (nhấn để mở rộng)",
+        "single": "Ví dụ đơn lẻ",
+        "singleToken": "Ví dụ đơn lẻ (Token)",
+        "singleJson": "Ví dụ đơn lẻ (JSON)",
+        "batchJson": "Ví dụ hàng loạt (JSON)"
+      }
     },
     "sessionSharing": {
       "title": "Chia sẻ phiên cục bộ khi chuyển tài khoản",
@@ -722,6 +769,7 @@
     }
   },
   "nav": {
+    "workbuddyAi": "WorkBuddy AI",
     "overview": "Antigravity IDE​",
     "accounts": "Quản lý tài khoản",
     "wakeup": "Wakeup Tasks​",
@@ -786,6 +834,10 @@
     "hiddenBadge": "Ẩn",
     "openFromMore": "Quản lý bố cục nền tảng",
     "dragHandleLabel": "Kéo để sắp xếp lại",
+    "sortKeyboardInstructions": "Nhấn phím cách để bắt đầu sắp xếp, dùng các phím mũi tên để di chuyển, nhấn phím cách hoặc Enter để thả và Esc để hủy.",
+    "sortPosition": "Vị trí {{position}} trên {{total}}.",
+    "sortPlaced": "Đã chuyển đến vị trí {{position}}.",
+    "sortCancelled": "Đã hủy sắp xếp.",
     "tipWithGroups": "Kéo để sắp xếp. Thanh bên có thể hiển thị tối đa {{max}} mục. Các mục con của nhóm không có công tắc thanh bên/bảng điều khiển và chỉ dùng cho thanh menu cùng nền tảng mặc định.",
     "addGroup": "Thêm nhóm",
     "editGroup": "Sửa nhóm",
@@ -819,7 +871,9 @@
     "groupEnabledHint": "Bật hoặc tắt tất cả nền tảng trong nhóm",
     "disabledHint": "Tắt sẽ dừng tác vụ tự động và ẩn phần cài đặt nền tảng. Việc hiển thị mục được thiết lập riêng",
     "enableAll": "Bật tất cả",
-    "disableAll": "Tắt tất cả"
+    "disableAll": "Tắt tất cả",
+    "confirmResetDesc": "Khôi phục mặc định sẽ xóa các nhóm tùy chỉnh và thứ tự sắp xếp. Tiếp tục?",
+    "confirmDeleteGroupDesc": "Xóa nhóm \"{{name}}\"? Các nền tảng bên trong sẽ hiển thị lại riêng lẻ."
   },
   "privacy": {
     "hideSensitive": "Ẩn email",
@@ -1150,6 +1204,11 @@
       "submit": "Nhập"
     },
     "launchDialog": {
+      "customCommand": "Lệnh tùy chỉnh",
+      "useDefaultCommand": "Lệnh mặc định",
+      "customCommandHint": "Để trống để chạy lệnh mặc định.",
+      "rememberDirectory": "Thư mục làm việc gần nhất được ghi nhớ.",
+      "chooseDirectory": "Chọn thư mục",
       "title": "Khởi chạy phiên bản",
       "terminal": "Cửa sổ lệnh",
       "command": "Lệnh khởi chạy",
@@ -1520,10 +1579,9 @@
       "codexEnhancements": {
         "quotaCompat": "Hạn mức chế độ kết hợp",
         "quotaCompatDesc": "Các phiên bản dịch vụ API hiển thị hạn mức khả dụng cho giao diện và kiểm tra cục bộ của ứng dụng. Mức sử dụng thực tế tại nhà cung cấp và giới hạn hình ảnh không thay đổi. Tùy chọn này chỉ áp dụng cho các cấu hình OAuth kết hợp API bên ngoài khác.",
-        "restartHint": "Dự đoán gốc mặc định tắt. Khởi động lại các phiên bản Codex liên quan sau khi đổi và giữ Cockpit Tools chạy. Tính năng nhập giọng nói gốc phụ thuộc vào khả năng và cài đặt của ứng dụng; Cockpit không thay thế hay ép bật tính năng này.",
         "configFailed": "Không thể đọc hoặc lưu cài đặt: {{error}}",
         "nativePredictions": "Dự đoán bước tiếp theo gốc (Tab)",
-        "nativePredictionsDesc": "Tạo gợi ý tin nhắn tiếp theo bằng nhà cung cấp API và mô hình của cuộc trò chuyện hiện tại. Tiêu tốn thêm tín dụng API; khởi động lại Codex sau khi lưu."
+        "nativePredictionsDesc": "Mặc định tắt. Gợi ý sử dụng nhà cung cấp API và mô hình của cuộc trò chuyện hiện tại, làm tăng mức sử dụng API. Sau khi thay đổi cài đặt, hãy khởi động lại các phiên bản Codex bị ảnh hưởng và giữ Cockpit Tools chạy."
       },
       "timeDisplayMode": "Hiển thị thời gian",
       "timeDisplayModeDesc": "Thời gian trên thẻ và danh sách tài khoản. Mặc định là thời gian chuyển tài khoản"
@@ -1871,6 +1929,14 @@
   },
   "appPath": {
     "missing": {
+      "pathLabel": "Đường dẫn khởi chạy {{app}}",
+      "configurePath": "Đặt đường dẫn",
+      "configureHint": "Chọn tệp thực thi hoặc để trống để tự động dò tìm.",
+      "cliHint": "Không tìm thấy {{app}}. Hãy chọn tệp thực thi hoặc cài CLI rồi dò tìm lại.",
+      "invalidPath": "Đường dẫn này không trỏ đến tệp thực thi {{app}} dùng được.",
+      "accountAlreadySwitched": "Tài khoản đã được chuyển. Chỉ thao tác khởi chạy ứng dụng sẽ được thử lại.",
+      "saveAndRetry": "Lưu và thử lại",
+      "operationCancelled": "Đã hủy khởi chạy.",
       "scanEmpty": "Không tìm thấy ứng dụng đang chạy. Hãy mở ứng dụng rồi thử lại hoặc chọn đường dẫn thủ công.",
       "scanEmptyGeneric": "Không tìm thấy {{app}} đang chạy. Hãy mở ứng dụng rồi thử lại hoặc chọn đường dẫn thủ công.",
       "title": "Không tìm thấy đường dẫn ứng dụng",
@@ -2645,11 +2711,13 @@
       "masterLabel": "Tự động dùng thẻ đặt lại",
       "ruleSource": "Nguồn quy tắc",
       "weeklyTrigger": "Ngưỡng hằng tuần",
+      "preferUsageCredits": "Ưu tiên tín dụng",
       "weeklyRemaining": "Hạn mức tuần còn ≤",
       "previewTitle": "Xem trước điều kiện",
       "previewAny": "Dùng một thẻ khi đáp ứng bất kỳ điều kiện đang bật nào:",
       "previewExpiry": "Thẻ sẽ hết hạn trong vòng {{value}} {{unit}}",
       "previewWeekly": "Hạn mức tuần còn lại không quá {{percent}}%",
+      "previewWeeklyAfterCredits": "Hạn mức tuần còn tối đa {{percent}}% và đã xác nhận không có tín dụng khả dụng",
       "previewOff": "Đã tắt tự động dùng thẻ. Các quy tắc bên dưới chưa có hiệu lực.",
       "previewEmpty": "Chưa bật điều kiện nào. Thẻ sẽ không được dùng tự động.",
       "cardOn": "Tự động",
@@ -2763,8 +2831,6 @@
     },
     "launchErrors": {
       "sessionRestoreFailed": "Sửa phiên thất bại và khôi phục bản sao lưu chưa hoàn tất. Đã dừng khởi chạy; hãy kiểm tra nhật ký và bản sao lưu trước khi thử lại.",
-      "sessionCheckTimeout": "Kiểm tra phiên đã hết thời gian chờ. Đã dừng khởi chạy; hãy thử lại hoặc xem nhật ký.",
-      "sessionFileTooLarge": "Dòng đầu của tệp phiên quá lớn. Đã dừng khởi chạy; hãy xem nhật ký.",
       "bindingFailed": "Không thể xác nhận tài khoản liên kết. Đã dừng khởi động; hãy thử chuyển tài khoản lại.",
       "processScanFailed": "Không thể kiểm tra các tiến trình nền cũ. Đã dừng khởi động; hãy thử lại.",
       "proxyEntryFailed": "Không thể khởi động proxy đã cấu hình. Không sử dụng tuyến thay thế; hãy thử lại."
@@ -2982,7 +3048,8 @@
       "forceRefreshAction": "Làm mới ngay",
       "forceRefreshRunning": "Đang làm mới Token…",
       "forceRefreshSuccess": "Đã làm mới Token thành công",
-      "forceRefreshRetry": "Kiểm tra lại"
+      "forceRefreshRetry": "Kiểm tra lại",
+      "advancedMaintenanceTitle": "Bảo trì & Chẩn đoán"
     },
     "switch": "Chuyển",
     "switched": "Đã chuyển sang {{email}}",
@@ -3974,9 +4041,6 @@
       "repairModal": {
         "historyDuplicateOrdinals": "Các lịch sử sau có số thứ tự bị trùng. Sửa chỉ mục lịch sử sẽ bỏ qua chúng và sửa toàn bộ không thể tiếp tục. Chọn “Sửa chỉ mục trò chuyện” cho các phiên khác.\n{{details}}",
         "projectsDeferredAction": "Thoát phiên bản rồi chọn Dự án cục bộ trong hộp thoại sửa phiên.",
-        "projectsStateSize": "Tệp trạng thái lớn nhất: {{file}} ({{bytes}} byte).",
-        "projectsQuickBudget": "Quá trình quét nhanh dự án đã chạm giới hạn.",
-        "projectsStateTooLarge": "Tệp trạng thái dự án vượt quá kích thước hỗ trợ.",
         "projectsStopHint": "Thoát các phiên bản đã chọn trước khi khôi phục. Bạn có thể xem trước thay đổi ngay.",
         "modeProjectsDesc": "Khôi phục dự án cục bộ và liên kết cuộc trò chuyện. Lịch sử trò chuyện được giữ nguyên.",
         "modeProjects": "Dự án cục bộ",
@@ -5176,7 +5240,8 @@
         "speedAdjusted": "{{tier}} → Chuẩn",
         "officialDefaultSpeed": "Kênh đăng ký chính thức không hỗ trợ ghi đè tốc độ. Lần thử này được gửi ở tốc độ mặc định.",
         "sentTier": "Đã gửi: {{tier}}",
-        "originalTier": "Mức ban đầu: {{tier}}"
+        "originalTier": "Mức ban đầu: {{tier}}",
+        "moreFilters": "Bộ lọc khác"
       },
       "timeouts": {
         "retryTitle": "Thử lại khi gửi và theo tài khoản",
@@ -5936,6 +6001,13 @@
         "nodeCount": "{{count}} nút",
         "updatedAt": "Cập nhật: {{time}}",
         "autoUpdate": "Tự cập nhật mỗi 6 giờ",
+        "dnsOverride": "Ghi đè DNS",
+        "ipv6": "Bật IPv6",
+        "dnsServers": "Máy chủ DNS",
+        "dnsServersHint": "Mỗi dòng một địa chỉ. Để trống để dùng Cloudflare DoH.",
+        "networkScope": "Áp dụng cho các kết nối proxy mới từ nguồn này.",
+        "invalidDnsServer": "Nhập một địa chỉ máy chủ DNS hợp lệ trên mỗi dòng.",
+        "networkSaveFailed": "Không thể lưu hoặc áp dụng cài đặt mạng. Hãy thử lại.",
         "snapshotNotice": "Cập nhật không thay đổi cấu hình đã liên kết. Liên kết lại để áp dụng cập nhật.",
         "defaultLabel": "Mặc định",
         "defaultEmpty": "Chưa đặt",
@@ -6513,7 +6585,8 @@
       "desc": "Nhấn nút bên dưới và hoàn tất ủy quyền GitHub Copilot trong trình duyệt."
     },
     "token": {
-      "desc": "Dán token truy cập GitHub Copilot hoặc dữ liệu JSON đã xuất."
+      "desc": "Dán token truy cập GitHub Copilot hoặc dữ liệu JSON đã xuất.",
+      "requiredFields": "Trường bắt buộc: ở chế độ Token hãy dán trực tiếp GitHub access token; chế độ JSON cần có id, github_login, github_id, github_access_token, copilot_token, created_at và last_used."
     },
     "import": {
       "localDesc": "Nhập dữ liệu tài khoản GitHub Copilot từ VS Code cục bộ hoặc tệp JSON.",
@@ -6890,7 +6963,8 @@
       "desc": "Nhấn nút bên dưới và hoàn tất ủy quyền Devin trong trình duyệt."
     },
     "token": {
-      "desc": "Dán token truy cập Devin hoặc dữ liệu JSON đã xuất."
+      "desc": "Dán token truy cập Devin hoặc dữ liệu JSON đã xuất.",
+      "requiredFields": "Trường bắt buộc: github_access_token (API Key)"
     },
     "import": {
       "localDesc": "Nhập tài khoản Devin từ các phiên đăng nhập cục bộ.",
@@ -6994,7 +7068,8 @@
       "startUrlRequired": "Nhập URL bắt đầu IAM Identity Center"
     },
     "token": {
-      "desc": "Dán mã thông báo truy cập Kiro của bạn hoặc dữ liệu JSON đã xuất."
+      "desc": "Dán mã thông báo truy cập Kiro của bạn hoặc dữ liệu JSON đã xuất.",
+      "requiredFields": "Trường bắt buộc: với JSON nên dùng access_token + refresh_token (accessToken / refreshToken chỉ để tương thích)."
     },
     "import": {
       "localDesc": "Nhập từ ứng dụng cục bộ hoặc JSON. Tài khoản JSON được lưu trước, sau đó trạng thái đăng nhập và hạn mức được cập nhật trong nền.",
@@ -7614,6 +7689,39 @@
       "detailError": "Lỗi check-in"
     }
   },
+  "codebuddyCli": {
+    "launchTitle": "Khởi chạy CodeBuddy CN",
+    "launchDesktop": "Khởi chạy ứng dụng máy tính",
+    "recheck": "Kiểm tra lại",
+    "checking": "Đang tìm CodeBuddy CLI…",
+    "rememberDirectory": "Thư mục làm việc gần nhất được lưu cho tài khoản này.",
+    "installGuide": "Hướng dẫn cài đặt chính thức",
+    "launch": "Chạy CLI",
+    "terminalOpened": "Đã gửi lệnh. Xem đầu ra của CLI trong cửa sổ dòng lệnh.",
+    "account": "Tài khoản",
+    "selectAccount": "Chọn tài khoản",
+    "chooseDirectory": "Chọn thư mục",
+    "homeDirectory": "Thư mục chính",
+    "instances": "Phiên bản CLI",
+    "newInstance": "Phiên bản mới",
+    "editInstance": "Sửa phiên bản",
+    "noInstances": "Chưa có phiên bản đã lưu.",
+    "removeConfirmation": "Xóa phiên bản này? Cấu hình và lịch sử CLI vẫn được giữ trên đĩa.",
+    "errors": {
+      "cliCheckFailed": "Không thể kiểm tra xem có CodeBuddy CLI hay không.",
+      "accountMissing": "Không tìm thấy tài khoản đã lưu.",
+      "accountUnreadable": "Không đọc được tài khoản đã lưu.",
+      "credentialMissing": "Tài khoản này thiếu mã truy cập. Hãy cấp quyền lại trong CodeBuddy hoặc CodeBuddy CN.",
+      "workingDirInvalid": "Chọn một thư mục làm việc hiện có.",
+      "nameRequired": "Nhập tên phiên bản.",
+      "instanceMissing": "Không tìm thấy phiên bản.",
+      "storageError": "Không thể đọc hoặc lưu dữ liệu phiên bản CLI.",
+      "cliMissing": "Không tìm thấy CodeBuddy CLI. Hãy cài theo hướng dẫn chính thức.",
+      "launchFailed": "Không thể khởi động CodeBuddy CLI.",
+      "terminalFailed": "Không mở được cửa sổ dòng lệnh.",
+      "terminalUnsupported": "Chọn một ứng dụng dòng lệnh được hỗ trợ trong Cài đặt chung. Trên macOS, dùng Terminal, iTerm2 hoặc Ghostty."
+    }
+  },
   "codebuddyCn": {
     "title": "Quản lý tài khoản CodeBuddy CN",
     "noAccounts": "Chưa có tài khoản CodeBuddy CN",
@@ -7639,6 +7747,27 @@
     "syncFailed": "Đồng bộ thất bại: {{error}}",
     "syncSuccess": "Đã đồng bộ {{count}} tài khoản với WorkBuddy",
     "syncToWorkbuddy": "Đồng bộ tới WorkBuddy"
+  },
+  "workbuddyAi": {
+    "search": "Tìm tài khoản WorkBuddy AI",
+    "noAccounts": "Chưa có tài khoản WorkBuddy AI",
+    "addAccount": "Thêm tài khoản WorkBuddy AI",
+    "oauthDesc": "Mở trang đăng nhập WorkBuddy AI trong trình duyệt.",
+    "tokenDesc": "Dán mã truy cập WorkBuddy AI hoặc JSON đã xuất.",
+    "importDesc": "Nhập từ ứng dụng trên máy hoặc tệp JSON.",
+    "importClient": "Nhập từ WorkBuddy AI",
+    "flowNotice": {
+      "title": "Giới thiệu về tài khoản WorkBuddy AI",
+      "desc": "Khi đổi tài khoản, tệp đăng nhập trên máy được cập nhật và ứng dụng quốc tế được mở.",
+      "permission": "Việc nhập và đổi tài khoản dùng tệp đăng nhập của bản quốc tế. Ứng dụng chính thức xử lý các trường đã mã hóa.",
+      "network": "Xác thực, làm mới mã và kiểm tra điểm đều kết nối tới WorkBuddy AI. Tệp đăng nhập và dữ liệu mã hóa được giữ trên thiết bị."
+    },
+    "oauthFeature": {
+      "title": "Đăng nhập WorkBuddy AI",
+      "signIn": "Đăng nhập WorkBuddy AI trong trình duyệt.",
+      "switch": "Sau khi cấp quyền, hãy đổi tài khoản bản quốc tế từ danh sách.",
+      "credits": "Xem điểm còn lại trên thẻ tài khoản."
+    }
   },
   "workbuddy": {
     "desktopEdition": "WorkBuddy (bản Trung Quốc)",
@@ -8479,7 +8608,8 @@
       "deploying": "Đang lấy mô hình…",
       "deploySuccess": "Đã triển khai tới Codex: {{count}} mô hình",
       "deployFailed": "Triển khai thất bại: {{error}}",
-      "useKey": "Dùng khóa"
+      "useKey": "Dùng khóa",
+      "deleteConfirm": "Xóa khóa đã lưu \"{{name}}\"? Hành động này không thể hoàn tác."
     },
     "prefill": {
       "codexReady": "Đã điền cấu hình APIKEY.FUN. Hãy kiểm tra trước khi thêm vào Codex.",

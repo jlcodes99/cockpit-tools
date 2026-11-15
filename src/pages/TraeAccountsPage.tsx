@@ -14,8 +14,9 @@ import {
   Database,
   Copy,
   Check,
-  ChevronLeft,
   KeyRound,
+  ArrowDown,
+  ArrowUp,
   Play,
   RotateCw,
   CircleAlert,
@@ -1165,7 +1166,9 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
             <td>
               {renderAccountQuota(account, 'table')}
             </td>
-            <td>{account.last_used > 0 ? formatDate(account.last_used) : '—'}</td>
+            <td>
+              <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDate} />
+            </td>
             <td className="sticky-action-cell table-action-cell">
               <div className="action-buttons">
                 <button
@@ -1251,71 +1254,71 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
         tabs={undefined}
       />
 
-      <div
-        className={`ghcp-flow-notice ${isFlowNoticeCollapsed ? 'collapsed' : ''}`}
-        role="note"
-        aria-live="polite"
-      >
-        <button
-          type="button"
-          className="ghcp-flow-notice-toggle"
-          onClick={() => setIsFlowNoticeCollapsed((prev) => !prev)}
-          aria-expanded={!isFlowNoticeCollapsed}
-        >
-          <div className="ghcp-flow-notice-title">
-            <CircleAlert size={16} />
-            <span>
-              {t('trae.flowNotice.titleWithPlatform', {
-                platform: platformLabel,
-                defaultValue: '{{platform}} 账号接入说明（点击展开/收起）',
-              })}
-            </span>
-          </div>
-          <ChevronDown
-            size={16}
-            className={`ghcp-flow-notice-arrow ${isFlowNoticeCollapsed ? 'collapsed' : ''}`}
-          />
-        </button>
-        {!isFlowNoticeCollapsed && (
-          <div className="ghcp-flow-notice-body">
-            <div className="ghcp-flow-notice-desc">
-              {t(
-                'trae.flowNotice.descWithPlatform',
-                {
-                  platform: platformLabel,
-                  defaultValue:
-                    '支持 {{platform}} 官方 OAuth 授权、本机导入、JSON 导入与本地注入切号；切号过程按 {{platform}} 客户端真实落盘规则写回。',
-                },
-              )}
-            </div>
-            <ul className="ghcp-flow-notice-list">
-              <li>
-                {t(
-                  'trae.flowNotice.permissionWithPlatform',
-                  {
-                    platform: platformLabel,
-                    defaultValue:
-                      '权限范围：读取并写入本机 {{platform}} 配置目录中的 storage.json 登录相关字段，用于账号导入、切号注入与套餐信息展示；所有数据仅在本机处理。',
-                  },
-                )}
-              </li>
-              <li>
-                {t(
-                  platformConfig.networkNoticeKey,
-                  {
-                    platform: platformLabel,
-                    defaultValue:
-                      '网络范围：{{platform}} OAuth 登录、令牌刷新和套餐查询会请求 Trae 官方接口；不会向第三方服务上传本地账号文件或原始存储内容。',
-                  },
-                )}
-              </li>
-            </ul>
-          </div>
-        )}
-      </div>
-
       {activeTab === 'overview' && (
         <>
+          <div
+            className={`ghcp-flow-notice ${isFlowNoticeCollapsed ? 'collapsed' : ''}`}
+            role="note"
+            aria-live="polite"
+          >
+            <button
+              type="button"
+              className="ghcp-flow-notice-toggle"
+              onClick={() => setIsFlowNoticeCollapsed((prev) => !prev)}
+              aria-expanded={!isFlowNoticeCollapsed}
+            >
+              <div className="ghcp-flow-notice-title">
+                <CircleAlert size={16} />
+                <span>
+                  {t('trae.flowNotice.titleWithPlatform', {
+                    platform: platformLabel,
+                    defaultValue: '{{platform}} 账号接入说明（点击展开/收起）',
+                  })}
+                </span>
+              </div>
+              <ChevronDown
+                size={16}
+                className={`ghcp-flow-notice-arrow ${isFlowNoticeCollapsed ? 'collapsed' : ''}`}
+              />
+            </button>
+            {!isFlowNoticeCollapsed && (
+              <div className="ghcp-flow-notice-body">
+                <div className="ghcp-flow-notice-desc">
+                  {t(
+                    'trae.flowNotice.descWithPlatform',
+                    {
+                      platform: platformLabel,
+                      defaultValue:
+                        '支持 {{platform}} 官方 OAuth 授权、本机导入、JSON 导入与本地注入切号；切号过程按 {{platform}} 客户端真实落盘规则写回。',
+                    },
+                  )}
+                </div>
+                <ul className="ghcp-flow-notice-list">
+                  <li>
+                    {t(
+                      'trae.flowNotice.permissionWithPlatform',
+                      {
+                        platform: platformLabel,
+                        defaultValue:
+                          '权限范围：读取并写入本机 {{platform}} 配置目录中的 storage.json 登录相关字段，用于账号导入、切号注入与套餐信息展示；所有数据仅在本机处理。',
+                      },
+                    )}
+                  </li>
+                  <li>
+                    {t(
+                      platformConfig.networkNoticeKey,
+                      {
+                        platform: platformLabel,
+                        defaultValue:
+                          '网络范围：{{platform}} OAuth 登录、令牌刷新和套餐查询会请求 Trae 官方接口；不会向第三方服务上传本地账号文件或原始存储内容。',
+                      },
+                    )}
+                  </li>
+                </ul>
+              </div>
+            )}
+          </div>
+
           {message && (
             <div className={`message-bar ${message.tone === 'error' ? 'error' : 'success'}`}>
               {message.text}
@@ -1459,7 +1462,7 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
                 }
                 aria-label={t('common.shared.sort.toggleDirection', '切换排序方向')}
               >
-                {sortDirection === 'desc' ? '⬇' : '⬆'}
+                {sortDirection === 'desc' ? <ArrowDown size={15} /> : <ArrowUp size={15} />}
               </button>
             </div>
 
@@ -1701,7 +1704,6 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
             <div className="modal-overlay">
               <div className="modal-content ghcp-add-modal platform-account-add-modal" onClick={(event) => event.stopPropagation()}>
                 <div className="modal-header">
-                  <button className="btn btn-secondary icon-only" onClick={closeAddModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
                   <h2>
                     {t('trae.addModal.titleWithPlatform', {
                       platform: platformLabel,

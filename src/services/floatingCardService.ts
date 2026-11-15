@@ -67,6 +67,6 @@ export async function saveFloatingCardPosition(x: number, y: number): Promise<vo
   return await invoke('save_floating_card_position', { x, y });
 }
 
-export async function showMainWindowAndNavigate(page: Page): Promise<void> {
+export async function showMainWindowAndNavigate(page: Page | `overview?${string}`): Promise<void> {
   return await invoke('show_main_window_and_navigate', { page });
 }

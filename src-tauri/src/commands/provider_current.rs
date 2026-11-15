@@ -38,6 +38,7 @@ fn resolve_provider_current_account_id(platform: &str) -> Result<Option<String>,
                 ),
             )
         }
+        "workbuddy_ai" => crate::modules::workbuddy_ai_account::current_id(),
         "workbuddy" => {
             let accounts = crate::modules::workbuddy_account::list_accounts();
             Ok(crate::modules::workbuddy_account::resolve_current_account_id(&accounts))
@@ -60,6 +61,11 @@ pub async fn get_provider_current_account_id(
     app: AppHandle,
     platform: String,
 ) -> Result<Option<String>, String> {
+    if platform.trim() == "workbuddy_ai" {
+        return tauri::async_runtime::spawn_blocking(crate::modules::workbuddy_ai_account::current_id)
+            .await
+            .map_err(|error| error.to_string())?;
+    }
     let current_account_id = if platform.trim() == "qoder" {
         tauri::async_runtime::spawn_blocking(crate::modules::qoder_account::reconcile_current_account)
             .await.map_err(|error| error.to_string())??

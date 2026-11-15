@@ -15,6 +15,7 @@ import type { WorkbuddyAccount } from '../../types/workbuddy';
 import {
   getWorkbuddyCredits,
   readWorkbuddyCreditPackage,
+  workbuddyCreditPercent,
   WORKBUDDY_CREDIT_GROUPS,
   type WorkbuddyCreditGroup,
 } from '../../utils/workbuddyCredits';
@@ -29,7 +30,7 @@ function useCreditFormat() {
   const { i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language;
   return {
-    number: new Intl.NumberFormat(locale),
+    number: new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
     date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'medium' }),
   };
 }
@@ -38,9 +39,13 @@ export function WorkbuddyCreditsSummary({
   credits,
   onGroup,
   onDetails,
+  international = false,
+  showBreakdown = false,
 }: {
   credits: Credits;
   onDetails?: () => void;
+  international?: boolean;
+  showBreakdown?: boolean;
   onGroup?: (group: WorkbuddyCreditGroup) => void;
 }) {
   const { t } = useTranslation();
@@ -60,15 +65,35 @@ export function WorkbuddyCreditsSummary({
           )}
         </div>
       )}
+      {showBreakdown && credits.left != null && (
+        <div className="workbuddy-credit-muted workbuddy-credit-breakdown">
+          {(['planBase', 'benefit', 'addon', 'planBonus'] as const)
+            .filter((kind) => kind !== 'planBonus' || credits.groups.some((group) => group.kind === kind))
+            .map((kind) => {
+              const label = t(groupKey(kind));
+              const amount = number.format(credits.groups.find((group) => group.kind === kind)?.left ?? 0);
+              return (
+                <div key={kind} className="workbuddy-credit-breakdown-item">
+                  <span title={label}>{label}</span>
+                  <strong title={amount}>{amount}</strong>
+                </div>
+              );
+            })}
+        </div>
+      )}
       {credits.groups.map((group) => {
         const label = t(groupKey(group.kind));
-        const remainPercent = group.total > 0 ? Math.min(100, Math.floor(group.left / group.total * 100)) : 0;
-        const usedPercent = group.total > 0 ? Math.min(100, group.used / group.total * 100) : 0;
+        const remainPercent = workbuddyCreditPercent(group.total, group.left, Math.floor);
+        const usedPercent = workbuddyCreditPercent(group.total, group.used, international ? Math.round : (value) => value);
         const Icon = creditGroupIcons[group.kind];
+        const timeText = group.time == null ? null : t(
+          group.usesExpiry ? 'workbuddy.credits.nearestExpiry' : 'workbuddy.credits.nextRefresh',
+          { time: date.format(group.time) },
+        );
         return (
-          <div key={group.kind} className="workbuddy-credit-entry" data-kind={group.kind}>
+          <div key={group.kind} className="workbuddy-credit-entry" data-kind={group.kind} data-international={international || undefined}>
             <div className="workbuddy-credit-line workbuddy-credit-group">
-              <strong><Icon size={14} aria-hidden="true" />{label}</strong>
+              <strong><Icon size={14} aria-hidden="true" /><span title={label}>{label}</span></strong>
               <span>{number.format(group.left)}</span>
             </div>
             <div className="workbuddy-credit-line workbuddy-credit-muted">
@@ -78,13 +103,11 @@ export function WorkbuddyCreditsSummary({
             <div className="workbuddy-credit-track" aria-hidden="true">
               <span style={{ width: `${usedPercent}%` }} />
             </div>
+            {(international || onGroup) && timeText && (
+              <div className="workbuddy-credit-muted workbuddy-credit-time" title={timeText}>{timeText}</div>
+            )}
             {onGroup && (
               <>
-                {group.time != null && (
-                  <div className="workbuddy-credit-muted">
-                    {t(group.usesExpiry ? 'workbuddy.credits.nearestExpiry' : 'workbuddy.credits.nextRefresh', { time: date.format(group.time) })}
-                  </div>
-                )}
                 {group.expiring && <span className="workbuddy-credit-expiry">{t('workbuddy.credits.expiring')}</span>}
                 <button
                   type="button"
