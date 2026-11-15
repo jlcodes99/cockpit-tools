@@ -1189,12 +1189,32 @@ fn summarize_zhipu_token_plan_usage(
     if limits.is_empty() {
         return Err("PROVIDER_USAGE_PARSE_FAILED: Zhipu token limit fields missing".to_string());
     }
-    limits.sort_by_key(|item| {
+
+    // 智谱用 unit 字段显式标识窗口类型（实测：3 = 5 小时滚动窗，6 = 每周窗；
+    // 周窗的 number 有 7 与 1 两种取值，只锚定 unit）。按 unit 分桶后固定按
+    // 「5 小时、每周」顺序输出：周期末尾每周窗会比 5 小时窗更早重置，按
+    // nextResetTime 排序会把两桶标反。unit 缺失或不识别的旧响应保持
+    // nextResetTime 升序兜底。
+    let mut ordered: Vec<&serde_json::Value> = Vec::with_capacity(limits.len());
+    let mut five_hour = None;
+    let mut weekly = None;
+    let mut fallback: Vec<&serde_json::Value> = Vec::new();
+    for item in &limits {
+        match item.get("unit").and_then(serde_json::Value::as_i64) {
+            Some(3) if five_hour.is_none() => five_hour = Some(item),
+            Some(6) if weekly.is_none() => weekly = Some(item),
+            _ => fallback.push(item),
+        }
+    }
+    fallback.sort_by_key(|item| {
         json_timestamp_field(item, &["nextResetTime", "next_reset_time"]).unwrap_or(i64::MAX)
     });
+    ordered.extend(five_hour);
+    ordered.extend(weekly);
+    ordered.extend(fallback);
 
-    let mut window_data = Vec::with_capacity(limits.len());
-    for item in &limits {
+    let mut window_data = Vec::with_capacity(ordered.len());
+    for item in &ordered {
         let total = json_f64_field(*item, &["usage", "total", "limit"]);
         let used = json_f64_field(*item, &["currentValue", "current_value", "used"]);
         let remaining = json_f64_field(*item, &["remaining", "remain"]);
@@ -2227,6 +2247,62 @@ mod new_api_usage_tests {
             .expect("legacy TOKENS_LIMIT entries must keep parsing");
         assert_eq!(summary.remaining, Some(90.0));
         assert_eq!(summary.plan_name.as_deref(), Some("pro"));
+    }
+
+    #[test]
+    fn zhipu_token_plan_classifies_windows_by_unit_not_reset_order() {
+        // 周期末尾场景：每周窗比 5 小时窗更早重置。按 unit 显式分类后，
+        // interval 槽位必须仍是 5 小时窗（unit 3），不能被 reset 升序标反。
+        let body = json!({
+            "success": true,
+            "data": {
+                "level": "max",
+                "limits": [
+                    {"type":"CREDIT_LIMIT","unit":3,"number":5,"percentage":10,
+                     "nextResetTime":1796000000000_i64},
+                    {"type":"CREDIT_LIMIT","unit":6,"number":1,"percentage":90,
+                     "nextResetTime":1795000000000_i64}
+                ]
+            }
+        });
+        let summary = summarize_zhipu_token_plan_usage(&body, 100)
+            .expect("unit classified windows must parse");
+        let pct = |key: &str| {
+            summary
+                .details
+                .iter()
+                .find(|d| d.key == key)
+                .map(|d| d.value.clone())
+        };
+        assert_eq!(pct("intervalUsedPercent").as_deref(), Some("10"));
+        assert_eq!(pct("weeklyUsedPercent").as_deref(), Some("90"));
+        assert_eq!(pct("intervalExpiresAt").as_deref(), Some("1796000000")); // json_timestamp_field 归一化为秒
+        assert_eq!(pct("weeklyExpiresAt").as_deref(), Some("1795000000"));
+    }
+
+    #[test]
+    fn zhipu_token_plan_falls_back_to_reset_order_without_unit() {
+        // 旧响应无 unit 字段：保持 nextResetTime 升序兜底（早重置 → interval）。
+        let body = json!({
+            "success": true,
+            "data": {
+                "limits": [
+                    {"type":"TOKENS_LIMIT","percentage":30,"nextResetTime":1794000000000_i64},
+                    {"type":"TOKENS_LIMIT","percentage":80,"nextResetTime":1796000000000_i64}
+                ]
+            }
+        });
+        let summary = summarize_zhipu_token_plan_usage(&body, 100)
+            .expect("legacy windows must parse");
+        let pct = |key: &str| {
+            summary
+                .details
+                .iter()
+                .find(|d| d.key == key)
+                .map(|d| d.value.clone())
+        };
+        assert_eq!(pct("intervalUsedPercent").as_deref(), Some("30"));
+        assert_eq!(pct("weeklyUsedPercent").as_deref(), Some("80"));
     }
 
     #[tokio::test]
