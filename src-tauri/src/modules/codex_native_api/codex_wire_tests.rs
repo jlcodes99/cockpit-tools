@@ -8,13 +8,17 @@ fn agent_browser_host_results_never_consume_pending_tool_ids_on_http_or_websocke
                 "name":"codex_apps_open_page","output":"Synthetic page\n  preserve whitespace  "});
             let mut selected = json!({"type":"function_call_output","namespace":"agent",
                 "name":"codex_apps_selected_page_part_1_of_1","output":"Synthetic selection"});
+            let mut goal = json!({"type":"function_call_output","namespace":"agent",
+                "name":"goal_objective","output":"Goal snapshot\n  exact spacing  "});
             if empty_id {
                 open["call_id"] = json!("");
                 selected["call_id"] = json!("");
+                goal["call_id"] = json!("");
             }
             let input = json!([
                 {"type":"function_call","name":"read_file","call_id":"real-function","arguments":"{}"},
                 open,
+                goal,
                 {"type":"custom_tool_call","name":"custom_read","call_id":"real-custom","input":"fixture"},
                 selected,
                 {"type":"function_call_output","call_id":"real-function","output":"Original function result"},
@@ -39,6 +43,7 @@ fn agent_browser_host_results_never_consume_pending_tool_ids_on_http_or_websocke
 fn agent_browser_host_malformed_ids_remain_untouched_for_identity_validation() {
     for name in [
         "codex_apps_open_page",
+        "goal_objective",
         "codex_apps_selected_page_part_1_of_1",
     ] {
         for id in [Value::Null, json!(42), json!(" ")] {

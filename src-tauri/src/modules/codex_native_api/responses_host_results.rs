@@ -9,7 +9,11 @@ pub(super) fn is_host_result(item: &Value) -> bool {
                 true
             }
             (Some("agent"), Some(name)) => {
-                matches!(name, "browser_tabs" | "codex_apps_open_page") || selected_page_part(name)
+                // Goal objective snapshots are client host results without a model call.
+                matches!(
+                    name,
+                    "browser_tabs" | "codex_apps_open_page" | "goal_objective"
+                ) || selected_page_part(name)
             }
             _ => false,
         }
@@ -59,6 +63,7 @@ mod agent_browser_tests {
     fn agent_browser_host_envelopes_and_page_part_boundaries_are_exact() {
         for name in [
             "browser_tabs",
+            "goal_objective",
             "codex_apps_open_page",
             "codex_apps_selected_page_part_1_of_1",
             "codex_apps_selected_page_part_1_of_2",
@@ -121,6 +126,7 @@ mod agent_browser_tests {
         use crate::modules::codex_native_api::identity::rebuild::{paired_tools, replay_items};
         for name in [
             "browser_tabs",
+            "goal_objective",
             "codex_apps_open_page",
             "codex_apps_selected_page_part_1_of_1",
         ] {
@@ -160,5 +166,45 @@ mod agent_browser_tests {
             json!({"type":"function_call_output","namespace":"agent",
             "name":"unknown","output":"unrecognized host result"})
         ]));
+    }
+}
+
+#[cfg(test)]
+mod goal_objective_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn agent_goal_objective_recognition_requires_the_exact_host_envelope() {
+        let goal = json!({"type":"function_call_output","namespace":"agent",
+            "name":"goal_objective","output":"Goal snapshot\n  preserve whitespace  "});
+        assert!(is_standalone(&goal));
+        for name in [
+            "goal_objective_extra",
+            "Goal_objective",
+            "goal_objective ",
+            " goal_objective",
+        ] {
+            let mut item = goal.clone();
+            item["name"] = json!(name);
+            assert!(!is_host_result(&item));
+        }
+        for namespace in [
+            "other",
+            "Agent",
+            " agent",
+            "agent ",
+            "codex_app",
+            "codex_tui",
+        ] {
+            let mut item = goal.clone();
+            item["namespace"] = json!(namespace);
+            assert!(!is_host_result(&item));
+        }
+        for kind in ["function_call", "custom_tool_call_output", "message"] {
+            let mut item = goal.clone();
+            item["type"] = json!(kind);
+            assert!(!is_host_result(&item));
+        }
     }
 }
