@@ -131,11 +131,20 @@ pub(crate) struct CodexInstanceStartTarget {
 }
 
 impl CodexInstanceStartTarget {
-    pub(crate) async fn preflight_desktop_proxy(&self) -> Result<(), String> {
+    pub(crate) async fn preflight_desktop_proxy(&self, app: Option<&AppHandle>) -> Result<(), String> {
         if launch_mode_uses_desktop_runtime(&self.launch_mode) {
             modules::codex_instance::preflight_egress_proxy_for_bind_account(
                 self.bind_account_id.as_deref(),
             ).await?;
+            if let Some(app) = app {
+                modules::codex_proxy_launch_guard::check_launch(
+                    app, self.bind_account_id.as_deref(), &self.user_data_dir, None,
+                ).await?;
+            } else {
+                modules::codex_proxy_launch_guard::check_for_launch(
+                    self.bind_account_id.as_deref(), &self.user_data_dir,
+                ).await?;
+            }
         }
         Ok(())
     }
@@ -163,6 +172,7 @@ fn emit_codex_instance_launch_progress(
         "isDefault".to_string(),
         serde_json::json!(target.is_default),
     );
+    payload.entry("accountId".to_string()).or_insert_with(|| serde_json::json!(target.bind_account_id));
     if let Some(operation) = target.launch_operation.as_deref() {
         payload.insert("operation".to_string(), serde_json::json!(operation));
     }
@@ -2783,13 +2793,13 @@ async fn codex_start_instance_internal(
         4,
         serde_json::json!({}),
     );
-    // Validate the effective route before credentials, profile writes, or stopping
-    // the previous client. Metadata/status lookup alone cannot detect a damaged engine.
-    launch_target.preflight_desktop_proxy().await?;
-    ensure_codex_instance_start_not_cancelled(&instance_id)?;
     let start_flow_lock =
         CODEX_INSTANCE_START_FLOW_LOCK.get_or_init(|| tokio::sync::Mutex::new(()));
     let _start_flow_guard = start_flow_lock.lock().await;
+    ensure_codex_instance_start_not_cancelled(&instance_id)?;
+    // Check after waiting for the launch lock, but before credentials, profile
+    // writes or stopping the previous client. A skipped step cannot bypass this.
+    launch_target.preflight_desktop_proxy(Some(&app)).await?;
     ensure_codex_instance_start_not_cancelled(&instance_id)?;
     emit_codex_instance_launch_step(
         &app,
@@ -3206,6 +3216,9 @@ async fn codex_start_instance_internal(
         let launch_proxy = modules::codex_instance::resolve_egress_proxy_for_bind_account(
             default_bind_account_id.as_deref(),
         ).await?;
+        modules::codex_proxy_dotenv::apply(&default_dir, default_bind_account_id.as_deref().unwrap_or("__client__"), &launch_proxy)?;
+        modules::codex_proxy_launch_guard::check_launch(&app, default_bind_account_id.as_deref(), &default_dir, Some(&launch_proxy)).await?;
+        modules::codex_proxy_launch_guard::verify_profile(&default_dir, default_bind_account_id.as_deref().unwrap_or("__client__"), &launch_proxy)?;
         launch_proxy.append_electron_args(&mut injection_plan.args);
         emit_codex_instance_launch_step(
             &app,
@@ -3227,6 +3240,7 @@ async fn codex_start_instance_internal(
         );
         let launch_args = injection_plan.args.clone();
         let prepared_home = default_dir.clone();
+        let verify_proxy = launch_proxy.clone();
         // Package registration, activation and PID confirmation can wait on
         // Windows services. Keep that synchronous work off the async runtime.
         let pid = tauri::async_runtime::spawn_blocking(move || {
@@ -3239,6 +3253,7 @@ async fn codex_start_instance_internal(
         })
         .await
         .map_err(|error| format!("Codex launch worker failed: {error}"))??;
+        modules::codex_proxy_launch_guard::verify_or_stop(&default_dir, default_bind_account_id.as_deref().unwrap_or("__client__"), pid, &verify_proxy)?;
         if codex_instance_start_cancelled(&instance_id) {
             let _ = modules::process::close_pid(pid, 5);
             return Err("CODEX_START_CANCELLED".to_string());
@@ -3516,6 +3531,9 @@ async fn codex_start_instance_internal(
     let launch_proxy = modules::codex_instance::resolve_egress_proxy_for_bind_account(
         instance.bind_account_id.as_deref(),
     ).await?;
+    modules::codex_proxy_dotenv::apply(instance_dir, instance.bind_account_id.as_deref().unwrap_or("__client__"), &launch_proxy)?;
+    modules::codex_proxy_launch_guard::check_launch(&app, instance.bind_account_id.as_deref(), instance_dir, Some(&launch_proxy)).await?;
+    modules::codex_proxy_launch_guard::verify_profile(instance_dir, instance.bind_account_id.as_deref().unwrap_or("__client__"), &launch_proxy)?;
     launch_proxy.append_electron_args(&mut injection_plan.args);
     emit_codex_instance_launch_step(
         &app,
@@ -3536,6 +3554,7 @@ async fn codex_start_instance_internal(
         instance.bind_account_id.clone(),
     );
     let launch_home = instance.user_data_dir.clone();
+    let verify_proxy = launch_proxy.clone();
     let launch_args = injection_plan.args.clone();
     let pid = tauri::async_runtime::spawn_blocking(move || {
         modules::process::start_codex_with_args_and_env_and_egress(
@@ -3547,6 +3566,7 @@ async fn codex_start_instance_internal(
     })
     .await
     .map_err(|error| format!("Codex launch worker failed: {error}"))??;
+    modules::codex_proxy_launch_guard::verify_or_stop(instance_dir, instance.bind_account_id.as_deref().unwrap_or("__client__"), pid, &verify_proxy)?;
     if codex_instance_start_cancelled(&instance_id) {
         let _ = modules::process::close_pid(pid, 5);
         return Err("CODEX_START_CANCELLED".to_string());

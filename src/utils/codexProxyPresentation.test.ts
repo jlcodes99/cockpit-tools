@@ -19,9 +19,9 @@ test('live proxy UI never reads legacy raw secrets and retains only backend save
     assert.doesNotMatch(source, /egress_proxy_url/);
   }
   const editor = readFileSync(new URL('../components/codex/useCodexProxyExitEditor.ts', import.meta.url), 'utf8');
-  assert.match(editor, /const updated = await updateCodexProxyAccount\(id, disabled\)/);
+  assert.match(editor, /const updated = await updateCodexProxyAccount\(id, disabled, original\)/);
   assert.match(editor, /const updated = await bindProxyCatalog\(id, choice\.sourceId, choice\.itemId, selections \?\? \{\}, choice\.groupId\)/);
-  assert.equal((editor.match(/setOverrides\(\(old\) => \(\{ \.\.\.old, \[id\]: \{ binding: updated\.egress_proxy \?\? null, disabled: updated\.egress_proxy_disabled \?\? false \} \}\)\)/g) ?? []).length, 2);
+  assert.equal((editor.match(/setOverrides\(\(old\) => \(\{ \.\.\.old, \[id\]: \{ binding: updated\.egress_proxy \?\? null, disabled: updated\.egress_proxy_disabled \?\? false, clientDefaults: updated\.egress_proxy_client_defaults \?\? false \} \}\)\)/g) ?? []).length, 2);
   assert.match(editor, /const checked = scope === 'selection'\s+\? await probeProxyCatalog\(requestId, choice\.sourceId, choice\.itemId, selections \?\? \{\}\)\s+: await testCodexAccountProxy\(id, requestId, null\)/);
   // Saving an unchanged binding stays a no-op instead of rewriting the account.
   assert.match(editor, /if \(operation\.current \|\| !account \|\| account.proxyTargetLoading \|\| account.proxyTargetError \|\| saved \|\| !selectionReady\) return;/);

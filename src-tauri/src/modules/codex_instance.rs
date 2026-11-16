@@ -112,6 +112,9 @@ pub async fn resolve_egress_proxy_for_bind_account(
         parse_provider_gateway_bind_account_id(bind_account_id).unwrap_or_else(|| bind_account_id.to_string());
     let account = crate::modules::codex_proxy_runtime::load(&account_id).await?;
     if account.is_api_key_auth() { return super::codex_client_proxy::resolve(&account_id).await; }
+    if crate::modules::codex_account_proxy::eligible(&account) && account.egress_proxy_client_defaults {
+        return Ok(CodexLaunchProxy::ClientDefaults);
+    }
     if crate::modules::codex_account_proxy::eligible(&account) && account.egress_proxy_disabled {
         return Ok(CodexLaunchProxy::Direct);
     }

@@ -68,7 +68,15 @@ fn verify_launch_injection(proxy: CodexLaunchProxy) -> u16 {
     ] {
         let value = command
             .get_envs()
-            .find(|(name, _)| *name == key)
+            // Command merges differently cased keys on Windows. Unix keeps
+            // each spelling separate, so retain the exact comparison there.
+            .find(|(name, _)| {
+                if cfg!(windows) {
+                    name.to_string_lossy().eq_ignore_ascii_case(key)
+                } else {
+                    *name == key
+                }
+            })
             .and_then(|(_, value)| value);
         let expected = if key.eq_ignore_ascii_case("https_proxy") { &http_url } else { &socks_url };
         assert_eq!(value.and_then(|value| value.to_str()), Some(expected.as_str()));

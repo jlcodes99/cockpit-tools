@@ -146,3 +146,12 @@ test('disabled accounts remain distinct from shared followers and can restore fo
   assert.deepEqual(filterProxyAccounts(accounts, { saved, filter: 'unbound' }), [follower]);
   assert.deepEqual(batchUnbindTargets(accounts, saved).map((entry) => entry.account.id), ['disabled']);
 });
+
+test('client-original accounts never follow the shared exit and stay visible as unbound', () => {
+  const original = { id: 'client-original', email: 'fixture@example.invalid', egress_proxy_client_defaults: true } as CodexAccount;
+  const noBinding = () => null;
+  const shared = { mode: 'all_accounts', binding: { protocol: 'fixture' } } as unknown as CodexUnifiedProxyView;
+  assert.deepEqual(unifiedFollowingIds([original], noBinding, shared), []);
+  assert.equal(resolveExitMode(null, { catalog: { sources: [] }, loading: false, failed: false } as CodexProxyCatalogState, true, false, true), 'client');
+  assert.deepEqual(filterProxyAccounts([original], { filter: 'unbound', saved: noBinding }), [original]);
+});

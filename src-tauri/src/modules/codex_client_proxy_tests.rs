@@ -844,3 +844,27 @@ async fn ordinary_catalog_binding_preserves_nested_picker_ids_and_failed_prepara
         .egress_proxy_url
         .is_none());
 }
+
+#[tokio::test]
+async fn client_original_settings_are_excluded_from_unified_proxy_follow_counts() {
+    let fixture = Fixture::new();
+    let api_id = fixture.provider();
+    let oauth_id = format!("original-settings-{}", uuid::Uuid::new_v4());
+    codex_account::save_account(&synthetic(&oauth_id, None)).unwrap();
+    let service = codex_instance::CODEX_API_SERVICE_BIND_ACCOUNT_ID.to_string();
+    let targets = [&api_id, &oauth_id, &service];
+    for target in targets {
+        crate::commands::codex::use_codex_client_proxy_defaults(target.clone()).await.unwrap();
+    }
+    let (eligible, independent, disabled) = super::super::codex_proxy_targets::account_totals().await.unwrap();
+    for target in targets {
+        assert!(!eligible.contains(target));
+        assert!(!independent.contains(target));
+        assert!(!disabled.contains(target));
+    }
+    for target in targets {
+        crate::commands::codex::update_codex_account_egress_proxy(target.clone(), None, Some(false)).await.unwrap();
+    }
+    let (eligible, _, _) = super::super::codex_proxy_targets::account_totals().await.unwrap();
+    for target in targets { assert!(eligible.contains(target)); }
+}

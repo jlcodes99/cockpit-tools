@@ -366,3 +366,16 @@ fn optional_api_local_state_failure_keeps_original_current_account_and_provider(
     let current = get_current_account_from_loaded(index, |_| Some(oauth.clone()), &source).unwrap();
     assert_eq!(current.id, oauth.id);
 }
+
+#[test]
+fn delayed_quota_snapshot_cannot_erase_explicit_client_defaults() {
+    let _lock = crate::modules::test_support::env_lock().lock().unwrap_or_else(|e| e.into_inner());
+    let _storage = QuotaProxyStorage::new();
+    let stale = seed_quota_proxy_account();
+    update_account_client_proxy_defaults(&stale.id).unwrap();
+    let returned = save_account_preserving_egress_proxy(&stale).unwrap();
+    assert!(returned.egress_proxy_client_defaults);
+    assert!(load_account(&stale.id).unwrap().egress_proxy_client_defaults);
+    assert!(!returned.egress_proxy_disabled);
+    assert!(returned.egress_proxy_url.is_none());
+}

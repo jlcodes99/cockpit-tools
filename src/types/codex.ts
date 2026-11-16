@@ -138,6 +138,7 @@ export interface CodexAccount {
   egress_proxy_url?: string | null;
   /** Explicit direct mode; absent on older accounts means follow existing defaults. */
   egress_proxy_disabled?: boolean;
+  egress_proxy_client_defaults?: boolean;
   /** Backend-provided safe proxy metadata; never contains credentials. */
   egress_proxy?: { protocol: string; server?: string; port?: number; name?: string; sourceName?: string; sourceId?: string; itemId?: string; groupId?: string | null; selectedName?: string | null; selections?: Record<string, string> } | null;
   /** Legacy import/export metadata; no longer changes outgoing requests. */

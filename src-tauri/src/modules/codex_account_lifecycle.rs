@@ -499,6 +499,7 @@ fn upsert_account_with_hints_and_reauth_target(
     if let Some(proxy) = selected_proxy {
         account.egress_proxy_url = Some(proxy);
         account.egress_proxy_disabled = false;
+        account.egress_proxy_client_defaults = false;
     }
 
     if has_reauth_target && generated_id != account.id {

@@ -287,7 +287,7 @@ fn default_and_managed_instance_preflight_only_requires_engine_for_node_desktop_
                 let target = crate::commands::codex_instance::resolve_codex_instance_start_target(id).unwrap();
                 assert_eq!(target.launch_mode, expected_mode);
                 assert_eq!(target.is_default, id == "__default__");
-                let result = crate::commands::codex_proxy_engine::codex_proxy_instance_preflight(id.into()).await;
+                let result = target.preflight_desktop_proxy(None).await;
                 if expected_mode == InstanceLaunchMode::App && binding.starts_with("trojan://") {
                     assert_eq!(result.unwrap_err(), "ENGINE_INSTALL_VERIFY");
                 } else {

@@ -1872,6 +1872,7 @@ fn account_proxy_env_pairs(proxy_url: &str) -> Vec<(&'static str, String)> {
 }
 
 pub fn apply_effective_proxy_env_to_command(cmd: &mut Command, launch_proxy: &CodexLaunchProxy) {
+    if matches!(launch_proxy, CodexLaunchProxy::ClientDefaults) { return; }
     let pairs = match launch_proxy {
         CodexLaunchProxy::Inherit => {
             let direct_hosts = config::get_codex_proxy_direct_hosts();
