@@ -4759,7 +4759,8 @@
           "totalGranted": "Gewährt",
           "totalAvailable": "Verfügbar",
           "isAvailable": "Guthaben verfügbar",
-          "modelLimitsEnabled": "Modelllimits"
+          "modelLimitsEnabled": "Modelllimits",
+          "weeklyShort": "Woche"
         },
         "accountBalance": "Kontostand",
         "unlimitedQuota": "Unbegrenzt",

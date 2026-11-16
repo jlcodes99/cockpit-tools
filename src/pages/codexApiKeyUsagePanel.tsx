@@ -201,6 +201,9 @@ export function renderCodexApiKeyUsagePanel({
       findApiKeyUsageDetail(summary, "intervalExpiresAt") ??
       findApiKeyUsageDetail(summary, "weeklyExpiresAt") ??
       findApiKeyUsageDetail(summary, "expiresAt");
+    // 智谱等 coding plan 是「5 小时 + 每周」双窗：主数字是 5 小时窗剩余，
+    // 把每周窗剩余并排在旁边，避免用户只看到一个数字而误以为没有周限。
+    const weeklyRemainingDetail = findApiKeyUsageDetail(summary, "weeklyRemainingPercent");
     return (
       <div
         className="quota-item codex-api-key-quota-item token-plan"
@@ -221,6 +224,13 @@ export function renderCodexApiKeyUsagePanel({
             {formatApiKeyUsageQuotaValue(
               summary,
               summary.quotaRemaining ?? summary.remaining,
+            )}
+            {weeklyRemainingDetail && (
+              <span>
+                {" · "}
+                {t("codex.modelProviders.usage.fields.weeklyShort", "Weekly")}{" "}
+                {weeklyRemainingDetail.value}
+              </span>
             )}
           </span>
         </div>

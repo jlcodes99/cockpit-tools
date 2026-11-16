@@ -4759,7 +4759,8 @@
           "totalGranted": "Đã cấp",
           "totalAvailable": "Khả dụng",
           "isAvailable": "Số dư khả dụng",
-          "modelLimitsEnabled": "Giới hạn mô hình"
+          "modelLimitsEnabled": "Giới hạn mô hình",
+          "weeklyShort": "Tuần"
         },
         "accountBalance": "Số dư tài khoản",
         "unlimitedQuota": "Không giới hạn",

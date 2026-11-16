@@ -4759,7 +4759,8 @@
           "totalGranted": "Tanımlanan",
           "totalAvailable": "Kullanılabilir",
           "isAvailable": "Bakiye kullanılabilir",
-          "modelLimitsEnabled": "Model limitleri"
+          "modelLimitsEnabled": "Model limitleri",
+          "weeklyShort": "Hafta"
         },
         "accountBalance": "Hesap bakiyesi",
         "unlimitedQuota": "Sınırsız",

@@ -4759,7 +4759,8 @@
           "totalGranted": "付与枠",
           "totalAvailable": "利用可能",
           "isAvailable": "残高の利用可否",
-          "modelLimitsEnabled": "モデル制限"
+          "modelLimitsEnabled": "モデル制限",
+          "weeklyShort": "週"
         },
         "accountBalance": "アカウント残高",
         "unlimitedQuota": "無制限",

@@ -4759,7 +4759,8 @@
           "totalGranted": "Přiděleno",
           "totalAvailable": "Dostupné",
           "isAvailable": "Zůstatek dostupný",
-          "modelLimitsEnabled": "Limity modelů"
+          "modelLimitsEnabled": "Limity modelů",
+          "weeklyShort": "Týden"
         },
         "accountBalance": "Zůstatek účtu",
         "unlimitedQuota": "Neomezeno",

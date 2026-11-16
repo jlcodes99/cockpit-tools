@@ -4759,7 +4759,8 @@
           "totalGranted": "Выдано",
           "totalAvailable": "Доступно",
           "isAvailable": "Баланс доступен",
-          "modelLimitsEnabled": "Лимиты моделей"
+          "modelLimitsEnabled": "Лимиты моделей",
+          "weeklyShort": "Неделя"
         },
         "accountBalance": "Баланс аккаунта",
         "unlimitedQuota": "Безлимитно",

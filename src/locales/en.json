@@ -4433,7 +4433,8 @@
           "totalGranted": "Granted",
           "totalAvailable": "Available",
           "isAvailable": "Balance available",
-          "modelLimitsEnabled": "Model Limits"
+          "modelLimitsEnabled": "Model Limits",
+          "weeklyShort": "Weekly"
         },
         "accountBalance": "Account Balance",
         "unlimitedQuota": "Unlimited",

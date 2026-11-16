@@ -4806,7 +4806,8 @@
           "totalGranted": "Diberikan",
           "totalAvailable": "Tersedia",
           "isAvailable": "Saldo tersedia",
-          "modelLimitsEnabled": "Batas model"
+          "modelLimitsEnabled": "Batas model",
+          "weeklyShort": "Minggu"
         },
         "accountBalance": "Saldo akun",
         "unlimitedQuota": "Tak terbatas",

@@ -4806,7 +4806,8 @@
           "totalGranted": "الممنوح",
           "totalAvailable": "المتاح",
           "isAvailable": "الرصيد متاح",
-          "modelLimitsEnabled": "قيود النماذج"
+          "modelLimitsEnabled": "قيود النماذج",
+          "weeklyShort": "أسبوعي"
         },
         "accountBalance": "رصيد الحساب",
         "unlimitedQuota": "غير محدود",

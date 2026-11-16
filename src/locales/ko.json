@@ -4759,7 +4759,8 @@
           "totalGranted": "부여 한도",
           "totalAvailable": "사용 가능",
           "isAvailable": "잔액 사용 가능",
-          "modelLimitsEnabled": "모델 제한"
+          "modelLimitsEnabled": "모델 제한",
+          "weeklyShort": "주간"
         },
         "accountBalance": "계정 잔액",
         "unlimitedQuota": "무제한",

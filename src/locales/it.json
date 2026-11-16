@@ -4759,7 +4759,8 @@
           "totalGranted": "Assegnato",
           "totalAvailable": "Disponibile",
           "isAvailable": "Saldo disponibile",
-          "modelLimitsEnabled": "Limiti modello"
+          "modelLimitsEnabled": "Limiti modello",
+          "weeklyShort": "Settimana"
         },
         "accountBalance": "Saldo account",
         "unlimitedQuota": "Illimitato",

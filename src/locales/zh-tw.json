@@ -4759,7 +4759,8 @@
           "totalGranted": "授予額度",
           "totalAvailable": "可用額度",
           "isAvailable": "餘額可用",
-          "modelLimitsEnabled": "模型限制"
+          "modelLimitsEnabled": "模型限制",
+          "weeklyShort": "週"
         },
         "accountBalance": "帳戶餘額",
         "unlimitedQuota": "無限額度",
