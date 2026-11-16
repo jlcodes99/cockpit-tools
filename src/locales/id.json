@@ -9355,5 +9355,125 @@
     "errorModel": "Masukkan nama model lengkap dan unik tanpa karakter pengganti.",
     "errorSave": "Gagal memuat atau menyimpan pengaturan. Coba lagi.",
     "saved": "Tersimpan. Berlaku untuk permintaan baru."
+  },
+  "antigravityTokenUsage": {
+    "tab": "Pemakaian Sesi",
+    "subtitle": "Pemakaian token lokal dari sesi Antigravity",
+    "title": "Pemakaian Token Sesi Antigravity",
+    "desc": "Menggabungkan pemakaian token aktual dari basis data sesi lokal Antigravity (~/.gemini/antigravity) dalam mode baca-saja, memisahkan token Thinking dan Output secara ketat.",
+    "hint": "Pemindaian baca-saja pada SQLite steps/gen_metadata (mendukung WAL), tembolok RPC, dan transkrip JSONL. Token Output tidak menyertakan Thinking (tanpa hitung ganda); token perkiraan dipisahkan dari jumlah pasti API.",
+    "summary": {
+      "badge": "Token Lokal",
+      "input": "Masukan",
+      "thinking": "Penalaran",
+      "output": "Keluaran",
+      "cache": "Tembolok",
+      "total": "Jumlah",
+      "turns": "Giliran",
+      "sessionsUnit": "sesi",
+      "scanning": "Memindai…",
+      "updating": "Memperbarui…",
+      "detail": "Rincian"
+    },
+    "range": {
+      "label": "Rentang Waktu",
+      "today": "Hari Ini",
+      "7d": "7 Hari Terakhir",
+      "30d": "30 Hari Terakhir",
+      "month": "Bulan Ini",
+      "all": "Semua Waktu"
+    },
+    "granularity": {
+      "label": "Granularitas",
+      "day": "Harian",
+      "week": "Mingguan",
+      "month": "Bulanan"
+    },
+    "kinds": {
+      "all": "Semua Jenis",
+      "main": "Utama",
+      "swarm": "Kawanan (Swarm)",
+      "subagent": "Sub-agen"
+    },
+    "filters": {
+      "kindLabel": "Jenis Sesi",
+      "modelLabel": "Model AI",
+      "workspaceLabel": "Ruang Kerja",
+      "allModels": "Semua Model",
+      "allWorkspaces": "Semua Ruang Kerja",
+      "searchPlaceholder": "Cari judul, ID sesi, ruang kerja, model…"
+    },
+    "dataDir": {
+      "label": "Folder Data:",
+      "customBadge": "Kustom",
+      "choose": "Ubah Folder",
+      "reset": "Atur Ulang Bawaan"
+    },
+    "actions": {
+      "refresh": "Muat Ulang",
+      "rebuild": "Pindai Ulang",
+      "backToAccounts": "Kembali ke Akun"
+    },
+    "rebuildConfirm": {
+      "title": "Pindai Ulang Penuh",
+      "message": "Hapus tembolok pindai lokal Cockpit Tools dan baca ulang seluruh berkas sesi Antigravity dalam mode baca-saja. Lanjutkan?"
+    },
+    "status": {
+      "scanning": "Memindai basis data sesi Antigravity…",
+      "ready": "Memindai {{dbFiles}} berkas DB · {{sessions}} sesi · {{turns}} giliran",
+      "idle": "Belum dipindai",
+      "cacheStats": "Tembolok {{hits}} cocok / {{misses}} baru ({{durationMs}} md)",
+      "scannedAt": "Disinkronkan {{time}}"
+    },
+    "cards": {
+      "total": "Jumlah Token",
+      "totalExact": "Jumlah Token Pasti",
+      "input": "Token Masukan",
+      "thinking": "Token Penalaran",
+      "output": "Token Keluaran",
+      "cache": "Token Tembolok",
+      "conversations": "Percakapan",
+      "turns": "Giliran",
+      "coverage": "Cakupan Pasti",
+      "avgPerDay": "Rata-rata / Hari Aktif"
+    },
+    "estimated": {
+      "notice": "{{turns}} giliran tanpa data mentah API diestimasi secara terpisah (tidak ditambahkan ke Jumlah Pasti):"
+    },
+    "trend": {
+      "title": "Tren Pemakaian Token",
+      "empty": "Tidak ada pemakaian token pada rentang waktu terpilih"
+    },
+    "tables": {
+      "byModel": "Berdasarkan Model",
+      "byWorkspace": "Berdasarkan Ruang Kerja",
+      "byKind": "Berdasarkan Jenis Sesi (Utama / Swarm / Sub-agen)",
+      "conversations": "Daftar Sesi Percakapan",
+      "conversationTitle": "Percakapan",
+      "modelName": "Model AI",
+      "workspaceName": "Ruang Kerja",
+      "sessions": "Sesi",
+      "turns": "Giliran",
+      "total": "Jumlah",
+      "updatedAt": "Diperbarui"
+    },
+    "pagination": {
+      "info": "Halaman {{page}} / {{totalPages}} ({{totalItems}} sesi)"
+    },
+    "detail": {
+      "openParent": "Buka Sesi Induk",
+      "children": "Sesi Turunan (Swarm / Sub-agen)",
+      "turnsTimeline": "Linimasa Token per Giliran"
+    },
+    "empty": {
+      "title": "Tidak ada pemakaian token untuk filter saat ini",
+      "desc": "Coba ubah Rentang Waktu ke \"Semua Waktu\" atau klik Muat Ulang setelah memakai Antigravity.",
+      "dirMissing": "Direktori data Antigravity tidak ditemukan. Periksa jalur folder di atas.",
+      "noRows": "Tidak ada data yang cocok"
+    },
+    "errors": {
+      "loadFailed": "Gagal memuat pemakaian token: {{error}}",
+      "syncFailed": "Gagal memindai pemakaian token: {{error}}"
+    }
   }
 }

@@ -9355,5 +9355,125 @@
     "errorModel": "请输入不重复的完整模型名，不支持通配符。",
     "errorSave": "读取或保存失败，请重试。",
     "saved": "已保存，后续请求使用新设置。"
+  },
+  "antigravityTokenUsage": {
+    "tab": "会话用量",
+    "subtitle": "Antigravity 本地会话 Token 用量统计",
+    "title": "Antigravity 会话 Token 用量",
+    "desc": "以只读方式从本机 Antigravity 会话数据库（~/.gemini/antigravity）汇总真实 Token 用量，严格区分 Thinking 与 Output。",
+    "hint": "只读解析 SQLite steps/gen_metadata（支持 WAL 感知）、RPC 缓存与 transcript JSONL。Output 已剔除 Thinking 避免重复计费；估算 Token（如有）与精确 API 用量严格分离。",
+    "summary": {
+      "badge": "本地 Token",
+      "input": "输入",
+      "thinking": "思考",
+      "output": "输出",
+      "cache": "缓存",
+      "total": "合计",
+      "turns": "轮次",
+      "sessionsUnit": "个会话",
+      "scanning": "扫描中…",
+      "updating": "更新中…",
+      "detail": "详情"
+    },
+    "range": {
+      "label": "时间范围",
+      "today": "今日",
+      "7d": "近 7 天",
+      "30d": "近 30 天",
+      "month": "本月",
+      "all": "全部"
+    },
+    "granularity": {
+      "label": "时间粒度",
+      "day": "按日",
+      "week": "按周",
+      "month": "按月"
+    },
+    "kinds": {
+      "all": "全部类型",
+      "main": "主会话",
+      "swarm": "Swarm 协作",
+      "subagent": "子代理"
+    },
+    "filters": {
+      "kindLabel": "会话类型",
+      "modelLabel": "模型",
+      "workspaceLabel": "工作区",
+      "allModels": "全部模型",
+      "allWorkspaces": "全部工作区",
+      "searchPlaceholder": "搜索标题、会话 ID、工作区、模型…"
+    },
+    "dataDir": {
+      "label": "数据目录：",
+      "customBadge": "自定义",
+      "choose": "切换目录",
+      "reset": "恢复默认"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "rebuild": "重新扫描",
+      "backToAccounts": "返回账号总览"
+    },
+    "rebuildConfirm": {
+      "title": "重新扫描",
+      "message": "将清空 Cockpit Tools 的本地扫描缓存，并以只读方式重新读取全部 Antigravity 会话数据。确认继续？"
+    },
+    "status": {
+      "scanning": "正在扫描 Antigravity 会话数据库…",
+      "ready": "已扫描 {{dbFiles}} 个 DB 文件 · {{sessions}} 个会话 · {{turns}} 次响应",
+      "idle": "尚未扫描",
+      "cacheStats": "缓存命中 {{hits}} / 新增 {{misses}}（{{durationMs}} ms）",
+      "scannedAt": "同步于 {{time}}"
+    },
+    "cards": {
+      "total": "合计 Tokens",
+      "totalExact": "精确合计 Tokens",
+      "input": "输入 Tokens",
+      "thinking": "思考 Tokens",
+      "output": "输出 Tokens",
+      "cache": "缓存 Tokens",
+      "conversations": "会话数",
+      "turns": "响应轮次",
+      "coverage": "精确覆盖率",
+      "avgPerDay": "活跃日均"
+    },
+    "estimated": {
+      "notice": "另有 {{turns}} 轮缺少原始 API 用量，已单独估算（不计入精确合计）："
+    },
+    "trend": {
+      "title": "Token 用量趋势",
+      "empty": "所选时间范围暂无 Token 用量记录"
+    },
+    "tables": {
+      "byModel": "按模型分布",
+      "byWorkspace": "按工作区分布",
+      "byKind": "按会话类型分布（主会话 / Swarm / 子代理）",
+      "conversations": "会话明细列表",
+      "conversationTitle": "会话",
+      "modelName": "模型",
+      "workspaceName": "工作区",
+      "sessions": "会话",
+      "turns": "轮次",
+      "total": "合计",
+      "updatedAt": "更新时间"
+    },
+    "pagination": {
+      "info": "第 {{page}} / {{totalPages}} 页（共 {{totalItems}} 个会话）"
+    },
+    "detail": {
+      "openParent": "打开父会话",
+      "children": "子会话（Swarm / 子代理）",
+      "turnsTimeline": "逐轮 Token 时间线"
+    },
+    "empty": {
+      "title": "当前筛选下暂无会话 Token 数据",
+      "desc": "可尝试将时间范围切换为“全部”，或在使用 Antigravity 后点击刷新。",
+      "dirMissing": "未找到 Antigravity 数据目录，请检查上方目录路径。",
+      "noRows": "暂无匹配数据"
+    },
+    "errors": {
+      "loadFailed": "读取 Token 用量失败：{{error}}",
+      "syncFailed": "扫描 Token 用量失败：{{error}}"
+    }
   }
 }

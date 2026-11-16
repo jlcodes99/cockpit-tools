@@ -9355,5 +9355,125 @@
     "errorModel": "Use a unique, exact model name without wildcards.",
     "errorSave": "Could not load or save settings. Retry.",
     "saved": "Saved. New requests use these settings."
+  },
+  "antigravityTokenUsage": {
+    "tab": "Session Usage",
+    "subtitle": "Local token usage from Antigravity sessions",
+    "title": "Antigravity Session Token Usage",
+    "desc": "Aggregates real token usage from local Antigravity session databases (~/.gemini/antigravity) in read-only mode, strictly separating Thinking and Output tokens.",
+    "hint": "Read-only scan of SQLite steps/gen_metadata (WAL-aware), RPC cache, and transcript JSONL. Output tokens exclude Thinking tokens (zero double-counting); estimated tokens (if any) are kept separate from exact API totals.",
+    "summary": {
+      "badge": "Local Tokens",
+      "input": "Input",
+      "thinking": "Thinking",
+      "output": "Output",
+      "cache": "Cache",
+      "total": "Total",
+      "turns": "Turns",
+      "sessionsUnit": "sessions",
+      "scanning": "Scanning…",
+      "updating": "Updating…",
+      "detail": "Details"
+    },
+    "range": {
+      "label": "Time Range",
+      "today": "Today",
+      "7d": "Last 7 Days",
+      "30d": "Last 30 Days",
+      "month": "This Month",
+      "all": "All Time"
+    },
+    "granularity": {
+      "label": "Granularity",
+      "day": "Daily",
+      "week": "Weekly",
+      "month": "Monthly"
+    },
+    "kinds": {
+      "all": "All Types",
+      "main": "Main",
+      "swarm": "Swarm",
+      "subagent": "Subagent"
+    },
+    "filters": {
+      "kindLabel": "Session Type",
+      "modelLabel": "Model",
+      "workspaceLabel": "Workspace",
+      "allModels": "All Models",
+      "allWorkspaces": "All Workspaces",
+      "searchPlaceholder": "Search title, session ID, workspace, model…"
+    },
+    "dataDir": {
+      "label": "Data Dir:",
+      "customBadge": "Custom",
+      "choose": "Change Folder",
+      "reset": "Reset Default"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "rebuild": "Rescan",
+      "backToAccounts": "Back to Accounts"
+    },
+    "rebuildConfirm": {
+      "title": "Full Rescan",
+      "message": "Clear Cockpit Tools local scan cache and re-read all Antigravity session files in read-only mode. Continue?"
+    },
+    "status": {
+      "scanning": "Scanning Antigravity session databases…",
+      "ready": "Scanned {{dbFiles}} DB files · {{sessions}} sessions · {{turns}} turns",
+      "idle": "Not scanned yet",
+      "cacheStats": "Cache {{hits}} hit / {{misses}} new ({{durationMs}} ms)",
+      "scannedAt": "Synced {{time}}"
+    },
+    "cards": {
+      "total": "Total Tokens",
+      "totalExact": "Total Exact Tokens",
+      "input": "Input Tokens",
+      "thinking": "Thinking Tokens",
+      "output": "Output Tokens",
+      "cache": "Cache Tokens",
+      "conversations": "Conversations",
+      "turns": "Turns",
+      "coverage": "Exact Coverage",
+      "avgPerDay": "Avg / Active Day"
+    },
+    "estimated": {
+      "notice": "{{turns}} turns lacked raw API usage and were estimated separately (never added to Exact Total):"
+    },
+    "trend": {
+      "title": "Token Usage Trend",
+      "empty": "No token usage recorded in the selected time range"
+    },
+    "tables": {
+      "byModel": "By Model",
+      "byWorkspace": "By Workspace",
+      "byKind": "By Session Type (Main / Swarm / Subagent)",
+      "conversations": "Conversation Sessions",
+      "conversationTitle": "Conversation",
+      "modelName": "Model",
+      "workspaceName": "Workspace",
+      "sessions": "Sessions",
+      "turns": "Turns",
+      "total": "Total",
+      "updatedAt": "Updated"
+    },
+    "pagination": {
+      "info": "Page {{page}} / {{totalPages}} ({{totalItems}} sessions)"
+    },
+    "detail": {
+      "openParent": "Open Parent Session",
+      "children": "Child Sessions (Swarm / Subagent)",
+      "turnsTimeline": "Turn-by-Turn Token Timeline"
+    },
+    "empty": {
+      "title": "No token usage found for current filters",
+      "desc": "Try switching Time Range to \"All Time\" or click Refresh after using Antigravity.",
+      "dirMissing": "Antigravity data directory was not found. Please check the folder path above.",
+      "noRows": "No matching data"
+    },
+    "errors": {
+      "loadFailed": "Failed to load token usage: {{error}}",
+      "syncFailed": "Failed to scan token usage: {{error}}"
+    }
   }
 }

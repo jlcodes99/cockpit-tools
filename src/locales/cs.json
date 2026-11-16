@@ -9355,5 +9355,125 @@
     "errorModel": "Zadejte jedinečný úplný název modelu bez zástupných znaků.",
     "errorSave": "Nastavení se nepodařilo načíst nebo uložit. Zkuste to znovu.",
     "saved": "Uloženo. Platí pro nové požadavky."
+  },
+  "antigravityTokenUsage": {
+    "tab": "Využití relací",
+    "subtitle": "Místní spotřeba tokenů z relací Antigravity",
+    "title": "Spotřeba tokenů relací Antigravity",
+    "desc": "Agreguje skutečnou spotřebu tokenů z místních databází relací Antigravity (~/.gemini/antigravity) v režimu pouze pro čtení a striktně odděluje tokeny Thinking a Output.",
+    "hint": "Čtení bez zápisu ze SQLite steps/gen_metadata (s podporou WAL), mezipaměti RPC a souborů transcript JSONL. Output nezahrnuje Thinking (žádné dvojí započtení); odhadnuté tokeny zůstávají oddělené.",
+    "summary": {
+      "badge": "Místní tokeny",
+      "input": "Vstup",
+      "thinking": "Uvažování",
+      "output": "Výstup",
+      "cache": "Mezipaměť",
+      "total": "Celkem",
+      "turns": "Kola",
+      "sessionsUnit": "relací",
+      "scanning": "Skenování…",
+      "updating": "Aktualizace…",
+      "detail": "Podrobnosti"
+    },
+    "range": {
+      "label": "Časové období",
+      "today": "Dnes",
+      "7d": "Posledních 7 dní",
+      "30d": "Posledních 30 dní",
+      "month": "Tento měsíc",
+      "all": "Celá historie"
+    },
+    "granularity": {
+      "label": "Podrobnost",
+      "day": "Denně",
+      "week": "Týdně",
+      "month": "Měsíčně"
+    },
+    "kinds": {
+      "all": "Všechny typy",
+      "main": "Hlavní",
+      "swarm": "Roj (Swarm)",
+      "subagent": "Podagent"
+    },
+    "filters": {
+      "kindLabel": "Typ relace",
+      "modelLabel": "Model AI",
+      "workspaceLabel": "Pracovní prostor",
+      "allModels": "Všechny modely",
+      "allWorkspaces": "Všechny prostory",
+      "searchPlaceholder": "Hledat název, ID relace, složku, model…"
+    },
+    "dataDir": {
+      "label": "Složka dat:",
+      "customBadge": "Vlastní",
+      "choose": "Změnit složku",
+      "reset": "Obnovit výchozí"
+    },
+    "actions": {
+      "refresh": "Obnovit",
+      "rebuild": "Znovu prohledat",
+      "backToAccounts": "Zpět na účty"
+    },
+    "rebuildConfirm": {
+      "title": "Úplné nové prohledání",
+      "message": "Vymazat místní mezipaměť skenování Cockpit Tools a znovu načíst všechny soubory relací Antigravity v režimu pouze pro čtení. Pokračovat?"
+    },
+    "status": {
+      "scanning": "Prohledávání databází relací Antigravity…",
+      "ready": "Prohledáno {{dbFiles}} DB souborů · {{sessions}} relací · {{turns}} kol",
+      "idle": "Dosud neprohledáno",
+      "cacheStats": "Mezipaměť {{hits}} shod / {{misses}} nových ({{durationMs}} ms)",
+      "scannedAt": "Synchronizováno {{time}}"
+    },
+    "cards": {
+      "total": "Celkem tokenů",
+      "totalExact": "Přesný součet tokenů",
+      "input": "Vstupní tokeny",
+      "thinking": "Tokeny uvažování",
+      "output": "Výstupní tokeny",
+      "cache": "Tokeny mezipaměti",
+      "conversations": "Konverzace",
+      "turns": "Kola odpovědí",
+      "coverage": "Přesné pokrytí",
+      "avgPerDay": "Prům. / aktivní den"
+    },
+    "estimated": {
+      "notice": "{{turns}} kol bez surových metrik API bylo odhadnuto samostatně (nikdy se nepřičítá k přesnému součtu):"
+    },
+    "trend": {
+      "title": "Trend spotřeby tokenů",
+      "empty": "Ve vybraném období nebyla zaznamenána žádná spotřeba tokenů"
+    },
+    "tables": {
+      "byModel": "Podle modelu",
+      "byWorkspace": "Podle pracovního prostoru",
+      "byKind": "Podle typu relace (Hlavní / Swarm / Podagent)",
+      "conversations": "Relace konverzací",
+      "conversationTitle": "Konverzace",
+      "modelName": "Model AI",
+      "workspaceName": "Pracovní prostor",
+      "sessions": "Relace",
+      "turns": "Kola",
+      "total": "Celkem",
+      "updatedAt": "Aktualizováno"
+    },
+    "pagination": {
+      "info": "Strana {{page}} / {{totalPages}} ({{totalItems}} relací)"
+    },
+    "detail": {
+      "openParent": "Otevřít nadřazenou relaci",
+      "children": "Podřízené relace (Swarm / Podagent)",
+      "turnsTimeline": "Časová osa tokenů po jednotlivých kolech"
+    },
+    "empty": {
+      "title": "Pro aktuální filtry nebyla nalezena žádná spotřeba tokenů",
+      "desc": "Zkuste přepnout období na „Celá historie“ nebo klikněte na Obnovit po použití Antigravity.",
+      "dirMissing": "Složka dat Antigravity nebyla nalezena. Zkontrolujte prosím cestu výše.",
+      "noRows": "Žádná odpovídající data"
+    },
+    "errors": {
+      "loadFailed": "Nepodařilo se načíst spotřebu tokenů: {{error}}",
+      "syncFailed": "Prohledání spotřeby tokenů selhalo: {{error}}"
+    }
   }
 }

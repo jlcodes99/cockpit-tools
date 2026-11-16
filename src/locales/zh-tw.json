@@ -9355,5 +9355,125 @@
     "errorModel": "請輸入不重複的完整模型名稱，不支援萬用字元。",
     "errorSave": "讀取或儲存失敗，請重試。",
     "saved": "已儲存，後續請求使用新設定。"
+  },
+  "antigravityTokenUsage": {
+    "tab": "工作階段用量",
+    "subtitle": "Antigravity 本機工作階段 Token 用量統計",
+    "title": "Antigravity 工作階段 Token 用量",
+    "desc": "以唯讀方式從本機 Antigravity 工作階段資料庫（~/.gemini/antigravity）彙總真實 Token 用量，嚴格區分 Thinking 與 Output。",
+    "hint": "唯讀解析 SQLite steps/gen_metadata（支援 WAL 感知）、RPC 快取與 transcript JSONL。Output 已剔除 Thinking 避免重複計費；估算 Token（如有）與精確 API 用量嚴格分離。",
+    "summary": {
+      "badge": "本機 Token",
+      "input": "輸入",
+      "thinking": "思考",
+      "output": "輸出",
+      "cache": "快取",
+      "total": "合計",
+      "turns": "輪次",
+      "sessionsUnit": "個工作階段",
+      "scanning": "掃描中…",
+      "updating": "更新中…",
+      "detail": "詳情"
+    },
+    "range": {
+      "label": "時間範圍",
+      "today": "今日",
+      "7d": "近 7 天",
+      "30d": "近 30 天",
+      "month": "本月",
+      "all": "全部"
+    },
+    "granularity": {
+      "label": "時間粒度",
+      "day": "按日",
+      "week": "按週",
+      "month": "按月"
+    },
+    "kinds": {
+      "all": "全部類型",
+      "main": "主工作階段",
+      "swarm": "Swarm 協作",
+      "subagent": "子代理"
+    },
+    "filters": {
+      "kindLabel": "工作階段類型",
+      "modelLabel": "模型",
+      "workspaceLabel": "工作區",
+      "allModels": "全部模型",
+      "allWorkspaces": "全部工作區",
+      "searchPlaceholder": "搜尋標題、工作階段 ID、工作區、模型…"
+    },
+    "dataDir": {
+      "label": "資料目錄：",
+      "customBadge": "自訂",
+      "choose": "切換目錄",
+      "reset": "恢復預設"
+    },
+    "actions": {
+      "refresh": "重新整理",
+      "rebuild": "重新掃描",
+      "backToAccounts": "返回帳號總覽"
+    },
+    "rebuildConfirm": {
+      "title": "重新掃描",
+      "message": "將清空 Cockpit Tools 的本機掃描快取，並以唯讀方式重新讀取全部 Antigravity 工作階段資料。確認繼續？"
+    },
+    "status": {
+      "scanning": "正在掃描 Antigravity 工作階段資料庫…",
+      "ready": "已掃描 {{dbFiles}} 個 DB 檔案 · {{sessions}} 個工作階段 · {{turns}} 次回應",
+      "idle": "尚未掃描",
+      "cacheStats": "快取命中 {{hits}} / 新增 {{misses}}（{{durationMs}} ms）",
+      "scannedAt": "同步於 {{time}}"
+    },
+    "cards": {
+      "total": "合計 Tokens",
+      "totalExact": "精確合計 Tokens",
+      "input": "輸入 Tokens",
+      "thinking": "思考 Tokens",
+      "output": "輸出 Tokens",
+      "cache": "快取 Tokens",
+      "conversations": "工作階段數",
+      "turns": "回應輪次",
+      "coverage": "精確覆蓋率",
+      "avgPerDay": "活躍日均"
+    },
+    "estimated": {
+      "notice": "另有 {{turns}} 輪缺少原始 API 用量，已單獨估算（不計入精確合計）："
+    },
+    "trend": {
+      "title": "Token 用量趨勢",
+      "empty": "所選時間範圍暫無 Token 用量記錄"
+    },
+    "tables": {
+      "byModel": "依模型分佈",
+      "byWorkspace": "依工作區分佈",
+      "byKind": "依類型分佈（主工作階段 / Swarm / 子代理）",
+      "conversations": "工作階段明細列表",
+      "conversationTitle": "工作階段",
+      "modelName": "模型",
+      "workspaceName": "工作區",
+      "sessions": "工作階段",
+      "turns": "輪次",
+      "total": "合計",
+      "updatedAt": "更新時間"
+    },
+    "pagination": {
+      "info": "第 {{page}} / {{totalPages}} 頁（共 {{totalItems}} 個工作階段）"
+    },
+    "detail": {
+      "openParent": "開啟父工作階段",
+      "children": "子工作階段（Swarm / 子代理）",
+      "turnsTimeline": "逐輪 Token 時間軸"
+    },
+    "empty": {
+      "title": "目前篩選下暫無工作階段 Token 資料",
+      "desc": "可嘗試將時間範圍切換為「全部」，或在使用 Antigravity 後點擊重新整理。",
+      "dirMissing": "找不到 Antigravity 資料目錄，請檢查上方目錄路徑。",
+      "noRows": "暫無相符資料"
+    },
+    "errors": {
+      "loadFailed": "讀取 Token 用量失敗：{{error}}",
+      "syncFailed": "掃描 Token 用量失敗：{{error}}"
+    }
   }
 }

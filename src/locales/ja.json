@@ -9355,5 +9355,125 @@
     "errorModel": "重複やワイルドカードのない完全なモデル名を入力してください。",
     "errorSave": "設定の読み込みまたは保存に失敗しました。再試行してください。",
     "saved": "保存しました。次のリクエストから適用されます。"
+  },
+  "antigravityTokenUsage": {
+    "tab": "セッション使用量",
+    "subtitle": "Antigravity ローカルセッションのトークン使用量",
+    "title": "Antigravity セッショントークン使用量",
+    "desc": "ローカルの Antigravity セッション DB（~/.gemini/antigravity）を読み取り専用で集計し、Thinking と Output トークンを厳密に分離します。",
+    "hint": "SQLite steps/gen_metadata（WAL 対応）、RPC キャッシュ、transcript JSONL を読み取り専用で解析します。Output から Thinking を除外して二重計上を防ぎ、推定トークンは正確な API 集計とは別に保持します。",
+    "summary": {
+      "badge": "ローカルトークン",
+      "input": "入力",
+      "thinking": "思考",
+      "output": "出力",
+      "cache": "キャッシュ",
+      "total": "合計",
+      "turns": "ターン",
+      "sessionsUnit": "セッション",
+      "scanning": "スキャン中…",
+      "updating": "更新中…",
+      "detail": "詳細"
+    },
+    "range": {
+      "label": "期間",
+      "today": "今日",
+      "7d": "過去 7 日間",
+      "30d": "過去 30 日間",
+      "month": "今月",
+      "all": "全期間"
+    },
+    "granularity": {
+      "label": "集計単位",
+      "day": "日別",
+      "week": "週別",
+      "month": "月別"
+    },
+    "kinds": {
+      "all": "すべての種別",
+      "main": "メイン",
+      "swarm": "Swarm 協調",
+      "subagent": "サブエージェント"
+    },
+    "filters": {
+      "kindLabel": "セッション種別",
+      "modelLabel": "モデル",
+      "workspaceLabel": "ワークスペース",
+      "allModels": "すべてのモデル",
+      "allWorkspaces": "すべてのワークスペース",
+      "searchPlaceholder": "タイトル、セッション ID、ワークスペース、モデルを検索…"
+    },
+    "dataDir": {
+      "label": "データフォルダ：",
+      "customBadge": "カスタム",
+      "choose": "フォルダ変更",
+      "reset": "既定に戻す"
+    },
+    "actions": {
+      "refresh": "更新",
+      "rebuild": "再スキャン",
+      "backToAccounts": "アカウント一覧に戻る"
+    },
+    "rebuildConfirm": {
+      "title": "完全再スキャン",
+      "message": "Cockpit Tools のローカルスキャンキャッシュを消去し、Antigravity セッションファイルを読み取り専用で再読み込みします。続行しますか？"
+    },
+    "status": {
+      "scanning": "Antigravity セッション DB をスキャン中…",
+      "ready": "{{dbFiles}} 個の DB · {{sessions}} セッション · {{turns}} ターンを集計済み",
+      "idle": "未スキャン",
+      "cacheStats": "キャッシュ一致 {{hits}} / 新規 {{misses}}（{{durationMs}} ms）",
+      "scannedAt": "{{time}} に同期"
+    },
+    "cards": {
+      "total": "合計トークン",
+      "totalExact": "正確合計トークン",
+      "input": "入力トークン",
+      "thinking": "思考トークン",
+      "output": "出力トークン",
+      "cache": "キャッシュトークン",
+      "conversations": "会話数",
+      "turns": "ターン数",
+      "coverage": "正確カバレッジ",
+      "avgPerDay": "稼働日平均"
+    },
+    "estimated": {
+      "notice": "API 使用量が未記録の {{turns}} ターンは別途推定されました（正確合計には加算されません）："
+    },
+    "trend": {
+      "title": "トークン使用量の推移",
+      "empty": "選択した期間にトークン使用量の記録がありません"
+    },
+    "tables": {
+      "byModel": "モデル別内訳",
+      "byWorkspace": "ワークスペース別内訳",
+      "byKind": "セッション種別内訳（メイン / Swarm / サブエージェント）",
+      "conversations": "会話セッション一覧",
+      "conversationTitle": "会話",
+      "modelName": "モデル",
+      "workspaceName": "ワークスペース",
+      "sessions": "セッション",
+      "turns": "ターン",
+      "total": "合計",
+      "updatedAt": "更新日時"
+    },
+    "pagination": {
+      "info": "{{page}} / {{totalPages}} ページ（全 {{totalItems}} セッション）"
+    },
+    "detail": {
+      "openParent": "親セッションを開く",
+      "children": "子セッション（Swarm / サブエージェント）",
+      "turnsTimeline": "ターン別トークン履歴"
+    },
+    "empty": {
+      "title": "現在のフィルタに一致するトークン使用量がありません",
+      "desc": "期間を「全期間」に切り替えるか、Antigravity の使用後に「更新」をクリックしてください。",
+      "dirMissing": "Antigravity のデータフォルダが見つかりません。上のパスを確認してください。",
+      "noRows": "一致するデータがありません"
+    },
+    "errors": {
+      "loadFailed": "トークン使用量の読み込みに失敗しました：{{error}}",
+      "syncFailed": "トークン使用量のスキャンに失敗しました：{{error}}"
+    }
   }
 }

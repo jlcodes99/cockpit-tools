@@ -1905,6 +1905,11 @@ pub fn run() {
             commands::antigravity_legacy_instance::antigravity_legacy_stop_instance,
             commands::antigravity_legacy_instance::antigravity_legacy_open_instance_window,
             commands::antigravity_legacy_instance::antigravity_legacy_close_all_instances,
+            commands::antigravity_token_usage::antigravity_query_token_usage,
+            commands::antigravity_token_usage::antigravity_sync_token_usage,
+            commands::antigravity_token_usage::antigravity_get_conversation_token_detail,
+            commands::antigravity_token_usage::antigravity_get_token_usage_settings,
+            commands::antigravity_token_usage::antigravity_set_token_usage_data_dir,
         ])
         .build(context)
         .expect("error while building tauri application");

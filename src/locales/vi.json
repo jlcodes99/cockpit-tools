@@ -9355,5 +9355,125 @@
     "errorModel": "Nhập tên mô hình đầy đủ, không trùng và không có ký tự đại diện.",
     "errorSave": "Không thể tải hoặc lưu cài đặt. Hãy thử lại.",
     "saved": "Đã lưu. Áp dụng cho yêu cầu mới."
+  },
+  "antigravityTokenUsage": {
+    "tab": "Mức dùng phiên",
+    "subtitle": "Thống kê token cục bộ từ phiên Antigravity",
+    "title": "Thống kê Token sử dụng (Antigravity)",
+    "desc": "Tổng hợp lượng Token thực tế từ dữ liệu phiên cục bộ (~/.gemini/antigravity) ở chế độ chỉ đọc an toàn, tách bạch hoàn toàn Thinking và Output.",
+    "hint": "Chỉ đọc (Read-only) từ SQLite steps/gen_metadata (kèm nhận diện WAL), RPC cache và transcript JSONL. Output đã loại trừ Thinking để không bao giờ tính trùng; Token ước tính (nếu có) được tách riêng khỏi Token chính xác.",
+    "summary": {
+      "badge": "Token cục bộ",
+      "input": "Đầu vào",
+      "thinking": "Suy luận",
+      "output": "Đầu ra",
+      "cache": "Bộ đệm",
+      "total": "Tổng cộng",
+      "turns": "Lượt",
+      "sessionsUnit": "phiên",
+      "scanning": "Đang quét…",
+      "updating": "Đang cập nhật…",
+      "detail": "Chi tiết"
+    },
+    "range": {
+      "label": "Khoảng thời gian",
+      "today": "Hôm nay",
+      "7d": "7 ngày qua",
+      "30d": "30 ngày qua",
+      "month": "Tháng này",
+      "all": "Tất cả"
+    },
+    "granularity": {
+      "label": "Độ chi tiết",
+      "day": "Theo ngày",
+      "week": "Theo tuần",
+      "month": "Theo tháng"
+    },
+    "kinds": {
+      "all": "Tất cả loại",
+      "main": "Phiên chính",
+      "swarm": "Swarm (Bầy đàn)",
+      "subagent": "Tác nhân phụ"
+    },
+    "filters": {
+      "kindLabel": "Loại phiên",
+      "modelLabel": "Mô hình",
+      "workspaceLabel": "Thư mục làm việc",
+      "allModels": "Tất cả mô hình",
+      "allWorkspaces": "Tất cả thư mục",
+      "searchPlaceholder": "Tìm tiêu đề, ID phiên, thư mục, mô hình…"
+    },
+    "dataDir": {
+      "label": "Thư mục dữ liệu:",
+      "customBadge": "Tùy chỉnh",
+      "choose": "Đổi thư mục",
+      "reset": "Mặc định"
+    },
+    "actions": {
+      "refresh": "Làm mới",
+      "rebuild": "Quét lại",
+      "backToAccounts": "Quay lại tài khoản"
+    },
+    "rebuildConfirm": {
+      "title": "Quét lại toàn bộ",
+      "message": "Xóa bộ nhớ đệm quét cục bộ của Cockpit Tools và đọc lại toàn bộ dữ liệu phiên Antigravity ở chế độ chỉ đọc. Tiếp tục?"
+    },
+    "status": {
+      "scanning": "Đang quét cơ sở dữ liệu phiên Antigravity…",
+      "ready": "Đã quét {{dbFiles}} tệp DB · {{sessions}} phiên · {{turns}} lượt phản hồi",
+      "idle": "Chưa quét",
+      "cacheStats": "Bộ đệm {{hits}} khớp / {{misses}} mới ({{durationMs}} ms)",
+      "scannedAt": "Đồng bộ lúc {{time}}"
+    },
+    "cards": {
+      "total": "Tổng Token",
+      "totalExact": "Tổng Token chính xác",
+      "input": "Token đầu vào",
+      "thinking": "Token suy luận",
+      "output": "Token đầu ra",
+      "cache": "Token bộ đệm",
+      "conversations": "Phiên hội thoại",
+      "turns": "Lượt phản hồi",
+      "coverage": "Độ phủ chính xác",
+      "avgPerDay": "TB / ngày hoạt động"
+    },
+    "estimated": {
+      "notice": "Có {{turns}} lượt thiếu số liệu API gốc được ước tính riêng (không cộng vào Tổng chính xác):"
+    },
+    "trend": {
+      "title": "Xu hướng sử dụng Token",
+      "empty": "Chưa có dữ liệu token trong khoảng thời gian đã chọn"
+    },
+    "tables": {
+      "byModel": "Phân bổ theo Mô hình",
+      "byWorkspace": "Phân bổ theo Thư mục làm việc",
+      "byKind": "Phân bổ theo Loại phiên (Chính / Swarm / Tác nhân phụ)",
+      "conversations": "Chi tiết từng Phiên hội thoại",
+      "conversationTitle": "Phiên hội thoại",
+      "modelName": "Mô hình",
+      "workspaceName": "Thư mục",
+      "sessions": "Phiên",
+      "turns": "Lượt",
+      "total": "Tổng cộng",
+      "updatedAt": "Cập nhật"
+    },
+    "pagination": {
+      "info": "Trang {{page}} / {{totalPages}} ({{totalItems}} phiên)"
+    },
+    "detail": {
+      "openParent": "Mở phiên cha",
+      "children": "Phiên con (Swarm / Tác nhân phụ)",
+      "turnsTimeline": "Dòng thời gian từng lượt gọi"
+    },
+    "empty": {
+      "title": "Chưa có dữ liệu Token trong bộ lọc hiện tại",
+      "desc": "Thử mở rộng khoảng thời gian sang \"Tất cả\" hoặc nhấn Làm mới sau khi sử dụng Antigravity.",
+      "dirMissing": "Không tìm thấy thư mục dữ liệu Antigravity. Hãy kiểm tra lại đường dẫn thư mục ở trên.",
+      "noRows": "Không có dữ liệu phù hợp"
+    },
+    "errors": {
+      "loadFailed": "Không thể tải thống kê token: {{error}}",
+      "syncFailed": "Quét dữ liệu token thất bại: {{error}}"
+    }
   }
 }

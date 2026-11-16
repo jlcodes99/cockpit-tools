@@ -137,6 +137,11 @@ const DashboardPage = lazy(() =>
 const AccountsPage = lazy(() =>
   import('./pages/AccountsPage').then((module) => ({ default: module.AccountsPage })),
 );
+const AntigravityTokenUsagePage = lazy(() =>
+  import('./pages/AntigravityTokenUsagePage').then((module) => ({
+    default: module.AntigravityTokenUsagePage,
+  })),
+);
 const CodexAccountsPage = lazy(() =>
   import('./pages/CodexAccountsPage').then((module) => ({ default: module.CodexAccountsPage })),
 );
@@ -237,6 +242,7 @@ const RENDERABLE_PAGE_VALUES: readonly Page[] = [
   'dashboard',
   'api-relay',
   'overview',
+  'antigravity-usage',
   'codex',
   'claude',
   'claude-cli',
@@ -270,6 +276,7 @@ const RENDERABLE_PAGE_SET = new Set<string>(RENDERABLE_PAGE_VALUES);
 const TOP_PROMO_DEFAULT_EXCLUDED_PAGES: readonly Page[] = ['api-relay', 'settings'];
 const TOP_PROMO_PAGE_PLATFORM_TARGETS: Partial<Record<Page, readonly string[]>> = {
   overview: ['antigravity', 'antigravity-ide'],
+  'antigravity-usage': ['antigravity', 'antigravity-ide'],
   instances: ['antigravity', 'antigravity-ide'],
   wakeup: ['antigravity', 'antigravity-ide'],
   verification: ['antigravity', 'antigravity-ide'],
@@ -3805,6 +3812,9 @@ function MainApp() {
           </VisibleBootPage>
           <VisibleBootPage when={page === 'overview'}>
             <AccountsPage onNavigate={setPage} />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'antigravity-usage'}>
+            <AntigravityTokenUsagePage onNavigate={setPage} />
           </VisibleBootPage>
           {/* Codex suite: keep both pages mounted after first visit to avoid empty flash when switching. */}
           {shouldMountCodexSuite && (

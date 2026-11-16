@@ -9355,5 +9355,125 @@
     "errorModel": "Joker karakter içermeyen benzersiz, tam bir model adı girin.",
     "errorSave": "Ayarlar yüklenemedi veya kaydedilemedi. Yeniden deneyin.",
     "saved": "Kaydedildi. Yeni isteklerde uygulanır."
+  },
+  "antigravityTokenUsage": {
+    "tab": "Oturum Kullanımı",
+    "subtitle": "Antigravity oturumlarından yerel token kullanımı",
+    "title": "Antigravity Oturum Token Kullanımı",
+    "desc": "Yerel Antigravity oturum veritabanlarından (~/.gemini/antigravity) salt okunur modda gerçek token kullanımını toplar; Thinking ve Output tokenlarını kesin olarak ayırır.",
+    "hint": "SQLite steps/gen_metadata (WAL destekli), RPC önbelleği ve transcript JSONL salt okunur taranır. Çıktı tokenları Thinking değerini içermez (çift sayım yoktur); tahmini tokenlar kesin toplamdan ayrı tutulur.",
+    "summary": {
+      "badge": "Yerel Tokenlar",
+      "input": "Girdi",
+      "thinking": "Düşünme",
+      "output": "Çıktı",
+      "cache": "Önbellek",
+      "total": "Toplam",
+      "turns": "Turlar",
+      "sessionsUnit": "oturum",
+      "scanning": "Taranıyor…",
+      "updating": "Güncelleniyor…",
+      "detail": "Ayrıntılar"
+    },
+    "range": {
+      "label": "Zaman Aralığı",
+      "today": "Bugün",
+      "7d": "Son 7 Gün",
+      "30d": "Son 30 Gün",
+      "month": "Bu Ay",
+      "all": "Tüm Zamanlar"
+    },
+    "granularity": {
+      "label": "Ayrıntı Düzeyi",
+      "day": "Günlük",
+      "week": "Haftalık",
+      "month": "Aylık"
+    },
+    "kinds": {
+      "all": "Tüm Türler",
+      "main": "Ana Oturum",
+      "swarm": "Sürü (Swarm)",
+      "subagent": "Alt Ajan"
+    },
+    "filters": {
+      "kindLabel": "Oturum Türü",
+      "modelLabel": "Yapay Zeka Modeli",
+      "workspaceLabel": "Çalışma Alanı",
+      "allModels": "Tüm Modeller",
+      "allWorkspaces": "Tüm Çalışma Alanları",
+      "searchPlaceholder": "Başlık, oturum kimliği, klasör, model ara…"
+    },
+    "dataDir": {
+      "label": "Veri Klasörü:",
+      "customBadge": "Özel",
+      "choose": "Klasör Değiştir",
+      "reset": "Varsayılana Dön"
+    },
+    "actions": {
+      "refresh": "Yenile",
+      "rebuild": "Yeniden Tara",
+      "backToAccounts": "Hesaplara Dön"
+    },
+    "rebuildConfirm": {
+      "title": "Tam Yeniden Tarama",
+      "message": "Cockpit Tools yerel tarama önbelleği temizlenecek ve tüm Antigravity oturum dosyaları salt okunur modda yeniden okunacak. Devam edilsin mi?"
+    },
+    "status": {
+      "scanning": "Antigravity oturum veritabanları taranıyor…",
+      "ready": "{{dbFiles}} DB dosyası · {{sessions}} oturum · {{turns}} tur tarandı",
+      "idle": "Henüz taranmadı",
+      "cacheStats": "Önbellek {{hits}} isabet / {{misses}} yeni ({{durationMs}} ms)",
+      "scannedAt": "{{time}} eşitlendi"
+    },
+    "cards": {
+      "total": "Toplam Token",
+      "totalExact": "Kesin Toplam Token",
+      "input": "Girdi Tokenları",
+      "thinking": "Düşünme Tokenları",
+      "output": "Çıktı Tokenları",
+      "cache": "Önbellek Tokenları",
+      "conversations": "Sohbetler",
+      "turns": "Yanıt Turları",
+      "coverage": "Kesin Kapsam",
+      "avgPerDay": "Ort. / Aktif Gün"
+    },
+    "estimated": {
+      "notice": "Ham API verisi bulunmayan {{turns}} tur ayrıca tahmin edildi (Kesin Toplama eklenmez):"
+    },
+    "trend": {
+      "title": "Token Kullanım Eğilimi",
+      "empty": "Seçilen zaman aralığında kayıtlı token kullanımı yok"
+    },
+    "tables": {
+      "byModel": "Modele Göre",
+      "byWorkspace": "Çalışma Alanına Göre",
+      "byKind": "Oturum Türüne Göre (Ana / Swarm / Alt Ajan)",
+      "conversations": "Sohbet Oturumları",
+      "conversationTitle": "Sohbet",
+      "modelName": "Yapay Zeka Modeli",
+      "workspaceName": "Çalışma Alanı",
+      "sessions": "Oturumlar",
+      "turns": "Turlar",
+      "total": "Toplam",
+      "updatedAt": "Güncellendi"
+    },
+    "pagination": {
+      "info": "Sayfa {{page}} / {{totalPages}} ({{totalItems}} oturum)"
+    },
+    "detail": {
+      "openParent": "Üst Oturumu Aç",
+      "children": "Alt Oturumlar (Swarm / Alt Ajan)",
+      "turnsTimeline": "Tur Bazlı Token Zaman Çizelgesi"
+    },
+    "empty": {
+      "title": "Mevcut filtreler için token kullanımı bulunamadı",
+      "desc": "Zaman Aralığını \"Tüm Zamanlar\" yapmayı deneyin veya Antigravity kullandıktan sonra Yenile düğmesine tıklayın.",
+      "dirMissing": "Antigravity veri dizini bulunamadı. Lütfen yukarıdaki klasör yolunu kontrol edin.",
+      "noRows": "Eşleşen veri yok"
+    },
+    "errors": {
+      "loadFailed": "Token kullanımı yüklenemedi: {{error}}",
+      "syncFailed": "Token kullanımı taranamadı: {{error}}"
+    }
   }
 }

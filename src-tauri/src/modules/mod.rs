@@ -26,6 +26,7 @@ pub mod antigravity_legacy_instance;
 pub mod antigravity_paths;
 pub(crate) mod antigravity_shared_switch;
 pub mod antigravity_switch_history;
+pub mod antigravity_token_usage;
 pub mod app_lifecycle;
 pub mod atomic_write;
 pub mod auto_local_import;

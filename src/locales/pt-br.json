@@ -9355,5 +9355,125 @@
     "errorModel": "Informe um nome de modelo completo e único, sem curingas.",
     "errorSave": "Não foi possível carregar ou salvar. Tente novamente.",
     "saved": "Salvo. Aplicado às próximas solicitações."
+  },
+  "antigravityTokenUsage": {
+    "tab": "Uso da sessão",
+    "subtitle": "Consumo local de tokens das sessões do Antigravity",
+    "title": "Uso de Tokens por Sessão (Antigravity)",
+    "desc": "Agrega o consumo real de tokens dos bancos locais do Antigravity (~/.gemini/antigravity) em modo somente leitura, separando estritamente Thinking e Output.",
+    "hint": "Leitura segura do SQLite steps/gen_metadata (compatível com WAL), cache RPC e transcript JSONL. Output exclui Thinking (sem contagem dupla); tokens estimados ficam separados do total exato.",
+    "summary": {
+      "badge": "Tokens locais",
+      "input": "Entrada",
+      "thinking": "Raciocínio",
+      "output": "Saída",
+      "cache": "Memória cache",
+      "total": "Soma geral",
+      "turns": "Turnos",
+      "sessionsUnit": "sessões",
+      "scanning": "Verificando…",
+      "updating": "Atualizando…",
+      "detail": "Detalhes"
+    },
+    "range": {
+      "label": "Período",
+      "today": "Hoje",
+      "7d": "Últimos 7 dias",
+      "30d": "Últimos 30 dias",
+      "month": "Este mês",
+      "all": "Todo o período"
+    },
+    "granularity": {
+      "label": "Granularidade",
+      "day": "Diária",
+      "week": "Semanal",
+      "month": "Mensal"
+    },
+    "kinds": {
+      "all": "Todos os tipos",
+      "main": "Principal",
+      "swarm": "Enxame (Swarm)",
+      "subagent": "Subagente"
+    },
+    "filters": {
+      "kindLabel": "Tipo de sessão",
+      "modelLabel": "Modelo",
+      "workspaceLabel": "Workspace local",
+      "allModels": "Todos os modelos",
+      "allWorkspaces": "Todos os workspaces",
+      "searchPlaceholder": "Buscar título, ID da sessão, pasta, modelo…"
+    },
+    "dataDir": {
+      "label": "Pasta de dados:",
+      "customBadge": "Personalizado",
+      "choose": "Alterar pasta",
+      "reset": "Restaurar padrão"
+    },
+    "actions": {
+      "refresh": "Atualizar",
+      "rebuild": "Reescanear",
+      "backToAccounts": "Voltar às contas"
+    },
+    "rebuildConfirm": {
+      "title": "Varredura completa",
+      "message": "Limpar o cache local do Cockpit Tools e reler todos os arquivos de sessão do Antigravity em modo somente leitura. Continuar?"
+    },
+    "status": {
+      "scanning": "Verificando bancos de sessões do Antigravity…",
+      "ready": "{{dbFiles}} arquivos DB · {{sessions}} sessões · {{turns}} turnos lidos",
+      "idle": "Ainda não verificado",
+      "cacheStats": "Cache {{hits}} acertos / {{misses}} novos ({{durationMs}} ms)",
+      "scannedAt": "Sincronizado em {{time}}"
+    },
+    "cards": {
+      "total": "Total de tokens",
+      "totalExact": "Total exato de tokens",
+      "input": "Tokens de entrada",
+      "thinking": "Tokens de raciocínio",
+      "output": "Tokens de saída",
+      "cache": "Tokens em cache",
+      "conversations": "Conversas",
+      "turns": "Turnos",
+      "coverage": "Cobertura exata",
+      "avgPerDay": "Média / dia ativo"
+    },
+    "estimated": {
+      "notice": "{{turns}} turnos sem métricas brutas da API foram estimados separadamente (nunca somados ao total exato):"
+    },
+    "trend": {
+      "title": "Tendência de uso de tokens",
+      "empty": "Nenhum consumo registrado no período selecionado"
+    },
+    "tables": {
+      "byModel": "Por modelo",
+      "byWorkspace": "Por pasta de trabalho",
+      "byKind": "Por tipo de sessão (Principal / Swarm / Subagente)",
+      "conversations": "Sessões de conversa",
+      "conversationTitle": "Conversa",
+      "modelName": "Modelo",
+      "workspaceName": "Pasta de trabalho",
+      "sessions": "Sessões",
+      "turns": "Turnos",
+      "total": "Soma geral",
+      "updatedAt": "Atualizado"
+    },
+    "pagination": {
+      "info": "Página {{page}} / {{totalPages}} ({{totalItems}} sessões)"
+    },
+    "detail": {
+      "openParent": "Abrir sessão pai",
+      "children": "Sessões filhas (Swarm / Subagente)",
+      "turnsTimeline": "Linha do tempo por turno"
+    },
+    "empty": {
+      "title": "Nenhum uso de tokens encontrado para os filtros atuais",
+      "desc": "Tente mudar o período para \"Todo o período\" ou clique em Atualizar após usar o Antigravity.",
+      "dirMissing": "Diretório de dados do Antigravity não encontrado. Verifique o caminho acima.",
+      "noRows": "Nenhum dado correspondente"
+    },
+    "errors": {
+      "loadFailed": "Falha ao carregar uso de tokens: {{error}}",
+      "syncFailed": "Falha ao verificar uso de tokens: {{error}}"
+    }
   }
 }

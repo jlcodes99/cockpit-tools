@@ -9355,5 +9355,125 @@
     "errorModel": "중복이나 와일드카드 없이 전체 모델 이름을 입력하세요.",
     "errorSave": "설정을 불러오거나 저장하지 못했습니다. 다시 시도하세요.",
     "saved": "저장되었습니다. 다음 요청부터 적용됩니다."
+  },
+  "antigravityTokenUsage": {
+    "tab": "세션 사용량",
+    "subtitle": "Antigravity 로컬 세션 토큰 사용량",
+    "title": "Antigravity 세션 토큰 사용량",
+    "desc": "로컬 Antigravity 세션 데이터베이스(~/.gemini/antigravity)를 읽기 전용으로 집계하며, Thinking 토큰과 Output 토큰을 엄격히 분리합니다.",
+    "hint": "SQLite steps/gen_metadata(WAL 인식), RPC 캐시 및 transcript JSONL을 읽기 전용으로 스캔합니다. Output에서 Thinking을 제외하여 중복 계산을 방지하며, 추정 토큰은 정확한 API 합계와 별도로 집계됩니다.",
+    "summary": {
+      "badge": "로컬 토큰",
+      "input": "입력",
+      "thinking": "사고",
+      "output": "출력",
+      "cache": "캐시",
+      "total": "합계",
+      "turns": "턴",
+      "sessionsUnit": "세션",
+      "scanning": "스캔 중…",
+      "updating": "업데이트 중…",
+      "detail": "상세"
+    },
+    "range": {
+      "label": "기간",
+      "today": "오늘",
+      "7d": "최근 7일",
+      "30d": "최근 30일",
+      "month": "이번 달",
+      "all": "전체 기간"
+    },
+    "granularity": {
+      "label": "집계 단위",
+      "day": "일별",
+      "week": "주별",
+      "month": "월별"
+    },
+    "kinds": {
+      "all": "모든 유형",
+      "main": "기본 세션",
+      "swarm": "Swarm 협업",
+      "subagent": "하위 에이전트"
+    },
+    "filters": {
+      "kindLabel": "세션 유형",
+      "modelLabel": "모델",
+      "workspaceLabel": "작업 공간",
+      "allModels": "모든 모델",
+      "allWorkspaces": "모든 작업 공간",
+      "searchPlaceholder": "제목, 세션 ID, 작업 공간, 모델 검색…"
+    },
+    "dataDir": {
+      "label": "데이터 폴더:",
+      "customBadge": "사용자 지정",
+      "choose": "폴더 변경",
+      "reset": "기본값 복원"
+    },
+    "actions": {
+      "refresh": "새로고침",
+      "rebuild": "전체 재스캔",
+      "backToAccounts": "계정 목록으로"
+    },
+    "rebuildConfirm": {
+      "title": "전체 재스캔",
+      "message": "Cockpit Tools 로컬 스캔 캐시를 비우고 모든 Antigravity 세션 파일을 읽기 전용 모드로 다시 읽습니다. 계속할까요?"
+    },
+    "status": {
+      "scanning": "Antigravity 세션 데이터베이스 스캔 중…",
+      "ready": "DB 파일 {{dbFiles}}개 · 세션 {{sessions}}개 · {{turns}}턴 스캔 완료",
+      "idle": "아직 스캔되지 않음",
+      "cacheStats": "캐시 적중 {{hits}} / 신규 {{misses}} ({{durationMs}} ms)",
+      "scannedAt": "{{time}} 동기화됨"
+    },
+    "cards": {
+      "total": "총 토큰",
+      "totalExact": "정확한 총 토큰",
+      "input": "입력 토큰",
+      "thinking": "사고 토큰",
+      "output": "출력 토큰",
+      "cache": "캐시 토큰",
+      "conversations": "대화 수",
+      "turns": "응답 턴",
+      "coverage": "정확도 범위",
+      "avgPerDay": "활성일 평균"
+    },
+    "estimated": {
+      "notice": "원본 API 사용량이 없는 {{turns}}턴은 별도로 추정되었습니다(정확한 합계에 합산되지 않음):"
+    },
+    "trend": {
+      "title": "토큰 사용량 추이",
+      "empty": "선택한 기간에 기록된 토큰 사용량이 없습니다"
+    },
+    "tables": {
+      "byModel": "모델별 분포",
+      "byWorkspace": "작업 공간별 분포",
+      "byKind": "세션 유형별 분포 (기본 / Swarm / 하위 에이전트)",
+      "conversations": "대화 세션 목록",
+      "conversationTitle": "대화",
+      "modelName": "모델",
+      "workspaceName": "작업 공간",
+      "sessions": "세션",
+      "turns": "턴",
+      "total": "합계",
+      "updatedAt": "업데이트 시간"
+    },
+    "pagination": {
+      "info": "{{page}} / {{totalPages}} 페이지 (총 {{totalItems}}개 세션)"
+    },
+    "detail": {
+      "openParent": "상위 세션 열기",
+      "children": "하위 세션 (Swarm / 하위 에이전트)",
+      "turnsTimeline": "턴별 토큰 타임라인"
+    },
+    "empty": {
+      "title": "현재 필터에 해당하는 토큰 사용량이 없습니다",
+      "desc": "기간을 \"전체 기간\"으로 변경하거나 Antigravity 사용 후 새로고침을 클릭해 보세요.",
+      "dirMissing": "Antigravity 데이터 폴더를 찾을 수 없습니다. 위의 폴더 경로를 확인해 주세요.",
+      "noRows": "일치하는 데이터 없음"
+    },
+    "errors": {
+      "loadFailed": "토큰 사용량을 불러오지 못했습니다: {{error}}",
+      "syncFailed": "토큰 사용량 스캔에 실패했습니다: {{error}}"
+    }
   }
 }

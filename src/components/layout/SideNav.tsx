@@ -122,7 +122,13 @@ function renderEntryIcon(entry: SideNavEntry, size: number) {
 }
 
 function isAntigravitySuitePage(page: Page): boolean {
-  return page === 'overview' || page === 'instances' || page === 'wakeup' || page === 'verification';
+  return (
+    page === 'overview' ||
+    page === 'antigravity-usage' ||
+    page === 'instances' ||
+    page === 'wakeup' ||
+    page === 'verification'
+  );
 }
 
 export function SideNav({

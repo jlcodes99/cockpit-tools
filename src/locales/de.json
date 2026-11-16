@@ -9355,5 +9355,125 @@
     "errorModel": "Eindeutigen, vollständigen Modellnamen ohne Platzhalter angeben.",
     "errorSave": "Einstellungen konnten nicht geladen oder gespeichert werden. Erneut versuchen.",
     "saved": "Gespeichert. Gilt für neue Anfragen."
+  },
+  "antigravityTokenUsage": {
+    "tab": "Sitzungsnutzung",
+    "subtitle": "Lokaler Token-Verbrauch aus Antigravity-Sitzungen",
+    "title": "Antigravity-Sitzungs-Token-Nutzung",
+    "desc": "Aggregiert den tatsächlichen Token-Verbrauch aus lokalen Antigravity-Sitzungsdatenbanken (~/.gemini/antigravity) im Nur-Lese-Modus und trennt Thinking- sowie Output-Token strikt.",
+    "hint": "Schreibgeschützter Scan von SQLite steps/gen_metadata (WAL-fähig), RPC-Cache und Transcript-JSONL. Output-Token enthalten keine Thinking-Token (keine Doppelzählung); geschätzte Token bleiben getrennt.",
+    "summary": {
+      "badge": "Lokale Token",
+      "input": "Eingabe",
+      "thinking": "Denken",
+      "output": "Ausgabe",
+      "cache": "Zwischenspeicher",
+      "total": "Gesamt",
+      "turns": "Schritte",
+      "sessionsUnit": "Sitzungen",
+      "scanning": "Scanne…",
+      "updating": "Aktualisiere…",
+      "detail": "Details anzeigen"
+    },
+    "range": {
+      "label": "Zeitraum",
+      "today": "Heute",
+      "7d": "Letzte 7 Tage",
+      "30d": "Letzte 30 Tage",
+      "month": "Dieser Monat",
+      "all": "Gesamter Zeitraum"
+    },
+    "granularity": {
+      "label": "Auflösung",
+      "day": "Täglich",
+      "week": "Wöchentlich",
+      "month": "Monatlich"
+    },
+    "kinds": {
+      "all": "Alle Typen",
+      "main": "Hauptsitzung",
+      "swarm": "Schwarm (Swarm)",
+      "subagent": "Unteragent"
+    },
+    "filters": {
+      "kindLabel": "Sitzungstyp",
+      "modelLabel": "Modell",
+      "workspaceLabel": "Arbeitsbereich",
+      "allModels": "Alle Modelle",
+      "allWorkspaces": "Alle Arbeitsbereiche",
+      "searchPlaceholder": "Titel, Sitzungs-ID, Arbeitsbereich, Modell suchen…"
+    },
+    "dataDir": {
+      "label": "Datenordner:",
+      "customBadge": "Benutzerdefiniert",
+      "choose": "Ordner ändern",
+      "reset": "Standard wiederherstellen"
+    },
+    "actions": {
+      "refresh": "Aktualisieren",
+      "rebuild": "Neu scannen",
+      "backToAccounts": "Zurück zu Konten"
+    },
+    "rebuildConfirm": {
+      "title": "Vollständiger Neuscan",
+      "message": "Lokalen Scan-Cache von Cockpit Tools leeren und alle Antigravity-Sitzungsdateien schreibgeschützt neu einlesen. Fortfahren?"
+    },
+    "status": {
+      "scanning": "Scanne Antigravity-Sitzungsdatenbanken…",
+      "ready": "{{dbFiles}} DB-Dateien · {{sessions}} Sitzungen · {{turns}} Runden gescannt",
+      "idle": "Noch nicht gescannt",
+      "cacheStats": "Cache {{hits}} Treffer / {{misses}} neu ({{durationMs}} ms)",
+      "scannedAt": "Synchronisiert {{time}}"
+    },
+    "cards": {
+      "total": "Gesamt-Token",
+      "totalExact": "Exakte Gesamt-Token",
+      "input": "Eingabe-Token",
+      "thinking": "Denk-Token",
+      "output": "Ausgabe-Token",
+      "cache": "Cache-Token",
+      "conversations": "Unterhaltungen",
+      "turns": "Antwortrunden",
+      "coverage": "Exakte Abdeckung",
+      "avgPerDay": "Ø / aktiver Tag"
+    },
+    "estimated": {
+      "notice": "{{turns}} Runden ohne direkte API-Messwerte wurden separat geschätzt (nicht zur exakten Summe addiert):"
+    },
+    "trend": {
+      "title": "Token-Nutzungstrend",
+      "empty": "Keine Token-Nutzung im gewählten Zeitraum aufgezeichnet"
+    },
+    "tables": {
+      "byModel": "Nach Modell",
+      "byWorkspace": "Nach Arbeitsbereich",
+      "byKind": "Nach Sitzungstyp (Haupt / Swarm / Unteragent)",
+      "conversations": "Konversationssitzungen",
+      "conversationTitle": "Unterhaltung",
+      "modelName": "Modell",
+      "workspaceName": "Arbeitsbereich",
+      "sessions": "Sitzungen",
+      "turns": "Runden",
+      "total": "Gesamt",
+      "updatedAt": "Aktualisiert"
+    },
+    "pagination": {
+      "info": "Seite {{page}} / {{totalPages}} ({{totalItems}} Sitzungen)"
+    },
+    "detail": {
+      "openParent": "Übergeordnete Sitzung öffnen",
+      "children": "Untersitzungen (Swarm / Unteragent)",
+      "turnsTimeline": "Token-Verlauf pro Runde"
+    },
+    "empty": {
+      "title": "Keine Token-Nutzung für aktuelle Filter gefunden",
+      "desc": "Wechseln Sie den Zeitraum auf „Gesamter Zeitraum“ oder klicken Sie nach der Nutzung von Antigravity auf Aktualisieren.",
+      "dirMissing": "Antigravity-Datenverzeichnis wurde nicht gefunden. Bitte prüfen Sie den Pfad oben.",
+      "noRows": "Keine passenden Daten"
+    },
+    "errors": {
+      "loadFailed": "Token-Nutzung konnte nicht geladen werden: {{error}}",
+      "syncFailed": "Scan der Token-Nutzung fehlgeschlagen: {{error}}"
+    }
   }
 }

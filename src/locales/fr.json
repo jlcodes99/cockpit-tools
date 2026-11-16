@@ -9355,5 +9355,125 @@
     "errorModel": "Saisissez un nom de modèle unique et complet, sans caractères génériques.",
     "errorSave": "Échec du chargement ou de l’enregistrement. Réessayez.",
     "saved": "Enregistré. Appliqué aux prochaines requêtes."
+  },
+  "antigravityTokenUsage": {
+    "tab": "Utilisation sessions",
+    "subtitle": "Consommation locale de jetons des sessions Antigravity",
+    "title": "Utilisation des jetons Antigravity",
+    "desc": "Agrège en lecture seule la consommation réelle de jetons depuis les bases locales Antigravity (~/.gemini/antigravity), en séparant strictement Thinking et Output.",
+    "hint": "Analyse en lecture seule de SQLite steps/gen_metadata (compatible WAL), du cache RPC et des journaux JSONL. La sortie exclut Thinking (aucun double comptage) ; les jetons estimés restent séparés du cumul exact.",
+    "summary": {
+      "badge": "Jetons locaux",
+      "input": "Entrée",
+      "thinking": "Réflexion",
+      "output": "Sortie",
+      "cache": "Mémoire cache",
+      "total": "Cumul",
+      "turns": "Tours",
+      "sessionsUnit": "discussions",
+      "scanning": "Analyse…",
+      "updating": "Actualisation…",
+      "detail": "Détails"
+    },
+    "range": {
+      "label": "Période",
+      "today": "Aujourd’hui",
+      "7d": "7 derniers jours",
+      "30d": "30 derniers jours",
+      "month": "Ce mois-ci",
+      "all": "Toute la période"
+    },
+    "granularity": {
+      "label": "Granularité",
+      "day": "Quotidienne",
+      "week": "Hebdomadaire",
+      "month": "Mensuelle"
+    },
+    "kinds": {
+      "all": "Tous les types",
+      "main": "Principale",
+      "swarm": "Essaim (Swarm)",
+      "subagent": "Sous-agent"
+    },
+    "filters": {
+      "kindLabel": "Type de session",
+      "modelLabel": "Modèle",
+      "workspaceLabel": "Espace de travail",
+      "allModels": "Tous les modèles",
+      "allWorkspaces": "Tous les espaces",
+      "searchPlaceholder": "Rechercher titre, ID de session, espace, modèle…"
+    },
+    "dataDir": {
+      "label": "Dossier de données :",
+      "customBadge": "Personnalisé",
+      "choose": "Changer de dossier",
+      "reset": "Par défaut"
+    },
+    "actions": {
+      "refresh": "Actualiser",
+      "rebuild": "Réanalyser",
+      "backToAccounts": "Retour aux comptes"
+    },
+    "rebuildConfirm": {
+      "title": "Réanalyse complète",
+      "message": "Vider le cache local de Cockpit Tools et relire tous les fichiers de session Antigravity en lecture seule. Continuer ?"
+    },
+    "status": {
+      "scanning": "Analyse des bases de sessions Antigravity…",
+      "ready": "{{dbFiles}} fichiers DB analysés · {{sessions}} sessions · {{turns}} tours",
+      "idle": "Pas encore analysé",
+      "cacheStats": "Cache : {{hits}} succès / {{misses}} nouveaux ({{durationMs}} ms)",
+      "scannedAt": "Synchronisé à {{time}}"
+    },
+    "cards": {
+      "total": "Jetons cumulés",
+      "totalExact": "Jetons exacts cumulés",
+      "input": "Jetons d’entrée",
+      "thinking": "Jetons de réflexion",
+      "output": "Jetons de sortie",
+      "cache": "Jetons en cache",
+      "conversations": "Discussions",
+      "turns": "Tours de réponse",
+      "coverage": "Couverture exacte",
+      "avgPerDay": "Moy. / jour actif"
+    },
+    "estimated": {
+      "notice": "{{turns}} tours sans mesures API brutes ont été estimés séparément (jamais ajoutés au cumul exact) :"
+    },
+    "trend": {
+      "title": "Tendance de consommation de jetons",
+      "empty": "Aucune consommation enregistrée sur la période sélectionnée"
+    },
+    "tables": {
+      "byModel": "Par modèle",
+      "byWorkspace": "Par espace de travail",
+      "byKind": "Par type de session (Principale / Swarm / Sous-agent)",
+      "conversations": "Sessions de conversation",
+      "conversationTitle": "Discussion",
+      "modelName": "Modèle",
+      "workspaceName": "Espace de travail",
+      "sessions": "Discussions",
+      "turns": "Tours",
+      "total": "Cumul",
+      "updatedAt": "Mis à jour"
+    },
+    "pagination": {
+      "info": "Page {{page}} / {{totalPages}} ({{totalItems}} discussions)"
+    },
+    "detail": {
+      "openParent": "Ouvrir la session parente",
+      "children": "Sessions enfants (Swarm / Sous-agent)",
+      "turnsTimeline": "Chronologie des jetons tour par tour"
+    },
+    "empty": {
+      "title": "Aucune donnée pour les filtres actuels",
+      "desc": "Essayez de passer la période sur « Toute la période » ou cliquez sur Actualiser après avoir utilisé Antigravity.",
+      "dirMissing": "Dossier de données Antigravity introuvable. Vérifiez le chemin ci-dessus.",
+      "noRows": "Aucune donnée correspondante"
+    },
+    "errors": {
+      "loadFailed": "Impossible de charger la consommation : {{error}}",
+      "syncFailed": "Échec de l’analyse des jetons : {{error}}"
+    }
   }
 }

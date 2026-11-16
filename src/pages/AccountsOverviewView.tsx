@@ -12,6 +12,7 @@ import { ModalErrorMessage } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { ANTIGRAVITY_RESET_SORT_PREFIX } from '../utils/antigravityAccountSort';
 import { OverviewTabsHeader } from '../components/OverviewTabsHeader';
+import { AntigravityTokenUsageSummary } from '../components/antigravity/AntigravityTokenUsageSummary';
 import { FileCorruptedModal } from '../components/FileCorruptedModal';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
@@ -234,6 +235,10 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
           onNavigate={onNavigate}
           onOpenManual={() => onNavigate?.('manual')}
           subtitle={t('overview.subtitle')}
+        />
+
+        <AntigravityTokenUsageSummary
+          onOpenDetail={() => onNavigate?.('antigravity-usage')}
         />
 
         {/* 工具栏 */}
