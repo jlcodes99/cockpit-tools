@@ -2886,6 +2886,7 @@
     "installing": "Installing...",
     "authorizing": "Waiting for system authorization...",
     "installFailed": "System installation failed. Try again later or download manually.",
+    "installFailedTranslocated": "The app is running from a read-only location (macOS App Translocation), so the update cannot be installed. Quit Cockpit Tools, move it to the Applications folder in Finder, open it again, then retry the update.",
     "restartRequiredAfterInstall": "The update is installed. Restart the app manually to finish switching.",
     "stoppingApiService": "Stopping API service...",
     "stopApiServiceFailed": "Couldn't stop the API service. Disable it first and try again.",

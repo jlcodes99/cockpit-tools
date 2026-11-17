@@ -2691,6 +2691,7 @@
     "installing": "Memasang...",
     "authorizing": "Menunggu otorisasi sistem...",
     "installFailed": "Instalasi sistem gagal. Coba lagi nanti atau unduh secara manual.",
+    "installFailedTranslocated": "Aplikasi berjalan dari lokasi baca-saja (macOS App Translocation), sehingga pembaruan tidak dapat dipasang. Keluar dari Cockpit Tools, pindahkan ke folder Applications di Finder, buka kembali, lalu coba perbarui lagi.",
     "restartRequiredAfterInstall": "Pembaruan terpasang. Mulai ulang aplikasi secara manual untuk menyelesaikan peralihan.",
     "stoppingApiService": "Menghentikan layanan API...",
     "stopApiServiceFailed": "Layanan API tidak dapat dihentikan. Nonaktifkan dulu, lalu coba lagi.",

@@ -61,6 +61,15 @@ pub struct UpdateRuntimeInfo {
     pub linux_install_kind: String,
     pub linux_managed_install_supported: bool,
     pub updater_target: Option<String>,
+    pub macos_translocated: bool,
+}
+
+/// Gatekeeper App Translocation runs quarantined apps from a read-only mount whose path
+/// contains an `AppTranslocation` directory, so in-place updates cannot be installed there.
+#[cfg(any(target_os = "macos", test))]
+fn is_translocated_path(path: &std::path::Path) -> bool {
+    path.components()
+        .any(|component| component.as_os_str() == "AppTranslocation")
 }
 
 #[cfg(target_os = "windows")]
@@ -165,6 +174,7 @@ mod imp {
                 LinuxInstallKind::Deb | LinuxInstallKind::Rpm
             ),
             updater_target: current_platform_key(install_kind).ok(),
+            macos_translocated: false,
         }
     }
 
@@ -685,6 +695,18 @@ mod imp {
         None
     }
 
+    #[cfg(target_os = "macos")]
+    fn macos_translocated() -> bool {
+        std::env::current_exe()
+            .map(|current_exe| super::is_translocated_path(&current_exe))
+            .unwrap_or(false)
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn macos_translocated() -> bool {
+        false
+    }
+
     pub fn get_update_runtime_info() -> UpdateRuntimeInfo {
         let platform = if cfg!(target_os = "macos") {
             "macos"
@@ -699,6 +721,7 @@ mod imp {
             linux_install_kind: "unknown".to_string(),
             linux_managed_install_supported: false,
             updater_target: desktop_updater_target(),
+            macos_translocated: macos_translocated(),
         }
     }
 
@@ -715,8 +738,32 @@ pub use imp::{get_update_runtime_info, install_linux_update};
 #[cfg(test)]
 mod tests {
     use super::{
-        expand_updater_endpoint, windows_updater_target_for_bundle, LatestManifest, LatestPlatform,
+        expand_updater_endpoint, is_translocated_path, windows_updater_target_for_bundle,
+        LatestManifest, LatestPlatform,
     };
+    use std::path::Path;
+
+    #[test]
+    fn detects_macos_app_translocation_path() {
+        let translocated = Path::new(
+            "/private/var/folders/xx/yyyy/T/AppTranslocation/0F3C2B1A-1234-5678-9ABC-DEF012345678/d/Cockpit Tools.app/Contents/MacOS/cockpit-tools",
+        );
+        assert!(is_translocated_path(translocated));
+    }
+
+    #[test]
+    fn regular_applications_path_is_not_translocated() {
+        let installed = Path::new("/Applications/Cockpit Tools.app/Contents/MacOS/cockpit-tools");
+        assert!(!is_translocated_path(installed));
+    }
+
+    #[test]
+    fn translocation_substring_in_other_name_is_not_translocated() {
+        let lookalike = Path::new(
+            "/Users/me/MyAppTranslocationBackup/Cockpit Tools.app/Contents/MacOS/cockpit-tools",
+        );
+        assert!(!is_translocated_path(lookalike));
+    }
 
     #[test]
     fn windows_updater_target_uses_bundle_then_directory_writability() {

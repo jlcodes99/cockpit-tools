@@ -11,6 +11,7 @@ export type UpdateRuntimeInfo = {
   linux_install_kind: string;
   linux_managed_install_supported: boolean;
   updater_target?: string | null;
+  macos_translocated?: boolean;
 };
 
 export type LinuxUpdateProgressPhase =

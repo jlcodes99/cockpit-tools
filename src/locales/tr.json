@@ -2642,6 +2642,7 @@
     "installing": "Yükleniyor...",
     "authorizing": "Sistem yetkisi bekleniyor...",
     "installFailed": "Sistem kurulumu başarısız oldu. Daha sonra yeniden deneyin veya paketi manuel indirin.",
+    "installFailedTranslocated": "Uygulama salt okunur bir konumdan çalışıyor (macOS App Translocation), bu nedenle güncelleme yüklenemiyor. Cockpit Tools uygulamasından çıkın, Finder’da Uygulamalar klasörüne taşıyın, yeniden açın ve güncellemeyi tekrar deneyin.",
     "restartRequiredAfterInstall": "Güncelleme yüklendi. Geçişi tamamlamak için uygulamayı manuel olarak yeniden başlatın.",
     "stoppingApiService": "API hizmeti durduruluyor...",
     "stopApiServiceFailed": "API hizmeti durdurulamadı. Önce devre dışı bırakıp tekrar deneyin.",

@@ -2642,6 +2642,7 @@
     "installing": "Đang cài đặt...",
     "authorizing": "Đang chờ cấp quyền hệ thống...",
     "installFailed": "Cài đặt hệ thống thất bại. Hãy thử lại sau hoặc tải gói về thủ công.",
+    "installFailedTranslocated": "Ứng dụng đang chạy từ vị trí chỉ đọc (macOS App Translocation), nên không thể cài đặt bản cập nhật. Hãy thoát Cockpit Tools, di chuyển ứng dụng vào thư mục Applications trong Finder, mở lại rồi thử cập nhật lại.",
     "restartRequiredAfterInstall": "Bản cập nhật đã được cài. Hãy khởi động lại ứng dụng thủ công để hoàn tất chuyển đổi.",
     "stoppingApiService": "Đang dừng dịch vụ API...",
     "stopApiServiceFailed": "Không thể dừng dịch vụ API. Hãy tắt dịch vụ trước rồi thử lại.",
