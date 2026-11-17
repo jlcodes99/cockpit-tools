@@ -250,7 +250,7 @@ test('small handoff returns metadata, restores window name and requires actual m
   assert.equal(next.sandbox.__cockpitEnhancements.nativePatchFeatures, undefined);
   next.sandbox.__cockpitNativeFastComplete();
   assert.equal(next.sandbox.__cockpitEnhancements.nativePatchState, 'active');
-  assert.equal(next.sandbox.__cockpitEnhancements.nativePatchFeatures, '1000');
+  assert.equal(next.sandbox.__cockpitEnhancements.nativePatchFeatures, '100000');
   assert.equal(next.elements.filter(node => node.type === 'importmap').length, 1);
   first.api.cancelHandoff('nonce-1'); next.api.cancelHandoff('nonce-1');
 });
@@ -289,6 +289,20 @@ test('wrong identity, stale handoff and invalid source are rejected after restor
     assert.equal(next.sandbox.name, 'existing-window'); assert.equal(next.elements.length, 0);
   }
   first.api.cancelHandoff('nonce-4');
+});
+
+test('a handoff is rejected when verified bound API authorization changes', async () => {
+  for (const wasVerified of [false, true]) {
+    const first = handoffBrowser({ apiService: true, boundApiAuthVerified: wasVerified });
+    assert.equal((await first.api.prepareHandoff('bound-auth-change')).ok, true);
+    first.listeners.get('beforeunload')();
+    const next = handoffBrowser({ apiService: true, boundApiAuthVerified: !wasVerified });
+    next.sandbox.name = first.sandbox.name;
+    assert.equal(next.api.consumeHandoff('bound-auth-change').ok, false);
+    assert.equal(next.sandbox.name, 'existing-window');
+    assert.equal(next.elements.length, 0);
+    first.api.cancelHandoff('bound-auth-change');
+  }
 });
 
 test('retired dictation bridges and capability-only handoffs cannot be reinstalled', async () => {

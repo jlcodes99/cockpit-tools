@@ -197,7 +197,7 @@ test('owner handover cancels old prediction work and reactivates only a verified
   original.runtime.register({managerForHost:()=>({}),nativeEnabled:()=>true});
   original.setReady(true);
   Object.assign(root.__cockpitEnhancements, {nativePatchState:'active', nativePatchMode:'full',
-    nativePatchRequestedFeatures:'00101',nativePatchFeatures:'00101',nativePredictionPatchState:'ready'});
+    nativePatchRequestedFeatures:'001010',nativePatchFeatures:'001010',nativePredictionPatchState:'ready'});
   assert.equal(original.runtime.allow('local'),true);
   const next = {...root.__cockpitEnhancements,owner:'owner-b'};
   vm.runInContext(stateSource.replace('__COCKPIT_STATE_OPTIONS__',JSON.stringify(next)),root);

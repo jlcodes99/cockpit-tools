@@ -108,7 +108,7 @@ test('real current handoff installs one graph and waits for initial, primary and
   const maps = next.elements.filter(element => element.type === 'importmap'); assert.equal(maps.length, 1);
   assert.deepEqual(Object.keys(JSON.parse(maps[0].textContent).imports), [app.files.initialUrl, app.files.primaryUrl, app.files.adapterUrl]);
   assert.equal(next.blobs.size, 3); complete(next);
-  assert.equal(next.root.__cockpitEnhancements.nativePatchFeatures, '1110');
+  assert.equal(next.root.__cockpitEnhancements.nativePatchFeatures, '111000');
   app.api.cancelHandoff('current-three'); next.api.cancelHandoff('current-three');
 });
 test('real current synchronous startup uses the same three-module completion protocol', { skip: !dir }, () => {
@@ -125,7 +125,7 @@ test('missing or changed current adapter never leaves partial quota edits in asy
     assert.equal(sync.blobs.size, 1);
     const source = await [...sync.blobs.values()][0].text(); assert.doesNotMatch(source, /__cockpitQuotaCompat|quota-primary/);
     sync.root.__cockpitNativeFastComplete(); assert.equal(active(sync), 'active');
-    assert.equal(sync.root.__cockpitEnhancements.nativePatchFeatures, '1010');
+    assert.equal(sync.root.__cockpitEnhancements.nativePatchFeatures, '101000');
     const disabled = browser({ adapter, config: { nativeFast: false } });
     assert.equal((await disabled.api.prepareHandoff('disabled')).ok, false);
     assert.equal(disabled.listeners.size, 0); assert.equal(disabled.blobs.size, 0);
@@ -145,7 +145,7 @@ test('current handoff refuses wrong nonce, owner, paths, completion kinds and pa
     value => { value.modules[1].url = 'app://-/other/assets/codex-composer-adapter-a.js'; },
     value => { value.modules[1].source = value.modules[1].source.replace('window.__cockpitNativeFastComplete?.("quota")', ''); },
     value => { value.modules[0].source = value.modules[0].source.replace('"quota-primary"', '"quota"'); },
-    value => { value.requestedFeatures = '1111'; }, value => { value.features = '1010'; },
+    value => { value.requestedFeatures = '111100'; }, value => { value.features = '101000'; },
     value => { value.modules.pop(); value.modules[0].source = value.modules[0].source.replace('"quota-primary"', '"quota"'); },
   ]) {
     const changed = { ...payload, modules: payload.modules.map(module => ({ ...module })) }; mutate(changed);
@@ -167,7 +167,7 @@ test('late completions after adapter preload failure cannot activate the current
 
 test('current non-service quota startup preserves its requested feature mask', { skip: !dir }, () => {
   for (const [config, mask] of [
-    [{ nativeFast: false, quotaCompat: true, apiKeyAuthVerified: false }, '0100'],
+    [{ nativeFast: false, quotaCompat: true, apiKeyAuthVerified: false }, '010000'],
   ]) {
     const app = browser({ config }); vm.runInNewContext(scripts.startup_preload, app.root);
     assert.equal(app.root.__cockpitStartupPreload.ok, true);

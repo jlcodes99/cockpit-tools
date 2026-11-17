@@ -74,12 +74,13 @@ struct Profile {
     native_fast: bool,
     native_predictions: bool,
     api_key_auth_verified: bool,
+    bound_api_auth_verified: bool,
     quota_compat: bool,
 }
 
 impl Profile {
     fn active(&self) -> bool {
-        self.native_fast || self.quota_compat || self.native_predictions
+        self.native_fast || self.quota_compat || self.native_predictions || self.bound_api_auth_verified
     }
 }
 
@@ -136,23 +137,28 @@ fn profile_from_values(
                 && url.fragment().is_none()
         })
     });
+    // This is an independently verified local API Service route which retains
+    // OAuth for the desktop account. It is not API-key authentication and must
+    // not turn on the unrelated Fast or prediction features.
+    let bound_api_auth_verified = requires_auth == Some(true)
+        && oauth
+        && custom_api
+        && valid_api_base
+        && provider
+            .and_then(|provider| provider.get("wire_api"))
+            .and_then(|item| item.as_str())
+            == Some("responses")
+        && base.zip(bearer).is_some_and(|(base, bearer)| {
+            verify_api_service(provider_id, base, bearer)
+        });
     let native_predictions = cfg.codex_app_native_predictions_enabled
         && valid_api_base
-        && (api_key_auth_verified
-            || requires_auth == Some(true)
-                && oauth
-                && custom_api
-                && provider
-                    .and_then(|provider| provider.get("wire_api"))
-                    .and_then(|item| item.as_str())
-                    == Some("responses")
-                && base.zip(bearer).is_some_and(|(base, bearer)| {
-                    verify_api_service(provider_id, base, bearer)
-                }));
+        && (api_key_auth_verified || bound_api_auth_verified);
     Profile {
         native_fast: api_key_auth_verified,
         native_predictions,
         api_key_auth_verified,
+        bound_api_auth_verified,
         quota_compat: cfg.codex_app_api_quota_compat_enabled
             && requires_auth == Some(true)
             && oauth
@@ -282,10 +288,10 @@ fn profile_or_api_fallback(profile: Option<Profile>, api_service: bool) -> Optio
 fn trusted_preload_source(profile: Option<&Profile>, api_service: bool, port: u16) -> Option<String> {
     let owner = format!("preload-{port}");
     match profile {
-        Some(profile) if profile.native_fast || profile.native_predictions
+        Some(profile) if profile.native_fast || profile.native_predictions || profile.bound_api_auth_verified
             || profile.quota_compat && !api_service => Some(fast::browser_preload_source(
             profile.native_fast, profile.native_predictions, profile.quota_compat,
-            profile.api_key_auth_verified, api_service, &owner)),
+            profile.api_key_auth_verified, profile.bound_api_auth_verified, api_service, &owner)),
         _ if api_service => Some(fast::quota_state_source(&owner)),
         _ => None,
     }
@@ -420,8 +426,8 @@ async fn run_profile(
         let allow_blank = preload_first
             || (cfg!(target_os = "windows")
                 && startup.is_some()
-                && (profile.native_fast || profile.native_predictions)
-                && profile.api_key_auth_verified
+                && ((profile.native_fast || profile.native_predictions) && profile.api_key_auth_verified
+                    || profile.bound_api_auth_verified)
                 && !profile.quota_compat);
         let Some(available) = targets(&client, port, allow_blank).await else {
             continue;
@@ -460,6 +466,7 @@ async fn run_profile(
                     profile.native_predictions,
                     profile.quota_compat,
                     profile.api_key_auth_verified,
+                    profile.bound_api_auth_verified,
                     api_service,
                     child_preload_first,
                     startup,
@@ -600,6 +607,7 @@ mod tests {
         assert!(profile.native_predictions);
         assert!(!profile.api_key_auth_verified);
         assert!(!profile.native_fast);
+        assert!(profile.bound_api_auth_verified);
         for (from, to) in [
             ("localhost:2566", "localhost:8080"),
             ("service-key", "other-key"),
@@ -607,8 +615,60 @@ mod tests {
             ("codex_local_access", "other_provider"),
         ] {
             let other = doc.to_string().replace(from, to).parse().unwrap();
-            assert!(!profile_from_values(&other, &oauth, &cfg, verified).native_predictions);
+            let profile = profile_from_values(&other, &oauth, &cfg, verified);
+            assert!(!profile.native_predictions);
+            assert!(!profile.bound_api_auth_verified);
         }
+    }
+
+    #[test]
+    fn bound_oauth_route_is_verified_separately_from_fast_and_predictions() {
+        let mut cfg = config::UserConfig::default();
+        cfg.codex_app_native_predictions_enabled = false;
+        cfg.codex_app_api_quota_compat_enabled = false;
+        let source = "model_provider='codex_local_access'\n[model_providers.codex_local_access]\nbase_url='http://localhost:2566/v1'\nwire_api='responses'\nrequires_openai_auth=true\nexperimental_bearer_token='service-key'\n";
+        let doc: toml_edit::Document = source.parse().unwrap();
+        let oauth = json!({"tokens":{"id_token":"synthetic-id","access_token":"synthetic-access"}});
+        let verified = |provider: &str, base: &str, key: &str| {
+            (provider, base, key) == ("codex_local_access", "http://localhost:2566/v1", "service-key")
+        };
+        let profile = profile_from_values(&doc, &oauth, &cfg, verified);
+        assert!(profile.bound_api_auth_verified);
+        assert!(profile.active());
+        assert!(!profile.api_key_auth_verified);
+        assert!(!profile.native_fast);
+        assert!(!profile.native_predictions);
+        assert!(!profile.quota_compat);
+        let preload = trusted_preload_source(Some(&profile), true, 9333).unwrap();
+        assert!(preload.contains("\"boundApiAuthVerified\":true"));
+        assert!(preload.contains("\"apiKeyAuthVerified\":false"));
+        assert!(preload.contains("\"nativeFast\":false"));
+        assert!(preload.contains("__cockpitStartupPreloadStarted"));
+
+        // A bound service is needed even if the profile looks like a valid route.
+        assert!(!profile_from_values(&doc, &oauth, &cfg, |_, _, _| false).bound_api_auth_verified);
+        for (from, to) in [
+            ("codex_local_access", "another_provider"),
+            ("localhost:2566", "localhost:8080"),
+            ("localhost:2566/v1", "user:pass@localhost:2566/v1"),
+            ("localhost:2566/v1", "localhost:2566/v1?secret=1"),
+            ("service-key", "other-key"),
+            ("service-key", "synthetic-access"),
+            ("responses", "chat"),
+            ("requires_openai_auth=true", "requires_openai_auth=false"),
+        ] {
+            let other: toml_edit::Document = source.replace(from, to).parse().unwrap();
+            assert!(!profile_from_values(&other, &oauth, &cfg, verified).bound_api_auth_verified, "{from} -> {to}");
+        }
+        let no_oauth = json!({"OPENAI_API_KEY":"synthetic-api-key"});
+        let profile = profile_from_values(&doc, &no_oauth, &cfg, verified);
+        assert!(!profile.bound_api_auth_verified);
+        assert!(profile.native_fast);
+        assert!(profile.api_key_auth_verified);
+        assert!(!profile_from_values(&doc, &Value::Null, &cfg, verified).bound_api_auth_verified);
+        let missing = profile_or_api_fallback(None, true).unwrap();
+        assert!(!missing.bound_api_auth_verified);
+        assert!(!missing.active());
     }
 
     #[test]

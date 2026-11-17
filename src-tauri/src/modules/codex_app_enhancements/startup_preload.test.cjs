@@ -170,12 +170,12 @@ function upgradeState(previous, overrides = {}) {
 
 test('host reattachment retains verified Fast-only activation and its separate quota failure', () => {
   const previous = { nativePatchState: 'active', nativePatchMode: 'fast-only',
-    nativePatchRequestedFeatures: '1011', nativePatchFeatures: '1010',
+    nativePatchRequestedFeatures: '101100', nativePatchFeatures: '101000',
     nativePatchReason: 'fast-only-quota-unsupported', nativeQuotaPatchState: 'unsupported',
     nativeQuotaPatchReason: 'quota-imports-missing' };
   const next = upgradeState(previous);
   assert.equal(next.nativePatchState, 'active');
-  assert.equal(next.nativePatchFeatures, '1010');
+  assert.equal(next.nativePatchFeatures, '101000');
   assert.equal(next.nativePatchReason, 'fast-only-quota-unsupported');
   assert.equal(next.nativeQuotaPatchState, 'unsupported');
   assert.equal(next.nativeQuotaPatchReason, 'quota-imports-missing');
@@ -183,14 +183,28 @@ test('host reattachment retains verified Fast-only activation and its separate q
 
 test('host rejects stale or overstated Fast-only feature masks', () => {
   const previous = { nativePatchState: 'active', nativePatchMode: 'fast-only',
-    nativePatchRequestedFeatures: '1011', nativePatchFeatures: '1010',
+    nativePatchRequestedFeatures: '101100', nativePatchFeatures: '101000',
     nativeQuotaPatchState: 'unsupported', nativeQuotaPatchReason: 'quota-imports-missing' };
   for (const next of [
-    upgradeState({ ...previous, nativePatchFeatures: '1011' }),
-    upgradeState({ ...previous, nativePatchRequestedFeatures: '1111' }),
+    upgradeState({ ...previous, nativePatchFeatures: '101100' }),
+    upgradeState({ ...previous, nativePatchRequestedFeatures: '111100' }),
     upgradeState(previous, { nativeFast: false }),
   ]) {
     assert.equal(next.nativePatchState, 'pending');
     assert.equal(next.nativeQuotaPatchState, undefined);
+  }
+});
+
+test('changing verified bound API authorization invalidates existing activation and preload', () => {
+  for (const wasVerified of [false, true]) for (const nativePatchState of ['active', 'preloading']) {
+    const config = { nativeFast: false, quotaCompat: true, apiKeyAuthVerified: false, apiService: true,
+      nativePredictions: false, boundApiAuthVerified: wasVerified, owner: 'same-owner' };
+    const features = wasVerified ? '010101' : '010100';
+    const previous = { ...config, nativePatchState, nativePatchMode: 'rspack',
+      nativePatchFeatures: features, nativePatchRequestedFeatures: features };
+    assert.equal(upgradeState(previous, config).nativePatchState, nativePatchState);
+    const changed = upgradeState(previous, { ...config, boundApiAuthVerified: !wasVerified });
+    assert.equal(changed.nativePatchState, 'pending');
+    assert.equal(changed.boundApiAuthVerified, !wasVerified);
   }
 });

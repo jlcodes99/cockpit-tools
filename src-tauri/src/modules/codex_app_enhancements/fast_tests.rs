@@ -7,6 +7,7 @@ struct Options {
     api_service: bool,
     native_fast: bool,
     api_key_auth_verified: bool,
+    bound_api_auth_verified: bool,
     fast_only: bool,
     full_quota_only: bool,
     initially_active: bool,
@@ -45,6 +46,7 @@ impl Default for Options {
             api_service: false,
             native_fast: true,
             api_key_auth_verified: true,
+            bound_api_auth_verified: false,
             fast_only: false,
             full_quota_only: false,
             initially_active: false,
@@ -116,6 +118,7 @@ async fn start(options: Options) -> Running {
     let api_service = options.api_service;
     let native_fast = options.native_fast;
     let api_key_auth_verified = options.api_key_auth_verified;
+    let bound_api_auth_verified = options.bound_api_auth_verified;
     let quota_compat = options.quota_compat;
     let public_entry = options.public_entry;
     let live_quota = options.live_quota;
@@ -170,6 +173,8 @@ async fn start(options: Options) -> Running {
                         json!("app://-/index.html")
                     } else if expression == "window.__cockpitQuotaState.install()" {
                         json!({"ok":!options.live_plan_invalid,"reason":"quota-http-boundary-unavailable"})
+                    } else if expression == "window.__cockpitServiceRspack.verifyRequestedDocument()" {
+                        json!({"ok":true})
                     } else if let Some(nonce) = argument(expression, "prepareHandoff") {
                         prepared_nonce = Some(nonce);
                         preparations += 1;
@@ -220,9 +225,9 @@ async fn start(options: Options) -> Running {
                                 if options.capability_only {
                                     json!({"state":"active-capability","reason":"capability-only-quota-provider-not-unique"})
                                 } else if options.fast_only {
-                                    json!({"state":"active","reason":"fast-only-quota-unsupported","mode":"fast-only","features":"1010","quotaState":"unsupported","quotaReason":"quota-imports-missing"})
+                                    json!({"state":"active","reason":"fast-only-quota-unsupported","mode":"fast-only","features":"101000","quotaState":"unsupported","quotaReason":"quota-imports-missing"})
                                 } else if options.full_quota_only {
-                                    json!({"state":"active","reason":"module-evaluated","mode":"full","features":"0101"})
+                                    json!({"state":"active","reason":"module-evaluated","mode":"full","features":"010100"})
                                 } else {
                                     json!({"state":"active"})
                                 }
@@ -331,6 +336,7 @@ async fn start(options: Options) -> Running {
                 false,
                 quota_compat,
                 api_key_auth_verified,
+                bound_api_auth_verified,
                 api_service,
                 preload_first,
                 startup,
@@ -345,6 +351,7 @@ async fn start(options: Options) -> Running {
                 false,
                 quota_compat,
                 api_key_auth_verified,
+                bound_api_auth_verified,
                 api_service,
                 preload_first,
                 startup,
@@ -1703,8 +1710,31 @@ async fn page_worker_waits_for_browser_completion_before_replacing_its_owner() {
     );
 }
 
+#[tokio::test]
+async fn verified_bound_oauth_prepares_a_future_document_without_reloading_an_existing_one() {
+    let mut runtime = start(Options {
+        api_service: true,
+        native_fast: false,
+        api_key_auth_verified: false,
+        bound_api_auth_verified: true,
+        quota_compat: false,
+        live_rspack: true,
+        startup: None,
+        ..Options::default()
+    }).await;
+    runtime.notice("document", Some("live-runtime-registered")).await;
+    assert_eq!(runtime.navigations.load(Ordering::Acquire), 0);
+    let calls = runtime.finish(false).await;
+    assert_eq!(expressions(&calls, "window.__cockpitServiceRspack.verifyRequestedDocument()"), 1);
+    assert_eq!(expressions(&calls, "window.__cockpitNativeFast.inspectStartupReload()"), 0);
+    assert!(calls.iter().any(|call| call["params"]["source"].as_str().is_some_and(|source|
+        source.contains("\"boundApiAuthVerified\":true")
+        && source.contains("\"apiKeyAuthVerified\":false")
+        && source.contains("\"nativeFast\":false"))));
+}
+
 #[test]
 fn automatic_fast_does_not_supply_catalog_fallbacks() {
-    let runtime = bootstrap(true, false, false, true, false, "catalog-test");
+    let runtime = bootstrap(true, false, false, true, false, false, "catalog-test");
     assert!(!runtime.contains("serviceTierFallbacks"));
 }

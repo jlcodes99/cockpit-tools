@@ -12,6 +12,11 @@
   const allowExpression = (host, auth) =>
     `window.__cockpitNativeFast?.allow(${host},${auth})===true`;
   const enabled = () => root.__cockpitEnhancements?.nativeFast === true;
+  // A bound OAuth profile still uses the local API's model capabilities. This
+  // host-verified route grants only Ultra compatibility, never speed access.
+  const boundApiEnabled = () => root.__cockpitEnhancements?.boundApiAuthVerified === true
+    && root.__cockpitEnhancements?.apiService === true;
+  const ultraEnabled = () => enabled() || boundApiEnabled();
   const predictionsEnabled = () => root.__cockpitEnhancements?.nativePredictions === true
     && (root.__cockpitEnhancements?.apiKeyAuthVerified === true || root.__cockpitEnhancements?.apiService === true);
   const quotaModuleEnabled = () => root.__cockpitEnhancements?.quotaCompat === true
@@ -24,17 +29,19 @@
       || auth == null && root.__cockpitEnhancements?.apiKeyAuthVerified === true);
   const failure = (source, reason) => ({ ok: false, patchedSource: source, diagnostics: { reason } });
 
-  function includeUltra(nativeValue, host, auth, custom, teamCatalog) {
+  function includeUltra(nativeValue, host, auth, custom, teamCatalog, provider) {
     // This only removes the native rollout gate for custom API providers.
     // The caller's include flag, enabled efforts and each model's declared
     // capabilities still go through the unmodified native selector.
-    return nativeValue || custom === true && teamCatalog == null && allow(host, auth);
+    const bound = boundApiEnabled() && provider === "codex_local_access"
+      && host === "local" && (auth === "chatgpt" || auth == null);
+    return nativeValue || custom === true && teamCatalog == null && (allow(host, auth) || bound);
   }
 
-  // Each gate is checked together with its surrounding call contract. No
-  // replacement is applied unless all four known contracts occur exactly once.
+  // Speed requires all four known contracts. Bound OAuth changes only the
+  // separately validated reasoning query and leaves the speed source intact.
   function transform(source) {
-    if (!enabled()) return failure(source, "disabled");
+    if (!ultraEnabled()) return failure(source, "disabled");
     if (typeof source !== "string" || source.length > LIMIT) return failure(source, "source-limit");
     const edits = [];
     const count = { ui: 0, request: 0, queued: 0, explicit: 0 };
@@ -48,7 +55,7 @@
     };
     const add = (kind, start, before, after) => {
       count[kind]++;
-      edits.push({ start, end: start + before.length, text: after });
+      if (enabled()) edits.push({ start, end: start + before.length, text: after });
     };
 
     for (const match of matches(`(?<identity>${NAME})\\?\\.authMethod===\`chatgpt\`\\|\\|\\k<identity>\\?\\.authMethod===\`personalAccessToken\`(?:\\|\\|\\k<identity>\\?\\.authMethod===\`amazonBedrock\`)?`)) {
@@ -134,17 +141,18 @@
       // Validate the enclosing query contract and the exact gate feeding this
       // selector, rather than replacing a feature flag globally. Retain the
       // caller's explicit includeUltraReasoningEffort=false short circuit.
-      const header = before.match(new RegExp(`\\(\\{additionalAvailableModels:${NAME},authMethod:${auth},enabledReasoningEfforts:${NAME},hasConfiguredModelCatalog:${catalog},hostId:${host},includeUltraReasoningEffort:(?<requested>${NAME}),isCustomModelProvider:${custom},limit:${NAME},modelCatalogPath:${NAME},modelProvider:${NAME}(?:,teamCatalog:(?<teamCatalog>${NAME}))?\\},\\{get:(?<get>${NAME}),queryClient:${NAME},scope:${NAME}\\}\\)=>\\{`));
+      const header = before.match(new RegExp(`\\(\\{additionalAvailableModels:${NAME},authMethod:${auth},enabledReasoningEfforts:${NAME},hasConfiguredModelCatalog:${catalog},hostId:${host},includeUltraReasoningEffort:(?<requested>${NAME}),isCustomModelProvider:${custom},limit:${NAME},modelCatalogPath:${NAME},modelProvider:(?<provider>${NAME})(?:,teamCatalog:(?<teamCatalog>${NAME}))?\\},\\{get:(?<get>${NAME}),queryClient:${NAME},scope:${NAME}\\}\\)=>\\{`));
       if (!header) continue;
       const gate = new RegExp(`[,;]${ultra}=${header.groups.requested}&&(?<value>${header.groups.get}\\(${NAME},\`1186680773\`\\));return\\{`).exec(before.slice(header.index + header[0].length));
       if (!gate) continue;
       const start = offset + header.index + header[0].length + gate.index + gate[0].indexOf(gate.groups.value);
       edits.push({ start, end: start + gate.groups.value.length,
-        text: `window.__cockpitNativeFast.includeUltra(${gate.groups.value},${host},${auth},${custom},${header.groups.teamCatalog || 'null'})` });
+        text: `window.__cockpitNativeFast.includeUltra(${gate.groups.value},${host},${auth},${custom},${header.groups.teamCatalog || 'null'},${header.groups.provider})` });
       reasoningMatches++;
     }
     if (catalogMatches > 1) return failure(source, "ambiguous-model-catalog");
-    if (Object.values(count).some(value => value !== 1)) return failure(source, "unsupported-gates");
+    if (enabled() && Object.values(count).some(value => value !== 1)) return failure(source, "unsupported-gates");
+    if (!enabled() && reasoningMatches !== 1) return failure(source, "unsupported-reasoning-gate");
     edits.sort((a, b) => a.start - b.start);
     if (edits.some((edit, i) => i > 0 && edit.start < edits[i - 1].end)) return failure(source, "overlapping-gates");
     let patched = source;
@@ -542,13 +550,14 @@
     let result = { ok: true, patchedSource: source };
     const fastInstalled = (source.match(/window\.__cockpitNativeFast\?\.allow\(/g) || []).length === 4;
     const quotaInstalled = (source.match(/globalThis\.__cockpitQuotaCompat\.initialReady=true/g) || []).length === 1;
-    if (enabled() && !fastInstalled) result = transform(result.patchedSource);
+    const ultraInstalled = source.includes('window.__cockpitNativeFast.includeUltra(');
+    if (enabled() && !fastInstalled || boundApiEnabled() && !ultraInstalled) result = transform(result.patchedSource);
     if (result.ok && quotaModuleEnabled() && !quotaInstalled) {
       result = root.__cockpitQuotaCompat?.transform(result.patchedSource, url) || failure(source, "quota-unavailable");
       if (!result.ok && (enabled() || predictionsEnabled())) return prepareFastOnly(source, url, result.diagnostics?.reason || 'quota-unavailable');
     }
     if (!result.ok) return failure(source, result.diagnostics?.reason || "unsupported-gates");
-    if (!enabled() && !quotaModuleEnabled() && !predictionsEnabled()) return failure(source, "disabled");
+    if (!ultraEnabled() && !quotaModuleEnabled() && !predictionsEnabled()) return failure(source, "disabled");
     return { ok: true, patchedSource: result.patchedSource, url, mode: 'full' };
   }
 
@@ -704,13 +713,14 @@
 
   const HANDOFF_PREFIX = "cockpit-native-handoff-v1:";
   let handoff = null, unloadHandler = null, restoreTimer = null, staged = null, preparationEpoch = 0;
-  const configurationMask = config => [config?.nativeFast, config?.quotaCompat, config?.apiKeyAuthVerified, config?.apiService]
-    .map(flag => flag === true ? "1" : "0").join("") + (config?.nativePredictions === true ? '1' : '');
+  const configurationMask = config => [config?.nativeFast, config?.quotaCompat, config?.apiKeyAuthVerified,
+    config?.apiService, config?.nativePredictions, config?.boundApiAuthVerified]
+    .map(flag => flag === true ? "1" : "0").join("");
   const featureMask = (config, mode = 'full') => mode === 'full' ? configurationMask(config)
     : mode === 'fast-only' && config?.nativeFast === true
-      ? `10${config.apiKeyAuthVerified === true ? '1' : '0'}0${config.nativePredictions === true ? '1' : ''}`
+      ? configurationMask({ ...config, quotaCompat: false, apiService: false })
       : mode === 'prediction-only' && config?.nativePredictions === true
-        ? `00${config.apiKeyAuthVerified === true ? '1' : '0'}01` : 'invalid';
+        ? configurationMask({ ...config, nativeFast: false, quotaCompat: false, apiService: false }) : 'invalid';
   const validNonce = nonce => typeof nonce === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(nonce);
   const localPage = () => root.location?.protocol === "app:" && root.location?.hostname === "-";
   const setState = (value, reason) => {

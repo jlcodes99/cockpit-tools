@@ -34,11 +34,11 @@ const STATE_SCRIPT: &str = r#";(() => {
   try { window.__cockpitApiDictation?.dispose?.(); } catch {}
   if (typeof window.__cockpitNativeDictation?.capability === 'function')
     window.__cockpitNativeDictation.capability = nativeValue => nativeValue;
-  const features = [next.nativeFast, next.quotaCompat, next.apiKeyAuthVerified, next.apiService].map(Number).join('') + (next.nativePredictions ? '1' : '');
+  const features = [next.nativeFast, next.quotaCompat, next.apiKeyAuthVerified, next.apiService, next.nativePredictions, next.boundApiAuthVerified].map(value => value === true ? '1' : '0').join('');
   const installedFeatures = previous?.nativePatchMode === 'fast-only'
-    ? [next.nativeFast, false, next.apiKeyAuthVerified, false].map(Number).join('') + (next.nativePredictions ? '1' : '')
+    ? [next.nativeFast, false, next.apiKeyAuthVerified, false, next.nativePredictions, next.boundApiAuthVerified].map(value => value === true ? '1' : '0').join('')
     : previous?.nativePatchMode === 'prediction-only'
-      ? [false, false, next.apiKeyAuthVerified, false, true].map(Number).join('') : features;
+      ? [false, false, next.apiKeyAuthVerified, false, true, next.boundApiAuthVerified].map(value => value === true ? '1' : '0').join('') : features;
   const active = previous?.nativePatchState === 'active'
     && ['full', 'live-quota', 'fast-only', 'prediction-only', 'rspack'].includes(previous.nativePatchMode)
     && (previous.nativePatchMode !== 'fast-only' || next.nativeFast === true
@@ -52,6 +52,7 @@ const STATE_SCRIPT: &str = r#";(() => {
     && previous.nativePredictions === next.nativePredictions
     && previous.quotaCompat === next.quotaCompat
     && previous.apiKeyAuthVerified === next.apiKeyAuthVerified
+    && previous.boundApiAuthVerified === next.boundApiAuthVerified
     && previous.apiService === next.apiService;
   const preserveLoadingState = sameOwnerAndConfig
     && ['preloading', 'unsupported'].includes(previous.nativePatchState);
@@ -66,6 +67,8 @@ const STATE_SCRIPT: &str = r#";(() => {
     nativeQuotaPatchReason: active || preserveLoadingState ? previous?.nativeQuotaPatchReason : undefined,
     nativePredictionPatchState: next.nativePredictions ? (active || preserveLoadingState ? previous?.nativePredictionPatchState : 'pending') : 'disabled',
     nativePredictionPatchReason: next.nativePredictions && (active || preserveLoadingState) ? previous?.nativePredictionPatchReason : undefined,
+    nativeUltraPatchState: next.boundApiAuthVerified || next.nativeFast ? (active || preserveLoadingState ? previous?.nativeUltraPatchState : 'pending') : 'disabled',
+    nativeUltraPatchReason: (next.boundApiAuthVerified || next.nativeFast) && (active || preserveLoadingState) ? previous?.nativeUltraPatchReason : undefined,
   };
 })();"#;
 const RUNTIME_PROBE_SCRIPT: &str = r#"(() => {
@@ -110,6 +113,7 @@ pub(super) fn browser_preload_source(
     native_predictions: bool,
     quota_compat: bool,
     api_key_auth_verified: bool,
+    bound_api_auth_verified: bool,
     api_service: bool,
     owner: &str,
 ) -> String {
@@ -121,6 +125,7 @@ pub(super) fn browser_preload_source(
                 native_predictions,
                 quota_compat,
                 api_key_auth_verified,
+                bound_api_auth_verified,
                 api_service,
                 owner
             )
@@ -498,7 +503,7 @@ async fn cleanup(
 ) {
     let _ = timeout(CLEANUP_TIMEOUT, async {
         if let Some(context) = session.context() {
-            let expression = format!("(()=>{{const s=window.__cockpitEnhancements;if(s?.owner==={}){{window.__cockpitQuotaState?.dispose?.();window.__cockpitNativeFast?.cancelHandoff?.({});s.nativeFast=false;s.nativePredictions=false;s.quotaCompat=false;s.apiService=false;window.__cockpitNativePredictions?.runtime?.dispose?.();window.__cockpitNativeFastDispose?.();}}return true;}})()", json!(owner), json!(nonce));
+            let expression = format!("(()=>{{const s=window.__cockpitEnhancements;if(s?.owner==={}){{window.__cockpitQuotaState?.dispose?.();window.__cockpitNativeFast?.cancelHandoff?.({});s.nativeFast=false;s.nativePredictions=false;s.boundApiAuthVerified=false;s.quotaCompat=false;s.apiService=false;window.__cockpitNativePredictions?.runtime?.dispose?.();window.__cockpitNativeFastDispose?.();}}return true;}})()", json!(owner), json!(nonce));
             let _ = session.evaluate(expression, context, Duration::from_millis(500)).await;
         }
         if let Some(identifier) = script_id { session.registrations.insert(identifier); }
@@ -555,10 +560,11 @@ fn bootstrap(
     native_predictions: bool,
     quota_compat: bool,
     api_key_auth_verified: bool,
+    bound_api_auth_verified: bool,
     api_service: bool,
     owner: &str,
 ) -> String {
-    let options = json!({"nativeFast":native_fast,"nativePredictions":native_predictions,"quotaCompat":quota_compat,"apiKeyAuthVerified":api_key_auth_verified,"apiService":api_service,"owner":owner});
+    let options = json!({"nativeFast":native_fast,"nativePredictions":native_predictions,"quotaCompat":quota_compat,"apiKeyAuthVerified":api_key_auth_verified,"boundApiAuthVerified":bound_api_auth_verified,"apiService":api_service,"owner":owner});
     let state = STATE_SCRIPT.replace("__COCKPIT_STATE_OPTIONS__", &options.to_string());
     format!("{state}\n{GUARD_SCRIPT}\n{SCRIPT}\n{PREDICTIONS_SCRIPT}\n{PREDICTIONS_RSPACK_SCRIPT}\n{SERVICE_RSPACK_SCRIPT}\n{QUOTA_SCRIPT}\n{QUOTA_CURRENT_SCRIPT}\n{QUOTA_STATE_SCRIPT}\n{QUOTA_START_SCRIPT}true;")
 }
@@ -628,7 +634,7 @@ async fn prepare_future_document(
         let result = registration
             .session()
             .evaluate(
-                "window.__cockpitServiceRspack.verifySpeedDocument()".to_string(),
+                "window.__cockpitServiceRspack.verifyRequestedDocument()".to_string(),
                 context,
                 PREPARE_TIMEOUT,
             )
@@ -638,7 +644,7 @@ async fn prepare_future_document(
             return Err("context-changed".to_string());
         }
         if result.get("ok").and_then(Value::as_bool) != Some(true) {
-            return Err(safe_reason(&result, "speed-contract-failed"));
+            return Err(safe_reason(&result, "enhancement-contract-failed"));
         }
         return register_live_runtime(registration, context).await;
     }
@@ -908,7 +914,7 @@ async fn read_activation(
                 .get("features")
                 .and_then(Value::as_str)
                 .is_some_and(|features| {
-                    (features.len() == 4 || features.len() == 5)
+                    features.len() == 6
                         && features.bytes().all(|byte| byte == b'0' || byte == b'1')
                         && (result.get("mode").and_then(Value::as_str) == Some("full")
                             || result.get("mode").and_then(Value::as_str) == Some("rspack")
@@ -916,7 +922,7 @@ async fn read_activation(
                             || result.get("mode").and_then(Value::as_str) == Some("fast-only")
                                 && features.starts_with('1')
                             || result.get("mode").and_then(Value::as_str) == Some("prediction-only")
-                                && features.len() == 5 && features.ends_with('1'))
+                                && features.as_bytes()[4] == b'1')
                 });
             registration.quota_unsupported_reason =
                 (result.get("quotaState").and_then(Value::as_str) == Some("unsupported")).then(
@@ -1209,6 +1215,7 @@ pub(super) async fn run(
     native_predictions: bool,
     quota_compat: bool,
     api_key_auth_verified: bool,
+    bound_api_auth_verified: bool,
     api_service: bool,
     preload_first: bool,
     startup: Option<Arc<StartupReload>>,
@@ -1217,8 +1224,8 @@ pub(super) async fn run(
     // The profile reader has verified either pure API authentication or an
     // independent API route with OAuth retained. Only those profiles can reuse
     // a launch transaction's single fresh-document permission.
-    let verified_api_route = (native_fast || native_predictions) && api_key_auth_verified || quota_compat;
-    let startup = if api_service && (!verified_api_route || !native_fast && !native_predictions) {
+    let verified_api_route = (native_fast || native_predictions) && api_key_auth_verified || quota_compat || bound_api_auth_verified;
+    let startup = if api_service && (!verified_api_route || !native_fast && !native_predictions && !bound_api_auth_verified) {
         None
     } else {
         startup
@@ -1237,6 +1244,7 @@ pub(super) async fn run(
         native_predictions,
         quota_compat,
         api_key_auth_verified,
+        bound_api_auth_verified,
         api_service,
         preload_first,
         startup,
@@ -1253,13 +1261,14 @@ async fn run_with_live_quota(
     native_predictions: bool,
     quota_compat: bool,
     api_key_auth_verified: bool,
+    bound_api_auth_verified: bool,
     api_service: bool,
     preload_first: bool,
     startup: Option<Arc<StartupReload>>,
     mut stop: watch::Receiver<bool>,
     live_quota: bool,
 ) -> Result<(), String> {
-    if !native_fast && !native_predictions && !quota_compat && !api_service || *stop.borrow() {
+    if !native_fast && !native_predictions && !quota_compat && !bound_api_auth_verified && !api_service || *stop.borrow() {
         return Ok(());
     }
     if !local_websocket(&websocket_url) {
@@ -1290,13 +1299,14 @@ async fn run_with_live_quota(
         native_predictions,
         quota_compat,
         api_key_auth_verified,
+        bound_api_auth_verified,
         api_service,
         &owner,
     );
     let startup_runtime = guard_document_install(&format!("{runtime}\n{PRELOAD_SCRIPT}"), "");
     let browser_snapshot = json!({"owner":format!("preload-{browser_port}"),
         "nativeFast":native_fast,"nativePredictions":native_predictions,"quotaCompat":quota_compat,
-        "apiKeyAuthVerified":api_key_auth_verified,"apiService":api_service});
+        "apiKeyAuthVerified":api_key_auth_verified,"boundApiAuthVerified":bound_api_auth_verified,"apiService":api_service});
     let runtime_probe = RUNTIME_PROBE_SCRIPT
         .replace(
             "__COCKPIT_BROWSER_SNAPSHOT__",

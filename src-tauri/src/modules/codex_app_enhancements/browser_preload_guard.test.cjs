@@ -45,7 +45,7 @@ function revoke(window, location = local) {
   return vm.runInNewContext(source, {location, window});
 }
 function pending(owner = 'preload-9333') {
-  const state = {owner, nativeFast:true, quotaCompat:true, apiService:true, apiKeyAuthVerified:true,
+  const state = {owner, nativeFast:true, quotaCompat:true, apiService:true, apiKeyAuthVerified:true, boundApiAuthVerified:true,
     nativePatchState:'preloading'};
   const window = {__cockpitEnhancements:state, disposed:0,
     __cockpitNativeFastComplete() { state.nativePatchState = 'active'; },
@@ -59,7 +59,7 @@ test('revoking browser-owned pending preload disables gates, disposes modules an
   assert.equal(window.disposed, 1);
   window.__cockpitNativeFastComplete?.();
   const state = window.__cockpitEnhancements;
-  for (const key of ['nativeFast','quotaCompat','apiService','apiKeyAuthVerified','apiDictation']) assert.equal(state[key], false);
+  for (const key of ['nativeFast','quotaCompat','apiService','apiKeyAuthVerified','boundApiAuthVerified','apiDictation']) assert.equal(state[key], false);
   assert.equal(state.nativePatchState, 'unsupported');
   assert.equal(state.nativeQuotaPatchState, 'disabled');
   assert.equal(state.nativePatchReason, 'browser-preload-revoked');
@@ -90,6 +90,7 @@ test('a throwing dispose hook cannot retain enabled gates or the pending complet
   assert.equal(window.__cockpitEnhancements.nativeFast, false);
   assert.equal(window.__cockpitEnhancements.quotaCompat, false);
   assert.equal(window.__cockpitEnhancements.apiService, false);
+  assert.equal(window.__cockpitEnhancements.boundApiAuthVerified, false);
 });
 test('revoking a quota-only browser preload disposes its data view after disabling the binding', () => {
   const window = pending(); let disposed = false;

@@ -22,6 +22,18 @@
     },
   ];
 
+  // Reasoning and speed routes change independently.  The newer desktop
+  // release has a verified Ultra graph but no known speed graph; never infer
+  // permission to alter service-tier handling from an Ultra match.
+  const ultraLayouts = [
+    {
+      host: 907538,
+      modelQueries: [146068, 215569, 24705, 267924, 304386, 424504, 505901, 529959,
+        551475, 613538, 613959, 662473, 860605, 906325, 953083, 961945],
+    },
+    ...speedLayouts,
+  ];
+
   function one(source, re, reason) {
     const matches = [...source.matchAll(re)];
     if (matches.length !== 1) throw Error(reason);
@@ -52,8 +64,8 @@
     return edit(source, explicit, explicit[0].replace(vars.native, () => `(${vars.native}||${allow})`));
   }
 
-  async function verifySpeedDocument() {
-    if (root.__cockpitEnhancements?.nativeFast !== true) return { ok: false, reason: "disabled" };
+  async function verifyDocument(wantSpeed, wantUltra) {
+    if (!wantSpeed && !wantUltra) return { ok: false, reason: "disabled" };
     const entries = [...(root.document?.scripts ?? [])].map(script => script.src)
       .filter(url => /^app:\/\/-\/assets\/\d+\.[a-f0-9]+\.js$/.test(url));
     if (!entries.length || entries.length > 8) return { ok: false, reason: "unsupported-entry" };
@@ -68,9 +80,16 @@
       const roots = new Map(await Promise.all(entries.map(async url => [url, await read(url)])));
       const html = entries.map(url => '<script src="' + url + '"></script>').join("");
       const reader = root.__cockpitPredictionRspack.chunkReader(html, url => roots.get(url));
-      const layout = speedLayouts.find(candidate => reader.has(candidate.host));
-      if (!layout) return { ok: false, reason: "speed-layout-unsupported" };
-      await Promise.all([[layout.host, speedQueue], ...layout.menus.map(id => [id, speedMenu])]
+      if (!reader) return { ok: false, reason: "not-rspack" };
+      const speedLayout = wantSpeed && speedLayouts.find(candidate => reader.has(candidate.host));
+      const ultraLayout = wantUltra && ultraLayouts.find(candidate => reader.has(candidate.host));
+      if (wantSpeed && !speedLayout) return { ok: false, reason: "speed-layout-unsupported" };
+      if (wantUltra && !ultraLayout) return { ok: false, reason: "ultra-layout-unsupported" };
+      const contracts = [
+        ...(wantSpeed ? [[speedLayout.host, speedQueue], ...speedLayout.menus.map(id => [id, speedMenu])] : []),
+        ...(wantUltra ? [[ultraLayout.host, ultraReasoning], ...ultraLayout.modelQueries.map(id => [id, ultraModelQuery])] : []),
+      ];
+      await Promise.all(contracts
         .map(async ([id, transform]) => {
           const source = await read(reader.urlFor(id));
           if (!source.includes(`export const __rspack_esm_ids=[${id}];`)
@@ -83,20 +102,30 @@
     }
   }
 
+  function verifySpeedDocument() {
+    return verifyDocument(root.__cockpitEnhancements?.nativeFast === true, false);
+  }
+
+  function verifyRequestedDocument() {
+    const state = root.__cockpitEnhancements;
+    return verifyDocument(state?.nativeFast === true,
+      state?.boundApiAuthVerified === true && state?.apiService === true);
+  }
+
   function ultraReasoning(source) {
-    const match = one(source, pattern(String.raw`authMethod:(?<host>${N}\.hostId)===${N}\.${N}\?(?<auth>${N}\.authMethod):null,[^;]{0,900}includeUltraReasoningEffort:(?<gate>\(0,${N}\.${N}\)\(${N},"1186680773"\)),isAuthLoading:[\s\S]{0,550}?isCustomModelProvider:(?<custom>\(0,${N}\.cc\)\(${N}\)),workspaceDependenciesEnabled:`), "ultra-reasoning-contract");
-    const { host, auth, gate, custom } = match.groups;
+    const match = one(source, pattern(String.raw`authMethod:(?<host>${N}\.hostId)===${N}\.${N}\?(?<auth>${N}\.authMethod):null,[^;]{0,900}includeUltraReasoningEffort:(?<gate>\(0,${N}\.${N}\)\(${N},"1186680773"\)),isAuthLoading:[\s\S]{0,550}?isCustomModelProvider:(?<custom>\(0,${N}\.cc\)\((?<config>${N})\)),workspaceDependenciesEnabled:`), "ultra-reasoning-contract");
+    const { host, auth, gate, custom, config } = match.groups;
     return edit(source, match, match[0].replace(gate,
-      () => `${fast}.includeUltra(${gate},${host},${auth},${custom},null)`));
+      () => `${fast}.includeUltra(${gate},${host},${auth},${custom},null,${config}?.model_provider)`));
   }
 
   function ultraModelQuery(source) {
-    const match = one(source, pattern(String.raw`\{additionalAvailableModels:${N},authMethod:(?<auth>${N}),enabledReasoningEfforts:${N},hostId:(?<host>${N}),includeUltraReasoningEffort:(?<requested>${N})=!0,limit:${N}=100,specialty:${N},teamCatalog:(?<team>${N})\},\{get:(?<get>${N}),queryClient:${N},scope:${N}\}\)=>\{[^;]{1,1200}?(?<custom>${N})=\(0,${N}\.cc\)\(${N}\),[^;]{1,1200}?(?<selected>${N})=(?<native>\k<requested>&&\k<get>\(${N}\.JW,"1186680773"\));(?=return\{queryKey:)`), "ultra-model-query-contract");
-    const { auth, host, requested, team, custom, selected, native } = match.groups;
+    const match = one(source, pattern(String.raw`\{additionalAvailableModels:${N},authMethod:(?<auth>${N}),enabledReasoningEfforts:${N},hostId:(?<host>${N}),includeUltraReasoningEffort:(?<requested>${N})=!0,limit:${N}=100,specialty:${N},teamCatalog:(?<team>${N})\},\{get:(?<get>${N}),queryClient:${N},scope:${N}\}\)=>\{[^;]{1,1200}?(?<custom>${N})=\(0,${N}\.cc\)\((?<config>${N})\),[^;]{1,1200}?(?<selected>${N})=(?<native>\k<requested>&&\k<get>\(${N}\.JW,"1186680773"\));(?=return\{queryKey:)`), "ultra-model-query-contract");
+    const { auth, host, requested, team, custom, selected, native, config } = match.groups;
     if (!source.slice(match.index, match.index + 3500).includes(`includeUltraReasoningEffort:${selected},isCustomModelProvider:${custom}`))
       throw Error("ultra-model-selector-contract");
     return edit(source, match, match[0].replace(native,
-      () => `${requested}&&${fast}.includeUltra(${native},${host},${auth},${custom},${team})`));
+      () => `${requested}&&${fast}.includeUltra(${native},${host},${auth},${custom},${team},${config}?.model_provider)`));
   }
 
   function preload(html, read) {
@@ -111,6 +140,7 @@
     };
     readChunk.has = reader.has;
     const wantSpeed = state?.nativeFast === true;
+    const wantUltra = wantSpeed || state?.boundApiAuthVerified === true && state?.apiService === true;
     const wantPredictions = state?.nativePredictions === true
       && (state.apiKeyAuthVerified === true || state.apiService === true);
     const modules = new Map();
@@ -129,14 +159,16 @@
       return { url, source: transform(modules.get(url)?.source ?? source) };
     };
     const speedLayout = speedLayouts.find(layout => readChunk.has(layout.host));
+    const ultraLayout = ultraLayouts.find(layout => readChunk.has(layout.host));
     const speed = prepare(wantSpeed, () => {
       if (!speedLayout) throw Error("speed-layout-unsupported");
       return [patch(speedLayout.host, speedQueue), ...speedLayout.menus.map(id => patch(id, speedMenu))];
     });
-    const ultra = prepare(wantSpeed && speed.ok, () => [
-      patch(speedLayout.host, ultraReasoning),
-      ...speedLayout.modelQueries.map(id => patch(id, ultraModelQuery)),
-    ]);
+    const ultra = prepare(wantUltra, () => {
+      if (!ultraLayout) throw Error("ultra-layout-unsupported");
+      return [patch(ultraLayout.host, ultraReasoning),
+        ...ultraLayout.modelQueries.map(id => patch(id, ultraModelQuery))];
+    });
     const predictions = prepare(wantPredictions, () => {
       const readWithPreparedModules = id => {
         const chunk = readChunk(id);
@@ -150,9 +182,10 @@
     const ok = rspack.installModules([...modules.values()], () => root.__cockpitNativePredictions?.runtime.dispose());
     const reason = ok ? "rspack-contracts-installed"
       : modules.size ? "rspack-install-failed"
-      : [speed, predictions].find(result => result.reason !== "disabled")?.reason ?? "rspack-contracts-disabled";
-    const mask = [wantSpeed, state?.quotaCompat, state?.apiKeyAuthVerified, state?.apiService]
-      .map(value => value === true ? "1" : "0").join("") + (state?.nativePredictions ? "1" : "");
+      : [speed, ultra, predictions].find(result => result.reason !== "disabled")?.reason ?? "rspack-contracts-disabled";
+    const mask = [wantSpeed, state?.quotaCompat, state?.apiKeyAuthVerified, state?.apiService,
+      state?.nativePredictions, state?.boundApiAuthVerified]
+      .map(value => value === true ? "1" : "0").join("");
     if (state) {
       root.__cockpitNativePredictions?.setReady(ok && predictions.ok);
       Object.assign(state, {
@@ -161,6 +194,8 @@
         nativePatchReason: reason,
         nativePatchFeatures: mask,
         nativePatchRequestedFeatures: mask,
+        nativeUltraPatchState: wantUltra ? ok && ultra.ok ? "active" : "unsupported" : "disabled",
+        nativeUltraPatchReason: ultra.reason ?? (ok ? undefined : "rspack-install-failed"),
         nativePredictionPatchState: wantPredictions ? ok && predictions.ok ? "ready" : "unsupported" : "disabled",
         nativePredictionPatchReason: predictions.reason ?? (ok ? undefined : "rspack-install-failed"),
       });
@@ -168,5 +203,5 @@
     return { ok, reason, mode: "rspack", speed, ultra, predictions };
   }
 
-  root.__cockpitServiceRspack = { preload, verifySpeedDocument };
+  root.__cockpitServiceRspack = { preload, verifySpeedDocument, verifyRequestedDocument };
 })();

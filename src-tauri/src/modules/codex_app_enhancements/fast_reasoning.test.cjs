@@ -140,3 +140,26 @@ test('unknown query/gate contracts stay native; duplicate selectors reject the w
   assert.equal(result.patchedSource, source);
   assert.equal(result.diagnostics.reason, 'ambiguous-model-catalog');
 });
+
+test('bound OAuth uses declared Ultra capabilities while preserving native speed and Luna limits', () => {
+  const env = load(true, true, {nativeFast:false, apiKeyAuthVerified:false,
+    apiService:true, boundApiAuthVerified:true});
+  const input = models(), before = JSON.stringify(input);
+  const output = env.select(input, {authMethod:'chatgpt', modelProvider:'codex_local_access'});
+  assert.equal(levels(output.models[0]).includes('ultra'), true);
+  assert.equal(levels(output.models[3]).includes('ultra'), false);
+  assert.equal(JSON.stringify(input), before);
+  assert.equal(env.api.allow('local', 'apiKey'), false, 'Ultra does not enable Fast');
+  for (const options of [{includeUltraReasoningEffort:false},
+    {enabledReasoningEfforts:new Set(['high','max'])}, {teamCatalog:'loading'},
+    {hostId:'remote'}, {isCustomModelProvider:false}, {authMethod:'copilot'},
+    {modelProvider:'another-api'}, {modelProvider:undefined}]) {
+    assert.equal(levels(env.select(input, {authMethod:'chatgpt', modelProvider:'codex_local_access', ...options}).models[0]).includes('ultra'), false);
+  }
+  const transformed = env.api.transform(fixture + '\n' + queryFixture());
+  assert.ok(transformed.patchedSource.startsWith(fixture + '\n'), 'speed source remains byte-for-byte native');
+  const prepared = env.api.prepareLive(fixture + '\n' + queryFixture(), 'app://-/assets/app-initial-test.js');
+  assert.equal(prepared.ok, true);
+  env.sandbox.__cockpitEnhancements.boundApiAuthVerified = false;
+  assert.equal(levels(env.select(input, {authMethod:'chatgpt', modelProvider:'codex_local_access'}).models[0]).includes('ultra'), false);
+});

@@ -79,8 +79,8 @@ for (const failure of ['initial', 'primary', 'fetch']) {
     const state = next.root.__cockpitEnhancements;
     assert.equal(state.nativePatchState, 'active');
     assert.equal(state.nativePatchMode, 'fast-only');
-    assert.equal(state.nativePatchFeatures, '1010');
-    assert.equal(state.nativePatchRequestedFeatures, '1110');
+    assert.equal(state.nativePatchFeatures, '101000');
+    assert.equal(state.nativePatchRequestedFeatures, '111000');
     assert.equal(state.nativeQuotaPatchState, 'unsupported');
     assert.equal(state.nativeQuotaPatchReason, prepared.quotaReason);
     assert.equal(state.nativePatchReason, 'fast-only-quota-unsupported');
@@ -96,7 +96,7 @@ test('known complete quota and Fast contracts still require both modules to eval
   app.root.__cockpitNativeFastComplete();
   assert.equal(app.root.__cockpitEnhancements.nativePatchState, 'preloading');
   app.root.__cockpitNativeFastComplete('quota');
-  assert.equal(app.root.__cockpitEnhancements.nativePatchFeatures, '1110');
+  assert.equal(app.root.__cockpitEnhancements.nativePatchFeatures, '111000');
   assert.equal(app.root.__cockpitEnhancements.nativeQuotaPatchState, 'active');
 });
 
@@ -144,8 +144,8 @@ test('host reconnection preserves actual Fast-only features and revokes them aft
   const config = { nativeFast: true, quotaCompat: true, apiKeyAuthVerified: true, apiService: false, owner: 'reconnected' };
   vm.runInNewContext(stateScript.replace('__COCKPIT_STATE_OPTIONS__', JSON.stringify(config)), app.root);
   assert.equal(app.root.__cockpitEnhancements.nativePatchState, 'active');
-  assert.equal(app.root.__cockpitEnhancements.nativePatchFeatures, '1010');
-  assert.equal(app.root.__cockpitEnhancements.nativePatchRequestedFeatures, '1110');
+  assert.equal(app.root.__cockpitEnhancements.nativePatchFeatures, '101000');
+  assert.equal(app.root.__cockpitEnhancements.nativePatchRequestedFeatures, '111000');
   assert.equal(app.root.__cockpitEnhancements.nativeQuotaPatchReason, prepared.quotaReason);
   config.nativeFast = false;
   vm.runInNewContext(stateScript.replace('__COCKPIT_STATE_OPTIONS__', JSON.stringify(config)), app.root);
