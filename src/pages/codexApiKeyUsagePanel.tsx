@@ -197,6 +197,21 @@ export function renderCodexApiKeyUsagePanel({
     );
   }
   if (variant === "card" && summary && isTokenPlanUsage) {
+    // 进度条与主数字同为「剩余」口径：剩余越多条越长、颜色越绿，与
+    // 官方订阅卡片一致。分级阈值同 Claude 订阅卡片
+    // （已用 ≥90 critical / ≥70 low / ≥40 medium / 其余 high）。
+    const remainingPercent = Math.max(
+      0,
+      Math.min(100, Math.round(100 - usedPercent)),
+    );
+    const quotaBarClass =
+      usedPercent >= 90
+        ? "critical"
+        : usedPercent >= 70
+          ? "low"
+          : usedPercent >= 40
+            ? "medium"
+            : "high";
     const resetDetail =
       findApiKeyUsageDetail(summary, "intervalExpiresAt") ??
       findApiKeyUsageDetail(summary, "weeklyExpiresAt") ??
@@ -226,8 +241,8 @@ export function renderCodexApiKeyUsagePanel({
         </div>
         <div className="quota-bar-track">
           <div
-            className="quota-bar high"
-            style={{ width: `${Math.max(0, Math.min(100, usedPercent))}%` }}
+            className={`quota-bar ${quotaBarClass}`}
+            style={{ width: `${remainingPercent}%` }}
           />
         </div>
         {(summary.planName || resetDetail) && (
@@ -458,7 +473,7 @@ export function renderCodexApiKeyUsagePanel({
               </>
             ) : null}
           </div>
-          {isNewApiUsage || isTokenPlanUsage ? (
+          {isNewApiUsage ? (
             <div className="codex-api-key-usage-progress">
               <div className="cockpit-api-progress-track">
                 <div

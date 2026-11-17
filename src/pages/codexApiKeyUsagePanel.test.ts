@@ -69,6 +69,25 @@ test('New API card text and bar both use remaining quota', () => {
   assert.ok(!html.includes('width:6%'));
 });
 
+test('Token plan card bar uses remaining quota with per-usage severity', () => {
+  // 智谱等双窗套餐：主数字与进度条同为「剩余」口径（5 小时窗），与 New API 卡一致；
+  // 周窗剩余并排在旁；剩余不足时分级转红（阈值同 Claude 订阅卡片）。
+  const html = renderSummary({
+    mode: 'token_plan', unit: '%', quotaLimit: 100, quotaUsed: 6, quotaRemaining: 94,
+  }, 'card');
+  assert.ok(html.includes('94%'));
+  assert.ok(html.includes('width:94%'));
+  assert.ok(!html.includes('width:6%'));
+  assert.ok(html.includes('quota-bar high'));
+
+  const critical = renderSummary({
+    mode: 'token_plan', unit: '%', quotaLimit: 100, quotaUsed: 95, quotaRemaining: 5,
+  }, 'card');
+  assert.ok(critical.includes('quota-bar critical'));
+  assert.ok(critical.includes('width:5%'));
+  assert.ok(!critical.includes('width:95%'));
+});
+
 test('Chat relay cards display confirmed quota and distinguish unsupported usage from pending', () => {
   const provider = { ...officialProvider, baseUrl: account.api_base_url!, integrationType: 'sub2api' as const };
   const chat = { ...account, api_wire_api: 'chat_completions' as const };
