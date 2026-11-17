@@ -628,18 +628,28 @@ pub fn start_for_profile(
     port: Option<u16>,
     bind_account_id: Option<String>,
 ) {
-    start_profile(app, instance_id, profile_dir, port, bind_account_id, false);
+    let _ = start_profile(app, instance_id, profile_dir, port, bind_account_id, false);
 }
 
 /// Only the unified launch transaction may arm first-document adaptation.
-pub fn start_for_launched_profile(
+pub async fn start_for_launched_profile(
     app: AppHandle,
     instance_id: String,
     profile_dir: PathBuf,
     port: Option<u16>,
     bind_account_id: Option<String>,
 ) {
-    start_profile(app, instance_id, profile_dir, port, bind_account_id, true);
+    let prepared = start_profile(app, instance_id, profile_dir, port, bind_account_id, true);
+    if !crate::modules::codex_app_enhancements::wait_for_launch_profile(
+        prepared,
+        Duration::from_secs(10),
+    )
+    .await
+    {
+        crate::modules::logger::log_warn(
+            "[CodexEnhancements] launch profile preparation unavailable; continuing native client startup",
+        );
+    }
 }
 
 fn start_profile(
@@ -649,9 +659,9 @@ fn start_profile(
     port: Option<u16>,
     bind_account_id: Option<String>,
     fresh_launch: bool,
-) {
-    let Some(port) = port else { return };
-    crate::modules::codex_app_enhancements::start_for_profile(
+) -> Option<tokio::sync::oneshot::Receiver<()>> {
+    let port = port?;
+    let prepared = crate::modules::codex_app_enhancements::start_for_profile(
         profile_dir.clone(),
         instance_id.clone(),
         port,
@@ -670,7 +680,7 @@ fn start_profile(
         );
     }
     if !should_enable_profile_injection(&profile_dir, bind_account_id.as_deref()) {
-        return;
+        return prepared;
     }
     stop_injection_for_profile(&profile_dir);
     let key = profile_key(&profile_dir);
@@ -682,6 +692,7 @@ fn start_profile(
     if let Ok(mut items) = runtimes().lock() {
         items.insert(key, InjectionRuntime { task });
     }
+    prepared
 }
 
 #[derive(Debug, Clone)]

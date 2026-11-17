@@ -3224,7 +3224,12 @@ async fn codex_start_instance_internal(
             default_dir.clone(),
             injection_plan.port,
             default_bind_account_id.clone(),
-        );
+        )
+        .await;
+        if codex_instance_start_cancelled(&instance_id) {
+            modules::codex_app_injection::stop_for_profile(&default_dir);
+        }
+        ensure_codex_instance_start_not_cancelled(&instance_id)?;
         let launch_args = injection_plan.args.clone();
         let prepared_home = default_dir.clone();
         // Package registration, activation and PID confirmation can wait on
@@ -3534,7 +3539,12 @@ async fn codex_start_instance_internal(
         instance_dir.to_path_buf(),
         injection_plan.port,
         instance.bind_account_id.clone(),
-    );
+    )
+    .await;
+    if codex_instance_start_cancelled(&instance_id) {
+        modules::codex_app_injection::stop_for_profile(instance_dir);
+    }
+    ensure_codex_instance_start_not_cancelled(&instance_id)?;
     let launch_home = instance.user_data_dir.clone();
     let launch_args = injection_plan.args.clone();
     let pid = tauri::async_runtime::spawn_blocking(move || {
