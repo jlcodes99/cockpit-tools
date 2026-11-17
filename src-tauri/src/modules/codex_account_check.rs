@@ -31,11 +31,7 @@ fn account_check_candidate_ids(payload: &serde_json::Value) -> HashSet<String> {
     }
     if let Some(accounts) = payload.get("accounts").and_then(|value| value.as_object()) {
         for (key, value) in accounts {
-            let key_looks_like_account_id = key.starts_with("org-")
-                || key.starts_with("account-")
-                || key.starts_with("acct_")
-                || (key.len() == 36 && key.chars().filter(|ch| *ch == '-').count() == 4);
-            if key_looks_like_account_id {
+            if account_check_key_looks_like_account_id(key) {
                 if let Some(id) = normalize_optional_ref(Some(key)) {
                     ids.insert(id);
                 }

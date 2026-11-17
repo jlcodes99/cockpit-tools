@@ -3500,6 +3500,155 @@ fn official_account_check_accepts_target_account_key() {
         .expect("target account should pass official account check validation");
 }
 
+fn profile_check_account(id: &str, account_id: &str) -> CodexAccount {
+    CodexAccount::new(
+        format!("codex_profile_{id}"),
+        format!("profile-{id}@example.com"),
+        make_codex_tokens(
+            &format!("profile-{id}@example.com"),
+            account_id,
+            &format!("org-{id}"),
+            id,
+            &format!("rt-{id}"),
+        ),
+    )
+}
+
+#[test]
+fn official_account_check_profile_reads_nested_workspace_account() {
+    let workspace_id = "11111111-1111-4111-8111-111111111111";
+    let account = profile_check_account("nested", workspace_id);
+    let payload = serde_json::json!({
+        "accounts": {
+            "11111111-1111-4111-8111-111111111111": {
+                "account": {
+                    "account_id": "11111111-1111-4111-8111-111111111111",
+                    "name": "Team Alpha",
+                    "structure": "workspace"
+                },
+                "can_access_with_session": true
+            }
+        },
+        "account_ordering": ["11111111-1111-4111-8111-111111111111"]
+    });
+
+    let (name, structure, id) =
+        super::parse_account_profile_from_check_response(&payload, &account);
+    assert_eq!(name.as_deref(), Some("Team Alpha"));
+    assert_eq!(structure.as_deref(), Some("workspace"));
+    assert_eq!(id.as_deref(), Some(workspace_id));
+}
+
+#[test]
+fn official_account_check_profile_selects_target_workspace_by_key() {
+    let target_id = "22222222-2222-4222-8222-222222222222";
+    let account = profile_check_account("target", target_id);
+    let payload = serde_json::json!({
+        "accounts": {
+            "11111111-1111-4111-8111-111111111111": {
+                "account": {
+                    "account_id": "11111111-1111-4111-8111-111111111111",
+                    "name": "Other Team",
+                    "structure": "workspace"
+                },
+                "can_access_with_session": true
+            },
+            "22222222-2222-4222-8222-222222222222": {
+                "account": {
+                    "name": "Target Team",
+                    "structure": "workspace"
+                },
+                "can_access_with_session": true
+            }
+        },
+        "account_ordering": [
+            "11111111-1111-4111-8111-111111111111",
+            "22222222-2222-4222-8222-222222222222"
+        ]
+    });
+
+    let (name, structure, id) =
+        super::parse_account_profile_from_check_response(&payload, &account);
+    assert_eq!(name.as_deref(), Some("Target Team"));
+    assert_eq!(structure.as_deref(), Some("workspace"));
+    assert_eq!(id.as_deref(), Some(target_id));
+}
+
+#[test]
+fn official_account_check_profile_does_not_borrow_another_workspace_name() {
+    let account = profile_check_account("missing", "44444444-4444-4444-8444-444444444444");
+    let payload = serde_json::json!({
+        "accounts": {
+            "11111111-1111-4111-8111-111111111111": {
+                "account": {
+                    "account_id": "11111111-1111-4111-8111-111111111111",
+                    "name": "Other Team",
+                    "structure": "workspace"
+                },
+                "can_access_with_session": true
+            },
+            "22222222-2222-4222-8222-222222222222": {
+                "account": {
+                    "account_id": "22222222-2222-4222-8222-222222222222",
+                    "name": "Another Team",
+                    "structure": "workspace"
+                },
+                "can_access_with_session": true
+            }
+        },
+        "account_ordering": ["11111111-1111-4111-8111-111111111111"]
+    });
+
+    assert_eq!(
+        super::parse_account_profile_from_check_response(&payload, &account),
+        (None::<String>, None::<String>, None::<String>)
+    );
+}
+
+#[test]
+fn official_account_check_profile_keeps_flat_records() {
+    let workspace_id = "33333333-3333-4333-8333-333333333333";
+    let account = profile_check_account("flat", workspace_id);
+    let payload = serde_json::json!({
+        "accounts": {
+            "33333333-3333-4333-8333-333333333333": {
+                "account_id": "33333333-3333-4333-8333-333333333333",
+                "name": "Flat Team",
+                "structure": "workspace",
+                "can_access_with_session": true
+            }
+        }
+    });
+
+    let (name, structure, id) =
+        super::parse_account_profile_from_check_response(&payload, &account);
+    assert_eq!(name.as_deref(), Some("Flat Team"));
+    assert_eq!(structure.as_deref(), Some("workspace"));
+    assert_eq!(id.as_deref(), Some(workspace_id));
+}
+
+#[test]
+fn official_account_check_profile_accepts_single_unindexed_record() {
+    let account = profile_check_account("single", "55555555-5555-4555-8555-555555555555");
+    let payload = serde_json::json!({
+        "accounts": {
+            "primary": {
+                "account": {
+                    "name": "Solo Team",
+                    "structure": "workspace"
+                },
+                "can_access_with_session": true
+            }
+        }
+    });
+
+    let (name, structure, id) =
+        super::parse_account_profile_from_check_response(&payload, &account);
+    assert_eq!(name.as_deref(), Some("Solo Team"));
+    assert_eq!(structure.as_deref(), Some("workspace"));
+    assert_eq!(id, None);
+}
+
 #[test]
 fn official_account_check_rejects_another_account() {
     let account = CodexAccount::new(

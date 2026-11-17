@@ -2438,11 +2438,130 @@ fn collect_account_records(payload: &serde_json::Value) -> Vec<serde_json::Value
     records
 }
 
+fn account_check_key_looks_like_account_id(key: &str) -> bool {
+    key.starts_with("org-")
+        || key.starts_with("account-")
+        || key.starts_with("acct_")
+        || (key.len() == 36 && key.chars().filter(|ch| *ch == '-').count() == 4)
+}
+
+/// The official `/accounts/check` response keys `accounts` by workspace id and
+/// nests the real profile under `account`. Keep both so parsing can target the
+/// current workspace; `collect_account_records` stays flat for response
+/// validation, which relies on the outer node.
+#[derive(Debug, Clone)]
+struct AccountProfileRecord {
+    key: Option<String>,
+    node: serde_json::Value,
+}
+
+fn collect_account_profile_records(payload: &serde_json::Value) -> Vec<AccountProfileRecord> {
+    let mut records = Vec::new();
+
+    if let Some(accounts_value) = payload.get("accounts") {
+        if let Some(array) = accounts_value.as_array() {
+            for item in array {
+                if item.is_object() {
+                    records.push(AccountProfileRecord {
+                        key: None,
+                        node: item.clone(),
+                    });
+                }
+            }
+        } else if let Some(object) = accounts_value.as_object() {
+            for (key, value) in object {
+                if value.is_object() {
+                    records.push(AccountProfileRecord {
+                        key: Some(key.clone()),
+                        node: value.clone(),
+                    });
+                }
+            }
+        }
+    }
+
+    if records.is_empty() {
+        if let Some(array) = payload.as_array() {
+            for item in array {
+                if item.is_object() {
+                    records.push(AccountProfileRecord {
+                        key: None,
+                        node: item.clone(),
+                    });
+                }
+            }
+        }
+    }
+
+    records
+}
+
+fn account_profile_record_parts(
+    item: &AccountProfileRecord,
+) -> Option<(
+    &serde_json::Map<String, serde_json::Value>,
+    &serde_json::Map<String, serde_json::Value>,
+)> {
+    let outer = item.node.as_object()?;
+    let inner = outer
+        .get("account")
+        .and_then(serde_json::Value::as_object)
+        .unwrap_or(outer);
+    Some((outer, inner))
+}
+
+fn account_profile_record_ids(item: &AccountProfileRecord) -> Vec<String> {
+    let mut ids = Vec::new();
+    if let Some((outer, inner)) = account_profile_record_parts(item) {
+        for record in [inner, outer] {
+            if let Some(id) = extract_account_record_field(
+                record,
+                &["id", "account_id", "chatgpt_account_id", "workspace_id"],
+            ) {
+                if let Some(id) = normalize_optional_ref(Some(id.as_str())) {
+                    ids.push(id);
+                }
+            }
+        }
+    }
+    if let Some(key) = item.key.as_deref() {
+        if account_check_key_looks_like_account_id(key) {
+            if let Some(key) = normalize_optional_ref(Some(key)) {
+                ids.push(key);
+            }
+        }
+    }
+    ids
+}
+
+fn account_profile_record_field(item: &AccountProfileRecord, keys: &[&str]) -> Option<String> {
+    let (outer, inner) = account_profile_record_parts(item)?;
+    extract_account_record_field(inner, keys).or_else(|| extract_account_record_field(outer, keys))
+}
+
+const ACCOUNT_PROFILE_ID_KEYS: &[&str] =
+    &["id", "account_id", "chatgpt_account_id", "workspace_id"];
+const ACCOUNT_PROFILE_NAME_KEYS: &[&str] = &[
+    "name",
+    "display_name",
+    "account_name",
+    "organization_name",
+    "workspace_name",
+    "title",
+];
+const ACCOUNT_PROFILE_STRUCTURE_KEYS: &[&str] = &[
+    "structure",
+    "account_structure",
+    "kind",
+    "type",
+    "account_type",
+];
+
 fn parse_account_profile_from_check_response(
     payload: &serde_json::Value,
     account: &CodexAccount,
 ) -> (Option<String>, Option<String>, Option<String>) {
-    let records = collect_account_records(payload);
+    let records = collect_account_profile_records(payload);
     if records.is_empty() {
         return (None, None, None);
     }
@@ -2458,90 +2577,53 @@ fn parse_account_profile_from_check_response(
             .or_else(|| normalize_optional_ref(account.account_id.as_deref()));
     let expected_org_id = normalize_optional_ref(account.organization_id.as_deref());
 
-    let mut selected_record: Option<serde_json::Value> = None;
-
-    if let Some(expected_id) = expected_account_id.as_deref() {
-        selected_record = records
-            .iter()
-            .find(|item| {
-                let Some(record) = item.as_object() else {
-                    return false;
-                };
-                let candidate_id = extract_account_record_field(
-                    record,
-                    &["id", "account_id", "chatgpt_account_id", "workspace_id"],
-                );
-                normalize_optional_ref(candidate_id.as_deref()) == Some(expected_id.to_string())
+    let selected = if let Some(expected_id) = expected_account_id.as_deref() {
+        match records.iter().find(|item| {
+            account_profile_record_ids(item)
+                .iter()
+                .any(|id| id.as_str() == expected_id)
+        }) {
+            Some(record) => record,
+            // A single returned record cannot belong to a different workspace.
+            None if records.len() == 1 => &records[0],
+            // Never silently copy another workspace's name onto this account.
+            None => return (None, None, None),
+        }
+    } else {
+        ordering_first_id
+            .as_deref()
+            .and_then(|ordering_id| {
+                records.iter().find(|item| {
+                    account_profile_record_ids(item)
+                        .iter()
+                        .any(|id| id.as_str() == ordering_id)
+                })
             })
-            .cloned();
-    }
-
-    if selected_record.is_none() {
-        if let Some(ordering_id) = ordering_first_id.as_deref() {
-            selected_record = records
-                .iter()
-                .find(|item| {
-                    let Some(record) = item.as_object() else {
-                        return false;
-                    };
-                    let candidate_id = extract_account_record_field(
-                        record,
-                        &["id", "account_id", "chatgpt_account_id", "workspace_id"],
-                    );
-                    normalize_optional_ref(candidate_id.as_deref()) == Some(ordering_id.to_string())
+            .or_else(|| {
+                expected_org_id.as_deref().and_then(|org_id| {
+                    records.iter().find(|item| {
+                        account_profile_record_field(
+                            item,
+                            &["organization_id", "org_id", "workspace_id"],
+                        )
+                        .as_deref()
+                            == Some(org_id)
+                    })
                 })
-                .cloned();
-        }
-    }
-
-    if selected_record.is_none() {
-        if let Some(org_id) = expected_org_id.as_deref() {
-            selected_record = records
-                .iter()
-                .find(|item| {
-                    let Some(record) = item.as_object() else {
-                        return false;
-                    };
-                    let candidate_org = extract_account_record_field(
-                        record,
-                        &["organization_id", "org_id", "workspace_id"],
-                    );
-                    normalize_optional_ref(candidate_org.as_deref()) == Some(org_id.to_string())
-                })
-                .cloned();
-        }
-    }
-
-    let selected = selected_record.unwrap_or_else(|| records[0].clone());
-    let Some(record) = selected.as_object() else {
-        return (None, None, None);
+            })
+            .unwrap_or(&records[0])
     };
 
-    let account_name = extract_account_record_field(
-        record,
-        &[
-            "name",
-            "display_name",
-            "account_name",
-            "organization_name",
-            "workspace_name",
-            "title",
-        ],
-    );
-    let account_structure = extract_account_record_field(
-        record,
-        &[
-            "structure",
-            "account_structure",
-            "kind",
-            "type",
-            "account_type",
-        ],
-    );
-    let account_id = extract_account_record_field(
-        record,
-        &["id", "account_id", "chatgpt_account_id", "workspace_id"],
-    );
+    let account_name = account_profile_record_field(selected, ACCOUNT_PROFILE_NAME_KEYS);
+    let account_structure = account_profile_record_field(selected, ACCOUNT_PROFILE_STRUCTURE_KEYS);
+    let account_id =
+        account_profile_record_field(selected, ACCOUNT_PROFILE_ID_KEYS).or_else(|| {
+            selected
+                .key
+                .as_deref()
+                .filter(|key| account_check_key_looks_like_account_id(key))
+                .and_then(|key| normalize_optional_ref(Some(key)))
+        });
 
     (account_name, account_structure, account_id)
 }
