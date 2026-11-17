@@ -741,13 +741,6 @@ fn startup_transient(reason: &str) -> bool {
 }
 
 async fn try_startup_reload(registration: &mut Registration, context: ContextKey) {
-    if registration.preload_first {
-        // Windows treats renderer reload as a second cold start. Its fresh
-        // launch permission authorizes first-document preload only.
-        registration.startup = None;
-        registration.report("document", "restart-required").await;
-        return;
-    }
     let Some(startup) = registration.startup.as_ref() else {
         registration.report("document", "restart-required").await;
         return;
