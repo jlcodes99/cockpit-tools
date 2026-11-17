@@ -1226,6 +1226,20 @@ const fn codex_price(
 /// can be replaced and historical estimates reprice.
 const CODEX_LOCAL_ACCESS_PRICE_BOOK: &[CodexLocalAccessPriceBookEntry] = &[
     // Keep in sync with supported Codex models and public OpenAI rates.
+    // https://developers.openai.com/api/docs/models/gpt-6.2-sol
+    CodexLocalAccessPriceBookEntry {
+        model_id: GPT_6_2_SOL,
+        session_long_context: true,
+        standard: codex_price(2.0, 0.1, 10.0),
+        priority: Some(codex_price(4.0, 0.2, 20.0)),
+    },
+    // https://developers.openai.com/api/docs/models/gpt-6.2-astra
+    CodexLocalAccessPriceBookEntry {
+        model_id: GPT_6_2_ASTRA,
+        session_long_context: true,
+        standard: codex_price(8.0, 0.4, 40.0),
+        priority: Some(codex_price(16.0, 0.8, 80.0)),
+    },
     // OpenAI Standard/Fast prices, USD per 1M tokens:
     // https://developers.openai.com/api/docs/models/gpt-6.1-sol
     CodexLocalAccessPriceBookEntry {
@@ -1401,6 +1415,12 @@ fn normalize_known_openai_codex_model(model: &str) -> Option<String> {
         }
     }
 
+    if normalized.contains(GPT_6_2_SOL) {
+        return Some(GPT_6_2_SOL.to_string());
+    }
+    if normalized.contains(GPT_6_2_ASTRA) {
+        return Some(GPT_6_2_ASTRA.to_string());
+    }
     if normalized.contains("gpt-6.1-terra") {
         return Some("gpt-6.1-terra".to_string());
     }
@@ -1520,7 +1540,9 @@ fn is_openai_session_long_context_model(model_id: &str) -> bool {
         .unwrap_or_else(|| model_id.trim().to_ascii_lowercase());
     matches!(
         normalized.as_str(),
-        "gpt-6.1-sol"
+        GPT_6_2_SOL
+            | GPT_6_2_ASTRA
+            | "gpt-6.1-sol"
             | "gpt-6.1-terra"
             | "gpt-5.4"
             | "gpt-5.5"
@@ -1571,13 +1593,16 @@ fn pricing_has_explicit_priority_rates(pricing: &CodexLocalAccessModelPricing) -
             .is_some_and(|value| value > 0.0)
 }
 
-/// Resolve unit prices after service_tier + long-context policy
-/// (absolute priority rates, else x2; Ultrafast x6, Flex x0.5; long composes).
+// Midnight Pacific time on March 1, 2027, when GPT-6.2 Ultrafast returns to 6x.
+const GPT_6_2_ULTRAFAST_INTRO_END_MS: i64 = 1_803_888_000_000;
+
+/// Resolve unit prices for the service tier and apply the long-context policy.
 fn compute_effective_unit_prices(
     pricing: &CodexLocalAccessModelPricing,
     model_id: &str,
     usage: Option<&UsageCapture>,
     service_tier: Option<&str>,
+    timestamp_ms: i64,
 ) -> CodexLocalAccessPrice {
     let mut input_price = pricing.input_usd_per_million;
     let mut output_price = pricing.output_usd_per_million;
@@ -1614,9 +1639,16 @@ fn compute_effective_unit_prices(
             tier_multiplier = 2.0;
         }
         CodexBillingServiceTier::Ultrafast if !is_grok_47_pricing_model(model_id) => {
-            // OpenAI Ultrafast uses 6x Standard, independently of Fast overrides.
-            // https://developers.openai.com/api/docs/models/gpt-6.1-sol
-            tier_multiplier = 6.0;
+            tier_multiplier = if timestamp_ms < GPT_6_2_ULTRAFAST_INTRO_END_MS
+                && matches!(
+                    normalize_known_openai_codex_model(model_id).as_deref(),
+                    Some(GPT_6_2_SOL | GPT_6_2_ASTRA)
+                )
+            {
+                3.0
+            } else {
+                6.0
+            };
         }
         CodexBillingServiceTier::Flex if !is_grok_47_pricing_model(model_id) => {
             tier_multiplier = 0.5;
@@ -2016,11 +2048,22 @@ fn resolve_effective_model_pricing(
     usage: Option<&UsageCapture>,
     service_tier: Option<&str>,
 ) -> Option<CodexLocalAccessModelPricing> {
+    resolve_effective_model_pricing_at(collection, model_id, usage, service_tier, now_ms())
+}
+
+fn resolve_effective_model_pricing_at(
+    collection: Option<&CodexLocalAccessCollection>,
+    model_id: Option<&str>,
+    usage: Option<&UsageCapture>,
+    service_tier: Option<&str>,
+    timestamp_ms: i64,
+) -> Option<CodexLocalAccessModelPricing> {
     let Some(model_id) = model_id.map(str::trim).filter(|value| !value.is_empty()) else {
         return None;
     };
     let base = resolve_base_model_pricing(collection, model_id)?;
-    let selected_price = compute_effective_unit_prices(&base, model_id, usage, service_tier);
+    let selected_price =
+        compute_effective_unit_prices(&base, model_id, usage, service_tier, timestamp_ms);
     Some(selected_model_pricing(&base, selected_price))
 }
 
@@ -2058,7 +2101,8 @@ fn calculate_usage_cost_usd(
             let cache_write_multiplier =
                 match normalize_known_openai_codex_model(&pricing.model_id).as_deref() {
                     Some(
-                        "gpt-5.6" | "gpt-5.6-sol" | "gpt-5.6-terra" | "gpt-5.6-luna"
+                        GPT_6_2_SOL | GPT_6_2_ASTRA
+                        | "gpt-5.6" | "gpt-5.6-sol" | "gpt-5.6-terra" | "gpt-5.6-luna"
                         | "gpt-6.1-sol" | "gpt-6.1-terra" | "gpt-6-astra" | "gpt-6-sol" | "gpt-6-luna",
                     ) => 1.25,
                     _ => 1.0,

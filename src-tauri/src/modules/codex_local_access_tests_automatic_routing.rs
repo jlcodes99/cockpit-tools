@@ -221,8 +221,8 @@ fn automatic_routing_accepts_catalog_models_without_opening_unknown_gpt_names() 
         .find(|model| model["slug"] == "gpt-6.1-sol")
         .unwrap()
         .clone();
-    future["slug"] = json!("gpt-6.2-sol");
-    future["display_name"] = json!("GPT-6.2 Sol");
+    future["slug"] = json!("gpt-7-test");
+    future["display_name"] = json!("GPT Future Test");
     future["visibility"] = json!("list");
     future["supported_in_api"] = json!(true);
     future["use_responses_lite"] = json!(true);
@@ -231,24 +231,29 @@ fn automatic_routing_accepts_catalog_models_without_opening_unknown_gpt_names() 
     crate::modules::codex_model_catalog::with_test_catalog(catalog, || {
         let visible = super::automatic_api_service_visible_model_ids(vec![
             "gpt-6.2-sol".into(),
+            "gpt-6.2-astra".into(),
+            "gpt-7-test".into(),
             "gpt-6.2-unlisted".into(),
             "gpt-5.4".into(),
             "deepseek-v4-pro".into(),
         ]);
-        assert_eq!(visible, vec!["gpt-6.2-sol", "deepseek-v4-pro"]);
+        assert_eq!(
+            visible,
+            vec!["gpt-6.2-sol", "gpt-6.2-astra", "gpt-7-test", "deepseek-v4-pro"]
+        );
         assert!(super::api_service_routable_codex_model_ids()
             .iter()
-            .any(|model| model == "gpt-6.2-sol"));
+            .any(|model| model == "gpt-7-test"));
         assert!(super::local_gateway_visible_gpt_model_definitions()
-            .contains(&("gpt-6.2-sol".into(), "GPT-6.2 Sol".into())));
+            .contains(&("gpt-7-test".into(), "GPT Future Test".into())));
         let rendered = super::codex_protocol::build_codex_client_models_response(
-            &["gpt-6.2-sol".into()],
+            &["gpt-7-test".into()],
         );
-        assert_eq!(rendered["models"][0]["display_name"], "GPT-6.2 Sol");
+        assert_eq!(rendered["models"][0]["display_name"], "GPT Future Test");
         assert_eq!(rendered["models"][0]["context_window"],
             crate::modules::codex_model_catalog::snapshot()["models"]
                 .as_array().unwrap().iter()
-                .find(|model| model["slug"] == "gpt-6.2-sol").unwrap()["context_window"]);
+                .find(|model| model["slug"] == "gpt-7-test").unwrap()["context_window"]);
     });
 }
 
@@ -257,7 +262,7 @@ fn configured_api_key_models_receive_catalog_thinking_without_changing_mapping()
     let mut catalog = crate::modules::codex_model_catalog::snapshot().as_ref().clone();
     let mut future = catalog["models"].as_array().unwrap().iter()
         .find(|model| model["slug"] == "gpt-6.1-sol").unwrap().clone();
-    future["slug"] = json!("gpt-6.2-sol");
+    future["slug"] = json!("gpt-7-test");
     future["supported_reasoning_levels"] = json!([
         {"effort": "low", "description": "Low"},
         {"effort": "ultra", "description": "Ultra"}
@@ -266,17 +271,17 @@ fn configured_api_key_models_receive_catalog_thinking_without_changing_mapping()
     crate::modules::codex_model_catalog::with_test_catalog(catalog, || {
         let mut collection = automatic_routing_collection();
         collection.model_aliases = vec![super::CodexLocalAccessModelAlias {
-            source_model: "gpt-6.2-sol".into(),
+            source_model: "gpt-7-test".into(),
             alias: "my-model".into(),
             fork: false,
         }];
-        let account = automatic_routing_account("upstream", "responses", &["gpt-6.2-sol"]);
+        let account = automatic_routing_account("upstream", "responses", &["gpt-7-test"]);
         let values = super::sidecar_codex_key_model_values(&account, &collection);
-        assert_eq!(values[0]["name"], "gpt-6.2-sol");
+        assert_eq!(values[0]["name"], "gpt-7-test");
         assert_eq!(values[0]["alias"], "my-model");
         // The native gateway exposes reasoning through /models, not the
         // retired Go sidecar's `thinking` configuration field.
-        let rendered = super::codex_protocol::build_codex_client_models_response(&["gpt-6.2-sol".into()]);
+        let rendered = super::codex_protocol::build_codex_client_models_response(&["gpt-7-test".into()]);
         let levels = rendered["models"][0]["supported_reasoning_levels"].as_array().unwrap()
             .iter().map(|level| level["effort"].clone()).collect::<Vec<_>>();
         assert_eq!(levels, vec![json!("low"), json!("ultra")]);

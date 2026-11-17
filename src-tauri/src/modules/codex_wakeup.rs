@@ -1,4 +1,5 @@
 use crate::models::codex::CodexAccount;
+use crate::modules::codex_model_catalog::{GPT_6_2_ASTRA, GPT_6_2_MODELS, GPT_6_2_SOL};
 use crate::modules::{account, codex_account, codex_local_access, logger, process};
 use super::wakeup_history_store::{self, HistoryRow, HistoryStore};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -38,6 +39,7 @@ const GPT_5_5_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-5-5-model-preset";
 const RETIRE_GPT_5_5_WAKEUP_MODEL_MIGRATION_ID: &str = "retire-gpt-5-5-wakeup-model";
 const GPT_6_1_SOL_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-6-1-sol-model-preset";
 const GPT_6_1_TERRA_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-6-1-terra-model-preset";
+const GPT_6_2_MODEL_PRESETS_MIGRATION_ID: &str = "add-gpt-6-2-model-presets";
 const GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-6-astra-model-preset";
 const GPT_6_SOL_LUNA_MODEL_PRESETS_MIGRATION_ID: &str = "add-gpt-6-sol-luna-model-presets";
 const PREFIX_BUILTIN_MODEL_PRESET_NAMES_MIGRATION_ID: &str = "prefix-builtin-model-preset-names";
@@ -409,6 +411,7 @@ impl Default for CodexWakeupState {
                 RETIRE_GPT_5_5_WAKEUP_MODEL_MIGRATION_ID.to_string(),
                 GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID.to_string(),
                 GPT_6_SOL_LUNA_MODEL_PRESETS_MIGRATION_ID.to_string(),
+                GPT_6_2_MODEL_PRESETS_MIGRATION_ID.to_string(),
                 PREFIX_BUILTIN_MODEL_PRESET_NAMES_MIGRATION_ID.to_string(),
                 PRUNE_LEGACY_MODEL_PRESETS_MIGRATION_ID.to_string(),
             ],
@@ -532,6 +535,9 @@ fn default_reasoning_efforts_for_model(model: &str) -> Vec<String> {
         ]
     } else if model.trim().eq_ignore_ascii_case("gpt-6.1-sol")
         || model.trim().eq_ignore_ascii_case("gpt-6.1-terra")
+        || GPT_6_2_MODELS
+            .iter()
+            .any(|id| model.trim().eq_ignore_ascii_case(id))
     {
         vec!["low", "medium", "high", "xhigh", "max", "ultra"]
             .into_iter()
@@ -563,6 +569,8 @@ fn default_model_presets() -> Vec<CodexWakeupModelPreset> {
         ("preset-gpt-5-6-sol", "GPT-5.6 Sol", "gpt-5.6-sol"),
         ("preset-gpt-5-6-terra", "GPT-5.6 Terra", "gpt-5.6-terra"),
         ("preset-gpt-5-6-luna", "GPT-5.6 Luna", "gpt-5.6-luna"),
+        ("preset-gpt-6-2-sol", "GPT-6.2 Sol", GPT_6_2_SOL),
+        ("preset-gpt-6-2-astra", "GPT-6.2 Astra", GPT_6_2_ASTRA),
     ];
 
     items
@@ -921,7 +929,10 @@ fn ensure_gpt_6_1_sol_model_preset(state: &mut CodexWakeupState) -> bool {
     let defaults = default_model_presets();
     let unchanged = defaults
         .iter()
-        .filter(|preset| preset.model != "gpt-6.1-sol" && preset.model != "gpt-6.1-terra")
+        .filter(|preset| {
+            !matches!(preset.model.as_str(), "gpt-6.1-sol" | "gpt-6.1-terra")
+                && !GPT_6_2_MODELS.contains(&preset.model.as_str())
+        })
         .all(|preset| {
             state
                 .model_presets
@@ -959,6 +970,31 @@ fn ensure_gpt_6_1_terra_model_preset(state: &mut CodexWakeupState) -> bool {
     true
 }
 
+fn ensure_gpt_6_2_model_presets(state: &mut CodexWakeupState) -> bool {
+    if state
+        .model_preset_migrations
+        .iter()
+        .any(|id| id == GPT_6_2_MODEL_PRESETS_MIGRATION_ID)
+    {
+        return false;
+    }
+    let additions = default_model_presets()
+        .into_iter()
+        .filter(|preset| GPT_6_2_MODELS.contains(&preset.model.as_str()))
+        .filter(|preset| {
+            !state.model_presets.iter().any(|existing| {
+                existing.model.trim().eq_ignore_ascii_case(&preset.model)
+                    || existing.id == preset.id
+            })
+        })
+        .collect::<Vec<_>>();
+    state.model_presets.extend(additions);
+    state
+        .model_preset_migrations
+        .push(GPT_6_2_MODEL_PRESETS_MIGRATION_ID.to_string());
+    true
+}
+
 fn apply_model_preset_migrations(state: &mut CodexWakeupState) -> bool {
     let mut changed = false;
     changed |= prune_legacy_model_presets(state);
@@ -970,6 +1006,7 @@ fn apply_model_preset_migrations(state: &mut CodexWakeupState) -> bool {
     changed |= ensure_gpt_6_sol_luna_model_presets(state);
     changed |= ensure_gpt_6_1_sol_model_preset(state);
     changed |= ensure_gpt_6_1_terra_model_preset(state);
+    changed |= ensure_gpt_6_2_model_presets(state);
     changed |= prefix_builtin_model_preset_names(state);
     state.model_preset_migrations.sort();
     state.model_preset_migrations.dedup();
@@ -3521,7 +3558,9 @@ mod tests {
                 "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
-                "gpt-5.6-luna"
+                "gpt-5.6-luna",
+                "gpt-6.2-sol",
+                "gpt-6.2-astra"
             ]
         );
         let astra = default_model_presets()
@@ -3584,7 +3623,9 @@ mod tests {
                 "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
-                "gpt-5.6-luna"
+                "gpt-5.6-luna",
+                "gpt-6.2-sol",
+                "gpt-6.2-astra"
             ]
         );
         assert!(state
@@ -3667,7 +3708,9 @@ mod tests {
                 "gpt-5.6-terra",
                 "gpt-5.6-luna",
                 "gpt-5.6-sol",
-                "custom-model"
+                "custom-model",
+                "gpt-6.2-sol",
+                "gpt-6.2-astra"
             ]
         );
         assert_eq!(

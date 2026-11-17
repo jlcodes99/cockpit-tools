@@ -1194,11 +1194,12 @@ fn compute_request_log_reprice_row(
     collection: Option<&CodexLocalAccessCollection>,
     row: &RequestLogRepriceRow,
 ) -> Option<RequestLogRepriceUpdate> {
-    let pricing = resolve_effective_model_pricing(
+    let pricing = resolve_effective_model_pricing_at(
         collection,
         Some(row.model_id.as_str()),
         Some(&row.usage),
         Some(row.service_tier.as_str()),
+        row.timestamp,
     );
     let pricing = pricing.as_ref()?;
     let estimated_cost_usd = calculate_usage_cost_usd(Some(&row.usage), Some(pricing));

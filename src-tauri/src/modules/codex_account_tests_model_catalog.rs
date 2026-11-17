@@ -27,6 +27,42 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
     assert_eq!(reloaded.api_model_vision_support.get(&defaults.image_model), Some(&false));
 }
 
+#[test]
+fn gpt_6_2_catalog_migration_preserves_explicit_model_selections() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = dir.path();
+    let previous = super::default_experimental_model_definitions(base)
+        .into_iter()
+        .filter(|model| !super::GPT_6_2_MODELS.contains(&model.model_id.as_str()))
+        .collect::<Vec<_>>();
+    let saved = serde_json::json!({
+        "version": super::EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
+        "default_model_id": "gpt-5.6-luna",
+        "models": previous,
+    });
+    fs::write(
+        super::experimental_model_config_path(base),
+        serde_json::to_vec(&saved).unwrap(),
+    )
+    .unwrap();
+    let upgraded = super::read_experimental_model_definitions(base);
+    let ids = upgraded
+        .iter()
+        .map(|model| model.model_id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(&ids[..2], &super::GPT_6_2_MODELS);
+    assert_eq!(
+        super::read_experimental_model_default_model_id(base).as_deref(),
+        Some("gpt-5.6-luna")
+    );
+
+    fs::write(super::user_customized_model_catalog_marker_path(base), "").unwrap();
+    let curated = super::read_experimental_model_definitions(base);
+    assert!(curated
+        .iter()
+        .all(|model| !super::GPT_6_2_MODELS.contains(&model.model_id.as_str())));
+}
+
     #[test]
     fn gpt_6_1_terra_catalog_upgrade_preserves_profiles_and_customization() {
         let _lock = crate::modules::test_support::env_lock()
@@ -38,7 +74,11 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
             let defaults = super::default_experimental_model_definitions(&dir);
             assert!(defaults.iter().any(|model| model.model_id == "gpt-6.1-terra"));
             let mut previous = defaults.into_iter()
-                .filter(|model| model.model_id != "gpt-6.1-terra").collect::<Vec<_>>();
+                .filter(|model| {
+                    model.model_id != "gpt-6.1-terra"
+                        && !super::GPT_6_2_MODELS.contains(&model.model_id.as_str())
+                })
+                .collect::<Vec<_>>();
             previous[0].context_window = Some(800_000);
             let old_config = serde_json::json!({
                 "version": super::EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
@@ -51,7 +91,8 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
             fs::write(&path, serde_json::to_vec(&old_config).unwrap()).unwrap();
             let upgraded = super::read_experimental_model_definitions(&dir);
             assert_eq!(upgraded.iter().filter(|model| model.model_id == "gpt-6.1-terra").count(), 1);
-            assert_eq!(upgraded[0].context_window, Some(800_000));
+            let old_sol = upgraded.iter().find(|model| model.model_id == "gpt-6.1-sol").unwrap();
+            assert_eq!(old_sol.context_window, Some(800_000));
             let old_ids = previous.iter().map(|model| model.model_id.clone()).collect::<Vec<_>>();
             let catalog_path = super::experimental_model_catalog_path(&dir);
             fs::write(&catalog_path, serde_json::to_vec(

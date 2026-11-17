@@ -739,11 +739,12 @@ async fn record_request_stats_with_meta(
         let mut runtime = gateway_runtime().lock().await;
         let now = now_ms();
         let usage_ref = usage.as_ref();
-        let pricing = resolve_effective_model_pricing(
+        let pricing = resolve_effective_model_pricing_at(
             runtime.collection.as_ref(),
             model_id,
             usage_ref,
             meta.service_tier,
+            now,
         );
         let model_pricing_version = runtime
             .collection

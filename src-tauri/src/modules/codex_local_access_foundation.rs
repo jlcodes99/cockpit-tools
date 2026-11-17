@@ -26,6 +26,7 @@ use crate::models::codex_local_access::{
     DEFAULT_CODEX_IMAGE_GENERATION_MODEL, DEFAULT_MAX_ACCOUNT_CONCURRENCY,
 };
 use crate::models::{CodexInstanceApiRoute, CodexInstanceModelRouting};
+use crate::modules::codex_model_catalog::{GPT_6_2_ASTRA, GPT_6_2_SOL};
 use crate::modules::atomic_write::{
     update_string_atomic, write_secret_string_atomic, write_secret_string_atomic_if_changed,
     write_string_atomic, write_string_atomic_if_hash_matches,
@@ -263,6 +264,8 @@ const CODEX_PROVIDER_MODEL_SHELL_POOL: &[&str] = &["gpt-5.6-sol", "gpt-5.6-terra
 // account already exposes those exact models, without assigning them to unrelated
 // overflow models. The retired model remains valid only for explicit API providers.
 const CODEX_PROVIDER_IDENTITY_ONLY_MODEL_IDS: &[&str] = &[
+    GPT_6_2_SOL,
+    GPT_6_2_ASTRA,
     "gpt-6.1-sol",
     "gpt-6.1-terra",
     "gpt-6-astra",
@@ -363,7 +366,7 @@ const RESPONSE_AFFINITY_TTL_MS: i64 = 24 * 60 * 60 * 1000;
 const MAX_RESPONSE_AFFINITY_BINDINGS: usize = 4096;
 const PREPARED_ACCOUNT_CACHE_TTL_MS: i64 = 30 * 1000;
 const STATE_RECENT_USAGE_EVENT_LIMIT: usize = 100;
-const DEFAULT_MODEL_PRICING_VERSION: u64 = 8;
+const DEFAULT_MODEL_PRICING_VERSION: u64 = 9;
 const MODEL_PRICING_REPRICE_BATCH_SIZE: i64 = 1_000;
 const MODEL_PRICING_REPRICE_PARALLEL_MIN_ROWS: usize = 2_000;
 const LOCAL_ACCESS_LOGS_DB_BUSY_TIMEOUT: Duration = Duration::from_secs(5);

@@ -18,7 +18,18 @@ pub(crate) const MAX_CATALOG_BYTES: usize = 8 * 1024 * 1024;
 const SOURCE_TIMEOUT: Duration = Duration::from_secs(8);
 const PRIMARY_URL: &str = "https://raw.githubusercontent.com/router-for-me/models/refs/heads/main/codex_client_models.json";
 const SECONDARY_URL: &str = "https://models.router-for.me/codex_client_models.json";
-const PINNED_MODELS: [&str; 5] = ["gpt-6.1-sol", "gpt-6-astra", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna"];
+pub(crate) const GPT_6_2_SOL: &str = "gpt-6.2-sol";
+pub(crate) const GPT_6_2_ASTRA: &str = "gpt-6.2-astra";
+pub(crate) const GPT_6_2_MODELS: [&str; 2] = [GPT_6_2_SOL, GPT_6_2_ASTRA];
+pub(super) const PINNED_MODELS: [&str; 7] = [
+    GPT_6_2_SOL,
+    GPT_6_2_ASTRA,
+    "gpt-6.1-sol",
+    "gpt-6-astra",
+    "gpt-6.1-terra",
+    "gpt-6-sol",
+    "gpt-6-luna",
+];
 const EMBEDDED_JSON: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../resources/codex/codex_client_models.json"

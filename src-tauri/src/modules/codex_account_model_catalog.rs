@@ -571,15 +571,7 @@ fn prioritize_gpt_6_model_definitions(
     mut models: Vec<CodexExperimentalModelDefinition>,
 ) -> Vec<CodexExperimentalModelDefinition> {
     let mut target_index = 0;
-    for model_id in [
-        GPT_6_1_SOL_MODEL_ID,
-        GPT_6_ASTRA_MODEL_ID,
-        GPT_6_1_TERRA_MODEL_ID,
-        GPT_6_SOL_MODEL_ID,
-        GPT_6_LUNA_MODEL_ID,
-    ]
-    .into_iter()
-    {
+    for model_id in crate::modules::codex_model_catalog::PINNED_MODELS {
         let Some(index) = models
             .iter()
             .position(|model| model.model_id.eq_ignore_ascii_case(model_id))
@@ -841,6 +833,7 @@ fn maybe_add_gpt_6_1_sol_to_previous_shipped_model_definitions(
         .collect::<HashSet<_>>();
     if !SHIPPED_VISIBLE_CODEX_MODEL_IDS
         .iter()
+        .filter(|id| !GPT_6_2_MODELS.contains(id))
         .filter(|id| ![GPT_6_1_SOL_MODEL_ID, GPT_6_1_TERRA_MODEL_ID, "gpt-reserve"].contains(id))
         .filter(|id| !is_retired_builtin_codex_model(id))
         .all(|id| ids.contains(&id.to_ascii_lowercase()))
@@ -864,6 +857,7 @@ fn maybe_add_gpt_6_1_terra_to_previous_shipped_model_definitions(
     let ids = models.iter().map(|model| model.model_id.to_ascii_lowercase())
         .filter(|id| id != "gpt-reserve").collect::<HashSet<_>>();
     let previous = SHIPPED_VISIBLE_CODEX_MODEL_IDS.iter()
+        .filter(|id| !GPT_6_2_MODELS.contains(id))
         .filter(|id| ![GPT_6_1_TERRA_MODEL_ID, "gpt-reserve"].contains(id))
         .map(|id| id.to_string()).collect::<HashSet<_>>();
     if ids == previous {
@@ -876,11 +870,27 @@ fn maybe_add_gpt_6_1_terra_to_previous_shipped_model_definitions(
     prioritize_gpt_6_model_definitions(models)
 }
 
+fn is_previous_gpt_6_2_catalog<'a>(model_ids: impl Iterator<Item = &'a str>) -> bool {
+    let ids = model_ids
+        .map(|id| id.trim().to_ascii_lowercase())
+        .filter(|id| id != "gpt-reserve")
+        .collect::<HashSet<_>>();
+    let previous = SHIPPED_VISIBLE_CODEX_MODEL_IDS
+        .iter()
+        .copied()
+        .filter(|id| *id != "gpt-reserve" && !GPT_6_2_MODELS.contains(id))
+        .map(str::to_owned)
+        .collect::<HashSet<_>>();
+    ids == previous
+}
+
 fn model_catalog_display_name(model_id: &str, fallback: &str) -> String {
     match model_id.trim().to_ascii_lowercase().as_str() {
         "gpt-5.6-sol" => "GPT-5.6 Sol".to_string(),
         "gpt-5.6-terra" => "GPT-5.6 Terra".to_string(),
         "gpt-5.6-luna" => "GPT-5.6 Luna".to_string(),
+        GPT_6_2_SOL => "GPT-6.2 Sol".to_string(),
+        GPT_6_2_ASTRA => "GPT-6.2 Astra".to_string(),
         GPT_6_1_SOL_MODEL_ID => "GPT-6.1 Sol".to_string(),
         GPT_6_1_TERRA_MODEL_ID => "GPT-6.1 Terra".to_string(),
         GPT_6_ASTRA_MODEL_ID => "GPT-6 Astra".to_string(),
@@ -1229,6 +1239,10 @@ pub(crate) fn read_experimental_model_definitions(
                 .any(|item| item == GPT_6_1_SOL_MODEL_CATALOG_MIGRATION_ID);
             let should_add_terra_61 = !config.migrations.iter()
                 .any(|item| item == GPT_6_1_TERRA_MODEL_CATALOG_MIGRATION_ID);
+            let should_add_62 = !config
+                .migrations
+                .iter()
+                .any(|item| item == GPT_6_2_MODEL_CATALOG_MIGRATION_ID);
             normalize_experimental_model_definitions_for_profile(Some(base_dir), config.models).map(
                 |models| {
                     (
@@ -1238,17 +1252,26 @@ pub(crate) fn read_experimental_model_definitions(
                         should_add_sol_luna,
                         should_add_sol_61,
                         should_add_terra_61,
+                        should_add_62,
                     )
                 },
             )
         }) {
-        Ok((_models, true, _, _, _, _)) => {
+        Ok((_models, true, _, _, _, _, _)) => {
             // A release migration intentionally resets all pre-release lists to the
             // shipped visible-model preset. Later user edits are preserved by version 4+
             // and the additive Astra / GPT-6 Sol-Luna migration markers.
             default_experimental_model_definitions(base_dir)
         }
-        Ok((models, false, should_add_astra, should_add_sol_luna, should_add_sol_61, should_add_terra_61)) => {
+        Ok((
+            models,
+            false,
+            should_add_astra,
+            should_add_sol_luna,
+            should_add_sol_61,
+            should_add_terra_61,
+            should_add_62,
+        )) => {
             let models = if should_add_astra {
                 maybe_add_gpt_6_astra_to_previous_shipped_model_definitions(base_dir, models)
             } else {
@@ -1264,11 +1287,23 @@ pub(crate) fn read_experimental_model_definitions(
             } else {
                 prioritize_gpt_6_model_definitions(models)
             };
-            if should_add_terra_61 {
+            let mut models = if should_add_terra_61 {
                 maybe_add_gpt_6_1_terra_to_previous_shipped_model_definitions(base_dir, models)
             } else {
                 models
+            };
+            if should_add_62
+                && !has_saved_experimental_model_definitions(base_dir)
+                && is_previous_gpt_6_2_catalog(models.iter().map(|model| model.model_id.as_str()))
+            {
+                models.extend(
+                    default_experimental_model_definitions(base_dir)
+                        .into_iter()
+                        .filter(|model| GPT_6_2_MODELS.contains(&model.model_id.as_str())),
+                );
+                models = prioritize_gpt_6_model_definitions(models);
             }
+            models
         }
         Err(error) => {
             logger::log_warn(&format!(
@@ -1358,6 +1393,12 @@ fn persist_experimental_model_definitions(
     }
     if !migrations.iter().any(|item| item == GPT_6_1_TERRA_MODEL_CATALOG_MIGRATION_ID) {
         migrations.push(GPT_6_1_TERRA_MODEL_CATALOG_MIGRATION_ID.to_string());
+    }
+    if !migrations
+        .iter()
+        .any(|item| item == GPT_6_2_MODEL_CATALOG_MIGRATION_ID)
+    {
+        migrations.push(GPT_6_2_MODEL_CATALOG_MIGRATION_ID.to_string());
     }
     let mut content = serde_json::to_string_pretty(&ExperimentalModelCatalogConfig {
         version: EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
@@ -3240,6 +3281,7 @@ fn rebuild_managed_catalog_from_existing(catalog_path: &Path) -> Result<(), Stri
     // A capability rebuild also upgrades unchanged default catalogs. Provider and
     // user-curated catalogs retain their actual model selection.
     let previous_ids = SHIPPED_VISIBLE_CODEX_MODEL_IDS.iter()
+        .filter(|id| !GPT_6_2_MODELS.contains(id))
         .filter(|id| ![GPT_6_1_TERRA_MODEL_ID, "gpt-reserve"].contains(id))
         .map(|id| id.to_string()).collect::<HashSet<_>>();
     let existing_ids = model_ids.iter().map(|id| id.to_ascii_lowercase())
@@ -3248,6 +3290,19 @@ fn rebuild_managed_catalog_from_existing(catalog_path: &Path) -> Result<(), Stri
         let insert_at = model_ids.iter().position(|id| id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID))
             .map(|index| index + 1).unwrap_or(0);
         model_ids.insert(insert_at, GPT_6_1_TERRA_MODEL_ID.into());
+    }
+    if !catalog_path
+        .parent()
+        .is_some_and(has_saved_experimental_model_definitions)
+        && is_previous_gpt_6_2_catalog(model_ids.iter().map(String::as_str))
+    {
+        model_ids.splice(
+            0..0,
+            GPT_6_2_MODELS
+                .into_iter()
+                .filter(|id| configured.iter().any(|model| model.model_id == *id))
+                .map(str::to_owned),
+        );
     }
     let mut rebuilt =
         crate::modules::codex_protocol::build_codex_client_models_response(&model_ids);

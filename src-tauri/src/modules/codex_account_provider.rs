@@ -9,6 +9,7 @@ use crate::modules::apikey_fun_links::{
     normalize_legacy_apikey_fun_url, APIKEY_FUN_LEGACY_PROVIDER_BASE_URL,
     APIKEY_FUN_PROVIDER_BASE_URL,
 };
+use crate::modules::codex_model_catalog::{GPT_6_2_ASTRA, GPT_6_2_MODELS, GPT_6_2_SOL};
 use crate::modules::{account, codex_oauth, logger};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use ed25519_dalek::pkcs8::DecodePrivateKey;
@@ -77,6 +78,7 @@ pub(crate) const GPT_6_1_SOL_MODEL_ID: &str = "gpt-6.1-sol";
 const GPT_6_1_SOL_MODEL_CATALOG_MIGRATION_ID: &str = "add-gpt-6-1-sol-model";
 pub(crate) const GPT_6_1_TERRA_MODEL_ID: &str = "gpt-6.1-terra";
 const GPT_6_1_TERRA_MODEL_CATALOG_MIGRATION_ID: &str = "add-gpt-6-1-terra-model";
+const GPT_6_2_MODEL_CATALOG_MIGRATION_ID: &str = "add-gpt-6-2-models";
 pub(crate) const GPT_6_ASTRA_MODEL_ID: &str = "gpt-6-astra";
 pub(crate) const GPT_6_SOL_MODEL_ID: &str = "gpt-6-sol";
 pub(crate) const GPT_6_LUNA_MODEL_ID: &str = "gpt-6-luna";
@@ -108,6 +110,8 @@ const PRE_GPT_6_SOL_LUNA_SHIPPED_VISIBLE_CODEX_MODEL_IDS: &[&str] = &[
 const EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION: u32 = 4;
 const CODEX_REASONING_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max", "ultra"];
 const SHIPPED_VISIBLE_CODEX_MODEL_IDS: &[&str] = &[
+    GPT_6_2_SOL,
+    GPT_6_2_ASTRA,
     GPT_6_1_SOL_MODEL_ID,
     GPT_6_ASTRA_MODEL_ID,
     GPT_6_1_TERRA_MODEL_ID,

@@ -19,6 +19,44 @@ fn long_override_usage(input_tokens: u64) -> super::UsageCapture {
 }
 
 #[test]
+fn gpt_6_2_ultrafast_pricing_uses_the_request_date_and_long_context_rates() {
+    let launch_end = super::GPT_6_2_ULTRAFAST_INTRO_END_MS;
+    for (model, rates) in [
+        ("openai/gpt-6.2-sol", (2.0, 0.1, 10.0)),
+        ("gpt-6.2-astra-2026-11-17", (8.0, 0.4, 40.0)),
+    ] {
+        for (input_tokens, input_multiplier, output_multiplier) in
+            [(272_000, 1.0, 1.0), (272_001, 2.0, 1.5)]
+        {
+            let usage = long_override_usage(input_tokens);
+            for (tier, timestamp, multiplier) in [
+                (None, launch_end - 1, 1.0),
+                (Some("priority"), launch_end - 1, 2.0),
+                (Some("ultrafast"), launch_end - 1, 3.0),
+                (Some("ultrafast"), launch_end, 6.0),
+            ] {
+                let price = super::resolve_effective_model_pricing_at(
+                    None, Some(model), Some(&usage), tier, timestamp,
+                )
+                .unwrap();
+                assert!(super::prices_close(
+                    price.input_usd_per_million,
+                    rates.0 * input_multiplier * multiplier
+                ));
+                assert!(super::prices_close(
+                    price.cached_input_usd_per_million.unwrap(),
+                    rates.1 * input_multiplier * multiplier
+                ));
+                assert!(super::prices_close(
+                    price.output_usd_per_million,
+                    rates.2 * output_multiplier * multiplier
+                ));
+            }
+        }
+    }
+}
+
+#[test]
 fn long_price_override_standard_and_flex_ignore_other_tiers_priority_configuration() {
     let normalized = super::normalize_model_pricings(vec![explicit_long_override()]);
     let stored: super::CodexLocalAccessModelPricing =
@@ -26,7 +64,7 @@ fn long_price_override_standard_and_flex_ignore_other_tiers_priority_configurati
     let usage = long_override_usage(272_001);
     for (tier, expected) in [(None, (7.0, 0.7, 40.0)), (Some("flex"), (3.5, 0.35, 20.0))] {
         let actual =
-            super::compute_effective_unit_prices(&stored, &stored.model_id, Some(&usage), tier);
+            super::compute_effective_unit_prices(&stored, &stored.model_id, Some(&usage), tier, 0);
         assert!(super::prices_close(
             actual.input_usd_per_million,
             expected.0
@@ -45,6 +83,7 @@ fn long_price_override_standard_and_flex_ignore_other_tiers_priority_configurati
         &stored.model_id,
         Some(&long_override_usage(272_000)),
         None,
+        0,
     );
     assert_eq!(short.input_usd_per_million, 5.0);
 }
@@ -71,7 +110,7 @@ fn ultrafast_ignores_fast_overrides_and_composes_with_custom_standard_long_price
     pricing.priority_input_usd_per_million = Some(999.0);
     pricing.priority_cached_input_usd_per_million = Some(999.0);
     pricing.priority_output_usd_per_million = Some(999.0);
-    let actual = super::compute_effective_unit_prices(&pricing, &pricing.model_id, Some(&long_override_usage(272_001)), Some("ultrafast"));
+    let actual = super::compute_effective_unit_prices(&pricing, &pricing.model_id, Some(&long_override_usage(272_001)), Some("ultrafast"), 0);
     assert!(super::prices_close(actual.input_usd_per_million, 42.0));
     assert!(super::prices_close(actual.cached_input_usd_per_million, 4.2));
     assert!(super::prices_close(actual.output_usd_per_million, 240.0));
@@ -108,6 +147,7 @@ fn long_price_override_priority_preserves_absolute_rates_or_composes_multiplier(
         &pricing.model_id,
         Some(&usage),
         Some("priority"),
+        0,
     );
     assert_eq!(priority.input_usd_per_million, 20.0);
     assert_eq!(priority.cached_input_usd_per_million, 2.0);
@@ -120,6 +160,7 @@ fn long_price_override_priority_preserves_absolute_rates_or_composes_multiplier(
         &pricing.model_id,
         Some(&usage),
         Some("priority"),
+        0,
     );
     assert_eq!(priority.input_usd_per_million, 14.0);
     assert_eq!(priority.cached_input_usd_per_million, 1.4);
@@ -139,6 +180,7 @@ fn long_price_override_zero_and_partial_values_are_preserved() {
         "gpt-5.5",
         Some(&long_override_usage(300_000)),
         None,
+        0,
     );
     assert_eq!(actual.input_usd_per_million, 0.0);
     assert_eq!(actual.cached_input_usd_per_million, 1.0);
@@ -196,7 +238,8 @@ fn long_price_override_custom_model_uses_explicit_threshold() {
             &normalized[0],
             "custom-model",
             Some(&long_override_usage(272_001)),
-            None
+            None,
+            0,
         )
         .input_usd_per_million,
         7.0

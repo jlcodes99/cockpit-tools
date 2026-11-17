@@ -434,9 +434,11 @@
         let models = generated["models"].as_array().expect("models array");
         assert_eq!(
             models[0].get("slug").and_then(serde_json::Value::as_str),
-            Some("gpt-6.1-sol")
+            Some("gpt-6.2-sol")
         );
         for expected in [
+            "gpt-6.2-sol",
+            "gpt-6.2-astra",
             "gpt-6.1-sol",
             "gpt-6-astra",
             "gpt-6.1-terra",
@@ -507,7 +509,11 @@
         .expect("enable experimental catalog");
 
         let mut previous_defaults = super::default_experimental_model_definitions(&base_dir);
-        previous_defaults.retain(|model| model.model_id != "gpt-6-astra" && model.model_id != "gpt-6.1-sol");
+        previous_defaults.retain(|model| {
+            model.model_id != "gpt-6-astra"
+                && model.model_id != "gpt-6.1-sol"
+                && !super::GPT_6_2_MODELS.contains(&model.model_id.as_str())
+        });
         let previous_config = serde_json::json!({
             "version": super::EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
             "models": previous_defaults,
@@ -538,7 +544,7 @@
             .as_array()
             .expect("models")
             .first()
-            .is_some_and(|model| model["slug"] == "gpt-6.1-sol"));
+            .is_some_and(|model| model["slug"] == "gpt-6.2-sol"));
         assert!(generated["models"]
             .as_array()
             .expect("models")
@@ -565,7 +571,10 @@
     fn gpt_6_1_sol_catalog_migration_preserves_customization() {
         let dir = make_temp_dir("codex-gpt61-migration");
         let mut previous = super::default_experimental_model_definitions(&dir);
-        previous.retain(|model| model.model_id != "gpt-6.1-sol");
+        previous.retain(|model| {
+            model.model_id != "gpt-6.1-sol"
+                && !super::GPT_6_2_MODELS.contains(&model.model_id.as_str())
+        });
         let upgraded =
             super::maybe_add_gpt_6_1_sol_to_previous_shipped_model_definitions(&dir, previous.clone());
         assert_eq!(upgraded[0].model_id, "gpt-6.1-sol");
@@ -594,7 +603,8 @@
         // 上一版随包发布的自动清单：只有 astra，没有 gpt-6-sol / gpt-6-luna。
         let mut previous_defaults = super::default_experimental_model_definitions(&base_dir);
         previous_defaults.retain(|model| {
-            model.model_id != "gpt-6-sol" && model.model_id != "gpt-6-luna" && model.model_id != "gpt-6.1-sol"
+            !matches!(model.model_id.as_str(), "gpt-6-sol" | "gpt-6-luna" | "gpt-6.1-sol")
+                && !super::GPT_6_2_MODELS.contains(&model.model_id.as_str())
         });
         let previous_config = serde_json::json!({
             "version": super::EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
@@ -630,8 +640,11 @@
             .filter_map(|model| model["slug"].as_str())
             .collect::<Vec<_>>();
         assert_eq!(
-            slugs.iter().take(5).copied().collect::<Vec<_>>(),
-            vec!["gpt-6.1-sol", "gpt-6-astra", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna"]
+            &slugs[..7],
+            &[
+                "gpt-6.2-sol", "gpt-6.2-astra", "gpt-6.1-sol", "gpt-6-astra",
+                "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna",
+            ]
         );
         let luna_index = slugs.iter().position(|slug| *slug == "gpt-6-luna");
         let legacy_sol_index = slugs.iter().position(|slug| *slug == "gpt-5.6-sol");
@@ -716,7 +729,9 @@
                 .expect("read repaired catalog"),
         )
         .expect("parse repaired catalog");
-        assert_eq!(catalog_config["models"][0]["model_id"], "gpt-6.1-sol");
+        assert_eq!(catalog_config["models"][0]["model_id"], "gpt-6.2-sol");
+        assert_eq!(catalog_config["models"][1]["model_id"], "gpt-6.2-astra");
+        assert_eq!(catalog_config["models"][2]["model_id"], "gpt-6.1-sol");
         assert_eq!(catalog_config["default_model_id"], "gpt-5.6-sol");
         assert!(catalog_config["migrations"]
             .as_array()
@@ -850,7 +865,7 @@
                 .experimental_model_catalog_reset_models
                 .first()
                 .map(|model| model.model_id.as_str()),
-            Some("gpt-6.1-sol")
+            Some("gpt-6.2-sol")
         );
         assert!(!result
             .experimental_model_catalog_reset_models

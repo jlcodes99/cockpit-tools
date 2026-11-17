@@ -45,6 +45,8 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'gemini-3-pro-low': 'Gemini 3 Pro (Low)',
   'gemini-3-pro-image': 'Gemini 3 Pro Image',
   'gpt-oss-120b-medium': 'GPT-OSS 120B (Medium)',
+  'gpt-6.2-sol': 'GPT-6.2 Sol',
+  'gpt-6.2-astra': 'GPT-6.2 Astra',
   'gpt-6.1-sol': 'GPT-6.1 Sol',
   'gpt-6.1-terra': 'GPT-6.1 Terra',
   'gpt-6-astra': 'GPT-6 Astra',

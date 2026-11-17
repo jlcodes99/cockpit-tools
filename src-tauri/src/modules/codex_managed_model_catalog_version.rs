@@ -26,7 +26,8 @@ use std::path::{Path, PathBuf};
 /// 14：Responses Lite 按实际供应商路由生成。
 /// 15：第三方路由的 GPT 壳位使用标准客户端工具。
 /// 16：刷新 GPT-6.1 Sol 的旧默认上下文和压缩阈值。
-pub(crate) const MANAGED_MODEL_CATALOG_GENERATOR_VERSION: u32 = 16;
+/// 17：默认清单加入 GPT-6.2 Sol 和 Astra。
+pub(crate) const MANAGED_MODEL_CATALOG_GENERATOR_VERSION: u32 = 17;
 
 const META_FILE_NAME: &str = "cockpit-model-catalog.meta.json";
 

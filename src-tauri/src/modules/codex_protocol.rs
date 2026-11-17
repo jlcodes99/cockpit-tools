@@ -333,12 +333,9 @@ fn managed_codex_model_ids_from_catalog(catalog: &Value) -> Vec<String> {
         .map(str::to_string)
         .collect::<Vec<_>>();
 
-    // 官方推荐集把 GPT-6 家族排在最前，顺序为 6.1 Sol → Astra → 6.1 Terra → Sol → Luna；
-    // 只移动已存在的条目，不插入目录里没有的模型。
-    for (offset, model_id) in ["gpt-6.1-sol", "gpt-6-astra", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna"]
-        .iter()
-        .enumerate()
-    {
+    // 只按内置推荐顺序移动现有条目，保留调用者的模型范围。
+    let mut offset = 0;
+    for model_id in super::codex_model_catalog::PINNED_MODELS {
         if let Some(index) = model_ids
             .iter()
             .position(|model| model.eq_ignore_ascii_case(model_id))
@@ -347,6 +344,7 @@ fn managed_codex_model_ids_from_catalog(catalog: &Value) -> Vec<String> {
                 let model = model_ids.remove(index);
                 model_ids.insert(offset, model);
             }
+            offset += 1;
         }
     }
 
@@ -1448,8 +1446,8 @@ mod tests {
             .or_else(|| models.first())
             .unwrap()
             .clone();
-        future["slug"] = json!("gpt-6.2-sol");
-        future["display_name"] = json!("GPT-6.2 Sol");
+        future["slug"] = json!("gpt-7-test");
+        future["display_name"] = json!("GPT Future Test");
         future["context_window"] = json!(512000);
         future["max_context_window"] = json!(1024000);
         future["default_reasoning_level"] = json!("low");
@@ -1460,15 +1458,15 @@ mod tests {
         future["use_responses_lite"] = json!(true);
         catalog["models"].as_array_mut().unwrap().push(future);
         crate::modules::codex_model_catalog::with_test_catalog(catalog, || {
-            let response = build_codex_client_models_response(&["gpt-6.2-sol".into()]);
+            let response = build_codex_client_models_response(&["gpt-7-test".into()]);
             let model = &response["models"][0];
-            assert_eq!(model["display_name"], "GPT-6.2 Sol");
+            assert_eq!(model["display_name"], "GPT Future Test");
             assert_eq!(model["context_window"], 512000);
             assert_eq!(model["max_context_window"], 1024000);
             assert_eq!(model["default_reasoning_level"], "low");
             assert_eq!(model["supported_reasoning_levels"][1]["effort"], "high");
-            assert!(codex_model_uses_responses_lite("gpt-6.2-sol"));
-            assert!(managed_codex_model_ids().contains(&"gpt-6.2-sol".into()));
+            assert!(codex_model_uses_responses_lite("gpt-7-test"));
+            assert!(managed_codex_model_ids().contains(&"gpt-7-test".into()));
         });
     }
 
@@ -2424,10 +2422,38 @@ mod tests {
     }
 
     #[test]
+    fn gpt_6_2_client_catalog_exposes_native_context_and_reasoning() {
+        let response = build_codex_client_models_response(&[
+            "gpt-6.2-sol".to_owned(),
+            "gpt-6.2-astra".to_owned(),
+        ]);
+        for (index, slug, display_name, context, compact) in [
+            (0, "gpt-6.2-sol", "GPT-6.2 Sol", 500_000, 450_000),
+            (1, "gpt-6.2-astra", "GPT-6.2 Astra", 272_000, 244_800),
+        ] {
+            let model = &response["models"][index];
+            assert_eq!(model["slug"], slug);
+            assert_eq!(model["display_name"], display_name);
+            assert_eq!(model["context_window"], context);
+            assert_eq!(model["max_context_window"], 872_000);
+            assert_eq!(model["auto_compact_token_limit"], compact);
+            assert_eq!(model["default_reasoning_level"], "low");
+            assert!(codex_model_uses_responses_lite(slug));
+            assert!(model["supported_reasoning_levels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|level| level["effort"] == "ultra"));
+        }
+    }
+
+    #[test]
     fn codex_5_6_models_preserve_official_reasoning_and_speed_capabilities() {
         assert_eq!(
             managed_codex_model_ids(),
             vec![
+                "gpt-6.2-sol",
+                "gpt-6.2-astra",
                 "gpt-6.1-sol",
                 "gpt-6-astra",
                 "gpt-6.1-terra",
@@ -2871,9 +2897,17 @@ mod tests {
     #[test]
     fn official_ultrafast_catalog_only_advertises_supported_models() {
         let catalog = build_codex_client_models_response(&managed_codex_model_ids());
-        for slug in ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol"] {
+        for slug in [
+            "gpt-6.2-sol",
+            "gpt-6.2-astra",
+            "gpt-6.1-sol",
+            "gpt-6-astra",
+            "gpt-6-sol",
+            "gpt-6-luna",
+            "gpt-5.6-sol",
+        ] {
             let model = catalog["models"].as_array().unwrap().iter().find(|model| model["slug"] == slug).unwrap();
-            let expected = matches!(slug, "gpt-6.1-sol" | "gpt-6-astra");
+            let expected = matches!(slug, "gpt-6.2-sol" | "gpt-6.1-sol" | "gpt-6-astra");
             assert_eq!(model["service_tiers"].as_array().unwrap().iter().any(|tier| tier["id"] == "ultrafast"), expected, "{slug}");
             assert_eq!(model["additional_speed_tiers"].as_array().unwrap().iter().any(|tier| tier == "ultrafast"), expected, "{slug}");
         }
