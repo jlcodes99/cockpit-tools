@@ -18,7 +18,7 @@
 - 本地 API Key 接入，所选模型具有 Fast 元数据。
 - 通过 Cockpit 正常重启后，原生 Fast 仍未出现。
 
-证据：一次启动在 22:23:37 确认客户端进程；22:23:43 才出现 `preload-registered-next-document`，随后出现 `restart-required`。只读检查得到 `nativePatchState: pending`、`document-already-started`；资源匹配检查通过。
+证据：一次启动在 22:23:37 确认客户端进程；22:23:43 才出现 `preload-registered-next-document`，随后出现 `restart-required`。只读检查得到 `nativePatchState: pending`、`document-already-started`；资源匹配检查通过。修复后对无输入的干净启动页允许一次受保护重载。
 
 这证明该次 Cockpit 首文档适配没有及时安装。源码中也存在“客户端启动与首份账号配置读取并行”的竞争，但它是不是全部原因，仍需新构建的 Windows 启动测试确认。
 
@@ -102,7 +102,7 @@ git status --short
 git rev-parse HEAD
 ```
 
-提取本文件末尾唯一的 `diff` 代码块，保存为 UTF-8 无 BOM、LF 换行的 `codex-fast-startup.patch`。该补丁使用零上下文格式，应用时必须保留 `--unidiff-zero`，仅用于上述精确版本；补丁文件应以一个换行结束；预期 SHA-256：`e24634037ceb429adec03d3fbd69ac70740c4bb192fdf3bc9247b30fad109c3c`。
+提取本文件末尾唯一的 `diff` 代码块，保存为 UTF-8 无 BOM、LF 换行的 `codex-fast-startup.patch`。该补丁使用零上下文格式，应用时必须保留 `--unidiff-zero`，仅用于上述精确版本；补丁文件应以一个换行结束；预期 SHA-256：`ba53e290fa86acc6340bf715407b360059f282960988648d73acf17cfcf45caf`。
 
 ```powershell
 Get-FileHash -Algorithm SHA256 .\codex-fast-startup.patch
@@ -257,6 +257,33 @@ index d2a5fe9..3aaab50 100644
 +#[path = "codex_app_enhancements/launch_profile_tests.rs"]
 +mod launch_profile_tests;
 +
+diff --git a/src-tauri/src/modules/codex_app_enhancements/fast.rs b/src-tauri/src/modules/codex_app_enhancements/fast.rs
+index de10f03..a8f85a8 100644
+--- a/src-tauri/src/modules/codex_app_enhancements/fast.rs
++++ b/src-tauri/src/modules/codex_app_enhancements/fast.rs
+@@ -744,7 +743,0 @@ async fn try_startup_reload(registration: &mut Registration, context: ContextKey
+-    if registration.preload_first {
+-        // Windows treats renderer reload as a second cold start. Its fresh
+-        // launch permission authorizes first-document preload only.
+-        registration.startup = None;
+-        registration.report("document", "restart-required").await;
+-        return;
+-    }
+diff --git a/src-tauri/src/modules/codex_app_enhancements/fast_tests.rs b/src-tauri/src/modules/codex_app_enhancements/fast_tests.rs
+index b2930a5..15422a3 100644
+--- a/src-tauri/src/modules/codex_app_enhancements/fast_tests.rs
++++ b/src-tauri/src/modules/codex_app_enhancements/fast_tests.rs
+@@ -1564 +1564 @@ async fn verified_api_fast_running_document_never_reloads() {
+-async fn verified_api_fast_preload_late_attach_waits_without_second_reload() {
++async fn verified_api_fast_preload_late_attach_reloads_once_when_page_is_clean() {
+@@ -1573,2 +1573,2 @@ async fn verified_api_fast_preload_late_attach_waits_without_second_reload() {
+-    runtime.notice("document", Some("restart-required")).await;
+-    assert_eq!(runtime.navigations.load(Ordering::Acquire), 0);
++    runtime.notice("document", Some("reload-requested")).await;
++    assert_eq!(runtime.navigations.load(Ordering::Acquire), 1);
+@@ -1578 +1578 @@ async fn verified_api_fast_preload_late_attach_waits_without_second_reload() {
+-        0
++        1
 diff --git a/src-tauri/src/modules/codex_app_enhancements/launch_profile_tests.rs b/src-tauri/src/modules/codex_app_enhancements/launch_profile_tests.rs
 new file mode 100644
 index 0000000..0140c2d
