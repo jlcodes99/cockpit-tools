@@ -109,3 +109,23 @@ async fn disabled_request_client_ignores_an_explicit_default_proxy() {
         direct.await.unwrap();
     }).await.expect("direct request must bypass the unusable default proxy");
 }
+
+#[tokio::test]
+async fn unsaved_eligible_account_keeps_the_caller_builder() {
+    let _fixture = LaunchFixture::new("unsaved-request-client");
+    // Import drafts probe quota before they are written to the account store.
+    let account = eligible_account("unsaved-request-client");
+    assert!(codex_account_proxy::eligible(&account));
+    assert!(codex_account::load_account(&account.id).is_none());
+    let builder = reqwest::Client::builder();
+    if let Err(error) = codex_proxy_runtime::client_builder(&account, builder).await {
+        panic!("unsaved account must keep the caller builder, got {error}");
+    }
+}
+
+#[tokio::test]
+async fn missing_account_is_still_unsupported_for_stored_lookups() {
+    let _fixture = LaunchFixture::new("missing-stored-lookup");
+    assert_eq!(codex_proxy_runtime::load_stored("missing-stored-lookup").await.err().as_deref(), Some("PROXY_ACCOUNT_UNSUPPORTED"));
+    assert_eq!(codex_proxy_runtime::status("missing-stored-lookup").await.err().as_deref(), Some("PROXY_ACCOUNT_UNSUPPORTED"));
+}
