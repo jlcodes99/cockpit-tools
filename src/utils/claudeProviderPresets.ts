@@ -248,6 +248,17 @@ const CC_SWITCH_DIRECT_CLAUDE_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset
     apiKeyUrl: 'https://aihubmix.com',
   }),
   createClaudeApiProviderPreset({
+    id: 'teapotrouter',
+    name: 'TeapotRouter',
+    baseUrl: 'https://api.teapotrouter.com',
+    website: 'https://teapotrouter.com',
+    apiKeyUrl: 'https://teapotrouter.com',
+    extraEnv: modelEnv('claude-sonnet-5-5', {
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-haiku-4-5',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-5-5',
+    }),
+  }),
+  createClaudeApiProviderPreset({
     id: 'cherryin',
     name: 'CherryIN',
     baseUrl: 'https://open.cherryin.net',
