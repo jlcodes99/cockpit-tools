@@ -1828,7 +1828,10 @@ export function CodebuddySuiteAccountsSharedView<
                     ) : (
                       <textarea
                         className="token-input"
-                        value={tokenInput}
+                        // Clear the rendered value during import to avoid WebView2
+                        // large-text stalls. State retains the full payload for retries.
+                        value={importing ? "" : tokenInput}
+                        readOnly={importing}
                         onChange={(e) => setTokenInput(e.target.value)}
                         placeholder={t(
                           platformConfig.tokenInputPlaceholderKey ||
@@ -1872,7 +1875,8 @@ export function CodebuddySuiteAccountsSharedView<
                     </p>
                     <textarea
                       className="token-input"
-                      value={tokenInput}
+                      value={importing ? "" : tokenInput}
+                      readOnly={importing}
                       onChange={(e) => setTokenInput(e.target.value)}
                       placeholder={t(
                         platformConfig.pasteJsonPlaceholderKey ||
