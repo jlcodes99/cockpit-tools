@@ -102,17 +102,17 @@ git status --short
 git rev-parse HEAD
 ```
 
-提取本文件末尾唯一的 `diff` 代码块，保存为 UTF-8 无 BOM、LF 换行的 `codex-fast-startup.patch`。补丁文件应以一个换行结束；预期 SHA-256：`b12ebe4a6031ee1c0090a79cf042d559ddfb7ac9acc05394daf003597a989b06`。
+提取本文件末尾唯一的 `diff` 代码块，保存为 UTF-8 无 BOM、LF 换行的 `codex-fast-startup.patch`。该补丁使用零上下文格式，应用时必须保留 `--unidiff-zero`，仅用于上述精确版本；补丁文件应以一个换行结束；预期 SHA-256：`e24634037ceb429adec03d3fbd69ac70740c4bb192fdf3bc9247b30fad109c3c`。
 
 ```powershell
 Get-FileHash -Algorithm SHA256 .\codex-fast-startup.patch
-git apply --check .\codex-fast-startup.patch
+git apply --unidiff-zero --check .\codex-fast-startup.patch
 ```
 
-只有哈希符合且 `git apply --check` 成功时，才继续应用：
+只有哈希符合且 `git apply --unidiff-zero --check` 成功时，才继续应用：
 
 ```powershell
-git apply .\codex-fast-startup.patch
+git apply --unidiff-zero .\codex-fast-startup.patch
 git diff --check
 git diff --stat
 git status --short
@@ -164,8 +164,8 @@ npm run tauri build
 只在本次独立源码目录、且确认补丁涉及的文件没有新增用户改动时检查反向应用：
 
 ```powershell
-git apply --reverse --check .\codex-fast-startup.patch
-git apply --reverse .\codex-fast-startup.patch
+git apply --unidiff-zero --reverse --check .\codex-fast-startup.patch
+git apply --unidiff-zero --reverse .\codex-fast-startup.patch
 ```
 
 停止本次测试实例，重新使用原官方 Cockpit / Codex。保留用户原有数据和会话，不使用批量删除、卸载或重装来代替回退。
@@ -181,10 +181,7 @@ diff --git a/src-tauri/src/commands/codex_instance.rs b/src-tauri/src/commands/c
 index e10e1ea..c2e6f23 100644
 --- a/src-tauri/src/commands/codex_instance.rs
 +++ b/src-tauri/src/commands/codex_instance.rs
-@@ -3224,7 +3224,12 @@ async fn codex_start_instance_internal(
-             default_dir.clone(),
-             injection_plan.port,
-             default_bind_account_id.clone(),
+@@ -3227 +3227,6 @@ async fn codex_start_instance_internal(
 -        );
 +        )
 +        .await;
@@ -192,13 +189,7 @@ index e10e1ea..c2e6f23 100644
 +            modules::codex_app_injection::stop_for_profile(&default_dir);
 +        }
 +        ensure_codex_instance_start_not_cancelled(&instance_id)?;
-         let launch_args = injection_plan.args.clone();
-         let prepared_home = default_dir.clone();
-         // Package registration, activation and PID confirmation can wait on
-@@ -3534,7 +3539,12 @@ async fn codex_start_instance_internal(
-         instance_dir.to_path_buf(),
-         injection_plan.port,
-         instance.bind_account_id.clone(),
+@@ -3537 +3542,6 @@ async fn codex_start_instance_internal(
 -    );
 +    )
 +    .await;
@@ -206,61 +197,33 @@ index e10e1ea..c2e6f23 100644
 +        modules::codex_app_injection::stop_for_profile(instance_dir);
 +    }
 +    ensure_codex_instance_start_not_cancelled(&instance_id)?;
-     let launch_home = instance.user_data_dir.clone();
-     let launch_args = injection_plan.args.clone();
-     let pid = tauri::async_runtime::spawn_blocking(move || {
 diff --git a/src-tauri/src/modules/codex_app_enhancements.rs b/src-tauri/src/modules/codex_app_enhancements.rs
 index d2a5fe9..3aaab50 100644
 --- a/src-tauri/src/modules/codex_app_enhancements.rs
 +++ b/src-tauri/src/modules/codex_app_enhancements.rs
-@@ -1,5 +1,6 @@
- //! Optional desktop enhancements, scoped to a launched Codex profile and its CDP port.
+@@ -2 +2,2 @@
 -//! Slow credential reads and all network work stay outside the launch transaction.
 +//! Fresh launches wait briefly for the initial credential snapshot; network work
 +//! stays outside the launch transaction and never pauses or reloads the client.
- 
- mod fast;
- mod browser_preload;
-@@ -11,7 +12,7 @@ use std::collections::{HashMap, HashSet};
- use std::path::{Path, PathBuf};
- use std::sync::{Arc, Mutex, OnceLock};
- use std::time::{Duration, Instant};
+@@ -14 +15 @@ use std::time::{Duration, Instant};
 -use tokio::sync::watch;
 +use tokio::sync::{oneshot, watch};
- use tokio::task::JoinHandle;
- 
- const POLL: Duration = Duration::from_secs(3);
-@@ -33,16 +34,22 @@ pub fn start_for_profile(
-     port: u16,
-     fresh_launch: bool,
-     api_service: bool,
+@@ -36 +37 @@ pub fn start_for_profile(
 -) {
 +) -> Option<oneshot::Receiver<()>> {
-     stop_for_profile(&profile);
-     if !enabled() && !api_service {
+@@ -39 +40 @@ pub fn start_for_profile(
 -        return;
 +        return None;
-     }
-     let (stop, receiver) = watch::channel(false);
-     if let Ok(mut active) = runtimes().lock() {
-         active.insert(profile.clone(), stop);
-     }
-     let startup = fresh_launch.then(|| Arc::new(fast::StartupReload::new()));
+@@ -45,0 +47,6 @@ pub fn start_for_profile(
 +    let (launch_ready, prepared) = if fresh_launch {
 +        let (ready, prepared) = oneshot::channel();
 +        (Some(ready), Some(prepared))
 +    } else {
 +        (None, None)
 +    };
-     tauri::async_runtime::spawn(run_profile(
-         profile,
-         instance,
-@@ -50,7 +57,21 @@ pub fn start_for_profile(
-         startup,
-         api_service,
-         receiver,
+@@ -52,0 +60 @@ pub fn start_for_profile(
 +        launch_ready,
-     ));
+@@ -53,0 +62,13 @@ pub fn start_for_profile(
 +    prepared
 +}
 +
@@ -274,59 +237,26 @@ index d2a5fe9..3aaab50 100644
 +        Some(prepared) => matches!(tokio::time::timeout(wait, prepared).await, Ok(Ok(()))),
 +        None => true,
 +    }
- }
- 
- pub fn stop_for_profile(profile: &Path) {
-@@ -274,7 +295,7 @@ impl Child {
- }
- 
- // API Service quota adaptation uses the persisted instance binding. Optional
+@@ -277 +298 @@ impl Child {
 -// Fast/prediction features still wait for their verified profile snapshot.
 +// Fast/prediction features still require their verified profile snapshot.
- fn profile_or_api_fallback(profile: Option<Profile>, api_service: bool) -> Option<Profile> {
-     profile.or_else(|| api_service.then(Profile::default))
- }
-@@ -308,6 +329,7 @@ async fn run_profile(
-     startup: Option<Arc<fast::StartupReload>>,
-     api_service: bool,
-     mut stop: watch::Receiver<bool>,
+@@ -310,0 +332 @@ async fn run_profile(
 +    mut launch_ready: Option<oneshot::Sender<()>>,
- ) {
-     // The launch transaction starts this worker before starting the process.
-     // Browser discovery must race neither a blocking keyring read nor a second
-@@ -359,6 +381,11 @@ async fn run_profile(
-         }
-         if read.as_ref().is_some_and(JoinHandle::is_finished) {
-             let verified = read.take().unwrap().await.ok().and_then(Result::ok);
+@@ -361,0 +384,5 @@ async fn run_profile(
 +            // The read worker has already published the complete trusted
 +            // preload source. Only now may the launch transaction start Codex.
 +            if let Some(ready) = launch_ready.take() {
 +                let _ = ready.send(());
 +            }
-             initial_snapshot_ready = true;
-             current_verified = verified.is_some();
-             let next = profile_or_api_fallback(verified, api_service);
-@@ -387,6 +414,9 @@ async fn run_profile(
-                 tick.reset();
-             }
-             logger::log_warn("[Codex enhancements] profile snapshot timed out; optional adaptations suspended");
+@@ -389,0 +417,3 @@ async fn run_profile(
 +            if let Some(ready) = launch_ready.take() {
 +                let _ = ready.send(());
 +            }
-             let safe = profile_or_api_fallback(None, api_service);
-             if current != safe {
-                 for (_, child) in children.drain() {
-@@ -478,6 +508,10 @@ async fn run_profile(
-     }
- }
- 
+@@ -480,0 +511,4 @@ async fn run_profile(
 +#[cfg(test)]
 +#[path = "codex_app_enhancements/launch_profile_tests.rs"]
 +mod launch_profile_tests;
 +
- #[cfg(test)]
- mod tests {
-     use super::*;
 diff --git a/src-tauri/src/modules/codex_app_enhancements/launch_profile_tests.rs b/src-tauri/src/modules/codex_app_enhancements/launch_profile_tests.rs
 new file mode 100644
 index 0000000..0140c2d
@@ -388,23 +318,13 @@ diff --git a/src-tauri/src/modules/codex_app_injection.rs b/src-tauri/src/module
 index d2d2452..745a6ee 100644
 --- a/src-tauri/src/modules/codex_app_injection.rs
 +++ b/src-tauri/src/modules/codex_app_injection.rs
-@@ -628,18 +628,28 @@ pub fn start_for_profile(
-     port: Option<u16>,
-     bind_account_id: Option<String>,
- ) {
+@@ -631 +631 @@ pub fn start_for_profile(
 -    start_profile(app, instance_id, profile_dir, port, bind_account_id, false);
 +    let _ = start_profile(app, instance_id, profile_dir, port, bind_account_id, false);
- }
- 
- /// Only the unified launch transaction may arm first-document adaptation.
+@@ -635 +635 @@ pub fn start_for_profile(
 -pub fn start_for_launched_profile(
 +pub async fn start_for_launched_profile(
-     app: AppHandle,
-     instance_id: String,
-     profile_dir: PathBuf,
-     port: Option<u16>,
-     bind_account_id: Option<String>,
- ) {
+@@ -642 +642,11 @@ pub fn start_for_launched_profile(
 -    start_profile(app, instance_id, profile_dir, port, bind_account_id, true);
 +    let prepared = start_profile(app, instance_id, profile_dir, port, bind_account_id, true);
 +    if !crate::modules::codex_app_enhancements::wait_for_launch_profile(
@@ -417,38 +337,16 @@ index d2d2452..745a6ee 100644
 +            "[CodexEnhancements] launch profile preparation unavailable; continuing native client startup",
 +        );
 +    }
- }
- 
- fn start_profile(
-@@ -649,9 +659,9 @@ fn start_profile(
-     port: Option<u16>,
-     bind_account_id: Option<String>,
-     fresh_launch: bool,
+@@ -652,3 +662,3 @@ fn start_profile(
 -) {
 -    let Some(port) = port else { return };
 -    crate::modules::codex_app_enhancements::start_for_profile(
 +) -> Option<tokio::sync::oneshot::Receiver<()>> {
 +    let port = port?;
 +    let prepared = crate::modules::codex_app_enhancements::start_for_profile(
-         profile_dir.clone(),
-         instance_id.clone(),
-         port,
-@@ -670,7 +680,7 @@ fn start_profile(
-         );
-     }
-     if !should_enable_profile_injection(&profile_dir, bind_account_id.as_deref()) {
+@@ -673 +683 @@ fn start_profile(
 -        return;
 +        return prepared;
-     }
-     stop_injection_for_profile(&profile_dir);
-     let key = profile_key(&profile_dir);
-@@ -682,6 +692,7 @@ fn start_profile(
-     if let Ok(mut items) = runtimes().lock() {
-         items.insert(key, InjectionRuntime { task });
-     }
+@@ -684,0 +695 @@ fn start_profile(
 +    prepared
- }
- 
- #[derive(Debug, Clone)]
 ```
-
