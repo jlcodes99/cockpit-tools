@@ -1500,6 +1500,7 @@ async fn disabled_and_stopped_sessions_do_not_connect() {
         false,
         false,
         false,
+        false,
         None,
         receiver
     )
@@ -1513,6 +1514,7 @@ async fn disabled_and_stopped_sessions_do_not_connect() {
         false,
         true,
         true,
+        false,
         false,
         false,
         None,
