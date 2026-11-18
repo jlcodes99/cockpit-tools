@@ -233,7 +233,7 @@ pub(super) async fn sync_server(
     let mut tunnels = tunnels();
     if let Some(tunnel) = tunnels.by_server.get_mut(&server.id) {
         if result.verified {
-            tunnel.applied = Some(service.clone());
+            tunnel.applied = result.succeeded().then(|| service.clone());
             tunnel.automatic = automatic;
         } else if tunnel.applied.is_none() {
             tunnels.by_server.remove(&server.id);

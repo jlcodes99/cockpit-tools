@@ -105,3 +105,9 @@ pub struct SshCodexSyncResult {
     pub error: Option<String>,
     pub synced_at: i64,
 }
+
+impl SshCodexSyncResult {
+    pub(crate) fn succeeded(&self) -> bool {
+        self.verified && self.error.is_none()
+    }
+}
