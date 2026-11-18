@@ -374,6 +374,123 @@
   overflow-wrap: anywhere;
 }
 
+/* 数字与到期标签同一行，避免多占一行高度 */
+.workbuddy-credit-balance-amount {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.workbuddy-credit-balance-amount > strong {
+  flex: 0 0 auto;
+}
+
+/* 卡片上的「24 小时内到期」小标签 */
+.workbuddy-expiring-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: color-mix(in srgb, var(--warning-strong) 72%, var(--text-primary));
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 600;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.workbuddy-expiring-badge:hover,
+.workbuddy-expiring-badge:focus-visible {
+  border-color: color-mix(in srgb, var(--warning) 65%, transparent);
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
+}
+
+.workbuddy-expiring-badge:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.workbuddy-expiring-badge svg {
+  flex-shrink: 0;
+}
+
+/* 表格视图的格子更窄，长文案要能收窄而不是撑破单元格 */
+.workbuddy-expiring-badge > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workbuddy-expiring-tooltip {
+  position: fixed;
+  z-index: 1200;
+  width: 272px;
+  max-width: calc(100vw - 24px);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-md);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: start;
+  pointer-events: none;
+}
+
+.workbuddy-expiring-tooltip-title {
+  margin-bottom: 6px;
+  color: color-mix(in srgb, var(--warning-strong) 72%, var(--text-primary));
+  font-weight: 600;
+}
+
+.workbuddy-expiring-tooltip-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workbuddy-expiring-tooltip-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 8px;
+}
+
+.workbuddy-expiring-tooltip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workbuddy-expiring-tooltip-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.workbuddy-expiring-tooltip-time {
+  grid-column: 1 / -1;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.workbuddy-expiring-tooltip-total {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-light);
+  font-variant-numeric: tabular-nums;
+}
+
 .btn.workbuddy-credit-link {
   min-width: 0;
   max-width: 100%;
@@ -399,13 +516,26 @@
   opacity: .5;
 }
 
+/* 「积分明细」挂在数字下面一行，位置不受到期标签影响 */
+.workbuddy-credit-details-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 2px 0 8px;
+}
+
+.workbuddy-credit-details-row .btn.workbuddy-credit-link {
+  padding: 2px 0;
+}
+
 .workbuddy-credits-compact {
   gap: 0;
   padding: 0 0 2px;
 }
 
 .workbuddy-credits-compact .workbuddy-credit-balance {
-  padding-block: 2px 9px;
+  padding-block: 2px 0;
 }
 
 .workbuddy-credits-compact .workbuddy-credit-entry {

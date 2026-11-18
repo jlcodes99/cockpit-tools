@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PACKAGE_CODE as code, type WorkbuddyAccount } from '../types/codebuddy-suite.ts';
-import { getWorkbuddyAiCredits, getWorkbuddyAiPlan, getWorkbuddyCredits, readWorkbuddyCreditPackage, workbuddyCreditPercent } from './workbuddyCredits.ts';
+import { getWorkbuddyAiCredits, getWorkbuddyAiPlan, getWorkbuddyCredits, getWorkbuddyExpiringCredits, readWorkbuddyCreditPackage, workbuddyCreditPercent } from './workbuddyCredits.ts';
 
 const now = Date.parse('2026-11-05T12:00:00+08:00');
 const active = (PackageCode: string, total: number, left: number, DeductionEndTime = now + 3600000) => ({
@@ -113,4 +113,57 @@ test('WorkBuddy AI keeps the usage row for a fully unused plan without package d
   assert.equal(base.total, 100);
   assert.equal(workbuddyCreditPercent(base.total, base.left, Math.floor), 100);
   assert.equal(getWorkbuddyAiCredits(account([], { Packages: [] }), now).groups.length, 0);
+});
+
+test('WorkBuddy expiring badge only counts reward and addon packages inside the horizon', () => {
+  const expiring = getWorkbuddyExpiringCredits(account([
+    active(code.proMon, 500, 400, now + 3600000),
+    active(code.activity, 100, 70, now + 3 * 3600000),
+    active(code.extra, 50, 45, now + 20 * 3600000),
+    active(code.bonus30, 100, 100, now - 1),
+    active(code.bonus29, 80, 0, now + 3600000),
+    active(code.bonus28, 200, 180, now + 40 * 3600000),
+  ]), now);
+  assert.deepEqual(expiring.packages.map(({ group, left }) => [group, left]), [
+    ['benefit', 70], ['addon', 45],
+  ]);
+  assert.equal(expiring.total, 115);
+});
+
+test('WorkBuddy expiring badge sorts by expiry, keeps the horizon edge and prefers the grant reason', () => {
+  const expiring = getWorkbuddyExpiringCredits(account([
+    { ...active(code.extra, 20, 20, now + 5 * 3600000), AccountAttributes: [{ Key: 'grantReason', Value: 'Buddy 加油站签到' }] },
+    active(code.activity, 10, 10, now + 3600000),
+    active(code.bonus29, 10, 10, now + 24 * 3600000),
+    active(code.activity, 10, 10, now + 24 * 3600000 + 1),
+  ]), now);
+  assert.deepEqual(expiring.packages.map(({ packageCode, name, expireAt }) => [packageCode, name, expireAt - now]), [
+    [code.activity, '', 3600000],
+    [code.extra, 'Buddy 加油站签到', 5 * 3600000],
+    [code.bonus29, '', 24 * 3600000],
+  ]);
+  assert.equal(expiring.total, 40);
+});
+
+test('WorkBuddy AI treats free grants as expiring rewards', () => {
+  const ai = getWorkbuddyExpiringCredits(account([
+    active(code.freeMon, 100, 75, now + 3600000),
+    active(code.gift, 10, 5, now + 7200000),
+    active(code.proMon, 500, 300, now + 3600000),
+  ]), now, 86400000, true);
+  assert.deepEqual(ai.packages.map(({ group, left }) => [group, left]), [['benefit', 75], ['benefit', 5]]);
+  assert.equal(ai.total, 80);
+  assert.equal(getWorkbuddyExpiringCredits(account([active(code.freeMon, 100, 75, now + 3600000)]), now).packages.length, 0);
+});
+
+test('WorkBuddy expiring badge schedules the next wake-up outside the horizon', () => {
+  const later = getWorkbuddyExpiringCredits(account([
+    active(code.activity, 100, 70, now + 30 * 3600000),
+    active(code.extra, 20, 20, now + 40 * 3600000),
+    active(code.proMon, 500, 400, now + 3600000),
+  ]), now);
+  assert.equal(later.packages.length, 0);
+  assert.equal(later.nextExpiryAt, now + 30 * 3600000);
+  assert.equal(getWorkbuddyExpiringCredits(account([active(code.activity, 100, 70, now - 1)]), now).nextExpiryAt, null);
+  assert.equal(getWorkbuddyExpiringCredits(account([active(code.bonus29, 10, 0, now + 3600000)]), now).nextExpiryAt, null);
 });

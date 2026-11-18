@@ -155,7 +155,11 @@ export function WorkbuddyAccountsPage() {
       if (account.enterprise_id) return null;
       const credits = getWorkbuddyCredits(account);
       return credits.left == null ? null : (
-        <WorkbuddyCreditsSummary credits={credits} onDetails={() => setCreditAccountId(account.id)} />
+        <WorkbuddyCreditsSummary
+          credits={credits}
+          account={account}
+          onDetails={() => setCreditAccountId(account.id)}
+        />
       );
     },
     renderQuotaAction: (account) => account.enterprise_id ? null : (
