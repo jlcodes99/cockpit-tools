@@ -2668,6 +2668,7 @@
     "installing": "安裝中...",
     "authorizing": "等待系統授權安裝...",
     "installFailed": "系統安裝失敗，請稍後重試或手動下載安裝。",
+    "installFailedTranslocated": "應用程式正在唯讀位置執行（macOS App Translocation），無法安裝更新。請結束 Cockpit Tools，在 Finder 中將其移至「應用程式」檔案夾，重新開啟後再重試更新。",
     "restartRequiredAfterInstall": "更新已安裝，請手動重新啟動應用程式完成切換。",
     "stoppingApiService": "正在關閉 API 服務...",
     "stopApiServiceFailed": "無法關閉 API 服務，請先停用後重試。",

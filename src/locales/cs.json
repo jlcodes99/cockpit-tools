@@ -2668,6 +2668,7 @@
     "installing": "Instaluje se...",
     "authorizing": "Čeká se na autorizaci systému...",
     "installFailed": "Instalace do systému selhala. Zkuste to později nebo stáhněte balíček ručně.",
+    "installFailedTranslocated": "Aplikace běží z umístění pouze pro čtení (macOS App Translocation), proto nelze aktualizaci nainstalovat. Ukončete Cockpit Tools, ve Finderu ji přesuňte do složky Aplikace, znovu ji otevřete a aktualizaci zopakujte.",
     "restartRequiredAfterInstall": "Aktualizace je nainstalována. Dokončete přepnutí ručním restartem aplikace.",
     "stoppingApiService": "Zastavuji službu API...",
     "stopApiServiceFailed": "Službu API se nepodařilo zastavit. Nejprve ji zakažte a zkuste to znovu.",

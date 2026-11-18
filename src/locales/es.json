@@ -2668,6 +2668,7 @@
     "installing": "Instalando...",
     "authorizing": "Esperando autorización del sistema...",
     "installFailed": "La instalación del sistema falló. Inténtalo más tarde o descarga el paquete manualmente.",
+    "installFailedTranslocated": "La aplicación se está ejecutando desde una ubicación de solo lectura (macOS App Translocation), por lo que no se puede instalar la actualización. Cierra Cockpit Tools, muévela a la carpeta Aplicaciones en el Finder, vuelve a abrirla y reintenta la actualización.",
     "restartRequiredAfterInstall": "La actualización ya está instalada. Reinicia la aplicación manualmente para completar el cambio.",
     "stoppingApiService": "Deteniendo servicio API...",
     "stopApiServiceFailed": "No se pudo detener el servicio API. Desactívalo primero e inténtalo de nuevo.",

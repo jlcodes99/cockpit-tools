@@ -2912,6 +2912,7 @@
     "installing": "安装中...",
     "authorizing": "等待系统授权安装...",
     "installFailed": "系统安装失败，请稍后重试或手动下载安装。",
+    "installFailedTranslocated": "应用正在只读位置运行（macOS App Translocation），无法安装更新。请退出 Cockpit Tools，在访达中将其移动到“应用程序”文件夹，重新打开后再重试更新。",
     "restartRequiredAfterInstall": "更新已安装，请手动重启应用完成切换。",
     "stoppingApiService": "正在关闭 API 服务...",
     "stopApiServiceFailed": "无法关闭 API 服务，请先停用后重试。",

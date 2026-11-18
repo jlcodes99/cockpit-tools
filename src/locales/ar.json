@@ -2715,6 +2715,7 @@
     "installing": "جارٍ التثبيت...",
     "authorizing": "بانتظار تفويض النظام...",
     "installFailed": "فشل التثبيت على النظام. حاول لاحقًا أو نزّل الحزمة يدويًا.",
+    "installFailedTranslocated": "يعمل التطبيق من موقع للقراءة فقط (macOS App Translocation)، لذا لا يمكن تثبيت التحديث. أغلق Cockpit Tools، وانقله إلى مجلد التطبيقات في Finder، ثم افتحه مجددًا وأعد محاولة التحديث.",
     "restartRequiredAfterInstall": "تم تثبيت التحديث. أعد تشغيل التطبيق يدويًا لإكمال التبديل.",
     "stoppingApiService": "جارٍ إيقاف خدمة API...",
     "stopApiServiceFailed": "تعذّر إيقاف خدمة API. عطّلها أولًا ثم أعد المحاولة.",

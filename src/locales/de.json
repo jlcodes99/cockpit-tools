@@ -2668,6 +2668,7 @@
     "installing": "Installation läuft...",
     "authorizing": "Warten auf Systemautorisierung...",
     "installFailed": "Die Systeminstallation ist fehlgeschlagen. Versuchen Sie es später erneut oder laden Sie das Paket manuell herunter.",
+    "installFailedTranslocated": "Die App wird von einem schreibgeschützten Ort ausgeführt (macOS App Translocation), daher kann das Update nicht installiert werden. Beenden Sie Cockpit Tools, verschieben Sie die App im Finder in den Ordner „Programme“, öffnen Sie sie erneut und wiederholen Sie dann das Update.",
     "restartRequiredAfterInstall": "Das Update ist installiert. Starten Sie die App manuell neu, um den Wechsel abzuschließen.",
     "stoppingApiService": "API-Dienst wird gestoppt...",
     "stopApiServiceFailed": "Der API-Dienst konnte nicht beendet werden. Deaktivieren Sie ihn zuerst und versuchen Sie es erneut.",

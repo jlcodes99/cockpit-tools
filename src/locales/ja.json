@@ -2668,6 +2668,7 @@
     "installing": "インストール中...",
     "authorizing": "システム認証を待っています...",
     "installFailed": "システムへのインストールに失敗しました。後でもう一度試すか、手動でダウンロードしてください。",
+    "installFailedTranslocated": "アプリが読み取り専用の場所から実行されているため（macOS App Translocation）、アップデートをインストールできません。Cockpit Tools を終了し、Finder で「アプリケーション」フォルダに移動してから再度開き、アップデートをやり直してください。",
     "restartRequiredAfterInstall": "更新はインストール済みです。切り替えを完了するにはアプリを手動で再起動してください。",
     "stoppingApiService": "API サービスを停止中...",
     "stopApiServiceFailed": "API サービスを停止できませんでした。先に無効化してから再試行してください。",
