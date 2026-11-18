@@ -10,6 +10,10 @@
 
 ## [Unreleased]
 
+### 修复
+
+- Linux AppImage 不再打包构建环境里的 `libwayland-*`，在 Mesa 25 及以上的发行版上可以正常打开窗口，而不再出现 `EGL_BAD_PARAMETER`。 [#3187](https://github.com/jlcodes99/cockpit-tools/issues/3187)
+
 ## [1.4.2] - 2026-11-18
 
 ### 新增
