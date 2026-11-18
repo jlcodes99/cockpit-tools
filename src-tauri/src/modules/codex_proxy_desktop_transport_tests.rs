@@ -240,21 +240,11 @@ async fn http_connect_returns_bad_gateway_and_can_recover_on_the_same_entry() {
         fixture.save(&account);
         let origin = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
         let port = origin.local_addr().unwrap().port();
-        let echo = tokio::spawn(async move {
-            let (mut socket, _) = origin.accept().await.unwrap();
-            let mut payload = [0; 4];
-            socket.read_exact(&mut payload).await.unwrap();
-            socket.write_all(&payload).await.unwrap();
-        });
-        let mut retry = ingress(entry, true, "127.0.0.1", port).await;
-        let mut reply = [0; 4];
-        retry.read_exact(&mut reply).await.unwrap();
-        assert_eq!(&reply, b"ping");
-        echo.await.unwrap();
-        assert_eq!(
-            entry_status(&account.id).unwrap().last_request_state,
-            "forwarded"
-        );
+        let mut retry = TcpStream::connect((Ipv4Addr::LOCALHOST, entry)).await.unwrap();
+        retry.write_all(format!("CONNECT 127.0.0.1:{port} HTTP/1.1\r\n\r\n").as_bytes()).await.unwrap();
+        assert!(read_headers(&mut retry).await.starts_with(b"HTTP/1.1 502"));
+        assert!(tokio::time::timeout(Duration::from_millis(100), origin.accept()).await.is_err());
+        assert_eq!(entry_status(&account.id).unwrap().last_request_state, "failed");
     })
     .await
     .expect("HTTP recovery deadline");

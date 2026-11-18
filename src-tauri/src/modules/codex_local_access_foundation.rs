@@ -1322,7 +1322,7 @@ fn macos_proxy_url_from_scutil_map(
 }
 
 #[cfg(target_os = "macos")]
-fn system_proxy_url_for_target(target_url: &str) -> Option<String> {
+pub(crate) fn system_proxy_url_for_target(target_url: &str) -> Option<String> {
     let output = StdCommand::new("scutil").arg("--proxy").output().ok()?;
     if !output.status.success() {
         return None;
@@ -1400,7 +1400,7 @@ fn windows_proxy_url_from_server(proxy_server: &str, target_scheme: &str) -> Opt
 }
 
 #[cfg(target_os = "windows")]
-fn system_proxy_url_for_target(target_url: &str) -> Option<String> {
+pub(crate) fn system_proxy_url_for_target(target_url: &str) -> Option<String> {
     let mut command = StdCommand::new("reg");
     {
         use std::os::windows::process::CommandExt;
@@ -1427,7 +1427,7 @@ fn system_proxy_url_for_target(target_url: &str) -> Option<String> {
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn system_proxy_url_for_target(_target_url: &str) -> Option<String> {
+pub(crate) fn system_proxy_url_for_target(_target_url: &str) -> Option<String> {
     None
 }
 

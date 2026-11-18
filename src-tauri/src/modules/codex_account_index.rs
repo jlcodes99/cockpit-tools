@@ -1014,6 +1014,7 @@ pub(crate) fn save_account_preserving_egress_proxy(
     }
     merged.egress_proxy_url = current.egress_proxy_url;
     merged.egress_proxy_disabled = current.egress_proxy_disabled;
+    merged.egress_proxy_client_defaults = current.egress_proxy_client_defaults;
     save_account_with_tombstone_guard(&merged)?;
     sync_token_subscription_index(current.subscription_active_until.as_deref(), &merged);
     Ok(merged)
