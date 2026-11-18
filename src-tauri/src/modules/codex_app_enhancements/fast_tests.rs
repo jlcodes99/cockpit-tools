@@ -1561,7 +1561,7 @@ async fn verified_api_fast_running_document_never_reloads() {
 }
 
 #[tokio::test]
-async fn verified_api_fast_preload_late_attach_waits_without_second_reload() {
+async fn verified_api_fast_preload_late_attach_reloads_once_when_page_is_clean() {
     let mut runtime = start(Options {
         api_service: true,
         quota_compat: false,
@@ -1570,12 +1570,12 @@ async fn verified_api_fast_preload_late_attach_waits_without_second_reload() {
         ..Options::default()
     })
     .await;
-    runtime.notice("document", Some("restart-required")).await;
-    assert_eq!(runtime.navigations.load(Ordering::Acquire), 0);
+    runtime.notice("document", Some("reload-requested")).await;
+    assert_eq!(runtime.navigations.load(Ordering::Acquire), 1);
     let calls = runtime.finish(false).await;
     assert_eq!(
         expressions(&calls, "window.__cockpitNativeFast.inspectStartupReload()"),
-        0
+        1
     );
     assert_eq!(methods(&calls, "Page.addScriptToEvaluateOnNewDocument"), 1);
     assert!(calls.iter().any(|call| call["params"]["source"]

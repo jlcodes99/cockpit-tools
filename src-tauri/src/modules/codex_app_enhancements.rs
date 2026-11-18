@@ -1,5 +1,6 @@
 //! Optional desktop enhancements, scoped to a launched Codex profile and its CDP port.
-//! Slow credential reads and all network work stay outside the launch transaction.
+//! Fresh launches wait briefly for the initial credential snapshot; network work
+//! stays outside the launch transaction and never pauses or reloads the client.
 
 mod fast;
 mod browser_preload;
@@ -11,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
-use tokio::sync::watch;
+use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
 
 const POLL: Duration = Duration::from_secs(3);
@@ -33,16 +34,22 @@ pub fn start_for_profile(
     port: u16,
     fresh_launch: bool,
     api_service: bool,
-) {
+) -> Option<oneshot::Receiver<()>> {
     stop_for_profile(&profile);
     if !enabled() && !api_service {
-        return;
+        return None;
     }
     let (stop, receiver) = watch::channel(false);
     if let Ok(mut active) = runtimes().lock() {
         active.insert(profile.clone(), stop);
     }
     let startup = fresh_launch.then(|| Arc::new(fast::StartupReload::new()));
+    let (launch_ready, prepared) = if fresh_launch {
+        let (ready, prepared) = oneshot::channel();
+        (Some(ready), Some(prepared))
+    } else {
+        (None, None)
+    };
     tauri::async_runtime::spawn(run_profile(
         profile,
         instance,
@@ -50,7 +57,21 @@ pub fn start_for_profile(
         startup,
         api_service,
         receiver,
+        launch_ready,
     ));
+    prepared
+}
+
+// A fresh client must not race the first credential read. Failure only skips
+// this optional preparation; it must never prevent the native client starting.
+pub(crate) async fn wait_for_launch_profile(
+    prepared: Option<oneshot::Receiver<()>>,
+    wait: Duration,
+) -> bool {
+    match prepared {
+        Some(prepared) => matches!(tokio::time::timeout(wait, prepared).await, Ok(Ok(()))),
+        None => true,
+    }
 }
 
 pub fn stop_for_profile(profile: &Path) {
@@ -274,7 +295,7 @@ impl Child {
 }
 
 // API Service quota adaptation uses the persisted instance binding. Optional
-// Fast/prediction features still wait for their verified profile snapshot.
+// Fast/prediction features still require their verified profile snapshot.
 fn profile_or_api_fallback(profile: Option<Profile>, api_service: bool) -> Option<Profile> {
     profile.or_else(|| api_service.then(Profile::default))
 }
@@ -308,6 +329,7 @@ async fn run_profile(
     startup: Option<Arc<fast::StartupReload>>,
     api_service: bool,
     mut stop: watch::Receiver<bool>,
+    mut launch_ready: Option<oneshot::Sender<()>>,
 ) {
     // The launch transaction starts this worker before starting the process.
     // Browser discovery must race neither a blocking keyring read nor a second
@@ -359,6 +381,11 @@ async fn run_profile(
         }
         if read.as_ref().is_some_and(JoinHandle::is_finished) {
             let verified = read.take().unwrap().await.ok().and_then(Result::ok);
+            // The read worker has already published the complete trusted
+            // preload source. Only now may the launch transaction start Codex.
+            if let Some(ready) = launch_ready.take() {
+                let _ = ready.send(());
+            }
             initial_snapshot_ready = true;
             current_verified = verified.is_some();
             let next = profile_or_api_fallback(verified, api_service);
@@ -387,6 +414,9 @@ async fn run_profile(
                 tick.reset();
             }
             logger::log_warn("[Codex enhancements] profile snapshot timed out; optional adaptations suspended");
+            if let Some(ready) = launch_ready.take() {
+                let _ = ready.send(());
+            }
             let safe = profile_or_api_fallback(None, api_service);
             if current != safe {
                 for (_, child) in children.drain() {
@@ -477,6 +507,10 @@ async fn run_profile(
         child.stop();
     }
 }
+
+#[cfg(test)]
+#[path = "codex_app_enhancements/launch_profile_tests.rs"]
+mod launch_profile_tests;
 
 #[cfg(test)]
 mod tests {
