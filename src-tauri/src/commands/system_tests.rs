@@ -604,3 +604,67 @@ fn antigravity_shared_login_requires_ide_2_6_or_newer() {
         std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
         std::fs::remove_dir_all(&data_dir).expect("remove temp dir");
     }
+
+    fn write_antigravity_app_asar(root: &Path) {
+        let package = br#"{"name":"antigravity","version":"2.32.1"}"#;
+        let product = br#"{"nameShort":"Antigravity","ideVersion":"2.32.1"}"#;
+        let header = format!(
+            r#"{{"files":{{"package.json":{{"size":{},"offset":"0"}},"product.json":{{"size":{},"offset":"{}"}}}}}}"#,
+            package.len(),
+            product.len(),
+            package.len(),
+        );
+        // Header layout verified against @electron/asar output: [u32 = 4]
+        // [u32 header_size][u32 payload][u32 json_len][json padded to 4 bytes],
+        // file data starts at 8 + header_size and entry offsets are strings.
+        let payload = 4 + (header.len() + 3) / 4 * 4;
+        let header_size = 4 + payload;
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&4u32.to_le_bytes());
+        bytes.extend_from_slice(&(header_size as u32).to_le_bytes());
+        bytes.extend_from_slice(&(payload as u32).to_le_bytes());
+        bytes.extend_from_slice(&(header.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(header.as_bytes());
+        bytes.extend(std::iter::repeat(b' ').take(payload - 4 - header.len()));
+        bytes.extend_from_slice(package);
+        bytes.extend_from_slice(product);
+        let resources = root.join("resources");
+        std::fs::create_dir_all(&resources).expect("create resources directory");
+        std::fs::write(resources.join("app.asar"), bytes).expect("write app.asar");
+    }
+
+    #[test]
+    fn antigravity_metadata_reads_product_json_from_app_asar_layout() {
+        let install = MetadataTestDir::new("asar-layout");
+        write_antigravity_app_asar(install.path());
+
+        let metadata = read_antigravity_product_json_metadata(install.path())
+            .expect("read product metadata from the asar-packed layout");
+
+        assert_eq!(metadata.product_name, "Antigravity");
+        assert_eq!(metadata.version, "2.32.1");
+        assert_eq!(metadata.source, "app.asar product.json");
+    }
+
+    #[test]
+    fn unpacked_product_json_wins_over_app_asar_metadata() {
+        let install = MetadataTestDir::new("asar-and-unpacked");
+        write_antigravity_app_asar(install.path());
+        write_antigravity_product_json(install.path());
+
+        let metadata = read_antigravity_product_json_metadata(install.path())
+            .expect("read unpacked product metadata");
+
+        assert_eq!(metadata.version, "1.2.3");
+        assert_eq!(metadata.source, "product.json");
+    }
+
+    #[test]
+    fn corrupted_app_asar_yields_no_metadata() {
+        let install = MetadataTestDir::new("corrupted-asar");
+        let resources = install.path().join("resources");
+        std::fs::create_dir_all(&resources).expect("create resources directory");
+        std::fs::write(resources.join("app.asar"), b"not-an-asar").expect("write corrupted asar");
+
+        assert!(read_antigravity_product_json_metadata(install.path()).is_none());
+    }

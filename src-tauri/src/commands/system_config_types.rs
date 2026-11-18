@@ -558,6 +558,72 @@ fn antigravity_product_json_candidates(root: &Path) -> Vec<PathBuf> {
     }
 }
 
+/// Minimal read-only Electron asar support. Distro repacks (e.g. the AUR
+/// `antigravity` package on Arch) ship `resources/app.asar` without an
+/// unpacked `resources/app/product.json`, so the version badge cannot read the
+/// install metadata. The layout is verified against `@electron/asar` output:
+/// `[u32 = 4][u32 header_size][u32 payload][u32 json_len][header json][file
+/// data at 8 + header_size]`, with each entry's `offset` stored as a string
+/// relative to the data region.
+fn read_antigravity_asar_file_bytes(root: &Path, file: &str) -> Option<Vec<u8>> {
+    let bytes = fs::read(root.join("resources").join("app.asar")).ok()?;
+    if bytes.len() < 16 {
+        return None;
+    }
+    let header_size = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as usize;
+    let json_len = u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]) as usize;
+    let data_base = 8usize.checked_add(header_size)?;
+    let Some(json_end) = 16usize.checked_add(json_len) else {
+        return None;
+    };
+    if data_base < json_end || json_end > bytes.len() {
+        return None;
+    }
+    let header: serde_json::Value = serde_json::from_slice(&bytes[16..json_end]).ok()?;
+    let entry = header.pointer(&format!("/files/{file}"))?;
+    let size = entry
+        .get("size")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0) as usize;
+    let offset: usize = entry
+        .get("offset")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|offset| offset.parse().ok())?;
+    let start = data_base.checked_add(offset)?;
+    let end = start.checked_add(size)?;
+    if end > bytes.len() {
+        return None;
+    }
+    Some(bytes[start..end].to_vec())
+}
+
+fn antigravity_installed_info_from_product_json(
+    value: &serde_json::Value,
+    root: &Path,
+    source: &str,
+) -> Option<AntigravityInstalledVersionInfo> {
+    #[cfg(any(target_os = "linux", test))]
+    {
+        if antigravity_product_json_is_explicitly_unrelated(value) {
+            return None;
+        }
+    }
+    let Some(version) = json_string_field(value, &["ideVersion", "version"]) else {
+        return None;
+    };
+    let product_name = json_string_field(
+        value,
+        &["nameShort", "nameLong", "productName", "applicationName"],
+    )
+    .unwrap_or_else(|| "Antigravity".to_string());
+    Some(AntigravityInstalledVersionInfo {
+        product_name,
+        version,
+        app_path: root.to_string_lossy().to_string(),
+        source: source.to_string(),
+    })
+}
+
 fn read_antigravity_product_json_metadata(root: &Path) -> Option<AntigravityInstalledVersionInfo> {
     for path in antigravity_product_json_candidates(root) {
         let Ok(content) = fs::read_to_string(&path) else {
@@ -566,26 +632,18 @@ fn read_antigravity_product_json_metadata(root: &Path) -> Option<AntigravityInst
         let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
             continue;
         };
-        #[cfg(any(target_os = "linux", test))]
-        if antigravity_product_json_is_explicitly_unrelated(&value) {
-            continue;
+        if let Some(info) =
+            antigravity_installed_info_from_product_json(&value, root, "product.json")
+        {
+            return Some(info);
         }
-        let Some(version) = json_string_field(&value, &["ideVersion", "version"]) else {
-            continue;
-        };
-        let product_name = json_string_field(
-            &value,
-            &["nameShort", "nameLong", "productName", "applicationName"],
-        )
-        .unwrap_or_else(|| "Antigravity".to_string());
-        return Some(AntigravityInstalledVersionInfo {
-            product_name,
-            version,
-            app_path: root.to_string_lossy().to_string(),
-            source: "product.json".to_string(),
-        });
     }
-    None
+
+    // Distro repacks ship the install metadata only inside resources/app.asar.
+    let asar_product = read_antigravity_asar_file_bytes(root, "product.json")?;
+    let content = String::from_utf8(asar_product).ok()?;
+    let value = serde_json::from_str::<serde_json::Value>(&content).ok()?;
+    antigravity_installed_info_from_product_json(&value, root, "app.asar product.json")
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -975,19 +1033,46 @@ fn antigravity_metadata_candidates(
     #[cfg(target_os = "linux")]
     {
         let paths: &[&str] = match normalize_antigravity_metadata_target(target) {
-            Some("antigravity") => &["/usr/share/antigravity", "/opt/antigravity"],
-            Some("antigravity_ide") => &["/usr/share/antigravity-ide", "/opt/antigravity-ide"],
+            Some("antigravity") => &[
+                "/usr/share/antigravity",
+                "/opt/antigravity",
+                "/opt/Antigravity",
+            ],
+            Some("antigravity_ide") => &[
+                "/usr/share/antigravity-ide",
+                "/opt/antigravity-ide",
+                "/opt/Antigravity IDE",
+            ],
             _ => &[
                 "/usr/share/antigravity",
                 "/usr/share/antigravity-ide",
                 "/opt/antigravity",
                 "/opt/antigravity-ide",
+                "/opt/Antigravity",
+                "/opt/Antigravity IDE",
             ],
         };
         for path in paths {
             let path = PathBuf::from(path);
             if path.exists() {
                 push_unique_antigravity_candidate(&mut candidates, path);
+            }
+        }
+
+        // Distro repacks (e.g. the AUR `antigravity` package on Arch) install
+        // under roots like /opt/Antigravity and expose /usr/bin/antigravity as
+        // a symlink to the real launcher. Resolve the install root through
+        // that symlink instead of enumerating every distro layout; wrapper
+        // scripts (which canonicalize back under /usr) are ignored.
+        if normalize_antigravity_metadata_target(target) != Some("antigravity_ide") {
+            if let Ok(resolved) = fs::canonicalize("/usr/bin/antigravity") {
+                if let Some(root) = resolved.parent() {
+                    if root != std::path::Path::new("/usr/bin")
+                        && root != std::path::Path::new("/usr")
+                    {
+                        push_unique_antigravity_candidate(&mut candidates, root.to_path_buf());
+                    }
+                }
             }
         }
 
