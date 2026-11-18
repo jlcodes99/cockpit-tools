@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Linux AppImage no longer bundles the build host's `libwayland-*` libraries, so the window can open on distributions with Mesa 25+ instead of failing with `EGL_BAD_PARAMETER`. [#3187](https://github.com/jlcodes99/cockpit-tools/issues/3187)
+
 ## [1.4.2] - 2026-11-18
 
 ### Added
