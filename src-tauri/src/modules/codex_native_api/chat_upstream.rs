@@ -103,15 +103,23 @@ fn responses_to_chat_inner(body: &Value, native: bool) -> Result<Value, ServiceE
         out.insert("response_format".into(), value);
     }
     let converted = context.tools(native);
+    let has_tools = !converted.is_empty();
     out.remove("tools");
-    if !converted.is_empty() {
+    if has_tools {
         out.insert("tools".into(), json!(converted));
     }
     if let Some(choice) = body.get("tool_choice") {
-        out.insert(
-            "tool_choice".into(),
-            choice_to_chat(choice, &context, native)?,
-        );
+        // Strict Chat upstreams (vLLM, new-api, xAI) reject `tool_choice` when
+        // `tools` is absent. Codex compaction requests carry a redundant
+        // `tool_choice: "auto"` with an empty `tools` array, so drop the orphan
+        // choice unless it is an explicit "none" (harmless alongside empty tools).
+        let keep = has_tools || choice.as_str().is_some_and(|s| s.eq_ignore_ascii_case("none"));
+        if keep {
+            out.insert(
+                "tool_choice".into(),
+                choice_to_chat(choice, &context, native)?,
+            );
+        }
     }
     if body
         .get("include")
