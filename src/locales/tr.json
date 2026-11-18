@@ -1304,7 +1304,7 @@
       "trayIconStyleDesc": "Sistem tek renkli simgesini veya özgün renkli uygulama simgesini seçin",
       "trayIconStyleTemplate": "Tek renkli simge",
       "trayIconStyleColor": "Renkli simge",
-      "menuBarLeftClick": "Menü çubuğu simgesine sol tıklama eylemi",
+      "menuBarLeftClick": "Menü çubuğunda sol tıklama",
       "menuBarLeftClickMenu": "Kota menüsünü aç",
       "menuBarLeftClickWindow": "Ana pencereyi aç",
       "floatingCardStartup": "Başlangıçta yüzen kartı göster",
@@ -1565,7 +1565,6 @@
       "webdavAllowedDomainsDesc": "Virgülle ayır; boş = sınır yok",
       "claudeQuotaDisplayRemaining": "Claude kotayı kalan % olarak göster",
       "claudeQuotaDisplayRemainingDesc": "Varsayılan: kullanılan %. Açık = kalan %. Otomatik geçiş ve uyarılar kullanıma göre.",
-      "menuBarLeftClick": "Menü çubuğunda sol tıklama",
       "menuBarLeftClickDesc": "Sağ tıklama her zaman kota menüsünü açar.",
       "menuBarLeftClickQuotaMenu": "Kota menüsü",
       "menuBarLeftClickMainWindow": "Ana pencere",
@@ -1604,11 +1603,7 @@
         "nativePredictionsDesc": "Varsayılan olarak açıktır. Öneriler mevcut konuşmanın API sağlayıcısını ve modelini kullanır ve API kullanımını artırır. Bu ayarı değiştirdikten sonra ilgili Codex örneklerini yeniden başlatın ve Cockpit Tools’u çalışır durumda tutun."
       },
       "timeDisplayMode": "Zaman gösterimi",
-      "timeDisplayModeDesc": "Hesap kartları ve listelerindeki zaman. Varsayılan, hesap değiştirme zamanıdır",
-      "menuBarLeftClick": "Menü çubuğunda sol tıklama",
-      "menuBarLeftClickDesc": "Sağ tıklama her zaman kota menüsünü açar.",
-      "menuBarLeftClickQuotaMenu": "Kota menüsü",
-      "menuBarLeftClickMainWindow": "Ana pencere"
+      "timeDisplayModeDesc": "Hesap kartları ve listelerindeki zaman. Varsayılan, hesap değiştirme zamanıdır"
     },
     "network": {
       "apiTitle": "Yerçekimine Karşı Kokpit API'si",
@@ -4786,7 +4781,8 @@
           "totalAvailable": "Kullanılabilir",
           "isAvailable": "Bakiye kullanılabilir",
           "modelLimitsEnabled": "Model limitleri",
-          "weeklyShort": "Hafta"
+          "weeklyShort": "Hafta",
+          "intervalShort": "5h"
         },
         "accountBalance": "Hesap bakiyesi",
         "unlimitedQuota": "Sınırsız",

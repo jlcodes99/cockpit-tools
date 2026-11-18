@@ -1347,7 +1347,7 @@
       "trayIconStyleDesc": "اختر أيقونة النظام أحادية اللون أو أيقونة التطبيق الأصلية الملونة",
       "trayIconStyleTemplate": "أيقونة أحادية اللون",
       "trayIconStyleColor": "أيقونة ملونة",
-      "menuBarLeftClick": "النقر الأيسر على أيقونة شريط القوائم",
+      "menuBarLeftClick": "النقر بالزر الأيسر في شريط القوائم",
       "menuBarLeftClickMenu": "فتح قائمة الحصص",
       "menuBarLeftClickWindow": "فتح النافذة الرئيسية",
       "floatingCardStartup": "إظهار البطاقة العائمة عند التشغيل",
@@ -1612,7 +1612,6 @@
       "webdavAllowedDomainsDesc": "مفصولة بفواصل؛ فارغ = بلا حد",
       "claudeQuotaDisplayRemaining": "حصة Claude كنسبة متبقية",
       "claudeQuotaDisplayRemainingDesc": "الافتراضي: % مستخدم. التفعيل = % متبقي. التبديل والتنبيهات حسب الاستخدام.",
-      "menuBarLeftClick": "النقر بالزر الأيسر في شريط القوائم",
       "menuBarLeftClickDesc": "يفتح النقر بالزر الأيمن دائمًا قائمة الحصة.",
       "menuBarLeftClickQuotaMenu": "قائمة الحصة",
       "menuBarLeftClickMainWindow": "النافذة الرئيسية",
@@ -1651,11 +1650,7 @@
         "nativePredictionsDesc": "مفعّل افتراضيًا. تستخدم الاقتراحات مزوّد API ونموذج المحادثة الحالية وتزيد استهلاك API. بعد تغيير الإعداد، أعد تشغيل مثيلات Codex المعنية وأبقِ Cockpit Tools قيد التشغيل."
       },
       "timeDisplayMode": "عرض الوقت",
-      "timeDisplayModeDesc": "الوقت المعروض في بطاقات الحسابات وقوائمها. الافتراضي هو وقت تبديل الحساب",
-      "menuBarLeftClick": "النقر بالزر الأيسر في شريط القوائم",
-      "menuBarLeftClickDesc": "يفتح النقر بالزر الأيمن دائمًا قائمة الحصة.",
-      "menuBarLeftClickQuotaMenu": "قائمة الحصة",
-      "menuBarLeftClickMainWindow": "النافذة الرئيسية"
+      "timeDisplayModeDesc": "الوقت المعروض في بطاقات الحسابات وقوائمها. الافتراضي هو وقت تبديل الحساب"
     },
     "network": {
       "apiTitle": "واجهة برمجة تطبيقات قمرة القيادة المضادة للجاذبية",
@@ -4833,7 +4828,8 @@
           "totalAvailable": "المتاح",
           "isAvailable": "الرصيد متاح",
           "modelLimitsEnabled": "قيود النماذج",
-          "weeklyShort": "أسبوعي"
+          "weeklyShort": "أسبوعي",
+          "intervalShort": "5h"
         },
         "accountBalance": "رصيد الحساب",
         "unlimitedQuota": "غير محدود",

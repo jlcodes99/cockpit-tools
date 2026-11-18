@@ -1304,7 +1304,7 @@
       "trayIconStyleDesc": "システムの単色アイコンまたは元のカラーアプリアイコンを選択します",
       "trayIconStyleTemplate": "単色アイコン",
       "trayIconStyleColor": "カラーアイコン",
-      "menuBarLeftClick": "メニューバーアイコンの左クリック操作",
+      "menuBarLeftClick": "メニューバーの左クリック",
       "menuBarLeftClickMenu": "使用枠メニューを開く",
       "menuBarLeftClickWindow": "メインウインドウを開く",
       "floatingCardStartup": "起動時にフローティングカードを表示",
@@ -1565,7 +1565,6 @@
       "webdavAllowedDomainsDesc": "カンマ区切り。空なら制限なし",
       "claudeQuotaDisplayRemaining": "Claude 残量%表示",
       "claudeQuotaDisplayRemainingDesc": "既定は使用済み%。オンで残量%。自動切替と警告は使用率基準のままです。",
-      "menuBarLeftClick": "メニューバーの左クリック",
       "menuBarLeftClickDesc": "右クリックでは常に利用枠メニューを開きます。",
       "menuBarLeftClickQuotaMenu": "利用枠メニュー",
       "menuBarLeftClickMainWindow": "メインウィンドウ",
@@ -1604,11 +1603,7 @@
         "nativePredictionsDesc": "既定ではオンです。候補の生成には現在の会話の API プロバイダーとモデルが使用され、API 使用量が増えます。設定を変更したら、対象の Codex インスタンスを再起動し、Cockpit Tools は起動したままにしてください。"
       },
       "timeDisplayMode": "時刻表示",
-      "timeDisplayModeDesc": "アカウントカードと一覧に表示する時刻。既定は切替時刻です",
-      "menuBarLeftClick": "メニューバーの左クリック",
-      "menuBarLeftClickDesc": "右クリックでは常に利用枠メニューを開きます。",
-      "menuBarLeftClickQuotaMenu": "利用枠メニュー",
-      "menuBarLeftClickMainWindow": "メインウィンドウ"
+      "timeDisplayModeDesc": "アカウントカードと一覧に表示する時刻。既定は切替時刻です"
     },
     "network": {
       "apiTitle": "反重力コックピット API",
@@ -4786,7 +4781,8 @@
           "totalAvailable": "利用可能",
           "isAvailable": "残高の利用可否",
           "modelLimitsEnabled": "モデル制限",
-          "weeklyShort": "週"
+          "weeklyShort": "週",
+          "intervalShort": "5h"
         },
         "accountBalance": "アカウント残高",
         "unlimitedQuota": "無制限",

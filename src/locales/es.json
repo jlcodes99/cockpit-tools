@@ -1300,7 +1300,7 @@
       "trayIconStyleDesc": "Elige el icono monocromo del sistema o el icono original a color de la app",
       "trayIconStyleTemplate": "Icono monocromo",
       "trayIconStyleColor": "Icono a color",
-      "menuBarLeftClick": "Acción del clic izquierdo en el icono de la barra de menús",
+      "menuBarLeftClick": "Clic izquierdo en la barra de menús",
       "menuBarLeftClickMenu": "Abrir el menú de cuotas",
       "menuBarLeftClickWindow": "Abrir la ventana principal",
       "floatingCardStartup": "Mostrar la tarjeta flotante al iniciar",
@@ -1565,7 +1565,6 @@
       "webdavAllowedDomainsDesc": "Separado por comas; vacío = sin límite",
       "claudeQuotaDisplayRemaining": "Cuota Claude como % restante",
       "claudeQuotaDisplayRemainingDesc": "Por defecto: % usado. Activar = % restante. Cambio automático y alertas siguen el uso.",
-      "menuBarLeftClick": "Clic izquierdo en la barra de menús",
       "menuBarLeftClickDesc": "El clic derecho siempre abre el menú de cuotas.",
       "menuBarLeftClickQuotaMenu": "Menú de cuotas",
       "menuBarLeftClickMainWindow": "Ventana principal",
@@ -1604,11 +1603,7 @@
         "nativePredictionsDesc": "Activado de forma predeterminada. Las sugerencias usan el proveedor de API y el modelo de la conversación actual y generan consumo adicional de API. Tras cambiar este ajuste, reinicia las instancias de Codex afectadas y mantén Cockpit Tools en ejecución."
       },
       "timeDisplayMode": "Hora mostrada",
-      "timeDisplayModeDesc": "Hora en las tarjetas y listas de cuentas. Por defecto, la del cambio de cuenta",
-      "menuBarLeftClick": "Clic izquierdo en la barra de menús",
-      "menuBarLeftClickDesc": "El clic derecho siempre abre el menú de cuotas.",
-      "menuBarLeftClickQuotaMenu": "Menú de cuotas",
-      "menuBarLeftClickMainWindow": "Ventana principal"
+      "timeDisplayModeDesc": "Hora en las tarjetas y listas de cuentas. Por defecto, la del cambio de cuenta"
     },
     "network": {
       "apiTitle": "API de cabina antigravedad",
@@ -4786,7 +4781,8 @@
           "totalAvailable": "Disponible",
           "isAvailable": "Saldo disponible",
           "modelLimitsEnabled": "Límites de modelo",
-          "weeklyShort": "Semana"
+          "weeklyShort": "Semana",
+          "intervalShort": "5h"
         },
         "accountBalance": "Saldo de cuenta",
         "unlimitedQuota": "Ilimitado",

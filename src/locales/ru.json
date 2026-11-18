@@ -1304,7 +1304,7 @@
       "trayIconStyleDesc": "Выберите системный монохромный значок или исходный цветной значок приложения",
       "trayIconStyleTemplate": "Монохромный значок",
       "trayIconStyleColor": "Цветной значок",
-      "menuBarLeftClick": "Действие левого щелчка по значку в строке меню",
+      "menuBarLeftClick": "Левый клик в строке меню",
       "menuBarLeftClickMenu": "Открыть меню квот",
       "menuBarLeftClickWindow": "Открыть главное окно",
       "floatingCardStartup": "Показывать плавающую карточку при запуске",
@@ -1565,7 +1565,6 @@
       "webdavAllowedDomainsDesc": "Через запятую; пусто = без ограничений",
       "claudeQuotaDisplayRemaining": "Квота Claude как % остатка",
       "claudeQuotaDisplayRemainingDesc": "По умолчанию % использования. Вкл. = остаток. Авто-смена и алерты по использованию.",
-      "menuBarLeftClick": "Левый клик в строке меню",
       "menuBarLeftClickDesc": "Правый клик всегда открывает меню лимитов.",
       "menuBarLeftClickQuotaMenu": "Меню лимитов",
       "menuBarLeftClickMainWindow": "Главное окно",
@@ -1604,11 +1603,7 @@
         "nativePredictionsDesc": "По умолчанию включено. Подсказки используют поставщика API и модель текущего диалога, увеличивая расход API. После изменения настройки перезапустите соответствующие экземпляры Codex и оставьте Cockpit Tools запущенным."
       },
       "timeDisplayMode": "Показ времени",
-      "timeDisplayModeDesc": "Время в карточках и списках аккаунтов. По умолчанию — время переключения",
-      "menuBarLeftClick": "Левый клик в строке меню",
-      "menuBarLeftClickDesc": "Правый клик всегда открывает меню лимитов.",
-      "menuBarLeftClickQuotaMenu": "Меню лимитов",
-      "menuBarLeftClickMainWindow": "Главное окно"
+      "timeDisplayModeDesc": "Время в карточках и списках аккаунтов. По умолчанию — время переключения"
     },
     "network": {
       "apiTitle": "API антигравитационной кабины",
@@ -4786,7 +4781,8 @@
           "totalAvailable": "Доступно",
           "isAvailable": "Баланс доступен",
           "modelLimitsEnabled": "Лимиты моделей",
-          "weeklyShort": "Неделя"
+          "weeklyShort": "Неделя",
+          "intervalShort": "5h"
         },
         "accountBalance": "Баланс аккаунта",
         "unlimitedQuota": "Безлимитно",

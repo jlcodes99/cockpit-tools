@@ -5,6 +5,8 @@ import { OpenAIOfficialUsagePanel } from "../components/codex/OpenAIOfficialUsag
 import type { ReactElement } from "react";
 import type { TFunction } from "i18next";
 import { Database } from "lucide-react";
+import { CodexQuotaMiniRows } from "../components/codex/CodexQuotaMiniRows";
+import type { UnifiedQuotaMetric } from "../presentation/platformAccountPresentation";
 import { isCodexChatCompletionsApiKeyAccount, type CodexAccount } from "../types/codex";
 import { getClaudeQuotaClass } from "../types/claude";
 import { isCodexApiKeyUsageQueryEligible, isDeepSeekAccount } from "../utils/codexDeepSeekAccess";
@@ -191,58 +193,65 @@ export function renderCodexApiKeyUsagePanel({
     );
   }
   if (variant === "card" && summary && isTokenPlanUsage) {
-    const remainingQuota = summary.quotaRemaining ?? summary.remaining;
-    const quotaLimit = summary.quotaLimit;
-    let remainingPercent: number | null = null;
-    if (!summary.quotaUnlimited && remainingQuota != null && Number.isFinite(remainingQuota)) {
-      const percent = summary.unit?.trim() === "%"
-        ? remainingQuota
-        : quotaLimit != null && Number.isFinite(quotaLimit) && quotaLimit > 0
-          ? (remainingQuota / quotaLimit) * 100
-          : null;
-      if (percent != null) {
-        remainingPercent = Math.max(0, Math.min(100, Math.round(percent)));
-      }
-    }
-    const quotaBarClass = remainingPercent == null ? "" : getClaudeQuotaClass(100 - remainingPercent);
     const resetDetail =
       findApiKeyUsageDetail(summary, "intervalExpiresAt") ??
       findApiKeyUsageDetail(summary, "weeklyExpiresAt") ??
       findApiKeyUsageDetail(summary, "expiresAt");
-    // 智谱等 coding plan 是「5 小时 + 每周」双窗：主数字是 5 小时窗剩余，
-    // 把每周窗剩余并排在旁边，避免用户只看到一个数字而误以为没有周限。
+    // 智谱等 coding plan 是「5 小时 + 每周」双窗：与官方订阅账号卡相同，
+    // 每个窗口渲染独立的 CodexQuotaMiniRow（label + 剩余% + 条 + 重置时间），
+    // 两个窗口各自独立展示，避免只显示单个数字。
+    const intervalRemainingDetail = findApiKeyUsageDetail(summary, "intervalRemainingPercent");
     const weeklyRemainingDetail = findApiKeyUsageDetail(summary, "weeklyRemainingPercent");
-    const weeklyRemaining = Number.parseFloat(weeklyRemainingDetail?.value ?? "");
+    const intervalResetDetail = findApiKeyUsageDetail(summary, "intervalExpiresAt");
+    const weeklyResetDetail = findApiKeyUsageDetail(summary, "weeklyExpiresAt");
+    const windowItem = (
+      key: string,
+      label: string,
+      remainingDetail?: { value: string },
+      resetDetail?: { value: string },
+    ): UnifiedQuotaMetric | null => {
+      const remaining = Number.parseFloat(remainingDetail?.value ?? "");
+      if (!Number.isFinite(remaining)) return null;
+      // 复用官方订阅卡的分级实现（getClaudeQuotaClass 按已用百分比分级），
+      // 保证与 GPT 卡的条颜色阈值完全一致。
+      const quotaClass = getClaudeQuotaClass(100 - remaining);
+      return {
+        key,
+        label,
+        percentage: remaining,
+        quotaClass,
+        valueText: `${remaining}%`,
+        resetText: resetDetail?.value,
+        showProgress: true,
+      };
+    };
+    const quotaItems = [
+      windowItem(
+        "interval",
+        t("codex.modelProviders.usage.fields.intervalShort", "5h"),
+        intervalRemainingDetail,
+        intervalResetDetail,
+      ),
+      windowItem(
+        "weekly",
+        t("codex.modelProviders.usage.fields.weeklyShort", "Weekly"),
+        weeklyRemainingDetail,
+        weeklyResetDetail,
+      ),
+    ].filter((item): item is UnifiedQuotaMetric => item !== null);
     return (
-      <div
-        className="quota-item codex-api-key-quota-item token-plan"
-        title={`${t(
-          "codex.modelProviders.usage.fields.remaining",
-          "Remaining",
-        )}: ${formatApiKeyUsageQuotaValue(summary, remainingQuota)}`}
-      >
+      <div className="quota-item codex-api-key-quota-item token-plan">
         <div className="quota-header">
           <Database size={14} />
           <span className="quota-label">
             {t("codex.modelProviders.usage.fields.planName", "Token Plan")}
           </span>
-          <span className={`quota-pct ${quotaBarClass}`}>
-            {formatApiKeyUsageQuotaValue(summary, remainingQuota)}
-            {Number.isFinite(weeklyRemaining) && (
-              <span>
-                {" · "}
-                {t("codex.modelProviders.usage.fields.weeklyShort", "Weekly")}{" "}
-                {formatApiKeyUsageMoney(weeklyRemaining, "%")}
-              </span>
-            )}
-          </span>
         </div>
-        {remainingPercent != null && (
-          <div className="quota-bar-track">
-            <div
-              className={`quota-bar ${quotaBarClass}`}
-              style={{ width: `${remainingPercent}%` }}
-            />
+        {quotaItems.length > 0 ? (
+          <CodexQuotaMiniRows items={quotaItems} t={t} />
+        ) : (
+          <div className="quota-empty">
+            {t("common.shared.quota.noData", "暂无配额数据")}
           </div>
         )}
         {(summary.planName || resetDetail) && (

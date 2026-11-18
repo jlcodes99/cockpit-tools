@@ -57,9 +57,16 @@ for (const variant of ['card', 'table'] as const) {
       details: [{ key: 'totalGranted', label: 'Granted', value: '100' }, { key: 'totalAvailable', label: 'Available', value: '80' }] }, variant);
     assert.ok(html.includes('$80.00') && html.includes('$100'));
   });
-  test(`token plan ${variant} shows the remaining quota`, () => {
-    const html = renderSummary({ mode: 'token_plan', remaining: 80, planName: 'Example' }, variant);
-    assert.ok(html.includes('$80.00') && html.includes('Example'));
+  test(`token plan card shows both quota windows`, () => {
+    const html = renderSummary({
+      mode: 'token_plan', planName: 'Example',
+      details: [
+        { key: 'intervalRemainingPercent', label: 'Interval remaining (%)', value: '80' },
+        { key: 'weeklyRemainingPercent', label: 'Weekly remaining (%)', value: '43' },
+      ],
+    }, 'card');
+    assert.ok(html.includes('Example'));
+    assert.ok(html.includes('codex-quota-mini') && html.includes('80') && html.includes('43'));
   });
 }
 test('New API card text and bar both use remaining quota', () => {
@@ -72,16 +79,23 @@ test('New API card text and bar both use remaining quota', () => {
 test('token plan card uses the displayed remaining quota and keeps the weekly figure', () => {
   const plan = {
     mode: 'token_plan', unit: '%', quotaLimit: 100, quotaUsed: 6, quotaRemaining: 94,
-    details: [{ key: 'weeklyRemainingPercent', label: 'Weekly', value: '43' }],
+    details: [
+      { key: 'intervalRemainingPercent', label: 'Interval', value: '94' },
+      { key: 'weeklyRemainingPercent', label: 'Weekly', value: '43' },
+    ],
   } as const;
   const html = renderSummary({ ...plan, details: [...plan.details] });
-  assert.match(html, /94%.*Weekly 43%/);
-  assert.match(html, /quota-bar high" style="width:94%"/);
+  // 双窗 mini rows：5h 行（剩余 94%，high 绿）与周限行（剩余 43%）各自独立。
+  assert.ok(html.includes('codex-quota-mini-bar high') && html.includes('width:94%'));
+  assert.ok(html.includes('Weekly') && html.includes('43%'));
   assert.doesNotMatch(html, /cockpit-api-progress-bar|width:6%/);
 
-  const critical = renderSummary({ mode: 'token_plan', unit: '%', quotaRemaining: 5 });
-  assert.match(critical, /quota-bar critical" style="width:5%"/);
-  assert.doesNotMatch(renderSummary({ mode: 'token_plan', unit: 'USD', remaining: 80 }), /quota-bar-track/);
+  const critical = renderSummary({
+    mode: 'token_plan', unit: '%', quotaRemaining: 5,
+    details: [{ key: 'intervalRemainingPercent', label: 'Interval', value: '5' }],
+  });
+  assert.match(critical, /codex-quota-mini-bar critical/);
+  assert.doesNotMatch(renderSummary({ mode: 'token_plan', unit: 'USD', remaining: 80 }), /codex-quota-mini-meter/);
 
 });
 
@@ -90,8 +104,10 @@ test('token plan card uses remaining quota for width and color', () => {
     const html = renderSummary({
       mode: 'token_plan', unit: '%', quotaLimit: 100,
       quotaUsed: 100 - remaining, quotaRemaining: remaining,
+      details: [{ key: 'intervalRemainingPercent', label: 'Interval', value: String(remaining) }],
     });
-    assert.match(html, new RegExp(`class="quota-bar ${level}" style="width:${remaining}%"`));
+    assert.match(html, new RegExp(`class="codex-quota-mini-bar ${level}"`));
+    assert.match(html, new RegExp(`style="width:${remaining}%"`));
     assert.ok(html.includes(`>${remaining}%<`));
     assert.doesNotMatch(html, /cockpit-api-progress-bar/);
   }
