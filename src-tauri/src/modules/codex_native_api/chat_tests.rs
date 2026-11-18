@@ -205,3 +205,58 @@ fn native_chat_legacy_completion() {
     assert_eq!(out["object"], "text_completion");
     assert_eq!(out["choices"][0]["text"], "yes");
 }
+
+#[test]
+fn chat_conversion_drops_orphan_tool_choice_when_compaction_has_no_tools() {
+    let request = json!({
+        "model": "vendor/deepseek-v4.1-flash",
+        "input": "hi",
+        "tools": [],
+        "tool_choice": "auto"
+    });
+    let wire = chat_upstream::responses_to_chat(&request).unwrap();
+    assert!(wire.get("tools").is_none());
+    assert!(wire.get("tool_choice").is_none());
+    let native = chat_upstream::responses_to_native_chat(&request).unwrap();
+    assert!(native.get("tools").is_none());
+    assert!(native.get("tool_choice").is_none());
+}
+#[test]
+fn chat_conversion_keeps_tool_choice_none_without_tools() {
+    let request = json!({
+        "model": "vendor/deepseek-v4.1-flash",
+        "input": "hi",
+        "tools": [],
+        "tool_choice": "none"
+    });
+    let wire = chat_upstream::responses_to_chat(&request).unwrap();
+    assert!(wire.get("tools").is_none());
+    assert_eq!(wire["tool_choice"], "none");
+}
+#[test]
+fn chat_conversion_drops_named_tool_choice_when_compaction_has_no_tools() {
+    let request = json!({
+        "model": "vendor/deepseek-v4.1-flash",
+        "input": "hi",
+        "tools": [],
+        "tool_choice": {"type":"function","name":"shell_command"}
+    });
+    let wire = chat_upstream::responses_to_chat(&request).unwrap();
+    assert!(wire.get("tools").is_none());
+    assert!(wire.get("tool_choice").is_none());
+}
+#[test]
+fn chat_conversion_keeps_tool_choice_when_tools_present() {
+    let request = json!({
+        "model": "vendor/deepseek-v4.1-flash",
+        "input": "hi",
+        "tools": [{"type":"function","name":"shell_command","parameters":{"type":"object"}}],
+        "tool_choice": "auto"
+    });
+    let wire = chat_upstream::responses_to_chat(&request).unwrap();
+    assert_eq!(wire["tools"].as_array().unwrap().len(), 1);
+    assert_eq!(wire["tool_choice"], "auto");
+    let native = chat_upstream::responses_to_native_chat(&request).unwrap();
+    assert_eq!(native["tool_choice"], "auto");
+    assert!(native["tools"].as_array().is_some());
+}
