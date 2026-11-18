@@ -129,7 +129,7 @@ impl SyncRoute<'_> {
                 "-o",
                 "ExitOnForwardFailure=yes",
                 "-o",
-                "LogLevel=DEBUG1",
+                "LogLevel=INFO",
                 "-o",
                 "ControlMaster=no",
                 "-o",

@@ -103,11 +103,8 @@ async fn wait_for_forward(
         }
         let line = String::from_utf8_lossy(&buffer);
         let line = line.trim();
-        if line
-            .contains(r#"Forwarding listen address "127.0.0.1" overridden by server GatewayPorts"#)
-        {
-            return Err("SSH server GatewayPorts overrode the requested loopback address".into());
-        }
+        // GatewayPorts notices describe sshd's binding policy. A confirmed port
+        // remains usable through the remote loopback address under that policy.
         if let Some(port) = allocated_forward_port(line, &destination) {
             return Ok(port);
         }
@@ -171,6 +168,10 @@ mod tests {
                 eprintln!("Allocated port 45002 for remote forward to 127.0.0.1:9000");
                 std::thread::sleep(Duration::from_secs(4));
             }
+            Ok("forward-policy-only") => {
+                eprintln!("debug1: Remote: Forwarding listen address \"127.0.0.1\" overridden by server GatewayPorts");
+                std::process::exit(255);
+            }
             Ok("forward-drop") => {
                 eprintln!("Allocated port 45002 for remote forward to 127.0.0.1:9000");
                 std::thread::sleep(Duration::from_millis(800));
@@ -205,12 +206,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reverse_forward_rejects_a_server_that_overrides_the_loopback_bind() {
-        let error = reverse_forward(fixture("forward-exposed"), 9000, Duration::from_secs(3))
+    async fn reverse_forward_accepts_a_confirmed_port_with_the_servers_bind_policy() {
+        let mut forward = reverse_forward(fixture("forward-exposed"), 9000, Duration::from_secs(3))
+            .await
+            .expect("the server's address policy still allows forwarding");
+        assert_eq!(forward.remote_port(), 45002);
+        assert!(forward.is_running());
+    }
+
+    #[tokio::test]
+    async fn reverse_forward_requires_confirmation_after_a_server_policy_notice() {
+        let error = reverse_forward(fixture("forward-policy-only"), 9000, Duration::from_secs(3))
             .await
             .err()
-            .expect("reject a server-wide bind");
-        assert!(error.contains("GatewayPorts"), "{error}");
+            .expect("a policy notice does not confirm an allocated port");
+        assert!(error.contains("closed before confirming"), "{error}");
     }
 
     #[tokio::test]
