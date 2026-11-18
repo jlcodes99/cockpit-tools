@@ -221,6 +221,16 @@ export function WorkbuddyModelProbeModal({
 
   const selectedSet = useMemo(() => new Set(models), [models]);
 
+  // 云端目录是唯一真源：已下线的模型从勾选集中剔除出计数与执行，
+  // 但不删除 localStorage 记录，模型重新上架时自动恢复勾选。
+  // 目录拉取失败（空目录）时不剔除，避免把用户的勾选全判成失效。
+  const catalogIdSet = useMemo(() => new Set(catalog.map((model) => model.id)), [catalog]);
+  const hasCatalog = catalogState === 'loaded' && catalog.length > 0;
+  const runnableModels = useMemo(
+    () => (hasCatalog ? models.filter((id) => catalogIdSet.has(id)) : models),
+    [hasCatalog, models, catalogIdSet],
+  );
+
   const toggleModel = (modelId: string) => {
     setModels((previous) => {
       const next = previous.includes(modelId)
@@ -231,8 +241,8 @@ export function WorkbuddyModelProbeModal({
     });
   };
 
-  const totalPairs = scopedAccounts.length * models.length;
-  const canRun = !running && scopedAccounts.length > 0 && models.length > 0;
+  const totalPairs = scopedAccounts.length * runnableModels.length;
+  const canRun = !running && scopedAccounts.length > 0 && runnableModels.length > 0;
 
   const summary = useMemo(() => {
     const counts = { available: 0, rate_limited: 0, error: 0, unknown: 0 };
@@ -259,11 +269,11 @@ export function WorkbuddyModelProbeModal({
     const token = runTokenRef.current + 1;
     runTokenRef.current = token;
     const pairs = scopedAccounts.flatMap((account) =>
-      models.map((model) => ({ account, model })),
+      runnableModels.map((model) => ({ account, model })),
     );
     const initial: Record<string, CellState> = {};
     for (const pair of pairs) initial[cellKey(pair.account.id, pair.model)] = { status: 'pending' };
-    setBatch({ accounts: scopedAccounts, models });
+    setBatch({ accounts: scopedAccounts, models: runnableModels });
     setActiveCell(null);
     setShowResults(true);
     setCells(initial);
@@ -554,7 +564,7 @@ export function WorkbuddyModelProbeModal({
                 <div className="wb-probe-models-head">
                   <h3 className="wb-probe-pane-heading wb-probe-model-heading">
                     {t('workbuddy.modelProbe.model')}
-                    <span className="wb-probe-selection-count">{models.length}</span>
+                    <span className="wb-probe-selection-count">{runnableModels.length}</span>
                   </h3>
                   <div className="wb-probe-models-actions">
                     <span className="wb-probe-search">

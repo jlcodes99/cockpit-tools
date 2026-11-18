@@ -92,3 +92,98 @@ test('batch probe submits once and keeps cleanup failures visible in the cell de
   assert.equal(closed, 0);
   h.unmount();
 });
+
+const PROBE_MODAL_MODULE_MOCKS = {
+  'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
+  '../../types/workbuddy': { getWorkbuddyAccountDisplayEmail: (account: any) => account.email },
+  '../../presentation/platformAccountPresentation': { buildWorkbuddyAccountPresentation: () => ({ planLabel: 'PRO', planClass: 'pro' }) },
+  '../../hooks/useEscClose': { useEscCloseTopmost() {} },
+};
+
+const PROBE_MODAL_STATUS_MOCKS = {
+  clearWorkbuddyProbeRecord() {},
+  setWorkbuddyProbeRecord() {},
+  parseProbeResetAt: () => null,
+  dismissWorkbuddyProbeRecord() {},
+  subscribeWorkbuddyProbeStatus: () => () => {},
+};
+
+function probeModalHarness(saved: string[], catalog: () => Promise<any[]>, probed: string[] = []) {
+  return loadHookModule(new URL('./WorkbuddyModelProbeModal.tsx', import.meta.url), {
+    ...PROBE_MODAL_MODULE_MOCKS,
+    '../../services/workbuddyService': {
+      fetchWorkbuddyCloudModels: catalog,
+      fetchCodebuddyCnCloudModels: async () => [],
+      probeWorkbuddyModel: (_accountId: string, model: string) => {
+        probed.push(model);
+        return Promise.resolve({
+          status: 'available',
+          message: '',
+          reply: 'OK',
+          conversationId: 'created',
+          conversationDeleted: true,
+          cleanupError: null,
+          keepConversation: false,
+        });
+      },
+      probeCodebuddyCnModel: () => { throw new Error('unused'); },
+    },
+    '../../utils/workbuddyProbeStatus': PROBE_MODAL_STATUS_MOCKS,
+  }, {
+    localStorage: {
+      getItem: () => JSON.stringify(saved),
+      setItem() {},
+    },
+  });
+}
+
+test('retired models stay saved but are excluded from the count and the probe batch', async () => {
+  const probed: string[] = [];
+  const h = probeModalHarness(
+    ['stale-model', 'kept-model'],
+    async () => [
+      { id: 'kept-model', name: 'Kept', credits: null, description: null, supportsImages: false, isDefault: false },
+    ],
+    probed,
+  );
+
+  h.render(() => h.exports.WorkbuddyModelProbeModal({
+    accounts: [{ id: 'a', email: 'a@example.invalid' }],
+    currentAccountId: 'a',
+    onClose: () => {},
+  }));
+  await settlePromises();
+
+  const count = nodes(h.flush()).find((node) => node.props?.className === 'wb-probe-selection-count');
+  assert.ok(count, 'selection count should render');
+  assert.equal(count.props.children, 1, 'the retired model must not count as runnable');
+
+  const submit = nodes(h.flush()).find(
+    (node) => node.type === 'button' && node.props.className === 'btn btn-primary',
+  );
+  assert.ok(submit, 'submit button should render');
+  assert.equal(submit.props.disabled, false, 'a live selection keeps the batch runnable');
+  submit.props.onClick();
+  await settlePromises();
+
+  assert.deepEqual(probed, ['kept-model'], 'the retired model must not be probed');
+  h.unmount();
+});
+
+test('a failed catalog fetch keeps the saved selection runnable', async () => {
+  const h = probeModalHarness(['stale-model', 'kept-model'], async () => {
+    throw new Error('offline');
+  });
+
+  h.render(() => h.exports.WorkbuddyModelProbeModal({
+    accounts: [{ id: 'a', email: 'a@example.invalid' }],
+    currentAccountId: 'a',
+    onClose: () => {},
+  }));
+  await settlePromises();
+
+  const count = nodes(h.flush()).find((node) => node.props?.className === 'wb-probe-selection-count');
+  assert.ok(count, 'selection count should render even when the catalog fails');
+  assert.equal(count.props.children, 2, 'without a loaded catalog the saved selection stays runnable');
+  h.unmount();
+});
