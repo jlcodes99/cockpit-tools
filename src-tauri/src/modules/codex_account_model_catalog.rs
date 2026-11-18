@@ -3723,6 +3723,15 @@ fn write_api_key_bearer_provider_override_to_config_toml(
     let is_local_access_loopback = provider_config.provider_id.as_deref()
         == Some(CODEX_RUNTIME_MODEL_PROVIDER_ID)
         && is_loopback_http_base_url(Some(base_url));
+    if is_local_access_loopback {
+        // The local gateway routes the hosted web search per model: official
+        // upstreams keep the native `web_search` tool (the managed catalog
+        // marks those models `web_search_provider = "standalone"`), while
+        // third-party upstreams already have hosted web tools stripped at
+        // request time. Declaring the capability on the generated provider
+        // makes the Codex client advertise the native web search tool again.
+        provider_table["supports_standalone_web_search"] = value(true);
+    }
     if supports_image_generation {
         set_imagegen_headers(provider_table, is_local_access_loopback);
     } else {

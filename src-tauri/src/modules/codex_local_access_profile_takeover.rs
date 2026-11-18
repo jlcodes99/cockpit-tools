@@ -669,6 +669,7 @@ fn restore_config_toml_from_takeover_backup_with_realtime_ownership(
                 "requires_openai_auth",
                 "experimental_bearer_token",
                 "supports_websockets",
+                "supports_standalone_web_search",
             ] {
                 if let Some(item) = backup_provider.get(key) {
                     provider[key] = item.clone();
