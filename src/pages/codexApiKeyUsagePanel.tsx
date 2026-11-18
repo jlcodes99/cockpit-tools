@@ -212,9 +212,9 @@ export function renderCodexApiKeyUsagePanel({
     ): UnifiedQuotaMetric | null => {
       const remaining = Number.parseFloat(remainingDetail?.value ?? "");
       if (!Number.isFinite(remaining)) return null;
-      const used = Math.max(0, Math.min(100, Math.round(100 - remaining)));
-      const quotaClass =
-        used >= 90 ? "critical" : used >= 70 ? "low" : used >= 40 ? "medium" : "high";
+      // 复用官方订阅卡的分级实现（getClaudeQuotaClass 按已用百分比分级），
+      // 保证与 GPT 卡的条颜色阈值完全一致。
+      const quotaClass = getClaudeQuotaClass(100 - remaining);
       return {
         key,
         label,
