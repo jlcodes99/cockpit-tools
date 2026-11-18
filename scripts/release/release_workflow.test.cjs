@@ -1,11 +1,17 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
 const test = require("node:test");
 
 const workflowPath = path.join(__dirname, "..", "..", ".github", "workflows", "release.yml");
 const workflow = fs.readFileSync(workflowPath, "utf8");
+const repoRoot = path.resolve(__dirname, "../..");
+const bash = process.platform === "win32"
+  ? path.join(process.env.ProgramFiles, "Git", "bin", "bash.exe")
+  : "bash";
 
 function jobBody(name, nextName) {
   const startMarker = `  ${name}:`;
@@ -16,17 +22,20 @@ function jobBody(name, nextName) {
   return workflow.slice(start, end);
 }
 
+function shellScripts(job) {
+  return [...job.matchAll(/        run: \|\r?\n((?:          .*\r?\n|\r?\n)+)/g)]
+    .map((match) => match[1].replace(/^          /gm, "").replace(/\r/g, ""));
+}
+
 test("release remains draft until all assets, manifests, and checksums are ready", () => {
   const prepare = jobBody("prepare-release", "build-windows");
-  const finalize = jobBody("finalize-legacy-latest", "upload-checksums");
-  const checksums = jobBody("upload-checksums", "publish-release");
+  const finalize = jobBody("finalize-legacy-latest", "publish-release");
   const publish = jobBody("publish-release", "update-homebrew-cask");
 
   assert.match(prepare, /gh release create "\$\{TAG\}" --draft/);
   assert.doesNotMatch(prepare, /--draft=false/);
   assert.doesNotMatch(finalize, /--draft=false/);
-  assert.doesNotMatch(checksums, /--draft=false/);
-  assert.match(publish, /needs:[\s\S]*finalize-legacy-latest[\s\S]*upload-checksums/);
+  assert.match(publish, /needs:[\s\S]*finalize-legacy-latest/);
   assert.match(publish, /gh release edit "\$\{TAG\}" --draft=false --prerelease=false --latest/);
 });
 
@@ -41,15 +50,13 @@ test("public updater verification and Homebrew run only after publication", () =
 
 test("every release upload uses the draft-safe retry helper", () => {
   assert.doesNotMatch(workflow, /gh release upload/);
-  assert.equal((workflow.match(/node scripts\/release\/upload_release_assets\.cjs /g) || []).length, 11);
   for (const [job, next] of [
     ["build-windows", "build-macos-aarch64"],
     ["build-macos-aarch64", "build-macos-x86_64"],
     ["build-macos-x86_64", "build-macos-universal"],
     ["build-macos-universal", "build-linux"],
     ["build-linux", "finalize-legacy-latest"],
-    ["finalize-legacy-latest", "upload-checksums"],
-    ["upload-checksums", "publish-release"],
+    ["finalize-legacy-latest", "publish-release"],
   ]) {
     const body = jobBody(job, next);
     assert.match(body, /actions\/checkout@v4/);
@@ -77,11 +84,11 @@ test("all macOS release assets pass signing and notarization before staging and 
     const body = jobBody(job, next);
     const prepare = body.indexOf('macos-signing.cjs prepare');
     const build = body.search(/node scripts\/tauri.cjs (build|bundle)/);
-    const rebuild = body.indexOf('inject-dmg-readme.cjs');
+    const dmg = body.indexOf('inject-dmg-readme.cjs');
     const verify = body.indexOf('macos-signing.cjs finalize');
     const stage = body.indexOf('stage_release_assets.cjs');
     const upload = body.indexOf('upload_release_assets.cjs');
-    assert.ok(prepare >= 0 && prepare < build && build < rebuild && rebuild < verify && verify < stage && stage < upload, job);
+    assert.ok(prepare >= 0 && prepare < build && build < dmg && dmg < verify && verify < stage && stage < upload, job);
     assert.match(body, /if: always\(\)\s+run: node scripts\/release\/macos-signing.cjs cleanup/);
     for (const name of ['APPLE_CERTIFICATE', 'APPLE_CERTIFICATE_PASSWORD', 'APPLE_SIGNING_IDENTITY', 'APPLE_ID', 'APPLE_PASSWORD', 'APPLE_TEAM_ID']) {
       assert.ok(body.includes(`secrets.${name}`), `${job}: missing ${name}`);
@@ -125,16 +132,64 @@ test("trusted main CI and release jobs share caches, with correct platform separ
   assert.doesNotMatch(workflow, /Library\/Caches\/tauri|uses: swatinem\/rust-cache/);
 });
 
-// Execute the actual workflow shell steps with fake external commands. This
-// catches early exits that textual ordering checks cannot detect.
+test("finalizes from one download, checksums the freshly generated manifest and stops if a signature is missing", {
+  skip: process.platform === "win32",
+}, (context) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "cockpit-release-finalize-"));
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const fixtures = path.join(directory, "draft");
+  const metadata = path.join(directory, "release-metadata");
+  fs.mkdirSync(fixtures);
+  fs.mkdirSync(metadata);
+  fs.writeFileSync(path.join(metadata, "release-notes.md"), "Release notes");
+  fs.writeFileSync(path.join(metadata, "published-at.txt"), "2026-11-18T02:00:00Z");
+  const installers = [
+    "Cockpit.Tools_aarch64.app.tar.gz", "Cockpit.Tools_x64.app.tar.gz",
+    "Cockpit.Tools_1.2.3_x64_en-US.msi", "Cockpit.Tools_1.2.3_x64-setup.exe",
+    "Cockpit.Tools_1.2.3_amd64.AppImage", "Cockpit.Tools_1.2.3_aarch64.AppImage",
+    "Cockpit.Tools_1.2.3_amd64.deb", "Cockpit.Tools_1.2.3_arm64.deb",
+    "Cockpit.Tools-1.2.3-1.x86_64.rpm", "Cockpit.Tools-1.2.3-1.aarch64.rpm",
+  ];
+  for (const installer of installers) {
+    fs.writeFileSync(path.join(fixtures, installer), "installer");
+    fs.writeFileSync(path.join(fixtures, installer + ".sig"), "test-signature");
+  }
+  fs.writeFileSync(path.join(fixtures, "latest.json"), "stale draft manifest");
+  fs.writeFileSync(path.join(fixtures, "SHA256SUMS.txt"), "stale checksum");
+
+  const scripts = shellScripts(jobBody("finalize-legacy-latest", "publish-release"));
+  const fakeCommands = [
+    'gh() { test "$1 $2" = "release download" || return 99; echo "DOWNLOAD"; cp draft/* release-assets/; }',
+    'node() { if [[ "$1" == scripts/release/upload_release_assets.cjs ]]; then echo "UPLOAD $*"; else "$NODE_BIN" "$REPO_ROOT/$1" "${@:2}"; fi; }',
+  ];
+  const run = () => spawnSync(bash, ["--noprofile", "--norc", "-e", "-o", "pipefail", "-c", [...fakeCommands, ...scripts].join("\n")], {
+    cwd: directory,
+    encoding: "utf8",
+    env: { ...process.env, NODE_BIN: process.execPath, REPO_ROOT: repoRoot, VERSION: "1.2.3", GITHUB_REPOSITORY: "example/cockpit-tools" },
+  });
+  const good = run();
+  assert.ifError(good.error);
+  assert.equal(good.status, 0, good.stderr);
+  assert.equal(good.stdout.match(/^DOWNLOAD$/gm)?.length, 1);
+  assert.match(good.stdout, /UPLOAD .* v1\.2\.3 latest\.json SHA256SUMS\.txt/);
+  const latest = fs.readFileSync(path.join(directory, "latest.json"));
+  const checksum = crypto.createHash("sha256").update(latest).digest("hex");
+  const lines = fs.readFileSync(path.join(directory, "SHA256SUMS.txt"), "utf8").trim().split("\n");
+  assert.ok(lines.includes(checksum + "  latest.json"));
+  assert.equal(lines.length, installers.length * 2 + 1);
+
+  fs.rmSync(path.join(directory, "release-assets"), { recursive: true });
+  fs.rmSync(path.join(fixtures, installers[0] + ".sig"));
+  const missing = run();
+  assert.ifError(missing.error);
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /Missing signature file/);
+  assert.doesNotMatch(missing.stdout, /UPLOAD/);
+});
+
 function runPublishJob(overrides = {}) {
-  const publish = jobBody("publish-release", "update-homebrew-cask");
-  const scripts = [...publish.matchAll(/        run: \|\r?\n((?:          .*\r?\n|\r?\n)+)/g)]
-    .map((match) => match[1].replace(/^          /gm, "").replace(/\r/g, ""));
+  const scripts = shellScripts(jobBody("publish-release", "update-homebrew-cask"));
   assert.equal(scripts.length, 2, "expected publication and verification shell steps");
-  const bash = process.platform === "win32"
-    ? path.join(process.env.ProgramFiles, "Git", "bin", "bash.exe")
-    : "bash";
   const result = spawnSync(bash, ["--noprofile", "--norc", "-e", "-o", "pipefail", "-c", `
     gh() {
       case "$1 $2" in

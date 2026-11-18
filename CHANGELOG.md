@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-18
+
+### Changed
+
+- **Releases**: Reduce the time between tagging and availability of official downloads without changing installer coverage or update signing.
+
 ## [1.4.0] - 2026-11-15
 
 ### Fixed

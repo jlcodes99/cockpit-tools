@@ -171,7 +171,6 @@ jobs:
 
   prepare-frontend:
     name: "🌐 Prepare production frontend"
-    needs: prepare-release
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout repository
@@ -186,11 +185,8 @@ jobs:
       - name: 📦 Install frontend dependencies
         run: npm ci --prefer-offline --no-audit --no-fund
 
-      - name: 🔄 Sync release versions
-        run: npm run sync-version
-
       - name: 🏗️ Build production frontend assets
-        run: npm run build
+        run: npm exec -- vite build
 
       - name: 📤 Share production frontend
         uses: actions/upload-artifact@v4
@@ -230,7 +226,7 @@ jobs:
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
-        run: npm install
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: 🔄 Sync versions
         run: npm run sync-version
@@ -247,10 +243,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          COCKPIT_PREBUILT_FRONTEND_DIST: "dist"
         run: |
           set -euo pipefail
-          npx tauri build --ci
+          npx tauri build --ci --config src-tauri/tauri.prebuilt-frontend.conf.json
 
       - name: 📦 Build Windows portable archive
         shell: bash
@@ -364,15 +359,10 @@ jobs:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🦀 Rust setup
-        uses: dtolnay/rust-toolchain@stable
+      - name: 💾 macOS release build cache
+        uses: ./.github/actions/macos-release-cache
         with:
-          targets: aarch64-apple-darwin
-
-      - name: 💾 Host build cache
-        uses: ./.github/actions/host-build-cache
-        with:
-          target: macos-aarch64
+          target: aarch64-apple-darwin
 
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
@@ -381,10 +371,7 @@ jobs:
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
-        run: npm install
-
-      - name: 🔄 Sync versions
-        run: npm run sync-version
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: 📥 Reuse production frontend
         uses: actions/download-artifact@v4
@@ -412,10 +399,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          COCKPIT_PREBUILT_FRONTEND_DIST: "dist"
         run: |
           set -euo pipefail
-          node scripts/tauri.cjs build --ci --target aarch64-apple-darwin
+          node scripts/tauri.cjs build --ci --target aarch64-apple-darwin --bundles app --config src-tauri/tauri.prebuilt-frontend.conf.json
 
       - name: 📦 Prepare Universal binary inputs
         shell: bash
@@ -435,12 +421,12 @@ jobs:
           compression-level: 1
           if-no-files-found: error
 
-      - name: 📝 Rebuild DMG with installation instructions
+      - name: 📝 Build final DMG with installation instructions
         shell: bash
         run: |
           set -euo pipefail
           node scripts/release/inject-dmg-readme.cjs \
-            --bundle-dir "target/aarch64-apple-darwin/release/bundle"
+            --bundle-dir "target/aarch64-apple-darwin/release/bundle" --mac-arch aarch64
 
       - name: ✅ Notarize final DMG and verify macOS assets
         env:
@@ -555,15 +541,10 @@ jobs:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🦀 Rust setup
-        uses: dtolnay/rust-toolchain@stable
+      - name: 💾 macOS release build cache
+        uses: ./.github/actions/macos-release-cache
         with:
-          targets: x86_64-apple-darwin
-
-      - name: 💾 Host build cache
-        uses: ./.github/actions/host-build-cache
-        with:
-          target: macos-x86_64
+          target: x86_64-apple-darwin
 
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
@@ -572,10 +553,7 @@ jobs:
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
-        run: npm install
-
-      - name: 🔄 Sync versions
-        run: npm run sync-version
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: 📥 Reuse production frontend
         uses: actions/download-artifact@v4
@@ -603,10 +581,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          COCKPIT_PREBUILT_FRONTEND_DIST: "dist"
         run: |
           set -euo pipefail
-          node scripts/tauri.cjs build --ci --target x86_64-apple-darwin
+          node scripts/tauri.cjs build --ci --target x86_64-apple-darwin --bundles app --config src-tauri/tauri.prebuilt-frontend.conf.json
 
       - name: 📦 Prepare Universal binary inputs
         shell: bash
@@ -626,12 +603,12 @@ jobs:
           compression-level: 1
           if-no-files-found: error
 
-      - name: 📝 Rebuild DMG with installation instructions
+      - name: 📝 Build final DMG with installation instructions
         shell: bash
         run: |
           set -euo pipefail
           node scripts/release/inject-dmg-readme.cjs \
-            --bundle-dir "target/x86_64-apple-darwin/release/bundle"
+            --bundle-dir "target/x86_64-apple-darwin/release/bundle" --mac-arch x64
 
       - name: ✅ Notarize final DMG and verify macOS assets
         env:
@@ -759,10 +736,7 @@ jobs:
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
-        run: npm install
-
-      - name: 🔄 Sync versions
-        run: npm run sync-version
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: 📥 Download ARM binary inputs
         uses: actions/download-artifact@v4
@@ -805,14 +779,14 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          node scripts/tauri.cjs bundle --ci --target universal-apple-darwin
+          node scripts/tauri.cjs bundle --ci --target universal-apple-darwin --bundles app
 
-      - name: 📝 Rebuild DMG with installation instructions
+      - name: 📝 Build final DMG with installation instructions
         shell: bash
         run: |
           set -euo pipefail
           node scripts/release/inject-dmg-readme.cjs \
-            --bundle-dir "target/universal-apple-darwin/release/bundle"
+            --bundle-dir "target/universal-apple-darwin/release/bundle" --mac-arch universal
 
       - name: ✅ Notarize final DMG and verify macOS assets
         env:
@@ -931,7 +905,7 @@ jobs:
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
-        run: npm install
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: 🔄 Sync versions
         run: npm run sync-version
@@ -948,10 +922,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          COCKPIT_PREBUILT_FRONTEND_DIST: "dist"
         run: |
           set -euo pipefail
-          npx tauri build --ci
+          npx tauri build --ci --config src-tauri/tauri.prebuilt-frontend.conf.json
 
       - name: 📥 Download release metadata
         uses: actions/download-artifact@v4
@@ -1039,7 +1012,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   finalize-legacy-latest:
-    name: 🏁 Finalize Legacy Updater Manifest
+    name: 🏁 Finalize Updater Manifest and Checksums
     if: needs.prepare-release.outputs.publish == 'true'
     # Wait for every platform build so latest.json is complete.
     needs:
@@ -1122,48 +1095,11 @@ jobs:
           ' latest.json > /dev/null
           jq -r '.platforms | keys[]' latest.json
 
-      - name: 📤 Upload complete legacy latest.json
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          node scripts/release/upload_release_assets.cjs "v${VERSION}" latest.json
-
-  upload-checksums:
-    name: 🔗 Publish SHA256SUMS
-    if: needs.prepare-release.outputs.publish == 'true'
-    needs:
-      - prepare-release
-      - finalize-legacy-latest
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      GH_REPO: ${{ github.repository }}
-      VERSION: ${{ needs.prepare-release.outputs.version }}
-    steps:
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v4
-
-      - name: ⚙️ Node.js setup
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: 📥 Download release assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p release-assets
-          gh release download "v${VERSION}" --dir release-assets --pattern "*" --clobber
-
       - name: ⚙️ Generate SHA256SUMS.txt from release assets
         shell: bash
         run: |
           set -euo pipefail
+          cp latest.json release-assets/latest.json
           cd release-assets
           rm -f SHA256SUMS.txt
           find . -type f -print0 \
@@ -1177,13 +1113,13 @@ jobs:
           test -s SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      - name: 📤 Upload SHA256SUMS.txt to release
+      - name: 📤 Upload complete legacy latest.json and SHA256SUMS.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/release/upload_release_assets.cjs "v${VERSION}" SHA256SUMS.txt
+          node scripts/release/upload_release_assets.cjs "v${VERSION}" latest.json SHA256SUMS.txt
 
   publish-release:
     name: 🚀 Publish Verified Release
@@ -1191,7 +1127,6 @@ jobs:
     needs:
       - prepare-release
       - finalize-legacy-latest
-      - upload-checksums
     runs-on: ubuntu-latest
     permissions:
       contents: write
