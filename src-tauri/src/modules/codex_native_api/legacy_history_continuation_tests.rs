@@ -199,6 +199,8 @@ async fn legacy_tool_history_leaves_missing_wrong_and_duplicate_results_to_upstr
         base: format!("http://{}", listener.local_addr().unwrap()),
         oauth: true,
         removed_a: AtomicBool::new(false),
+        open_timeout: ExecutionPolicy::default().open_timeout,
+        rejections: Mutex::new(Vec::new()),
     });
     let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let mut fixture = Fixture {

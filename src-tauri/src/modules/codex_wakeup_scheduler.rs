@@ -108,9 +108,7 @@ fn quota_reset_timing(task: &codex_wakeup::CodexWakeupTask, now: i64) -> QuotaRe
         account_ids.iter().filter_map(|id| codex_account::load_account(id))
             .filter(codex_wakeup::is_pool_wakeup_account).collect::<Vec<_>>()
     } else {
-        let selected: HashSet<&str> = account_ids.iter().map(String::as_str).collect();
-        codex_account::list_accounts().into_iter()
-            .filter(|account| selected.contains(account.id.as_str())).collect()
+        codex_account::load_indexed_accounts_by_ids(account_ids)
     };
     let delay = i64::from(task.schedule.quota_reset_delay_minutes.unwrap_or(0)) * 60;
     let after = task.last_run_at.unwrap_or(task.created_at);

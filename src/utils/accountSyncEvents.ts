@@ -116,6 +116,7 @@ export function resolvePlatformIdFromPage(page: Page | string): PlatformId | nul
     normalized === 'api-relay' ||
     normalized === 'wakeup' ||
     normalized === 'verification' ||
+    normalized === 'antigravity-usage' ||
     normalized === '2fa' ||
     normalized === 'proxies' ||
     normalized === 'instances'

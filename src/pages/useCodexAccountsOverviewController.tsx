@@ -4,14 +4,13 @@ import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName
 import { useEffect, useMemo, useCallback, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { RefreshCw, RotateCw } from "lucide-react";
 import { CodexResetCreditExpiry } from '../components/CodexResetCreditExpiry';
-import { CodexResetAutomationStatus } from '../components/codex/CodexResetAutomation';
 import * as codexService from "../services/codexService";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
 import { type CodexAccountGroup } from "../services/codexAccountGroupService";
-import { hasCodexAccountStructure, hasCodexAccountName, isCodexApiKeyAccount, isCodexChatgptPlanAccount, isCodexAgentIdentityAccount, isCodexWebSessionAccount, isCodexNewApiAccount, isCodexTeamLikePlan } from "../types/codex";
+import { hasCodexAccountStructure, hasCodexAccountName, isCodexApiKeyAccount, isCodexChatgptPlanAccount, isCodexAgentIdentityAccount, isCodexNewApiAccount, isCodexTeamLikePlan } from "../types/codex";
 import { summarizeCodexQuotaErrorMessage } from "../utils/codexQuotaError";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
-import { formatCodexWindowStatsText } from "../utils/codexWindowStats";
+import { formatCodexWindowStatsText, hasVisibleCodexWindowStats } from "../utils/codexWindowStats";
 import { useCodexAccountWindowStats } from "../hooks/useCodexAccountWindowStats";
 import { type CodexLaunchPreviewAction, type CodexLaunchPreviewSummary } from "../components/codex/CodexLaunchPreviewModal";
 import { CodexImageModelSelect } from "../components/CodexImageModelConfig";
@@ -287,11 +286,11 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
             (item.key === "primary"
               ? accountStats.primary
               : accountStats.secondary);
-          if (!stats) return item;
+          if (!stats || !hasVisibleCodexWindowStats(stats)) return item;
           const windowStatsText = formatCodexWindowStatsText(stats);
           const hint = t(
             "codex.quota.windowStatsHint",
-            "从本窗口满额到现在，该账号走 API 服务的请求数、token 和账号计费",
+            "本额度窗口内经由 API 服务的请求数、Token 和估算用量价值",
           );
           return {
             ...item,
@@ -1690,11 +1689,13 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
       const isResetting = resettingResetCreditAccountId === account.id;
       const isDisabled = isResetting;
       if (mode === 'expiry') {
+        const emptyHintKey = availableCount === 0 ? 'codex.resetAutomation.noCredits' : 'codex.quota.resetCreditTimeUnknown';
+        const emptyHintText = t(emptyHintKey);
         return (
           <div className="codex-account-reset-expiry-line">
             {displayCount > 0 ? <CodexResetCreditExpiry key={account.id} accountId={account.id} quota={account.quota}
               disabled={isDisabled} onClick={() => openResetCreditConfirmModal(account)} />
-              : <span className="reset-automation-hint">{t(availableCount === 0 ? 'codex.resetAutomation.noCredits' : 'codex.quota.resetCreditTimeUnknown')}</span>}
+              : <span className="codex-reset-credit-empty-hint" title={emptyHintText}>{emptyHintText}</span>}
           </div>
         );
       }
@@ -1721,7 +1722,6 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
               <RotateCw size={13} />
             )}
             {t("codex.quota.resetCredits", { count: displayCount })}
-            {!isCodexWebSessionAccount(account) && <CodexResetAutomationStatus accountId={account.id} />}
           </button>
         </div>
       );

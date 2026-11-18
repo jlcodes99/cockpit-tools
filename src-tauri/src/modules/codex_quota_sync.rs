@@ -420,6 +420,27 @@ async fn discover() -> Result<Discovery, String> {
         .map_err(|e| e.to_string())?
 }
 
+fn finish_active_refresh(
+    account_id: &str,
+    state: Option<&mut RefreshState>,
+    result: Result<CodexQuota, String>,
+    after_refresh: impl FnOnce(),
+) {
+    let failures = state.map_or(1, |state| {
+        state.finish(Instant::now(), &result);
+        state.failures
+    });
+    match result {
+        Ok(_) => after_refresh(),
+        Err(error) => {
+            logger::log_warn(&format!(
+                "[Codex Quota Sync] refresh deferred/failed: account_id={account_id}, retry_in={}s",
+                failure_backoff(failures, &error).as_secs()
+            ));
+        }
+    }
+}
+
 pub(crate) fn ensure_started() {
     if STARTED.swap(true, Ordering::AcqRel) {
         return;
@@ -428,19 +449,20 @@ pub(crate) fn ensure_started() {
         let mut discovery = Discovery::default();
         let mut states: HashMap<String, RefreshState> = HashMap::new();
         let mut discovery_due = Instant::now();
-        let mut jobs = tokio::task::JoinSet::new();
+        let mut jobs = tokio::task::JoinSet::<(String, Result<CodexQuota, String>)>::new();
         let mut tick = tokio::time::interval(ACTIVITY_INTERVAL);
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             tokio::select! {
                 Some(completed) = jobs.join_next(), if !jobs.is_empty() => {
                     if let Ok((id, result)) = completed {
-                        if let Some(state) = states.get_mut(&id) { state.finish(Instant::now(), &result); }
-                        if let Err(error) = result {
-                            // Error details stay in the existing quota refresh diagnostics.
-                            logger::log_warn(&format!("[Codex Quota Sync] refresh deferred/failed: account_id={id}, retry_in={}s",
-                                failure_backoff(states.get(&id).map_or(1, |s| s.failures), &error).as_secs()));
-                        }
+                        finish_active_refresh(&id, states.get_mut(&id), result, || {
+                            if let Some(app) = crate::get_app_handle() {
+                                tauri::async_runtime::spawn(async move {
+                                    Box::pin(crate::commands::codex::run_codex_post_refresh_checks(app)).await;
+                                });
+                            }
+                        });
                     }
                 }
                 _ = tick.tick() => {

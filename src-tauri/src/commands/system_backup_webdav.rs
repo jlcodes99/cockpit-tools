@@ -467,6 +467,7 @@ fn open_path_in_system(path: &Path) -> Result<(), String> {
         std::process::Command::new("open")
             .arg(path)
             .spawn()
+            .map(crate::modules::process::background_child_pid)
             .map_err(|e| format!("打开目录失败: {}", e))?;
     }
 
@@ -475,6 +476,7 @@ fn open_path_in_system(path: &Path) -> Result<(), String> {
         std::process::Command::new("explorer")
             .arg(path)
             .spawn()
+            .map(crate::modules::process::background_child_pid)
             .map_err(|e| format!("打开目录失败: {}", e))?;
     }
 
@@ -483,6 +485,7 @@ fn open_path_in_system(path: &Path) -> Result<(), String> {
         std::process::Command::new("xdg-open")
             .arg(path)
             .spawn()
+            .map(crate::modules::process::background_child_pid)
             .map_err(|e| format!("打开目录失败: {}", e))?;
     }
 
@@ -493,6 +496,48 @@ fn open_path_in_system(path: &Path) -> Result<(), String> {
 pub async fn open_data_folder() -> Result<(), String> {
     let path = modules::account::get_data_dir()?;
     open_path_in_system(path.as_path())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataDirectorySettings {
+    current_path: Option<String>,
+    configured_path: Option<String>,
+    environment_override: bool,
+    restart_required: bool,
+    error: Option<String>,
+}
+
+#[tauri::command]
+pub fn get_data_directory_settings() -> DataDirectorySettings {
+    use modules::data_paths;
+
+    let active = data_paths::resolve_data_dir();
+    let active_custom = data_paths::active_custom_data_dir();
+    let configured = data_paths::read_data_dir_preference();
+    let environment_override = data_paths::environment_data_dir().is_some();
+    let restart_required = !environment_override
+        && configured.as_ref().is_ok_and(|configured| {
+            active_custom.as_ref().map_or(true, |active| active != configured)
+        });
+    let error = active.as_ref().err().or_else(|| configured.as_ref().err()).cloned();
+    DataDirectorySettings {
+        current_path: active.ok().map(|path| path.to_string_lossy().into_owned()),
+        configured_path: configured.ok().flatten().map(|path| path.to_string_lossy().into_owned()),
+        environment_override,
+        restart_required,
+        error,
+    }
+}
+
+#[tauri::command]
+pub async fn set_data_directory(path: Option<String>) -> Result<DataDirectorySettings, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        modules::data_paths::save_data_dir_preference(path.as_deref().map(std::path::Path::new))?;
+        Ok(get_data_directory_settings())
+    })
+    .await
+    .map_err(|error| format!("保存数据目录设置失败: {error}"))?
 }
 
 #[tauri::command]

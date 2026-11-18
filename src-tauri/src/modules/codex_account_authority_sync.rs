@@ -701,6 +701,39 @@ fn sync_account_from_authority_sources(account: &mut CodexAccount) -> Result<boo
     sync_account_from_authority_sources_with_entries(account, &process_entries)
 }
 
+/// Retain a selected profile's OAuth rotation before rewriting its credentials.
+pub(crate) async fn preserve_profile_oauth_before_replacement(
+    profile: &Path,
+    previous_binding: Option<&str>,
+) -> Result<(), String> {
+    // Switch-and-launch can persist the new binding before writing the profile.
+    // Prefer the credential owner of the profile actually on disk.
+    let account_id = read_managed_projection_from_dir(profile)
+        .and_then(|projection| {
+            projection.credential_account_id.or_else(|| {
+                oauth_account_id_for_runtime_binding(Some(&projection.account_id))
+            })
+        })
+        .or_else(|| oauth_account_id_for_runtime_binding(previous_binding));
+    let Some(account_id) = account_id else {
+        return Ok(());
+    };
+    if !load_account(&account_id).is_some_and(|account| {
+        !account.is_api_key_auth() && !account.is_agent_identity_auth() && !account.is_web_session_auth()
+    }) {
+        return Ok(());
+    }
+    let lock = codex_token_lock_for(&account_id);
+    let _guard = lock.lock().await;
+    let Some(_file_guard) =
+        try_acquire_codex_token_refresh_file_lock(&account_id, "profile-replace").await?
+    else {
+        return Ok(());
+    };
+    sync_account_from_runtime_authority_dirs(&account_id, &[profile.to_path_buf()])?;
+    Ok(())
+}
+
 fn sync_account_from_authority_sources_with_entries(
     account: &mut CodexAccount,
     process_entries: &[(u32, Option<String>)],
@@ -777,7 +810,7 @@ async fn sync_active_official_account_before_switch() -> Result<bool, String> {
     } else {
         current_account_id
     };
-    let Some(mut oauth_account) = load_account(&oauth_account_id) else {
+    let Some(oauth_account) = load_account(&oauth_account_id) else {
         return Ok(false);
     };
     if oauth_account.is_api_key_auth()
@@ -786,10 +819,6 @@ async fn sync_active_official_account_before_switch() -> Result<bool, String> {
     {
         return Ok(false);
     }
-    if !managed_account_tokens_need_refresh(&oauth_account) && !oauth_account.requires_reauth {
-        return Ok(false);
-    }
-
     let lock = codex_token_lock_for(&oauth_account_id);
     let _guard = lock.lock().await;
     let Some(_file_guard) =
@@ -797,10 +826,26 @@ async fn sync_active_official_account_before_switch() -> Result<bool, String> {
     else {
         return Ok(false);
     };
-    let changed = sync_account_from_live_authority_sources(&mut oauth_account)?;
+    // The default profile is about to be overwritten even if its client has
+    // stopped or the previous access token is still usable after a rotation.
+    let Some(mut oauth_account) = load_account(&oauth_account_id) else {
+        return Ok(false);
+    };
+    let process_entries = if managed_account_tokens_need_refresh(&oauth_account)
+        || oauth_account.requires_reauth
+    {
+        crate::modules::process::collect_codex_process_entries()
+    } else {
+        Vec::new()
+    };
+    let changed = if process_entries.is_empty() {
+        sync_account_from_runtime_authority_dirs(&oauth_account_id, &[get_codex_home()])?
+    } else {
+        sync_account_from_live_authority_sources_with_entries(&mut oauth_account, &process_entries)?
+    };
     if changed {
         logger::log_info(&format!(
-            "[Codex切号] 覆盖前已从全部运行态 profile 保存最新官方凭证: account_id={}",
+            "[Codex切号] 覆盖前已保存最新官方凭证: account_id={}",
             oauth_account.id
         ));
     }

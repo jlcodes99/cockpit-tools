@@ -854,6 +854,47 @@ async fn official_fallback_http_preflight_owner_change_stops_without_pool() {
 }
 
 #[tokio::test]
+async fn official_fallback_recovers_a_message_only_sharing_quota_rejection() {
+    let message = "The ChatGPT user has reached their Subscription Sharing usage limit. Ask the user to try again after their usage limit resets or use an API key instead";
+    let sse = r#"data: {"type":"response.created","response":{"id":"opening","output":[]}}
+
+data: {"type":"response.failed","response":{"status":"failed","output":[],"error":{"message":"The ChatGPT user has reached their Subscription Sharing usage limit. Ask the user to try again after their usage limit resets or use an API key instead","type":"invalid_request_error","resets_in_seconds":61}}}
+
+"#;
+    for event_stream in [None, Some(sse)] {
+        let fixture = Fixture::new(
+            400,
+            json!({"error":{"message":message,"type":"invalid_request_error","resets_in_seconds":61}}),
+            event_stream,
+            false,
+        ).await;
+        let response = fixture.send(request()).await;
+        assert_eq!(response.status(), 200, "{:?}", response.text().await.unwrap());
+        assert_eq!(fixture.captures.lock().unwrap().iter().map(|capture| capture.0.as_str()).collect::<Vec<_>>(),
+            ["/official/responses", "/local/responses"]);
+        let failures = fixture.host.official_failures.lock().unwrap().clone();
+        assert_eq!(failures.len(), 1);
+        assert_eq!(failures[0].code, "subscription_sharing_usage_limit_exceeded");
+        assert_eq!(failures[0].retry_after, Some(Duration::from_secs(61)));
+        fixture.close().await;
+    }
+
+    let late = r#"data: {"type":"response.output_text.delta","delta":"Already generated"}
+
+data: {"type":"response.failed","response":{"status":"failed","error":{"message":"The ChatGPT user has reached their Subscription Sharing usage limit."}}}
+
+"#;
+    let fixture = Fixture::new(200, Value::Null, Some(late), false).await;
+    let mut streaming = request();
+    streaming["stream"] = json!(true);
+    let response = fixture.send(streaming).await;
+    assert!(response.text().await.unwrap().contains("Already generated"));
+    assert_eq!(fixture.host.fallback_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(fixture.captures.lock().unwrap().len(), 1);
+    fixture.close().await;
+}
+
+#[tokio::test]
 async fn official_fallback_quota_cooling_is_observed_before_local_selection_and_preserves_reset() {
     let fixture = Fixture::new(429, json!({"error":{
         "code":"subscription_sharing_usage_limit_exceeded", "message":"Official sharing quota exhausted",

@@ -25,3 +25,20 @@ test('old flat quota snapshots remain readable', () => {
   assert.equal(resolveQoderCreditUsage({ ...base, auth_credit_usage_raw: raw }), raw);
   assert.equal(getQoderSubscriptionInfo({ ...base, auth_credit_usage_raw: raw }).userQuota.percentage, 20);
 });
+
+test('ratio percentages are converted to percent points', () => {
+  const raw = {
+    qoderUsage: {
+      totalUsagePercentage: 0.62,
+      addOnQuota: { used: 1618, total: 2600, remaining: 982, percentage: 0.62 },
+    },
+  };
+  const info = getQoderSubscriptionInfo({ ...base, auth_credit_usage_raw: raw });
+  assert.equal(info.addOnQuota.percentage, (1618 / 2600) * 100);
+  assert.equal(info.totalUsagePercentage, 62);
+});
+
+test('saved percent points below one are preserved without a raw quota bucket', () => {
+  const info = getQoderSubscriptionInfo({ ...base, credits_usage_percent: 0.35 });
+  assert.equal(info.userQuota.percentage, 0.35);
+});

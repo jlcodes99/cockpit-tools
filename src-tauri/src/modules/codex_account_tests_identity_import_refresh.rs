@@ -1374,6 +1374,52 @@ fn profile_mutation_lock_allows_one_writer_and_rejects_the_concurrent_writer() {
         .expect("profile lease should be reusable after release");
 }
 
+#[cfg(any(unix, target_os = "windows"))]
+#[test]
+fn profile_mutation_lock_direct_home_still_contends_with_the_linked_home() {
+    use std::fs;
+    use std::io::{Error, ErrorKind};
+
+    let temp = tempfile::tempdir().unwrap();
+    let standard = temp.path().join(".codex");
+    let home = temp.path().join("自定义 Codex Home");
+    let unrelated = temp.path().join("different-home");
+    fs::create_dir(&home).unwrap();
+    fs::create_dir(&unrelated).unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&home, &standard).unwrap();
+    #[cfg(target_os = "windows")]
+    junction::create(&home, &standard).unwrap();
+    let path = standard
+        .join(".cockpit-profile-mutation-locks")
+        .join("profile-test.lock");
+    let blocked_junction = Error::from_raw_os_error(448);
+
+    let direct = super::direct_codex_profile_lock_path(&path, &home, &blocked_junction).unwrap();
+    assert_eq!(direct.file_name(), path.file_name());
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::create_dir(&path).unwrap();
+    assert_eq!(
+        fs::create_dir(&direct).unwrap_err().kind(),
+        ErrorKind::AlreadyExists
+    );
+    fs::remove_dir(&path).unwrap();
+    fs::create_dir(&direct).unwrap();
+    assert_eq!(
+        fs::create_dir(&path).unwrap_err().kind(),
+        ErrorKind::AlreadyExists
+    );
+
+    assert!(super::direct_codex_profile_lock_path(&path, &unrelated, &blocked_junction).is_none());
+    assert!(super::direct_codex_profile_lock_path(&path, &standard, &blocked_junction).is_none());
+    assert!(super::direct_codex_profile_lock_path(
+        &path,
+        &home,
+        &Error::new(ErrorKind::PermissionDenied, "different failure")
+    )
+    .is_none());
+}
+
 #[test]
 fn account_switch_commits_only_after_runtime_stop_hook() {
     let _lock = crate::modules::test_support::env_lock()
@@ -1436,6 +1482,65 @@ fn account_switch_commits_only_after_runtime_stop_hook() {
         load_account_index().current_account_id.as_deref(),
         Some(account.id.as_str())
     );
+}
+
+#[test]
+fn account_switch_bound_provider_does_not_reenter_token_lock_after_runtime_stop() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let env = TestEnvGuard::new("codex-switch-bound-provider-lock");
+    let now = chrono::Utc::now().timestamp();
+    let expiration = now + 302;
+    let mut tokens = make_codex_tokens(
+        "bound-switch@example.com", "acc-bound", "org-bound", "bound", "fixture-refresh",
+    );
+    tokens.access_token = make_jwt(serde_json::json!({
+        "exp": expiration,
+        "https://api.openai.com/auth": {"chatgpt_account_id": "acc-bound", "organization_id": "org-bound"}
+    }));
+    let mut oauth = upsert_account(tokens).unwrap();
+    oauth.egress_proxy_url = Some("http://127.0.0.1:1".into());
+    save_account(&oauth).unwrap();
+    let mut provider = CodexAccount::new_api_key(
+        "bound-provider-switch".into(), "relay@example.invalid".into(), "fixture-key".into(),
+        CodexApiProviderMode::Custom, Some("https://relay.example.invalid/v1".into()),
+        Some("fixture-relay".into()), Some("Fixture relay".into()), vec!["gpt-5.6-sol".into()],
+    );
+    provider.api_instance_access_mode = Some("gateway".into());
+    provider.bound_oauth_account_id = Some(oauth.id.clone());
+    save_account(&provider).unwrap();
+    assert!(crate::modules::codex_local_access::account_requires_provider_gateway(
+        &load_account(&provider.id).unwrap()
+    ));
+    assert!(!super::managed_account_tokens_need_refresh(&oauth));
+
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        tokio::time::timeout(
+            std::time::Duration::from_secs(8),
+            super::switch_account_managed_with_before_commit(&provider.id, || async {
+                // Wait until the token reaches the refresh margin after preflight.
+                while !super::managed_account_tokens_need_refresh(&oauth) {
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+                assert!(expiration > chrono::Utc::now().timestamp());
+                Ok(())
+            }),
+        )
+        .await
+        .expect("provider configuration must not wait on its own OAuth lock")
+        .unwrap();
+    });
+    let auth: serde_json::Value =
+        serde_json::from_slice(&fs::read(env.codex_home().join("auth.json")).unwrap()).unwrap();
+    assert_eq!(auth["tokens"]["access_token"], oauth.tokens.access_token);
+    assert_eq!(load_account_index().current_account_id.as_deref(), Some(provider.id.as_str()));
+    let base_url = super::configured_provider_base_url(&env.codex_home()).unwrap();
+    let base_url = url::Url::parse(&base_url).unwrap();
+    assert_eq!(base_url.host_str(), Some("localhost"));
+    assert_eq!(base_url.path(), "/v1");
+    assert!(base_url.port().is_some());
 }
 
 #[test]
@@ -2618,6 +2723,46 @@ fn try_parse_pending_oauth_delimited_line_rejects_non_email() {
 }
 
 #[test]
+fn import_json_with_utf8_bom_is_recognized_in_both_import_paths() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock().unwrap_or_else(|error| error.into_inner());
+    let _env = TestEnvGuard::new("codex-json-import-utf8-bom");
+    let account = serde_json::json!({
+        "auth_mode": "apikey",
+        "OPENAI_API_KEY": "sk-fixture-bom",
+        "base_url": "https://relay.example.invalid/v1",
+    });
+    let single = format!("\u{feff}{}", serde_json::to_string_pretty(&account).unwrap());
+    let multiple = format!("\u{feff}{}", serde_json::to_string_pretty(&[&account]).unwrap());
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let first = runtime.block_on(import_from_json(&single)).unwrap();
+    let again = runtime.block_on(import_from_json(&multiple)).unwrap();
+    assert_eq!(first[0].id, again[0].id);
+    assert_eq!(first[0].api_base_url.as_deref(), Some("https://relay.example.invalid/v1"));
+    for value in [&single, &multiple] {
+        assert_eq!(super::codex_batch_import_values_from_content(value).unwrap(), vec![account.clone()]);
+    }
+    let invalid = runtime.block_on(import_from_json("\u{feff}{\"auth_mode\":\"apikey\"}"));
+    assert!(invalid.unwrap_err().contains("缺少 OPENAI_API_KEY"));
+}
+
+#[test]
+fn batch_import_rejects_invalid_single_line_json_and_keeps_valid_json_lines() {
+    for content in [r#"{"auth_mode":}"#, "\u{feff}[{\"auth_mode\":\"apikey\"}"] {
+        let error = super::codex_batch_import_values_from_content(content).unwrap_err();
+        assert!(error.contains("无法解析 JSON"), "{error}");
+    }
+
+    let rows = super::codex_batch_import_values_from_content(
+        "{\"auth_mode\":\"apikey\"}\n{\"auth_mode\":\"oauth\"}",
+    ).unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0]["auth_mode"], "apikey");
+    assert_eq!(rows[1]["auth_mode"], "oauth");
+    assert!(super::codex_batch_import_values_from_content("[]").unwrap().is_empty());
+}
+
+#[test]
 fn import_auth_file_tokens_preserves_sensitive_note_metadata() {
     let _lock = crate::modules::test_support::env_lock()
         .lock()
@@ -3035,6 +3180,67 @@ fn reauth_updates_explicit_target_account_even_when_identity_changes() {
     let accounts = list_accounts_checked().expect("list accounts");
     assert_eq!(accounts.len(), 1);
     assert_eq!(accounts[0].id, existing.id);
+}
+
+#[test]
+fn reauth_preserves_the_record_when_verified_oauth_email_changes() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock().unwrap_or_else(|error| error.into_inner());
+    let _env = TestEnvGuard::new("codex-reauth-email-change");
+    let mut original = upsert_account(make_codex_tokens(
+        "before@example.com", "workspace", "org", "stable-user", "rt-before",
+    )).unwrap();
+    original.account_note = Some("retained note".into());
+    original.user_id = Some("stale-cached-user".into());
+    save_account(&original).unwrap();
+    let mut index = load_account_index();
+    index.current_account_id = Some(original.id.clone());
+    save_account_index(&index).unwrap();
+
+    for tokens in [
+        make_codex_tokens("after@example.com", "workspace", "org", "other-user", "rt-wrong"),
+        make_codex_tokens("after@example.com", "other-workspace", "org", "stable-user", "rt-wrong"),
+        make_codex_tokens("after@example.com", "workspace", "other-org", "stable-user", "rt-wrong"),
+    ] {
+        let error = upsert_account_for_reauth(tokens, &original.id).unwrap_err();
+        assert!(error.starts_with("CODEX_OAUTH_RESTART_REQUIRED: "));
+    }
+    assert_eq!(load_account(&original.id).unwrap().tokens.refresh_token.as_deref(), Some("rt-before"));
+    let saved = upsert_account_for_reauth(make_codex_tokens(
+        "after@example.com", "workspace", "org", "stable-user", "rt-after",
+    ), &original.id).unwrap();
+    assert_eq!(saved.id, original.id);
+    assert_eq!(saved.email, "after@example.com");
+    let detail = load_account(&original.id).unwrap();
+    assert_eq!(detail.email, saved.email);
+    assert_eq!(detail.account_note.as_deref(), Some("retained note"));
+    assert_eq!(detail.tokens.refresh_token.as_deref(), Some("rt-after"));
+    let index = load_account_index();
+    assert_eq!(index.current_account_id.as_deref(), Some(original.id.as_str()));
+    assert_eq!(index.accounts.len(), 1);
+    assert_eq!(index.accounts[0].email, saved.email);
+}
+
+#[test]
+fn reauth_email_change_never_deletes_a_conflicting_account() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock().unwrap_or_else(|error| error.into_inner());
+    let _env = TestEnvGuard::new("codex-reauth-email-conflict");
+    let original = upsert_account(make_codex_tokens(
+        "before@example.com", "workspace", "org", "stable-user", "rt-before",
+    )).unwrap();
+    let mut conflict = upsert_account(make_codex_tokens(
+        "after@example.com", "workspace", "org", "other-user", "rt-conflict",
+    )).unwrap();
+    conflict.user_id = Some("user-stable-user".into());
+    save_account(&conflict).unwrap();
+    let error = upsert_account_for_reauth(make_codex_tokens(
+        "after@example.com", "workspace", "org", "stable-user", "rt-after",
+    ), &original.id).unwrap_err();
+    assert!(error.contains("已存在"));
+    assert_eq!(load_account(&original.id).unwrap().tokens.refresh_token.as_deref(), Some("rt-before"));
+    assert_eq!(load_account(&conflict.id).unwrap().tokens.refresh_token.as_deref(), Some("rt-conflict"));
+    assert_eq!(load_account_index().accounts.len(), 2);
 }
 
 #[test]
@@ -3468,6 +3674,76 @@ fn client_runtime_allows_expired_id_token_when_access_token_is_valid() {
     assert_eq!(prepared.id, account.id);
     let persisted = load_account(&account.id).expect("load reauth account");
     assert!(!persisted.requires_reauth);
+}
+
+#[test]
+fn account_profile_reads_nested_workspace_for_the_target_account() {
+    let _env = TestEnvGuard::new("codex-nested-workspace-profile");
+    let mut account = CodexAccount::new(
+        "workspace-profile-test".into(),
+        "workspace@example.test".into(),
+        make_codex_tokens(
+            "workspace@example.test",
+            "workspace-team",
+            "org-workspace-team",
+            "workspace-profile",
+            "fixture",
+        ),
+    );
+    account.plan_type = Some("business".into());
+    let payload = serde_json::json!({
+        "accounts": {
+            "workspace-personal": {"account": {"name": "Personal", "structure": "personal"}},
+            "workspace-team": {"account": {
+                "id": "profile-record-id",
+                "account_id": "workspace-team",
+                "name": "Team Alpha",
+                "structure": "workspace"
+            }}
+        },
+        "account_ordering": ["workspace-personal", "workspace-team"]
+    });
+
+    let (name, structure, remote_id) =
+        super::parse_account_profile_from_check_response(&payload, &account).unwrap();
+    save_account(&account).unwrap();
+    super::persist_codex_account_profile(&account, name, structure, remote_id).unwrap();
+    let saved = load_account(&account.id).unwrap();
+    assert_eq!(saved.account_name.as_deref(), Some("Team Alpha"));
+    assert_eq!(saved.account_structure.as_deref(), Some("workspace"));
+    assert_eq!(saved.account_id.as_deref(), Some("workspace-team"));
+    assert_eq!(saved.tokens.access_token, account.tokens.access_token);
+
+    let legacy = serde_json::json!({"accounts": [
+        {"account_id": "workspace-team", "name": "Team Alpha", "structure": "workspace"}
+    ]});
+    assert_eq!(
+        super::parse_account_profile_from_check_response(&legacy, &account)
+            .unwrap().0.as_deref(),
+        Some("Team Alpha")
+    );
+}
+
+#[test]
+fn account_profile_never_substitutes_another_workspace_when_target_is_known() {
+    let mut account = CodexAccount::new(
+        "workspace-profile-test".into(),
+        "workspace@example.test".into(),
+        make_codex_tokens("workspace@example.test", "workspace-team", "org-team", "profile", "fixture"),
+    );
+    account.plan_type = Some("team".into());
+    let payload = serde_json::json!({
+        "accounts": {"workspace-personal": {"account": {"name": "Personal"}}},
+        "account_ordering": ["workspace-personal"]
+    });
+    let error = super::parse_account_profile_from_check_response(&payload, &account).unwrap_err();
+    assert!(error.starts_with("CODEX_WORKSPACE_PROFILE_NOT_FOUND"));
+
+    let nameless = serde_json::json!({"accounts": {
+        "workspace-team": {"account": {"account_id": "workspace-team", "structure": "workspace"}}
+    }});
+    let error = super::parse_account_profile_from_check_response(&nameless, &account).unwrap_err();
+    assert!(error.starts_with("CODEX_WORKSPACE_PROFILE_NAME_MISSING"));
 }
 
 #[test]

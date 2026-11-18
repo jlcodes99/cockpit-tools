@@ -22,7 +22,6 @@ describe("codex local access account initialization", () => {
       resolveCodexLocalAccessInitialAccountIds(
         ["persisted", "persisted"],
         [],
-        true,
         false,
       ),
       ["persisted"],
@@ -34,7 +33,6 @@ describe("codex local access account initialization", () => {
       resolveCodexLocalAccessInitialAccountIds(
         ["available", "missing"],
         [account("available")],
-        true,
         true,
       ),
       ["available"],

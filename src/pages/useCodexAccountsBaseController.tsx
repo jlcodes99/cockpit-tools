@@ -10,7 +10,7 @@ import { chatGptPlanErrorKey, listChatGptPlanAccounts } from "../services/chatgp
 import { implicitCodexServiceAccountIds } from "../utils/chatgptPlanOverview";
 import { canChooseCodexServiceAuthorization } from "../utils/codexAccountServiceNavigation";
 import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
-import { listenSafely as listen } from "../utils/tauriEventListener";
+import { subscribeCodexLocalAccessStateUpdates } from "../utils/codexLocalAccessStateUpdates";
 import { refreshCodexQuotaWithFeedback } from "../utils/codexQuotaRefreshFeedback";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Download, Copy, Check, Eye, EyeOff, FileText, FolderOpen } from "lucide-react";
@@ -23,7 +23,7 @@ import * as codexLocalAccessService from "../services/codexLocalAccessService";
 import { maskJsonPreviewContent } from "../components/ExportJsonModal";
 import { useModalErrorState } from "../components/ModalErrorMessage";
 import { type CodexAccountGroup, assignAccountsToCodexGroup, getCodexAccountGroups, invalidateCodexGroupCache } from "../services/codexAccountGroupService";
-import { formatCodexResetTime, formatCodexResetTimeAbsolute, isCodexOpaqueAccessTokenOnlyAccount, type CodexBatchDeleteJobStatus, type CodexResetCredit, type CodexResetCreditsSnapshot } from "../types/codex";
+import { formatCodexResetTime, formatCodexResetTimeAbsolute, isCodexAgentIdentityAccount, isCodexApiKeyAccount, isCodexChatgptPlanAccount, isCodexOpaqueAccessTokenOnlyAccount, isCodexPendingOAuthAccount, isCodexWebSessionAccount, type CodexBatchDeleteJobStatus, type CodexResetCredit, type CodexResetCreditsSnapshot } from "../types/codex";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
 import { readCodexImportSyncApiService, writeCodexImportSyncApiService } from "../utils/codexImportPreferences";
 import { CODEX_OPEN_ADD_ACCOUNT_EVENT, takePendingCodexOpenAddAccountRequest, type CodexOAuthBindingRetryDetail, type CodexOpenAddAccountDetail } from "../utils/codexAddAccountRequest";
@@ -361,6 +361,7 @@ export function useCodexAccountsBaseController() {
       reauthorizeAccountId?: string;
       message: string;
     } | null>(null);
+    const [accountNotePausedForReauth, setAccountNotePausedForReauth] = useState(false);
     const [editingAccountNoteId, setEditingAccountNoteId] = useState<
       string | null
     >(null);
@@ -923,6 +924,7 @@ export function useCodexAccountsBaseController() {
         tab: string,
         targetAccount?: CodexAccount | null,
         options?: {
+          fromAccountNote?: boolean;
           retrySwitchAfterOAuth?: boolean;
           retrySwitchLaunchAfterSwitch?: boolean;
           retryInstanceLaunchAfterOAuth?: boolean;
@@ -930,6 +932,7 @@ export function useCodexAccountsBaseController() {
           retryOAuthBinding?: CodexOAuthBindingRetryDetail;
         },
       ) => {
+        setAccountNotePausedForReauth(options?.fromAccountNote ?? false);
         setReauthTargetAccount(targetAccount ?? null);
         setReauthRetrySwitchAccountId(
           targetAccount && options?.retrySwitchAfterOAuth
@@ -1200,41 +1203,13 @@ export function useCodexAccountsBaseController() {
       reloadLocalAccessLaunchCurrent,
     ]);
 
-    useEffect(() => {
-      const handleLocalAccessUpdated = () => {
-        void reloadLocalAccessState();
-        void reloadLocalAccessLaunchCurrent();
-      };
-      window.addEventListener(
-        "codex-local-access-state-updated",
-        handleLocalAccessUpdated,
-      );
-      return () => {
-        window.removeEventListener(
-          "codex-local-access-state-updated",
-          handleLocalAccessUpdated,
-        );
-      };
-    }, [reloadLocalAccessLaunchCurrent, reloadLocalAccessState]);
-
-    useEffect(() => {
-      let disposed = false;
-      let unlisten: (() => void) | null = null;
-      void listen("codex-local-access-state-updated", () => {
-        void reloadLocalAccessState();
-        void reloadLocalAccessLaunchCurrent();
-      }).then((dispose) => {
-        if (disposed) {
-          dispose();
-          return;
-        }
-        unlisten = dispose;
-      });
-      return () => {
-        disposed = true;
-        unlisten?.();
-      };
-    }, [reloadLocalAccessLaunchCurrent, reloadLocalAccessState]);
+    useEffect(
+      () => subscribeCodexLocalAccessStateUpdates(() => Promise.all([
+        reloadLocalAccessState(),
+        reloadLocalAccessLaunchCurrent(),
+      ])),
+      [reloadLocalAccessLaunchCurrent, reloadLocalAccessState],
+    );
 
     useEffect(() => {
       if (!localAccessEntryVisible) {
@@ -2177,6 +2152,17 @@ export function useCodexAccountsBaseController() {
       isCodexOpaqueAccessTokenOnlyAccount(editingAccountNoteAccount),
     );
 
+    const reauthorizeAccountNoteEmail =
+      editingAccountNoteAccount &&
+      !isCodexApiKeyAccount(editingAccountNoteAccount) &&
+      !isCodexChatgptPlanAccount(editingAccountNoteAccount) &&
+      !isCodexAgentIdentityAccount(editingAccountNoteAccount) &&
+      !isCodexWebSessionAccount(editingAccountNoteAccount) &&
+      !isCodexPendingOAuthAccount(editingAccountNoteAccount) &&
+      !activeAccountUsesPersonalAccessToken
+        ? () => openCodexAddModal("oauth", editingAccountNoteAccount, { fromAccountNote: true })
+        : null;
+
     const refreshSavedMfaRecords = useCallback(() => {
       setSavedMfaRecords(loadSavedMfaRecords());
     }, []);
@@ -2305,6 +2291,10 @@ export function useCodexAccountsBaseController() {
     const { status: accountNoteReadStatus, start: loadAccountNote, reset: resetAccountNoteRead, retry: retryAccountNoteRead } = useAccountFormLoad();
     const openAccountNoteModal = useCallback(
       (snapshot: CodexAccount) => {
+        setAccountNotePausedForReauth(false);
+        if (accountNotePausedForReauth && editingAccountNoteId === snapshot.id) {
+          return;
+        }
         setEditingAccountNoteId(snapshot.id);
         setEditingAccountNoteForm(EMPTY_CODEX_ACCOUNT_NOTE_FORM);
         setPendingOAuthNoteModalOpen(false);
@@ -2324,6 +2314,8 @@ export function useCodexAccountsBaseController() {
         }) : null));
       },
       [
+        accountNotePausedForReauth,
+        editingAccountNoteId,
         fetchAccountNoteMailPreviewForUrl,
         loadAccountNote,
         refreshSavedMfaRecords,
@@ -2357,6 +2349,7 @@ export function useCodexAccountsBaseController() {
 
     const closeAccountNoteModal = useCallback(() => {
       if (savingAccountNote || savingPendingOAuthAccount) return;
+      setAccountNotePausedForReauth(false);
       resetAccountNoteRead();
       rememberActiveAccountNoteMfaQuery();
       setEditingAccountNoteId(null);
@@ -2561,6 +2554,8 @@ export function useCodexAccountsBaseController() {
     accounts,
     activeAccountNoteDisplayName,
     activeAccountNoteEmail,
+    accountNotePausedForReauth,
+    reauthorizeAccountNoteEmail,
     activeAccountNoteForm,
     activeAccountNoteMode,
     activeAccountNoteOtpToken,

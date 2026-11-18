@@ -12,6 +12,7 @@ pub enum AppError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
+    #[cfg(feature = "desktop")]
     #[error("Tauri error: {0}")]
     Tauri(#[from] tauri::Error),
 

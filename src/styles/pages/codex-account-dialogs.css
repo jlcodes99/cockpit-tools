@@ -2627,6 +2627,12 @@
   color: var(--text-primary);
 }
 
+.codex-model-instructions-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .codex-quick-config-modal .codex-quick-config-section__heading p {
   margin-top: 6px;
   font-size: 12px;

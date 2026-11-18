@@ -17,10 +17,10 @@ const BIGMODEL_REDIRECT_URI: &str = "zcode://oauth/callback";
 const ZAI_AUTHORIZE_URL: &str = "https://chat.z.ai/api/oauth/authorize";
 const ZAI_USER_INFO_URL: &str = "https://chat.z.ai/api/oauth/userinfo";
 const ZAI_BUSINESS_LOGIN_URL: &str = "https://api.z.ai/api/auth/z/login";
-// OAuth redirect contract verified against ZCode 3.16.3. Both providers now
+// OAuth redirect contract verified against ZCode 3.18.2. Both providers now
 // return through the official web bridge to the shared desktop callback.
 const DESKTOP_OAUTH_REDIRECT_URI: &str =
-    "https://zcode.z.ai/app/oauth/login?redirect=zcode%3A%2F%2Foauth%2Fcallback&app_version=3.16.3";
+    "https://zcode.z.ai/app/oauth/login?redirect=zcode%3A%2F%2Foauth%2Fcallback&app_version=3.18.2";
 const ZAI_CLIENT_ID: &str = "client_P8X5CMWmlaRO9gyO-KSqtg";
 const ZCODE_OAUTH_WINDOW_LABEL: &str = "zcode-oauth";
 
@@ -500,6 +500,7 @@ async fn exchange_callback(
         zcode_jwt_token,
         api_key: None,
         expires_at,
+        team_plan: None,
         plan_type: None,
         quota_total: None,
         quota_used: None,

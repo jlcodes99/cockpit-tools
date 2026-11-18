@@ -24,3 +24,12 @@ runs:
         cache-workspace-crates: "false"
         cache-bin: "false"
         save-if: ${{ github.ref == 'refs/heads/main' }}
+
+    - name: Report macOS cache status
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+        CACHE_HIT: ${{ steps.rust-cache.outputs.cache-hit }}
+      run: |
+        printf '### macOS release Rust cache\n\n- Target: `%s`\n- Exact match: **%s**\n' \
+          "$TARGET" "${CACHE_HIT:-unknown}" >> "$GITHUB_STEP_SUMMARY"

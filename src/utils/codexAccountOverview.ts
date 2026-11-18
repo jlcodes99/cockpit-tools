@@ -3,8 +3,10 @@ import { getCodexAccountQuotaError } from "./codexProxyRuntimeError";
 import type { TFunction } from "i18next";
 import type { CodexAccount } from "../types/codex";
 import {
+  getCodexMonthlyCreditUsage,
   getCodexPlanFilterKey,
   getCodexQuotaWindows,
+  getCodexSubscriptionExpiryBucket,
   isCodexApiKeyAccount,
   isCodexChatgptPlanAccount,
   isCodexNewApiAccount,
@@ -143,11 +145,7 @@ export function isCodexOverviewAccountSubscriptionExpired(
     return false;
   }
   if (isCodexApiKeyAccount(account)) return false;
-  const until = account.subscription_active_until?.trim();
-  if (!until) return false;
-  const parsed = Date.parse(until);
-  if (Number.isNaN(parsed)) return false;
-  return parsed <= Date.now();
+  return getCodexSubscriptionExpiryBucket(account.subscription_active_until) === "expired";
 }
 
 export function incrementCodexPlanFilterCount(
@@ -259,6 +257,10 @@ export function buildCodexOverviewSortOptions(
     {
       value: "hourly",
       label: t("codex.sort.hourly", "按5小时配额"),
+    },
+    {
+      value: "credits",
+      label: t("common.shared.sort.credits", "按剩余 Credits"),
     },
     {
       value: "weekly_reset",
@@ -376,6 +378,12 @@ function getQuotaSortWindow(account: CodexAccount, weekly: boolean) {
   });
 }
 
+function getCreditSortValue(account: CodexAccount): number | undefined {
+  if (isCodexApiKeyAccount(account)) return undefined;
+  const credits = getCodexMonthlyCreditUsage(account.quota);
+  return credits?.unlimited ? Number.POSITIVE_INFINITY : credits?.remaining;
+}
+
 export function createCodexOverviewAccountComparator({
   sortBy,
   sortDirection,
@@ -401,6 +409,17 @@ export function createCodexOverviewAccountComparator({
         return leftIndex - rightIndex;
       }
       return right.created_at - left.created_at;
+    }
+
+    if (sortBy === "credits") {
+      const leftCredits = getCreditSortValue(left);
+      const rightCredits = getCreditSortValue(right);
+      if (leftCredits === rightCredits) return 0;
+      if (leftCredits == null) return 1;
+      if (rightCredits == null) return -1;
+      return sortDirection === "desc"
+        ? rightCredits - leftCredits
+        : leftCredits - rightCredits;
     }
 
     const cockpitApiPriority =

@@ -6,6 +6,7 @@ use tokio::sync::mpsc;
 struct Options {
     api_service: bool,
     native_fast: bool,
+    native_predictions: bool,
     api_key_auth_verified: bool,
     fast_only: bool,
     full_quota_only: bool,
@@ -44,6 +45,7 @@ impl Default for Options {
         Self {
             api_service: false,
             native_fast: true,
+            native_predictions: false,
             api_key_auth_verified: true,
             fast_only: false,
             full_quota_only: false,
@@ -115,6 +117,7 @@ async fn start(options: Options) -> Running {
     let profile_dir = options.profile_dir.clone();
     let api_service = options.api_service;
     let native_fast = options.native_fast;
+    let native_predictions = options.native_predictions;
     let api_key_auth_verified = options.api_key_auth_verified;
     let quota_compat = options.quota_compat;
     let public_entry = options.public_entry;
@@ -170,6 +173,8 @@ async fn start(options: Options) -> Running {
                         json!("app://-/index.html")
                     } else if expression == "window.__cockpitQuotaState.install()" {
                         json!({"ok":!options.live_plan_invalid,"reason":"quota-http-boundary-unavailable"})
+                    } else if expression == "window.__cockpitServiceRspack.verifyDocument()" {
+                        json!({"ok":true,"predictions":{"ok":true}})
                     } else if let Some(nonce) = argument(expression, "prepareHandoff") {
                         prepared_nonce = Some(nonce);
                         preparations += 1;
@@ -195,8 +200,12 @@ async fn start(options: Options) -> Running {
                         } else {
                             json!({"ok":true,"reason":"saved-home-draft"})
                         }
-                    } else if let Some(nonce) = argument(expression, "reloadPreparedDocument") {
-                        assert_eq!(Some(&nonce), prepared_nonce.as_ref());
+                    } else if expression == "window.__cockpitStartupGuard.reload()"
+                        || argument(expression, "reloadPreparedDocument").is_some()
+                    {
+                        if let Some(nonce) = argument(expression, "reloadPreparedDocument") {
+                            assert_eq!(Some(&nonce), prepared_nonce.as_ref());
+                        }
                         reload_attempts += 1;
                         if options.disconnect_on_reload {
                             let _ = notices_tx.send(json!({"phase":"reload-disconnected"}));
@@ -328,13 +337,14 @@ async fn start(options: Options) -> Running {
                 url,
                 profile_dir,
                 native_fast,
-                false,
+                native_predictions,
                 quota_compat,
                 api_key_auth_verified,
                 api_service,
                 preload_first,
                 startup,
                 stop_rx,
+                None,
             )
             .await
         } else {
@@ -342,7 +352,7 @@ async fn start(options: Options) -> Running {
                 url,
                 profile_dir,
                 native_fast,
-                false,
+                native_predictions,
                 quota_compat,
                 api_key_auth_verified,
                 api_service,
@@ -350,6 +360,7 @@ async fn start(options: Options) -> Running {
                 startup,
                 stop_rx,
                 live_quota,
+                None,
             )
             .await
         }
@@ -518,6 +529,35 @@ async fn quota_data_failure_is_reported_without_reload_or_false_activation() {
     let calls = runtime.finish(false).await;
     assert_safe_protocol(&calls);
     assert_eq!(expressions(&calls, "window.__cockpitNativeFast.reloadPreparedDocument()"), 0);
+}
+
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn fresh_bound_oauth_predictions_preflight_without_fast_and_respect_the_draft_guard() {
+    let mut runtime = start(Options {
+        api_service: true,
+        api_key_auth_verified: false,
+        native_fast: false,
+        native_predictions: true,
+        quota_compat: false,
+        public_entry: true,
+        live_rspack: true,
+        reload_rejections: vec!["draft-present"],
+        ..Options::default()
+    })
+    .await;
+    runtime.notice("document", Some("draft-present")).await;
+    assert_eq!(runtime.navigations.load(Ordering::Acquire), 0);
+    assert_eq!(
+        runtime.notice("activation", Some("module-evaluated")).await["state"],
+        "active"
+    );
+    assert_eq!(runtime.navigations.load(Ordering::Acquire), 1);
+    let calls = runtime.finish(false).await;
+    assert_eq!(expressions(&calls, "window.__cockpitServiceRspack.verifyDocument()"), 1);
+    assert_eq!(methods(&calls, "Page.addScriptToEvaluateOnNewDocument"), 1);
+    assert_eq!(expressions(&calls, "window.__cockpitStartupGuard.reload()"), 2);
+    assert_safe_protocol(&calls);
 }
 
 #[tokio::test]
@@ -1494,7 +1534,8 @@ async fn disabled_and_stopped_sessions_do_not_connect() {
         false,
         false,
         None,
-        receiver
+        receiver,
+        None,
     )
     .await
     .is_ok());
@@ -1509,7 +1550,8 @@ async fn disabled_and_stopped_sessions_do_not_connect() {
         false,
         false,
         None,
-        receiver
+        receiver,
+        None,
     )
     .await
     .is_ok());
@@ -1705,6 +1747,6 @@ async fn page_worker_waits_for_browser_completion_before_replacing_its_owner() {
 
 #[test]
 fn automatic_fast_does_not_supply_catalog_fallbacks() {
-    let runtime = bootstrap(true, false, false, true, false, "catalog-test");
+    let runtime = bootstrap(true, false, false, true, false, "catalog-test", None);
     assert!(!runtime.contains("serviceTierFallbacks"));
 }

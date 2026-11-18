@@ -710,6 +710,7 @@ struct RequestStatsMeta<'a> {
     upstream_model: Option<&'a str>,
     first_response_ms: Option<u64>,
     output_generation_ms: Option<u64>,
+    input_text_characters: Option<u64>,
 }
 
 async fn record_request_stats_with_meta(
@@ -739,11 +740,12 @@ async fn record_request_stats_with_meta(
         let mut runtime = gateway_runtime().lock().await;
         let now = now_ms();
         let usage_ref = usage.as_ref();
-        let pricing = resolve_effective_model_pricing(
+        let pricing = resolve_effective_model_pricing_at(
             runtime.collection.as_ref(),
             model_id,
             usage_ref,
             meta.service_tier,
+            now,
         );
         let model_pricing_version = runtime
             .collection
@@ -865,11 +867,13 @@ async fn record_request_stats_with_meta(
         event.requested_service_tier = recorded_service_tier_value(meta.requested_service_tier);
         event.response_service_tier = recorded_service_tier_value(meta.response_service_tier);
         event.output_generation_ms = meta.output_generation_ms;
+        event.input_text_characters = meta.input_text_characters;
         event.first_response_ms = meta.first_response_ms.or(event.first_response_ms);
         if let Some(recent) = runtime.stats.events.last_mut() {
             recent.connection_source = event.connection_source;
             recent.first_response_ms = event.first_response_ms;
             recent.output_generation_ms = event.output_generation_ms;
+            recent.input_text_characters = event.input_text_characters;
             recent.authorization_route = event.authorization_route.clone();
             recent.requested_service_tier = event.requested_service_tier.clone();
             recent.response_service_tier = event.response_service_tier.clone();
@@ -1125,6 +1129,7 @@ pub async fn activate_local_access_for_dir(
             .map(|collection| collection.api_key.clone())
             .ok_or_else(|| "API 服务集合尚未创建".to_string())?
     };
+    cleanup_provider_gateway_profile_model_overrides(profile_dir)?;
     save_profile_takeover_backup(profile_dir, &api_key)?;
     let state = set_local_access_enabled(true).await?;
     let collection = state
@@ -1155,6 +1160,7 @@ pub async fn prepare_local_access_for_bound_profile_dir(
     ensure_gateway_matches_runtime().await?;
     // This path is an explicit launch of an API Service-bound instance, not
     // background reconciliation. It may reacquire the selected profile.
+    cleanup_provider_gateway_profile_model_overrides(profile_dir)?;
     save_profile_takeover_backup(profile_dir, &collection.api_key)?;
     write_local_access_profile_takeover(profile_dir, &collection, None, true).await?;
     Ok(true)
@@ -1166,6 +1172,8 @@ fn new_empty_local_access_collection() -> Result<CodexLocalAccessCollection, Str
         port: allocate_initial_local_port(CODEX_LOCAL_ACCESS_LOCALHOST_BIND_HOST)?,
         api_key: generate_local_api_key(),
         api_keys: Vec::new(),
+        account_pools: Vec::new(),
+        account_pool_revision: 0,
         access_scope: CodexLocalAccessScope::Localhost,
         client_base_url_host: CodexLocalAccessClientBaseUrlHost::default(),
         image_generation_mode: CodexLocalAccessImageGenerationMode::default(),
@@ -1192,6 +1200,7 @@ fn new_empty_local_access_collection() -> Result<CodexLocalAccessCollection, Str
         routing_strategy: CodexLocalAccessRoutingStrategy::default(),
         custom_routing_rules: Vec::new(),
         account_model_rules: Vec::new(),
+        account_quota_floors: HashMap::new(),
         model_aliases: Vec::new(),
         suppress_oauth_model_alias: false,
         model_pricing_version: DEFAULT_MODEL_PRICING_VERSION,

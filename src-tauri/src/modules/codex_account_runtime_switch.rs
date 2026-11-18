@@ -776,6 +776,7 @@ fn switch_account_with_prepared(
 async fn activate_provider_gateway_after_switch_if_needed(
     base_dir: &Path,
     account: &CodexAccount,
+    prepared_oauth: Option<&CodexAccount>,
 ) -> Result<(), String> {
     if crate::modules::codex_local_access::account_requires_provider_gateway(account) {
         logger::log_info(&format!(
@@ -783,8 +784,12 @@ async fn activate_provider_gateway_after_switch_if_needed(
             account.id,
             base_dir.display()
         ));
-        crate::modules::codex_local_access::activate_provider_gateway_for_dir(base_dir, &account.id)
-            .await?;
+        crate::modules::codex_local_access::activate_provider_gateway_for_dir_with_prepared_oauth(
+            base_dir,
+            &account.id,
+            prepared_oauth,
+        )
+        .await?;
         crate::modules::codex_cli_daemon::after_provider_gateway_profile_write(base_dir, &account.id);
         return Ok(());
     }
@@ -924,7 +929,7 @@ async fn commit_account_switch_locked(
         PreparedCodexAccountSwitch::Account(account) => {
             let updated_account = switch_account_with_prepared(account_id, account)?;
             let codex_home = get_codex_home();
-            activate_provider_gateway_after_switch_if_needed(&codex_home, &updated_account).await?;
+            activate_provider_gateway_after_switch_if_needed(&codex_home, &updated_account, None).await?;
             Ok(updated_account)
         }
         PreparedCodexAccountSwitch::ApiKeyWithOauth {
@@ -963,7 +968,12 @@ async fn commit_account_switch_locked(
                 updated_account.email, oauth_account.email
             ));
 
-            activate_provider_gateway_after_switch_if_needed(&codex_home, &updated_account).await?;
+            activate_provider_gateway_after_switch_if_needed(
+                &codex_home,
+                &updated_account,
+                Some(&oauth_account),
+            )
+            .await?;
 
             Ok(updated_account)
         }

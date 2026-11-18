@@ -39,18 +39,46 @@ fn non_empty_sidecar_string(value: &str) -> Option<String> {
 }
 
 fn sidecar_upstream_stream_error_category(event: &SidecarUsageEvent) -> Option<&str> {
-    event.error_category.as_deref().map(str::trim).filter(|category| matches!(
+    let typed = event.error_category.as_deref().map(str::trim).filter(|category| matches!(
         *category,
         "upstream_stream_error" | "incomplete_upstream_stream" | "request_timeout"
             | "upstream_timeout" | "upstream_first_byte_timeout" | "upstream_stream_timeout"
             | "upstream_idle_timeout" | "upstream_total_timeout"
-    ))
+    ));
+    typed.or_else(|| {
+        if event.success || event.status != Some(200) {
+            return None;
+        }
+        let message = event.error_message.as_deref()?;
+        // A legacy cancellation label can coexist with an explicit Responses failure.
+        if is_upstream_response_failed_error_message(message) {
+            Some("upstream_response_failed")
+        } else if is_stream_incomplete_error_message(message) {
+            Some("stream_incomplete")
+        } else {
+            None
+        }
+    })
+}
+
+fn sidecar_usage_event_has_unattributed_eof(event: &SidecarUsageEvent) -> bool {
+    !event.success
+        && event.status == Some(200)
+        && matches!(
+            event.error_category.as_deref().map(str::trim),
+            None | Some("" | "client_canceled" | "request_failed")
+        )
+        && event.error_message.as_deref().is_some_and(|message| {
+            message.trim().eq_ignore_ascii_case("unexpected EOF")
+        })
 }
 
 fn sidecar_usage_event_is_client_canceled(event: &SidecarUsageEvent) -> bool {
     // A typed upstream read failure may mention EOF/reset, but that does not
     // identify the downstream client as the peer that disconnected.
-    if sidecar_upstream_stream_error_category(event).is_some() {
+    if sidecar_upstream_stream_error_category(event).is_some()
+        || sidecar_usage_event_has_unattributed_eof(event)
+    {
         return false;
     }
     if event
@@ -340,6 +368,9 @@ fn normalized_sidecar_error_category(event: &SidecarUsageEvent) -> Option<String
     if let Some(category) = sidecar_upstream_stream_error_category(event) {
         return Some(category.to_string());
     }
+    if sidecar_usage_event_has_unattributed_eof(event) {
+        return Some("request_failed".to_string());
+    }
     if sidecar_usage_event_is_client_canceled(event) {
         return Some("client_canceled".to_string());
     }
@@ -374,14 +405,17 @@ fn normalized_sidecar_error_category(event: &SidecarUsageEvent) -> Option<String
         .map(str::to_string)
 }
 
-async fn update_sidecar_account_health(event: &SidecarUsageEvent) {
+async fn update_sidecar_account_health(event: &SidecarUsageEvent, error_category: Option<&str>) {
+    if sidecar_usage_event_has_unattributed_eof(event) {
+        return;
+    }
     update_sidecar_account_health_from_values(
         event.account_id.as_str(),
         event.account_email.as_str(),
         event.request_kind.as_str(),
         event.success,
         event.status,
-        event.error_category.as_deref(),
+        error_category,
         event.error_message.as_deref(),
         sidecar_usage_event_is_client_canceled(event),
     )
@@ -421,7 +455,7 @@ async fn update_sidecar_auth_result_health(event: &SidecarAuthResultEvent, pool_
     }
 }
 
-fn emit_local_access_state_updated() {
+pub(crate) fn emit_local_access_state_updated() {
     let Some(app) = crate::get_app_handle() else {
         return;
     };
@@ -1017,7 +1051,8 @@ fn resolve_recorded_usage_model_id(
 }
 
 async fn record_sidecar_usage_event(event: SidecarUsageEvent) {
-    update_sidecar_account_health(&event).await;
+    let error_category = normalized_sidecar_error_category(&event);
+    update_sidecar_account_health(&event, error_category.as_deref()).await;
     let account_id = non_empty_sidecar_string(&event.account_id);
     let account_email = non_empty_sidecar_string(&event.account_email);
     let api_key_id = non_empty_sidecar_string(&event.api_key_id);
@@ -1034,7 +1069,6 @@ async fn record_sidecar_usage_event(event: SidecarUsageEvent) {
         .or_else(|| non_empty_sidecar_string(&event.alias))
         .or_else(|| upstream_model.clone());
     let request_id = non_empty_sidecar_string(&event.request_id);
-    let error_category = normalized_sidecar_error_category(&event);
     if let Err(error) = record_request_stats_with_meta(
         account_id.as_deref(),
         account_email.as_deref(),
@@ -1063,6 +1097,7 @@ async fn record_sidecar_usage_event(event: SidecarUsageEvent) {
             upstream_model: upstream_model.as_deref(),
             first_response_ms: event.first_response_ms,
             output_generation_ms: event.output_generation_ms,
+            input_text_characters: None,
         },
     )
     .await
@@ -1715,7 +1750,8 @@ fn apply_profile_model_ordering(client_models: &mut Value) {
     else {
         return;
     };
-    let reserve_priority = local_gateway_visible_gpt_model_definitions().len() as i64;
+    let recommended = local_gateway_visible_gpt_model_definitions();
+    let reserve_priority = recommended.len() as i64;
     let account_priority_base = reserve_priority + 1;
     let mut account_index = 0_i64;
     for model in models.iter_mut() {
@@ -1728,7 +1764,7 @@ fn apply_profile_model_ordering(client_models: &mut Value) {
             .get("visibility")
             .and_then(Value::as_str)
             .is_some_and(|visibility| visibility.eq_ignore_ascii_case("hide"));
-        let priority = if let Some(index) = local_gateway_visible_gpt_model_definitions()
+        let priority = if let Some(index) = recommended
             .iter()
             .position(|(model_id, _)| model_id.eq_ignore_ascii_case(&slug))
         {
@@ -1896,7 +1932,7 @@ fn local_access_profile_model_definitions_with_accounts(profile_dir:&Path,collec
         .into_iter()
         .filter_map(|account_id| accounts.iter().find(|account|account.id==account_id).cloned())
         .filter(|account| {
-            is_local_access_eligible_account(account, collection.restrict_free_accounts)
+            is_local_access_eligible_account(account)
         })
         .collect();
     let include_official_gpt_models = pool_provides_gpt_models(&pool_accounts);
@@ -2059,7 +2095,9 @@ fn write_local_access_profile_client_models(
 
     let config_path = profile_config_path(profile_dir);
     let mut doc = crate::modules::codex_config_format::load_codex_config_doc(&config_path)?;
-    if doc.get("model_catalog_json").and_then(|item| item.as_str()) != Some(catalog_file) {
+    if !crate::modules::codex_model_catalog_capabilities::uses_dynamic_api_service_catalog(&doc)
+        && doc.get("model_catalog_json").and_then(|item| item.as_str()) != Some(catalog_file)
+    {
         doc["model_catalog_json"] = value(catalog_file);
         let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
         crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)?;
@@ -2190,12 +2228,20 @@ async fn write_local_access_profile_credentials(
     profile_dir: &Path,
     collection: &CodexLocalAccessCollection,
     api_key: Option<&str>,
+    provider_name: Option<&str>,
+    prepared_oauth: Option<&CodexAccount>,
 ) -> Result<(String, bool), String> {
     let bound_oauth_account_id =
         normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref());
+    if prepared_oauth.is_some_and(|oauth| Some(oauth.id.as_str()) != bound_oauth_account_id.as_deref())
+    {
+        return Err("API Key 账号绑定的 OAuth 账号不匹配".to_string());
+    }
     if let Some(bound_id) = bound_oauth_account_id.as_deref() {
         let _ = validate_local_access_bound_oauth_account(bound_id)?;
-        let _ = codex_account::ensure_managed_account_fresh(bound_id).await?;
+        if prepared_oauth.is_none() {
+            codex_account::ensure_managed_account_fresh(bound_id).await?;
+        }
     }
     let runtime_api_key = api_key
         .map(str::trim)
@@ -2203,12 +2249,15 @@ async fn write_local_access_profile_credentials(
         .map(str::to_string)
         .unwrap_or_else(|| collection.api_key.clone());
     let supports_websockets = profile_api_key_supports_websockets(collection, &runtime_api_key);
-    let runtime_account = build_runtime_account(
+    let mut runtime_account = build_runtime_account(
         build_collection_base_url(collection),
         runtime_api_key.clone(),
         bound_oauth_account_id,
         supports_websockets,
     );
+    if let Some(name) = provider_name.map(str::trim).filter(|name| !name.is_empty()) {
+        runtime_account.api_provider_name = Some(name.to_string());
+    }
     // Capture ownership before the account writer replaces provider.base_url;
     // comparing afterward mistakes our previous port for an explicit user URL.
     let previous_config = read_optional_profile_file(&profile_config_path(profile_dir))?
@@ -2224,7 +2273,15 @@ async fn write_local_access_profile_credentials(
                 .map(str::to_owned);
         }
     }
-    codex_account::write_account_bundle_to_dir(profile_dir, &runtime_account)?;
+    if let Some(oauth) = prepared_oauth {
+        codex_account::write_api_key_account_bundle_with_oauth_to_dir(
+            profile_dir,
+            &runtime_account,
+            oauth,
+        )?;
+    } else {
+        codex_account::write_account_bundle_to_dir(profile_dir, &runtime_account)?;
+    }
     write_local_access_profile_transport_config(
         profile_dir,
         collection,
@@ -2242,8 +2299,33 @@ async fn write_local_access_profile_takeover(
     api_key: Option<&str>,
     include_account_pool_models: bool,
 ) -> Result<(), String> {
-    let (runtime_api_key, supports_websockets) =
-        write_local_access_profile_credentials(profile_dir, collection, api_key).await?;
+    write_local_access_profile_takeover_with_provider_name(
+        profile_dir,
+        collection,
+        api_key,
+        include_account_pool_models,
+        None,
+        None,
+    )
+    .await
+}
+
+async fn write_local_access_profile_takeover_with_provider_name(
+    profile_dir: &Path,
+    collection: &CodexLocalAccessCollection,
+    api_key: Option<&str>,
+    include_account_pool_models: bool,
+    provider_name: Option<&str>,
+    prepared_oauth: Option<&CodexAccount>,
+) -> Result<(), String> {
+    let (runtime_api_key, supports_websockets) = write_local_access_profile_credentials(
+        profile_dir,
+        collection,
+        api_key,
+        provider_name,
+        prepared_oauth,
+    )
+    .await?;
     let definitions = local_access_profile_model_definitions(
         profile_dir,
         collection,
@@ -2438,8 +2520,16 @@ async fn ensure_profile_takeover(
 async fn ensure_local_access_profile_takeovers(
     collection: &CodexLocalAccessCollection,
 ) -> Result<(), String> {
+    maintain_local_access_takeover_dirs(collect_local_access_profile_takeover_dirs(), collection)
+        .await
+}
+
+async fn maintain_local_access_takeover_dirs(
+    dirs: Vec<PathBuf>,
+    collection: &CodexLocalAccessCollection,
+) -> Result<(), String> {
     let mut failures = Vec::new();
-    for profile_dir in collect_local_access_profile_takeover_dirs() {
+    for profile_dir in dirs {
         if let Err(err) = ensure_profile_takeover(&profile_dir, collection).await {
             failures.push(err);
         }
@@ -2451,6 +2541,39 @@ async fn ensure_local_access_profile_takeovers(
     }
 }
 
+fn add_owned_default_for_routing_sync(
+    dirs: &mut Vec<PathBuf>,
+    profile: PathBuf,
+    is_dev_profile: bool,
+    collection: &CodexLocalAccessCollection,
+) {
+    // An explicit routing save can maintain an attached OAuth profile. It must
+    // never claim a default profile that belongs to another provider or environment.
+    if is_dev_profile || !collection.enabled {
+        return;
+    }
+    let key = normalize_profile_dir_key(&profile);
+    if dirs.iter().any(|dir| normalize_profile_dir_key(dir) == key) {
+        return;
+    }
+    if inspect_local_access_profile_attachment(&profile, Some(collection)).attached
+        && profile_still_owned_for_collection(&profile, collection).unwrap_or(false)
+    {
+        dirs.push(profile);
+    }
+}
+
+fn collect_local_access_routing_sync_dirs(collection: &CodexLocalAccessCollection) -> Vec<PathBuf> {
+    let mut dirs = collect_local_access_profile_takeover_dirs();
+    add_owned_default_for_routing_sync(
+        &mut dirs,
+        codex_account::get_codex_home(),
+        account::is_dev_profile(),
+        collection,
+    );
+    dirs
+}
+
 fn profile_model_catalog_websocket_preference_matches(
     profile_dir: &Path,
     catalog_file: Option<&str>,
@@ -2459,11 +2582,11 @@ fn profile_model_catalog_websocket_preference_matches(
     let catalog_file = catalog_file
         .filter(|value| !value.trim().is_empty())
         .unwrap_or(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE);
-    if !is_cockpit_managed_model_catalog_name(catalog_file) {
+    if !codex_account::catalog_ref_targets_cockpit_managed_file(catalog_file, profile_dir) {
         return false;
     }
 
-    let catalog_path = profile_dir.join(catalog_file);
+    let catalog_path = profile_dir.join(catalog_file.trim());
     let Ok(content) = std::fs::read_to_string(catalog_path) else {
         return false;
     };
@@ -2606,6 +2729,7 @@ fn build_local_access_api_key(label: Option<&str>) -> CodexLocalAccessApiKey {
         provider_gateway: None,
         model_routing: None,
         inherit_account_pool: Some(true),
+        account_pool_id: None,
         account_ids: Vec::new(),
         priority_account_ids: Vec::new(),
         preferred_account_id: None,
@@ -2624,7 +2748,7 @@ fn build_local_access_api_key(label: Option<&str>) -> CodexLocalAccessApiKey {
 }
 
 fn normalize_collection_api_keys(collection: &mut CodexLocalAccessCollection) -> bool {
-    let mut changed = false;
+    let mut changed = apply_named_account_pool_scopes(collection);
     let now = now_ms();
 
     if collection.api_keys.is_empty() {
@@ -2641,6 +2765,7 @@ fn normalize_collection_api_keys(collection: &mut CodexLocalAccessCollection) ->
             provider_gateway: None,
             model_routing: None,
             inherit_account_pool: Some(true),
+            account_pool_id: None,
             account_ids: Vec::new(),
             priority_account_ids: Vec::new(),
             preferred_account_id: None,

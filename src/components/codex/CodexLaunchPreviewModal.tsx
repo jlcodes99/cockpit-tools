@@ -63,6 +63,7 @@ import {
   toggleRouteModelInRoutes,
 } from "./CodexModelRoutingFields";
 import { forceRefreshCodexTokens } from "../../services/codexService";
+import { backUpRefreshedCodexAccount } from "../../services/scheduledBackupService";
 import { requestCodexOpenAddAccount } from "../../utils/codexAddAccountRequest";
 import { areCodexModelRoutingsEqual, resolveRoutingCatalog } from "../../utils/codexModelRoutingValue";
 import {
@@ -283,9 +284,11 @@ export function CodexLaunchPreviewModal({
   const [contextConfigOpen, setContextConfigOpen] = useState(false);
   const [forceRefreshing, setForceRefreshing] = useState(false);
   const [manualRefreshResult, setManualRefreshResult] = useState<{
-    status: "running" | "success" | "error";
+    status: "running" | "backing-up" | "success" | "error";
     error?: string;
     requiresReauth?: boolean;
+    backupPath?: string;
+    backupError?: string;
   } | null>(null);
   const [manualRefreshedAccount, setManualRefreshedAccount] =
     useState<CodexAccount | null>(null);
@@ -1570,7 +1573,13 @@ export function CodexLaunchPreviewModal({
       const refreshed = await forceRefreshCodexTokens(account.id);
       useCodexAccountStore.getState().applyAccountSnapshot(refreshed);
       setManualRefreshedAccount(refreshed);
-      setManualRefreshResult({ status: "success" });
+      setManualRefreshResult({ status: "backing-up" });
+      try {
+        const backup = await backUpRefreshedCodexAccount(refreshed);
+        setManualRefreshResult({ status: "success", backupPath: backup?.path });
+      } catch (backupError) {
+        setManualRefreshResult({ status: "success", backupError: String(backupError).replace(/^Error:\s*/, "") });
+      }
     } catch (refreshError) {
       const errorMessage = String(refreshError).replace(/^Error:\s*/, "");
       const latestAccount = useCodexAccountStore.getState().accounts.find((item) => item.id === account.id) ?? account;
@@ -2701,7 +2710,7 @@ export function CodexLaunchPreviewModal({
                   <p>
                     {manualRefreshResult.status === "running"
                       ? t("codex.launchPreview.forceRefreshRunning")
-                      : manualRefreshResult.status === "success"
+                      : manualRefreshResult.status === "success" || manualRefreshResult.status === "backing-up"
                         ? t("codex.launchPreview.forceRefreshSuccess")
                         : t("codex.launchPreview.forceRefreshDescription")}
                   </p>
@@ -2726,9 +2735,16 @@ export function CodexLaunchPreviewModal({
                   <span>
                     {manualRefreshResult.status === "running"
                       ? t("codex.launchPreview.forceRefreshRunning")
-                      : t("codex.launchPreview.forceRefreshSuccess")}
+                      : manualRefreshResult.status === "backing-up"
+                        ? t("settings.transfer.backup.feedback.running")
+                        : manualRefreshResult.backupPath
+                          ? t("settings.transfer.backup.feedback.runSuccess", { path: manualRefreshResult.backupPath })
+                          : t("codex.launchPreview.forceRefreshSuccess")}
                   </span>
                 </div>
+              )}
+              {manualRefreshResult.backupError && (
+                <ModalErrorMessage message={t("settings.transfer.backup.feedback.runFailed", { error: manualRefreshResult.backupError })} />
               )}
             </div>
             <div className="modal-footer codex-launch-preview-refresh-footer">
@@ -2747,7 +2763,9 @@ export function CodexLaunchPreviewModal({
                 disabled={forceRefreshing}
               >
                 {forceRefreshing
-                  ? t("codex.launchPreview.forceRefreshRunning")
+                  ? manualRefreshResult.status === "backing-up"
+                    ? t("settings.transfer.backup.running")
+                    : t("codex.launchPreview.forceRefreshRunning")
                   : t("codex.launchPreview.forceRefreshRetry", "重新检测")}
               </button>
               {manualRefreshResult.status === "error" && manualRefreshResult.requiresReauth && (

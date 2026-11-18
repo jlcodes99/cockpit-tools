@@ -145,6 +145,10 @@ pub(super) fn rejection(event: &Value) -> Option<(u16, Value)> {
     {
         return Some((400, event.clone()));
     }
+    if super::upstream_errors::policy_refusal(event) {
+        return super::upstream_errors::chat_failure(event, 400)
+            .map(|error| (error.status, event.clone()));
+    }
     if super::quota_exhaustion::code(event).is_some() && !http_execution_observed(event) {
         return Some((429, event.clone()));
     }
@@ -217,7 +221,9 @@ pub(super) fn rejection(event: &Value) -> Option<(u16, Value)> {
         status
     } else if super::upstream_errors::model_unavailable(400, event, "") {
         404
-    } else if super::transient_rate_limit::applies(event) {
+    } else if super::upstream_errors::chat_failure(event, 0)
+        .is_some_and(|error| error.status == 429)
+    {
         429
     } else if [&*code, &*kind].iter().any(|v| {
         matches!(
@@ -252,10 +258,11 @@ pub(super) fn rejection(event: &Value) -> Option<(u16, Value)> {
             return None;
         }
         // Capacity is transient availability, not evidence of exhausted quota.
-        503
+        super::upstream_errors::chat_failure(event, 503)
+            .map_or(503, |error| error.status)
     };
     let mut body = json!({"error": error});
-    // Preserve Retry-After/reset hints, including wrapped event headers.
+    // Preserve Retry-After/reset hints without copying the entire wrapped body.
     for key in [
         "headers",
         "retry_after",
@@ -266,6 +273,9 @@ pub(super) fn rejection(event: &Value) -> Option<(u16, Value)> {
         if let Some(value) = event.get(key) {
             body[key] = value.clone();
         }
+    }
+    if let Some(delay) = super::events::retry_after_event(event) {
+        body["retry_after"] = json!(delay.as_secs_f64());
     }
     Some((status, body))
 }
@@ -412,6 +422,10 @@ pub(super) fn pre_execution(event: &Value) -> bool {
                 .is_none_or(|value| value.is_null() || value.as_u64() == Some(0))
     }
     metadata_only(event, event.get("object").and_then(Value::as_str) == Some("response"))
+        && event.get("body").filter(|body| body.is_object()).is_none_or(|body| {
+            metadata_only(body, false)
+                && body.get("response").is_none_or(|value| metadata_only(value, true))
+        })
         && event
             .get("response")
             .is_none_or(|value| metadata_only(value, true))
@@ -694,7 +708,10 @@ async fn probe_inner(
                     hold_deadline = Some(tokio::time::Instant::now() + MAX_HOLD);
                 }
                 if responses_json {
-                    if let Some(value) = frame.value {
+                    if let Some(mut value) = frame.value {
+                        if official {
+                            super::official_fallback::normalize_sharing_quota_error(&mut value);
+                        }
                         if super::quota_exhaustion::code(&value).is_some() && !http_execution_observed(&value) {
                             reject = Some((429, value));
                         }
@@ -722,7 +739,10 @@ async fn probe_inner(
                     }
                     continue;
                 }
-                let Some(event) = frame.value else { continue };
+                let Some(mut event) = frame.value else { continue };
+                if official && matches!(super::events::response_terminal_kind(&event), Some("error" | "response.failed")) {
+                    super::official_fallback::normalize_sharing_quota_error(&mut event);
+                }
                 #[cfg(test)]
                 if official {
                     trace_official_gate(&event, gate_started);

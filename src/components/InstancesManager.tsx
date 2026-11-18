@@ -637,7 +637,15 @@ export function InstancesManager<TAccount extends AccountLike>({
   isAccountAllowedForLaunchMode,
   toolbarExtraActions,
 }: InstancesManagerProps<TAccount>) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const copyTimeoutDuration = useMemo(
+    () => new Intl.NumberFormat(i18n.resolvedLanguage ?? i18n.language, {
+      style: "unit",
+      unit: "minute",
+      unitDisplay: "short",
+    }),
+    [i18n.resolvedLanguage, i18n.language],
+  );
   const {
     instances,
     defaults,
@@ -712,6 +720,7 @@ export function InstancesManager<TAccount extends AccountLike>({
   const [formCodexOpenConfigLoading, setFormCodexOpenConfigLoading] =
     useState(false);
   const [formCopySourceInstanceId, setFormCopySourceInstanceId] = useState("");
+  const [formCopyTimeoutMinutes, setFormCopyTimeoutMinutes] = useState("10");
   const [formError, setFormError] = useState<string | null>(null);
   const formErrorRef = useRef<HTMLDivElement | null>(null);
   const copyAutoNameRef = useRef("");
@@ -1072,6 +1081,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     setFormWorkingDir("");
     setFormExtraArgs("");
     setFormInitMode("empty");
+    setFormCopyTimeoutMinutes("10");
     setFormLaunchMode(isCliOnlyApp ? "cli" : "app");
     setFormAppSpeed("standard");
     setFormBindAccountId("");
@@ -1630,6 +1640,10 @@ export function InstancesManager<TAccount extends AccountLike>({
             : resolveBindAccountValue(formBindAccountId),
           modelRouting: nextModelRouting,
           copySourceInstanceId: formCopySourceInstanceId || defaultInstanceId,
+          copyTimeoutSeconds:
+            isCodexApp && formInitMode === "copy"
+              ? Number(formCopyTimeoutMinutes) * 60
+              : undefined,
         });
         if (
           created?.id &&
@@ -3423,6 +3437,21 @@ export function InstancesManager<TAccount extends AccountLike>({
                         "会复制来源实例的目录、绑定账号、启动方式和混合路由，不必重新配一遍。",
                       )}
                     </p>
+                    {isCodexApp && (
+                      <div className="form-group">
+                        <label>{t("instances.form.copyTimeout", "Copy timeout")}</label>
+                        <SingleSelectDropdown
+                          value={formCopyTimeoutMinutes}
+                          onChange={setFormCopyTimeoutMinutes}
+                          options={[2, 10, 30, 60].map((minutes) => ({
+                            value: String(minutes),
+                            label: copyTimeoutDuration.format(minutes),
+                          }))}
+                          ariaLabel={t("instances.form.copyTimeout", "Copy timeout")}
+                          className="instance-copy-source-select"
+                        />
+                      </div>
+                    )}
                     {selectedCopySourceInstance?.running && (
                       <p className="form-hint warning">
                         {t(

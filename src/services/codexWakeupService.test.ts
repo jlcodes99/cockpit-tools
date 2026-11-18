@@ -52,3 +52,24 @@ test('Codex wakeup service preserves dynamic pool tasks and reports the executed
   assert.deepEqual(progress.account_ids, ['second', 'first']);
   assert.deepEqual(calls, ['codex_wakeup_save_state', 'codex_wakeup_get_pool_accounts']);
 });
+
+test('wakeup history preserves HTTP statuses and supports older results', async () => {
+  const record = {
+    id: 'current', runId: 'run', timestamp: 2, triggerType: 'scheduled',
+    accountId: 'oauth-a', accountEmail: 'oauth-a@example.invalid', success: true,
+  };
+  const { exports } = loadHookModule(new URL('./codexWakeupService.ts', import.meta.url), {
+    '@tauri-apps/api/core': {
+      invoke: async (command: string) => {
+        assert.equal(command, 'codex_wakeup_load_history');
+        return {
+          records: [{ ...record, httpStatus: 201 }, { ...record, id: 'older', timestamp: 1 }],
+          migrationPending: false, migrationError: null,
+        };
+      },
+    },
+  });
+  const history = await exports.loadCodexWakeupHistory();
+  assert.equal(history.records[0].http_status, 201);
+  assert.equal(history.records[1].http_status, undefined);
+});

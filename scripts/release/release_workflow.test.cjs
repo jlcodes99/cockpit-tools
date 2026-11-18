@@ -55,7 +55,8 @@ test("every release upload uses the draft-safe retry helper", () => {
     ["build-macos-aarch64", "build-macos-x86_64"],
     ["build-macos-x86_64", "build-macos-universal"],
     ["build-macos-universal", "build-linux"],
-    ["build-linux", "finalize-legacy-latest"],
+    ["build-linux", "build-linux-cli"],
+    ["build-linux-cli", "finalize-legacy-latest"],
     ["finalize-legacy-latest", "publish-release"],
   ]) {
     const body = jobBody(job, next);
@@ -63,6 +64,23 @@ test("every release upload uses the draft-safe retry helper", () => {
     assert.match(body, /actions\/setup-node@v4/);
     assert.match(body, /node scripts\/release\/upload_release_assets\.cjs/);
   }
+});
+
+test("standalone Linux CLI archives join release checksums and validation", () => {
+  const cli = jobBody("build-linux-cli", "finalize-legacy-latest");
+  const checksums = jobBody("finalize-legacy-latest", "publish-release");
+  const validation = jobBody("validate-release-artifacts");
+
+  assert.match(cli, /arch: x86_64[\s\S]*arch: aarch64/);
+  assert.match(cli, /cargo build --locked --release --package cockpit-cli/);
+  assert.match(cli, /tar -xzf .*\n.*ldd /);
+  assert.match(cli, /env -u DISPLAY -u WAYLAND_DISPLAY/);
+  assert.match(cli, /name: linux-cli-/);
+  assert.doesNotMatch(cli, /prepare-frontend|tauri build|libwebkit2gtk-dev/);
+  assert.match(checksums, /needs:[\s\S]*?- build-linux-cli/);
+  assert.match(validation, /needs:[\s\S]*?- build-linux-cli/);
+  assert.match(validation, /pattern: linux-cli-\*\n\s+path: validation-workspace\/release-assets/);
+  assert.match(validation, /for arch in x86_64 aarch64; do\n\s+test -f .*cockpit-cli_/);
 });
 
 test("macOS release builds use the wrapper that cleans temporary DMG mounts", () => {
@@ -121,7 +139,7 @@ test("trusted main CI and release jobs share caches, with correct platform separ
   const cache = fs.readFileSync(path.join(__dirname, "../../.github/actions/host-build-cache/action.yml"), "utf8");
   assert.match(ci, /push:\s+branches:[\s\S]*?- "main"/);
   assert.match(ci, /uses: \.\/.github\/actions\/host-build-cache\s+with:\s+target: \$\{\{ matrix.cache_target \}\}/);
-  for (const target of ["windows", "macos-aarch64", "macos-x86_64", "linux-x86_64", "linux-aarch64"]) {
+  for (const target of ["windows", "windows-aarch64", "macos-aarch64", "macos-x86_64", "linux-x86_64", "linux-aarch64"]) {
     assert.ok(ci.includes(`cache_target: "${target}"`));
   }
   assert.match(cache, /shared-key: host-release-v2-\$\{\{ inputs.target \}\}/);
@@ -146,6 +164,7 @@ test("finalizes from one download, checksums the freshly generated manifest and 
   const installers = [
     "Cockpit.Tools_aarch64.app.tar.gz", "Cockpit.Tools_x64.app.tar.gz",
     "Cockpit.Tools_1.2.3_x64_en-US.msi", "Cockpit.Tools_1.2.3_x64-setup.exe",
+    "Cockpit.Tools_1.2.3_arm64-setup.exe",
     "Cockpit.Tools_1.2.3_amd64.AppImage", "Cockpit.Tools_1.2.3_aarch64.AppImage",
     "Cockpit.Tools_1.2.3_amd64.deb", "Cockpit.Tools_1.2.3_arm64.deb",
     "Cockpit.Tools-1.2.3-1.x86_64.rpm", "Cockpit.Tools-1.2.3-1.aarch64.rpm",
@@ -153,6 +172,10 @@ test("finalizes from one download, checksums the freshly generated manifest and 
   for (const installer of installers) {
     fs.writeFileSync(path.join(fixtures, installer), "installer");
     fs.writeFileSync(path.join(fixtures, installer + ".sig"), "test-signature");
+  }
+  const cliArchives = ["cockpit-cli_1.2.3_linux_x86_64.tar.gz", "cockpit-cli_1.2.3_linux_aarch64.tar.gz"];
+  for (const archive of cliArchives) {
+    fs.writeFileSync(path.join(fixtures, archive), archive);
   }
   fs.writeFileSync(path.join(fixtures, "latest.json"), "stale draft manifest");
   fs.writeFileSync(path.join(fixtures, "SHA256SUMS.txt"), "stale checksum");
@@ -176,7 +199,10 @@ test("finalizes from one download, checksums the freshly generated manifest and 
   const checksum = crypto.createHash("sha256").update(latest).digest("hex");
   const lines = fs.readFileSync(path.join(directory, "SHA256SUMS.txt"), "utf8").trim().split("\n");
   assert.ok(lines.includes(checksum + "  latest.json"));
-  assert.equal(lines.length, installers.length * 2 + 1);
+  for (const archive of cliArchives) {
+    assert.ok(lines.includes(crypto.createHash("sha256").update(archive).digest("hex") + "  " + archive));
+  }
+  assert.equal(lines.length, installers.length * 2 + cliArchives.length + 1);
 
   fs.rmSync(path.join(directory, "release-assets"), { recursive: true });
   fs.rmSync(path.join(fixtures, installers[0] + ".sig"));

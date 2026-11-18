@@ -536,7 +536,7 @@ fn format_command_preview(command: &Command) -> String {
     modules::process::summarize_text_for_process_log(&preview, 600)
 }
 
-fn spawn_command_with_trace(cmd: &mut Command) -> std::io::Result<std::process::Child> {
+fn spawn_command_with_trace(cmd: &mut Command) -> std::io::Result<u32> {
     let preview = format_command_preview(cmd);
     if command_trace_enabled() {
         modules::logger::log_info(&format!("[CmdTrace][Cursor] EXEC {}", preview));
@@ -559,7 +559,7 @@ fn spawn_command_with_trace(cmd: &mut Command) -> std::io::Result<std::process::
             )),
         }
     }
-    result
+    result.map(modules::process::background_child_pid)
 }
 
 fn collect_running_process_exe_by_pid() -> HashMap<u32, String> {
@@ -953,7 +953,7 @@ fn resolve_macos_exec_path(path_str: &str) -> Option<PathBuf> {
     None
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn resolve_macos_exec_path(path_str: &str) -> Option<PathBuf> {
     let path = PathBuf::from(path_str);
     if path.exists() {
@@ -961,6 +961,72 @@ fn resolve_macos_exec_path(path_str: &str) -> Option<PathBuf> {
     } else {
         None
     }
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn resolve_windows_cursor_launch_path(path: &Path, explicitly_configured: bool) -> Option<PathBuf> {
+    if !path_looks_like_cursor(path) || !path.is_file() {
+        return None;
+    }
+    let is_gui = |candidate: &Path| {
+        candidate.is_file() && modules::process::windows_executable_has_gui_subsystem(candidate)
+    };
+    let extension = path.extension()?;
+    if extension.eq_ignore_ascii_case("exe") {
+        return is_gui(path).then(|| path.to_path_buf());
+    }
+    // The installed PATH launcher lives under resources/app/bin.
+    let mut root = path;
+    for segment in ["cursor.cmd", "bin", "app", "resources"] {
+        if !root.file_name().is_some_and(|name| name.eq_ignore_ascii_case(segment)) {
+            return (explicitly_configured
+                && (extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat")))
+            .then(|| path.to_path_buf());
+        }
+        root = root.parent()?;
+    }
+    ["Cursor.exe", "Electron.exe"]
+        .into_iter()
+        .map(|name| root.join(name))
+        .find(|candidate| is_gui(candidate))
+}
+
+#[cfg(test)]
+#[test]
+fn windows_cursor_launch_uses_the_gui_behind_a_cli_shim() {
+    let temp = tempfile::tempdir().unwrap();
+    let bin = temp.path().join("resources").join("app").join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let shim = bin.join("cursor.cmd");
+    fs::write(&shim, "@echo off\r\n").unwrap();
+    let app = temp.path().join("Cursor.exe");
+    fs::write(&app, "this is not a Windows executable").unwrap();
+    assert_eq!(resolve_windows_cursor_launch_path(&app, true), None);
+    assert_eq!(resolve_windows_cursor_launch_path(&shim, true), None);
+
+    let mut image = [0u8; 158];
+    image[..2].copy_from_slice(b"MZ");
+    image[60..64].copy_from_slice(&64u32.to_le_bytes());
+    image[64..68].copy_from_slice(b"PE\0\0");
+    image[88..90].copy_from_slice(&0x20bu16.to_le_bytes());
+    image[156..158].copy_from_slice(&3u16.to_le_bytes()); // Console subsystem.
+    fs::write(&app, image).unwrap();
+    assert_eq!(resolve_windows_cursor_launch_path(&shim, true), None);
+
+    image[156..158].copy_from_slice(&2u16.to_le_bytes()); // GUI subsystem.
+    fs::write(&app, image).unwrap();
+    assert_eq!(
+        resolve_windows_cursor_launch_path(&app, true),
+        Some(app.clone())
+    );
+    assert_eq!(resolve_windows_cursor_launch_path(&shim, true), Some(app));
+    let other_shim = temp.path().join("cursor.cmd");
+    fs::write(&other_shim, "@echo off\r\n").unwrap();
+    assert_eq!(resolve_windows_cursor_launch_path(&other_shim, false), None);
+    assert_eq!(
+        resolve_windows_cursor_launch_path(&other_shim, true),
+        Some(other_shim)
+    );
 }
 
 fn detect_cursor_exec_path() -> Option<PathBuf> {
@@ -1007,6 +1073,11 @@ fn detect_cursor_exec_path() -> Option<PathBuf> {
             );
             if let Some(process) = system.process(sysinfo::Pid::from(pid as usize)) {
                 if let Some(path) = process.exe() {
+                    #[cfg(target_os = "windows")]
+                    if let Some(gui) = resolve_windows_cursor_launch_path(path, false) {
+                        return Some(gui);
+                    }
+                    #[cfg(not(target_os = "windows"))]
                     return Some(path.to_path_buf());
                 }
             }
@@ -1029,8 +1100,8 @@ fn detect_cursor_exec_path() -> Option<PathBuf> {
                 );
             }
             for candidate in candidates {
-                if candidate.exists() {
-                    return Some(candidate);
+                if let Some(gui) = resolve_windows_cursor_launch_path(&candidate, false) {
+                    return Some(gui);
                 }
             }
             if let Some(path) = modules::process::detect_windows_exec_path_by_signatures(
@@ -1040,7 +1111,9 @@ fn detect_cursor_exec_path() -> Option<PathBuf> {
                 &["cursor"],
                 &["cursor"],
             ) {
-                return Some(path);
+                if let Some(gui) = resolve_windows_cursor_launch_path(&path, false) {
+                    return Some(gui);
+                }
             }
         }
 
@@ -1104,6 +1177,11 @@ pub fn detect_and_save_cursor_launch_path(force: bool) -> Option<String> {
 fn resolve_cursor_launch_path() -> Result<PathBuf, String> {
     let config = modules::config::get_user_config();
     if let Some(custom) = normalize_custom_path(&config.cursor_app_path) {
+        #[cfg(target_os = "windows")]
+        if let Some(exec) = resolve_windows_cursor_launch_path(Path::new(&custom), true) {
+            return Ok(exec);
+        }
+        #[cfg(not(target_os = "windows"))]
         if let Some(exec) = resolve_macos_exec_path(&custom) {
             if path_looks_like_cursor(&exec) {
                 return Ok(exec);
@@ -1159,9 +1237,7 @@ fn spawn_cursor_windows(
             cmd.arg(arg.trim());
         }
     }
-    let child =
-        spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Cursor 失败: {}", e))?;
-    Ok(child.id())
+    spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Cursor 失败: {}", e))
 }
 
 #[cfg(target_os = "macos")]
@@ -1191,7 +1267,7 @@ fn spawn_cursor_macos_open(
         }
     }
 
-    let child =
+    let pid =
         spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Cursor 失败: {}", e))?;
     modules::logger::log_info("Cursor 启动命令已发送（open -n -a）");
     let probe_started = std::time::Instant::now();
@@ -1204,9 +1280,9 @@ fn spawn_cursor_macos_open(
     }
     modules::logger::log_warn(&format!(
         "[Cursor Start] 启动后 6s 内未匹配到实例 PID，回退 open pid={}",
-        child.id()
+        pid
     ));
-    Ok(child.id())
+    Ok(pid)
 }
 
 #[cfg(target_os = "linux")]
@@ -1233,9 +1309,7 @@ fn spawn_cursor_unix(
             cmd.arg(arg.trim());
         }
     }
-    let child =
-        spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Cursor 失败: {}", e))?;
-    Ok(child.id())
+    spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Cursor 失败: {}", e))
 }
 
 pub fn start_cursor_with_args_with_new_window(

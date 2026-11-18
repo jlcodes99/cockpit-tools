@@ -19,7 +19,6 @@ const oauthAccount = (
 
 test("includes a valid OAuth account that is outside the default service pool", () => {
   const selected = selectCodexApiKeyScopeAccounts({
-    restrictFreeAccounts: true,
     scopedAccountIds: [],
     accounts: [
       oauthAccount("default-pool-account"),
@@ -35,7 +34,6 @@ test("includes a valid OAuth account that is outside the default service pool", 
 
 test("keeps provider-gateway accounts selectable and preserves a persisted fixed scope", () => {
   const selected = selectCodexApiKeyScopeAccounts({
-    restrictFreeAccounts: true,
     scopedAccountIds: ["provider-gateway-account"],
     accounts: [
       oauthAccount("pro-account", "pro"),
@@ -56,7 +54,6 @@ test("keeps provider-gateway accounts selectable and preserves a persisted fixed
 
 test("includes a provider account inferred from its upstream URL", () => {
   const selected = selectCodexApiKeyScopeAccounts({
-    restrictFreeAccounts: true,
     scopedAccountIds: [],
     accounts: [
       oauthAccount("pro-account", "pro"),
@@ -78,7 +75,6 @@ test("includes a provider account inferred from its upstream URL", () => {
 test("preserves an existing scoped account that is temporarily absent while filtering invalid new selections", () => {
   const accountIds = reconcileCodexApiKeyScopeAccountIds({
     accounts: [oauthAccount("pro-account", "pro")],
-    restrictFreeAccounts: true,
     persistedAccountIds: ["temporarily-unavailable-account"],
     draftAccountIds: [
       "temporarily-unavailable-account",

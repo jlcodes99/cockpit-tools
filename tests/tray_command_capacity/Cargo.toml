@@ -1,0 +1,14 @@
+[package]
+name = "tray-command-capacity"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[target.'cfg(windows)'.dependencies]
+muda = { version = "=0.17.2", default-features = false }
+windows-sys = { version = "0.60", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }
+
+[patch.crates-io]
+muda = { path = "../../vendor/muda" }

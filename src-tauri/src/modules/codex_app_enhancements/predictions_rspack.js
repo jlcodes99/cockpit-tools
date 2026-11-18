@@ -1,4 +1,4 @@
-// Codex 26.1029 ships Rspack ESM chunks. Keep the native editor and its
+// Codex ships Rspack ESM chunks. Keep the native editor and its
 // lifecycle intact; replace only the same four prediction contracts as Vite.
 (() => {
   "use strict";
@@ -6,6 +6,7 @@
   const P = "window.__cockpitNativePredictions";
   const chunks = { initial: 559161, composer: 563813, host: 24191, settings: 572868 };
   const currentChunks = { initial: 16389, composer: 39017, host: 182735, settings: 553834 };
+  const desktop261111Chunks = { initial: 538993, composer: 899469, host: 907538, settings: 184348 };
   const N = "[A-Za-z_$][\\w$]*";
   const esc = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -23,19 +24,22 @@
         replace(new RegExp(`(${N}\\(${N}\\.${N},"4290031608"\\))(&&\\(0,${N}\\.${N}\\)\\(${N},\\(0,${N}\\.${N}\\)\\(\\)\\.enabled\\)&&null!=${N}\\.appServices\\.cumberbatch)`, "g"),
           (_, gate, rest) => {
             const allow = `${P}?.runtime.allow()===true`;
-            if (id !== currentChunks.initial) return `(${gate}||${allow})${rest}`;
+            if (id === chunks.initial) return `(${gate}||${allow})${rest}`;
             const at = rest.indexOf("&&null!=");
             return `(${gate}||${allow})${rest.slice(0, at)}&&(${rest.slice(at + 2)}||${allow})`;
           });
       } else if (kind === "composer") {
         // This dependency and component uniquely own the catch-up query.
-        const match = new RegExp(`hostId:(${N}),pluginHostId:${N},roots:${N}\\}=${N},(${N})=\\(0,${N}\\.${N}\\)\\(${N}\\.${N}\\),${N}=\\(0,${N}\\.${N}\\)\\(${N}\\.${N}\\),${N}=\\(0,${N}\\.${N}\\)\\(${N}\\.${N}\\),(${N})=(${N})\\.appServices\\.cumberbatch`).exec(source);
-        if (!match || !source.includes('generationTrigger:"catch_up"')) throw Error("composer-contract");
+        const declaration = id === desktop261111Chunks.composer ? "\\)\\{let " : `=${N},`;
+        const pattern = new RegExp(`hostId:(${N}),pluginHostId:${N},roots:${N}\\}${declaration}(${N})=\\(0,${N}\\.${N}\\)\\(${N}\\.${N}\\),${N}=\\(0,${N}\\.${N}\\)\\(${N}\\.${N}\\),${N}=\\(0,${N}\\.${N}\\)\\(${N}\\.${N}\\),(${N})=(${N})\\.appServices\\.cumberbatch`, "g");
+        const [match, duplicate] = source.matchAll(pattern);
+        if (!match || duplicate || !source.includes('generationTrigger:"catch_up"')) throw Error("composer-contract");
         const [, host, scope, service, services] = match;
         replace(new RegExp(esc(`${service}=${services}.appServices.cumberbatch`), "g"),
           () => `${service}=${P}.runtime.serviceFor(${scope},${host},${services}.appServices.cumberbatch)`);
       } else if (kind === "host") {
-        const name = id === currentChunks.host ? `(?: ${N})?` : ` ${N}`;
+        const modernHost = id === currentChunks.host || id === desktop261111Chunks.host;
+        const name = modernHost ? `(?: ${N})?` : ` ${N}`;
         const match = new RegExp(`async function${name}\\((${N}),${N},(${N}),${N}\\)\\{let (${N})=(${N})\\.appServices\\?\\.cumberbatch;`).exec(source);
         if (!match || !source.includes("Cumberbatch background prediction did not finish")) throw Error("host-contract");
         const [, scope, target, service, services] = match;
@@ -45,7 +49,7 @@
           gate => `(${gate}||${P}?.runtime.allow(${target}.hostId)===true)`, 2);
         // Dgwo exports the scope-bound RPC accessor; the native preference reader
         // and factory remain authoritative, including cancellation on disable.
-        if (id === currentChunks.host) {
+        if (modernHost) {
           replace(new RegExp(`Dgwo\\((${N}),(${N}),(${N})\\)\\{(?=[^}]{1,430}\\.d\\(\\2,\\{\\},\\{V:function\\()`, "g"),
             (signature, _module, exports, require) => signature
               + `${P}.runtime.register({managerForHost:(...args)=>${exports}.V(...args),nativeEnabled:scope=>${require}("RxZZ").CN(scope.get.bind(scope),${require}("eEqo").W().enabled)===true});`);
@@ -94,14 +98,20 @@
     };
     readChunk.urlFor = urlFor;
     readChunk.has = id => Boolean(hashes.get(String(id)));
+    readChunk.entryScripts = entries.map(url => url.split("/").at(-1));
     return readChunk;
+  }
+
+  function selectLayout(readChunk) {
+    return [desktop261111Chunks, currentChunks, chunks]
+      .find(layout => readChunk.has(layout.initial)) ?? chunks;
   }
 
   function prepare(html, read, existingReader) {
     try {
       const readChunk = existingReader ?? chunkReader(html, read);
       if (!readChunk) return { ok: false, reason: "not-rspack" };
-      const layout = readChunk.has(currentChunks.initial) ? currentChunks : chunks;
+      const layout = selectLayout(readChunk);
       const modules = Object.entries(layout).map(([kind, id]) => {
         const { url, source } = readChunk(id);
         const result = transform(source, kind, id);
@@ -150,7 +160,7 @@
     }
   }
 
-  const api = { transform, prepare, chunkReader, installModules };
+  const api = { transform, prepare, chunkReader, selectLayout, installModules };
   root.__cockpitPredictionRspack = api;
   if (typeof module === "object" && module.exports) module.exports = api;
 })();

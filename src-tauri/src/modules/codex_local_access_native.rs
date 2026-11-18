@@ -10,6 +10,7 @@ const NATIVE_SOFT_BINDING_LIMIT: usize = 65_536;
 static NATIVE_SYSTEM_PROXY_IO: std::sync::LazyLock<Arc<Semaphore>> =
     std::sync::LazyLock::new(|| Arc::new(Semaphore::new(1)));
 static NATIVE_API_RUNNING: AtomicBool = AtomicBool::new(false);
+static NATIVE_RESPONSE_TIMINGS_ENABLED: AtomicBool = AtomicBool::new(false);
 static NATIVE_PROFILE_RUNNING: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 static NATIVE_ACCOUNT_IO: std::sync::LazyLock<Arc<Semaphore>> =
@@ -208,6 +209,7 @@ struct NativeHostBridge {
     cooldowns: Mutex<HashMap<NativeCooldownKey, NativeCooldown>>,
     cooling_disabled: AtomicBool,
     clients: Mutex<NativeHttpClientCache>,
+    tls_roots: Arc<TokioMutex<Option<(Instant, Arc<rustls::RootCertStore>)>>>,
     system_proxy_cache: TokioMutex<Option<(Instant, Option<String>)>>,
     #[cfg(test)]
     routing_sequence: AtomicU64,
@@ -283,9 +285,11 @@ fn native_recorded_failure_cools_account(report: &native_contract::RequestReport
     if !report.success && !report.account_id.is_empty() && native_report_model_unavailable(report) {
         return true;
     }
+    // A generic upstream 404 can describe the requested resource or endpoint.
+    // Only a confirmed model-unavailable error gets the model's long cooldown.
     if report.success
         || report.account_id.is_empty()
-        || !matches!(report.status, 401 | 402 | 403 | 404 | 408 | 429 | 500..=599)
+        || !matches!(report.status, 401 | 402 | 403 | 408 | 429 | 500..=599)
     {
         return false;
     }
@@ -370,6 +374,11 @@ impl NativeHostBridge {
             return;
         }
         if !native_recorded_failure_cools_account(report) {
+            return;
+        }
+        if report.diagnostics.as_ref().and_then(|context| context.attempts.last())
+            .is_some_and(|attempt| attempt.account_id == report.account_id && attempt.confirmed_quota_cooldown_recorded)
+        {
             return;
         }
         if let Ok(mut cooldowns) = self.cooldowns.lock() {
@@ -559,7 +568,7 @@ fn native_scoped_account_ids(
 
 fn native_quota_allows(collection: &CodexLocalAccessCollection, account: &CodexAccount) -> bool {
     let now = now_ms();
-    if account_quota_cooldown(account, now).is_some_and(|snapshot| snapshot.active(now)) {
+    if pool_account_quota_cooldown(collection, account, now).is_some_and(|snapshot| snapshot.active(now)) {
         return false;
     }
     native_bound_quota_reserve_allows(collection, account)
@@ -716,6 +725,9 @@ fn native_account_model(account: &CodexAccount, model: &str) -> Option<String> {
 async fn native_load_accounts(
     ids: Vec<String>,
 ) -> Result<Vec<CodexAccount>, native_contract::ServiceError> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
     let permit = NATIVE_ACCOUNT_IO
         .clone()
         .acquire_owned()
@@ -723,8 +735,7 @@ async fn native_load_accounts(
         .map_err(|_| native_error(503, "service_unavailable", "Account reader is unavailable"))?;
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        ids.iter()
-            .filter_map(|id| codex_account::load_account(id))
+        codex_account::load_accounts_for_routing(&ids)
             .map(|mut account| {
                 if let Some(remote) = crate::modules::codex_remote_service::for_account(&account) {
                     for model in remote.image_models {
@@ -988,7 +999,13 @@ impl native_contract::Host for NativeHostBridge {
         Box::pin(async move {
             if self.selected_route_current(route).await {
                 if let Ok(mut states) = self.cooldowns.lock() {
-                    native_mark_quota_exhausted(&mut states, &route.account_id, retry_after, Instant::now());
+                    let now = Instant::now();
+                    if route.chatgpt {
+                        let key = native_oauth_quota_key(&route.account_id, &route.model);
+                        native_mark_quota_exhausted_at_key(&mut states, key, retry_after, now);
+                    } else {
+                        native_mark_quota_exhausted(&mut states, &route.account_id, retry_after, now);
+                    }
                 }
             }
         })
@@ -1274,6 +1291,20 @@ impl native_contract::Host for NativeHostBridge {
         context: NativeDiagnosticContext,
     ) -> futures_util::future::BoxFuture<'_, ()> {
         Box::pin(async move {
+            if let Some(prepare_ms) = context.initial_local_prepare_ms {
+                let debug_logs = self.collection_override.as_ref().map_or_else(
+                    || NATIVE_RESPONSE_TIMINGS_ENABLED.load(Ordering::Relaxed),
+                    |collection| collection.debug_logs,
+                );
+                if debug_logs {
+                    let upstream_ms = context.first_upstream_response_ms
+                        .map_or_else(|| "-".to_owned(), |elapsed| elapsed.to_string());
+                    logger::log_codex_api_info(&format!(
+                        "[NativeAPI] response timing request_id={} initial_local_prepare_ms={prepare_ms} dispatch_to_first_upstream_response_ms={upstream_ms}",
+                        context.request_id,
+                    ));
+                }
+            }
             native_record_diagnostic(context);
         })
     }
@@ -1570,6 +1601,7 @@ impl native_contract::Host for NativeHostBridge {
                     client_instance_id: diagnostics.and_then(|d| d.client_instance_id.as_deref()),
                     first_response_ms: diagnostics.and_then(|d| d.first_response_ms),
                     output_generation_ms: diagnostics.and_then(|d| d.output_generation_ms),
+                    input_text_characters: report.input_text_characters,
                     service_tier: report
                         .response_service_tier
                         .as_deref()
@@ -1685,6 +1717,7 @@ mod native_host_tests {
     include!("codex_local_access_tests_native_cooling_continuation.rs");
     include!("codex_local_access_tests_native_quota_continuation.rs");
     include!("codex_local_access_tests_native_quota_http.rs");
+    include!("codex_local_access_tests_native_pool_timing.rs");
     include!("codex_local_access_tests_native_reserve.rs");
     include!("codex_local_access_tests_native_automatic.rs");
     include!("codex_local_access_tests_native_parity22.rs");

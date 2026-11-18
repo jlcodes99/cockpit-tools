@@ -4,6 +4,113 @@ use std::path::Path;
 
 pub(crate) const FILE_NAME: &str = "cockpit-native-speed-models.json";
 const MANAGED_FILE: &str = "cockpit-model-catalog.json";
+const API_PROVIDER: &str = "codex_local_access";
+const API_KEY_DISCOVERY: &str = "api_key_model_discovery";
+const MANAGED_DISCOVERY_COMMENT: &str = "# Cockpit Tools API Service";
+
+pub(crate) fn remove_managed_api_service_discovery(doc: &mut toml_edit::Document) -> bool {
+    let Some(features) = doc.get_mut("features").and_then(|item| item.as_table_like_mut()) else {
+        return false;
+    };
+    let owned = features
+        .get(API_KEY_DISCOVERY)
+        .and_then(toml_edit::Item::as_value)
+        .is_some_and(|value| {
+            value.as_bool() == Some(true)
+                && value
+                    .decor()
+                    .suffix()
+                    .and_then(toml_edit::RawString::as_str)
+                    .is_some_and(|suffix| suffix.trim() == MANAGED_DISCOVERY_COMMENT)
+        });
+    if owned {
+        features.remove(API_KEY_DISCOVERY);
+    }
+    owned
+}
+
+fn managed_catalog_url(doc: &toml_edit::Document) -> Option<String> {
+    if doc.get("model_provider")?.as_str()? != API_PROVIDER {
+        return None;
+    }
+    let base = doc.get("model_providers")?.get(API_PROVIDER)?.get("base_url")?.as_str()?;
+    let url = reqwest::Url::parse(base).ok()?;
+    if !matches!(url.scheme(), "http" | "https")
+        || !matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"))
+        || url.query().is_some() || url.fragment().is_some()
+        || !url.username().is_empty() || url.password().is_some()
+    {
+        return None;
+    }
+    Some(format!("{}/models", url.as_str().trim_end_matches('/')))
+}
+
+pub(crate) fn uses_dynamic_api_service_catalog(doc: &toml_edit::Document) -> bool {
+    managed_catalog_url(doc).is_some_and(|url| {
+        doc.get("model_providers")
+            .and_then(|providers| providers.get(API_PROVIDER))
+            .and_then(|provider| provider.get("model_catalog_url"))
+            .and_then(|value| value.as_str()) == Some(url.as_str())
+    })
+}
+
+pub(crate) fn prepare_dynamic_api_service_catalog(
+    base_dir: &Path,
+    supported_client: impl FnOnce() -> bool,
+) -> Result<(), String> {
+    let mut doc = read_doc(base_dir)?;
+    let Some(url) = managed_catalog_url(&doc) else { return Ok(()) };
+    let owned_url = uses_dynamic_api_service_catalog(&doc);
+    if let Some(reference) = doc.get("model_catalog_json").and_then(|v| v.as_str()) {
+        if reference != MANAGED_FILE && Path::new(reference) != base_dir.join(MANAGED_FILE) {
+            return Ok(());
+        }
+    }
+    let configured_url = doc["model_providers"][API_PROVIDER].get("model_catalog_url");
+    if configured_url.is_some() && !owned_url {
+        return Ok(());
+    }
+    let discovery = doc
+        .get("features")
+        .and_then(|features| features.get(API_KEY_DISCOVERY))
+        .and_then(|flag| flag.as_bool());
+    let use_dynamic = base_dir.join(MANAGED_FILE).is_file()
+        && !crate::modules::codex_account::has_saved_experimental_model_definitions(base_dir)
+        && discovery != Some(false)
+        && supported_client();
+    if use_dynamic {
+        // Desktop can turn off the rollout default at runtime. The bundled app
+        // server respects an explicit profile value over that default.
+        if discovery.is_none() {
+            let mut enabled = toml_edit::Value::from(true);
+            enabled.decor_mut().set_suffix(format!(" {MANAGED_DISCOVERY_COMMENT}"));
+            let features = doc.entry("features").or_insert_with(toml_edit::table);
+            if let Some(inline) = features.as_inline_table() {
+                *features = toml_edit::Item::Table(inline.clone().into_table());
+            }
+            let features = features
+                .as_table_mut()
+                .ok_or("Codex features 不是 TOML 表")?;
+            if features.get(API_KEY_DISCOVERY).is_none() {
+                features.insert(API_KEY_DISCOVERY, toml_edit::Item::Value(enabled));
+            }
+        }
+        doc["model_providers"][API_PROVIDER]["model_catalog_url"] = toml_edit::value(url);
+        doc.remove("model_catalog_json");
+    } else if owned_url {
+        remove_managed_api_service_discovery(&mut doc);
+        if let Some(table) = doc["model_providers"][API_PROVIDER].as_table_like_mut() {
+            table.remove("model_catalog_url");
+        }
+        if base_dir.join(MANAGED_FILE).is_file() {
+            doc["model_catalog_json"] = toml_edit::value(MANAGED_FILE);
+        }
+    } else {
+        return Ok(());
+    }
+    let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
+    crate::modules::codex_config_format::write_codex_config_toml_atomic(&base_dir.join("config.toml"), &content)
+}
 
 pub(crate) fn is_reference(base_dir: &Path, reference: &str) -> bool {
     reference.trim() == FILE_NAME || Path::new(reference.trim()) == base_dir.join(FILE_NAME)
@@ -97,6 +204,9 @@ pub(crate) fn prepare_managed_catalog(base_dir: &Path) -> Result<(), String> {
     clear_reference(base_dir)?;
     let path = base_dir.join(MANAGED_FILE);
     if path.is_file() {
+        if let Err(error) = crate::modules::codex_account::rebuild_stale_managed_model_catalog(base_dir) {
+            crate::modules::logger::log_warn(&format!("[Codex模型目录] 启动校验未重建目录: {error}"));
+        }
         let mut changed = false;
         crate::modules::atomic_write::update_string_atomic(&path, |current| {
             let current = current.ok_or("受管模型目录已被移除")?;
@@ -176,6 +286,53 @@ mod tests {
             {"slug":"gpt-6-astra","additional_speed_tiers":["fast","ultrafast"],
              "service_tiers":[{"id":"ultrafast","name":"Upstream Ultrafast"}]}
         ]})
+    }
+
+    #[test]
+    fn dynamic_api_service_catalog_preserves_static_file_for_older_clients() {
+        let dir = tempfile::tempdir().unwrap();
+        let profile = dir.path();
+        fs::write(profile.join(MANAGED_FILE), r#"{"models":[]}"#).unwrap();
+        fs::write(profile.join("config.toml"), format!(
+            "model = 'gpt-6.1-sol'\nfeatures = {{ shell_tool = false }}\nmodel_provider = '{API_PROVIDER}'\nmodel_catalog_json = '{MANAGED_FILE}'\n[model_providers.{API_PROVIDER}]\nbase_url = 'http://127.0.0.1:2783/v1'\n"
+        )).unwrap();
+        prepare_dynamic_api_service_catalog(profile, || true).unwrap();
+        let doc = read_doc(profile).unwrap();
+        assert!(uses_dynamic_api_service_catalog(&doc));
+        assert_eq!(doc["features"][API_KEY_DISCOVERY].as_bool(), Some(true));
+        assert!(doc.get("model_catalog_json").is_none());
+        assert_eq!(doc["model"].as_str(), Some("gpt-6.1-sol"));
+        assert!(profile.join(MANAGED_FILE).exists());
+
+        prepare_dynamic_api_service_catalog(profile, || false).unwrap();
+        let doc = read_doc(profile).unwrap();
+        assert!(!uses_dynamic_api_service_catalog(&doc));
+        assert!(doc["features"].get(API_KEY_DISCOVERY).is_none());
+        assert_eq!(doc["features"]["shell_tool"].as_bool(), Some(false));
+        assert_eq!(doc["model_catalog_json"].as_str(), Some(MANAGED_FILE));
+
+        fs::write(profile.join("config.toml"), format!(
+            "model_provider = '{API_PROVIDER}'\nmodel_catalog_json = 'my-own.json'\n[model_providers.{API_PROVIDER}]\nbase_url = 'http://127.0.0.1:2783/v1'\n"
+        )).unwrap();
+        prepare_dynamic_api_service_catalog(profile, || panic!("custom catalog does not need a capability probe")).unwrap();
+        assert_eq!(read_doc(profile).unwrap()["model_catalog_json"].as_str(), Some("my-own.json"));
+    }
+
+    #[test]
+    fn dynamic_api_service_catalog_respects_explicit_feature_values() {
+        let dir = tempfile::tempdir().unwrap();
+        let profile = dir.path();
+        fs::write(profile.join(MANAGED_FILE), r#"{"models":[]}"#).unwrap();
+        for enabled in [false, true] {
+            fs::write(profile.join("config.toml"), format!(
+                "model_provider = '{API_PROVIDER}'\nmodel_catalog_json = '{MANAGED_FILE}'\n[features]\n{API_KEY_DISCOVERY} = {enabled}\n[model_providers.{API_PROVIDER}]\nbase_url = 'http://127.0.0.1:2783/v1'\n"
+            )).unwrap();
+            prepare_dynamic_api_service_catalog(profile, || true).unwrap();
+            let mut doc = read_doc(profile).unwrap();
+            assert_eq!(uses_dynamic_api_service_catalog(&doc), enabled);
+            assert!(!remove_managed_api_service_discovery(&mut doc));
+            assert_eq!(doc["features"][API_KEY_DISCOVERY].as_bool(), Some(enabled));
+        }
     }
 
     #[test]

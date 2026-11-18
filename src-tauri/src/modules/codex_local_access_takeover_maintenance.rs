@@ -158,6 +158,130 @@ fn profile_still_owned_for_collection(
     )
 }
 
+fn sync_owned_oauth_profile_websockets(
+    profile_dir: &Path,
+    collection: &CodexLocalAccessCollection,
+) -> Result<(), String> {
+    if !collection.enabled {
+        return Ok(());
+    }
+    let config_path = profile_config_path(profile_dir);
+    if read_optional_profile_file(&profile_dir.join(TAKEOVER_OWNERSHIP_FILE))?.is_none() {
+        return Ok(());
+    }
+    let _lease = codex_account::try_acquire_profile_mutation_lease(
+        profile_dir,
+        "api-profile-websocket-sync",
+    )?;
+    let Some(config) = read_optional_profile_file(&config_path)? else {
+        return Ok(());
+    };
+    let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&config)?;
+    if recorded_takeover_ownership_matches(profile_dir, &doc)? != Some(true) {
+        return Ok(());
+    }
+    let provider = &doc["model_providers"][CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID];
+    if !profile_base_url_matches(
+        provider.get("base_url").and_then(|item| item.as_str()),
+        &build_collection_base_url(collection),
+    ) || provider
+        .get("experimental_bearer_token")
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        != Some(collection.api_key.trim())
+        || !read_optional_profile_file(&profile_auth_path(profile_dir))?
+            .as_deref()
+            .is_some_and(is_codex_oauth_auth_text)
+    {
+        return Ok(());
+    }
+
+    let supports_websockets = profile_api_key_supports_websockets(collection, &collection.api_key);
+    let catalog_path = doc
+        .get("model_catalog_json")
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        .filter(|name| is_cockpit_managed_model_catalog_name(name))
+        .map(|name| profile_dir.join(name));
+    let catalog_update = if let Some(path) = catalog_path {
+        updated_profile_websocket_catalog(&path, supports_websockets)?
+            .map(|content| (path, content))
+    } else {
+        None
+    };
+    let provider = &mut doc["model_providers"][CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID];
+    let config_changed = provider["supports_websockets"].as_bool() != Some(supports_websockets);
+    if !config_changed && catalog_update.is_none() {
+        return Ok(());
+    }
+
+    invalidate_codex_model_cache(profile_dir)?;
+    if config_changed {
+        provider["supports_websockets"] = value(supports_websockets);
+        let updated = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
+        crate::modules::codex_config_format::write_codex_config_toml_atomic(
+            &config_path,
+            &updated,
+        )?;
+    }
+    if let Some((path, content)) = catalog_update {
+        let refresh_meta =
+            !crate::modules::codex_managed_model_catalog_version::managed_catalog_needs_rebuild(
+                &path,
+            );
+        if let Err(error) = write_string_atomic(&path, &content) {
+            if config_changed {
+                crate::modules::codex_config_format::write_codex_config_toml_atomic(
+                    &config_path,
+                    &config,
+                )
+                .map_err(|rollback| {
+                    format!("更新 Codex 模型目录失败: {error}；恢复配置失败: {rollback}")
+                })?;
+            }
+            return Err(error);
+        }
+        if refresh_meta {
+            if let Err(error) =
+                crate::modules::codex_managed_model_catalog_version::write_managed_catalog_meta(
+                    &path,
+                )
+            {
+                logger::log_codex_api_warn(&format!("更新 Codex 模型目录版本戳失败: {error}"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn updated_profile_websocket_catalog(
+    path: &Path,
+    supports_websockets: bool,
+) -> Result<Option<String>, String> {
+    let Some(content) = read_optional_profile_file(path)? else {
+        return Ok(None);
+    };
+    let mut catalog: Value = serde_json::from_str(&content)
+        .map_err(|error| format!("解析 Codex 模型目录失败: {error}"))?;
+    let models = catalog
+        .get_mut("models")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| "Codex 模型目录缺少 models 列表".to_string())?;
+    let mut changed = false;
+    for model in models {
+        let model = model
+            .as_object_mut()
+            .ok_or_else(|| "Codex 模型目录包含无效模型".to_string())?;
+        if model.get("prefer_websockets").and_then(Value::as_bool) != Some(supports_websockets) {
+            model.insert("prefer_websockets".to_owned(), json!(supports_websockets));
+            changed = true;
+        }
+    }
+    changed
+        .then(|| serde_json::to_string_pretty(&catalog).map_err(|error| error.to_string()))
+        .transpose()
+}
+
 fn maintain_local_access_profile(
     profile_dir: &Path,
     collection: &CodexLocalAccessCollection,
@@ -184,7 +308,9 @@ fn maintain_local_access_profile(
                 && doc
                     .get("model_catalog_json")
                     .and_then(|item| item.as_str())
-                    .is_some_and(is_cockpit_managed_model_catalog_name)
+                    .is_some_and(|reference| {
+                        codex_account::catalog_ref_targets_cockpit_managed_file(reference, profile_dir)
+                    })
         }
     };
     if !owned {

@@ -145,7 +145,15 @@ function isCursorEnterpriseAccount(account: CursorAccount): boolean {
 }
 
 function resolveCursorPlanLabel(account: CursorAccount): string {
-  return account.membership_type?.trim() || account.plan_type?.trim() || 'Unknown';
+  const label = account.membership_type?.trim() || account.plan_type?.trim() || 'Unknown';
+  switch (label.toLowerCase()) {
+    case 'unified_ultra':
+      return 'X Ultra';
+    case 'super':
+      return 'Super';
+    default:
+      return label;
+  }
 }
 
 export function getCursorPlanBadge(account: CursorAccount): CursorPlanBadge {
@@ -179,6 +187,8 @@ export function getCursorPlanBadgeClass(
   const normalized = normalizeCursorMembershipType(planType);
   switch (normalized) {
     case 'ultra':
+    case 'unified_ultra':
+    case 'super':
       return 'ultra';
     case 'enterprise':
       return account && !isCursorEnterpriseAccount(account) ? 'team' : 'enterprise';
@@ -187,8 +197,6 @@ export function getCursorPlanBadgeClass(
       return 'plus';
     case 'premium':
       return 'pro';
-    case 'super':
-      return 'ultra';
     case 'pro':
     case 'free_trial':
       return 'pro';

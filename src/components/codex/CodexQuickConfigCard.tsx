@@ -13,6 +13,8 @@ import type { CodexExperimentalModelDefinition, CodexQuickConfig } from '../../t
 import { getCodexExperimentalModelErrorMessage } from '../../utils/codexExperimentalModel';
 import { resolveStoredCompactLimitInput } from '../../utils/codexModelContext';
 import { CodexContextManagementControl } from './CodexContextManagementControl';
+import { CodexModelInstructionsSetting } from './CodexModelInstructionsSetting';
+import { CodexSubagentDefaultsSetting } from './CodexSubagentDefaultsSetting';
 import { CodexContextOverrideEditor } from './CodexContextOverrideEditor';
 import { CodexExperimentalModelEditor } from './CodexExperimentalModelEditor';
 
@@ -212,6 +214,8 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
           </div>
 
           <CodexContextManagementControl variant="settings" />
+          <CodexModelInstructionsSetting />
+          <CodexSubagentDefaultsSetting modelIds={models.map((model) => model.model_id)} />
 
           {loading ? (
             <div className="section-desc">{t('common.loading')}</div>

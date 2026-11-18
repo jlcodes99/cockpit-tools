@@ -91,6 +91,7 @@ interface RawCodexWakeupHistoryItem {
   accountEmail: string;
   accountContextText?: string;
   success: boolean;
+  httpStatus?: number;
   prompt?: string;
   model?: string;
   modelDisplayName?: string;
@@ -267,6 +268,7 @@ function fromRawHistoryItem(raw: RawCodexWakeupHistoryItem): CodexWakeupHistoryI
     account_email: raw.accountEmail,
     account_context_text: raw.accountContextText,
     success: raw.success,
+    http_status: raw.httpStatus,
     prompt: raw.prompt,
     model: raw.model,
     model_display_name: raw.modelDisplayName,

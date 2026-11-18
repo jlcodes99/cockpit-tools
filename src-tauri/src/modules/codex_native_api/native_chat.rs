@@ -368,11 +368,11 @@ async fn forward_with_policy(
             .as_ref()
             .and_then(|value| value.get("usage"))
             .map(normalize_usage);
-        tracker.payload(
+        tracker.payload_with(
             "upstream_response",
             "http",
             &headers,
-            &String::from_utf8_lossy(&bytes),
+            || String::from_utf8_lossy(&bytes),
         );
         tracker
             .complete(

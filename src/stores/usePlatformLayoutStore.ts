@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { ALL_PLATFORM_IDS, isMenuVisiblePlatform, MENU_VISIBLE_PLATFORM_IDS, PlatformId } from '../types/platform';
 import { persistPlatformLayout, readPlatformLayout } from '../utils/uiPreferences';
-import { CLASSIC_SIDEBAR_ENTRY_LIMIT } from './useSideNavLayoutStore';
 
 const LEGACY_TRAY_CORE_IDS: PlatformId[] = ['antigravity', 'codex', 'github-copilot', 'windsurf'];
 const TRAY_MIGRATED_PLATFORM_IDS: PlatformId[] = [
@@ -423,7 +422,8 @@ function mergeAntigravityLayoutEntries(raw: PersistedPlatformLayout): PersistedP
   const idePlatformEntry = makePlatformEntryId('antigravity_ide');
   const remap = (entries?: PlatformLayoutEntryId[]) => Array.isArray(entries)
     ? [...new Set(entries.map((entry) =>
-      entry === appPlatformEntry || entry === idePlatformEntry || (removedIdeGroup && entry === ideEntry)
+      entry === appPlatformEntry
+        || entry === idePlatformEntry || (removedIdeGroup && entry === ideEntry)
         ? targetEntry : entry,
     ))]
     : undefined;
@@ -461,7 +461,11 @@ function mergeAntigravityLayoutEntries(raw: PersistedPlatformLayout): PersistedP
     orderedPlatformIds: remapLegacy(raw.orderedPlatformIds),
     orderedEntryIds: remap(raw.orderedEntryIds),
     hiddenEntryIds: remap(raw.hiddenEntryIds),
-    sidebarEntryIds: remap(raw.sidebarEntryIds),
+    sidebarEntryIds: Array.isArray(raw.sidebarEntryIds)
+      ? [...new Set(raw.sidebarEntryIds.map((entry) =>
+        entry === idePlatformEntry || (removedIdeGroup && entry === ideEntry) ? targetEntry : entry,
+      ))]
+      : undefined,
     hiddenPlatformIds: remapLegacy(raw.hiddenPlatformIds),
     sidebarPlatformIds: remapLegacy(raw.sidebarPlatformIds),
     apiRelayEntryOrder: typeof raw.apiRelayEntryOrder === 'number' && Array.isArray(raw.orderedEntryIds)
@@ -535,7 +539,7 @@ function defaultSidebarEntryIds(
   groups: PlatformLayoutGroup[],
   orderedEntryIds = buildEntryOrderFromPlatformOrder(defaultPlatformOrder(), groups),
 ): PlatformLayoutEntryId[] {
-  return orderedEntryIds.slice(0, CLASSIC_SIDEBAR_ENTRY_LIMIT - 1);
+  return orderedEntryIds.slice(0, 5);
 }
 
 function defaultSidebarPlatformIds(): PlatformId[] {
@@ -991,33 +995,15 @@ function normalizeHiddenEntryIds(
 function normalizeSidebarEntryIds(
   rawSidebarEntryIds: unknown,
   orderedEntryIds: PlatformLayoutEntryId[],
-  _hiddenEntryIds: PlatformLayoutEntryId[],
   groups: PlatformLayoutGroup[],
   legacySidebarPlatformIds: PlatformId[],
 ): PlatformLayoutEntryId[] {
-  const normalized = normalizeEntryVisibilityList(rawSidebarEntryIds, orderedEntryIds, groups);
-  if (normalized.length > 0) {
-    return normalized;
-  }
-
   if (Array.isArray(rawSidebarEntryIds)) {
-    const rawItems = rawSidebarEntryIds.filter((item): item is string => typeof item === 'string');
-    if (rawItems.length === 0) {
-      return [];
-    }
-
-    const isLegacyPlatformEntryList = rawItems.every((entryId) => {
-      const platformId = parsePlatformEntryId(entryId);
-      if (!platformId) {
-        return false;
-      }
-      const resolvedEntryId = resolveEntryIdForPlatform(platformId, groups);
-      return resolvedEntryId !== entryId;
-    });
-
-    if (!isLegacyPlatformEntryList) {
-      return [];
-    }
+    const availableEntryIds = [
+      ...orderedEntryIds,
+      ...groups.flatMap((group) => group.platformIds.filter(isMenuVisiblePlatform).map(makePlatformEntryId)),
+    ];
+    return normalizeEntryVisibilityList(rawSidebarEntryIds, availableEntryIds, groups);
   }
 
   const fallback = deriveEntryVisibilityFromLegacyPlatforms(
@@ -1210,7 +1196,6 @@ function normalizeStateData(
   const sidebarEntryIds = normalizeSidebarEntryIds(
     raw.sidebarEntryIds,
     orderedEntryIds,
-    hiddenEntryIds,
     platformGroups,
     normalizeSidebar(raw.sidebarPlatformIds, []),
   );
@@ -1300,7 +1285,6 @@ function loadPersistedState(): NormalizedLayoutStateData {
     const sidebarEntryIds = normalizeSidebarEntryIds(
       parsed.sidebarEntryIds,
       orderedEntryIds,
-      hiddenEntryIds,
       platformGroups,
       sidebarPlatformIds,
     );
@@ -1812,7 +1796,6 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
       normalizedGroups,
       get().orderedPlatformIds,
     );
-
     const next = normalizeStateData({
       orderedPlatformIds,
       hiddenPlatformIds: get().hiddenPlatformIds,

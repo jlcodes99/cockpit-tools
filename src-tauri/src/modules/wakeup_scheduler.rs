@@ -15,10 +15,10 @@ const RESET_TRIGGER_COOLDOWN_MS: i64 = 10 * 60 * 1000;
 const RESET_SAFETY_MARGIN_MS: i64 = 2 * 60 * 1000;
 const WAKEUP_TASKS_FILE: &str = "wakeup_tasks.json";
 
-#[path = "antigravity_wakeup_store.rs"]
-mod store;
 #[path = "antigravity_wakeup_quota_refresh.rs"]
 mod quota_refresh;
+#[path = "antigravity_wakeup_store.rs"]
+mod store;
 static RULES_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,6 +73,8 @@ pub struct ScheduleConfig {
     pub selected_accounts: Vec<String>,
     pub crontab: Option<String>,
     pub wake_on_reset: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weekly_reset_only: Option<bool>,
     pub custom_prompt: Option<String>,
     pub max_output_tokens: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -110,6 +112,7 @@ pub struct ScheduleConfigNormalized {
     pub selected_accounts: Vec<String>,
     pub crontab: Option<String>,
     pub wake_on_reset: bool,
+    pub weekly_reset_only: bool,
     pub custom_prompt: Option<String>,
     pub max_output_tokens: i32,
     pub transport_mode: Option<modules::wakeup::WakeupTransportMode>,
@@ -127,6 +130,13 @@ struct ResetState {
     last_reset_trigger_timestamps: HashMap<String, String>,
     last_reset_trigger_at: HashMap<String, i64>,
     last_reset_remaining: HashMap<String, i32>,
+    #[serde(default)]
+    weekly_reset_boundaries: HashMap<String, i64>,
+}
+
+enum WakeupTargets {
+    Models(Vec<String>),
+    WeeklyReset(HashMap<String, (String, String)>),
 }
 
 #[derive(Default, Clone)]
@@ -229,6 +239,7 @@ fn apply_state(config: &PersistedWakeupState, runtime: HashMap<String, store::Ru
         let previous = guard.reset_states.entry(id).or_default();
         previous.last_reset_trigger_timestamps = row.reset.last_reset_trigger_timestamps;
         previous.last_reset_trigger_at = row.reset.last_reset_trigger_at;
+        previous.weekly_reset_boundaries = row.reset.weekly_reset_boundaries;
         previous
             .last_reset_remaining
             .extend(row.reset.last_reset_remaining);
@@ -368,6 +379,7 @@ fn normalize_schedule(raw: ScheduleConfig) -> ScheduleConfigNormalized {
         selected_accounts: raw.selected_accounts,
         crontab: raw.crontab,
         wake_on_reset: raw.wake_on_reset.unwrap_or(false),
+        weekly_reset_only: raw.weekly_reset_only.unwrap_or(false),
         custom_prompt: raw.custom_prompt,
         max_output_tokens,
         transport_mode: raw.transport_mode,
@@ -978,6 +990,153 @@ fn mark_reset_triggered(state: &mut ResetState, model_key: &str, reset_at: &str)
         .insert(model_key.to_string(), chrono::Utc::now().timestamp_millis());
 }
 
+struct WeeklyResetTarget {
+    account_id: String,
+    model: String,
+    completed_boundary: i64,
+    next_boundary: Option<i64>,
+}
+
+fn observe_weekly_resets(
+    accounts: &[crate::models::Account],
+    schedule: &ScheduleConfigNormalized,
+    reset: &mut ResetState,
+    now: i64,
+) -> HashMap<String, WeeklyResetTarget> {
+    use modules::account::{model_summary_family, summary_bucket_window, SummaryWindow};
+    use modules::quota::summary_bucket_family;
+
+    let models: Vec<_> = schedule
+        .selected_models
+        .iter()
+        .filter_map(|model| model_summary_family(model).map(|family| (model, family)))
+        .collect();
+    let mut due = HashMap::new();
+    for email in &schedule.selected_accounts {
+        let Some(account) = accounts
+            .iter()
+            .find(|account| account.email.eq_ignore_ascii_case(email))
+        else {
+            continue;
+        };
+        let Some(quota) = account
+            .quota
+            .as_ref()
+            .filter(|quota| !quota.quota_summary_stale && !quota.is_forbidden)
+        else {
+            continue;
+        };
+        for (model, family) in &models {
+            let Some((remaining, reported_boundary)) = quota
+                .models
+                .iter()
+                .filter(|bucket| {
+                    summary_bucket_family(&bucket.name) == Some(*family)
+                        && summary_bucket_window(&bucket.name) == Some(SummaryWindow::Weekly)
+                })
+                .filter_map(|bucket| {
+                    let boundary = if bucket.reset_time.is_empty() {
+                        None
+                    } else {
+                        Some(
+                            DateTime::parse_from_rfc3339(&bucket.reset_time)
+                                .ok()?
+                                .timestamp_millis(),
+                        )
+                    };
+                    Some((bucket.percentage, boundary))
+                })
+                .min()
+            else {
+                continue;
+            };
+            let next_boundary = reported_boundary.filter(|boundary| *boundary > now);
+            let key = serde_json::json!([account.id, model]).to_string();
+            let Some(previous) = reset.weekly_reset_boundaries.get(&key).copied() else {
+                if let Some(boundary) = next_boundary {
+                    reset.weekly_reset_boundaries.insert(key, boundary);
+                }
+                continue;
+            };
+            let already_claimed = reset
+                .last_reset_trigger_timestamps
+                .get(&key)
+                .is_some_and(|claimed| claimed == &previous.to_string());
+            if previous > now || already_claimed {
+                // An adjusted future deadline does not signal a completed reset.
+                if let Some(boundary) = next_boundary {
+                    reset.weekly_reset_boundaries.insert(key, boundary);
+                }
+            } else if quota.quota_summary_updated_at.unwrap_or(quota.last_updated)
+                >= previous.div_euclid(1000)
+                && (next_boundary.is_some() || remaining == 100)
+            {
+                due.insert(
+                    key,
+                    WeeklyResetTarget {
+                        account_id: account.id.clone(),
+                        model: (*model).clone(),
+                        completed_boundary: previous,
+                        next_boundary,
+                    },
+                );
+            }
+        }
+    }
+    due
+}
+
+async fn handle_weekly_reset_task(app: &AppHandle, task: &WakeupTask, now: i64, can_run: bool) {
+    let expected = task.clone();
+    let plan = tauri::async_runtime::spawn_blocking(move || {
+        let accounts = modules::list_accounts()?;
+        let _rules = lock_or_recover(&RULES_LOCK, "wakeup rules lock");
+        let mut guard = lock_or_recover(state(), "wakeup state lock");
+        if !task_rule_is_current(&guard, &expected) || guard.running_tasks.contains(&expected.id) {
+            return Ok(None);
+        }
+        let mut reset = guard
+            .reset_states
+            .get(&expected.id)
+            .cloned()
+            .unwrap_or_default();
+        let previous_boundaries = reset.weekly_reset_boundaries.clone();
+        let due = observe_weekly_resets(&accounts, &expected.schedule, &mut reset, now);
+        if previous_boundaries != reset.weekly_reset_boundaries {
+            wakeup_store()?.save_weekly_boundaries(&expected.id, &reset.weekly_reset_boundaries)?;
+            guard.reset_states.insert(expected.id, reset.clone());
+        }
+        if !can_run || due.is_empty() {
+            return Ok(None);
+        }
+        let mut pairs = HashMap::new();
+        for (key, target) in due {
+            mark_reset_triggered(&mut reset, &key, &target.completed_boundary.to_string());
+            if let Some(boundary) = target.next_boundary {
+                reset.weekly_reset_boundaries.insert(key.clone(), boundary);
+            }
+            pairs.insert(key, (target.account_id, target.model));
+        }
+        Ok::<_, String>(Some((WakeupTargets::WeeklyReset(pairs), reset)))
+    })
+    .await
+    .map_err(|error| error.to_string())
+    .and_then(|result| result);
+    match plan {
+        Ok(Some((targets, reset))) => {
+            let app = app.clone();
+            let task = task.clone();
+            tauri::async_runtime::spawn(async move {
+                run_task_with_models(&app, &task, "quota_reset", targets, None, Some(reset)).await;
+            });
+        }
+        Ok(None) => {}
+        Err(error) => {
+            modules::logger::log_warn(&format!("[WakeupTasks] 检查周配额重置失败: {error}"));
+        }
+    }
+}
+
 async fn run_scheduler_once(app: &AppHandle) {
     let snapshot = {
         let guard = lock_or_recover(state(), "wakeup state lock");
@@ -1007,7 +1166,7 @@ async fn run_scheduler_once(app: &AppHandle) {
         }
 
         if task.schedule.wake_on_reset {
-            handle_quota_reset_task(app, task, now);
+            handle_quota_reset_task(app, task, now).await;
             continue;
         }
 
@@ -1050,8 +1209,8 @@ async fn run_scheduler_once(app: &AppHandle) {
     }
 }
 
-fn handle_quota_reset_task(app: &AppHandle, task: &WakeupTask, now: DateTime<Local>) {
-    if task.schedule.time_window_enabled {
+async fn handle_quota_reset_task(app: &AppHandle, task: &WakeupTask, now: DateTime<Local>) {
+    let can_run = if task.schedule.time_window_enabled {
         let in_window = is_in_time_window(
             task.schedule.time_window_start.as_ref(),
             task.schedule.time_window_end.as_ref(),
@@ -1060,9 +1219,16 @@ fn handle_quota_reset_task(app: &AppHandle, task: &WakeupTask, now: DateTime<Loc
         let in_fallback_time = task.schedule.fallback_times.iter().any(|time| {
             parse_time_to_minutes(time) == Some((now.hour() as i32) * 60 + now.minute() as i32)
         });
-        if !in_window && !in_fallback_time {
-            return;
-        }
+        in_window || in_fallback_time
+    } else {
+        true
+    };
+    if task.schedule.weekly_reset_only {
+        handle_weekly_reset_task(app, task, now.timestamp_millis(), can_run).await;
+        return;
+    }
+    if !can_run {
+        return;
     }
 
     let accounts = match modules::list_accounts() {
@@ -1131,7 +1297,7 @@ fn handle_quota_reset_task(app: &AppHandle, task: &WakeupTask, now: DateTime<Loc
                 &app_handle,
                 &task_clone,
                 "quota_reset",
-                models,
+                WakeupTargets::Models(models),
                 None,
                 Some(candidate),
             )
@@ -1184,7 +1350,7 @@ async fn run_task(app: &AppHandle, task: &WakeupTask, trigger_source: &str, due_
         app,
         task,
         trigger_source,
-        task.schedule.selected_models.clone(),
+        WakeupTargets::Models(task.schedule.selected_models.clone()),
         due_at,
         None,
     )
@@ -1263,7 +1429,7 @@ pub async fn execute_pending_confirmation(app: &AppHandle, task_id: &str) -> Res
             app,
             &pending.task,
             &pending.trigger_source,
-            pending.task.schedule.selected_models.clone(),
+            WakeupTargets::Models(pending.task.schedule.selected_models.clone()),
             pending.due_at,
             None,
         )
@@ -1332,11 +1498,15 @@ async fn run_task_with_models(
     app: &AppHandle,
     task: &WakeupTask,
     trigger_source: &str,
-    mut models: Vec<String>,
+    targets: WakeupTargets,
     due_at: Option<i64>,
     reset: Option<ResetState>,
 ) {
-    if models.is_empty() {
+    let mut keys = match &targets {
+        WakeupTargets::Models(models) => models.clone(),
+        WakeupTargets::WeeklyReset(pairs) => pairs.keys().cloned().collect(),
+    };
+    if keys.is_empty() {
         return;
     }
 
@@ -1392,7 +1562,7 @@ async fn run_task_with_models(
             due_at,
             claimed_at,
             reset.as_ref(),
-            &mut models,
+            &mut keys,
         )?;
         if !claimed {
             return Ok(None);
@@ -1402,12 +1572,12 @@ async fn run_task_with_models(
         if let Some(reset) = reset {
             guard.reset_states.insert(expected.id, reset);
         }
-        Ok::<_, String>(Some((claimed_at, models)))
+        Ok::<_, String>(Some((claimed_at, keys)))
     })
     .await
     .map_err(|error| error.to_string())
     .and_then(|result| result);
-    let (claimed_at, models) = match result {
+    let (claimed_at, keys) = match result {
         Ok(Some(run)) => run,
         Ok(None) => return,
         Err(error) => {
@@ -1433,7 +1603,14 @@ async fn run_task_with_models(
     let mut history: Vec<modules::wakeup_history::WakeupHistoryItem> = Vec::new();
     let mut successful_accounts = HashSet::new();
     for account in &selected_accounts {
-        for model in &models {
+        for key in &keys {
+            let model = match &targets {
+                WakeupTargets::Models(_) => key,
+                WakeupTargets::WeeklyReset(pairs) => match pairs.get(key) {
+                    Some((id, model)) if *id == account.id => model,
+                    _ => continue,
+                },
+            };
             let started = chrono::Utc::now();
             let result = modules::wakeup::trigger_wakeup(
                 &account.id,
@@ -1544,4 +1721,116 @@ struct WakeupTaskResultPayload {
     records: Vec<modules::wakeup_history::WakeupHistoryItem>,
 }
 
-// (no local helpers)
+#[cfg(test)]
+mod weekly_reset_tests {
+    use super::*;
+    use crate::models::{Account, QuotaData, TokenData};
+
+    const START: i64 = 1_800_000_000_000;
+    const HOUR: i64 = 3_600_000;
+    const WEEK: i64 = 168 * HOUR;
+
+    fn account(id: &str, now: i64, buckets: &[(&str, i32, Option<i64>)]) -> Account {
+        let mut account = Account::new(
+            id.into(),
+            format!("{id}@example.test"),
+            TokenData::new("access".into(), "refresh".into(), 3600, None, None, None),
+        );
+        let mut quota = QuotaData::new();
+        quota.last_updated = now / 1000;
+        quota.quota_summary_updated_at = Some(quota.last_updated);
+        for (id, remaining, reset) in buckets {
+            let reset = reset
+                .map(|boundary| {
+                    chrono::Utc
+                        .timestamp_millis_opt(boundary)
+                        .unwrap()
+                        .to_rfc3339()
+                })
+                .unwrap_or_default();
+            quota.add_model((*id).into(), None, *remaining, reset);
+        }
+        account.quota = Some(quota);
+        account
+    }
+
+    fn schedule(models: &[&str], weekly: bool) -> ScheduleConfigNormalized {
+        let mut payload = serde_json::json!({
+            "repeatMode": "daily",
+            "wakeOnReset": true,
+            "selectedAccounts": ["a@example.test", "b@example.test"],
+            "selectedModels": models
+        });
+        if weekly {
+            payload["weeklyResetOnly"] = true.into();
+        }
+        normalize_schedule(serde_json::from_value(payload).unwrap())
+    }
+
+    #[test]
+    fn antigravity_wakeup_weekly_reset_uses_explicit_windows_per_account() {
+        let models = [
+            "gemini-4-hydrogen-high",
+            "claude-opus-5-5-high",
+            "gemini-4-argon-medium",
+            "gemini-4-carbon-low",
+        ];
+        assert!(!schedule(&models, false).weekly_reset_only);
+        let rule = schedule(&models, true);
+        assert!(rule.weekly_reset_only);
+
+        let deadline = START + 2 * HOUR;
+        let a_buckets = [
+            ("gemini-weekly", 20, Some(deadline)),
+            ("3p-weekly", 100, Some(deadline + HOUR)),
+            ("gemini-argon-wtu-weekly", 0, Some(deadline + HOUR)),
+            ("carbon:weekly", 50, Some(deadline + HOUR)),
+            ("gemini-5h", 100, Some(START + HOUR)),
+        ];
+        let mut accounts = [
+            account("a", START, &a_buckets),
+            account("b", START, &[("gemini:weekly", 90, Some(deadline + HOUR))]),
+        ];
+        let mut reset = ResetState::default();
+        assert!(observe_weekly_resets(&accounts, &rule, &mut reset, START).is_empty());
+        assert_eq!(reset.weekly_reset_boundaries.len(), 5);
+
+        let mut buckets = a_buckets;
+        buckets[4].2 = Some(deadline + HOUR);
+        accounts[0] = account("a", START + HOUR, &buckets);
+        assert!(observe_weekly_resets(&accounts, &rule, &mut reset, START + HOUR).is_empty());
+        assert!(observe_weekly_resets(&accounts, &rule, &mut reset, deadline).is_empty());
+
+        buckets[0] = ("gemini:weekly", 99, Some(deadline + WEEK));
+        accounts[0] = account("a", deadline, &buckets);
+        accounts[0].quota.as_mut().unwrap().quota_summary_stale = true;
+        assert!(observe_weekly_resets(&accounts, &rule, &mut reset, deadline).is_empty());
+        accounts[0].quota.as_mut().unwrap().quota_summary_stale = false;
+        let due = observe_weekly_resets(&accounts, &rule, &mut reset, deadline);
+        assert_eq!(due.len(), 1);
+        let wakeup = due.values().next().unwrap();
+        assert_eq!(
+            (
+                &*wakeup.account_id,
+                &*wakeup.model,
+                wakeup.completed_boundary,
+                wakeup.next_boundary
+            ),
+            ("a", models[0], deadline, Some(deadline + WEEK))
+        );
+
+        // A bucket can be full with no next deadline until the first request.
+        buckets[0] = ("gemini:weekly", 100, None);
+        accounts[0] = account("a", deadline, &buckets);
+        let due = observe_weekly_resets(&accounts, &rule, &mut reset, deadline);
+        let (key, wakeup) = due.iter().next().unwrap();
+        assert_eq!(wakeup.next_boundary, None);
+        mark_reset_triggered(&mut reset, key, &deadline.to_string());
+        assert!(observe_weekly_resets(&accounts, &rule, &mut reset, deadline).is_empty());
+
+        buckets[0].2 = Some(deadline + WEEK);
+        accounts[0] = account("a", deadline, &buckets);
+        assert!(observe_weekly_resets(&accounts, &rule, &mut reset, deadline).is_empty());
+        assert_eq!(reset.weekly_reset_boundaries[key], deadline + WEEK);
+    }
+}

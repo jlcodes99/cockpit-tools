@@ -3,7 +3,6 @@ import { isCodexLocalAccessEligibleAccount } from "./codexLocalAccessAccounts.ts
 
 interface SelectCodexApiKeyScopeAccountsOptions<T extends CodexAccount> {
   accounts: T[];
-  restrictFreeAccounts: boolean;
   scopedAccountIds: string[];
 }
 
@@ -11,7 +10,6 @@ interface ReconcileCodexApiKeyScopeAccountIdsOptions<
   T extends CodexAccount,
 > {
   accounts: T[];
-  restrictFreeAccounts: boolean;
   persistedAccountIds: string[];
   draftAccountIds: string[];
 }
@@ -25,7 +23,6 @@ interface IsCodexApiKeyScopeAccountActiveOptions {
 
 export function selectCodexApiKeyScopeAccounts<T extends CodexAccount>({
   accounts,
-  restrictFreeAccounts,
   scopedAccountIds,
 }: SelectCodexApiKeyScopeAccountsOptions<T>): T[] {
   const scopedIds = new Set(scopedAccountIds);
@@ -36,20 +33,18 @@ export function selectCodexApiKeyScopeAccounts<T extends CodexAccount>({
     seenIds.add(account.id);
 
     if (scopedIds.has(account.id)) return true;
-    return isCodexLocalAccessEligibleAccount(account, restrictFreeAccounts);
+    return isCodexLocalAccessEligibleAccount(account);
   });
 }
 
 export function reconcileCodexApiKeyScopeAccountIds<T extends CodexAccount>({
   accounts,
-  restrictFreeAccounts,
   persistedAccountIds,
   draftAccountIds,
 }: ReconcileCodexApiKeyScopeAccountIdsOptions<T>): string[] {
   const selectableAccountIds = new Set(
     selectCodexApiKeyScopeAccounts({
       accounts,
-      restrictFreeAccounts,
       scopedAccountIds: persistedAccountIds,
     }).map((account) => account.id),
   );

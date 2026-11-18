@@ -19,7 +19,7 @@ test('a preview opened from the startup cache shows loading and keeps close avai
   rendered.find(node => node.type === 'button' && node.props.children === 'common.close').props.onClick();
   assert.equal(preview.closed, 1);
 });
-function harness(mode: string, options: { actions?: any[]; instances?: any[]; loaded?: boolean; account?: any; save?: () => Promise<any>; refresh?: () => Promise<any>; latestAccount?: any; accounts?: any[]; imageLoaded?: boolean; imageModel?: string; execute?: (launchAfterSwitch: boolean, options?: any) => Promise<boolean | { projectStateDeferred: true }> } = {}) {
+function harness(mode: string, options: { actions?: any[]; instances?: any[]; loaded?: boolean; account?: any; save?: () => Promise<any>; refresh?: () => Promise<any>; backUp?: (account: any) => Promise<any>; latestAccount?: any; accounts?: any[]; imageLoaded?: boolean; imageModel?: string; execute?: (launchAfterSwitch: boolean, options?: any) => Promise<boolean | { projectStateDeferred: true }> } = {}) {
   let traps: any[] = [];
   let escapes: any[] = [];
   let closed = 0;
@@ -45,6 +45,7 @@ function harness(mode: string, options: { actions?: any[]; instances?: any[]; lo
     '../../services/codexInstanceService': { saveCodexInstanceQuickConfig: options.save ?? (async () => config),
       saveCodexInstanceConfiguration: async () => ({ quickConfig: config, instance: { id: '__default__' } }) },
     '../../services/codexService': { forceRefreshCodexTokens: options.refresh ?? (async () => options.account) },
+    '../../services/scheduledBackupService': { backUpRefreshedCodexAccount: options.backUp ?? (async () => null) },
     '../../services/codexLaunchPreviewConfigService': {
       getCachedCodexLaunchPreviewConfig: () => options.loaded ? config : null,
       loadCodexLaunchPreviewConfig: () => options.loaded ? Promise.resolve(config) : new Promise(() => {}),
@@ -300,6 +301,32 @@ function healthyRefreshAccount() {
   return { id: 'qa', email: 'qa@example.invalid', auth_mode: 'oauth', plan_type: 'pro', requires_reauth: false,
     tokens: { access_token: token, refresh_token: 'QA_REFRESH_NOT_VALID' } };
 }
+
+test('force refresh backs up the refreshed account and keeps a backup error separate', async () => {
+  const refresh = deferred<any>();
+  const backup = deferred<any>();
+  const account = healthyRefreshAccount();
+  const refreshed = { ...account, tokens: { ...account.tokens, refresh_token: 'test-rotated-credential' } };
+  const seen: any[] = [];
+  const h = harness('account', {
+    loaded: true, account, refresh: () => refresh.promise,
+    backUp: (value) => { seen.push(value); return backup.promise; },
+  });
+  await h.ready();
+  nodes(h.tree).find((node) => node.type === 'button' && node.props.children === 'codex.launchPreview.forceRefreshAction').props.onClick();
+  assert.deepEqual(seen, []);
+  refresh.resolve(refreshed);
+  await h.ready();
+  assert.deepEqual(seen, [refreshed]);
+  assert.ok(nodes(h.tree).some((node) => node.props.children === 'settings.transfer.backup.feedback.running'));
+  backup.reject(new Error('backup disk is read-only'));
+  await h.ready();
+  const child = nodes(h.tree).find((node) => node.props?.['aria-labelledby'] === 'codex-launch-preview-refresh-title');
+  assert.ok(nodes(child).some((node) => node.props.children === 'codex.launchPreview.forceRefreshSuccess'));
+  assert.ok(nodes(child).some((node) => node.type === 'error' && node.props.message === 'settings.transfer.backup.feedback.runFailed'));
+  assert.ok(!nodes(child).some((node) => node.props.children === 'common.reauthorize'));
+  h.h.unmount();
+});
 for (const [reason, reauth] of [
   ['Token 刷新失败：Token 刷新请求失败: error sending request for url (https://auth.openai.com/oauth/token)', false],
   ['TLS certificate expired during refresh', false],

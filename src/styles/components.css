@@ -2275,8 +2275,8 @@
 }
 
 .platform-layout-controls-grid.is-child-grid {
-  /* 启用 / 默认平台 / 菜单栏显示 + 编辑、删除两个图标按钮 */
-  grid-template-columns: max-content max-content max-content 32px 32px;
+  /* 启用 / 默认平台 / 菜单栏 + 编辑、删除 */
+  grid-template-columns: repeat(3, max-content) 32px 32px;
   gap: 8px;
   opacity: 0.95;
 }
@@ -2837,6 +2837,12 @@
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
+  }
+
+  .platform-layout-controls-grid.is-child-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
   .platform-layout-main,

@@ -6,6 +6,9 @@ test('lifecycle and proxy failures remain distinct from authorization errors', (
   assert.equal(codexLaunchErrorKey('CODEX_SWITCH_BINDING_FAILED'), 'codex.launchErrors.bindingFailed');
   assert.equal(codexLaunchErrorKey(new Error('CODEX_PROCESS_SCAN_FAILED')), 'codex.launchErrors.processScanFailed');
   assert.equal(codexLaunchErrorKey('PROXY_ENTRY_PORT_UNAVAILABLE'), 'codex.launchErrors.proxyEntryFailed');
+  assert.equal(codexLaunchErrorKey('CODEX_PROXY_DOTENV_UNAVAILABLE'), 'codex.launchErrors.proxyEnvUnavailable');
+  assert.equal(codexLaunchErrorKey('CODEX_PROXY_DOTENV_CHANGED'), 'codex.launchErrors.proxyEnvChanged');
+  assert.equal(codexLaunchErrorKey('CODEX_PROXY_DOTENV_STOP_FAILED'), 'codex.launchErrors.proxyEnvStopFailed');
   assert.equal(codexLaunchErrorKey('CODEX_SWITCH_AUTH_REQUIRED:{}'), null);
   assert.equal(codexLaunchErrorKey('unknown error or private diagnostic data'), null);
 });

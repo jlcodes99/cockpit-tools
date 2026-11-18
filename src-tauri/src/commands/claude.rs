@@ -789,7 +789,19 @@ fn switch_claude_account_impl(account_id: String) -> Result<String, String> {
 
     let account = claude_account::load_account(&account_id)
         .ok_or_else(|| format!("Claude account not found: {}", account_id))?;
-    claude_account::inject_to_claude(&account_id)?;
+    #[cfg(target_os = "macos")]
+    let _desktop_switch = if matches!(
+        account.auth_mode,
+        ClaudeAuthMode::DesktopOAuth | ClaudeAuthMode::DesktopGateway
+    ) {
+        // Keep the live profile, verified write-back and recorded active
+        // account in the same switch while ownership is checked over HTTP.
+        static DESKTOP_SWITCH: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        Some(DESKTOP_SWITCH.lock().map_err(|_| "无法获取 Claude Desktop 切换锁")?)
+    } else {
+        None
+    };
+    let sync_warning = claude_account::inject_to_claude(&account_id)?;
     claude_account::touch_last_used(&account_id)?;
     let current_platform = if matches!(
         account.auth_mode,
@@ -818,5 +830,8 @@ fn switch_claude_account_impl(account_id: String) -> Result<String, String> {
         ClaudeAuthMode::ApiKey => format!("Claude Code API Key 已应用: {}", account.email),
         _ => format!("切换完成: {}", account.email),
     };
-    Ok(message)
+    Ok(match sync_warning {
+        Some(warning) => format!("{message}（{warning}）"),
+        None => message,
+    })
 }

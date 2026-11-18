@@ -20,6 +20,7 @@ fn native_cooldown_report(status: u16, error: &str) -> native_contract::RequestR
         success: false,
         elapsed: Duration::ZERO,
         usage: None,
+        input_text_characters: None,
         error: Some(error.into()),
         error_message: None,
         credential_scope: false,
@@ -361,6 +362,31 @@ fn disabling_cooling_clears_errors_without_clearing_account_quota_data() {
     );
     host.record_failure_cooldown(&native_cooldown_report(429, "usage_limit_reached"));
     assert!(!host.cooldowns.lock().unwrap().is_empty());
+}
+
+#[test]
+fn a_generic_404_does_not_cool_the_only_model_route() {
+    let host = NativeHostBridge::default();
+    let mut report = native_cooldown_report(404, "upstream_http_404");
+    report.error_message = Some("Not Found".into());
+    host.record_failure_cooldown(&report);
+    assert!(native_cooldown_wait(
+        &host.cooldowns.lock().unwrap(),
+        "pool-a",
+        "fixture-model",
+        false,
+        Instant::now(),
+    )
+    .is_none());
+
+    report.error = Some("model_not_found".into());
+    host.record_failure_cooldown(&report);
+    let states = host.cooldowns.lock().unwrap();
+    assert_eq!(
+        states[&native_cooldown_key("pool-a", "fixture-model", false)].reason,
+        "model_not_available"
+    );
+    assert!(native_cooldown_wait(&states, "pool-a", "another-model", false, Instant::now()).is_none());
 }
 
 #[test]
@@ -751,7 +777,7 @@ fn native_quota_refresh_clears_only_earlier_quota_cooldowns_for_this_account() {
     native_upsert_cooldown(&mut states, "a", "overload", 503, None, false, old);
     native_upsert_cooldown(&mut states, "a", "new-quota", 429, None, false, newer);
     native_mark_quota_exhausted(&mut states, "b", Some(Duration::from_secs(7200)), old);
-    assert!(native_clear_quota_cooldowns(&mut states, "a", query));
+    assert!(native_clear_quota_cooldowns(&mut states, "a", query, true, false));
     assert!(!states.contains_key(&native_cooldown_key("a", "", true)));
     assert!(!states.contains_key(&native_cooldown_key("a", "old-quota", false)));
     assert!(states.contains_key(&native_cooldown_key("a", "new-quota", false)));
@@ -759,7 +785,50 @@ fn native_quota_refresh_clears_only_earlier_quota_cooldowns_for_this_account() {
     assert!(states.contains_key(&native_cooldown_key("b", "", true)));
     // An account-wide rejection received during the GET also wins.
     native_mark_quota_exhausted(&mut states, "b", None, newer);
-    assert!(!native_clear_quota_cooldowns(&mut states, "b", query));
+    assert!(!native_clear_quota_cooldowns(&mut states, "b", query, true, false));
+}
+
+#[test]
+fn native_reserve_refresh_and_credential_errors_keep_their_own_scopes() {
+    let now = Instant::now();
+    let query_started = now + Duration::from_secs(1);
+    let reserve = native_oauth_quota_key("a", "gpt-reserve");
+    let included = native_oauth_quota_key("a", "gpt-5.6-luna");
+    let mut states = HashMap::new();
+    native_mark_quota_exhausted_at_key(&mut states, reserve.clone(), Some(Duration::from_secs(90)), now);
+    native_mark_quota_exhausted_at_key(&mut states, included.clone(), Some(Duration::from_secs(300)), now);
+    assert!(native_clear_quota_cooldowns(&mut states, "a", query_started, false, true));
+    assert!(!states.contains_key(&reserve));
+    assert!(states.contains_key(&included));
+    native_mark_quota_exhausted_at_key(&mut states, reserve.clone(), Some(Duration::from_secs(90)), query_started);
+    assert!(native_clear_quota_cooldowns(&mut states, "a", query_started, true, false));
+    assert!(states.contains_key(&reserve));
+    assert!(!native_clear_quota_cooldowns(&mut states, "a", query_started, false, true));
+    assert!(!states.contains_key(&included));
+
+    native_upsert_cooldown(&mut states, "a", "gpt-5.6-luna", 401, None, true, query_started);
+    assert_eq!(native_cooldown_wait(&states, "a", "gpt-reserve", false, query_started), Some(Duration::from_secs(1800)));
+    assert_eq!(native_cooldown_wait(&states, "a", "gpt-5.6-luna", false, query_started), Some(Duration::from_secs(1800)));
+}
+
+#[test]
+fn native_reserve_confirmed_quota_report_does_not_add_a_credential_cooldown() {
+    let host = NativeHostBridge::default();
+    let now = Instant::now();
+    native_mark_quota_exhausted_at_key(&mut host.cooldowns.lock().unwrap(),
+        native_oauth_quota_key("pool-a", "gpt-reserve"), Some(Duration::from_secs(60)), now);
+    let mut report = native_cooldown_report(429, "usage_limit_reached");
+    report.upstream_model = "gpt-reserve".into();
+    report.diagnostics = Some(native_api::diagnostics::DiagnosticContext {
+        attempts: vec![native_api::diagnostics::DiagnosticAttempt {
+            account_id: "pool-a".into(), confirmed_quota_cooldown_recorded: true, ..Default::default()
+        }],
+        ..Default::default()
+    });
+    host.record_failure_cooldown(&report);
+    let states = host.cooldowns.lock().unwrap();
+    assert!(native_cooldown_wait(&states, "pool-a", "gpt-5.6-luna", false, now).is_none());
+    assert_eq!(native_cooldown_wait(&states, "pool-a", "gpt-reserve", false, now), Some(Duration::from_secs(60)));
 }
 
 #[test]
@@ -809,7 +878,7 @@ fn native_server_failure_streak_spans_models_and_preserves_quota() {
     native_mark_quota_exhausted(&mut states, "a", Some(Duration::from_secs(3600)), now);
     assert_eq!(states[&native_upstream_failure_key("a")].non_quota_failures, 0);
     assert_eq!(native_cooldown_wait(&states, "a", "m1", false, now), Some(Duration::from_secs(3600)));
-    assert!(native_clear_quota_cooldowns(&mut states, "a", now + Duration::from_secs(1)));
+    assert!(native_clear_quota_cooldowns(&mut states, "a", now + Duration::from_secs(1), true, false));
     assert_eq!(native_cooldown_wait(&states, "a", "healthy-model", false, now), Some(Duration::from_secs(598)));
     assert!(native_cooldown_wait(&states, "a", "healthy-model", false, now + Duration::from_secs(598)).is_none());
 }

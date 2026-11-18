@@ -5,6 +5,10 @@ edition = "2021"
 authors = ["jlcodes"]
 license = "CC-BY-NC-SA-4.0"
 
+[features]
+default = ["desktop"]
+desktop = ["dep:tauri", "dep:tauri-plugin-notification", "dep:mac-notification-sys"]
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
@@ -32,8 +36,8 @@ tracing-subscriber.workspace = true
 tracing-appender.workspace = true
 tracing-log.workspace = true
 trash.workspace = true
-tauri.workspace = true
-tauri-plugin-notification.workspace = true
+tauri = { workspace = true, optional = true }
+tauri-plugin-notification = { workspace = true, optional = true }
 rand.workspace = true
 sha2.workspace = true
 ring = "0.17"
@@ -53,7 +57,7 @@ rsa.workspace = true
 serde_urlencoded.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
-mac-notification-sys.workspace = true
+mac-notification-sys = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows.workspace = true

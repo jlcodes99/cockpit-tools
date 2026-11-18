@@ -379,6 +379,41 @@ async fn ensure_instance_gateway_started(target: &InstanceGatewayTarget) -> Resu
     }
 }
 
+async fn restore_instance_gateways_after_failed_update(
+    runtime_keys: &HashSet<String>,
+    process_entries: &[(u32, Option<String>)],
+) -> Result<(), String> {
+    let targets = collect_instance_gateway_targets()?;
+    let mut errors = Vec::new();
+    for target in targets {
+        let key = provider_gateway_runtime_key(&target.profile_dir, &target.runtime_id);
+        if !runtime_keys.contains(&key) || !instance_target_is_running(&target, process_entries) {
+            continue;
+        }
+        match load_provider_gateway_profile_state(&target.profile_dir, &target.runtime_id) {
+            Ok(Some(_)) => {}
+            // An explicit stop clears the saved instance gateway state.
+            Ok(None) => continue,
+            Err(error) => {
+                errors.push(format!("读取实例网关状态失败 ({}): {error}", target.instance_id));
+                continue;
+            }
+        }
+        if !instance_gateway_runtime_is_healthy(&target.profile_dir, &target.runtime_id).await {
+            let result = ensure_instance_gateway_started(&target).await;
+            set_instance_gateway_recovery_error(&key, result.as_ref().err().cloned());
+            if let Err(error) = result {
+                errors.push(format!("恢复实例网关失败 ({}): {error}", target.instance_id));
+            }
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("\n"))
+    }
+}
+
 /// 启动自愈：宿主重启后重建此前已启用的实例级网关。
 ///
 /// 与 API 服务保持一致的语义：只要 profile 仍然绑定需要网关的账号，并且该网关此前启动过

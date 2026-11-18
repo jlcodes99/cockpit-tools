@@ -3,7 +3,7 @@ use std::{fs::File, io::ErrorKind, path::Path, time::Instant};
 
 use serde::{Deserialize, Serialize};
 
-use super::{message, AccountRule, Pending, Record, Rule};
+use super::{message, Pending, Record};
 use crate::modules::background_maintenance::{BATCH_BYTES, BATCH_ROWS, BATCH_TIME};
 use crate::modules::legacy_json_input::{Input, ReadError};
 
@@ -28,12 +28,7 @@ enum Section {
 
 pub(super) enum Item {
     Revision(u64),
-    PublicRule(Rule),
-    AccountRule(String, AccountRule),
     Pending(String, Pending),
-    Evidence(String, String),
-    Success(String, i64),
-    SuccessMap,
     Record(u64, Record),
 }
 
@@ -85,6 +80,7 @@ pub(super) fn read(
         input.expect(b'{').map_err(ReadError::into_message)?;
     }
     let mut complete = false;
+    let mut visited = 0usize;
     loop {
         match read_item(&mut input, &mut cursor, &mut root_closed) {
             Ok(Some(item)) => items.push(item),
@@ -92,12 +88,13 @@ pub(super) fn read(
             Err(ReadError::Budget) if cursor.offset > previous_cursor.offset => break,
             Err(error) => return Err(error.into_message()),
         }
+        visited += 1;
         cursor.offset = input.offset;
         if matches!(cursor.section, Section::Root) && !cursor.next_item && root_closed {
             complete = true;
             break;
         }
-        if items.len() >= BATCH_ROWS || input.budget == 0 || start.elapsed() >= BATCH_TIME {
+        if visited >= BATCH_ROWS || input.budget == 0 || start.elapsed() >= BATCH_TIME {
             break;
         }
     }
@@ -164,28 +161,23 @@ fn read_item(
                 } else {
                     b'{'
                 })?;
-                let success_map = matches!(section, Section::Success);
                 cursor.section = section;
                 cursor.next_item = false;
-                return Ok(success_map.then_some(Item::SuccessMap));
+                return Ok(None);
             }
             match key.as_str() {
                 "revision" => Some(Item::Revision(input.value()?)),
-                "public_rule" => Some(Item::PublicRule(input.value()?)),
-                "last_automatic_success_ms" => {
-                    input.value::<()>()?;
-                    None
-                }
                 _ => {
                     input.value::<serde::de::IgnoredAny>()?;
                     None
                 }
             }
         }
-        Section::AccountRules => Some(Item::AccountRule(key, input.value()?)),
         Section::Pending => Some(Item::Pending(key, input.value()?)),
-        Section::Evidence => Some(Item::Evidence(key, input.value()?)),
-        Section::Success => Some(Item::Success(key, input.value()?)),
+        Section::AccountRules | Section::Evidence | Section::Success => {
+            input.value::<serde::de::IgnoredAny>()?;
+            None
+        }
         Section::Records => unreachable!(),
     };
     cursor.next_item = true;

@@ -30,7 +30,8 @@ export function ModelProviderUsagePanel({
     usageMode === 'cockpit' ||
     usageMode === 'sub2api' ||
     usageMode === 'new_api' ||
-    usageMode === 'token_plan';
+    usageMode === 'token_plan' ||
+    usageMode === 'custom';
   const classNames = [
     'codex-api-key-usage-panel',
     usageMode ?? 'sub2api',
@@ -87,6 +88,35 @@ export function ModelProviderUsagePanel({
             </span>
             <strong>{resetDetail?.value || '-'}</strong>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (usageMode === 'custom') {
+    const balance = summary.remaining ?? summary.balance ?? summary.quotaRemaining;
+    const money = (value: number) => formatModelProviderUsageMoney(value, summary.unit ?? '');
+    const metrics = [
+      [t('codex.modelProviders.usage.accountBalance', '账户余额'), balance == null
+        ? summary.quotaUnlimited ? t('codex.modelProviders.usage.unlimitedQuota', '无限额度') : null
+        : money(balance)],
+      [t('codex.modelProviders.usage.limit', '总额度'), summary.quotaLimit == null ? null : money(summary.quotaLimit)],
+      [t('codex.modelProviders.usage.used', '已用额度'), summary.quotaUsed == null ? null : money(summary.quotaUsed)],
+      [t('codex.modelProviders.usage.fields.todayRequests', '今日请求'), summary.todayRequests == null ? null : formatModelProviderUsageInteger(summary.todayRequests)],
+      [t('codex.modelProviders.usage.fields.todayTokens', '今日 Token'), summary.todayTotalTokens == null ? null : formatModelProviderUsageTokenCount(summary.todayTotalTokens)],
+      [t('codex.modelProviders.usage.fields.todayCost', '今日费用'), summary.todayCost == null ? null : money(summary.todayCost)],
+      [t('codex.modelProviders.usage.fields.totalRequests', '总请求'), summary.totalRequests == null ? null : formatModelProviderUsageInteger(summary.totalRequests)],
+      [t('codex.modelProviders.usage.fields.totalTokens', '总 Token'), summary.totalTotalTokens == null ? null : formatModelProviderUsageTokenCount(summary.totalTotalTokens)],
+      [t('codex.modelProviders.usage.fields.totalCost', '总费用'), summary.totalCost == null ? null : money(summary.totalCost)],
+      [t('codex.modelProviders.usage.fields.isAvailable', '余额可用'), summary.isValid == null ? null : t(summary.isValid ? 'common.yes' : 'common.no')],
+    ].filter(([, value]) => value != null);
+    return (
+      <div className={classNames}>
+        <div className="codex-api-key-usage-grid">
+          {metrics.length === 0 && <span>{t('dashboard.noData', '暂无数据')}</span>}
+          {metrics.map(([label, value]) => (
+            <div key={label}><span>{label}</span><strong>{value}</strong></div>
+          ))}
         </div>
       </div>
     );

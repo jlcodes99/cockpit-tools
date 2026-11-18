@@ -2,7 +2,6 @@
 //! Only projects and user threads verified in this profile's SQLite registry are
 //! shared. Remote/cloud state and account atoms stay in their original scope.
 use super::*;
-use crate::modules::ssh_server_identity::AUTO_CONNECT;
 use sha2::{Digest, Sha256};
 #[path = "account_state_ssh.rs"]
 mod ssh;
@@ -15,6 +14,7 @@ const PROJECT_APPEARANCES: &str = "project-appearances";
 const THREAD_ORDERS: &str = "sidebar-project-thread-orders";
 const PINNED_THREADS: &str = "pinned-thread-ids";
 const MIGRATED_PINS: &str = "app-server-migrated-pinned-thread-ids-by-host";
+const PROJECTLESS_THREADS: &str = "projectless-thread-ids";
 
 #[path = "account_presentation.rs"]
 mod presentation;
@@ -46,7 +46,7 @@ const SCOPED_GLOBALS: &[&str] = &[
     "thread-writable-roots",
     "thread-workspace-root-hints",
     "thread-projectless-output-directories",
-    "projectless-thread-ids",
+    PROJECTLESS_THREADS,
     "selected-remote-host-id",
     "remote-projects",
     "active-remote-project-id",
@@ -56,7 +56,7 @@ const SCOPED_GLOBALS: &[&str] = &[
     "host-id-remote-control-allowed",
     "added-remote-control-env-ids",
     "remote-project-connection-backfill-completed",
-    AUTO_CONNECT,
+    "remote-connection-auto-connect-by-host-id",
     "queued-follow-ups",
 ];
 const SHARED_ATOMS: &[&str] = &[
@@ -291,10 +291,11 @@ fn local_view(
         view[PINNED_PROJECTS] = pins;
     }
     view[MAP] = json!({ &host: mapping });
-    let ungrouped = sources
-        .first()
-        .map(|source| projectless(source))
-        .unwrap_or_default();
+    let mut ungrouped = projectless(sources[0]);
+    if let Some(ids) = merge_verified_projectless_ids(sources[0], sources[1], threads, &nonlocal_threads) {
+        ungrouped.extend(ids.iter().filter_map(Value::as_str).map(str::to_owned));
+        view[PROJECTLESS_THREADS] = json!(ids);
+    }
     let mut assignments = BTreeMap::new();
     let mut hosts = BTreeMap::new();
     for thread in threads.iter().filter(|thread| thread.root) {
@@ -331,6 +332,48 @@ fn local_view(
     set_map(&mut view, ASSIGN, assignments);
     set_map(&mut view, HOSTS, hosts);
     Ok(view)
+}
+
+fn merge_verified_projectless_ids(
+    target: &Value,
+    current: &Value,
+    threads: &[Thread],
+    nonlocal_threads: &HashSet<&str>,
+) -> Option<Vec<Value>> {
+    let current_ids = current[PROJECTLESS_THREADS].as_array()?;
+    let mut ids = if target[PROJECTLESS_THREADS].is_null() {
+        Vec::new()
+    } else {
+        target[PROJECTLESS_THREADS].as_array()?.clone()
+    };
+    let initial_size = ids.len();
+    let local = threads
+        .iter()
+        .filter(|thread| {
+            thread.root
+                && thread.project.is_none()
+                && thread.section.is_none()
+                && !nonlocal_threads.contains(thread.id.as_str())
+                && target[ASSIGN][&thread.id].is_null()
+                && current[ASSIGN][&thread.id].is_null()
+                && thread
+                    .cwd
+                    .as_deref()
+                    .is_some_and(|cwd| Path::new(cwd).is_absolute() && !cloud_root(cwd))
+        })
+        .map(|thread| thread.id.as_str())
+        .collect::<HashSet<_>>();
+    let mut seen = ids
+        .iter()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect::<HashSet<_>>();
+    for id in current_ids.iter().filter_map(Value::as_str) {
+        if local.contains(id) && seen.insert(id.to_owned()) {
+            ids.push(json!(id));
+        }
+    }
+    (ids.len() > initial_size).then_some(ids)
 }
 
 fn merge_local_pins(
@@ -381,7 +424,7 @@ fn merge_local_pins(
 
 // Add verified local entries; existing target cloud/remote entries and settings win.
 fn merge_local(target: &mut Value, view: &Value) {
-    for key in [PINNED_PROJECTS, PROJECT_APPEARANCES, THREAD_ORDERS, PINNED_THREADS] {
+    for key in [PINNED_PROJECTS, PROJECT_APPEARANCES, THREAD_ORDERS, PINNED_THREADS, PROJECTLESS_THREADS] {
         if let Some(value) = view.get(key) {
             target[key] = value.clone();
         }
@@ -424,12 +467,12 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
         return Ok(false);
     };
     let before = decode(Some(&bytes))?;
-    let mut after = before.clone();
-    ssh::inherit_scoped_auto_connect(&mut after, owner);
-    // Modern scoped SSH preferences can exist without a project archive.
+    // Older/unscoped state is handled by the existing recovery path. Its
+    // top-level preferences do not identify an owner that we can archive.
     if before.get(SCOPES).is_none() && before.get(PARKED).is_none() {
-        return finish_prepare(home, &bytes, &before, &after);
+        return Ok(ssh::prepare_startup(home, &before));
     }
+    let mut after = before.clone();
     let mut scopes = before
         .get(SCOPES)
         .or_else(|| before.get(PARKED))
@@ -529,15 +572,11 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
         after.as_object_mut().unwrap().remove(SCOPES);
         after[PARKED] = scopes;
     }
-    finish_prepare(home, &bytes, &before, &after)
-}
-
-fn finish_prepare(home: &Path, bytes: &[u8], before: &Value, after: &Value) -> Result<bool, String> {
     if after == before {
-        return Ok(ssh::prepare_startup(home, after));
+        return Ok(ssh::prepare_startup(home, &after));
     }
-    let expected_hash: [u8; 32] = Sha256::digest(bytes).into();
-    let content = serde_json::to_string(after).map_err(|e| e.to_string())?;
+    let expected_hash: [u8; 32] = Sha256::digest(&bytes).into();
+    let content = serde_json::to_string(&after).map_err(|e| e.to_string())?;
     // Codex owns the adjacent .bak. Do not replace it with a temporary backup
     // or treat it as a plaintext credential backup to remove.
     if !crate::modules::atomic_write::restore_string_atomic_if_hash_matches(
@@ -547,7 +586,7 @@ fn finish_prepare(home: &Path, bytes: &[u8], before: &Value, after: &Value) -> R
     )? {
         return Err("CODEX_PROJECT_CHANGED".into());
     }
-    ssh::prepare_startup(home, after);
+    ssh::prepare_startup(home, &after);
     Ok(true)
 }
 

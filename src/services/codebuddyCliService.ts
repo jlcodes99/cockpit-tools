@@ -8,27 +8,12 @@ export interface CodebuddyCliAccountRef {
   accountId: string;
 }
 
-export interface CodebuddyCliInstance {
-  id: string;
-  name: string;
+export type CodebuddyCliLaunchTarget = {
+  kind: 'account';
   account: CodebuddyCliAccountRef;
-  workingDir: string;
-}
-
-export type CodebuddyCliInstanceDraft = Omit<CodebuddyCliInstance, 'id'> & { id?: string };
-
-export type CodebuddyCliLaunchTarget =
-  | { kind: 'instance'; id: string; workingDir?: string }
-  | { kind: 'account'; account: CodebuddyCliAccountRef; workingDir?: string; rememberWorkingDir?: boolean };
-
-export const listCodebuddyCliInstances = () =>
-  invoke<CodebuddyCliInstance[]>('codebuddy_cli_list_instances');
-
-export const saveCodebuddyCliInstance = (draft: CodebuddyCliInstanceDraft) =>
-  invoke<CodebuddyCliInstance[]>('codebuddy_cli_save_instance', { draft });
-
-export const removeCodebuddyCliInstance = (id: string) =>
-  invoke<CodebuddyCliInstance[]>('codebuddy_cli_remove_instance', { id });
+  workingDir?: string;
+  rememberWorkingDir?: boolean;
+};
 
 export const launchCodebuddyCli = (target: CodebuddyCliLaunchTarget, terminal?: string, customCommand?: string) =>
   withCliLaunchPath('codebuddy_cli', () => invoke<void>('codebuddy_cli_launch', { target, terminal, customCommand }),

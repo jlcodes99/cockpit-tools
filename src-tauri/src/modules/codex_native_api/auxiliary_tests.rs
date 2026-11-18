@@ -11,6 +11,7 @@ use super::super::{contract::*, start, Handle, Options};
 use super::*;
 use axum::{
     extract::Multipart,
+    http::StatusCode,
     routing::{get, post},
     Router,
 };
@@ -199,8 +200,11 @@ async fn auxiliary_search_maps_caller_identity_and_model_without_changing_search
                 |State(seen): State<Arc<Mutex<Vec<(HeaderMap, Value)>>>>,
                  headers: HeaderMap,
                  Json(body): Json<Value>| async move {
+                    if body["model"] != "upstream-model" {
+                        return (StatusCode::BAD_REQUEST, Json(json!({"error":"unknown upstream model"})));
+                    }
                     seen.lock().unwrap().push((headers, body));
-                    Json(json!({"output":"result","results":[],"future":true}))
+                    (StatusCode::OK, Json(json!({"output":"result","results":[],"future":true})))
                 },
             ),
         )
@@ -217,8 +221,7 @@ async fn auxiliary_search_maps_caller_identity_and_model_without_changing_search
     assert_eq!(requests[0].1["id"], requests[1].1["id"]);
     assert_ne!(requests[0].1["id"], requests[2].1["id"]);
     assert_ne!(requests[0].1["id"], "search-original");
-    // Model canonicalization is for selection; the search payload retains its model.
-    assert_eq!(requests[0].1["model"], "client-model");
+    assert_eq!(requests[0].1["model"], "upstream-model");
     assert_eq!(requests[0].1["input"], "keep this content");
     assert_eq!(requests[0].1["vendor"], true);
     assert!(requests[0].1.get("client_metadata").is_none());

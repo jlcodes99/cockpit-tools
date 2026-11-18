@@ -409,7 +409,7 @@ pub async fn set_current_account(
 pub async fn fetch_account_quota(account_id: String) -> AppResult<models::Account> {
     let mut account = modules::load_account(&account_id).map_err(AppError::Account)?;
     let quota = modules::fetch_quota_with_fresh_token(&mut account, true).await?;
-    modules::update_account_quota(&account_id, quota).map_err(AppError::Account)?;
+    modules::update_account_quota(&account, quota).map_err(AppError::Account)?;
     // 重载账号，包含写入的 quota_error 等最新信息
     let updated_account = modules::load_account(&account_id).map_err(AppError::Account)?;
     Ok(updated_account)
@@ -475,7 +475,7 @@ async fn refresh_current_quota_for_target(
     let quota = modules::fetch_quota_with_fresh_token(&mut account, true)
         .await
         .map_err(|e| e.to_string())?;
-    modules::update_account_quota(&account.id, quota).map_err(|e| e.to_string())?;
+    modules::update_account_quota(&account, quota)?;
 
     let mut switched = false;
     match run_auto_switch_for_runtime_target(&app, runtime_target.as_deref()).await {

@@ -16,7 +16,7 @@ export type UsageTrendPoint = {
   usage: Pick<
     CodexLocalAccessStatsWindow["totals"],
     "totalTokens" | "requestCount" | "estimatedCostUsd"
-  >;
+  > & Partial<Pick<CodexLocalAccessStatsWindow["totals"], "inputTokens" | "outputTokens" | "reasoningTokens">>;
 };
 
 const CHART_WIDTH = 960;
@@ -61,6 +61,25 @@ function buildSmoothPath(points: Array<{ x: number; y: number }>): string {
   }, `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`);
 }
 
+function tokenComposition(points: UsageTrendPoint[]) {
+  let input = 0;
+  let output = 0;
+  let reasoning = 0;
+  let hasReasoning = true;
+  for (const { usage } of points) {
+    const { inputTokens, outputTokens, totalTokens, reasoningTokens } = usage;
+    if (totalTokens === 0 && !inputTokens && !outputTokens && !reasoningTokens) continue;
+    if (inputTokens == null || outputTokens == null || inputTokens < 0 || outputTokens < 0
+      || inputTokens + outputTokens !== totalTokens) return null;
+    input += inputTokens;
+    output += outputTokens;
+    if (reasoningTokens == null || reasoningTokens < 0 || reasoningTokens > outputTokens) hasReasoning = false;
+    else reasoning += reasoningTokens;
+  }
+  if (input + output === 0) return null;
+  return { input, output: hasReasoning ? output - reasoning : output, reasoning: hasReasoning ? reasoning : null };
+}
+
 export function CodexUsageTrend({
   statsWindow,
   points: suppliedPoints,
@@ -89,8 +108,31 @@ export function CodexUsageTrend({
   const chartWrapRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [tooltipLeft, setTooltipLeft] = useState(0);
+  const [chartWidth, setChartWidth] = useState(CHART_WIDTH);
   const trend = suppliedPoints ?? statsWindow?.trend ?? [];
+  const hasTrend = trend.length > 0;
   const hourly = hourlyOverride ?? statsWindow?.trendHourly ?? false;
+  const tokenMetric = metric === "totalTokens";
+  const composition = useMemo(() => tokenComposition(trend), [trend]);
+  const periodTokensLabel = t("codex.apiService.usage.periodTokens", "时段 Token 用量");
+  const cumulativeTokensLabel = t("codex.apiService.usage.cumulativeTokens", "累计 Token 用量");
+  const compositionLabel = t("codex.apiService.usage.tokenComposition", "Token 用量构成");
+  const plotBottom = CHART_HEIGHT - PLOT.bottom;
+  const plotHeight = plotBottom - PLOT.top;
+  const plotRight = chartWidth - PLOT.right;
+  const plotWidth = plotRight - PLOT.left;
+  const firstBucket = trend[0]?.bucketStart ?? 0;
+  const elapsed = (trend[trend.length - 1]?.bucketStart ?? firstBucket) - firstBucket;
+
+  useLayoutEffect(() => {
+    const wrap = chartWrapRef.current;
+    if (!hasTrend || !wrap) return;
+    const resize = () => setChartWidth(Math.max(300, Math.min(wrap.clientWidth, CHART_WIDTH)));
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(wrap);
+    return () => observer.disconnect();
+  }, [hasTrend]);
 
   const points = useMemo(() => {
     const values = trend.map((point) => ({
@@ -106,22 +148,44 @@ export function CodexUsageTrend({
     const min = Math.min(...values.map((item) => item.value));
     const max = Math.max(...values.map((item) => item.value));
     const span = Math.max(max - min, max * 0.08, 1);
-    const xSpan = CHART_WIDTH - PLOT.left - PLOT.right;
-    const ySpan = CHART_HEIGHT - PLOT.top - PLOT.bottom;
-    return values.map((item, index) => ({
-      ...item,
-      index,
-      x: PLOT.left + (values.length === 1 ? xSpan / 2 : (index / (values.length - 1)) * xSpan),
-      y: PLOT.top + (1 - (item.value - min + span * 0.03) / (span * 1.06)) * ySpan,
-    }));
-  }, [metric, trend]);
+    let cumulative = 0;
+    return values.map((item, index) => {
+      cumulative += item.value;
+      const fraction = tokenMetric ? item.value / Math.max(1, max) : (item.value - min + span * 0.03) / (span * 1.06);
+      return {
+        ...item, index, cumulative,
+        x: PLOT.left + (elapsed > 0 ? (item.point.bucketStart - firstBucket) / elapsed : 0.5) * plotWidth,
+        y: PLOT.top + (1 - fraction) * plotHeight,
+      };
+    });
+  }, [metric, tokenMetric, trend, elapsed, firstBucket, plotWidth, plotHeight]);
 
-  const linePath = buildSmoothPath(points);
+  const linePath = tokenMetric ? "" : buildSmoothPath(points);
   const areaPath = points.length > 0
     ? `${linePath} L ${points[points.length - 1].x.toFixed(2)} ${(CHART_HEIGHT - PLOT.bottom).toFixed(2)} L ${points[0].x.toFixed(2)} ${(CHART_HEIGHT - PLOT.bottom).toFixed(2)} Z`
     : "";
   const maxValue = points.length > 0 ? Math.max(...points.map((point) => point.value)) : 0;
-  const totalValue = points.reduce((sum, point) => sum + point.value, 0);
+  const totalValue = points[points.length - 1]?.cumulative ?? 0;
+  const cumulativeY = (value: number) => plotBottom - value / Math.max(1, totalValue) * plotHeight;
+  const cumulativeLine = points.map((point, index) => index === 0
+    ? `M ${point.x} ${cumulativeY(point.cumulative)}`
+    : `H ${point.x} V ${cumulativeY(point.cumulative)}`).join(" ");
+  const intervalCount = 1 + elapsed / (hourly ? 3_600_000 : 86_400_000);
+  const barWidth = Math.min(22, plotWidth / intervalCount * 0.55);
+  const slices = !tokenMetric || !composition ? [] : [
+    { label: t("common.codexUsage.input"), value: composition.input, color: "var(--primary)" },
+    { label: composition.reasoning === null ? t("common.codexUsage.output") : t("codex.apiService.usage.nonReasoningOutput", "非推理输出"),
+      value: composition.output, color: "var(--success)" },
+    ...(composition.reasoning === null ? [] : [{ label: t("codex.apiService.usage.reasoningTokens", "推理"), value: composition.reasoning, color: "var(--warning)" }]),
+  ];
+  const percent = new Intl.NumberFormat(lang, { style: "percent", maximumFractionDigits: 1 });
+  let sliceStart = 0;
+  const compositionGradient = slices.map(({ value, color }) => {
+    const sliceEnd = sliceStart + value / totalValue * 100;
+    const stop = `${color} ${sliceStart}% ${sliceEnd}%`;
+    sliceStart = sliceEnd;
+    return stop;
+  }).join(", ");
   const axisStep = Math.max(1, Math.ceil(points.length / 7));
   const axisIndexes = new Set(
     points
@@ -139,7 +203,7 @@ export function CodexUsageTrend({
       const text = formatMetricValue(point.value, metric, lang);
       const width = Math.max(42, Math.min(112, text.length * 7 + 16));
       const x = Math.min(
-        CHART_WIDTH - PLOT.right - width / 2,
+        plotRight - width / 2,
         Math.max(PLOT.left + width / 2, point.x),
       );
       const start = x - width / 2 - 4;
@@ -151,7 +215,7 @@ export function CodexUsageTrend({
       labels.set(point.index, { text, x });
     });
     return labels;
-  }, [lang, metric, points]);
+  }, [lang, metric, points, plotRight]);
   const gridYs = [0, 1, 2].map(
     (index) => PLOT.top + (index / 2) * (CHART_HEIGHT - PLOT.top - PLOT.bottom),
   );
@@ -186,15 +250,16 @@ export function CodexUsageTrend({
     pointer.x = event.clientX;
     pointer.y = event.clientY;
     const relativeX = pointer.matrixTransform(matrix.inverse()).x;
-    const fraction = (relativeX - PLOT.left) / (CHART_WIDTH - PLOT.left - PLOT.right);
-    setHoveredIndex(Math.round(Math.max(0, Math.min(1, fraction)) * (points.length - 1)));
+    const nearest = points.reduce((best, point) =>
+      Math.abs(point.x - relativeX) < Math.abs(best.x - relativeX) ? point : best);
+    setHoveredIndex(nearest.index);
   };
 
   return (
-    <section className="codex-usage-trend" aria-labelledby="codex-usage-trend-title">
+    <section className="codex-usage-trend" aria-labelledby={`${chartId}-title`}>
       <div className="codex-usage-trend__header">
         <div>
-          <h2 id="codex-usage-trend-title">
+          <h2 id={`${chartId}-title`}>
             {title ?? t("codex.apiService.usage.title", "用量统计")}
           </h2>
         </div>
@@ -229,118 +294,163 @@ export function CodexUsageTrend({
           {emptyLabel ?? t("codex.apiService.usage.trendEmpty", "所选时间范围暂无请求记录")}
         </div>
       ) : (
-        <div ref={chartWrapRef} className="codex-usage-trend__chart-wrap">
-          <svg
-            ref={svgRef}
-            className="codex-usage-trend__chart"
-            viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-            role="img"
-            aria-label={`${title ?? t("codex.apiService.usage.title", "用量统计")} · ${formatMetricValue(maxValue, metric, lang)}`}
-          >
-            <title>{title ?? t("codex.apiService.usage.title", "用量统计")}</title>
-            <defs>
-              <linearGradient id={`${chartId}-area`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.26" />
-                <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.02" />
-              </linearGradient>
-            </defs>
-            {gridYs.map((y) => (
-              <line key={y} className="codex-usage-trend__grid" x1={PLOT.left} x2={CHART_WIDTH - PLOT.right} y1={y} y2={y} />
-            ))}
-            <line className="codex-usage-trend__baseline" x1={PLOT.left} x2={CHART_WIDTH - PLOT.right} y1={CHART_HEIGHT - PLOT.bottom} y2={CHART_HEIGHT - PLOT.bottom} />
-            {areaPath ? <path className="codex-usage-trend__area" d={areaPath} fill={`url(#${chartId}-area)`} /> : null}
-            {linePath ? <path className="codex-usage-trend__line" d={linePath} /> : null}
-            {hoveredPoint ? (
-              <>
-                <rect
-                  className="codex-usage-trend__hover-slice"
-                  x={hoveredPoint.x - 18}
-                  y={PLOT.top}
-                  width="36"
-                  height={CHART_HEIGHT - PLOT.top - PLOT.bottom}
-                />
-                <line
-                  className="codex-usage-trend__hover-line"
-                  x1={hoveredPoint.x}
-                  x2={hoveredPoint.x}
-                  y1={PLOT.top}
-                  y2={CHART_HEIGHT - PLOT.bottom}
-                />
-              </>
-            ) : null}
-            <rect
-              className="codex-usage-trend__interaction-layer"
-              x={PLOT.left}
-              y={PLOT.top}
-              width={CHART_WIDTH - PLOT.left - PLOT.right}
-              height={CHART_HEIGHT - PLOT.top - PLOT.bottom}
-              onMouseMove={handleChartMove}
-              onMouseLeave={() => setHoveredIndex(null)}
-            />
-            {points.map((point) => (
-              <g key={point.point.bucketStart}>
-                {point.value > 0 ? (
-                  <circle
-                    className={`codex-usage-trend__point${hoveredIndex === point.index ? " is-hovered" : ""}`}
-                    cx={point.x}
-                    cy={point.y}
-                    r={point.value === maxValue || hoveredIndex === point.index ? 5 : 3.5}
-                    tabIndex={0}
-                    onMouseEnter={() => setHoveredIndex(point.index)}
-                    onFocus={() => setHoveredIndex(point.index)}
-                    onBlur={() => setHoveredIndex(null)}
-                  >
-                    <title>{`${formatBucketLabel(point.point.bucketStart, hourly, lang, timeZone)} · ${formatMetricValue(point.value, metric, lang)}`}</title>
-                  </circle>
-                ) : null}
-                {valueLabels.has(point.index) ? (
-                  (() => {
-                    const label = valueLabels.get(point.index);
-                    if (!label) return null;
-                    const labelWidth = Math.max(42, Math.min(112, label.text.length * 7 + 16));
-                    const labelY = Math.max(PLOT.top + 3, point.y - 29);
-                    return (
-                      <g className="codex-usage-trend__value-label">
-                        <rect x={label.x - labelWidth / 2} y={labelY} width={labelWidth} height="20" rx="7" />
-                        <text className="codex-usage-trend__value" x={label.x} y={labelY + 14} textAnchor="middle">
-                          {label.text}
-                        </text>
-                      </g>
-                    );
-                  })()
-                ) : null}
-                {axisIndexes.has(point.index) ? (
-                  <text className="codex-usage-trend__axis-label" x={point.x} y={CHART_HEIGHT - 21} textAnchor="middle">
-                    {formatBucketLabel(point.point.bucketStart, hourly, lang, timeZone)}
-                  </text>
-                ) : null}
-                {axisIndexes.has(point.index) ? (
-                  <text className="codex-usage-trend__axis-value" x={point.x} y={CHART_HEIGHT - 4} textAnchor="middle">
-                    {formatMetricValue(point.value, metric, lang)}
-                  </text>
-                ) : null}
-              </g>
-            ))}
-          </svg>
-          {hoveredPoint ? (
-            <div ref={tooltipRef} className="codex-usage-trend__tooltip" role="status" style={{ left: tooltipLeft }}>
-              <strong>{formatBucketLabel(hoveredPoint.point.bucketStart, hourly, lang, timeZone)}</strong>
-              <div>
-                <span>{labels?.totalTokens ?? t("codex.localAccess.stats.tokens", "总 Token 数")}</span>
-                <b>{formatMetricValue(hoveredPoint.point.usage.totalTokens, "totalTokens", lang)}</b>
+        <div className="codex-usage-trend__body">
+          <div ref={chartWrapRef} className="codex-usage-trend__chart-wrap">
+            {tokenMetric && (
+              <div className="codex-usage-trend__legend">
+                <span>{periodTokensLabel}</span><span>{cumulativeTokensLabel}</span>
               </div>
-              <div>
-                <span>{labels?.requestCount ?? t("codex.localAccess.stats.requests", "总请求数")}</span>
-                <b>{formatMetricValue(hoveredPoint.point.usage.requestCount, "requestCount", lang)}</b>
-              </div>
-              {metrics.includes("estimatedCostUsd") ? (
-                <div>
-                  <span>{labels?.estimatedCostUsd ?? t("codex.localAccess.stats.estimatedCost", "估算价值")}</span>
-                  <b>{formatMetricValue(hoveredPoint.point.usage.estimatedCostUsd, "estimatedCostUsd", lang)}</b>
-                </div>
+            )}
+            <svg
+              ref={svgRef}
+              className="codex-usage-trend__chart"
+              viewBox={`0 0 ${chartWidth} ${CHART_HEIGHT}`}
+              role="img"
+              aria-label={tokenMetric
+                ? `${periodTokensLabel} · ${cumulativeTokensLabel} ${formatMetricValue(totalValue, metric, lang)}`
+                : `${title ?? t("codex.apiService.usage.title", "用量统计")} · ${formatMetricValue(maxValue, metric, lang)}`}
+            >
+              <title>{title ?? t("codex.apiService.usage.title", "用量统计")}</title>
+              <defs>
+                <linearGradient id={`${chartId}-area`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.26" />
+                  <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.02" />
+                </linearGradient>
+              </defs>
+              {gridYs.map((y) => (
+                <line key={y} className="codex-usage-trend__grid" x1={PLOT.left} x2={plotRight} y1={y} y2={y} />
+              ))}
+              <line className="codex-usage-trend__baseline" x1={PLOT.left} x2={plotRight} y1={plotBottom} y2={plotBottom} />
+              {tokenMetric ? (
+                <>
+                  <text className="codex-usage-trend__period-scale" x={PLOT.left} y={PLOT.top - 9}>
+                    {formatMetricValue(maxValue, metric, lang)}
+                  </text>
+                  <text className="codex-usage-trend__cumulative-scale" x={plotRight} y={PLOT.top - 9} textAnchor="end">
+                    {formatMetricValue(totalValue, metric, lang)}
+                  </text>
+                  {points.map((point) => <rect key={point.point.bucketStart} className="codex-usage-trend__period-bar"
+                    x={point.x - barWidth / 2} y={point.y} width={barWidth} height={plotBottom - point.y} rx="2" />)}
+                  {points.length === 1 ? (
+                    <line className="codex-usage-trend__cumulative-line" x1={points[0].x - barWidth / 2} x2={points[0].x + barWidth / 2}
+                      y1={cumulativeY(totalValue)} y2={cumulativeY(totalValue)} />
+                  ) : <path className="codex-usage-trend__cumulative-line" d={cumulativeLine} />}
+                </>
+              ) : (
+                <>
+                  <path className="codex-usage-trend__area" d={areaPath} fill={`url(#${chartId}-area)`} />
+                  <path className="codex-usage-trend__line" d={linePath} />
+                </>
+              )}
+              {hoveredPoint ? (
+                <>
+                  <rect
+                    className="codex-usage-trend__hover-slice"
+                    x={hoveredPoint.x - 18}
+                    y={PLOT.top}
+                    width="36"
+                    height={CHART_HEIGHT - PLOT.top - PLOT.bottom}
+                  />
+                  <line
+                    className="codex-usage-trend__hover-line"
+                    x1={hoveredPoint.x}
+                    x2={hoveredPoint.x}
+                    y1={PLOT.top}
+                    y2={CHART_HEIGHT - PLOT.bottom}
+                  />
+                </>
               ) : null}
+              <rect
+                className="codex-usage-trend__interaction-layer"
+                x={PLOT.left}
+                y={PLOT.top}
+                width={plotWidth}
+                height={CHART_HEIGHT - PLOT.top - PLOT.bottom}
+                onMouseMove={handleChartMove}
+                onMouseLeave={() => setHoveredIndex(null)}
+              />
+              {points.map((point) => (
+                <g key={point.point.bucketStart}>
+                  {point.value > 0 ? (
+                    <circle
+                      className={`codex-usage-trend__point${hoveredIndex === point.index ? " is-hovered" : ""}`}
+                      cx={point.x}
+                      cy={point.y}
+                      r={point.value === maxValue || hoveredIndex === point.index ? 5 : 3.5}
+                      tabIndex={0}
+                      onMouseEnter={() => setHoveredIndex(point.index)}
+                      onFocus={() => setHoveredIndex(point.index)}
+                      onBlur={() => setHoveredIndex(null)}
+                    >
+                      <title>{`${formatBucketLabel(point.point.bucketStart, hourly, lang, timeZone)} · ${formatMetricValue(point.value, metric, lang)}${tokenMetric ? ` · ${cumulativeTokensLabel} ${formatMetricValue(point.cumulative, metric, lang)}` : ""}`}</title>
+                    </circle>
+                  ) : null}
+                  {valueLabels.has(point.index) ? (
+                    (() => {
+                      const label = valueLabels.get(point.index);
+                      if (!label) return null;
+                      const labelWidth = Math.max(42, Math.min(112, label.text.length * 7 + 16));
+                      const labelY = Math.max(PLOT.top + 3, point.y - 29);
+                      return (
+                        <g className="codex-usage-trend__value-label">
+                          <rect x={label.x - labelWidth / 2} y={labelY} width={labelWidth} height="20" rx="7" />
+                          <text className="codex-usage-trend__value" x={label.x} y={labelY + 14} textAnchor="middle">
+                            {label.text}
+                          </text>
+                        </g>
+                      );
+                    })()
+                  ) : null}
+                  {axisIndexes.has(point.index) ? (
+                    <text className="codex-usage-trend__axis-label" x={point.x} y={CHART_HEIGHT - 21} textAnchor="middle">
+                      {formatBucketLabel(point.point.bucketStart, hourly, lang, timeZone)}
+                    </text>
+                  ) : null}
+                  {axisIndexes.has(point.index) ? (
+                    <text className="codex-usage-trend__axis-value" x={point.x} y={CHART_HEIGHT - 4} textAnchor="middle">
+                      {formatMetricValue(point.value, metric, lang)}
+                    </text>
+                  ) : null}
+                </g>
+              ))}
+            </svg>
+            {hoveredPoint ? (
+              <div ref={tooltipRef} className="codex-usage-trend__tooltip" role="status" style={{ left: tooltipLeft }}>
+                <strong>{formatBucketLabel(hoveredPoint.point.bucketStart, hourly, lang, timeZone)}</strong>
+                <div>
+                  <span>{labels?.totalTokens ?? t("codex.localAccess.stats.tokens", "总 Token 数")}</span>
+                  <b>{formatMetricValue(hoveredPoint.point.usage.totalTokens, "totalTokens", lang)}</b>
+                </div>
+                {tokenMetric && <div>
+                  <span>{cumulativeTokensLabel}</span>
+                  <b>{formatMetricValue(hoveredPoint.cumulative, metric, lang)}</b>
+                </div>}
+                <div>
+                  <span>{labels?.requestCount ?? t("codex.localAccess.stats.requests", "总请求数")}</span>
+                  <b>{formatMetricValue(hoveredPoint.point.usage.requestCount, "requestCount", lang)}</b>
+                </div>
+                {metrics.includes("estimatedCostUsd") ? (
+                  <div>
+                    <span>{labels?.estimatedCostUsd ?? t("codex.localAccess.stats.estimatedCost", "估算价值")}</span>
+                    <b>{formatMetricValue(hoveredPoint.point.usage.estimatedCostUsd, "estimatedCostUsd", lang)}</b>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          {tokenMetric && slices.length > 0 && (
+            <div className="codex-usage-trend__composition" role="group" aria-label={compositionLabel}>
+              <div className="codex-usage-trend__ring" style={{ background: `conic-gradient(${compositionGradient})` }} aria-hidden="true">
+                <strong>{formatMetricValue(totalValue, metric, lang)}</strong>
+              </div>
+              <ul>
+                {slices.map(({ label, value, color }) => (
+                  <li key={label}><i aria-hidden="true" style={{ background: color }} /><span>{label}</span>
+                    <b title={value.toLocaleString(lang)}>{percent.format(value / totalValue)}</b></li>
+                ))}
+              </ul>
             </div>
-          ) : null}
+          )}
         </div>
       )}
     </section>

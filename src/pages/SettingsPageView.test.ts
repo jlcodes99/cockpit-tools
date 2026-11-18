@@ -39,6 +39,40 @@ test('the network page opens report links only when a listener address is availa
   h.unmount();
 });
 
+test('menu bar left-click setting exposes the same choices and disabled state in both layouts', () => {
+  const Dropdown = () => null;
+  const h = loadHookModule(new URL('../components/MenuBarLeftClickSetting.tsx', import.meta.url), {
+    'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
+    './SingleSelectDropdown': { SingleSelectDropdown: Dropdown },
+  });
+  const findDropdown = (node: any): any => {
+    if (Array.isArray(node)) return node.map(findDropdown).find(Boolean);
+    return node?.type === Dropdown
+      ? node
+      : node?.props?.children && findDropdown(node.props.children);
+  };
+  const changes: boolean[] = [];
+  for (const variant of ['general', 'quick-settings']) {
+    const render = (opensMainWindow: boolean, disabled: boolean) => findDropdown(h.render(() =>
+      h.exports.MenuBarLeftClickSetting({
+        variant,
+        opensMainWindow,
+        disabled,
+        onChange: (next: boolean) => changes.push(next),
+      }),
+    )).props;
+    const defaultSelect = render(false, false);
+    assert.equal(defaultSelect.value, 'quota');
+    assert.deepEqual(Array.from(defaultSelect.options, (option: { value: string }) => option.value), ['quota', 'window']);
+    defaultSelect.onChange('window');
+    const savedChoice = render(true, true);
+    assert.equal(savedChoice.value, 'window');
+    assert.equal(savedChoice.disabled, true);
+  }
+  assert.deepEqual(changes, [true, true]);
+  h.unmount();
+});
+
 test('data settings mount only on first visit and retain their component tree across tabs', () => {
   const Section = () => null;
   const h = loadHookModule(new URL('./SettingsPageView.tsx', import.meta.url), {

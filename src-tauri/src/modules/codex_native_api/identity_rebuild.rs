@@ -718,10 +718,20 @@ impl IdentityStore {
         headers: &HeaderMap,
         body: &mut Value,
     ) -> Result<bool, ServiceError> {
-        let Some(Value::String(text)) = body.get("input") else {
-            return Ok(false);
+        let input = match body.get("input") {
+            Some(Value::String(text)) => serde_json::json!([
+                {"type":"message","role":"user","content":[{"type":"input_text","text":text}]}
+            ]),
+            None | Some(Value::Null)
+                if body.get("previous_response_id").and_then(Value::as_str)
+                    .is_some_and(|previous| !previous.trim().is_empty()) =>
+            {
+                // The checkpoint provides all input for a continuation with no delta.
+                Value::Array(Vec::new())
+            }
+            _ => return Ok(false),
         };
-        body["input"] = serde_json::json!([{"type":"message","role":"user","content":[{"type":"input_text","text":text}]}]);
+        body["input"] = input;
         let mut probe_headers = headers.clone();
         let mut probe = body.clone();
         supplement_identities(context, &mut probe_headers, &mut probe)?;
@@ -1174,6 +1184,8 @@ impl IdentityStore {
                 .as_ref()
                 .map(|input| {
                     checkpoint_store::Encoded::prepare(
+                        &self.checkpoint_reader()?,
+                        &binding.caller,
                         input,
                         output,
                         generation.parameters.as_ref(),

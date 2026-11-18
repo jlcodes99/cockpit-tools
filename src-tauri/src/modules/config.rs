@@ -22,6 +22,15 @@ const SERVER_STATUS_FILE: &str = "server.json";
 const USER_CONFIG_FILE: &str = "config.json";
 const USER_CONFIG_LOCK_FILE: &str = "config.json.lock";
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CodexAutomaticSessionRepair {
+    Off,
+    IndexOnly,
+    #[default]
+    Quick,
+}
+
 /// 服务状态（写入共享文件供其他客户端读取）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerStatus {
@@ -115,9 +124,12 @@ pub struct UserConfig {
     /// 官方客户端增强，仅在重启目标实例后应用。
     #[serde(default = "default_codex_app_enhancements_enabled")]
     pub codex_app_api_quota_compat_enabled: bool,
-    /// 本地 API 模式下的原生下一步预测；额外消耗供应商额度，默认关闭。
-    #[serde(default)]
+    /// 本地 API 模式下的原生下一步预测；额外消耗供应商额度，默认开启。
+    #[serde(default = "default_codex_app_native_predictions_enabled")]
     pub codex_app_native_predictions_enabled: bool,
+    /// 旧配置首次升级后开启预测，之后保留用户偏好。
+    #[serde(default)]
+    pub(crate) codex_app_native_predictions_default_on_migrated: bool,
     /// Codex WSL 配置目录 (Windows Only)
     #[serde(default = "default_codex_wsl_config_dir")]
     pub codex_wsl_config_dir: String,
@@ -192,6 +204,8 @@ pub struct UserConfig {
     /// 菜单栏图标样式（macOS）
     #[serde(default = "default_tray_icon_style")]
     pub tray_icon_style: TrayIconStyle,
+    #[serde(default)]
+    pub menu_bar_left_click_opens_main_window: bool,
     /// 是否在 macOS 菜单栏图标旁显示当前账号剩余额度
     #[serde(default = "default_menu_bar_quota_enabled")]
     pub menu_bar_quota_enabled: bool,
@@ -335,6 +349,8 @@ pub struct UserConfig {
     pub codebuddy_cli_path: String,
     #[serde(default = "default_claude_app_scan_roots")]
     pub claude_app_scan_roots: String,
+    #[serde(default)]
+    pub claude_share_code_sessions_on_switch: bool,
     /// 切换 Codex 后需联动重启的指定应用路径
     #[serde(default = "default_codex_specified_app_path")]
     pub codex_specified_app_path: String,
@@ -436,6 +452,10 @@ pub struct UserConfig {
     /// 切换 Codex 时是否自动启动/重启 Codex App
     #[serde(default = "default_codex_launch_on_switch")]
     pub codex_launch_on_switch: bool,
+    #[serde(default)]
+    pub codex_cli_auto_refresh_on_switch: bool,
+    #[serde(default)]
+    pub codex_automatic_session_repair: CodexAutomaticSessionRepair,
     /// 启动时是否自动恢复 Codex 代理接管状态
     #[serde(default = "default_codex_auto_restore_takeover_on_launch")]
     pub codex_auto_restore_takeover_on_launch: bool,
@@ -779,6 +799,10 @@ fn default_codex_app_ui_injection_enabled() -> bool {
 }
 
 fn default_codex_app_enhancements_enabled() -> bool {
+    true
+}
+
+fn default_codex_app_native_predictions_enabled() -> bool {
     true
 }
 
@@ -1300,7 +1324,8 @@ impl Default for UserConfig {
             codex_sync_wsl: default_codex_sync_wsl(),
             codex_app_ui_injection_enabled: default_codex_app_ui_injection_enabled(),
             codex_app_api_quota_compat_enabled: default_codex_app_enhancements_enabled(),
-            codex_app_native_predictions_enabled: false,
+            codex_app_native_predictions_enabled: default_codex_app_native_predictions_enabled(),
+            codex_app_native_predictions_default_on_migrated: true,
             codex_wsl_config_dir: default_codex_wsl_config_dir(),
             zed_auto_refresh_minutes: default_zed_auto_refresh(),
             ghcp_auto_refresh_minutes: default_ghcp_auto_refresh(),
@@ -1328,6 +1353,7 @@ impl Default for UserConfig {
             hide_dock_icon: default_hide_dock_icon(),
             show_tray_icon: default_show_tray_icon(),
             tray_icon_style: default_tray_icon_style(),
+            menu_bar_left_click_opens_main_window: false,
             menu_bar_quota_enabled: default_menu_bar_quota_enabled(),
             menu_bar_show_account_prefix: default_menu_bar_show_account_prefix(),
             menu_bar_quota_platform: default_menu_bar_quota_platform(),
@@ -1380,6 +1406,7 @@ impl Default for UserConfig {
             antigravity_cli_path: String::new(),
             codebuddy_cli_path: String::new(),
             claude_app_scan_roots: default_claude_app_scan_roots(),
+            claude_share_code_sessions_on_switch: false,
             codex_specified_app_path: default_codex_specified_app_path(),
             zed_app_path: default_zed_app_path(),
             vscode_app_path: default_vscode_app_path(),
@@ -1418,6 +1445,8 @@ impl Default for UserConfig {
             openclaw_auth_overwrite_on_switch: default_openclaw_auth_overwrite_on_switch(),
             hermes_auth_overwrite_on_switch: default_hermes_auth_overwrite_on_switch(),
             codex_launch_on_switch: default_codex_launch_on_switch(),
+            codex_cli_auto_refresh_on_switch: false,
+            codex_automatic_session_repair: CodexAutomaticSessionRepair::default(),
             codex_auto_restore_takeover_on_launch:
                 default_codex_auto_restore_takeover_on_launch(),
             antigravity_launch_on_switch: default_antigravity_launch_on_switch(),
@@ -2467,6 +2496,9 @@ pub fn load_user_config() -> Result<UserConfig, String> {
             return Ok(UserConfig::default());
         }
     };
+    if !config.codex_app_native_predictions_default_on_migrated {
+        config.codex_app_native_predictions_enabled = default_codex_app_native_predictions_enabled();
+    }
     let (include_accounts, include_config) = normalize_auto_backup_selection(
         config.auto_backup_include_accounts,
         config.auto_backup_include_config,
@@ -2597,6 +2629,7 @@ where
     drop(cached);
     let (mut next_config, _file_lock_guard) = load_latest(&cached_config)?;
     patch(&mut next_config)?;
+    next_config.codex_app_native_predictions_default_on_migrated = true;
 
     // Keep the writer transaction and cross-process file lock through commit,
     // while only holding the cache write lock for the in-memory assignment.
@@ -2633,6 +2666,18 @@ where
     )
 }
 
+pub(crate) fn persist_codex_native_predictions_default() {
+    if get_user_config().codex_app_native_predictions_default_on_migrated {
+        return;
+    }
+    // Reuse the settings transaction so a concurrent user change is preserved.
+    if let Err(error) = patch_user_config(|_| Ok(())) {
+        crate::modules::logger::log_warn(&format!(
+            "[Config] 保存 Codex 下一步预测默认值失败，下次启动将重试: {error}"
+        ));
+    }
+}
+
 /// 保存完整用户配置。
 pub fn save_user_config(config: &UserConfig) -> Result<(), String> {
     let replacement = config.clone();
@@ -2660,6 +2705,13 @@ pub fn get_user_config() -> UserConfig {
         .read()
         .map(|state| state.user_config.clone())
         .unwrap_or_default()
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn menu_bar_left_click_opens_main_window() -> bool {
+    get_runtime_state()
+        .read()
+        .is_ok_and(|state| state.user_config.menu_bar_left_click_opens_main_window)
 }
 
 pub(crate) fn get_codex_proxy_direct_hosts() -> Vec<String> {
@@ -3008,7 +3060,7 @@ mod tests {
     }
 
     #[test]
-    fn codex_native_predictions_remain_opt_in_across_config_upgrades() {
+    fn codex_native_predictions_default_to_enabled() {
         for config in [
             UserConfig::default(),
             serde_json::from_value(serde_json::json!({})).unwrap(),
@@ -3018,21 +3070,58 @@ mod tests {
             }))
             .unwrap(),
         ] {
-            assert!(!config.codex_app_native_predictions_enabled);
+            assert!(config.codex_app_native_predictions_enabled);
         }
-        for enabled in [true, false] {
-            let config: UserConfig = serde_json::from_value(serde_json::json!({
-                "codex_app_native_fast_enabled": false,
-                "codex_app_api_quota_compat_enabled": true,
-                "codex_app_native_predictions_enabled": enabled
-            }))
-            .expect("read an explicit prediction preference");
-            let restored: UserConfig =
-                serde_json::from_value(serde_json::to_value(config).unwrap()).unwrap();
-            assert_eq!(restored.codex_app_native_predictions_enabled, enabled);
+    }
 
-            assert!(restored.codex_app_api_quota_compat_enabled);
+    #[test]
+    fn codex_native_predictions_upgrade_enables_legacy_off_once() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let dir = tempfile::tempdir().expect("create config directory");
+        std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", dir.path());
+        let path = dir.path().join("config.json");
+        fs::write(
+            &path,
+            serde_json::json!({
+                "startup_minimized_default_off_migrated": true,
+                "codex_app_native_predictions_enabled": false,
+                "codex_app_api_quota_compat_enabled": false,
+                "language": "ja",
+            })
+            .to_string(),
+        )
+        .expect("write legacy config");
+
+        let loaded = super::load_user_config().expect("load legacy config");
+        assert!(loaded.codex_app_native_predictions_enabled);
+        assert!(!loaded.codex_app_native_predictions_default_on_migrated);
+        let state = make_runtime_state();
+        for setting in [None, Some(false)] {
+            patch_runtime_state(
+                &state,
+                super::load_latest_user_config_with_lock,
+                super::persist_user_config,
+                |_| {},
+                |config| {
+                    if let Some(enabled) = setting {
+                        config.codex_app_native_predictions_enabled = enabled;
+                    }
+                    Ok(())
+                },
+            )
+            .expect("save upgraded preference");
+            let reloaded = super::load_user_config().expect("reload persisted config");
+            assert_eq!(
+                reloaded.codex_app_native_predictions_enabled,
+                setting.unwrap_or(true)
+            );
+            assert!(reloaded.codex_app_native_predictions_default_on_migrated);
+            assert!(!reloaded.codex_app_api_quota_compat_enabled);
+            assert_eq!(reloaded.language, "ja");
         }
+        std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
     }
 
     #[test]

@@ -128,6 +128,55 @@ function harness(options: {
 const started: DownloadEvent = { event: 'Started', data: { contentLength: 1000 } };
 const chunk = (size: number): DownloadEvent => ({ event: 'Progress', data: { chunkLength: size } });
 
+test('install and relaunch failures show the error before recovering the API listener', async () => {
+  for (const stage of ['install', 'relaunch'] as const) {
+    const failure = new Error(`fixture ${stage} failed`);
+    const recoveryStarted = deferred<void>();
+    const recovery = deferred<void>();
+    const calls: string[] = [];
+    let displayedError = '';
+    const context = {
+      updateAction: { state: 'ready', version: '1.4.1', requiresInstall: true },
+      silentUpdateVersion: null,
+      pendingSilentUpdateRef: { current: {
+        async install() { if (stage === 'install') throw failure; },
+        async close() {},
+      } },
+      async prepareCodexLocalAccessBeforeRelaunch() {},
+      async invoke(command: string) {
+        calls.push(command);
+        if (command === 'relaunch_after_update') throw failure;
+        assert.equal(command, 'codex_local_access_resume_after_failed_update');
+        recoveryStarted.resolve();
+        await recovery.promise;
+      },
+      setUpdateAction() {}, setUpdateErrorDetails() {}, setSilentUpdateVersion() {},
+      setUpdateRetryStatus() {}, writeUpdateLog() {},
+      setUpdateDownloadError(value: string) { displayedError = value; },
+      sanitizeUpdaterErrorMessage: retry.sanitizeUpdaterErrorMessage,
+      console: { error() {} },
+      t: (key: string) => key,
+    };
+    const source = `
+      const restoreCodexLocalAccessAfterRelaunchFailure = ${callbacks.get('restoreCodexLocalAccessAfterRelaunchFailure')};
+      (${callbacks.get('handleApplyPendingUpdate')})
+    `;
+    const apply = vm.runInNewContext(ts.transpileModule(source, {
+      compilerOptions: { target: ts.ScriptTarget.ES2022 },
+    }).outputText, context) as () => Promise<void>;
+    const rejected = assert.rejects(apply(), (error) => error === failure);
+    await recoveryStarted.promise;
+    assert.equal(displayedError, stage === 'install'
+      ? 'update_notification.installFailed'
+      : 'update_notification.restartRequiredAfterInstall');
+    assert.deepEqual(calls, stage === 'install'
+      ? ['codex_local_access_resume_after_failed_update']
+      : ['relaunch_after_update', 'codex_local_access_resume_after_failed_update']);
+    recovery.resolve();
+    await rejected;
+  }
+});
+
 test('manual download followed by the hourly check keeps one task and real progress', async () => {
   const update = candidate();
   const h = harness({ check: async () => update });

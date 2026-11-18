@@ -2,6 +2,13 @@
 
 本文档描述仓库当前由 `.github/workflows/release.yml` 执行的发布流程。发布行为以 workflow 和 `scripts/release/` 下的脚本为准；如果两者与本文不一致，应先修正文档或 workflow，再发版。
 
+## 共享开发工作区
+
+- **固定入口**：本机开发、修复和发版统一使用 `/private/var/www/antigravity-cockpit-tools` 的本地 `main`。写入前用 `git rev-parse --show-toplevel` 和 `git branch --show-current` 核对。除非用户明确指定，否则不新建分支或工作树，也不在当前会话附带的其他工作区继续写代码。
+- **现有改动**：如果固定目录还在别的分支，先保留现场。迁移时把原目录、其他工作树以及归档中尚未合入的改动去重收拢后，再统一到本地 `main`；不要为切换而自动 stash、重置或覆盖其他会话的改动。
+- **并行写入**：不同会话可以并行改互不重叠的范围。同一文件、共享逻辑或中英文更新日志有并行改动时，先核对已有内容，再错开写入，保留他人改动。暂存和提交只选本次授权的范围。
+- **开发交接**：已完成的用户可感知改动写进共用的中英文待发日志，不另建发布清单。还未完成或只是实验的改动，交接时标明对应文件和状态。例外使用其他工作区时，交接也注明改动所在的工作区、分支、提交或可恢复的快照。日常开发留在本地，不自动提交或推送。
+
 ## 1. 发布前检查
 
 标准发版在仓库根目录执行：
@@ -52,16 +59,19 @@ v<package.json.version>
 
 当前 release workflow 构建并上传：
 
-- Windows
+- Windows x64（MSI、NSIS 和便携包）
+- Windows ARM64（NSIS）
 - macOS Apple Silicon (`aarch64`)
 - macOS Intel (`x86_64`)
 - macOS Universal
 - Linux `x86_64`
 - Linux `aarch64`
 
-Linux release 同时包含 AppImage、deb 和 rpm updater targets。macOS Universal DMG 还会用于后续 Homebrew Cask 更新。
+Linux release 同时包含 AppImage、deb 和 rpm，以及可在无桌面环境运行的 x86_64 和 aarch64 独立 CLI 压缩包。独立 CLI 计入发布校验和。macOS Universal DMG 还会用于后续 Homebrew Cask 更新。
 
 macOS 正式构建和 `warm-macos-release-cache.yml` 共用独立的依赖缓存，固定在同一 Rust 版本，并分别按 ARM 和 Intel 编译目标保存。预热在 `main` 的构建配置或依赖变更时后台运行，也可在 `main` 手动启动；用 Tauri 的正式编译参数，只编译，不签名、打包或发布。正式 tag 仅读取缓存，不等待预热；缓存缺失时直接编译。普通 PR CI 的 `ci` profile 缓存保持独立；Windows/Linux 继续使用原有缓存。
+
+新推送不会取消正在编译的预热任务。同一版的 `main` 和 tag 紧接着推时，正式构建可能在缓存写入前就已经开始。需要缩短打 tag 后的等待时，可在准备版本期间让 `main` 预热先完成；这不是发版门槛。下一次发布在 macOS ARM 和 Intel 的任务摘要看 `Exact match`，再对照 Rust 编译耗时；`false` 只表示没有精确匹配，是否恢复了部分缓存以步骤日志为准。
 
 Universal 不再从源码重编两套宿主。ARM 和 Intel release job 在本轮构建后通过 `scripts/release/macos-universal.cjs --mode stage` 上传宿主薄二进制，附带版本、commit、workflow run ID 和 SHA-256。Universal job 使用同一 run 的具名 artifact；`--mode merge` 校验身份、文件哈希和实际架构，合并宿主并逐片比对原始内容，再用 `tauri bundle` 打包。缺失或不匹配直接失败，不回退到其他版本或旧产物。
 
@@ -153,12 +163,12 @@ Casks/cockpit-tools.rb
 
 ## 7. 发版顺序
 
+0. **确定范围并收齐**：未指定只发某项时，「发版」和「快速发版」都包含本项目所有已完成、尚未公开发布的改动，不限于当前会话。以最近一个仍公开的正式版为基线，对照本地 `main` 的提交、未提交改动和待发日志；如仍有分散开发的遗留改动，由发版会话核对对应分支、工作区和归档快照，只合入尚未包含的最终实现。只有同一功能存在冲突且无法从代码和历史判断取舍时，才询问具体冲突。
 1. 更新 `package.json` 版本。
-2. 更新 `CHANGELOG.md` 与 `CHANGELOG.zh-CN.md`，确保存在对应版本段落。
+2. 按最近公开正式版到本次准备发布的实际代码差异，更新 `CHANGELOG.md` 与 `CHANGELOG.zh-CN.md`，不把未合入内容写成已发布。
 3. 执行 `npm run sync-version`。标准发布按 `AGENTS.md` 执行本地检查；明确指定快速发布时跳过这些检查，不等待普通 CI 或缓存预热。
-
-4. 提交并合并发布所需改动。
-5. 从期望发布的 commit 创建 `v<version>` 标签，先推送分支，再推送标签。
+4. 在共享的本地 `main` 提交已收齐的改动。打 tag 前对照最终提交和待发日志，告知用户本次包含什么、哪些已知改动未纳入及原因。范围明确时无需再次审批。
+5. 从核对过的 `main` 提交创建 `v<version>` 标签，先推送 `main`，再推送标签。
 6. 分支和 tag 到达远端即报告「已触发构建」。只有正式 Release 和 `latest.json` 可用时才报告「用户可更新」。Homebrew Cask 在发布后异步更新。
 
 快速发布不强制清理本地 Rust/Tauri 编译产物。仅讨论发布、修改规则或验证代码不授权提交、推送或触发发布。

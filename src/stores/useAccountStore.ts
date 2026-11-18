@@ -176,7 +176,7 @@ interface AccountState {
     currentAccountsByTarget: CurrentAccountsByTarget;
     loading: boolean;
     error: string | null;
-    fetchAccounts: () => Promise<void>;
+    fetchAccounts: (options?: { background?: boolean }) => Promise<void>;
     fetchCurrentAccount: (runtimeTarget?: AntigravityRuntimeTarget) => Promise<void>;
     addAccount: (email: string, refreshToken: string) => Promise<Account>;
     deleteAccount: (accountId: string) => Promise<void>;
@@ -201,7 +201,7 @@ export const useAccountStore = create<AccountState>()(
       loading: false,
       error: null,
 
-      fetchAccounts: async () => {
+      fetchAccounts: async ({ background = false } = {}) => {
           const now = Date.now();
           
           // 如果正在请求中，且距离上次请求不足 DEBOUNCE_MS，复用现有 Promise
@@ -213,7 +213,9 @@ export const useAccountStore = create<AccountState>()(
           
           fetchAccountsPromise = (async () => {
               const requestId = ++fetchAccountsSeq;
-              set({ loading: true, error: null });
+              if (!background || get().accounts.length === 0) {
+                  set({ loading: true, error: null });
+              }
               try {
                   const accounts = await accountService.listAccounts();
                   if (requestId !== fetchAccountsSeq) {
@@ -221,11 +223,11 @@ export const useAccountStore = create<AccountState>()(
                   }
                   if (accounts.length === 0 && get().accounts.length > 0 && !allowNextEmptyAccountList) {
                       console.warn('[AccountStore] 忽略异常空账号列表，保留本地缓存账号');
-                      set({ loading: false });
+                      set({ loading: false, error: null });
                       return;
                   }
                   allowNextEmptyAccountList = false;
-                  set({ accounts, loading: false });
+                  set({ accounts, loading: false, error: null });
               } catch (e) {
                   if (requestId !== fetchAccountsSeq) {
                       return;

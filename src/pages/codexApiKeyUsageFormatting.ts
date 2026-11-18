@@ -79,7 +79,7 @@ export function useCodexApiKeyUsageFormatting(
   );
 
   const formatApiKeyUsagePercent = useCallback(
-    (summary?: CodexModelProviderUsageSummary): number => {
+    (summary?: CodexModelProviderUsageSummary): number | null => {
       if (summary?.mode === "new_api") {
         const { granted, available } = resolveNewApiQuotaSnapshot(summary);
         if (granted != null && available != null && granted > 0) {
@@ -88,6 +88,7 @@ export function useCodexApiKeyUsageFormatting(
             Math.min(100, Math.round(((granted - available) / granted) * 100)),
           );
         }
+        return null;
       }
       const used = summary?.quotaUsed ?? summary?.totalCost;
       const limit = summary?.quotaLimit;

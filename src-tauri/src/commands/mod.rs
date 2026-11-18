@@ -2,6 +2,7 @@ pub mod account;
 pub(crate) mod cli_launch_path;
 pub mod announcement;
 pub mod antigravity_legacy_instance;
+pub mod antigravity_token_usage;
 pub mod claude;
 pub mod claude_instance;
 pub mod codebuddy;

@@ -49,6 +49,39 @@ fn finish_writes(conn: &Connection, batch: &[UsageLogWrite], epoch: u64) {
 }
 
 #[test]
+fn committed_usage_is_visible_in_the_account_window_at_millisecond_precision() {
+    let (dir, conn) = logs();
+    let second = 1_800_000_000_000;
+    let mut latest = write("latest", 1);
+    latest.event.account_id = "account-a".into();
+    latest.event.timestamp = second + 431;
+    latest.event.estimated_cost_usd = 0.125;
+    let mut other = write("other", 1);
+    other.event.account_id = "account-b".into();
+    other.event.timestamp = latest.event.timestamp;
+    finish_writes(&conn, &[latest, other], 1);
+
+    let database = dir.path().join("logs.sqlite");
+    let read = |end_at| {
+        query_local_access_account_window_stats_at_path(
+            &database,
+            vec![CodexLocalAccessAccountWindowQuery {
+                account_id: "account-a".into(),
+                window_key: "primary".into(),
+                start_at: second,
+                end_at,
+            }],
+        )
+        .unwrap()
+    };
+    assert_eq!(read(second)[0].request_count, 0);
+    let stats = read(second + 431);
+    assert_eq!(stats[0].request_count, 1);
+    assert_eq!(stats[0].total_tokens, 12);
+    assert_eq!(stats[0].estimated_cost_usd, 0.125);
+}
+
+#[test]
 fn summary_transaction_rollback_never_commits_later_rows_outside_the_batch() {
     let (_dir, conn) = logs();
     crate::modules::codex_request_summary::ensure_schema(&conn).unwrap();
@@ -195,4 +228,38 @@ fn slow_sql_batch_is_interrupted_and_same_rows_can_be_retried_without_partial_ch
             ["settledMicrousd"],
         123
     );
+}
+
+#[test]
+fn monthly_token_alerts_use_committed_and_deduplicated_gateway_usage() {
+    let (_dir, conn) = logs();
+    ensure_monthly_token_alerts_schema(&conn).unwrap();
+    save_monthly_token_threshold(&conn, "writer-key", 24).unwrap();
+    let now = 1_800_000_000_431;
+    let mut first = write("monthly-one", 1);
+    first.event.timestamp = now;
+    let mut second = write("monthly-two", 1);
+    second.event.timestamp = now;
+    let mut other = write("monthly-other", 1);
+    other.event.timestamp = now;
+    other.event.api_key_id = "another-key".into();
+    other.event.total_tokens = 10_000;
+    let keys = [("writer-key".to_owned(), "Writer key".to_owned())]
+        .into_iter()
+        .collect();
+    let persist = |writes: &[&UsageLogWrite]| {
+        let tx = conn.unchecked_transaction().unwrap();
+        for write in writes {
+            insert_live_usage_event_in_transaction(&tx, &write.event, None).unwrap();
+        }
+        tx.commit().unwrap();
+    };
+    persist(&[&other, &first]);
+    persist(&[&first]);
+    assert_eq!(monthly_token_alert(&conn, "writer-key", now).unwrap().used, 12);
+    assert!(claim_monthly_token_alerts(&conn, &keys, now).unwrap().1.is_empty());
+    persist(&[&second]);
+    let notices = claim_monthly_token_alerts(&conn, &keys, now).unwrap().1;
+    assert_eq!(notices.len(), 1);
+    assert_eq!(notices[0].used, 24);
 }

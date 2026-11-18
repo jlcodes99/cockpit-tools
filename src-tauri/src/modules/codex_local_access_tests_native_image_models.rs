@@ -477,6 +477,9 @@ async fn native_image_bare_alias_http_generation_edit_and_responses_send_configu
         };
         assert!(image_listed(selected), "{catalog}");
         assert!(image_listed(actual), "{catalog}");
+        if !oauth_source {
+            assert!(image_listed(explicit), "{catalog}");
+        }
         assert_eq!(image_listed("gpt-image-2"), selected == "gpt-image-2.5");
         let mut expected = Vec::new();
         let requests = if oauth_source {

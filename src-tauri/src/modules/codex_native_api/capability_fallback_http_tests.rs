@@ -26,6 +26,7 @@ enum Rejection {
     UnsupportedSse,
     UnsupportedHandshakeSse,
     InvalidSse,
+    ImageParameterSse,
     AfterOutput,
     Incomplete,
 }
@@ -206,6 +207,11 @@ async fn fixture(
                 } else {
                     vec![error]
                 }
+            } else if account == "primary" && matches!(rejection, Rejection::ImageParameterSse) {
+                vec![json!({"type":"error","error":{
+                    "type":"image_generation_user_error","code":"invalid_value","param":"complexity",
+                    "message":"Complexity 'medium' is not supported for this image model."
+                }})]
             } else if account == "primary" && matches!(rejection, Rejection::AfterOutput) {
                 vec![json!({"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_write","call_id":"write","name":"write","arguments":"{}","status":"completed"}}),
                     json!({"type":"error","error":{"code":"unsupported_tool","param":"tools[0].type","message":"Already generated output"}})]
@@ -420,7 +426,7 @@ async fn capability_fallback_handles_precise_sse_rejections_before_output_for_bo
 
 #[tokio::test]
 async fn capability_fallback_sse_parameter_faults_and_generated_output_never_replay() {
-    for mode in [Rejection::InvalidSse, Rejection::AfterOutput] {
+    for mode in [Rejection::InvalidSse, Rejection::ImageParameterSse, Rejection::AfterOutput] {
         let (_host, captures, mut service, _dir, task) = fixture(true, false, true, mode).await;
         let mut body = request();
         body["stream"] = json!(true);
@@ -432,6 +438,9 @@ async fn capability_fallback_sse_parameter_faults_and_generated_output_never_rep
         assert!(!text.contains("resp_fallback_backup"));
         if matches!(mode, Rejection::AfterOutput) {
             assert!(text.contains("fc_write"), "the existing tool output remains visible: {text}");
+        }
+        if matches!(mode, Rejection::ImageParameterSse) {
+            assert!(text.contains("Complexity 'medium'"), "{text}");
         }
         drop(sent);
         service.shutdown(Duration::from_secs(2)).await.unwrap();

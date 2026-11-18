@@ -1,36 +1,55 @@
 use crate::models::codex::CodexTokens;
 use crate::modules::logger;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+#[cfg(feature = "desktop")]
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "desktop")]
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::io::{ErrorKind, Write};
-use std::net::{TcpListener, TcpStream};
+#[cfg(feature = "desktop")]
+use std::io::ErrorKind;
+use std::io::Write;
+#[cfg(feature = "desktop")]
+use std::net::TcpListener;
+use std::net::TcpStream;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+#[cfg(feature = "desktop")]
 use std::time::Duration;
+#[cfg(feature = "desktop")]
 use tauri::{AppHandle, Emitter};
 use url::Url;
 
 const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
+#[cfg(feature = "desktop")]
 const AUTH_ENDPOINT: &str = "https://auth.openai.com/oauth/authorize";
 const TOKEN_ENDPOINT: &str = "https://auth.openai.com/oauth/token";
+#[cfg(feature = "desktop")]
 const SCOPES: &str =
     "openid profile email offline_access api.connectors.read api.connectors.invoke";
 const ORIGINATOR: &str = "Codex Desktop";
 const OAUTH_CALLBACK_PORT: u16 = 1455;
+#[cfg(feature = "desktop")]
 const OAUTH_PORT_IN_USE_CODE: &str = "CODEX_OAUTH_PORT_IN_USE";
 const OAUTH_STATE_FILE: &str = "codex_oauth_pending.json";
+#[cfg(feature = "desktop")]
 const OAUTH_TIMEOUT_SECONDS: i64 = 300;
 const TOKEN_REFRESH_SKEW_SECONDS: i64 = 300;
 pub const ID_TOKEN_REFRESH_LEAD_SECONDS: i64 = 10 * 60;
+#[cfg(feature = "desktop")]
 const DEVICE_USER_CODE_ENDPOINT: &str = "https://auth.openai.com/api/accounts/deviceauth/usercode";
+#[cfg(feature = "desktop")]
 const DEVICE_TOKEN_ENDPOINT: &str = "https://auth.openai.com/api/accounts/deviceauth/token";
+#[cfg(feature = "desktop")]
 const DEVICE_VERIFICATION_URL: &str = "https://auth.openai.com/codex/device";
+#[cfg(any(feature = "desktop", test))]
 const DEVICE_EXCHANGE_REDIRECT_URI: &str = "https://auth.openai.com/deviceauth/callback";
+#[cfg(feature = "desktop")]
 const DEVICE_TIMEOUT_SECONDS: u64 = 15 * 60;
+#[cfg(any(feature = "desktop", test))]
 const DEVICE_DEFAULT_POLL_SECONDS: u64 = 5;
+#[cfg(feature = "desktop")]
 const DEVICE_REQUEST_TIMEOUT_SECONDS: u64 = 25;
 
 pub fn get_callback_port() -> u16 {
@@ -68,6 +87,7 @@ pub struct CodexDeviceAuthStartResponse {
     pub poll_interval_seconds: u64,
 }
 
+#[cfg(feature = "desktop")]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CodexDeviceAuthErrorEvent {
@@ -75,12 +95,14 @@ struct CodexDeviceAuthErrorEvent {
     error: String,
 }
 
+#[cfg(feature = "desktop")]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CodexOAuthLoginCallbackEvent {
     login_id: String,
 }
 
+#[cfg(feature = "desktop")]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CodexOAuthLoginTimeoutEvent {
@@ -114,12 +136,14 @@ lazy_static::lazy_static! {
     static ref COMPLETE_ATTEMPT_SEQ: AtomicU64 = AtomicU64::new(0);
 }
 
+#[cfg(feature = "desktop")]
 fn generate_base64url_token() -> String {
     let mut rng = rand::thread_rng();
     let bytes: Vec<u8> = (0..32).map(|_| rng.gen::<u8>()).collect();
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
+#[cfg(feature = "desktop")]
 fn generate_code_challenge(code_verifier: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(code_verifier.as_bytes());
@@ -198,6 +222,7 @@ fn set_oauth_state(state: Option<OAuthState>) {
     persist_state_to_disk(state.as_ref());
 }
 
+#[cfg(feature = "desktop")]
 fn ensure_callback_listener_for_state(app_handle: &AppHandle, state: &OAuthState) {
     if state.device_auth_id.is_some() {
         return;
@@ -248,6 +273,7 @@ fn ensure_callback_listener_for_state(app_handle: &AppHandle, state: &OAuthState
     }
 }
 
+#[cfg(feature = "desktop")]
 fn find_available_port() -> Result<u16, String> {
     match TcpListener::bind(("127.0.0.1", OAUTH_CALLBACK_PORT)) {
         Ok(listener) => {
@@ -262,6 +288,7 @@ fn find_available_port() -> Result<u16, String> {
     }
 }
 
+#[cfg(any(feature = "desktop", test))]
 fn parse_device_poll_interval(value: Option<&serde_json::Value>) -> u64 {
     value
         .and_then(|item| item.as_u64().or_else(|| item.as_str()?.parse().ok()))
@@ -269,6 +296,7 @@ fn parse_device_poll_interval(value: Option<&serde_json::Value>) -> u64 {
         .unwrap_or(DEVICE_DEFAULT_POLL_SECONDS)
 }
 
+#[cfg(feature = "desktop")]
 async fn request_device_user_code() -> Result<(String, String, u64), String> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(DEVICE_REQUEST_TIMEOUT_SECONDS))
@@ -316,6 +344,7 @@ async fn request_device_user_code() -> Result<(String, String, u64), String> {
     ))
 }
 
+#[cfg(feature = "desktop")]
 fn clear_oauth_state_for_login_id(login_id: &str) {
     let should_clear = OAUTH_STATE
         .lock()
@@ -327,6 +356,7 @@ fn clear_oauth_state_for_login_id(login_id: &str) {
     }
 }
 
+#[cfg(feature = "desktop")]
 fn emit_device_auth_error(app: &AppHandle, login_id: &str, error: String) {
     clear_oauth_state_for_login_id(login_id);
     let _ = app.emit(
@@ -338,6 +368,7 @@ fn emit_device_auth_error(app: &AppHandle, login_id: &str, error: String) {
     );
 }
 
+#[cfg(feature = "desktop")]
 async fn poll_device_token(
     app: AppHandle,
     login_id: String,
@@ -449,6 +480,7 @@ async fn poll_device_token(
     }
 }
 
+#[cfg(feature = "desktop")]
 pub async fn start_device_auth(app: AppHandle) -> Result<CodexDeviceAuthStartResponse, String> {
     hydrate_oauth_state_if_missing();
     if OAUTH_STATE.lock().unwrap().is_some() {
@@ -540,6 +572,7 @@ fn parse_callback_url(callback_url: &str, port: u16) -> Result<Url, String> {
     .map_err(|e| format!("回调链接格式无效: {}", e))
 }
 
+#[cfg(feature = "desktop")]
 fn build_auth_url(redirect_uri: &str, code_challenge: &str, state: &str) -> String {
     format!(
         "{}?response_type=code&client_id={}&redirect_uri={}&scope={}&code_challenge={}&code_challenge_method=S256&id_token_add_organizations=true&codex_cli_simplified_flow=true&state={}&originator={}",
@@ -553,6 +586,7 @@ fn build_auth_url(redirect_uri: &str, code_challenge: &str, state: &str) -> Stri
     )
 }
 
+#[cfg(feature = "desktop")]
 fn to_start_response(state: &OAuthState) -> CodexOAuthLoginStartResponse {
     CodexOAuthLoginStartResponse {
         login_id: state.login_id.clone(),
@@ -572,6 +606,7 @@ fn clear_oauth_state_if_matches(expected_state: &str, expected_login_id: &str) {
     }
 }
 
+#[cfg(feature = "desktop")]
 pub async fn start_oauth_login(
     app_handle: AppHandle,
 ) -> Result<CodexOAuthLoginStartResponse, String> {
@@ -646,6 +681,7 @@ pub async fn start_oauth_login(
     Ok(CodexOAuthLoginStartResponse { login_id, auth_url })
 }
 
+#[cfg(feature = "desktop")]
 async fn start_callback_server(
     port: u16,
     expected_state: String,
@@ -1101,6 +1137,7 @@ pub fn submit_callback_url(login_id: &str, callback_url: &str) -> Result<(), Str
     Ok(())
 }
 
+#[cfg(feature = "desktop")]
 pub fn restore_pending_oauth_listener(app_handle: AppHandle) {
     hydrate_oauth_state_if_missing();
     let state = {

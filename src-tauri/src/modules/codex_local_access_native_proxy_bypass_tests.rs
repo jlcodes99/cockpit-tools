@@ -71,6 +71,22 @@ fn native_explicit_service_proxy_is_not_bypassed_by_environment() {
     );
 }
 
+#[test]
+fn native_explicit_service_proxy_accepts_a_saved_host_and_port_without_a_scheme() {
+    assert_eq!(
+        validate_upstream_proxy_config(Some("127.0.0.1:7890".into())).unwrap().as_deref(),
+        Some("http://127.0.0.1:7890")
+    );
+    assert_eq!(
+        validate_upstream_proxy_config(Some("socks5://127.0.0.1:7890".into())).unwrap().as_deref(),
+        Some("socks5://127.0.0.1:7890")
+    );
+    native_proxy_bypass_case(
+        "native_explicit_service_proxy_accepts_a_saved_host_and_port_without_a_scheme",
+        "host-and-port",
+    );
+}
+
 async fn native_proxy_bypass_network_case(scenario: &str) {
     use axum::{extract::ws::WebSocketUpgrade, routing::get, Router};
     use futures_util::{SinkExt, StreamExt};
@@ -98,6 +114,7 @@ async fn native_proxy_bypass_network_case(scenario: &str) {
             .unwrap()
     });
     let proxy_url = format!("http://{proxy_address}");
+    let explicit = matches!(scenario, "explicit" | "host-and-port");
     std::env::set_var("HTTPS_PROXY", &proxy_url);
     if scenario == "uppercase" {
         std::env::set_var("no_proxy", "*");
@@ -110,13 +127,15 @@ async fn native_proxy_bypass_network_case(scenario: &str) {
     std::env::set_var(
         no_proxy_key,
         match scenario {
-            "explicit" => "*",
+            "explicit" | "host-and-port" => "*",
             "lowercase" => "127.0.0.0/8",
             _ => "127.0.0.1",
         },
     );
     let mut input = Inputs::new();
-    input.collection.upstream_proxy_url = (scenario == "explicit").then_some(proxy_url);
+    input.collection.upstream_proxy_url = explicit.then(|| {
+        if scenario == "host-and-port" { proxy_address.to_string() } else { proxy_url }
+    });
     input.base = format!("http://{upstream_address}/v1");
     let host = NativeHostBridge::default();
     let (client, _, _, first_key) =
@@ -133,7 +152,7 @@ async fn native_proxy_bypass_network_case(scenario: &str) {
         .text()
         .await
         .unwrap();
-    if scenario == "explicit" {
+    if explicit {
         for source in [
             "account",
             "service",

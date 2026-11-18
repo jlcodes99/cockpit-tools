@@ -581,8 +581,8 @@ fn spawn_open_app_with_options_and_env_and_egress(
             }
         }
     }
-    let child = spawn_detached_unix(&mut cmd).map_err(|e| format!("启动失败: {}", e))?;
-    Ok(child.id())
+    let pid = spawn_detached_unix(&mut cmd).map_err(|e| format!("启动失败: {}", e))?;
+    Ok(pid)
 }
 
 fn find_antigravity_process_exe() -> Option<std::path::PathBuf> {
@@ -699,15 +699,8 @@ fn find_vscode_process_exe() -> Option<std::path::PathBuf> {
             let mut parts = line.splitn(2, |ch: char| ch.is_whitespace());
             let _pid_str = parts.next().unwrap_or("").trim();
             let cmdline = parts.next().unwrap_or("").trim();
-            let lower = cmdline.to_lowercase();
-            if !lower.contains("visual studio code.app/contents/macos/") {
-                continue;
-            }
-            if lower.contains("--type=") || lower.contains("crashpad_handler") {
-                continue;
-            }
-            if let Some(exe) = extract_macos_exe_from_cmdline(cmdline) {
-                return Some(std::path::PathBuf::from(exe));
+            if let Some(executable) = vscode_macos_running_executable(cmdline) {
+                return Some(executable);
             }
         }
         return None;
@@ -1196,6 +1189,66 @@ pub fn detect_antigravity_legacy_exec_path() -> Option<std::path::PathBuf> {
     None
 }
 
+#[cfg(target_os = "macos")]
+fn resolve_vscode_macos_bundle_executable(path: &Path) -> Option<PathBuf> {
+    let bundle = path.ancestors().find(|path| {
+        path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("app"))
+    })?;
+    let contents = bundle.join("Contents");
+    let binaries = contents.join("MacOS");
+    let metadata = plist::Value::from_file(contents.join("Info.plist")).ok();
+    if let Some(executable) = metadata.as_ref()
+        .and_then(plist::Value::as_dictionary)
+        .and_then(|info| info.get("CFBundleExecutable"))
+        .and_then(plist::Value::as_string)
+    {
+        let name = Path::new(executable);
+        if name.file_name()? != executable {
+            return None;
+        }
+        let binary = binaries.join(name);
+        return binary.is_file().then_some(binary);
+    }
+    ["Code", "Electron"].into_iter()
+        .map(|name| binaries.join(name))
+        .find(|binary| binary.is_file())
+}
+
+#[cfg(target_os = "macos")]
+fn vscode_macos_running_executable(command: &str) -> Option<PathBuf> {
+    let lower = command.to_ascii_lowercase();
+    if lower.contains("--type=") || lower.contains("crashpad_handler") {
+        return None;
+    }
+    let bundle_end = lower.find(".app/contents/macos/")? + ".app".len();
+    let bundle = Path::new(&command[..bundle_end]);
+    if !bundle.is_absolute() {
+        return None;
+    }
+    let name = bundle.file_name()?.to_str()?.to_ascii_lowercase();
+    if !matches!(name.as_str(), "visual studio code.app" | "visual studio code - insiders.app") {
+        return None;
+    }
+    let executable = resolve_vscode_macos_bundle_executable(bundle)?;
+    let tail = command.strip_prefix(executable.to_str()?)?;
+    (tail.is_empty() || tail.starts_with(char::is_whitespace)).then_some(executable)
+}
+
+#[cfg(target_os = "macos")]
+fn detect_vscode_macos_application(
+    system_applications: &Path,
+    user_applications: Option<&Path>,
+) -> Option<PathBuf> {
+    ["Visual Studio Code.app", "Visual Studio Code - Insiders.app"]
+        .into_iter()
+        .flat_map(|name| {
+            std::iter::once(system_applications)
+                .chain(user_applications)
+                .map(move |directory| directory.join(name))
+        })
+        .find_map(|bundle| resolve_vscode_macos_bundle_executable(&bundle))
+}
+
 fn detect_vscode_exec_path() -> Option<std::path::PathBuf> {
     if let Some(path) = find_vscode_process_exe() {
         return Some(path);
@@ -1203,10 +1256,8 @@ fn detect_vscode_exec_path() -> Option<std::path::PathBuf> {
 
     #[cfg(target_os = "macos")]
     {
-        let path = std::path::PathBuf::from(VSCODE_APP_PATH);
-        if path.exists() {
-            return Some(path);
-        }
+        let user_applications = dirs::home_dir().map(|home| home.join("Applications"));
+        return detect_vscode_macos_application(Path::new("/Applications"), user_applications.as_deref());
     }
 
     #[cfg(target_os = "windows")]
@@ -1281,6 +1332,7 @@ fn detect_vscode_exec_path() -> Option<std::path::PathBuf> {
         }
     }
 
+    #[cfg(not(target_os = "macos"))]
     None
 }
 
@@ -2105,7 +2157,7 @@ fn is_chatgpt_store_gui_exe(path: &std::path::Path) -> bool {
 /// Read only the PE headers. A desktop path must not resolve to a console CLI,
 /// DLL or script merely because its filename exists.
 #[cfg(any(test, target_os = "windows"))]
-fn windows_executable_has_gui_subsystem(path: &Path) -> bool {
+pub(crate) fn windows_executable_has_gui_subsystem(path: &Path) -> bool {
     use std::io::{Read, Seek, SeekFrom};
     let check = || -> std::io::Result<bool> {
         let mut file = std::fs::File::open(path)?;
@@ -2205,13 +2257,13 @@ struct CodexStorePackage {
     install_location: std::path::PathBuf,
 }
 
-/// 列出当前用户已注册的商店版 Codex 包（新版本优先）。
+/// 列出当前用户已注册的商店版 Codex 包（稳定版优先，同渠道按版本排序）。
 ///
 /// 只读包注册信息：不扫描 WindowsApps 目录（普通用户会被拒，且带 `-Filter` 时可能
 /// 静默返回空），也不依赖客户端是否正在运行。PFN 一并输出，便于日志和后续匹配。
 #[cfg(target_os = "windows")]
 fn codex_store_packages() -> Vec<CodexStorePackage> {
-    let script = r#"$names = @('OpenAI.Codex', 'OpenAI.ChatGPT', 'OpenAI.ChatGPT-Desktop')
+    let script = r#"$names = @('OpenAI.Codex', 'OpenAI.ChatGPT', 'OpenAI.ChatGPT-Desktop', 'OpenAI.CodexBeta')
 $pkgs = @()
 foreach ($name in $names) {
   $pkgs += @(Get-AppxPackage -Name $name -ErrorAction SilentlyContinue)
@@ -2225,7 +2277,8 @@ if ($pkgs.Count -eq 0) {
 }
 $pkgs |
   Where-Object { $_.InstallLocation -and $_.PackageFamilyName } |
-  Sort-Object -Property @{ Expression = { $_.Version }; Descending = $true } |
+  Sort-Object -Property @{ Expression = { if ($_.Name -ieq 'OpenAI.CodexBeta') { 1 } else { 0 } } },
+                        @{ Expression = { $_.Version }; Descending = $true } |
   ForEach-Object { Write-Output ([string]$_.PackageFamilyName + '|' + [string]$_.InstallLocation.Trim()) }"#;
 
     let mut packages = Vec::new();
@@ -2272,7 +2325,9 @@ $pkgs |
 #[cfg(target_os = "windows")]
 fn detect_codex_store_gui_exe() -> Option<std::path::PathBuf> {
     for package in codex_store_packages() {
-        if let Some(exe) = codex_store_gui_exe_in(&package.install_location) {
+        if let Some(exe) = codex_store_gui_exe_in(&package.install_location)
+            .filter(|path| is_usable_codex_windows_gui_path(path))
+        {
             crate::modules::logger::log_info(&format!(
                 "[Path Detect] codex store hit: pfn={} install_location={} exe={}",
                 package.family_name,
@@ -2282,7 +2337,7 @@ fn detect_codex_store_gui_exe() -> Option<std::path::PathBuf> {
             return Some(exe);
         }
         crate::modules::logger::log_warn(&format!(
-            "[Path Detect] 商店包 {} 的安装目录里没有 ChatGPT.exe: {}",
+            "[Path Detect] 商店包 {} 的安装目录里没有可用的 ChatGPT.exe: {}",
             package.family_name,
             package.install_location.to_string_lossy()
         ));
@@ -2711,11 +2766,18 @@ pub fn ensure_minimax_code_launch_path_configured() -> Result<(), String> {
     resolve_minimax_code_launch_path().map(|_| ())
 }
 
+#[cfg(target_os = "macos")]
+fn resolve_macos_vscode_executable(path: &str) -> Option<PathBuf> {
+    ["Code", "Electron"]
+        .into_iter()
+        .find_map(|binary| resolve_macos_exec_path(path, binary).filter(|path| path.is_file()))
+}
+
 fn resolve_vscode_launch_path() -> Result<std::path::PathBuf, String> {
     if let Some(custom) = normalize_custom_path(Some(&config::get_user_config().vscode_app_path)) {
         #[cfg(target_os = "macos")]
         {
-            if let Some(exec) = resolve_macos_exec_path(&custom, "Electron") {
+            if let Some(exec) = resolve_macos_vscode_executable(&custom) {
                 return Ok(exec);
             }
         }
@@ -2985,9 +3047,7 @@ fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
         ));
     }
 
-    if let Some(detected) =
-        detect_codex_store_gui_exe().filter(|path| is_usable_codex_windows_gui_path(path))
-    {
+    if let Some(detected) = detect_codex_store_gui_exe() {
         update_app_path_in_config("codex", &detected, &configured);
         crate::modules::logger::log_info(&format!(
             "[Codex Start] 已自动探测并写回 Codex 启动路径: {}",

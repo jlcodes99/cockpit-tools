@@ -2323,11 +2323,6 @@ async fn send_upstream_request_with_authorization_url(
         if let Some(session_id) = session_id {
             request = request.header("Session-Id", session_id);
         }
-        if !account.is_api_key_auth() {
-            if let Some(account_id) = resolve_upstream_account_id(account) {
-                request = request.header("ChatGPT-Account-Id", account_id);
-            }
-        }
         if !headers.contains_key("accept") {
             request = request.header(
                 ACCEPT,

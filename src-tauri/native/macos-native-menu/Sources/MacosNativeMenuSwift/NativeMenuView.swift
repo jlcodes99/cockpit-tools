@@ -83,6 +83,7 @@ struct NativeMenuAccountSectionView: View {
                         QuotaMetricView(
                             row: row
                         )
+                        .equatable()
 
                         if index < viewedCard.quota_rows.count - 1 {
                             Divider()
@@ -285,7 +286,7 @@ private struct AccountHeaderView: View {
     }
 }
 
-private struct QuotaMetricView: View {
+private struct QuotaMetricView: View, Equatable {
     let row: NativeMenuQuotaRow
 
     var body: some View {

@@ -27,10 +27,9 @@ fn format_kill_command_failure(
     }
 }
 
-pub fn start_vscode_with_args_with_new_window(
+pub fn start_vscode_with_args(
     user_data_dir: &str,
     extra_args: &[String],
-    use_new_window: bool,
 ) -> Result<u32, String> {
     #[cfg(target_os = "macos")]
     {
@@ -49,11 +48,6 @@ pub fn start_vscode_with_args_with_new_window(
         let mut args: Vec<String> = Vec::new();
         args.push("--user-data-dir".to_string());
         args.push(target.to_string());
-        if use_new_window {
-            args.push("--new-window".to_string());
-        } else {
-            args.push("--reuse-window".to_string());
-        }
         for arg in extra_args {
             let trimmed = arg.trim();
             if !trimmed.is_empty() {
@@ -101,11 +95,6 @@ pub fn start_vscode_with_args_with_new_window(
             cmd.creation_flags(0x08000000);
         }
         cmd.arg("--user-data-dir").arg(target);
-        if use_new_window {
-            cmd.arg("--new-window");
-        } else {
-            cmd.arg("--reuse-window");
-        }
         for arg in extra_args {
             let trimmed = arg.trim();
             if !trimmed.is_empty() {
@@ -135,11 +124,6 @@ pub fn start_vscode_with_args_with_new_window(
                 .stderr(Stdio::null());
         }
         cmd.arg("--user-data-dir").arg(target);
-        if use_new_window {
-            cmd.arg("--new-window");
-        } else {
-            cmd.arg("--reuse-window");
-        }
         for arg in extra_args {
             let trimmed = arg.trim();
             if !trimmed.is_empty() {
@@ -147,15 +131,15 @@ pub fn start_vscode_with_args_with_new_window(
             }
         }
 
-        let child =
+        let pid =
             spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 VS Code 失败: {}", e))?;
         crate::modules::logger::log_info("VS Code 启动命令已发送");
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
-        let _ = (user_data_dir, extra_args, use_new_window);
+        let _ = (user_data_dir, extra_args);
         Err("GitHub Copilot 应用多开仅支持 macOS、Windows 和 Linux".to_string())
     }
 }
@@ -280,10 +264,10 @@ pub fn start_codebuddy_with_args_with_new_window(
             }
         }
 
-        let child =
+        let pid =
             spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 CodeBuddy 失败: {}", e))?;
         crate::modules::logger::log_info("CodeBuddy 启动命令已发送");
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -392,10 +376,10 @@ pub fn start_codebuddy_default_with_args_with_new_window(
                 cmd.arg(trimmed);
             }
         }
-        let child =
+        let pid =
             spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 CodeBuddy 失败: {}", e))?;
         crate::modules::logger::log_info("CodeBuddy 默认实例启动命令已发送");
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -525,10 +509,10 @@ pub fn start_codebuddy_cn_with_args_with_new_window(
             }
         }
 
-        let child =
+        let pid =
             spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 CodeBuddy CN 失败: {}", e))?;
         crate::modules::logger::log_info("CodeBuddy CN 启动命令已发送");
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -637,10 +621,10 @@ pub fn start_codebuddy_cn_default_with_args_with_new_window(
                 cmd.arg(trimmed);
             }
         }
-        let child =
+        let pid =
             spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 CodeBuddy CN 失败: {}", e))?;
         crate::modules::logger::log_info("CodeBuddy CN 默认实例启动命令已发送");
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -709,7 +693,7 @@ pub fn start_workbuddy_with_args_with_new_window(
             }
         }
 
-        let child =
+        let pid =
             spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 WorkBuddy 失败：{}", e))?;
         crate::modules::logger::log_info(&format!(
             "[WorkBuddy Start] managed instance via Electron binary; config_dir={} user_data_dir={} launch_path={}",
@@ -731,9 +715,9 @@ pub fn start_workbuddy_with_args_with_new_window(
         }
         crate::modules::logger::log_warn(&format!(
             "[WorkBuddy Start] 启动后 6s 内未匹配到实例 PID，回退 child pid={}",
-            child.id()
+            pid
         ));
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(target_os = "windows")]
@@ -799,14 +783,14 @@ pub fn start_workbuddy_with_args_with_new_window(
             }
         }
 
-        let child =
+        let pid =
             spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 WorkBuddy 失败：{}", e))?;
         crate::modules::logger::log_info(&format!(
             "[WorkBuddy Start] managed instance; config_dir={} user_data_dir={}",
             config_dir.to_string_lossy(),
             electron_dir_str
         ));
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -872,7 +856,7 @@ pub fn start_minimax_code_with_args_with_new_window(
                 cmd.arg(trimmed);
             }
         }
-        let child =
+        let pid =
             spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 MiniMax Code 失败：{}", e))?;
         crate::modules::logger::log_info(&format!(
             "[MiniMax Code Start] managed instance; data_dir={} launch_path={}",
@@ -889,9 +873,9 @@ pub fn start_minimax_code_with_args_with_new_window(
         }
         crate::modules::logger::log_warn(&format!(
             "[MiniMax Code Start] 启动后 6s 内未匹配到实例 PID，回退 child pid={}",
-            child.id()
+            pid
         ));
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(target_os = "windows")]
@@ -956,13 +940,13 @@ pub fn start_minimax_code_with_args_with_new_window(
                 cmd.arg(trimmed);
             }
         }
-        let child =
+        let pid =
             spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 MiniMax Code 失败：{}", e))?;
         crate::modules::logger::log_info(&format!(
             "[MiniMax Code Start] managed instance; data_dir={}",
             data_dir_path.to_string_lossy()
         ));
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -1070,10 +1054,10 @@ pub fn start_minimax_code_default_with_args_with_new_window(
                 cmd.arg(trimmed);
             }
         }
-        let child =
+        let pid =
             spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 MiniMax Code 失败：{}", e))?;
         crate::modules::logger::log_info("MiniMax Code 默认实例启动命令已发送");
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -1177,16 +1161,64 @@ pub fn start_workbuddy_default_with_args_with_new_window(
                 cmd.arg(trimmed);
             }
         }
-        let child =
+        let pid =
             spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 WorkBuddy 失败：{}", e))?;
         crate::modules::logger::log_info("WorkBuddy 默认实例启动命令已发送");
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = (extra_args, use_new_window);
         Err("WorkBuddy 应用多开仅支持 macOS、Windows 和 Linux".to_string())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn qoder_macos_launch_profile(target: &Path) -> std::io::Result<PathBuf> {
+    use sha2::{Digest, Sha256};
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::{symlink, DirBuilderExt, MetadataExt, PermissionsExt};
+
+    // Qoder places <version>-main.sock in user-data-dir. Darwin's sun_path
+    // has room for 104 bytes including the terminating NUL.
+    const SOCKET_PATH_CAPACITY: usize = 104;
+    const SOCKET_SUFFIX_BYTES: usize = "/xxxx-main.sock".len();
+    if target.as_os_str().as_bytes().len() + SOCKET_SUFFIX_BYTES < SOCKET_PATH_CAPACITY {
+        return Ok(target.to_path_buf());
+    }
+
+    std::fs::create_dir_all(target)?;
+    let target = std::fs::canonicalize(target)?;
+    // SAFETY: geteuid takes no arguments and has no memory preconditions.
+    let uid = unsafe { libc::geteuid() };
+    let alias_dir = PathBuf::from(format!("/tmp/.cockpit-qoder-{uid}"));
+    match std::fs::DirBuilder::new().mode(0o700).create(&alias_dir) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error),
+    }
+    let metadata = std::fs::symlink_metadata(&alias_dir)?;
+    if !metadata.is_dir() || metadata.uid() != uid || metadata.permissions().mode() & 0o077 != 0 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "Qoder could not use a private profile alias directory",
+        ));
+    }
+
+    // Use a stable alias so a running instance keeps the same IPC endpoint.
+    let digest = format!("{:x}", Sha256::digest(target.as_os_str().as_bytes()));
+    let alias = alias_dir.join(&digest[..32]);
+    match symlink(&target, &alias) {
+        Ok(()) => Ok(alias),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            if std::fs::read_link(&alias)? == target {
+                Ok(alias)
+            } else {
+                Err(error)
+            }
+        }
+        Err(error) => Err(error),
     }
 }
 
@@ -1204,10 +1236,12 @@ pub fn start_qoder_with_args_with_new_window(
         let launch_path = resolve_qoder_launch_path()?;
         let app_root = resolve_macos_app_root_from_launch_path(&launch_path)
             .ok_or_else(|| app_path_missing_error("qoder"))?;
+        let launch_profile = qoder_macos_launch_profile(Path::new(target))
+            .map_err(|error| format!("QODER_LAUNCH_FAILED: {error}"))?;
 
         let mut args: Vec<String> = Vec::new();
         args.push("--user-data-dir".to_string());
-        args.push(target.to_string());
+        args.push(launch_profile.to_string_lossy().into_owned());
         if use_new_window {
             args.push("--new-window".to_string());
         } else {
@@ -1310,9 +1344,9 @@ pub fn start_qoder_with_args_with_new_window(
             }
         }
 
-        let child = spawn_detached_unix(&mut cmd).map_err(|e| format!("QODER_LAUNCH_FAILED: {}", e))?;
+        let pid = spawn_detached_unix(&mut cmd).map_err(|e| format!("QODER_LAUNCH_FAILED: {}", e))?;
         crate::modules::logger::log_info("Qoder 启动命令已发送");
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -1421,9 +1455,9 @@ pub fn start_qoder_default_with_args_with_new_window(
                 cmd.arg(trimmed);
             }
         }
-        let child = spawn_detached_unix(&mut cmd).map_err(|e| format!("QODER_LAUNCH_FAILED: {}", e))?;
+        let pid = spawn_detached_unix(&mut cmd).map_err(|e| format!("QODER_LAUNCH_FAILED: {}", e))?;
         crate::modules::logger::log_info("Qoder 默认实例启动命令已发送");
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -1548,9 +1582,9 @@ pub fn start_trae_with_args_with_new_window(
             }
         }
 
-        let child = spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 Trae 失败: {}", e))?;
+        let pid = spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 Trae 失败: {}", e))?;
         crate::modules::logger::log_info("Trae 启动命令已发送");
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -1669,10 +1703,10 @@ pub fn start_trae_platform_with_args_with_new_window(
             }
         }
 
-        let child = spawn_detached_unix(&mut cmd)
+        let pid = spawn_detached_unix(&mut cmd)
             .map_err(|e| format!("启动 {} 失败: {}", platform.display_name(), e))?;
         crate::modules::logger::log_info(&format!("{} 启动命令已发送", platform.display_name()));
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -1776,9 +1810,9 @@ pub fn start_trae_default_with_args_with_new_window(
                 cmd.arg(trimmed);
             }
         }
-        let child = spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 Trae 失败: {}", e))?;
+        let pid = spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 Trae 失败: {}", e))?;
         crate::modules::logger::log_info("Trae 默认实例启动命令已发送");
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -1874,13 +1908,13 @@ pub fn start_trae_platform_default_with_args_with_new_window(
                 cmd.arg(trimmed);
             }
         }
-        let child = spawn_detached_unix(&mut cmd)
+        let pid = spawn_detached_unix(&mut cmd)
             .map_err(|e| format!("启动 {} 失败: {}", platform.display_name(), e))?;
         crate::modules::logger::log_info(&format!(
             "{} 默认实例启动命令已发送",
             platform.display_name()
         ));
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -1960,10 +1994,10 @@ pub fn start_vscode_default_with_args(extra_args: &[String]) -> Result<u32, Stri
                 .stderr(Stdio::null());
         }
         cmd.args(&args);
-        let child =
+        let pid =
             spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 VS Code 失败: {}", e))?;
         crate::modules::logger::log_info("VS Code 默认实例启动命令已发送");
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -2007,8 +2041,11 @@ pub fn close_vscode(user_data_dirs: &[String], timeout_secs: u64) -> Result<(), 
                 default_dir.as_deref(),
             )
         },
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         Some(request_vscode_graceful_close as fn(u32)),
-        Some(2),
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        None,
+        Some(timeout_secs.min(8)),
         #[cfg(target_os = "windows")]
         Some(log_vscode_process_details_for_pids as fn(&[u32])),
         #[cfg(not(target_os = "windows"))]
@@ -2016,46 +2053,8 @@ pub fn close_vscode(user_data_dirs: &[String], timeout_secs: u64) -> Result<(), 
     )
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn request_vscode_graceful_close(pid: u32) {
-    if pid == 0 || !is_pid_running(pid) {
-        return;
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        let script = format!(
-            "tell application \"System Events\" to set frontmost of (first process whose unix id is {}) to true\n\
-tell application \"System Events\" to keystroke \"q\" using command down",
-            pid
-        );
-        match Command::new("osascript").args(["-e", &script]).output() {
-            Ok(output) => {
-                if output.status.success() {
-                    crate::modules::logger::log_info(&format!(
-                        "[VSCode Close] 已发送优雅退出请求 pid={}",
-                        pid
-                    ));
-                } else {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    crate::modules::logger::log_warn(&format!(
-                        "[VSCode Close] 优雅退出失败 pid={} err={}",
-                        pid,
-                        stderr.trim()
-                    ));
-                }
-            }
-            Err(e) => {
-                crate::modules::logger::log_warn(&format!(
-                    "[VSCode Close] 调用 osascript 失败 pid={} err={}",
-                    pid, e
-                ));
-            }
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = pid;
-    }
+    request_desktop_graceful_close(pid, "VSCode Close");
 }
 

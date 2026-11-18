@@ -25,6 +25,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import {
   isPrivacyModeEnabledByDefault,
@@ -124,6 +125,7 @@ export interface OAuthStartResponse {
 /** 各平台需要提供的数据服务函数 */
 export interface ProviderDataService {
   importFromJson: (content: string) => Promise<unknown[]>;
+  importFromFile?: (path: string) => Promise<unknown[]>;
   importFromLocal?: () => Promise<unknown[]>;
   addWithToken?: (token: string) => Promise<unknown>;
   exportAccounts: (ids: string[]) => Promise<string>;
@@ -1710,20 +1712,15 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     };
   }, [consumeExternalProviderImport, platformId]);
 
-  const handlePickImportFile = useCallback(() => {
-    importFileInputRef.current?.click();
-  }, []);
-
   // ─── Import ───────────────────────────────────────────────────────────
-  const handleImportJsonFile = useCallback(
-    async (file: File) => {
+  const runJsonImport = useCallback(
+    async (importAccounts: () => Promise<unknown[]>) => {
       setImporting(true);
       setAddStatus('loading');
       setAddMessage(t('common.shared.import.importing', '正在导入...'));
 
       try {
-        const content = await file.text();
-        const imported = await dataService.importFromJson(content);
+        const imported = await importAccounts();
         await fetchAccounts();
         if (platformId) {
           await emitAccountsChanged({
@@ -1756,8 +1753,38 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
 
       setImporting(false);
     },
-    [dataService, fetchAccounts, platformId, resetAddModalState, t],
+    [fetchAccounts, platformId, resetAddModalState, t],
   );
+
+  const handleImportJsonFile = useCallback(
+    (file: File) => runJsonImport(async () => dataService.importFromJson(await file.text())),
+    [dataService.importFromJson, runJsonImport],
+  );
+
+  const handlePickImportFile = useCallback(async () => {
+    const importFromFile = dataService.importFromFile;
+    if (!importFromFile) {
+      importFileInputRef.current?.click();
+      return;
+    }
+    try {
+      const path = await openFileDialog({
+        multiple: false,
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      });
+      if (typeof path === 'string') {
+        await runJsonImport(() => importFromFile(path));
+      }
+    } catch (error) {
+      setAddStatus('error');
+      setAddMessage(
+        t('common.shared.import.failedMsg', {
+          error: String(error).replace(/^Error:\s*/, ''),
+          defaultValue: '导入失败: {{error}}',
+        }),
+      );
+    }
+  }, [dataService.importFromFile, runJsonImport, t]);
 
   const handleImportFromLocal = useMemo(() => {
     if (!dataService.importFromLocal) return null;

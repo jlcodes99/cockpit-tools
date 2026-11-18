@@ -587,9 +587,8 @@ fn resolve_target_modified_at_ms(
 }
 
 fn resolve_rollout_path(data_dir: &Path, rollout_path: &str) -> PathBuf {
-    let trimmed = rollout_path.trim();
-    let stripped = trimmed.strip_prefix(r"\\?\").unwrap_or(trimmed);
-    let path = Path::new(stripped);
+    // Keep the UNC and volume prefixes used by Windows for absolute paths.
+    let path = Path::new(rollout_path.trim());
     if path.is_absolute() {
         path.to_path_buf()
     } else {

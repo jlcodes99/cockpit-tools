@@ -1,6 +1,7 @@
 {
   "version": "2026-07-10.1",
   "codexOAuthAppVersion": "26.820.60940",
+  "codexModelCatalogSource": "upstream",
   "refreshIntervalMs": 3600000,
   "updatePrompt": {
     "mode": "popup",

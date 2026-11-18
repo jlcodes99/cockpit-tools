@@ -96,3 +96,71 @@ async fn request_fault_http_and_native_chat_keep_body_without_refresh_rotation_o
         }
     }
 }
+
+#[tokio::test]
+async fn generic_responses_bad_request_records_only_history_shape_and_provider_trace() {
+    let received = Arc::new(Mutex::new(None::<Value>));
+    let observed = received.clone();
+    let app = Router::new().route("/a/responses", post(move |Json(body): Json<Value>| {
+        let observed = observed.clone();
+        async move {
+            *observed.lock().unwrap() = Some(body);
+            (
+                StatusCode::BAD_REQUEST,
+                [("x-request-id", "req_history-fixture")],
+                Json(json!({"detail":"Bad Request"})),
+            )
+        }
+    }));
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let upstream = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let host = Arc::new(FaultHost {
+        inner: CooldownHost {
+            bases: [format!("http://{addr}/a"), format!("http://{addr}/b")],
+            failures: Mutex::new(vec![]),
+            selections: Mutex::new(vec![]),
+            round_wait: Some(Duration::ZERO),
+            credential_retries: 2,
+            oauth: true,
+            fail_refresh: true,
+        },
+        chat: false,
+        reports: Mutex::new(vec![]),
+    });
+    let root = tempfile::tempdir().unwrap();
+    let mut service = start(
+        "127.0.0.1:0".parse().unwrap(), host.clone(), root.path().join("identity.sqlite"),
+        Options::default(),
+    ).await.unwrap();
+    let mut history = vec![json!({"role":"user","content":"private-long-history".repeat(4000)})];
+    history.extend([
+        json!({"type":"function_call","name":"fixture","call_id":"private-call-id","arguments":"{}"}),
+        json!({"type":"function_call_output","call_id":"private-call-id","output":"private-tool-output"}),
+        json!({"role":"user","content":"continue"}),
+    ]);
+    let response = reqwest::Client::builder().no_proxy().build().unwrap()
+        .post(format!("http://{}/v1/responses", service.addr))
+        .bearer_auth("fixture").json(&json!({"model":"model","input":history}))
+        .send().await.unwrap();
+    assert_eq!(response.status(), 400);
+    assert_eq!(response.json::<Value>().await.unwrap(), json!({"detail":"Bad Request"}));
+    service.shutdown(Duration::from_secs(2)).await.unwrap();
+    assert_eq!(host.inner.selections.lock().unwrap().len(), 1);
+    let reports = host.reports.lock().unwrap();
+    let diagnostic = reports[0].diagnostics.as_ref().unwrap();
+    assert!(diagnostic.payloads.is_empty());
+    assert_eq!(diagnostic.attempts.len(), 1);
+    let attempt = &diagnostic.attempts[0];
+    assert_eq!(attempt.upstream_request_id.as_deref(), Some("req_history-fixture"));
+    let rejection = attempt.responses_history_rejection.as_ref().unwrap();
+    assert_eq!(rejection.client.input_items, 4);
+    assert_eq!(rejection.client.messages, 2);
+    assert_eq!(rejection.client.tool_calls, 1);
+    assert_eq!(rejection.client.tool_outputs, 1);
+    assert_eq!(rejection.upstream.input_items, received.lock().unwrap().as_ref().unwrap()["input"].as_array().unwrap().len());
+    assert!(!rejection.compaction_request);
+    let json = serde_json::to_string(diagnostic).unwrap();
+    assert!(!json.contains("private-"));
+    upstream.abort();
+}

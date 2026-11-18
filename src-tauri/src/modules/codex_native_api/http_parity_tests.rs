@@ -253,6 +253,68 @@ async fn policy_rejection_records_direct_peer_without_an_upstream_attempt() {
 }
 
 #[tokio::test]
+async fn visible_text_then_disconnect_does_not_repeat_generation() {
+    let requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let release = Arc::new(tokio::sync::Notify::new());
+    let counted = requests.clone();
+    let release_upstream = release.clone();
+    let app = Router::new().route("/v1/responses", post(move || {
+        let request = counted.fetch_add(1, Ordering::SeqCst);
+        let release = release_upstream.clone();
+        async move {
+            let payload = if request == 0 {
+                let first = format!("{}{}", created(), concat!(
+                    "event: response.output_text.delta\n",
+                    "data: {\"type\":\"response.output_text.delta\",\"sequence_number\":1,",
+                    "\"item_id\":\"msg-fixture\",\"output_index\":0,\"content_index\":0,",
+                    "\"delta\":\"first-visible-segment\"}\n\n",
+                ));
+                let stream = futures_util::stream::once(async { Ok(Bytes::from(first)) })
+                    .chain(futures_util::stream::once(async move {
+                        release.notified().await;
+                        Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "fixture cut"))
+                    }));
+                Body::from_stream(stream)
+            } else {
+                Body::from(format!("{}{}", created(), completed()))
+            };
+            axum::http::Response::builder()
+                .header("content-type", "text/event-stream")
+                .body(payload).unwrap()
+        }
+    }));
+    let (addr, upstream) = mock(app).await;
+    let (mut service, _, root) = native(addr, false, false, Options::default()).await;
+    let url = format!("http://{}/v1/responses", service.addr);
+    let response = client().post(&url).bearer_auth("local-test-key")
+        .header("session_id", "fixture-thread").json(&body(true)).send().await.unwrap();
+    assert_eq!(response.status(), 200);
+    let mut feed = response.bytes_stream();
+    let mut received = String::new();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !received.contains("first-visible-segment") {
+            let bytes = feed.next().await.expect("visible text frame").unwrap();
+            received.push_str(std::str::from_utf8(&bytes).unwrap());
+        }
+        release.notify_one();
+        while let Some(bytes) = feed.next().await {
+            received.push_str(std::str::from_utf8(&bytes.unwrap()).unwrap());
+        }
+    }).await.unwrap();
+    assert!(received.contains("upstream_stream_error"), "{received}");
+    assert_eq!(received.matches("first-visible-segment").count(), 1);
+    assert_eq!(requests.load(Ordering::SeqCst), 1);
+
+    let next = client().post(&url).bearer_auth("local-test-key")
+        .header("session_id", "fixture-thread").json(&body(true)).send().await.unwrap();
+    assert!(next.text().await.unwrap().contains("response.completed"));
+    assert_eq!(requests.load(Ordering::SeqCst), 2);
+    service.shutdown(Duration::from_secs(2)).await.unwrap();
+    upstream.abort();
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
 async fn request_decodes_mixed_case_chained_content_encoding() {
     let seen = Arc::new(Mutex::new(None));
     let capture = seen.clone();

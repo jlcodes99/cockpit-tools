@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { deferred, loadHookModule, settlePromises } from '../../../tests/helpers/reactHookHarness';
-import { withChatGptPlanMembership } from '../../services/chatgptPlanService';
+import { chatGptPlanErrorKey, withChatGptPlanMembership } from '../../services/chatgptPlanService';
 
 type Node = { type: unknown; props: Record<string, any> };
 function nodes(value: any): Node[] {
@@ -105,6 +105,35 @@ test('authorization saves without joining, model requests or automatic service s
   ctx.button('chatgptPlan.saveOnly').props.onClick();
   assert.equal(ctx.calls.closed, 1);
   assert.equal(joins, 0);
+  ctx.hook.unmount();
+});
+
+test('polling after the deadline still displays an authorization already saved by the backend', async () => {
+  const cancelled: string[] = [];
+  const polled: string[] = [];
+  const ctx = harness({
+    async startChatGptPlanLogin() { return { login_id: 'saved', authorize_url: 'https://auth.openai.com/', expires_at: Date.now() / 1000 - 60 }; },
+    async cancelChatGptPlanLogin(id: string) { cancelled.push(id); },
+    async pollChatGptPlanLogin(id: string) { polled.push(id); return { status: 'complete', account }; },
+  }, null);
+  await settlePromises(); ctx.tree(); await settlePromises();
+  assert.deepEqual(polled, ['saved']);
+  assert.deepEqual(cancelled, []);
+  assert.equal(ctx.failures.message, '');
+  assert.ok(ctx.button('chatgptPlan.saveOnly'));
+  assert.equal(ctx.calls.changed, 1);
+  ctx.hook.unmount();
+});
+
+test('a missing native login session stops polling and leaves a new authorization available', async () => {
+  const ctx = harness({
+    chatGptPlanErrorKey,
+    async pollChatGptPlanLogin() { throw 'CHATGPT_PLAN_LOGIN_EXPIRED'; },
+  }, null);
+  await settlePromises(); ctx.tree(); await settlePromises();
+  assert.equal(ctx.failures.message, 'chatgptPlan.error.expired');
+  assert.ok(ctx.button('codex.oauth.timeoutRetry'));
+  assert.equal(ctx.timers.size, 0);
   ctx.hook.unmount();
 });
 

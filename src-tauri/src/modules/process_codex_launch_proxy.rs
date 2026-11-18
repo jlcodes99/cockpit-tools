@@ -24,7 +24,7 @@ impl CodexLaunchProxy {
 
     // Explicit empty overrides also work across LaunchServices and the Windows
     // package helper, whose child can inherit an environment different from ours.
-    fn env_overrides(&self) -> Vec<(&'static str, String)> {
+    pub(crate) fn env_overrides(&self) -> Vec<(&'static str, String)> {
         match self {
             Self::Inherit => {
                 let direct_hosts = config::get_codex_proxy_direct_hosts();
@@ -85,6 +85,23 @@ fn proxy_env_with_direct_hosts(
 #[cfg(test)]
 mod codex_direct_launch_tests {
     use super::*;
+
+    #[test]
+    fn pasted_typographic_quotes_wrap_the_full_extra_argument() {
+        let rules = "localhost;127.0.0.1;[::1];10.0.0.0/8;172.16.0.0/12;192.168.0.0/16";
+        let args = parse_extra_args(&format!(
+            "--proxy-bypass-list=”{rules}” --title=“Two words” --note=keep“verbatim” --dangling=“unfinished"
+        ));
+        assert_eq!(args, [
+            format!("--proxy-bypass-list={rules}"),
+            "--title=Two words".to_owned(),
+            "--note=keep“verbatim”".to_owned(),
+            "--dangling=“unfinished".to_owned(),
+        ]);
+        assert_eq!(parse_extra_args(r#"--ascii="a b" --literal='a “b”'"#), [
+            "--ascii=a b", "--literal=a “b”",
+        ]);
+    }
 
     fn assert_direct_env(command: &Command) {
         for name in [

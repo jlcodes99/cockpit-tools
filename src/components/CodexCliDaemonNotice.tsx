@@ -9,7 +9,9 @@ import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import { useModalScrollLock } from '../hooks/useModalScrollLock';
 import './CodexCliDaemonNotice.css';
 
-type RestartNotice = { command: string; codexHome?: string };
+type RestartNotice = { command: string; codexHome?: string; autoDeferred?: boolean };
+type RestartOutcome = 'restarted' | 'workspaceConfirmed' | 'workspaceUnconfirmed';
+type RestartState = 'idle' | 'pending' | 'error' | 'unconfirmed' | 'workspaceMismatch' | RestartOutcome;
 
 function readNotice(payload: unknown): RestartNotice | undefined {
   if (typeof payload === 'string' && payload.trim()) return { command: payload };
@@ -17,7 +19,8 @@ function readNotice(payload: unknown): RestartNotice | undefined {
     || typeof payload.command !== 'string' || !payload.command.trim()) return;
   const codexHome = 'codexHome' in payload && typeof payload.codexHome === 'string'
     ? payload.codexHome : undefined;
-  return { command: payload.command, codexHome };
+  const autoDeferred = 'autoDeferred' in payload && payload.autoDeferred === true;
+  return { command: payload.command, codexHome, autoDeferred };
 }
 
 /** Restarting a shared daemon requires an explicit action. */
@@ -25,7 +28,7 @@ export function CodexCliDaemonNotice() {
   const { t } = useTranslation();
   const [notices, setNotices] = useState<RestartNotice[]>([]);
   const [copyState, setCopyState] = useState<'idle' | 'pending' | 'copied' | 'error'>('idle');
-  const [restartState, setRestartState] = useState<'idle' | 'pending' | 'done' | 'error'>('idle');
+  const [restartState, setRestartState] = useState<RestartState>('idle');
   const dialog = useRef<HTMLDivElement>(null);
   const error = useRef<HTMLParagraphElement>(null);
   const generation = useRef(0);
@@ -50,11 +53,11 @@ export function CodexCliDaemonNotice() {
       const next = readNotice(payload);
       if (disposed || !next) return;
       const active = restarting.current.has(next.command) || restarted.current === next.command;
-      if (active && !next.codexHome) return;
       setNotices((pending) => {
         const index = pending.findIndex((queued, i) => queued.command === next.command && !(active && i === 0));
         if (index === -1) return [...pending, next];
-        if (pending[index].codexHome || !next.codexHome) return pending;
+        if (pending[index].codexHome === next.codexHome &&
+            pending[index].autoDeferred === next.autoDeferred) return pending;
         return pending.map((queued, i) => i === index ? next : queued);
       });
     }).then((stop) => {
@@ -68,8 +71,15 @@ export function CodexCliDaemonNotice() {
     };
   }, []);
 
-  const errorKey = restartState === 'error' ? 'codex.cliDaemon.restartFailed'
-    : copyState === 'error' ? 'codex.cliDaemon.copyFailed' : null;
+  const resultKey = restartState === 'workspaceConfirmed' ? 'codex.cliDaemon.workspaceConfirmed'
+    : restartState === 'workspaceUnconfirmed' ? 'codex.cliDaemon.workspaceUnconfirmed'
+      : restartState === 'restarted' ? 'codex.cliDaemon.restarted' : null;
+  const restartErrorKey = restartState === 'workspaceMismatch' ? 'codex.cliDaemon.workspaceMismatch'
+    : restartState === 'unconfirmed' ? 'codex.cliDaemon.restartUnconfirmed'
+      : restartState === 'error' ? 'codex.cliDaemon.restartFailed' : null;
+  const visibleRestartErrorKey = notice?.codexHome ? restartErrorKey : null;
+  const copyErrorKey = copyState === 'error' ? 'codex.cliDaemon.copyFailed' : null;
+  const errorKey = copyErrorKey ?? visibleRestartErrorKey;
   useEffect(() => {
     if (!errorKey) return;
     error.current?.scrollIntoView({ block: 'nearest' });
@@ -79,7 +89,6 @@ export function CodexCliDaemonNotice() {
   const copy = async () => {
     if (!notice || copyState === 'pending') return;
     const current = generation.current;
-    if (restartState === 'error') setRestartState('idle');
     setCopyState('pending');
     try {
       await navigator.clipboard.writeText(notice.command);
@@ -90,20 +99,28 @@ export function CodexCliDaemonNotice() {
   };
 
   const restart = async () => {
-    if (!notice?.codexHome || restartState === 'done' || restarting.current.has(notice.command)) return;
+    if (!notice?.codexHome || resultKey || restarting.current.has(notice.command)) return;
     const current = generation.current;
     restarting.current.add(notice.command);
     setCopyState('idle');
     setRestartState('pending');
     try {
-      await invoke('codex_restart_cli_daemon', { codexHome: notice.codexHome });
+      const result = await invoke<unknown>('codex_restart_cli_daemon', { codexHome: notice.codexHome });
       if (current === generation.current) {
-        restarted.current = notice.command;
-        setRestartState('done');
+        if (result === 'restarted' || result === 'workspaceConfirmed' || result === 'workspaceUnconfirmed') {
+          restarted.current = notice.command;
+          setRestartState(result);
+        } else {
+          setRestartState('unconfirmed');
+        }
       }
     } catch (failure) {
       console.warn('[Codex CLI daemon] Restart failed', failure);
-      if (current === generation.current) setRestartState('error');
+      if (current === generation.current) {
+        const code = String(failure).replace(/^Error:\s*/, '');
+        setRestartState(code === 'CODEX_CLI_DAEMON_WORKSPACE_MISMATCH' ? 'workspaceMismatch'
+          : code === 'CODEX_CLI_DAEMON_RESTART_UNCONFIRMED' ? 'unconfirmed' : 'error');
+      }
     } finally {
       restarting.current.delete(notice.command);
     }
@@ -120,10 +137,15 @@ export function CodexCliDaemonNotice() {
         </div>
         <div className="modal-body codex-cli-daemon-body">
           <p>{t(notice.codexHome ? 'codex.cliDaemon.profileChanged' : 'codex.cliDaemon.description')}</p>
+          {notice.autoDeferred && <p role="status">{t('codex.cliDaemon.autoDeferred')}</p>}
           <p>{t(notice.codexHome ? 'codex.cliDaemon.restartWarning' : 'codex.cliDaemon.restartHint')}</p>
           <pre>{notice.command}</pre>
-          {restartState === 'done' && <p role="status">{t('codex.cliDaemon.restarted')}</p>}
-          {errorKey && <p ref={error} tabIndex={-1} role="alert" className="codex-cli-daemon-error">{t(errorKey)}</p>}
+          {resultKey && <p role="status">{t(resultKey)}</p>}
+          {[visibleRestartErrorKey, copyErrorKey].map((key) => key && (
+            <p key={key} ref={key === errorKey ? error : undefined} tabIndex={-1} role="alert" className="codex-cli-daemon-error">
+              {t(key)}
+            </p>
+          ))}
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" disabled={copyState === 'pending' || restartState === 'pending'} onClick={() => { void copy(); }}>
@@ -131,7 +153,7 @@ export function CodexCliDaemonNotice() {
           </button>
           <button type="button" className={notice.codexHome ? 'btn btn-secondary' : 'btn btn-primary'} onClick={close}>{t('common.close')}</button>
           {notice.codexHome && <button type="button" className="btn btn-primary"
-            disabled={copyState === 'pending' || restartState === 'pending' || restartState === 'done'}
+            disabled={copyState === 'pending' || restartState === 'pending' || Boolean(resultKey)}
             onClick={() => { void restart(); }}>
             {t(restartState === 'pending' ? 'codex.cliDaemon.restarting' : 'codex.cliDaemon.restart')}
           </button>}

@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 // 使用 wham/usage 端点（Quotio 使用的）
 const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
+const PROFILE_USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/profiles/me";
 const RESET_CREDITS_URL: &str = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits";
 const RESET_CREDITS_CONSUME_URL: &str =
     "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume";
@@ -289,9 +290,9 @@ pub(super) fn has_confirmed_free_subscription(account: &CodexAccount) -> bool {
 }
 
 #[derive(Debug, Clone)]
-struct AccountCheckRecord {
-    key: Option<String>,
-    node: serde_json::Value,
+pub(crate) struct AccountCheckRecord {
+    pub(crate) key: Option<String>,
+    pub(crate) node: serde_json::Value,
 }
 
 fn now_timestamp() -> i64 {
@@ -495,7 +496,7 @@ pub(crate) fn parse_subscription_timestamp(raw: &str) -> Option<i64> {
 
     if trimmed.chars().all(|ch| ch.is_ascii_digit()) {
         let mut timestamp = trimmed.parse::<i64>().ok()?;
-        if timestamp > 1_000_000_000_000 {
+        if timestamp >= 1_000_000_000_000 {
             timestamp /= 1000;
         }
         return Some(timestamp);
@@ -528,7 +529,9 @@ fn extract_account_record_field(
     None
 }
 
-fn collect_subscription_account_records(payload: &serde_json::Value) -> Vec<AccountCheckRecord> {
+pub(crate) fn collect_subscription_account_records(
+    payload: &serde_json::Value,
+) -> Vec<AccountCheckRecord> {
     let mut records = Vec::new();
 
     if let Some(accounts_value) = payload.get("accounts") {
@@ -569,7 +572,7 @@ fn collect_subscription_account_records(payload: &serde_json::Value) -> Vec<Acco
     records
 }
 
-fn account_check_record_parts(
+pub(crate) fn account_check_record_parts(
     item: &AccountCheckRecord,
 ) -> Option<(
     &serde_json::Map<String, serde_json::Value>,
@@ -586,18 +589,33 @@ fn account_check_record_parts(
     Some((account_record, entitlement))
 }
 
-fn account_check_record_plan_type(item: &AccountCheckRecord) -> Option<String> {
+pub(crate) fn account_check_record_plan_type(item: &AccountCheckRecord) -> Option<String> {
     let (account_record, entitlement) = account_check_record_parts(item)?;
     entitlement
         .and_then(|value| extract_account_record_field(value, &["subscription_plan"]))
         .or_else(|| extract_account_record_field(account_record, &["plan_type", "planType"]))
 }
 
-fn account_check_record_is_default(item: &AccountCheckRecord) -> bool {
+pub(crate) fn account_check_record_is_default(item: &AccountCheckRecord) -> bool {
     account_check_record_parts(item)
         .and_then(|(account_record, _)| account_record.get("is_default"))
         .and_then(|value| value.as_bool())
         .unwrap_or(false)
+}
+
+fn account_check_workspace_id(
+    item: &AccountCheckRecord,
+    expected_account_id: Option<&str>,
+) -> Option<String> {
+    let (record, _) = account_check_record_parts(item)?;
+    extract_account_record_field(record, &["account_id", "id", "chatgpt_account_id", "workspace_id"])
+        .or_else(|| {
+            // The map can be keyed by organization as well as workspace. Use
+            // its key as a workspace ID only when it matches the known ID.
+            expected_account_id
+                .filter(|expected| item.key.as_deref().map(str::trim) == Some(*expected))
+                .map(str::to_owned)
+        })
 }
 
 fn parse_account_check_snapshot(
@@ -631,18 +649,9 @@ fn parse_account_check_snapshot(
         .iter()
         .find(|item| organization_matches(item))
         .or_else(|| {
+            let preferred = preferred_account_id.as_deref()?;
             records.iter().find(|item| {
-                let Some(preferred) = preferred_account_id.as_deref() else {
-                    return false;
-                };
-                let Some((account_record, _)) = account_check_record_parts(item) else {
-                    return false;
-                };
-                let candidate_id = extract_account_record_field(
-                    account_record,
-                    &["account_id", "id", "chatgpt_account_id", "workspace_id"],
-                );
-                candidate_id.as_deref() == Some(preferred)
+                account_check_workspace_id(item, Some(preferred)).as_deref() == Some(preferred)
             })
         })
         .or_else(|| {
@@ -659,22 +668,9 @@ fn parse_account_check_snapshot(
         .or_else(|| records.first())
         .ok_or_else(|| "accounts/check 返回里没有可用账号".to_string())?;
 
-    let record = selected
-        .node
-        .as_object()
+    let (account_record, entitlement) = account_check_record_parts(selected)
         .ok_or_else(|| "accounts/check 账号记录格式不正确".to_string())?;
-    let account_record = record
-        .get("account")
-        .and_then(|value| value.as_object())
-        .unwrap_or(record);
-    let entitlement = record
-        .get("entitlement")
-        .and_then(|value| value.as_object());
-
-    let account_id = extract_account_record_field(
-        account_record,
-        &["account_id", "id", "chatgpt_account_id", "workspace_id"],
-    );
+    let account_id = account_check_workspace_id(selected, preferred_account_id.as_deref());
     if preferred_account_id.is_some()
         && account_id != preferred_account_id
         && !organization_matches(selected)
@@ -688,8 +684,8 @@ fn parse_account_check_snapshot(
         });
     }
     let subscription_active_until = entitlement
-        .and_then(|value| extract_account_record_field(value, &["expires_at"]))
-        .or_else(|| extract_account_record_field(account_record, &["expires_at"]));
+        .and_then(|value| extract_subscription_expiry(value, &["expires_at"]))
+        .or_else(|| extract_subscription_expiry(account_record, &["expires_at"]));
     let account_plan = extract_account_record_field(account_record, &["plan_type", "planType"]);
     let entitlement_plan =
         entitlement.and_then(|value| extract_account_record_field(value, &["subscription_plan"]));
@@ -711,22 +707,28 @@ fn parse_account_check_snapshot(
     })
 }
 
+fn extract_subscription_expiry(
+    record: &serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<String> {
+    keys.iter()
+        .filter_map(|key| normalize_optional_json_scalar(record.get(*key)))
+        .find(|value| parse_subscription_timestamp(value).is_some())
+}
+
 fn parse_subscription_snapshot(
     payload: &serde_json::Value,
     fallback_account_id: &str,
 ) -> SubscriptionStatusSnapshot {
+    let record = payload.as_object();
     SubscriptionStatusSnapshot {
         account_id: normalize_optional_ref(Some(fallback_account_id)),
-        plan_type: normalize_optional_json_scalar(
-            payload
-                .get("subscription_plan")
-                .or_else(|| payload.get("plan_type")),
-        ),
-        subscription_active_until: normalize_optional_json_scalar(
-            payload
-                .get("active_until")
-                .or_else(|| payload.get("expires_at")),
-        ),
+        plan_type: record.and_then(|record| {
+            extract_account_record_field(record, &["subscription_plan", "plan_type"])
+        }),
+        subscription_active_until: record.and_then(|record| {
+            extract_subscription_expiry(record, &["active_until", "expires_at"])
+        }),
     }
 }
 
@@ -1394,6 +1396,40 @@ struct CodexApiResponse {
     body: String,
 }
 
+pub(crate) async fn fetch_profile_lifetime_tokens(account: &CodexAccount) -> Result<Option<u64>, String> {
+    fetch_profile_lifetime_tokens_at(account, PROFILE_USAGE_URL).await
+}
+
+async fn fetch_profile_lifetime_tokens_at(
+    account: &CodexAccount,
+    url: &str,
+) -> Result<Option<u64>, String> {
+    if account.is_api_key_auth()
+        || account.is_agent_identity_auth()
+        || account.is_web_session_auth()
+        || codex_account::is_pending_oauth_account(account)
+        || account.tokens.access_token.trim().is_empty()
+    {
+        return Err("CODEX_PROFILE_USAGE_OAUTH_REQUIRED".into());
+    }
+
+    let response = send_codex_api_request(account, Method::GET, url, None).await?;
+    if !response.status.is_success() {
+        return Err(format!("CODEX_PROFILE_USAGE_HTTP_{}", response.status.as_u16()));
+    }
+    #[derive(Deserialize)]
+    struct ProfileUsage {
+        stats: Option<ProfileUsageStats>,
+    }
+    #[derive(Deserialize)]
+    struct ProfileUsageStats {
+        lifetime_tokens: Option<u64>,
+    }
+    let profile: ProfileUsage = serde_json::from_str(&response.body)
+        .map_err(|_| "CODEX_PROFILE_USAGE_INVALID_RESPONSE".to_string())?;
+    Ok(profile.stats.and_then(|stats| stats.lifetime_tokens))
+}
+
 async fn send_codex_api_request(
     account: &CodexAccount,
     method: Method,
@@ -1481,7 +1517,7 @@ async fn send_codex_api_request_with_agent_auth_base_url(
     Err("Agent Identity task 恢复后请求仍失败".to_string())
 }
 
-async fn fetch_reset_credits(account: &CodexAccount) -> Result<CodexResetCreditsSnapshot, String> {
+pub(crate) async fn fetch_reset_credits(account: &CodexAccount) -> Result<CodexResetCreditsSnapshot, String> {
     if let Some(payload) = mock_reset_credits_payload() {
         logger::log_info("Codex reset credit 查询使用显式 mock JSON");
         return Ok(parse_reset_credits_snapshot(payload));
@@ -2379,6 +2415,58 @@ mod tests {
         )
     }
 
+    #[tokio::test]
+    async fn codex_profile_lifetime_tokens_uses_the_selected_oauth_and_exact_total() {
+        let _env_guard = crate::modules::test_support::env_lock().lock().unwrap();
+        let mut account = subscription_test_account();
+        account.id = format!("profile-usage-{}", uuid::Uuid::new_v4());
+        account.tokens.access_token = "synthetic-profile-oauth".into();
+        account.account_id = Some("selected-workspace".into());
+        account.egress_proxy_disabled = true;
+        crate::modules::codex_account::save_account(&account).unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/backend-api/wham/profiles/me", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            for (status, body) in [
+                ("200 OK", r#"{"stats":{"lifetime_tokens":630000000,"peak_daily_tokens":11}}"#),
+                ("200 OK", r#"{"stats":{"lifetime_tokens":0}}"#),
+                ("200 OK", r#"{"stats":{"lifetime_tokens":null,"peak_daily_tokens":11}}"#),
+                ("200 OK", r#"{"metadata":{"stats_error":"temporarily unavailable"}}"#),
+                ("401 Unauthorized", r#"{"error":"synthetic upstream body"}"#),
+                ("200 OK", r#"{"stats":{"lifetime_tokens":-7}}"#),
+            ] {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let request = read_test_http_request(&mut stream).await.to_ascii_lowercase();
+                assert!(request.starts_with("get /backend-api/wham/profiles/me http/"));
+                assert!(request.contains("authorization: bearer synthetic-profile-oauth\r\n"));
+                assert!(request.contains("chatgpt-account-id: selected-workspace\r\n"));
+                let response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        assert_eq!(super::fetch_profile_lifetime_tokens_at(&account, &url).await, Ok(Some(630_000_000)));
+        assert_eq!(super::fetch_profile_lifetime_tokens_at(&account, &url).await, Ok(Some(0)));
+        assert_eq!(super::fetch_profile_lifetime_tokens_at(&account, &url).await, Ok(None));
+        assert_eq!(super::fetch_profile_lifetime_tokens_at(&account, &url).await, Ok(None));
+        assert_eq!(
+            super::fetch_profile_lifetime_tokens_at(&account, &url).await,
+            Err("CODEX_PROFILE_USAGE_HTTP_401".into())
+        );
+        assert_eq!(
+            super::fetch_profile_lifetime_tokens_at(&account, &url).await,
+            Err("CODEX_PROFILE_USAGE_INVALID_RESPONSE".into())
+        );
+        server.await.unwrap();
+        account.auth_mode = crate::models::codex::CodexAuthMode::Apikey;
+        assert_eq!(
+            super::fetch_profile_lifetime_tokens_at(&account, &url).await,
+            Err("CODEX_PROFILE_USAGE_OAUTH_REQUIRED".into())
+        );
+    }
+
     #[test]
     fn quota_sync_rejects_an_upstream_identity_mismatch() {
         let mut account = subscription_test_account();
@@ -2690,6 +2778,34 @@ mod tests {
     }
 
     #[test]
+    fn subscription_account_check_reads_team_entitlement_from_workspace_key() {
+        let mut account = subscription_test_account();
+        account.account_id = Some("workspace-team".into());
+        account.plan_type = Some("free".into());
+        let snapshot = parse_account_check_snapshot(
+            &json!({
+                "account_ordering": ["personal", "workspace-team"],
+                "accounts": {
+                    "personal": {
+                        "account": {"account_id":"personal", "plan_type":"free", "is_default":true}
+                    },
+                    "workspace-team": {
+                        "account": {"plan_type":"team"},
+                        "entitlement": {"subscription_plan":"team", "expires_at":"2099-06-01T00:00:00Z"}
+                    }
+                }
+            }),
+            &account,
+        ).unwrap();
+        assert_eq!(snapshot.account_id.as_deref(), Some("workspace-team"));
+        assert_eq!(snapshot.plan_type.as_deref(), Some("team"));
+        assert_eq!(snapshot.subscription_active_until.as_deref(), Some("2099-06-01T00:00:00Z"));
+
+        super::apply_subscription_snapshot(&mut account, snapshot);
+        assert_eq!(account.plan_type.as_deref(), Some("team"));
+    }
+
+    #[test]
     fn subscription_lookup_does_not_use_another_workspaces_expiry() {
         let mut account = subscription_test_account();
         account.account_id = Some("target".into());
@@ -2708,6 +2824,73 @@ mod tests {
         assert_eq!(snapshot.account_id.as_deref(), Some("target"));
         assert_eq!(snapshot.plan_type, None);
         assert_eq!(snapshot.subscription_active_until, None);
+    }
+
+    #[test]
+    fn subscription_account_check_prefers_explicit_workspace_id_over_conflicting_key() {
+        let mut account = subscription_test_account();
+        account.account_id = Some("target".into());
+        let snapshot = parse_account_check_snapshot(
+            &json!({"accounts": {"target": {
+                "account": {"account_id":"other", "plan_type":"team"},
+                "entitlement": {"subscription_plan":"team", "expires_at":"2099-06-01T00:00:00Z"}
+            }}}),
+            &account,
+        ).unwrap();
+        assert_eq!(snapshot.account_id.as_deref(), Some("target"));
+        assert_eq!(snapshot.plan_type, None);
+        assert_eq!(snapshot.subscription_active_until, None);
+    }
+
+    #[test]
+    fn subscriptions_use_the_first_valid_expiry_and_plan_fields() {
+        for inactive_field in [serde_json::Value::Null, json!(""), json!("invalid")] {
+            let snapshot = super::parse_subscription_snapshot(
+                &json!({
+                    "subscription_plan": null,
+                    "plan_type": "plus",
+                    "active_until": inactive_field,
+                    "expires_at": 1_900_000_000_000_i64
+                }),
+                "target",
+            );
+            let mut account = subscription_test_account();
+            account.subscription_active_until = Some("2000-01-01T00:00:00Z".into());
+            super::apply_subscription_snapshot(&mut account, snapshot);
+            assert_eq!(
+                account.subscription_active_until.as_deref(),
+                Some("1900000000000")
+            );
+            assert_eq!(account.plan_type.as_deref(), Some("plus"));
+            assert!(account.subscription_query_last_success_at.is_some());
+        }
+
+        let snapshot = super::parse_subscription_snapshot(
+            &json!({"active_until":"2030-01-01T08:00:00+08:00","expires_at":"2031-01-01T00:00:00Z"}),
+            "target",
+        );
+        assert_eq!(
+            snapshot.subscription_active_until.as_deref(),
+            Some("2030-01-01T08:00:00+08:00")
+        );
+    }
+
+    #[test]
+    fn subscription_account_check_uses_account_expiry_when_entitlement_expiry_is_invalid() {
+        let mut account = subscription_test_account();
+        account.account_id = Some("target".into());
+        let snapshot = parse_account_check_snapshot(
+            &json!({"accounts": {"target": {
+                "account": {"account_id":"target", "plan_type":"plus", "expires_at":"2030-01-01T08:00:00+08:00"},
+                "entitlement": {"subscription_plan":"plus", "expires_at":"invalid"}
+            }}}),
+            &account,
+        )
+        .unwrap();
+        assert_eq!(
+            snapshot.subscription_active_until.as_deref(),
+            Some("2030-01-01T08:00:00+08:00")
+        );
     }
 
     #[test]

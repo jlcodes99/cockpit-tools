@@ -161,16 +161,9 @@ pub(super) fn event_failure(event: &Value, fallback: u16) -> ServiceError {
             "upstream_error",
             "Upstream returned a failed response",
         )
+        .with_error_details(super::upstream_errors::flat_error_details(event))
     });
-    let detail = event
-        .pointer("/response/error")
-        .or_else(|| event.get("error"))
-        .filter(|value| value.is_object())
-        .cloned()
-        .unwrap_or_else(|| super::upstream_errors::flat_error_details(event));
-    error
-        .with_error_details(detail)
-        .with_retry_after(super::events::retry_after_event(event))
+    error.with_retry_after(super::events::retry_after_event(event))
 }
 
 #[cfg(test)]

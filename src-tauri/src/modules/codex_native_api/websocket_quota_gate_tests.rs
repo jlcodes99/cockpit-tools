@@ -431,6 +431,22 @@ pub(super) async fn http_endpoint(
 ) -> Response {
     let attempt = state.attempts.fetch_add(1, Ordering::SeqCst);
     state.requests.lock().unwrap().push((headers, body));
+    if let Behavior::FirstError(event) = &state.behavior {
+        return Response::builder()
+            .header("content-type", "text/event-stream")
+            .body(axum::body::Body::from(format!("event: error\ndata: {event}\n\n")))
+            .unwrap();
+    }
+    if let Behavior::MetadataThenSuccess(event) = &state.behavior {
+        let mut metadata = event.clone();
+        let kind = metadata.as_object_mut().unwrap().remove("type").unwrap();
+        let kind = kind.as_str().unwrap();
+        let done = json!({"type":"response.completed","response":{"id":state.response_id,"status":"completed","output":[]}});
+        return Response::builder()
+            .header("content-type", "text/event-stream")
+            .body(axum::body::Body::from(format!("event: {kind}\ndata: {metadata}\n\ndata: {done}\n\n")))
+            .unwrap();
+    }
     let response_id = format!(
         "http-{}-{attempt}",
         if matches!(state.behavior, Behavior::Success) {

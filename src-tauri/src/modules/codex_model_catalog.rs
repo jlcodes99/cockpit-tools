@@ -1,32 +1,80 @@
 use std::collections::{HashMap, HashSet};
-use std::future::Future;
 use std::io::Read;
 use std::path::Path;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, LazyLock, OnceLock, RwLock, atomic::{AtomicBool, AtomicU64, Ordering}};
 use std::time::Duration;
 
 use reqwest::Client;
 use serde_json::{Map, Value};
-use tokio::sync::OnceCell;
+use tokio::sync::{Mutex, OnceCell};
 
 use super::{
     atomic_write, codex_account::is_retired_gpt55_model, codex_wakeup::is_codex_model_before_5_5,
-    config, logger,
+    codex_model_prices::{self, PriceBook}, config, logger,
 };
 
 pub(crate) const MAX_CATALOG_BYTES: usize = 8 * 1024 * 1024;
 const SOURCE_TIMEOUT: Duration = Duration::from_secs(8);
 const PRIMARY_URL: &str = "https://raw.githubusercontent.com/router-for-me/models/refs/heads/main/codex_client_models.json";
 const SECONDARY_URL: &str = "https://models.router-for.me/codex_client_models.json";
-const PINNED_MODELS: [&str; 5] = ["gpt-6.1-sol", "gpt-6-astra", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna"];
+const PROJECT_MODELS_URL: &str = "https://raw.githubusercontent.com/jlcodes99/cockpit-tools/main/resources/codex/codex_client_models.json";
+const PRICES_URL: &str = "https://raw.githubusercontent.com/jlcodes99/cockpit-tools/main/resources/codex/model_prices.json";
+const REFRESH_INTERVAL: Duration = Duration::from_secs(60 * 60);
+pub(crate) const GPT_6_2_SOL_MODEL_ID: &str = "gpt-6.2-sol";
+pub(crate) const GPT_6_2_ASTRA_MODEL_ID: &str = "gpt-6.2-astra";
+pub(crate) const GPT_6_2_MODELS: [&str; 2] = [GPT_6_2_SOL_MODEL_ID, GPT_6_2_ASTRA_MODEL_ID];
+pub(crate) const RECOMMENDED_FRONTIER_MODELS: [&str; 7] = [
+    "gpt-6.1-sol",
+    GPT_6_2_SOL_MODEL_ID,
+    GPT_6_2_ASTRA_MODEL_ID,
+    "gpt-6.1-terra",
+    "gpt-6-astra",
+    "gpt-6-sol",
+    "gpt-6-luna",
+];
+const RECOMMENDED_5_6_MODELS: [&str; 3] = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
 const EMBEDDED_JSON: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../resources/codex/codex_client_models.json"
 ));
 
 static EMBEDDED: OnceLock<Arc<Value>> = OnceLock::new();
-static ACTIVE: OnceLock<Arc<Value>> = OnceLock::new();
-static INITIALIZED: OnceCell<()> = OnceCell::const_new();
+static ACTIVE: LazyLock<RwLock<CatalogSnapshot>> = LazyLock::new(|| RwLock::new(CatalogSnapshot {
+    models: embedded(),
+    prices: codex_model_prices::bundled(),
+    source: CatalogSource::Embedded,
+}));
+static CACHE_LOADED: OnceCell<()> = OnceCell::const_new();
+static WORKER_STARTED: AtomicBool = AtomicBool::new(false);
+static REFRESH_GENERATION: AtomicU64 = AtomicU64::new(0);
+static REFRESH: Mutex<Option<RefreshReport>> = Mutex::const_new(None);
+
+struct CatalogSnapshot {
+    models: Arc<Value>,
+    prices: Arc<PriceBook>,
+    source: CatalogSource,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RefreshReport {
+    models_updated: bool,
+    prices_updated: bool,
+    model_error: Option<String>,
+    price_error: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CatalogSource {
+    Downloaded,
+    Cache,
+    Embedded,
+}
+
+pub(crate) fn source() -> CatalogSource {
+    ACTIVE.read().unwrap_or_else(|err| err.into_inner()).source
+}
 
 fn embedded() -> Arc<Value> {
     EMBEDDED
@@ -44,57 +92,182 @@ pub(crate) fn snapshot() -> Arc<Value> {
     if let Some(catalog) = TEST_CATALOG.with(|value| value.borrow().clone()) {
         return catalog;
     }
-    ACTIVE.get().cloned().unwrap_or_else(embedded)
+    ACTIVE.read().unwrap_or_else(|err| err.into_inner()).models.clone()
 }
 
-// Only startup calls initialize; all later consumers and sidecar restarts share ACTIVE.
+pub(crate) fn prices() -> Arc<PriceBook> {
+    ACTIVE.read().unwrap_or_else(|err| err.into_inner()).prices.clone()
+}
+
 pub(crate) async fn initialize() {
-    initialize_once(&INITIALIZED, &ACTIVE, || async {
-        let cache_path = config::get_shared_dir().join("codex-client-models.cache.json");
-        let client = match Client::builder()
-            .https_only(true)
-            .redirect(reqwest::redirect::Policy::limited(3))
-            .timeout(SOURCE_TIMEOUT)
-            .connect_timeout(Duration::from_secs(4))
-            .build()
-        {
-            Ok(client) => Some(client),
-            Err(error) => {
-                logger::log_warn(&format!(
-                    "[Codex model catalog] HTTP client unavailable: {error}"
-                ));
-                None
+    if WORKER_STARTED.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    loop {
+        refresh().await;
+        tokio::time::sleep(REFRESH_INTERVAL).await;
+    }
+}
+
+fn cache_paths() -> (std::path::PathBuf, std::path::PathBuf) {
+    let dir = config::get_shared_dir();
+    (dir.join("codex-client-models.cache.json"), dir.join("codex-model-prices.cache.json"))
+}
+
+async fn load_cached_data() {
+    CACHE_LOADED.get_or_init(|| async {
+        let changed = tokio::task::spawn_blocking(|| {
+            let (models_path, prices_path) = cache_paths();
+            let models = read_cache(&models_path);
+            let prices = read_cache_bytes(&prices_path).and_then(|data| codex_model_prices::parse_remote(&data));
+            let mut active = ACTIVE.write().unwrap_or_else(|err| err.into_inner());
+            let mut changed = false;
+            if let Ok(models) = models {
+                changed = active.models.as_ref() != &models;
+                active.models = Arc::new(models);
+                active.source = CatalogSource::Cache;
             }
-        };
-        load_startup_catalog(
-            client.as_ref(),
-            &cache_path,
-            &[PRIMARY_URL, SECONDARY_URL],
-            SOURCE_TIMEOUT,
-        )
-        .await
-    })
-    .await;
+            if let Ok(prices) = prices {
+                if prices.revision > active.prices.revision {
+                    active.prices = Arc::new(prices);
+                    changed = true;
+                }
+            }
+            changed
+        }).await.unwrap_or(false);
+        if changed {
+            super::codex_local_access::emit_local_access_state_updated();
+        }
+    }).await;
 }
 
-async fn initialize_once<F, Fut>(once: &OnceCell<()>, active: &OnceLock<Arc<Value>>, load: F)
-where
-    F: FnOnce() -> Fut,
-    Fut: Future<Output = Arc<Value>>,
-{
-    once.get_or_init(|| async {
-        let catalog = load().await;
-        let _ = active.set(catalog);
-    })
-    .await;
+pub(crate) async fn refresh() -> RefreshReport {
+    load_cached_data().await;
+    let generation = REFRESH_GENERATION.load(Ordering::Acquire);
+    let mut last = REFRESH.lock().await;
+    if REFRESH_GENERATION.load(Ordering::Relaxed) != generation {
+        if let Some(report) = last.as_ref() {
+            return report.clone();
+        }
+    }
+    let report = refresh_remote().await;
+    if report.model_error.is_some() || report.price_error.is_some() {
+        logger::log_warn(&format!("[Codex catalog] Refresh status: models={:?}, prices={:?}",
+            report.model_error, report.price_error));
+    }
+    *last = Some(report.clone());
+    REFRESH_GENERATION.fetch_add(1, Ordering::Release);
+    if report.models_updated || report.prices_updated {
+        super::codex_local_access::emit_local_access_state_updated();
+    }
+    report
 }
 
+async fn refresh_remote() -> RefreshReport {
+    let client = Client::builder().https_only(true)
+        .redirect(reqwest::redirect::Policy::limited(3))
+        .timeout(SOURCE_TIMEOUT).connect_timeout(Duration::from_secs(4)).build();
+    let client = match client {
+        Ok(client) => client,
+        Err(error) => return RefreshReport {
+            models_updated: false, prices_updated: false,
+            model_error: Some(error.to_string()), price_error: Some(error.to_string()),
+        },
+    };
+    let (models, price_bytes) = tokio::join!(
+        fetch_configured_catalog(&client),
+        fetch_bytes(&client, PRICES_URL, SOURCE_TIMEOUT),
+    );
+    let result = tokio::task::spawn_blocking(move || {
+        let prices = price_bytes.and_then(|bytes| codex_model_prices::parse_remote(&bytes).map(|book| (book, bytes)));
+        let (models_path, prices_path) = cache_paths();
+        let report = activate_remote(&ACTIVE, &models_path, &prices_path, models, prices);
+        if report.models_updated {
+            super::codex_local_access::refresh_api_service_experimental_model_ids();
+        }
+        report
+    }).await;
+    result.unwrap_or_else(|error| RefreshReport {
+        models_updated: false, prices_updated: false,
+        model_error: Some(error.to_string()), price_error: Some(error.to_string()),
+    })
+}
+
+async fn fetch_configured_catalog(client: &Client) -> Option<Value> {
+    let urls: &[&str] = if super::remote_config::prefers_project_codex_model_catalog().await {
+        &[PROJECT_MODELS_URL, PRIMARY_URL, SECONDARY_URL]
+    } else {
+        &[PRIMARY_URL, SECONDARY_URL]
+    };
+    fetch_catalog(client, urls, SOURCE_TIMEOUT).await
+}
+
+fn activate_remote(
+    active: &RwLock<CatalogSnapshot>,
+    models_path: &Path,
+    prices_path: &Path,
+    models: Option<Value>,
+    prices: Result<(PriceBook, Vec<u8>), String>,
+) -> RefreshReport {
+    let (current_models, current_revision) = {
+        let active = active.read().unwrap_or_else(|err| err.into_inner());
+        (Arc::clone(&active.models), active.prices.revision)
+    };
+    let mut report = RefreshReport {
+        models_updated: false, prices_updated: false,
+        model_error: models.is_none().then(|| "Model catalog sources unavailable".into()),
+        price_error: None,
+    };
+    let downloaded = models.is_some();
+    let models = models.filter(|value| value != current_models.as_ref()).map(|value| {
+        if let Ok(content) = serde_json::to_string(&value) {
+            save_cache(models_path, &content);
+        }
+        Arc::new(value)
+    });
+    let prices = match prices {
+        Ok((book, bytes)) if book.revision > current_revision => {
+            if let Ok(content) = std::str::from_utf8(&bytes) {
+                save_cache(prices_path, content);
+            }
+            Some(Arc::new(book))
+        }
+        Ok(_) => None,
+        Err(error) => {
+            report.price_error = Some(error);
+            None
+        }
+    };
+    // Change both sources as a unit; a failed source keeps its last good value.
+    let mut active = active.write().unwrap_or_else(|err| err.into_inner());
+    if downloaded {
+        active.source = CatalogSource::Downloaded;
+    }
+    if let Some(models) = models {
+        active.models = models;
+        report.models_updated = true;
+    }
+    if let Some(prices) = prices {
+        active.prices = prices;
+        report.prices_updated = true;
+    }
+    report
+}
+
+fn save_cache(path: &Path, content: &str) {
+    if let Err(error) = atomic_write::write_string_atomic(path, content) {
+        logger::log_warn(&format!("[Codex catalog] Failed to persist {:?}: {error}", path.file_name()));
+    }
+}
+
+#[cfg(test)]
+#[cfg(test)]
 async fn load_startup_catalog(
     client: Option<&Client>,
     cache_path: &Path,
     urls: &[&str],
     timeout: Duration,
-) -> Arc<Value> {
+) -> (Arc<Value>, CatalogSource) {
     if let Some(client) = client {
         if let Some(catalog) = fetch_catalog(client, urls, timeout).await {
             let content =
@@ -104,36 +277,42 @@ async fn load_startup_catalog(
                     "[Codex model catalog] Cache persistence failed; using fetched snapshot: {error}"
                 ));
             }
-            return Arc::new(catalog);
+            return (Arc::new(catalog), CatalogSource::Downloaded);
         }
     }
     match read_cache(cache_path) {
-        Ok(catalog) => Arc::new(catalog),
+        Ok(catalog) => (Arc::new(catalog), CatalogSource::Cache),
         Err(error) => {
             if cache_path.exists() {
                 logger::log_warn(&format!(
                     "[Codex model catalog] Cache rejected; using embedded snapshot: {error}"
                 ));
             }
-            embedded()
+            (embedded(), CatalogSource::Embedded)
         }
     }
 }
 
 fn read_cache(path: &Path) -> Result<Value, String> {
+    parse_and_merge(&read_cache_bytes(path)?)
+}
+
+fn read_cache_bytes(path: &Path) -> Result<Vec<u8>, String> {
     let file = std::fs::File::open(path).map_err(|error| error.to_string())?;
     let mut bytes = Vec::new();
     file.take((MAX_CATALOG_BYTES + 1) as u64)
         .read_to_end(&mut bytes)
         .map_err(|error| error.to_string())?;
-    parse_and_merge(&bytes)
+    if bytes.len() > MAX_CATALOG_BYTES {
+        return Err("Codex catalog exceeds size limit".into());
+    }
+    Ok(bytes)
 }
 
-async fn fetch_catalog(client: &Client, urls: &[&str], timeout: Duration) -> Option<Value> {
-    for url in urls {
-        let result = tokio::time::timeout(timeout, async {
+async fn fetch_bytes(client: &Client, url: &str, timeout: Duration) -> Result<Vec<u8>, String> {
+    tokio::time::timeout(timeout, async {
             let mut response = client
-                .get(*url)
+                .get(url)
                 .send()
                 .await
                 .map_err(|error| error.to_string())?;
@@ -147,15 +326,22 @@ async fn fetch_catalog(client: &Client, urls: &[&str], timeout: Duration) -> Opt
                 }
                 bytes.extend_from_slice(&chunk);
             }
-            parse_and_merge(&bytes)
-        })
-        .await;
+            Ok(bytes)
+    }).await.map_err(|_| "Codex catalog request timed out".to_string())?
+}
+
+async fn fetch_catalog(client: &Client, urls: &[&str], timeout: Duration) -> Option<Value> {
+    for url in urls {
+        let result = match fetch_bytes(client, url, timeout).await {
+            Ok(bytes) => tokio::task::spawn_blocking(move || parse_and_merge(&bytes)).await
+                .map_err(|error| error.to_string()).and_then(|parsed| parsed),
+            Err(error) => Err(error),
+        };
         match result {
-            Ok(Ok(catalog)) => return Some(catalog),
-            Ok(Err(error)) => logger::log_warn(&format!(
+            Ok(catalog) => return Some(catalog),
+            Err(error) => logger::log_warn(&format!(
                 "[Codex model catalog] Rejected source {url}: {error}"
             )),
-            Err(_) => logger::log_warn(&format!("[Codex model catalog] Source timed out: {url}")),
         }
     }
     None
@@ -185,7 +371,7 @@ fn parse_and_merge(bytes: &[u8]) -> Result<Value, String> {
         sol["context_window"] = current["context_window"].clone();
         sol["auto_compact_token_limit"] = current["auto_compact_token_limit"].clone();
     }
-    for slug in PINNED_MODELS {
+    for slug in RECOMMENDED_FRONTIER_MODELS {
         if !present.contains(slug) {
             let pinned = defaults["models"]
                 .as_array()
@@ -194,6 +380,27 @@ fn parse_and_merge(bytes: &[u8]) -> Result<Value, String> {
                 .find(|model| normalized_id(model["slug"].as_str().unwrap()) == slug)
                 .ok_or_else(|| format!("embedded catalog missing pinned model {slug}"))?;
             models.push(pinned.clone());
+        }
+    }
+    // Older startup catalogs predate announcement of Ultrafast for both 6.2 models.
+    for model in models.iter_mut().filter(|model| {
+        model["slug"].as_str().is_some_and(|slug| {
+            GPT_6_2_MODELS.iter().any(|id| slug.trim().eq_ignore_ascii_case(id))
+        })
+    }) {
+        for (field, tier) in [
+            ("additional_speed_tiers", Value::from("ultrafast")),
+            ("service_tiers", serde_json::json!({"id":"ultrafast","name":"Ultrafast","description":""})),
+        ] {
+            if model[field].is_null() {
+                model[field] = serde_json::json!([]);
+            }
+            if let Some(tiers) = model[field].as_array_mut() {
+                let exists = tiers.iter().any(|value| value == "ultrafast" || value["id"] == "ultrafast");
+                if !exists {
+                    tiers.push(tier);
+                }
+            }
         }
     }
     if let Some(overrides) = catalog
@@ -292,7 +499,6 @@ fn validate_model(model: &Map<String, Value>, partial: bool) -> Result<(), Strin
         "slug",
         "display_name",
         "description",
-        "base_instructions",
         "minimal_client_version",
         "visibility",
         "default_reasoning_level",
@@ -300,6 +506,15 @@ fn validate_model(model: &Map<String, Value>, partial: bool) -> Result<(), Strin
         if !partial || field == "slug" || model.contains_key(field) {
             required_string(model, field)?;
         }
+    }
+    if model.get("base_instructions").is_some_and(|value| !value.is_null()) {
+        required_string(model, "base_instructions")?;
+    } else if !partial && !model.get("model_messages")
+        .and_then(|value| value.get("instructions_template"))
+        .and_then(Value::as_str)
+        .is_some_and(|text| !text.trim().is_empty())
+    {
+        return Err("model requires base_instructions or a model_messages instructions_template".into());
     }
     for field in ["context_window", "max_context_window", "priority"] {
         if !partial || model.contains_key(field) {
@@ -392,7 +607,27 @@ fn validate_catalog(catalog: &Value) -> Result<(), String> {
 }
 
 pub(crate) fn recommended_models() -> Vec<(String, String)> {
-    let catalog = snapshot();
+    recommended_models_from_catalog(&snapshot())
+}
+
+pub(crate) fn bundled_recommended_models() -> Vec<(String, String)> {
+    recommended_models_from_catalog(&embedded())
+}
+
+pub(crate) fn bundled_model_supports_vision(model_id: &str) -> Option<bool> {
+    let catalog = embedded();
+    let model = catalog["models"].as_array()?.iter().find(|model| model["slug"] == model_id)?;
+    Some(model["input_modalities"].as_array().is_some_and(|values| values.iter().any(|value| value == "image")))
+}
+
+pub(crate) fn recommended_model_rank(id: &str) -> Option<usize> {
+    RECOMMENDED_FRONTIER_MODELS
+        .into_iter()
+        .chain(RECOMMENDED_5_6_MODELS)
+        .position(|model| model.eq_ignore_ascii_case(id.trim()))
+}
+
+fn recommended_models_from_catalog(catalog: &Value) -> Vec<(String, String)> {
     let Some(models) = catalog.get("models").and_then(Value::as_array) else {
         return Vec::new();
     };
@@ -424,7 +659,10 @@ pub(crate) fn recommended_models() -> Vec<(String, String)> {
             name.to_string(),
         ));
     }
-    recommended.sort_by_key(|model| model.0);
+    recommended.sort_by_key(|(priority, id, _)| (
+        recommended_model_rank(id).unwrap_or(usize::MAX),
+        *priority,
+    ));
     recommended
         .into_iter()
         .map(|(_, id, name)| (id, name))
@@ -624,7 +862,7 @@ mod tests {
         assert_eq!(future["vendor_metadata"], json!({"keep": [1, 2, 3]}));
         assert_eq!(merged["model_overrides"], remote()["model_overrides"]);
         assert_eq!(merged["catalog_metadata"], remote()["catalog_metadata"]);
-        for slug in PINNED_MODELS {
+        for slug in RECOMMENDED_FRONTIER_MODELS {
             assert!(merged["models"]
                 .as_array()
                 .unwrap()
@@ -680,6 +918,9 @@ mod tests {
         ] {
             for invalid in [Value::Null, json!("  "), json!(42)] {
                 let mut catalog = remote();
+                if field == "base_instructions" && invalid.is_null() {
+                    catalog["models"][1].as_object_mut().unwrap().remove("model_messages");
+                }
                 catalog["models"][1][field] = invalid;
                 assert!(parse(&catalog).is_err(), "{field}");
             }
@@ -785,11 +1026,16 @@ mod tests {
         with_test_catalog(merged, || {
             let recommended = recommended_models();
             assert_eq!(
-                recommended[0],
+                recommended[1],
                 ("gpt-6.2-sol".into(), "Remote GPT-6.2 Sol".into())
             );
             assert_eq!(
-                &recommended[1..3]
+                recommended[..7].iter().map(|item| item.0.as_str()).collect::<Vec<_>>(),
+                ["gpt-6.1-sol", "gpt-6.2-sol", "gpt-6.2-astra", "gpt-6.1-terra",
+                    "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"]
+            );
+            assert_eq!(
+                &recommended[7..9]
                     .iter()
                     .map(|item| item.0.as_str())
                     .collect::<Vec<_>>(),
@@ -831,14 +1077,16 @@ mod tests {
         let cache = dir.cache();
         let client = local_client();
         let (url, task) = mock_response(serde_json::to_vec(&remote()).unwrap(), "").await;
-        let loaded =
+        let (loaded, source) =
             load_startup_catalog(Some(&client), &cache, &[&url], Duration::from_secs(2)).await;
         task.await.unwrap();
         assert_eq!(*loaded, parse(&remote()).unwrap());
         let bytes = fs::read(&cache).unwrap();
         assert_eq!(*loaded, read_cache(&cache).unwrap());
-        let cached =
+        let (cached, cached_source) =
             load_startup_catalog(Some(&client), &cache, &[&url], Duration::from_millis(100)).await;
+        assert_eq!(source, CatalogSource::Downloaded);
+        assert_eq!(cached_source, CatalogSource::Cache);
         assert_eq!(*cached, *loaded);
         assert_eq!(fs::read(&cache).unwrap(), bytes);
     }
@@ -852,9 +1100,10 @@ mod tests {
         fs::write(&cache, &valid).unwrap();
         for body in [b"invalid".to_vec(), vec![b' '; MAX_CATALOG_BYTES + 1]] {
             let (url, task) = mock_response(body, "").await;
-            let loaded =
+            let (loaded, source) =
                 load_startup_catalog(Some(&client), &cache, &[&url], Duration::from_secs(2)).await;
             task.await.unwrap();
+            assert_eq!(source, CatalogSource::Cache);
             assert_eq!(*loaded, parse(&remote()).unwrap());
             assert_eq!(fs::read(&cache).unwrap(), valid);
         }
@@ -888,7 +1137,7 @@ mod tests {
         let blocked = dir.0.join("file");
         fs::write(&blocked, "not a directory").unwrap();
         let (url, task) = mock_response(serde_json::to_vec(&remote()).unwrap(), "").await;
-        let loaded = load_startup_catalog(
+        let (loaded, source) = load_startup_catalog(
             Some(&client),
             &blocked.join("cache.json"),
             &[&url],
@@ -896,6 +1145,7 @@ mod tests {
         )
         .await;
         task.await.unwrap();
+        assert_eq!(source, CatalogSource::Downloaded);
         assert_eq!(*loaded, parse(&remote()).unwrap());
     }
 
@@ -904,14 +1154,15 @@ mod tests {
         let dir = TempDir::new();
         let cache = dir.cache();
         assert_eq!(
-            *load_startup_catalog(None, &cache, &[], Duration::ZERO).await,
+            *load_startup_catalog(None, &cache, &[], Duration::ZERO).await.0,
             *embedded()
         );
         assert!(!cache.exists());
         for body in [b"{}".to_vec(), vec![b' '; MAX_CATALOG_BYTES + 1]] {
             fs::write(&cache, &body).unwrap();
             assert!(read_cache(&cache).is_err());
-            let loaded = load_startup_catalog(None, &cache, &[], Duration::ZERO).await;
+            let (loaded, source) = load_startup_catalog(None, &cache, &[], Duration::ZERO).await;
+            assert_eq!(source, CatalogSource::Embedded);
             assert!(Arc::ptr_eq(&loaded, &embedded()));
             assert_eq!(fs::read(&cache).unwrap(), body);
         }
@@ -973,37 +1224,36 @@ mod tests {
         });
         let dir = TempDir::new();
         let cache = dir.cache();
-        let loaded =
+        let (loaded, source) =
             load_startup_catalog(Some(&client), &cache, &[&failed], Duration::from_secs(2)).await;
         failed_task.await.unwrap();
+        assert_eq!(source, CatalogSource::Embedded);
         assert!(Arc::ptr_eq(&loaded, &embedded()));
         assert!(!cache.exists());
     }
 
-    #[tokio::test]
-    async fn initialization_is_single_flight_and_never_refreshes_a_frozen_snapshot() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
+    #[test]
+    fn refresh_publishes_valid_snapshots_and_keeps_them_when_sources_fail() {
         let dir = TempDir::new();
-        let cache = dir.cache();
-        let client = local_client();
-        let (url, task) = mock_response(serde_json::to_vec(&remote()).unwrap(), "").await;
-        let once = OnceCell::new();
-        let active = OnceLock::new();
-        let calls = AtomicUsize::new(0);
-        let load = || async {
-            calls.fetch_add(1, Ordering::SeqCst);
-            load_startup_catalog(Some(&client), &cache, &[&url], Duration::from_secs(2)).await
-        };
-        tokio::join!(
-            initialize_once(&once, &active, load),
-            initialize_once(&once, &active, load)
-        );
-        task.await.unwrap();
-        let frozen = active.get().unwrap().clone();
-        fs::write(&cache, serde_json::to_vec(&*embedded()).unwrap()).unwrap();
-        initialize_once(&once, &active, load).await;
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
-        assert!(Arc::ptr_eq(active.get().unwrap(), &frozen));
-        assert_eq!(*frozen, parse(&remote()).unwrap());
+        let price_path = dir.0.join("prices.json");
+        let initial = embedded();
+        let bundled = codex_model_prices::bundled();
+        let active = RwLock::new(CatalogSnapshot { models: initial.clone(), prices: bundled.clone(), source: CatalogSource::Embedded });
+        let mut book: Value = serde_json::from_slice(codex_model_prices::BUNDLED).unwrap();
+        book["revision"] = json!(bundled.revision + 1);
+        let bytes = serde_json::to_vec(&book).unwrap();
+        let prices = codex_model_prices::parse_remote(&bytes).unwrap();
+        let models = parse(&remote()).unwrap();
+        let report = activate_remote(&active, &dir.cache(), &price_path, Some(models.clone()), Ok((prices, bytes)));
+        assert!(report.models_updated && report.prices_updated);
+        assert_eq!(*active.read().unwrap().models, models);
+        assert_eq!(read_cache(&dir.cache()).unwrap(), models);
+        assert_eq!(active.read().unwrap().prices.revision, bundled.revision + 1);
+        assert_eq!(initial, embedded());
+
+        let report = activate_remote(&active, &dir.cache(), &price_path, None, Err("offline".into()));
+        assert!(report.model_error.is_some() && report.price_error.is_some());
+        assert_eq!(*active.read().unwrap().models, models);
+        assert_eq!(active.read().unwrap().prices.revision, bundled.revision + 1);
     }
 }

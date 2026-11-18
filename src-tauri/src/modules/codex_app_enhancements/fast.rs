@@ -13,6 +13,7 @@ use tokio::sync::watch;
 use tokio::time::{timeout, Instant};
 use tokio_tungstenite::tungstenite::{protocol::WebSocketConfig, Message};
 use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream, WebSocketStream};
+use super::rspack_speed_assets::Assets;
 
 const GUARD_SCRIPT: &str = include_str!("startup_guard.js");
 const PRELOAD_SCRIPT: &str = include_str!("startup_preload.js");
@@ -112,6 +113,7 @@ pub(super) fn browser_preload_source(
     api_key_auth_verified: bool,
     api_service: bool,
     owner: &str,
+    speed_assets: Option<&Assets>,
 ) -> String {
     guard_document_install(
         &format!(
@@ -122,7 +124,8 @@ pub(super) fn browser_preload_source(
                 quota_compat,
                 api_key_auth_verified,
                 api_service,
-                owner
+                owner,
+                speed_assets,
             )
         ),
         "",
@@ -557,8 +560,9 @@ fn bootstrap(
     api_key_auth_verified: bool,
     api_service: bool,
     owner: &str,
+    speed_assets: Option<&Assets>,
 ) -> String {
-    let options = json!({"nativeFast":native_fast,"nativePredictions":native_predictions,"quotaCompat":quota_compat,"apiKeyAuthVerified":api_key_auth_verified,"apiService":api_service,"owner":owner});
+    let options = json!({"nativeFast":native_fast,"nativePredictions":native_predictions,"quotaCompat":quota_compat,"apiKeyAuthVerified":api_key_auth_verified,"apiService":api_service,"owner":owner,"rspackSpeedAssets":speed_assets});
     let state = STATE_SCRIPT.replace("__COCKPIT_STATE_OPTIONS__", &options.to_string());
     format!("{state}\n{GUARD_SCRIPT}\n{SCRIPT}\n{PREDICTIONS_SCRIPT}\n{PREDICTIONS_RSPACK_SCRIPT}\n{SERVICE_RSPACK_SCRIPT}\n{QUOTA_SCRIPT}\n{QUOTA_CURRENT_SCRIPT}\n{QUOTA_STATE_SCRIPT}\n{QUOTA_START_SCRIPT}true;")
 }
@@ -628,7 +632,7 @@ async fn prepare_future_document(
         let result = registration
             .session()
             .evaluate(
-                "window.__cockpitServiceRspack.verifySpeedDocument()".to_string(),
+                "window.__cockpitServiceRspack.verifyRequestedDocument()".to_string(),
                 context,
                 PREPARE_TIMEOUT,
             )
@@ -638,7 +642,7 @@ async fn prepare_future_document(
             return Err("context-changed".to_string());
         }
         if result.get("ok").and_then(Value::as_bool) != Some(true) {
-            return Err(safe_reason(&result, "speed-contract-failed"));
+            return Err(safe_reason(&result, "rspack-contract-failed"));
         }
         return register_live_runtime(registration, context).await;
     }
@@ -1213,11 +1217,14 @@ pub(super) async fn run(
     preload_first: bool,
     startup: Option<Arc<StartupReload>>,
     stop: watch::Receiver<bool>,
+    speed_assets: Option<&Assets>,
 ) -> Result<(), String> {
     // The profile reader has verified either pure API authentication or an
     // independent API route with OAuth retained. Only those profiles can reuse
     // a launch transaction's single fresh-document permission.
-    let verified_api_route = (native_fast || native_predictions) && api_key_auth_verified || quota_compat;
+    // The profile reader has already verified the API route for predictions.
+    let verified_api_route =
+        (native_fast && api_key_auth_verified) || native_predictions || quota_compat;
     let startup = if api_service && (!verified_api_route || !native_fast && !native_predictions) {
         None
     } else {
@@ -1242,6 +1249,7 @@ pub(super) async fn run(
         startup,
         stop,
         live_quota,
+        speed_assets,
     )
     .await
 }
@@ -1258,6 +1266,7 @@ async fn run_with_live_quota(
     startup: Option<Arc<StartupReload>>,
     mut stop: watch::Receiver<bool>,
     live_quota: bool,
+    speed_assets: Option<&Assets>,
 ) -> Result<(), String> {
     if !native_fast && !native_predictions && !quota_compat && !api_service || *stop.borrow() {
         return Ok(());
@@ -1292,6 +1301,7 @@ async fn run_with_live_quota(
         api_key_auth_verified,
         api_service,
         &owner,
+        speed_assets,
     );
     let startup_runtime = guard_document_install(&format!("{runtime}\n{PRELOAD_SCRIPT}"), "");
     let browser_snapshot = json!({"owner":format!("preload-{browser_port}"),

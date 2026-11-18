@@ -1,3 +1,170 @@
+#[test]
+fn explicit_websocket_sync_updates_only_the_owned_oauth_profile_transport() {
+    let profile = tempfile::tempdir().unwrap();
+    let profile = profile.path();
+    let mut collection = realtime_mixed_test_collection();
+    collection.enabled = true;
+    collection.bound_oauth_account_id = Some("oauth-fixture".to_owned());
+    let mixed_routing = collection.api_keys[0].model_routing.take();
+    let config_path = profile.join(CODEX_PROFILE_CONFIG_FILE);
+    let catalog_path = profile.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE);
+    let auth_path = profile.join(CODEX_PROFILE_AUTH_FILE);
+    let config = format!(
+        r#"model_provider = "codex_local_access"
+model = "saved-model"
+model_catalog_json = "{}"
+[model_providers.codex_local_access]
+base_url = "{}"
+experimental_bearer_token = "{}"
+wire_api = "responses"
+requires_openai_auth = true
+supports_websockets = false
+"#,
+        super::CODEX_MANAGED_MODEL_CATALOG_FILE,
+        super::build_collection_base_url(&collection),
+        collection.api_key
+    );
+    let auth = r#"{"tokens":{"id_token":"fixture-id"}}"#;
+    let catalog = json!({"models":[{"slug":"saved-model","context_window":12345,"prefer_websockets":false}],"revision":1});
+    fs::write(&config_path, &config).unwrap();
+    fs::write(&auth_path, auth).unwrap();
+    fs::write(&catalog_path, catalog.to_string()).unwrap();
+    collection.responses_websockets_enabled = true;
+
+    super::sync_owned_oauth_profile_websockets(profile, &collection).unwrap();
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), config);
+    super::remember_takeover_ownership(profile).unwrap();
+
+    let mut other_service = collection.clone();
+    other_service.port += 1;
+    super::sync_owned_oauth_profile_websockets(profile, &other_service).unwrap();
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), config);
+    let mut wrong_key = collection.clone();
+    wrong_key.api_key = "other-test-key".to_owned();
+    super::sync_owned_oauth_profile_websockets(profile, &wrong_key).unwrap();
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), config);
+
+    let edited = config.replace(&collection.api_key, "externally-edited-key");
+    fs::write(&config_path, &edited).unwrap();
+    super::sync_owned_oauth_profile_websockets(profile, &collection).unwrap();
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), edited);
+    fs::write(&config_path, &config).unwrap();
+
+    let cache = profile.join(super::CODEX_MODEL_CACHE_FILE);
+    fs::write(&cache, "{}").unwrap();
+    super::sync_owned_oauth_profile_websockets(profile, &collection).unwrap();
+    let expected = config.replace("supports_websockets = false", "supports_websockets = true");
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), expected);
+    let mut expected_catalog = catalog.clone();
+    expected_catalog["models"][0]["prefer_websockets"] = json!(true);
+    let actual_catalog: Value =
+        serde_json::from_str(&fs::read_to_string(&catalog_path).unwrap()).unwrap();
+    assert_eq!(actual_catalog, expected_catalog);
+    assert!(!cache.exists());
+    assert_eq!(fs::read_to_string(&auth_path).unwrap(), auth);
+
+    collection.bound_oauth_account_id = None;
+    collection.api_keys[0].model_routing = mixed_routing;
+    super::sync_owned_oauth_profile_websockets(profile, &collection).unwrap();
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), config);
+    let actual_catalog: Value =
+        serde_json::from_str(&fs::read_to_string(&catalog_path).unwrap()).unwrap();
+    assert_eq!(actual_catalog, catalog);
+}
+
+#[tokio::test]
+async fn passive_takeover_repairs_websocket_flags_for_an_absolute_owned_catalog() {
+    for owned in [true, false] {
+        let directory = tempfile::tempdir().unwrap();
+        let profile = directory.path().join("profile");
+        fs::create_dir(&profile).unwrap();
+        let mut collection = test_local_access_collection(Vec::new());
+        collection.enabled = true;
+        collection.responses_websockets_enabled = false;
+        write_local_access_profile_takeover(&profile, &collection, None, true)
+            .await
+            .unwrap();
+        fs::remove_file(profile.join(super::TAKEOVER_OWNERSHIP_FILE)).unwrap();
+
+        let generated_catalog = profile.join(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE);
+        let catalog = if owned {
+            generated_catalog.clone()
+        } else {
+            directory.path().join(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE)
+        };
+        let stale_catalog = fs::read_to_string(generated_catalog)
+            .unwrap()
+            .replace("\"prefer_websockets\": false", "\"prefer_websockets\": true");
+        fs::write(&catalog, &stale_catalog).unwrap();
+        let config_path = profile.join(CODEX_PROFILE_CONFIG_FILE);
+        let mut doc = fs::read_to_string(&config_path).unwrap().parse::<Document>().unwrap();
+        doc["model_catalog_json"] = value(catalog.to_str().unwrap());
+        doc["model_providers"]["codex_local_access"]["supports_websockets"] = value(true);
+        let original_config = doc.to_string();
+        fs::write(&config_path, &original_config).unwrap();
+
+        assert!(super::local_access_profile_takeover_needs_sync(&profile, &collection));
+        super::ensure_profile_takeover(&profile, &collection).await.unwrap();
+        if owned {
+            assert!(!super::local_access_profile_takeover_needs_sync(&profile, &collection));
+            let repaired = fs::read_to_string(config_path).unwrap().parse::<Document>().unwrap();
+            assert_eq!(
+                repaired["model_providers"]["codex_local_access"]["supports_websockets"].as_bool(),
+                Some(false),
+            );
+        } else {
+            assert_eq!(fs::read_to_string(config_path).unwrap(), original_config);
+            assert_eq!(fs::read_to_string(catalog).unwrap(), stale_catalog);
+        }
+    }
+}
+
+#[tokio::test]
+async fn explicit_routing_sync_repairs_owned_oauth_default_without_claiming_other_profiles() {
+    let directory = tempfile::tempdir().unwrap();
+    let profile = directory.path();
+    let mut collection = test_local_access_collection(Vec::new());
+    collection.enabled = true;
+    collection.responses_websockets_enabled = false;
+    write_local_access_profile_takeover(profile, &collection, None, true)
+        .await
+        .unwrap();
+
+    let config_path = profile.join(CODEX_PROFILE_CONFIG_FILE);
+    let mut doc = fs::read_to_string(&config_path).unwrap().parse::<Document>().unwrap();
+    doc["model_providers"]["codex_local_access"]["requires_openai_auth"] = value(true);
+    fs::write(&config_path, doc.to_string()).unwrap();
+    let auth_path = profile.join(CODEX_PROFILE_AUTH_FILE);
+    let oauth_auth = r#"{"auth_mode":"chatgpt","tokens":{"access_token":"fixture-access","refresh_token":"fixture-refresh","id_token":"fixture-id","account_id":"fixture-account"}}"#;
+    fs::write(&auth_path, oauth_auth).unwrap();
+    collection.bound_oauth_account_id = Some("fixture-account".into());
+    super::remember_takeover_ownership(profile).unwrap();
+
+    let mut dirs = Vec::new();
+    super::add_owned_default_for_routing_sync(&mut dirs, profile.to_path_buf(), true, &collection);
+    assert!(dirs.is_empty(), "development must not maintain the shared default profile");
+    let mut foreign_collection = collection.clone();
+    foreign_collection.api_key = "another-environment".into();
+    super::add_owned_default_for_routing_sync(
+        &mut dirs, profile.to_path_buf(), false, &foreign_collection,
+    );
+    assert!(dirs.is_empty(), "an unrelated gateway must not claim this profile");
+    super::add_owned_default_for_routing_sync(&mut dirs, profile.to_path_buf(), false, &collection);
+    assert_eq!(dirs, vec![profile.to_path_buf()]);
+
+    collection.responses_websockets_enabled = true;
+    super::maintain_local_access_takeover_dirs(dirs, &collection).await.unwrap();
+    let doc = fs::read_to_string(&config_path).unwrap().parse::<Document>().unwrap();
+    assert_eq!(
+        doc["model_providers"]["codex_local_access"]["supports_websockets"].as_bool(),
+        Some(true),
+    );
+    assert!(super::profile_model_catalog_websocket_preference_matches(
+        profile, doc["model_catalog_json"].as_str(), true,
+    ));
+    assert_eq!(fs::read_to_string(&auth_path).unwrap(), oauth_auth);
+}
+
 #[tokio::test]
 async fn passive_takeover_realtime_fills_missing_sideband_for_pool_and_mixed_keys() {
     for mixed in [false, true] {

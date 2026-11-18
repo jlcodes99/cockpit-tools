@@ -655,6 +655,57 @@ fn account_project_switch_api_key_roundtrip_preserves_oauth_archive_without_leak
 }
 
 #[test]
+fn account_switch_keeps_verified_projectless_threads_in_the_api_key_sidebar() {
+    let f = Fixture::new();
+    let db = Connection::open(f.home().join("state_5.sqlite")).unwrap();
+    db.execute_batch("ALTER TABLE threads ADD COLUMN first_user_message TEXT;")
+        .unwrap();
+    for id in ["unassigned", "remote", "cloud", "hidden-child"] {
+        let source = if id == "hidden-child" {
+            "subagent"
+        } else {
+            "vscode"
+        };
+        let cwd = if id == "cloud" {
+            "/tmp/.chatgpt-projects/private"
+        } else {
+            &f.root
+        };
+        db.execute(
+            "INSERT INTO threads VALUES(?1,?2,?3,NULL,0,'fixture user message')",
+            (id, cwd, source),
+        )
+        .unwrap();
+    }
+    drop(db);
+    let mut state = f.local("legacy");
+    state[SCOPES] = json!({"owner":"a","inactive":{}});
+    state["projectless-thread-ids"] = json!([
+        "unassigned",
+        "remote",
+        "cloud",
+        "hidden-child",
+        "chat",
+        "unknown"
+    ]);
+    state[HOSTS]["remote"] = json!("ssh-host");
+    state["thread-projectless-output-directories"] = json!({"unassigned":"/private/source-only"});
+    f.write(&state);
+
+    prepare(f.home(), None).unwrap();
+    let key = native_start(f.state(), None);
+    assert_eq!(key["projectless-thread-ids"], json!(["unassigned"]));
+    assert!(key.get("thread-projectless-output-directories").is_none());
+    assert_eq!(key[ASSIGN]["chat"]["projectId"], "legacy");
+    assert_eq!(
+        key[PARKED]["inactive"]["a"]["globals"]["projectless-thread-ids"],
+        state["projectless-thread-ids"]
+    );
+    f.write(&key);
+    assert!(!prepare(f.home(), None).unwrap());
+}
+
+#[test]
 fn account_project_switch_keeps_target_alias_order_and_cloud_memberships() {
     let f = Fixture::new();
     let mut target = f.local("target-id");

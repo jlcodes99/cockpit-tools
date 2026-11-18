@@ -28,6 +28,8 @@ mod go_limits_tests;
 
 #[path = "images_credentials_retry_tests.rs"]
 mod credentials_retry_tests;
+#[path = "images_open_timeout_tests.rs"]
+mod open_timeout_tests;
 
 #[tokio::test]
 async fn oauth_image_request_fault_keeps_error_without_refresh_rotation_or_cooling() {

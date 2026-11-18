@@ -56,6 +56,12 @@ fn bool_to_db_value(value: bool) -> i64 {
     }
 }
 
+fn request_logs_input_characters_select(conn: &Connection) -> Result<&'static str, String> {
+    request_logs_has_column(conn, "input_text_characters")
+        .map(|exists| if exists { "input_text_characters" } else { "NULL AS input_text_characters" })
+        .map_err(|error| error.to_string())
+}
+
 fn local_access_log_event_key(event: &CodexLocalAccessUsageEvent) -> String {
     let mut hash = 0xcbf29ce484222325u64;
     let mut feed = |value: &str| {
@@ -215,6 +221,7 @@ fn create_request_logs_table(
             latency_ms INTEGER NOT NULL DEFAULT 0,
             first_response_ms INTEGER,
             output_generation_ms INTEGER,
+            input_text_characters INTEGER,
             input_tokens INTEGER NOT NULL DEFAULT 0,
             output_tokens INTEGER NOT NULL DEFAULT 0,
             total_tokens INTEGER NOT NULL DEFAULT 0,
@@ -325,6 +332,7 @@ fn open_local_access_logs_db_once(
         "output_generation_ms",
         "output_generation_ms INTEGER",
     )?;
+    ensure_request_logs_column(&conn, "input_text_characters", "input_text_characters INTEGER")?;
     ensure_request_logs_column(
         &conn,
         "input_tokens",
@@ -384,6 +392,9 @@ fn open_local_access_logs_db_once(
         r#"
         CREATE INDEX IF NOT EXISTS idx_codex_local_access_logs_timestamp
             ON request_logs(timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_codex_local_access_logs_input_text
+            ON request_logs(timestamp, account_id, model_id, api_key_id, input_text_characters)
+            WHERE input_text_characters IS NOT NULL;
         CREATE INDEX IF NOT EXISTS idx_codex_local_access_logs_model
             ON request_logs(model_id, timestamp DESC);
         CREATE INDEX IF NOT EXISTS idx_codex_local_access_logs_model_id
@@ -889,10 +900,20 @@ fn insert_local_access_usage_event_with_identity(conn:&Connection,event:&CodexLo
     }
     ensure_request_logs_column(conn, "output_generation_ms", "output_generation_ms INTEGER")
         .map_err(|error| format!("添加输出计时列失败: {error}"))?;
-    conn.execute(
-        "UPDATE request_logs SET output_generation_ms=COALESCE(?1,output_generation_ms) WHERE event_key=?2",
-        params![event.output_generation_ms.map(|value| value.min(i64::MAX as u64) as i64),local_access_log_event_key(event)],
-    ).map_err(|error| format!("保存输出计时失败: {error}"))?;
+    let output_generation = event.output_generation_ms.map(|value| value.min(i64::MAX as u64) as i64);
+    let event_key = local_access_log_event_key(event);
+    if let Some(characters) = event.input_text_characters {
+        conn.execute(
+            "UPDATE request_logs SET output_generation_ms=COALESCE(?1,output_generation_ms),
+                input_text_characters=?2 WHERE event_key=?3",
+            params![output_generation, characters.min(i64::MAX as u64) as i64, event_key],
+        ).map_err(|error| format!("保存请求字符数与输出计时失败: {error}"))?;
+    } else {
+        conn.execute(
+            "UPDATE request_logs SET output_generation_ms=COALESCE(?1,output_generation_ms) WHERE event_key=?2",
+            params![output_generation, event_key],
+        ).map_err(|error| format!("保存输出计时失败: {error}"))?;
+    }
     ensure_request_logs_column(conn, "first_response_ms", "first_response_ms INTEGER")
         .map_err(|error| format!("添加请求首响列失败: {error}"))?;
     let first_response_ms = event
@@ -1194,11 +1215,12 @@ fn compute_request_log_reprice_row(
     collection: Option<&CodexLocalAccessCollection>,
     row: &RequestLogRepriceRow,
 ) -> Option<RequestLogRepriceUpdate> {
-    let pricing = resolve_effective_model_pricing(
+    let pricing = resolve_effective_model_pricing_at(
         collection,
         Some(row.model_id.as_str()),
         Some(&row.usage),
         Some(row.service_tier.as_str()),
+        row.timestamp,
     );
     let pricing = pricing.as_ref()?;
     let estimated_cost_usd = calculate_usage_cost_usd(Some(&row.usage), Some(pricing));
@@ -1775,6 +1797,10 @@ fn usage_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CodexLocalA
             .ok()
             .flatten()
             .and_then(|value| u64::try_from(value).ok()),
+        input_text_characters: row
+            .get::<_, Option<i64>>("input_text_characters")
+            .unwrap_or_default()
+            .and_then(|value| u64::try_from(value).ok()),
         output_generation_ms: row
             .get::<_, Option<i64>>("output_generation_ms")
             .ok()
@@ -1836,6 +1862,7 @@ where F:FnMut(CodexLocalAccessUsageEvent)->Result<(),String> {
     let service_tier_evidence_select = request_logs_service_tier_evidence_select(conn)?;
     let proxy_route_select = request_logs_proxy_route_select(conn)?;
     let first_response_select = request_logs_first_response_select(conn)?;
+    let input_characters_select = request_logs_input_characters_select(conn)?;
     let output_generation_select = request_logs_output_generation_select(conn)?;
     let load_sql = format!(
         r#"
@@ -1856,7 +1883,7 @@ where F:FnMut(CodexLocalAccessUsageEvent)->Result<(),String> {
                 {reasoning_effort_select},
                 {service_tier_evidence_select},
                 {proxy_route_select},
-            {first_response_select}, {output_generation_select},
+            {first_response_select}, {output_generation_select}, {input_characters_select},
                 turn_state_length,
                 turn_state_class,
                 success,
@@ -2165,6 +2192,8 @@ fn query_local_access_usage_events_blocking(
     request_kind: Option<CodexLocalAccessRequestKind>,
     success: Option<bool>,
     error_category: Option<String>,
+    min_total_tokens: Option<i64>,
+    account_ids: Option<Vec<String>>,
     connection_source_filter: RequestConnectionSourceFilter,
 ) -> Result<CodexLocalAccessUsageEventPage, String> {
     let page_size = page_size.clamp(1, 200);
@@ -2176,6 +2205,11 @@ fn query_local_access_usage_events_blocking(
             clauses.push(format!("{column} = ?"));
             params.push(SqlValue::Text(value));
         }
+    }
+
+    if let Some(ids) = account_ids.filter(|ids| !ids.is_empty()) {
+        clauses.push("account_id IN (SELECT value FROM json_each(?))".into());
+        params.push(SqlValue::Text(serde_json::to_string(&ids).map_err(|error| error.to_string())?));
     }
 
     if let Some(start_at) = start_at {
@@ -2235,6 +2269,10 @@ fn query_local_access_usage_events_blocking(
     if let Some(success) = success {
         clauses.push("success = ?".to_string());
         params.push(SqlValue::Integer(bool_to_db_value(success)));
+    }
+    if let Some(minimum) = min_total_tokens {
+        clauses.push("total_tokens >= ?".into());
+        params.push(SqlValue::Integer(minimum));
     }
     push_like_filter(
         &mut clauses,
@@ -2305,6 +2343,7 @@ fn query_local_access_usage_events_blocking(
     let service_tier_evidence_select = request_logs_service_tier_evidence_select(&conn)?;
     let proxy_route_select = request_logs_proxy_route_select(&conn)?;
     let first_response_select = request_logs_first_response_select(&conn)?;
+    let input_characters_select = request_logs_input_characters_select(&conn)?;
     let output_generation_select = request_logs_output_generation_select(&conn)?;
     let authorization_fallback_select = request_logs_authorization_fallback_select(&conn)?;
     let list_sql = format!(
@@ -2330,7 +2369,7 @@ fn query_local_access_usage_events_blocking(
             {service_tier_evidence_select},
             {proxy_route_select},
             {authorization_fallback_select},
-            {first_response_select}, {output_generation_select},
+            {first_response_select}, {output_generation_select}, {input_characters_select},
             turn_state_length,
             turn_state_class,
             success,
@@ -2415,6 +2454,8 @@ pub async fn query_local_access_usage_events(
     request_kind: Option<CodexLocalAccessRequestKind>,
     success: Option<bool>,
     error_category: Option<String>,
+    min_total_tokens: Option<i64>,
+    account_ids: Option<Vec<String>>,
     source_kind: Option<String>,
     peer_ip: Option<String>,
 ) -> Result<CodexLocalAccessUsageEventPage, String> {
@@ -2444,6 +2485,8 @@ pub async fn query_local_access_usage_events(
             request_kind,
             success,
             error_category,
+            min_total_tokens,
+            account_ids,
             RequestConnectionSourceFilter { kind: source_kind, peer_ip },
         )
     })
@@ -2463,8 +2506,15 @@ fn query_local_access_stats_window_blocking(
     if !REQUEST_USAGE_ROLLUP.ready(&conn) { schedule_request_rollup_backfill(); }
     let categories_ready = conn.query_row("SELECT complete FROM request_log_maintenance WHERE name='error_category'", [], |r| r.get::<_,bool>(0)).unwrap_or(false);
     if categories_ready {
-        return with_request_log_sql_budget(&conn, ACCOUNT_WINDOW_QUERY_BUDGET, || query_rollup_window(&conn,start_at,end_at));
+        return with_request_log_sql_budget(&conn, ACCOUNT_WINDOW_QUERY_BUDGET, || {
+            let tx = conn.unchecked_transaction().map_err(|error| error.to_string())?;
+            let mut window = read_rollup_window(&tx, start_at, end_at)?;
+            attach_input_text_stats(&tx, start_at, end_at, &mut window)?;
+            Ok(window)
+        });
     }
+    let transaction = conn.unchecked_transaction().map_err(|error| error.to_string())?;
+    let conn = &transaction;
     let service_tier_select = if request_logs_has_service_tier_column(&conn)
         .map_err(|e| format!("检查 API 服务日志 service_tier 列失败: {}", e))?
     {
@@ -2482,11 +2532,12 @@ fn query_local_access_stats_window_blocking(
     let service_tier_evidence_select = request_logs_service_tier_evidence_select(&conn)?;
     let proxy_route_select = request_logs_proxy_route_select(&conn)?;
     let first_response_select = request_logs_first_response_select(&conn)?;
+    let input_characters_select = request_logs_input_characters_select(&conn)?;
     let output_generation_select = request_logs_output_generation_select(&conn)?;
     let sql = format!(
         r#"SELECT timestamp, request_id, account_id, email, api_key_id, api_key_label,
                   client_instance_id, model_id, requested_model, upstream_model, gateway_mode, request_kind, {service_tier_select}, {reasoning_effort_select}, {service_tier_evidence_select}, {proxy_route_select},
-            {first_response_select}, {output_generation_select}, turn_state_length, turn_state_class, success,
+            {first_response_select}, {output_generation_select}, {input_characters_select}, turn_state_length, turn_state_class, success,
                   http_status, error_category, error_message, latency_ms, input_tokens,
                   output_tokens, total_tokens, cached_tokens, reasoning_tokens, token_breakdown_json,
                   estimated_cost_usd, model_pricing_version, input_usd_per_million,
@@ -2516,6 +2567,7 @@ fn query_local_access_stats_window_blocking(
     trend.sort_by_key(|point| point.bucket_start);
     window.trend = trend;
     window.trend_hourly = hourly_trend;
+    attach_input_text_stats(conn, start_at, end_at, &mut window)?;
     Ok(window)
 }
 
@@ -2535,6 +2587,7 @@ pub async fn query_local_access_stats_window(
 
 
 include!("codex_local_access_usage_rollup.rs");
+include!("codex_local_access_monthly_token_alert.rs");
 
 fn apply_usage_event_to_stats(
     stats: &mut CodexLocalAccessStats,
@@ -2762,6 +2815,7 @@ fn append_usage_event_with_meta(
         latency_ms,
         first_response_ms: cached_request_first_response(request_id),
         output_generation_ms: None,
+        input_text_characters: None,
         input_tokens: usage.input_tokens,
         output_tokens: usage.output_tokens,
         total_tokens: usage.total_tokens,

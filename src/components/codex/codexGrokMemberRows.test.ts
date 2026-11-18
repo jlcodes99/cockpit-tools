@@ -11,7 +11,7 @@ const row = { ...proxy, id: 'grok:source' };
 const input = {
   codexAccounts: [codex, proxy], grokRows: [row], grokAccounts: [source],
   manageGrok: true, showCodexPlatform: true, showGrokPlatform: true,
-  restrictFreeAccounts: false, selected: new Set(['proxy']),
+  restrictFreeAccounts: false, isSelected: (account: CodexAccount) => account.id === proxy.id,
 };
 const ids = (rows: CodexAccount[]) => rows.map((account) => account.id);
 
@@ -53,4 +53,18 @@ test('incomplete legacy product amounts do not invent a fully available quota ch
     const account = { id: 'legacy', quota: { products: [product] } } as GrokAccount;
     assert.equal(CodexGrokBuildQuotaChip({ account, t: (key) => key }), null);
   }
+});
+
+test('the Free filter hides non-members and keeps joined Free accounts visible', () => {
+  const free = { ...input.codexAccounts[0], id: 'free', plan_type: 'free' };
+  const joined = { ...free, id: 'joined-free' };
+  const members = {
+    ...input, codexAccounts: [free, joined], grokRows: [],
+    restrictFreeAccounts: true, isSelected: (account: CodexAccount) => account.id === joined.id,
+  };
+  assert.deepEqual(ids(selectCodexLocalAccessMemberRows(members)), [joined.id]);
+  assert.deepEqual(
+    ids(selectCodexLocalAccessMemberRows({ ...members, restrictFreeAccounts: false })),
+    [free.id, joined.id],
+  );
 });

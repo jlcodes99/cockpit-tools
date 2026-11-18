@@ -373,8 +373,6 @@ export function useAutoRefresh() {
           });
           if (destroyedRef.current) return;
 
-          stopScheduler();
-
           const currentRefreshMinutesMap = loadCurrentAccountRefreshMinutesMap();
           const currentAccountEmails = getCurrentAccountEmails();
           const resolveTraeCurrentMinutes = (platform: TraeRefreshPlatform): number =>
@@ -464,7 +462,7 @@ export function useAutoRefresh() {
                   return;
                 }
                 try {
-                  await invoke('refresh_current_codex_quota');
+                  await invoke('refresh_current_codex_quota', { background: true });
                   await fetchCodexAccounts();
                   await fetchCurrentCodexAccount();
                 } finally {
@@ -816,13 +814,17 @@ export function useAutoRefresh() {
             });
           }
 
-          if (tasks.length > 0) {
-            const scheduler = createAutoRefreshScheduler(tasks, {
+          if (destroyedRef.current) return;
+          const scheduler = schedulerRef.current;
+          if (scheduler) {
+            scheduler.replaceTasks(tasks);
+            scheduler.start();
+          } else if (tasks.length > 0) {
+            schedulerRef.current = createAutoRefreshScheduler(tasks, {
               tickMs: AUTO_REFRESH_TICK_MS,
               maxConcurrent: AUTO_REFRESH_MAX_CONCURRENT,
             });
-            scheduler.start();
-            schedulerRef.current = scheduler;
+            schedulerRef.current.start();
           }
 
           const enabledPlatforms = buildEnabledPlatformsSummary(descriptors);
@@ -888,7 +890,6 @@ export function useAutoRefresh() {
     refreshWorkbuddyToken,
     refreshMinimaxCodeToken,
     refreshZedToken,
-    stopScheduler,
   ]);
 
   useEffect(() => {
@@ -898,7 +899,7 @@ export function useAutoRefresh() {
         return;
       }
       const store = useAccountStore.getState();
-      await store.fetchAccounts();
+      await store.fetchAccounts({ background: true });
       if (disposed) return;
       const selected = getAntigravityRuntimeTarget();
       await store.fetchCurrentAccount(selected === 'antigravity' ? 'antigravity_ide' : 'antigravity');

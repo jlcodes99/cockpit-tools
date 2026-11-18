@@ -7,6 +7,7 @@ import { invoke } from '@tauri-apps/api/core';
 export interface CodebuddySessionLocation {
   instanceId: string;
   instanceName: string;
+  local?: boolean;
 }
 
 export interface CodebuddySessionRecord {
@@ -27,11 +28,20 @@ export interface CodebuddySessionRecord {
 
 export type CodebuddySessionPlatform = 'cn' | 'intl' | 'workbuddy';
 
-export async function codebuddyListSessions(
+export interface CodebuddySessionOverview {
+  sessions: CodebuddySessionRecord[];
+  warnings: string[];
+}
+
+export function workbuddyRebindWorkspace(instanceId: string, oldCwd: string, newCwd: string): Promise<number> {
+  return invoke('workbuddy_rebind_workspace', { instanceId, oldCwd, newCwd });
+}
+
+export async function codebuddyListSessionOverview(
   platform: CodebuddySessionPlatform,
   opts?: { keyword?: string; status?: string },
-): Promise<CodebuddySessionRecord[]> {
-  return await invoke('codebuddy_list_sessions', {
+): Promise<CodebuddySessionOverview> {
+  return await invoke('codebuddy_list_session_overview', {
     platform,
     keyword: opts?.keyword ?? null,
     status: opts?.status ?? null,

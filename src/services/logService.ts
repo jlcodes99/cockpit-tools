@@ -11,7 +11,8 @@ export interface LogSnapshot {
   log_dir_path: string;
   log_file_path: string;
   log_file_name: string;
-  content: string;
+  content: string | null;
+  content_revision: string | null;
   line_limit: number;
   file_size: number;
   modified_at_ms: number | null;
@@ -21,8 +22,13 @@ export interface LogSnapshot {
 export async function getLogSnapshot(
   fileName?: string,
   lineLimit?: number,
+  knownContentRevision?: string,
 ): Promise<LogSnapshot> {
-  return await invoke('logs_get_snapshot', { fileName: fileName ?? null, lineLimit });
+  return await invoke('logs_get_snapshot', {
+    fileName: fileName ?? null,
+    lineLimit,
+    knownContentRevision,
+  });
 }
 
 export async function openLogDirectory(): Promise<void> {

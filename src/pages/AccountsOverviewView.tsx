@@ -12,9 +12,11 @@ import { ModalErrorMessage } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { ANTIGRAVITY_RESET_SORT_PREFIX } from '../utils/antigravityAccountSort';
 import { OverviewTabsHeader } from '../components/OverviewTabsHeader';
+import { AntigravityTokenUsageSummary } from '../components/antigravity/AntigravityTokenUsageSummary';
 import { FileCorruptedModal } from '../components/FileCorruptedModal';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
+import { PlatformQuotaHistoryButton } from '../components/PlatformQuotaHistoryButton';
 import { MultiSelectFilterDropdown } from '../components/MultiSelectFilterDropdown';
 import { AccountTagFilterDropdown } from '../components/AccountTagFilterDropdown';
 import { getMfaOtpToken } from '../utils/mfaVault';
@@ -236,6 +238,10 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
           subtitle={t('overview.subtitle')}
         />
 
+        <AntigravityTokenUsageSummary
+          onOpenDetail={() => onNavigate?.('antigravity-usage')}
+        />
+
         {/* 工具栏 */}
         <div className="toolbar">
           <div className="toolbar-left">
@@ -436,6 +442,9 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                 <FolderOpen size={14} />
               </button>
             )}
+            <PlatformQuotaHistoryButton platform="antigravity" accounts={accounts.map((account) => ({
+              value: account.id, label: maskAccountText(account.email), createdAt: account.created_at,
+            }))} />
             <QuickSettingsPopover
               key={antigravityRuntimeTarget}
               type="antigravity"
@@ -498,7 +507,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
         )}
 
         {/* 内容区域 */}
-        {loading ? (
+        {loading && accounts.length === 0 ? (
           <div className="empty-state">
             <div
               className="loading-spinner"

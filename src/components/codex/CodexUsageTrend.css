@@ -76,6 +76,113 @@
   overflow: visible;
 }
 
+.codex-usage-trend__body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.codex-usage-trend__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.codex-usage-trend__legend span::before {
+  display: inline-block;
+  width: 9px;
+  height: 7px;
+  margin-inline-end: 5px;
+  border-radius: 2px;
+  background: var(--primary);
+  content: '';
+}
+
+.codex-usage-trend__legend span + span::before {
+  width: 13px;
+  height: 3px;
+  vertical-align: 2px;
+  background: var(--warning);
+}
+
+.codex-usage-trend__period-bar {
+  fill: color-mix(in srgb, var(--primary) 68%, transparent);
+}
+
+.codex-usage-trend__cumulative-line {
+  fill: none;
+  stroke: var(--warning);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.codex-usage-trend__period-scale,
+.codex-usage-trend__cumulative-scale {
+  fill: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.codex-usage-trend__composition {
+  display: grid;
+  flex: 0 0 auto;
+  justify-items: center;
+  width: 150px;
+  gap: 12px;
+}
+
+.codex-usage-trend__ring {
+  display: grid;
+  place-items: center;
+  width: 104px;
+  aspect-ratio: 1;
+  padding: 11px;
+  border-radius: 50%;
+}
+
+.codex-usage-trend__ring strong {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.codex-usage-trend__composition ul {
+  display: grid;
+  width: 100%;
+  gap: 5px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.codex-usage-trend__composition li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.codex-usage-trend__composition li i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.codex-usage-trend__composition li b {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
 .codex-usage-trend__chart {
   display: block;
   width: 100%;
@@ -253,6 +360,10 @@
 
   .codex-usage-trend__chart {
     height: 246px;
+  }
+
+  .codex-usage-trend__body {
+    flex-direction: column;
   }
 
   .codex-usage-trend__tooltip {

@@ -2,6 +2,8 @@
 // No disk or network work is performed while holding this coordinator's mutex.
 use crate::modules::codex_native_api::rate_limits::{QuotaSnapshot, QuotaWindow};
 
+const QUOTA_RESET_DRIFT_TOLERANCE_SECONDS: i64 = 120;
+
 #[derive(Clone)]
 struct ObservedQuotaWindow {
     value: Option<QuotaWindow>,
@@ -33,6 +35,8 @@ struct QuotaReserveCoordinator {
 
 static QUOTA_RESERVE_COORDINATOR: OnceLock<Mutex<QuotaReserveCoordinator>> = OnceLock::new();
 static QUOTA_RESERVE_NOTIFY_PENDING: AtomicBool = AtomicBool::new(false);
+// A complete usage query can correct small clock drift within a five-hour or weekly window.
+const QUOTA_RESET_BACKWARD_DRIFT_SECONDS: i64 = 120;
 
 fn quota_refresh_failure_backoff(failures: u32, error: Option<&str>) -> Duration {
     let seconds = (5_u64 << failures.min(5)).min(120);
@@ -278,15 +282,18 @@ fn merge_observed_window(
             return;
         }
         if let (Some(old), Some(new)) = (previous.value.as_ref(), value.as_ref()) {
-            let older_window = old
-                .resets_at
-                .zip(new.resets_at)
-                .is_some_and(|(old, new)| new < old);
-            let newer_window = old
-                .resets_at
-                .zip(new.resets_at)
-                .is_some_and(|(old, new)| new > old);
-            let same_window = old.resets_at == new.resets_at;
+            // Usage queries and response headers may report slightly different
+            // reset times for the same quota window.
+            let reset_delta = old.resets_at.zip(new.resets_at)
+                .map(|(old, new)| new.saturating_sub(old));
+            let older_window = reset_delta.is_some_and(|delta| {
+                delta < -QUOTA_RESET_DRIFT_TOLERANCE_SECONDS
+            });
+            let newer_window = reset_delta.is_some_and(|delta| {
+                delta > QUOTA_RESET_DRIFT_TOLERANCE_SECONDS
+            });
+            let same_window = old.resets_at == new.resets_at
+                || reset_delta.is_some_and(|_| !older_window && !newer_window);
             if older_window
                 || (!authoritative && !newer_window && new.remaining_percent > old.remaining_percent)
                 || (!authoritative && previous.request_started > request_started && !same_window)
@@ -451,9 +458,9 @@ pub(crate) fn confirm_gateway_quota_refresh(
                 state.verified_query_started_at.map_or(started, |previous| previous.max(started)),
             );
         }
-        // Re-establish only an expired reset baseline from a fresh complete
-        // query taken after the last observation and settled consumption.
-        if complete && state.in_flight == 0 && settled {
+        // A fresh complete query can replace expired evidence even on a busy
+        // account. Settlement and near-reserve admission use the same checks.
+        if complete {
             recovered_primary = clear_stale_reversed_baseline(&mut state.primary, primary.as_ref(), started);
             recovered_secondary = clear_stale_reversed_baseline(&mut state.secondary, secondary.as_ref(), started);
         }
@@ -580,6 +587,31 @@ fn quota_reserved_error(
         .with_retry_after(Some(Duration::from_secs(5)))
 }
 
+fn quota_reserve_admission_error(
+    reserve: &CodexLocalAccessQuotaReserve,
+    account: &CodexAccount,
+    state: Option<&QuotaAccountRuntime>,
+) -> Option<native_contract::ServiceError> {
+    let (blocked, near, primary, secondary) = quota_reserve_decision(reserve, account, state);
+    if !blocked && !(near && state.is_some_and(|s| s.in_flight > 0 || s.awaiting_confirmation)) {
+        return None;
+    }
+    let reason = if !state.is_some_and(|s| s.verified) {
+        "unverified"
+    } else if account.quota_error.is_some() || quota_refresh_fail_closed_for_account(&account.id) {
+        "refresh_failed"
+    } else if primary.is_none() || secondary.is_none() {
+        "snapshot_expired"
+    } else if blocked {
+        "reserve_threshold"
+    } else if state.is_some_and(|s| s.awaiting_confirmation) {
+        "awaiting_confirmation"
+    } else {
+        "concurrent_near_reserve"
+    };
+    Some(quota_reserved_error(reason, reserve, primary.as_ref(), secondary.as_ref(), state.map_or(0, |s| s.in_flight)))
+}
+
 fn acquire_quota_admission(
     collection: &CodexLocalAccessCollection,
     account: &CodexAccount,
@@ -591,15 +623,8 @@ fn acquire_quota_admission(
         .lock()
         .map_err(|_| native_error(503, "quota_unavailable", "Quota admission is unavailable"))?;
     let state = runtime.accounts.entry(account.id.clone()).or_default();
-    let (blocked, near, primary, secondary) = quota_reserve_decision(&reserve, account, Some(state));
-    if blocked || (near && (state.in_flight > 0 || state.awaiting_confirmation)) {
-        let reason = if !state.verified { "unverified" }
-            else if account.quota_error.is_some() || quota_refresh_fail_closed_for_account(&account.id) { "refresh_failed" }
-            else if primary.is_none() || secondary.is_none() { "snapshot_expired" }
-            else if blocked { "reserve_threshold" }
-            else if state.awaiting_confirmation { "awaiting_confirmation" }
-            else { "concurrent_near_reserve" };
-        return Err(quota_reserved_error(reason, &reserve, primary.as_ref(), secondary.as_ref(), state.in_flight));
+    if let Some(error) = quota_reserve_admission_error(&reserve, account, Some(state)) {
+        return Err(error);
     }
     state.in_flight += 1;
     let permit = QuotaAdmissionPermit {
