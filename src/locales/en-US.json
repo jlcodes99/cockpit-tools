@@ -198,6 +198,7 @@
     "providerClear": "Clear selection"
   },
   "common": {
+    "previewTruncated": "The preview shows only part of the content. Copying or downloading includes the full JSON.",
     "collapseAll": "Collapse all",
     "expandAll": "Expand all",
     "syncing": "Syncing…",

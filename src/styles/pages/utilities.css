@@ -934,6 +934,12 @@
   flex-wrap: wrap;
 }
 
+.export-json-preview-note {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .export-json-textarea {
   width: 100%;
   min-height: 320px;

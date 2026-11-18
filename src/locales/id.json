@@ -198,6 +198,7 @@
     "providerClear": "Hapus pilihan"
   },
   "common": {
+    "previewTruncated": "Pratinjau hanya menampilkan sebagian konten. Penyalinan atau pengunduhan mencakup seluruh JSON.",
     "collapseAll": "Ciutkan semua",
     "expandAll": "Perluas semua",
     "syncing": "Menyinkronkan…",

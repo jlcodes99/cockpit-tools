@@ -198,6 +198,7 @@
     "providerClear": "선택 해제"
   },
   "common": {
+    "previewTruncated": "미리보기에는 내용의 일부만 표시됩니다. 복사하거나 다운로드할 때는 전체 JSON이 포함됩니다.",
     "collapseAll": "전체 접기",
     "expandAll": "전체 펼치기",
     "syncing": "동기화 중…",
