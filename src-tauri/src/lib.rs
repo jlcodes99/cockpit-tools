@@ -612,6 +612,7 @@ pub fn run() {
             modules::codex_reset_automation::schedule_migration();
             tauri::async_runtime::spawn(modules::codex_subscription_refresh::run());
             tauri::async_runtime::spawn(modules::codex_proxy_desktop_router::restore_on_startup());
+            tauri::async_runtime::spawn(modules::ssh_server::run_api_service_sync());
 
             // 启动 WebSocket 服务（使用 Tauri 的 async runtime）
             tauri::async_runtime::spawn(async {

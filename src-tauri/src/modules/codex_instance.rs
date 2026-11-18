@@ -167,6 +167,7 @@ pub fn save_instance_store(store: &InstanceStore) -> Result<(), String> {
         .lock()
         .unwrap_or_else(|e| e.into_inner());
     save_instance_store_raw(store)?;
+    modules::ssh_server::default_binding_saved(store.default_settings.bind_account_id.as_deref());
     crate::commands::codex_instance_gateway_watchdog::instance_store_saved(store);
     Ok(())
 }
