@@ -2,7 +2,7 @@ use crate::models::codex::CodexAccount;
 use crate::models::ssh_server::{
     SshAuthConfig, SshCodexSyncResult, SshCodexSyncStatus, SshServer, SshServerStore,
 };
-use crate::modules::{account, codex_account, logger};
+use crate::modules::{account, codex_account, codex_instance, codex_local_access, logger};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use std::path::PathBuf;
 use std::sync::LazyLock;
@@ -14,7 +14,12 @@ use uuid::Uuid;
 mod store;
 #[path = "ssh_server_batch.rs"]
 mod batch;
+#[path = "ssh_server_api_service.rs"]
+mod api_service;
 pub use crate::models::ssh_server::SshServerList;
+pub(crate) use api_service::{
+    api_service_activated, close_api_service_tunnels, default_binding_saved, run_api_service_sync,
+};
 
 #[path = "ssh_server_process.rs"]
 mod process;
@@ -35,10 +40,25 @@ const SYNC_TIMEOUT_SECS: u64 = 45;
 static ACCOUNT_SYNC_LOCK: LazyLock<tokio::sync::Mutex<()>> =
     LazyLock::new(|| tokio::sync::Mutex::new(()));
 
-fn ensure_current_sync_account(account: &CodexAccount) -> Result<(), String> {
-    if codex_account::get_current_account().is_some_and(|current| {
+pub(crate) fn sync_binding_id(account: &CodexAccount) -> &str {
+    if codex_local_access::is_local_access_runtime_account_id(&account.id) {
+        codex_instance::CODEX_API_SERVICE_BIND_ACCOUNT_ID
+    } else {
+        &account.id
+    }
+}
+
+pub(crate) fn is_current_sync_account(account: &CodexAccount) -> bool {
+    if codex_local_access::is_local_access_runtime_account_id(&account.id) {
+        return api_service::is_bound();
+    }
+    codex_account::get_current_account().is_some_and(|current| {
         current.id == account.id && current.token_generation == account.token_generation
-    }) {
+    })
+}
+
+fn ensure_current_sync_account(account: &CodexAccount) -> Result<(), String> {
+    if is_current_sync_account(account) {
         Ok(())
     } else {
         Err("ssh_sync_superseded: a newer Codex account is active".into())
@@ -69,6 +89,7 @@ fn sanitize_error(error: impl ToString) -> String {
     let mut value = error.to_string();
     for marker in [
         "OPENAI_API_KEY",
+        "experimental_bearer_token",
         "access_token",
         "refresh_token",
         "id_token",
@@ -237,7 +258,7 @@ pub fn upsert_server(server: SshServer) -> Result<SshServerList, String> {
         if let Some(index) = existing_index { store.servers[index] = server; }
         else { store.servers.push(server); }
         Ok(())
-    })
+    }).inspect(api_service::server_list_changed)
 }
 
 pub fn delete_server(server_id: &str) -> Result<SshServerList, String> {
@@ -245,15 +266,15 @@ pub fn delete_server(server_id: &str) -> Result<SshServerList, String> {
     store::update(&store_path()?, |store| {
         store.servers.retain(|server| server.id != server_id);
         Ok(())
-    })
+    }).inspect(api_service::server_list_changed)
 }
 
 pub fn select_servers(server_ids: Vec<String>) -> Result<SshServerList, String> {
-    store::select(&store_path()?, server_ids)
+    store::select(&store_path()?, server_ids).inspect(api_service::server_list_changed)
 }
 
 pub fn set_server_selected(server_id: &str, selected: bool) -> Result<SshServerList, String> {
-    store::set_selected(&store_path()?, server_id, selected)
+    store::set_selected(&store_path()?, server_id, selected).inspect(api_service::server_list_changed)
 }
 
 /// OpenSSH 参数：非交互、握手超时与私钥 IdentitiesOnly，避免 agent 里一堆 key 拖慢/超时。
@@ -280,8 +301,20 @@ fn build_ssh_args(server: &SshServer, connect_timeout_secs: u64) -> Vec<String> 
         args.push("-i".to_string());
         args.push(path.clone());
     }
+    args.push("--".into());
     args.push(format!("{}@{}", server.username, server.host));
     args
+}
+
+fn ssh_command(server: &SshServer, timeout_secs: u64, options: &[&str]) -> Command {
+    let mut command = Command::new("ssh");
+    command.args(options).args(build_ssh_args(
+        server,
+        timeout_secs.min(CONNECTION_TIMEOUT_SECS),
+    ));
+    #[cfg(target_os = "windows")]
+    command.creation_flags(0x0800_0000);
+    command
 }
 
 async fn run_ssh(
@@ -290,17 +323,8 @@ async fn run_ssh(
     remote_args: &[&str],
     stdin_payload: Option<String>,
 ) -> Result<String, String> {
-    // 握手超时与整段墙钟分开：ConnectTimeout 用连接上限，命令本身可更长
-    let connect_timeout = CONNECTION_TIMEOUT_SECS.min(timeout_secs);
-    let mut command = Command::new("ssh");
-    command.args(build_ssh_args(server, connect_timeout));
+    let mut command = ssh_command(server, timeout_secs, &["-o", "ClearAllForwardings=yes"]);
     command.args(remote_args);
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
 
     let output = process::output(command, Duration::from_secs(timeout_secs), stdin_payload).await?;
 
@@ -347,13 +371,27 @@ pub async fn test_connection(server_id: &str) -> Result<String, String> {
     }
 }
 
-async fn read_remote_config_toml(server: &SshServer) -> Result<Option<String>, String> {
-    let script = r#"set -eu
+const REMOTE_CODEX_HOME_SCRIPT: &str = r#"set -eu
 codex_home=$1
 case "$codex_home" in
   "~") codex_home="$HOME" ;;
-  "~/"*) codex_home="$HOME/${{codex_home#~/}}" ;;
+  "~/"*) codex_home="$HOME/${codex_home#\~/}" ;;
 esac
+"#;
+
+async fn run_ssh_script(server: &SshServer, body: &str) -> Result<String, String> {
+    let home = crate::modules::codex_ssh::shell_single_quote(&server.codex_home);
+    run_ssh(
+        server,
+        SYNC_TIMEOUT_SECS,
+        &["sh", "-s", "--", &home],
+        Some([REMOTE_CODEX_HOME_SCRIPT, body].concat()),
+    )
+    .await
+}
+
+async fn read_remote_config_toml(server: &SshServer) -> Result<Option<String>, String> {
+    let script = r#"
 target="$codex_home/config.toml"
 if [ -f "$target" ]; then
   printf '__COCKPIT_EXISTS__\n'
@@ -365,14 +403,9 @@ else
   printf '__COCKPIT_MISSING__\n'
 fi
 "#;
-    let output = run_ssh(
-        server,
-        SYNC_TIMEOUT_SECS,
-        &["sh", "-s", "--", &server.codex_home],
-        Some(script.to_string()),
-    )
-    .await
-    .map_err(|e| format!("ssh_remote_read_failed: {}", sanitize_error(e)))?;
+    let output = run_ssh_script(server, script)
+        .await
+        .map_err(|e| format!("ssh_remote_read_failed: {}", sanitize_error(e)))?;
     if let Some(rest) = output.strip_prefix("__COCKPIT_EXISTS__\n") {
         return Ok(Some(rest.to_string()));
     }
@@ -397,24 +430,24 @@ async fn upload_and_verify_bundle(
         ));
     }
     let script = format!(
-        r#"set -eu
-codex_home=$1
-case "$codex_home" in
-  "~") codex_home="$HOME" ;;
-  "~/"*) codex_home="$HOME/${{codex_home#~/}}" ;;
-esac
-mkdir -p "$codex_home"
+        r#"umask 077
+mkdir -p -- "$codex_home"
 chmod 700 "$codex_home" 2>/dev/null || true
-tmp_dir="$codex_home/.cockpit-codex-sync.$$"
-rm -rf "$tmp_dir"
-mkdir -p "$tmp_dir"
-cleanup() {{ rm -rf "$tmp_dir"; }}
+tmp_dir="$(mktemp -d "$codex_home/.cockpit-codex-sync.XXXXXXXX")"
+cleanup() {{ rm -rf -- "$tmp_dir"; }}
 trap cleanup EXIT INT TERM
-cat <<'__COCKPIT_CODEX_PAYLOAD__' | while IFS='	' read -r rel mode expected encoded; do
-{payload}__COCKPIT_CODEX_PAYLOAD__
+hash_file() {{
+  if command -v sha256sum >/dev/null 2>&1; then
+    digest="$(sha256sum "$1")" || return 1
+  else
+    digest="$(shasum -a 256 "$1")" || return 1
+  fi
+  printf '%s' "${{digest%% *}}"
+}}
+while IFS='	' read -r rel mode expected encoded; do
   [ -n "$rel" ] || continue
   case "$rel" in
-    auth.json|config.toml|.cockpit_codex_auth.json) ;;
+    auth.json|config.toml|.cockpit_codex_auth.json|cockpit-model-catalog.json) ;;
     *) printf 'invalid relative path: %s\n' "$rel" >&2; exit 4 ;;
   esac
   tmp="$tmp_dir/$rel"
@@ -422,26 +455,27 @@ cat <<'__COCKPIT_CODEX_PAYLOAD__' | while IFS='	' read -r rel mode expected enco
   if ! printf '%s' "$encoded" | base64 -d > "$tmp" 2>/dev/null; then
     printf '%s' "$encoded" | base64 -D > "$tmp"
   fi
-  chmod "$mode" "$tmp" 2>/dev/null || true
-  mv "$tmp" "$target"
-  chmod "$mode" "$target" 2>/dev/null || true
-  actual="$(sha256sum "$target" 2>/dev/null | awk '{{print $1}}' || shasum -a 256 "$target" | awk '{{print $1}}')"
+  [ ! -d "$target" ]
+  chmod "$mode" "$tmp"
+  actual="$(hash_file "$tmp")"
   if [ "$actual" != "$expected" ]; then
     printf 'hash mismatch for %s\n' "$rel" >&2
     exit 5
   fi
-  printf '%s\t%s\n' "$rel" "$actual"
+done <<'__COCKPIT_CODEX_PAYLOAD__'
+{payload}__COCKPIT_CODEX_PAYLOAD__
+for rel in auth.json .cockpit_codex_auth.json cockpit-model-catalog.json config.toml; do
+  tmp="$tmp_dir/$rel"
+  [ -f "$tmp" ] || continue
+  target="$codex_home/$rel"
+  mv -f -- "$tmp" "$target"
+  printf '%s\t%s\n' "$rel" "$(hash_file "$target")"
 done
 "#
     );
-    let output = run_ssh(
-        server,
-        SYNC_TIMEOUT_SECS,
-        &["sh", "-s", "--", &server.codex_home],
-        Some(script),
-    )
-    .await
-    .map_err(|e| format!("ssh_remote_write_failed: {}", sanitize_error(e)))?;
+    let output = run_ssh_script(server, &script)
+        .await
+        .map_err(|e| format!("ssh_remote_write_failed: {}", sanitize_error(e)))?;
 
     for file in &bundle.files {
         let verified = output
@@ -487,42 +521,77 @@ fn persist_sync_status(
     Ok(result_from_status(server, status))
 }
 
-async fn sync_account_to_server(server: SshServer, account: &CodexAccount, wait_for_desktop: bool) -> SshCodexSyncResult {
-    let synced_at = now_timestamp();
-    let sync_attempt = async {
-        ensure_current_sync_account(account)?;
-        validate_server(&server)?;
-        let existing_config = read_remote_config_toml(&server).await?;
-        ensure_current_sync_account(account)?;
-        let bundle =
-            codex_account::build_projection_bundle_for_remote(account, existing_config.as_deref())
-                .map_err(|e| format!("codex_bundle_failed: {}", sanitize_error(e)))?;
-        // 鉴权落盘 + 校验是硬条件
-        upload_and_verify_bundle(&server, &bundle).await?;
-        ensure_current_sync_account(account)?;
-        let refresh_error = match crate::modules::codex_app_injection::refresh_ssh_connection(
-            &server, account, wait_for_desktop,
-        ).await {
-            Ok(true) => {
-                logger::log_info(&format!("[Codex SSH] 客户端连接已重连并确认账号: server_id={}", server.id));
-                None
-            }
-            Ok(false) => None, // No enabled Desktop connection to refresh.
-            Err(error) => Some(format!("ssh_connection_refresh_failed: {}", sanitize_error(error))),
-        };
-        Ok::<_, String>((bundle, refresh_error))
+async fn ensure_sync_target(
+    server: &SshServer,
+    account: &CodexAccount,
+    api_route: Option<&api_service::SyncRoute<'_>>,
+) -> Result<(), String> {
+    ensure_current_sync_account(account)?;
+    if let Some(route) = api_route {
+        route.verify_forward(server).await?;
     }
-    .await;
+    Ok(())
+}
 
-    let status = match sync_attempt {
-        Ok((bundle, refresh_error)) => SshCodexSyncStatus {
+async fn project_remote_profile(
+    server: &SshServer,
+    account: &CodexAccount,
+    api_route: Option<&api_service::SyncRoute<'_>>,
+) -> Result<codex_account::CodexAccountProjectionBundle, String> {
+    ensure_sync_target(server, account, api_route).await?;
+    validate_server(server)?;
+    let existing_config = read_remote_config_toml(server).await?;
+    let catalog = api_route
+        .map(|_| codex_local_access::api_service_model_catalog_for_ssh())
+        .transpose()?
+        .flatten();
+    let bundle = codex_account::build_projection_bundle_for_remote(
+        account,
+        existing_config.as_deref(),
+        catalog.as_deref(),
+    )
+    .map_err(|e| format!("codex_bundle_failed: {}", sanitize_error(e)))?;
+    ensure_sync_target(server, account, api_route).await?;
+    upload_and_verify_bundle(server, &bundle).await?;
+    ensure_sync_target(server, account, api_route).await?;
+    Ok(bundle)
+}
+
+async fn refresh_remote_client(
+    server: &SshServer,
+    account: &CodexAccount,
+    wait_for_desktop: bool,
+) -> Option<String> {
+    match crate::modules::codex_app_injection::refresh_ssh_connection(
+        server, account, wait_for_desktop,
+    ).await {
+        Ok(true) => {
+            logger::log_info(&format!(
+                "[Codex SSH] 客户端连接已重连并确认凭据: server_id={}", server.id,
+            ));
+            None
+        }
+        Ok(false) => None,
+        Err(error) => Some(format!("ssh_connection_refresh_failed: {}", sanitize_error(error))),
+    }
+}
+
+async fn sync_account_to_server(
+    server: SshServer,
+    account: &CodexAccount,
+    wait_for_desktop: bool,
+    api_route: Option<&api_service::SyncRoute<'_>>,
+) -> SshCodexSyncResult {
+    let synced_at = now_timestamp();
+    let status = match project_remote_profile(&server, account, api_route).await {
+        Ok(bundle) => SshCodexSyncStatus {
             account_id: bundle.account_id,
             account_email: bundle.account_email,
             token_generation: bundle.token_generation,
             bundle_hash: bundle.bundle_hash,
             synced_at,
             verified: true,
-            error: refresh_error,
+            error: refresh_remote_client(&server, account, wait_for_desktop).await,
         },
         Err(error) => SshCodexSyncStatus {
             account_id: account.id.clone(),
@@ -540,6 +609,15 @@ async fn sync_account_to_server(server: SshServer, account: &CodexAccount, wait_
     if ensure_current_sync_account(account).is_err() {
         return result_from_status(&server, status);
     }
+    if let Some(route) = api_route {
+        if route.verify(&server).await.is_err() {
+            return result_from_status(&server, status);
+        }
+    }
+    publish_sync_status(&server, status)
+}
+
+fn publish_sync_status(server: &SshServer, status: SshCodexSyncStatus) -> SshCodexSyncResult {
     match persist_sync_status(&server.id, status.clone()) {
         Ok(result) => result,
         Err(error) => {
@@ -547,7 +625,7 @@ async fn sync_account_to_server(server: SshServer, account: &CodexAccount, wait_
                 "[Codex SSH] 保存同步状态失败: server_id={}, error={}",
                 server.id, error
             ));
-            result_from_status(&server, status)
+            result_from_status(server, status)
         }
     }
 }
@@ -556,8 +634,6 @@ pub async fn sync_current_account_to_server(
     server_id: Option<String>,
 ) -> Result<SshCodexSyncResult, String> {
     let _guard = ACCOUNT_SYNC_LOCK.lock().await;
-    let account = codex_account::get_current_account()
-        .ok_or_else(|| "codex_bundle_failed: no current Codex account".to_string())?;
     let store = load_store()?;
     let server = if let Some(server_id) = server_id
         .as_deref()
@@ -577,7 +653,15 @@ pub async fn sync_current_account_to_server(
         store.servers.iter().find(|s| store.selected_server_ids.contains(&s.id)).cloned()
             .ok_or_else(|| "ssh_not_configured: no selected SSH server".to_string())?
     };
-    Ok(sync_account_to_server(server, &account, false).await)
+    if api_service::is_bound() {
+        let service = codex_local_access::running_api_service_for_ssh().await
+            .ok_or("ssh_tunnel_failed: Codex API Service is not running")?;
+        let automatic = store::switch_targets(&store).iter().any(|target| target.id == server.id);
+        return Ok(api_service::sync_server(server, &service, automatic, false).await);
+    }
+    let account = codex_account::get_current_account()
+        .ok_or_else(|| "codex_bundle_failed: no current Codex account".to_string())?;
+    Ok(sync_account_to_server(server, &account, false, None).await)
 }
 
 pub async fn sync_selected_servers_after_codex_switch(
@@ -598,7 +682,7 @@ pub async fn sync_selected_servers_after_codex_switch(
         || ensure_current_sync_account(account).is_ok(),
         |server| load_store().map(|latest|
             store::switch_targets(&latest).iter().any(|target| target.id == server.id)),
-        |server| sync_account_to_server(server, account, wait_for_desktop), &mut publish).await;
+        |server| sync_account_to_server(server, account, wait_for_desktop, None), &mut publish).await;
     if let Err((server, error)) = result {
         logger::log_warn(&format!("[Codex SSH] 无法回读同步目标，停止当前队列: {}", sanitize_error(&error)));
         publish(result_from_status(&server, SshCodexSyncStatus {

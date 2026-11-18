@@ -11,9 +11,7 @@ const SCRIPT: &str = include_str!("codex_app_ssh_reconnect.js");
 const REFRESH_TIMEOUT: Duration = Duration::from_secs(40);
 
 fn current(account: &CodexAccount) -> bool {
-    codex_account::get_current_account().is_some_and(|active| {
-        active.id == account.id && active.token_generation == account.token_generation
-    })
+    crate::modules::ssh_server::is_current_sync_account(account)
 }
 
 async fn resolve_endpoint(
@@ -72,7 +70,7 @@ fn ensure_current_target(account: &CodexAccount) -> Result<(), String> {
     }
     let settings = crate::modules::codex_instance::load_default_settings()?;
     if bind_account_id_value(settings.bind_account_id.as_deref()).as_deref()
-        != Some(account.id.as_str())
+        != Some(crate::modules::ssh_server::sync_binding_id(account))
     {
         return Err("profile_binding_changed".into());
     }

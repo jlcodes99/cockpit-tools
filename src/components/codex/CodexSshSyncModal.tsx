@@ -40,7 +40,7 @@ export function CodexSshSyncModal({ open, onClose }: CodexSshSyncModalProps) {
               <p className="codex-ssh-sync-modal__subtitle">
                 {t(
                   'codex.ssh.modalHint',
-                  '添加并选中一台 SSH 服务器，开启「切号后自动同步」后，Codex 切号会把当前账号同步到远端。',
+                  '选中主机并启用「切号后自动同步」。切换到 API 服务时，Cockpit 会通过 SSH 隧道让远端 Codex 使用本机网关。',
                 )}
               </p>
             </div>
