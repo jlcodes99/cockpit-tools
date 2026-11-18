@@ -13,6 +13,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::models::qoder::{QoderAccount, QoderOAuthStartResponse};
+use crate::modules::qoder_channel::{ide_source, preserve_refresh_source, CredentialSource};
 use crate::modules::{logger, qoder_account, qoder_identity, qoder_instance};
 
 const REAUTH_REQUIRED: &str = "QODER_REAUTH_REQUIRED";
@@ -884,18 +885,15 @@ pub(crate) fn token_expiry(info: Option<&Value>, key: &str) -> Option<i64> {
 }
 
 fn session_endpoint(account: &QoderAccount) -> Result<String, String> {
-    let (source, _) = qoder_identity::scope(
-        account.auth_user_info_raw.as_ref(),
-        account.auth_user_plan_raw.as_ref(),
-    );
-    if matches!(source, Some("qodercn" | "dedicated_qodercn")) {
+    let source = ide_source(account)?;
+    if matches!(source, CredentialSource::LegacyCnIde | CredentialSource::DedicatedIde) {
         if let Some(origin) = account.verified_openapi_origin.as_deref() {
             return Ok(origin.to_string());
         }
     }
     match source {
-        None | Some("qoder") => Ok(DEFAULT_OPENAPI_BASE_URL.to_string()),
-        Some("dedicated_qodercn") => {
+        CredentialSource::GlobalIde => Ok(DEFAULT_OPENAPI_BASE_URL.to_string()),
+        CredentialSource::DedicatedIde => {
             let root = qoder_instance::get_default_qoder_user_data_dir()?;
             if !qoder_account::local_session_matches(&root, account)? {
                 return Err(OPENAPI_UNAVAILABLE.into());
@@ -908,7 +906,7 @@ fn session_endpoint(account: &QoderAccount) -> Result<String, String> {
                 .ok_or(OPENAPI_UNAVAILABLE)?;
             dedicated_openapi_endpoint(configured).ok_or_else(|| OPENAPI_UNAVAILABLE.into())
         }
-        Some("qodercn") => {
+        CredentialSource::LegacyCnIde => {
             let root = qoder_instance::get_default_qoder_user_data_dir()?;
             if !qoder_account::local_session_matches(&root, account)? {
                 return Err(OPENAPI_UNAVAILABLE.into());
@@ -933,7 +931,6 @@ fn session_endpoint(account: &QoderAccount) -> Result<String, String> {
             }
             Err(OPENAPI_UNAVAILABLE.into())
         }
-        // CN 1.0 sessions use Cosy rather than the device-token OpenAPI.
         _ => Err(OPENAPI_UNAVAILABLE.into()),
     }
 }
@@ -1065,6 +1062,7 @@ async fn account_endpoint(account: &QoderAccount) -> Result<String, String> {
 
 pub(crate) async fn prepare_account_for_switch(account_id: &str) -> Result<(), String> {
     let target = load_refresh_target(account_id).await?;
+    ide_source(&target)?;
     let info = target.auth_user_info_raw.as_ref();
     access_token_from_info(info).ok_or(REAUTH_REQUIRED)?;
     if !token_expiry(info, "expireTime")
@@ -1126,7 +1124,7 @@ async fn refresh_account_from_openapi_once(
         }
     };
     ensure_refresh_identity_consistent(&target, &user_status)?;
-    let user_info =
+    let mut user_info =
         build_refresh_user_info_raw(&target, &access, &user_status, data_policy.as_ref());
 
     let (plan, usage) = tokio::join!(
@@ -1136,6 +1134,7 @@ async fn refresh_account_from_openapi_once(
     let plan = plan
         .map_err(|error| logger::log_warn(&format!("[Qoder Refresh] 套餐查询失败: {error}")))
         .ok();
+    preserve_refresh_source(&target, &mut user_info, plan.as_ref())?;
     let (usage, quota_error) = match usage {
         Ok(usage) => (Some(usage), None),
         Err(error) => (None, Some(error)),
@@ -1715,6 +1714,68 @@ mod tests {
             "test-machine-token".to_string()
         )));
         assert!(!query.iter().any(|(key, _)| key == "client_id"));
+    }
+
+    #[test]
+    fn ide_uses_its_default_or_previously_verified_endpoint() {
+        use crate::modules::qoder_channel::account_fixture;
+
+        let global = account_fixture(None, None);
+        assert_eq!(session_endpoint(&global).unwrap(), DEFAULT_OPENAPI_BASE_URL);
+        for (marker, endpoint) in [
+            ("qodercn", "https://legacy.qoder.cn"),
+            ("dedicated_qodercn", "https://tenant-openapi.example.invalid"),
+        ] {
+            let mut account = account_fixture(None, Some(marker));
+            account.verified_openapi_origin = Some(endpoint.into());
+            assert_eq!(session_endpoint(&account).unwrap(), endpoint);
+        }
+    }
+
+    #[test]
+    fn ide_rejects_public_cn_and_conflicting_sources_before_resolving_an_origin() {
+        use crate::modules::qoder_channel::account_fixture;
+
+        for (info, plan) in [(None, Some("qoder_cn")), (Some("qodercn"), Some("qoder"))] {
+            let mut account = account_fixture(info, plan);
+            account.verified_openapi_origin = Some("https://legacy.qoder.cn".into());
+            assert_eq!(
+                session_endpoint(&account).unwrap_err(),
+                "QODER_PLATFORM_MISMATCH"
+            );
+        }
+    }
+
+    #[test]
+    fn refreshing_a_legacy_plan_keeps_its_verified_origin() {
+        use crate::modules::qoder_channel::account_fixture;
+        use serde_json::json;
+
+        let mut account = account_fixture(None, Some("qodercn"));
+        let origin = "https://legacy.qoder.cn";
+        account.verified_openapi_origin = Some(origin.into());
+        let current = &json!({ "id": "fixture-user" });
+        let mut info = build_refresh_user_info_raw(&account, "synthetic-token", current, None);
+        let conflicting_plan = json!({ "login_source": "qoder" });
+        assert_eq!(
+            preserve_refresh_source(&account, &mut info, Some(&conflicting_plan)),
+            Err("QODER_PLATFORM_MISMATCH".into())
+        );
+        let plan = json!({ "name": "Personal" });
+        preserve_refresh_source(&account, &mut info, Some(&plan)).unwrap();
+        account.auth_user_info_raw = Some(info);
+        account.auth_user_plan_raw = Some(plan);
+        assert_eq!(session_endpoint(&account).unwrap(), origin);
+
+        let mut global_info = json!({});
+        assert_eq!(
+            preserve_refresh_source(
+                &account_fixture(None, None),
+                &mut global_info,
+                Some(&json!({ "login_source": "qodercn" })),
+            ),
+            Err("QODER_PLATFORM_MISMATCH".into())
+        );
     }
 
     #[test]
