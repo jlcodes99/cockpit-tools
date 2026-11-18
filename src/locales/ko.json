@@ -1304,7 +1304,7 @@
       "trayIconStyleDesc": "시스템 단색 아이콘 또는 원래 컬러 앱 아이콘을 선택합니다",
       "trayIconStyleTemplate": "단색 아이콘",
       "trayIconStyleColor": "컬러 아이콘",
-      "menuBarLeftClick": "메뉴 막대 아이콘 왼쪽 클릭 동작",
+      "menuBarLeftClick": "메뉴 막대 왼쪽 클릭",
       "menuBarLeftClickMenu": "사용량 한도 메뉴 열기",
       "menuBarLeftClickWindow": "기본 창 열기",
       "floatingCardStartup": "시작 시 플로팅 카드 표시",
@@ -1565,7 +1565,6 @@
       "webdavAllowedDomainsDesc": "쉼표 구분; 비우면 제한 없음",
       "claudeQuotaDisplayRemaining": "Claude 잔여 % 표시",
       "claudeQuotaDisplayRemainingDesc": "기본은 사용 %. 켜면 잔여 %. 자동 전환·경고는 사용 비율 기준.",
-      "menuBarLeftClick": "메뉴 막대 왼쪽 클릭",
       "menuBarLeftClickDesc": "오른쪽 클릭은 항상 할당량 메뉴를 엽니다.",
       "menuBarLeftClickQuotaMenu": "할당량 메뉴",
       "menuBarLeftClickMainWindow": "메인 창",
@@ -1604,11 +1603,7 @@
         "nativePredictionsDesc": "기본적으로 켜져 있습니다. 제안은 현재 대화의 API 제공업체와 모델을 사용하며 API 사용량이 추가됩니다. 설정을 변경한 후 해당 Codex 인스턴스를 다시 시작하고 Cockpit Tools를 계속 실행하세요."
       },
       "timeDisplayMode": "시간 표시",
-      "timeDisplayModeDesc": "계정 카드와 목록에 표시할 시간입니다. 기본값은 전환 시간입니다",
-      "menuBarLeftClick": "메뉴 막대 왼쪽 클릭",
-      "menuBarLeftClickDesc": "오른쪽 클릭은 항상 할당량 메뉴를 엽니다.",
-      "menuBarLeftClickQuotaMenu": "할당량 메뉴",
-      "menuBarLeftClickMainWindow": "메인 창"
+      "timeDisplayModeDesc": "계정 카드와 목록에 표시할 시간입니다. 기본값은 전환 시간입니다"
     },
     "network": {
       "apiTitle": "반중력 조종석 API",
@@ -4786,7 +4781,8 @@
           "totalAvailable": "사용 가능",
           "isAvailable": "잔액 사용 가능",
           "modelLimitsEnabled": "모델 제한",
-          "weeklyShort": "주간"
+          "weeklyShort": "주간",
+          "intervalShort": "5h"
         },
         "accountBalance": "계정 잔액",
         "unlimitedQuota": "무제한",

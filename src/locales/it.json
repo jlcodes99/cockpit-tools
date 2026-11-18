@@ -1300,7 +1300,7 @@
       "trayIconStyleDesc": "Scegli l’icona di sistema monocromatica o l’icona app originale a colori",
       "trayIconStyleTemplate": "Icona monocromatica",
       "trayIconStyleColor": "Icona a colori",
-      "menuBarLeftClick": "Azione del clic sinistro sull’icona nella barra dei menu",
+      "menuBarLeftClick": "Clic sinistro nella barra dei menu",
       "menuBarLeftClickMenu": "Apri il menu delle quote",
       "menuBarLeftClickWindow": "Apri la finestra principale",
       "floatingCardStartup": "Mostra la scheda flottante all'avvio",
@@ -1565,7 +1565,6 @@
       "webdavAllowedDomainsDesc": "Separati da virgola; vuoto = nessun limite",
       "claudeQuotaDisplayRemaining": "Quota Claude come % residua",
       "claudeQuotaDisplayRemainingDesc": "Predefinito: % usata. Attiva = % residua. Auto-switch e avvisi restano sull’uso.",
-      "menuBarLeftClick": "Clic sinistro nella barra dei menu",
       "menuBarLeftClickDesc": "Il clic destro apre sempre il menu delle quote.",
       "menuBarLeftClickQuotaMenu": "Menu delle quote",
       "menuBarLeftClickMainWindow": "Finestra principale",
@@ -1604,11 +1603,7 @@
         "nativePredictionsDesc": "Attivato per impostazione predefinita. I suggerimenti usano il fornitore API e il modello della conversazione in corso e comportano un utilizzo aggiuntivo dell’API. Dopo aver modificato questa impostazione, riavvia le istanze di Codex interessate e lascia in esecuzione Cockpit Tools."
       },
       "timeDisplayMode": "Orario mostrato",
-      "timeDisplayModeDesc": "Orario nelle schede e negli elenchi degli account. Predefinito: cambio account",
-      "menuBarLeftClick": "Clic sinistro nella barra dei menu",
-      "menuBarLeftClickDesc": "Il clic destro apre sempre il menu delle quote.",
-      "menuBarLeftClickQuotaMenu": "Menu delle quote",
-      "menuBarLeftClickMainWindow": "Finestra principale"
+      "timeDisplayModeDesc": "Orario nelle schede e negli elenchi degli account. Predefinito: cambio account"
     },
     "network": {
       "apiTitle": "API della cabina di pilotaggio antigravità",
@@ -4786,7 +4781,8 @@
           "totalAvailable": "Disponibile",
           "isAvailable": "Saldo disponibile",
           "modelLimitsEnabled": "Limiti modello",
-          "weeklyShort": "Settimana"
+          "weeklyShort": "Settimana",
+          "intervalShort": "5h"
         },
         "accountBalance": "Saldo account",
         "unlimitedQuota": "Illimitato",

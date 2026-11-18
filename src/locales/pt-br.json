@@ -1304,7 +1304,7 @@
       "trayIconStyleDesc": "Escolha o ícone monocromático do sistema ou o ícone colorido original do app",
       "trayIconStyleTemplate": "Ícone monocromático",
       "trayIconStyleColor": "Ícone colorido",
-      "menuBarLeftClick": "Ação do clique esquerdo no ícone da barra de menus",
+      "menuBarLeftClick": "Clique esquerdo na barra de menus",
       "menuBarLeftClickMenu": "Abrir menu de cotas",
       "menuBarLeftClickWindow": "Abrir janela principal",
       "floatingCardStartup": "Mostrar cartão flutuante ao iniciar",
@@ -1565,7 +1565,6 @@
       "webdavAllowedDomainsDesc": "Separado por vírgulas; vazio = sem limite",
       "claudeQuotaDisplayRemaining": "Cota Claude como % restante",
       "claudeQuotaDisplayRemainingDesc": "Padrão: % usado. Ativar = % restante. Troca automática e alertas usam o consumo.",
-      "menuBarLeftClick": "Clique esquerdo na barra de menus",
       "menuBarLeftClickDesc": "O clique direito sempre abre o menu de cotas.",
       "menuBarLeftClickQuotaMenu": "Menu de cotas",
       "menuBarLeftClickMainWindow": "Janela principal",
@@ -1604,11 +1603,7 @@
         "nativePredictionsDesc": "Ativado por padrão. As sugestões usam o provedor de API e o modelo da conversa atual e geram consumo adicional da API. Após alterar esta configuração, reinicie as instâncias afetadas do Codex e mantenha o Cockpit Tools em execução."
       },
       "timeDisplayMode": "Hora exibida",
-      "timeDisplayModeDesc": "Hora nos cartões e listas de contas. Por padrão, a hora da troca de conta",
-      "menuBarLeftClick": "Clique esquerdo na barra de menus",
-      "menuBarLeftClickDesc": "O clique direito sempre abre o menu de cotas.",
-      "menuBarLeftClickQuotaMenu": "Menu de cotas",
-      "menuBarLeftClickMainWindow": "Janela principal"
+      "timeDisplayModeDesc": "Hora nos cartões e listas de contas. Por padrão, a hora da troca de conta"
     },
     "network": {
       "apiTitle": "API de cockpit antigravidade",
@@ -4786,7 +4781,8 @@
           "totalAvailable": "Disponível",
           "isAvailable": "Saldo disponível",
           "modelLimitsEnabled": "Limites de modelo",
-          "weeklyShort": "Semana"
+          "weeklyShort": "Semana",
+          "intervalShort": "5h"
         },
         "accountBalance": "Saldo da conta",
         "unlimitedQuota": "Ilimitado",

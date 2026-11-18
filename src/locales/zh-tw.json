@@ -1300,7 +1300,7 @@
       "trayIconStyleDesc": "選擇系統單色圖示或原彩色 App 圖示",
       "trayIconStyleTemplate": "單色圖示",
       "trayIconStyleColor": "彩色圖示",
-      "menuBarLeftClick": "選單列圖示左鍵行為",
+      "menuBarLeftClick": "選單列左鍵操作",
       "menuBarLeftClickMenu": "開啟原生額度選單",
       "menuBarLeftClickWindow": "直接開啟主視窗",
       "floatingCardStartup": "啟動時顯示懸浮卡片",
@@ -1565,7 +1565,6 @@
       "webdavAllowedDomainsDesc": "逗號分隔；留空不限制",
       "claudeQuotaDisplayRemaining": "Claude 額度顯示剩餘%",
       "claudeQuotaDisplayRemainingDesc": "預設顯示已用百分比；開啟後改為顯示剩餘百分比。自動切號與預警仍依已用比例計算。",
-      "menuBarLeftClick": "選單列左鍵操作",
       "menuBarLeftClickDesc": "右鍵一律開啟額度選單。",
       "menuBarLeftClickQuotaMenu": "額度選單",
       "menuBarLeftClickMainWindow": "主視窗",
@@ -1604,11 +1603,7 @@
         "nativePredictionsDesc": "預設開啟。使用目前對話的 API 供應商和模型產生下一則訊息建議，會增加 API 用量。變更後請重新啟動相關 Codex 執行個體，並讓 Cockpit Tools 保持執行。"
       },
       "timeDisplayMode": "時間顯示",
-      "timeDisplayModeDesc": "選擇帳號卡片與列表的時間內容，預設為切換時間",
-      "menuBarLeftClick": "選單列左鍵操作",
-      "menuBarLeftClickDesc": "右鍵一律開啟額度選單。",
-      "menuBarLeftClickQuotaMenu": "額度選單",
-      "menuBarLeftClickMainWindow": "主視窗"
+      "timeDisplayModeDesc": "選擇帳號卡片與列表的時間內容，預設為切換時間"
     },
     "network": {
       "apiTitle": "反重力駕駛艙 API",
@@ -4786,7 +4781,8 @@
           "totalAvailable": "可用額度",
           "isAvailable": "餘額可用",
           "modelLimitsEnabled": "模型限制",
-          "weeklyShort": "週"
+          "weeklyShort": "週",
+          "intervalShort": "5h"
         },
         "accountBalance": "帳戶餘額",
         "unlimitedQuota": "無限額度",

@@ -1549,7 +1549,7 @@
       "trayIconStyleDesc": "Choose the system template icon or the original color app icon",
       "trayIconStyleTemplate": "Template icon",
       "trayIconStyleColor": "Color icon",
-      "menuBarLeftClick": "Menu bar icon left-click action",
+      "menuBarLeftClick": "Menu bar left click",
       "menuBarLeftClickMenu": "Open quota menu",
       "menuBarLeftClickWindow": "Open main window",
       "floatingCardStartup": "Show floating card on startup",
@@ -1803,7 +1803,6 @@
       "webdavAllowedDomainsDesc": "Comma-separated; empty = no limit. Host must match when set",
       "claudeQuotaDisplayRemaining": "Claude quota as remaining %",
       "claudeQuotaDisplayRemainingDesc": "Default shows used percentage; enable to show remaining. Auto-switch and alerts still use used ratio.",
-      "menuBarLeftClick": "Menu bar left click",
       "menuBarLeftClickDesc": "Right-click always opens the quota menu.",
       "menuBarLeftClickQuotaMenu": "Quota menu",
       "menuBarLeftClickMainWindow": "Main window",
@@ -1840,11 +1839,7 @@
         "configFailed": "Could not load or save settings: {{error}}",
         "nativePredictions": "Native next-step predictions (Tab)",
         "nativePredictionsDesc": "On by default. Suggestions use your current conversation’s API provider and model and incur additional API usage. After changing this setting, restart the affected Codex instances and keep Cockpit Tools running."
-      },
-      "menuBarLeftClick": "Menu bar left click",
-      "menuBarLeftClickDesc": "Right-click always opens the quota menu.",
-      "menuBarLeftClickQuotaMenu": "Quota menu",
-      "menuBarLeftClickMainWindow": "Main window"
+      }
     },
     "tabs": {
       "general": "General",
@@ -4454,7 +4449,8 @@
           "totalAvailable": "Available",
           "isAvailable": "Balance available",
           "modelLimitsEnabled": "Model Limits",
-          "weeklyShort": "Weekly"
+          "weeklyShort": "Weekly",
+          "intervalShort": "5h"
         },
         "accountBalance": "Account Balance",
         "unlimitedQuota": "Unlimited",

@@ -1304,7 +1304,7 @@
       "trayIconStyleDesc": "Systemvorlagen-Symbol oder ursprüngliches farbiges App-Symbol wählen",
       "trayIconStyleTemplate": "Vorlagen-Symbol",
       "trayIconStyleColor": "Farbiges Symbol",
-      "menuBarLeftClick": "Linksklick auf das Menüleistensymbol",
+      "menuBarLeftClick": "Linksklick in der Menüleiste",
       "menuBarLeftClickMenu": "Kontingentmenü öffnen",
       "menuBarLeftClickWindow": "Hauptfenster öffnen",
       "floatingCardStartup": "Schwebende Karte beim Start anzeigen",
@@ -1565,7 +1565,6 @@
       "webdavAllowedDomainsDesc": "Kommagetrennt; leer = kein Limit",
       "claudeQuotaDisplayRemaining": "Claude-Kontingent als Rest-%",
       "claudeQuotaDisplayRemainingDesc": "Standard: verbraucht %. Ein = Rest %. Auto-Wechsel/Warnungen weiter nach Verbrauch.",
-      "menuBarLeftClick": "Linksklick in der Menüleiste",
       "menuBarLeftClickDesc": "Ein Rechtsklick öffnet immer das Kontingentmenü.",
       "menuBarLeftClickQuotaMenu": "Kontingentmenü",
       "menuBarLeftClickMainWindow": "Hauptfenster",
@@ -1604,11 +1603,7 @@
         "nativePredictionsDesc": "Standardmäßig aktiviert. Vorschläge nutzen den API-Anbieter und das Modell des aktuellen Chats und verursachen zusätzlichen API-Verbrauch. Starte nach einer Änderung die betroffenen Codex-Instanzen neu und lasse Cockpit Tools geöffnet."
       },
       "timeDisplayMode": "Zeitanzeige",
-      "timeDisplayModeDesc": "Zeitangabe auf Kontokarten und in Listen. Standard ist der Kontowechsel",
-      "menuBarLeftClick": "Linksklick in der Menüleiste",
-      "menuBarLeftClickDesc": "Ein Rechtsklick öffnet immer das Kontingentmenü.",
-      "menuBarLeftClickQuotaMenu": "Kontingentmenü",
-      "menuBarLeftClickMainWindow": "Hauptfenster"
+      "timeDisplayModeDesc": "Zeitangabe auf Kontokarten und in Listen. Standard ist der Kontowechsel"
     },
     "network": {
       "apiTitle": "Antigravity-Cockpit-API",
@@ -4786,7 +4781,8 @@
           "totalAvailable": "Verfügbar",
           "isAvailable": "Guthaben verfügbar",
           "modelLimitsEnabled": "Modelllimits",
-          "weeklyShort": "Woche"
+          "weeklyShort": "Woche",
+          "intervalShort": "5h"
         },
         "accountBalance": "Kontostand",
         "unlimitedQuota": "Unbegrenzt",

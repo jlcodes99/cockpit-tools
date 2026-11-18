@@ -1304,7 +1304,7 @@
       "trayIconStyleDesc": "Chọn biểu tượng đơn sắc của hệ thống hoặc biểu tượng app gốc có màu",
       "trayIconStyleTemplate": "Biểu tượng đơn sắc",
       "trayIconStyleColor": "Biểu tượng màu",
-      "menuBarLeftClick": "Thao tác nhấp chuột trái vào biểu tượng thanh menu",
+      "menuBarLeftClick": "Nhấp trái trên thanh menu",
       "menuBarLeftClickMenu": "Mở menu hạn mức",
       "menuBarLeftClickWindow": "Mở cửa sổ chính",
       "floatingCardStartup": "Hiển thị thẻ nổi khi khởi động",
@@ -1565,7 +1565,6 @@
       "webdavAllowedDomainsDesc": "Cách nhau bằng dấu phẩy; trống = không giới hạn",
       "claudeQuotaDisplayRemaining": "Claude hiển thị % còn lại",
       "claudeQuotaDisplayRemainingDesc": "Mặc định % đã dùng. Bật = % còn lại. Tự chuyển và cảnh báo vẫn theo đã dùng.",
-      "menuBarLeftClick": "Nhấp trái trên thanh menu",
       "menuBarLeftClickDesc": "Nhấp phải luôn mở menu hạn mức.",
       "menuBarLeftClickQuotaMenu": "Menu hạn mức",
       "menuBarLeftClickMainWindow": "Cửa sổ chính",
@@ -1604,11 +1603,7 @@
         "nativePredictionsDesc": "Mặc định bật. Gợi ý sử dụng nhà cung cấp API và mô hình của cuộc trò chuyện hiện tại, làm tăng mức sử dụng API. Sau khi thay đổi cài đặt, hãy khởi động lại các phiên bản Codex bị ảnh hưởng và giữ Cockpit Tools chạy."
       },
       "timeDisplayMode": "Hiển thị thời gian",
-      "timeDisplayModeDesc": "Thời gian trên thẻ và danh sách tài khoản. Mặc định là thời gian chuyển tài khoản",
-      "menuBarLeftClick": "Nhấp trái trên thanh menu",
-      "menuBarLeftClickDesc": "Nhấp phải luôn mở menu hạn mức.",
-      "menuBarLeftClickQuotaMenu": "Menu hạn mức",
-      "menuBarLeftClickMainWindow": "Cửa sổ chính"
+      "timeDisplayModeDesc": "Thời gian trên thẻ và danh sách tài khoản. Mặc định là thời gian chuyển tài khoản"
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -4786,7 +4781,8 @@
           "totalAvailable": "Khả dụng",
           "isAvailable": "Số dư khả dụng",
           "modelLimitsEnabled": "Giới hạn mô hình",
-          "weeklyShort": "Tuần"
+          "weeklyShort": "Tuần",
+          "intervalShort": "5h"
         },
         "accountBalance": "Số dư tài khoản",
         "unlimitedQuota": "Không giới hạn",

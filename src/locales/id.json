@@ -1353,7 +1353,7 @@
       "trayIconStyleDesc": "Pilih ikon template sistem atau ikon app asli berwarna",
       "trayIconStyleTemplate": "Ikon template",
       "trayIconStyleColor": "Ikon berwarna",
-      "menuBarLeftClick": "Tindakan klik kiri pada ikon bar menu",
+      "menuBarLeftClick": "Klik kiri di bar menu",
       "menuBarLeftClickMenu": "Buka menu kuota",
       "menuBarLeftClickWindow": "Buka jendela utama",
       "floatingCardStartup": "Tampilkan kartu mengambang saat mulai",
@@ -1612,7 +1612,6 @@
       "webdavAllowedDomainsDesc": "Pisahkan koma; kosong = tanpa batas",
       "claudeQuotaDisplayRemaining": "Kuota Claude sebagai % sisa",
       "claudeQuotaDisplayRemainingDesc": "Default: % terpakai. Aktif = % sisa. Auto-switch & peringatan tetap pakai rasio terpakai.",
-      "menuBarLeftClick": "Klik kiri di bar menu",
       "menuBarLeftClickDesc": "Klik kanan selalu membuka menu kuota.",
       "menuBarLeftClickQuotaMenu": "Menu kuota",
       "menuBarLeftClickMainWindow": "Jendela utama",
@@ -1651,11 +1650,7 @@
         "nativePredictionsDesc": "Aktif secara bawaan. Saran menggunakan penyedia API dan model percakapan saat ini serta menambah penggunaan API. Setelah mengubah pengaturan ini, mulai ulang instans Codex terkait dan biarkan Cockpit Tools tetap berjalan."
       },
       "timeDisplayMode": "Tampilan waktu",
-      "timeDisplayModeDesc": "Waktu pada kartu dan daftar akun. Bawaan menggunakan waktu pergantian akun",
-      "menuBarLeftClick": "Klik kiri di bar menu",
-      "menuBarLeftClickDesc": "Klik kanan selalu membuka menu kuota.",
-      "menuBarLeftClickQuotaMenu": "Menu kuota",
-      "menuBarLeftClickMainWindow": "Jendela utama"
+      "timeDisplayModeDesc": "Waktu pada kartu dan daftar akun. Bawaan menggunakan waktu pergantian akun"
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -4833,7 +4828,8 @@
           "totalAvailable": "Tersedia",
           "isAvailable": "Saldo tersedia",
           "modelLimitsEnabled": "Batas model",
-          "weeklyShort": "Minggu"
+          "weeklyShort": "Minggu",
+          "intervalShort": "5h"
         },
         "accountBalance": "Saldo akun",
         "unlimitedQuota": "Tak terbatas",

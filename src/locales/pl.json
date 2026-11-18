@@ -1304,7 +1304,7 @@
       "trayIconStyleDesc": "Wybierz systemową ikonę monochromatyczną albo oryginalną kolorową ikonę aplikacji",
       "trayIconStyleTemplate": "Ikona monochromatyczna",
       "trayIconStyleColor": "Ikona kolorowa",
-      "menuBarLeftClick": "Działanie lewego kliknięcia ikony na pasku menu",
+      "menuBarLeftClick": "Lewy przycisk na pasku menu",
       "menuBarLeftClickMenu": "Otwórz menu limitów",
       "menuBarLeftClickWindow": "Otwórz główne okno",
       "floatingCardStartup": "Pokaż kartę pływającą przy starcie",
@@ -1565,7 +1565,6 @@
       "webdavAllowedDomainsDesc": "Po przecinku; puste = bez limitu",
       "claudeQuotaDisplayRemaining": "Limit Claude jako % pozostały",
       "claudeQuotaDisplayRemainingDesc": "Domyślnie % zużycia. Włącz = % pozostały. Auto-przełączanie i alerty wg zużycia.",
-      "menuBarLeftClick": "Lewy przycisk na pasku menu",
       "menuBarLeftClickDesc": "Kliknięcie prawym przyciskiem zawsze otwiera menu limitów.",
       "menuBarLeftClickQuotaMenu": "Menu limitów",
       "menuBarLeftClickMainWindow": "Okno główne",
@@ -1604,11 +1603,7 @@
         "nativePredictionsDesc": "Domyślnie włączone. Sugestie korzystają z dostawcy API i modelu bieżącej rozmowy oraz zwiększają użycie API. Po zmianie ustawienia uruchom ponownie odpowiednie instancje Codex i pozostaw Cockpit Tools uruchomione."
       },
       "timeDisplayMode": "Wyświetlany czas",
-      "timeDisplayModeDesc": "Czas na kartach i listach kont. Domyślnie czas przełączenia konta",
-      "menuBarLeftClick": "Lewy przycisk na pasku menu",
-      "menuBarLeftClickDesc": "Kliknięcie prawym przyciskiem zawsze otwiera menu limitów.",
-      "menuBarLeftClickQuotaMenu": "Menu limitów",
-      "menuBarLeftClickMainWindow": "Okno główne"
+      "timeDisplayModeDesc": "Czas na kartach i listach kont. Domyślnie czas przełączenia konta"
     },
     "network": {
       "apiTitle": "API kokpitu antygrawitacyjnego",
@@ -4786,7 +4781,8 @@
           "totalAvailable": "Dostępne",
           "isAvailable": "Saldo dostępne",
           "modelLimitsEnabled": "Limity modeli",
-          "weeklyShort": "Tydzień"
+          "weeklyShort": "Tydzień",
+          "intervalShort": "5h"
         },
         "accountBalance": "Saldo konta",
         "unlimitedQuota": "Bez limitu",

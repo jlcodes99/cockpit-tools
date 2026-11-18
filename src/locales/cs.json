@@ -1300,7 +1300,7 @@
       "trayIconStyleDesc": "Vyberte systémovou jednobarevnou ikonu nebo původní barevnou ikonu aplikace",
       "trayIconStyleTemplate": "Jednobarevná ikona",
       "trayIconStyleColor": "Barevná ikona",
-      "menuBarLeftClick": "Kliknutí levým tlačítkem na ikonu v řádku nabídek",
+      "menuBarLeftClick": "Kliknutí levým tlačítkem v řádku nabídek",
       "menuBarLeftClickMenu": "Otevřít nabídku kvót",
       "menuBarLeftClickWindow": "Otevřít hlavní okno",
       "floatingCardStartup": "Zobrazit plovoucí kartu při spuštění",
@@ -1565,7 +1565,6 @@
       "webdavAllowedDomainsDesc": "Oddělené čárkou; prázdné = bez limitu",
       "claudeQuotaDisplayRemaining": "Claude kvóta jako zbývající %",
       "claudeQuotaDisplayRemainingDesc": "Výchozí: % využito. Zapnout = % zbývá. Auto-přepínání a výstrahy dle využití.",
-      "menuBarLeftClick": "Kliknutí levým tlačítkem v řádku nabídek",
       "menuBarLeftClickDesc": "Kliknutí pravým tlačítkem vždy otevře nabídku kvót.",
       "menuBarLeftClickQuotaMenu": "Nabídka kvót",
       "menuBarLeftClickMainWindow": "Hlavní okno",
@@ -1604,11 +1603,7 @@
         "nativePredictionsDesc": "Ve výchozím nastavení je zapnuto. Návrhy používají poskytovatele API a model z aktuální konverzace a zvyšují spotřebu API. Po změně nastavení restartujte dotčené instance Codexu a nechte Cockpit Tools spuštěné."
       },
       "timeDisplayMode": "Zobrazený čas",
-      "timeDisplayModeDesc": "Čas na kartách a v seznamu účtů. Výchozí je čas přepnutí účtu",
-      "menuBarLeftClick": "Kliknutí levým tlačítkem v řádku nabídek",
-      "menuBarLeftClickDesc": "Kliknutí pravým tlačítkem vždy otevře nabídku kvót.",
-      "menuBarLeftClickQuotaMenu": "Nabídka kvót",
-      "menuBarLeftClickMainWindow": "Hlavní okno"
+      "timeDisplayModeDesc": "Čas na kartách a v seznamu účtů. Výchozí je čas přepnutí účtu"
     },
     "network": {
       "apiTitle": "Antigravity Cockpit API​",
@@ -4786,7 +4781,8 @@
           "totalAvailable": "Dostupné",
           "isAvailable": "Zůstatek dostupný",
           "modelLimitsEnabled": "Limity modelů",
-          "weeklyShort": "Týden"
+          "weeklyShort": "Týden",
+          "intervalShort": "5h"
         },
         "accountBalance": "Zůstatek účtu",
         "unlimitedQuota": "Neomezeno",

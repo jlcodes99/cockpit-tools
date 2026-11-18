@@ -1300,7 +1300,7 @@
       "trayIconStyleDesc": "Choisissez l’icône système monochrome ou l’icône d’app originale en couleur",
       "trayIconStyleTemplate": "Icône monochrome",
       "trayIconStyleColor": "Icône couleur",
-      "menuBarLeftClick": "Clic gauche sur l’icône de la barre des menus",
+      "menuBarLeftClick": "Clic gauche dans la barre des menus",
       "menuBarLeftClickMenu": "Ouvrir le menu des quotas",
       "menuBarLeftClickWindow": "Ouvrir la fenêtre principale",
       "floatingCardStartup": "Afficher la carte flottante au démarrage",
@@ -1565,7 +1565,6 @@
       "webdavAllowedDomainsDesc": "Séparés par des virgules ; vide = sans limite",
       "claudeQuotaDisplayRemaining": "Quota Claude en % restant",
       "claudeQuotaDisplayRemainingDesc": "Par défaut : % utilisé. Activer = % restant. Bascules/alertes restent sur l’usage.",
-      "menuBarLeftClick": "Clic gauche dans la barre des menus",
       "menuBarLeftClickDesc": "Le clic droit ouvre toujours le menu des quotas.",
       "menuBarLeftClickQuotaMenu": "Menu des quotas",
       "menuBarLeftClickMainWindow": "Fenêtre principale",
@@ -1604,11 +1603,7 @@
         "nativePredictionsDesc": "Activé par défaut. Les suggestions utilisent le fournisseur d’API et le modèle de la conversation en cours et entraînent une consommation supplémentaire de l’API. Après avoir modifié ce réglage, redémarrez les instances Codex concernées et laissez Cockpit Tools en cours d’exécution."
       },
       "timeDisplayMode": "Heure affichée",
-      "timeDisplayModeDesc": "Heure affichée sur les comptes. Par défaut, heure du changement de compte",
-      "menuBarLeftClick": "Clic gauche dans la barre des menus",
-      "menuBarLeftClickDesc": "Le clic droit ouvre toujours le menu des quotas.",
-      "menuBarLeftClickQuotaMenu": "Menu des quotas",
-      "menuBarLeftClickMainWindow": "Fenêtre principale"
+      "timeDisplayModeDesc": "Heure affichée sur les comptes. Par défaut, heure du changement de compte"
     },
     "network": {
       "apiTitle": "API du cockpit antigravité",
@@ -4786,7 +4781,8 @@
           "totalAvailable": "Disponible",
           "isAvailable": "Solde disponible",
           "modelLimitsEnabled": "Limites modèles",
-          "weeklyShort": "Semaine"
+          "weeklyShort": "Semaine",
+          "intervalShort": "5h"
         },
         "accountBalance": "Solde du compte",
         "unlimitedQuota": "Illimité",
