@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "revision": 2026111801,
+  "source": "https://developers.openai.com/api/docs/pricing",
+  "models": [
+    { "id": "gpt-6.2-sol", "standard": [2, 0.1, 10], "ultrafastPromoUntilMs": 1803888000000 },
+    { "id": "gpt-6.2-astra", "standard": [8, 0.4, 40], "ultrafastPromoUntilMs": 1803888000000 },
+    { "id": "gpt-6.1-sol", "standard": [2, 0.1, 10] },
+    { "id": "gpt-6.1-terra", "standard": [1, 0.05, 5] },
+    { "id": "gpt-6-astra", "standard": [10, 1, 50] },
+    { "id": "gpt-6-sol", "standard": [2, 0.2, 10] },
+    { "id": "gpt-6-luna", "standard": [0.1, 0.01, 0.5] },
+    { "id": "gpt-5.6-sol", "standard": [4, 0.4, 20], "aliases": ["gpt-5.6"] },
+    { "id": "gpt-5.6-terra", "standard": [2, 0.2, 12] },
+    { "id": "gpt-5.6-luna", "standard": [0.2, 0.02, 1.2] }
+  ]
+}
