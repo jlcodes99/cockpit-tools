@@ -198,6 +198,7 @@
     "providerClear": "Effacer la sélection"
   },
   "common": {
+    "previewTruncated": "L’aperçu affiche seulement une partie du contenu. La copie ou le téléchargement inclut le JSON complet.",
     "collapseAll": "Tout réduire",
     "expandAll": "Tout développer",
     "syncing": "Synchronisation…",

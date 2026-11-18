@@ -198,6 +198,7 @@
     "providerClear": "清除選取"
   },
   "common": {
+    "previewTruncated": "預覽僅顯示部分內容。複製或下載時會包含完整的 JSON。",
     "collapseAll": "全部收起",
     "expandAll": "全部展開",
     "syncing": "同步中…",

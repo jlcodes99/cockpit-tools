@@ -198,6 +198,7 @@
     "providerClear": "Bỏ chọn"
   },
   "common": {
+    "previewTruncated": "Bản xem trước chỉ hiển thị một phần nội dung. Khi sao chép hoặc tải xuống, toàn bộ JSON sẽ được bao gồm.",
     "collapseAll": "Thu gọn tất cả",
     "expandAll": "Mở rộng tất cả",
     "syncing": "Đang đồng bộ…",

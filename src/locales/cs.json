@@ -198,6 +198,7 @@
     "providerClear": "Zrušit výběr"
   },
   "common": {
+    "previewTruncated": "Náhled zobrazuje pouze část obsahu. Kopírování nebo stažení zahrnuje celý JSON.",
     "collapseAll": "Sbalit vše",
     "expandAll": "Rozbalit vše",
     "syncing": "Synchronizace…",

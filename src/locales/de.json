@@ -198,6 +198,7 @@
     "providerClear": "Auswahl leeren"
   },
   "common": {
+    "previewTruncated": "Die Vorschau ist gekürzt. Beim Kopieren oder Herunterladen wird der vollständige JSON-Inhalt übernommen.",
     "collapseAll": "Alle einklappen",
     "expandAll": "Alle ausklappen",
     "syncing": "Synchronisierung…",

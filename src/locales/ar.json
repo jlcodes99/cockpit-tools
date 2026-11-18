@@ -198,6 +198,7 @@
     "providerClear": "مسح التحديد"
   },
   "common": {
+    "previewTruncated": "يُعرض جزء من المعاينة. يتضمن النسخ أو التنزيل ملف JSON كاملاً.",
     "collapseAll": "طي الكل",
     "expandAll": "توسيع الكل",
     "syncing": "جارٍ المزامنة…",

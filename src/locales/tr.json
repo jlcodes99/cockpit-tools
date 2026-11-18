@@ -198,6 +198,7 @@
     "providerClear": "Seçimi temizle"
   },
   "common": {
+    "previewTruncated": "Önizleme içeriğin yalnızca bir bölümünü gösterir. Kopyalama veya indirme, JSON içeriğinin tamamını içerir.",
     "collapseAll": "Tümünü daralt",
     "expandAll": "Tümünü genişlet",
     "syncing": "Eşitleniyor…",

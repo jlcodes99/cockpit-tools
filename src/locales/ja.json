@@ -198,6 +198,7 @@
     "providerClear": "選択を解除"
   },
   "common": {
+    "previewTruncated": "プレビューには内容の一部だけが表示されます。コピーやダウンロードには JSON 全体が含まれます。",
     "collapseAll": "すべて折りたたむ",
     "expandAll": "すべて展開",
     "syncing": "同期中…",

@@ -198,6 +198,7 @@
     "providerClear": "清空选择"
   },
   "common": {
+    "previewTruncated": "预览仅显示部分内容。复制或下载将包含完整 JSON。",
     "collapseAll": "全部收起",
     "expandAll": "全部展开",
     "syncing": "同步中…",

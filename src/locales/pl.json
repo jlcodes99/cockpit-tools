@@ -198,6 +198,7 @@
     "providerClear": "Wyczyść wybór"
   },
   "common": {
+    "previewTruncated": "Podgląd pokazuje tylko część treści. Kopiowanie lub pobieranie obejmuje cały JSON.",
     "collapseAll": "Zwiń wszystko",
     "expandAll": "Rozwiń wszystko",
     "syncing": "Synchronizacja…",
