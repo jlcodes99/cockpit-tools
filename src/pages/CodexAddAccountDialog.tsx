@@ -11,9 +11,10 @@ import { useEscCloseTopmost } from "../hooks/useEscClose";
 import { useModalScrollLock } from "../hooks/useModalScrollLock";
 import "./CodexAccountDialogs.css";
 import { CODEX_TEMP_LOGIN_STEPS } from "../services/codexTempLoginService";
-import { CODEX_API_PROVIDER_CUSTOM_ID, CODEX_API_PROVIDER_PRESETS, COCKPIT_API_PROVIDER_ID } from "../utils/codexProviderPresets";
+import { CODEX_API_PROVIDER_CUSTOM_ID, CODEX_API_PROVIDER_PRESETS, COCKPIT_API_PROVIDER_ID, resolveOllamaLocalPlaceholderKey } from "../utils/codexProviderPresets";
 import { canUseCodexOAuthAccountProxy } from "../utils/codexAccountProxy";
 import type { CodexAccountsViewProps } from "./CodexAccountsView";
+import { filterCodexSavedProviders } from "./codexAccountsControllerModel";
 
 /** 渲染 CodexAccountsOverviewPanel 的 expr:showAddModal && 业务面板。 */
 export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
@@ -139,6 +140,8 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     tokenImportProgress,
     tokenInput,
   } = props;
+  const localPlaceholderKey = resolveOllamaLocalPlaceholderKey(apiBaseUrlInput);
+  const hasApiKeyInput = Boolean(apiKeyInput.trim() || localPlaceholderKey);
   const [usageApiKeyDraft, setUsageApiKeyDraft] = useState('');
 
   useEffect(() => { setUsageApiKeyDraft(''); }, [showAddModal, apiKeyInput, apiBaseUrlInput]);
@@ -146,14 +149,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
   useEffect(() => {
     if (!showAddModal) setSavedProviderSearch("");
   }, [showAddModal]);
-  const providerQuery = savedProviderSearch.trim().toLowerCase();
-  const visibleManagedProviders = providerQuery
-    ? managedProviders.filter((provider) =>
-        provider.name.toLowerCase().includes(providerQuery) ||
-        provider.baseUrl.toLowerCase().includes(providerQuery) ||
-        provider.apiKeys.some((key) => key.name.toLowerCase().includes(providerQuery)),
-      )
-    : managedProviders;
+  const visibleManagedProviders = filterCodexSavedProviders(managedProviders, savedProviderSearch);
   const officialUsage = isOpenAIOfficialUsageUrl(apiBaseUrlInput.trim() || OPENAI_OFFICIAL_USAGE_BASE_URL);
   const addStatusRef = useRef<HTMLDivElement>(null);
   const oauthCallbackInputRef = useRef<HTMLInputElement>(null);
@@ -320,6 +316,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                                 )}
                               </button>
                             </div>
+                            <p className="section-desc">{t("codex.oauth.reauthEmailChangeHint")}</p>
                           </div>
                         )}
                         <div className="codex-reauth-note-summary">
@@ -721,6 +718,16 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                             <div className="add-status error">
                               <CircleAlert size={16} />
                               <span>{oauthPrepareError}</span>
+                              {!oauthProxyEnabled && (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-outline"
+                                  disabled={oauthCompletingRef.current}
+                                  onClick={() => void handleStartDeviceAuth()}
+                                >
+                                  {t("common.shared.oauth.deviceAuth", "设备授权")}
+                                </button>
+                              )}
                               {oauthPortInUse && (
                                 <button
                                   className="btn btn-sm btn-outline"
@@ -960,6 +967,10 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                               <SingleSelectDropdown
                                 className="codex-managed-api-key-select"
                                 value={managedProviderApiKeyId}
+                                search={{
+                                  label: t("codex.modelProviders.existingApiKeysSearch"),
+                                  emptyLabel: t("common.shared.noMatch.desc"),
+                                }}
                                 options={[
                                   {
                                     value: "",
@@ -1179,6 +1190,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                             <input
                               type={apiKeyInputVisible ? "text" : "password"}
                               value={apiKeyInput}
+                              placeholder={localPlaceholderKey}
                               onChange={(e) =>
                                 handleApiKeyInputChange(e.target.value)
                               }
@@ -1305,7 +1317,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                                   disabled={
                                     apiModelCatalogFetching ||
                                     addStatus === "loading" ||
-                                    !apiKeyInput.trim()
+                                    !hasApiKeyInput
                                   }
                                 >
                                   <RefreshCw
@@ -1346,7 +1358,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                                   <small>
                                     {t(
                                       "codex.api.modelCatalog.syncDescription",
-                                      "保存后使用当前模型列表生成 Cockpit 受管的 Codex 模型目录，不覆盖用户自定义目录。",
+                                      "在 Cockpit 中用此账号启动 Codex 时应用此模型列表。已有自定义目录时优先使用该目录。",
                                     )}
                                   </small>
                                 </span>
@@ -1592,7 +1604,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                     <button
                       className="btn btn-primary"
                       onClick={() => void handleApiKeyLogin(officialUsage ? usageApiKeyDraft : undefined)}
-                      disabled={importing || addStatus === "loading" || apiModelCatalogFetching || !apiKeyInput.trim()}
+                      disabled={importing || addStatus === "loading" || apiModelCatalogFetching || !hasApiKeyInput}
                     >
                       {addStatus === "loading" ? <RefreshCw size={16} className="loading-spinner" /> : <KeyRound size={16} />}
                       {t("common.shared.addAccount", "添加账号")}

@@ -31,6 +31,7 @@ struct RecordPayload {
     #[serde(rename = "type")]
     kind: Option<String>,
     item: Option<ItemHeader>,
+    history_base: Option<serde::de::IgnoredAny>,
 }
 
 #[derive(Deserialize)]
@@ -206,22 +207,39 @@ fn append_records(path: &Path, cutoff: Option<&Cutoff>, output: &mut impl Write)
         }
         end = records.position;
         trailing_newline = record.complete;
-        if parsed.needs_legacy_event() {
+        // The first session_meta defines this file's lineage. Later metadata can
+        // have been copied with the parent's messages and does not define a fork.
+        let inherited_history_base = parsed.kind == "session_meta"
+            && parsed
+                .payload
+                .as_ref()
+                .is_some_and(|payload| payload.history_base.is_some());
+        let needs_legacy_event = parsed.needs_legacy_event();
+        if inherited_history_base || needs_legacy_event {
             copy_bytes(&mut source, output, line_start - copied)?;
             let length = end - line_start;
             let mut item_source = source.by_ref().take(length);
-            let value: Value = serde_json::from_reader(&mut item_source)?;
+            let mut value: Value = serde_json::from_reader(&mut item_source)?;
             if item_source.limit() != 0 {
                 return Err(io::Error::other("history changed during export"));
             }
+            if inherited_history_base {
+                let payload = value["payload"]
+                    .as_object_mut()
+                    .ok_or_else(|| io::Error::other("invalid inherited session metadata"))?;
+                payload.remove("history_base");
+                payload.insert("history_mode".into(), Value::String("legacy".into()));
+            }
             write_json_line(output, &value)?;
-            for payload in legacy_events(&value["payload"]["item"]) {
-                write_json_line(
-                    output,
-                    &json!({
-                        "timestamp": value["timestamp"], "type": "event_msg", "payload": payload,
-                    }),
-                )?;
+            if needs_legacy_event {
+                for payload in legacy_events(&value["payload"]["item"]) {
+                    write_json_line(
+                        output,
+                        &json!({
+                            "timestamp": value["timestamp"], "type": "event_msg", "payload": payload,
+                        }),
+                    )?;
+                }
             }
             copied = end;
             trailing_newline = true;

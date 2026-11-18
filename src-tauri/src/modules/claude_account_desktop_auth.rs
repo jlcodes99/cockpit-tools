@@ -22,6 +22,75 @@ mod electron_runtime_tests {
             assert!(electron_runtime_download_url(&asset).contains(asset.file_name));
         }
     }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn incomplete_macos_electron_archive_does_not_replace_the_runtime() {
+        use super::extract_electron_runtime_zip;
+        use std::{fs, io::Write};
+        use zip::{write::SimpleFileOptions, ZipWriter};
+
+        let asset = test_electron_runtime_asset_for("macos", "aarch64").unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let archive_path = directory.path().join("electron.zip");
+        let mut archive = ZipWriter::new(fs::File::create(&archive_path).unwrap());
+        archive
+            .start_file(asset.executable_relative, SimpleFileOptions::default())
+            .unwrap();
+        archive.write_all(b"exe").unwrap();
+        archive
+            .start_file(
+                "Electron.app/Contents/Frameworks/Electron Framework.framework/Electron Framework",
+                SimpleFileOptions::default(),
+            )
+            .unwrap();
+        archive.write_all(b"framework binary").unwrap();
+        archive.finish().unwrap();
+
+        let destination = directory.path().join(asset.platform_key);
+        fs::create_dir(&destination).unwrap();
+        fs::write(destination.join("existing-runtime"), b"keep").unwrap();
+        let error = extract_electron_runtime_zip(&asset, &archive_path, &destination, None)
+            .unwrap_err();
+        assert!(error.contains("libffmpeg.dylib"), "{error}");
+        assert!(destination.join("existing-runtime").is_file());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore = "requires COCKPIT_TEST_ELECTRON_ARCHIVE, the pinned macOS Electron archive"]
+    fn macos_electron_runtime_rebuilds_missing_library_and_launches() {
+        use super::{electron_runtime_asset_for_current_platform, ensure_electron_runtime_in_root};
+        use std::{fs, path::PathBuf, process::Command};
+
+        let asset = electron_runtime_asset_for_current_platform().unwrap();
+        let archive = PathBuf::from(std::env::var_os("COCKPIT_TEST_ELECTRON_ARCHIVE").unwrap());
+        let directory = tempfile::tempdir().unwrap();
+        let cached_archive = directory.path().join(asset.file_name);
+        if fs::hard_link(&archive, &cached_archive).is_err() {
+            fs::copy(&archive, &cached_archive).unwrap();
+        }
+
+        let executable = ensure_electron_runtime_in_root(&asset, directory.path(), None).unwrap();
+        let ffmpeg = executable.parent().unwrap().parent().unwrap().join(
+            "Frameworks/Electron Framework.framework/Libraries/libffmpeg.dylib",
+        );
+        fs::remove_file(&ffmpeg).unwrap();
+        assert!(executable.is_file());
+        assert!(!ffmpeg.exists());
+        assert_eq!(
+            ensure_electron_runtime_in_root(&asset, directory.path(), None).unwrap(),
+            executable
+        );
+        assert!(ffmpeg.is_file());
+        let result = Command::new(executable)
+            .env("ELECTRON_RUN_AS_NODE", "1")
+            .arg("--version")
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+        assert!(result.stdout.starts_with(b"v"));
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -2870,14 +2939,23 @@ fn inject_oauth_account_to_claude_code(
     Ok(())
 }
 
-pub fn inject_to_claude_config(account_id: &str, config_dir: Option<&Path>) -> Result<(), String> {
+pub fn inject_to_claude_config(
+    account_id: &str,
+    config_dir: Option<&Path>,
+) -> Result<Option<String>, String> {
     let account = load_account(account_id).ok_or_else(|| "Claude 账号不存在".to_string())?;
     if account.auth_mode == ClaudeAuthMode::DesktopGateway {
         if let Some(target_dir) = config_dir {
             restore_desktop_gateway_account_to_profile(account_id, target_dir, false)?;
-            return Ok(());
+            return Ok(None);
         }
         quit_claude_desktop_for_profile_write()?;
+        #[cfg(target_os = "macos")]
+        if let Err(error) = get_default_claude_desktop_user_data_dir()
+            .and_then(|target_dir| write_back_default_desktop_login(&target_dir, None))
+        {
+            logger::log_warn(&format!("[Claude Switch] 回写原账号登录态失败: {error}"));
+        }
         write_default_desktop_gateway_profile(&account)?;
         crate::modules::claude_instance::ensure_claude_launch_path_configured()?;
         launch_default_claude_desktop()?;
@@ -2885,7 +2963,7 @@ pub fn inject_to_claude_config(account_id: &str, config_dir: Option<&Path>) -> R
         let mut updated = account.clone();
         updated.last_used = now_ts_ms();
         save_account_and_index(updated)?;
-        return Ok(());
+        return Ok(None);
     }
     if account.auth_mode == ClaudeAuthMode::DesktopOAuth {
         if config_dir.is_some() {
@@ -2899,23 +2977,46 @@ pub fn inject_to_claude_config(account_id: &str, config_dir: Option<&Path>) -> R
             .ok_or_else(|| "Claude 账号缺少 profile 快照".to_string())?;
         let target_dir = get_default_claude_desktop_user_data_dir()?;
         quit_claude_desktop_for_profile_write()?;
-        let _backup_dir = backup_current_desktop_profile(&target_dir)?;
+        let backup = backup_current_desktop_profile(&target_dir)?;
+        #[cfg(target_os = "macos")]
+        if let Some(backup) = backup {
+            if let Err(error) = write_back_default_desktop_login(&target_dir, Some(&backup)) {
+                logger::log_warn(&format!(
+                    "[Claude Switch] 回写原账号登录态失败，已保留切换前备份: {error}"
+                ));
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = backup;
         restore_default_desktop_gateway_official_config()?;
         restore_desktop_profile_snapshot(&snapshot_dir, &target_dir, account.account_uuid.as_deref())?;
         restore_default_desktop_gateway_official_config()?;
+        #[cfg(target_os = "macos")]
+        let sync_warning = if crate::modules::config::get_user_config().claude_share_code_sessions_on_switch {
+            desktop_code_sessions::sync_before_launch(&target_dir, &account).err()
+                .map(|error| {
+                    let message = format!("同步 Code 会话列表失败：{error}");
+                    logger::log_warn(&format!("[Claude Switch] {message}"));
+                    message
+                })
+        } else {
+            None
+        };
+        #[cfg(not(target_os = "macos"))]
+        let sync_warning = None;
 
         let mut updated = account.clone();
         updated.last_used = now_ts_ms();
         save_account_and_index(updated)?;
         launch_default_claude_desktop()?;
-        return Ok(());
+        return Ok(sync_warning);
     }
     if account.auth_mode == ClaudeAuthMode::ApiKey {
         inject_api_key_to_claude_code_settings(&account, config_dir)?;
         let mut updated = account.clone();
         updated.last_used = now_ts_ms();
         save_account_and_index(updated)?;
-        return Ok(());
+        return Ok(None);
     }
     let config_dir_path = get_effective_claude_code_config_dir(config_dir)?;
     clear_api_key_env_from_claude_code_settings(&config_dir_path)?;
@@ -2925,10 +3026,10 @@ pub fn inject_to_claude_config(account_id: &str, config_dir: Option<&Path>) -> R
         current.last_used = now_ts_ms();
         Ok(())
     })?;
-    Ok(())
+    Ok(None)
 }
 
-pub fn inject_to_claude(account_id: &str) -> Result<(), String> {
+pub fn inject_to_claude(account_id: &str) -> Result<Option<String>, String> {
     inject_to_claude_config(account_id, None)
 }
 

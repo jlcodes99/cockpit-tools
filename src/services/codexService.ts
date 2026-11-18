@@ -48,6 +48,10 @@ export async function getCurrentCodexAccount(): Promise<CodexAccount | null> {
   return await invoke('get_current_codex_account');
 }
 
+export async function getCodexProfileLifetimeTokens(accountId: string): Promise<number | null> {
+  return invoke('get_codex_profile_lifetime_tokens', { accountId });
+}
+
 /** 获取当前 Codex config.toml 路径 */
 export async function getCodexConfigTomlPath(): Promise<string> {
   return await invoke('get_codex_config_toml_path');
@@ -71,6 +75,32 @@ export async function openCodexConfigToml(): Promise<void> {
 /** 获取 Codex config.toml 快捷配置 */
 export async function getCodexQuickConfig(): Promise<CodexQuickConfig> {
   return await invoke('get_codex_quick_config');
+}
+
+interface CodexModelInstructionsSetting {
+  path: string | null;
+  deferred: boolean;
+}
+
+export function getCodexModelInstructions(): Promise<CodexModelInstructionsSetting> {
+  return invoke('get_codex_model_instructions');
+}
+
+export function setCodexModelInstructions(path: string | null): Promise<CodexModelInstructionsSetting> {
+  return invoke('set_codex_model_instructions', { path });
+}
+
+export interface CodexSubagentDefaults {
+  model: string | null;
+  reasoningEffort: string | null;
+}
+
+export function getCodexSubagentDefaults(): Promise<CodexSubagentDefaults> {
+  return invoke('get_codex_subagent_defaults');
+}
+
+export function setCodexSubagentDefaults(defaults: CodexSubagentDefaults): Promise<CodexSubagentDefaults> {
+  return invoke('set_codex_subagent_defaults', { defaults });
 }
 
 /** 保存官方 Codex 实验性上下文管理开关。 */
@@ -108,6 +138,10 @@ export async function saveCodexModelCatalog(
     experimentalModelCatalogModels,
     experimentalModelCatalogDefaultModelId: experimentalModelCatalogDefaultModelId ?? null,
   });
+}
+
+export async function getCodexBaseCatalogSource(): Promise<'downloaded' | 'cache' | 'embedded'> {
+  return invoke('get_codex_base_catalog_source');
 }
 
 export async function getCodexModelReasoningEfforts(

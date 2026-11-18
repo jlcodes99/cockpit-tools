@@ -48,6 +48,50 @@ async fn native_startup_recovers_from_an_occupied_configured_port() {
 }
 
 #[tokio::test]
+async fn access_scope_rebinds_a_running_native_gateway_and_persists() {
+    let _env_lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _env = LocalAccessTestDataGuard::new("native-gateway-access-scope");
+    super::with_chatgpt_plan_test_runtime(|| async {
+        let mut collection = test_local_access_collection(Vec::new());
+        collection.port = std::net::TcpListener::bind(("127.0.0.1", 0))
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        collection.gateway_mode = CodexLocalAccessGatewayMode::Native;
+        collection.access_scope = super::CodexLocalAccessScope::Localhost;
+        super::save_collection_to_disk(&collection).unwrap();
+        {
+            let mut runtime = super::gateway_runtime().lock().await;
+            runtime.loaded = true;
+            runtime.collection = Some(collection.clone());
+        }
+        super::ensure_gateway_matches_runtime().await.unwrap();
+
+        for (scope, bind_host) in [
+            (super::CodexLocalAccessScope::Lan, "0.0.0.0"),
+            (super::CodexLocalAccessScope::Localhost, "127.0.0.1"),
+        ] {
+            let state = super::update_local_access_scope(scope).await.unwrap();
+            assert!(state.running);
+            let saved = super::load_collection_from_disk().unwrap().unwrap();
+            assert_eq!(saved.access_scope, scope);
+            assert_eq!(saved.port, collection.port);
+            assert_eq!(saved.api_key, collection.api_key);
+            assert_eq!(saved.client_base_url_host, collection.client_base_url_host);
+            assert_eq!(
+                super::gateway_runtime().lock().await.actual_bind_host.as_deref(),
+                Some(bind_host),
+            );
+            assert!(std::net::TcpStream::connect(("127.0.0.1", collection.port)).is_ok());
+        }
+        super::stop_gateway().await;
+    }).await;
+}
+
+#[tokio::test]
 async fn port_recovery_preserves_an_unrelated_listener_and_switches_to_a_new_port() {
     let _env_lock = crate::modules::test_support::env_lock()
         .lock()

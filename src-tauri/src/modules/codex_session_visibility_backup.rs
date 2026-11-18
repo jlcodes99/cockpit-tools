@@ -453,6 +453,44 @@ fn backup_instance_files(
         ),
     )?;
 
+    if let Err(error) = write_instance_backup(
+        data_dir,
+        &backup_dir,
+        rollout_changes,
+        include_sqlite,
+        include_session_index,
+        include_global_state,
+        instance_id,
+        target_provider,
+        options,
+    ) {
+        // Live files have not been changed. A partial backup cannot be used
+        // to restore them and can leave an entire SQLite copy on disk.
+        if let Err(cleanup_error) = fs::remove_dir_all(&backup_dir) {
+            if cleanup_error.kind() != std::io::ErrorKind::NotFound {
+                return Err(format!(
+                    "{error}\n清理未完成的会话修复备份失败 ({}): {cleanup_error}",
+                    backup_dir.display()
+                ));
+            }
+        }
+        return Err(error);
+    }
+
+    Ok(backup_dir)
+}
+
+fn write_instance_backup(
+    data_dir: &Path,
+    backup_dir: &Path,
+    rollout_changes: &[RolloutProviderChange],
+    include_sqlite: bool,
+    include_session_index: bool,
+    include_global_state: bool,
+    instance_id: &str,
+    target_provider: &str,
+    options: CodexSessionVisibilityRepairOptions,
+) -> Result<(), String> {
     let backed_up_files: Vec<String> = Vec::new();
     let mut rollout_timestamps = Vec::new();
     let mut sqlite_backup_files = Vec::new();
@@ -474,7 +512,7 @@ fn backup_instance_files(
     }
 
     if include_sqlite {
-        sqlite_backup_files = backup_sqlite_databases(data_dir, &backup_dir, options)?;
+        sqlite_backup_files = backup_sqlite_databases(data_dir, backup_dir, options)?;
     }
 
     let mut session_index_backup_created = false;
@@ -552,7 +590,7 @@ fn backup_instance_files(
         )
     })?;
 
-    Ok(backup_dir)
+    Ok(())
 }
 
 pub(crate) fn is_session_visibility_repair_backup(name: &str) -> bool {

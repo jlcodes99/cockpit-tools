@@ -13,7 +13,7 @@ for (const variant of ['settings', 'quick'] as const) {
     const stored: Record<string, unknown> = {
       codex_app_native_fast_enabled: false,
       codex_app_api_quota_compat_enabled: true,
-      // Old configuration responses omit predictions, which must stay opt-in.
+      // Responses missing the prediction field use the shared default.
       // A stale response must not restore retired controls or persist them.
       codex_app_api_dictation_enabled: true,
       codex_app_api_dictation_model: 'legacy-model',
@@ -47,7 +47,7 @@ for (const variant of ['settings', 'quick'] as const) {
       'settings.general.codexEnhancements.nativePredictions',
     ]);
     assert.equal(controls.every(entry => entry.props.type === 'checkbox' && !entry.props.disabled), true);
-    assert.deepEqual(controls.map(entry => entry.props.checked), [true, false]);
+    assert.deepEqual(controls.map(entry => entry.props.checked), [true, true]);
     assert.equal(tree.some(entry => String(entry.props.children).includes('dictation')), false);
     assert.deepEqual(controls.map(control => {
       const descriptions = tree.filter(entry => entry.props.id === control.props['aria-describedby']);
@@ -61,18 +61,18 @@ for (const variant of ['settings', 'quick'] as const) {
     await settlePromises();
     tree = nodes(hook.flush());
     assert.equal(JSON.stringify(patches), JSON.stringify([{ codex_app_api_quota_compat_enabled: false }]));
-    tree.filter(entry => entry.type === 'input')[1].props.onChange({ target: { checked: true } });
+    tree.filter(entry => entry.type === 'input')[1].props.onChange({ target: { checked: false } });
     await settlePromises();
     tree = nodes(hook.flush());
     assert.deepEqual(JSON.parse(JSON.stringify(patches)), [
       { codex_app_api_quota_compat_enabled: false },
-      { codex_app_native_predictions_enabled: true },
+      { codex_app_native_predictions_enabled: false },
     ]);
-    assert.deepEqual(tree.filter(entry => entry.type === 'input').map(entry => entry.props.checked), [false, true]);
+    assert.deepEqual(tree.filter(entry => entry.type === 'input').map(entry => entry.props.checked), [false, false]);
     listeners.get('config-updated')?.();
     await settlePromises();
     tree = nodes(hook.flush());
-    assert.equal(tree.filter(entry => entry.type === 'input')[1].props.checked, true);
+    assert.equal(tree.filter(entry => entry.type === 'input')[1].props.checked, false);
     hook.unmount();
   });
 }

@@ -486,6 +486,22 @@ test('creating an official account optionally stores its query key without requi
   await assert.rejects(h.service.queryCodexModelProviderUsage({ baseUrl: saved.baseUrl, apiKey: 'model-two' }), /OPENAI_USAGE_NOT_CONFIGURED/);
 });
 
+test('custom quota configuration persists across reload and does not enter Codex account credentials', async () => {
+  const h = harness();
+  const config = {
+    endpoint: '/user/balance', headers: { 'User-Agent': 'cc-switch/1.0' },
+    mappings: { remaining: 'balance' }, unit: 'CNY',
+  };
+  await h.service.updateCodexModelProvider('provider', { customUsage: config });
+  assert.deepEqual(h.stored()[0].customUsage, config);
+  h.service.invalidateCodexModelProviderCache();
+  const [saved] = await h.service.listCodexModelProviders();
+  assert.deepEqual(JSON.parse(JSON.stringify(saved.customUsage)), config);
+  assert.equal(JSON.stringify(buildCodexModelProviderAccountSnapshot(saved, 'sk-first')).includes('/user/balance'), false);
+  await h.service.updateCodexModelProvider('provider', { customUsage: null });
+  assert.equal(h.stored()[0].customUsage, undefined);
+});
+
 test('concurrent organization queries share one request while other providers retain their model key', async () => {
   const gate = deferred<unknown>();
   const requests: any[] = [];

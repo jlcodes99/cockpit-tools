@@ -180,6 +180,10 @@
   padding-top: 4px;
 }
 
+.antigravity-card-footer {
+  flex-wrap: wrap;
+}
+
 .card-date {
   font-size: 10px;
   color: var(--text-muted);
@@ -204,7 +208,7 @@
   display: inline-flex;
   align-items: center;
   width: auto;
-  max-width: 220px;
+  max-width: min(220px, 100%);
   min-width: 0;
 }
 

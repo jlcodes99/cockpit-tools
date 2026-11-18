@@ -68,20 +68,11 @@ fn validate_projection_cursors(
         let relative = relative_profile_path(Path::new(&path), target)
             .ok_or_else(|| format!("会话 {id} 的历史路径不在副本中"))?;
         let rollout_path = root.join(relative);
-        let mut file = fs::File::open(&rollout_path).map_err(|e| e.to_string())?;
-        let length = file.metadata().map_err(|e| e.to_string())?.len();
         if offset < 0 {
             return Err(format!("会话 {id} 的历史索引超出副本文件边界"));
         }
-        let mut cursor_valid = offset as u64 <= length;
-        if cursor_valid && offset > 0 {
-            file.seek(SeekFrom::Start(offset as u64 - 1))
-                .map_err(|e| e.to_string())?;
-            let mut byte = [0];
-            file.read_exact(&mut byte).map_err(|e| e.to_string())?;
-            cursor_valid = byte[0] == b'\n';
-        }
-        if cursor_valid {
+        let boundary = rollout_boundaries(&rollout_path, [offset as u64], budget)?[0];
+        if boundary == RolloutBoundary::RecordEnd {
             continue;
         }
         let complete_history = match next_ordinal.filter(|ordinal| *ordinal >= 0) {
@@ -91,7 +82,7 @@ fn validate_projection_cursors(
             None => false,
         };
         if !complete_history {
-            return Err(if offset as u64 > length {
+            return Err(if boundary == RolloutBoundary::PastEnd {
                 format!("会话 {id} 的历史索引超出副本文件边界")
             } else {
                 format!("会话 {id} 的历史索引不在记录末尾")
@@ -165,7 +156,7 @@ fn rollout_covers_projection_ordinal(
     checkpoint: u64,
     budget: &CopyBudget<'_>,
 ) -> Result<bool, String> {
-    let mut reader = BufReader::new(fs::File::open(path).map_err(|e| e.to_string())?);
+    let mut reader = BufReader::new(rollout_reader::open(path).map_err(|e| e.to_string())?);
     let mut first_record = true;
     let mut expected = 0_u64;
     let mut has_ordinal = false;

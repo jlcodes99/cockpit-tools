@@ -33,6 +33,46 @@ fn keepalive_leaves_default_profile_refresh_chain_to_the_official_client() {
 }
 
 #[test]
+fn account_switch_roundtrip_preserves_official_rotation_while_stored_access_is_valid() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let env = TestEnvGuard::new("codex-switch-preserves-official-rotation");
+    let outgoing = seed_oauth_account(make_codex_tokens(
+        "demo@example.com", "acc-current", "org-current", "stored", "rt-stored",
+    ));
+    let incoming = upsert_account(make_codex_tokens(
+        "second@example.com", "acc-second", "org-second", "second", "rt-second",
+    )).unwrap();
+    let mut rotated = make_codex_tokens(
+        "demo@example.com", "acc-current", "org-current", "official", "rt-official",
+    );
+    rotated.access_token = make_jwt(serde_json::json!({
+        "exp": 4_102_448_400i64,
+        "https://api.openai.com/auth": {
+            "chatgpt_account_id": "acc-current", "organization_id": "org-current"
+        }
+    }));
+    let profile = env.codex_home();
+    let mut auth = build_oauth_auth_file(&rotated, "acc-current");
+    auth.last_refresh = Some(serde_json::json!(chrono::Utc::now().timestamp()));
+    fs::write(profile.join("auth.json"), serde_json::to_vec(&auth).unwrap()).unwrap();
+    assert!(!super::managed_account_tokens_need_refresh(&outgoing));
+
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(super::switch_account_managed(&incoming.id)).unwrap();
+    let saved = load_account(&outgoing.id).unwrap();
+    assert_eq!(saved.tokens.refresh_token, rotated.refresh_token);
+    assert_eq!(saved.token_generation, outgoing.token_generation + 1);
+    assert_eq!(super::read_official_oauth_tokens(&profile).unwrap().access_token, incoming.tokens.access_token);
+
+    runtime.block_on(super::switch_account_managed(&outgoing.id)).unwrap();
+    let restored = super::read_official_oauth_tokens(&profile).unwrap();
+    assert_eq!(restored.access_token, rotated.access_token);
+    assert_eq!(restored.refresh_token, rotated.refresh_token);
+}
+
+#[test]
 fn live_authority_sync_finds_default_auth_with_electron_process_entries() {
     let _lock = crate::modules::test_support::env_lock()
         .lock()

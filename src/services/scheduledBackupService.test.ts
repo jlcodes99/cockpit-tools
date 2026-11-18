@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
@@ -14,7 +15,7 @@ function harness(invoke: (command: string, args?: Record<string, unknown>) => Pr
   const timers = new Map<number, () => void>();
   let timerId = 0;
   vm.runInNewContext(compiled, {
-    exports, require: (name: string) => name === './dataTransferService'
+    exports, crypto: { randomUUID }, require: (name: string) => name === './dataTransferService'
       ? { exportDataTransferBundle: async () => bundle } : { invoke },
     setTimeout: (callback: () => void) => { timers.set(++timerId, callback); return timerId; },
     clearTimeout: (id: number) => timers.delete(id),
@@ -43,6 +44,55 @@ test('backup creation and retention changes use the same cleanup command', async
       ['cleanup_auto_backup_files', '{"retentionDays":7}'],
     ]);
   }
+});
+
+test('force refresh writes an immediate local backup with the current Codex token', async () => {
+  const fresh = { id: 'codex-test', token_generation: 2, tokens: { refresh_token: 'test-rotated-credential' } };
+  const settings = {
+    enabled: true, include_accounts: true, include_config: true, retention_days: 7,
+    last_backup_at: new Date().toISOString(),
+  };
+  const writes: Array<Record<string, unknown>> = [];
+  const service = harness(async (command, args) => {
+    if (command === 'get_auto_backup_settings') return settings;
+    if (command === 'write_auto_backup_file') {
+      writes.push(args!);
+      return `/backups/${args!.fileName}`;
+    }
+    if (command === 'cleanup_auto_backup_files') return [];
+    throw new Error(command);
+  }, { accounts: { platforms: { codex: { exported_data: [fresh] } } }, config: { verification_records: [] } });
+  assert.equal(service.isAutoBackupDue(settings), false);
+  const [first, second] = await Promise.all([
+    service.backUpRefreshedCodexAccount(fresh),
+    service.backUpRefreshedCodexAccount(fresh),
+  ]);
+  assert.notEqual(first.file_name, second.file_name);
+  assert.match(first.file_name, /^cockpit_auto_backup_full_.*_token-refresh-[a-f0-9-]{36}\.json$/);
+  assert.equal(writes.length, 2);
+  for (const { content } of writes) {
+    assert.deepEqual(JSON.parse(String(content)).accounts.platforms.codex.exported_data, [fresh]);
+  }
+});
+
+test('force refresh respects the backup scope and rejects a stale export before writing', async () => {
+  const fresh = { id: 'codex-test', token_generation: 2, tokens: { refresh_token: 'test-rotated-credential' } };
+  const stale = { id: fresh.id, token_generation: 1, tokens: { refresh_token: 'test-old-credential' } };
+  const settings = { enabled: false, include_accounts: true, include_config: false, retention_days: 7 };
+  const calls: string[] = [];
+  const service = harness(async (command) => {
+    calls.push(command);
+    if (command === 'get_auto_backup_settings') return settings;
+    throw new Error(command);
+  }, { accounts: { platforms: { codex: { exported_data: [stale] } } } });
+  assert.equal(await service.backUpRefreshedCodexAccount(fresh), null);
+  settings.enabled = true;
+  settings.include_accounts = false;
+  settings.include_config = true;
+  assert.equal(await service.backUpRefreshedCodexAccount(fresh), null);
+  settings.include_accounts = true;
+  await assert.rejects(service.backUpRefreshedCodexAccount(fresh), /codex_backup_missing_refreshed_token/);
+  assert.deepEqual(calls, ['get_auto_backup_settings', 'get_auto_backup_settings', 'get_auto_backup_settings']);
 });
 
 test('backup scan failures preserve loaded settings and other successful data', async () => {

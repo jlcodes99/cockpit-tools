@@ -22,6 +22,7 @@ export interface DisplayGroup {
 }
 
 const FIXED_DISPLAY_GROUPS: DisplayGroup[] = [
+  { id: 'g4_carbon', name: 'Gemini 4 Carbon', models: ['gemini-4-carbon', 'gemini-4-carbon-low', 'gemini-4-carbon-medium', 'gemini-4-carbon-high', 'carbon:weekly', 'gemini-carbon-wtu-weekly'] },
   { id: 'g4_argon', name: 'Gemini 4 Argon', models: ['gemini-4-argon', 'gemini-4-argon-medium', 'gemini-4-argon-high', 'argon:weekly', 'gemini-argon-wtu-weekly'] },
   {
     id: 'claude_45',
@@ -75,6 +76,15 @@ const FIXED_DISPLAY_GROUPS: DisplayGroup[] = [
         'gemini-3.8-flash-medium',
         'gemini-3.8-flash-high',
         'MODEL_PLACEHOLDER_M318',
+        'gemini-4-hydrogen',
+        'gemini-4-hydrogen-low',
+        'gemini-4-hydrogen-medium',
+        'gemini-4-hydrogen-high',
+        'gemini-4-hydrogen-xhigh',
+        'MODEL_PLACEHOLDER_M525',
+        'MODEL_PLACEHOLDER_M526',
+        'MODEL_PLACEHOLDER_M527',
+        'MODEL_PLACEHOLDER_M528',
 
       'gemini-3-flash',
       'gemini-3.1-flash',

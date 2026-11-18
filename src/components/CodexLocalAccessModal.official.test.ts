@@ -71,7 +71,7 @@ test('local gateway application selects its source and inactive member dialogs d
   }
 });
 
-function saveMembersContext(options: { mappingEnabled?: boolean; selected?: Set<string>; accounts?: Map<string, { id: string }>; bindings?: Record<string, string>; save?: (payload: any) => Promise<unknown>; prepare?: (ids: string[], bindings: Record<string, string>) => Promise<Record<string, string> | null> } = {}) {
+function saveMembersContext(options: { mappingEnabled?: boolean; selected?: Set<string>; accounts?: Map<string, { id: string }>; pausedAccountIds?: string[]; bindings?: Record<string, string>; save?: (payload: any) => Promise<unknown>; prepare?: (ids: string[], bindings: Record<string, string>) => Promise<Record<string, string> | null> } = {}) {
   const source = ts.createSourceFile('modal.tsx', readFileSync(new URL('./CodexLocalAccessModal.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let callback: ts.Expression | undefined;
   const visit = (node: ts.Node) => {
@@ -87,7 +87,7 @@ function saveMembersContext(options: { mappingEnabled?: boolean; selected?: Set<
   let pending = false;
   const memberSaveInFlight = { current: false }, memberSaveEpoch = { current: 0 };
   const saved: any[] = [];
-  const collection = { accountIds: ['chatgpt_plan_grant', 'other'], pausedAccountIds: [] as string[] };
+  const collection = { accountIds: ['chatgpt_plan_grant', 'other'], pausedAccountIds: options.pausedAccountIds ?? [] };
   const expression = ts.transpileModule(`(${callback.getText(source)})`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const action = vm.runInNewContext(expression, {
     accountsLoaded: true, selected, localAccessAccountById: accounts, collection,
@@ -145,6 +145,19 @@ test('an API Key selection survives a stale roster and saves once the imported a
   assert.deepEqual(Array.from(cleared.saved[0].accountIds), []);
 });
 
+test('saving a new member keeps the persisted paused authorization when its metadata is absent', async () => {
+  const h = saveMembersContext({
+    selected: new Set(['chatgpt_plan_grant', 'other', 'new-key']),
+    accounts: new Map([['other', { id: 'other' }], ['new-key', { id: 'new-key' }]]),
+    pausedAccountIds: ['chatgpt_plan_grant'],
+  });
+  await h.action();
+  assert.equal(h.error(), '');
+  assert.equal(h.closed(), true);
+  assert.deepEqual(Array.from(h.saved[0].accountIds), ['chatgpt_plan_grant', 'other', 'new-key']);
+  assert.equal('chatgpt_plan_grant' in h.saved[0].imageGenerationAccountPolicies, false);
+});
+
 
 test('the production picker rebuilds source filters instead of losing healthy official rows to source OAuth failures', () => {
   const file = ts.createSourceFile('modal.tsx', readFileSync(new URL('./CodexLocalAccessModal.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -169,7 +182,7 @@ test('the production picker rebuilds source filters instead of losing healthy of
   assert.equal(rows.length, 1);
   assert.equal(rows[0].account_name, 'Original account');
   assert.equal(rows[0].id, endpoint.id);
-  const selected = resolveCodexLocalAccessInitialAccountIds([endpoint.id], localAccessAccounts, true, true);
+  const selected = resolveCodexLocalAccessInitialAccountIds([endpoint.id], localAccessAccounts, true);
   assert.equal(selected.includes(rows[0].id), true);
   assert.equal(resolveCodexMemberImagePolicy(rows[0], 'enabled'), 'disabled');
   const h = saveMembersContext();

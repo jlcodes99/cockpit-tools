@@ -65,14 +65,19 @@ test('a failed refresh retains entries and retries the first page, not the older
 
 test('new local outcomes update in place without discarding loaded older pages', async () => {
   const h = setup(); h.render(() => h.exports.useCodexResetHistory('a', 'local'));
-  h.calls[0].task.resolve(page(['pending'], 30)); await settlePromises();
-  let state = h.flush(); void state.more(); h.flush();
-  h.calls[1].task.resolve(page(['older'], 10)); await settlePromises(); h.flush();
+  const legacy = [{ id: 'old-check', account_id: 'a', at: 50, reason: 'check', status: 'failed', detail: null }];
+  h.calls[0].task.resolve({ ...page(['pending'], 30), legacyRecords: legacy }); await settlePromises();
+  let state = h.flush();
+  assert.deepEqual(Array.from(state.legacyRecords), legacy);
+  void state.more(); h.flush();
+  h.calls[1].task.resolve(page(['older'], 10)); await settlePromises(); state = h.flush();
+  assert.deepEqual(Array.from(state.legacyRecords), legacy);
   h.emit(); h.flush();
-  h.calls[2].task.resolve({ entries: [{ id: 'pending', kind: 'reset', at: 1 }], nextCursor: 30 });
+  h.calls[2].task.resolve({ entries: [{ id: 'pending', kind: 'reset', at: 1 }], nextCursor: 30, legacyRecords: legacy });
   await settlePromises(); state = h.flush();
   assert.equal(state.entries.map((entry: any) => entry.id).join(','), 'pending,older');
   assert.equal(state.entries[0].kind, 'reset');
+  assert.deepEqual(Array.from(state.legacyRecords), legacy);
   assert.equal(state.cursor, 10);
   h.unmount();
 });

@@ -394,8 +394,8 @@ fn quota_protection_complete_settled_query_recovers_stale_reversed_reset() {
 }
 
 #[test]
-fn quota_protection_reversed_reset_keeps_newer_or_unsettled_evidence() {
-    for case in ["fresh", "newer-observation", "in-flight", "unsettled", "partial", "late", "event"] {
+fn quota_protection_reversed_reset_keeps_fresh_evidence_and_rejects_incomplete_updates() {
+    for case in ["fresh", "newer-observation", "partial", "late", "event"] {
         let id = format!("quota-reset-guard-{case}");
         let (collection, account) = quota_protection_reversed_reset_fixture(&id, true);
         let mut started = Instant::now();
@@ -414,8 +414,6 @@ fn quota_protection_reversed_reset_keeps_newer_or_unsettled_evidence() {
                     state.completed_at = None;
                     started = Instant::now() - Duration::from_secs(2);
                 }
-                "in-flight" => state.in_flight = 1,
-                "unsettled" => state.completed_at = Some(Instant::now()),
                 "late" => started = Instant::now() - Duration::from_secs(181),
                 _ => {}
             }
@@ -438,6 +436,90 @@ fn quota_protection_reversed_reset_keeps_newer_or_unsettled_evidence() {
             assert_eq!(window.value.as_ref().unwrap().remaining_percent, 12.0, "case={case}");
         }
         assert!(acquire_quota_admission(&collection, &account).is_err(), "case={case}");
+    }
+}
+
+#[test]
+fn quota_protection_expired_reversed_reset_recovers_while_busy() {
+    for (case, in_flight, remaining, allowed) in [
+        ("in-flight", 1, 80, true),
+        ("unsettled", 0, 80, true),
+        ("near-reserve-in-flight", 1, 18, false),
+        ("near-reserve-unsettled", 0, 18, false),
+    ] {
+        let id = format!("quota-reset-busy-{case}");
+        let (collection, mut account) = quota_protection_reversed_reset_fixture(&id, true);
+        let quota = account.quota.as_mut().unwrap();
+        quota.hourly_percentage = remaining;
+        {
+            let mut runtime = quota_reserve_coordinator().lock().unwrap();
+            let state = runtime.accounts.get_mut(&account.id).unwrap();
+            state.in_flight = in_flight;
+            state.completed_at = Some(Instant::now());
+        }
+
+        assert!(acquire_quota_admission(&collection, &account).is_err());
+        confirm_gateway_quota_refresh(&account.id, account.quota.as_ref().unwrap(), Instant::now());
+        {
+            let runtime = quota_reserve_coordinator().lock().unwrap();
+            let state = &runtime.accounts[&account.id];
+            let window = state.primary.as_ref().unwrap().value.as_ref().unwrap();
+            assert_eq!(window.resets_at, Some(5000), "{case}");
+            assert_eq!(window.remaining_percent, f64::from(remaining), "{case}");
+            assert!(state.awaiting_confirmation, "{case}");
+        }
+        assert_eq!(
+            acquire_quota_admission(&collection, &account).is_ok(),
+            allowed,
+            "{case}"
+        );
+    }
+}
+
+#[test]
+fn quota_protection_small_reset_drift_does_not_discard_fresh_usage_or_inflate_headers() {
+    for (drift, accepted) in [(30, true), (120, true), (121, false), (3000, false)] {
+        let id = format!("quota-reset-drift-{drift}");
+        let (_, mut account) = quota_protection_fixture(&id, 70, true);
+        {
+            let mut runtime = quota_reserve_coordinator().lock().unwrap();
+            let window = runtime
+                .accounts
+                .get_mut(&account.id)
+                .unwrap()
+                .primary
+                .as_mut()
+                .unwrap();
+            window.value.as_mut().unwrap().resets_at = Some(8000);
+        }
+        let quota = account.quota.as_mut().unwrap();
+        quota.hourly_percentage = 60;
+        quota.hourly_reset_time = Some(8000 - drift);
+        confirm_gateway_quota_refresh(&account.id, quota, Instant::now());
+        // A later header can still carry the prior estimate of the reset time.
+        observe_gateway_quota(
+            &account.id,
+            quota_protection_snapshot(95.0, 8000),
+            Instant::now(),
+        );
+        let runtime = quota_reserve_coordinator().lock().unwrap();
+        let value = runtime.accounts[&account.id]
+            .primary
+            .as_ref()
+            .unwrap()
+            .value
+            .as_ref()
+            .unwrap();
+        let expected = if accepted {
+            (Some(8000 - drift), 60.0)
+        } else {
+            (Some(8000), 70.0)
+        };
+        assert_eq!(
+            (value.resets_at, value.remaining_percent),
+            expected,
+            "drift={drift}"
+        );
     }
 }
 

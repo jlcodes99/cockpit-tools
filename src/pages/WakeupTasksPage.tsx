@@ -682,6 +682,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
     clear: clearFormError,
   } = useModalErrorState('');
   const [formTimeWindowEnabled, setFormTimeWindowEnabled] = useState(false);
+  const [formWeeklyResetOnly, setFormWeeklyResetOnly] = useState(false);
   const [formTimeWindowStart, setFormTimeWindowStart] = useState('09:00');
   const [formTimeWindowEnd, setFormTimeWindowEnd] = useState('18:00');
   const [formFallbackTimes, setFormFallbackTimes] = useState<string[]>(['07:00']);
@@ -1497,7 +1498,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
       return `${t('wakeup.triggerSource.startup')} +${schedule.startupDelayMinutes}${t('settings.general.minutes')}`;
     }
     if (schedule.wakeOnReset) {
-      return t('wakeup.format.quotaReset');
+      return t(schedule.weeklyResetOnly ? 'wakeup.form.weeklyQuotaResetOnly' : 'wakeup.format.quotaReset');
     }
     if (schedule.crontab) {
       return t('wakeup.format.crontab', { expr: schedule.crontab });
@@ -1564,6 +1565,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
     setFormExecutionMode('auto');
     setFormConfirmTimeoutMinutes(5);
     setFormTimeWindowEnabled(false);
+    setFormWeeklyResetOnly(false);
     setFormTimeWindowStart('09:00');
     setFormTimeWindowEnd('18:00');
     setFormFallbackTimes(['07:00']);
@@ -1608,6 +1610,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
     setFormStartupDelayMode(startupDelayMinutes > 0 ? 'delayed' : 'immediate');
     setFormStartupDelayMinutes(String(startupDelayMinutes > 0 ? startupDelayMinutes : 1));
     setFormTimeWindowEnabled(Boolean(schedule.timeWindowEnabled));
+    setFormWeeklyResetOnly(Boolean(schedule.weeklyResetOnly));
     setFormTimeWindowStart(schedule.timeWindowStart || '09:00');
     setFormTimeWindowEnd(schedule.timeWindowEnd || '18:00');
     setFormFallbackTimes(schedule.fallbackTimes?.length ? [...schedule.fallbackTimes] : ['07:00']);
@@ -2001,6 +2004,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
       selectedAccounts: formSelectedAccounts,
       crontab: formTriggerMode === 'crontab' ? formCrontab.trim() : undefined,
       wakeOnReset: formTriggerMode === 'quota_reset',
+      weeklyResetOnly: formTriggerMode === 'quota_reset' && formWeeklyResetOnly ? true : undefined,
       startupDelayMinutes,
       customPrompt: formCustomPrompt.trim() || undefined,
       maxOutputTokens: normalizeMaxOutputTokens(formMaxOutputTokens, 0),
@@ -3088,6 +3092,21 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
 
               {formTriggerMode === 'quota_reset' && (
                 <div className="wakeup-mode-panel">
+                  <div className="wakeup-form-group">
+                    <div className="wakeup-form-row">
+                      <label htmlFor="wakeup-weekly-reset-only">{t('wakeup.form.weeklyQuotaResetOnly')}</label>
+                      <label className="wakeup-switch">
+                        <input
+                          id="wakeup-weekly-reset-only"
+                          type="checkbox"
+                          checked={formWeeklyResetOnly}
+                          onChange={(event) => setFormWeeklyResetOnly(event.target.checked)}
+                        />
+                        <span className="wakeup-slider" />
+                      </label>
+                    </div>
+                    <p className="wakeup-hint">{t('wakeup.form.weeklyQuotaResetHint')}</p>
+                  </div>
                   <div className="wakeup-form-group">
                     <div className="wakeup-form-row">
                       <label>{t('wakeup.form.timeWindowEnabled')}</label>

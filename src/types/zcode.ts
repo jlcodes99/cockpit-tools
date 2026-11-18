@@ -13,6 +13,7 @@ export interface ZcodeAccount extends CodebuddySuiteAccountBase {
   avatar_url?: string | null;
   zcode_jwt_token?: string;
   api_key?: string | null;
+  team_plan?: { organization_id: string; project_id: string } | null;
   quota_total?: number | null;
   quota_used?: number | null;
   quota_remaining?: number | null;
@@ -57,7 +58,8 @@ function balanceResources(account: ZcodeAccount): OfficialQuotaResource[] {
     const used = Math.max(0, finite(item.used_units) ?? 0);
     const remain = Math.max(0, finite(item.remaining_units) ?? finite(item.available_units) ?? total - used);
     const usedPercent = total > 0 ? Math.max(0, Math.min(100, (used / total) * 100)) : 0;
-    const reset = finite(item.period_end) ?? finite(item.expires_at);
+    const periodEnd = finite(item.period_end) ?? finite(item.expires_at);
+    const reset = finite(item.next_refresh_at) ?? periodEnd;
     return {
       packageCode: text(item.entitlement_id) ?? `zcode-${index}`,
       packageName: text(item.show_name) ?? text(item.plan_id) ?? `ZCode ${index + 1}`,
@@ -71,7 +73,7 @@ function balanceResources(account: ZcodeAccount): OfficialQuotaResource[] {
       usedPercent,
       remainPercent: total > 0 ? (remain / total) * 100 : null,
       refreshAt: reset ? reset * 1000 : null,
-      expireAt: reset ? reset * 1000 : null,
+      expireAt: periodEnd ? periodEnd * 1000 : null,
       isBasePackage: true,
     };
   });
@@ -85,6 +87,10 @@ export function getZcodeAccountDisplayEmail(account: ZcodeAccount): string {
 
 export function getZcodePlanBadge(account: ZcodeAccount): string {
   if (account.auth_mode === 'api_key') return 'API Key';
+  if (account.team_plan) {
+    const level = account.plan_type?.trim();
+    return level ? `Team · ${level}` : 'Team';
+  }
   return account.plan_type?.trim() || account.provider || 'UNKNOWN';
 }
 

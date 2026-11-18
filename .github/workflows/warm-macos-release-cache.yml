@@ -1,0 +1,58 @@
+name: Warm macOS Release Cache
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Cargo.lock'
+      - '**/Cargo.toml'
+      - 'src-tauri/tauri*.conf.json'
+      - 'package-lock.json'
+      - 'scripts/tauri.cjs'
+      - '.github/actions/macos-release-cache/**'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/warm-macos-release-cache.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: warm-macos-release-cache-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  warm:
+    if: github.ref == 'refs/heads/main'
+    name: "Warm macOS release dependencies (${{ matrix.target }})"
+    runs-on: macos-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [aarch64-apple-darwin, x86_64-apple-darwin]
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: cache
+        uses: ./.github/actions/macos-release-cache
+        with:
+          target: ${{ matrix.target }}
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: npm exec -- vite build
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          TARGET: ${{ matrix.target }}
+        run: node scripts/tauri.cjs build --ci --target "$TARGET" --no-bundle --config src-tauri/tauri.prebuilt-frontend.conf.json

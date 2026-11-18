@@ -34,9 +34,6 @@ fn inject_bound_account_for_instance_start(
         bind_id, account.github_login, user_data_dir
     ));
 
-    // Ensure DB is writable before injection.
-    modules::process::close_vscode(&[user_data_dir.to_string()], 20)?;
-
     modules::logger::log_info("正在向实例目录注入 GitHub Copilot Token...");
     let github_id = account.github_id.to_string();
     modules::vscode_inject::inject_copilot_token_for_user_data_dir(
@@ -274,24 +271,17 @@ pub async fn github_copilot_start_instance(
         .find(|item| item.id == instance_id)
         .ok_or("实例不存在")?;
 
-    if let Some(pid) =
-        modules::process::resolve_vscode_pid(instance.last_pid, Some(&instance.user_data_dir))
-    {
-        modules::process::close_pid(pid, 20)?;
+    modules::process::close_vscode(std::slice::from_ref(&instance.user_data_dir), 20)?;
+    if instance.last_pid.is_some() {
         let _ = modules::github_copilot_instance::update_instance_pid(&instance.id, None)?;
     }
-    modules::process::close_vscode(&[instance.user_data_dir.clone()], 20)?;
 
     inject_bound_account_for_instance_start(
         &instance.user_data_dir,
         instance.bind_account_id.as_deref(),
     )?;
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);
-    let pid = modules::process::start_vscode_with_args_with_new_window(
-        &instance.user_data_dir,
-        &extra_args,
-        true,
-    )?;
+    let pid = modules::process::start_vscode_with_args(&instance.user_data_dir, &extra_args)?;
     modules::logger::log_info(&format!(
         "GitHub Copilot 实例已启动: instance_id={}, pid={}",
         instance.id, pid
@@ -314,9 +304,7 @@ pub async fn github_copilot_stop_instance(
         let default_dir = modules::github_copilot_instance::get_default_vscode_user_data_dir()?;
         let default_dir_str = default_dir.to_string_lossy().to_string();
         let default_settings = modules::github_copilot_instance::load_default_settings()?;
-        if let Some(pid) = modules::process::resolve_vscode_pid(default_settings.last_pid, None) {
-            modules::process::close_pid(pid, 20)?;
-        }
+        modules::process::close_vscode(std::slice::from_ref(&default_dir_str), 20)?;
         let updated_settings = modules::github_copilot_instance::update_default_pid(None)?;
         let running = updated_settings
             .last_pid
@@ -346,11 +334,7 @@ pub async fn github_copilot_stop_instance(
         .find(|item| item.id == instance_id)
         .ok_or("实例不存在")?;
 
-    if let Some(pid) =
-        modules::process::resolve_vscode_pid(instance.last_pid, Some(&instance.user_data_dir))
-    {
-        modules::process::close_pid(pid, 20)?;
-    }
+    modules::process::close_vscode(std::slice::from_ref(&instance.user_data_dir), 20)?;
     let updated = modules::github_copilot_instance::update_instance_pid(&instance.id, None)?;
     let initialized = is_profile_initialized(&updated.user_data_dir);
     Ok(InstanceProfileView::from_profile(

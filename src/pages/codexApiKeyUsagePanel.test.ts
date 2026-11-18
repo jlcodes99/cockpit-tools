@@ -69,6 +69,42 @@ test('New API card text and bar both use remaining quota', () => {
   assert.ok(!html.includes('width:6%'));
 });
 
+test('token plan card uses the displayed remaining quota and keeps the weekly figure', () => {
+  const plan = {
+    mode: 'token_plan', unit: '%', quotaLimit: 100, quotaUsed: 6, quotaRemaining: 94,
+    details: [{ key: 'weeklyRemainingPercent', label: 'Weekly', value: '43' }],
+  } as const;
+  const html = renderSummary({ ...plan, details: [...plan.details] });
+  assert.match(html, /94%.*Weekly 43%/);
+  assert.match(html, /quota-bar high" style="width:94%"/);
+  assert.doesNotMatch(html, /cockpit-api-progress-bar|width:6%/);
+
+  const critical = renderSummary({ mode: 'token_plan', unit: '%', quotaRemaining: 5 });
+  assert.match(critical, /quota-bar critical" style="width:5%"/);
+  assert.doesNotMatch(renderSummary({ mode: 'token_plan', unit: 'USD', remaining: 80 }), /quota-bar-track/);
+
+});
+
+test('token plan card uses remaining quota for width and color', () => {
+  for (const [remaining, level] of [[99, 'high'], [60, 'medium'], [30, 'low'], [10, 'critical']] as const) {
+    const html = renderSummary({
+      mode: 'token_plan', unit: '%', quotaLimit: 100,
+      quotaUsed: 100 - remaining, quotaRemaining: remaining,
+    });
+    assert.match(html, new RegExp(`class="quota-bar ${level}" style="width:${remaining}%"`));
+    assert.ok(html.includes(`>${remaining}%<`));
+    assert.doesNotMatch(html, /cockpit-api-progress-bar/);
+  }
+});
+
+test('token plan table keeps remaining quota text without a second progress bar', () => {
+  const html = renderSummary({
+    mode: 'token_plan', unit: '%', remaining: 99, quotaLimit: 100, quotaUsed: 1,
+  }, 'table');
+  assert.ok(html.includes('>99%<'));
+  assert.doesNotMatch(html, /cockpit-api-progress-bar/);
+});
+
 test('Chat relay cards display confirmed quota and distinguish unsupported usage from pending', () => {
   const provider = { ...officialProvider, baseUrl: account.api_base_url!, integrationType: 'sub2api' as const };
   const chat = { ...account, api_wire_api: 'chat_completions' as const };

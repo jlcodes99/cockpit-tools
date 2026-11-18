@@ -7,7 +7,7 @@ async fn native_tls_proxy_stream_survives_account_removal_and_another_identity()
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     let certificate = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
-    let root = reqwest::Certificate::from_der(certificate.cert.der()).unwrap();
+    let roots = native_test_tls_roots(certificate.cert.der().clone());
     let mut config = rustls::ServerConfig::builder_with_provider(Arc::new(
         rustls::crypto::aws_lc_rs::default_provider(),
     ))
@@ -83,11 +83,10 @@ async fn native_tls_proxy_stream_survives_account_removal_and_another_identity()
         }
     });
     let client = || {
-        native_http_client_builder(true, false)
+        native_codex_http_client_builder(roots.clone(), false)
+            .unwrap()
             .no_proxy()
             .proxy(reqwest::Proxy::all(format!("http://{proxy}")).unwrap())
-            .tls_built_in_root_certs(false)
-            .add_root_certificate(root.clone())
             .timeout(Duration::from_secs(5))
             .build()
             .unwrap()

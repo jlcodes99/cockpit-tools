@@ -158,10 +158,49 @@ pub fn deserialize_account_file<T: DeserializeOwned>(
     path: &Path,
     content: &str,
 ) -> Result<(T, bool), String> {
+    deserialize_account_file_with_cipher(path, content, account_file_decryption_cipher)
+}
+
+/// Reuse a successfully opened key only while reading one batch of details.
+/// Plaintext files do not require a key, and a failed read can be retried by
+/// the next file (for example, while the key is being created).
+#[derive(Default)]
+pub(crate) struct AccountFileBatchDecoder {
+    cipher: Option<Aes256Gcm>,
+}
+
+impl AccountFileBatchDecoder {
+    pub(crate) fn deserialize<T: DeserializeOwned>(
+        &mut self,
+        path: &Path,
+        content: &str,
+    ) -> Result<(T, bool), String> {
+        deserialize_account_file_with_cipher(path, content, || {
+            let cipher = match &self.cipher {
+                Some(cipher) => cipher.clone(),
+                None => {
+                    let cipher = account_file_decryption_cipher()?;
+                    self.cipher = Some(cipher.clone());
+                    cipher
+                }
+            };
+            Ok(cipher)
+        })
+    }
+}
+
+fn account_file_decryption_cipher() -> Result<Aes256Gcm, String> {
+    Aes256Gcm::new_from_slice(&read_key(&key_path()?)?)
+        .map_err(|error| format!("初始化账号详情解密失败: {error}"))
+}
+
+fn deserialize_account_file_with_cipher<T: DeserializeOwned>(
+    path: &Path,
+    content: &str,
+    decryption_cipher: impl FnOnce() -> Result<Aes256Gcm, String>,
+) -> Result<(T, bool), String> {
     if let Ok(envelope) = serde_json::from_str::<SecureAccountEnvelope>(content) {
-        let cipher = Aes256Gcm::new_from_slice(&read_key(&key_path()?)?)
-            .map_err(|error| format!("初始化账号详情解密失败: {error}"))?;
-        let value = decrypt_envelope(&envelope, cipher)?;
+        let value = decrypt_envelope(&envelope, decryption_cipher()?)?;
         let needs_rotation =
             chrono::Utc::now().timestamp() - envelope.encrypted_at > ROTATION_SECONDS;
         return Ok((value, needs_rotation));
@@ -251,6 +290,14 @@ mod tests {
             deserialize_account_file::<DemoAccount>(&path, &plain).expect("legacy");
         assert_eq!(legacy, account);
         assert!(needs_migration);
+
+        let mut batch = AccountFileBatchDecoder::default();
+        let legacy = batch.deserialize::<DemoAccount>(&path, &plain).unwrap();
+        assert_eq!(legacy, (account.clone(), true));
+        assert!(batch.cipher.is_none());
+        let encrypted = batch.deserialize::<DemoAccount>(&path, &enc).unwrap();
+        assert_eq!(encrypted, (account, false));
+        assert!(batch.cipher.is_some());
 
         let switched = serde_json::json!({"id":"a1", "last_switched_at": 200, "secret":"new"});
         write_account_preserving_switch_time(&path, "demo", &switched).unwrap();

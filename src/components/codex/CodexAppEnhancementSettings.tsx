@@ -10,7 +10,7 @@ interface EnhancementConfig {
 
 const DEFAULTS: EnhancementConfig = {
   codex_app_api_quota_compat_enabled: true,
-  codex_app_native_predictions_enabled: false,
+  codex_app_native_predictions_enabled: true,
 };
 const KEY = 'settings.general.codexEnhancements.';
 const SWITCHES = [

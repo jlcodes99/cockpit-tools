@@ -97,6 +97,9 @@ export function CodexRequestDetailModal({ event, accountDisplayNames = new Map()
           <div className="codex-request-metric"><span><Clock3 size={14} aria-hidden="true" />{t('codex.requestDiagnostics.totalLatency')}</span><strong>{event.latencyMs} ms</strong></div>
           <div className="codex-request-metric"><span><Activity size={14} aria-hidden="true" />{t('codex.requestDiagnostics.firstResponse')}</span><strong>{hasRequestFirstResponse(firstResponseMs) ? `${firstResponseMs} ms` : '—'}</strong></div>
           <div className="codex-request-metric"><span><Gauge size={14} aria-hidden="true" />{t('common.outputSpeed.label')}</span><strong><CodexOutputSpeed event={event} t={t} hideLabel /></strong></div>
+          {event.inputTextCharacters != null && <div className="codex-request-metric" title={t('codex.apiService.logs.inputTextCharactersHint')}>
+            <span>{t('codex.apiService.logs.inputTextCharacters')}</span><strong>{event.inputTextCharacters.toLocaleString()}</strong>
+          </div>}
         </div>
         <p className="codex-request-diagnostics-hint codex-request-detail-explanation"><Info size={14} aria-hidden="true" /><span>{t('codex.requestDiagnostics.firstResponseHint')}</span></p>
         {requestSize && <section className="codex-request-detail-section">

@@ -9,11 +9,13 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+use super::codex_session_rollout_reader as rollout_reader;
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde_json::Value;
 
 const GLOBAL_STATE: &str = ".codex-global-state.json";
 const STATE_DB: &str = "state_5.sqlite";
+pub(crate) const DEFAULT_COPY_TIMEOUT: Duration = Duration::from_secs(600);
 const HOST_MAPS: [&str; 3] = [
     "app-server-project-id-by-legacy-project-id-by-host",
     "app-server-projects-migration-by-host",
@@ -31,8 +33,11 @@ struct CopyBudget<'a> {
 
 impl CopyBudget<'_> {
     fn check(&self) -> Result<(), String> {
-        if self.cancelled.load(Ordering::Acquire) || Instant::now() >= self.deadline {
-            return Err("复制实例已取消或超时，请重试".to_string());
+        if self.cancelled.load(Ordering::Acquire) {
+            return Err("复制实例已取消".to_string());
+        }
+        if Instant::now() >= self.deadline {
+            return Err("复制实例超时，请延长复制超时时间后重试".to_string());
         }
         Ok(())
     }
@@ -43,8 +48,18 @@ pub fn copy_profile_with_cancellation(
     target: &Path,
     cancelled: &AtomicBool,
 ) -> Result<(), String> {
+    copy_profile_with_timeout(source, target, cancelled, DEFAULT_COPY_TIMEOUT)
+}
+
+pub(crate) fn copy_profile_with_timeout(
+    source: &Path,
+    target: &Path,
+    cancelled: &AtomicBool,
+    timeout: Duration,
+) -> Result<(), String> {
+    let started = Instant::now();
     let budget = CopyBudget {
-        deadline: Instant::now() + Duration::from_secs(90),
+        deadline: started.checked_add(timeout).ok_or("复制超时时间无效")?,
         cancelled,
     };
     budget.check()?;
@@ -110,13 +125,20 @@ pub fn copy_profile_with_cancellation(
     // Do not clean up a path we did not successfully create.
     created.map_err(|e| format!("创建实例临时目录失败: {e}"))?;
     let mut removed_target = false;
+    let mut phase = "复制文件和数据库快照";
     let result = (|| {
-        copy_tree(&source, &staging, &budget)?;
+        let mut copied = 0;
+        let mut last_progress = Instant::now();
+        copy_tree(&source, &staging, &budget, &mut copied, &mut last_progress)?;
         budget.check()?;
+        phase = "迁移实例索引";
         relocate_metadata(&source, &source_alias, &absolute_target, &staging, &budget)?;
+        phase = "校验分页历史";
         validate_lineage(&staging, &budget)?;
+        phase = "校验会话投影";
         validate_projection_cursors(&staging, &absolute_target, &budget)?;
         budget.check()?;
+        phase = "发布副本";
         // Preserve the existing target's mode when replacing its directory.
         // A newly created Unix target retains the private staging permissions.
         if let Some(permissions) = &target_permissions {
@@ -128,9 +150,14 @@ pub fn copy_profile_with_cancellation(
             fs::remove_dir(&target).map_err(|e| format!("目标实例目录已被使用: {e}"))?;
             removed_target = true;
         }
+        budget.check()?;
         fs::rename(&staging, &target).map_err(|e| format!("发布实例副本失败: {e}"))
     })();
+    let elapsed_ms = started.elapsed().as_millis();
     if result.is_err() {
+        super::logger::log_warn(&format!(
+            "[Codex Instance Copy] failed phase={phase} elapsed_ms={elapsed_ms}"
+        ));
         // A target such as 0500 may have made staging non-writable before a
         // failed publish. Restore owner access so its contents can be removed.
         #[cfg(unix)]
@@ -152,9 +179,16 @@ pub fn copy_profile_with_cancellation(
                 }
             }
         }
+    } else {
+        super::logger::log_info(&format!(
+            "[Codex Instance Copy] completed elapsed_ms={elapsed_ms}"
+        ));
     }
     result.map_err(|e| {
-        format!("复制 Codex 实例失败，未发布副本: {e}；若来源实例正在运行，请关闭后重试")
+        format!(
+            "复制 Codex 实例失败，未发布副本（{phase}，耗时 {:.1} 秒）: {e}",
+            elapsed_ms as f64 / 1000.0
+        )
     })
 }
 
@@ -232,7 +266,13 @@ fn is_database_sidecar(path: &Path) -> bool {
     })
 }
 
-fn copy_tree(source: &Path, target: &Path, budget: &CopyBudget<'_>) -> Result<(), String> {
+fn copy_tree(
+    source: &Path,
+    target: &Path,
+    budget: &CopyBudget<'_>,
+    copied: &mut usize,
+    last_progress: &mut Instant,
+) -> Result<(), String> {
     budget.check()?;
     fs::create_dir_all(target).map_err(|e| e.to_string())?;
     for entry in fs::read_dir(source).map_err(|e| e.to_string())? {
@@ -242,7 +282,7 @@ fn copy_tree(source: &Path, target: &Path, budget: &CopyBudget<'_>) -> Result<()
         let dest = target.join(entry.file_name());
         let kind = entry.file_type().map_err(|e| e.to_string())?;
         if kind.is_dir() {
-            copy_tree(&path, &dest, budget)?;
+            copy_tree(&path, &dest, budget, copied, last_progress)?;
         } else if kind.is_file() && !is_database_sidecar(&path) {
             if is_database(&path) {
                 // VACUUM INTO includes committed WAL pages without copying live WAL/SHM files.
@@ -251,7 +291,22 @@ fn copy_tree(source: &Path, target: &Path, budget: &CopyBudget<'_>) -> Result<()
                 db.busy_timeout(Duration::from_secs(5))
                     .map_err(|e| e.to_string())?;
                 db.execute("VACUUM INTO ?1", [dest.to_string_lossy().as_ref()])
-                    .map_err(|e| format!("创建数据库快照失败 ({}): {e}", path.display()))?;
+                    .map_err(|e| {
+                        if matches!(
+                            e.sqlite_error_code(),
+                            Some(
+                                rusqlite::ErrorCode::DatabaseBusy
+                                    | rusqlite::ErrorCode::DatabaseLocked
+                            )
+                        ) {
+                            format!(
+                                "来源数据库被占用，请关闭来源实例后重试 ({}): {e}",
+                                path.display()
+                            )
+                        } else {
+                            format!("创建数据库快照失败 ({}): {e}", path.display())
+                        }
+                    })?;
                 fs::set_permissions(
                     &dest,
                     fs::metadata(&path)
@@ -265,6 +320,13 @@ fn copy_tree(source: &Path, target: &Path, budget: &CopyBudget<'_>) -> Result<()
                 if let Ok(time) = fs::metadata(&path).and_then(|m| m.modified()) {
                     let _ = fs::File::open(&dest).and_then(|f| f.set_modified(time));
                 }
+            }
+            *copied += 1;
+            if last_progress.elapsed() >= Duration::from_secs(15) {
+                crate::modules::logger::log_info(&format!(
+                    "[Codex Instance] 复制完整实例已写入 {copied} 个文件"
+                ));
+                *last_progress = Instant::now();
             }
         }
     }
@@ -455,10 +517,28 @@ fn relocate_threads(
                 || relative
                     .components()
                     .any(|c| matches!(c, std::path::Component::ParentDir))
-                || !staging.join(&relative).is_file()
             {
                 return Err(format!("会话 {id} 的历史文件未完整复制"));
             }
+            let relative = if staging.join(&relative).is_file() {
+                relative
+            } else {
+                let sibling = relative
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .and_then(|name| {
+                        if name.ends_with(".jsonl.zst") {
+                            Some(relative.with_extension(""))
+                        } else if name.ends_with(".jsonl") {
+                            Some(relative.with_extension("jsonl.zst"))
+                        } else {
+                            None
+                        }
+                    });
+                sibling
+                    .filter(|path| staging.join(path).is_file())
+                    .ok_or_else(|| format!("会话 {id} 的历史文件未完整复制"))?
+            };
             tx.execute(
                 "UPDATE threads SET rollout_path = ?1 WHERE id = ?2",
                 rusqlite::params![target.join(&relative).to_string_lossy().as_ref(), id],
@@ -512,6 +592,15 @@ fn relocate_threads(
     tx.commit().map_err(|e| e.to_string())
 }
 
+fn copied_rollout(path: &Path) -> Option<PathBuf> {
+    if path.is_file() {
+        return Some(path.to_path_buf());
+    }
+    let compressed = path.with_extension("jsonl.zst");
+    (path.extension().is_some_and(|extension| extension == "jsonl") && compressed.is_file())
+        .then_some(compressed)
+}
+
 #[derive(Clone)]
 struct Rollout {
     path: PathBuf,
@@ -531,22 +620,31 @@ fn collect_rollouts(
         budget.check()?;
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
-        if entry.file_type().map_err(|e| e.to_string())?.is_dir() {
+        let kind = entry.file_type().map_err(|e| e.to_string())?;
+        if kind.is_dir() {
             collect_rollouts(&path, files, budget)?;
-        } else if path.extension().and_then(|s| s.to_str()) == Some("jsonl") {
+        } else if kind.is_file() {
+            let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            let name = name.strip_suffix(".zst").unwrap_or(name);
+            let Some(stem) = name.strip_suffix(".jsonl") else {
+                continue;
+            };
+            // If both storage variants coexist, use the same plain-first choice as export.
+            if rollout_reader::is_compressed(&path) && path.with_extension("").is_file() {
+                continue;
+            }
             let mut first = Vec::new();
-            BufReader::new(fs::File::open(&path).map_err(|e| e.to_string())?)
+            BufReader::new(rollout_reader::open(&path).map_err(|e| e.to_string())?)
                 .read_until(b'\n', &mut first)
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| format!("无法读取历史文件 {}: {e}", path.display()))?;
             let Ok(meta) = serde_json::from_slice::<Value>(&first) else {
                 continue;
             };
             if meta.get("type").and_then(Value::as_str) != Some("session_meta") {
                 continue;
             }
-            let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
-                continue;
-            };
             // Continuation files end in their physical rollout ID while payload.id
             // may still be the root session ID shared by every segment.
             let Some(id) = stem
@@ -571,12 +669,66 @@ fn collect_rollouts(
     Ok(())
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RolloutBoundary {
+    RecordEnd,
+    InsideRecord,
+    PastEnd,
+}
+
+fn rollout_boundaries(
+    path: &Path,
+    offsets: impl IntoIterator<Item = u64>,
+    budget: &CopyBudget<'_>,
+) -> Result<Vec<RolloutBoundary>, String> {
+    let read_error = |error| format!("校验历史文件 {} 失败: {error}", path.display());
+    let mut file = BufReader::new(fs::File::open(path).map_err(read_error)?);
+    let compressed = rollout_reader::is_compressed(path)
+        || file.fill_buf().map_err(read_error)?.starts_with(&[0x28, 0xb5, 0x2f, 0xfd]);
+    if !compressed {
+        let length = file.get_ref().metadata().map_err(read_error)?.len();
+        return offsets.into_iter().map(|offset| {
+            budget.check()?;
+            if offset > length {
+                return Ok(RolloutBoundary::PastEnd);
+            }
+            if offset == 0 {
+                return Ok(RolloutBoundary::RecordEnd);
+            }
+            file.seek(SeekFrom::Start(offset - 1)).map_err(read_error)?;
+            let mut byte = [0];
+            file.read_exact(&mut byte).map_err(read_error)?;
+            Ok(if byte[0] == b'\n' { RolloutBoundary::RecordEnd } else { RolloutBoundary::InsideRecord })
+        }).collect();
+    }
+    let mut reader = BufReader::new(rollout_reader::open(path).map_err(read_error)?);
+    let mut position = 0;
+    let mut last_byte = b'\n';
+    offsets.into_iter().map(|offset| {
+        // Callers supply offsets in ascending order so a shared parent is
+        // decompressed at most once, even when many children reference it.
+        while position < offset {
+            budget.check()?;
+            let buffer = reader.fill_buf().map_err(read_error)?;
+            let count = (offset - position).min(buffer.len() as u64) as usize;
+            if count == 0 {
+                return Ok(RolloutBoundary::PastEnd);
+            }
+            last_byte = buffer[count - 1];
+            reader.consume(count);
+            position += count as u64;
+        }
+        Ok(if last_byte == b'\n' { RolloutBoundary::RecordEnd } else { RolloutBoundary::InsideRecord })
+    }).collect()
+}
+
 fn validate_lineage(root: &Path, budget: &CopyBudget<'_>) -> Result<(), String> {
     let mut files = HashMap::new();
     for dir in ["sessions", "archived_sessions"] {
         collect_rollouts(&root.join(dir), &mut files, budget)?;
     }
     let mut checked = std::collections::HashSet::new();
+    let mut parents = HashMap::<&Path, Vec<(u64, &str)>>::new();
     for (id, rollout) in &files {
         budget.check()?;
         let Some(base) = &rollout.base else {
@@ -593,19 +745,7 @@ fn validate_lineage(root: &Path, budget: &CopyBudget<'_>) -> Result<(), String> 
             .get("end_byte_offset")
             .and_then(Value::as_u64)
             .ok_or("分页历史缺少字节边界")?;
-        let mut file = fs::File::open(&parent.path).map_err(|e| e.to_string())?;
-        if offset > file.metadata().map_err(|e| e.to_string())?.len() {
-            return Err(format!("分页历史 {id} 的字节边界超出来源文件"));
-        }
-        if offset > 0 {
-            file.seek(SeekFrom::Start(offset - 1))
-                .map_err(|e| e.to_string())?;
-            let mut byte = [0];
-            file.read_exact(&mut byte).map_err(|e| e.to_string())?;
-            if byte[0] != b'\n' {
-                return Err(format!("分页历史 {id} 的字节边界不在记录末尾"));
-            }
-        }
+        parents.entry(parent.path.as_path()).or_default().push((offset, id));
         let mut seen = std::collections::HashSet::new();
         let mut current = id.as_str();
         while let Some(next) = files
@@ -623,6 +763,17 @@ fn validate_lineage(root: &Path, budget: &CopyBudget<'_>) -> Result<(), String> 
             current = next;
         }
         checked.extend(seen);
+    }
+    for (parent, mut references) in parents {
+        references.sort_unstable_by_key(|(offset, _)| *offset);
+        let boundaries = rollout_boundaries(parent, references.iter().map(|(offset, _)| *offset), budget)?;
+        for ((_, id), boundary) in references.into_iter().zip(boundaries) {
+            match boundary {
+                RolloutBoundary::RecordEnd => {}
+                RolloutBoundary::PastEnd => return Err(format!("分页历史 {id} 的字节边界超出来源文件")),
+                RolloutBoundary::InsideRecord => return Err(format!("分页历史 {id} 的字节边界不在记录末尾")),
+            }
+        }
     }
     Ok(())
 }

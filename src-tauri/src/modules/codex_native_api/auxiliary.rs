@@ -283,6 +283,9 @@ async fn handle_prepared(
         object.remove("prompt_cache_key");
         object.remove("prompt_cache_retention");
         let mapped = rewrite(&state, &auth, &route, &identity_headers, &mut body).await?;
+        if !route.chatgpt && !model.is_empty() && !route.model.is_empty() {
+            body["model"] = json!(route.model);
+        }
         if search_id.is_some() {
             body["id"] = json!(mapped
                 .get("session-id")

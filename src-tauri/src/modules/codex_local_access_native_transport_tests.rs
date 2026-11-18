@@ -341,17 +341,23 @@ include!("codex_local_access_native_tls_lifecycle_tests.rs");
 
 const NATIVE_ALPN_DEADLINE: Duration = Duration::from_secs(5);
 
+fn native_test_tls_roots(root: rustls::pki_types::CertificateDer<'_>) -> Arc<rustls::RootCertStore> {
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(root).unwrap();
+    Arc::new(roots)
+}
+
 /// A TLS-only peer records the negotiated protocol, then closes deliberately.
 /// The certificate is generated per fixture and trusted only by the test client.
 async fn native_alpn_fixture(
     protocols: Vec<Vec<u8>>,
 ) -> (
     std::net::SocketAddr,
-    reqwest::Certificate,
+    rustls::pki_types::CertificateDer<'static>,
     tokio::task::JoinHandle<std::io::Result<Option<Vec<u8>>>>,
 ) {
     let certificate = rcgen::generate_simple_self_signed(vec!["127.0.0.1".into()]).unwrap();
-    let root = reqwest::Certificate::from_der(certificate.cert.der()).unwrap();
+    let root = certificate.cert.der().clone();
     let mut config = rustls::ServerConfig::builder_with_provider(Arc::new(
         rustls::crypto::aws_lc_rs::default_provider(),
     ))
@@ -408,10 +414,8 @@ fn native_alpn_is_scoped_to_oauth_responses_and_http1_pools_are_separate() {
 async fn native_codex_responses_tls_negotiates_h2_with_the_production_client_builder() {
     let (address, root, server) =
         native_alpn_fixture(vec![b"h2".to_vec(), b"http/1.1".to_vec()]).await;
-    let client = native_http_client_builder(true, false)
+    let client = native_codex_http_client_builder(native_test_tls_roots(root), false).unwrap()
         .no_proxy()
-        .tls_built_in_root_certs(false)
-        .add_root_certificate(root)
         .timeout(NATIVE_ALPN_DEADLINE)
         .build()
         .unwrap();
@@ -432,10 +436,8 @@ async fn native_codex_responses_tls_falls_back_for_http1_only_and_no_alpn_peers(
     for protocols in [vec![b"http/1.1".to_vec()], vec![]] {
         let expected = protocols.first().cloned();
         let (address, root, server) = native_alpn_fixture(protocols).await;
-        let client = native_http_client_builder(true, false)
-            .no_proxy()
-            .tls_built_in_root_certs(false)
-            .add_root_certificate(root)
+        let client = native_codex_http_client_builder(native_test_tls_roots(root), false).unwrap()
+        .no_proxy()
             .timeout(NATIVE_ALPN_DEADLINE)
             .build()
             .unwrap();
@@ -452,9 +454,9 @@ async fn native_codex_responses_tls_falls_back_for_http1_only_and_no_alpn_peers(
 async fn native_codex_responses_tls_rejects_an_untrusted_certificate() {
     let (address, _untrusted_root, server) =
         native_alpn_fixture(vec![b"h2".to_vec(), b"http/1.1".to_vec()]).await;
-    let client = native_http_client_builder(true, false)
+    let client = native_codex_http_client_builder(Arc::new(rustls::RootCertStore::empty()), false)
+        .unwrap()
         .no_proxy()
-        .tls_built_in_root_certs(false)
         .timeout(NATIVE_ALPN_DEADLINE)
         .build()
         .unwrap();
@@ -497,10 +499,8 @@ async fn native_codex_responses_tls_rejects_an_untrusted_certificate() {
 async fn native_codex_responses_tls_http11_websocket_upgrade_does_not_negotiate_h2() {
     let (address, root, server) =
         native_alpn_fixture(vec![b"h2".to_vec(), b"http/1.1".to_vec()]).await;
-    let client = native_http_client_builder(true, true)
+    let client = native_codex_http_client_builder(native_test_tls_roots(root), true).unwrap()
         .no_proxy()
-        .tls_built_in_root_certs(false)
-        .add_root_certificate(root)
         .timeout(NATIVE_ALPN_DEADLINE)
         .build()
         .unwrap();
@@ -606,10 +606,8 @@ async fn native_codex_responses_h2_reads_large_chunked_sse_through_the_completed
         .await
         .expect("large H2 SSE fixture deadline");
     });
-    let client = native_http_client_builder(true, false)
+    let client = native_codex_http_client_builder(native_test_tls_roots(ca.der().clone()), false).unwrap()
         .no_proxy()
-        .tls_built_in_root_certs(false)
-        .add_root_certificate(reqwest::Certificate::from_der(ca.der()).unwrap())
         .timeout(deadline)
         .build()
         .unwrap();

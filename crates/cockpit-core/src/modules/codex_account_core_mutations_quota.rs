@@ -98,22 +98,27 @@ pub async fn import_from_files(file_paths: Vec<String>) -> Result<CodexFileImpor
 
     let mut imported = Vec::new();
     let mut failed: Vec<CodexFileImportFailure> = Vec::new();
+    #[cfg(feature = "desktop")]
     let total = candidates.len() + fallback_files.len();
+    #[cfg(feature = "desktop")]
     let mut progress_index = 0usize;
 
     for (tokens, account_id_hint, label) in candidates {
         // 发送进度事件
-        progress_index += 1;
-        if let Some(app_handle) = crate::get_app_handle() {
-            use tauri::Emitter;
-            let _ = app_handle.emit(
-                "codex:file-import-progress",
-                serde_json::json!({
-                    "current": progress_index,
-                    "total": total,
-                    "email": &label,
-                }),
-            );
+        #[cfg(feature = "desktop")]
+        {
+            progress_index += 1;
+            if let Some(app_handle) = crate::get_app_handle() {
+                use tauri::Emitter;
+                let _ = app_handle.emit(
+                    "codex:file-import-progress",
+                    serde_json::json!({
+                        "current": progress_index,
+                        "total": total,
+                        "email": &label,
+                    }),
+                );
+            }
         }
 
         match upsert_account_with_hints(tokens, account_id_hint, None) {
@@ -145,17 +150,20 @@ pub async fn import_from_files(file_paths: Vec<String>) -> Result<CodexFileImpor
     }
 
     for (content, label) in fallback_files {
-        progress_index += 1;
-        if let Some(app_handle) = crate::get_app_handle() {
-            use tauri::Emitter;
-            let _ = app_handle.emit(
-                "codex:file-import-progress",
-                serde_json::json!({
-                    "current": progress_index,
-                    "total": total,
-                    "email": &label,
-                }),
-            );
+        #[cfg(feature = "desktop")]
+        {
+            progress_index += 1;
+            if let Some(app_handle) = crate::get_app_handle() {
+                use tauri::Emitter;
+                let _ = app_handle.emit(
+                    "codex:file-import-progress",
+                    serde_json::json!({
+                        "current": progress_index,
+                        "total": total,
+                        "email": &label,
+                    }),
+                );
+            }
         }
 
         match import_from_json(&content).await {

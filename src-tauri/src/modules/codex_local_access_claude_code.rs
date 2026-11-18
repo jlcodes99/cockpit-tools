@@ -87,7 +87,19 @@ fn claude_code_settings_plan(
         }
         updates.insert(env, model.cloned());
     }
-    let main_model = main_model.ok_or("CODEX_CLAUDE_CODE_NO_PRESET_MODELS")?;
+    let custom_model = if main_model.is_none() {
+        models.first()
+    } else {
+        None
+    };
+    let main_model = main_model
+        .or(custom_model)
+        .ok_or("CODEX_CLAUDE_CODE_NO_PRESET_MODELS")?;
+    if let Some(model) = custom_model {
+        updates.insert("ANTHROPIC_CUSTOM_MODEL_OPTION", Some(model.clone()));
+        // Claude Code may use the Haiku alias for background requests.
+        updates.insert("ANTHROPIC_DEFAULT_HAIKU_MODEL", Some(model.clone()));
+    }
     updates.insert("ANTHROPIC_MODEL", Some(main_model.clone()));
     updates.insert("ANTHROPIC_BASE_URL", Some(base_url.to_owned()));
     updates.insert("ANTHROPIC_AUTH_TOKEN", Some(key.to_owned()));
@@ -108,6 +120,14 @@ fn claude_code_settings_plan(
         .or_insert_with(|| json!({}))
         .as_object_mut()
         .ok_or("Claude Code settings.json 的 env 不是对象")?;
+    if custom_model.is_none()
+        && env
+            .get("ANTHROPIC_CUSTOM_MODEL_OPTION")
+            .and_then(Value::as_str)
+            .is_some_and(|model| !models.iter().any(|id| id == model))
+    {
+        updates.insert("ANTHROPIC_CUSTOM_MODEL_OPTION", None);
+    }
     let mut changes = std::collections::BTreeMap::new();
     for (name, value) in updates {
         let replacement = value.as_ref().map(|value| Value::String(value.clone()));
@@ -278,14 +298,26 @@ async fn claude_code_connection(key_id: &str) -> Result<(String, String, Vec<Str
         .json::<Value>()
         .await
         .map_err(|_| "CODEX_CLAUDE_CODE_SERVICE_UNAVAILABLE")?;
-    let models = models
+    let models = claude_code_catalog_models(&models)?;
+    Ok((base_url, key, models))
+}
+
+fn claude_code_catalog_models(catalog: &Value) -> Result<Vec<String>, String> {
+    Ok(catalog
         .get("data")
         .and_then(Value::as_array)
         .ok_or("CODEX_CLAUDE_CODE_SERVICE_UNAVAILABLE")?
         .iter()
+        .filter(|item| {
+            item["cockpit_image"].as_bool() != Some(true)
+                || item["capabilities"].as_array().is_some_and(|values| {
+                    values
+                        .iter()
+                        .any(|value| value.as_str() == Some("completion"))
+                })
+        })
         .filter_map(|item| item.get("id").and_then(Value::as_str).map(str::to_owned))
-        .collect();
-    Ok((base_url, key, models))
+        .collect())
 }
 
 pub async fn preview_claude_code_settings(
@@ -407,6 +439,33 @@ mod claude_code_settings_tests {
             fs::read_to_string(temp.path().join("settings.json.bak")).unwrap(),
             "another tool's backup"
         );
+    }
+
+    #[test]
+    fn gpt_only_catalog_writes_a_selectable_chat_model_and_skips_image_only_entries() {
+        let catalog = json!({"data":[
+            {"id":"team/gpt-image-2", "cockpit_image":true},
+            {"id":"team/gpt-6.1-sol", "capabilities":["completion"]}
+        ]});
+        let models = claude_code_catalog_models(&catalog).unwrap();
+        let plan = claude_code_settings_plan(
+            Path::new("settings.json"),
+            None,
+            "http://localhost:13000",
+            "fixture-key",
+            &models,
+        )
+        .unwrap();
+        let settings: Value = serde_json::from_str(&plan.after).unwrap();
+        assert_eq!(models, ["team/gpt-6.1-sol"]);
+        for key in [
+            "ANTHROPIC_MODEL",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION",
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        ] {
+            assert_eq!(settings["env"][key], "team/gpt-6.1-sol");
+        }
+        assert_eq!(settings["env"]["ANTHROPIC_AUTH_TOKEN"], "fixture-key");
     }
 
     #[test]

@@ -652,6 +652,7 @@
         "expiresAt": "Wygasa: {{time}}",
         "unlimited": "Bez limitu",
         "leftPercent": "Pozostało {{value}}%",
+        "weeklyLimitReached": "Osiągnięto limit tygodniowy",
         "cachedRefreshFailed": "Odświeżanie nie powiodło się; wyświetlam ostatnie poprawne dane",
         "lastSuccessfulQuery": "Ostatni sukces: {{time}}",
         "cachedNeedsReauth": "⚠️ Wymagana weryfikacja internetowa, aby kontynuować (dane z pamięci podręcznej poniżej)"
@@ -839,6 +840,7 @@
     "sortPlaced": "Przeniesiono na pozycję {{position}}.",
     "sortCancelled": "Anulowano sortowanie.",
     "tipWithGroups": "Przeciągnij, aby zmienić kolejność. Na pasku bocznym może być widocznych maksymalnie {{max}} pozycji. Elementy podrzędne grup nie mają przełączników paska bocznego/pulpitu i służą tylko do paska menu oraz wyboru platformy domyślnej.",
+    "tipWithSidebarShortcuts": "Przeciągnij elementy, aby zmienić ich kolejność. Na pasku bocznym można wyświetlić do {{max}} pozycji, w tym pojedyncze platformy z grup.",
     "addGroup": "Dodaj grupę",
     "editGroup": "Edytuj grupę",
     "deleteGroup": "Usuń grupę",
@@ -1079,7 +1081,8 @@
         "savedForNextLaunch": "Zapisano. Zmiana zostanie zastosowana przy następnym uruchomieniu Codex przez Cockpit; bieżąca sesja pozostanie bez zmian.",
         "restartRollbackFailed": "Nie udało się uruchomić nowej trasy i nie można zrestartować pierwotnej konfiguracji: ",
         "restartRolledBack": "Nie udało się uruchomić nowej trasy. Przywrócono pierwotną konfigurację i zrestartowano Codex: {{error}}"
-      }
+      },
+      "copyTimeout": "Limit czasu kopiowania"
     },
     "quota": {
       "unbound": "Konto niepowiązane",
@@ -1138,6 +1141,7 @@
         "preparingCredentials": "Sprawdzanie tokenów i aktualizowanie pełnych danych logowania w razie potrzeby...",
         "profileReady": "auth.json / pęk kluczy instancji został bezpiecznie zaktualizowany",
         "cliPrepared": "Polecenie uruchomienia CLI jest gotowe",
+        "cliResumeStarted": "Kontynuowanie sesji CLI uruchomiono w tle",
         "startingClient": "Uruchamianie i sprawdzanie procesu klienta Codex..."
       }
     },
@@ -1300,6 +1304,9 @@
       "trayIconStyleDesc": "Wybierz systemową ikonę monochromatyczną albo oryginalną kolorową ikonę aplikacji",
       "trayIconStyleTemplate": "Ikona monochromatyczna",
       "trayIconStyleColor": "Ikona kolorowa",
+      "menuBarLeftClick": "Działanie lewego kliknięcia ikony na pasku menu",
+      "menuBarLeftClickMenu": "Otwórz menu limitów",
+      "menuBarLeftClickWindow": "Otwórz główne okno",
       "floatingCardStartup": "Pokaż kartę pływającą przy starcie",
       "floatingCardStartupDesc": "Automatycznie pokazuj pływającą kartę konta po uruchomieniu aplikacji",
       "floatingCardAlwaysOnTop": "Domyślnie utrzymuj kartę pływającą na wierzchu",
@@ -1309,6 +1316,9 @@
       "floatingCardShowNowAction": "Pokaż kartę pływającą",
       "dataDir": "Katalog danych",
       "dataDirDesc": "Lokalizacja przechowywania kont i plików konfiguracji.",
+      "dataDirPending": "Po ponownym uruchomieniu Cockpit Tools odczyta dane z {{path}}.",
+      "dataDirPendingDefault": "Po ponownym uruchomieniu Cockpit Tools użyje katalogu domyślnego.",
+      "dataDirEnvironment": "Bieżące uruchomienie używa katalogu wskazanego przez COCKPIT_TOOLS_DATA_DIR.",
       "topRightAdVisible": "Pokaż górną promocję",
       "topRightAdVisibleDesc": "Ukrywa górny obszar promocyjny w aplikacji. Strona sponsorów pozostaje bez zmian.",
       "opencodeTitle": "Integracja OpenCode",
@@ -1377,6 +1387,10 @@
       "cursorPathReset": "Przywróć domyślne",
       "codexLaunchOnSwitch": "Automatycznie uruchamiaj Codex App podczas przełączania Codex",
       "codexLaunchOnSwitchDesc": "Po przełączeniu konta automatycznie uruchom lub uruchom ponownie Codex App",
+      "codexAutomaticSessionRepair": "Automatyczna naprawa widoczności sesji",
+      "codexAutomaticSessionRepairDesc": "Wybierz, czy naprawiać indeks sesji i znaczniki czasu plików historii przy uruchamianiu Codex z Cockpit lub zmianie dostawcy sesji.",
+      "codexAutomaticSessionRepairIndexOnly": "Tylko indeks",
+      "codexAutomaticSessionRepairQuick": "Szybka naprawa",
       "autoUpdate": "Automatyczna aktualizacja w tle",
       "autoUpdateDesc": "Po wykryciu nowej wersji aktualizacja zostanie wykonana w tle, a po zakończeniu pojawi się monit o ponowne uruchomienie.",
       "autoUpdateOff": "Wyłączone (aktualizacja ręczna)",
@@ -1509,6 +1523,8 @@
       "claudeSettingsTitle": "Ustawienia Claude",
       "claudeAutoRefresh": "Automatyczne odświeżanie limitu Claude",
       "claudeAutoRefreshDesc": "Automatycznie odświeża w tle pamięć podręczną limitów kont Claude.",
+      "claudeShareCodeSessionsOnSwitch": "Synchronizuj sesje Code po zmianie konta",
+      "claudeShareCodeSessionsOnSwitchDesc": "Udostępnia listę sesji Code między kontami lokalnymi przy przełączaniu domyślnego profilu Claude Desktop w macOS.",
       "claudeAppPath": "Cel uruchamiania Claude Desktop",
       "claudeAppPathDesc": "Profil domyślny może używać celu Microsoft Store; wiele instancji wymaga prawdziwego Claude.exe.",
       "antigravityLaunchOnSwitch": "Uruchamiaj Antigravity IDE przy przełączaniu",
@@ -1549,6 +1565,10 @@
       "webdavAllowedDomainsDesc": "Po przecinku; puste = bez limitu",
       "claudeQuotaDisplayRemaining": "Limit Claude jako % pozostały",
       "claudeQuotaDisplayRemainingDesc": "Domyślnie % zużycia. Włącz = % pozostały. Auto-przełączanie i alerty wg zużycia.",
+      "menuBarLeftClick": "Lewy przycisk na pasku menu",
+      "menuBarLeftClickDesc": "Kliknięcie prawym przyciskiem zawsze otwiera menu limitów.",
+      "menuBarLeftClickQuotaMenu": "Menu limitów",
+      "menuBarLeftClickMainWindow": "Okno główne",
       "menuBarQuota": "Bieżący limit na pasku menu",
       "menuBarQuotaDesc": "Po włączeniu pokazuje pozostały limit bieżącego konta wybranej platformy obok ikony. Opcje platformy w oknie dialogowym.",
       "menuBarQuotaEnabledDesc": "Wł. · {{platform}} · pozostały limit bieżącego konta tej platformy (najniższy z limitów)",
@@ -1581,10 +1601,14 @@
         "quotaCompatDesc": "Instancje usługi API pokazują klientowi dostępną kwotę na potrzeby lokalnych kontroli. Rzeczywiste zużycie u dostawcy i limity obrazów nie zmieniają się. Ten przełącznik dotyczy tylko innych połączeń OAuth z zewnętrznym API.",
         "configFailed": "Nie udało się odczytać lub zapisać ustawień: {{error}}",
         "nativePredictions": "Natywne przewidywanie następnego kroku (Tab)",
-        "nativePredictionsDesc": "Domyślnie wyłączone. Sugestie korzystają z dostawcy API i modelu bieżącej rozmowy oraz zwiększają użycie API. Po zmianie ustawienia uruchom ponownie odpowiednie instancje Codex i pozostaw Cockpit Tools uruchomione."
+        "nativePredictionsDesc": "Domyślnie włączone. Sugestie korzystają z dostawcy API i modelu bieżącej rozmowy oraz zwiększają użycie API. Po zmianie ustawienia uruchom ponownie odpowiednie instancje Codex i pozostaw Cockpit Tools uruchomione."
       },
       "timeDisplayMode": "Wyświetlany czas",
-      "timeDisplayModeDesc": "Czas na kartach i listach kont. Domyślnie czas przełączenia konta"
+      "timeDisplayModeDesc": "Czas na kartach i listach kont. Domyślnie czas przełączenia konta",
+      "menuBarLeftClick": "Lewy przycisk na pasku menu",
+      "menuBarLeftClickDesc": "Kliknięcie prawym przyciskiem zawsze otwiera menu limitów.",
+      "menuBarLeftClickQuotaMenu": "Menu limitów",
+      "menuBarLeftClickMainWindow": "Okno główne"
     },
     "network": {
       "apiTitle": "API kokpitu antygrawitacyjnego",
@@ -2590,6 +2614,8 @@
       "crontabValidate": "Sprawdź",
       "crontabValidateHint": "Wyrażenie zostanie zweryfikowane przy zapisie",
       "crontabPreviewEmpty": "Wpisz prawidłowe wyrażenie Crontab",
+      "weeklyQuotaResetOnly": "Wybudzaj tylko po zresetowaniu tygodniowego limitu",
+      "weeklyQuotaResetHint": "Każde wybrane konto zostanie wybudzone po zresetowaniu jego tygodniowego limitu.",
       "timeWindowEnabled": "Włącz okno czasowe",
       "timeWindowHint": "Po włączeniu reset limitu działa tylko w oknie; poza nim używane są stałe godziny.",
       "timeWindow": "Okno resetu limitu",
@@ -2667,6 +2693,17 @@
     "other_group": "Inne modele"
   },
   "codex": {
+    "subagentDefaults": {
+      "title": "Ustawienia domyślne podagentów",
+      "description": "Dotyczą nowych podagentów. Wartości podane podczas uruchamiania mają pierwszeństwo. Puste pole używa wartości domyślnej Codex."
+    },
+    "modelInstructions": {
+      "title": "Instrukcje systemowe",
+      "description": "Wybierz lokalny plik UTF-8. Zmiana zostanie od razu zapisana i użyta w nowych sesjach.",
+      "deferred": "Wybór zacznie obowiązywać po przełączeniu z DeepSeek na innego dostawcę.",
+      "selectFile": "Wybierz plik",
+      "useDefault": "Użyj ustawień domyślnych"
+    },
     "cli": {
       "launchSuccess": "Uruchomiono Codex CLI",
       "selectWorkingDir": "Wybierz folder roboczy Codex CLI"
@@ -2674,56 +2711,19 @@
     "resetAutomation": {
       "nothingToReset": "Obecnie żaden okres limitu nie wymaga resetu.",
       "unknownOutcome": "Nie udało się potwierdzić wyniku resetu. Spróbuj ponownie.",
-      "applyAllHint": "Po włączeniu zapis kopiuje regułę do wszystkich kont, zastępując ustawienia własne i wyłączone.",
-      "applyAll": "Zapisz dla wszystkich",
-      "accountHint": "Konta bez własnych ustawień używają wspólnej reguły. Zapis dotyczy tylko tego konta.",
-      "title": "Automatyczne użycie kart",
-      "accountTab": "To konto",
-      "publicTab": "Wspólna reguła",
-      "inherit": "Użyj wspólnej reguły",
-      "custom": "Własna reguła",
-      "off": "Wyłączone",
-      "entryDefault": "Ustawienia auto",
       "noCredits": "Brak kart",
-      "publicHint": "Domyślna reguła dla kont bez własnych ustawień. Ustawienia własne i wyłączone pozostają bez zmian.",
-      "before": "Przed wygaśnięciem",
-      "expiry": "Użyj przed wygaśnięciem",
       "minutes": "min",
       "hours": "godz.",
       "days": "dni",
-      "hostHint": "Działa, gdy Cockpit Tools jest otwarty. Kartę wybiera serwer. Po automatycznym użyciu karty na tym samym koncie trzeba odczekać 30 minut do kolejnego automatycznego użycia.",
-      "invalidTime": "Wpisz dodatni czas z dokładnością do pełnej sekundy.",
-      "invalidPercent": "Wpisz całkowity procent od 0 do 100.",
-      "loadFailed": "Nie udało się wczytać reguł: {{error}}",
-      "saveFailed": "Nie udało się zapisać reguł: {{error}}",
-      "conflict": "Reguła została zmieniona gdzie indziej. Wczytaj ją ponownie.",
+      "conflict": "Dane konta zmieniły się podczas resetu. Spróbuj ponownie.",
       "busy": "Reset tego konta już trwa.",
-      "storageError": "Nie można odczytać lub zapisać reguł resetu.",
+      "storageError": "Nie można odczytać ani zapisać wpisów resetu.",
       "timeout": "Przekroczono czas. Zapisany identyfikator zostanie użyty ponownie, aby uniknąć podwójnego zużycia.",
-      "history": "Ostatnie działania",
-      "reasonExpiry": "Bliskie wygaśnięcie",
-      "reasonQuota": "Niski limit",
-      "reasonManual": "Reset ręczny",
-      "reasonCheck": "Sprawdzenie w tle",
-      "pending": "Oczekiwanie na wynik",
-      "editPublic": "Edytuj wspólną regułę",
       "accountMissing": "Konto już nie istnieje.",
-      "masterLabel": "Używaj kart automatycznie",
-      "ruleSource": "Źródło reguły",
-      "weeklyTrigger": "Próg tygodniowy",
-      "preferUsageCredits": "Najpierw kredyty",
-      "weeklyRemaining": "Pozostało w tygodniu ≤",
-      "previewTitle": "Podgląd warunków",
-      "previewAny": "Karta zostanie użyta, gdy spełniony będzie dowolny aktywny warunek:",
       "previewExpiry": "Karta wygasa w ciągu {{value}} {{unit}}",
       "previewWeekly": "Pozostały limit tygodniowy wynosi najwyżej {{percent}}%",
       "previewWeeklyAfterCredits": "Pozostały limit tygodniowy wynosi najwyżej {{percent}}% i potwierdzono brak dostępnych kredytów",
-      "previewOff": "Automatyczne użycie jest wyłączone. Poniższe reguły są nieaktywne.",
-      "previewEmpty": "Brak aktywnych warunków. Karty nie będą używane automatycznie.",
-      "cardOn": "Autom.",
-      "cardOff": "Wył.",
-      "orSeparator": " lub ",
-      "inheritHint": "Ustawienia korzystają ze wspólnej reguły. Edytuj ją lub wybierz własną regułę."
+      "orSeparator": " lub "
     },
     "overload": {
       "setting": "Ponawiaj przy przeciążeniu",
@@ -2833,7 +2833,10 @@
       "sessionRestoreFailed": "Naprawa sesji nie powiodła się, a przywracanie kopii jest niepełne. Uruchamianie zatrzymane; przed ponowną próbą sprawdź dzienniki i kopie zapasowe.",
       "bindingFailed": "Nie można potwierdzić powiązania konta. Uruchamianie zatrzymano. Spróbuj ponownie przełączyć konto.",
       "processScanFailed": "Nie można sprawdzić poprzednich procesów w tle. Uruchamianie zatrzymano. Spróbuj ponownie.",
-      "proxyEntryFailed": "Nie można uruchomić skonfigurowanego proxy. Nie użyto innej trasy. Spróbuj ponownie."
+      "proxyEntryFailed": "Nie można uruchomić skonfigurowanego proxy. Nie użyto innej trasy. Spróbuj ponownie.",
+      "proxyEnvUnavailable": "Nie udało się zastosować ustawień proxy. Sprawdź plik .env tej instancji Codex i spróbuj ponownie.",
+      "proxyEnvChanged": "Plik .env zmienił się podczas uruchamiania. Zapisz zmiany i spróbuj ponownie.",
+      "proxyEnvStopFailed": "Plik .env zmienił się podczas uruchamiania i nie udało się zatrzymać Codex. Zamknij instancję i spróbuj ponownie."
     },
     "oauthProxy": {
       "toggle": "Autoryzuj przez proxy",
@@ -2909,6 +2912,7 @@
         "operation": "Działania",
         "manage": "Zarządzaj",
         "resetDefaults": "Przywróć domyślne",
+        "embeddedFallback": "Zaktualizowany katalog modeli jest niedostępny. Cockpit używa wbudowanego katalogu.",
         "inheritHint": "Oficjalne modele zachowują swoje możliwości, a własne używają ogólnego szablonu. Widoczne modele można dodawać i usuwać.",
         "validation": {
           "required": "Pozostaw co najmniej jeden model.",
@@ -2955,6 +2959,20 @@
       "quota": {
         "hourly": "5 godz",
         "weekly": "Tygodniowo"
+      },
+      "sessionResume": {
+        "title": "Wznawianie sesji",
+        "enabled": "Przy uruchomieniu tej instancji wyślij polecenie kontynuacji",
+        "cliHint": "Uruchomienie w terminalu wysyła skonfigurowane polecenie. Podgląd, kopiowanie i własne polecenia działają jak dotąd. Jeśli przełączenie ma uruchomić tę instancję, polecenie zostanie wysłane w tle.",
+        "target": "Sesja do wznowienia",
+        "recentActivity": "Ostatnio aktywna sesja",
+        "lastCreated": "Ostatnio utworzona sesja",
+        "previousDesktopSession": "Sesja wyświetlana przed zatrzymaniem",
+        "specific": "Określona sesja",
+        "threadId": "Identyfikator sesji",
+        "prompt": "Polecenie kontynuacji",
+        "invalidId": "Wpisz prawidłowy UUID sesji.",
+        "promptRequired": "Wpisz polecenie kontynuacji."
       },
       "syncAllRecords": {
         "action": "Synchronizuj rekordy wszystkich instancji",
@@ -3109,7 +3127,8 @@
       "portInUseAction": "Zamknij port i spróbuj ponownie",
       "timeout": "Uwierzytelnianie przekroczyło limit czasu. Kliknij",
       "timeoutRetry": "Odśwież link uwierzytelniania",
-      "reauthEmailLabel": "Konto do ponownej autoryzacji"
+      "reauthEmailLabel": "Konto do ponownej autoryzacji",
+      "reauthEmailChangeHint": "Jeśli adres e-mail logowania się zmienił, użyj nowego adresu w przeglądarce. Cockpit zaktualizuje zapisany adres po potwierdzeniu tego samego użytkownika i obszaru roboczego."
     },
     "token": {
       "importPartial": "Import zakończony. Udane: {{success}}, nieudane: {{failed}}. {{errors}}",
@@ -3193,7 +3212,7 @@
         "save": "Zapisz kolekcję",
         "freeNotice": "Bezpłatne konta nie są jeszcze obsługiwane. Nie można wybrać kont bezpłatnych.",
         "freeUnsupported": "Bezpłatne konta nie są jeszcze obsługiwane",
-        "restrictFreeToggle": "Ogranicz konta Free",
+        "restrictFreeToggle": "Ukryj konta Free spoza puli",
         "sessionAffinityConfirmTitle": "Włączyć przywiązanie sesji?",
         "sessionAffinityDescription": "Po włączeniu ta sama rozmowa będzie próbowała nadal używać tego samego konta. Gdy konto jest niedostępne, routing może je zmienić; po wygaśnięciu konto zostanie wybrane ponownie.",
         "pendingOauthUnsupported": "Oczekujące wykluczone",
@@ -3630,7 +3649,7 @@
       "reset": "Resetuj",
       "weeklyBlocksHourly": "Limit tygodniowy wynosi 0, więc limit 5-godzinny jest niedostępny",
       "windowStats": "Zużyto {{tokens}} · {{cost}}",
-      "windowStatsHint": "Żądania, tokeny i opłata konta w usłudze API od pełnego okna",
+      "windowStatsHint": "Żądania usługi API, tokeny i szacunkowa wartość użycia w tym okresie limitu",
       "windowUsed": "Zużyto {{tokens}} · {{cost}}",
       "windowReq": "{{count}} żąd.",
       "resetCredits": "Resety {{count}}",
@@ -3655,8 +3674,8 @@
       "resetCreditRecordsLoadFailed": "Nie udało się wczytać zapisów resetu: {{error}}",
       "resetCreditGrantedAt": "Przyznano",
       "resetCreditExpiresAt": "Wygasa",
-      "windowAccountCostHint": "Opłata konta (szacunek z cen modelu)",
-      "windowEstimatedFullCostHint": "Przeliczone z bieżącego użycia: koszt konta przy pełnym wykorzystaniu okna",
+      "windowAccountCostHint": "Wartość użycia oszacowana według cen API modelu. Pozostały limit subskrypcji wynika z wartości procentowej zwróconej przez konto.",
+      "windowEstimatedFullCostHint": "Szacunkowa wartość całego limitu, obliczona na podstawie wykorzystanej części",
       "windowUserCostHint": "Opłata użytkownika",
       "windowWeeks": "Limit {{count}} tyg.",
       "windowDays": "Limit {{count}} dn.",
@@ -3920,7 +3939,7 @@
         "max": "Maks.",
         "ultra": "Ekstremalny"
       },
-      "scheduleQuotaResetHint": "Po włączeniu wybudzania po resecie limitu automatyczne odświeżanie zostanie ustawione co 2 minuty.",
+      "scheduleQuotaResetHint": "Zadanie uruchomi się według ostatniego zapisanego czasu resetu limitu konta. Interwał automatycznego odświeżania Codex pozostanie bez zmian.",
       "scheduleQuotaResetSummary": "Uruchom po resecie limitu",
       "quotaResetWindowLabel": "Warunek wyzwalania okna resetu",
       "quotaResetWindowHint": "primary_window zwykle odpowiada limitowi 5-godzinnemu. U użytkowników darmowych primary_window może odpowiadać limitowi tygodniowemu i różnić się zależnie od subskrypcji.",
@@ -3933,7 +3952,6 @@
       },
       "nextRunsQuotaResetHint": "Wyzwalacze po resecie limitu zależą od najnowszych danych limitu, więc podgląd stałej godziny nie jest dostępny.",
       "triggerQuotaReset": "Wyzwalacz resetu limitu",
-      "noticeSavedEnabledWithQuotaReset": "Zadania zapisane. Łącznie: {{count}}. Automatyczne odświeżanie Codex ustawiono na co {{minutes}} min.",
       "runtimeConfigTitle": "Własne ścieżki środowiska uruchomieniowego",
       "runtimeConfigHint": "Możesz podać ścieżkę do pliku wykonywalnego lub katalogu. Pozostaw puste, aby wykryć automatycznie z PATH.",
       "runtimeConfigCodexCliLabel": "Ścieżka Codex CLI",
@@ -4122,7 +4140,7 @@
         "projectsSuccess": "Przywrócono: {{projects}} projektów, {{assignments}} przypisań; pominięto {{skipped}} projektów i {{ambiguous}} niejednoznacznych rozmów.",
         "projectsPending": "Przywracanie przerwano. Zamknij instancję i uruchom pełną naprawę, aby odtworzyć niedokończone zapisy.",
         "projectsDeferred": "Część danych odłożono. Zamknij instancję i ponów szybką naprawę albo użyj pełnej.",
-        "switchProjectsDeferred": "Dane logowania zostały zaktualizowane, ale nie udało się zsynchronizować stanu lokalnych projektów. Zamknij odpowiednią instancję Codex i uruchom ją ponownie z Cockpit."
+        "switchProjectsDeferred": "Dane logowania zostały zaktualizowane, ale nie udało się zsynchronizować stanu lokalnych projektów lub rozmów. Zamknij odpowiednią instancję Codex i uruchom ją ponownie z Cockpit."
       },
       "importModal": {
         "title": "Importuj sesje",
@@ -4222,6 +4240,14 @@
       }
     },
     "sessionUsage": {
+      "comparison": {
+        "localTotal": "Tokeny sesji lokalnych · wybrany okres i instancje",
+        "profileTotal": "Oficjalny profil · łączna liczba tokenów",
+        "account": "Konto Codex",
+        "noAccount": "Dodaj konto Codex OAuth, aby zobaczyć jego oficjalną sumę.",
+        "loadError": "Nie udało się wczytać oficjalnej sumy.",
+        "unavailable": "Oficjalny profil nie udostępnił sumy."
+      },
       "tab": "Zużycie",
       "listTab": "Sesje",
       "title": "Zużycie sesji",
@@ -4312,7 +4338,7 @@
       "hideApiKey": "Ukryj API Key",
       "apiKeyHiddenHint": "API Key jest ukryty. Kliknij, aby pokazać.",
       "modelCatalog": {
-        "restartHint": "Zaktualizowano katalog modeli. Jeśli Codex jest uruchomiony, uruchom go ponownie, aby zastosować zmiany.",
+        "launchHint": "Uruchom Codex z Cockpita za pomocą tego konta, aby zastosować zapisane ustawienia modeli.",
         "label": "Lista modeli",
         "fetch": "Pobierz od dostawcy",
         "fetching": "Pobieranie...",
@@ -4320,7 +4346,7 @@
         "placeholder": "Wpisz jeden identyfikator modelu w każdym wierszu lub rozdziel identyfikatory przecinkami.",
         "editHint": "Pobrane modele trafią tylko do tej wersji roboczej. Sprawdź i edytuj je przed zapisaniem.",
         "syncToggle": "Synchronizuj modele dostawcy z Codex",
-        "syncDescription": "Po zapisaniu ta lista posłuży do utworzenia katalogu modeli Codex zarządzanego przez Cockpit. Własne katalogi nie zostaną nadpisane.",
+        "syncDescription": "Ta lista zostanie użyta po uruchomieniu Codex z Cockpita za pomocą tego konta. Istniejący katalog niestandardowy ma pierwszeństwo.",
         "fetchCredentialsRequired": "Najpierw wpisz API Key i Base URL.",
         "fetchEmpty": "Dostawca nie zwrócił żadnych modeli. Zachowano bieżącą listę.",
         "fetchFailed": "Nie udało się pobrać modeli dostawcy: {{error}}",
@@ -4759,7 +4785,8 @@
           "totalGranted": "Przyznano",
           "totalAvailable": "Dostępne",
           "isAvailable": "Saldo dostępne",
-          "modelLimitsEnabled": "Limity modeli"
+          "modelLimitsEnabled": "Limity modeli",
+          "weeklyShort": "Tydzień"
         },
         "accountBalance": "Saldo konta",
         "unlimitedQuota": "Bez limitu",
@@ -4923,6 +4950,7 @@
       "repairFailedWithError": "Naprawa widoczności nie powiodła się: {{error}}"
     },
     "accountNote": {
+      "refreshEmailHint": "Jeśli adres e-mail konta OpenAI się zmienił, ponownie autoryzuj to samo konto i obszar roboczy, aby go tutaj zaktualizować.",
       "title": "Notatka konta",
       "label": "Notatka konta",
       "desc": "Dodaj hasło, 2FA, URL poczty, telefon i inne notatki dla {{account}}.",
@@ -5037,7 +5065,7 @@
         "responsesTitle": "Wejście Responses",
         "responsesNote": "Natywne wejście Codex Responses.",
         "anthropicTitle": "Wiadomości Anthropic",
-        "claudeCodeNoModels": "Ten klucz nie udostępnia modeli z szablonu Claude Code. Najpierw zapisz aliasy w regułach modeli.",
+        "claudeCodeNoModels": "Brak dostępnych modeli czatu dla tego klucza. Sprawdź reguły modeli i pulę kont.",
         "claudeCodeSettingsChanged": "Ustawienia zmieniły się po podglądzie. Wyświetl nowy podgląd.",
         "claudeCodeServiceUnavailable": "Nie udało się wczytać modeli dla tego klucza. Sprawdź usługę API i stan klucza.",
         "claudeCodeNoBackup": "Brak kopii zapasowej pasującej do bieżących ustawień.",
@@ -5074,6 +5102,11 @@
         "saveRules": "Zapisz reguły",
         "rulesSaved": "Reguły modeli zapisane",
         "pricingAction": "Ceny",
+        "refreshCatalog": "Odśwież modele",
+        "refreshComplete": "Sprawdzono modele i ceny.",
+        "refreshFailed": "Nie udało się odświeżyć modeli ani cen. Obowiązują dotychczasowe dane.",
+        "refreshModelsFailed": "Nie udało się odświeżyć modeli. Obowiązuje dotychczasowa lista.",
+        "refreshPricesFailed": "Nie udało się odświeżyć cen. Obowiązują dotychczasowe ceny.",
         "pricingTitle": "Ceny modeli",
         "pricingDesc": "USD / 1M tokenów, tylko do lokalnych statystyk.",
         "pricingModel": "Nazwa",
@@ -5110,6 +5143,16 @@
         "pricingRepriceCompleted": "Zaktualizowano szacunki historyczne",
         "pricingRepriceSaveBlocked": "Trwa przeliczanie; zapisz po zakończeniu"
       },
+      "accountPools": {
+        "title": "Nazwane pule kont",
+        "add": "Dodaj pulę kont",
+        "name": "Nazwa puli",
+        "deleteHint": "Po usunięciu puli powiązane klucze zachowają bieżący zakres kont.",
+        "detach": "Odłącz pulę",
+        "saved": "Zapisano pulę kont",
+        "removed": "Usunięto pulę kont",
+        "detached": "Odłączono klucz od puli"
+      },
       "keys": {
         "policyTitle": "Polityka modeli",
         "advancedPolicyTitle": "Zaawansowane: polityka modeli",
@@ -5132,6 +5175,13 @@
         "tokenLimit": "Łączny limit tokenów",
         "tokenLimitPlaceholder": "Przykład: 10m",
         "tokenLimitHint": "Pozostaw puste, aby nie ustawiać limitu. Tokeny wejściowe i wyjściowe są sumowane dla wszystkich modeli.",
+        "monthlyTokens": {
+          "title": "Miesięczne przypomnienie o tokenach",
+          "used": "W tym miesiącu: {{used}} tokenów",
+          "hint": "Pozostaw puste, aby wyłączyć. Przypomnienie jest wyświetlane raz w lokalnym miesiącu kalendarzowym. Żądania są nadal obsługiwane.",
+          "invalid": "Wpisz całkowitą liczbę tokenów.",
+          "notification": "Klucz {{label}} zużył w tym miesiącu {{used}} tokenów i osiągnął próg {{threshold}} tokenów."
+        },
         "tokenLimitInvalid": "Wprowadź prawidłowy limit tokenów, na przykład 10m lub 10000000",
         "tokenLimitUsage": "Limit tokenów",
         "tokenLimitCurrentUsage": "Wykorzystano: {{used}} tokenów",
@@ -5169,6 +5219,10 @@
         "maxRetryInterval": "Czas retry",
         "disableCooling": "Wyłącz cooldown",
         "saveOptions": "Zapisz opcje",
+        "accountQuotaFloor": "Minimalny pozostały limit",
+        "accountQuotaFloorHint": "Gdy pozostały limit w dowolnym okresie osiągnie tę wartość, konto przestanie otrzymywać nowe żądania. Puste pole wyłącza tę opcję.",
+        "accountQuotaFloorInvalid": "Wpisz pełny procent od 1 do 100.",
+        "accountQuotaFloorSaveFailed": "Nie udało się zapisać minimalnego limitu.",
         "immediateSseResponse": "Natychmiastowe SSE 200",
         "maxConcurrentImageRequests": "Żądania obrazów na konto",
         "maxAccountConcurrency": "Współbieżność konta",
@@ -5237,6 +5291,12 @@
         "tokenOutput": "Wyjście",
         "tokenCache": "Pamięć",
         "tokenTotal": "Razem",
+        "inputTextCharacters": "Liczba znaków wejściowych",
+        "inputTextCharactersHint": "Liczba znaków Unicode w wiadomościach i instrukcjach przesłanych z tym żądaniem, łącznie z historią tekstową wysłaną przez klienta.",
+        "highTokenRequests": "Żądania o wysokim zużyciu tokenów",
+        "highTokenBadge": "Wysokie zużycie",
+        "tokenThreshold": "Próg liczby tokenów",
+        "highTokenHint": "Zarejestrowane żądania zużywające co najmniej {{threshold}} tokenów",
         "speedAdjusted": "{{tier}} → Zwykła",
         "officialDefaultSpeed": "Oficjalny dostęp przez subskrypcję nie obsługuje zmiany szybkości. Ta próba użyła szybkości domyślnej.",
         "sentTier": "Wysłano: {{tier}}",
@@ -5311,7 +5371,13 @@
       "usage": {
         "title": "Statystyki użycia",
         "lastRecorded": "Ostatni zapis",
-        "trendEmpty": "Brak żądań w wybranym zakresie"
+        "inputTextCoverage": "Zmierzono {{measured}} z {{total}} żądań",
+        "trendEmpty": "Brak żądań w wybranym zakresie",
+        "periodTokens": "Tokeny w przedziale",
+        "cumulativeTokens": "Łączna liczba tokenów",
+        "tokenComposition": "Podział wykorzystania tokenów",
+        "nonReasoningOutput": "Wyjście bez rozumowania",
+        "reasoningTokens": "Rozumowanie"
       },
       "accountModelMappings": {
         "action": "Mapa modeli",
@@ -6281,6 +6347,13 @@
       "restart": "Uruchom ponownie CLI",
       "restarting": "Uruchamianie ponowne…",
       "restarted": "Usługa CLI została uruchomiona ponownie.",
+      "autoRefresh": "Automatycznie odświeżaj CLI po zmianie konta",
+      "autoRefreshHint": "Odświeża domyślnego demona CLI, gdy jest bezczynny i nie ma połączonych klientów.",
+      "autoDeferred": "Nie udało się potwierdzić automatycznego odświeżenia CLI. Sprawdź demona przed ponownym uruchomieniem.",
+      "workspaceConfirmed": "Demon CLI został uruchomiony ponownie i potwierdzono wybrany obszar roboczy OAuth.",
+      "workspaceUnconfirmed": "Demon CLI został uruchomiony ponownie. Nie udało się potwierdzić wybranego obszaru roboczego OAuth.",
+      "workspaceMismatch": "Ponownie uruchomiony demon CLI używa innego konta lub obszaru roboczego OAuth.",
+      "restartUnconfirmed": "Nie udało się zweryfikować nowego demona CLI. Spróbuj ponownie lub skopiuj polecenie do terminala.",
       "restartFailed": "Nie udało się uruchomić ponownie. Spróbuj jeszcze raz lub skopiuj polecenie do terminala.",
       "title": "Odśwież konto CLI",
       "description": "Dane logowania zapisano, ale usługa Codex CLI tego profilu nadal działa i może używać poprzedniego konta.",
@@ -6503,6 +6576,12 @@
       "saveOnly": "Tylko zapisz",
       "validationBusy": "Sprawdzanie poprzedniej ścieżki nadal trwa. Spróbuj ponownie za chwilę."
     },
+    "customProviderUsage": {
+      "title": "Niestandardowe zapytanie o limit",
+      "settings": "Ustawienia zapytania (JSON)",
+      "hint": "Pozostaw puste, aby użyć automatycznego wykrywania. Dodaj nagłówki przez headers. Rozdziel alternatywne ścieżki znakiem |, aby użyć pierwszej wartości innej niż null.",
+      "invalid": "Sprawdź JSON, zgodność pochodzenia adresu i mapowanie pól."
+    },
     "openaiUsage": {
       "monthCost": "Koszt w miesiącu",
       "scope": "Koszty organizacji; żądania i tokeny tylko tekstowych API. Dane według UTC.",
@@ -6548,7 +6627,7 @@
       "official": "Historia oficjalna",
       "local": "Użycie lokalne",
       "officialHint": "Oficjalne wpisy z ostatnich 30 dni.",
-      "localHint": "Od teraz zapisuje ręczne i automatyczne działania tej aplikacji. Starsze dane nie są uzupełniane.",
+      "localHint": "Zapisuje ręczne działania w tej aplikacji i zachowuje wcześniejsze automatyczne wpisy. Starsze dane nie są uzupełniane.",
       "officialEmpty": "Brak resetów w ostatnich 30 dniach",
       "localEmpty": "Brak lokalnych wpisów użycia",
       "received": "Otrzymano reset",
@@ -6565,7 +6644,13 @@
       "requestId": "Identyfikator żądania",
       "more": "Pokaż więcej",
       "loadFailed": "Nie udało się wczytać historii",
-      "officialUnavailable": "Oficjalna historia resetów jest niedostępna dla tego konta"
+      "officialUnavailable": "Oficjalna historia resetów jest niedostępna dla tego konta",
+      "legacyActivityTitle": "Wcześniejszy dziennik aktywności (tylko do odczytu)",
+      "legacyActivityHint": "Wyświetlane tylko według zapisanego ID konta; bez wnioskowania tożsamości ani faktycznego użycia karty.",
+      "legacyReasonExpiry": "Bliskie wygaśnięcie",
+      "legacyReasonQuota": "Niski limit",
+      "legacyReasonManual": "Reset ręczny",
+      "legacyReasonCheck": "Sprawdzenie w tle"
     }
   },
   "githubCopilot": {
@@ -7449,7 +7534,16 @@
         "dir": "Katalog"
       },
       "unknownTime": "Nieznany czas",
-      "searchPlaceholder": "Szukaj wg tytułu lub folderu roboczego"
+      "searchPlaceholder": "Szukaj wg tytułu lub folderu roboczego",
+      "rebind": {
+        "title": "Zmień folder obszaru roboczego",
+        "scope": "Ponownie powiąż wszystkie sesje lokalne z tego folderu w wybranej instancji WorkBuddy. Przed zastosowaniem zamknij tę instancję.",
+        "instance": "Instancja WorkBuddy",
+        "choose": "Wybierz nowy folder",
+        "apply": "Powiąż sesje ponownie",
+        "noSessions": "W tym folderze nie ma już sesji lokalnych. Odśwież listę i spróbuj ponownie.",
+        "success": "Ponownie powiązane sesje lokalne ({{count}})"
+      }
     },
     "title": "Zarządzanie kontami CodeBuddy",
     "noAccounts": "Brak kont CodeBuddy",
@@ -7946,6 +8040,10 @@
       "timeRangeError": "Czas rozpoczęcia nie może być późniejszy niż czas zakończenia"
     },
     "modelProbe": {
+      "results": "Wyniki testu",
+      "reply": "Odpowiedź modelu",
+      "backToSetup": "Wróć do konfiguracji",
+      "catalogUnavailable": "Nie udało się wczytać modeli.",
       "scopeAll": "Wszystkie ({{count}})",
       "scopeSelected": "Wybrane ({{count}})",
       "scopeCurrent": "Bieżące konto",
@@ -7973,6 +8071,7 @@
       "open": "Testuj modele"
     },
     "probeNotice": {
+      "recovered": "{{model}} ponownie dostępny od {{time}}",
       "until": "{{model}} ograniczony w ostatnim teście, reset {{time}}",
       "unavailable": "{{model}} ograniczony w ostatnim teście",
       "failed": "Ostatni test {{model}} nieudany"
@@ -8631,7 +8730,7 @@
       "title": "Użyj klucza API",
       "family": "Grupa",
       "platform": "Bieżący system",
-      "unsupportedGroup": "Dla tej grupy nie ma jeszcze klientów z zapisem jednym kliknięciem."
+      "unsupportedGroup": "Cockpit Tools nie ma jeszcze szablonu konfiguracji klienta dla interfejsu {{family}} usługi APIKEY.FUN. Możesz skonfigurować go ręcznie w zgodnym kliencie."
     },
     "campaign": {
       "badge": "11.11",
@@ -9355,5 +9454,125 @@
     "errorModel": "Wpisz unikalną pełną nazwę modelu bez symboli wieloznacznych.",
     "errorSave": "Nie udało się wczytać lub zapisać ustawień. Spróbuj ponownie.",
     "saved": "Zapisano. Dotyczy nowych żądań."
+  },
+  "antigravityTokenUsage": {
+    "tab": "Zużycie sesji",
+    "subtitle": "Lokalne zużycie tokenów w sesjach Antigravity",
+    "title": "Zużycie tokenów sesji Antigravity",
+    "desc": "Agreguje rzeczywiste zużycie tokenów z lokalnych baz sesji Antigravity (~/.gemini/antigravity) w trybie tylko do odczytu, ściśle rozdzielając tokeny Thinking i Output.",
+    "hint": "Skanowanie tylko do odczytu baz SQLite steps/gen_metadata (z obsługą WAL), pamięci RPC oraz plików transcript JSONL. Output nie obejmuje Thinking (brak podwójnego liczenia); tokeny szacowane są oddzielone od dokładnych sum.",
+    "summary": {
+      "badge": "Lokalne tokeny",
+      "input": "Wejście",
+      "thinking": "Myślenie",
+      "output": "Wyjście",
+      "cache": "Pamięć podręczna",
+      "total": "Suma",
+      "turns": "Tury",
+      "sessionsUnit": "sesji",
+      "scanning": "Skanowanie…",
+      "updating": "Aktualizowanie…",
+      "detail": "Szczegóły"
+    },
+    "range": {
+      "label": "Zakres czasu",
+      "today": "Dzisiaj",
+      "7d": "Ostatnie 7 dni",
+      "30d": "Ostatnie 30 dni",
+      "month": "Ten miesiąc",
+      "all": "Cały okres"
+    },
+    "granularity": {
+      "label": "Szczegółowość",
+      "day": "Dziennie",
+      "week": "Tygodniowo",
+      "month": "Miesięcznie"
+    },
+    "kinds": {
+      "all": "Wszystkie typy",
+      "main": "Główna",
+      "swarm": "Rój (Swarm)",
+      "subagent": "Podagent"
+    },
+    "filters": {
+      "kindLabel": "Typ sesji",
+      "modelLabel": "Model AI",
+      "workspaceLabel": "Obszar roboczy",
+      "allModels": "Wszystkie modele",
+      "allWorkspaces": "Wszystkie obszary",
+      "searchPlaceholder": "Szukaj tytułu, ID sesji, folderu, modelu…"
+    },
+    "dataDir": {
+      "label": "Folder danych:",
+      "customBadge": "Własny",
+      "choose": "Zmień folder",
+      "reset": "Przywróć domyślny"
+    },
+    "actions": {
+      "refresh": "Odśwież",
+      "rebuild": "Skanuj ponownie",
+      "backToAccounts": "Powrót do kont"
+    },
+    "rebuildConfirm": {
+      "title": "Pełne ponowne skanowanie",
+      "message": "Wyczyścić lokalną pamięć skanowania Cockpit Tools i ponownie odczytać wszystkie pliki sesji Antigravity w trybie tylko do odczytu. Kontynuować?"
+    },
+    "status": {
+      "scanning": "Skanowanie baz sesji Antigravity…",
+      "ready": "Zeskanowano {{dbFiles}} plików DB · {{sessions}} sesji · {{turns}} tur",
+      "idle": "Jeszcze nie skanowano",
+      "cacheStats": "Pamięć podręczna: {{hits}} trafień / {{misses}} nowych ({{durationMs}} ms)",
+      "scannedAt": "Zsynchronizowano {{time}}"
+    },
+    "cards": {
+      "total": "Suma tokenów",
+      "totalExact": "Dokładna suma tokenów",
+      "input": "Tokeny wejściowe",
+      "thinking": "Tokeny myślenia",
+      "output": "Tokeny wyjściowe",
+      "cache": "Tokeny z pamięci podręcznej",
+      "conversations": "Rozmowy",
+      "turns": "Tury odpowiedzi",
+      "coverage": "Dokładne pokrycie",
+      "avgPerDay": "Śred. / aktywny dzień"
+    },
+    "estimated": {
+      "notice": "{{turns}} tur bez surowych danych API oszacowano osobno (nie są wliczane do dokładnej sumy):"
+    },
+    "trend": {
+      "title": "Trend zużycia tokenów",
+      "empty": "Brak zarejestrowanego zużycia tokenów w wybranym okresie"
+    },
+    "tables": {
+      "byModel": "Według modelu",
+      "byWorkspace": "Według obszaru roboczego",
+      "byKind": "Według typu sesji (Główna / Swarm / Podagent)",
+      "conversations": "Sesje rozmów",
+      "conversationTitle": "Rozmowa",
+      "modelName": "Model AI",
+      "workspaceName": "Obszar roboczy",
+      "sessions": "Sesje",
+      "turns": "Tury",
+      "total": "Suma",
+      "updatedAt": "Zaktualizowano"
+    },
+    "pagination": {
+      "info": "Strona {{page}} / {{totalPages}} ({{totalItems}} sesji)"
+    },
+    "detail": {
+      "openParent": "Otwórz sesję nadrzędną",
+      "children": "Sesje podrzędne (Swarm / Podagent)",
+      "turnsTimeline": "Oś czasu tokenów tura po turze"
+    },
+    "empty": {
+      "title": "Brak zużycia tokenów dla bieżących filtrów",
+      "desc": "Spróbuj zmienić zakres czasu na „Cały okres” lub kliknij Odśwież po użyciu Antigravity.",
+      "dirMissing": "Nie znaleziono katalogu danych Antigravity. Sprawdź ścieżkę powyżej.",
+      "noRows": "Brak pasujących danych"
+    },
+    "errors": {
+      "loadFailed": "Nie udało się wczytać zużycia tokenów: {{error}}",
+      "syncFailed": "Skanowanie zużycia tokenów nie powiodło się: {{error}}"
+    }
   }
 }

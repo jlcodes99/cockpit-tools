@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw, Settings, X } from "lucide-react";
+import { Play, RefreshCw, Settings, X } from "lucide-react";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import { PlatformInstancesContent } from "../components/platform/PlatformInstancesContent";
 import { CodexCliLaunchDialog } from "../components/codex/CodexCliLaunchDialog";
+import { CodexSessionResumeDialog } from "../components/codex/CodexSessionResumeDialog";
 import {
   CodexLaunchPreviewModal,
   type CodexLaunchPreviewAction,
@@ -130,6 +131,7 @@ export function CodexInstancesContent({
     null,
   );
   const [syncingAllRecords, setSyncingAllRecords] = useState(false);
+  const [showResumeSettings, setShowResumeSettings] = useState(false);
   const [autoSyncUpdating, setAutoSyncUpdating] = useState(false);
   const [showSyncSettingsModal, setShowSyncSettingsModal] = useState(false);
   const [syncRecordsMessage, setSyncRecordsMessage] = useState<{
@@ -620,6 +622,13 @@ export function CodexInstancesContent({
 
   const syncAllRecordsSettingsButton = (
     <div className="codex-sync-records-actions">
+      <button type="button" className="btn btn-secondary icon-only"
+        disabled={!instanceStore.instances.length}
+        onClick={() => setShowResumeSettings(true)}
+        title={t("codex.instances.sessionResume.title")}
+        aria-label={t("codex.instances.sessionResume.title")}>
+        <Play size={16} />
+      </button>
       <button
         type="button"
         className="btn btn-secondary icon-only"
@@ -694,6 +703,10 @@ export function CodexInstancesContent({
           toolbarExtraActions={syncAllRecordsSettingsButton}
         />
       </div>
+
+      {showResumeSettings && (
+        <CodexSessionResumeDialog instances={instanceStore.instances} onClose={() => setShowResumeSettings(false)} />
+      )}
 
       {showSyncSettingsModal && (
         <div className="codex-sync-settings-overlay">

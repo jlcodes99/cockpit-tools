@@ -42,36 +42,15 @@ fn collect_macos_antigravity_entries(legacy: bool) -> Vec<(u32, Option<String>)>
                 let Some(process) = system.process(sysinfo::Pid::from_u32(*pid)) else {
                     return false;
                 };
-                let Some(path) = antigravity_macos_profile_from_argv(process.cmd()) else {
+                let Some(path) = macos_profiles_from_argv(process.cmd()).last() else {
                     return false;
                 };
-                *dir = Some(path);
+                *dir = Some(path.to_owned());
                 true
             });
         }
     }
     entries
-}
-
-fn antigravity_macos_profile_from_argv(args: &[std::ffi::OsString]) -> Option<String> {
-    args.iter()
-        .enumerate()
-        .skip(1)
-        .take_while(|(_, arg)| *arg != "--")
-        .filter_map(|(index, arg)| {
-            let arg = arg.to_str()?;
-            if arg == "--user-data-dir" {
-                return args.get(index + 1)?.to_str().filter(|path| !path.starts_with("--"));
-            }
-            arg.strip_prefix("--user-data-dir=")
-        })
-        .filter(|path| !path.trim().is_empty())
-        .last()
-        .map(str::to_owned)
-}
-fn owned_macos_process_command(line: &str, owner: u32) -> Option<&str> {
-    let (uid, tail) = line.trim().split_once(char::is_whitespace)?;
-    (uid.parse::<u32>().ok()? == owner).then(|| tail.trim_start())
 }
 
 fn parse_macos_antigravity_entries(
@@ -162,7 +141,7 @@ mod antigravity_macos_owner_tests {
             "--user-data-dir=/tmp/managed profile",
         ].map(std::ffi::OsString::from);
         assert_eq!(
-            antigravity_macos_profile_from_argv(&argv).as_deref(),
+            macos_profiles_from_argv(&argv).last(),
             Some("/tmp/managed profile"),
         );
     }

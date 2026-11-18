@@ -26,6 +26,7 @@ export type InstanceStoreState = {
     launchMode?: InstanceLaunchMode;
     appSpeed?: CodexAppSpeed;
     copySourceInstanceId: string;
+    copyTimeoutSeconds?: number;
     initMode?: InstanceInitMode;
   }) => Promise<InstanceProfile>;
   updateInstance: (payload: {
@@ -61,6 +62,7 @@ type InstanceService = {
     launchMode?: InstanceLaunchMode;
     appSpeed?: CodexAppSpeed;
     copySourceInstanceId: string;
+    copyTimeoutSeconds?: number;
     initMode?: InstanceInitMode;
   }) => Promise<InstanceProfile>;
   updateInstance: (payload: {

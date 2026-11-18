@@ -35,6 +35,7 @@ pub mod github_copilot_instance;
 pub mod github_copilot_oauth;
 // pub mod group_settings;
 pub mod i18n;
+#[cfg(feature = "desktop")]
 pub mod import;
 pub mod instance;
 pub(crate) mod instance_registry;

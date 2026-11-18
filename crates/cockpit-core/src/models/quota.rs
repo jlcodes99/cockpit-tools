@@ -8,6 +8,8 @@ pub struct ModelQuota {
     pub display_name: Option<String>,
     pub percentage: i32, // 剩余百分比 0-100
     pub reset_time: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary_exhausted: Option<bool>,
 }
 
 /// AI 积分信息（来自 loadCodeAssist paidTier.availableCredits）
@@ -74,6 +76,7 @@ impl QuotaData {
             display_name,
             percentage,
             reset_time,
+            summary_exhausted: None,
         });
     }
 }

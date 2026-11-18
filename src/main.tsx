@@ -26,9 +26,7 @@ void (async () => {
 
   const rootElement = document.getElementById("root");
   if (!rootElement) {
-    const error = new Error("Root element not found");
-    captureError(error, { source: "frontend_boot", phase: "root_lookup" });
-    throw error;
+    throw new Error("Root element not found");
   }
 
   recordFrontendStage("react_mount_start");
@@ -54,4 +52,7 @@ void (async () => {
   window.addEventListener('agtools:ui-time-display-changed', reloadUiTimeDisplayPreference);
   window.addEventListener('agtools:side-nav-preferences-changed', reloadSideNavPreferences);
   void hydrateDurableUiSettings().catch(error => console.warn('[UI preferences]', error));
-})();
+})().catch(error => {
+  window.dispatchEvent(new Event("cockpit:boot-failed"));
+  captureError(error, { source: "frontend_boot", phase: "startup" });
+});

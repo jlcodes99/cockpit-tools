@@ -1,7 +1,45 @@
 use super::{
-    select_cloud_code_base_url, QuotaCloudCodeContext, TokenData,
+    select_cloud_code_base_url, LoadProjectResponse, ProjectMetadataResult, QuotaCloudCodeContext, TokenData,
     CLOUD_CODE_AUTOPUSH_SANDBOX_BASE_URL, CLOUD_CODE_DAILY_BASE_URL, CLOUD_CODE_PROD_BASE_URL,
 };
+use serde_json::json;
+
+#[test]
+fn gcp_classification_requires_evidence_for_the_active_tier() {
+    let allowed = json!([
+        {"id":"enterprise", "isDefault":true, "usesGcpTos":true},
+        {"id":"consumer", "usesGcpTos":false}
+    ]);
+    for (current_tier, expected) in [
+        (json!({"id":"consumer"}), Some(false)),
+        (json!({"id":"enterprise"}), Some(true)),
+        (json!({"id":"enterprise", "usesGcpTos":false}), Some(false)),
+        (json!({"id":"different"}), None),
+        (serde_json::Value::Null, None),
+    ] {
+        let response: LoadProjectResponse = serde_json::from_value(json!({
+            "cloudaicompanionProject":"fixture-project", "currentTier":current_tier, "allowedTiers":allowed,
+        })).unwrap();
+        assert_eq!(response.current_gcp_tos(), expected);
+    }
+}
+
+#[test]
+fn quota_requests_use_the_route_reported_in_the_same_project_discovery() {
+    let existing = QuotaCloudCodeContext { preferred_project_id: Some("saved-project".into()), is_gcp_tos: true };
+    let metadata = |project: Option<&str>, tos| ProjectMetadataResult {
+        project_id: project.map(str::to_owned), subscription_tier: None, credits: vec![], is_gcp_tos: tos,
+    };
+    let consumer = existing.after_project_discovery(&metadata(Some("new-project"), Some(false)));
+    assert_eq!(consumer.preferred_project_id.as_deref(), Some("new-project"));
+    assert_eq!(select_cloud_code_base_url(&consumer, None, false, false), CLOUD_CODE_DAILY_BASE_URL);
+    let gcp = consumer.after_project_discovery(&metadata(Some("enterprise-project"), Some(true)));
+    assert_eq!(gcp.preferred_project_id.as_deref(), Some("enterprise-project"));
+    assert_eq!(select_cloud_code_base_url(&gcp, None, false, false), CLOUD_CODE_PROD_BASE_URL);
+    let incomplete = gcp.after_project_discovery(&metadata(Some("aicode-consumers"), None));
+    assert_eq!(incomplete.preferred_project_id, gcp.preferred_project_id);
+    assert_eq!(select_cloud_code_base_url(&incomplete, Some("https://override.example.test"), false, false), "https://override.example.test");
+}
 
 #[test]
 fn token_context_normalizes_real_projects_and_discards_consumer_placeholder() {

@@ -1020,7 +1020,7 @@ fn refresh_api_key_provider_projection_in_dir(
     Ok(())
 }
 
-fn write_api_key_account_bundle_with_oauth_to_dir(
+pub(crate) fn write_api_key_account_bundle_with_oauth_to_dir(
     base_dir: &Path,
     api_key_account: &CodexAccount,
     oauth_account: &CodexAccount,

@@ -363,7 +363,7 @@
 
 .codex-api-service-summary-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(112px, 1fr));
+  grid-template-columns: repeat(6, minmax(112px, 1fr));
   gap: 8px;
   min-width: 0;
   overflow-x: auto;
@@ -763,7 +763,7 @@
 }
 
 .codex-api-service-proxy-input-row {
-  max-width: 100%;
+  width: 100%;
 }
 
 .codex-api-service-stacked-control {
@@ -1399,6 +1399,12 @@
   line-height: 1.4;
 }
 
+.api-key-token-limit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .api-key-account-scope {
   display: grid;
   gap: 9px;
@@ -1705,6 +1711,47 @@
   flex-wrap: wrap;
   gap: 7px;
   min-width: 0;
+}
+
+.codex-pool-quota-floor {
+  grid-column: 1 / -1;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.codex-pool-quota-floor summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--text-info);
+}
+
+.codex-pool-quota-floor form {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.codex-pool-quota-floor form p {
+  margin: 0;
+}
+
+.codex-pool-quota-floor form > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.codex-pool-quota-floor input {
+  width: 4.5em;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.codex-pool-quota-floor [role="alert"] {
+  color: var(--text-negative);
 }
 
 .codex-api-service-account-card strong {
@@ -2807,10 +2854,6 @@
   .codex-api-service-input-row .btn,
   .codex-api-service-hero-actions .btn {
     width: 100%;
-  }
-
-  .codex-api-service-proxy-input-row {
-    max-width: none;
   }
 
   .codex-api-service-copy-row .folder-icon-btn {

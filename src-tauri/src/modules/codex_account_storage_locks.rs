@@ -19,6 +19,12 @@ fn get_old_codex_data_dir() -> PathBuf {
 
 /// 将旧目录中的 codex 数据迁移到新目录（一次性，迁移成功后删除旧文件）
 fn migrate_codex_data_if_needed(new_data_dir: &PathBuf) {
+    use crate::modules::data_paths;
+    if data_paths::environment_data_dir().is_none()
+        && !matches!(data_paths::active_custom_data_dir(), Ok(None))
+    {
+        return;
+    }
     #[cfg(test)]
     if std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR").is_some()
         || std::env::var_os("COCKPIT_TEST_DATA_DIR").is_some()
@@ -85,21 +91,23 @@ fn get_accounts_storage_path() -> PathBuf {
     data_dir.join("codex_accounts.json")
 }
 
-/// 获取账号详情存储目录（使用公共数据目录入口 ~/.cockpit_tools/，兼容旧目录；账号文件位于 codex_accounts/）
-fn get_accounts_dir() -> PathBuf {
-    let data_dir = account::get_data_dir().unwrap_or_else(|_| {
-        crate::modules::data_paths::fallback_data_dir()
-    });
+fn resolve_codex_account_data_dir() -> PathBuf {
+    account::get_data_dir().unwrap_or_else(|_| crate::modules::data_paths::fallback_data_dir())
+}
+
+fn codex_accounts_dir_in(data_dir: &Path) -> PathBuf {
     let accounts_dir = data_dir.join("codex_accounts");
     fs::create_dir_all(&accounts_dir).ok();
     accounts_dir
 }
 
+/// 获取账号详情存储目录（使用公共数据目录入口 ~/.cockpit_tools/，兼容旧目录；账号文件位于 codex_accounts/）
+fn get_accounts_dir() -> PathBuf {
+    codex_accounts_dir_in(&resolve_codex_account_data_dir())
+}
+
 fn account_tombstone_path(account_id: &str) -> PathBuf {
-    let data_dir = account::get_data_dir().unwrap_or_else(|_| {
-        crate::modules::data_paths::fallback_data_dir()
-    });
-    data_dir
+    resolve_codex_account_data_dir()
         .join(CODEX_ACCOUNT_TOMBSTONES_DIR)
         .join(format!("{}.json", account_id))
 }
@@ -191,7 +199,10 @@ fn account_credential_hash(account: &CodexAccount) -> String {
 }
 
 fn read_account_tombstone(account_id: &str) -> Option<CodexAccountTombstone> {
-    let path = account_tombstone_path(account_id);
+    read_account_tombstone_file(&account_tombstone_path(account_id))
+}
+
+fn read_account_tombstone_file(path: &Path) -> Option<CodexAccountTombstone> {
     serde_json::from_str(&fs::read_to_string(path).ok()?).ok()
 }
 
@@ -199,8 +210,13 @@ fn account_is_tombstoned(account_id: &str) -> bool {
     read_account_tombstone(account_id).is_some_and(|tombstone| tombstone.deleted)
 }
 
-fn validate_loaded_account_tombstone(account: &CodexAccount) -> Result<bool, String> {
-    let Some(tombstone) = read_account_tombstone(&account.id) else {
+fn validate_loaded_account_tombstone(
+    account: &CodexAccount,
+    tombstones_dir: &Path,
+) -> Result<bool, String> {
+    let Some(tombstone) =
+        read_account_tombstone_file(&tombstones_dir.join(format!("{}.json", account.id)))
+    else {
         return Ok(true);
     };
     if tombstone.deleted {
@@ -418,18 +434,57 @@ fn codex_profile_mutation_lock_root() -> PathBuf {
     }
 }
 
+#[cfg(any(target_os = "windows", test))]
+fn direct_codex_profile_lock_path(
+    path: &Path,
+    configured_home: &Path,
+    error: &std::io::Error,
+) -> Option<PathBuf> {
+    const ERROR_UNTRUSTED_MOUNT_POINT: i32 = 448;
+    if error.raw_os_error() != Some(ERROR_UNTRUSTED_MOUNT_POINT) || !configured_home.is_absolute() {
+        return None;
+    }
+    let default_home = path.parent()?.parent()?;
+    // Read the link itself. Traversing it can fail under RedirectionGuard.
+    // Only use the independently configured Home when it names the exact target.
+    if fs::read_link(default_home).ok()?.as_path() != configured_home {
+        return None;
+    }
+    Some(configured_home.join(path.strip_prefix(default_home).ok()?))
+}
+
+fn prepare_codex_profile_lock_directory(path: PathBuf) -> Result<PathBuf, String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("Codex profile 写入锁路径无效: {}", path.display()))?;
+    match fs::create_dir_all(parent) {
+        Ok(()) => Ok(path),
+        Err(error) => {
+            #[cfg(target_os = "windows")]
+            {
+                let configured_home = get_codex_home();
+                if let Some(direct_path) =
+                    direct_codex_profile_lock_path(&path, &configured_home, &error)
+                {
+                    let direct_parent = configured_home.join(CODEX_PROFILE_MUTATION_LOCK_DIR);
+                    fs::create_dir_all(&direct_parent).map_err(|error| {
+                        format_io_error("创建 Codex profile 写入锁目录", &direct_parent, &error)
+                    })?;
+                    return Ok(direct_path);
+                }
+            }
+            Err(format_io_error("创建 Codex profile 写入锁目录", parent, &error))
+        }
+    }
+}
+
 /// 用户主动触发的 profile 变更不能排队到另一环境操作完成后再执行。
 /// 否则后到的环境会立即关闭前一个环境刚启动的官方客户端，造成“切进去又退出”。
 pub(crate) fn try_acquire_profile_mutation_lease(
     profile_dir: &Path,
     reason: &str,
 ) -> Result<CodexProfileMutationLease, String> {
-    let path = codex_profile_mutation_lock_path(profile_dir);
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("Codex profile 写入锁路径无效: {}", path.display()))?;
-    fs::create_dir_all(parent)
-        .map_err(|err| format_io_error("创建 Codex profile 写入锁目录", parent, &err))?;
+    let path = prepare_codex_profile_lock_directory(codex_profile_mutation_lock_path(profile_dir))?;
 
     for _ in 0..2 {
         match fs::create_dir(&path) {

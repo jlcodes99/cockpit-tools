@@ -12,18 +12,9 @@ fn real_cli_sends_selected_tier_with_unified_managed_catalog() {
     let binary = PathBuf::from(std::env::var_os("COCKPIT_TIER_TEST_CLI").expect("test CLI path"));
     let root = std::env::temp_dir().join(format!("cockpit-tier-wire-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).unwrap();
-    let export = root.join("export");
-    std::fs::create_dir_all(&export).unwrap();
-    let output = crate::modules::process_timeout::output_with_timeout(
-        Command::new(&binary)
-            .args(["debug", "models", "--bundled"])
-            .env("CODEX_HOME", &export)
-            .current_dir(&export),
-        Duration::from_secs(4),
-    )
-    .unwrap();
-    assert!(output.status.success());
-    let mut catalog: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let mut catalog = crate::modules::codex_protocol::build_codex_client_models_response(&[
+        "gpt-6.2-sol".into(),
+    ]);
     supplement(&mut catalog).unwrap();
     for tier in ["default", "priority", "ultrafast"] {
         let profile = root.join(tier);
@@ -72,7 +63,7 @@ fn real_cli_sends_selected_tier_with_unified_managed_catalog() {
             serde_json::from_slice::<Value>(&body).unwrap()
         });
         std::fs::write(profile.join("config.toml"), format!(
-                "model = 'gpt-6.1-sol'\nmodel_provider = 'probe'\nservice_tier = '{tier}'\nmodel_reasoning_effort = 'low'\n[features]\nfast_mode = true\n[model_providers.probe]\nname = 'Loopback test'\nbase_url = 'http://127.0.0.1:{port}/v1'\nwire_api = 'responses'\nrequires_openai_auth = false\n"
+                "model = 'gpt-6.2-sol'\nmodel_provider = 'probe'\nservice_tier = '{tier}'\nmodel_reasoning_effort = 'low'\n[features]\nfast_mode = true\n[model_providers.probe]\nname = 'Loopback test'\nbase_url = 'http://127.0.0.1:{port}/v1'\nwire_api = 'responses'\nrequires_openai_auth = false\n"
             )).unwrap();
         std::fs::write(
             profile.join(MANAGED_FILE),
@@ -100,7 +91,7 @@ fn real_cli_sends_selected_tier_with_unified_managed_catalog() {
         crate::modules::process_timeout::output_with_timeout(&mut command, Duration::from_secs(12))
             .unwrap();
         let body = receive.join().unwrap();
-        assert_eq!(body["model"], "gpt-6.1-sol");
+        assert_eq!(body["model"], "gpt-6.2-sol");
         if tier == "default" {
             assert!(body.get("service_tier").is_none());
         } else {

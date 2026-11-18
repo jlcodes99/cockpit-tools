@@ -101,6 +101,18 @@ async fn identity_http(State(source): State<Arc<IdentitySource>>, request: Reque
         )
             .into_response();
     }
+    if value["input"].as_array().is_some_and(|items| {
+        items.iter().any(|item| {
+            item["type"] == "function_call_output" && item["output"] == "synthetic-rejected-history"
+        })
+    }) {
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            [("x-request-id", "fixture-long-history-400")],
+            Json(json!({"detail":"Bad Request"})),
+        )
+            .into_response();
+    }
     if parts.uri.path().contains("images/") {
         return Json(json!({"created":1,"data":[{"b64_json":"AA=="}]})).into_response();
     }
@@ -173,10 +185,15 @@ struct IdentityHost {
     diagnostics: Mutex<Vec<DiagnosticContext>>,
 }
 impl Host for IdentityHost {
-    fn authorize<'a>(&'a self, _: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
-        Box::pin(async {
+    fn authorize<'a>(&'a self, key: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
+        Box::pin(async move {
             Ok(Caller {
-                id: "identity-caller".into(),
+                id: if key == "other-caller-key" {
+                    "identity-other-caller"
+                } else {
+                    "identity-caller"
+                }
+                .into(),
                 label: "test".into(),
             })
         })
@@ -379,6 +396,69 @@ async fn captured(host: &IdentityHost, count: usize) -> Vec<DiagnosticContext> {
     })
     .await
     .unwrap()
+}
+
+#[tokio::test]
+async fn generic_400_after_large_history_preserves_diagnostics_and_allows_a_smaller_next_turn() {
+    let (mut handle, host, source, task, _dir) =
+        identity_fixture(WireApi::Responses, false, false).await;
+    let url = format!("http://{}/v1/responses", handle.addr);
+    let marker = "synthetic-history-body";
+    let requests = [
+        (
+            "main",
+            json!([
+                {"type":"message","role":"user","content":marker.repeat(40_000)},
+                {"type":"function_call","call_id":"fixture","name":"read","arguments":"{}"},
+                {"type":"function_call_output","call_id":"fixture","output":"synthetic-rejected-history"},
+                {"type":"message","role":"user","content":"continue"},
+            ]),
+            400,
+        ),
+        ("side", json!([{"type":"message","role":"user","content":marker.repeat(60_000)}]), 200),
+        ("main", json!([{"type":"message","role":"user","content":"summarized history"}]), 200),
+    ];
+    let mut encoded_lengths = Vec::new();
+    for (thread, input, status) in requests {
+        let body = json!({"model":"m","input":input});
+        let encoded = body.to_string();
+        encoded_lengths.push(encoded.len() as u64);
+        let response = http_client()
+            .post(&url)
+            .bearer_auth("key")
+            .header("content-type", "application/json")
+            .header("session-id", thread)
+            .header("thread-id", thread)
+            .body(encoded)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status().as_u16(), status);
+        let result: Value = response.json().await.unwrap();
+        if status == 400 {
+            assert_eq!(result, json!({"detail":"Bad Request"}));
+        }
+    }
+    let recorded = captured(&host, 3).await;
+    let rejected = recorded.iter().find(|context| {
+        context.attempts.iter().any(|attempt| attempt.status == Some(400))
+    }).unwrap();
+    assert_eq!(rejected.attempts.len(), 1);
+    assert_eq!(rejected.failure_phase.as_deref(), Some("upstream"));
+    let attempt = &rejected.attempts[0];
+    assert_eq!(attempt.upstream_request_id.as_deref(), Some("fixture-long-history-400"));
+    assert_eq!(attempt.request_size.as_ref().unwrap().total_bytes, encoded_lengths[0]);
+    {
+        let sent = source.seen.lock().unwrap();
+        assert_eq!(sent.len(), 3, "generic upstream 400 must not be retried");
+        assert_eq!(sent[0].body["input"][2]["output"], "synthetic-rejected-history");
+        assert_eq!(sent[0].headers["x-test-account"], sent[2].headers["x-test-account"]);
+        assert_eq!(attempt.upstream_request_bytes, Some(sent[0].body.to_string().len() as u64));
+    }
+    assert!(rejected.payloads.is_empty());
+    assert!(!serde_json::to_string(rejected).unwrap().contains(marker));
+    handle.shutdown(Duration::from_secs(2)).await.unwrap();
+    task.abort();
 }
 
 #[tokio::test]

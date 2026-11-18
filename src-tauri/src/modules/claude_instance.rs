@@ -662,7 +662,7 @@ fn format_command_preview(command: &Command) -> String {
     modules::process::summarize_text_for_process_log(&preview, 600)
 }
 
-fn spawn_command_with_trace(cmd: &mut Command) -> std::io::Result<std::process::Child> {
+fn spawn_command_with_trace(cmd: &mut Command) -> std::io::Result<u32> {
     let preview = format_command_preview(cmd);
     if command_trace_enabled() {
         modules::logger::log_info(&format!("[CmdTrace][Claude] EXEC {}", preview));
@@ -685,7 +685,7 @@ fn spawn_command_with_trace(cmd: &mut Command) -> std::io::Result<std::process::
             )),
         }
     }
-    result
+    result.map(modules::process::background_child_pid)
 }
 
 fn normalize_custom_path(value: &str) -> Option<String> {
@@ -1801,7 +1801,7 @@ fn spawn_claude_windows(
             cmd.arg(arg.trim());
         }
     }
-    let child =
+    let pid =
         spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Claude 失败: {}", e))?;
     if matches!(launch_target, ClaudeWindowsLaunchTarget::ShellApp(_)) {
         let probe_started = std::time::Instant::now();
@@ -1814,11 +1814,11 @@ fn spawn_claude_windows(
         }
         modules::logger::log_warn(&format!(
             "[Claude Start] Windows shell app target launched but no Claude.exe PID matched in 6s; explorer pid={}",
-            child.id()
+            pid
         ));
         return Err("Claude Desktop 已发起启动，但 6 秒内未匹配到真实 Claude.exe 进程".to_string());
     }
-    Ok(child.id())
+    Ok(pid)
 }
 
 #[cfg(target_os = "macos")]
@@ -1854,7 +1854,7 @@ fn spawn_claude_macos_open(
         }
     }
 
-    let child =
+    let pid =
         spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Claude 失败: {}", e))?;
     modules::logger::log_info("Claude 启动命令已发送（open -n -a）");
     let probe_started = std::time::Instant::now();
@@ -1867,9 +1867,9 @@ fn spawn_claude_macos_open(
     }
     modules::logger::log_warn(&format!(
         "[Claude Start] 启动后 6s 内未匹配到实例 PID，回退 open pid={}",
-        child.id()
+        pid
     ));
-    Ok(child.id())
+    Ok(pid)
 }
 
 #[cfg(target_os = "linux")]
@@ -1900,9 +1900,7 @@ fn spawn_claude_unix(
             cmd.arg(arg.trim());
         }
     }
-    let child =
-        spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Claude 失败: {}", e))?;
-    Ok(child.id())
+    spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Claude 失败: {}", e))
 }
 
 pub fn start_claude_with_args_with_new_window(

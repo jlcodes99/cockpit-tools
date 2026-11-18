@@ -960,7 +960,7 @@
         insert_local_access_usage_event(&conn, &event).expect("insert request log");
 
         let mut collection = test_local_access_collection(vec!["acc-1".to_string()]);
-        collection.model_pricing_version = 8;
+        collection.model_pricing_version = DEFAULT_MODEL_PRICING_VERSION + 1;
         collection.model_pricings = vec![model_pricing(
             "custom-model",
             None,
@@ -999,7 +999,7 @@
             .expect("read repriced request log");
 
         assert!((loaded.0 - 6.95).abs() < 0.000001);
-        assert_eq!(loaded.1, 8);
+        assert_eq!(loaded.1, collection.model_pricing_version as i64);
         assert_eq!(loaded.2, 3.0);
         assert_eq!(loaded.3, 9.0);
         assert_eq!(loaded.4, Some(0.25));
@@ -2453,22 +2453,51 @@ supports_websockets = false
 
     #[test]
     fn gpt_6_1_sol_does_not_inherit_legacy_model_prices() {
-        use super::{normalize_known_openai_codex_model, price_book_entry_for_model};
+        use super::{normalize_known_openai_codex_model, resolve_base_model_pricing};
         assert_eq!(
             normalize_known_openai_codex_model("codex/gpt-6.1-sol-2026-09-30").as_deref(),
             Some("gpt-6.1-sol")
         );
-        let pricing = price_book_entry_for_model("gpt-6.1-sol").expect("official price");
+        let pricing = resolve_base_model_pricing(None, "gpt-6.1-sol").expect("official price");
         assert_eq!(pricing.model_id, "gpt-6.1-sol");
-        assert_eq!(pricing.standard.input_usd_per_million, 2.0);
-        assert_eq!(pricing.standard.cached_input_usd_per_million, 0.1);
-        assert_eq!(pricing.standard.output_usd_per_million, 10.0);
+        assert_eq!(pricing.input_usd_per_million, 2.0);
+        assert_eq!(pricing.cached_input_usd_per_million, Some(0.1));
+        assert_eq!(pricing.output_usd_per_million, 10.0);
         assert_eq!(
-            price_book_entry_for_model("codex/gpt-6.1-sol")
+            resolve_base_model_pricing(None, "codex/gpt-6.1-sol")
                 .unwrap()
                 .model_id,
             "gpt-6.1-sol"
         );
+    }
+
+    #[test]
+    fn gpt_6_2_official_rates_use_request_date_and_cache_lifetimes() {
+        use super::{calculate_usage_cost_usd, native_usage_capture, resolve_effective_model_pricing_at};
+        let change = 1_803_888_000_000;
+        for (model, standard) in [("team/gpt-6.2-sol-2026-11-17", [2., 0.1, 10.]), ("gpt-6.2-astra", [8., 0.4, 40.])] {
+            let usage = native_usage_capture(&serde_json::json!({
+                "input_tokens": 12_000,
+                "output_tokens": 100,
+                "input_tokens_details": {
+                    "cached_tokens": 4000, "cache_write_tokens": 7000,
+                    "cache_write_tokens_details": {"ttl_30m_tokens": 3000, "ttl_12h_tokens": 4000}
+                }
+            }));
+            for (timestamp, factor) in [(change - 1, 3.0), (change, 6.0)] {
+                let price = resolve_effective_model_pricing_at(None, Some(model), Some(&usage), Some("ultrafast"), timestamp).unwrap();
+                assert_eq!(price.input_usd_per_million, standard[0] * factor);
+                assert_eq!(price.cached_input_usd_per_million, Some(standard[1] * factor));
+                assert_eq!(price.output_usd_per_million, standard[2] * factor);
+                let expected = (standard[0] * (1000. + 3000. * 1.25 + 4000. * 2.5)
+                    + standard[1] * 4000. + standard[2] * 100.) * factor / 1_000_000.;
+                assert!((calculate_usage_cost_usd(Some(&usage), Some(&price)) - expected).abs() < 1e-12);
+            }
+            let long = native_usage_capture(&serde_json::json!({"input_tokens":272001,"output_tokens":1}));
+            let price = resolve_effective_model_pricing_at(None, Some(model), Some(&long), Some("priority"), change).unwrap();
+            assert_eq!(price.input_usd_per_million, standard[0] * 4.);
+            assert_eq!(price.output_usd_per_million, standard[2] * 3.);
+        }
     }
 
     #[test]

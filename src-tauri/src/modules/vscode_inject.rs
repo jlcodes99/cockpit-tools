@@ -410,11 +410,19 @@ fn build_macos_safe_storage_candidates(
     if matches!(mode, SafeStorageReadMode::QoderOnly) {
         return vec![
             ("Qoder Safe Storage".to_string(), Some("Qoder".to_string())),
+            (
+                "Qoder App Safe Storage".to_string(),
+                Some("Qoder App Key".to_string()),
+            ),
             ("Qoder Safe Storage".to_string(), Some("qoder".to_string())),
             ("Qoder Safe Storage".to_string(), None),
             (
                 "Qoder Safe Storage".to_string(),
                 Some("Qoder Safe Storage".to_string()),
+            ),
+            (
+                "Qoder App Safe Storage".to_string(),
+                Some("Qoder App Key".to_string()),
             ),
         ];
     }
@@ -1429,6 +1437,19 @@ fn write_secret_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn qoder_safe_storage_includes_native_and_legacy_keychain_items() {
+        let candidates = build_macos_safe_storage_candidates(None, SafeStorageReadMode::QoderOnly);
+        assert_eq!(candidates[0], ("Qoder Safe Storage".into(), Some("Qoder".into())));
+        assert_eq!(
+            candidates[1],
+            ("Qoder App Safe Storage".into(), Some("Qoder App Key".into())),
+        );
+        assert!(!build_macos_safe_storage_candidates(None, SafeStorageReadMode::Default)
+            .iter().any(|(service, _)| service.starts_with("Qoder")));
+    }
 
     #[test]
     fn qoder_secret_snapshot_rolls_back_all_keys_on_failure() {

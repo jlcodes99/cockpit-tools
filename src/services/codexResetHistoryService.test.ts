@@ -45,4 +45,22 @@ test('local reset history keeps request identity and actual no-op outcome', asyn
   assert.equal(page.entries[1].after.available_count, 0);
   assert.equal(page.entries[1].after.weekly.remaining, 100);
   assert.deepEqual(page.entries[1].receipt, { credit_id: 'card-1', windows_reset: 2 });
+  assert.equal(page.legacyRecords, undefined);
+});
+
+test('first page of local reset history preserves read-only legacy activities separately', async () => {
+  const h = loadHookModule(new URL('./codexResetHistoryService.ts', import.meta.url), {
+    '@tauri-apps/api/core': { invoke: async () => ({
+      records: [],
+      next_cursor: null,
+      legacy_records: [
+        { id: 'rec-1', account_id: 'account', at: 150, reason: 'check', status: 'failed', detail: 'timeout' },
+      ],
+    }) },
+  });
+  const page = await h.exports.loadCodexResetHistory('account', 'local', null);
+  assert.equal(page.entries.length, 0);
+  assert.deepEqual(Array.from(page.legacyRecords), [
+    { id: 'rec-1', account_id: 'account', at: 150, reason: 'check', status: 'failed', detail: 'timeout' },
+  ]);
 });

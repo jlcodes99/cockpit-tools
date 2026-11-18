@@ -1664,6 +1664,7 @@ fn parse_line_delimited_json_values(
 /// Web Session 格式会按普通 Token 账号落盘并标记为仅查额（不可启动/切号/加入 API）。
 pub async fn import_from_json(json_content: &str) -> Result<Vec<CodexAccount>, String> {
     ensure_storage_writable_for_import()?;
+    let json_content = json_content.trim_start_matches('\u{feff}');
     if !json_content.trim().is_empty()
         && !json_content.trim_start().starts_with('{')
         && !json_content.trim_start().starts_with('[')
@@ -2642,7 +2643,7 @@ async fn codex_batch_import_draft_from_value(
 }
 
 fn codex_batch_import_values_from_content(content: &str) -> Result<Vec<serde_json::Value>, String> {
-    let trimmed = content.trim();
+    let trimmed = content.trim_start_matches('\u{feff}').trim();
     if trimmed.is_empty() {
         return Ok(Vec::new());
     }
@@ -2679,7 +2680,8 @@ fn codex_batch_import_values_from_content(content: &str) -> Result<Vec<serde_jso
                 other => Ok(vec![other]),
             }
         }
-        Err(_) => parse_line_delimited_json_values(trimmed).map(|items| items.unwrap_or_default()),
+        Err(error) => parse_line_delimited_json_values(trimmed)?
+            .ok_or_else(|| format!("无法解析 JSON 内容: {error}")),
     }
 }
 

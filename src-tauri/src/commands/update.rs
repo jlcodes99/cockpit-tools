@@ -190,3 +190,93 @@ pub async fn install_linux_update(
 ) -> Result<(), String> {
     linux_updater::install_linux_update(app, expected_version).await
 }
+
+// Opening the app bundle through LaunchServices after the old process exits
+// keeps the new app out of the old registration's subtree.
+#[cfg(target_os = "macos")]
+const MACOS_UPDATE_RELAUNCH: &str = r#"
+bundle="$1"
+shift
+while IFS= read -r line; do :; done
+if [ "$#" -eq 0 ]; then
+    exec /usr/bin/open -n -a "$bundle"
+fi
+exec /usr/bin/open -n -a "$bundle" --args "$@"
+"#;
+
+#[cfg(any(test, target_os = "macos"))]
+fn macos_update_bundle(executable: &std::path::Path) -> Option<&std::path::Path> {
+    let macos = executable.parent()?;
+    let contents = macos.parent()?;
+    let bundle = contents.parent()?;
+    (macos.file_name()? == "MacOS" && contents.file_name()? == "Contents"
+        && bundle.extension()? == "app")
+        .then_some(bundle)
+}
+
+#[tauri::command]
+pub fn relaunch_after_update(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::{ChildStdin, Command, Stdio};
+        use std::sync::Mutex;
+        use tauri::Manager;
+
+        // Holding the writer until this process exits is more reliable than
+        // sleeping or checking whether a PID still exists.
+        static RELAUNCH_PIPE: Mutex<Option<ChildStdin>> = Mutex::new(None);
+        let env = app.env();
+        let exe = tauri::process::current_binary(&env).map_err(|error| error.to_string())?;
+        if let Some(bundle) = macos_update_bundle(&exe) {
+            let mut pipe = RELAUNCH_PIPE.lock().map_err(|error| error.to_string())?;
+            if pipe.is_some() {
+                return Ok(());
+            }
+            let spawn_guard = crate::modules::app_lifecycle::acquire_process_spawn_guard(
+                "macOS 更新重启",
+            ).map_err(|error| error.to_string())?;
+            let mut child = Command::new("/bin/sh")
+                .args(["-c", MACOS_UPDATE_RELAUNCH, "cockpit-update-relaunch"])
+                .arg(bundle)
+                .args(env.args_os.iter().skip(1))
+                .env_remove("__CFBundleIdentifier")
+                .env_remove("XPC_SERVICE_NAME")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .spawn()
+                .map_err(|error| format!("无法安排 macOS 更新重启: {error}"))?;
+            *pipe = child.stdin.take();
+            drop(spawn_guard);
+            drop(pipe);
+            crate::modules::floating_card_window::request_app_exit();
+            app.exit(0);
+            return Ok(());
+        }
+    }
+
+    app.request_restart();
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn macos_update_relaunch_uses_the_bundle_path() {
+        let bundle = Path::new("/Applications/Cockpit Tools.app");
+        assert_eq!(
+            macos_update_bundle(&bundle.join("Contents/MacOS/cockpit-tools")),
+            Some(bundle)
+        );
+        assert_eq!(
+            macos_update_bundle(Path::new("/tmp/target/debug/cockpit-tools")),
+            None
+        );
+        assert_eq!(
+            macos_update_bundle(&bundle.join("Contents/Resources/cockpit-tools")),
+            None
+        );
+    }
+}

@@ -3,8 +3,8 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { CodexResetHistory } from '../components/codex/CodexResetHistory';
 import { createPortal } from "react-dom";
 import { useModalScrollLock } from "../hooks/useModalScrollLock";
-import { useCodexTagGroupLayout } from "../hooks/useCodexTagGroupLayout";
 import { useEscCloseTopmost } from "../hooks/useEscClose";
+import { useCodexTagGroupLayout } from "../hooks/useCodexTagGroupLayout";
 import { useModalFocusTrap } from "../hooks/useModalFocusTrap";
 import "./CodexAccountDialogs.css";
 import { Plus, RefreshCw, Upload, Trash2, X, Globe, Power, Copy, Check, Play, Pause, RotateCw, CircleAlert, Info, Rows3, LayoutGrid, List, Search, ArrowDownWideNarrow, ArrowUp, ArrowDown, GripVertical, Clock, Tag, Eye, EyeOff, BookOpen, FileText, ExternalLink, FolderOpen, FolderPlus, LogOut, Terminal, ChevronDown } from "lucide-react";
@@ -32,9 +32,8 @@ import { CodexAddAccountDialog } from "./CodexAddAccountDialog";
 import { useCodexPelicanStore } from "../stores/useCodexPelicanStore";
 import { CodexRecycleBinModal } from "../components/CodexRecycleBinModal";
 import { emitAccountsChanged } from "../utils/accountSyncEvents";
-import { CodexResetAutomationDialog, CodexResetAutomationSection } from "../components/codex/CodexResetAutomation";
-import { isCodexWebSessionAccount } from "../types/codex";
 import { PELICAN_GROUPS_CHANGED } from "../components/codex/pelican/PelicanResults";
+import { filterCodexSavedProviders } from "./codexAccountsControllerModel";
 
 
 /** 渲染 CodexAccountsView 的 activeTab === "overview" 业务面板。 */
@@ -372,12 +371,15 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [activeAccountNoteMode, accountNoteFieldErrors.twoFactorSecret]);
-  const [resetAutomationOpen, setResetAutomationOpen] = useState(false);
   const quickSwitchDialogRef = useRef<HTMLDivElement>(null);
   useEscCloseTopmost(Boolean(quickSwitchAccountId), closeQuickSwitchModal, quickSwitchDialogRef);
+  const [quickSwitchProviderSearch, setQuickSwitchProviderSearch] = useState("");
+  const visibleQuickSwitchProviders = filterCodexSavedProviders(managedProviders, quickSwitchProviderSearch);
+  useEffect(() => {
+    setQuickSwitchProviderSearch("");
+  }, [quickSwitchAccountId]);
   const resetCreditDialogRef = useRef<HTMLDivElement>(null);
-  useModalFocusTrap(resetCreditDialogRef, Boolean(resetCreditConfirmAccount), true, !resetAutomationOpen);
-  useEffect(() => { setResetAutomationOpen(false); }, [resetCreditConfirmAccount?.id]);
+  useModalFocusTrap(resetCreditDialogRef, Boolean(resetCreditConfirmAccount));
   const [recycleBinOpen, setRecycleBinOpen] = useState(false);
   const recycleBinButton = (
     <button type="button" className="btn btn-secondary" onClick={() => setRecycleBinOpen(true)}>
@@ -632,7 +634,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
           </div>
 
           {(overviewAccounts.length > 0 || codexGroups.length > 0) && (
-            <div className="codex-overview-selection-bar account-selection-toolbar has-middle">
+            <div className="codex-overview-selection-bar account-selection-toolbar has-middle codex-overview-account-toolbar">
               <div className="codex-overview-selection-left">
                 <label className="codex-overview-select-all">
                   <input
@@ -1262,21 +1264,38 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                           </span>
                         </div>
                       ) : (
-                        <div className="api-provider-chip-list">
-                          {managedProviders.map((provider) => (
-                            <button
-                              key={provider.id}
-                              className={`api-provider-chip ${quickSwitchProviderId === provider.id ? "active" : ""}`}
-                              onClick={() =>
-                                handleSelectQuickSwitchProvider(provider.id)
-                              }
-                              type="button"
+                        <>
+                          <div className="search-box codex-saved-provider-search">
+                            <Search size={16} className="search-icon" aria-hidden="true" />
+                            <input
+                              type="search"
+                              value={quickSwitchProviderSearch}
+                              onChange={(event) => setQuickSwitchProviderSearch(event.target.value)}
+                              placeholder={t("codex.modelProviders.searchSavedProviders")}
+                              aria-label={t("codex.modelProviders.searchSavedProviders")}
                               disabled={quickSwitchSubmitting}
-                            >
-                              <span>{provider.name}</span>
-                            </button>
-                          ))}
-                        </div>
+                            />
+                          </div>
+                          {visibleQuickSwitchProviders.length > 0 ? (
+                            <div className="api-provider-chip-list">
+                              {visibleQuickSwitchProviders.map((provider) => (
+                                <button
+                                  key={provider.id}
+                                  className={`api-provider-chip ${quickSwitchProviderId === provider.id ? "active" : ""}`}
+                                  onClick={() => handleSelectQuickSwitchProvider(provider.id)}
+                                  type="button"
+                                  disabled={quickSwitchSubmitting}
+                                >
+                                  <span>{provider.name}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="section-desc" role="status">
+                              {t("codex.modelProviders.noMatchingSavedProviders")}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
 
@@ -1292,6 +1311,10 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                           <SingleSelectDropdown
                             className="codex-managed-api-key-select"
                             value={quickSwitchApiKeyId}
+                            search={{
+                              label: t("codex.modelProviders.existingApiKeysSearch"),
+                              emptyLabel: t("common.shared.noMatch.desc"),
+                            }}
                             options={selectedQuickSwitchProvider.apiKeys.map(
                               (item) => ({
                                 value: item.id,
@@ -1913,7 +1936,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
             </div>
           )}
 
-          {resetCreditConfirmAccount && !resetAutomationOpen && (
+          {resetCreditConfirmAccount && (
             <div className="modal-overlay codex-reset-credit-confirm-overlay">
               <div
                 ref={resetCreditDialogRef}
@@ -1978,8 +2001,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                       </span>
                     </div>
                   )}
-                  {!isCodexWebSessionAccount(resetCreditConfirmAccount) && <CodexResetAutomationSection accountId={resetCreditConfirmAccount.id}
-                    disabled={isResetCreditConfirmSubmitting} onSettings={() => setResetAutomationOpen(true)} />}
                   <CodexResetHistory key={resetCreditConfirmAccount.id} accountId={resetCreditConfirmAccount.id}>
                     <div className="codex-reset-credit-confirm-details-title">
                       {t("codex.quota.resetCreditDetailsTitle", "重置次数明细")}
@@ -2062,9 +2083,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
               </div>
             </div>
           )}
-          {resetCreditConfirmAccount && resetAutomationOpen && <CodexResetAutomationDialog key={resetCreditConfirmAccount.id}
-            accountId={resetCreditConfirmAccount.id} accountLabel={maskAccountText(resolvePresentation(resetCreditConfirmAccount).displayName)}
-            onClose={() => setResetAutomationOpen(false)} />}
 
           {deleteConfirm && (
             <div className="modal-overlay">
@@ -2225,6 +2243,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
           />
 
           {activeAccountNoteMode &&
+            !(props.accountNotePausedForReauth && props.showAddModal) &&
             createPortal(
               <div className="modal-overlay">
                 <div
@@ -2342,6 +2361,23 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                         </div>
                       )}
                     </div>
+                    {props.reauthorizeAccountNoteEmail && !props.showAddModal && (
+                      <div className="codex-account-note-field">
+                        <small className="codex-account-note-field-hint">
+                          {t("codex.accountNote.refreshEmailHint")}
+                        </small>
+                        <div>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={props.reauthorizeAccountNoteEmail}
+                            disabled={activeAccountNoteSaving}
+                          >
+                            {t("common.reauthorize")}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     {activeAccountUsesPersonalAccessToken ? (
                       <label className="codex-account-note-field">
                         <span>

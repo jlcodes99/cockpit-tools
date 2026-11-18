@@ -148,7 +148,7 @@ fn native_plan_vision_model(
     } else if plan.automatic
         && automatic_api_service_provider_route_eligible(
             account,
-            &native_automatic_upstream_models(collection, account),
+            || native_automatic_upstream_models(collection, account),
         )
         && !native_account_model_vision(account, model)
     {
@@ -174,7 +174,7 @@ fn native_catalog_vision(
         return native_account_model_vision(account, upstream)
             || (automatic_api_service_provider_route_eligible(
                 account,
-                &native_automatic_upstream_models(collection, account),
+                || native_automatic_upstream_models(collection, account),
             ) && native_automatic_vision_fallback(collection, account).is_some());
     }
     account
@@ -218,7 +218,7 @@ fn native_prepare_provider_vision_body(
     } else if key.is_none_or(|key| key.model_routing.is_none() && key.provider_gateway.is_none())
         && automatic_api_service_provider_route_eligible(
             account,
-            &native_automatic_upstream_models(collection, account),
+            || native_automatic_upstream_models(collection, account),
         )
     {
         !native_account_model_vision(account, model)

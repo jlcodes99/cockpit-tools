@@ -407,11 +407,11 @@
             result.experimental_model_catalog_reset_default_model_id.as_deref(),
             Some("gpt-5.6-sol")
         );
-        let expected_shipped_models = super::SHIPPED_VISIBLE_CODEX_MODEL_IDS
-            .iter()
-            .filter(|model_id| !crate::modules::codex_wakeup::is_codex_model_before_5_5(model_id))
-            .copied()
-            .collect::<Vec<_>>();
+        let expected_shipped_models = [
+            "gpt-6.1-sol", "gpt-6.2-sol", "gpt-6.2-astra", "gpt-6.1-terra",
+            "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra",
+            "gpt-5.6-luna", "gpt-reserve",
+        ];
         assert_eq!(
             result
                 .experimental_model_catalog_reset_models
@@ -432,24 +432,12 @@
         )
         .expect("parse generated catalog");
         let models = generated["models"].as_array().expect("models array");
-        assert_eq!(
-            models[0].get("slug").and_then(serde_json::Value::as_str),
-            Some("gpt-6.1-sol")
-        );
-        for expected in [
-            "gpt-6.1-sol",
-            "gpt-6-astra",
-            "gpt-6.1-terra",
-            "gpt-6-sol",
-            "gpt-6-luna",
-            "gpt-5.6-sol",
-            "gpt-5.6-terra",
-            "gpt-5.6-luna",
-        ] {
-            assert!(models.iter().any(|model| {
-                model.get("slug").and_then(serde_json::Value::as_str) == Some(expected)
-            }));
-        }
+        let ordered: Vec<_> = models
+            .iter()
+            .filter_map(|model| model["slug"].as_str())
+            .take(10)
+            .collect();
+        assert_eq!(ordered, expected_shipped_models[..10]);
         for legacy in [
             "gpt-5.5",
             "gpt-5.4",
@@ -507,7 +495,8 @@
         .expect("enable experimental catalog");
 
         let mut previous_defaults = super::default_experimental_model_definitions(&base_dir);
-        previous_defaults.retain(|model| model.model_id != "gpt-6-astra" && model.model_id != "gpt-6.1-sol");
+        previous_defaults.retain(|model| model.model_id != "gpt-6-astra" && model.model_id != "gpt-6.1-sol"
+            && !crate::modules::codex_model_catalog::GPT_6_2_MODELS.contains(&model.model_id.as_str()));
         let previous_config = serde_json::json!({
             "version": super::EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
             "models": previous_defaults,
@@ -538,7 +527,7 @@
             .as_array()
             .expect("models")
             .first()
-            .is_some_and(|model| model["slug"] == "gpt-6.1-sol"));
+            .is_some_and(|model| model["slug"] == "gpt-6.2-sol"));
         assert!(generated["models"]
             .as_array()
             .expect("models")
@@ -565,7 +554,8 @@
     fn gpt_6_1_sol_catalog_migration_preserves_customization() {
         let dir = make_temp_dir("codex-gpt61-migration");
         let mut previous = super::default_experimental_model_definitions(&dir);
-        previous.retain(|model| model.model_id != "gpt-6.1-sol");
+        previous.retain(|model| model.model_id != "gpt-6.1-sol"
+            && !crate::modules::codex_model_catalog::GPT_6_2_MODELS.contains(&model.model_id.as_str()));
         let upgraded =
             super::maybe_add_gpt_6_1_sol_to_previous_shipped_model_definitions(&dir, previous.clone());
         assert_eq!(upgraded[0].model_id, "gpt-6.1-sol");
@@ -595,6 +585,7 @@
         let mut previous_defaults = super::default_experimental_model_definitions(&base_dir);
         previous_defaults.retain(|model| {
             model.model_id != "gpt-6-sol" && model.model_id != "gpt-6-luna" && model.model_id != "gpt-6.1-sol"
+                && !crate::modules::codex_model_catalog::GPT_6_2_MODELS.contains(&model.model_id.as_str())
         });
         let previous_config = serde_json::json!({
             "version": super::EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
@@ -630,8 +621,8 @@
             .filter_map(|model| model["slug"].as_str())
             .collect::<Vec<_>>();
         assert_eq!(
-            slugs.iter().take(5).copied().collect::<Vec<_>>(),
-            vec!["gpt-6.1-sol", "gpt-6-astra", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna"]
+            slugs.iter().take(7).copied().collect::<Vec<_>>(),
+            crate::modules::codex_model_catalog::RECOMMENDED_FRONTIER_MODELS
         );
         let luna_index = slugs.iter().position(|slug| *slug == "gpt-6-luna");
         let legacy_sol_index = slugs.iter().position(|slug| *slug == "gpt-5.6-sol");
@@ -1583,9 +1574,7 @@
             .parse::<toml_edit::Document>()
             .expect("parse config");
 
-        assert!(super::remove_provider_managed_model_catalog_from_doc(
-            &mut doc
-        ));
+        assert!(super::remove_provider_managed_model_catalog_from_doc(Path::new("."), &mut doc));
         assert!(doc.get("model_catalog_json").is_none());
     }
 
@@ -1829,6 +1818,31 @@ wire_api = "responses"
     }
 
     /// 一次性迁移：把历史遗留的「模型管理」关闭并恢复跟随官方模型目录，
+    #[test]
+    fn model_management_default_off_does_not_remove_the_active_api_service_catalog() {
+        let profile = tempfile::tempdir().unwrap();
+        let base_dir = profile.path();
+        let catalog = base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE);
+        let config = base_dir.join("config.toml");
+        let mut doc = toml_edit::Document::new();
+        doc["model_provider"] = toml_edit::value("codex_local_access");
+        doc["model_catalog_json"] = toml_edit::value(catalog.to_str().unwrap());
+        doc["model_providers"]["codex_local_access"]["base_url"] =
+            toml_edit::value("http://127.0.0.1:53823/v1");
+        let config_contents = doc.to_string();
+        fs::write(&config, &config_contents).unwrap();
+        fs::write(&catalog, r#"{"models":[]}"#).unwrap();
+
+        assert!(!super::migrate_model_management_default_off_once(base_dir).unwrap());
+        assert_eq!(fs::read_to_string(&config).unwrap(), config_contents);
+        assert!(catalog.is_file());
+
+        doc["model_provider"] = toml_edit::value("openai");
+        fs::write(&config, doc.to_string()).unwrap();
+        assert!(super::migrate_model_management_default_off_once(base_dir).unwrap());
+        assert!(!catalog.exists());
+    }
+
     /// 只执行一次，且保留用户已保存的模型清单（重新开启后仍可用）。
     #[test]
     fn model_management_default_off_migration_runs_once_and_keeps_definitions() {

@@ -49,13 +49,13 @@
 .codex-experimental-model-summary__table-head,
 .codex-experimental-model-summary__row {
   display: grid;
-  min-width: 820px;
+  min-width: 890px;
   grid-template-columns:
     18px
     minmax(120px, 1.1fr)
     minmax(160px, 1.5fr)
     minmax(90px, 0.75fr)
-    minmax(90px, 0.7fr)
+    repeat(2, minmax(90px, 0.7fr))
     minmax(105px, 0.85fr)
     52px;
   align-items: center;
@@ -64,14 +64,14 @@
 
 .codex-experimental-model-summary__table-head.has-source,
 .codex-experimental-model-summary__row.has-source {
-  min-width: 910px;
+  min-width: 980px;
   grid-template-columns:
     18px
     minmax(110px, 1fr)
     minmax(150px, 1.4fr)
     64px
     minmax(80px, 0.7fr)
-    minmax(90px, 0.7fr)
+    repeat(2, minmax(90px, 0.7fr))
     minmax(105px, 0.85fr)
     52px;
 }
@@ -318,11 +318,11 @@
   min-width: 0;
   grid-template-columns:
     18px
-    minmax(160px, 1.4fr)
-    minmax(130px, 1.1fr)
-    minmax(110px, 0.9fr)
-    minmax(92px, 0.75fr)
-    minmax(130px, 1fr)
+    minmax(150px, 1.4fr)
+    minmax(116px, 1.1fr)
+    minmax(100px, 0.9fr)
+    repeat(2, minmax(94px, 0.75fr))
+    minmax(110px, 1fr)
     64px;
   align-items: center;
   gap: 10px;
@@ -333,19 +333,24 @@
   min-width: 0;
   grid-template-columns:
     18px
-    minmax(150px, 1.2fr)
+    minmax(138px, 1.2fr)
+    minmax(110px, 1fr)
+    70px
+    minmax(100px, 0.9fr)
+    repeat(2, minmax(94px, 0.75fr))
     minmax(120px, 1fr)
-    76px
-    minmax(110px, 0.9fr)
-    minmax(92px, 0.75fr)
-    minmax(130px, 1fr)
     64px;
   align-items: center;
   gap: 10px;
 }
 
 .codex-experimental-model-editor__table-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex: 0 0 auto;
   padding: 4px 10px 8px;
+  background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
   color: var(--text-muted);
   font-size: 11px;
@@ -369,8 +374,16 @@
   padding-left: 2px;
 }
 
-.codex-experimental-model-editor__table-head.has-source > span:nth-child(8) {
+.codex-experimental-model-editor__table-head.has-source > span:last-child {
   text-align: center;
+}
+
+.codex-experimental-model-editor__table-head > span,
+.codex-experimental-model-summary__table-head > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .codex-experimental-model-transfer-btn {
@@ -380,14 +393,14 @@
   white-space: nowrap;
 }
 
-.codex-experimental-model-editor__default-effort {
+.codex-experimental-model-editor__effort {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 5px;
 }
 
-.codex-experimental-model-default-effort-select .single-select-dropdown-trigger {
+.codex-experimental-model-effort-select .single-select-dropdown-trigger {
   min-height: 34px;
   padding: 4px 8px;
   border-radius: 7px;
@@ -395,8 +408,8 @@
   box-shadow: none;
   gap: 4px;
 }
-.codex-experimental-model-default-effort-select .single-select-dropdown-value { font-size: 11px; }
-.codex-experimental-model-default-effort-select .single-select-dropdown-arrow { width: 16px; height: 16px; background: transparent; }
+.codex-experimental-model-effort-select .single-select-dropdown-value { font-size: 11px; }
+.codex-experimental-model-effort-select .single-select-dropdown-arrow { width: 16px; height: 16px; background: transparent; }
 
 .codex-experimental-model-editor__list {
   display: flex;
@@ -404,8 +417,17 @@
   flex: 1;
   max-height: 520px;
   flex-direction: column;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: auto;
+}
+
+.codex-experimental-model-editor__table-head,
+.codex-experimental-model-editor__row {
+  min-width: 840px;
+}
+
+.codex-experimental-model-editor__table-head.has-source,
+.codex-experimental-model-editor__row:has(> .has-source) {
+  min-width: 910px;
 }
 
 .codex-experimental-model-editor__list.is-sorting {
@@ -418,7 +440,6 @@
 
 .codex-experimental-model-editor__row {
   width: 100%;
-  min-width: 0;
   flex: 0 0 auto;
   padding: 7px 10px;
   border-bottom: 1px solid var(--border-light);
@@ -954,7 +975,7 @@
 @media (max-width: 640px) {
   .codex-experimental-model-summary__table-head,
   .codex-experimental-model-summary__row {
-    min-width: 720px;
+    min-width: 800px;
   }
 
   .codex-experimental-model-custom-context-overlay {

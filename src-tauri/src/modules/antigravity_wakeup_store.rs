@@ -155,6 +155,26 @@ impl WakeupStore {
         Ok(())
     }
 
+    pub(super) fn save_weekly_boundaries(
+        &self,
+        id: &str,
+        boundaries: &HashMap<String, i64>,
+    ) -> Result<(), String> {
+        let mut conn = self.open()?;
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(error)?;
+        let mut reset = load_runtime(&tx, id)?.unwrap_or_default().reset;
+        reset.weekly_reset_boundaries.clone_from(boundaries);
+        tx.execute(
+            "INSERT INTO task_runtime(task_id,reset) VALUES (?1,?2)
+             ON CONFLICT(task_id) DO UPDATE SET reset=excluded.reset",
+            params![id, serde_json::to_string(&reset).map_err(error)?],
+        )
+        .map_err(error)?;
+        tx.commit().map_err(error)
+    }
+
     pub(super) fn claim(
         &self,
         id: &str,
@@ -197,6 +217,11 @@ impl WakeupStore {
                     merged
                         .last_reset_remaining
                         .insert(model.clone(), *remaining);
+                }
+                if let Some(boundary) = candidate.weekly_reset_boundaries.get(model) {
+                    merged
+                        .weekly_reset_boundaries
+                        .insert(model.clone(), *boundary);
                 }
                 true
             });
@@ -527,5 +552,58 @@ mod tests {
         let (_, rows) = reopened.load().unwrap();
         assert!(rows["task-000"].last_run_at.is_none());
         assert!(rows["task-000"].reset.last_reset_trigger_at.is_empty());
+    }
+
+    #[test]
+    fn antigravity_wakeup_weekly_boundaries_survive_restart_and_claim_independently() {
+        let temp = tempfile::tempdir().unwrap();
+        let legacy = temp.path().join("tasks.json");
+        fixture(&legacy, 1);
+        let store = WakeupStore::new(legacy.clone());
+        while !store.migrate_batch(&legacy).unwrap() {}
+
+        let a = r#"["a","model"]"#.to_string();
+        let b = r#"["b","model"]"#.to_string();
+        store
+            .save_weekly_boundaries(
+                "task-000",
+                &HashMap::from([(a.clone(), 100), (b.clone(), 200)]),
+            )
+            .unwrap();
+        let reopened = WakeupStore::new(legacy);
+        let (_, rows) = reopened.load().unwrap();
+        let mut reset = rows["task-000"].reset.clone();
+        assert_eq!(reset.weekly_reset_boundaries[&a], 100);
+        assert_eq!(reset.weekly_reset_boundaries[&b], 200);
+
+        reset
+            .last_reset_trigger_timestamps
+            .insert(a.clone(), "100".into());
+        reset.weekly_reset_boundaries.insert(a.clone(), 700);
+        assert!(reopened
+            .claim(
+                "task-000",
+                None,
+                None,
+                150,
+                Some(&reset),
+                &mut vec![a.clone()]
+            )
+            .unwrap());
+
+        reset
+            .last_reset_trigger_timestamps
+            .insert(b.clone(), "200".into());
+        reset.weekly_reset_boundaries.insert(b.clone(), 800);
+        let mut keys = vec![a.clone(), b.clone()];
+        assert!(reopened
+            .claim("task-000", None, None, 250, Some(&reset), &mut keys)
+            .unwrap());
+        assert_eq!(keys, [b.clone()]);
+        let (_, rows) = reopened.load().unwrap();
+        assert_eq!(
+            rows["task-000"].reset.weekly_reset_boundaries,
+            HashMap::from([(a, 700), (b, 800)])
+        );
     }
 }

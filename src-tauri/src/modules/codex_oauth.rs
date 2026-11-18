@@ -1744,6 +1744,10 @@ pub async fn refresh_access_token_with_account_proxy(
     current_id_token: Option<&str>,
     account: Option<&crate::models::codex::CodexAccount>,
 ) -> Result<CodexTokens, String> {
+    let refresh_token = refresh_token.trim();
+    if refresh_token.is_empty() {
+        return Err("Codex 登录授权缺少 refresh_token，无法自动续期，请重新登录。".into());
+    }
     use crate::modules::codex_device_restrictions as restrictions;
     if let Some(account) = account {
         restrictions::ensure_allowed(&account.id, restrictions::TOKEN).await?;
@@ -2209,6 +2213,14 @@ mod tests {
     fn id_token_is_not_due_beyond_refresh_lead_time() {
         let fresh = chrono::Utc::now().timestamp() + ID_TOKEN_REFRESH_LEAD_SECONDS + 3600;
         assert!(!is_id_token_refresh_due(&make_jwt(fresh)));
+    }
+
+    #[tokio::test]
+    async fn refresh_rejects_empty_credentials_before_network_io() {
+        for token in ["", " \t\n"] {
+            let error = super::refresh_access_token(token).await.unwrap_err();
+            assert!(error.contains("缺少 refresh_token") && error.contains("请重新登录"), "{error}");
+        }
     }
 
     #[test]

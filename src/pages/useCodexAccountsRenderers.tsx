@@ -1,18 +1,21 @@
 import { CodexDeviceRestrictionBadge } from "../components/codex/CodexDeviceRestrictions";
 import { resolveNewApiQuotaSnapshot } from "../services/modelProviderUsageService";
+import { ModelProviderUsagePanel } from "../components/model-provider/ModelProviderUsagePanel";
 import { resolveCodexAccountDailyUsage } from "./codexApiKeyUsagePanel";
 import { codexDailyUsageMetrics } from "../components/codex/CodexDailyUsagePanel";
 import { isCodexOfficialApiAccount } from "../types/codex";
 import { OpenAIOfficialUsagePanel } from '../components/codex/OpenAIOfficialUsagePanel';
 import { CodexRemoteServiceDetails } from '../components/codex/CodexRemoteServiceDetails';
 import { currentOpenAIUsageState, isOpenAIOfficialUsageAccount, resolveAccountUsageBaseUrl } from '../utils/openaiOfficialUsage';
-import { useEffect, useMemo, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useCodexCardReorder } from "../hooks/useCodexCardReorder";
+import { codexWakeupResultLabel, useCodexAccountWakeupResults } from "../hooks/useCodexAccountWakeupResults";
 import { mergeCodexCardOrder } from "../utils/codexCardOrder";
 import { RefreshCw, Upload, Trash2, X, Power, Database, Copy, Check, Play, RotateCw, CircleAlert, Info, Calendar, Tag, Eye, EyeOff, FileText, ExternalLink, Pencil, FolderPlus, ChevronRight, Wrench, Terminal, Link2, Waypoints } from "lucide-react";
 import { AccountLastUsed } from '../components/AccountLastUsed';
 import { isCodexApiKeyAccount, isCodexAgentIdentityAccount, isCodexChatCompletionsApiKeyAccount, isCodexNewApiAccount } from "../types/codex";
 import { isVerboseCodexQuotaErrorMessage, summarizeCodexQuotaErrorMessage } from "../utils/codexQuotaError";
+import { getCodexAccountRefreshFeedback, type CodexAccountRefreshMessage } from "../utils/codexQuotaRefreshFeedback";
 import { CodexQuotaMiniRows } from "../components/codex/CodexQuotaMiniRows";
 import { CodexAccountProxyButton } from "../components/codex/CodexAccountProxyButton";
 import { CodexAccountOfficialBadge } from "../components/codex/CodexOfficialBadge";
@@ -27,7 +30,7 @@ import "../styles/pages/codex-account-card-skins.css";
 import { CodexTeamQuotaHistory } from "../components/codex/CodexTeamQuotaHistory";
 import { isCodexAccountReauthRequired, isCodexApiUsableReauthNotice, isCodexRefreshTokenNoticeOnly, isCodexRefreshTokenReusedAccount, isCodexServerRevokedReauth } from "../utils/codexSwitchAuthFailure";
 import { CODEX_LAUNCH_PREVIEW_API_SERVICE_CARD_KEY } from "../utils/codexLaunchPreviewInstancePreference";
- import { isDeepSeekAccount, shouldShowCodexApiKeyUsagePanel } from "../utils/codexDeepSeekAccess";
+ import { isDeepSeekAccount, isMoonshotBalanceUrl, shouldShowCodexApiKeyUsagePanel } from "../utils/codexDeepSeekAccess";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import { CODEX_API_SERVICE_BIND_ID } from "../types/instance";
 import { COCKPIT_API_BASE_URL } from "../utils/codexProviderPresets";
@@ -69,7 +72,6 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
   | "formatApiKeyUsageDetailLabel"
   | "formatApiKeyUsageDetailValue"
   | "formatApiKeyUsageMoney"
-  | "formatApiKeyUsagePercent"
   | "formatApiKeyUsageQuotaValue"
   | "formatDate"
   | "getCodexSwitchOrLaunchBlockedReason"
@@ -185,6 +187,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
   | "setSortBy"
   | "shouldOfferReauthorizeAction"
   | "sponsorApiProviderTemplates"
+  | "store"
   | "switching"
   | "t"
   | "toggleAccountApiKeyVisible"
@@ -196,7 +199,6 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
     formatApiKeyUsageDetailLabel,
     formatApiKeyUsageDetailValue,
     formatApiKeyUsageMoney,
-    formatApiKeyUsagePercent,
     formatApiKeyUsageQuotaValue,
     resolveCockpitApiAccountBalanceText,
     accountIdLabel,
@@ -326,6 +328,88 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
     toggleAccountApiKeyVisible,
     visibleApiKeyAccountIds,
   } = context;
+  const [accountRefreshStates, setAccountRefreshStates] = useState(
+    () => new Map<string, "pending" | CodexAccountRefreshMessage>(),
+  );
+  const accountRefreshInFlight = useRef(new Set<string>());
+  const accountRefreshTimers = useRef(new Map<string, number>());
+  useEffect(() => {
+    const timers = accountRefreshTimers.current;
+    const inFlight = accountRefreshInFlight.current;
+    return () => {
+      for (const timer of timers.values()) window.clearTimeout(timer);
+      timers.clear();
+      inFlight.clear();
+    };
+  }, []);
+
+  const handleOverviewAccountRefresh = async (
+    account: (typeof accounts)[number],
+    provider: Parameters<typeof refreshApiKeyUsage>[1],
+  ) => {
+    const accountId = account.id;
+    if (accountRefreshInFlight.current.has(accountId)) return;
+    accountRefreshInFlight.current.add(accountId);
+    const timers = accountRefreshTimers.current;
+    const timer = timers.get(accountId);
+    if (timer !== undefined) window.clearTimeout(timer);
+    timers.delete(accountId);
+    setAccountRefreshStates((previous) => new Map(previous).set(accountId, "pending"));
+    const message = await getCodexAccountRefreshFeedback(async () => {
+      if (canRefreshApiKeyUsage(account, provider)) return refreshApiKeyUsage(account, provider);
+      await context.store.refreshQuota(accountId);
+      return { ok: true };
+    }, t);
+    if (!accountRefreshInFlight.current.delete(accountId)) return;
+    setAccountRefreshStates((previous) => {
+      const next = new Map(previous);
+      if (message) next.set(accountId, message);
+      else next.delete(accountId);
+      return next;
+    });
+    if (message?.tone === "success") {
+      timers.set(accountId, window.setTimeout(() => {
+        timers.delete(accountId);
+        setAccountRefreshStates((previous) => {
+          if (previous.get(accountId) !== message) return previous;
+          const next = new Map(previous);
+          next.delete(accountId);
+          return next;
+        });
+      }, 5000));
+    }
+  };
+
+  const renderAccountRefreshFeedback = (accountId: string) => {
+    const message = accountRefreshStates.get(accountId);
+    return (
+      <div className="codex-account-refresh-status" role="status">
+        {message && message !== "pending" && (
+          <span className={`codex-account-refresh-feedback ${message.tone}`}>
+            {message.tone === "success" ? <Check size={12} aria-hidden /> : <CircleAlert size={12} aria-hidden />}
+            <span className="codex-account-refresh-feedback-text" title={message.text}>{message.text}</span>
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  const isQuotaRefreshPending = (
+    account: (typeof accounts)[number],
+    provider: Parameters<typeof refreshApiKeyUsage>[1],
+  ) =>
+    accountRefreshStates.get(account.id) === "pending" ||
+    (canRefreshApiKeyUsage(account, provider)
+      ? apiKeyUsageMap[account.id]?.loading === true
+      : refreshing === account.id);
+
+  const wakeupResults = useCodexAccountWakeupResults(activeTab === "overview");
+  const renderWakeupResult = (accountId: string) => {
+    const result = wakeupResults.get(accountId);
+    if (!result) return null;
+    const label = codexWakeupResultLabel(result, t);
+    return <div className="codex-account-wakeup-result" title={`${label} · ${formatDate(result.timestamp)}`}>{label}</div>;
+  };
   const orderedCardIds = useMemo(
     () => [...overviewAccounts].sort(compareAccountsBySort).map((account) => account.id),
     [overviewAccounts, compareAccountsBySort],
@@ -376,6 +460,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
           subscriptionInfo.bucket !== "access_token_only";
         const isSubscriptionRefreshPending =
           refreshingSubscriptionAccountId === account.id ||
+          accountRefreshStates.get(account.id) === "pending" ||
           refreshing === account.id;
         return (
           <div
@@ -411,9 +496,11 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
             </div>
             <CodexAccountOfficialBadge account={account} grants={planOverview.accounts} memberIds={localAccessAccountIdSet} />
             <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDate} />
+            {renderWakeupResult(account.id)}
             <div className="codex-compact-quotas">
               {isApiKeyAccount ? (
-                (!hideRelayQuota || apiKeyUsageMap[account.id]?.summary?.cockpit || shouldShowCodexApiKeyUsagePanel(account, hideRelayQuota)) && (isOpenAIOfficialUsageAccount(account)
+                (!hideRelayQuota || apiKeyUsageMap[account.id]?.summary?.cockpit || shouldShowCodexApiKeyUsagePanel(account, hideRelayQuota)) &&
+                (isOpenAIOfficialUsageAccount(account) || isMoonshotBalanceUrl(account.api_base_url)
                   ? renderApiKeyUsagePanel(account, resolveUsageProviderForApiKeyAccount(account), 'table')
                   : codexDailyUsageMetrics(resolveCodexAccountDailyUsage(account, apiKeyUsageMap[account.id]?.summary), t).map(item => (
                   <span key={`${account.id}-${item.key}`} className="codex-compact-quota" title={`${item.label} ${item.value}`}>
@@ -507,9 +594,6 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
         const isApiKeyAccount = isCodexApiKeyAccount(account);
         const isCockpitAccount = isApiKeyAccount && Boolean(apiKeyUsageMap[account.id]?.summary?.cockpit);
         const cardSkin = isCockpitAccount ? "codex-card-skin-cockpit" : isApiKeyAccount ? resolveCodexAccountCardSkin(account.api_base_url) : "";
-        const cardDisplayName = cardSkin === "codex-card-skin-apikey-fun"
-          ? "APIKEY.FUN"
-          : presentation.displayName;
         const serverRevokedReauth = isCodexServerRevokedReauth(account);
         const refreshTokenReusedState = isCodexRefreshTokenReusedAccount(account);
         const switchOrLaunchBlockedReason =
@@ -643,7 +727,9 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
           subscriptionInfo.bucket !== "access_token_only";
         const isSubscriptionRefreshPending =
           refreshingSubscriptionAccountId === account.id ||
+          accountRefreshStates.get(account.id) === "pending" ||
           refreshing === account.id;
+        const quotaRefreshPending = isQuotaRefreshPending(account, apiKeyUsageProvider);
         const resetCreditControls = renderResetCreditControls(account);
         return (
           <div
@@ -686,7 +772,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                   title={maskAccountText(presentation.displayName)}
                   onDoubleClick={() => handleAccountNameDoubleClick(account)}
                 >
-                  {maskAccountText(cardDisplayName)}
+                  {maskAccountText(presentation.displayName)}
                 </span>
               )}
               {isCurrent && (
@@ -928,8 +1014,10 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
             <div className="codex-card-bottom">
               <CodexAccountProxyCard account={account} placement="detailed" />
               <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDate} />
+              {renderWakeupResult(account.id)}
               <CodexSpeedControl scope="account" account={account} disabled={!!switching}
                 onError={(text) => setMessage(text ? { text, tone: "error" } : null)} />
+              {renderAccountRefreshFeedback(account.id)}
               <div className="card-footer">
                 <div className="card-actions">
                   <button
@@ -1008,32 +1096,13 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                       canRefreshApiKeyUsage(account, apiKeyUsageProvider)) && (
                       <button
                         className="card-action-btn"
-                        onClick={() =>
-                          canRefreshApiKeyUsage(account, apiKeyUsageProvider)
-                            ? void refreshApiKeyUsage(
-                                account,
-                                apiKeyUsageProvider,
-                              )
-                            : handleRefresh(account.id)
-                        }
-                        disabled={
-                          canRefreshApiKeyUsage(account, apiKeyUsageProvider)
-                            ? apiKeyUsageMap[account.id]?.loading === true
-                            : refreshing === account.id
-                        }
+                        onClick={() => void handleOverviewAccountRefresh(account, apiKeyUsageProvider)}
+                        disabled={quotaRefreshPending}
                         title={t("common.shared.refreshQuota", "刷新配额")}
                       >
                         <RotateCw
                           size={14}
-                          className={
-                            canRefreshApiKeyUsage(account, apiKeyUsageProvider)
-                              ? apiKeyUsageMap[account.id]?.loading === true
-                                ? "loading-spinner"
-                                : ""
-                              : refreshing === account.id
-                                ? "loading-spinner"
-                                : ""
-                          }
+                          className={quotaRefreshPending ? "loading-spinner" : ""}
                         />
                       </button>
                     )}
@@ -1872,7 +1941,9 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
           subscriptionInfo.bucket !== "access_token_only";
         const isSubscriptionRefreshPending =
           refreshingSubscriptionAccountId === account.id ||
+          accountRefreshStates.get(account.id) === "pending" ||
           refreshing === account.id;
+        const quotaRefreshPending = isQuotaRefreshPending(account, apiKeyUsageProvider);
         const resetCreditControls = renderResetCreditControls(account);
         return (
           <tr
@@ -1925,6 +1996,8 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                     </span>
                   )}
                 </div>
+                {renderAccountRefreshFeedback(account.id)}
+                {renderWakeupResult(account.id)}
                 {(meta.accountContextText ||
                   isInLocalAccess ||
                   (!isApiKeyAccount && hasCodexAccountNoteDetails(account)) ||
@@ -2233,29 +2306,13 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                     canRefreshApiKeyUsage(account, apiKeyUsageProvider)) && (
                     <button
                       className="action-btn"
-                      onClick={() =>
-                        canRefreshApiKeyUsage(account, apiKeyUsageProvider)
-                          ? void refreshApiKeyUsage(account, apiKeyUsageProvider)
-                          : handleRefresh(account.id)
-                      }
-                      disabled={
-                        canRefreshApiKeyUsage(account, apiKeyUsageProvider)
-                          ? apiKeyUsageMap[account.id]?.loading === true
-                          : refreshing === account.id
-                      }
+                      onClick={() => void handleOverviewAccountRefresh(account, apiKeyUsageProvider)}
+                      disabled={quotaRefreshPending}
                       title={t("common.shared.refreshQuota", "刷新配额")}
                     >
                       <RotateCw
                         size={14}
-                        className={
-                          canRefreshApiKeyUsage(account, apiKeyUsageProvider)
-                            ? apiKeyUsageMap[account.id]?.loading === true
-                              ? "loading-spinner"
-                              : ""
-                            : refreshing === account.id
-                              ? "loading-spinner"
-                              : ""
-                        }
+                        className={quotaRefreshPending ? "loading-spinner" : ""}
                       />
                     </button>
                   )}
@@ -2391,7 +2448,6 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
       const apiKeyDisplay = resolveApiKeyDisplayText(account, visible);
       const baseUrl =
         resolveAccountUsageBaseUrl(account, provider?.baseUrl) || "-";
-      const usedPercent = formatApiKeyUsagePercent(summary);
       const newApiQuota = resolveNewApiQuotaSnapshot(summary);
       const summaryDetails =
         usageMode === "new_api"
@@ -2621,6 +2677,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
               ) : usageMode === "openai_official" ? (
                 <OpenAIOfficialUsagePanel provider={provider} apiKey={account.openai_api_key ?? ""} sourceBinding={state?.sourceBinding} onRefresh={() => void refreshApiKeyUsageByAccountId(account.id)} summary={summary} loading={state?.loading} error={state?.error} detailed t={t} />
               ) : <>
+                {usageMode === "custom" && <ModelProviderUsagePanel summary={summary} variant="table" />}
                 {state?.loading && <p className="codex-daily-usage-note" role="status">{t("common.loading")}</p>}
                 {state?.error && <p className="codex-daily-usage-note" role="status">{t("common.shared.quota.queryFailed")}</p>}
               <section className={summaryGridClassName}>
@@ -2631,22 +2688,6 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                   >
                     <span className="cockpit-api-card-label">{item.label}</span>
                     <strong>{item.value}</strong>
-                    {(item.key === "remaining" ||
-                      item.key === "totalAvailable") &&
-                      usageMode !== "new_api" &&
-                      usageMode !== "sub2api" && (
-                        <div>
-                          <div className="cockpit-api-progress-row">
-                            <div className="cockpit-api-progress-track">
-                              <div
-                                className="cockpit-api-progress-bar"
-                                style={{ width: `${usedPercent}%` }}
-                              />
-                            </div>
-                            <span>{usedPercent}%</span>
-                          </div>
-                        </div>
-                      )}
                   </div>
                 ))}
               </section>

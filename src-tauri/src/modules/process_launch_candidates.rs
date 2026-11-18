@@ -30,7 +30,7 @@ const ANTIGRAVITY_LEGACY_APP_CONTENTS_MARKER: &str = "antigravity.app/contents/"
 #[cfg(target_os = "macos")]
 const ANTIGRAVITY_APP_EXEC_MARKER: &str = "antigravity ide.app/contents/macos/electron";
 #[cfg(target_os = "macos")]
-const VSCODE_APP_PATH: &str = "/Applications/Visual Studio Code.app/Contents/MacOS/Electron";
+const VSCODE_APP_PATH: &str = "/Applications/Visual Studio Code.app";
 
 #[cfg(target_os = "windows")]
 const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
@@ -65,6 +65,28 @@ fn extract_macos_exe_from_cmdline(cmdline: &str) -> Option<String> {
     }
     // For non-.app executables: first whitespace-delimited token
     cmdline.split_whitespace().next().map(|s| s.to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_profiles_from_argv(args: &[std::ffi::OsString]) -> impl Iterator<Item = &str> {
+    args.iter()
+        .enumerate()
+        .skip(1)
+        .take_while(|(_, arg)| *arg != "--")
+        .filter_map(|(index, arg)| {
+            let arg = arg.to_str()?;
+            if arg == "--user-data-dir" {
+                return args.get(index + 1)?.to_str().filter(|path| !path.starts_with("--"));
+            }
+            arg.strip_prefix("--user-data-dir=")
+        })
+        .filter(|path| !path.trim().is_empty())
+}
+
+#[cfg(target_os = "macos")]
+fn owned_macos_process_command(line: &str, owner: u32) -> Option<&str> {
+    let (uid, tail) = line.trim().split_once(char::is_whitespace)?;
+    (uid.parse::<u32>().ok()? == owner).then(|| tail.trim_start())
 }
 
 fn strict_process_detect_enabled() -> bool {
@@ -2089,23 +2111,46 @@ pub fn append_effective_proxy_env_to_open_args(
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-fn spawn_detached_unix(cmd: &mut Command) -> Result<Child, String> {
+fn spawn_detached_unix(cmd: &mut Command) -> Result<u32, String> {
     use std::os::unix::process::CommandExt;
-    if !should_detach_child() {
-        return spawn_command_with_trace(cmd).map_err(|e| format!("启动失败: {}", e));
+    if should_detach_child() {
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        unsafe {
+            cmd.pre_exec(|| {
+                if libc::setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
     }
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    unsafe {
-        cmd.pre_exec(|| {
-            if libc::setsid() == -1 {
-                return Err(std::io::Error::last_os_error());
+    spawn_command_with_trace(cmd)
+        .map(background_child_pid)
+        .map_err(|e| format!("启动失败: {}", e))
+}
+
+pub(crate) fn background_child_pid(child: Child) -> u32 {
+    let pid = child.id();
+    // Unix keeps an exited child in the process table until its parent waits.
+    #[cfg(unix)]
+    if let Err(error) = std::thread::Builder::new()
+        .name("cockpit-child-wait".into())
+        .spawn(move || {
+            let mut child = child;
+            if let Err(error) = child.wait() {
+                crate::modules::logger::log_warn(&format!(
+                    "[Process] 回收已启动的子进程失败 pid={pid}: {error}"
+                ));
             }
-            Ok(())
-        });
+        })
+    {
+        crate::modules::logger::log_warn(&format!(
+            "[Process] 无法启动子进程回收线程 pid={pid}: {error}"
+        ));
     }
-    spawn_command_with_trace(cmd).map_err(|e| format!("启动失败: {}", e))
+    pid
 }
 
 /// Strip Windows extended-length path prefixes (`\\?\` / `\\?\UNC\`) for user-facing paths.

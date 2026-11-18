@@ -10,6 +10,9 @@ export function codexLaunchErrorKey(error: unknown): string | null {
   }
   if (code === 'CODEX_SWITCH_BINDING_FAILED') return 'codex.launchErrors.bindingFailed';
   if (code === 'CODEX_PROCESS_SCAN_FAILED') return 'codex.launchErrors.processScanFailed';
+  if (code === 'CODEX_PROXY_DOTENV_UNAVAILABLE') return 'codex.launchErrors.proxyEnvUnavailable';
+  if (code === 'CODEX_PROXY_DOTENV_CHANGED') return 'codex.launchErrors.proxyEnvChanged';
+  if (code === 'CODEX_PROXY_DOTENV_STOP_FAILED') return 'codex.launchErrors.proxyEnvStopFailed';
   if (code === 'PROXY_ENTRY_PORT_UNAVAILABLE' || code === 'PROXY_RUNTIME_NOT_READY') {
     return 'codex.launchErrors.proxyEntryFailed';
   }

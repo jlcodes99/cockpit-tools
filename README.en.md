@@ -179,6 +179,7 @@ Manage Cursor instances with isolated profiles and lifecycle controls.
 ### 8. Grok CLI Account Management
 
 - **OAuth Authorization**: Supports xAI's official OIDC device flow and saves the account after browser verification completes
+- **Use with the Codex API service**: Authorize the account from **Grok CLI**, then open **Codex → API Service → Add Account**. Filter by **Grok**, select the account, and save. Cockpit creates a provider entry bound to the Grok account and prepares its xAI credentials for the service.
 - **API Keys and Third-Party Endpoints**: Supports official xAI API keys plus OpenAI-compatible third-party `Base URL` and model IDs; configuration is written to an account-specific `config.toml`, while the key is injected only into the corresponding CLI process at launch
 - **Import and Redacted Export**: Imports official credentials from the default `~/.grok/auth.json` or supplied JSON; account-page exports and generic account backups omit access/refresh tokens, cannot restore a sign-in, and require a separate official `auth.json` import when migrating
 - **Real Account Switching**: Writes the selected account to the default `~/.grok/auth.json` in Grok CLI's official registry format while preserving other registry scopes in the file
@@ -389,10 +390,13 @@ Notes:
 Go to [GitHub Releases](https://github.com/jlcodes99/cockpit-tools/releases) to download the package for your system:
 
 *   **macOS**: `.dmg` (Apple Silicon & Intel)
-*   **Windows**: `.msi` (Recommended), `.exe`, or `x64-portable.zip` (extract and run)
+*   **Windows x64**: `_x64_en-US.msi` (recommended), `_x64-setup.exe`, or `x64-portable.zip` (extract and run)
+*   **Windows ARM64**: `_arm64-setup.exe`
 
 Extract the Windows portable archive and run the included `Cockpit Tools.exe` (or the bundled main executable). Windows 10/11 with the Microsoft Edge WebView2 Runtime is required. Accounts and settings remain in the current Windows user's data directory and are not moved with the ZIP folder.
-*   **Linux**: `.deb` (Debian/Ubuntu), `.rpm`, or `.AppImage` (Universal)
+*   **Linux**: `.deb` (Debian/Ubuntu), `.rpm`, or `.AppImage`
+
+Ubuntu 20.04 cannot install the current `.deb` because its repositories lack `libwebkit2gtk-4.1-0`. The current x64 AppImage binary requires glibc 2.34, and Ubuntu 20.04 provides glibc 2.31. Use Ubuntu 24.04 LTS. See the [Ubuntu 24.04 build guide](docs/build-wsl2-ubuntu24.md) for building from source.
 
 ### Option B: Install with Homebrew (macOS)
 
@@ -456,6 +460,18 @@ npm run tauri dev
 
 ```bash
 npm run tauri build
+```
+
+### Command line
+
+Download `cockpit-cli_<version>_linux_<architecture>.tar.gz` from a [GitHub Release](https://github.com/jlcodes99/cockpit-tools/releases) with CLI assets. Choose `x86_64` or `aarch64`, extract the archive, and run `./cockpit-cli list codex --json`. Release builds use Ubuntu 22.04 (x86_64) and Ubuntu 24.04 (aarch64). The CLI requires the system OpenSSL 3 runtime and runs without a desktop environment.
+
+You can also run it from source. Scripts can read JSON from stdout with `--json` and check the nonzero exit code and stderr on failure.
+
+```bash
+cargo run --locked --package cockpit-cli -- list codex --json
+cargo run --locked --package cockpit-cli -- switch codex "your-account-id" --json
+cargo run --locked --package cockpit-cli -- switch cursor "your-account-id" --json
 ```
 
 ---

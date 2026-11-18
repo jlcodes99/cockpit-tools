@@ -293,7 +293,7 @@ Acesse a [página de lançamentos do GitHub](https://github.com/jlcodes99/cockpi
 
 *   **macOS**: `.dmg` (Apple Silicon & Intel)
 *   **Windows**: `.msi` (Recommended) or `.exe`
-*   **Linux**: `.deb` (Debian/Ubuntu), `.rpm`, or `.AppImage` (Universal)
+*   **Linux**: `.deb` (Debian/Ubuntu), `.rpm` ou `.AppImage`
 
 ### Opção B: Instalar com o Homebrew (macOS)
 

@@ -657,6 +657,7 @@
         "expiresAt": "만료 시간: {{time}}",
         "unlimited": "무제한 할당량",
         "leftPercent": "{{value}}% 남음",
+        "weeklyLimitReached": "주간 한도 도달",
         "cachedRefreshFailed": "새로고침 실패; 마지막으로 성공한 데이터를 표시합니다",
         "lastSuccessfulQuery": "마지막 성공: {{time}}",
         "cachedNeedsReauth": "⚠️ 계속하려면 웹 인증이 필요합니다(아래는 마지막 성공 데이터입니다)"
@@ -839,6 +840,7 @@
     "sortPlaced": "{{position}}번째 위치로 이동했습니다.",
     "sortCancelled": "정렬을 취소했습니다.",
     "tipWithGroups": "드래그하여 순서를 바꿀 수 있습니다. 사이드바에는 최대 {{max}}개 항목을 표시할 수 있습니다. 그룹 하위 항목은 사이드바/대시보드 토글에 포함되지 않으며 메뉴 표시줄과 기본 플랫폼 전환에만 사용됩니다.",
+    "tipWithSidebarShortcuts": "드래그해서 순서를 바꾸세요. 사이드바에는 그룹 내 개별 플랫폼을 포함해 최대 {{max}}개의 항목을 표시할 수 있습니다.",
     "addGroup": "그룹 추가",
     "editGroup": "그룹 편집",
     "deleteGroup": "그룹 삭제",
@@ -1079,7 +1081,8 @@
         "savedForNextLaunch": "저장했습니다. 다음에 Cockpit에서 Codex를 시작할 때 적용되며 현재 세션은 변경되지 않습니다.",
         "restartRollbackFailed": "새 경로를 시작하지 못했고 원래 구성을 다시 시작할 수 없습니다: ",
         "restartRolledBack": "새 경로를 시작하지 못했습니다. 원래 구성이 복원되고 Codex가 다시 시작되었습니다: {{error}}"
-      }
+      },
+      "copyTimeout": "복사 제한 시간"
     },
     "quota": {
       "unbound": "연결된 계정 없음",
@@ -1138,6 +1141,7 @@
         "preparingCredentials": "토큰을 확인하고 필요 시 전체 로그인 정보를 갱신하는 중...",
         "profileReady": "인스턴스 auth.json / 키체인이 안전하게 갱신되었습니다",
         "cliPrepared": "CLI 시작 명령이 준비되었습니다",
+        "cliResumeStarted": "CLI 세션 이어서 실행을 백그라운드에서 시작했습니다",
         "startingClient": "Codex 클라이언트 프로세스를 시작하고 확인하는 중..."
       }
     },
@@ -1300,6 +1304,9 @@
       "trayIconStyleDesc": "시스템 단색 아이콘 또는 원래 컬러 앱 아이콘을 선택합니다",
       "trayIconStyleTemplate": "단색 아이콘",
       "trayIconStyleColor": "컬러 아이콘",
+      "menuBarLeftClick": "메뉴 막대 아이콘 왼쪽 클릭 동작",
+      "menuBarLeftClickMenu": "사용량 한도 메뉴 열기",
+      "menuBarLeftClickWindow": "기본 창 열기",
       "floatingCardStartup": "시작 시 플로팅 카드 표시",
       "floatingCardStartupDesc": "앱 실행 후 계정 플로팅 카드를 자동으로 표시합니다",
       "floatingCardAlwaysOnTop": "플로팅 카드를 기본적으로 항상 위에 표시",
@@ -1309,6 +1316,9 @@
       "floatingCardShowNowAction": "플로팅 카드 표시",
       "dataDir": "데이터 디렉터리",
       "dataDirDesc": "계정 및 구성 파일 저장 위치.",
+      "dataDirPending": "다시 시작하면 Cockpit Tools가 {{path}}에서 데이터를 읽습니다.",
+      "dataDirPendingDefault": "다시 시작하면 Cockpit Tools가 기본 디렉터리를 사용합니다.",
+      "dataDirEnvironment": "현재 실행은 COCKPIT_TOOLS_DATA_DIR에 지정된 디렉터리를 사용합니다.",
       "topRightAdVisible": "상단 프로모션 표시",
       "topRightAdVisibleDesc": "앱 상단 프로모션 영역을 숨깁니다. 스폰서 페이지에는 영향을 주지 않습니다.",
       "opencodeTitle": "OpenCode 연동",
@@ -1377,6 +1387,10 @@
       "cursorPathReset": "기본값으로 재설정",
       "codexLaunchOnSwitch": "Codex 전환 시 Codex App 자동 실행",
       "codexLaunchOnSwitchDesc": "계정 전환 후 Codex App을 자동으로 시작하거나 재시작",
+      "codexAutomaticSessionRepair": "세션 표시 자동 복구",
+      "codexAutomaticSessionRepairDesc": "Cockpit에서 Codex를 시작하거나 세션 공급자를 바꿀 때 세션 인덱스와 기록 파일의 타임스탬프를 복구할지 선택합니다.",
+      "codexAutomaticSessionRepairIndexOnly": "인덱스만",
+      "codexAutomaticSessionRepairQuick": "빠른 복구",
       "autoUpdate": "백그라운드 자동 업데이트",
       "autoUpdateDesc": "새 버전이 감지되면 백그라운드에서 조용히 업데이트하고 완료 후 재시작을 안내합니다.",
       "autoUpdateOff": "끔(수동 업데이트)",
@@ -1509,6 +1523,8 @@
       "claudeSettingsTitle": "Claude 설정",
       "claudeAutoRefresh": "Claude 할당량 자동 새로고침",
       "claudeAutoRefreshDesc": "백그라운드에서 Claude 계정의 할당량 캐시를 자동으로 갱신합니다.",
+      "claudeShareCodeSessionsOnSwitch": "계정 전환 시 Code 세션 동기화",
+      "claudeShareCodeSessionsOnSwitchDesc": "macOS에서 기본 Claude Desktop 프로필을 전환할 때 로컬 계정 간에 Code 세션 목록을 공유합니다.",
       "claudeAppPath": "Claude Desktop 시작 대상",
       "claudeAppPathDesc": "기본 프로필은 Microsoft Store 대상을 사용할 수 있지만, 다중 인스턴스에는 실제 Claude.exe가 필요합니다.",
       "antigravityLaunchOnSwitch": "전환 시 Antigravity IDE 실행",
@@ -1549,6 +1565,10 @@
       "webdavAllowedDomainsDesc": "쉼표 구분; 비우면 제한 없음",
       "claudeQuotaDisplayRemaining": "Claude 잔여 % 표시",
       "claudeQuotaDisplayRemainingDesc": "기본은 사용 %. 켜면 잔여 %. 자동 전환·경고는 사용 비율 기준.",
+      "menuBarLeftClick": "메뉴 막대 왼쪽 클릭",
+      "menuBarLeftClickDesc": "오른쪽 클릭은 항상 할당량 메뉴를 엽니다.",
+      "menuBarLeftClickQuotaMenu": "할당량 메뉴",
+      "menuBarLeftClickMainWindow": "메인 창",
       "menuBarQuota": "메뉴 막대에 실시간 한도 표시",
       "menuBarQuotaDesc": "켜면 선택한 플랫폼 현재 계정의 남은 한도를 메뉴 막대 아이콘 옆에 표시합니다. 플랫폼 등 전용 옵션은 대화상자에서 설정합니다.",
       "menuBarQuotaEnabledDesc": "사용 중 · {{platform}} · 해당 플랫폼 현재 계정 남은 한도(여러 항목 중 최저)",
@@ -1581,10 +1601,14 @@
         "quotaCompatDesc": "API 서비스 인스턴스는 클라이언트 표시와 로컬 확인에 사용 가능한 할당량을 제공합니다. 실제 공급자 사용량과 이미지 한도는 변경되지 않습니다. 이 설정은 다른 OAuth 및 외부 API 혼합 구성에만 적용됩니다.",
         "configFailed": "설정을 읽거나 저장하지 못했습니다: {{error}}",
         "nativePredictions": "네이티브 다음 단계 예측(Tab)",
-        "nativePredictionsDesc": "기본적으로 꺼져 있습니다. 제안은 현재 대화의 API 제공업체와 모델을 사용하며 API 사용량이 추가됩니다. 설정을 변경한 후 해당 Codex 인스턴스를 다시 시작하고 Cockpit Tools를 계속 실행하세요."
+        "nativePredictionsDesc": "기본적으로 켜져 있습니다. 제안은 현재 대화의 API 제공업체와 모델을 사용하며 API 사용량이 추가됩니다. 설정을 변경한 후 해당 Codex 인스턴스를 다시 시작하고 Cockpit Tools를 계속 실행하세요."
       },
       "timeDisplayMode": "시간 표시",
-      "timeDisplayModeDesc": "계정 카드와 목록에 표시할 시간입니다. 기본값은 전환 시간입니다"
+      "timeDisplayModeDesc": "계정 카드와 목록에 표시할 시간입니다. 기본값은 전환 시간입니다",
+      "menuBarLeftClick": "메뉴 막대 왼쪽 클릭",
+      "menuBarLeftClickDesc": "오른쪽 클릭은 항상 할당량 메뉴를 엽니다.",
+      "menuBarLeftClickQuotaMenu": "할당량 메뉴",
+      "menuBarLeftClickMainWindow": "메인 창"
     },
     "network": {
       "apiTitle": "반중력 조종석 API",
@@ -2590,6 +2614,8 @@
       "crontabValidate": "검증",
       "crontabValidateHint": "표현식은 저장 시 검증됩니다",
       "crontabPreviewEmpty": "유효한 Crontab 표현식을 입력하세요",
+      "weeklyQuotaResetOnly": "주간 할당량이 초기화된 후에만 깨우기",
+      "weeklyQuotaResetHint": "선택한 각 계정은 해당 계정의 주간 할당량이 초기화된 후에 깨어납니다.",
       "timeWindowEnabled": "시간 창 사용",
       "timeWindowHint": "활성화하면 할당량 재설정은 창 내에서만 동작하며, 밖에서는 고정 시간 사용.",
       "timeWindow": "할당량 재설정 시간 창",
@@ -2667,6 +2693,17 @@
     "other_group": "기타 모델"
   },
   "codex": {
+    "subagentDefaults": {
+      "title": "하위 에이전트 기본값",
+      "description": "새 하위 에이전트에 적용됩니다. 시작할 때 지정한 값이 우선합니다. 비워 두면 Codex 기본값을 사용합니다."
+    },
+    "modelInstructions": {
+      "title": "시스템 지침",
+      "description": "로컬 UTF-8 파일을 선택하세요. 변경 사항은 즉시 저장되며 새 세션에 적용됩니다.",
+      "deferred": "DeepSeek에서 다른 제공업체로 전환하면 적용됩니다.",
+      "selectFile": "파일 선택",
+      "useDefault": "기본값 사용"
+    },
     "cli": {
       "launchSuccess": "Codex CLI를 실행했습니다",
       "selectWorkingDir": "Codex CLI 작업 폴더 선택"
@@ -2674,56 +2711,19 @@
     "resetAutomation": {
       "nothingToReset": "현재 재설정할 할당량 기간이 없습니다.",
       "unknownOutcome": "재설정 결과를 확인할 수 없습니다. 다시 시도하세요.",
-      "applyAllHint": "켜고 저장하면 모든 계정에 이 규칙을 복사하여 기존 사용자 지정 및 꺼짐 설정을 덮어씁니다.",
-      "applyAll": "모든 계정에 저장",
-      "accountHint": "개별 설정이 없는 계정은 공통 규칙을 사용합니다. 저장하면 현재 계정에만 적용됩니다.",
-      "title": "초기화 카드 자동 사용",
-      "accountTab": "현재 계정",
-      "publicTab": "공통 규칙",
-      "inherit": "공통 규칙 따르기",
-      "custom": "개별 규칙",
-      "off": "끄기",
-      "entryDefault": "자동 설정",
       "noCredits": "카드 없음",
-      "publicHint": "개별 설정이 없는 계정의 기본 규칙입니다. 기존 사용자 지정 또는 꺼짐 설정은 유지됩니다.",
-      "before": "만료 전",
-      "expiry": "만료 전 사용",
       "minutes": "분",
       "hours": "시간",
       "days": "일",
-      "hostHint": "Cockpit Tools 실행 중 확인합니다. 사용할 카드는 서버가 결정합니다. 카드를 자동으로 사용한 계정은 다음 자동 사용까지 30분을 기다립니다.",
-      "invalidTime": "초 단위로 표현 가능한 양의 시간을 입력하세요.",
-      "invalidPercent": "0~100 사이의 정수 백분율을 입력하세요.",
-      "loadFailed": "규칙 로드 실패: {{error}}",
-      "saveFailed": "규칙 저장 실패: {{error}}",
-      "conflict": "다른 곳에서 규칙이 변경되었습니다. 다시 불러오세요.",
+      "conflict": "초기화 중 계정 정보가 변경되었습니다. 다시 시도하세요.",
       "busy": "이 계정의 초기화가 진행 중입니다.",
-      "storageError": "초기화 규칙을 읽거나 저장할 수 없습니다.",
+      "storageError": "초기화 기록을 읽거나 저장할 수 없습니다.",
       "timeout": "요청 시간이 초과되었습니다. 저장된 요청 ID를 재사용하여 중복 사용을 방지합니다.",
-      "history": "최근 실행",
-      "reasonExpiry": "만료 임박",
-      "reasonQuota": "잔여량 부족",
-      "reasonManual": "수동 초기화",
-      "reasonCheck": "백그라운드 확인",
-      "pending": "결과 대기",
-      "editPublic": "공통 규칙 편집",
       "accountMissing": "계정이 더 이상 없습니다.",
-      "masterLabel": "초기화 카드 자동 사용",
-      "ruleSource": "규칙 출처",
-      "weeklyTrigger": "주간 잔여량 조건",
-      "preferUsageCredits": "크레딧 우선",
-      "weeklyRemaining": "주간 잔여량 ≤",
-      "previewTitle": "실행 조건 미리보기",
-      "previewAny": "활성화된 조건 중 하나를 충족하면 초기화 카드 한 장을 사용합니다:",
       "previewExpiry": "카드 만료까지 {{value}} {{unit}} 이내",
       "previewWeekly": "주간 잔여량 {{percent}}% 이하",
       "previewWeeklyAfterCredits": "주간 잔여량이 {{percent}}% 이하이고 사용 가능한 크레딧이 없음을 확인한 경우",
-      "previewOff": "자동 사용이 꺼져 있어 아래 설정은 적용되지 않습니다.",
-      "previewEmpty": "활성화된 실행 조건이 없어 카드를 자동으로 사용하지 않습니다.",
-      "cardOn": "자동",
-      "cardOff": "꺼짐",
-      "orSeparator": " 또는 ",
-      "inheritHint": "공통 규칙을 따릅니다. 공통 규칙을 편집하거나 사용자 지정으로 전환하세요."
+      "orSeparator": " 또는 "
     },
     "overload": {
       "setting": "과부하 시 계속 재시도",
@@ -2833,7 +2833,10 @@
       "sessionRestoreFailed": "세션 복구에 실패했고 백업 복원이 완료되지 않아 실행을 중단했습니다. 다시 시도하기 전에 로그와 백업을 확인하세요.",
       "bindingFailed": "계정 연결을 확인할 수 없어 시작을 중단했습니다. 계정 전환을 다시 시도하세요.",
       "processScanFailed": "기존 백그라운드 프로세스를 확인할 수 없어 시작을 중단했습니다. 다시 시도하세요.",
-      "proxyEntryFailed": "설정된 프록시를 시작할 수 없습니다. 다른 경로를 사용하지 않았습니다. 다시 시도하세요."
+      "proxyEntryFailed": "설정된 프록시를 시작할 수 없습니다. 다른 경로를 사용하지 않았습니다. 다시 시도하세요.",
+      "proxyEnvUnavailable": "프록시 설정을 적용하지 못했습니다. 이 Codex 인스턴스의 .env 파일을 확인한 후 다시 시도하세요.",
+      "proxyEnvChanged": "시작 중에 .env 파일이 변경되었습니다. 변경 사항을 저장한 후 다시 시도하세요.",
+      "proxyEnvStopFailed": "시작 중에 .env 파일이 변경되었으며 Codex를 중지하지 못했습니다. 인스턴스를 닫고 다시 시도하세요."
     },
     "oauthProxy": {
       "toggle": "프록시로 인증",
@@ -2909,6 +2912,7 @@
         "operation": "작업",
         "manage": "관리",
         "resetDefaults": "기본값 복원",
+        "embeddedFallback": "업데이트된 모델 카탈로그를 사용할 수 없어 Cockpit의 내장 카탈로그를 사용합니다.",
         "inheritHint": "공식 모델은 기능 필드를 유지하고 사용자 지정 모델은 일반 템플릿을 사용합니다. 표시 모델을 추가하거나 삭제할 수 있습니다.",
         "validation": {
           "required": "모델을 하나 이상 유지하세요.",
@@ -2955,6 +2959,20 @@
       "quota": {
         "hourly": "5시간",
         "weekly": "주간"
+      },
+      "sessionResume": {
+        "title": "세션 이어서 실행",
+        "enabled": "이 인스턴스가 시작될 때 이어서 실행할 프롬프트 보내기",
+        "cliHint": "터미널에서 실행하면 설정한 프롬프트를 보냅니다. 미리 보기, 복사, 사용자 지정 명령은 평소처럼 동작합니다. 전환 시 이 인스턴스를 시작하도록 설정하면 프롬프트를 백그라운드에서 보냅니다.",
+        "target": "이어서 실행할 세션",
+        "recentActivity": "최근 활동 세션",
+        "lastCreated": "최근 생성된 세션",
+        "previousDesktopSession": "종료 전에 보고 있던 세션",
+        "specific": "특정 세션",
+        "threadId": "세션 ID",
+        "prompt": "이어서 실행할 프롬프트",
+        "invalidId": "유효한 세션 UUID를 입력하세요.",
+        "promptRequired": "프롬프트를 입력하세요."
       },
       "syncAllRecords": {
         "action": "모든 인스턴스 기록 동기화",
@@ -3109,7 +3127,8 @@
       "portInUseAction": "포트 종료 후 다시 시도",
       "timeout": "인증이 시간 초과되었습니다. 클릭하세요",
       "timeoutRetry": "인증 링크 새로고침",
-      "reauthEmailLabel": "재인증 계정"
+      "reauthEmailLabel": "재인증 계정",
+      "reauthEmailChangeHint": "로그인 이메일이 변경되었다면 브라우저에서 새 주소를 사용하세요. Cockpit은 같은 사용자와 작업 공간임을 확인한 뒤 저장된 이메일을 업데이트합니다."
     },
     "token": {
       "importPartial": "가져오기를 마쳤습니다. 성공 {{success}}개, 실패 {{failed}}개. {{errors}}",
@@ -3193,7 +3212,7 @@
         "save": "모음 저장",
         "freeNotice": "무료 계정은 아직 지원되지 않습니다. 무료 계정은 선택할 수 없습니다.",
         "freeUnsupported": "무료 계정은 아직 지원되지 않습니다",
-        "restrictFreeToggle": "Free 계정 제한",
+        "restrictFreeToggle": "추가되지 않은 Free 계정 숨기기",
         "sessionAffinityConfirmTitle": "세션 선호를 켤까요?",
         "sessionAffinityDescription": "켜면 같은 대화가 가능한 한 같은 계정을 계속 사용합니다. 계정을 사용할 수 없으면 라우팅에 따라 전환되며, 만료 후에는 계정을 다시 선택합니다.",
         "pendingOauthUnsupported": "미인증 추가 불가",
@@ -3630,7 +3649,7 @@
       "reset": "재설정",
       "weeklyBlocksHourly": "주간 할당량이 0이라 5시간 할당량을 사용할 수 없습니다",
       "windowStats": "사용 {{tokens}} · {{cost}}",
-      "windowStatsHint": "이 창이 가득 찬 뒤부터 이 계정이 API 서비스로 쓴 요청 수, 토큰, 계정 과금",
+      "windowStatsHint": "이 할당량 기간의 API 서비스 요청 수, 토큰 수 및 예상 사용 가치",
       "windowUsed": "사용 {{tokens}} · {{cost}}",
       "windowReq": "{{count}}회",
       "resetCredits": "재설정 {{count}}",
@@ -3655,8 +3674,8 @@
       "resetCreditRecordsLoadFailed": "재설정 기록을 불러오지 못했습니다: {{error}}",
       "resetCreditGrantedAt": "지급",
       "resetCreditExpiresAt": "만료",
-      "windowAccountCostHint": "계정 과금(모델 가격 추산)",
-      "windowEstimatedFullCostHint": "사용 비율로 환산한 이 윈도우 만료 시 예상 계정 청구 금액",
+      "windowAccountCostHint": "모델 API 단가로 추정한 사용 가치입니다. 남은 구독 할당량은 계정에서 반환한 비율을 따릅니다.",
+      "windowEstimatedFullCostHint": "현재까지 사용한 할당량 비율로 계산한 전체 기간의 예상 사용 가치",
       "windowUserCostHint": "사용자 과금",
       "windowWeeks": "{{count}}주 할당량",
       "windowDays": "{{count}}일 할당량",
@@ -3920,7 +3939,7 @@
         "max": "최대",
         "ultra": "극한"
       },
-      "scheduleQuotaResetHint": "할당량 초기화 후 깨우기를 켜면 자동 새로고침이 2분 간격으로 조정됩니다.",
+      "scheduleQuotaResetHint": "계정의 최근 기록된 할당량 초기화 시간을 기준으로 작업이 실행됩니다. Codex 자동 새로고침 간격은 기존 설정을 유지합니다.",
       "scheduleQuotaResetSummary": "할당량 초기화 후 실행",
       "quotaResetWindowLabel": "리셋 윈도우 트리거 조건",
       "quotaResetWindowHint": "primary_window는 일반적으로 5시간 할당량을 의미합니다. 무료 사용자에서는 primary_window가 주간 할당량을 의미할 수 있으며, 구독에 따라 달라질 수 있습니다.",
@@ -3933,7 +3952,6 @@
       },
       "nextRunsQuotaResetHint": "할당량 초기화 트리거는 최신 할당량 데이터에 의존하므로 고정 시간 미리보기를 제공하지 않습니다.",
       "triggerQuotaReset": "할당량 초기화 트리거",
-      "noticeSavedEnabledWithQuotaReset": "작업이 저장되었습니다. 총 {{count}}개. Codex 자동 새로고침이 {{minutes}}분 간격으로 조정되었습니다.",
       "runtimeConfigTitle": "사용자 지정 런타임 경로",
       "runtimeConfigHint": "실행 파일 경로 또는 디렉터리 경로를 입력할 수 있습니다. 비워두면 PATH에서 자동 감지합니다.",
       "runtimeConfigCodexCliLabel": "Codex CLI 경로",
@@ -4122,7 +4140,7 @@
         "projectsSuccess": "복원 완료: 프로젝트 {{projects}}개, 소속 {{assignments}}개. 프로젝트 {{skipped}}개와 소속이 불명확한 대화 {{ambiguous}}개 제외.",
         "projectsPending": "이전 복원이 중단되었습니다. 대상 인스턴스를 종료하고 전체 복구로 미완료 쓰기를 복원하세요.",
         "projectsDeferred": "일부 프로젝트 정보의 처리가 보류되었습니다. 대상 인스턴스를 종료하고 빠른 복구를 재시도하거나 전체 복구를 사용하세요.",
-        "switchProjectsDeferred": "인증 정보는 업데이트됐지만 로컬 프로젝트 상태를 동기화하지 못했습니다. 해당 Codex 인스턴스를 종료한 뒤 Cockpit에서 다시 시작하세요."
+        "switchProjectsDeferred": "인증 정보는 업데이트됐지만 로컬 프로젝트 또는 대화 상태를 동기화하지 못했습니다. 해당 Codex 인스턴스를 종료한 뒤 Cockpit에서 다시 시작하세요."
       },
       "importModal": {
         "title": "세션 가져오기",
@@ -4222,6 +4240,14 @@
       }
     },
     "sessionUsage": {
+      "comparison": {
+        "localTotal": "로컬 세션 토큰 · 선택한 기간 및 인스턴스",
+        "profileTotal": "공식 프로필 · 누적 토큰",
+        "account": "Codex 계정",
+        "noAccount": "공식 누적 사용량을 보려면 Codex OAuth 계정을 추가하세요.",
+        "loadError": "공식 누적 사용량을 불러올 수 없습니다.",
+        "unavailable": "공식 프로필에서 누적 사용량을 제공하지 않았습니다."
+      },
       "tab": "사용량",
       "listTab": "세션",
       "title": "세션 사용량",
@@ -4312,7 +4338,7 @@
       "hideApiKey": "API Key 숨기기",
       "apiKeyHiddenHint": "API Key가 숨겨져 있습니다. 클릭하면 표시됩니다.",
       "modelCatalog": {
-        "restartHint": "모델 카탈로그를 업데이트했습니다. Codex가 실행 중이면 다시 시작해야 적용됩니다.",
+        "launchHint": "저장한 모델 설정을 적용하려면 Cockpit에서 이 계정으로 Codex를 실행하세요.",
         "label": "모델 목록",
         "fetch": "공급자에서 가져오기",
         "fetching": "가져오는 중...",
@@ -4320,7 +4346,7 @@
         "placeholder": "한 줄에 모델 ID 하나를 입력하거나 쉼표로 구분하세요.",
         "editHint": "가져온 모델은 현재 초안에만 반영됩니다. 저장하기 전에 검토하고 편집할 수 있습니다.",
         "syncToggle": "공급자 모델을 Codex에 동기화",
-        "syncDescription": "저장 후 이 목록으로 Cockpit 관리 Codex 모델 카탈로그를 생성합니다. 사용자 지정 카탈로그는 덮어쓰지 않습니다.",
+        "syncDescription": "Cockpit에서 이 계정으로 Codex를 실행할 때 이 모델 목록을 적용합니다. 기존 사용자 지정 모델 카탈로그가 우선합니다.",
         "fetchCredentialsRequired": "먼저 API Key와 Base URL을 입력하세요.",
         "fetchEmpty": "공급자가 모델을 반환하지 않았습니다. 현재 목록을 유지했습니다.",
         "fetchFailed": "공급자 모델을 가져오지 못했습니다: {{error}}",
@@ -4759,7 +4785,8 @@
           "totalGranted": "부여 한도",
           "totalAvailable": "사용 가능",
           "isAvailable": "잔액 사용 가능",
-          "modelLimitsEnabled": "모델 제한"
+          "modelLimitsEnabled": "모델 제한",
+          "weeklyShort": "주간"
         },
         "accountBalance": "계정 잔액",
         "unlimitedQuota": "무제한",
@@ -4923,6 +4950,7 @@
       "repairFailedWithError": "표시 복구에 실패했습니다: {{error}}"
     },
     "accountNote": {
+      "refreshEmailHint": "OpenAI 계정의 이메일이 변경된 경우 동일한 계정과 워크스페이스를 다시 인증하면 여기에서 업데이트됩니다.",
       "title": "계정 메모",
       "label": "계정 메모",
       "desc": "{{account}}에 비밀번호, 2FA, 메일 URL, 전화번호, 기타 메모를 추가합니다.",
@@ -5037,7 +5065,7 @@
         "responsesTitle": "Responses 엔트리",
         "responsesNote": "Codex 네이티브 Responses 엔트리입니다.",
         "anthropicTitle": "Anthropic 메시지",
-        "claudeCodeNoModels": "이 키에서 사용할 Claude Code 프리셋 모델이 없습니다. 모델 규칙에서 별칭을 먼저 저장하세요.",
+        "claudeCodeNoModels": "이 키로 사용할 수 있는 채팅 모델이 없습니다. 모델 규칙과 계정 풀을 확인하세요.",
         "claudeCodeSettingsChanged": "미리 보기 후 설정이 변경되었습니다. 다시 미리 보세요.",
         "claudeCodeServiceUnavailable": "이 키의 모델을 불러올 수 없습니다. API 서비스와 키 상태를 확인하세요.",
         "claudeCodeNoBackup": "현재 설정과 일치하는 백업이 없습니다.",
@@ -5074,6 +5102,11 @@
         "saveRules": "규칙 저장",
         "rulesSaved": "모델 규칙 저장됨",
         "pricingAction": "가격",
+        "refreshCatalog": "모델 새로고침",
+        "refreshComplete": "모델과 가격을 확인했습니다.",
+        "refreshFailed": "모델과 가격을 새로고침하지 못했습니다. 현재 데이터를 계속 사용합니다.",
+        "refreshModelsFailed": "모델을 새로고침하지 못했습니다. 현재 목록을 계속 사용합니다.",
+        "refreshPricesFailed": "가격을 새로고침하지 못했습니다. 현재 가격을 계속 사용합니다.",
         "pricingTitle": "모델 가격",
         "pricingDesc": "단위: USD / 1M tokens. 로컬 통계 전용.",
         "pricingModel": "모델",
@@ -5110,6 +5143,16 @@
         "pricingRepriceCompleted": "과거 추정치가 업데이트됨",
         "pricingRepriceSaveBlocked": "과거 추정치 업데이트 중 — 완료 후 저장하세요"
       },
+      "accountPools": {
+        "title": "이름이 지정된 계정 풀",
+        "add": "계정 풀 추가",
+        "name": "풀 이름",
+        "deleteHint": "풀을 삭제해도 연결된 키의 현재 계정 범위는 유지됩니다.",
+        "detach": "풀 연결 해제",
+        "saved": "계정 풀을 저장했습니다",
+        "removed": "계정 풀을 삭제했습니다",
+        "detached": "키의 계정 풀 연결을 해제했습니다"
+      },
       "keys": {
         "policyTitle": "모델 정책",
         "advancedPolicyTitle": "고급 기능: 모델 정책",
@@ -5132,6 +5175,13 @@
         "tokenLimit": "총 토큰 한도",
         "tokenLimitPlaceholder": "예: 10m",
         "tokenLimitHint": "비워 두면 제한이 없습니다. 모든 모델의 입력 및 출력 토큰이 합산됩니다.",
+        "monthlyTokens": {
+          "title": "월간 토큰 알림",
+          "used": "이번 달 사용량 {{used}} 토큰",
+          "hint": "비워 두면 알림을 끕니다. 현지 달력 기준으로 매월 한 번 알림을 표시하며 요청은 계속 처리됩니다.",
+          "invalid": "토큰 수를 정수로 입력하세요.",
+          "notification": "{{label}}의 이번 달 사용량이 {{used}} 토큰으로, 알림 기준인 {{threshold}} 토큰에 도달했습니다."
+        },
         "tokenLimitInvalid": "10m 또는 10000000과 같은 올바른 토큰 한도를 입력하세요",
         "tokenLimitUsage": "토큰 한도",
         "tokenLimitCurrentUsage": "사용됨: {{used}} 토큰",
@@ -5169,6 +5219,10 @@
         "maxRetryInterval": "재시도 대기",
         "disableCooling": "쿨다운 끄기",
         "saveOptions": "옵션 저장",
+        "accountQuotaFloor": "최소 잔여 한도",
+        "accountQuotaFloorHint": "어느 기간이든 잔여 한도가 이 값에 도달하면 계정이 새 요청을 받지 않습니다. 비워 두면 사용하지 않습니다.",
+        "accountQuotaFloorInvalid": "1~100 사이의 정수 백분율을 입력하세요.",
+        "accountQuotaFloorSaveFailed": "최소 잔여 한도를 저장하지 못했습니다.",
         "immediateSseResponse": "즉시 SSE 200",
         "maxConcurrentImageRequests": "계정당 이미지 요청",
         "maxAccountConcurrency": "계정 동시 실행 수",
@@ -5237,6 +5291,12 @@
         "tokenOutput": "출력",
         "tokenCache": "캐시",
         "tokenTotal": "합계",
+        "inputTextCharacters": "입력 문자 수",
+        "inputTextCharactersHint": "이 요청에 포함된 메시지와 지시문 텍스트의 유니코드 문자 수입니다. 클라이언트가 보낸 텍스트 기록도 포함합니다.",
+        "highTokenRequests": "토큰 사용량이 많은 요청",
+        "highTokenBadge": "높은 사용량",
+        "tokenThreshold": "토큰 표시 기준",
+        "highTokenHint": "{{threshold}}개 이상의 토큰을 사용한 기록된 요청",
         "speedAdjusted": "{{tier}} → 표준",
         "officialDefaultSpeed": "공식 구독 경로는 속도 지정을 지원하지 않아 이번 요청은 기본 속도로 전송했습니다.",
         "sentTier": "전송: {{tier}}",
@@ -5311,7 +5371,13 @@
       "usage": {
         "title": "사용 통계",
         "lastRecorded": "최근 기록",
-        "trendEmpty": "선택한 기간에 요청이 없습니다"
+        "inputTextCoverage": "요청 {{total}}개 중 {{measured}}개 측정",
+        "trendEmpty": "선택한 기간에 요청이 없습니다",
+        "periodTokens": "구간별 토큰 사용량",
+        "cumulativeTokens": "누적 토큰 사용량",
+        "tokenComposition": "토큰 사용량 구성",
+        "nonReasoningOutput": "추론 외 출력",
+        "reasoningTokens": "추론"
       },
       "accountModelMappings": {
         "action": "모델 맵",
@@ -6281,6 +6347,13 @@
       "restart": "CLI 재시작",
       "restarting": "재시작 중…",
       "restarted": "CLI 데몬이 재시작되었습니다.",
+      "autoRefresh": "계정 전환 후 CLI 자동 새로 고침",
+      "autoRefreshHint": "기본 CLI 데몬이 유휴 상태이고 연결된 클라이언트가 없으면 새로 고칩니다.",
+      "autoDeferred": "CLI 자동 새로 고침을 확인하지 못했습니다. 다시 시작하기 전에 데몬 상태를 확인하세요.",
+      "workspaceConfirmed": "CLI 데몬이 다시 시작되었으며 선택한 OAuth 작업 공간이 확인되었습니다.",
+      "workspaceUnconfirmed": "CLI 데몬은 다시 시작되었습니다. 선택한 OAuth 작업 공간을 확인하지 못했습니다.",
+      "workspaceMismatch": "다시 시작한 CLI 데몬이 다른 OAuth 계정 또는 작업 공간을 사용하고 있습니다.",
+      "restartUnconfirmed": "새 CLI 데몬이 준비되었는지 확인하지 못했습니다. 다시 시도하거나 명령을 터미널에 복사하세요.",
       "restartFailed": "재시작하지 못했습니다. 다시 시도하거나 명령을 터미널에 복사하세요.",
       "title": "CLI 계정 새로 고침",
       "description": "인증 정보는 저장되었지만 이 프로필의 Codex CLI 백그라운드 서비스가 실행 중이어서 이전 계정을 계속 사용할 수 있습니다.",
@@ -6503,6 +6576,12 @@
       "saveOnly": "설정만 저장",
       "validationBusy": "이전 경로를 아직 확인 중입니다. 잠시 후 다시 시도하세요."
     },
+    "customProviderUsage": {
+      "title": "맞춤 할당량 조회",
+      "settings": "조회 설정(JSON)",
+      "hint": "비워 두면 자동 감지를 사용합니다. headers로 요청 헤더를 추가합니다. 대체 필드 경로를 |로 구분하면 첫 번째 null이 아닌 값을 사용합니다.",
+      "invalid": "JSON, 엔드포인트가 동일 출처인지 여부, 필드 매핑을 확인하세요."
+    },
     "openaiUsage": {
       "monthCost": "이번 달 비용",
       "scope": "조직 전체 비용입니다. 요청과 토큰은 텍스트 API만 포함하며 UTC로 집계합니다.",
@@ -6548,7 +6627,7 @@
       "official": "공식 기록",
       "local": "로컬 사용",
       "officialHint": "공식 기록의 최근 30일 내역입니다.",
-      "localHint": "지금부터 이 앱에서 실행한 수동 및 자동 작업을 기록합니다. 이전 데이터는 복원하지 않습니다.",
+      "localHint": "이 앱에서의 수동 작업을 기록하고 기존 자동 기록도 유지합니다. 이전 데이터는 복원하지 않습니다.",
       "officialEmpty": "최근 30일간 초기화 기록이 없습니다",
       "localEmpty": "로컬 사용 기록이 없습니다",
       "received": "초기화 횟수 지급",
@@ -6565,7 +6644,13 @@
       "requestId": "요청 ID",
       "more": "더 보기",
       "loadFailed": "기록을 불러오지 못했습니다",
-      "officialUnavailable": "이 계정은 공식 초기화 기록을 지원하지 않습니다"
+      "officialUnavailable": "이 계정은 공식 초기화 기록을 지원하지 않습니다",
+      "legacyActivityTitle": "이전 활동 기록(읽기 전용)",
+      "legacyActivityHint": "저장된 계정 ID 기준으로만 표시되며 워크스페이스 ID나 실제 카드 차감 결과를 추정하지 않습니다.",
+      "legacyReasonExpiry": "만료 임박",
+      "legacyReasonQuota": "잔여량 부족",
+      "legacyReasonManual": "수동 초기화",
+      "legacyReasonCheck": "백그라운드 확인"
     }
   },
   "githubCopilot": {
@@ -7449,7 +7534,16 @@
         "dir": "폴더"
       },
       "unknownTime": "시간 알 수 없음",
-      "searchPlaceholder": "제목 또는 작업 폴더로 검색"
+      "searchPlaceholder": "제목 또는 작업 폴더로 검색",
+      "rebind": {
+        "title": "작업 공간 폴더 변경",
+        "scope": "선택한 WorkBuddy 인스턴스에서 이 폴더의 모든 로컬 세션을 다시 연결합니다. 적용하기 전에 해당 인스턴스를 종료하세요.",
+        "instance": "WorkBuddy 인스턴스",
+        "choose": "새 폴더 선택",
+        "apply": "세션 다시 연결",
+        "noSessions": "이 폴더에 남은 로컬 세션이 없습니다. 목록을 새로고침한 후 다시 시도하세요.",
+        "success": "다시 연결된 로컬 세션 {{count}}개"
+      }
     },
     "title": "CodeBuddy 계정 관리",
     "noAccounts": "CodeBuddy 계정이 없습니다",
@@ -7946,6 +8040,10 @@
       "timeRangeError": "시작 시간은 종료 시간보다 늦을 수 없습니다"
     },
     "modelProbe": {
+      "results": "테스트 결과",
+      "reply": "모델 응답",
+      "backToSetup": "설정으로 돌아가기",
+      "catalogUnavailable": "모델을 불러오지 못했습니다.",
       "scopeAll": "전체 ({{count}})",
       "scopeSelected": "선택됨 ({{count}})",
       "scopeCurrent": "현재 계정",
@@ -7973,6 +8071,7 @@
       "open": "모델 확인"
     },
     "probeNotice": {
+      "recovered": "{{model}} 사용 가능 상태 복구 ({{time}})",
       "until": "{{model}} 이전 확인 시 제한됨, 해제 {{time}}",
       "unavailable": "{{model}} 이전 확인 시 제한됨",
       "failed": "{{model}} 이전 확인 실패"
@@ -8631,7 +8730,7 @@
       "title": "API 키 사용",
       "family": "그룹",
       "platform": "현재 시스템",
-      "unsupportedGroup": "이 그룹에는 아직 원클릭으로 쓸 수 있는 클라이언트가 없습니다."
+      "unsupportedGroup": "Cockpit Tools에는 아직 APIKEY.FUN의 {{family}} 엔드포인트에 맞는 클라이언트 설정 템플릿이 없습니다. 이 엔드포인트를 지원하는 클라이언트에서 직접 설정할 수 있습니다."
     },
     "campaign": {
       "badge": "11.11",
@@ -9355,5 +9454,125 @@
     "errorModel": "중복이나 와일드카드 없이 전체 모델 이름을 입력하세요.",
     "errorSave": "설정을 불러오거나 저장하지 못했습니다. 다시 시도하세요.",
     "saved": "저장되었습니다. 다음 요청부터 적용됩니다."
+  },
+  "antigravityTokenUsage": {
+    "tab": "세션 사용량",
+    "subtitle": "Antigravity 로컬 세션 토큰 사용량",
+    "title": "Antigravity 세션 토큰 사용량",
+    "desc": "로컬 Antigravity 세션 데이터베이스(~/.gemini/antigravity)를 읽기 전용으로 집계하며, Thinking 토큰과 Output 토큰을 엄격히 분리합니다.",
+    "hint": "SQLite steps/gen_metadata(WAL 인식), RPC 캐시 및 transcript JSONL을 읽기 전용으로 스캔합니다. Output에서 Thinking을 제외하여 중복 계산을 방지하며, 추정 토큰은 정확한 API 합계와 별도로 집계됩니다.",
+    "summary": {
+      "badge": "로컬 토큰",
+      "input": "입력",
+      "thinking": "사고",
+      "output": "출력",
+      "cache": "캐시",
+      "total": "합계",
+      "turns": "턴",
+      "sessionsUnit": "세션",
+      "scanning": "스캔 중…",
+      "updating": "업데이트 중…",
+      "detail": "상세"
+    },
+    "range": {
+      "label": "기간",
+      "today": "오늘",
+      "7d": "최근 7일",
+      "30d": "최근 30일",
+      "month": "이번 달",
+      "all": "전체 기간"
+    },
+    "granularity": {
+      "label": "집계 단위",
+      "day": "일별",
+      "week": "주별",
+      "month": "월별"
+    },
+    "kinds": {
+      "all": "모든 유형",
+      "main": "기본 세션",
+      "swarm": "Swarm 협업",
+      "subagent": "하위 에이전트"
+    },
+    "filters": {
+      "kindLabel": "세션 유형",
+      "modelLabel": "모델",
+      "workspaceLabel": "작업 공간",
+      "allModels": "모든 모델",
+      "allWorkspaces": "모든 작업 공간",
+      "searchPlaceholder": "제목, 세션 ID, 작업 공간, 모델 검색…"
+    },
+    "dataDir": {
+      "label": "데이터 폴더:",
+      "customBadge": "사용자 지정",
+      "choose": "폴더 변경",
+      "reset": "기본값 복원"
+    },
+    "actions": {
+      "refresh": "새로고침",
+      "rebuild": "전체 재스캔",
+      "backToAccounts": "계정 목록으로"
+    },
+    "rebuildConfirm": {
+      "title": "전체 재스캔",
+      "message": "Cockpit Tools 로컬 스캔 캐시를 비우고 모든 Antigravity 세션 파일을 읽기 전용 모드로 다시 읽습니다. 계속할까요?"
+    },
+    "status": {
+      "scanning": "Antigravity 세션 데이터베이스 스캔 중…",
+      "ready": "DB 파일 {{dbFiles}}개 · 세션 {{sessions}}개 · {{turns}}턴 스캔 완료",
+      "idle": "아직 스캔되지 않음",
+      "cacheStats": "캐시 적중 {{hits}} / 신규 {{misses}} ({{durationMs}} ms)",
+      "scannedAt": "{{time}} 동기화됨"
+    },
+    "cards": {
+      "total": "총 토큰",
+      "totalExact": "정확한 총 토큰",
+      "input": "입력 토큰",
+      "thinking": "사고 토큰",
+      "output": "출력 토큰",
+      "cache": "캐시 토큰",
+      "conversations": "대화 수",
+      "turns": "응답 턴",
+      "coverage": "정확도 범위",
+      "avgPerDay": "활성일 평균"
+    },
+    "estimated": {
+      "notice": "원본 API 사용량이 없는 {{turns}}턴은 별도로 추정되었습니다(정확한 합계에 합산되지 않음):"
+    },
+    "trend": {
+      "title": "토큰 사용량 추이",
+      "empty": "선택한 기간에 기록된 토큰 사용량이 없습니다"
+    },
+    "tables": {
+      "byModel": "모델별 분포",
+      "byWorkspace": "작업 공간별 분포",
+      "byKind": "세션 유형별 분포 (기본 / Swarm / 하위 에이전트)",
+      "conversations": "대화 세션 목록",
+      "conversationTitle": "대화",
+      "modelName": "모델",
+      "workspaceName": "작업 공간",
+      "sessions": "세션",
+      "turns": "턴",
+      "total": "합계",
+      "updatedAt": "업데이트 시간"
+    },
+    "pagination": {
+      "info": "{{page}} / {{totalPages}} 페이지 (총 {{totalItems}}개 세션)"
+    },
+    "detail": {
+      "openParent": "상위 세션 열기",
+      "children": "하위 세션 (Swarm / 하위 에이전트)",
+      "turnsTimeline": "턴별 토큰 타임라인"
+    },
+    "empty": {
+      "title": "현재 필터에 해당하는 토큰 사용량이 없습니다",
+      "desc": "기간을 \"전체 기간\"으로 변경하거나 Antigravity 사용 후 새로고침을 클릭해 보세요.",
+      "dirMissing": "Antigravity 데이터 폴더를 찾을 수 없습니다. 위의 폴더 경로를 확인해 주세요.",
+      "noRows": "일치하는 데이터 없음"
+    },
+    "errors": {
+      "loadFailed": "토큰 사용량을 불러오지 못했습니다: {{error}}",
+      "syncFailed": "토큰 사용량 스캔에 실패했습니다: {{error}}"
+    }
   }
 }

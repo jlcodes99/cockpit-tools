@@ -38,6 +38,7 @@ const GPT_5_5_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-5-5-model-preset";
 const RETIRE_GPT_5_5_WAKEUP_MODEL_MIGRATION_ID: &str = "retire-gpt-5-5-wakeup-model";
 const GPT_6_1_SOL_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-6-1-sol-model-preset";
 const GPT_6_1_TERRA_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-6-1-terra-model-preset";
+const GPT_6_2_MODEL_PRESETS_MIGRATION_ID: &str = "add-gpt-6-2-model-presets";
 const GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-6-astra-model-preset";
 const GPT_6_SOL_LUNA_MODEL_PRESETS_MIGRATION_ID: &str = "add-gpt-6-sol-luna-model-presets";
 const PREFIX_BUILTIN_MODEL_PRESET_NAMES_MIGRATION_ID: &str = "prefix-builtin-model-preset-names";
@@ -267,6 +268,8 @@ pub struct CodexWakeupHistoryItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_context_text: Option<String>,
     pub success: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http_status: Option<u16>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -532,6 +535,8 @@ fn default_reasoning_efforts_for_model(model: &str) -> Vec<String> {
         ]
     } else if model.trim().eq_ignore_ascii_case("gpt-6.1-sol")
         || model.trim().eq_ignore_ascii_case("gpt-6.1-terra")
+        || crate::modules::codex_model_catalog::GPT_6_2_MODELS.iter()
+            .any(|id| model.trim().eq_ignore_ascii_case(id))
     {
         vec!["low", "medium", "high", "xhigh", "max", "ultra"]
             .into_iter()
@@ -563,6 +568,8 @@ fn default_model_presets() -> Vec<CodexWakeupModelPreset> {
         ("preset-gpt-5-6-sol", "GPT-5.6 Sol", "gpt-5.6-sol"),
         ("preset-gpt-5-6-terra", "GPT-5.6 Terra", "gpt-5.6-terra"),
         ("preset-gpt-5-6-luna", "GPT-5.6 Luna", "gpt-5.6-luna"),
+        ("preset-gpt-6-2-sol", "GPT-6.2 Sol", "gpt-6.2-sol"),
+        ("preset-gpt-6-2-astra", "GPT-6.2 Astra", "gpt-6.2-astra"),
     ];
 
     items
@@ -921,7 +928,8 @@ fn ensure_gpt_6_1_sol_model_preset(state: &mut CodexWakeupState) -> bool {
     let defaults = default_model_presets();
     let unchanged = defaults
         .iter()
-        .filter(|preset| preset.model != "gpt-6.1-sol" && preset.model != "gpt-6.1-terra")
+        .filter(|preset| preset.model != "gpt-6.1-sol" && preset.model != "gpt-6.1-terra"
+            && !crate::modules::codex_model_catalog::GPT_6_2_MODELS.contains(&preset.model.as_str()))
         .all(|preset| {
             state
                 .model_presets
@@ -970,6 +978,16 @@ fn apply_model_preset_migrations(state: &mut CodexWakeupState) -> bool {
     changed |= ensure_gpt_6_sol_luna_model_presets(state);
     changed |= ensure_gpt_6_1_sol_model_preset(state);
     changed |= ensure_gpt_6_1_terra_model_preset(state);
+    if !state.model_preset_migrations.iter().any(|id| id == GPT_6_2_MODEL_PRESETS_MIGRATION_ID) {
+        let known_ids: HashSet<String> = state.model_presets.iter()
+            .map(|preset| preset.model.trim().to_ascii_lowercase()).collect();
+        state.model_presets.extend(default_model_presets().into_iter().filter(|preset| {
+            crate::modules::codex_model_catalog::GPT_6_2_MODELS.contains(&preset.model.as_str())
+                && !known_ids.contains(&preset.model)
+        }));
+        state.model_preset_migrations.push(GPT_6_2_MODEL_PRESETS_MIGRATION_ID.into());
+        changed = true;
+    }
     changed |= prefix_builtin_model_preset_names(state);
     state.model_preset_migrations.sort();
     state.model_preset_migrations.dedup();
@@ -1093,7 +1111,7 @@ fn normalize_runtime_config(raw: &CodexWakeupRuntimeConfig) -> CodexWakeupRuntim
     }
 }
 
-fn is_team_like_plan(plan_type: Option<&str>) -> bool {
+pub(crate) fn is_team_like_plan(plan_type: Option<&str>) -> bool {
     let Some(raw) = plan_type else {
         return false;
     };
@@ -2413,11 +2431,21 @@ pub fn load_history(
 }
 
 pub fn add_history_items(new_items: Vec<CodexWakeupHistoryItem>) -> Result<(), String> {
-    history_store()?.add(&new_items)
+    history_store()?.add(&new_items)?;
+    emit_history_changed();
+    Ok(())
 }
 
 pub fn clear_history() -> Result<(), String> {
-    history_store()?.clear()
+    history_store()?.clear()?;
+    emit_history_changed();
+    Ok(())
+}
+
+fn emit_history_changed() {
+    if let Some(app) = crate::get_app_handle() {
+        let _ = app.emit("codex://wakeup-history-changed", ());
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -2704,6 +2732,7 @@ fn create_failure_record(
         account_email,
         account_context_text,
         success: false,
+        http_status: None,
         prompt,
         model: execution_config.model.clone(),
         model_display_name: execution_config.model_display_name.clone(),
@@ -2927,6 +2956,7 @@ async fn run_api_single_account(
                 account_email,
                 account_context_text,
                 success: true,
+                http_status: Some(output.http_status),
                 prompt: prompt_value,
                 model: execution_config.model.clone(),
                 model_display_name: execution_config.model_display_name.clone(),
@@ -3106,6 +3136,7 @@ async fn run_cli_single_account(
                 account_email,
                 account_context_text,
                 success: true,
+                http_status: None,
                 prompt: prompt_value,
                 model: execution_config.model.clone(),
                 model_display_name: execution_config.model_display_name.clone(),
@@ -3521,7 +3552,9 @@ mod tests {
                 "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
-                "gpt-5.6-luna"
+                "gpt-5.6-luna",
+                "gpt-6.2-sol",
+                "gpt-6.2-astra"
             ]
         );
         let astra = default_model_presets()
@@ -3584,7 +3617,9 @@ mod tests {
                 "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
-                "gpt-5.6-luna"
+                "gpt-5.6-luna",
+                "gpt-6.2-sol",
+                "gpt-6.2-astra"
             ]
         );
         assert!(state
@@ -3667,7 +3702,9 @@ mod tests {
                 "gpt-5.6-terra",
                 "gpt-5.6-luna",
                 "gpt-5.6-sol",
-                "custom-model"
+                "custom-model",
+                "gpt-6.2-sol",
+                "gpt-6.2-astra"
             ]
         );
         assert_eq!(

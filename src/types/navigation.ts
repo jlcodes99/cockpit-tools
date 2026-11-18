@@ -3,6 +3,7 @@ export type Page =
   | 'manual'
   | 'api-relay'
   | 'overview'
+  | 'antigravity-usage'
   | 'codex'
   | 'claude'
   | 'claude-cli'
@@ -38,6 +39,7 @@ export const MAIN_WINDOW_NAVIGABLE_PAGES: readonly Page[] = [
   'manual',
   'api-relay',
   'overview',
+  'antigravity-usage',
   'codex',
   'claude',
   'claude-cli',

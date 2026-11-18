@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { codexRemoteBinding } from '../utils/codexRemoteBinding';
+import type { CustomProviderUsage } from '../utils/codexCustomProviderUsage';
 
 export type ModelProviderUsageIntegrationType = 'sub2api' | 'new_api';
 export type ModelProviderUsageMode =
@@ -7,6 +8,7 @@ export type ModelProviderUsageMode =
   | 'deepseek'
   | 'token_plan'
   | 'cockpit'
+  | 'custom'
   | 'openai_official';
 
 export interface ModelProviderModel {
@@ -74,18 +76,24 @@ function usageDetailNumber(
 export function resolveNewApiQuotaSnapshot(
   summary?: ModelProviderUsageSummary,
 ): NewApiQuotaSnapshot {
+  const legacyUsage = usageDetailNumber(summary, 'totalUsage');
   const used =
     finiteUsageNumber(summary?.quotaUsed) ??
-    finiteUsageNumber(summary?.totalCost);
-  const granted =
-    usageDetailNumber(summary, 'totalGranted') ??
-    finiteUsageNumber(summary?.quotaLimit) ??
+    finiteUsageNumber(summary?.totalCost) ??
+    (legacyUsage == null ? null : legacyUsage / 100);
+  const billingLimit =
     usageDetailNumber(summary, 'hardLimitUsd') ??
     usageDetailNumber(summary, 'softLimitUsd') ??
     usageDetailNumber(summary, 'systemHardLimitUsd');
+  const granted =
+    usageDetailNumber(summary, 'totalGranted') ??
+    finiteUsageNumber(summary?.quotaLimit) ??
+    (summary?.quotaUnlimited === true && billingLimit === 100_000_000 ? null : billingLimit);
   const available =
     usageDetailNumber(summary, 'totalAvailable') ??
     finiteUsageNumber(summary?.quotaRemaining) ??
+    finiteUsageNumber(summary?.remaining) ??
+    finiteUsageNumber(summary?.balance) ??
     (granted != null && used != null
       ? Math.max(0, granted - used)
       : null);
@@ -94,6 +102,36 @@ export function resolveNewApiQuotaSnapshot(
     usageDetailNumber(summary, 'accessUntil');
 
   return { granted, available, expiresAt };
+}
+
+export function presentNewApiQuota(
+  summary: ModelProviderUsageSummary | undefined,
+  unlimitedText: string,
+  unavailableText: string,
+): { text: string; percent: number | null; expiresAt: number | null } {
+  const { granted, available, expiresAt } = resolveNewApiQuotaSnapshot(summary);
+  const unit = summary?.unit ?? '';
+  if (available != null) {
+    const amount = formatModelProviderUsageMoney(available, unit);
+    return {
+      text: granted == null ? amount : `${amount} / ${formatModelProviderUsageMoney(granted, unit)}`,
+      percent: granted != null && granted > 0
+        ? Math.max(0, Math.min(100, Math.round((available / granted) * 100)))
+        : null,
+      expiresAt,
+    };
+  }
+  if (granted != null) {
+    return {
+      text: `${unavailableText} / ${formatModelProviderUsageMoney(granted, unit)}`,
+      percent: null,
+      expiresAt,
+    };
+  }
+  if (summary?.quotaUnlimited === true) {
+    return { text: unlimitedText, percent: 100, expiresAt };
+  }
+  return { text: unavailableText, percent: null, expiresAt };
 }
 
 export function buildUsageBaseUrlCandidates(baseUrl: string): string[] {
@@ -121,10 +159,11 @@ export async function queryModelProviderUsage(input: {
   /** Only used for OpenAI organization usage; never replaces the model credential. */
   usageApiKey?: string;
   integrationType?: ModelProviderUsageIntegrationType | null;
+  customUsage?: CustomProviderUsage;
   respectRelayBalanceSwitch?: boolean;
   accountId?: string;
 }): Promise<ModelProviderUsageSummary> {
-  const candidates = buildUsageBaseUrlCandidates(input.baseUrl);
+  const candidates = input.customUsage ? [input.baseUrl] : buildUsageBaseUrlCandidates(input.baseUrl);
   let lastError: unknown = null;
   for (const baseUrl of candidates) {
     try {
@@ -135,6 +174,7 @@ export async function queryModelProviderUsage(input: {
         integrationType: input.integrationType ?? null,
         respectRelayBalanceSwitch: input.respectRelayBalanceSwitch ?? false,
         accountId: input.accountId ?? null,
+        customUsage: input.customUsage ?? null,
       });
       if (summary.cockpit) summary.sourceBinding = await codexRemoteBinding(input.baseUrl, input.apiKey);
       return summary;
@@ -153,27 +193,15 @@ export async function listModelProviderModels(input: {
   apiKey: string;
   wireApi?: string;
   authScheme?: "x-api-key" | "bearer";
-  rememberForLaunch?: boolean;
+  launchAccountId?: string;
 }): Promise<ModelProviderModelsResult> {
   return await invoke('codex_list_model_provider_models', {
     baseUrl: input.baseUrl,
     apiKey: input.apiKey,
     wireApi: input.wireApi ?? null,
     authScheme: input.authScheme ?? null,
-    rememberForLaunch: input.rememberForLaunch ?? null,
+    launchAccountId: input.launchAccountId ?? null,
   });
-}
-
-const launchModelRequests = new Map<string, Promise<ModelProviderModelsResult>>();
-
-export function discoverModelProviderLaunchModels(input: Parameters<typeof listModelProviderModels>[0]) {
-  const requestKey = JSON.stringify([input.baseUrl, input.apiKey, input.wireApi, input.authScheme]);
-  const current = launchModelRequests.get(requestKey);
-  if (current) return current;
-  const request = listModelProviderModels({ ...input, rememberForLaunch: true })
-    .finally(() => launchModelRequests.delete(requestKey));
-  launchModelRequests.set(requestKey, request);
-  return request;
 }
 
 export function isRelayBalanceDisabledError(error: unknown): boolean {
@@ -199,6 +227,7 @@ export function resolveModelProviderUsageMode(
     summary.mode === 'sub2api' ||
     summary.mode === 'deepseek' ||
     summary.mode === 'token_plan' ||
+    summary.mode === 'custom' ||
     summary.mode === 'openai_official'
   ) {
     return summary.mode;

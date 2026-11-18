@@ -9,7 +9,6 @@ import { AccountLastUsed } from '../components/AccountLastUsed';
 import { useUiConfigStore } from '../stores/useUiConfigStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import * as codebuddyService from '../services/codebuddyService';
-import { CodebuddyInstancesPanel } from '../components/codebuddy/CodebuddyCliInstances';
 import { CodebuddyLaunchDialog } from '../components/codebuddy/CodebuddyLaunchDialog';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
@@ -607,16 +606,7 @@ export function CodebuddyAccountsPage() {
         tabs={['overview', 'sessions', 'instances']}
       />
       {activeTab === 'instances' ? (
-        <CodebuddyInstancesPanel
-          region="international"
-          accounts={store.accounts}
-          accountsLoading={store.loading}
-          accountsError={store.error}
-          fetchAccounts={store.fetchAccounts}
-          maskAccountText={maskAccountText}
-        >
-          <CodebuddyInstancesContent accountsForSelect={filteredAccounts} />
-        </CodebuddyInstancesPanel>
+        <CodebuddyInstancesContent accountsForSelect={filteredAccounts} />
       ) : activeTab === 'sessions' ? (
         <CodebuddySessionManager platform="intl" accounts={store.accounts as any} />
       ) : (

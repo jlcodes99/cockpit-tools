@@ -194,6 +194,35 @@ use super::*;
     }
 
     #[test]
+    fn trae_refresh_uses_newest_matching_instance_session_instead_of_last_profile() {
+        use std::time::{Duration, UNIX_EPOCH};
+        let dir = tempfile::tempdir().unwrap();
+        let saved = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        let mut account = sample_account();
+        account.email = "fixture@example.invalid".into();
+        account.user_id = Some("fixture-user".into());
+        let session = |name: &str, time: u64, user: &str, access: &str, refresh: &str| {
+            let path = dir.path().join(name);
+            fs::write(&path, serde_json::json!({(TRAE_STORAGE_AUTH_KEY): {
+                "userId": user, "email":"fixture@example.invalid", "accessToken": access,
+                "refreshToken": refresh, "expiresAt": 1_800_000_000, "platformId":"trae",
+            }}).to_string()).unwrap();
+            fs::File::open(&path).unwrap().set_modified(saved + Duration::from_secs(time)).unwrap();
+            (name.to_owned(), path)
+        };
+        let newest = session("default.json", 20, "fixture-user", "newest-access", "newest-refresh");
+        let older = session("bound.json", 10, "fixture-user", "older-access", "older-refresh");
+        let mismatched = session("wrong-user.json", 30, "different-user", "different-access", "different-refresh");
+        assert!(sync_account_from_storage_candidates(&mut account, vec![newest.clone(), older.clone(), mismatched.clone()], saved));
+        assert_eq!(account.refresh_token.as_deref(), Some("newest-refresh"));
+        assert_eq!(account.access_token, "newest-access");
+
+        // The newest snapshot wins even when its tokens already match the central account.
+        assert!(!sync_account_from_storage_candidates(&mut account, vec![older, newest, mismatched], saved));
+        assert_eq!(account.refresh_token.as_deref(), Some("newest-refresh"));
+    }
+
+    #[test]
     fn account_identity_match_uses_user_id_as_primary_key() {
         let mut account = sample_account();
         account.email = "same@example.com".to_string();

@@ -8,6 +8,8 @@ include!("codex_account_check.rs");
 include!("codex_account_model_retirement.rs");
 include!("codex_account_model_catalog.rs");
 include!("codex_account_context_management.rs");
+include!("codex_account_model_instructions.rs");
+include!("codex_account_subagent_defaults.rs");
 include!("codex_account_storage_locks.rs");
 include!("codex_account_token_refresh.rs");
 include!("codex_account_revoked_access.rs");
@@ -27,6 +29,7 @@ mod tests {
     include!("codex_account_tests_auth_store.rs");
     include!("codex_account_tests_batch_import_pressure.rs");
     include!("codex_account_tests_identity_import_refresh.rs");
+    include!("codex_account_tests_reauth_email.rs");
     include!("codex_account_tests_live_authority.rs");
     include!("codex_account_tests_auth_projection_identity.rs");
     include!("codex_account_tests_cli_daemon.rs");
@@ -41,6 +44,7 @@ mod tests {
     include!("codex_account_tests_model_vision.rs");
     include!("codex_account_tests_recycle_bin.rs");
     include!("codex_account_tests_revoked_access.rs");
+    include!("codex_account_tests_profile_check.rs");
     include!("../../../crates/cockpit-core/src/modules/codex_account_quota_window_tests.rs");
 }
 

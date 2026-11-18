@@ -38,10 +38,7 @@ pub(super) fn record<'a>(
     deadline: Deadline,
 ) -> BoxFuture<'a, Result<(), ServiceError>> {
     Box::pin(async move {
-        if !tracker
-            .quota_exhausted_accounts
-            .insert(route.account_id.clone())
-        {
+        if !tracker.mark_quota_exhausted(&route.account_id) {
             return Ok(());
         }
         let observation = async {
@@ -70,6 +67,8 @@ pub(super) fn record<'a>(
             result = deadline::timeout_at(deadline.cap(tokio::time::Instant::now() + state.options.request_timeout),
                 observation) =>
                     result.map_err(|_| super::retry::total_timeout()),
-        }
+        }?;
+        tracker.mark_confirmed_quota_cooldown_recorded(&route.account_id);
+        Ok(())
     })
 }

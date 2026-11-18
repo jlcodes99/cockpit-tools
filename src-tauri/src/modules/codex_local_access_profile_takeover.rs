@@ -470,6 +470,7 @@ fn remove_codex_local_access_config_with_realtime_ownership(
     if has_managed_realtime_sideband_override(&doc) || managed_realtime_sideband {
         doc.remove("experimental_realtime_ws_base_url");
     }
+    crate::modules::codex_model_catalog_capabilities::remove_managed_api_service_discovery(&mut doc);
     let _ = doc.remove("model_provider");
     if doc
         .get("model_catalog_json")

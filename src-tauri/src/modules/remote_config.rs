@@ -73,6 +73,8 @@ pub struct RemoteConfigPayload {
     #[serde(default)]
     pub codex_oauth_app_version: String,
     #[serde(default)]
+    codex_model_catalog_source: Option<String>,
+    #[serde(default)]
     pub refresh_interval_ms: Option<i64>,
     #[serde(default)]
     pub hidden_platform_ids: Vec<String>,
@@ -120,6 +122,7 @@ fn empty_payload() -> RemoteConfigPayload {
     RemoteConfigPayload {
         version: String::new(),
         codex_oauth_app_version: DEFAULT_CODEX_OAUTH_APP_VERSION.to_string(),
+        codex_model_catalog_source: None,
         refresh_interval_ms: Some(DEFAULT_REFRESH_INTERVAL_MS),
         hidden_platform_ids: Vec::new(),
         platforms: BTreeMap::new(),
@@ -588,6 +591,16 @@ async fn load_remote_config_raw(force_refresh: bool) -> Result<(RemoteConfigPayl
 pub async fn get_remote_config_state() -> Result<RemoteConfigState, String> {
     let (payload, updated_at) = load_remote_config_raw(false).await?;
     Ok(build_state(payload, updated_at))
+}
+
+pub(super) async fn prefers_project_codex_model_catalog() -> bool {
+    match load_remote_config_raw(false).await {
+        Ok((payload, _)) => payload.codex_model_catalog_source.as_deref() == Some("project"),
+        Err(error) => {
+            logger::log_warn(&format!("[RemoteConfig] Codex catalog source unavailable: {error}"));
+            false
+        }
+    }
 }
 
 pub async fn force_refresh_remote_config_state() -> Result<RemoteConfigState, String> {

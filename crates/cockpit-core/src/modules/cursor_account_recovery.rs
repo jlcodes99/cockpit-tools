@@ -275,8 +275,6 @@ mod tests {
     use crate::modules::antigravity_account_index_store::IndexRead;
     use serde_json::json;
 
-    static LOCK: Mutex<()> = Mutex::new(());
-
     fn setup() -> (tempfile::TempDir, PathBuf, PathBuf) {
         let root = tempfile::tempdir().unwrap();
         let index = root.path().join("cursor_accounts.json");
@@ -285,13 +283,17 @@ mod tests {
         (root, index, details)
     }
 
-    fn worker(path: &Path, directory: &Path) -> CursorRecovery {
+    fn worker(
+        path: &Path,
+        directory: &Path,
+        mutation_lock: &'static Mutex<()>,
+    ) -> CursorRecovery {
         CursorRecovery::new(
             provider_account_index::store(path).unwrap(),
             directory.to_owned(),
             |content| serde_json::from_str(content).map_err(|error| error.to_string()),
             |id| Ok(id.to_owned()),
-            &LOCK,
+            mutation_lock,
         )
     }
 
@@ -325,13 +327,14 @@ mod tests {
 
     #[test]
     fn cursor_recovery_resumes_without_duplicating_accounts() {
+        static LOCK: Mutex<()> = Mutex::new(());
         let (_root, index, details) = setup();
         let legacy = r#"{"version":"1.0","accounts":[]}"#;
         fs::write(&index, legacy).unwrap();
         for number in 0..48 {
             seed(&details, &format!("account-{number}"));
         }
-        let mut first = worker(&index, &details);
+        let mut first = worker(&index, &details, &LOCK);
         for _ in 0..4 {
             assert!(!first.run_batch().unwrap());
         }
@@ -340,7 +343,7 @@ mod tests {
         assert!(interrupted.accounts.len() < 48);
         assert!(!interrupted.detail_recovery_complete);
         drop(first);
-        finish(&mut worker(&index, &details));
+        finish(&mut worker(&index, &details, &LOCK));
         let recovered = active(&index);
         assert_eq!(recovered.accounts.len(), 48);
         assert!(recovered.detail_recovery_complete);
@@ -350,11 +353,12 @@ mod tests {
 
     #[test]
     fn cursor_recovery_does_not_reinsert_a_concurrently_deleted_detail() {
+        static LOCK: Mutex<()> = Mutex::new(());
         let (_root, index, details) = setup();
         fs::write(&index, r#"{"version":"1.0","accounts":[]}"#).unwrap();
         seed(&details, "retired");
         seed(&details, "orphan");
-        let mut job = worker(&index, &details);
+        let mut job = worker(&index, &details, &LOCK);
         assert!(!job.run_batch().unwrap());
         assert!(!job.run_batch().unwrap());
         assert!(job.staged.iter().any(|row| row.id == "retired"));
@@ -368,15 +372,16 @@ mod tests {
         assert_eq!(recovered.accounts.len(), 1);
         assert_eq!(recovered.accounts[0].id, "orphan");
         assert!(details.join("retired.json").exists());
-        assert!(worker(&index, &details).run_batch().unwrap());
+        assert!(worker(&index, &details, &LOCK).run_batch().unwrap());
     }
 
     #[test]
     fn cursor_recovery_preserves_corrupt_index_and_recovers_readable_detail() {
+        static LOCK: Mutex<()> = Mutex::new(());
         let (_root, index, details) = setup();
         fs::write(&index, "{broken").unwrap();
         seed(&details, "orphan");
-        finish(&mut worker(&index, &details));
+        finish(&mut worker(&index, &details, &LOCK));
         let recovered = active(&index);
         assert!(recovered.detail_recovery_complete);
         assert_eq!(recovered.accounts[0].id, "orphan");
@@ -385,6 +390,7 @@ mod tests {
 
     #[test]
     fn cursor_recovery_reads_a_detail_backup_without_rewriting_source() {
+        static LOCK: Mutex<()> = Mutex::new(());
         let (_root, index, details) = setup();
         seed(&details, "orphan");
         let primary = details.join("orphan.json");
@@ -392,7 +398,7 @@ mod tests {
         fs::rename(&primary, &backup).unwrap();
         fs::write(&primary, "{broken").unwrap();
 
-        finish(&mut worker(&index, &details));
+        finish(&mut worker(&index, &details, &LOCK));
         assert_eq!(active(&index).accounts[0].id, "orphan");
         assert_eq!(fs::read_to_string(&primary).unwrap(), "{broken");
         assert!(backup.is_file());
@@ -400,10 +406,11 @@ mod tests {
 
     #[test]
     fn cursor_recovery_does_not_treat_invalid_legacy_data_as_empty() {
+        static LOCK: Mutex<()> = Mutex::new(());
         let (_root, index, details) = setup();
         fs::write(&index, "{broken").unwrap();
         fs::write(details.join("unreadable.json"), "{broken").unwrap();
-        let mut job = worker(&index, &details);
+        let mut job = worker(&index, &details, &LOCK);
         assert!(!job.run_batch().unwrap());
         assert!(!job.run_batch().unwrap());
         assert!(job.run_batch().is_err());
@@ -412,7 +419,7 @@ mod tests {
         assert!(!snapshot.detail_recovery_complete);
         assert!(snapshot.accounts.is_empty());
         seed(&details, "unreadable");
-        finish(&mut worker(&index, &details));
+        finish(&mut worker(&index, &details, &LOCK));
         assert!(active(&index).detail_recovery_complete);
     }
 }

@@ -4,7 +4,65 @@
 // 切换、OAuth、导入导出、配额和唤醒命令。对外调用仍使用 `commands::codex::<command>`，
 // 不会因为物理拆分改变 Tauri command 名称或 Rust 调用路径。
 
-static CODEX_POST_REFRESH_CHECK_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+const POST_REFRESH_RUNNING: u8 = 1;
+const POST_REFRESH_PENDING: u8 = 2;
+static CODEX_POST_REFRESH_STATE: AtomicU8 = AtomicU8::new(0);
+static CODEX_AUTO_SWITCH_RECHECK_SCHEDULED: AtomicBool = AtomicBool::new(false);
+const CODEX_AUTO_SWITCH_RECHECK_INTERVAL: Duration = Duration::from_secs(10);
+const CODEX_AUTO_SWITCH_WAITING_FOR_IDLE: &str = "CODEX_AUTO_SWITCH_WAITING_FOR_IDLE";
+const CODEX_AUTO_SWITCH_SELECTION_CHANGED: &str = "CODEX_AUTO_SWITCH_SELECTION_CHANGED";
+
+
+struct CodexPostRefreshRun<'a> {
+    state: &'a AtomicU8,
+    owns_worker: bool,
+}
+
+impl<'a> CodexPostRefreshRun<'a> {
+    fn request(state: &'a AtomicU8) -> Option<Self> {
+        let previous = state.fetch_or(
+            POST_REFRESH_RUNNING | POST_REFRESH_PENDING,
+            Ordering::AcqRel,
+        );
+        (previous & POST_REFRESH_RUNNING == 0).then(|| Self {
+            state,
+            owns_worker: true,
+        })
+    }
+
+    async fn drain<F, Fut>(mut self, mut check: F)
+    where
+        F: FnMut() -> Fut,
+        Fut: std::future::Future<Output = ()>,
+    {
+        loop {
+            // Requests before this point are covered by the snapshot about to be read.
+            self.state.fetch_and(!POST_REFRESH_PENDING, Ordering::AcqRel);
+            check().await;
+            // Release ownership only if no refresh completed during the check.
+            if self.state.compare_exchange(
+                POST_REFRESH_RUNNING,
+                0,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+                .is_ok()
+            {
+                self.owns_worker = false;
+                return;
+            }
+        }
+    }
+}
+
+impl Drop for CodexPostRefreshRun<'_> {
+    fn drop(&mut self) {
+        if self.owns_worker {
+            self.state.store(0, Ordering::Release);
+        }
+    }
+}
+
 const CODEX_BATCH_DELETE_JOBS_DIR: &str = "codex_batch_delete_jobs";
 const CODEX_MAIL_PREVIEW_MAX_BYTES: usize = 512 * 1024;
 static CODEX_BATCH_DELETE_JOBS: LazyLock<Mutex<HashMap<String, CodexBatchDeleteJob>>> =
@@ -692,9 +750,12 @@ fn restart_codex_specified_app_if_enabled(user_config: &config::UserConfig) {
     }
 }
 
-async fn stop_default_codex_runtime_before_auth_commit() -> Result<(), String> {
+async fn stop_default_codex_runtime_before_auth_commit(
+    selected: Option<Option<uuid::Uuid>>,
+) -> Result<(), String> {
     let codex_home = codex_account::get_codex_home();
     let launch_mode = crate::modules::codex_instance::load_default_settings()?.launch_mode;
+    let instance = crate::commands::codex_instance::DEFAULT_INSTANCE_ID;
     crate::modules::codex_app_injection::stop_for_profile(&codex_home);
 
     if launch_mode == crate::models::InstanceLaunchMode::App {
@@ -705,6 +766,7 @@ async fn stop_default_codex_runtime_before_auth_commit() -> Result<(), String> {
         logger::log_info("[Codex Switch][Backend] CLI 模式无需关闭桌面运行态，继续提交新授权");
     }
 
+    crate::modules::codex_app_injection::record_after_desktop_stop(instance, selected).await;
     codex_local_access::stop_provider_gateways_for_profile(&codex_home).await;
     if let Err(error) = crate::modules::codex_instance::update_default_pid(None) {
         logger::log_warn(&format!(
@@ -727,6 +789,22 @@ pub async fn list_codex_accounts() -> Result<Vec<CodexAccount>, String> {
 #[tauri::command]
 pub fn get_current_codex_account() -> Result<Option<CodexAccount>, String> {
     Ok(codex_account::get_current_account())
+}
+
+#[tauri::command]
+pub async fn get_codex_profile_lifetime_tokens(account_id: String) -> Result<Option<u64>, String> {
+    let account = tauri::async_runtime::spawn_blocking(move || {
+        if codex_account::account_storage_status(&account_id)?
+            != codex_account::CodexAccountStorageStatus::Present
+        {
+            return Ok(None);
+        }
+        codex_account::load_account_checked(&account_id)
+    })
+    .await
+    .map_err(|_| "CODEX_PROFILE_USAGE_ACCOUNT_READ_FAILED".to_string())??
+    .ok_or_else(|| "CODEX_PROFILE_USAGE_ACCOUNT_NOT_FOUND".to_string())?;
+    codex_quota::fetch_profile_lifetime_tokens(&account).await
 }
 
 #[tauri::command]
@@ -778,6 +856,46 @@ pub async fn get_codex_quick_config() -> Result<CodexQuickConfig, String> {
     tauri::async_runtime::spawn_blocking(codex_account::load_current_quick_config)
         .await
         .map_err(|error| format!("读取 Codex 快捷配置后台任务失败: {}", error))?
+}
+
+#[tauri::command]
+pub async fn get_codex_model_instructions() -> Result<codex_account::CodexModelInstructionsSetting, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        codex_account::read_model_instructions_setting(&codex_account::get_codex_home())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn set_codex_model_instructions(
+    path: Option<String>,
+) -> Result<codex_account::CodexModelInstructionsSetting, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        codex_account::save_model_instructions_setting(&codex_account::get_codex_home(), path)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn get_codex_subagent_defaults() -> Result<codex_account::CodexSubagentDefaults, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        codex_account::read_subagent_defaults(&codex_account::get_codex_home())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn set_codex_subagent_defaults(
+    defaults: codex_account::CodexSubagentDefaults,
+) -> Result<codex_account::CodexSubagentDefaults, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        codex_account::save_subagent_defaults(&codex_account::get_codex_home(), defaults)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -843,11 +961,18 @@ pub async fn save_codex_model_catalog(
 }
 
 #[tauri::command]
+pub(crate) async fn get_codex_base_catalog_source() -> crate::modules::codex_model_catalog::CatalogSource {
+    crate::modules::codex_model_catalog::initialize().await;
+    crate::modules::codex_model_catalog::source()
+}
+
+#[tauri::command]
 pub async fn get_codex_model_reasoning_efforts(
     models: Vec<crate::models::codex::CodexExperimentalModelDefinition>,
     instance_id: Option<String>,
 ) -> Result<HashMap<String, Vec<String>>, String> {
     if models.len() > 1000 { return Err("MODEL_CONFIG_TOO_MANY_ITEMS".to_string()); }
+    crate::modules::codex_model_catalog::initialize().await;
     tauri::async_runtime::spawn_blocking(move || {
         let dir = codex_account::model_config_profile_dir(instance_id.as_deref().unwrap_or("__default__"))?;
         Ok(codex_account::model_reasoning_efforts_for_profile(&dir, &models))
@@ -1097,12 +1222,17 @@ async fn switch_codex_account_internal(
     auto_repair_mode: Option<codex_session_visibility::CodexSessionVisibilityAutoRepairMode>,
     reauth_token_generation: Option<u64>,
     launch_after_switch: Option<bool>,
+    automatic: Option<codex_account::CodexAutoSwitchSelection>,
 ) -> Result<CodexAccount, String> {
+    let codex_home = codex_account::get_codex_home();
+    let _profile_lease = codex_account::try_acquire_profile_mutation_lease(&codex_home, "oauth-account-switch")?;
+    #[cfg(target_os = "macos")]
+    let cli_refresh = crate::modules::codex_cli_daemon::SwitchRefresh::begin(&codex_home);
+    if let Some(selection) = automatic.as_ref() {
+        require_current_auto_switch_selection(selection)?;
+    }
     clear_codex_switch_cancel(&account_id);
-    let _profile_lease = codex_account::try_acquire_profile_mutation_lease(
-        &codex_account::get_codex_home(),
-        "oauth-account-switch",
-    )?;
+    let previous_provider = codex_session_visibility::read_target_provider(&codex_home).ok();
     let mut progress_guard = CodexSwitchProgressGuard {
         app: app.clone(),
         account_id: account_id.clone(),
@@ -1127,7 +1257,7 @@ async fn switch_codex_account_internal(
     let is_oauth_account = !initial_account.is_api_key_auth()
         && !initial_account.is_agent_identity_auth()
         && !initial_account.is_web_session_auth();
-    if !is_oauth_account {
+    if !is_oauth_account && automatic.is_none() {
         // 默认实例切到普通 API Key / 其他非 OAuth 账号时，混合模型路由必须自动关闭：
         // 路由的底座账号已经不存在，继续保留会拦住启动，并让后台监控反复尝试恢复网关。
         disable_default_model_routing_for_non_oauth_switch().await;
@@ -1225,10 +1355,30 @@ async fn switch_codex_account_internal(
             serde_json::json!({ "required": false }),
         );
     }
+    let mut selected_desktop_thread = None;
+    let selected_desktop_thread_out = &mut selected_desktop_thread;
     let before_commit = move || {
         let step_app = step_app.clone();
         let step_account_id = step_account_id.clone();
         async move {
+            let resume_selection = crate::modules::codex_app_injection::capture_before_desktop_stop(
+                crate::commands::codex_instance::DEFAULT_INSTANCE_ID,
+            ).await;
+            if let Some(selection) = automatic.as_ref() {
+                if launch_after_switch {
+                    *selected_desktop_thread_out = match resume_selection {
+                        Some(thread) => thread,
+                        None => crate::modules::codex_app_injection::capture_default_desktop_thread().await,
+                    };
+                }
+                if !default_runtime_allows_auto_switch().await {
+                    return Err(CODEX_AUTO_SWITCH_WAITING_FOR_IDLE.to_string());
+                }
+                require_current_auto_switch_selection(selection)?;
+                if !is_oauth_account {
+                    disable_default_model_routing_for_non_oauth_switch().await;
+                }
+            }
             if credentials_need_refresh {
                 let prepared_account = codex_account::load_account(&step_account_id);
                 emit_codex_switch_step(
@@ -1272,7 +1422,7 @@ async fn switch_codex_account_internal(
                 44,
                 serde_json::json!({}),
             );
-            stop_default_codex_runtime_before_auth_commit().await?;
+            stop_default_codex_runtime_before_auth_commit(resume_selection).await?;
             emit_codex_switch_step(
                 &step_app,
                 &step_account_id,
@@ -1309,6 +1459,14 @@ async fn switch_codex_account_internal(
     ensure_codex_switch_not_cancelled(&account_id)?;
     let account = match switch_result {
         Ok(account) => account,
+        Err(error) if is_deferred_auto_switch(&error) => {
+            let _ = app.emit(
+                "codex:switch-progress",
+                serde_json::json!({ "accountId": account_id, "type": "cancelled", "cancelled": true }),
+            );
+            progress_guard.completed = true;
+            return Err(error);
+        }
         Err(error) => {
             let formatted_error = codex_account::format_account_switch_error(&account_id, error);
             let auth_failure = formatted_error.starts_with("CODEX_SWITCH_AUTH_REQUIRED:");
@@ -1348,9 +1506,11 @@ async fn switch_codex_account_internal(
         serde_json::json!({}),
     );
     let project_state_deferred = !launch_after_switch
-        && crate::commands::codex_instance::profile_switch::prepare_project_state_after_switch(
+        && crate::commands::codex_instance::profile_switch::prepare_desktop_state_after_switch(
             crate::commands::codex_instance::DEFAULT_INSTANCE_ID.to_string(),
-            codex_account::get_codex_home(),
+            codex_home,
+            previous_provider.filter(|_| crate::modules::codex_instance::load_default_settings()
+                .is_ok_and(|settings| settings.launch_mode == crate::models::InstanceLaunchMode::App)),
         )
         .await;
     if is_reauth_handoff {
@@ -1461,6 +1621,11 @@ async fn switch_codex_account_internal(
         serde_json::json!({}),
     );
 
+    #[cfg(target_os = "macos")]
+    if let Some(refresh) = cli_refresh {
+        ensure_codex_switch_not_cancelled(&account_id)?;
+        refresh.finish().await;
+    }
     if launch_after_switch {
         ensure_codex_switch_not_cancelled(&account_id)?;
         emit_codex_switch_step(
@@ -1485,6 +1650,7 @@ async fn switch_codex_account_internal(
                 Some("switch-and-start"),
                 None,
                 Some(&default_bind_account_id),
+                selected_desktop_thread,
             )
             .await
             {
@@ -1591,56 +1757,119 @@ pub async fn codex_cancel_account_switch(app: AppHandle, account_id: String) -> 
     Ok(())
 }
 
-async fn run_codex_post_refresh_checks(app: &AppHandle) {
-    if CODEX_POST_REFRESH_CHECK_IN_PROGRESS.swap(true, Ordering::SeqCst) {
-        logger::log_info("[AutoSwitch][Codex] 后置检查进行中，跳过本次执行");
+fn require_current_auto_switch_selection(
+    expected: &codex_account::CodexAutoSwitchSelection,
+) -> Result<(), String> {
+    if codex_account::pick_auto_switch_target_if_needed()?.as_ref() == Some(expected) {
+        Ok(())
+    } else {
+        Err(CODEX_AUTO_SWITCH_SELECTION_CHANGED.to_string())
+    }
+}
+
+fn is_deferred_auto_switch(error: &str) -> bool {
+    matches!(error, CODEX_AUTO_SWITCH_WAITING_FOR_IDLE | CODEX_AUTO_SWITCH_SELECTION_CHANGED)
+}
+
+async fn default_runtime_allows_auto_switch() -> bool {
+    use crate::modules::codex_app_injection::{default_desktop_activity, DesktopActivity};
+
+    let launch_mode = tauri::async_runtime::spawn_blocking(|| {
+        crate::modules::codex_instance::load_default_settings().map(|settings| settings.launch_mode)
+    }).await;
+    match launch_mode {
+        Ok(Ok(crate::models::InstanceLaunchMode::App)) => {
+            default_desktop_activity().await == DesktopActivity::Idle
+        }
+        Ok(Ok(crate::models::InstanceLaunchMode::Cli)) => {
+            crate::commands::codex_instance::cli_resume::cli_allows_auto_switch(
+                codex_account::get_codex_home(),
+            ).await
+        }
+        _ => false,
+    }
+}
+
+fn schedule_codex_auto_switch_recheck(app: &AppHandle) {
+    if CODEX_AUTO_SWITCH_RECHECK_SCHEDULED.swap(true, Ordering::AcqRel) {
         return;
     }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(CODEX_AUTO_SWITCH_RECHECK_INTERVAL).await;
+        CODEX_AUTO_SWITCH_RECHECK_SCHEDULED.store(false, Ordering::Release);
+        run_codex_post_refresh_checks(&app).await;
+    });
+}
 
+pub(crate) fn run_codex_post_refresh_checks(
+    app: &AppHandle,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+    Box::pin(async move {
+        let Some(run) = CodexPostRefreshRun::request(&CODEX_POST_REFRESH_STATE) else {
+            return;
+        };
+        let app = app.clone();
+        // The refresh caller may stop waiting. The worker can still drain its queue.
+        let worker = tauri::async_runtime::spawn(async move {
+            run.drain(|| run_codex_post_refresh_check_once(&app)).await;
+        });
+        if let Err(error) = worker.await {
+            logger::log_warn(&format!("[AutoSwitch][Codex] 后置检查任务失败: {error}"));
+        }
+    })
+}
+
+async fn run_codex_post_refresh_check_once(app: &AppHandle) {
     let mut switched = false;
-
     match codex_account::pick_auto_switch_target_if_needed() {
-        Ok(Some(target)) => {
-            let target_id = target.id.clone();
-            // Keep the large switch state machine out of the post-refresh Future.
-            match Box::pin(switch_codex_account(
-                app.clone(),
-                target_id.clone(),
-                None,
-                None,
-                None,
-                None,
-            ))
-            .await
-            {
-                Ok(switched_account) => {
-                    logger::log_info(&format!(
-                        "[AutoSwitch][Codex] 自动切号完成: target_id={}, email={}",
-                        switched_account.id, switched_account.email
-                    ));
-                    switched = true;
-                }
-                Err(e) => {
-                    logger::log_warn(&format!(
-                        "[AutoSwitch][Codex] 自动切号失败: target_id={}, error={}",
-                        target_id, e
-                    ));
+        Ok(Some(selection)) => {
+            if !default_runtime_allows_auto_switch().await {
+                schedule_codex_auto_switch_recheck(app);
+            } else {
+                let target_id = selection.target_id.clone();
+                // Keep the large switch state machine out of the post-refresh Future.
+                match Box::pin(switch_codex_account_with_path_recovery(
+                    app.clone(),
+                    target_id.clone(),
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(selection),
+                ))
+                .await
+                {
+                    Ok(switched_account) => {
+                        logger::log_info(&format!(
+                            "[AutoSwitch][Codex] 自动切号完成: target_id={}, email={}",
+                            switched_account.id, switched_account.email
+                        ));
+                        switched = true;
+                    }
+                    Err(error) if is_deferred_auto_switch(&error) => {
+                        schedule_codex_auto_switch_recheck(app);
+                    }
+                    Err(error) => {
+                        logger::log_warn(&format!(
+                            "[AutoSwitch][Codex] 自动切号失败: target_id={}, error={}",
+                            target_id, error
+                        ));
+                    }
                 }
             }
         }
         Ok(None) => {}
-        Err(e) => {
-            logger::log_warn(&format!("[AutoSwitch][Codex] 自动切号检查失败: {}", e));
+        Err(error) => {
+            logger::log_warn(&format!("[AutoSwitch][Codex] 自动切号检查失败: {error}"));
         }
     }
 
     if !switched {
-        if let Err(e) = codex_account::run_quota_alert_if_needed() {
-            logger::log_warn(&format!("[QuotaAlert][Codex] 预警检查失败: {}", e));
+        if let Err(error) = codex_account::run_quota_alert_if_needed() {
+            logger::log_warn(&format!("[QuotaAlert][Codex] 预警检查失败: {error}"));
         }
     }
-
-    CODEX_POST_REFRESH_CHECK_IN_PROGRESS.store(false, Ordering::SeqCst);
 }
 
 /// 删除 Codex 账号
@@ -1989,7 +2218,10 @@ pub async fn refresh_codex_subscription_info(
 }
 
 #[tauri::command]
-pub async fn refresh_current_codex_quota(app: AppHandle) -> Result<(), String> {
+pub async fn refresh_current_codex_quota(
+    app: AppHandle,
+    background: Option<bool>,
+) -> Result<(), String> {
     let Some(account) = codex_account::get_current_account() else {
         return Err("未找到当前 Codex 账号".to_string());
     };
@@ -2011,7 +2243,11 @@ pub async fn refresh_current_codex_quota(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    let result = Box::pin(codex_quota::refresh_account_quota(&account.id)).await;
+    let result = if background.unwrap_or(false) {
+        Box::pin(codex_quota::refresh_account_quota_background(&account.id)).await
+    } else {
+        Box::pin(codex_quota::refresh_account_quota(&account.id)).await
+    };
     if result.is_ok() {
         Box::pin(run_codex_post_refresh_checks(&app)).await;
         let _ = crate::modules::tray::update_tray_menu(&app);
@@ -2801,6 +3037,7 @@ pub async fn restore_codex_active_takeover_if_enabled(app: AppHandle) -> Result<
     if !cfg.codex_auto_restore_takeover_on_launch {
         return Ok(false);
     }
+    crate::modules::codex_model_catalog::initialize().await;
     let base_dir = codex_account::get_codex_home();
     let reapply_catalog_result =
         codex_account::reapply_experimental_model_policy_if_enabled(&base_dir)?;

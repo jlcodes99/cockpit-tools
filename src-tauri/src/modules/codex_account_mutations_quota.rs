@@ -471,7 +471,12 @@ async fn update_api_key_bound_oauth_account_with_bound(
             &account,
             &bound_oauth_account,
         )?;
-        activate_provider_gateway_after_switch_if_needed(&codex_home, &account).await?;
+        activate_provider_gateway_after_switch_if_needed(
+            &codex_home,
+            &account,
+            Some(&bound_oauth_account),
+        )
+        .await?;
     }
 
     Ok(account)
@@ -1000,7 +1005,13 @@ fn pick_quota_alert_recommendation(
     pick_best_candidate(candidates)
 }
 
-pub fn pick_auto_switch_target_if_needed() -> Result<Option<CodexAccount>, String> {
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct CodexAutoSwitchSelection {
+    pub current_id: String,
+    pub target_id: String,
+}
+
+pub(crate) fn pick_auto_switch_target_if_needed() -> Result<Option<CodexAutoSwitchSelection>, String> {
     // 平台在「平台布局」中被禁用时不自动切号
     if !crate::modules::tray_layout::is_platform_enabled("codex") {
         return Ok(None);
@@ -1083,7 +1094,10 @@ pub fn pick_auto_switch_target_if_needed() -> Result<Option<CodexAccount>, Strin
             return Ok(None);
         }
 
-        Ok(pick_best_candidate(candidates))
+        Ok(pick_best_candidate(candidates).map(|target| CodexAutoSwitchSelection {
+            current_id,
+            target_id: target.id,
+        }))
     })();
 
     CODEX_AUTO_SWITCH_IN_PROGRESS.store(false, Ordering::SeqCst);

@@ -338,6 +338,7 @@ pub fn broadcast_data_changed(source: &str) {
     crate::modules::logger::log_info(&format!("[WS] 广播数据变更: {}", source));
 
     // 同时发送 Tauri 事件通知前端刷新
+    #[cfg(feature = "desktop")]
     if let Some(app_handle) = crate::get_app_handle() {
         use tauri::Emitter;
         let _ = app_handle.emit("accounts:refresh", source);
@@ -356,6 +357,7 @@ pub fn broadcast_language_changed(language: &str, source: &str) {
         language, source
     ));
 
+    #[cfg(feature = "desktop")]
     if let Some(app_handle) = crate::get_app_handle() {
         use tauri::Emitter;
         let _ = app_handle.emit("settings:language_changed", language);

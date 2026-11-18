@@ -7,6 +7,7 @@ import { buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingMod
 import { contextWindowDraftsFromRecord, parseContextWindowDrafts } from '../utils/codexModelContextWindows';
 import { resolveCodexModelProviderForApiKey } from '../utils/codexModelProviderKeyConfig';
 import { resolveCodexProviderCapabilityProfile } from '../utils/codexProviderGateway';
+import { resolveOllamaLocalPlaceholderKey } from '../utils/codexProviderPresets';
 import { resolveCodexModelProviderAccountName } from '../utils/codexModelProviderAccountName';
 
 function handler(name: string, state: Record<string, any>) {
@@ -24,7 +25,7 @@ function handler(name: string, state: Record<string, any>) {
   visit(source);
   assert.ok(declaration);
   const fetchBindings = name === 'handleFetchApiModelCatalog' || name === 'handleFetchEditingApiModelCatalog'
-    ? ['apiModelFetchWireApi', 'apiModelFetchAuthScheme', 'apiModelFetchKey', 'modelFetchState'] : [];
+    ? ['effectiveApiKeyInput', 'apiModelFetchWireApi', 'apiModelFetchAuthScheme', 'apiModelFetchKey', 'modelFetchState'] : [];
   const setup = fetchBindings.map(key => `globalThis.${key} = ${declarations.get(key)!.initializer!.getText(source)};`).join('\n')
     + (fetchBindings.length ? 'modelFetchState.current.addKey = apiModelFetchKey;' : '');
   const code = ts.transpileModule(`${setup}\nglobalThis.run = ${declaration.initializer!.getText(source)}`, {
@@ -45,7 +46,7 @@ function harness() {
   const state: Record<string, any> = {
     useCallback: (value: any) => value,
     useRef: (value: any) => state.modelFetchState ?? { current: value },
-    resolveCodexProviderCapabilityProfile, resolveCodexModelProviderAccountName,
+    resolveCodexProviderCapabilityProfile, resolveCodexModelProviderAccountName, resolveOllamaLocalPlaceholderKey,
     apiBaseUrlInput: account.api_base_url, apiKeyInput: account.openai_api_key,
     apiProviderPresetId: 'custom', selectedManagedProvider: provider, sponsorApiProviderTemplates: [],
     accounts: [account], editingApiKeyCredentialsId: 'account', editingApiKeyCredentialsValue: 'sk-test',
@@ -133,3 +134,29 @@ for (const entry of ['add'] as const) {
     });
   }
 }
+
+test('local Ollama can load models with a blank key and a remote endpoint still needs a key', async () => {
+  const h = harness();
+  h.state.selectedManagedProvider = null;
+  h.state.apiProviderPresetId = 'ollama_local';
+  h.state.apiBaseUrlInput = 'http://127.0.0.1:11434/v1';
+  h.state.apiKeyInput = '';
+  const requests: any[] = [];
+  h.state.listModelProviderModels = async (request: any) => {
+    requests.push(request);
+    return { models: [{ id: 'local-model' }] };
+  };
+  h.state.parseApiModelCatalogText = (value: string) => value.split('\n');
+  h.state.setApiModelCatalogFetching = () => {};
+  h.state.setApiModelCatalogError = (value: any) => { h.state.modelError = value; };
+  h.state.setApiModelCatalogInput = (value: string) => { h.state.modelDraft = value; };
+  await handler('handleFetchApiModelCatalog', h.state)();
+  assert.equal(requests[0].apiKey, resolveOllamaLocalPlaceholderKey(h.state.apiBaseUrlInput));
+  assert.equal(requests[0].wireApi, 'chat_completions');
+  assert.equal(h.state.modelDraft, 'local-model');
+
+  h.state.apiBaseUrlInput = 'https://ollama.com/v1';
+  await handler('handleFetchApiModelCatalog', h.state)();
+  assert.equal(requests.length, 1);
+  assert.equal(h.state.modelError, 'codex.api.modelCatalog.fetchCredentialsRequired');
+});

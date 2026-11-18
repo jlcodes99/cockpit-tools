@@ -36,6 +36,27 @@ pub async fn switch_codex_account(
     launch_after_switch: Option<bool>,
     path_recovery_managed: Option<bool>,
 ) -> Result<CodexAccount, String> {
+    Box::pin(switch_codex_account_with_path_recovery(
+        app,
+        account_id,
+        auto_repair_mode,
+        reauth_token_generation,
+        launch_after_switch,
+        path_recovery_managed,
+        None,
+    ))
+    .await
+}
+
+async fn switch_codex_account_with_path_recovery(
+    app: AppHandle,
+    account_id: String,
+    auto_repair_mode: Option<codex_session_visibility::CodexSessionVisibilityAutoRepairMode>,
+    reauth_token_generation: Option<u64>,
+    launch_after_switch: Option<bool>,
+    path_recovery_managed: Option<bool>,
+    automatic: Option<codex_account::CodexAutoSwitchSelection>,
+) -> Result<CodexAccount, String> {
     let args = serde_json::json!({
         "accountId": account_id,
         "autoRepairMode": auto_repair_mode,
@@ -48,6 +69,7 @@ pub async fn switch_codex_account(
         auto_repair_mode,
         reauth_token_generation,
         launch_after_switch,
+        automatic,
     ))
     .await;
     if let Err(error) = &result {

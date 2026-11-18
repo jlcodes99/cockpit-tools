@@ -15,6 +15,7 @@ export interface AutoRefreshSchedulerOptions {
 export interface AutoRefreshSchedulerHandle {
   start: () => void;
   stop: () => void;
+  replaceTasks: (tasks: AutoRefreshSchedulerTask[]) => void;
 }
 
 const DEFAULT_TICK_MS = 5_000;
@@ -24,7 +25,6 @@ const MIN_INITIAL_DELAY_RATIO = 0.05;
 
 interface RuntimeTask extends AutoRefreshSchedulerTask {
   nextRunAt: number;
-  running: boolean;
 }
 
 function clampIntervalMs(intervalMs: number): number {
@@ -68,24 +68,45 @@ export function createAutoRefreshScheduler(
 
   let stopped = false;
   let timerId: number | null = null;
-  let activeCount = 0;
+  const runningKeys = new Set<string>();
+  let runtimeTasks: RuntimeTask[] = [];
 
-  const runtimeTasks: RuntimeTask[] = tasks
-    .filter((task) => task.intervalMs > 0)
-    .map((task) => ({
-      ...task,
-      nextRunAt: Date.now() + buildInitialDelayMs(task, tickMs),
-      running: false,
-    }));
+  function clearTimer() {
+    if (timerId !== null) {
+      window.clearInterval(timerId);
+      timerId = null;
+    }
+  }
+
+  function replaceTasks(nextTasks: AutoRefreshSchedulerTask[]) {
+    const previousTasks = new Map(runtimeTasks.map((task) => [task.key, task]));
+    const now = Date.now();
+    runtimeTasks = nextTasks
+      .filter((task) => task.intervalMs > 0)
+      .map((task) => {
+        const previous = previousTasks.get(task.key);
+        return {
+          ...task,
+          nextRunAt: previous?.intervalMs === task.intervalMs
+            ? previous.nextRunAt
+            : now + buildInitialDelayMs(task, tickMs),
+        };
+      });
+    if (runtimeTasks.length === 0) {
+      clearTimer();
+    }
+  }
+
+  replaceTasks(tasks);
 
   const scheduleDueTasks = () => {
-    if (stopped || activeCount >= maxConcurrent) {
+    if (stopped || runningKeys.size >= maxConcurrent) {
       return;
     }
 
     const now = Date.now();
     const dueTasks = runtimeTasks
-      .filter((task) => !task.running && task.nextRunAt <= now)
+      .filter((task) => !runningKeys.has(task.key) && task.nextRunAt <= now)
       .sort((left, right) => {
         if (left.nextRunAt !== right.nextRunAt) {
           return left.nextRunAt - right.nextRunAt;
@@ -94,7 +115,7 @@ export function createAutoRefreshScheduler(
       });
 
     for (const task of dueTasks) {
-      if (stopped || activeCount >= maxConcurrent) {
+      if (stopped || runningKeys.size >= maxConcurrent) {
         break;
       }
 
@@ -103,15 +124,13 @@ export function createAutoRefreshScheduler(
         continue;
       }
 
-      task.running = true;
+      runningKeys.add(task.key);
       task.nextRunAt = Date.now() + clampIntervalMs(task.intervalMs);
-      activeCount += 1;
 
       void Promise.resolve()
         .then(() => task.run())
         .finally(() => {
-          task.running = false;
-          activeCount = Math.max(0, activeCount - 1);
+          runningKeys.delete(task.key);
           if (!stopped) {
             scheduleDueTasks();
           }
@@ -127,12 +146,10 @@ export function createAutoRefreshScheduler(
       scheduleDueTasks();
       timerId = window.setInterval(scheduleDueTasks, tickMs);
     },
+    replaceTasks,
     stop() {
       stopped = true;
-      if (timerId !== null) {
-        window.clearInterval(timerId);
-        timerId = null;
-      }
+      clearTimer();
     },
   };
 }

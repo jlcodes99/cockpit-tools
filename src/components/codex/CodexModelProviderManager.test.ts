@@ -19,6 +19,60 @@ const end = source.indexOf('  }, [', start);
 assert.ok(start > 0 && end > start);
 const handler = `${source.slice(start, end)}  }, []); globalThis.save = handleSaveApiKeyEdit;`;
 
+test('switching a managed CLI to a gateway starts continuation through that gateway only', async () => {
+  const file = ts.createSourceFile('manager.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let declaration: ts.Expression | undefined;
+  function visit(node: ts.Node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(file) === 'executeProviderLaunchPreview')
+      declaration = node.initializer;
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  assert.ok(declaration);
+  const calls: string[][] = [];
+  const run = vm.runInNewContext(ts.transpileModule(`(${declaration.getText(file)})`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, {
+    useCallback: (fn: unknown) => fn,
+    providerLaunchPreview: {
+      instanceId: 'cli-instance', instanceName: 'CLI',
+      account: { id: 'custom-key' }, provider: { id: 'relay', baseUrl: 'https://fixture.invalid' },
+    },
+    setNotice() {},
+    isCodexApiKeyAccount: () => true,
+    updateAccountInstanceAccess() {},
+    resolveCodexApiProviderPresetId: () => 'custom',
+    resolveGatewayModeByWireApi: () => 'gateway',
+    resolveProviderWireApi: () => 'responses',
+    buildCodexProviderGatewayBindId: (id: string) => `gateway:${id}`,
+    resolveCodexProviderBindAccountId: (_account: unknown, id: string) => id,
+    async updateCodexInstance(payload: { bindAccountId: string }) {
+      calls.push(['bind', payload.bindAccountId]);
+      return { launchMode: 'cli' };
+    },
+    async startCodexInstance(id: string, options: { expectedSwitchBinding: string }) {
+      calls.push(['start', id, options.expectedSwitchBinding]);
+    },
+    async switchInstanceAccount(id: string, binding: string) {
+      calls.push(['switch', id, binding]);
+      return false;
+    },
+    async reloadCurrentAccount() {},
+    async reloadLocalAccessState() {},
+    async reloadCodexInstances() {},
+    setLastEnabledProviderId() {},
+    setProviderLaunchPreview() {},
+    parseServiceError: String,
+    t: (key: string) => key,
+  });
+  assert.equal(await run(true), true);
+  assert.equal(await run(false), true);
+  assert.deepEqual(calls, [
+    ['bind', 'gateway:custom-key'],
+    ['start', 'cli-instance', 'gateway:custom-key'],
+    ['switch', 'cli-instance', 'gateway:custom-key'],
+  ]);
+});
+
 test('provider test order prefers successful providers with shorter total duration', () => {
   const fixture = {
     providerName: 'Fixture', wireApi: 'responses', accessMode: 'gateway',

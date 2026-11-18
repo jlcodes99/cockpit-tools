@@ -116,9 +116,6 @@ async fn native_image_route_once(
             && !account.is_agent_identity_auth()
             && !account.requires_reauth
             && !codex_account::account_has_remote_api_auth_rejection(account)
-            && !(collection.restrict_free_accounts
-                && is_free_plan_type(account.plan_type.as_deref())
-                && !account.is_api_key_auth())
             && native_quota_allows(&collection, account)
             && native_image_source_allowed(&collection, account, selection)
             && native_image_model_allowed_for_selection(

@@ -2,7 +2,7 @@
 // a broken upstream path can behind a still-running local CONNECT proxy.
 struct NativeNetworkPeer {
     address: std::net::SocketAddr,
-    root: reqwest::Certificate,
+    roots: Arc<rustls::RootCertStore>,
     request_seen: Arc<tokio::sync::Notify>,
     task: tokio::task::JoinHandle<()>,
 }
@@ -18,7 +18,7 @@ async fn native_network_peer(blackhole: bool) -> NativeNetworkPeer {
     use hyper_util::rt::{TokioExecutor, TokioIo};
 
     let certificate = rcgen::generate_simple_self_signed(vec!["127.0.0.1".into()]).unwrap();
-    let root = reqwest::Certificate::from_der(certificate.cert.der()).unwrap();
+    let roots = native_test_tls_roots(certificate.cert.der().clone());
     let mut config = rustls::ServerConfig::builder_with_provider(Arc::new(
         rustls::crypto::aws_lc_rs::default_provider(),
     ))
@@ -67,17 +67,16 @@ async fn native_network_peer(blackhole: bool) -> NativeNetworkPeer {
     });
     NativeNetworkPeer {
         address,
-        root,
+        roots,
         request_seen,
         task,
     }
 }
 
 fn native_network_test_client(peer: &NativeNetworkPeer) -> Client {
-    native_http_client_builder(true, false)
+    native_codex_http_client_builder(peer.roots.clone(), false)
+        .unwrap()
         .no_proxy()
-        .tls_built_in_root_certs(false)
-        .add_root_certificate(peer.root.clone())
         // The outer bound is deliberately later than heartbeat detection.
         .timeout(Duration::from_secs(60))
         .build()

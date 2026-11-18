@@ -7,10 +7,7 @@ use chrono::{SecondsFormat, Utc};
 use serde::Serialize;
 use serde_json::{json, Value as JsonValue};
 
-use crate::modules;
-
-#[path = "codex_session_rollout_reader.rs"]
-mod rollout_reader;
+use crate::modules::{self, codex_session_rollout_reader as rollout_reader};
 
 const DEFAULT_INSTANCE_ID: &str = "__default__";
 const DEFAULT_INSTANCE_NAME: &str = "默认实例";

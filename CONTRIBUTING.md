@@ -85,9 +85,9 @@ Please be respectful and professional in all interactions. We follow the [Contri
 ### Release Process Summary
 
 1. Update version in `package.json` + CHANGELOG (Chinese & English)
-2. Run `npm run sync-version` → `npm run release:preflight`
+2. Run `npm run sync-version`. Use the standard checks in [the release guide](docs/release-process.md#7-发版顺序) unless explicitly requesting a fast release.
 3. Commit → Tag (e.g., `v0.22.20`) → Push branch and tag
-4. CI auto-builds macOS (universal) + Windows + Linux → Generates SHA256 → Updates Homebrew Cask
+4. The tag triggers the official build. The public Release and `latest.json` indicate that users can update; Homebrew Cask follows separately.
 
 ### Release Targets
 

@@ -67,6 +67,30 @@ fn source_projection_bytes(f: &Fixture) -> Vec<u8> {
 }
 
 #[test]
+fn compressed_rollout_projection_uses_uncompressed_record_boundaries() {
+    for (offset, expected_rows) in [
+        (LEGACY_ROLLOUT_BYTES as i64, 1),
+        (LEGACY_PROJECTION_OFFSET, 0),
+    ] {
+        let (f, _) = legacy_projection_fixture(offset);
+        let compressed_path = f.child_rollout.with_extension("jsonl.zst");
+        let bytes = compress_rollout(&f.child_rollout, &compressed_path);
+        assert!(bytes.len() < offset as usize);
+        copy_profile(&f.source, &f.target).unwrap();
+        let target = Connection::open(f.target.join("thread_history_1.sqlite")).unwrap();
+        let rows = target
+            .query_row(
+                "SELECT count(*) FROM thread_history_projection_state WHERE thread_id=?1",
+                [ROOT],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
+        assert_eq!(rows, expected_rows);
+        assert_eq!(fs::read(f.target_path(&compressed_path)).unwrap(), bytes);
+    }
+}
+
+#[test]
 fn stale_legacy_projection_rebuilds_only_affected_copy_cache_without_touching_source() {
     let (f, original_rollout) = legacy_projection_fixture(LEGACY_PROJECTION_OFFSET);
     let history_before = source_projection_bytes(&f);

@@ -76,6 +76,137 @@ impl Drop for Fixture {
     }
 }
 
+fn compress_rollout(path: &Path, destination: &Path) -> Vec<u8> {
+    let bytes = fs::read(path).unwrap();
+    let compressed = zstd::stream::encode_all(bytes.as_slice(), 0).unwrap();
+    fs::create_dir_all(destination.parent().unwrap()).unwrap();
+    fs::write(destination, &compressed).unwrap();
+    fs::remove_file(path).unwrap();
+    compressed
+}
+
+#[test]
+fn copy_profile_preserves_compressed_paginated_lineage_and_repairs_index_path() {
+    let f = Fixture::new();
+    let archived_parent = f.source.join("archived_sessions").join(
+        f.root_rollout
+            .with_extension("jsonl.zst")
+            .file_name()
+            .unwrap(),
+    );
+    let child = f.child_rollout.with_extension("jsonl.zst");
+    let parent_bytes = compress_rollout(&f.root_rollout, &archived_parent);
+    let child_bytes = compress_rollout(&f.child_rollout, &child);
+    copy_profile(&f.source, &f.target).unwrap();
+    assert_eq!(
+        fs::read(f.target_path(&archived_parent)).unwrap(),
+        parent_bytes
+    );
+    assert_eq!(fs::read(f.target_path(&child)).unwrap(), child_bytes);
+    let read_path = |profile: &Path| {
+        Connection::open(profile.join(STATE_DB))
+            .unwrap()
+            .query_row(
+                "SELECT rollout_path FROM threads WHERE id=?1",
+                [ROOT],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap()
+    };
+    assert_eq!(Path::new(&read_path(&f.target)), f.target_path(&child));
+    assert_eq!(Path::new(&read_path(&f.source)), f.child_rollout);
+}
+
+#[test]
+fn copy_profile_rejects_truncated_compressed_parent_before_publish() {
+    let f = Fixture::new();
+    let metadata = json!({"type": "session_meta", "payload": {"id": ROOT}});
+    fs::write(&f.root_rollout, format!("{metadata}\n")).unwrap();
+    let compressed = f.root_rollout.with_extension("jsonl.zst");
+    compress_rollout(&f.root_rollout, &compressed);
+    let error = copy_profile(&f.source, &f.target).unwrap_err();
+    assert!(error.contains("字节边界超出"), "{error}");
+    assert!(!f.target.exists());
+}
+
+#[test]
+fn configured_copy_timeout_is_distinct_from_cancellation_and_preserves_the_target() {
+    let f = Fixture::new();
+    fs::create_dir_all(&f.target).unwrap();
+    let expired = copy_profile_with_timeout(
+        &f.source,
+        &f.target,
+        &AtomicBool::new(false),
+        Duration::ZERO,
+    )
+    .unwrap_err();
+    assert!(expired.contains("超时"), "{expired}");
+    assert!(!expired.contains("取消"), "{expired}");
+    let cancelled = copy_profile_with_timeout(
+        &f.source,
+        &f.target,
+        &AtomicBool::new(true),
+        Duration::from_secs(2),
+    )
+    .unwrap_err();
+    assert!(cancelled.contains("已取消"), "{cancelled}");
+    assert!(!cancelled.contains("超时"), "{cancelled}");
+    assert!(fs::read_dir(&f.target).unwrap().next().is_none());
+    copy_profile_with_timeout(
+        &f.source,
+        &f.target,
+        &AtomicBool::new(false),
+        Duration::from_secs(120),
+    )
+    .unwrap();
+    assert!(f.target.join(STATE_DB).is_file());
+}
+
+#[test]
+fn copy_resolves_archived_compressed_parent_at_its_decoded_byte_boundary() {
+    let f = Fixture::new();
+    let archived = f.source.join("archived_sessions");
+    fs::create_dir(&archived).unwrap();
+    let parent = archived.join(f.root_rollout.file_name().unwrap());
+    let parent_zstd = parent.with_extension("jsonl.zst");
+    let bytes = fs::read(&f.root_rollout).unwrap();
+    let compressed = zstd::stream::encode_all(bytes.as_slice(), 0).unwrap();
+    fs::write(&parent_zstd, &compressed).unwrap();
+    fs::remove_file(&f.root_rollout).unwrap();
+    let db = Connection::open(f.source.join(STATE_DB)).unwrap();
+    db.execute("UPDATE threads SET id=?1", [CHILD]).unwrap();
+    db.execute(
+        "INSERT INTO threads VALUES (?1, ?2, NULL, ?3)",
+        rusqlite::params![ROOT, parent.to_string_lossy(), "/workspace/shared"],
+    ).unwrap();
+    drop(db);
+
+    copy_profile(&f.source, &f.target).unwrap();
+    assert_eq!(fs::read(f.target_path(&parent_zstd)).unwrap(), compressed);
+    let db = Connection::open(f.target.join(STATE_DB)).unwrap();
+    let indexed: String = db.query_row("SELECT rollout_path FROM threads WHERE id=?1", [ROOT], |r| r.get(0)).unwrap();
+    assert_eq!(Path::new(&indexed), f.target_path(&parent));
+    assert_eq!(
+        fs::read(f.target_path(&f.child_rollout)).unwrap(),
+        fs::read(&f.child_rollout).unwrap(),
+    );
+    drop(db);
+    for (offset, expected) in [
+        (bytes.len() - 1, "字节边界不在记录末尾"),
+        (bytes.len() + 1, "字节边界超出来源文件"),
+    ] {
+        let content = fs::read_to_string(&f.child_rollout).unwrap();
+        let (first, rest) = content.split_once('\n').unwrap();
+        let mut meta: Value = serde_json::from_str(first).unwrap();
+        meta["payload"]["history_base"]["end_byte_offset"] = json!(offset);
+        fs::write(&f.child_rollout, format!("{meta}\n{rest}")).unwrap();
+        let invalid_target = f.dir.join("invalid-target");
+        let error = copy_profile(&f.source, &invalid_target).unwrap_err();
+        assert!(error.contains("校验分页历史") && error.contains(expected), "{error}");
+        assert!(!invalid_target.exists());
+    }
+}
+
 #[test]
 fn copied_instance_uses_its_own_history_after_source_grows() {
     let f = Fixture::new();
@@ -111,7 +242,7 @@ fn copied_instance_uses_its_own_history_after_source_grows() {
     validate_lineage(
         &f.target,
         &CopyBudget {
-            deadline: Instant::now() + Duration::from_secs(5),
+            deadline: Instant::now() + DEFAULT_COPY_TIMEOUT,
             cancelled: &AtomicBool::new(false),
         },
     )
@@ -341,7 +472,7 @@ fn validates_multiple_segments_including_archived_ancestor() {
     validate_lineage(
         &f.target,
         &CopyBudget {
-            deadline: Instant::now() + Duration::from_secs(5),
+            deadline: Instant::now() + DEFAULT_COPY_TIMEOUT,
             cancelled: &AtomicBool::new(false),
         },
     )

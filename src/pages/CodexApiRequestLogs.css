@@ -339,3 +339,32 @@
   min-width: 0;
   max-width: 100%;
 }
+
+.codex-request-log-high-filter[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.codex-request-log-token-grid > .codex-request-log-high-token {
+  justify-content: flex-start;
+  align-items: center;
+  color: var(--text-primary);
+  font-weight: 600;
+  white-space: normal;
+}
+
+.codex-request-log-threshold {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.codex-request-log-threshold label {
+  flex: 1;
+  min-width: 0;
+}
+
+.codex-request-log-threshold input[aria-invalid="true"] {
+  border-color: var(--danger);
+}

@@ -1,19 +1,20 @@
 import { LaunchPathSettingsButton } from '../components/LaunchPathSettingsButton';
+import { MenuBarLeftClickSetting } from '../components/MenuBarLeftClickSetting';
 import { invoke } from '@tauri-apps/api/core';
 import { normalizeLanguage } from '../i18n';
-import * as accountService from '../services/accountService';
 import { AutoSwitchAccountScopeSelector } from '../components/AutoSwitchAccountScopeSelector';
 import { UI_SCALE_OPTION_STRINGS as UI_SCALE_OPTIONS } from '../utils/uiScale';
 import { setClaudeQuotaDisplayRemainingEnabled } from '../utils/claudeQuotaDisplayPreference';
 import { SettingsAccountTransferSection } from '../components/SettingsAccountTransferSection';
 import type { SideNavLayoutMode } from '../stores/useSideNavLayoutStore';
 import './settings/Settings.css';
-import { Save, FolderOpen, AlertCircle, RefreshCw } from 'lucide-react';
+import { Save, AlertCircle, RefreshCw } from 'lucide-react';
 import type { SettingsPageViewProps } from "./SettingsPageView";
 import { FloatingCardSettings, FloatingCardShowSetting } from "./settings/FloatingCardSettings";
 import { StartupPageSetting } from "./settings/StartupPageSetting";
 import { ThemeColorSetting } from './settings/ThemeColorSetting';
 import { AppBackgroundSettings } from './settings/AppBackgroundSettings';
+import { DataDirectorySetting } from './settings/DataDirectorySetting';
 import { SettingsCodexPlatformPanel } from "./SettingsCodexPlatformPanel";
 import { PlatformSettingsSection } from "./settings/PlatformSettingsSection";
 import {
@@ -69,6 +70,8 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     claudeQuotaAlertThresholdCustomMode,
     claudeQuotaAlertThresholdIsPreset,
     claudeQuotaDisplayRemaining,
+    claudeShareCodeSessionsOnSwitch,
+    setClaudeShareCodeSessionsOnSwitch,
     closeBehavior,
     codebuddyAppPath,
     codebuddyAutoRefresh,
@@ -145,6 +148,8 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     loadGeneralConfig,
     loadUpdateSettings,
     menuBarQuotaEnabled,
+    menuBarLeftClickOpensMainWindow,
+    setMenuBarLeftClickOpensMainWindow,
     menuBarQuotaPlatform,
     menuBarQuotaPlatformOptions,
     normalizeNumberInput,
@@ -762,6 +767,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     </div>
                   </div>
 
+                  <MenuBarLeftClickSetting
+                    opensMainWindow={menuBarLeftClickOpensMainWindow}
+                    disabled={!showTrayIcon}
+                    onChange={setMenuBarLeftClickOpensMainWindow}
+                  />
+
                   <div className="settings-row">
                     <div className="row-label">
                       <div className="row-title">
@@ -1004,17 +1015,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
 
               <FloatingCardShowSetting />
 
-              <div className="settings-row">
-                <div className="row-label">
-                  <div className="row-title">{t('settings.general.dataDir')}</div>
-                  <div className="row-desc">{t('settings.general.dataDirDesc')}</div>
-                </div>
-                <div className="row-control">
-                  <button className="btn btn-secondary" onClick={() => accountService.openDataFolder()}>
-                    <FolderOpen size={16} />{t('common.open')}
-                  </button>
-                </div>
-              </div>
+              <DataDirectorySetting />
 
               <div className="settings-row">
                 <div className="row-label">
@@ -1556,6 +1557,25 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   })}
                   {renderCurrentAccountRefreshRow('claude')}
                   {renderAccountLevelRefreshConfig('claude')}
+                  {isMacOS && (
+                    <div className="settings-row">
+                      <div className="row-label">
+                        <div className="row-title">{t('settings.general.claudeShareCodeSessionsOnSwitch')}</div>
+                        <div className="row-desc">{t('settings.general.claudeShareCodeSessionsOnSwitchDesc')}</div>
+                      </div>
+                      <div className="row-control">
+                        <label className="switch">
+                          <input
+                            type="checkbox"
+                            aria-label={t('settings.general.claudeShareCodeSessionsOnSwitch')}
+                            checked={claudeShareCodeSessionsOnSwitch}
+                            onChange={(event) => setClaudeShareCodeSessionsOnSwitch(event.target.checked)}
+                          />
+                          <span className="slider" />
+                        </label>
+                      </div>
+                    </div>
+                  )}
                   <div className="settings-row">
                     <div className="row-label">
                       <div className="row-title">

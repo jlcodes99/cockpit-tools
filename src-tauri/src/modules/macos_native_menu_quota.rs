@@ -946,7 +946,7 @@
         modules::codex_quota::relay_balance_disabled()
             && (modules::codex_quota::account_relay_balance_disabled(account)
                 || codex_api_key_provider_usage(account).is_some_and(|summary| {
-                    matches!(summary.get("mode").and_then(Value::as_str), Some("new_api" | "sub2api"))
+                    matches!(summary.get("mode").and_then(Value::as_str), Some("new_api" | "sub2api" | "custom"))
                 }))
     }
 
@@ -1394,10 +1394,14 @@
 
     fn normalize_antigravity_model_for_match(value: &str) -> String {
         let normalized = value.trim().to_lowercase();
+        if normalized.starts_with("gemini-4-carbon") || matches!(normalized.as_str(), "carbon:weekly" | "gemini-carbon-wtu-weekly") {
+            return "gemini-4-carbon".into();
+        }
         if normalized.starts_with("gemini-4-argon") || matches!(normalized.as_str(), "argon:weekly" | "gemini-argon-wtu-weekly") {
             return "gemini-4-argon".into();
         }
         if normalized.starts_with("gemini-3.8-flash") { return "gemini-3.8-flash".into(); }
+        if normalized.starts_with("gemini-4-hydrogen") { return "gemini-4-hydrogen".into(); }
         if normalized.starts_with("claude-sonnet-5-5") { return "claude-sonnet-5-5".into(); }
         if normalized.starts_with("claude-opus-5-5") { return "claude-opus-5-5".into(); }
         if normalized.is_empty() {
@@ -2275,6 +2279,15 @@
     }
 
     fn read_cursor_tray_usage(account: &crate::models::cursor::CursorAccount) -> CursorTrayUsage {
+        if let Some(weekly) = modules::cursor_account::read_weekly_tray_usage(account) {
+            return CursorTrayUsage {
+                weekly: true,
+                total_used_percent: weekly.used_percent,
+                reset_ts: weekly.reset_at,
+                paid_monthly_cents: weekly.paid_monthly_cents,
+                ..CursorTrayUsage::default()
+            };
+        }
         let Some(raw) = account.cursor_usage_raw.as_ref() else {
             return CursorTrayUsage::default();
         };
@@ -2414,6 +2427,48 @@
             reset_ts,
             on_demand_text,
             on_demand_percent,
+            ..CursorTrayUsage::default()
         }
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn cursor_tray_prefers_weekly_shared_usage_to_an_old_monthly_snapshot() {
+        let mut account: crate::models::cursor::CursorAccount = serde_json::from_value(serde_json::json!({
+            "id":"cursor-tray", "email":"fixture@example.test", "access_token":"",
+            "membership_type":"super", "created_at":1, "last_used":1,
+            "cursor_usage_raw": {
+                "planInfo":{"includedUsagePeriod":2,"includedUsageResetsAt":"1795119300000"},
+                "planUsage":{"totalPercentUsed":31},
+                "credits":{"monthlyUsedCents":736},
+                "billingCycleEnd":"2026-12-01T00:00:00Z",
+                "individualUsage":{
+                    "plan":{"totalPercentUsed":0,"autoPercentUsed":0,"apiPercentUsed":0,"limit":16159},
+                    "onDemand":{"enabled":false}
+                }
+            }
+        })).unwrap();
+        let usage = read_cursor_tray_usage(&account);
+        assert!(usage.weekly);
+        assert_eq!(usage.total_used_percent, Some(31));
+        assert_eq!(usage.reset_ts, Some(1795119300));
+        assert_eq!(usage.auto_used_percent, None);
+        assert_eq!(usage.api_used_percent, None);
+        assert_eq!(usage.on_demand_text, None);
+        assert_eq!(usage.paid_monthly_cents, Some(736));
+
+        let raw = account.cursor_usage_raw.as_mut().unwrap().as_object_mut().unwrap();
+        raw.remove("planUsage");
+        raw.remove("planInfo");
+        let usage = read_cursor_tray_usage(&account);
+        assert!(usage.weekly);
+        assert_eq!(usage.total_used_percent, None);
+        assert_eq!(usage.reset_ts, None);
+
+        account.membership_type = Some("pro".into());
+        let usage = read_cursor_tray_usage(&account);
+        assert!(!usage.weekly);
+        assert_eq!(usage.total_used_percent, Some(0));
+        assert!(usage.reset_ts.is_some());
     }
 

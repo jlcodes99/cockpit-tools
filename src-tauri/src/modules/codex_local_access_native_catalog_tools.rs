@@ -60,18 +60,74 @@ fn native_apply_catalog_tool_capabilities(
         .iter()
         .filter(|account| native_model_visible(collection, key, plan, account))
         .any(|account| {
-            native_wire_api(account).map_or(true, |wire| wire == native_contract::WireApi::Chat)
+            native_plan_wire_api(plan, account)
+                .map_or(true, |wire| wire == native_contract::WireApi::Chat)
+                || native_route_rejects_client_tool_search(plan, account)
         })
     {
         model["supports_search_tool"] = json!(false);
     } else if collection.gateway_mode == CodexLocalAccessGatewayMode::Native
         && accounts.iter().any(|account| {
             native_model_visible(collection, key, plan, account)
-                && native_wire_api(account).ok() == Some(native_contract::WireApi::Anthropic)
+                && native_plan_wire_api(plan, account) == Some(native_contract::WireApi::Anthropic)
         })
     {
         model["supports_search_tool"] = json!(true);
     }
+}
+
+/// The protocol the selected route actually speaks. A provider gateway
+/// overrides the protocol declared by its account.
+fn native_plan_wire_api(
+    plan: &NativeModelRoutePlan,
+    account: &CodexAccount,
+) -> Option<native_contract::WireApi> {
+    if let Some(gateway) = plan.gateway.as_ref() {
+        return Some(
+            match gateway
+                .wire_api
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or("responses")
+            {
+                "chat_completions" => native_contract::WireApi::Chat,
+                "anthropic" => native_contract::WireApi::Anthropic,
+                _ => native_contract::WireApi::Responses,
+            },
+        );
+    }
+    native_wire_api(account).ok()
+}
+
+/// A third-party Responses upstream has no Codex client tool-search adapter:
+/// its Responses API rejects the hosted `tool_search` tool type. Advertising
+/// the capability would make every client turn fail upstream.
+fn native_route_rejects_client_tool_search(
+    plan: &NativeModelRoutePlan,
+    account: &CodexAccount,
+) -> bool {
+    if let Some(gateway) = plan.gateway.as_ref() {
+        let responses = gateway
+            .wire_api
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("responses")
+            .eq_ignore_ascii_case("responses");
+        // A remote Cockpit gateway negotiates the capability on its own.
+        return responses
+            && !crate::modules::codex_remote_service::is_known(
+                &gateway.base_url,
+                &gateway.api_key,
+            );
+    }
+    if !account.is_api_key_auth()
+        || native_is_chatgpt_plan_account(account)
+        || codex_account::is_grok_upstream_provider(account)
+        || crate::modules::codex_remote_service::is_known_account(account)
+    {
+        return false;
+    }
+    native_wire_api(account).ok() == Some(native_contract::WireApi::Responses)
 }
 
 fn apply_provider_catalog_image_input(model: &mut Value, vision: bool) {
@@ -131,12 +187,18 @@ fn native_apply_oauth_mapping_metadata(
     }
 }
 
-fn native_apply_catalog_account_context(
+fn native_apply_catalog_account_metadata(
     model: &mut Value,
     account: &CodexAccount,
     requested: &str,
     upstream: &str,
 ) {
+    if let (Some(Value::Object(template)), Some(entry)) = (
+        bailian_token_plan_model_template(account, upstream),
+        model.as_object_mut(),
+    ) {
+        entry.extend(template);
+    }
     let windows = &account.api_model_context_windows;
     let lookup = |name: &str| windows.get(name).copied().or_else(|| {
         windows.iter().find_map(|(id, window)| id.eq_ignore_ascii_case(name).then_some(*window))
@@ -192,7 +254,7 @@ fn native_apply_catalog_route_metadata(
             }
         }
     }
-    native_apply_catalog_account_context(model, account, &plan.model, &upstream);
+    native_apply_catalog_account_metadata(model, account, &plan.model, &upstream);
 }
 
 fn native_apply_profile_catalog_capabilities(

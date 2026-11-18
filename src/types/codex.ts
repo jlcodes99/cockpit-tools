@@ -402,6 +402,7 @@ export interface CodexSessionVisibilityRepairItem {
 }
 
 export type CodexSessionVisibilityRepairMode = 'quick' | 'deep' | 'history' | 'projects';
+export type CodexAutomaticSessionRepair = 'off' | 'index_only' | 'quick';
 export type CodexSessionVisibilityAutoRepairMode =
   | 'legacy_before_4eb75d96'
   | 'legacy_4eb75d96'

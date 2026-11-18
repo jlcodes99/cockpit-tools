@@ -374,6 +374,7 @@ async fn run_official_pair(
         serde_json::to_value(&source.tokens).unwrap()
     );
     assert_eq!(wakeup.reply, "OK");
+    assert_eq!(wakeup.http_status, 200);
     let (_cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
     let deltas = Arc::new(Mutex::new(Vec::new()));
     let observed = deltas.clone();

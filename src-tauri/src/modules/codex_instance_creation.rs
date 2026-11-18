@@ -63,16 +63,41 @@ impl Drop for CodexInstanceCreationReservation {
     }
 }
 
+impl CreateInstanceParams {
+    fn normalized_init_mode(&self) -> String {
+        self.init_mode
+            .as_deref()
+            .unwrap_or("copy")
+            .to_ascii_lowercase()
+    }
+
+    pub(crate) fn copies_profile(&self) -> bool {
+        let mode = self.normalized_init_mode();
+        !matches!(mode.as_str(), "empty" | "existingdir" | "existing_dir")
+            && !(mode == "cliconfig" && self.launch_mode == Some(InstanceLaunchMode::Cli))
+    }
+}
+
 pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, String> {
-    create_instance_with_cancellation(params, &std::sync::atomic::AtomicBool::new(false))
+    create_instance_with_cancellation(
+        params,
+        &std::sync::atomic::AtomicBool::new(false),
+        modules::codex_profile_copy::DEFAULT_COPY_TIMEOUT,
+    )
 }
 
 pub fn create_instance_with_cancellation(
     params: CreateInstanceParams,
     cancelled: &std::sync::atomic::AtomicBool,
+    copy_timeout: std::time::Duration,
 ) -> Result<InstanceProfile, String> {
     create_instance_with_profile_copy(params, cancelled, |source, target| {
-        modules::codex_profile_copy::copy_profile_with_cancellation(source, target, cancelled)
+        modules::codex_profile_copy::copy_profile_with_timeout(
+            source,
+            target,
+            cancelled,
+            copy_timeout,
+        )
     })
 }
 
@@ -113,11 +138,7 @@ fn create_instance_with_profile_copy(
     check_instance_creation_cancelled(cancelled)?;
 
     let user_dir_path = PathBuf::from(&user_data_dir);
-    let init_mode = params
-        .init_mode
-        .as_deref()
-        .unwrap_or("copy")
-        .to_ascii_lowercase();
+    let init_mode = params.normalized_init_mode();
     let create_empty = init_mode == "empty";
     let copy_cli_config = init_mode == "cliconfig"
         && params.launch_mode == Some(InstanceLaunchMode::Cli);

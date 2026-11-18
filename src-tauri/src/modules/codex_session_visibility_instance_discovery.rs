@@ -70,7 +70,7 @@ fn try_rebuild_thread_metadata(instance: &CodexSyncInstance) -> bool {
     }
 }
 
-fn read_target_provider(data_dir: &Path) -> Result<String, String> {
+pub(crate) fn read_target_provider(data_dir: &Path) -> Result<String, String> {
     let config_path = data_dir.join(CONFIG_FILE_NAME);
     if !config_path.exists() {
         return Ok(DEFAULT_PROVIDER_ID.to_string());
@@ -343,30 +343,18 @@ fn collect_referenced_rollout_provider_changes(
     }
 
     let mut changes = Vec::new();
-    for (index, (rollout_path, target_modified_at)) in candidates.into_iter().enumerate() {
+    for (index, (relative_path, target_modified_at)) in candidates.into_iter().enumerate() {
         if index % 64 == 0 {
             std::thread::yield_now();
         }
+        let rollout_path = data_dir.join(&relative_path);
         if !rollout_path.exists() || !is_plain_rollout_file(&rollout_path) {
             continue;
         }
         let rewrite = scan_rollout_first_session_meta_provider(&rollout_path)?;
-        if rewrite.session_meta_count == 0 { continue; }
-        if rewrite.non_root_agent {
+        if rewrite.session_meta_count == 0 || rewrite.non_root_agent {
             continue;
         }
-        let Some(relative_path) = rollout_path
-            .strip_prefix(data_dir)
-            .ok()
-            .map(Path::to_path_buf)
-        else {
-            modules::logger::log_warn(&format!(
-                "跳过 Codex 会话可见性修复中的实例外 rollout: data_dir={}, rollout={}",
-                data_dir.display(),
-                rollout_path.display()
-            ));
-            continue;
-        };
         let source_metadata = fs::metadata(&rollout_path).map_err(|error| format!("{}: {}", rollout_path.display(), error))?;
         let source_modified_at = source_metadata.modified().ok();
         if target_modified_at.is_none() || modules::codex_session_file_time::same_modified_time_millis(source_modified_at, target_modified_at) { continue; }
@@ -384,6 +372,29 @@ fn collect_referenced_rollout_provider_changes(
 
     changes.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
     Ok(changes)
+}
+
+fn referenced_rollout_relative_path(data_dir: &Path, rollout_path: &Path) -> Option<PathBuf> {
+    if let Ok(relative) = rollout_path.strip_prefix(data_dir) {
+        if relative
+            .components()
+            .all(|part| matches!(part, std::path::Component::Normal(_)))
+        {
+            return Some(relative.to_path_buf());
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        // The stored reference and configured directory can use different
+        // drive or UNC spellings for the same location.
+        let root = data_dir.canonicalize().ok()?;
+        let rollout = rollout_path.canonicalize().ok()?;
+        return rollout.strip_prefix(root).ok().map(Path::to_path_buf);
+    }
+
+    #[cfg(not(windows))]
+    None
 }
 
 fn collect_referenced_rollout_paths_for_db(
@@ -496,13 +507,21 @@ fn collect_referenced_rollout_paths_for_db(
             continue;
         }
         let rollout_path = resolve_rollout_path(data_dir, &rollout_path);
+        let Some(relative_path) = referenced_rollout_relative_path(data_dir, &rollout_path) else {
+            modules::logger::log_warn(&format!(
+                "跳过 Codex 会话可见性修复中的实例外 rollout: data_dir={}, rollout={}",
+                data_dir.display(),
+                rollout_path.display()
+            ));
+            continue;
+        };
         let target_modified_at = updated_at_ms
             .or_else(|| updated_at.map(|value| value * 1000))
             .and_then(|value| {
                 modules::codex_session_file_time::system_time_from_unix_millis(value as i128)
             });
         candidates
-            .entry(rollout_path)
+            .entry(relative_path)
             .and_modify(|existing| {
                 if existing.is_none() {
                     *existing = target_modified_at;

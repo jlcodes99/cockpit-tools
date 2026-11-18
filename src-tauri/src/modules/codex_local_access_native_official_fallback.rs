@@ -54,7 +54,7 @@ fn native_official_scope_fingerprint(
         "members":collection.account_ids,"paused":collection.paused_account_ids,
         "official":collection.official_account_bindings,"revision":collection.chatgpt_plan_service_revision,
         "identities":collection.service_account_identity_fingerprints,"excluded":collection.excluded_models,
-        "aliases":collection.model_aliases,"rules":collection.account_model_rules,"restrictFree":collection.restrict_free_accounts});
+        "aliases":collection.model_aliases,"rules":collection.account_model_rules});
     format!(
         "{:x}",
         Sha256::digest(ordered(material).to_string().as_bytes())
@@ -108,7 +108,6 @@ fn native_local_fallback_model(
         || account.is_web_session_auth()
         || codex_account::is_grok_upstream_provider(account)
         || !native_eligible(account)
-        || (collection.restrict_free_accounts && account.plan_type.as_deref() == Some("free"))
     {
         return Err(native_error(
             503,

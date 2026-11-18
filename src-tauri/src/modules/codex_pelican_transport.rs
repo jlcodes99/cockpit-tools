@@ -377,7 +377,8 @@ async fn pelican_chat_inner(
             "pelican",
             on_delta,
         )
-        .await;
+        .await
+        .map(|(output, _)| output);
     }
     let id = account_id.to_owned();
     let runtime_handle = tokio::runtime::Handle::current();

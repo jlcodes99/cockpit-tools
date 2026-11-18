@@ -1455,14 +1455,27 @@
             .map(|account| {
                 let usage = read_cursor_tray_usage(&account);
                 let mut rows = Vec::new();
+                let total_label = if usage.weekly {
+                    translate_or(lang, "cursor.quota.weeklyUsage", "Weekly usage", &[])
+                } else {
+                    "Total Usage".to_string()
+                };
                 if let Some(percentage) = usage.total_used_percent {
                     rows.push(make_progress_row(
-                        "Total Usage".to_string(),
+                        total_label,
                         format!("{percentage}%"),
                         percentage,
                         format_reset_subtext(lang, usage.reset_ts),
                         cursor_usage_tone(percentage),
                     ));
+                } else if usage.weekly {
+                    rows.push(QuotaRow {
+                        label: total_label,
+                        value: "—".to_string(),
+                        progress: None,
+                        progress_tone: None,
+                        subtext: format_reset_subtext(lang, usage.reset_ts),
+                    });
                 }
                 if let Some(percentage) = usage.auto_used_percent {
                     rows.push(make_progress_row(
@@ -1502,6 +1515,15 @@
                         subtext: None,
                     });
                 }
+                if let Some(cents) = usage.paid_monthly_cents {
+                    rows.push(QuotaRow {
+                        label: translate_or(lang, "cursor.quota.additionalMonthlyUsed", "Additional usage this month", &[]),
+                        value: format!("${:.2}", cents as f64 / 100.0),
+                        progress: None,
+                        progress_tone: None,
+                        subtext: None,
+                    });
+                }
                 let account_id = account.id.clone();
                 let remaining_percent = min_quota_progress(&rows, false);
                 AccountCard {
@@ -1511,7 +1533,11 @@
                     } else {
                         account.email
                     },
-                    plan: account.membership_type,
+                    plan: account.membership_type.map(|plan| match plan.trim().to_ascii_lowercase().as_str() {
+                        "unified_ultra" => "Ultra".to_string(),
+                        "super" => "Super".to_string(),
+                        _ => plan,
+                    }),
                     updated_at: display_updated_at(
                         account.usage_updated_at,
                         account.last_used,

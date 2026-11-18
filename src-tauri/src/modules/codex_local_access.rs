@@ -22,6 +22,7 @@ include!("codex_local_access_injection_display.rs");
 include!("codex_local_access_sidecar_runtime.rs");
 include!("codex_local_access_pool_diagnostics.rs");
 include!("codex_local_access_collection.rs");
+include!("codex_local_access_named_pools.rs");
 include!("codex_local_access_image_sources.rs");
 include!("codex_local_access_image_model_catalog.rs");
 include!("codex_local_access_model_config_transfer.rs");

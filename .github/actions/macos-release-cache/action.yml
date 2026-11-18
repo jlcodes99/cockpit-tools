@@ -1,0 +1,35 @@
+name: macOS release build cache
+description: Set up the pinned macOS Rust toolchain and share optimized dependencies from main.
+inputs:
+  target:
+    description: Rust target triple for the architecture being built.
+    required: true
+outputs:
+  cache-hit:
+    description: Whether the exact cache key was restored.
+    value: ${{ steps.rust-cache.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: "1.100.0"
+        targets: ${{ inputs.target }}
+
+    - id: rust-cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: macos-tauri-release-v1-${{ inputs.target }}
+        workspaces: ". -> target"
+        cache-workspace-crates: "false"
+        cache-bin: "false"
+        save-if: ${{ github.ref == 'refs/heads/main' }}
+
+    - name: Report macOS cache status
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+        CACHE_HIT: ${{ steps.rust-cache.outputs.cache-hit }}
+      run: |
+        printf '### macOS release Rust cache\n\n- Target: `%s`\n- Exact match: **%s**\n' \
+          "$TARGET" "${CACHE_HIT:-unknown}" >> "$GITHUB_STEP_SUMMARY"

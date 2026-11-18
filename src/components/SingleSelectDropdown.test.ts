@@ -49,7 +49,7 @@ test('portaled menus skip disabled options and restore focus after selection or 
     menu.props.onKeyDown({ key, preventDefault() {} });
     assert.equal(document.activeElement, items[index], key);
   }
-  menu.props.children[3].props.onClick(); tree = h.flush();
+  menu.props.children[1].props.children[3].props.onClick(); tree = h.flush();
   assert.deepEqual(chosen, ['1']);
   assert.equal(tree.props.children[1], null);
   assert.equal(triggerFocus, 1);
@@ -57,5 +57,59 @@ test('portaled menus skip disabled options and restore focus after selection or 
   escape?.(); tree = h.flush();
   assert.equal(tree.props.children[1], null);
   assert.equal(triggerFocus, 2);
+  h.unmount();
+});
+
+test('search filters visible labels while preserving the current value and resetting on reopen', () => {
+  const h = loadHookModule(new URL('./SingleSelectDropdown.tsx', import.meta.url), {
+    'react-dom': { createPortal: (tree: unknown) => tree },
+    '../hooks/useEscClose': { useEscCloseTopmost() {} },
+  }, {
+    document: { body: {}, addEventListener() {}, removeEventListener() {} },
+    window: {
+      innerWidth: 900, innerHeight: 600,
+      getComputedStyle: () => ({ zIndex: 'auto' }),
+      setTimeout: () => 1, clearTimeout() {}, addEventListener() {}, removeEventListener() {},
+    },
+  });
+  const chosen: string[] = [];
+  const props = {
+    value: 'daily',
+    options: [
+      { value: '', label: 'Enter a new key' },
+      { value: 'daily', label: 'Daily (sk-d…ab12)' },
+      { value: 'work', label: 'Work (sk-w…cd34)' },
+    ],
+    onChange: (value: string) => chosen.push(value),
+    search: { label: 'Search keys', emptyLabel: 'No results' },
+  };
+  let tree = h.render(() => h.exports.SingleSelectDropdown(props));
+  const trigger = tree.props.children[0];
+  trigger.props.ref.current = {
+    getBoundingClientRect: () => ({ left: 40, top: 30, bottom: 76, width: 300 }),
+    focus() {},
+  };
+  trigger.props.onClick();
+  tree = h.flush();
+  const filter = (value: string) => {
+    tree.props.children[1].props.children[0].props.children.props.onChange({ target: { value } });
+    tree = h.flush();
+  };
+  const shown = () => Array.from(tree.props.children[1].props.children[1].props.children,
+    (option: any) => option.props.children[0].props.children);
+  filter(' CD34 ');
+  assert.deepEqual(shown(), ['Work (sk-w…cd34)']);
+  assert.equal(tree.props.children[0].props.children[0].props.children, 'Daily (sk-d…ab12)');
+  assert.deepEqual(chosen, []);
+  filter('missing');
+  assert.deepEqual(shown(), []);
+  assert.equal(tree.props.children[1].props.children[2].props.children, 'No results');
+  filter('work');
+  tree.props.children[1].props.children[1].props.children[0].props.onClick();
+  tree = h.flush();
+  assert.deepEqual(chosen, ['work']);
+  tree.props.children[0].props.onClick();
+  tree = h.flush();
+  assert.equal(shown().length, 3);
   h.unmount();
 });

@@ -132,6 +132,40 @@
   background: color-mix(in srgb, var(--primary) 36%, transparent);
 }
 
+.single-select-dropdown-menu.searchable {
+  scroll-padding-top: 42px;
+}
+
+.single-select-dropdown-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-surface);
+}
+
+.single-select-dropdown-search input {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.single-select-dropdown-search input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.single-select-dropdown-empty {
+  padding: 12px 10px 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
 .single-select-dropdown-item {
   width: 100%;
   min-height: 42px;

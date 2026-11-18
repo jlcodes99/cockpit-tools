@@ -109,6 +109,7 @@ export interface CodexLocalAccessApiKey {
   key: string;
   providerGateway?: unknown | null;
   inheritAccountPool?: boolean;
+  accountPoolId?: string;
   accountIds?: string[];
   priorityAccountIds?: string[];
   modelPrefix?: string | null;
@@ -156,12 +157,19 @@ export interface CodexLocalAccessTimeoutPreset {
   updatedAt: number;
 }
 
+export interface CodexLocalAccessAccountPool {
+  id: string;
+  label: string;
+  accountIds: string[];
+}
+
 export interface CodexLocalAccessCollection {
   multiAgent?: CodexMultiAgentConfig;
   enabled: boolean;
   port: number;
   apiKey: string;
   apiKeys: CodexLocalAccessApiKey[];
+  accountPools?: CodexLocalAccessAccountPool[];
   accessScope: CodexLocalAccessScope;
   clientBaseUrlHost: CodexLocalAccessClientBaseUrlHost;
   imageGenerationMode: CodexLocalAccessImageGenerationMode;
@@ -183,6 +191,7 @@ export interface CodexLocalAccessCollection {
   capabilityFallback?: CodexCapabilityFallbackConfig;
   customRoutingRules: CodexLocalAccessCustomRoutingRule[];
   accountModelRules: CodexLocalAccessAccountModelRule[];
+  accountQuotaFloors?: Record<string, number>;
   modelAliases: CodexLocalAccessModelAlias[];
   modelPricingVersion: number;
   modelPricings: CodexLocalAccessModelPricing[];
@@ -239,6 +248,10 @@ export interface CodexLocalAccessUsageStats {
   cachedTokens: number;
   reasoningTokens: number;
   estimatedCostUsd: number;
+  inputText?: {
+    characters: number;
+    measuredRequests: number;
+  };
 }
 
 export interface CodexLocalAccessAccountStats {
@@ -300,6 +313,7 @@ export interface CodexTokenInputBreakdown {
   uncached_tokens: number;
   cache_read_tokens: number;
   cache_write_tokens: number;
+  cache_write_ttl_12h_tokens?: number;
 }
 
 export interface CodexTokenOutputBreakdown {
@@ -362,6 +376,8 @@ export interface CodexLocalAccessUsageEvent {
   firstResponseMs?: number | null;
   /** Observed streaming window for this successful upstream attempt; never inferred for older logs. */
   outputGenerationMs?: number | null;
+  /** Unicode scalar count of submitted message and instruction text. */
+  inputTextCharacters?: number | null;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
@@ -509,6 +525,7 @@ export interface CodexLocalAccessRequestLogQuery {
   accountNameMatches?: string[];
   /** Exact identity filters for contextual navigation; queries remain free text. */
   accountId?: string | null;
+  accountIds?: string[];
   apiKeyId?: string | null;
   apiKeyQuery?: string | null;
   instanceQuery?: string | null;
@@ -519,6 +536,7 @@ export interface CodexLocalAccessRequestLogQuery {
   requestKind?: CodexLocalAccessRequestKind | null;
   success?: boolean | null;
   errorCategory?: string | null;
+  minTotalTokens?: number | null;
 }
 
 export interface CodexLocalAccessAccountCooldown {

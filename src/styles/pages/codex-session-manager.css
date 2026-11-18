@@ -825,6 +825,25 @@
   min-width: 104px;
 }
 
+.workbuddy-workspace-rebind {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-primary);
+}
+
+.workbuddy-workspace-rebind__path {
+  overflow-wrap: anywhere;
+}
+
+.workbuddy-workspace-rebind__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .codebuddy-session-manager .codex-session-row__status-badge {
   display: inline-flex;
   align-items: center;
@@ -2334,11 +2353,39 @@
   box-shadow: 0 12px 26px -26px rgba(15, 23, 42, 0.5);
 }
 
-.codex-session-manager:not(.codebuddy-session-manager) .codex-session-usage__hero-head {
+.codex-session-manager:not(.codebuddy-session-manager) .codex-session-usage__sources {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.codex-session-usage__local-source,
+.codex-session-usage__profile-source {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.codex-session-usage__profile-controls {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.codex-session-usage__profile-controls > :first-child {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.codex-session-usage__profile-source > span,
+.codex-session-usage__profile-source > div[role='status'] {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.codex-session-usage__profile-source .codex-session-usage-amount {
+  color: var(--text-primary);
+  font-size: clamp(28px, 3vw, 38px);
+  line-height: 1;
 }
 
 .codex-session-manager:not(.codebuddy-session-manager) .codex-session-usage__hero-total {
@@ -2465,9 +2512,8 @@
 }
 
 @media (max-width: 720px) {
-  .codex-session-manager:not(.codebuddy-session-manager) .codex-session-usage__hero-head {
-    align-items: stretch;
-    flex-direction: column;
+  .codex-session-manager:not(.codebuddy-session-manager) .codex-session-usage__sources {
+    grid-template-columns: 1fr;
   }
 
   .codex-session-manager:not(.codebuddy-session-manager) .codex-session-usage__hero-side {

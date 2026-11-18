@@ -36,7 +36,7 @@ export function useCodexAccountWindowStats(active: boolean, accounts: readonly C
       reader.refresh();
     };
     refresh();
-    // Some successful requests do not carry quota headers, so events alone are insufficient.
+    // Periodic reads also pick up changes such as log maintenance and quota window resets.
     const timer = window.setInterval(refresh, 30_000);
     const stopQuota = subscribeTauriEvent<CodexQuotaUpdate>('codex:quota-updated', ({ payload }) => {
       if (inputs.current.memberIds.includes(payload.account_id)) refresh();
@@ -45,6 +45,7 @@ export function useCodexAccountWindowStats(active: boolean, accounts: readonly C
       if (payload?.platformId === 'codex') refresh();
     });
     const stopService = subscribeTauriEvent('codex-local-access-state-updated', refresh);
+    const stopUsage = subscribeTauriEvent('codex-local-access-usage-committed', refresh);
     window.addEventListener('codex-local-access-state-updated', refresh);
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
@@ -54,7 +55,7 @@ export function useCodexAccountWindowStats(active: boolean, accounts: readonly C
       // even if the user leaves and re-enters the overview meanwhile.
       reader.setScope(null);
       window.clearInterval(timer);
-      stopQuota(); stopSwitch(); stopService();
+      stopQuota(); stopSwitch(); stopService(); stopUsage();
       window.removeEventListener('codex-local-access-state-updated', refresh);
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refresh);

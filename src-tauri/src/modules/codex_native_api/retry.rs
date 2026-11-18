@@ -2,7 +2,7 @@
 use crate::modules::codex_native_api::deadline::{self, Deadline};
 use super::{
     contract::{
-        ExecutionPolicy, OfficialFallbackFailure, ServiceError, WireApi,
+        ExecutionPolicy, OfficialFallbackFailure, Route, ServiceError, WireApi,
         MIXED_MODEL_ROUTING_CALLER_ID,
     },
     events::retry_after_headers,
@@ -86,6 +86,37 @@ fn mixed_provider_responses(prepared: &Prepared) -> bool {
         && prepared.route.wire_api == WireApi::Responses
         && !prepared.route.chatgpt
         && !prepared.route.chatgpt_plan
+}
+
+/// A remote Cockpit gateway negotiates the Codex client tool-search
+/// capability on its own, so its requests keep the hosted tool declaration.
+fn remote_cockpit_upstream(route: &Route) -> bool {
+    let Some(value) = route
+        .headers
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+    else {
+        return false;
+    };
+    let Some(key) = value
+        .strip_prefix("Bearer ")
+        .or_else(|| value.strip_prefix("bearer "))
+    else {
+        return false;
+    };
+    crate::modules::codex_remote_service::is_known(&route.base_url, key.trim())
+}
+
+/// Third-party Responses upstreams have no Codex client tool-search adapter:
+/// their Responses API rejects the hosted `tool_search` tool type. The
+/// official Codex backend, the independent ChatGPT plan grant and Grok keep
+/// their own adapters.
+fn route_rejects_client_tool_search(route: &Route) -> bool {
+    route.wire_api == WireApi::Responses
+        && !route.chatgpt
+        && !route.chatgpt_plan
+        && !super::grok_errors::applies(route)
+        && !remote_cockpit_upstream(route)
 }
 
 async fn send_inner(
@@ -290,14 +321,20 @@ async fn send_inner(
             &mut headers, &body, codex_backend && !prepared.route.chatgpt_plan, &prepared.route.headers,
         )?;
         prepared.multi_agent_context.capture_final(&body);
-        prepared.binding.retain_transmitted_input_blobs(&body);
         let base_url = endpoint.as_ref().map_or(prepared.route.base_url.as_str(), |endpoint| {
             endpoint.base_url.as_str()
         });
+        let deepseek_responses = path == "responses"
+            && prepared.route.wire_api == WireApi::Responses
+            && crate::modules::codex_account::is_official_deepseek_base_url(base_url);
         if path == "responses" && prepared.route.wire_api == WireApi::Responses {
-            let official_deepseek =
-                crate::modules::codex_account::is_official_deepseek_base_url(base_url);
-            if official_deepseek
+            if route_rejects_client_tool_search(&prepared.route) {
+                // A stale client catalog can still declare the hosted Codex
+                // tool-search tool. Third-party Responses APIs reject that
+                // tool type, so it never reaches the upstream.
+                crate::modules::codex_protocol::strip_client_tool_search(&mut body);
+            }
+            if deepseek_responses
                 || crate::modules::codex_protocol::is_deepseek_model(&prepared.route.model)
             {
                 if let Some(effort) = body.pointer_mut("/reasoning/effort") {
@@ -308,10 +345,13 @@ async fn send_inner(
                     }
                 }
             }
-            if official_deepseek {
+            if deepseek_responses {
+                super::responses_tool_history::restore_deepseek_reasoning_text(&mut body);
+                super::responses_tool_history::normalize_deepseek_reasoning_history(&mut body);
                 super::responses_tool_history::normalize_deepseek_tool_history(&mut body);
             }
         }
+        prepared.binding.retain_transmitted_input_blobs(&body);
         super::opencode_go::apply_session_header(
             base_url, &prepared.caller.id, &prepared.binding, &mut tracker.opencode_go_session, &mut headers,
         );
@@ -428,7 +468,7 @@ async fn send_inner(
                 tracker.begin_attempt("http");
                 if let Some(bytes) = request.body().and_then(reqwest::Body::as_bytes) { tracker.upstream_request_bytes(bytes.len()); }
                 tracker.capability_fallback(prepared.capability_fallback.clone());
-                tracker.payload("upstream_request", "http", request.headers(), &body.to_string());
+                tracker.payload_with("upstream_request", "http", request.headers(), || body.to_string());
                 tracker.upstream_headers(request.headers());
                 tracker.quota_request_started();
                 let response = client.execute(request).await?;
@@ -579,6 +619,9 @@ async fn send_inner(
         tracker.upstream_response_headers(response.headers());
         tracker.quota_headers(response.headers());
         let status = response.status();
+        if protocol == WireApi::Responses && status == StatusCode::BAD_REQUEST {
+            tracker.responses_history_rejection(prepared, &body, compact);
+        }
         if status.is_success()
             && !compact
             && (prepared.route.wire_api == WireApi::Responses || (chat && streaming))
@@ -647,8 +690,23 @@ async fn send_inner(
                 deadline,
                 &prepared.route.model,
                 super::grok_errors::applies(&prepared.route),
+                prepared.route.chatgpt_plan,
             )
             .await?;
+            if deepseek_responses && inspected.0.status() == StatusCode::BAD_REQUEST
+                && inspected.2.as_deref().is_some_and(
+                    super::responses_tool_history::deepseek_rejected_missing_reasoning,
+                )
+            {
+                let error = ServiceError::new(
+                    400,
+                    "deepseek_reasoning_replay_required",
+                    "DeepSeek rejected the replay because a previous tool turn is missing the required reasoning text.",
+                );
+                tracker.attempt_error(&error);
+                tracker.capture_request_fault(true);
+                return Err(error);
+            }
             exhausted = inspected.10.as_ref().and_then(super::quota_exhaustion::code);
             explicit_capacity = inspected.10.as_ref().is_some_and(super::overload::event);
             if explicit_capacity { tracker.observe_overload(); }
@@ -1140,6 +1198,7 @@ pub(super) async fn inspect_status_error(
     deadline: Deadline,
     model: &str,
     grok: bool,
+    official: bool,
 ) -> Result<
     (
         reqwest::Response,
@@ -1158,7 +1217,7 @@ pub(super) async fn inspect_status_error(
 > {
     let status = response.status();
     let version = response.version();
-    let headers = response.headers().clone();
+    let mut headers = response.headers().clone();
     let mut source = response.bytes_stream();
     let mut bytes = Vec::new();
     loop {
@@ -1189,7 +1248,9 @@ pub(super) async fn inspect_status_error(
             None => break,
         }
     }
-    let value = serde_json::from_slice::<Value>(&bytes).ok();
+    let mut value = serde_json::from_slice::<Value>(&bytes).ok();
+    let normalized_sharing_quota = official && value.as_mut()
+        .is_some_and(super::official_fallback::normalize_sharing_quota_error);
     let (normalized_status, grok_wait) = if grok {
         super::grok_errors::classify(
             status.as_u16(),
@@ -1198,7 +1259,7 @@ pub(super) async fn inspect_status_error(
                 .unwrap_or_else(|| Value::String(String::from_utf8_lossy(&bytes).into_owned())),
         )
     } else {
-        (if value.as_ref().is_some_and(super::transient_rate_limit::applies) { 429 } else { status.as_u16() }, None)
+        (if normalized_sharing_quota || value.as_ref().is_some_and(super::transient_rate_limit::applies) { 429 } else { status.as_u16() }, None)
     };
     let status = StatusCode::from_u16(normalized_status).unwrap_or(status);
     let (mut message, scope) = value
@@ -1252,6 +1313,11 @@ pub(super) async fn inspect_status_error(
         code: if model_unavailable { "official_model_unavailable".into() } else { code.clone().unwrap_or_else(|| "upstream_http_error".into()) },
         message: message.clone(), retry_after: body_retry_after,
     }).filter(|failure| super::official_fallback::reason(failure).is_some());
+    if let Some(value) = value.as_ref().filter(|_| normalized_sharing_quota) {
+        bytes = value.to_string().into_bytes();
+        headers.remove(header::CONTENT_LENGTH);
+        headers.remove(header::CONTENT_ENCODING);
+    }
     let mut rebuilt = axum::http::Response::new(bytes);
     *rebuilt.status_mut() = status;
     *rebuilt.version_mut() = version;

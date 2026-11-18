@@ -11,6 +11,10 @@ include!("claude_account_desktop_auth.rs");
 include!("claude_account_cli_sync.rs");
 include!("claude_account_oauth_updates.rs");
 
+#[cfg(any(test, target_os = "macos"))]
+#[path = "claude_desktop_code_sessions.rs"]
+mod desktop_code_sessions;
+
 #[cfg(test)]
 mod tests {
     include!("claude_account_tests.rs");

@@ -31,6 +31,90 @@ fn native_automatic_fixture() -> CodexAccount {
 }
 
 #[tokio::test]
+async fn chat_instance_profile_prevents_hosted_search_from_blocking_normal_turns() {
+    use axum::{http::StatusCode, response::IntoResponse, routing::post, Json, Router};
+
+    let _env = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _data = super::native_capability_integration_tests::NativeInstallationTestData::new();
+    let directory = tempfile::tempdir().unwrap();
+    let profile = directory.path();
+    let config = profile_config_path(profile);
+    let mut account = native_automatic_fixture();
+    let upstream = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    account.api_base_url = Some(format!("http://{}/v1", upstream.local_addr().unwrap()));
+    let upstream_task = tokio::spawn(async move {
+        let router = Router::new().route("/v1/chat/completions", post(|Json(body): Json<Value>| async move {
+            assert_eq!(body["model"], "upstream-text");
+            assert_eq!(body["messages"][0]["content"], "Reply once.");
+            assert_eq!(body["stream"], true);
+            let chunk = json!({
+                "id": "completion", "object": "chat.completion.chunk", "model": "upstream-text",
+                "choices": [{"index": 0, "delta": {"role": "assistant", "content": "fixture reply"}, "finish_reason": "stop"}],
+            });
+            (
+                [("content-type", "text/event-stream")],
+                format!("data: {chunk}\n\ndata: [DONE]\n\n"),
+            ).into_response()
+        }));
+        axum::serve(upstream, router).await.unwrap();
+    });
+    let mut collection = native_test_collection();
+    collection.account_ids = vec![account.id.clone()];
+    let key = collection.api_key.clone();
+    let mut host = NativeHostBridge::for_collection(collection);
+    host.profile_dir = Some(profile.to_path_buf());
+    host.account_overrides.insert(account.id.clone(), account.clone());
+    let mut service = native_api::start(
+        "127.0.0.1:0".parse().unwrap(),
+        Arc::new(host),
+        profile.join("identity.sqlite"),
+        native_api::Options::default(),
+    ).await.unwrap();
+    let url = format!("http://{}/v1/responses", service.addr);
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
+    let send = || async {
+        let doc = crate::modules::codex_config_format::load_codex_config_doc(&config).unwrap();
+        let mut body = json!({"model": "client-text", "input": "Reply once.", "stream": true});
+        if doc.get("web_search").and_then(|mode| mode.as_str()) != Some("disabled") {
+            body["tools"] = json!([{"type": "web_search"}]);
+        }
+        client.post(&url).bearer_auth(&key).json(&body).send().await.unwrap()
+    };
+
+    let original = send().await;
+    assert_eq!(original.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert!(original.text().await.unwrap().contains("capability_fallback_no_compatible_account"));
+    for (before, user_edit) in [
+        (None, None),
+        (Some("live"), None),
+        (Some("disabled"), None),
+        (Some("live"), Some("cached")),
+    ] {
+        let content = before.map_or(String::new(), |mode| format!("web_search = \"{mode}\"\n"));
+        fs::write(&config, content).unwrap();
+        backup_current_profile_model_before_provider_gateway(profile, &["client-text".into()]).unwrap();
+        prepare_provider_gateway_web_search(profile, &account).unwrap();
+        prepare_provider_gateway_web_search(profile, &account).unwrap();
+        let repaired = send().await;
+        assert_eq!(repaired.status(), StatusCode::OK);
+        assert!(repaired.text().await.unwrap().contains("fixture reply"));
+        if let Some(mode) = user_edit {
+            fs::write(&config, format!("web_search = \"{mode}\"\n")).unwrap();
+        }
+        cleanup_provider_gateway_profile_model_overrides(profile).unwrap();
+        let mut responses = account.clone();
+        responses.api_wire_api = Some("responses".into());
+        prepare_provider_gateway_web_search(profile, &responses).unwrap();
+        let saved = crate::modules::codex_config_format::load_codex_config_doc(&config).unwrap();
+        assert_eq!(saved.get("web_search").and_then(|mode| mode.as_str()), user_edit.or(before));
+    }
+    service.shutdown(Duration::from_secs(2)).await.unwrap();
+    upstream_task.abort();
+}
+
+#[tokio::test]
 async fn pool_wakeup_uses_current_active_accounts_in_saved_order_and_cancels_without_sending() {
     use crate::models::codex::{CodexAccountIndex, CodexAccountSummary};
     use crate::modules::codex_wakeup;
@@ -775,6 +859,39 @@ fn native_automatic_empty_responses_pool_does_not_claim_undeclared_provider_mode
         native_plan_account_model(&explicit, &account).as_deref(),
         Some("other-provider-only")
     );
+}
+
+#[test]
+fn native_automatic_pool_uses_one_catalog_per_request_and_sees_next_edit() {
+    use crate::modules::codex_wakeup;
+
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _data = super::native_capability_integration_tests::NativeInstallationTestData::new();
+    let model = "gpt-fixture-pool-preset";
+    let mut wakeup = codex_wakeup::load_state_for_scheduler().unwrap();
+    wakeup.model_presets.push(codex_wakeup::CodexWakeupModelPreset {
+        id: "pool-fixture".into(),
+        name: "Fixture".into(),
+        model: model.into(),
+        allowed_reasoning_efforts: vec![],
+        default_reasoning_effort: "medium".into(),
+    });
+    codex_wakeup::save_state(&wakeup).unwrap();
+
+    let collection = native_test_collection();
+    let plan = native_model_route_plan(&collection, None, model).unwrap();
+    let mut account = native_test_account();
+    account.id = "pool-a".into();
+    assert_eq!(native_plan_account_model(&plan, &account).as_deref(), Some(model));
+
+    wakeup.model_presets.retain(|preset| preset.id != "pool-fixture");
+    codex_wakeup::save_state(&wakeup).unwrap();
+    account.id = "pool-b".into();
+    assert_eq!(native_plan_account_model(&plan, &account).as_deref(), Some(model));
+    let next = native_model_route_plan(&collection, None, model).unwrap();
+    assert!(native_plan_account_model(&next, &account).is_none());
 }
 
 #[test]
