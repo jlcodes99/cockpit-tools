@@ -672,6 +672,36 @@ pub(super) fn completed_response(event: &Value) -> bool {
         && !response.get("error").is_some_and(|error| !error.is_null())
 }
 
+/// Upstreams occasionally terminate a normally streaming response with a
+/// `response.incomplete` event that explains itself neither semantically
+/// (`incomplete_details` missing/null, or its reason null/"unknown") nor in
+/// usage (`usage` missing or zero). Codex clients parse that terminal as a
+/// non-retryable turn error (`Incomplete response returned, reason: unknown`)
+/// and abort the turn instead of running their built-in stream reconnect.
+pub(super) fn silent_incomplete_termination(event: &Value) -> bool {
+    if response_terminal_kind(event) != Some("response.incomplete") {
+        return false;
+    }
+    let response = event.get("response").unwrap_or(event);
+    let reason = response
+        .pointer("/incomplete_details/reason")
+        .and_then(Value::as_str)
+        .map(str::trim);
+    let explained = reason.is_some_and(|reason| {
+        !reason.is_empty() && !reason.eq_ignore_ascii_case("unknown")
+    });
+    if explained {
+        return false;
+    }
+    response
+        .get("usage")
+        .filter(|usage| !usage.is_null())
+        .map_or(true, |usage| {
+            usage.pointer("/input_tokens").and_then(Value::as_u64).unwrap_or(0) == 0
+                && usage.pointer("/output_tokens").and_then(Value::as_u64).unwrap_or(0) == 0
+        })
+}
+
 fn event_too_large() -> ServiceError {
     ServiceError::new(
         502,
