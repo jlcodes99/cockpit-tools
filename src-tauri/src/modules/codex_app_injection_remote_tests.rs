@@ -1,6 +1,47 @@
 use super::*;
 use std::sync::{Arc, Mutex};
 
+#[test]
+fn cached_discovery_does_not_turn_the_owned_local_service_into_a_remote_key_view() {
+    let _guard = crate::modules::test_support::env_lock().lock().unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let previous = std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR");
+    struct Restore(Option<std::ffi::OsString>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            match self.0.take() {
+                Some(value) => std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", value),
+                None => std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR"),
+            }
+        }
+    }
+    let _restore = Restore(previous);
+    std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", data.path());
+    let base = "http://127.0.0.1:58439/v1";
+    let profile = profile(base, 1);
+    let config_path = data.path().join("codex_local_access.json");
+    std::fs::write(
+        &config_path,
+        json!({"port":58439,"apiKeys":[
+            {"id":"local-key","key":"remote-fixture","enabled":true}
+        ]})
+        .to_string(),
+    )
+    .unwrap();
+    assert!(dialog_endpoint(profile.path()).unwrap().is_none());
+    assert!(endpoint(profile.path()).unwrap().is_some());
+    // Loopback is not sufficient proof: another local service or an SSH
+    // forward must keep the restricted remote view.
+    for config in [
+        json!({"port":58440,"apiKeys":[{"id":"local-key","key":"remote-fixture","enabled":true}]}),
+        json!({"port":58439,"apiKeys":[{"id":"local-key","key":"different","enabled":true}]}),
+        json!({"port":58439,"apiKeys":[{"id":"local-key","key":"remote-fixture","enabled":false}]}),
+    ] {
+        std::fs::write(&config_path, config.to_string()).unwrap();
+        assert!(dialog_endpoint(profile.path()).unwrap().is_some());
+    }
+}
+
 fn profile(base: &str, version: u32) -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(

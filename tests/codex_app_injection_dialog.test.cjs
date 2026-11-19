@@ -30,6 +30,15 @@ const row = (id, extra = {}) => ({ id, timestamp: 1792545981000, accountDisplayN
   inputTokens: 1000, outputTokens: 214, cachedTokens: 700, totalTokens: 1214,
   outputGenerationMs: 3240, latencyMs: 14140, firstResponseMs: 10910, ...extra });
 
+test('local failure shows its recorded cause even when the category is missing', () => {
+  const h = harness();
+  h.action('tab', 'logs');
+  h.respond({ requests: { rows: [row(1, { success: false, httpStatus: 503,
+    errorMessage: 'Upstream overloaded <retry>', errorCategory: null })] } });
+  assert.ok(h.details.innerHTML.includes('Upstream overloaded &lt;retry&gt;'));
+  assert.ok(!h.details.innerHTML.includes('<retry>'));
+});
+
 test('remote logs stay in the Key view, hide private route fields and page in place', () => {
   const h = harness();
   h.root.usageState.__remoteService = { product: 'cockpit-tools', keyLabel: 'B' };

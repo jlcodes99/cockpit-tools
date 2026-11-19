@@ -19,9 +19,8 @@ pub(crate) use error::error_object;
 pub(crate) use error::is_cloudflare_challenge;
 pub(super) use error::cloudflare_gateway_message;
 pub(crate) use error::upstream_error_metadata_status;
-pub(super) use error::{
-    failure_phase, sanitize_error_text, transport_failure, upstream_error_metadata,
-};
+pub(crate) use error::sanitize_error_text;
+pub(super) use error::{failure_phase, transport_failure, upstream_error_metadata};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
