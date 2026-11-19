@@ -50,6 +50,94 @@
         assert_eq!(codex_menu_bar_value("en", [], None), "--");
     }
 
+    fn token_plan_usage_summary() -> Value {
+        serde_json::json!({
+            "mode": "token_plan",
+            "unit": "%",
+            "remaining": 85.0,
+            "details": [
+                {"key": "planName", "label": "Plan", "value": "GLM Coding Plan"},
+                {"key": "remaining", "label": "Remaining", "value": "85"},
+                // This detail is what used to trip the new_api heuristic and
+                // render "Total: - / Remaining: -" for token-plan accounts.
+                {"key": "expiresAt", "label": "Next Reset", "value": "1765000000"},
+                {"key": "intervalRemainingPercent", "label": "Interval Remaining %", "value": "85"},
+                {"key": "intervalExpiresAt", "label": "Interval Reset", "value": "1765000000"},
+                {"key": "weeklyRemainingPercent", "label": "Weekly Remaining %", "value": "40"},
+                {"key": "weeklyExpiresAt", "label": "Weekly Reset", "value": "1765600000"}
+            ]
+        })
+    }
+
+    #[test]
+    fn token_plan_menu_bar_status_lists_windows_and_uses_the_tightest_percent() {
+        let status = build_codex_token_plan_menu_bar_status(
+            "en",
+            &token_plan_usage_summary(),
+            "API".to_string(),
+        )
+        .expect("token_plan windows");
+        assert_eq!(status.value_text, "5h 85% · Week 40%");
+        assert_eq!(status.remaining_percent, Some(40));
+    }
+
+    #[test]
+    fn token_plan_usage_rows_render_windows_like_the_subscription_card() {
+        let rows = build_codex_token_plan_usage_rows("en", &token_plan_usage_summary())
+            .expect("token_plan windows");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].label, "5h");
+        assert_eq!(rows[0].value, "85%");
+        assert_eq!(rows[0].progress, Some(85));
+        assert_eq!(rows[1].label, "Week");
+        assert_eq!(rows[1].value, "40%");
+        assert_eq!(rows[1].progress, Some(40));
+        for row in &rows {
+            assert!(
+                row.subtext.as_deref().is_some_and(|text| !text.is_empty()),
+                "reset subtext must render for {row:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn token_plan_with_only_a_weekly_window_renders_the_single_window() {
+        let summary = serde_json::json!({
+            "mode": "token_plan",
+            "details": [
+                {"key": "weeklyRemainingPercent", "label": "Weekly Remaining %", "value": "40"},
+                {"key": "weeklyExpiresAt", "label": "Weekly Reset", "value": "1765600000"}
+            ]
+        });
+        let status = build_codex_token_plan_menu_bar_status(
+            "en",
+            &summary,
+            "API".to_string(),
+        )
+        .expect("weekly window");
+        assert_eq!(status.value_text, "Week 40%");
+        assert_eq!(status.remaining_percent, Some(40));
+    }
+
+    #[test]
+    fn token_plan_without_window_fields_keeps_the_balance_rendering() {
+        // codex-proxy-rs reports USD amounts without per-window percents:
+        // it must keep the generic balance path instead of token-plan rows.
+        let summary = serde_json::json!({
+            "mode": "token_plan",
+            "unit": "USD",
+            "details": [
+                {"key": "dailyRemaining", "label": "dailyRemaining", "value": "12.5"},
+                {"key": "dailyExpiresAt", "label": "dailyExpiresAt", "value": "1765000000"},
+                {"key": "weeklyRemaining", "label": "weeklyRemaining", "value": "70"},
+                {"key": "weeklyExpiresAt", "label": "weeklyExpiresAt", "value": "1765600000"}
+            ]
+        });
+        assert!(codex_token_plan_window_rows_data(&summary).is_none());
+        assert!(build_codex_token_plan_usage_rows("en", &summary).is_none());
+        assert!(build_codex_token_plan_menu_bar_status("en", &summary, "API".into()).is_none());
+    }
+
     fn is_codex_api_service_current() -> bool {
         let index = modules::codex_account::load_account_index();
         if index
@@ -74,6 +162,7 @@
 
     /// Codex API Key / 模型供应商账号：展示剩余额度金额或数量，前缀固定为 API。
     fn build_codex_api_key_menu_bar_status(
+        lang: &str,
         account: &crate::models::codex::CodexAccount,
     ) -> MenuBarStatus {
         // 「API」是类型标签，不是邮箱前缀，不受「显示邮箱前 4 位」开关影响。
@@ -90,6 +179,16 @@
             .map(str::trim)
             .unwrap_or_default();
         let unit = json_path(Some(summary), &["unit"]).and_then(Value::as_str);
+        // Token-plan coding subscriptions (智谱 GLM / MiniMax / OpenCode Go) report
+        // per-window remaining percents instead of new_api balances. Their
+        // `expiresAt` detail must not route them into the new_api branch below.
+        if mode == "token_plan" {
+            if let Some(status) =
+                build_codex_token_plan_menu_bar_status(lang, summary, prefix.clone())
+            {
+                return status;
+            }
+        }
         let has_new_api_fields = codex_api_key_usage_detail(summary, "totalGranted").is_some()
             || codex_api_key_usage_detail(summary, "totalAvailable").is_some()
             || codex_api_key_usage_detail(summary, "expiresAt").is_some();
@@ -202,7 +301,7 @@
         if matches!(platform, PlatformId::Codex) {
             if let Some(account) = modules::codex_account::get_current_account() {
                 if account.is_api_key_auth() {
-                    return Some(build_codex_api_key_menu_bar_status(&account));
+                    return Some(build_codex_api_key_menu_bar_status(&lang, &account));
                 }
             }
         }
@@ -974,6 +1073,72 @@
             .unwrap_or_else(|| "-".to_string())
     }
 
+    /// Token-plan 每窗口剩余数据：(label, 剩余百分比, 重置时间)。
+    /// 无窗口百分比（如 codex-proxy-rs 以 USD 金额上报）时返回 None，
+    /// 调用方回落到通用余额渲染。
+    fn codex_token_plan_window_rows_data(
+        summary: &Value,
+    ) -> Option<Vec<(&'static str, i32, Option<i64>)>> {
+        let mut windows = Vec::new();
+        for (label, percent_key, reset_key) in [
+            ("5h", "intervalRemainingPercent", "intervalExpiresAt"),
+            ("Weekly", "weeklyRemainingPercent", "weeklyExpiresAt"),
+        ] {
+            let Some(percent) = codex_api_key_usage_detail_number(summary, percent_key) else {
+                continue;
+            };
+            let reset_at = codex_api_key_usage_detail(summary, reset_key)
+                .and_then(|item| item.get("value"))
+                .and_then(parse_timestamp_like);
+            windows.push((label, percent.round().clamp(0.0, 100.0) as i32, reset_at));
+        }
+        (!windows.is_empty()).then_some(windows)
+    }
+
+    /// Token-plan 菜单栏数值与 API 服务池对齐：列出各窗口，剩余取最紧窗口。
+    fn build_codex_token_plan_menu_bar_status(
+        lang: &str,
+        summary: &Value,
+        account_prefix: String,
+    ) -> Option<MenuBarStatus> {
+        let windows = codex_token_plan_window_rows_data(summary)?;
+        let remaining_percent = windows
+            .iter()
+            .map(|(_, percent, _)| *percent)
+            .min();
+        let value_text = codex_menu_bar_value(
+            lang,
+            windows.iter().map(|(label, percent, _)| (*label, *percent)),
+            remaining_percent,
+        );
+        Some(MenuBarStatus {
+            account_prefix,
+            value_text,
+            remaining_percent,
+        })
+    }
+
+    /// Token-plan coding subscriptions report per-window remaining percents
+    /// plus reset times instead of new_api balances. Render each present
+    /// window the way the OAuth subscription card does: label, remaining
+    /// percent, progress, reset time.
+    fn build_codex_token_plan_usage_rows(lang: &str, summary: &Value) -> Option<Vec<QuotaRow>> {
+        let windows = codex_token_plan_window_rows_data(summary)?;
+        let mut rows = Vec::with_capacity(windows.len());
+        for (label, percent, reset_at) in windows {
+            let display_label = localize_codex_pool_window_label(lang, label);
+            let tone_percent = percent.clamp(0, 100);
+            rows.push(make_progress_row(
+                display_label,
+                format!("{tone_percent}%"),
+                tone_percent,
+                reset_at.and_then(|ts| format_reset_subtext(lang, Some(ts))),
+                codex_remaining_tone(tone_percent),
+            ));
+        }
+        Some(rows)
+    }
+
     fn build_codex_api_key_usage_rows(
         lang: &str,
         account: &crate::models::codex::CodexAccount,
@@ -993,6 +1158,13 @@
             .map(str::trim)
             .unwrap_or_default();
         let unit = json_path(Some(summary), &["unit"]).and_then(Value::as_str);
+        // Token-plan coding subscriptions render their per-window percents like
+        // the OAuth subscription card instead of the new_api balance fields.
+        if mode == "token_plan" {
+            if let Some(rows) = build_codex_token_plan_usage_rows(lang, summary) {
+                return rows;
+            }
+        }
         let has_new_api_fields = codex_api_key_usage_detail(summary, "totalGranted").is_some()
             || codex_api_key_usage_detail(summary, "totalAvailable").is_some()
             || codex_api_key_usage_detail(summary, "expiresAt").is_some();
