@@ -26,13 +26,9 @@ fn finalize_outcome(outcome: &mut AcpOutcome) {
     if outcome.error.is_some() || !outcome.text.trim().is_empty() || outcome.prompt_done {
         return;
     }
-    let session_ready =
-        outcome.ack_ids.contains(&INIT_ID) && outcome.ack_ids.contains(&LOAD_ID);
-    if !session_ready {
-        outcome.error = Some(
-            "WORKBUDDY_PROBE_HANDSHAKE_INCOMPLETE (no ack for initialize/session/load)".into(),
-        );
-    }
+    // 真实后端不会为 initialize/session/load/set_model 推 ack，
+    // 因此不能用 ack 判定握手——成功与否以 prompt 的最终结果（或回复文本）为准；
+    // 两者都没有时由调用方按 NO_REPLY 处理。
 }
 
 pub(super) struct AcpOutcome {
@@ -302,32 +298,26 @@ pub(super) async fn read_acp_reply(
                 return;
             }
 
-            while outcome.error.is_none()
-                && if id == PROMPT_ID {
-                    outcome.text.trim().is_empty()
-                } else {
-                    !outcome.ack_ids.contains(&id)
+        }
+        // 真实后端（workbuddy/codebuddy.cn）对 4 个 JSON-RPC POST 都返回
+        // 200 + 空响应体，JSON-RPC 结果统一走 SSE，且只推 session/prompt 的最终
+        // result（含 stopReason/usage.model），不为前三步握手推 ack。
+        // 因此不能逐步等待 ack——发完请求后统一读一次流，以最终结果/reply 判定。
+        while outcome.error.is_none()
+            && !outcome.prompt_done
+            && outcome.text.trim().is_empty()
+            && !stream_ended
+        {
+            let decoded = match stream.next().await {
+                Some(Ok(bytes)) => decoder.feed(&bytes, false, session_id, &mut outcome),
+                Some(Err(error)) => Err(error.without_url().to_string()),
+                None => {
+                    stream_ended = true;
+                    decoder.feed(&[], true, session_id, &mut outcome)
                 }
-                && !stream_ended
-            {
-                let decoded = match stream.next().await {
-                    Some(Ok(bytes)) => decoder.feed(&bytes, false, session_id, &mut outcome),
-                    Some(Err(error)) => Err(error.without_url().to_string()),
-                    None => {
-                        stream_ended = true;
-                        decoder.feed(&[], true, session_id, &mut outcome)
-                    }
-                };
-                if let Err(error) = decoded {
-                    outcome.error = Some(error);
-                }
-            }
-            if outcome.error.is_some() {
-                return;
-            }
-            if id != PROMPT_ID && !outcome.ack_ids.contains(&id) {
-                outcome.error = Some(format!("WORKBUDDY_PROBE_HANDSHAKE_INCOMPLETE ({method})"));
-                return;
+            };
+            if let Err(error) = decoded {
+                outcome.error = Some(error);
             }
         }
         finalize_outcome(&mut outcome);
