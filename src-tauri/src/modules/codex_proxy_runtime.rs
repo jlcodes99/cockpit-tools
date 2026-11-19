@@ -446,7 +446,11 @@ pub async fn client_builder(
         return Ok(builder);
     }
     // Refresh the routing choice before applying caller defaults.
-    let current = load(&account.id).await?;
+    // An unsaved account (e.g. an import draft) cannot carry a binding yet.
+    let Some(current) = load_stored_optional(&account.id).await? else {
+        return Ok(builder);
+    };
+    ensure_account_proxy_state(&current).await?;
     if current.egress_proxy_disabled {
         return Ok(builder.no_proxy());
     }
@@ -493,8 +497,17 @@ async fn read_with_limit<T: Send + 'static>(
 }
 
 pub(crate) async fn load_stored(account_id: &str) -> Result<CodexAccount, String> {
+    load_stored_optional(account_id)
+        .await?
+        .ok_or_else(|| "PROXY_ACCOUNT_UNSUPPORTED".to_string())
+}
+
+/// `Ok(None)` means the account is not in the store; read failures stay errors.
+async fn load_stored_optional(account_id: &str) -> Result<Option<CodexAccount>, String> {
     if let Some(target) = super::codex_client_proxy::route_target(account_id) {
-        return Box::pin(super::codex_client_proxy::load_route(target)).await;
+        return Box::pin(super::codex_client_proxy::load_route(target))
+            .await
+            .map(Some);
     }
     let account_id = account_id.to_string();
     read_with_limit(
@@ -503,8 +516,7 @@ pub(crate) async fn load_stored(account_id: &str) -> Result<CodexAccount, String
         READ_TOTAL_TIMEOUT,
         move || codex_account::load_account(&account_id),
     )
-    .await?
-    .ok_or_else(|| "PROXY_ACCOUNT_UNSUPPORTED".to_string())
+    .await
 }
 
 pub(crate) async fn stored_accounts() -> Result<Vec<CodexAccount>, String> {
