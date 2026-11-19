@@ -46,6 +46,48 @@ pub(super) fn endpoint(profile: &Path) -> Result<Option<Endpoint>, String> {
         version: connection.key_views_version,
     }))
 }
+
+pub(super) fn dialog_endpoint(profile: &Path) -> Result<Option<Endpoint>, String> {
+    let Some(endpoint) = endpoint(profile)? else {
+        return Ok(None);
+    };
+    // If ownership cannot be verified, keep the restricted Key view.
+    Ok((!owns_local_service(&endpoint.base, &endpoint.key).unwrap_or(false)).then_some(endpoint))
+}
+
+// A loopback address alone may be an SSH forward. Require the configured
+// local port and an enabled local credential before exposing local records.
+fn owns_local_service(base: &str, key: &str) -> Result<bool, String> {
+    let Ok(url) = reqwest::Url::parse(base) else {
+        return Ok(false);
+    };
+    let loopback = url.host_str().is_some_and(|host| {
+        host == "localhost"
+            || host
+                .trim_matches(['[', ']'])
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|address| address.is_loopback())
+    });
+    if url.scheme() != "http" || !loopback || url.path().trim_end_matches('/') != "/v1" {
+        return Ok(false);
+    }
+    let path = super::recent_account::read_only_data_dir()?.join("codex_local_access.json");
+    let Some(config) = super::recent_account::read_small_file(&path)? else {
+        return Ok(false);
+    };
+    let config: Value = serde_json::from_str(&config).map_err(|e| e.to_string())?;
+    if url.port_or_known_default().map(u64::from) != config["port"].as_u64() {
+        return Ok(false);
+    }
+    Ok(
+        match config["apiKeys"].as_array().filter(|keys| !keys.is_empty()) {
+            Some(keys) => keys.iter().any(|entry| {
+                entry["enabled"].as_bool() != Some(false) && entry["key"].as_str() == Some(key)
+            }),
+            None => config["apiKey"].as_str() == Some(key),
+        },
+    )
+}
 fn query(endpoint: &Endpoint, thread: Option<&str>) -> KeyQuery {
     KeyQuery {
         thread_id: thread.map(str::to_owned),

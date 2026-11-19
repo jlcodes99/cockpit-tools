@@ -791,6 +791,7 @@ test('request account, plan, model and error strings render as text rather than 
   for (const text of [accountEmail, plan, model, errorCategory]) assert.ok(h.details().textContent.includes(text));
   assert.equal(h.details().querySelector('.cell-email')!.getAttribute('title'), accountEmail);
   assert.equal(h.details().querySelector('.cell-error')!.getAttribute('title'), errorMessage);
+  assert.equal(h.details().querySelector('.cell-error')!.textContent, errorCategory);
   assert.match(h.details().innerHTML, /&lt;img/);
 });
 

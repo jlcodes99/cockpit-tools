@@ -8,7 +8,7 @@ use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use chrono::{Local, TimeZone};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -105,8 +105,8 @@ pub(super) fn read_dialog_data(profile: &Path, query: &DialogQuery) -> Result<Va
     {
         return Err("invalid dialog query".into());
     }
-    if let Some(endpoint)=super::remote_view::endpoint(profile)? {
-        return super::remote_view::dialog(profile,&endpoint,query);
+    if let Some(endpoint) = super::remote_view::dialog_endpoint(profile)? {
+        return super::remote_view::dialog(profile, &endpoint, query);
     }
     if query.view == "openLogs" {
         open_request_logs(query)?;
@@ -402,6 +402,7 @@ fn read_data(
                 started,
             )?
         };
+        enrich_error_messages(&tx, &mut output["requests"], started)?;
     }
     if chat_valid && query.view == "overview" {
         let mut session_query = query.clone();
@@ -451,6 +452,45 @@ fn read_data(
     tx.commit().map_err(|e| e.to_string())?;
     check_budget(started)?;
     Ok(output)
+}
+
+fn enrich_error_messages(
+    conn: &Connection,
+    page: &mut Value,
+    started: Instant,
+) -> Result<(), String> {
+    let Some(rows) = page["rows"].as_array_mut() else {
+        return Ok(());
+    };
+    if !rows.iter().any(|row| row["success"].as_bool() == Some(false))
+        || !columns(conn, "request_logs")?.contains("error_message")
+    {
+        return Ok(());
+    }
+    // Read only this bounded page by primary key; summaries intentionally do
+    // not persist upstream text or diagnostic payloads.
+    let mut statement = conn
+        .prepare("SELECT substr(error_message,1,8192) FROM request_logs WHERE id=?1 AND success=0")
+        .map_err(|e| e.to_string())?;
+    for row in rows.iter_mut().take(PAGE_SIZE) {
+        check_budget(started)?;
+        if row["success"].as_bool() != Some(false) {
+            continue;
+        }
+        let Some(id) = row["id"].as_str().and_then(|id| id.parse::<i64>().ok()) else {
+            continue;
+        };
+        let message: Option<String> = statement
+            .query_row([id], |record| record.get(0))
+            .optional()
+            .map_err(|e| e.to_string())?
+            .flatten();
+        if let Some(message) = message.filter(|message| !message.trim().is_empty()) {
+            row["errorMessage"] =
+                json!(crate::modules::codex_native_api::diagnostics::sanitize_error_text(&message));
+        }
+    }
+    Ok(())
 }
 
 fn cursor_binding(scope: &RequestScope, query: &DialogQuery) -> String {

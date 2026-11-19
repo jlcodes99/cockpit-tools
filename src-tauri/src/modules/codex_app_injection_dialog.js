@@ -194,6 +194,7 @@
     const visibleAddress = !/^(?:codex_|chatgpt_plan_|api-key-[a-f0-9]{8}$)/i.test(address) || address.includes('@') ? address : '';
     const email = row.accountDisplayName || visibleAddress || missingLabel;
     const imageKind = {image_generation:'imageGeneration',image_edit:'imageEdit'}[row.requestKind];
+    const error = row.success ? '' : row.errorCategory || row.errorMessage || '';
     return '<tr class="request-row"><td><span class="cell-date">' + esc(timestamp ? timestamp.toLocaleDateString(undefined, {month:'2-digit',day:'2-digit'}) : missingLabel)
       + '</span><time class="cell-time">' + esc(timestamp ? timestamp.toLocaleTimeString(undefined, {hour12:false}) : missingLabel) + '</time></td>'
       + (remote ? '<td><span class="cell-email" title="' + esc(row.requestId || missingLabel) + '">' + esc(row.requestId || missingLabel) + '</span></td>' : '<td><span class="cell-email" title="' + esc(email) + '">' + esc(email) + '</span>' + badge(row.plan) + '<span class="cell-route">' + esc(route) + '</span></td>')
@@ -205,7 +206,7 @@
       + '<td><span class="cell-result ' + (outcome === 'success' ? '' : 'failed') + '">' + dot(outcome === 'success' ? 'green' : '') + esc(label(outcome)) + '</span>'
       + '<span class="cell-code">' + esc(row.httpStatus ? 'HTTP ' + row.httpStatus : missingLabel) + '</span>'
       + (row.recovered ? '<span class="cell-recovery">↳ ' + esc(label('recovered')) + '</span>' : '')
-      + (row.errorCategory ? '<span class="cell-error" title="' + esc(row.errorMessage || row.errorCategory) + '">' + esc(row.errorCategory) + '</span>' : '') + '</td></tr>';
+      + (error ? '<span class="cell-error" title="' + esc(row.errorMessage || error) + '">' + esc(error) + '</span>' : '') + '</td></tr>';
   }
   function quotaContent(root, input) {
     const {badgeKind:kind,formatMoney,shortProductLabel} = input;

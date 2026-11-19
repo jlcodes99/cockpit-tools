@@ -81,6 +81,44 @@ fn data(conn: &Connection, scope: &RequestScope, query: &DialogQuery) -> Value {
 }
 
 #[test]
+fn local_dialog_reads_sanitized_causes_without_persisting_them_in_summaries() {
+    let conn = database();
+    append(&conn, "failed-cause", "key-a", THREAD, 100);
+    conn.execute("UPDATE request_logs SET success=0,http_status=503,error_category='server_is_overloaded',error_message=?1 WHERE request_id='failed-cause'",
+        ["Our servers are currently overloaded. Please try again later. Bearer fixture-private https://private.invalid/path"],).unwrap();
+    let result = data(&conn, &scope(), &query("service", "logs"));
+    let message = result["requests"]["rows"][0]["errorMessage"]
+        .as_str()
+        .expect("failed local requests need a readable cause");
+    assert!(message.contains("Our servers are currently overloaded."));
+    assert!(!message.contains("fixture-private"));
+    assert!(!message.contains("private.invalid"));
+    conn.execute_batch("CREATE INDEX idx_codex_local_access_logs_request_id ON request_logs(request_id,timestamp DESC)")
+        .unwrap();
+    crate::modules::codex_request_summary::ensure_schema(&conn).unwrap();
+    crate::modules::codex_request_summary::refresh_request(&conn, "failed-cause").unwrap();
+    let result = data(&conn, &scope(), &query("service", "logs"));
+    assert!(result["requests"]["rows"][0]["errorMessage"]
+        .as_str()
+        .unwrap()
+        .contains("Our servers are currently overloaded."));
+    let stored: String = conn
+        .query_row(
+            "SELECT data_json FROM request_display_summaries",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(serde_json::from_str::<Value>(&stored).unwrap()["errorMessage"].is_null());
+    conn.execute_batch("ALTER TABLE request_logs DROP COLUMN error_message")
+        .unwrap();
+    assert!(
+        data(&conn, &scope(), &query("service", "logs"))["requests"]["rows"][0]["errorMessage"]
+            .is_null()
+    );
+}
+
+#[test]
 fn query_validation_rejects_unbounded_or_ambiguous_input() {
     let valid = serde_json::to_value(query("chat", "overview")).unwrap();
     assert!(parse_query(&valid).is_some());
