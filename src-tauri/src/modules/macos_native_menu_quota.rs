@@ -37,6 +37,35 @@
 
     #[cfg(test)]
     #[test]
+    fn token_plan_window_rows_render_five_hour_and_weekly() {
+        let details = serde_json::json!([
+            {"key":"intervalRemainingPercent","label":"Interval","value":"1"},
+            {"key":"intervalExpiresAt","label":"Interval reset","value":1794759005},
+            {"key":"weeklyRemainingPercent","label":"Weekly","value":"43"},
+            {"key":"weeklyExpiresAt","label":"Weekly reset","value":1795131224}
+        ]);
+        let rows = token_plan_window_rows("en", &details);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].label, "5h");
+        assert_eq!(rows[0].progress, Some(1));
+        assert_eq!(rows[1].label, "Weekly");
+        assert_eq!(rows[1].progress, Some(43));
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn token_plan_window_rows_skip_unparseable_entries() {
+        let details = serde_json::json!([
+            {"key":"intervalRemainingPercent","label":"Interval","value":"abc"},
+            {"key":"weeklyRemainingPercent","label":"Weekly","value":"43"}
+        ]);
+        let rows = token_plan_window_rows("en", &details);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].label, "Weekly");
+    }
+
+    #[cfg(test)]
+    #[test]
     fn codex_menu_bar_quota_labels_present_windows_without_inventing_missing_usage() {
         assert_eq!(
             codex_menu_bar_value("en", [("5h", 95), ("Weekly", 0)], Some(0)),
@@ -974,6 +1003,43 @@
             .unwrap_or_else(|| "-".to_string())
     }
 
+    /// 智谱 token_plan 用量明细 → 菜单双窗行（5 小时窗 + 每周窗）。
+    /// 明细条目形如 {"key":"intervalRemainingPercent","value":"1"}；
+    /// 缺失或无法解析的窗口不产出对应行。
+    fn token_plan_window_rows(lang: &str, details: &Value) -> Vec<QuotaRow> {
+        let detail_pct = |key: &str| -> Option<i32> {
+            let item = details.as_array()?.iter()
+                .find(|row| row.get("key").and_then(Value::as_str).is_some_and(|s| s == key))?;
+            let raw = item.get("value")?.as_str()?.trim().parse::<f64>().ok()?;
+            Some(raw.clamp(0.0, 100.0).round() as i32)
+        };
+        let detail_reset = |key: &str| -> Option<i64> {
+            let item = details.as_array()?.iter()
+                .find(|row| row.get("key").and_then(Value::as_str).is_some_and(|s| s == key))?;
+            item.get("value")?.as_str()?.trim().parse::<i64>().ok()
+        };
+        let mut rows = Vec::new();
+        if let Some(pct) = detail_pct("intervalRemainingPercent") {
+            rows.push(make_progress_row(
+                translate_or(lang, "codex.modelProviders.usage.fields.intervalShort", "5h", &[]),
+                format!("{pct}%"),
+                pct,
+                detail_reset("intervalExpiresAt").and_then(|ts| format_reset_subtext(lang, Some(ts))),
+                codex_remaining_tone(pct),
+            ));
+        }
+        if let Some(pct) = detail_pct("weeklyRemainingPercent") {
+            rows.push(make_progress_row(
+                translate_or(lang, "codex.modelProviders.usage.fields.weeklyShort", "Weekly", &[]),
+                format!("{pct}%"),
+                pct,
+                detail_reset("weeklyExpiresAt").and_then(|ts| format_reset_subtext(lang, Some(ts))),
+                codex_remaining_tone(pct),
+            ));
+        }
+        rows
+    }
+
     fn build_codex_api_key_usage_rows(
         lang: &str,
         account: &crate::models::codex::CodexAccount,
@@ -996,6 +1062,21 @@
         let has_new_api_fields = codex_api_key_usage_detail(summary, "totalGranted").is_some()
             || codex_api_key_usage_detail(summary, "totalAvailable").is_some()
             || codex_api_key_usage_detail(summary, "expiresAt").is_some();
+        // 智谱等 coding plan（token_plan）：5 小时窗 + 每周窗双行，
+        // 数据在用量明细里（interval/weeklyRemainingPercent）。
+        // 必须先于 new_api 分支判断：token_plan 明细含 expiresAt，
+        // 会被 has_new_api_fields 误判。
+        if mode == "token_plan" {
+            let rows = token_plan_window_rows(
+                lang,
+                summary.get("details").unwrap_or(&Value::Null),
+            );
+            if !rows.is_empty() {
+                return rows;
+            }
+            // 双窗数据缺失时继续走通用分支（保持旧行为）。
+        }
+
         if mode == "new_api" || has_new_api_fields {
             let total_granted = codex_api_key_usage_detail_number(summary, "totalGranted");
             let total_available = codex_api_key_usage_detail_number(summary, "totalAvailable");
