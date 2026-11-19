@@ -886,14 +886,9 @@ export function buildCodexAccountPresentation(
   // Verified bindings borrow original account display data only. Endpoint
   // credentials, eligibility and runtime health never consume this copy.
   account = getCodexServiceAccountDisplay(account);
-  const plan = account.plan_type?.toLowerCase() ?? "";
-  const workspaceName = account.account_name?.trim();
-  let displayName = account.email;
-  if (isCodexApiKeyAccount(account)) {
-    displayName = resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"));
-  } else if ((plan.includes("team") || plan.includes("business")) && workspaceName && workspaceName !== account.email) {
-    displayName = account.email ? `${workspaceName} (${account.email})` : workspaceName;
-  }
+  const displayName = isCodexApiKeyAccount(account)
+    ? resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"))
+    : account.email;
   const effectiveQuota = getCodexEffectiveQuotaPercentages(account.quota);
   const weeklyBlocksHourlyHint = effectiveQuota.weeklyBlocksHourly
     ? t("codex.quota.weeklyBlocksHourly", "周额度为 0，5小时额度已不可用")
