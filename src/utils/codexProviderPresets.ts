@@ -221,6 +221,14 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     apiKeyUrl: "https://app.requesty.ai/api-keys",
   },
   {
+    id: "atlascloud",
+    name: "Atlas Cloud",
+    baseUrls: ["https://api.atlascloud.ai/v1"],
+    modelCatalog: ["openai/gpt-6.1-terra", "deepseek-ai/deepseek-v4-flash"],
+    website: "https://www.atlascloud.ai/",
+    apiKeyUrl: "https://console.atlascloud.ai/api-keys",
+  },
+  {
     id: "aicodemirror",
     name: "AICodeMirror",
     baseUrls: [
