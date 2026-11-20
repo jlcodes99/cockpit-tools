@@ -513,6 +513,16 @@ async fn ensure_provider_gateway_for_bind_account(
     Ok(())
 }
 
+/// Desktop instances run the bundled app server; CLI instances run the user's `codex` CLI.
+/// Probe only the binary that will actually launch, with injectable probes for tests.
+fn dynamic_catalog_supported(
+    desktop: bool,
+    desktop_probe: impl FnOnce() -> bool,
+    cli_probe: impl FnOnce() -> bool,
+) -> bool {
+    if desktop { desktop_probe() } else { cli_probe() }
+}
+
 #[cfg(test)]
 async fn apply_launch_speed_after_auth(
     profile_dir: &Path,
@@ -540,7 +550,11 @@ async fn apply_launch_speed_and_catalog_after_auth(
         if api_service_binding {
             if let Err(error) = modules::codex_model_catalog_capabilities::prepare_dynamic_api_service_catalog(
                 &profile_dir,
-                || desktop && modules::process::codex_desktop_supports_dynamic_models(),
+                || dynamic_catalog_supported(
+                    desktop,
+                    modules::process::codex_desktop_supports_dynamic_models,
+                    modules::process::codex_cli_supports_dynamic_models,
+                ),
             ) {
                 modules::logger::log_warn(&format!("[Codex模型目录] 动态目录准备失败: {error}"));
             }
@@ -1195,6 +1209,17 @@ esac
     fn cli_launch_mode_does_not_manage_a_desktop_runtime() {
         assert!(launch_mode_uses_desktop_runtime(&InstanceLaunchMode::App));
         assert!(!launch_mode_uses_desktop_runtime(&InstanceLaunchMode::Cli));
+    }
+
+    #[test]
+    fn dynamic_catalog_probe_matches_the_launch_mode() {
+        let desktop_probe = || true;
+        let cli_probe = || panic!("desktop launch must not probe the CLI binary");
+        assert!(super::dynamic_catalog_supported(true, desktop_probe, cli_probe));
+
+        let desktop_probe = || panic!("CLI launch must not probe the desktop binary");
+        let cli_probe = || true;
+        assert!(super::dynamic_catalog_supported(false, desktop_probe, cli_probe));
     }
 
     #[test]
