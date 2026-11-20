@@ -253,7 +253,15 @@ pub fn apply_state_to_window_config(config: &mut tauri::utils::config::WindowCon
     // Apply position and maximization after creation so the window has normal restore bounds.
 }
 
-/// Apply saved geometry to an already-created main window (first launch / recreate).
+/// The runtime config may contain geometry loaded at startup. Start from the
+/// defaults so disabling window memory also takes effect on tray recreation.
+pub fn apply_state_to_recreated_window_config(config: &mut tauri::utils::config::WindowConfig) {
+    config.width = DEFAULT_WIDTH;
+    config.height = DEFAULT_HEIGHT;
+    apply_state_to_window_config(config);
+}
+
+/// Apply saved geometry to an already-created main window.
 pub fn restore_to_window<R: Runtime>(window: &WebviewWindow<R>) {
     if !remember_main_window_state_enabled() {
         return;
@@ -269,6 +277,18 @@ pub fn restore_to_window<R: Runtime>(window: &WebviewWindow<R>) {
         logger::log_warn(&format!("[Window] 恢复窗口尺寸失败: {}", err));
     }
 
+    restore_saved_placement(window, state);
+}
+
+pub fn restore_placement<R: Runtime>(window: &WebviewWindow<R>) {
+    if remember_main_window_state_enabled() {
+        if let Some(state) = load_main_window_state() {
+            restore_saved_placement(window, state);
+        }
+    }
+}
+
+fn restore_saved_placement<R: Runtime>(window: &WebviewWindow<R>, state: MainWindowState) {
     if state_position_is_visible(window, &state) {
         let (x, y) = (state.x.unwrap_or_default(), state.y.unwrap_or_default());
         if let Err(err) = window.set_position(Position::Logical(LogicalPosition { x, y })) {
