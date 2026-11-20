@@ -537,7 +537,7 @@ fn clone_main_window_config(
     config.create = false;
     config.visible = false;
     // Restore last size/position when recreating after tray destroy (#948 / #1132).
-    main_window_state::apply_state_to_window_config(&mut config);
+    main_window_state::apply_state_to_recreated_window_config(&mut config);
     Ok(config)
 }
 

@@ -451,6 +451,15 @@ pub fn run() {
     // Tauri and the tray's window recreation both read this configuration.
     let mut context = tauri::generate_context!();
     configure_main_window_decorations(context.config_mut(), cfg!(target_os = "linux"));
+    if let Some(main) = context
+        .config_mut()
+        .app
+        .windows
+        .iter_mut()
+        .find(|window| window.label == "main")
+    {
+        modules::main_window_state::apply_state_to_window_config(main);
+    }
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
@@ -823,9 +832,9 @@ pub fn run() {
                 startup_external_import_handled
             ));
 
-            // Restore last main-window size/position before optional startup minimize (#948 / #1132).
+            // The initial size is already in the config. Restore placement before startup minimize.
             if let Some(main) = app.get_webview_window("main") {
-                modules::main_window_state::restore_to_window(&main);
+                modules::main_window_state::restore_placement(&main);
             }
 
             apply_startup_minimized(&app.handle());
