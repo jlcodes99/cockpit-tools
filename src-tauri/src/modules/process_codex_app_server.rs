@@ -33,6 +33,17 @@ pub(crate) fn codex_desktop_supports_dynamic_models() -> bool {
         .is_some_and(|output| supports_codex_catalog_url_version(&output))
 }
 
+/// CLI launch mode runs the user's `codex` CLI, not the bundled desktop app server.
+/// Reuse the wakeup resolver so the probe targets the same binary the instance launches
+/// (configured `codex_cli_path`, `CODEX_CLI_PATH`, then PATH search dirs).
+pub(crate) fn codex_cli_supports_dynamic_models() -> bool {
+    codex_cli_version_supports_dynamic_models(crate::modules::codex_wakeup::get_cli_status().version)
+}
+
+fn codex_cli_version_supports_dynamic_models(version: Option<String>) -> bool {
+    version.is_some_and(|version| supports_codex_catalog_url_version(&version))
+}
+
 fn supports_codex_catalog_url_version(output: &str) -> bool {
     let Some(version) = output.trim().strip_prefix("codex-cli ") else { return false };
     let version = version.split('+').next().unwrap_or(version);
@@ -51,6 +62,20 @@ fn codex_model_catalog_desktop_version_includes_compatible_prereleases() {
     assert!(supports_codex_catalog_url_version("codex-cli 0.166.0"));
     assert!(!supports_codex_catalog_url_version("codex-cli 0.155.0"));
     assert!(!supports_codex_catalog_url_version("codex-cli 0.166.0-alpha.1"));
+}
+
+#[test]
+fn codex_model_catalog_cli_version_gate() {
+    assert!(codex_cli_version_supports_dynamic_models(Some(
+        "codex-cli 0.169.0-alpha.11.1".to_string()
+    )));
+    assert!(codex_cli_version_supports_dynamic_models(Some(
+        "codex-cli 0.166.0".to_string()
+    )));
+    assert!(!codex_cli_version_supports_dynamic_models(Some(
+        "codex-cli 0.155.0".to_string()
+    )));
+    assert!(!codex_cli_version_supports_dynamic_models(None));
 }
 #[cfg(any(test, target_os = "macos", target_os = "linux"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
