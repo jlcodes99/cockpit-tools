@@ -1989,7 +1989,7 @@ const CODEX_MODEL_MANAGEMENT_DEFAULT_OFF_MARKER_FILE: &str =
 /// 只在首次执行时生效（成功后写入标记文件），用户之后自己再开启模型管理不再被干预；
 /// 已保存的模型清单文件会保留，用户重新开启时仍能看到自己的清单。
 pub fn migrate_model_management_default_off_once(base_dir: &Path) -> Result<bool, String> {
-    if base_dir.as_os_str().is_empty() {
+    if base_dir.as_os_str().is_empty() || !base_dir.is_dir() {
         return Ok(false);
     }
     migrate_retired_chatgpt_default_for_dir(base_dir)?;
