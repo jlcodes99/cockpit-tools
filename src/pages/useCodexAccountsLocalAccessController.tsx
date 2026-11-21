@@ -1305,18 +1305,19 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
           searchQuery,
           filterTypes,
           tagFilter,
-          groupFilter,
-          activeGroupId,
+          // OAuth 绑定弹框列出的是全局 OAuth 账号，不受背后账号列表
+          // 当前分组（activeGroupId / groupFilter）影响，否则在只含
+          // API Key 账号的分组里打开弹框会误显示“没有匹配的账号”。
+          groupFilter: [],
+          activeGroupId: null,
           resolveDisplayName: (account) =>
             resolvePresentation(account).displayName,
           compareAccounts: oauthBindingCompareAccountsBySort,
           isAbnormalAccount,
         }),
       [
-        activeGroupId,
         codexGroups,
         filterTypes,
-        groupFilter,
         isAbnormalAccount,
         oauthAccounts,
         oauthBindingCompareAccountsBySort,
