@@ -221,6 +221,21 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     apiKeyUrl: "https://app.requesty.ai/api-keys",
   },
   {
+    id: "aigrow",
+    name: "AIGROW",
+    baseUrls: ["https://aigrow.gg/v1"],
+    modelCatalog: [
+      "gpt-6.2-sol",
+      "gpt-6.2-astra",
+      "gpt-6-astra",
+      "gpt-6.1-sol",
+      "gpt-6.1-terra",
+      "gpt-6-luna",
+    ],
+    website: "https://aigrow.gg/ai-api",
+    apiKeyUrl: "https://aigrow.gg/dashboard/api",
+  },
+  {
     id: "aicodemirror",
     name: "AICodeMirror",
     baseUrls: [
