@@ -7877,6 +7877,8 @@
       "nearestExpiry": "直近の有効期限 {{time}}",
       "nextRefresh": "次回更新 {{time}}",
       "expiring": "まもなく期限切れのクレジットを含む",
+
+      "expiringHintTitle": "期限切れ間近のクレジット詳細を見る",
       "valid": "有効",
       "expired": "期限切れ",
       "expiresAt": "有効期限 {{time}}",

@@ -93,6 +93,11 @@ export function getWorkbuddyAiPlan(account: WorkbuddyAccount) {
   return { label: style === 'free' ? 'FREE' : name || label || 'UNKNOWN', style };
 }
 
+/** 是否存在即将到期的积分（与积分明细里「包含即将到期的积分」提示一致）。 */
+export function hasWorkbuddyExpiringCredits(account: WorkbuddyAccount, now = Date.now()): boolean {
+  return getWorkbuddyCredits(account, now).groups.some((group) => group.expiring);
+}
+
 export function workbuddyCreditPercent(total: number, amount: number, round: (value: number) => number) {
   return total > 0 ? Math.max(0, Math.min(100, round(amount / total * 100))) : 0;
 }

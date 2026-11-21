@@ -7877,6 +7877,8 @@
       "nearestExpiry": "Prima scadenza {{time}}",
       "nextRefresh": "Prossimo rinnovo {{time}}",
       "expiring": "Alcuni crediti scadono a breve",
+
+      "expiringHintTitle": "Visualizza i crediti in scadenza",
       "valid": "Validi",
       "expired": "Scaduti",
       "expiresAt": "Scade il {{time}}",

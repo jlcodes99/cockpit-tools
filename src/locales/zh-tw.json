@@ -7877,6 +7877,8 @@
       "nearestExpiry": "最近到期時間 {{time}}",
       "nextRefresh": "下次更新時間 {{time}}",
       "expiring": "包含即將到期的點數",
+
+      "expiringHintTitle": "查看即將到期的積分明細",
       "valid": "有效期限內",
       "expired": "已過期",
       "expiresAt": "到期時間 {{time}}",

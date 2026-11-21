@@ -7924,6 +7924,8 @@
       "nearestExpiry": "أقرب انتهاء {{time}}",
       "nextRefresh": "التجديد التالي {{time}}",
       "expiring": "رصيد ينتهي قريبًا",
+
+      "expiringHintTitle": "عرض تفاصيل الأرصدة المنتهية قريبًا",
       "valid": "ساري",
       "expired": "منتهي",
       "expiresAt": "ينتهي {{time}}",

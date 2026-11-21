@@ -8247,6 +8247,8 @@
       "nearestExpiry": "Earliest expiry {{time}}",
       "nextRefresh": "Next refresh {{time}}",
       "expiring": "Includes credits expiring soon",
+
+      "expiringHintTitle": "View expiring credits",
       "valid": "Valid",
       "expired": "Expired",
       "expiresAt": "Expires {{time}}",

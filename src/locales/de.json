@@ -7877,6 +7877,8 @@
       "nearestExpiry": "Nächster Ablauf {{time}}",
       "nextRefresh": "Nächste Erneuerung {{time}}",
       "expiring": "Guthaben läuft bald ab",
+
+      "expiringHintTitle": "Details zu bald ablaufenden Guthaben anzeigen",
       "valid": "Gültig",
       "expired": "Abgelaufen",
       "expiresAt": "Läuft ab am {{time}}",
