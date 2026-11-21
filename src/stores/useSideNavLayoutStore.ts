@@ -7,11 +7,6 @@ import {
 
 export type SideNavLayoutMode = 'original' | 'classic';
 
-export const SIDEBAR_ENTRY_LIMITS: Record<SideNavLayoutMode, number> = {
-  original: 3,
-  classic: 6,
-};
-
 interface SideNavLayoutState {
   mode: SideNavLayoutMode;
   classicCollapsed: boolean;
