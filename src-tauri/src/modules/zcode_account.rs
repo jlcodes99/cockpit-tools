@@ -31,10 +31,10 @@ const BILLING_BALANCE_URL: &str = "https://zcode.z.ai/api/v1/zcode-plan/billing/
 const MCP_USAGE_URL: &str = "https://zcode.z.ai/api/v1/mcp/usage";
 const ACTIVE_PROVIDER_KEY: &str = "oauth:active_provider";
 const ZCODE_JWT_KEY: &str = "zcodejwttoken";
-const ZAI_API_KEY_PROVIDER_ID: &str = "builtin:zai";
-const BIGMODEL_API_KEY_PROVIDER_ID: &str = "builtin:bigmodel";
-const ZAI_API_BASE_URL: &str = "https://api.z.ai/api/anthropic";
-const BIGMODEL_API_BASE_URL: &str = "https://open.bigmodel.cn/api/anthropic";
+pub(crate) const ZAI_API_KEY_PROVIDER_ID: &str = "builtin:zai";
+pub(crate) const BIGMODEL_API_KEY_PROVIDER_ID: &str = "builtin:bigmodel";
+pub(crate) const ZAI_API_BASE_URL: &str = "https://api.z.ai/api/anthropic";
+pub(crate) const BIGMODEL_API_BASE_URL: &str = "https://open.bigmodel.cn/api/anthropic";
 
 static ZCODE_ACCOUNT_LOCK: std::sync::LazyLock<Mutex<()>> =
     std::sync::LazyLock::new(|| Mutex::new(()));
