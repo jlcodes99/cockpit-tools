@@ -2636,6 +2636,19 @@ pub fn add_codex_account_from_grok(
 }
 
 #[tauri::command]
+pub fn add_codex_account_from_zcode(
+    zcode_account_id: String,
+    account_name: Option<String>,
+) -> Result<CodexAccount, String> {
+    let account = codex_account::upsert_zcode_provider_account(
+        &zcode_account_id,
+        account_name,
+    )?;
+    codex_account::load_account(&account.id)
+        .ok_or_else(|| "账号保存后无法读取".to_string())
+}
+
+#[tauri::command]
 pub async fn update_codex_api_key_credentials(
     account_id: String,
     api_key: String,
