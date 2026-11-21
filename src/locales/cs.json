@@ -7877,6 +7877,8 @@
       "nearestExpiry": "Nejbližší konec {{time}}",
       "nextRefresh": "Další obnova {{time}}",
       "expiring": "Obsahuje brzy končící kredity",
+
+      "expiringHintTitle": "Zobrazit podrobnosti o brzy expirujících kreditech",
       "valid": "Platné",
       "expired": "Vypršelé",
       "expiresAt": "Vyprší {{time}}",

@@ -7877,6 +7877,8 @@
       "nearestExpiry": "İlk sona erme {{time}}",
       "nextRefresh": "Sonraki yenileme {{time}}",
       "expiring": "Bazı krediler yakında sona eriyor",
+
+      "expiringHintTitle": "Yakında sona erecek kredi ayrıntılarını görüntüle",
       "valid": "Geçerli",
       "expired": "Süresi dolmuş",
       "expiresAt": "Bitiş {{time}}",

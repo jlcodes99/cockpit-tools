@@ -7877,6 +7877,8 @@
       "nearestExpiry": "Expiration la plus proche {{time}}",
       "nextRefresh": "Prochain renouvellement {{time}}",
       "expiring": "Des crédits expirent bientôt",
+
+      "expiringHintTitle": "Voir les crédits expirant bientôt",
       "valid": "Valides",
       "expired": "Expirés",
       "expiresAt": "Expire {{time}}",

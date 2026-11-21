@@ -8052,6 +8052,8 @@
       "nearestExpiry": "Kedaluwarsa berikutnya {{time}}",
       "nextRefresh": "Pembaruan berikutnya {{time}}",
       "expiring": "Termasuk kredit yang akan segera kedaluwarsa",
+
+      "expiringHintTitle": "Lihat rincian kredit yang segera kedaluwarsa",
       "valid": "Berlaku",
       "expired": "Kedaluwarsa",
       "expiresAt": "Kedaluwarsa {{time}}",

@@ -8247,6 +8247,8 @@
       "nearestExpiry": "最近到期时间 {{time}}",
       "nextRefresh": "下次刷新时间 {{time}}",
       "expiring": "包含即将到期的积分",
+
+      "expiringHintTitle": "查看即将到期的积分明细",
       "valid": "有效期内",
       "expired": "已过期",
       "expiresAt": "到期时间 {{time}}",

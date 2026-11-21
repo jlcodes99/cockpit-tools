@@ -7877,6 +7877,8 @@
       "nearestExpiry": "Najbliższa ważność do {{time}}",
       "nextRefresh": "Następne odnowienie {{time}}",
       "expiring": "Część kredytów wkrótce wygaśnie",
+
+      "expiringHintTitle": "Zobacz szczegóły punktów wygasających wkrótce",
       "valid": "Ważne",
       "expired": "Wygasłe",
       "expiresAt": "Wygasa {{time}}",

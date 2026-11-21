@@ -179,6 +179,7 @@ export interface CodebuddySuiteAccountsPlatformConfig<
   renderQuotaAction?: (account: TAccount) => ReactNode;
   /** 积分到期时间（用于卡片时间区的「到期时间」选项）；不实现则该项不显示 */
   /** 卡片底部时间区旁的提示（如「包含即将到期的积分」） */
+  renderCardFooterHint?: (account: TAccount) => ReactNode;
   /** 卡片内、配额区上方的提示条（如模型受限警示） */
   renderCardNotice?: (account: TAccount) => ReactNode;
   /** 卡片操作按钮组里的额外按钮（如单账号探测） */
@@ -765,6 +766,7 @@ export function CodebuddySuiteAccountsSharedView<
               formatDate={formatDate}
               refreshAt={getAccountQuotaUpdatedAtMs(account)}
             />
+            {platformConfig.renderCardFooterHint?.(account)}
             <div className="card-actions">
               <button
                 className="card-action-btn success"

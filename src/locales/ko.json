@@ -7877,6 +7877,8 @@
       "nearestExpiry": "가장 빠른 만료 {{time}}",
       "nextRefresh": "다음 갱신 {{time}}",
       "expiring": "곧 만료되는 크레딧 포함",
+
+      "expiringHintTitle": "곧 만료되는 크레딧 내역 보기",
       "valid": "유효",
       "expired": "만료",
       "expiresAt": "만료 {{time}}",
