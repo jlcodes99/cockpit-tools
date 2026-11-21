@@ -68,6 +68,88 @@ pub(crate) fn preserve_refresh_source(
     Ok(())
 }
 
+/// Endpoints of one Qoder realm. The OAuth flow itself stays shared; a channel
+/// only contributes its service origins and the marker its sessions carry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Channel {
+    source: CredentialSource,
+    website: &'static str,
+    openapi_base_url: &'static str,
+}
+
+impl Channel {
+    /// Channels Cockpit can log in to. IDE-bound sources have no login flow of
+    /// their own, so they resolve to `None`.
+    pub(crate) fn for_source(source: CredentialSource) -> Option<Self> {
+        match source {
+            CredentialSource::GlobalIde => Some(Self {
+                source,
+                website: "https://qoder.com",
+                openapi_base_url: "https://openapi.qoder.sh",
+            }),
+            CredentialSource::PublicCn => Some(Self {
+                source,
+                website: "https://qoder.cn",
+                openapi_base_url: "https://openapi.qoder.com.cn",
+            }),
+            CredentialSource::LegacyCnIde
+            | CredentialSource::DedicatedIde
+            | CredentialSource::Unsupported => None,
+        }
+    }
+
+    pub(crate) fn source(self) -> CredentialSource {
+        self.source
+    }
+
+    pub(crate) fn marker(self) -> &'static str {
+        match self.source {
+            CredentialSource::PublicCn => "qoder_cn",
+            _ => "qoder",
+        }
+    }
+
+    pub(crate) fn openapi_base_url(self) -> &'static str {
+        self.openapi_base_url
+    }
+
+    fn select_accounts_url(self) -> Result<url::Url, String> {
+        url::Url::parse(&format!("{}/device/selectAccounts", self.website))
+            .map_err(|error| format!("解析 Qoder 登录地址失败: {error}"))
+    }
+
+    /// Browser entry point for a channel login. The public CN client signs in
+    /// through the website and hands the PKCE challenge back to the desktop
+    /// client, so it needs no redirect URI of its own.
+    pub(crate) fn sign_in_url(
+        self,
+        nonce: &str,
+        challenge: &str,
+        challenge_method: &str,
+        machine_id: Option<&str>,
+    ) -> Result<String, String> {
+        let mut callback = self.select_accounts_url()?;
+        {
+            let mut query = callback.query_pairs_mut();
+            query.append_pair("nonce", nonce);
+            query.append_pair("challenge", challenge);
+            query.append_pair("challenge_method", challenge_method);
+            query.append_pair("client_id", "732aef47-9cf2-46a2-95fe-4cebb5d0d1fa");
+            if let Some(machine_id) = machine_id.filter(|value| !value.trim().is_empty()) {
+                query.append_pair("machine_id", machine_id);
+            }
+        }
+        let mut sign_in = url::Url::parse(&format!("{}/users/sign-in", self.website))
+            .map_err(|error| format!("解析 Qoder 登录地址失败: {error}"))?;
+        {
+            let mut query = sign_in.query_pairs_mut();
+            query.append_pair("biz_variant", "qoder");
+            query.append_pair("oauth_callback", callback.as_str());
+        }
+        Ok(sign_in.to_string())
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn account_fixture(info: Option<&str>, plan: Option<&str>) -> QoderAccount {
     use serde_json::json;
@@ -120,6 +202,50 @@ mod tests {
         assert_eq!(
             credential_source(&account),
             Err("QODER_REGION_UNSUPPORTED".into())
+        );
+    }
+
+    #[test]
+    fn public_cn_login_never_points_at_the_global_service() {
+        let channel = Channel::for_source(CredentialSource::PublicCn).expect("CN channel");
+        assert_eq!(channel.marker(), "qoder_cn");
+        assert_eq!(channel.openapi_base_url(), "https://openapi.qoder.com.cn");
+
+        let sign_in = url::Url::parse(
+            &channel
+                .sign_in_url("nonce-test", "challenge-test", "S256", Some("machine-test"))
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(sign_in.host_str(), Some("qoder.cn"));
+        let callback = sign_in
+            .query_pairs()
+            .find(|(key, _)| key == "oauth_callback")
+            .expect("oauth_callback")
+            .1
+            .into_owned();
+        let callback = url::Url::parse(&callback).unwrap();
+        assert_eq!(callback.host_str(), Some("qoder.cn"));
+        assert!(callback
+            .query_pairs()
+            .any(|(key, value)| key == "challenge" && value == "challenge-test"));
+        assert!(!callback.query_pairs().any(|(key, _)| key == "redirect_uri"));
+    }
+
+    #[test]
+    fn ide_bound_sources_have_no_login_channel() {
+        for source in [
+            CredentialSource::LegacyCnIde,
+            CredentialSource::DedicatedIde,
+            CredentialSource::Unsupported,
+        ] {
+            assert!(Channel::for_source(source).is_none());
+        }
+        assert_eq!(
+            Channel::for_source(CredentialSource::GlobalIde)
+                .unwrap()
+                .openapi_base_url(),
+            "https://openapi.qoder.sh"
         );
     }
 }

@@ -13,7 +13,9 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::models::qoder::{QoderAccount, QoderOAuthStartResponse};
-use crate::modules::qoder_channel::{ide_source, preserve_refresh_source, CredentialSource};
+use crate::modules::qoder_channel::{
+    ide_source, preserve_refresh_source, Channel, CredentialSource,
+};
 use crate::modules::{logger, qoder_account, qoder_identity, qoder_instance};
 
 const REAUTH_REQUIRED: &str = "QODER_REAUTH_REQUIRED";
@@ -51,6 +53,7 @@ const WHITELIST_NOT_ALLOW: i64 = 7;
 #[derive(Debug, Clone)]
 struct PendingOAuthState {
     login_id: String,
+    channel: Channel,
     expected_nonce: String,
     code_verifier: String,
     challenge_method: String,
@@ -885,7 +888,7 @@ pub(crate) fn token_expiry(info: Option<&Value>, key: &str) -> Option<i64> {
 }
 
 fn session_endpoint(account: &QoderAccount) -> Result<String, String> {
-    let source = ide_source(account)?;
+    let source = crate::modules::qoder_channel::credential_source(account)?;
     if matches!(source, CredentialSource::LegacyCnIde | CredentialSource::DedicatedIde) {
         if let Some(origin) = account.verified_openapi_origin.as_deref() {
             return Ok(origin.to_string());
@@ -893,6 +896,9 @@ fn session_endpoint(account: &QoderAccount) -> Result<String, String> {
     }
     match source {
         CredentialSource::GlobalIde => Ok(DEFAULT_OPENAPI_BASE_URL.to_string()),
+        CredentialSource::PublicCn => Channel::for_source(CredentialSource::PublicCn)
+            .map(|channel| channel.openapi_base_url().to_string())
+            .ok_or_else(|| OPENAPI_UNAVAILABLE.into()),
         CredentialSource::DedicatedIde => {
             let root = qoder_instance::get_default_qoder_user_data_dir()?;
             if !qoder_account::local_session_matches(&root, account)? {
@@ -1031,7 +1037,7 @@ async fn renew_device_token(
     let verified_origin = (endpoint != DEFAULT_OPENAPI_BASE_URL).then(|| endpoint.to_string());
     let account = account.clone();
     tokio::task::spawn_blocking(move || {
-        qoder_account::save_refresh(
+        save_refreshed_account(
             &account,
             Value::Object(updated),
             None,
@@ -1047,10 +1053,43 @@ async fn renew_device_token(
 async fn load_refresh_target(account_id: &str) -> Result<QoderAccount, String> {
     let id = account_id.to_string();
     tokio::task::spawn_blocking(move || {
-        qoder_account::load_account(&id).ok_or_else(|| "QODER_SESSION_CHANGED".to_string())
+        if let Some(account) = qoder_account::load_account(&id) {
+            return Ok(account);
+        }
+        match crate::modules::qoder_cn_account::QoderCnAccountStore::default_store() {
+            Ok(store) => store
+                .load_account(&id)?
+                .ok_or_else(|| "QODER_SESSION_CHANGED".to_string()),
+            Err(_) => Err("QODER_SESSION_CHANGED".to_string()),
+        }
     })
     .await
     .map_err(|_| "QODER_ACCOUNT_BUSY")?
+}
+
+/// Stores a refreshed snapshot in the channel that owns the account.
+fn save_refreshed_account(
+    account: &QoderAccount,
+    user_info: Value,
+    plan: Option<Value>,
+    usage: Option<Value>,
+    quota_error: Option<String>,
+    verified_origin: Option<String>,
+) -> Result<QoderAccount, String> {
+    match crate::modules::qoder_channel::credential_source(account)? {
+        CredentialSource::PublicCn => {
+            crate::modules::qoder_cn_account::QoderCnAccountStore::default_store()?
+                .save_refresh(account, user_info, plan, usage, quota_error)
+        }
+        _ => qoder_account::save_refresh(
+            account,
+            user_info,
+            plan,
+            usage,
+            quota_error,
+            verified_origin,
+        ),
+    }
 }
 
 async fn account_endpoint(account: &QoderAccount) -> Result<String, String> {
@@ -1141,7 +1180,7 @@ async fn refresh_account_from_openapi_once(
     };
     let verified_origin = (endpoint != DEFAULT_OPENAPI_BASE_URL).then_some(endpoint);
     tokio::task::spawn_blocking(move || {
-        qoder_account::save_refresh(
+        save_refreshed_account(
             &target,
             user_info,
             plan,
@@ -1346,12 +1385,25 @@ fn get_string_from_object(
     get_object_field(object, keys).and_then(value_to_string)
 }
 pub async fn start_login() -> Result<QoderOAuthStartResponse, String> {
-    tokio::task::spawn_blocking(start_login_blocking)
+    tokio::task::spawn_blocking(|| start_login_blocking(global_channel()))
         .await
         .map_err(|_| "QODER_ACCOUNT_BUSY")?
 }
 
-fn start_login_blocking() -> Result<QoderOAuthStartResponse, String> {
+/// Starts a login against the public CN client instead of the global IDE.
+pub async fn start_cn_login() -> Result<QoderOAuthStartResponse, String> {
+    let channel = Channel::for_source(CredentialSource::PublicCn)
+        .ok_or_else(|| "QODER_REGION_UNSUPPORTED".to_string())?;
+    tokio::task::spawn_blocking(move || start_login_blocking(channel))
+        .await
+        .map_err(|_| "QODER_ACCOUNT_BUSY")?
+}
+
+fn global_channel() -> Channel {
+    Channel::for_source(CredentialSource::GlobalIde).expect("global channel is always available")
+}
+
+fn start_login_blocking(channel: Channel) -> Result<QoderOAuthStartResponse, String> {
     logger::log_info("[Qoder OAuth] 开始创建登录会话");
     let login_base_url = resolve_qoder_cli_login_endpoint();
     let machine_info = match read_qoder_machine_info_cache() {
@@ -1382,15 +1434,24 @@ fn start_login_blocking() -> Result<QoderOAuthStartResponse, String> {
     let code_verifier = generate_pkce_verifier();
     let challenge_method = QODER_DEVICE_LOGIN_CHALLENGE_METHOD.to_string();
     let code_challenge = generate_pkce_challenge(&code_verifier);
-    let verification_uri = build_cli_device_login_url(
-        &login_base_url,
-        installed_ide_redirect_uri(),
-        &expected_nonce,
-        &code_challenge,
-        &challenge_method,
-        machine_info.as_ref().map(|info| info.token.as_str()),
-        login_machine_id,
-    )?;
+    let verification_uri = if channel.source() == CredentialSource::PublicCn {
+        channel.sign_in_url(
+            &expected_nonce,
+            &code_challenge,
+            &challenge_method,
+            login_machine_id,
+        )?
+    } else {
+        build_cli_device_login_url(
+            &login_base_url,
+            installed_ide_redirect_uri(),
+            &expected_nonce,
+            &code_challenge,
+            &challenge_method,
+            machine_info.as_ref().map(|info| info.token.as_str()),
+            login_machine_id,
+        )?
+    };
     let login_machine_id_source = if machine_id.is_some() {
         "machine_info"
     } else if login_machine_id.is_some() {
@@ -1416,10 +1477,11 @@ fn start_login_blocking() -> Result<QoderOAuthStartResponse, String> {
 
     let state = PendingOAuthState {
         login_id: login_id.clone(),
+        channel,
         expected_nonce: expected_nonce.clone(),
         code_verifier,
         challenge_method: challenge_method.clone(),
-        openapi_base_url: DEFAULT_OPENAPI_BASE_URL.to_string(),
+        openapi_base_url: channel.openapi_base_url().to_string(),
         machine_info,
         verification_uri: verification_uri.clone(),
         expires_at: now_timestamp() + OAUTH_TIMEOUT_SECONDS,
@@ -1484,6 +1546,7 @@ pub async fn complete_login(login_id: &str) -> Result<QoderAccount, String> {
                 state.challenge_method.clone(),
                 state.openapi_base_url.clone(),
                 state.machine_info.clone(),
+                state.channel,
             )
         };
 
@@ -1571,6 +1634,7 @@ pub async fn complete_login(login_id: &str) -> Result<QoderAccount, String> {
                 };
 
                 let id = login_id.to_string();
+                let channel = snapshot.5;
                 let account = tokio::task::spawn_blocking(move || {
                     let state = {
                         let mut pending = PENDING_OAUTH_STATE
@@ -1585,7 +1649,8 @@ pub async fn complete_login(login_id: &str) -> Result<QoderAccount, String> {
                         }
                         pending.take()
                     };
-                    let result = qoder_account::upsert_account_from_snapshot(
+                    let result = persist_login_snapshot(
+                        channel,
                         user_info_raw,
                         user_plan_raw,
                         credit_usage_raw,
@@ -1627,6 +1692,27 @@ pub async fn complete_login(login_id: &str) -> Result<QoderAccount, String> {
             next_wait_log_at += Duration::from_secs(5);
         }
         tokio::time::sleep(Duration::from_millis(OAUTH_POLL_INTERVAL_MS)).await;
+    }
+}
+
+/// Stores a finished login in the channel that started it: the IDE keeps the
+/// global store, the public CN client has its own encrypted one.
+fn persist_login_snapshot(
+    channel: Channel,
+    user_info_raw: Value,
+    user_plan_raw: Option<Value>,
+    credit_usage_raw: Option<Value>,
+) -> Result<QoderAccount, String> {
+    match channel.source() {
+        CredentialSource::PublicCn => {
+            crate::modules::qoder_cn_account::QoderCnAccountStore::default_store()?
+                .upsert_from_snapshot(user_info_raw, user_plan_raw, credit_usage_raw)
+        }
+        _ => qoder_account::upsert_account_from_snapshot(
+            user_info_raw,
+            user_plan_raw,
+            credit_usage_raw,
+        ),
     }
 }
 
@@ -1733,17 +1819,21 @@ mod tests {
     }
 
     #[test]
-    fn ide_rejects_public_cn_and_conflicting_sources_before_resolving_an_origin() {
+    fn public_cn_resolves_its_own_endpoint_and_ide_rejects_conflicts() {
         use crate::modules::qoder_channel::account_fixture;
 
-        for (info, plan) in [(None, Some("qoder_cn")), (Some("qodercn"), Some("qoder"))] {
-            let mut account = account_fixture(info, plan);
-            account.verified_openapi_origin = Some("https://legacy.qoder.cn".into());
-            assert_eq!(
-                session_endpoint(&account).unwrap_err(),
-                "QODER_PLATFORM_MISMATCH"
-            );
-        }
+        let mut cn = account_fixture(None, Some("qoder_cn"));
+        cn.verified_openapi_origin = Some("https://legacy.qoder.cn".into());
+        assert_eq!(
+            session_endpoint(&cn).unwrap(),
+            "https://openapi.qoder.com.cn"
+        );
+
+        let conflicting = account_fixture(Some("qodercn"), Some("qoder"));
+        assert_eq!(
+            session_endpoint(&conflicting).unwrap_err(),
+            "QODER_PLATFORM_MISMATCH"
+        );
     }
 
     #[test]

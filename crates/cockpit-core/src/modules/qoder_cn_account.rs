@@ -3,6 +3,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
+use serde_json::Value;
+
 use super::{
     account_index_repair::{
         collect_account_file_ids, load_accounts_from_details, sort_accounts_by_recency,
@@ -20,6 +22,8 @@ const ACCOUNTS_DIR: &str = "qoder_cn_accounts";
 /// so it must stay in sync with `QoderCnAccountIndex::LEGACY_FILE`.
 const ACCOUNTS_INDEX_FILE: &str = "qoder_cn_accounts.json";
 const INDEX_BUSY: &str = "QODER_CN_ACCOUNT_BUSY";
+/// Marker every persisted CN session carries; see `qoder_channel::Channel`.
+const LOGIN_SOURCE_MARKER: &str = "qoder_cn";
 
 /// Serializes index mutations. Detail files are written outside this lock, but
 /// every write that also touches the index goes through it.
@@ -39,6 +43,11 @@ pub struct QoderCnAccountStore {
 impl QoderCnAccountStore {
     pub fn new(data_dir: PathBuf) -> Self {
         Self { root: data_dir }
+    }
+
+    /// Store rooted at the desktop data directory.
+    pub fn default_store() -> Result<Self, String> {
+        Ok(Self::new(super::account::get_data_dir()?))
     }
 
     fn directory(&self) -> PathBuf {
@@ -148,6 +157,86 @@ impl QoderCnAccountStore {
         self.write_details(&account)
     }
 
+    /// Merges a freshly logged-in snapshot into the CN store. The account is
+    /// matched by id, then by user id, so a re-login updates in place instead of
+    /// creating a second entry for the same person.
+    pub fn upsert_from_snapshot(
+        &self,
+        user_info_raw: Value,
+        user_plan_raw: Option<Value>,
+        credit_usage_raw: Option<Value>,
+    ) -> Result<QoderAccount, String> {
+        let _guard = index_guard()?;
+        let (user_info_raw, user_plan_raw) = stamp_public_cn(user_info_raw, user_plan_raw)?;
+        let draft = super::qoder_account::build_account_from_snapshot(
+            user_info_raw.clone(),
+            user_plan_raw.clone(),
+            None,
+            None,
+        );
+        let existing = self.find_existing(&draft)?;
+        let account = super::qoder_account::build_account_from_snapshot(
+            user_info_raw,
+            user_plan_raw,
+            credit_usage_raw,
+            existing.as_ref(),
+        );
+        self.write_details(&account)?;
+        Ok(account)
+    }
+
+    /// Persists a refreshed snapshot, but only while the stored credentials are
+    /// still the ones the caller refreshed with.
+    pub fn save_refresh(
+        &self,
+        expected: &QoderAccount,
+        user_info: Value,
+        plan: Option<Value>,
+        usage: Option<Value>,
+        quota_error: Option<String>,
+    ) -> Result<QoderAccount, String> {
+        let _guard = index_guard()?;
+        let current = self
+            .load_account(&expected.id)?
+            .ok_or_else(|| "QODER_SESSION_CHANGED".to_string())?;
+        if current.auth_user_info_raw != expected.auth_user_info_raw
+            || current.auth_user_plan_raw != expected.auth_user_plan_raw
+        {
+            return Err("QODER_SESSION_CHANGED".into());
+        }
+        let mut updated = super::qoder_account::build_account_from_snapshot(
+            user_info,
+            plan,
+            usage,
+            Some(&current),
+        );
+        updated.quota_query_last_error = quota_error;
+        updated.quota_query_last_error_at = updated
+            .quota_query_last_error
+            .as_ref()
+            .map(|_| chrono::Utc::now().timestamp_millis());
+        self.write_details(&updated)?;
+        Ok(updated)
+    }
+
+    fn find_existing(&self, draft: &QoderAccount) -> Result<Option<QoderAccount>, String> {
+        if let Some(account) = self.load_account(&draft.id)? {
+            return Ok(Some(account));
+        }
+        let Some(user_id) = draft.user_id.as_deref() else {
+            return Ok(None);
+        };
+        let index = self.load_index_checked()?;
+        let Some(summary) = index
+            .accounts
+            .iter()
+            .find(|summary| summary.user_id.as_deref() == Some(user_id))
+        else {
+            return Ok(None);
+        };
+        self.load_account(&summary.id)
+    }
+
     fn delete_details(&self, id: &str) -> Result<(), String> {
         let path = self.path(id)?;
         if path.try_exists().map_err(|error| error.to_string())? {
@@ -218,6 +307,33 @@ fn refresh_summary(index: &mut QoderCnAccountIndex, account: &QoderAccount) {
         return;
     }
     index.accounts.push(summary);
+}
+
+/// Marks a fresh login snapshot as a Cockpit public CN session. A snapshot that
+/// already carries another channel's marker is rejected instead of relabelled.
+fn stamp_public_cn(
+    mut user_info: Value,
+    mut plan: Option<Value>,
+) -> Result<(Value, Option<Value>), String> {
+    if !user_info.is_object() {
+        return Err("QODER_LOGIN_PAYLOAD_INVALID".into());
+    }
+    stamp_marker(&mut user_info)?;
+    if let Some(payload) = plan.as_mut().filter(|value| value.is_object()) {
+        stamp_marker(payload)?;
+    }
+    Ok((user_info, plan))
+}
+
+fn stamp_marker(payload: &mut Value) -> Result<(), String> {
+    match payload.get("login_source") {
+        None | Some(Value::Null) => {
+            payload["login_source"] = Value::String(LOGIN_SOURCE_MARKER.to_string());
+            Ok(())
+        }
+        Some(value) if value.as_str() == Some(LOGIN_SOURCE_MARKER) => Ok(()),
+        Some(_) => Err("QODER_PLATFORM_MISMATCH".into()),
+    }
 }
 
 fn require_public_cn(account: &QoderAccount) -> Result<(), String> {
@@ -383,5 +499,86 @@ mod tests {
             Some("quota-unavailable")
         );
         assert!(stored.quota_query_last_error_at.is_some());
+    }
+
+    #[test]
+    fn refresh_updates_details_and_rejects_stale_credentials() {
+        let root = tempfile::tempdir().unwrap();
+        let store = QoderCnAccountStore::new(root.path().to_path_buf());
+        let account = cn_account("refresh", 1);
+        store.save_account(&account).unwrap();
+
+        let mut refreshed_info = account.auth_user_info_raw.clone().unwrap();
+        refreshed_info["token"] = serde_json::json!("rotated-token");
+        let refreshed = store
+            .save_refresh(
+                &account,
+                refreshed_info.clone(),
+                None,
+                None,
+                Some("quota-down".into()),
+            )
+            .unwrap();
+        assert_eq!(
+            refreshed.auth_user_info_raw.as_ref().unwrap()["token"],
+            "rotated-token"
+        );
+        assert_eq!(
+            refreshed.quota_query_last_error.as_deref(),
+            Some("quota-down")
+        );
+
+        // The caller refreshed with credentials that are no longer stored.
+        assert_eq!(
+            store
+                .save_refresh(&account, refreshed_info, None, None, None)
+                .unwrap_err(),
+            "QODER_SESSION_CHANGED"
+        );
+    }
+
+    #[test]
+    fn login_snapshot_is_stamped_and_merged_by_identity() {
+        let root = tempfile::tempdir().unwrap();
+        let store = QoderCnAccountStore::new(root.path().to_path_buf());
+        let snapshot = || {
+            serde_json::json!({
+                "id": "cn-user-1",
+                "email": "cn-login@example.invalid",
+                "token": "synthetic-token",
+                "expireTime": 9_999_999_999_000_i64,
+            })
+        };
+
+        let first = store
+            .upsert_from_snapshot(snapshot(), None, None)
+            .unwrap();
+        assert_eq!(
+            first.auth_user_info_raw.as_ref().unwrap()["login_source"],
+            "qoder_cn"
+        );
+
+        let second = store
+            .upsert_from_snapshot(snapshot(), None, None)
+            .unwrap();
+        assert_eq!(first.id, second.id);
+        assert_eq!(store.list_accounts().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn login_snapshot_from_another_channel_is_rejected() {
+        let root = tempfile::tempdir().unwrap();
+        let store = QoderCnAccountStore::new(root.path().to_path_buf());
+        let snapshot = serde_json::json!({
+            "id": "cn-user-2",
+            "token": "synthetic-token",
+            "login_source": "qoder",
+        });
+        assert_eq!(
+            store
+                .upsert_from_snapshot(snapshot, None, None)
+                .unwrap_err(),
+            "QODER_PLATFORM_MISMATCH"
+        );
     }
 }
