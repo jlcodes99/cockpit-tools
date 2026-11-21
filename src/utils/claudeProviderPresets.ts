@@ -497,6 +497,17 @@ const CC_SWITCH_DIRECT_CLAUDE_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset
     }),
   }),
   createClaudeApiProviderPreset({
+    id: 'aigrow',
+    name: 'AIGROW',
+    baseUrl: 'https://aigrow.gg',
+    website: 'https://aigrow.gg/ai-api',
+    apiKeyUrl: 'https://aigrow.gg/dashboard/api',
+    extraEnv: modelEnv('claude-haiku-5.5', {
+      ANTHROPIC_DEFAULT_SONNET_MODEL: 'claude-sonnet-5.5',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-5.5',
+    }),
+  }),
+  createClaudeApiProviderPreset({
     id: 'pipellm',
     name: 'PIPELLM',
     baseUrl: 'https://cc-api.pipellm.ai',
