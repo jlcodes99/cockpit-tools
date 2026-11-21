@@ -707,7 +707,16 @@ fn default_child_receives_proxy_and_selected_home_without_console() {
         .collect::<Vec<_>>();
     env.push(("CODEX_HOME".into(), "wrong-home".into()));
     env.push(("CODEX_ELECTRON_USER_DATA_PATH".into(), "wrong-data".into()));
-    let script = "$values=@{};foreach($key in @('ALL_PROXY','HTTP_PROXY','HTTPS_PROXY','CODEX_HOME','CODEX_ELECTRON_USER_DATA_PATH','COCKPIT_CODEX_PACKAGE_LAUNCH_PAYLOAD')){$values[$key]=[Environment]::GetEnvironmentVariable($key,'Process')};$values|ConvertTo-Json -Compress";
+    let script = r#"
+$values = @{}
+foreach ($key in @('ALL_PROXY', 'HTTP_PROXY', 'HTTPS_PROXY', 'CODEX_HOME',
+                    'CODEX_ELECTRON_USER_DATA_PATH', 'COCKPIT_CODEX_PACKAGE_LAUNCH_PAYLOAD')) {
+    $values[$key] = [Environment]::GetEnvironmentVariable($key, 'Process')
+}
+$json = $values | ConvertTo-Json -Compress
+$bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+[Console]::OpenStandardOutput().Write($bytes, 0, $bytes.Length)
+"#;
     for selected_home in [None, Some(r"D:\李杰\Codex Home")] {
         let mut request = request(selected_home, None, &[], &env);
         request.executable = PathBuf::from(std::env::var("SystemRoot").unwrap())

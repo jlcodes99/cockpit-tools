@@ -48,6 +48,28 @@ fn unsent_fixture() -> (RequestTracker, Arc<Recorder>, Arc<Activity>, watch::Sen
     (tracker, host, activity, stop)
 }
 
+#[test]
+fn payload_formatting_is_lazy_without_room_for_capture() {
+    let (mut tracker, _host, _activity, _stop) = unsent_fixture();
+    let headers = axum::http::HeaderMap::new();
+    tracker.context("POST", "/v1/responses", &headers, false);
+    let unexpected = || -> String { panic!("skipped diagnostics must not format the body") };
+    tracker.payload_with("client_request", "http", &headers, unexpected);
+    assert!(tracker.diagnostics.as_ref().unwrap().payloads.is_empty());
+
+    tracker.context("POST", "/v1/responses", &headers, true);
+    for _ in 0..16 {
+        tracker.payload_with("client_request", "http", &headers, || json!({"text":"测试"}).to_string());
+    }
+    tracker.payload_with("client_request", "http", &headers, unexpected);
+    let context = tracker.diagnostics.as_ref().unwrap();
+    assert!(context.truncated);
+    assert_eq!(context.payloads.len(), 16);
+    let payload = &context.payloads[0];
+    assert_eq!(payload.body, "{\"text\":\"测试\"}");
+    assert_eq!(payload.original_bytes, payload.body.len() as u64);
+}
+
 fn select_candidate(tracker: &mut RequestTracker, account_id: &str) {
     let caller = Caller { id: "caller".into(), label: "test".into() };
     tracker.routed(&caller, &dispatch_route(account_id), "requested");

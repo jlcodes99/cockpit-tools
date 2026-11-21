@@ -203,7 +203,15 @@ pub fn get_data_dir() -> Result<PathBuf, String> {
     }
 
     #[cfg(test)]
-    let data_dir = crate::modules::test_support::fallback_data_dir();
+    let data_dir = if std::env::var_os("COCKPIT_TOOLS_TEST_ISOLATED_HOME")
+        .map(PathBuf::from)
+        .is_some_and(|home| dirs::home_dir().as_ref() == Some(&home))
+    {
+        // The restart regression runs in a child with its own home and preference file.
+        resolve_data_dir()?
+    } else {
+        crate::modules::test_support::fallback_data_dir()
+    };
     #[cfg(not(test))]
     let data_dir = resolve_data_dir()?;
 
@@ -991,18 +999,27 @@ fn save_current_account_file(email: &str) -> Result<(), String> {
     Ok(())
 }
 
+const QUOTA_REFRESH_ACCOUNT_REIMPORTED: &str = "刷新期间账号已重新导入，请重试";
+
 /// 更新账号配额
-pub fn update_account_quota(account_id: &str, quota: QuotaData) -> Result<(), String> {
+pub fn update_account_quota(queried: &Account, quota: QuotaData) -> Result<(), String> {
     let _lock = lock_account_index()?;
-    let account = load_account(account_id)?;
+    let account = load_account(&queried.id)?;
+    if account.created_at != queried.created_at {
+        return Err(QUOTA_REFRESH_ACCOUNT_REIMPORTED.to_string());
+    }
     save_account_quota(account, quota)
 }
 
 fn save_account_quota(mut account: Account, mut quota: QuotaData) -> Result<(), String> {
+    use modules::platform_quota_history::{self, Platform};
+
+    let history = platform_quota_history::antigravity_metrics(&quota);
+    let observed_at = quota.last_updated.saturating_mul(1000);
     modules::quota::preserve_failed_quota_summary(&mut quota, account.quota.as_ref());
 
     // 容错：如果新获取的 models 为空，但之前有数据，保留原来的 models
-    if quota.models.is_empty() {
+    if quota.models.is_empty() && quota.quota_summary_updated_at.is_none() {
         if let Some(ref existing_quota) = account.quota {
             if !existing_quota.models.is_empty()
                 && !quota.is_forbidden
@@ -1035,6 +1052,13 @@ fn save_account_quota(mut account: Account, mut quota: QuotaData) -> Result<(), 
     account.update_quota(quota);
     account.usage_updated_at = Some(chrono::Utc::now().timestamp());
     save_account(&account)?;
+    platform_quota_history::record(
+        Platform::Antigravity,
+        &account.id,
+        account.created_at,
+        observed_at,
+        &history,
+    );
     if let Some(ref quota) = account.quota {
         let _ = modules::quota_cache::write_quota_cache("authorized", &account.email, quota);
     }
@@ -1056,7 +1080,8 @@ pub(super) async fn refresh_quota_after_wakeup(account_id: String) -> Result<(),
 fn save_quota_after_wakeup(queried: &Account, quota: QuotaData) -> Result<(), String> {
     let _lock = lock_account_index()?;
     let latest = load_account(&queried.id)?;
-    if !same_oauth_credentials(&latest.token, &queried.token)
+    if latest.created_at != queried.created_at
+        || !same_oauth_credentials(&latest.token, &queried.token)
         || latest.token.project_id != queried.token.project_id
         || latest.quota.as_ref().is_some_and(|stored| stored.last_updated > quota.last_updated)
     {
@@ -1139,6 +1164,50 @@ mod quota_refresh_cache_tests {
         let current = load_account(&account.id).unwrap();
         assert_eq!(current.token.access_token, "reauthorized");
         assert_eq!(current.quota.unwrap().last_updated, 2);
+
+        let mut reimported = previous.clone();
+        reimported.created_at += 1;
+        assert!(reimported.quota.is_none());
+        save_account(&reimported).unwrap();
+        let mut stale_refresh = previous.clone();
+        stale_refresh.disabled = true;
+        assert!(merge_quota_refresh_state_blocking(&mut stale_refresh, &previous.token).is_err());
+        assert!(!load_account(&reimported.id).unwrap().disabled);
+        let error = update_account_quota(&previous, snapshot(4, "2026-11-12T07:00:00Z"))
+            .unwrap_err();
+        assert!(error.contains("重新导入"));
+        save_quota_after_wakeup(&previous, snapshot(4, "2026-11-12T07:00:00Z")).unwrap();
+        assert!(load_account(&reimported.id).unwrap().quota.is_none());
+        update_account_quota(&reimported, snapshot(5, "2026-11-12T08:00:00Z")).unwrap();
+        assert_eq!(load_account(&reimported.id).unwrap().quota.unwrap().last_updated, 5);
+    }
+
+    #[test]
+    fn quota_refresh_keeps_failed_windows_but_a_confirmed_empty_response_removes_them() {
+        let _lock = crate::modules::test_support::env_lock().lock().unwrap();
+        let mut account = Account::new(
+            "empty-summary-fixture".into(), "quota-empty@example.invalid".into(),
+            TokenData::new("access".into(), "refresh".into(), 3600, None, None, None),
+        );
+        let mut previous = QuotaData::new();
+        previous.quota_summary_updated_at = Some(previous.last_updated);
+        previous.add_model("gemini-weekly".into(), None, 46, String::new());
+        account.update_quota(previous);
+
+        let mut failed = QuotaData::new();
+        failed.quota_summary_stale = true;
+        save_account_quota(account.clone(), failed).unwrap();
+        let cached = load_account(&account.id).unwrap();
+        assert_eq!(cached.quota.as_ref().unwrap().models[0].percentage, 46);
+        assert!(cached.quota.as_ref().unwrap().quota_summary_stale);
+
+        let mut empty = QuotaData::new();
+        empty.quota_summary_updated_at = Some(empty.last_updated);
+        save_account_quota(cached, empty).unwrap();
+        let stored = load_account(&account.id).unwrap().quota.unwrap();
+        assert!(stored.models.is_empty());
+        assert!(!stored.quota_summary_stale);
+        assert_eq!(stored.quota_summary_updated_at, Some(stored.last_updated));
     }
 }
 
@@ -1208,12 +1277,12 @@ struct AutoSwitchWindowThresholds {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SummaryWindow {
+pub(super) enum SummaryWindow {
     FiveHour,
     Weekly,
 }
 
-fn summary_bucket_window(name: &str) -> Option<SummaryWindow> {
+pub(super) fn summary_bucket_window(name: &str) -> Option<SummaryWindow> {
     let normalized = name.trim().to_lowercase();
     if normalized.ends_with("5h") {
         Some(SummaryWindow::FiveHour)
@@ -1316,6 +1385,19 @@ fn available_ai_credits(account: &Account) -> Option<f64> {
 fn default_auto_switch_groups() -> Vec<AutoSwitchGroupDefinition> {
     vec![
         AutoSwitchGroupDefinition {
+            id: "g4_carbon".into(),
+            name: "Gemini 4 Carbon".into(),
+            summary_family: SummaryBucketFamily::Carbon,
+            models: vec![
+                "gemini-4-carbon".into(),
+                "gemini-4-carbon-low".into(),
+                "gemini-4-carbon-medium".into(),
+                "gemini-4-carbon-high".into(),
+                "carbon:weekly".into(),
+                "gemini-carbon-wtu-weekly".into(),
+            ],
+        },
+        AutoSwitchGroupDefinition {
             id: "g4_argon".into(),
             name: "Gemini 4 Argon".into(),
             summary_family: SummaryBucketFamily::Argon,
@@ -1379,6 +1461,15 @@ fn default_auto_switch_groups() -> Vec<AutoSwitchGroupDefinition> {
                 "gemini-3.8-flash-medium".into(),
                 "gemini-3.8-flash-high".into(),
                 "MODEL_PLACEHOLDER_M318".into(),
+                "gemini-4-hydrogen".into(),
+                "gemini-4-hydrogen-low".into(),
+                "gemini-4-hydrogen-medium".into(),
+                "gemini-4-hydrogen-high".into(),
+                "gemini-4-hydrogen-xhigh".into(),
+                "MODEL_PLACEHOLDER_M525".into(),
+                "MODEL_PLACEHOLDER_M526".into(),
+                "MODEL_PLACEHOLDER_M527".into(),
+                "MODEL_PLACEHOLDER_M528".into(),
                 "gemini-3-flash".to_string(),
                 "gemini-3.1-flash".to_string(),
                 "gemini-3-flash-image".to_string(),
@@ -1489,6 +1580,14 @@ fn resolve_monitored_auto_switch_groups(
 
 fn normalize_model_for_group_match(value: &str) -> String {
     let normalized = value.trim().to_lowercase();
+    if normalized.starts_with("gemini-4-carbon")
+        || matches!(
+            normalized.as_str(),
+            "carbon:weekly" | "gemini-carbon-wtu-weekly"
+        )
+    {
+        return "gemini-4-carbon".into();
+    }
     if normalized.starts_with("gemini-4-argon")
         || matches!(
             normalized.as_str(),
@@ -1499,6 +1598,9 @@ fn normalize_model_for_group_match(value: &str) -> String {
     }
     if normalized.starts_with("gemini-3.8-flash") {
         return "gemini-3.8-flash".into();
+    }
+    if normalized.starts_with("gemini-4-hydrogen") {
+        return "gemini-4-hydrogen".into();
     }
     if normalized.starts_with("claude-sonnet-5-5") {
         return "claude-sonnet-5-5".into();
@@ -1529,6 +1631,13 @@ fn model_matches_group_model(model_name: &str, group_model_id: &str) -> bool {
         return true;
     }
     left.starts_with(&(right.clone() + "-")) || right.starts_with(&(left + "-"))
+}
+
+pub(super) fn model_summary_family(model: &str) -> Option<SummaryBucketFamily> {
+    default_auto_switch_groups()
+        .into_iter()
+        .find(|group| group.models.iter().any(|id| model_matches_group_model(model, id)))
+        .map(|group| group.summary_family)
 }
 
 fn collect_group_quotas(
@@ -2294,7 +2403,6 @@ pub async fn refresh_all_quotas_logic(
         })
         .map(|mut account| {
             let email = account.email.clone();
-            let account_id = account.id.clone();
             let permit = semaphore.clone();
             async move {
                 let _guard = permit.acquire().await.unwrap();
@@ -2303,7 +2411,7 @@ pub async fn refresh_all_quotas_logic(
                         let unresolved_forbidden = account.quota_error.as_ref().filter(|error| {
                             error.code == Some(403) && !quota.is_forbidden && quota.models.is_empty()
                         });
-                        if let Err(e) = update_account_quota(&account_id, quota) {
+                        if let Err(e) = update_account_quota(&account, quota) {
                             let msg = format!("Account {}: Save quota failed - {}", email, e);
                             Err(msg)
                         } else if let Some(error) = unresolved_forbidden {
@@ -2385,6 +2493,9 @@ fn merge_quota_refresh_state_blocking(
 
     let _lock = lock_account_index().map_err(AppError::Account)?;
     let mut latest = load_account(&account.id).map_err(AppError::Account)?;
+    if latest.created_at != account.created_at {
+        return Err(AppError::Account(QUOTA_REFRESH_ACCOUNT_REIMPORTED.to_string()));
+    }
     if !same_oauth_credentials(&latest.token, expected_token) {
         return Err(AppError::Account(
             "Antigravity OAuth credentials changed during quota refresh".to_owned(),
@@ -2446,8 +2557,12 @@ pub async fn fetch_quota_with_fresh_token(
         expected_token = account.token.clone();
     }
 
-    let (metadata, result) =
-        modules::quota::fetch_quota_for_token(&account.token, &account.email, skip_cache).await;
+    let verification_pending = account.quota_error.as_ref().is_some_and(|error| {
+        error.reason.as_deref() == Some("VALIDATION_REQUIRED") || error.validation_url.is_some()
+    });
+    let (metadata, result) = modules::quota::fetch_quota_for_token(
+        &account.token, &account.email, skip_cache || verification_pending,
+    ).await;
     // loadCodeAssist and the quota endpoints are separate requests. Persist any
     // project data it returned even if fetching model quotas subsequently failed.
     apply_project_metadata(&mut account.token, &metadata);
@@ -3337,6 +3452,25 @@ mod new_antigravity_model_tests {
     use super::*;
 
     #[test]
+    fn carbon_and_shared_gemini_quota_windows_stay_separate() {
+        let mut account = Account::new(
+            "carbon-fixture".into(),
+            "fixture@example.test".into(),
+            TokenData::new("access".into(), "refresh".into(), 3600, None, None, None),
+        );
+        let mut quota = QuotaData::new();
+        quota.add_model("gemini-carbon-wtu-weekly".into(), None, 21, String::new());
+        quota.add_model("gemini-4-hydrogen-high".into(), None, 39, String::new());
+        account.quota = Some(quota);
+        let groups = collect_group_quotas(&account, &default_auto_switch_groups());
+        let carbon = groups.iter().find(|group| group.id == "g4_carbon").unwrap();
+        let flash = groups.iter().find(|group| group.id == "g3_flash").unwrap();
+        assert_eq!(carbon.weekly, Some(21));
+        assert_eq!(flash.weekly, None);
+        assert_eq!(flash.model_average, Some(39));
+    }
+
+    #[test]
     fn antigravity_quota_windows_trigger_switch_and_filter_candidates() {
         let account = |id: &str, windows: &[(&str, i32)], stale| {
             let mut account = Account::new(
@@ -3436,6 +3570,7 @@ mod new_antigravity_model_tests {
             default_auto_switch_groups(),
             &reported,
         );
+        assert!(explicit.iter().any(|group| group.id == "g4_carbon"));
         assert!(explicit.iter().any(|group| group.id == "g4_argon"));
     }
 
@@ -3443,6 +3578,12 @@ mod new_antigravity_model_tests {
     fn new_groups_keep_legacy_models_and_separate_new_versions() {
         let groups = default_auto_switch_groups();
         assert!(groups.iter().any(|group| group.id == "g3_pro"));
+        let carbon = groups.iter().find(|group| group.id == "g4_carbon").unwrap();
+        assert!(carbon.models.contains(&"gemini-4-carbon-high".into()));
+        assert_eq!(
+            normalize_model_for_group_match("gemini-4-carbon-high"),
+            "gemini-4-carbon"
+        );
         let argon = groups.iter().find(|group| group.id == "g4_argon").unwrap();
         assert!(argon.models.contains(&"gemini-4-argon-high".into()));
         assert_eq!(
@@ -3453,9 +3594,19 @@ mod new_antigravity_model_tests {
             normalize_model_for_group_match("claude-sonnet-4-6"),
             normalize_model_for_group_match("claude-sonnet-5-5-high")
         );
+        let flash = groups.iter().find(|group| group.id == "g3_flash").unwrap();
+        assert!(flash.models.contains(&"gemini-4-hydrogen-xhigh".into()));
+        assert_eq!(
+            normalize_model_for_group_match("gemini-4-hydrogen-xhigh"),
+            "gemini-4-hydrogen"
+        );
         assert_ne!(
             normalize_model_for_group_match("gemini-3-flash"),
             normalize_model_for_group_match("gemini-3.8-flash-high")
+        );
+        assert_ne!(
+            normalize_model_for_group_match("gemini-3.8-flash-high"),
+            normalize_model_for_group_match("gemini-4-hydrogen-xhigh")
         );
     }
 }

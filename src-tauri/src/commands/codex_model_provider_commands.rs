@@ -1,3 +1,7 @@
+use crate::modules::codex_provider_discovered_models::{
+    codex_model_provider_models_url, fetch_provider_models, CodexModelProviderModel,
+    CodexModelProviderModelsResult,
+};
 use crate::modules::codex_provider_protocol::normalize_model_provider_wire_api;
 use serde_json::Value;
 
@@ -11,6 +15,9 @@ pub async fn codex_discover_remote_service(base_url: String, api_key: String) ->
 mod openai_usage;
 #[path = "codex_provider_quota_windows.rs"]
 mod quota_windows;
+#[path = "codex_custom_provider_usage.rs"]
+mod custom_provider_usage;
+pub(crate) use custom_provider_usage::CustomProviderUsage;
 
 #[tauri::command]
 pub async fn codex_query_remote_key_data(base_url:String,api_key:String,resource:String,
@@ -53,27 +60,6 @@ pub async fn save_codex_model_providers(data: String) -> Result<(), String> {
         std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
         crate::modules::atomic_write::write_secret_string_atomic(&dir.join(CODEX_MODEL_PROVIDERS_FILE), &data)
     }).await.map_err(|error| error.to_string())?
-}
-
-fn codex_model_provider_models_url(base_url: &str) -> Result<String, String> {
-    let trimmed = base_url.trim().trim_end_matches('/');
-    if trimmed.is_empty() {
-        return Err("PROVIDER_BASE_URL_INVALID".to_string());
-    }
-    let mut url =
-        reqwest::Url::parse(trimmed).map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())?;
-    match url.scheme() {
-        "http" | "https" => {}
-        _ => return Err("PROVIDER_BASE_URL_INVALID".to_string()),
-    }
-    let next_path = if url.path().is_empty() || url.path() == "/" {
-        "/models".to_string()
-    } else {
-        format!("{}/models", url.path().trim_end_matches('/'))
-    };
-    url.set_path(&next_path);
-    url.set_query(None);
-    Ok(url.to_string())
 }
 
 fn codex_model_provider_usage_url(base_url: &str) -> Result<String, String> {
@@ -145,7 +131,7 @@ fn codex_model_provider_token_plan_provider(
     let host = host.to_ascii_lowercase();
     if matches!(
         host.as_str(),
-        "api.minimaxi.com" | "www.minimaxi.com" | "api.minimax.io" | "www.minimax.io"
+        "api.minimax.cn" | "api.minimaxi.com" | "www.minimaxi.com" | "api.minimax.io" | "www.minimax.io"
     ) {
         return Ok(Some(CodexTokenPlanProvider::MiniMax));
     }
@@ -353,6 +339,8 @@ fn emit_model_provider_chat_test_progress(
 
 const RESPONSES_NATIVE_CHAT_TEST_MODEL_PRIORITY: &[&str] = &[
     crate::modules::codex_wakeup::DEFAULT_WAKEUP_MODEL,
+    crate::modules::codex_model_catalog::GPT_6_2_SOL_MODEL_ID,
+    crate::modules::codex_model_catalog::GPT_6_2_ASTRA_MODEL_ID,
     "gpt-6.1-sol",
     "gpt-6-astra",
     "gpt-6.1-terra",
@@ -603,58 +591,12 @@ fn summarize_model_provider_models(body: &serde_json::Value) -> (Option<String>,
     (first, output)
 }
 
-fn list_model_provider_models(body: &serde_json::Value) -> Vec<CodexModelProviderModel> {
-    let mut seen = std::collections::HashSet::new();
-    body.get("data")
-        .and_then(|value| value.as_array())
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|item| {
-                    let id = item.get("id").and_then(|id| id.as_str())?.trim();
-                    if id.is_empty() {
-                        return None;
-                    }
-                    let key = id.to_ascii_lowercase();
-                    if !seen.insert(key) {
-                        return None;
-                    }
-                    Some(CodexModelProviderModel {
-                        id: id.to_string(),
-                        display_name: item
-                            .get("display_name")
-                            .or_else(|| item.get("displayName"))
-                            .and_then(|value| value.as_str())
-                            .map(str::trim)
-                            .filter(|value| !value.is_empty())
-                            .map(str::to_string),
-                    })
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexModelProviderUsageDetail {
     pub key: String,
     pub label: String,
     pub value: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CodexModelProviderModel {
-    pub id: String,
-    pub display_name: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CodexModelProviderModelsResult {
-    pub models: Vec<CodexModelProviderModel>,
-    pub latency_ms: u64,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -1168,20 +1110,18 @@ fn summarize_zhipu_token_plan_usage(
     latency_ms: u64,
 ) -> Result<CodexModelProviderUsageSummary, String> {
     let payload = token_plan_payload(body);
-    let mut limits: Vec<&serde_json::Value> = payload
+    let limits: Vec<&serde_json::Value> = payload
         .get("limits")
         .and_then(serde_json::Value::as_array)
         .map(|items| {
             items
                 .iter()
                 .filter(|item| {
-                    // 智谱国内站已把额度条目类型从 TOKENS_LIMIT 改名为
-                    // CREDIT_LIMIT（国际站仍为 TOKENS_LIMIT），两个都收，
-                    // 否则新版套餐整包解析失败报 "token limit fields missing"。
-                    json_string_field(item, &["type"]).is_some_and(|kind| {
-                        kind.eq_ignore_ascii_case("TOKENS_LIMIT")
-                            || kind.eq_ignore_ascii_case("CREDIT_LIMIT")
-                    })
+                    json_string_field(item, &["type"])
+                        .is_some_and(|kind| {
+                            kind.eq_ignore_ascii_case("TOKENS_LIMIT")
+                                || kind.eq_ignore_ascii_case("CREDIT_LIMIT")
+                        })
                 })
                 .collect()
         })
@@ -1189,16 +1129,40 @@ fn summarize_zhipu_token_plan_usage(
     if limits.is_empty() {
         return Err("PROVIDER_USAGE_PARSE_FAILED: Zhipu token limit fields missing".to_string());
     }
-    limits.sort_by_key(|item| {
+
+    // The weekly window can reset before the five-hour window. Older responses
+    // without a recognized unit use reset order to fill any unlabelled slots.
+    let mut interval = None;
+    let mut weekly = None;
+    let mut unlabelled = Vec::new();
+    let mut additional = Vec::new();
+    let limit_count = limits.len();
+    for item in limits {
+        match item.get("unit").and_then(serde_json::Value::as_i64) {
+            Some(3) if interval.is_none() => interval = Some(item),
+            Some(6) if weekly.is_none() => weekly = Some(item),
+            Some(3 | 6) => additional.push(item),
+            _ => unlabelled.push(item),
+        }
+    }
+    unlabelled.sort_by_key(|item| {
         json_timestamp_field(item, &["nextResetTime", "next_reset_time"]).unwrap_or(i64::MAX)
     });
+    let mut unlabelled = unlabelled.into_iter();
+    let interval = interval.or_else(|| unlabelled.next());
+    let weekly = weekly.or_else(|| unlabelled.next());
+    let ordered = interval
+        .map(|item| (item, "interval"))
+        .into_iter()
+        .chain(weekly.map(|item| (item, "weekly")))
+        .chain(unlabelled.chain(additional).map(|item| (item, "window")));
 
-    let mut window_data = Vec::with_capacity(limits.len());
-    for item in &limits {
-        let total = json_f64_field(*item, &["usage", "total", "limit"]);
-        let used = json_f64_field(*item, &["currentValue", "current_value", "used"]);
-        let remaining = json_f64_field(*item, &["remaining", "remain"]);
-        let used_percent = json_f64_field(*item, &["percentage", "usedPercentage"])
+    let mut window_data = Vec::with_capacity(limit_count);
+    for (item, prefix) in ordered {
+        let total = json_f64_field(item, &["usage", "total", "limit"]);
+        let used = json_f64_field(item, &["currentValue", "current_value", "used"]);
+        let remaining = json_f64_field(item, &["remaining", "remain"]);
+        let used_percent = json_f64_field(item, &["percentage", "usedPercentage"])
             .or_else(|| match (used, total) {
                 (Some(used), Some(total)) if total > 0.0 => Some((used / total) * 100.0),
                 _ => None,
@@ -1210,6 +1174,7 @@ fn summarize_zhipu_token_plan_usage(
         let remaining_percent = clamp_usage_percent(100.0 - used_percent);
         let reset_at = json_timestamp_field(item, &["nextResetTime", "next_reset_time"]);
         window_data.push((
+            prefix,
             total,
             used,
             remaining,
@@ -1219,10 +1184,10 @@ fn summarize_zhipu_token_plan_usage(
         ));
     }
 
-    let primary = window_data.first().copied().ok_or_else(|| {
-        "PROVIDER_USAGE_PARSE_FAILED: Zhipu token limit fields missing".to_string()
-    })?;
-    let remaining_percent = primary.4;
+    let (_, _, _, _, _, remaining_percent, reset_at) =
+        window_data.first().copied().ok_or_else(|| {
+            "PROVIDER_USAGE_PARSE_FAILED: Zhipu token limit fields missing".to_string()
+        })?;
     let plan_name =
         json_string_field(payload, &["level", "planName"]).or_else(|| Some("ZHIPU".to_string()));
     let mut details = Vec::new();
@@ -1237,18 +1202,9 @@ fn summarize_zhipu_token_plan_usage(
         &mut details,
         "expiresAt",
         "Next Reset",
-        primary.5.map(|value| value.to_string()),
+        reset_at.map(|value| value.to_string()),
     );
-    for (index, (total, used, remaining, used_percent, remaining_percent, reset_at)) in
-        window_data.into_iter().enumerate()
-    {
-        let prefix = if index == 0 {
-            "interval"
-        } else if index == 1 {
-            "weekly"
-        } else {
-            "window"
-        };
+    for (prefix, total, used, remaining, used_percent, remaining_percent, reset_at) in window_data {
         push_usage_detail(
             &mut details,
             &format!("{}Limit", prefix),
@@ -1310,7 +1266,7 @@ fn summarize_zhipu_token_plan_usage(
         total_requests: None,
         total_total_tokens: None,
         total_cost: None,
-        model_stats_count: limits.len(),
+        model_stats_count: limit_count,
         latency_ms,
         details,
     })
@@ -1741,7 +1697,10 @@ pub fn codex_cancel_model_provider_chat_test(run_id: String) -> Result<bool, Str
 }
 
 #[tauri::command]
-pub async fn codex_list_model_provider_models(base_url: String, api_key: String, wire_api: Option<String>, auth_scheme: Option<String>, remember_for_launch: Option<bool>) -> Result<CodexModelProviderModelsResult, String> {
+pub async fn codex_list_model_provider_models(base_url: String, api_key: String, wire_api: Option<String>, auth_scheme: Option<String>, launch_account_id: Option<String>) -> Result<CodexModelProviderModelsResult, String> {
+    if let Some(account_id) = launch_account_id {
+        return crate::modules::codex_provider_discovered_models::prefetch(account_id).await;
+    }
     if let Ok(Some(remote)) = crate::modules::codex_remote_service::discover(&base_url, api_key.trim(), false).await {
         let names:std::collections::HashMap<String,String>=remote.model_catalog.as_ref().and_then(|c|c["models"].as_array())
             .into_iter().flatten().filter_map(|m|Some((m["slug"].as_str()?.into(),m["display_name"].as_str()?.into()))).collect();
@@ -1753,52 +1712,7 @@ pub async fn codex_list_model_provider_models(base_url: String, api_key: String,
             let display_name=names.get(&id).cloned();CodexModelProviderModel { id, display_name }
         }).collect(), latency_ms: 0 });
     }
-    if api_key.trim().is_empty() { return Err("MISSING_API_KEY".into()); }
-    let remember_for_launch = remember_for_launch.unwrap_or(false);
-    let mut client = reqwest::Client::builder().timeout(Duration::from_secs(20));
-    if remember_for_launch {
-        client = client.redirect(reqwest::redirect::Policy::none());
-    }
-    let client = client.build().map_err(|_| "PROVIDER_MODELS_NETWORK_FAILED".to_string())?;
-    let protocol = normalize_model_provider_wire_api(wire_api.as_deref(), &base_url);
-    let raw = if protocol == "anthropic" {
-        crate::modules::codex_native_api::anthropic::endpoint(&base_url,"models").map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())?
-    } else { codex_model_provider_models_url(&base_url)? };
-    let mut url = reqwest::Url::parse(&raw).map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())?;
-    let started = Instant::now();
-    let mut models = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for _ in 0..10 {
-        let remaining = Duration::from_secs(20).checked_sub(started.elapsed()).ok_or("PROVIDER_MODELS_NETWORK_FAILED")?;
-        let request = crate::modules::codex_provider_protocol::authenticate_provider_request(client.get(url.clone()), &protocol, auth_scheme.as_deref(), &api_key).timeout(remaining);
-        let response = request.send().await.map_err(|_| "PROVIDER_MODELS_NETWORK_FAILED".to_string())?;
-        if !response.status().is_success() { return Err(format!("PROVIDER_MODELS_HTTP_{}",response.status().as_u16())); }
-        let body: serde_json::Value = if remember_for_launch {
-            let mut response = response;
-            let mut bytes = Vec::new();
-            let limit = crate::modules::codex_model_catalog::MAX_CATALOG_BYTES;
-            while let Some(chunk) = response.chunk().await.map_err(|_| "PROVIDER_MODELS_PARSE_FAILED")? {
-                if chunk.len() > limit - bytes.len() {
-                    return Err("PROVIDER_MODELS_PARSE_FAILED".to_string());
-                }
-                bytes.extend_from_slice(&chunk);
-            }
-            serde_json::from_slice(&bytes).map_err(|_| "PROVIDER_MODELS_PARSE_FAILED".to_string())?
-        } else {
-            response.json().await.map_err(|_| "PROVIDER_MODELS_PARSE_FAILED".to_string())?
-        };
-        for model in list_model_provider_models(&body) { if seen.insert(model.id.clone()) { models.push(model); } }
-        if body["has_more"] != true { break; }
-        let Some(last) = body["last_id"].as_str().filter(|s|!s.is_empty()) else { break; };
-        url.query_pairs_mut().clear().append_pair("after_id",last);
-    }
-    if remember_for_launch {
-        crate::modules::codex_provider_discovered_models::remember(
-            &base_url, &api_key, &protocol, auth_scheme.as_deref(),
-            models.iter().map(|model| model.id.clone()).collect(),
-        )?;
-    }
-    Ok(CodexModelProviderModelsResult {models,latency_ms:started.elapsed().as_millis().min(u64::MAX as u128) as u64})
+    fetch_provider_models(&base_url, &api_key, wire_api.as_deref(), auth_scheme.as_deref(), false).await
 }
 
 #[tauri::command]
@@ -1809,6 +1723,7 @@ pub async fn codex_query_model_provider_usage(
     usage_api_key: Option<String>,
     respect_relay_balance_switch: Option<bool>,
     account_id: Option<String>,
+    custom_usage: Option<CustomProviderUsage>,
 ) -> Result<CodexModelProviderUsageSummary, String> {
     let relay_balance_disabled = respect_relay_balance_switch.unwrap_or(true)
         && crate::modules::codex_quota::relay_balance_disabled();
@@ -1822,7 +1737,11 @@ pub async fn codex_query_model_provider_usage(
     } else {
         None
     };
-    let result = query_model_provider_usage(base_url, api_key, integration_type, usage_api_key, relay_balance_disabled).await;
+    let result = match custom_usage.as_ref().filter(|_| !openai_usage::is_official_base_url(&base_url)) {
+        Some(_) if relay_balance_disabled => Err(crate::modules::codex_quota::RELAY_BALANCE_DISABLED.into()),
+        Some(config) => custom_provider_usage::query(&base_url, &api_key, config).await,
+        None => query_model_provider_usage(base_url, api_key, integration_type, usage_api_key, relay_balance_disabled).await,
+    };
     if let Some(original) = original {
         let snapshot = match &result {
             Ok(summary) => {
@@ -1881,6 +1800,10 @@ async fn query_model_provider_usage(
     if openai_usage::is_official_base_url(&base_url) {
         let usage_key = openai_usage::require_usage_key(usage_api_key.as_deref())?;
         return openai_usage::query(&client, usage_key).await;
+    }
+
+    if let Some((url, unit)) = moonshot_balance_endpoint(&base_url) {
+        return query_moonshot_balance(&client, &url, key, unit).await;
     }
 
     if quota_windows::is_opencode_go_endpoint(&base_url) {
@@ -1963,8 +1886,49 @@ async fn query_model_provider_usage(
     }
 }
 
-/// 请求 DeepSeek 官方余额接口，返回原始响应与耗时。
-async fn fetch_deepseek_balance_body(
+fn moonshot_balance_endpoint(base_url: &str) -> Option<(reqwest::Url, &'static str)> {
+    let mut url = reqwest::Url::parse(base_url.trim()).ok()?;
+    if url.scheme() != "https" || url.port().is_some()
+        || !url.username().is_empty() || url.password().is_some()
+        || !matches!(url.path().trim_end_matches('/'), "" | "/v1" | "/anthropic")
+    {
+        return None;
+    }
+    let unit = match url.host_str()? {
+        "api.moonshot.cn" => "CNY",
+        "api.moonshot.ai" => "USD",
+        _ => return None,
+    };
+    url.set_path("/v1/users/me/balance");
+    url.set_query(None);
+    url.set_fragment(None);
+    Some((url, unit))
+}
+
+async fn query_moonshot_balance(
+    client: &reqwest::Client,
+    url: &reqwest::Url,
+    key: &str,
+    unit: &str,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    let (body, latency_ms) = fetch_model_provider_balance_body(client, url.as_str(), key).await?;
+    if body["code"].as_i64() != Some(0) || body["status"].as_bool() != Some(true) {
+        let code = body["code"].as_i64().map_or_else(|| "unknown".into(), |code| code.to_string());
+        return Err(format!("PROVIDER_USAGE_REQUEST_FAILED: Moonshot code={code}"));
+    }
+    let balance = body.pointer("/data/available_balance")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| "PROVIDER_USAGE_PARSE_FAILED: missing Moonshot available balance".to_string())?;
+    Ok(CodexModelProviderUsageSummary {
+        mode: Some("custom".into()),
+        balance: Some(balance),
+        unit: Some(unit.into()),
+        latency_ms,
+        ..Default::default()
+    })
+}
+
+async fn fetch_model_provider_balance_body(
     client: &reqwest::Client,
     url: &str,
     key: &str,
@@ -1997,7 +1961,7 @@ async fn query_deepseek_model_provider_balance(
     url: &str,
     key: &str,
 ) -> Result<CodexModelProviderUsageSummary, String> {
-    let (body, latency_ms) = fetch_deepseek_balance_body(client, url, key).await?;
+    let (body, latency_ms) = fetch_model_provider_balance_body(client, url, key).await?;
     Ok(summarize_deepseek_balance(&body, latency_ms))
 }
 
@@ -2007,7 +1971,7 @@ pub(crate) async fn query_deepseek_balance_snapshot(
     url: &str,
     key: &str,
 ) -> Result<DeepSeekBalanceSnapshot, String> {
-    let (body, _) = fetch_deepseek_balance_body(client, url, key).await?;
+    let (body, _) = fetch_model_provider_balance_body(client, url, key).await?;
     Ok(deepseek_balance_snapshot_from_body(&body))
 }
 
@@ -2103,6 +2067,8 @@ async fn query_new_api_model_provider_usage(
             subscription_text.chars().take(300).collect::<String>()
         ));
     }
+    let subscription = serde_json::from_str::<serde_json::Value>(&subscription_text)
+        .map_err(|e| format!("PROVIDER_USAGE_PARSE_FAILED: {}", e))?;
     let usage_response = client
         .get(&usage_url)
         .bearer_auth(key)
@@ -2113,17 +2079,23 @@ async fn query_new_api_model_provider_usage(
     let latency_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
     let usage_status = usage_response.status();
     let usage_text = usage_response.text().await.unwrap_or_default();
-    if !usage_status.is_success() {
-        return Err(format!(
+    let usage_error = || {
+        format!(
             "PROVIDER_USAGE_HTTP_{}: {}",
             usage_status.as_u16(),
             usage_text.chars().take(300).collect::<String>()
-        ));
-    }
-    let subscription = serde_json::from_str::<serde_json::Value>(&subscription_text)
-        .map_err(|e| format!("PROVIDER_USAGE_PARSE_FAILED: {}", e))?;
-    let usage = serde_json::from_str::<serde_json::Value>(&usage_text)
-        .map_err(|e| format!("PROVIDER_USAGE_PARSE_FAILED: {}", e))?;
+        )
+    };
+    let usage = if usage_status.is_success() {
+        serde_json::from_str::<serde_json::Value>(&usage_text)
+            .map_err(|e| format!("PROVIDER_USAGE_PARSE_FAILED: {}", e))?
+    } else if usage_status == reqwest::StatusCode::NOT_FOUND {
+        // Some relays implement only the subscription route. Keep its limit and
+        // leave usage absent rather than treating the missing route as zero.
+        serde_json::Value::Null
+    } else {
+        return Err(usage_error());
+    };
     let token_usage = match client
         .get(&token_usage_url)
         .bearer_auth(key)
@@ -2137,12 +2109,19 @@ async fn query_new_api_model_provider_usage(
         }
         _ => None,
     };
-    Ok(summarize_new_api_model_provider_usage(
+    let summary = summarize_new_api_model_provider_usage(
         &subscription,
         &usage,
         token_usage.as_ref(),
         latency_ms,
-    ))
+    );
+    if usage_status == reqwest::StatusCode::NOT_FOUND
+        && summary.quota_limit.is_none()
+        && summary.quota_remaining.is_none()
+    {
+        return Err(usage_error());
+    }
+    Ok(summary)
 }
 
 async fn query_sub2api_model_provider_usage(
@@ -2205,7 +2184,7 @@ mod new_api_usage_tests {
         assert_eq!(summary.mode.as_deref(), Some("token_plan"));
         assert_eq!(summary.remaining, Some(98.0));
         assert_eq!(summary.plan_name.as_deref(), Some("max"));
-        // 周窗条目（nextResetTime 较大，排序第二）也要进 details。
+        // 周窗条目也要进 details。
         assert!(summary
             .details
             .iter()
@@ -2227,6 +2206,73 @@ mod new_api_usage_tests {
             .expect("legacy TOKENS_LIMIT entries must keep parsing");
         assert_eq!(summary.remaining, Some(90.0));
         assert_eq!(summary.plan_name.as_deref(), Some("pro"));
+    }
+
+    #[test]
+    fn zhipu_token_plan_classifies_windows_by_unit_when_weekly_resets_first() {
+        let summary = summarize_zhipu_token_plan_usage(
+            &json!({"limits": [
+                {"type":"CREDIT_LIMIT","unit":6,"number":1,"percentage":90,"nextResetTime":1795000000000_i64},
+                {"type":"CREDIT_LIMIT","unit":3,"number":5,"percentage":10,"nextResetTime":1796000000000_i64}
+            ]}),
+            100,
+        )
+        .unwrap();
+        let details = |key| {
+            summary
+                .details
+                .iter()
+                .find(|detail| detail.key == key)
+                .map(|detail| detail.value.as_str())
+        };
+        assert_eq!(summary.remaining, Some(90.0));
+        assert_eq!(details("intervalRemainingPercent"), Some("90"));
+        assert_eq!(details("intervalExpiresAt"), Some("1796000000"));
+        assert_eq!(details("weeklyRemainingPercent"), Some("10"));
+        assert_eq!(details("weeklyExpiresAt"), Some("1795000000"));
+    }
+
+    #[test]
+    fn zhipu_token_plan_keeps_weekly_label_without_an_interval_window() {
+        let summary = summarize_zhipu_token_plan_usage(
+            &json!({"limits": [
+                {"type":"CREDIT_LIMIT","unit":6,"number":7,"percentage":20}
+            ]}),
+            100,
+        )
+        .unwrap();
+        assert_eq!(summary.remaining, Some(80.0));
+        assert!(summary
+            .details
+            .iter()
+            .any(|detail| detail.key == "weeklyRemainingPercent" && detail.value == "80"));
+        assert!(!summary
+            .details
+            .iter()
+            .any(|detail| detail.key.starts_with("interval")));
+    }
+
+    #[test]
+    fn zhipu_token_plan_orders_legacy_windows_and_keeps_an_explicit_weekly_slot() {
+        for weekly_unit in [json!(null), json!(6)] {
+            let summary = summarize_zhipu_token_plan_usage(
+                &json!({"limits": [
+                    {"type":"TOKENS_LIMIT","unit":weekly_unit,"percentage":70,"nextResetTime":1796000000000_i64},
+                    {"type":"TOKENS_LIMIT","percentage":40,"nextResetTime":1795000000000_i64}
+                ]}),
+                100,
+            )
+            .unwrap();
+            assert_eq!(summary.remaining, Some(60.0));
+            assert!(summary
+                .details
+                .iter()
+                .any(|detail| detail.key == "intervalRemainingPercent" && detail.value == "60"));
+            assert!(summary
+                .details
+                .iter()
+                .any(|detail| detail.key == "weeklyRemainingPercent" && detail.value == "30"));
+        }
     }
 
     #[tokio::test]
@@ -2297,6 +2343,85 @@ mod new_api_usage_tests {
             assert!(total >= first + 40, "{protocol}: first={first}, total={total}");
         }
         upstream.abort();
+    }
+
+    #[tokio::test]
+    async fn moonshot_balance_uses_the_official_region_and_preserves_missing_usage() {
+        use axum::{http::HeaderMap, routing::get, Json, Router};
+
+        for (input, host, unit) in [
+            ("https://api.moonshot.cn/v1/", "api.moonshot.cn", "CNY"),
+            ("https://api.moonshot.ai/anthropic", "api.moonshot.ai", "USD"),
+        ] {
+            let (endpoint, actual_unit) = moonshot_balance_endpoint(input).unwrap();
+            assert_eq!(endpoint.as_str(), format!("https://{host}/v1/users/me/balance"));
+            assert_eq!(actual_unit, unit);
+        }
+        for input in [
+            "https://api.kimi.com/coding/v1",
+            "https://api.moonshot.cn.example/v1",
+            "http://api.moonshot.cn/v1",
+        ] {
+            assert!(moonshot_balance_endpoint(input).is_none());
+        }
+
+        let app = Router::new()
+            .route("/v1/users/me/balance", get(|headers: HeaderMap| async move {
+                assert_eq!(headers["authorization"], "Bearer fixture-key");
+                Json(json!({"code":0,"status":true,"data":{"available_balance":0,"cash_balance":-4,"voucher_balance":5}}))
+            }))
+            .route("/error", get(|| async {
+                Json(json!({"code":4,"status":false,"data":{"available_balance":12}}))
+            }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let client = reqwest::Client::new();
+        let url = reqwest::Url::parse(&format!("{base}/v1/users/me/balance")).unwrap();
+        let summary = query_moonshot_balance(&client, &url, "fixture-key", "CNY").await.unwrap();
+        assert_eq!(summary.balance, Some(0.0));
+        assert_eq!(summary.unit.as_deref(), Some("CNY"));
+        assert_eq!(summary.quota_limit, None);
+        assert_eq!(summary.total_total_tokens, None);
+        let error_url = reqwest::Url::parse(&format!("{base}/error")).unwrap();
+        assert!(query_moonshot_balance(&client, &error_url, "fixture-key", "CNY")
+            .await.err().unwrap().contains("Moonshot code=4"));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn new_api_subscription_limit_survives_an_unimplemented_usage_endpoint() {
+        use axum::{http::StatusCode, routing::get, Json, Router};
+
+        let app = Router::new()
+            .route("/limited/dashboard/billing/subscription", get(|| async {
+                Json(json!({"hard_limit_usd": 1849}))
+            }))
+            .route("/limited/dashboard/billing/usage", get(|| async { StatusCode::NOT_FOUND }))
+            .route("/unknown/dashboard/billing/subscription", get(|| async { Json(json!({})) }))
+            .route("/unknown/dashboard/billing/usage", get(|| async { StatusCode::NOT_FOUND }))
+            .route("/denied/dashboard/billing/subscription", get(|| async {
+                Json(json!({"hard_limit_usd": 1849}))
+            }))
+            .route("/denied/dashboard/billing/usage", get(|| async { StatusCode::UNAUTHORIZED }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let client = reqwest::Client::new();
+
+        let summary = query_new_api_model_provider_usage(&client, &format!("{base}/limited"), "fixture-key")
+            .await.unwrap();
+        assert_eq!(summary.quota_limit, Some(1849.0));
+        assert_eq!(summary.quota_remaining, None);
+        assert_eq!(summary.quota_used, None);
+        assert_eq!(summary.unit.as_deref(), Some(""));
+
+        for (path, status) in [("unknown", 404), ("denied", 401)] {
+            let error = query_new_api_model_provider_usage(&client, &format!("{base}/{path}"), "fixture-key")
+                .await.err().expect("a usage error without a supported partial result");
+            assert!(error.starts_with(&format!("PROVIDER_USAGE_HTTP_{status}:")));
+        }
+        server.abort();
     }
 
     #[tokio::test]

@@ -1,4 +1,57 @@
 // Bundled app-server ownership and command parsing, shared by shutdown and diagnostics.
+
+/// Probe the selected desktop's App Server binary, never a different CLI on PATH.
+pub(crate) fn codex_desktop_supports_dynamic_models() -> bool {
+    let Ok(launch_path) = resolve_codex_launch_path() else { return false };
+    #[cfg(target_os = "macos")]
+    let binary = {
+        let Some(root) = resolve_macos_app_root_from_launch_path(&launch_path) else { return false };
+        let resources = std::path::Path::new(&root).join("Contents/Resources");
+        let nested = resources.join("codex-cli/CodexCLI.app/Contents/MacOS/codex");
+        if nested.is_file() { nested } else { resources.join("codex") }
+    };
+    #[cfg(target_os = "windows")]
+    let binary = {
+        let Some(parent) = launch_path.parent() else { return false };
+        parent.join("resources").join("codex.exe")
+    };
+    #[cfg(target_os = "linux")]
+    let binary = {
+        let Some(parent) = launch_path.parent() else { return false };
+        parent.join("resources").join("codex")
+    };
+    let mut command = std::process::Command::new(binary);
+    command.arg("--version");
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    crate::modules::process_timeout::output_with_timeout(&mut command, std::time::Duration::from_secs(1))
+        .ok().filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .is_some_and(|output| supports_codex_catalog_url_version(&output))
+}
+
+fn supports_codex_catalog_url_version(output: &str) -> bool {
+    let Some(version) = output.trim().strip_prefix("codex-cli ") else { return false };
+    let version = version.split('+').next().unwrap_or(version);
+    let (numbers, prerelease) = version.split_once('-').unwrap_or((version, ""));
+    let numbers = numbers.split('.').map(str::parse::<u32>).collect::<Result<Vec<_>, _>>();
+    let Ok(numbers) = numbers else { return false };
+    // The 0.166.0 release has both model_catalog_url and API-key discovery enabled by default.
+    let [major, minor, patch] = numbers.as_slice() else { return false };
+    let version = (*major, *minor, *patch);
+    version > (0, 166, 0) || (version == (0, 166, 0) && prerelease.is_empty())
+}
+
+#[test]
+fn codex_model_catalog_desktop_version_includes_compatible_prereleases() {
+    assert!(supports_codex_catalog_url_version("codex-cli 0.169.0-alpha.11.1"));
+    assert!(supports_codex_catalog_url_version("codex-cli 0.166.0"));
+    assert!(!supports_codex_catalog_url_version("codex-cli 0.155.0"));
+    assert!(!supports_codex_catalog_url_version("codex-cli 0.166.0-alpha.1"));
+}
 #[cfg(any(test, target_os = "macos", target_os = "linux"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CodexProcessTreeEntry {

@@ -34,7 +34,7 @@ async fn default_http_accepts_large_plain_chunked_and_compressed_conversations()
         .route("/v1/responses/compact", post(handler))
         .layer(axum::extract::DefaultBodyLimit::disable());
     let (addr, upstream) = mock(app).await;
-    let (mut service, _, root) = native(addr, false, false, Options::default()).await;
+    let (mut service, host, root) = native(addr, false, false, Options::default()).await;
     let raw = serde_json::to_vec(&large_body()).unwrap();
     let gzip = {
         let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
@@ -85,6 +85,9 @@ async fn default_http_accepts_large_plain_chunked_and_compressed_conversations()
     }
     assert_eq!(seen.lock().unwrap().as_slice(), &[LARGE_TEXT_BYTES; 5]);
     service.shutdown(Duration::from_secs(3)).await.unwrap();
+    let reports = host.reports.lock().unwrap();
+    assert_eq!(reports.len(), 5);
+    assert!(reports.iter().all(|report| report.input_text_characters == Some(LARGE_TEXT_BYTES as u64)));
     upstream.abort();
     let _ = std::fs::remove_dir_all(root);
 }
@@ -110,7 +113,7 @@ async fn default_websocket_accepts_large_conversation_frames() {
         }
     }));
     let (addr, upstream) = mock(app).await;
-    let (mut service, _, root) = native(addr, true, false, Options::default()).await;
+    let (mut service, host, root) = native(addr, true, false, Options::default()).await;
     let mut request = format!("ws://{}/v1/responses", service.addr)
         .into_client_request()
         .unwrap();
@@ -134,6 +137,7 @@ async fn default_websocket_accepts_large_conversation_frames() {
     assert_eq!(*seen.lock().unwrap(), Some(LARGE_TEXT_BYTES));
     socket.close(None).await.unwrap();
     service.shutdown(Duration::from_secs(3)).await.unwrap();
+    assert_eq!(host.reports.lock().unwrap()[0].input_text_characters, Some(LARGE_TEXT_BYTES as u64));
     upstream.abort();
     let _ = std::fs::remove_dir_all(root);
 }

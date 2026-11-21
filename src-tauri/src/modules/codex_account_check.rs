@@ -41,19 +41,16 @@ fn account_check_candidate_ids(payload: &serde_json::Value) -> HashSet<String> {
                 }
             }
             if let Some(record) = value.as_object() {
-                if let Some(id) = extract_account_record_field(
-                    record,
-                    &["id", "account_id", "chatgpt_account_id", "workspace_id"],
-                )
-                .and_then(|value| normalize_optional_ref(Some(&value)))
+                if let Some(id) = extract_account_record_field(record, ACCOUNT_CHECK_ID_KEYS)
+                    .and_then(|value| normalize_optional_ref(Some(&value)))
                 {
                     ids.insert(id);
                 }
             }
         }
     }
-    for value in collect_account_records(payload) {
-        let Some(record) = value.as_object() else {
+    for item in collect_account_records(payload) {
+        let Some(record) = item.node.as_object() else {
             continue;
         };
         if let Some(id) = extract_account_record_field(
@@ -81,9 +78,7 @@ fn validate_account_check_payload(
         });
     }
 
-    let expected_account_id =
-        extract_chatgpt_account_id_from_access_token(&account.tokens.access_token)
-            .or_else(|| normalize_optional_ref(account.account_id.as_deref()));
+    let expected_account_id = resolve_account_check_target_account_id(account);
     if let Some(expected_account_id) = expected_account_id {
         if !candidate_ids.is_empty() && !candidate_ids.contains(&expected_account_id) {
             return Err(CodexAccountCheckError {
@@ -136,9 +131,7 @@ fn validate_account_check_payload(
     Ok(())
 }
 
-async fn request_remote_account_check(
-    account: &CodexAccount,
-) -> Result<serde_json::Value, CodexAccountCheckError> {
+fn build_account_check_headers(account: &CodexAccount) -> Result<HeaderMap, CodexAccountCheckError> {
     let access_token = account.tokens.access_token.trim();
     if access_token.is_empty() {
         return Err(CodexAccountCheckError {
@@ -147,16 +140,6 @@ async fn request_remote_account_check(
         });
     }
 
-    let client = crate::modules::codex_proxy_runtime::client_builder(account, reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))).await.map_err(|_| CodexAccountCheckError {
-            kind: CodexAccountCheckErrorKind::Network,
-            message: "PROXY_CLIENT_FAILED".into(),
-        })?
-        .build()
-        .map_err(|error| CodexAccountCheckError {
-            kind: CodexAccountCheckErrorKind::Network,
-            message: format!("创建官方账号检查客户端失败: {}", error),
-        })?;
     let mut headers = HeaderMap::new();
     headers.insert(
         AUTHORIZATION,
@@ -169,9 +152,7 @@ async fn request_remote_account_check(
     );
     headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
 
-    if let Some(account_id) = normalize_optional_ref(account.account_id.as_deref())
-        .or_else(|| extract_chatgpt_account_id_from_access_token(access_token))
-    {
+    if let Some(account_id) = resolve_account_check_target_account_id(account) {
         headers.insert(
             "ChatGPT-Account-Id",
             HeaderValue::from_str(&account_id).map_err(|error| CodexAccountCheckError {
@@ -180,6 +161,25 @@ async fn request_remote_account_check(
             })?,
         );
     }
+
+    Ok(headers)
+}
+
+async fn request_remote_account_check(
+    account: &CodexAccount,
+) -> Result<serde_json::Value, CodexAccountCheckError> {
+    let headers = build_account_check_headers(account)?;
+
+    let client = crate::modules::codex_proxy_runtime::client_builder(account, reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))).await.map_err(|_| CodexAccountCheckError {
+            kind: CodexAccountCheckErrorKind::Network,
+            message: "PROXY_CLIENT_FAILED".into(),
+        })?
+        .build()
+        .map_err(|error| CodexAccountCheckError {
+            kind: CodexAccountCheckErrorKind::Network,
+            message: format!("创建官方账号检查客户端失败: {}", error),
+        })?;
 
     let response = client
         .get(ACCOUNT_CHECK_URL)
@@ -231,5 +231,5 @@ async fn fetch_remote_account_profile(
     let payload = request_remote_account_check(account)
         .await
         .map_err(|error| error.message)?;
-    Ok(parse_account_profile_from_check_response(&payload, account))
+    parse_account_profile_from_check_response(&payload, account)
 }

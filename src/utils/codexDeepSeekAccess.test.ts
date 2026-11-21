@@ -8,6 +8,7 @@ import {
   isDeepSeekCdpAccess,
   isDeepSeekDirectAccess,
   isCodexApiKeyUsageQueryEligible,
+  isMoonshotBalanceUrl,
   isCodexTokenPlanAccount,
   parseCodexBoundAccountId,
   resolveCodexProviderBindAccountId,
@@ -208,6 +209,7 @@ test("detects MiniMax and Zhipu Token Plan accounts", () => {
 test("MiniMax and Zhipu Chat Completions accounts can query Token Plan usage", () => {
   for (const baseUrl of [
     "https://api.minimaxi.com/v1",
+    "https://api.minimax.cn/v1",
     "https://open.bigmodel.cn/api/coding/paas/v4",
   ]) {
     const tokenPlanAccount = account({
@@ -301,4 +303,19 @@ test("the balance switch hides relay panels while preserving dedicated provider 
   assert.equal(canShowCodexProviderBalance(true, "https://api.openai.com/v1"), true);
   assert.equal(canShowCodexProviderBalance(true, "https://api.deepseek.com/v1"), true);
   assert.equal(canShowCodexProviderBalance(true, "https://api.z.ai/api/coding/paas/v4"), true);
+});
+test('official Moonshot balance is eligible before its first refresh', () => {
+  for (const baseUrl of ['https://api.moonshot.cn/v1/', 'https://api.moonshot.ai/anthropic']) {
+    const kimi = account({
+      auth_mode: 'apikey', api_base_url: baseUrl,
+      api_wire_api: 'chat_completions', openai_api_key: 'fixture',
+    });
+    assert.equal(isMoonshotBalanceUrl(baseUrl), true);
+    assert.equal(isCodexApiKeyUsageQueryEligible(kimi), true);
+    assert.equal(shouldShowCodexApiKeyUsagePanel(kimi, true), true);
+    assert.equal(canShowCodexProviderBalance(true, baseUrl), true);
+  }
+  for (const baseUrl of ['https://api.kimi.com/coding/v1', 'https://api.moonshot.ai.example/v1', 'http://api.moonshot.cn/v1']) {
+    assert.equal(isMoonshotBalanceUrl(baseUrl), false);
+  }
 });

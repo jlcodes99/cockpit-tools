@@ -184,6 +184,12 @@ jobs:
             platform: windows-latest
             target: x86_64-pc-windows-msvc
             executable: target/x86_64-pc-windows-msvc/ci/cockpit-tools.exe
+          - label: Windows ARM64
+            cache_target: "windows-aarch64"
+            icon: "🪟"
+            platform: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            executable: target/aarch64-pc-windows-msvc/ci/cockpit-tools.exe
 
     steps:
       - name: "📥 Checkout repository"

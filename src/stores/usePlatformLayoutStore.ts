@@ -422,7 +422,8 @@ function mergeAntigravityLayoutEntries(raw: PersistedPlatformLayout): PersistedP
   const idePlatformEntry = makePlatformEntryId('antigravity_ide');
   const remap = (entries?: PlatformLayoutEntryId[]) => Array.isArray(entries)
     ? [...new Set(entries.map((entry) =>
-      entry === appPlatformEntry || entry === idePlatformEntry || (removedIdeGroup && entry === ideEntry)
+      entry === appPlatformEntry
+        || entry === idePlatformEntry || (removedIdeGroup && entry === ideEntry)
         ? targetEntry : entry,
     ))]
     : undefined;
@@ -460,7 +461,11 @@ function mergeAntigravityLayoutEntries(raw: PersistedPlatformLayout): PersistedP
     orderedPlatformIds: remapLegacy(raw.orderedPlatformIds),
     orderedEntryIds: remap(raw.orderedEntryIds),
     hiddenEntryIds: remap(raw.hiddenEntryIds),
-    sidebarEntryIds: remap(raw.sidebarEntryIds),
+    sidebarEntryIds: Array.isArray(raw.sidebarEntryIds)
+      ? [...new Set(raw.sidebarEntryIds.map((entry) =>
+        entry === idePlatformEntry || (removedIdeGroup && entry === ideEntry) ? targetEntry : entry,
+      ))]
+      : undefined,
     hiddenPlatformIds: remapLegacy(raw.hiddenPlatformIds),
     sidebarPlatformIds: remapLegacy(raw.sidebarPlatformIds),
     apiRelayEntryOrder: typeof raw.apiRelayEntryOrder === 'number' && Array.isArray(raw.orderedEntryIds)
@@ -990,33 +995,15 @@ function normalizeHiddenEntryIds(
 function normalizeSidebarEntryIds(
   rawSidebarEntryIds: unknown,
   orderedEntryIds: PlatformLayoutEntryId[],
-  _hiddenEntryIds: PlatformLayoutEntryId[],
   groups: PlatformLayoutGroup[],
   legacySidebarPlatformIds: PlatformId[],
 ): PlatformLayoutEntryId[] {
-  const normalized = normalizeEntryVisibilityList(rawSidebarEntryIds, orderedEntryIds, groups);
-  if (normalized.length > 0) {
-    return normalized;
-  }
-
   if (Array.isArray(rawSidebarEntryIds)) {
-    const rawItems = rawSidebarEntryIds.filter((item): item is string => typeof item === 'string');
-    if (rawItems.length === 0) {
-      return [];
-    }
-
-    const isLegacyPlatformEntryList = rawItems.every((entryId) => {
-      const platformId = parsePlatformEntryId(entryId);
-      if (!platformId) {
-        return false;
-      }
-      const resolvedEntryId = resolveEntryIdForPlatform(platformId, groups);
-      return resolvedEntryId !== entryId;
-    });
-
-    if (!isLegacyPlatformEntryList) {
-      return [];
-    }
+    const availableEntryIds = [
+      ...orderedEntryIds,
+      ...groups.flatMap((group) => group.platformIds.filter(isMenuVisiblePlatform).map(makePlatformEntryId)),
+    ];
+    return normalizeEntryVisibilityList(rawSidebarEntryIds, availableEntryIds, groups);
   }
 
   const fallback = deriveEntryVisibilityFromLegacyPlatforms(
@@ -1209,7 +1196,6 @@ function normalizeStateData(
   const sidebarEntryIds = normalizeSidebarEntryIds(
     raw.sidebarEntryIds,
     orderedEntryIds,
-    hiddenEntryIds,
     platformGroups,
     normalizeSidebar(raw.sidebarPlatformIds, []),
   );
@@ -1299,7 +1285,6 @@ function loadPersistedState(): NormalizedLayoutStateData {
     const sidebarEntryIds = normalizeSidebarEntryIds(
       parsed.sidebarEntryIds,
       orderedEntryIds,
-      hiddenEntryIds,
       platformGroups,
       sidebarPlatformIds,
     );
@@ -1811,7 +1796,6 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
       normalizedGroups,
       get().orderedPlatformIds,
     );
-
     const next = normalizeStateData({
       orderedPlatformIds,
       hiddenPlatformIds: get().hiddenPlatformIds,

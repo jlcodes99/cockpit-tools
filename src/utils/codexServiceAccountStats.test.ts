@@ -3,7 +3,7 @@ import test from 'node:test';
 import type { CodexAccount } from '../types/codex';
 import type { ChatGptPlanAccount } from '../services/chatgptPlanService';
 import type { CodexLocalAccessAccountStats, CodexLocalAccessUsageStats } from '../types/codexLocalAccess';
-import { aggregateCodexServiceAccountStats } from './codexServiceAccountStats';
+import { aggregateCodexServiceAccountStats, codexServiceAccountSources } from './codexServiceAccountStats';
 import { reconcileChatGptPlanDisplaySources } from './chatgptPlanOverview';
 
 const source = { id: 'source', email: 'original@example.com' } as CodexAccount;
@@ -20,8 +20,11 @@ const stat = (accountId: string, requests: number, updatedAt = 1): CodexLocalAcc
 
 test('all source and official history is merged once per endpoint, regardless of current membership', () => {
   const rows = [stat(source.id, 2), stat('chatgpt_plan_grant', 3), stat('unrelated', 7)];
+  rows[0].usage.inputText = { characters: 0, measuredRequests: 1 };
+  rows[1].usage.inputText = { characters: 16, measuredRequests: 2 };
   const snapshot = JSON.stringify(rows);
   const result = aggregateCodexServiceAccountStats(rows, [source], [grant]);
+  assert.deepEqual([...codexServiceAccountSources([source], [grant])], [['chatgpt_plan_grant', source.id]]);
   assert.equal(result.get(source.id), result.get('chatgpt_plan_grant'));
   const merged = result.get(source.id)!;
   assert.equal(merged.accountId, source.id);
@@ -29,6 +32,8 @@ test('all source and official history is merged once per endpoint, regardless of
   assert.equal(merged.usage.requestCount, 5);
   assert.equal(merged.usage.inputTokens, 50);
   assert.equal(merged.usage.totalTokens, 75);
+  assert.deepEqual(merged.usage.inputText, { characters: 16, measuredRequests: 3 });
+  assert.equal(result.get('unrelated')!.usage.inputText, undefined);
   assert.equal(merged.usage.estimatedCostUsd, 0.5);
   assert.equal(merged.usage.totalLatencyMs, 500);
   assert.equal(merged.usage.clientCanceledCount, 2);

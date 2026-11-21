@@ -927,7 +927,7 @@ pub fn inject_to_trae_at_path(storage_path: &Path, account_id: &str) -> Result<(
     // If the target storage already holds this account's fresher rotated tokens,
     // adopt them before rewrite so we never downgrade a live Trae session snapshot.
     if storage_path.exists()
-        && sync_account_tokens_from_storage_path(&mut account, storage_path, "注入前本地", true)
+        && sync_account_tokens_from_storage_path(&mut account, storage_path, "注入前本地", true) == Some(true)
     {
         if let Err(err) = upsert_account_record(account.clone()) {
             logger::log_warn(&format!(
@@ -2065,7 +2065,7 @@ fn apply_runtime_storage_payload_for_usage_refresh(
     let Some(storage_path) = runtime_storage_path else {
         return;
     };
-    sync_account_tokens_from_storage_path(account, storage_path, "运行中实例", false);
+    let _ = sync_account_tokens_from_storage_path(account, storage_path, "运行中实例", false);
 }
 
 fn runtime_storage_is_newer(
@@ -2075,11 +2075,15 @@ fn runtime_storage_is_newer(
     storage_modified > account_modified
 }
 
-fn storage_is_newer_than_saved_account(account: &TraeAccount, storage_path: &Path) -> bool {
-    let account_modified = resolve_account_file_path(account.id.as_str())
+fn saved_account_modified_at(account: &TraeAccount) -> Option<std::time::SystemTime> {
+    resolve_account_file_path(account.id.as_str())
         .ok()
         .and_then(|path| fs::metadata(path).ok())
-        .and_then(|metadata| metadata.modified().ok());
+        .and_then(|metadata| metadata.modified().ok())
+}
+
+fn storage_is_newer_than_saved_account(account: &TraeAccount, storage_path: &Path) -> bool {
+    let account_modified = saved_account_modified_at(account);
     let storage_modified = fs::metadata(storage_path)
         .ok()
         .and_then(|metadata| metadata.modified().ok());
@@ -2094,12 +2098,13 @@ fn storage_is_newer_than_saved_account(account: &TraeAccount, storage_path: &Pat
 /// Pull fresher tokens from Trae `storage.json` when identity matches.
 /// Critical for avoiding refresh-token races: Trae may have already rotated
 /// refresh tokens on disk while Cockpit still holds a stale copy.
+/// A matched session reports whether it changed tokens; a rejected session returns `None`.
 fn sync_account_tokens_from_storage_path(
     account: &mut TraeAccount,
     storage_path: &Path,
     source_label: &str,
     require_newer_than_saved_account: bool,
-) -> bool {
+) -> Option<bool> {
     if require_newer_than_saved_account
         && !storage_is_newer_than_saved_account(account, storage_path)
     {
@@ -2109,12 +2114,12 @@ fn sync_account_tokens_from_storage_path(
             account.id,
             storage_path.display()
         ));
-        return false;
+        return None;
     }
 
     let payload = match read_local_trae_auth_from_storage_path(storage_path) {
         Ok(Some(payload)) => payload,
-        Ok(None) => return false,
+        Ok(None) => return None,
         Err(err) => {
             logger::log_warn(&format!(
                 "[Trae Refresh] 读取{} storage 失败，跳过本地会话同步: path={}, error={}",
@@ -2122,7 +2127,7 @@ fn sync_account_tokens_from_storage_path(
                 storage_path.display(),
                 err
             ));
-            return false;
+            return None;
         }
     };
 
@@ -2139,7 +2144,7 @@ fn sync_account_tokens_from_storage_path(
             account.id,
             storage_path.display()
         ));
-        return false;
+        return None;
     }
 
     let account_platform = resolve_account_platform_kind(account);
@@ -2153,7 +2158,7 @@ fn sync_account_tokens_from_storage_path(
             payload_platform.provider_key(),
             storage_path.display()
         ));
-        return false;
+        return None;
     }
 
     let previous_access_token = account.access_token.clone();
@@ -2168,7 +2173,7 @@ fn sync_account_tokens_from_storage_path(
         storage_path.display(),
         if token_changed { "true" } else { "false" }
     ));
-    token_changed
+    Some(token_changed)
 }
 
 /// Collect candidate storage.json paths that may hold a fresher session for this account.
@@ -2235,17 +2240,11 @@ fn collect_storage_paths_for_account_sync(account: &TraeAccount) -> Vec<(String,
 /// Persist any synced rotation so Cockpit does not keep a stale refresh token
 /// even if the subsequent ExchangeToken call fails.
 fn prepare_account_tokens_before_exchange(account: &mut TraeAccount) -> bool {
-    let mut any_changed = false;
-    for (label, storage_path) in collect_storage_paths_for_account_sync(account) {
-        if sync_account_tokens_from_storage_path(
-            account,
-            storage_path.as_path(),
-            label.as_str(),
-            true,
-        ) {
-            any_changed = true;
-        }
-    }
+    let Some(saved_modified) = saved_account_modified_at(account) else {
+        return false;
+    };
+    let candidates = collect_storage_paths_for_account_sync(account);
+    let any_changed = sync_account_from_storage_candidates(account, candidates, saved_modified);
 
     if any_changed {
         if let Err(err) = upsert_account_record(account.clone()) {
@@ -2262,6 +2261,27 @@ fn prepare_account_tokens_before_exchange(account: &mut TraeAccount) -> bool {
     }
 
     any_changed
+}
+
+fn sync_account_from_storage_candidates(
+    account: &mut TraeAccount,
+    candidates: Vec<(String, PathBuf)>,
+    saved_modified: std::time::SystemTime,
+) -> bool {
+    let mut newer: Vec<_> = candidates
+        .into_iter()
+        .filter_map(|(label, path)| {
+            let modified = fs::metadata(&path).ok()?.modified().ok()?;
+            runtime_storage_is_newer(saved_modified, modified).then_some((modified, label, path))
+        })
+        .collect();
+    newer.sort_by_key(|(modified, _, _)| std::cmp::Reverse(*modified));
+    newer
+        .into_iter()
+        .find_map(|(_, label, path)| {
+            sync_account_tokens_from_storage_path(account, &path, &label, false)
+        })
+        .unwrap_or(false)
 }
 
 fn format_exchange_token_failure(official_err: &str, legacy_err: &str) -> String {

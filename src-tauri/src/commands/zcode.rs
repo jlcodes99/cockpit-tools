@@ -19,8 +19,17 @@ pub fn delete_zcode_accounts(account_ids: Vec<String>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn import_zcode_from_json(json_content: String) -> Result<Vec<ZcodeAccount>, String> {
-    zcode_account::import_from_json(&json_content)
+pub async fn import_zcode_from_json(json_content: String) -> Result<Vec<ZcodeAccount>, String> {
+    tokio::task::spawn_blocking(move || zcode_account::import_from_json(&json_content, None))
+        .await
+        .map_err(|_| "导入 ZCode 账号失败".to_string())?
+}
+
+#[tauri::command]
+pub async fn import_zcode_from_file(path: String) -> Result<Vec<ZcodeAccount>, String> {
+    tokio::task::spawn_blocking(move || zcode_account::import_from_file(std::path::Path::new(&path)))
+        .await
+        .map_err(|_| "导入 ZCode 文件失败".to_string())?
 }
 
 #[tauri::command]

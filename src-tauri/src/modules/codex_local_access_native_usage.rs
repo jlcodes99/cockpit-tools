@@ -102,6 +102,12 @@ fn native_usage_capture(value: &Value) -> UsageCapture {
             breakdown.input.uncached_tokens = input_tokens - cache_read - cache_write;
             breakdown.input.cache_read_tokens = cache_read;
             breakdown.input.cache_write_tokens = cache_write;
+            if let Some(ttls) = value.pointer("/input_tokens_details/cache_write_tokens_details") {
+                breakdown.input.cache_write_ttl_12h_tokens = ttls["ttl_30m_tokens"].as_u64()
+                    .zip(ttls["ttl_12h_tokens"].as_u64())
+                    .filter(|(short, long)| short.checked_add(*long) == Some(cache_write))
+                    .map(|(_, long)| long);
+            }
             breakdown.output.total_tokens = output_tokens;
             breakdown.output.non_reasoning_tokens = output_tokens - output_reasoning;
             breakdown.output.reasoning_tokens = output_reasoning;

@@ -18,7 +18,7 @@ pub(super) async fn websocket_json_measured(
     let parse = move || {
         let body: serde_json::Value = serde_json::from_str(text.as_str())
             .map_err(|_| ServiceError::new(400, "invalid_json", "WebSocket message must be JSON"))?;
-        let size = super::request_metrics::measure(&body, text.len());
+        let size = super::request_metrics::measure(&body, text.len(), "/v1/responses");
         Ok((body, size))
     };
     if small {

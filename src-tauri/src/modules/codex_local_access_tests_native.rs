@@ -737,6 +737,48 @@ async fn native_alpha_search_prefers_oauth_and_falls_back_only_within_the_key_sc
 }
 
 #[tokio::test]
+async fn native_automatic_and_search_routes_use_oauth_backup_only_when_regular_relay_is_unavailable() {
+    let mut host = native_test_routing_host();
+    let regular = host.account_overrides.get_mut("pool-a").unwrap();
+    regular.api_wire_api = Some("chat_completions".into());
+    regular.api_model_catalog = vec!["gpt-5.6-sol".into()];
+
+    let mut backup = native_test_account_with_quota(100, 100);
+    backup.id = "pool-b".into();
+    backup.tokens.access_token = "at-synthetic-backup".into();
+    backup.tokens.refresh_token = None;
+    backup.egress_proxy_disabled = true;
+    host.account_overrides.insert(backup.id.clone(), backup);
+    let mut key = native_test_key();
+    key.enabled = true;
+    key.inherit_account_pool = Some(false);
+    key.account_ids = vec!["pool-a".into(), "pool-b".into()];
+    let caller = native_test_caller(&key.id);
+    let collection = host.collection_override.as_mut().unwrap();
+    collection.api_keys = vec![key];
+    collection.custom_routing_rules = vec![serde_json::from_value(json!({
+        "accountId": "pool-b", "priority": 0, "weight": 1, "isBackup": true,
+    })).unwrap()];
+
+    for operation in [None, Some("search")] {
+        let mut request = native_test_route_request(operation.unwrap_or("responses"));
+        request.model = "gpt-5.6-sol".into();
+        request.auxiliary = operation.map(str::to_owned);
+        request.requires_permit = false;
+        let route = native_select_route(&host, &caller, request.clone()).await.unwrap();
+        assert_eq!(route.account_id, "pool-a", "operation: {operation:?}");
+
+        request.excluded_account_ids.push("pool-a".into());
+        let route = native_select_route(&host, &caller, request.clone()).await.unwrap();
+        assert_eq!(route.account_id, "pool-b", "operation: {operation:?}");
+
+        request.excluded_account_ids.clear();
+        let route = native_select_route(&host, &caller, request).await.unwrap();
+        assert_eq!(route.account_id, "pool-a", "operation: {operation:?}");
+    }
+}
+
+#[tokio::test]
 async fn native_quota_retry_uses_only_backups_in_the_active_key_scope() {
     let mut host = native_test_routing_host();
     let mut key = native_test_key();
@@ -816,7 +858,7 @@ async fn native_free_agent_identity_keeps_pool_eligibility_without_bypassing_res
         "agent_runtime_id":"fixture-runtime","agent_private_key":"unused-fixture-key",
         "task_id":"fixture-task","account_id":"fixture-workspace","chatgpt_user_id":"fixture-user"
     })).unwrap());
-    assert!(is_local_access_eligible_account(&agent, true));
+    assert!(is_local_access_eligible_account(&agent));
     host.account_overrides
         .insert(agent.id.clone(), agent.clone());
     let collection = host.collection().await.unwrap();
@@ -859,18 +901,6 @@ async fn native_free_agent_identity_keeps_pool_eligibility_without_bypassing_res
     excluded.excluded_account_ids = vec![agent.id.clone()];
     assert_eq!(
         native_select_route(&host, &caller, excluded)
-            .await
-            .err()
-            .unwrap()
-            .code,
-        "no_available_account"
-    );
-    let mut ordinary = agent;
-    ordinary.agent_identity = None;
-    ordinary.tokens.access_token = "fixture-access".into();
-    host.account_overrides.insert(ordinary.id.clone(), ordinary);
-    assert_eq!(
-        native_select_route(&host, &caller, request.clone())
             .await
             .err()
             .unwrap()
@@ -1074,6 +1104,43 @@ fn native_route_order_matches_plan_quota_expiry_and_global_priority_controls() {
     }
 }
 
+#[test]
+fn native_models_publish_consistent_image_input_for_the_selected_route() {
+    let collection = native_test_collection();
+    let mut oauth = native_test_account();
+    oauth.id = "pool-b".into();
+    oauth.plan_type = Some("pro".into());
+    oauth.api_model_mappings = serde_json::from_value(json!([
+        {"client_model": "vision-alias", "upstream_model": "gpt-5.6-sol"}
+    ])).unwrap();
+    let oauth_catalog = native_catalog(&collection, None, &[oauth]).unwrap();
+    for id in ["gpt-5.6-sol", "vision-alias"] {
+        let client = oauth_catalog["models"].as_array().unwrap().iter()
+            .find(|entry| entry["slug"] == id).expect("client model");
+        let public = oauth_catalog["data"].as_array().unwrap().iter()
+            .find(|entry| entry["id"] == id).expect("public model");
+        assert_eq!(client["input_modalities"], json!(["text", "image"]), "{id}");
+        assert_eq!(public["model_info"]["input_modalities"], client["input_modalities"], "{id}");
+        assert!(public["capabilities"].as_array().unwrap().contains(&json!("vision")), "{id}");
+    }
+
+    let mut relay = CodexAccount::new_api_key(
+        "pool-a".into(), "relay@example.invalid".into(), "fixture".into(),
+        crate::models::codex::CodexApiProviderMode::Custom,
+        Some("https://example.invalid/v1".into()), None, None, vec!["gpt-5.6-sol".into()],
+    );
+    relay.api_wire_api = Some("responses".into());
+    relay.api_model_vision_support.insert("gpt-5.6-sol".into(), false);
+    let relay_catalog = native_catalog(&collection, None, &[relay]).unwrap();
+    let client = relay_catalog["models"].as_array().unwrap().iter()
+        .find(|entry| entry["slug"] == "gpt-5.6-sol").expect("relay client model");
+    let public = relay_catalog["data"].as_array().unwrap().iter()
+        .find(|entry| entry["id"] == "gpt-5.6-sol").expect("relay public model");
+    assert_eq!(client["input_modalities"], json!(["text"]));
+    assert_eq!(public["model_info"]["input_modalities"], client["input_modalities"]);
+    assert!(!public["capabilities"].as_array().unwrap().contains(&json!("vision")));
+}
+
 #[tokio::test]
 async fn oauth_account_model_mapping_is_scoped_and_used_for_routing() {
     let mut oauth = native_test_account();
@@ -1125,6 +1192,206 @@ async fn oauth_account_model_mapping_is_scoped_and_used_for_routing() {
     let route = native_select_route(&host, &native_test_caller(&key.id), request).await.unwrap();
     assert_eq!(route.account_id, "pool-b");
     assert_eq!(route.model, "gpt-5.6-sol");
+}
+
+#[tokio::test]
+async fn binding_oauth_profile_keeps_the_existing_responses_history_owner() {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+
+    let caller = native_test_caller(NATIVE_PRIMARY_CALLER);
+    let mut owner = None;
+    for bound_account_id in [None, Some("pool-a".to_string())] {
+        let mut collection = native_test_collection();
+        collection.bound_oauth_account_id = bound_account_id;
+        collection.bound_oauth_quota_reserve = None;
+        let mut host = NativeHostBridge::for_collection(collection);
+        for id in ["pool-a", "pool-b"] {
+            let mut account = native_test_account_with_quota(90, 90);
+            account.id = id.to_string();
+            account.plan_type = Some("pro".to_string());
+            let claims = json!({"exp": chrono::Utc::now().timestamp() + 3600});
+            account.tokens.access_token = format!("e30.{}.fixture", URL_SAFE_NO_PAD.encode(claims.to_string()));
+            account.tokens.refresh_token = None;
+            account.egress_proxy_disabled = true;
+            host.account_overrides.insert(account.id.clone(), account);
+        }
+        let mut request = native_test_route_request("thread-owned-before-binding");
+        request.model = "gpt-5.6-sol".to_string();
+        request.preferred_account_id = Some("pool-a".to_string());
+        request.requires_permit = false;
+        let route = native_select_route(&host, &caller, request).await.unwrap();
+        assert_eq!(route.account_id, "pool-a");
+        assert_eq!(route.wire_api, native_contract::WireApi::Responses);
+        if let Some(previous) = owner.replace(route.owner_id) {
+            assert_eq!(owner.as_ref(), Some(&previous));
+        }
+    }
+}
+
+use native_contract::{Caller, ExecutionPolicy, Host, RequestReport, Route, RouteRequest, ServiceError};
+
+// Use the real account selection and retry policy, then send only to a local fixture.
+struct LoopbackUpstream {
+    bridge: NativeHostBridge,
+    origin: String,
+}
+
+impl Host for LoopbackUpstream {
+    fn authorize<'a>(&'a self, bearer: &'a str) -> futures_util::future::BoxFuture<'a, Result<Caller, ServiceError>> {
+        self.bridge.authorize(bearer)
+    }
+
+    fn route<'a>(
+        &'a self,
+        caller: &'a Caller,
+        request: RouteRequest,
+    ) -> futures_util::future::BoxFuture<'a, Result<Route, ServiceError>> {
+        Box::pin(async move {
+            let mut route = self.bridge.route(caller, request).await?;
+            assert!(route.chatgpt);
+            route.base_url = format!("{}/{}", self.origin, route.account_id);
+            Ok(route)
+        })
+    }
+
+    fn models<'a>(&'a self, caller: &'a Caller) -> futures_util::future::BoxFuture<'a, Result<Value, ServiceError>> {
+        self.bridge.models(caller)
+    }
+
+    fn execution_policy(&self) -> futures_util::future::BoxFuture<'_, Result<ExecutionPolicy, ServiceError>> {
+        self.bridge.execution_policy()
+    }
+
+    fn route_quota_exhausted<'a>(
+        &'a self,
+        route: &'a Route,
+        status: u16,
+        retry_after: Option<Duration>,
+    ) -> futures_util::future::BoxFuture<'a, ()> {
+        self.bridge.route_quota_exhausted(route, status, retry_after)
+    }
+
+    fn record(&self, _report: RequestReport) -> futures_util::future::BoxFuture<'_, ()> {
+        Box::pin(async {})
+    }
+}
+
+#[tokio::test]
+async fn binding_oauth_profile_preserves_incremental_http_history_after_restart() {
+    use axum::{extract::Path as AxumPath, routing::post, Json, Router};
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+
+    let received = Arc::new(Mutex::new(Vec::new()));
+    let app = Router::new().route(
+        "/{account}/responses",
+        post({
+            let received = received.clone();
+            move |AxumPath(account): AxumPath<String>, Json(body): Json<Value>| {
+                let received = received.clone();
+                async move {
+                    let mut received = received.lock().unwrap();
+                    received.push((account, body));
+                    Json(json!({"id":format!("resp-bound-{}", received.len()),"status":"completed","output":[
+                        {"type":"reasoning","id":"reason-fixture","encrypted_content":"synthetic-owner-cipher"},
+                        {"type":"message","id":"message-fixture","role":"assistant","content":[
+                            {"type":"output_text","text":"fixture reply"}
+                        ]}
+                    ]}))
+                }
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let upstream = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let root = tempfile::tempdir().unwrap();
+    let identity_path = root.path().join("identity.sqlite");
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap();
+
+    for (bound, response_id, remove_owner) in [
+        (None, None, false),
+        (Some("pool-a"), Some("resp-bound-1"), false),
+        (None, Some("resp-bound-2"), true),
+    ] {
+        let mut collection = native_test_collection();
+        collection.bound_oauth_account_id = bound.map(str::to_owned);
+        collection.bound_oauth_quota_reserve = None;
+        collection.session_affinity = false;
+        let priority = if response_id.is_some() { "pool-b" } else { "pool-a" };
+        collection.custom_routing_rules = vec![serde_json::from_value(json!({
+            "accountId": priority, "priority": 0, "weight": 1, "isPreferred": true,
+        }))
+        .unwrap()];
+        if remove_owner {
+            collection.account_ids.retain(|id| id != "pool-a");
+        }
+        let mut bridge = NativeHostBridge::for_collection(collection);
+        for id in ["pool-a", "pool-b"] {
+            let mut account = native_test_account_with_quota(90, 90);
+            account.id = id.to_owned();
+            account.account_id = Some(format!("fixture-workspace-{id}"));
+            account.plan_type = Some("plus".to_owned());
+            let claims = json!({"exp": chrono::Utc::now().timestamp() + 3600, "sub": id});
+            account.tokens.access_token =
+                format!("e30.{}.fixture", URL_SAFE_NO_PAD.encode(claims.to_string()));
+            account.tokens.refresh_token = None;
+            account.egress_proxy_disabled = true;
+            bridge.account_overrides.insert(account.id.clone(), account);
+        }
+        let mut gateway = native_api::start(
+            "127.0.0.1:0".parse().unwrap(),
+            Arc::new(LoopbackUpstream { bridge, origin: origin.clone() }),
+            identity_path.clone(),
+            native_api::Options::default(),
+        )
+        .await
+        .unwrap();
+        let mut body = json!({
+            "model":"gpt-5.6-sol",
+            "stream":false,
+            "input":[{"type":"message","role":"user","content":[{"type":"input_text","text":
+                if response_id.is_some() { "only the next message" } else { "original message" }
+            }]}]
+        });
+        if let Some(previous) = response_id {
+            body["previous_response_id"] = json!(previous);
+        }
+        let response = client
+            .post(format!("http://{}/v1/responses", gateway.addr))
+            .bearer_auth("fixture-primary-key")
+            .header("thread-id", "fixture-owned-thread")
+            .header("session-id", "fixture-owned-session")
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        let status = response.status();
+        let body: Value = response.json().await.unwrap();
+        if remove_owner {
+            assert_eq!(status, 409, "{body}");
+            assert_eq!(body["error"]["code"], "account_binding_unavailable");
+        } else {
+            assert_eq!(status, 200, "{body}");
+            assert_eq!(body["status"], "completed");
+        }
+        gateway.shutdown(Duration::from_secs(3)).await.unwrap();
+        if bound.is_some() {
+            // A legacy history can retain its owner without having replayable input.
+            let store = rusqlite::Connection::open(&identity_path).unwrap();
+            assert!(store.execute("DELETE FROM native_rebuild_checkpoints_v1", []).unwrap() > 0);
+            assert!(store.execute("DELETE FROM native_rebuild_history_v1", []).unwrap() > 0);
+        }
+    }
+
+    let received = received.lock().unwrap();
+    let owners: Vec<_> = received.iter().map(|(account, _)| account.as_str()).collect();
+    assert_eq!(owners, ["pool-a", "pool-a"]);
+    assert!(received[1].1.to_string().contains("only the next message"));
+    upstream.abort();
 }
 
 #[tokio::test]

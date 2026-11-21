@@ -171,7 +171,6 @@ jobs:
 
   prepare-frontend:
     name: "🌐 Prepare production frontend"
-    needs: prepare-release
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout repository
@@ -186,11 +185,8 @@ jobs:
       - name: 📦 Install frontend dependencies
         run: npm ci --prefer-offline --no-audit --no-fund
 
-      - name: 🔄 Sync release versions
-        run: npm run sync-version
-
       - name: 🏗️ Build production frontend assets
-        run: npm run build
+        run: npm exec -- vite build
 
       - name: 📤 Share production frontend
         uses: actions/upload-artifact@v4
@@ -201,27 +197,47 @@ jobs:
           compression-level: 0
 
   build-windows:
-    name: "🏗️ Build: Windows"
+    name: "🏗️ Build: Windows ${{ matrix.arch }}"
     needs:
       - prepare-release
       - prepare-frontend
-    runs-on: windows-latest
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            cache_target: windows
+            bundles: msi,nsis
+            updater_targets: windows-x86_64-msi,windows-x86_64-nsis
+          - arch: arm64
+            platform: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            cache_target: windows-aarch64
+            bundles: nsis
+            updater_targets: windows-aarch64-nsis
     permissions:
       contents: write
     env:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.prepare-release.outputs.version }}
+      WINDOWS_TARGET: ${{ matrix.target }}
+      WINDOWS_BUNDLES: ${{ matrix.bundles }}
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
       - name: 🦀 Rust setup
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: 💾 Host build cache
         uses: ./.github/actions/host-build-cache
         with:
-          target: windows
+          target: ${{ matrix.cache_target }}
 
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
@@ -230,7 +246,7 @@ jobs:
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
-        run: npm install
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: 🔄 Sync versions
         run: npm run sync-version
@@ -247,18 +263,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          COCKPIT_PREBUILT_FRONTEND_DIST: "dist"
         run: |
           set -euo pipefail
-          npx tauri build --ci
+          npx tauri build --ci --target "${WINDOWS_TARGET}" --bundles "${WINDOWS_BUNDLES}" --config src-tauri/tauri.prebuilt-frontend.conf.json
 
       - name: 📦 Build Windows portable archive
+        if: matrix.arch == 'x64'
         shell: bash
         run: |
           set -euo pipefail
           node scripts/release/build_windows_portable.cjs \
             --version "${VERSION}" \
-            --release-dir "target/release" \
+            --release-dir "target/${WINDOWS_TARGET}/release" \
             --output-dir "portable-assets"
 
       - name: 📥 Download release metadata
@@ -269,13 +285,17 @@ jobs:
 
       - name: 📦 Stage Windows release assets
         shell: bash
+        env:
+          WINDOWS_ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
           node scripts/release/stage_release_assets.cjs \
             --platform windows \
-            --assets-dir "target/release/bundle" \
+            --assets-dir "target/${WINDOWS_TARGET}/release/bundle" \
             --output-dir "release-assets"
-          cp portable-assets/* release-assets/
+          if [ "${WINDOWS_ARCH}" = "x64" ]; then
+            cp portable-assets/* release-assets/
+          fi
 
       - name: 📤 Upload Windows release assets
         if: needs.prepare-release.outputs.publish == 'true'
@@ -295,6 +315,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_PUBLISH: ${{ needs.prepare-release.outputs.publish }}
+          WINDOWS_UPDATER_TARGETS: ${{ matrix.updater_targets }}
         shell: bash
         run: |
           set -euo pipefail
@@ -304,7 +325,7 @@ jobs:
             --assets-dir "release-assets" \
             --notes-file "release-metadata/release-notes.md" \
             --published-at "$(cat release-metadata/published-at.txt)" \
-            --targets "windows-x86_64-msi,windows-x86_64-nsis" \
+            --targets "${WINDOWS_UPDATER_TARGETS}" \
             --output-dir "target-manifests"
           if [ "${RELEASE_PUBLISH}" = "true" ]; then
             node scripts/release/upload_release_assets.cjs "v${VERSION}" target-manifests/*.json
@@ -314,7 +335,7 @@ jobs:
         if: needs.prepare-release.outputs.publish != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: release-windows
+          name: release-windows-${{ matrix.arch }}
           retention-days: 7
           if-no-files-found: error
           path: |
@@ -330,7 +351,7 @@ jobs:
           shopt -s nullglob
           assets=(release-assets/*)
           {
-            echo "### 🪟 Windows packages"
+            echo "### 🪟 Windows ${{ matrix.arch }} packages"
             echo
             echo "**Mode:** ${{ needs.prepare-release.outputs.publish == 'true' && 'GitHub Release' || 'Validation artifact' }}"
             echo
@@ -364,15 +385,10 @@ jobs:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🦀 Rust setup
-        uses: dtolnay/rust-toolchain@stable
+      - name: 💾 macOS release build cache
+        uses: ./.github/actions/macos-release-cache
         with:
-          targets: aarch64-apple-darwin
-
-      - name: 💾 Host build cache
-        uses: ./.github/actions/host-build-cache
-        with:
-          target: macos-aarch64
+          target: aarch64-apple-darwin
 
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
@@ -381,10 +397,7 @@ jobs:
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
-        run: npm install
-
-      - name: 🔄 Sync versions
-        run: npm run sync-version
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: 📥 Reuse production frontend
         uses: actions/download-artifact@v4
@@ -412,10 +425,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          COCKPIT_PREBUILT_FRONTEND_DIST: "dist"
         run: |
           set -euo pipefail
-          node scripts/tauri.cjs build --ci --target aarch64-apple-darwin
+          node scripts/tauri.cjs build --ci --target aarch64-apple-darwin --bundles app --config src-tauri/tauri.prebuilt-frontend.conf.json
 
       - name: 📦 Prepare Universal binary inputs
         shell: bash
@@ -435,12 +447,12 @@ jobs:
           compression-level: 1
           if-no-files-found: error
 
-      - name: 📝 Rebuild DMG with installation instructions
+      - name: 📝 Build final DMG with installation instructions
         shell: bash
         run: |
           set -euo pipefail
           node scripts/release/inject-dmg-readme.cjs \
-            --bundle-dir "target/aarch64-apple-darwin/release/bundle"
+            --bundle-dir "target/aarch64-apple-darwin/release/bundle" --mac-arch aarch64
 
       - name: ✅ Notarize final DMG and verify macOS assets
         env:
@@ -555,15 +567,10 @@ jobs:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🦀 Rust setup
-        uses: dtolnay/rust-toolchain@stable
+      - name: 💾 macOS release build cache
+        uses: ./.github/actions/macos-release-cache
         with:
-          targets: x86_64-apple-darwin
-
-      - name: 💾 Host build cache
-        uses: ./.github/actions/host-build-cache
-        with:
-          target: macos-x86_64
+          target: x86_64-apple-darwin
 
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
@@ -572,10 +579,7 @@ jobs:
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
-        run: npm install
-
-      - name: 🔄 Sync versions
-        run: npm run sync-version
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: 📥 Reuse production frontend
         uses: actions/download-artifact@v4
@@ -603,10 +607,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          COCKPIT_PREBUILT_FRONTEND_DIST: "dist"
         run: |
           set -euo pipefail
-          node scripts/tauri.cjs build --ci --target x86_64-apple-darwin
+          node scripts/tauri.cjs build --ci --target x86_64-apple-darwin --bundles app --config src-tauri/tauri.prebuilt-frontend.conf.json
 
       - name: 📦 Prepare Universal binary inputs
         shell: bash
@@ -626,12 +629,12 @@ jobs:
           compression-level: 1
           if-no-files-found: error
 
-      - name: 📝 Rebuild DMG with installation instructions
+      - name: 📝 Build final DMG with installation instructions
         shell: bash
         run: |
           set -euo pipefail
           node scripts/release/inject-dmg-readme.cjs \
-            --bundle-dir "target/x86_64-apple-darwin/release/bundle"
+            --bundle-dir "target/x86_64-apple-darwin/release/bundle" --mac-arch x64
 
       - name: ✅ Notarize final DMG and verify macOS assets
         env:
@@ -759,10 +762,7 @@ jobs:
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
-        run: npm install
-
-      - name: 🔄 Sync versions
-        run: npm run sync-version
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: 📥 Download ARM binary inputs
         uses: actions/download-artifact@v4
@@ -805,14 +805,14 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          node scripts/tauri.cjs bundle --ci --target universal-apple-darwin
+          node scripts/tauri.cjs bundle --ci --target universal-apple-darwin --bundles app
 
-      - name: 📝 Rebuild DMG with installation instructions
+      - name: 📝 Build final DMG with installation instructions
         shell: bash
         run: |
           set -euo pipefail
           node scripts/release/inject-dmg-readme.cjs \
-            --bundle-dir "target/universal-apple-darwin/release/bundle"
+            --bundle-dir "target/universal-apple-darwin/release/bundle" --mac-arch universal
 
       - name: ✅ Notarize final DMG and verify macOS assets
         env:
@@ -931,7 +931,7 @@ jobs:
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
-        run: npm install
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: 🔄 Sync versions
         run: npm run sync-version
@@ -948,10 +948,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          COCKPIT_PREBUILT_FRONTEND_DIST: "dist"
         run: |
           set -euo pipefail
-          npx tauri build --ci
+          npx tauri build --ci --config src-tauri/tauri.prebuilt-frontend.conf.json
 
       - name: 📥 Download release metadata
         uses: actions/download-artifact@v4
@@ -1038,8 +1037,79 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+  build-linux-cli:
+    name: "🏗️ Build: Linux CLI (${{ matrix.arch }})"
+    needs: prepare-release
+    runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            platform: ubuntu-22.04
+          - arch: aarch64
+            platform: ubuntu-24.04-arm
+    env:
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.prepare-release.outputs.version }}
+      CLI_ARCH: ${{ matrix.arch }}
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🦀 Rust setup
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: ⚙️ Node.js setup
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 📦 Build, package and test the standalone CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --release --package cockpit-cli
+          archive="release-assets/cockpit-cli_${VERSION}_linux_${CLI_ARCH}.tar.gz"
+          mkdir -p release-assets
+          tar -czf "${archive}" -C target/release cockpit-cli
+          smoke_dir="$(mktemp -d)"
+          trap 'rm -rf "${smoke_dir}"' EXIT
+          tar -xzf "${archive}" -C "${smoke_dir}"
+          ldd "${smoke_dir}/cockpit-cli" > "${smoke_dir}/dependencies"
+          cat "${smoke_dir}/dependencies"
+          if grep -Ei 'not found|lib(gtk|gdk|webkit|javascriptcoregtk|ayatana|appindicator)' "${smoke_dir}/dependencies"; then
+            exit 1
+          fi
+          env -u DISPLAY -u WAYLAND_DISPLAY "${smoke_dir}/cockpit-cli" --version
+          env -u DISPLAY -u WAYLAND_DISPLAY \
+            HOME="${smoke_dir}/home" \
+            COCKPIT_TOOLS_DATA_DIR="${smoke_dir}/accounts" \
+            CODEX_HOME="${smoke_dir}/codex" \
+            "${smoke_dir}/cockpit-cli" list codex --json | jq -e '. == []'
+
+      - name: 📤 Upload Linux CLI archive
+        if: needs.prepare-release.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/release/upload_release_assets.cjs "v${VERSION}" "release-assets/cockpit-cli_${VERSION}_linux_${CLI_ARCH}.tar.gz"
+
+      - name: 📦 Upload Linux CLI validation artifact
+        if: needs.prepare-release.outputs.publish != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-cli-${{ matrix.arch }}
+          path: release-assets
+          retention-days: 7
+          if-no-files-found: error
+
   finalize-legacy-latest:
-    name: 🏁 Finalize Legacy Updater Manifest
+    name: 🏁 Finalize Updater Manifest and Checksums
     if: needs.prepare-release.outputs.publish == 'true'
     # Wait for every platform build so latest.json is complete.
     needs:
@@ -1049,6 +1119,7 @@ jobs:
       - build-macos-x86_64
       - build-macos-universal
       - build-linux
+      - build-linux-cli
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -1113,6 +1184,7 @@ jobs:
             .platforms["darwin-x86_64"] and
             .platforms["windows-x86_64"] and
             .platforms["windows-x86_64-nsis"] and
+            .platforms["windows-aarch64-nsis"] and
             .platforms["linux-x86_64-appimage"] and
             .platforms["linux-x86_64-deb"] and
             .platforms["linux-x86_64-rpm"] and
@@ -1122,48 +1194,11 @@ jobs:
           ' latest.json > /dev/null
           jq -r '.platforms | keys[]' latest.json
 
-      - name: 📤 Upload complete legacy latest.json
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          node scripts/release/upload_release_assets.cjs "v${VERSION}" latest.json
-
-  upload-checksums:
-    name: 🔗 Publish SHA256SUMS
-    if: needs.prepare-release.outputs.publish == 'true'
-    needs:
-      - prepare-release
-      - finalize-legacy-latest
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      GH_REPO: ${{ github.repository }}
-      VERSION: ${{ needs.prepare-release.outputs.version }}
-    steps:
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v4
-
-      - name: ⚙️ Node.js setup
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: 📥 Download release assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p release-assets
-          gh release download "v${VERSION}" --dir release-assets --pattern "*" --clobber
-
       - name: ⚙️ Generate SHA256SUMS.txt from release assets
         shell: bash
         run: |
           set -euo pipefail
+          cp latest.json release-assets/latest.json
           cd release-assets
           rm -f SHA256SUMS.txt
           find . -type f -print0 \
@@ -1177,13 +1212,13 @@ jobs:
           test -s SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      - name: 📤 Upload SHA256SUMS.txt to release
+      - name: 📤 Upload complete legacy latest.json and SHA256SUMS.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/release/upload_release_assets.cjs "v${VERSION}" SHA256SUMS.txt
+          node scripts/release/upload_release_assets.cjs "v${VERSION}" latest.json SHA256SUMS.txt
 
   publish-release:
     name: 🚀 Publish Verified Release
@@ -1191,7 +1226,6 @@ jobs:
     needs:
       - prepare-release
       - finalize-legacy-latest
-      - upload-checksums
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -1233,7 +1267,7 @@ jobs:
           node scripts/release/verify_published_updater_manifests.cjs \
             --version "${VERSION}" \
             --repo "${GITHUB_REPOSITORY}" \
-            --targets "darwin-aarch64-app,darwin-x86_64-app,windows-x86_64-msi,windows-x86_64-nsis,linux-x86_64-appimage,linux-x86_64-deb,linux-x86_64-rpm,linux-aarch64-appimage,linux-aarch64-deb,linux-aarch64-rpm" \
+            --targets "darwin-aarch64-app,darwin-x86_64-app,windows-x86_64-msi,windows-x86_64-nsis,windows-aarch64-nsis,linux-x86_64-appimage,linux-x86_64-deb,linux-x86_64-rpm,linux-aarch64-appimage,linux-aarch64-deb,linux-aarch64-rpm" \
             --legacy
 
   update-homebrew-cask:
@@ -1350,6 +1384,7 @@ jobs:
       - build-macos-x86_64
       - build-macos-universal
       - build-linux
+      - build-linux-cli
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1371,6 +1406,13 @@ jobs:
           path: validation-workspace
           merge-multiple: true
 
+      - name: 📥 Download standalone Linux CLI archives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: linux-cli-*
+          path: validation-workspace/release-assets
+          merge-multiple: true
+
       - name: 🏗️ Build and validate complete updater manifest
         shell: bash
         run: |
@@ -1388,6 +1430,7 @@ jobs:
             .platforms["darwin-x86_64"] and
             .platforms["windows-x86_64"] and
             .platforms["windows-x86_64-nsis"] and
+            .platforms["windows-aarch64-nsis"] and
             .platforms["linux-x86_64-appimage"] and
             .platforms["linux-x86_64-deb"] and
             .platforms["linux-x86_64-rpm"] and
@@ -1397,6 +1440,9 @@ jobs:
           ' latest.json > /dev/null
 
           test -n "$(find validation-workspace/release-assets -name '*_universal.dmg' -print -quit)"
+          for arch in x86_64 aarch64; do
+            test -f "validation-workspace/release-assets/cockpit-cli_${VERSION}_linux_${arch}.tar.gz"
+          done
 
       - name: 🔗 Generate validation checksums
         shell: bash

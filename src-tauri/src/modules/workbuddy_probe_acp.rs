@@ -258,13 +258,12 @@ pub(super) async fn read_acp_reply(
             }
         };
 
-        // 客户端 bootstrap 序列：initialize → session/load → session/set_model → session/prompt。
-        // 少了 set_model，沙箱会用默认模型跑，探测结果就与所选模型无关（永远 OK）。
-        //
-        // 注意：真实后端对 JSON-RPC POST 返回 200 + 空响应体（受理），
-        // 成功/错误响应统一走 SSE 流；个别部署也可能内联返回。
-        // 因此这里只检查内联错误，不强制内联 ack——握手确认在读流阶段按 id 核对。
-        let mut inline_bodies: Vec<String> = Vec::new();
+        // An empty POST response only accepts the request. Its JSON-RPC result
+        // arrives on the GET stream, so wait for each handshake step there
+        // unless the POST already returned the matching result.
+        let mut stream = resp.bytes_stream();
+        let mut decoder = ReplyDecoder::default();
+        let mut stream_ended = false;
         let calls: [(&'static str, u64, serde_json::Value); 4] = [
             (
                 "initialize",
@@ -291,100 +290,58 @@ pub(super) async fn read_acp_reply(
             ),
         ];
         for (method, id, params) in calls {
-            match send(method, id, params).await {
-                Ok(response_text) => {
-                    if let Some(err) = parse_acp_post_error(&response_text) {
-                        outcome.error = Some(format!("{}: {}", method, err));
-                        return;
-                    }
-                    // Require the model-selection acknowledgment before
-                    // sending a prompt. Prompt replies may be direct SSE events.
-                    if method != "session/prompt" && !rpc_acknowledged(&response_text, id) {
-                        outcome.error = Some(format!(
-                            "WORKBUDDY_PROBE_HANDSHAKE_INCOMPLETE ({}): {}",
-                            method,
-                            truncate_chars(response_text.trim(), 220)
-                        ));
-                        return;
-                    }
-                    inline_bodies.push(response_text);
-                }
-                Err(e) => {
-                    outcome.error = Some(e);
+            let body = match send(method, id, params).await {
+                Ok(body) => body,
+                Err(error) => {
+                    outcome.error = Some(error);
                     return;
                 }
-            }
-        }
-
-        let mut decoder = ReplyDecoder::default();
-        // 内联响应体也要过一遍解码器：登记 ack_id、解析 _meta 错误与内联更新。
-        for body in &inline_bodies {
-            if body.trim().is_empty() {
-                continue;
-            }
-            if let Err(error) = decoder.feed(body.as_bytes(), true, session_id, &mut outcome) {
-                outcome.error = Some(error);
+            };
+            if let Err(error) = ReplyDecoder::decode_post(&body, session_id, &mut outcome) {
+                outcome.error = Some(format!("{method}: {error}"));
                 return;
             }
-        }
-        if outcome.error.is_some() {
-            return;
-        }
-        // Some servers return prompt updates in the POST body while the GET
-        // channel stays idle. Decode those updates before awaiting another byte.
-        if outcome.prompt_done || !outcome.text.trim().is_empty() {
-            finalize_outcome(&mut outcome);
-            return;
-        }
-        let mut stream = resp.bytes_stream();
-        while let Some(chunk) = stream.next().await {
-            match chunk {
-                Ok(bytes) => {
-                    if let Err(error) = decoder.feed(&bytes, false, session_id, &mut outcome) {
-                        outcome.error = Some(error);
-                        return;
+
+            while outcome.error.is_none()
+                && if id == PROMPT_ID {
+                    outcome.text.trim().is_empty()
+                } else {
+                    !outcome.ack_ids.contains(&id)
+                }
+                && !stream_ended
+            {
+                let decoded = match stream.next().await {
+                    Some(Ok(bytes)) => decoder.feed(&bytes, false, session_id, &mut outcome),
+                    Some(Err(error)) => Err(error.without_url().to_string()),
+                    None => {
+                        stream_ended = true;
+                        decoder.feed(&[], true, session_id, &mut outcome)
                     }
-                }
-                Err(error) => {
-                    outcome.error = Some(error.without_url().to_string());
-                    return;
+                };
+                if let Err(error) = decoded {
+                    outcome.error = Some(error);
                 }
             }
-            if outcome.error.is_some() || outcome.prompt_done || !outcome.text.trim().is_empty() {
-                break;
+            if outcome.error.is_some() {
+                return;
             }
-        }
-        if let Err(error) = decoder.feed(&[], true, session_id, &mut outcome) {
-            outcome.error = Some(error);
+            if id != PROMPT_ID && !outcome.ack_ids.contains(&id) {
+                outcome.error = Some(format!("WORKBUDDY_PROBE_HANDSHAKE_INCOMPLETE ({method})"));
+                return;
+            }
         }
         finalize_outcome(&mut outcome);
     };
 
-    if tokio::time::timeout(deadline, read_future).await.is_err() {
+    // The prompt result can arrive before its text updates. Keep reading
+    // within the probe deadline even after receiving a successful result.
+    if tokio::time::timeout(deadline, read_future).await.is_err() && !outcome.prompt_done {
         outcome.error = Some("WORKBUDDY_PROBE_TIMEOUT".into());
     }
     if let Some(error) = &mut outcome.error {
         *error = error.replace(session_token, "<redacted>");
     }
     outcome
-}
-
-fn rpc_acknowledged(body: &str, id: u64) -> bool {
-    let matches = |value: &Value| {
-        (value["id"] == id || value["id"].as_str().is_some_and(|s| s == id.to_string()))
-            && value.get("result").is_some()
-    };
-    // 整段解析：兼容 pretty-print 的 JSON（逐行解析会失败）
-    if let Ok(value) = serde_json::from_str::<Value>(body.trim()) {
-        if matches(&value) {
-            return true;
-        }
-    }
-    // 逐行解析：兼容 SSE（data: {...}）与多事件流
-    body.lines().any(|line| {
-        let text = line.strip_prefix("data:").unwrap_or(line).trim();
-        serde_json::from_str::<Value>(text).is_ok_and(|value| matches(&value))
-    })
 }
 
 #[derive(Default)]
@@ -394,6 +351,18 @@ struct ReplyDecoder {
 }
 
 impl ReplyDecoder {
+    fn decode_post(body: &str, session: &str, outcome: &mut AcpOutcome) -> Result<(), String> {
+        let body = body.trim();
+        if body.is_empty() {
+            return Ok(());
+        }
+        if let Ok(value) = serde_json::from_str::<Value>(body) {
+            Self::update(&value, session, outcome);
+            return Ok(());
+        }
+        Self::default().feed(body.as_bytes(), true, session, outcome)
+    }
+
     fn feed(
         &mut self,
         bytes: &[u8],
@@ -573,16 +542,7 @@ mod tests {
     }
 
     #[test]
-    fn model_selection_requires_its_own_ack_and_quota_requires_error_evidence() {
-        assert!(rpc_acknowledged(
-            r#"{"jsonrpc":"2.0","id":3,"result":{}}"#,
-            3
-        ));
-        assert!(!rpc_acknowledged(r#"{"id":2,"result":{}}"#, 3));
-        assert!(!rpc_acknowledged(
-            r#"{"id":3,"error":{"message":"unsupported"}}"#,
-            3
-        ));
+    fn quota_requires_error_evidence() {
         assert!(parse_acp_post_error(r#"{"id":3,"result":{"model":"quota-model"}}"#).is_none());
         let body = r#"{"id":4,"result":{"_meta":{"codebuddy.ai/errorMessage":"{\"message\":\"quota exhausted\"}"}}}"#;
         assert!(parse_acp_post_error(body).is_some());

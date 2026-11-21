@@ -31,7 +31,7 @@ test('every common account presentation identifies the plan source without inven
   assert.equal(getCodexPlanBadgePresentation(plan).label, 'ChatGPT');
   assert.equal(getCodexPlanFilterKey(plan), 'CHATGPT_PLAN');
   assert.equal(isCodexEffectiveFreePlan(plan), false);
-  assert.equal(isCodexLocalAccessEligibleAccount(plan, true), true);
+  assert.equal(isCodexLocalAccessEligibleAccount(plan), true);
   const raw = { ...plan, plan_type: 'Business Special Edition' };
   assert.equal(buildCodexAccountPresentation(raw, t).planLabel, 'Business Special Edition');
   assert.equal(getCodexPlanBadgePresentation(raw).label, 'Business Special Edition');

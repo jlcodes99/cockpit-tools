@@ -369,9 +369,17 @@ async fn responses_first_response_skips_transport_keepalives() {
 
     let diagnostics = host.diagnostics.lock().unwrap();
     assert_eq!(diagnostics.len(), 3);
+    let mut http_timings = 0;
     for context in diagnostics.iter() {
         assert!(context.first_response_ms.unwrap() >= OUTPUT_DELAY.as_millis() as u64, "{context:?}");
+        if context.initial_local_prepare_ms.is_some() {
+            let upstream_ms = context.first_upstream_response_ms.unwrap();
+            assert!(upstream_ms >= OUTPUT_DELAY.as_millis() as u64, "{context:?}");
+            assert!(upstream_ms <= context.first_response_ms.unwrap(), "{context:?}");
+            http_timings += 1;
+        }
     }
+    assert_eq!(http_timings, 2);
     upstream.abort();
     std::fs::remove_dir_all(path).unwrap();
 }

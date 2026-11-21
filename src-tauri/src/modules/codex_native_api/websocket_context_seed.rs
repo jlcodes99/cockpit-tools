@@ -96,15 +96,29 @@ fn unsupported_generate(event: &Value) -> bool {
             Some("unsupported_parameter" | "unknown_parameter")
         )
         && event["error"]["param"] == "generate"
-        && ["response", "id", "output", "usage"]
-            .iter()
-            .all(|key| event[*key].is_null())
-        && ["output", "result", "usage"]
-            .iter()
-            .all(|key| event["error"][*key].is_null())
-        && ["executed", "execution_started"]
-            .iter()
-            .all(|key| event["error"].get(*key).is_none_or(|value| value == false))
+        && rejection_has_no_execution(event)
+}
+
+fn rejection_has_no_execution(event: &Value) -> bool {
+    ["response", "id", "output", "result", "usage"]
+        .iter()
+        .all(|key| event[*key].is_null() && event["error"][*key].is_null())
+        && ["executed", "execution_started"].iter().all(|key| {
+            [event, &event["error"]].into_iter().all(|object| {
+                object.get(*key).is_none_or(|value| value == false)
+            })
+        })
+}
+
+fn message_limit_rejected(event: &Value) -> bool {
+    (event["type"].is_null() || event["type"] == "error")
+        && (event["status"].is_null() || matches!(event["status"].as_u64(), Some(400 | 413)))
+        && event["error"]["code"] == "message_too_big"
+        && rejection_has_no_execution(event)
+}
+
+fn message_limit_fallback() -> ServiceError {
+    unavailable().with_error_details(json!({ "preload_failure": "message_too_big" }))
 }
 
 fn json_bytes(value: &Value) -> usize {
@@ -348,6 +362,11 @@ where
         cached_tokens: 0,
     };
     for index in 0..plan.ranges.len() - 1 {
+        // Only the first cold chunk has no previously accepted history to
+        // resend. Keep an existing socket's parent or acknowledged chunks
+        // out of this transport fallback.
+        let cold_first_chunk = index == 0
+            && body.get("previous_response_id").is_none_or(Value::is_null);
         check_quota(state, tracker, deadline).await?;
         let text = plan
             .body(
@@ -387,7 +406,7 @@ where
                 Some(Ok(UpstreamMessage::Text(text))) => {
                     bytes = bytes.saturating_add(text.len());
                     let mut completed = false;
-                    let mut rejected = false;
+                    let mut rejection = None;
                     for document in
                         super::super::event_documents::websocket(UpstreamMessage::Text(text))
                     {
@@ -411,11 +430,12 @@ where
                             return Err(ServiceError::new(502, "websocket_context_seed_output",
                             "Upstream generated unexpected output during non-generating context preload"));
                         }
-                        match event["type"].as_str() {
+                        let rejected_for_size = message_limit_rejected(&event);
+                        match event["type"].as_str().or_else(|| rejected_for_size.then_some("error")) {
                             Some(
                                 "response.created" | "response.queued" | "response.in_progress",
                             ) => {
-                                if completed || rejected {
+                                if completed || rejection.is_some() {
                                     return Err(outcome_unknown("unexpected_response_start"));
                                 }
                                 response_started = true;
@@ -423,7 +443,7 @@ where
                             Some("response.completed" | "response.done") => {
                                 let response = &event["response"];
                                 if completed
-                                    || rejected
+                                    || rejection.is_some()
                                     || response["status"] != "completed"
                                     || !response["output"].as_array().is_some_and(Vec::is_empty)
                                 {
@@ -456,13 +476,19 @@ where
                                 | "response.incomplete"
                                 | "response.cancelled",
                             ) => {
-                                if !response_started
+                                if index == 0
+                                    && !response_started
                                     && !completed
-                                    && !rejected
-                                    && unsupported_generate(&event)
+                                    && rejection.is_none()
                                 {
-                                    rejected = true;
-                                    continue;
+                                    if cold_first_chunk && rejected_for_size {
+                                        rejection = Some(message_limit_fallback());
+                                        continue;
+                                    }
+                                    if unsupported_generate(&event) {
+                                        rejection = Some(unavailable());
+                                        continue;
+                                    }
                                 }
                                 tracing::info!(target:"codex_api",reason="upstream_rejected",event_type=event["type"].as_str().unwrap_or(""),error_code=event.pointer("/error/code").or_else(|| event.pointer("/response/error/code")).and_then(|value| value.as_str()).filter(|code|code.len()<=64 && code.bytes().all(|c|c.is_ascii_alphanumeric()||c==b'_')).unwrap_or(""),"[NativeAPI][websocket] bootstrap=seed_unconfirmed");
                                 return Err(outcome_unknown("upstream_rejection"));
@@ -477,8 +503,8 @@ where
                     }
                     // A single upstream frame can contain both the terminal
                     // event and additional events. Validate the whole frame.
-                    if rejected {
-                        return Err(unavailable());
+                    if let Some(error) = rejection {
+                        return Err(error);
                     }
                     if completed {
                         break;
@@ -489,6 +515,11 @@ where
                         .await?;
                 }
                 Some(Ok(UpstreamMessage::Pong(_) | UpstreamMessage::Frame(_))) => {}
+                Some(Ok(UpstreamMessage::Close(Some(frame))))
+                    if cold_first_chunk && !response_started && u16::from(frame.code) == 1009 =>
+                {
+                    return Err(message_limit_fallback());
+                }
                 Some(Err(_)) => return Err(outcome_unknown("receive_failed")),
                 Some(Ok(UpstreamMessage::Binary(_))) => {
                     return Err(outcome_unknown("unexpected_binary_message"))

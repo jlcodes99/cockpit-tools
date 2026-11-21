@@ -109,6 +109,7 @@ fn transfer_codebuddy_history(
         target_uid,
         backup_root,
         Some(&mut available),
+        false,
     )?;
     // A skipped workspace still belongs to its original account. Move only
     // rows whose source conversation is confirmed available in the target.
@@ -169,7 +170,14 @@ pub(crate) fn sync_history_between_accounts(
     target_uid: &str,
     backup_root: &Path,
 ) -> Result<CodebuddySessionTransferReport, String> {
-    sync_history(extension_data_dir, source_uid, target_uid, backup_root, None)
+    sync_history(
+        extension_data_dir,
+        source_uid,
+        target_uid,
+        backup_root,
+        None,
+        true,
+    )
 }
 
 fn sync_history(
@@ -178,6 +186,7 @@ fn sync_history(
     target_uid: &str,
     backup_root: &Path,
     mut available: Option<&mut HashSet<String>>,
+    allow_shared_workbuddy_junctions: bool,
 ) -> Result<CodebuddySessionTransferReport, String> {
     let mut report = CodebuddySessionTransferReport::default();
     let source_outer = extension_data_dir.join(source_uid);
@@ -215,6 +224,11 @@ fn sync_history(
             .join(&ide_name)
             .join(target_uid);
         reject_symlink_if_exists(&extension_data_dir.join(target_uid).join(&ide_name))?;
+        if allow_shared_workbuddy_junctions
+            && workbuddy_junctions_share_directory(&source_account_root, &target_account_root)?
+        {
+            continue;
+        }
         reject_symlink_if_exists(&target_account_root)?;
         let target_history_root = target_account_root.join("history");
 
@@ -659,6 +673,31 @@ fn reject_symlink_if_exists(path: &Path) -> Result<(), String> {
             error
         )),
     }
+}
+
+#[cfg(target_os = "windows")]
+fn workbuddy_junctions_share_directory(source: &Path, target: &Path) -> Result<bool, String> {
+    let is_junction = |path: &Path| -> std::io::Result<bool> {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => junction::exists(path),
+            Ok(_) => Ok(false),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(error),
+        }
+    };
+    let already_shared = || -> std::io::Result<bool> {
+        if !is_junction(target)? || !is_junction(source)? {
+            return Ok(false);
+        }
+        // Aliases of the same history need no file writes. WorkBuddy still remaps its database.
+        Ok(source.canonicalize()? == target.canonicalize()?)
+    };
+    already_shared().map_err(|error| format!("读取 WorkBuddy 会话目录联接失败: {}", error))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn workbuddy_junctions_share_directory(_source: &Path, _target: &Path) -> Result<bool, String> {
+    Ok(false)
 }
 
 fn conversation_is_newer(source: &Value, target: &Value) -> bool {

@@ -652,6 +652,7 @@
         "expiresAt": "Hết hạn lúc: {{time}}",
         "unlimited": "Hạn mức không giới hạn",
         "leftPercent": "Còn {{value}}%",
+        "weeklyLimitReached": "Đã đạt giới hạn tuần",
         "cachedRefreshFailed": "Làm mới thất bại; đang hiển thị dữ liệu thành công gần nhất",
         "lastSuccessfulQuery": "Lần thành công gần nhất: {{time}}",
         "cachedNeedsReauth": "⚠️ Cần xác minh web để tiếp tục (dữ liệu lưu trong bộ nhớ đệm bên dưới)"
@@ -839,6 +840,7 @@
     "sortPlaced": "Đã chuyển đến vị trí {{position}}.",
     "sortCancelled": "Đã hủy sắp xếp.",
     "tipWithGroups": "Kéo để sắp xếp. Thanh bên có thể hiển thị tối đa {{max}} mục. Các mục con của nhóm không có công tắc thanh bên/bảng điều khiển và chỉ dùng cho thanh menu cùng nền tảng mặc định.",
+    "tipWithSidebarShortcuts": "Kéo để đổi thứ tự. Thanh bên có thể hiển thị tối đa {{max}} mục, bao gồm từng nền tảng trong một nhóm.",
     "addGroup": "Thêm nhóm",
     "editGroup": "Sửa nhóm",
     "deleteGroup": "Xóa nhóm",
@@ -1079,7 +1081,8 @@
         "savedForNextLaunch": "Đã lưu. Thay đổi sẽ có hiệu lực vào lần tới khi bạn khởi động Codex qua Cockpit; phiên hiện tại vẫn giữ nguyên.",
         "restartRollbackFailed": "Không thể khởi động tuyến mới và không thể khởi động lại cấu hình gốc: ",
         "restartRolledBack": "Không thể khởi động tuyến mới. Cấu hình gốc đã được khôi phục và Codex đã khởi động lại: {{error}}"
-      }
+      },
+      "copyTimeout": "Giới hạn thời gian sao chép"
     },
     "quota": {
       "unbound": "Tài khoản chưa liên kết",
@@ -1138,6 +1141,7 @@
         "preparingCredentials": "Đang kiểm tra token và cập nhật đầy đủ thông tin đăng nhập khi cần...",
         "profileReady": "auth.json / chuỗi khóa của phiên bản đã được cập nhật an toàn",
         "cliPrepared": "Lệnh khởi động CLI đã sẵn sàng",
+        "cliResumeStarted": "Đã bắt đầu tiếp tục phiên CLI trong nền",
         "startingClient": "Đang khởi động và xác minh tiến trình ứng dụng Codex..."
       }
     },
@@ -1300,6 +1304,9 @@
       "trayIconStyleDesc": "Chọn biểu tượng đơn sắc của hệ thống hoặc biểu tượng app gốc có màu",
       "trayIconStyleTemplate": "Biểu tượng đơn sắc",
       "trayIconStyleColor": "Biểu tượng màu",
+      "menuBarLeftClick": "Thao tác nhấp chuột trái vào biểu tượng thanh menu",
+      "menuBarLeftClickMenu": "Mở menu hạn mức",
+      "menuBarLeftClickWindow": "Mở cửa sổ chính",
       "floatingCardStartup": "Hiển thị thẻ nổi khi khởi động",
       "floatingCardStartupDesc": "Tự động hiển thị thẻ tài khoản nổi sau khi ứng dụng khởi động",
       "floatingCardAlwaysOnTop": "Giữ thẻ nổi luôn ở trên cùng theo mặc định",
@@ -1309,6 +1316,9 @@
       "floatingCardShowNowAction": "Hiển thị thẻ nổi",
       "dataDir": "Thư mục dữ liệu",
       "dataDirDesc": "Vị trí lưu trữ tài khoản và cấu hình.",
+      "dataDirPending": "Sau khi khởi động lại, Cockpit Tools sẽ đọc dữ liệu từ {{path}}.",
+      "dataDirPendingDefault": "Sau khi khởi động lại, Cockpit Tools sẽ dùng thư mục mặc định.",
+      "dataDirEnvironment": "Lần khởi động hiện tại dùng thư mục do COCKPIT_TOOLS_DATA_DIR chỉ định.",
       "topRightAdVisible": "Hiện quảng bá trên cùng",
       "topRightAdVisibleDesc": "Ẩn vị trí quảng bá trên cùng trong ứng dụng. Trang Nhà tài trợ không bị ảnh hưởng.",
       "opencodeTitle": "Tích hợp OpenCode",
@@ -1377,6 +1387,10 @@
       "cursorPathReset": "Đặt lại mặc định",
       "codexLaunchOnSwitch": "Tự động khởi chạy Codex App khi chuyển Codex",
       "codexLaunchOnSwitchDesc": "Tự động khởi động hoặc khởi động lại Codex App sau khi chuyển tài khoản",
+      "codexAutomaticSessionRepair": "Tự động khôi phục khả năng hiển thị phiên",
+      "codexAutomaticSessionRepairDesc": "Chọn có khôi phục chỉ mục phiên và dấu thời gian của tệp lịch sử khi khởi chạy Codex từ Cockpit hoặc đổi nhà cung cấp phiên hay không.",
+      "codexAutomaticSessionRepairIndexOnly": "Chỉ chỉ mục",
+      "codexAutomaticSessionRepairQuick": "Khôi phục nhanh",
       "autoUpdate": "Tự động cập nhật nền",
       "autoUpdateDesc": "Khi phát hiện phiên bản mới, ứng dụng sẽ cập nhật ngầm ở nền và nhắc khởi động lại sau khi hoàn tất.",
       "autoUpdateOff": "Tắt (cập nhật thủ công)",
@@ -1509,6 +1523,8 @@
       "claudeSettingsTitle": "Cài đặt Claude",
       "claudeAutoRefresh": "Tự động làm mới hạn mức Claude",
       "claudeAutoRefreshDesc": "Tự động làm mới bộ nhớ đệm hạn mức cho tài khoản Claude trong nền.",
+      "claudeShareCodeSessionsOnSwitch": "Đồng bộ phiên Code khi chuyển tài khoản",
+      "claudeShareCodeSessionsOnSwitchDesc": "Chia sẻ danh sách phiên Code giữa các tài khoản cục bộ khi chuyển hồ sơ Claude Desktop mặc định trên macOS.",
       "claudeAppPath": "Mục tiêu khởi chạy Claude Desktop",
       "claudeAppPathDesc": "Hồ sơ mặc định có thể dùng mục tiêu Microsoft Store; hồ sơ đa phiên bản cần Claude.exe thật.",
       "antigravityLaunchOnSwitch": "Khởi chạy Antigravity IDE khi chuyển",
@@ -1549,6 +1565,10 @@
       "webdavAllowedDomainsDesc": "Cách nhau bằng dấu phẩy; trống = không giới hạn",
       "claudeQuotaDisplayRemaining": "Claude hiển thị % còn lại",
       "claudeQuotaDisplayRemainingDesc": "Mặc định % đã dùng. Bật = % còn lại. Tự chuyển và cảnh báo vẫn theo đã dùng.",
+      "menuBarLeftClick": "Nhấp trái trên thanh menu",
+      "menuBarLeftClickDesc": "Nhấp phải luôn mở menu hạn mức.",
+      "menuBarLeftClickQuotaMenu": "Menu hạn mức",
+      "menuBarLeftClickMainWindow": "Cửa sổ chính",
       "menuBarQuota": "Hạn mức trực tiếp trên thanh menu",
       "menuBarQuotaDesc": "Khi bật, hiển thị hạn mức còn lại của tài khoản hiện tại nền tảng đã chọn cạnh biểu tượng. Tùy chọn nền tảng trong hộp thoại.",
       "menuBarQuotaEnabledDesc": "Đang bật · {{platform}} · còn lại của tài khoản hiện tại nền tảng đó (thấp nhất trong các hạn mức)",
@@ -1581,10 +1601,14 @@
         "quotaCompatDesc": "Các phiên bản dịch vụ API hiển thị hạn mức khả dụng cho giao diện và kiểm tra cục bộ của ứng dụng. Mức sử dụng thực tế tại nhà cung cấp và giới hạn hình ảnh không thay đổi. Tùy chọn này chỉ áp dụng cho các cấu hình OAuth kết hợp API bên ngoài khác.",
         "configFailed": "Không thể đọc hoặc lưu cài đặt: {{error}}",
         "nativePredictions": "Dự đoán bước tiếp theo gốc (Tab)",
-        "nativePredictionsDesc": "Mặc định tắt. Gợi ý sử dụng nhà cung cấp API và mô hình của cuộc trò chuyện hiện tại, làm tăng mức sử dụng API. Sau khi thay đổi cài đặt, hãy khởi động lại các phiên bản Codex bị ảnh hưởng và giữ Cockpit Tools chạy."
+        "nativePredictionsDesc": "Mặc định bật. Gợi ý sử dụng nhà cung cấp API và mô hình của cuộc trò chuyện hiện tại, làm tăng mức sử dụng API. Sau khi thay đổi cài đặt, hãy khởi động lại các phiên bản Codex bị ảnh hưởng và giữ Cockpit Tools chạy."
       },
       "timeDisplayMode": "Hiển thị thời gian",
-      "timeDisplayModeDesc": "Thời gian trên thẻ và danh sách tài khoản. Mặc định là thời gian chuyển tài khoản"
+      "timeDisplayModeDesc": "Thời gian trên thẻ và danh sách tài khoản. Mặc định là thời gian chuyển tài khoản",
+      "menuBarLeftClick": "Nhấp trái trên thanh menu",
+      "menuBarLeftClickDesc": "Nhấp phải luôn mở menu hạn mức.",
+      "menuBarLeftClickQuotaMenu": "Menu hạn mức",
+      "menuBarLeftClickMainWindow": "Cửa sổ chính"
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -2590,6 +2614,8 @@
       "crontabValidate": "Xác thực",
       "crontabValidateHint": "Biểu thức sẽ được xác thực khi lưu",
       "crontabPreviewEmpty": "Vui lòng nhập biểu thức Crontab hợp lệ",
+      "weeklyQuotaResetOnly": "Chỉ đánh thức sau khi hạn mức tuần được đặt lại",
+      "weeklyQuotaResetHint": "Mỗi tài khoản đã chọn được đánh thức sau khi hạn mức tuần của chính tài khoản đó được đặt lại.",
       "timeWindowEnabled": "Bật khung giờ",
       "timeWindowHint": "Khi được bật, việc kích hoạt khi đặt lại hạn mức chỉ diễn ra trong khung giờ; ngoài khung giờ sẽ sử dụng thời gian cố định.",
       "timeWindow": "Khung giờ kích hoạt khi đặt lại hạn mức",
@@ -2667,6 +2693,17 @@
     "other_group": "Mô hình khác"
   },
   "codex": {
+    "subagentDefaults": {
+      "title": "Mặc định của tác nhân phụ",
+      "description": "Áp dụng cho tác nhân phụ mới. Giá trị chỉ định khi khởi chạy được ưu tiên. Để trống nếu muốn dùng mặc định của Codex."
+    },
+    "modelInstructions": {
+      "title": "Chỉ dẫn hệ thống",
+      "description": "Chọn tệp UTF-8 trên máy. Thay đổi được lưu ngay và áp dụng cho các phiên mới.",
+      "deferred": "Lựa chọn có hiệu lực sau khi chuyển từ DeepSeek sang nhà cung cấp khác.",
+      "selectFile": "Chọn tệp",
+      "useDefault": "Dùng mặc định"
+    },
     "cli": {
       "launchSuccess": "Đã khởi chạy Codex CLI",
       "selectWorkingDir": "Chọn thư mục làm việc cho Codex CLI"
@@ -2674,56 +2711,19 @@
     "resetAutomation": {
       "nothingToReset": "Hiện không có kỳ hạn mức nào cần đặt lại.",
       "unknownOutcome": "Không thể xác nhận kết quả đặt lại. Hãy thử lại.",
-      "applyAllHint": "Khi bật, thao tác Lưu sẽ sao chép quy tắc này cho mọi tài khoản, ghi đè các thiết lập tùy chỉnh và đã tắt.",
-      "applyAll": "Lưu cho mọi tài khoản",
-      "accountHint": "Tài khoản chưa có thiết lập riêng dùng quy tắc chung. Lưu chỉ áp dụng cho tài khoản này.",
-      "title": "Tự dùng thẻ đặt lại",
-      "accountTab": "Tài khoản này",
-      "publicTab": "Quy tắc chung",
-      "inherit": "Theo quy tắc chung",
-      "custom": "Quy tắc riêng",
-      "off": "Tắt",
-      "entryDefault": "Cài đặt tự động",
       "noCredits": "Không có thẻ",
-      "publicHint": "Quy tắc mặc định cho tài khoản chưa có thiết lập riêng. Giữ nguyên các thiết lập tùy chỉnh hoặc đã tắt.",
-      "before": "Trước khi hết hạn",
-      "expiry": "Dùng trước khi hết hạn",
       "minutes": "phút",
       "hours": "giờ",
       "days": "ngày",
-      "hostHint": "Chạy khi Cockpit Tools đang mở. Máy chủ quyết định thẻ được dùng. Sau khi tự động dùng thẻ, cùng tài khoản phải chờ 30 phút trước lần tự động dùng thẻ tiếp theo.",
-      "invalidTime": "Nhập thời gian dương với số giây nguyên.",
-      "invalidPercent": "Nhập phần trăm nguyên từ 0 đến 100.",
-      "loadFailed": "Không tải được quy tắc: {{error}}",
-      "saveFailed": "Không lưu được quy tắc: {{error}}",
-      "conflict": "Quy tắc đã thay đổi ở nơi khác. Hãy tải lại.",
+      "conflict": "Thông tin tài khoản đã thay đổi trong lúc đặt lại. Vui lòng thử lại.",
       "busy": "Tài khoản này đang được đặt lại.",
-      "storageError": "Không đọc hoặc lưu được quy tắc đặt lại.",
+      "storageError": "Không thể đọc hoặc lưu lịch sử đặt lại.",
       "timeout": "Yêu cầu hết thời gian. Mã yêu cầu đã lưu sẽ được dùng lại để tránh trừ thẻ hai lần.",
-      "history": "Hoạt động gần đây",
-      "reasonExpiry": "Sắp hết hạn",
-      "reasonQuota": "Hạn mức thấp",
-      "reasonManual": "Đặt lại thủ công",
-      "reasonCheck": "Kiểm tra nền",
-      "pending": "Đang chờ kết quả",
-      "editPublic": "Sửa quy tắc chung",
       "accountMissing": "Tài khoản không còn tồn tại.",
-      "masterLabel": "Tự động dùng thẻ đặt lại",
-      "ruleSource": "Nguồn quy tắc",
-      "weeklyTrigger": "Ngưỡng hằng tuần",
-      "preferUsageCredits": "Ưu tiên tín dụng",
-      "weeklyRemaining": "Hạn mức tuần còn ≤",
-      "previewTitle": "Xem trước điều kiện",
-      "previewAny": "Dùng một thẻ khi đáp ứng bất kỳ điều kiện đang bật nào:",
       "previewExpiry": "Thẻ sẽ hết hạn trong vòng {{value}} {{unit}}",
       "previewWeekly": "Hạn mức tuần còn lại không quá {{percent}}%",
       "previewWeeklyAfterCredits": "Hạn mức tuần còn tối đa {{percent}}% và đã xác nhận không có tín dụng khả dụng",
-      "previewOff": "Đã tắt tự động dùng thẻ. Các quy tắc bên dưới chưa có hiệu lực.",
-      "previewEmpty": "Chưa bật điều kiện nào. Thẻ sẽ không được dùng tự động.",
-      "cardOn": "Tự động",
-      "cardOff": "Tắt",
-      "orSeparator": " hoặc ",
-      "inheritHint": "Đang dùng quy tắc chung. Hãy sửa quy tắc chung hoặc chuyển sang tùy chỉnh."
+      "orSeparator": " hoặc "
     },
     "overload": {
       "setting": "Thử lại khi quá tải",
@@ -2833,7 +2833,10 @@
       "sessionRestoreFailed": "Sửa phiên thất bại và khôi phục bản sao lưu chưa hoàn tất. Đã dừng khởi chạy; hãy kiểm tra nhật ký và bản sao lưu trước khi thử lại.",
       "bindingFailed": "Không thể xác nhận tài khoản liên kết. Đã dừng khởi động; hãy thử chuyển tài khoản lại.",
       "processScanFailed": "Không thể kiểm tra các tiến trình nền cũ. Đã dừng khởi động; hãy thử lại.",
-      "proxyEntryFailed": "Không thể khởi động proxy đã cấu hình. Không sử dụng tuyến thay thế; hãy thử lại."
+      "proxyEntryFailed": "Không thể khởi động proxy đã cấu hình. Không sử dụng tuyến thay thế; hãy thử lại.",
+      "proxyEnvUnavailable": "Không thể áp dụng cài đặt proxy. Hãy kiểm tra tệp .env của phiên bản Codex này rồi thử lại.",
+      "proxyEnvChanged": "Tệp .env đã thay đổi trong lúc khởi động. Hãy lưu các chỉnh sửa rồi thử lại.",
+      "proxyEnvStopFailed": "Tệp .env đã thay đổi trong lúc khởi động và không thể dừng Codex. Hãy đóng phiên bản này rồi thử lại."
     },
     "oauthProxy": {
       "toggle": "Đăng nhập qua proxy",
@@ -2909,6 +2912,7 @@
         "operation": "Thao tác",
         "manage": "Quản lý",
         "resetDefaults": "Khôi phục mặc định",
+        "embeddedFallback": "Không có danh mục mô hình cập nhật. Cockpit đang dùng danh mục tích hợp.",
         "inheritHint": "Mô hình chính thức giữ nguyên khả năng; mô hình tùy chỉnh dùng mẫu khả năng chung. Bạn có thể thêm hoặc xóa mô hình hiển thị.",
         "validation": {
           "required": "Giữ lại ít nhất một mô hình.",
@@ -2955,6 +2959,20 @@
       "quota": {
         "hourly": "5 giờ",
         "weekly": "Tuần"
+      },
+      "sessionResume": {
+        "title": "Tiếp tục phiên",
+        "enabled": "Gửi lời nhắc tiếp tục khi phiên bản này khởi động",
+        "cliHint": "Chạy trong thiết bị đầu cuối sẽ gửi lời nhắc đã cấu hình. Xem trước, sao chép và lệnh tùy chỉnh vẫn hoạt động như cũ. Nếu thao tác chuyển đổi được đặt để khởi động phiên bản này, lời nhắc sẽ được gửi trong nền.",
+        "target": "Phiên cần tiếp tục",
+        "recentActivity": "Phiên hoạt động gần đây nhất",
+        "lastCreated": "Phiên được tạo gần đây nhất",
+        "previousDesktopSession": "Phiên đang xem trước khi dừng",
+        "specific": "Phiên cụ thể",
+        "threadId": "ID phiên",
+        "prompt": "Lời nhắc tiếp tục",
+        "invalidId": "Nhập UUID phiên hợp lệ.",
+        "promptRequired": "Nhập lời nhắc tiếp tục."
       },
       "syncAllRecords": {
         "action": "Đồng bộ tất cả bản ghi phiên bản",
@@ -3109,7 +3127,8 @@
       "portInUseAction": "Đóng cổng và thử lại",
       "timeout": "Xác thực đã hết thời gian. Vui lòng nhấn",
       "timeoutRetry": "Làm mới link xác thực",
-      "reauthEmailLabel": "Tài khoản ủy quyền lại"
+      "reauthEmailLabel": "Tài khoản ủy quyền lại",
+      "reauthEmailChangeHint": "Nếu email đăng nhập đã thay đổi, hãy dùng địa chỉ mới trong trình duyệt. Cockpit cập nhật địa chỉ đã lưu sau khi xác minh đúng người dùng và không gian làm việc."
     },
     "token": {
       "importPartial": "Đã nhập xong. Thành công: {{success}}, thất bại: {{failed}}. {{errors}}",
@@ -3193,7 +3212,7 @@
         "save": "Lưu bộ",
         "freeNotice": "Tài khoản miễn phí chưa được hỗ trợ. Tài khoản miễn phí không thể được chọn.",
         "freeUnsupported": "Tài khoản miễn phí chưa được hỗ trợ",
-        "restrictFreeToggle": "Giới hạn tài khoản Free",
+        "restrictFreeToggle": "Ẩn tài khoản Free chưa tham gia",
         "sessionAffinityConfirmTitle": "Bật gắn kết phiên?",
         "sessionAffinityDescription": "Khi bật, cùng một cuộc trò chuyện sẽ cố gắng tiếp tục dùng cùng một tài khoản. Nếu tài khoản không khả dụng, định tuyến vẫn có thể chuyển đổi; sau khi hết hạn, tài khoản sẽ được chọn lại.",
         "pendingOauthUnsupported": "Chờ xác thực: không",
@@ -3630,7 +3649,7 @@
       "reset": "Đặt lại",
       "weeklyBlocksHourly": "Hạn mức tuần là 0 nên hạn mức 5 giờ không khả dụng",
       "windowStats": "Đã dùng {{tokens}} · {{cost}}",
-      "windowStatsHint": "Số yêu cầu, token và phí tài khoản qua dịch vụ API từ lúc cửa sổ đầy",
+      "windowStatsHint": "Yêu cầu dịch vụ API, token và giá trị sử dụng ước tính trong kỳ hạn mức này",
       "windowUsed": "Đã dùng {{tokens}} · {{cost}}",
       "windowReq": "{{count}} YC",
       "resetCredits": "Lượt đặt lại {{count}}",
@@ -3655,8 +3674,8 @@
       "resetCreditRecordsLoadFailed": "Không tải được bản ghi đặt lại: {{error}}",
       "resetCreditGrantedAt": "Được cấp",
       "resetCreditExpiresAt": "Hết hạn",
-      "windowAccountCostHint": "Phí tài khoản (ước theo giá mô hình)",
-      "windowEstimatedFullCostHint": "Quy đổi từ mức dùng hiện tại: chi phí tính cho tài khoản khi cửa sổ này đầy",
+      "windowAccountCostHint": "Giá trị sử dụng ước tính theo đơn giá API của mô hình. Hạn mức thuê bao còn lại theo tỷ lệ tài khoản trả về.",
+      "windowEstimatedFullCostHint": "Giá trị ước tính cho toàn bộ kỳ, ngoại suy từ tỷ lệ hạn mức đã dùng",
       "windowUserCostHint": "Phí người dùng",
       "windowWeeks": "Hạn mức {{count}} tuần",
       "windowDays": "Hạn mức {{count}} ngày",
@@ -3920,7 +3939,7 @@
         "max": "Tối đa",
         "ultra": "Cực cao"
       },
-      "scheduleQuotaResetHint": "Khi bật đánh thức sau khi đặt lại hạn mức, làm mới tự động sẽ được điều chỉnh mỗi 2 phút.",
+      "scheduleQuotaResetHint": "Tác vụ chạy theo thời điểm đặt lại hạn mức gần nhất đã ghi nhận của tài khoản. Chu kỳ làm mới tự động của Codex giữ nguyên theo cài đặt.",
       "scheduleQuotaResetSummary": "Chạy sau khi đặt lại hạn mức",
       "quotaResetWindowLabel": "Điều kiện kích hoạt cửa sổ đặt lại",
       "quotaResetWindowHint": "primary_window thường tương ứng với hạn mức 5 giờ. Với người dùng miễn phí, primary_window có thể tương ứng với hạn mức tuần và thay đổi theo gói đăng ký.",
@@ -3933,7 +3952,6 @@
       },
       "nextRunsQuotaResetHint": "Kích hoạt đặt lại hạn mức phụ thuộc dữ liệu hạn mức mới nhất nên không có xem trước thời gian cố định.",
       "triggerQuotaReset": "Kích hoạt đặt lại hạn mức",
-      "noticeSavedEnabledWithQuotaReset": "Đã lưu tác vụ. Tổng: {{count}}. Làm mới tự động Codex đã được điều chỉnh mỗi {{minutes}} phút.",
       "runtimeConfigTitle": "Đường dẫn runtime tùy chỉnh",
       "runtimeConfigHint": "Bạn có thể nhập đường dẫn tệp thực thi hoặc thư mục. Để trống để tự động phát hiện từ PATH.",
       "runtimeConfigCodexCliLabel": "Đường dẫn Codex CLI",
@@ -4122,7 +4140,7 @@
         "projectsSuccess": "Đã khôi phục: {{projects}} dự án, {{assignments}} liên kết; bỏ qua {{skipped}} dự án và {{ambiguous}} hội thoại không rõ liên kết.",
         "projectsPending": "Lần khôi phục trước bị gián đoạn. Thoát phiên bản đích và chạy sửa đầy đủ để khôi phục các thao tác ghi chưa hoàn tất.",
         "projectsDeferred": "Một số siêu dữ liệu đã được hoãn. Thoát phiên bản đích rồi thử sửa nhanh lại hoặc dùng sửa đầy đủ.",
-        "switchProjectsDeferred": "Thông tin xác thực đã được cập nhật nhưng không thể đồng bộ trạng thái dự án cục bộ. Hãy thoát phiên bản Codex liên quan rồi khởi chạy lại từ Cockpit."
+        "switchProjectsDeferred": "Thông tin xác thực đã được cập nhật nhưng không thể đồng bộ trạng thái dự án cục bộ hoặc cuộc trò chuyện. Hãy thoát phiên bản Codex liên quan rồi khởi chạy lại từ Cockpit."
       },
       "importModal": {
         "title": "Nhập phiên",
@@ -4222,6 +4240,14 @@
       }
     },
     "sessionUsage": {
+      "comparison": {
+        "localTotal": "Token phiên cục bộ · khoảng thời gian và phiên bản đã chọn",
+        "profileTotal": "Hồ sơ chính thức · tổng token từ trước đến nay",
+        "account": "Tài khoản Codex",
+        "noAccount": "Thêm tài khoản Codex OAuth để xem tổng chính thức.",
+        "loadError": "Không tải được tổng chính thức.",
+        "unavailable": "Hồ sơ chính thức chưa cung cấp tổng."
+      },
       "tab": "Mức dùng",
       "listTab": "Phiên",
       "title": "Mức dùng phiên",
@@ -4312,7 +4338,7 @@
       "hideApiKey": "Ẩn API Key",
       "apiKeyHiddenHint": "API Key đã bị ẩn. Nhấp để hiển thị.",
       "modelCatalog": {
-        "restartHint": "Danh mục mô hình đã được cập nhật. Nếu Codex đang chạy, hãy khởi động lại để áp dụng.",
+        "launchHint": "Khởi chạy Codex từ Cockpit bằng tài khoản này để áp dụng các thiết lập mô hình đã lưu.",
         "label": "Danh sách mô hình",
         "fetch": "Lấy từ nhà cung cấp",
         "fetching": "Đang lấy...",
@@ -4320,7 +4346,7 @@
         "placeholder": "Nhập một ID mô hình trên mỗi dòng hoặc phân tách các ID bằng dấu phẩy.",
         "editHint": "Các mô hình đã lấy chỉ được thêm vào bản nháp này. Hãy xem lại và chỉnh sửa trước khi lưu.",
         "syncToggle": "Đồng bộ mô hình nhà cung cấp với Codex",
-        "syncDescription": "Sau khi lưu, danh sách này được dùng để tạo danh mục mô hình Codex do Cockpit quản lý. Danh mục tùy chỉnh không bị ghi đè.",
+        "syncDescription": "Danh sách này được áp dụng khi bạn khởi chạy Codex từ Cockpit bằng tài khoản này. Danh mục mô hình tùy chỉnh hiện có được ưu tiên.",
         "fetchCredentialsRequired": "Hãy nhập API Key và Base URL trước.",
         "fetchEmpty": "Nhà cung cấp không trả về mô hình nào. Danh sách hiện tại được giữ nguyên.",
         "fetchFailed": "Không thể lấy mô hình từ nhà cung cấp: {{error}}",
@@ -4759,7 +4785,8 @@
           "totalGranted": "Đã cấp",
           "totalAvailable": "Khả dụng",
           "isAvailable": "Số dư khả dụng",
-          "modelLimitsEnabled": "Giới hạn mô hình"
+          "modelLimitsEnabled": "Giới hạn mô hình",
+          "weeklyShort": "Tuần"
         },
         "accountBalance": "Số dư tài khoản",
         "unlimitedQuota": "Không giới hạn",
@@ -4923,6 +4950,7 @@
       "repairFailedWithError": "Sửa hiển thị thất bại: {{error}}"
     },
     "accountNote": {
+      "refreshEmailHint": "Nếu email tài khoản OpenAI đã thay đổi, hãy cấp quyền lại cho cùng tài khoản và không gian làm việc để cập nhật email tại đây.",
       "title": "Ghi chú tài khoản",
       "label": "Ghi chú tài khoản",
       "desc": "Thêm mật khẩu, 2FA, URL email, điện thoại và ghi chú khác cho {{account}}.",
@@ -5037,7 +5065,7 @@
         "responsesTitle": "Ngõ Responses",
         "responsesNote": "Ngõ Responses gốc của Codex.",
         "anthropicTitle": "Tin nhắn Anthropic",
-        "claudeCodeNoModels": "Khóa này không có mô hình nào trong mẫu Claude Code. Hãy lưu bí danh trong phần quy tắc mô hình trước.",
+        "claudeCodeNoModels": "Khóa này không có mô hình trò chuyện khả dụng. Hãy kiểm tra quy tắc mô hình và nhóm tài khoản của khóa.",
         "claudeCodeSettingsChanged": "Cài đặt đã thay đổi sau khi xem trước. Hãy xem trước lại.",
         "claudeCodeServiceUnavailable": "Không tải được mô hình cho khóa này. Hãy kiểm tra dịch vụ API và trạng thái khóa.",
         "claudeCodeNoBackup": "Không có bản sao lưu khớp với cài đặt hiện tại.",
@@ -5074,6 +5102,11 @@
         "saveRules": "Lưu quy tắc",
         "rulesSaved": "Đã lưu quy tắc mô hình",
         "pricingAction": "Giá",
+        "refreshCatalog": "Làm mới mô hình",
+        "refreshComplete": "Đã kiểm tra mô hình và giá.",
+        "refreshFailed": "Không thể làm mới mô hình và giá. Tiếp tục dùng dữ liệu hiện tại.",
+        "refreshModelsFailed": "Không thể làm mới mô hình. Tiếp tục dùng danh mục hiện tại.",
+        "refreshPricesFailed": "Không thể làm mới giá. Tiếp tục dùng giá hiện tại.",
         "pricingTitle": "Giá mô hình",
         "pricingDesc": "USD / 1M token, chỉ dùng thống kê cục bộ.",
         "pricingModel": "Mô hình",
@@ -5110,6 +5143,16 @@
         "pricingRepriceCompleted": "Đã cập nhật ước tính lịch sử",
         "pricingRepriceSaveBlocked": "Đang tính lại ước tính; hãy lưu sau khi xong"
       },
+      "accountPools": {
+        "title": "Nhóm tài khoản có tên",
+        "add": "Thêm nhóm tài khoản",
+        "name": "Tên nhóm",
+        "deleteHint": "Các khóa được liên kết giữ nguyên phạm vi tài khoản khi xóa nhóm.",
+        "detach": "Hủy liên kết nhóm",
+        "saved": "Đã lưu nhóm tài khoản",
+        "removed": "Đã xóa nhóm tài khoản",
+        "detached": "Đã hủy liên kết khóa khỏi nhóm"
+      },
       "keys": {
         "policyTitle": "Chính sách mô hình",
         "advancedPolicyTitle": "Nhóm tài khoản, mô hình và giới hạn token",
@@ -5132,6 +5175,13 @@
         "tokenLimit": "Giới hạn tổng token",
         "tokenLimitPlaceholder": "Ví dụ: 10m",
         "tokenLimitHint": "Để trống nếu không giới hạn. Token đầu vào và đầu ra được cộng dồn trên tất cả mô hình.",
+        "monthlyTokens": {
+          "title": "Nhắc dùng token hằng tháng",
+          "used": "Tháng này: {{used}} token",
+          "hint": "Để trống để tắt nhắc. Lời nhắc xuất hiện một lần mỗi tháng theo lịch địa phương và các yêu cầu vẫn tiếp tục.",
+          "invalid": "Nhập số nguyên token.",
+          "notification": "{{label}} đã dùng {{used}} token trong tháng này và đạt ngưỡng nhắc {{threshold}} token."
+        },
         "tokenLimitInvalid": "Nhập giới hạn token hợp lệ, ví dụ 10m hoặc 10000000",
         "tokenLimitUsage": "Giới hạn token",
         "tokenLimitCurrentUsage": "Đã dùng: {{used}} token",
@@ -5169,6 +5219,10 @@
         "maxRetryInterval": "Chờ retry",
         "disableCooling": "Tắt cooldown",
         "saveOptions": "Lưu tùy chọn",
+        "accountQuotaFloor": "Hạn mức còn lại tối thiểu",
+        "accountQuotaFloorHint": "Khi hạn mức còn lại của một kỳ chạm mức này, tài khoản ngừng nhận yêu cầu mới. Để trống để tắt.",
+        "accountQuotaFloorInvalid": "Nhập phần trăm nguyên từ 1 đến 100.",
+        "accountQuotaFloorSaveFailed": "Không thể lưu hạn mức còn lại tối thiểu.",
         "immediateSseResponse": "SSE trả 200 ngay",
         "maxConcurrentImageRequests": "Yêu cầu ảnh mỗi tài khoản",
         "maxAccountConcurrency": "Đồng thời mỗi tài khoản",
@@ -5237,6 +5291,12 @@
         "tokenOutput": "Đầu ra",
         "tokenCache": "Bộ nhớ đệm",
         "tokenTotal": "Tổng",
+        "inputTextCharacters": "Số ký tự đầu vào",
+        "inputTextCharactersHint": "Số ký tự Unicode trong phần văn bản của tin nhắn và chỉ dẫn gửi kèm yêu cầu này, bao gồm lịch sử văn bản do máy khách gửi.",
+        "highTokenRequests": "Yêu cầu dùng nhiều token",
+        "highTokenBadge": "Mức dùng cao",
+        "tokenThreshold": "Ngưỡng đánh dấu token",
+        "highTokenHint": "Các yêu cầu được ghi nhận dùng ít nhất {{threshold}} token",
         "speedAdjusted": "{{tier}} → Chuẩn",
         "officialDefaultSpeed": "Kênh đăng ký chính thức không hỗ trợ ghi đè tốc độ. Lần thử này được gửi ở tốc độ mặc định.",
         "sentTier": "Đã gửi: {{tier}}",
@@ -5311,7 +5371,13 @@
       "usage": {
         "title": "Thống kê dùng",
         "lastRecorded": "Ghi nhận gần nhất",
-        "trendEmpty": "Không có yêu cầu trong khoảng đã chọn"
+        "inputTextCoverage": "Đã đo {{measured}} trên {{total}} yêu cầu",
+        "trendEmpty": "Không có yêu cầu trong khoảng đã chọn",
+        "periodTokens": "Token theo khoảng thời gian",
+        "cumulativeTokens": "Token tích lũy",
+        "tokenComposition": "Cơ cấu sử dụng token",
+        "nonReasoningOutput": "Đầu ra ngoài suy luận",
+        "reasoningTokens": "Suy luận"
       },
       "accountModelMappings": {
         "action": "Bản đồ mô hình",
@@ -6281,6 +6347,13 @@
       "restart": "Khởi động lại CLI",
       "restarting": "Đang khởi động lại…",
       "restarted": "Đã khởi động lại dịch vụ CLI.",
+      "autoRefresh": "Tự động làm mới CLI sau khi đổi tài khoản",
+      "autoRefreshHint": "Làm mới tiến trình CLI mặc định khi rảnh và không còn ứng dụng khách kết nối.",
+      "autoDeferred": "Không thể xác nhận việc tự động làm mới CLI. Hãy kiểm tra tiến trình trước khi khởi động lại.",
+      "workspaceConfirmed": "Tiến trình CLI đã khởi động lại và không gian làm việc OAuth đã chọn đã được xác minh.",
+      "workspaceUnconfirmed": "Tiến trình CLI đã khởi động lại. Chưa thể xác minh không gian làm việc OAuth đã chọn.",
+      "workspaceMismatch": "Tiến trình CLI vừa khởi động lại đang dùng một tài khoản hoặc không gian làm việc OAuth khác.",
+      "restartUnconfirmed": "Không thể xác minh tiến trình CLI mới. Hãy thử lại hoặc sao chép lệnh vào thiết bị đầu cuối.",
       "restartFailed": "Không thể khởi động lại. Hãy thử lại hoặc sao chép lệnh vào terminal.",
       "title": "Làm mới tài khoản CLI",
       "description": "Thông tin xác thực đã được lưu nhưng dịch vụ nền Codex CLI của hồ sơ này vẫn chạy và có thể tiếp tục dùng tài khoản cũ.",
@@ -6503,6 +6576,12 @@
       "saveOnly": "Chỉ lưu cài đặt",
       "validationBusy": "Đường dẫn trước vẫn đang được kiểm tra. Vui lòng thử lại sau giây lát."
     },
+    "customProviderUsage": {
+      "title": "Truy vấn hạn mức tùy chỉnh",
+      "settings": "Cài đặt truy vấn (JSON)",
+      "hint": "Để trống để tự động phát hiện. Dùng headers để thêm tiêu đề yêu cầu. Phân cách các đường dẫn thay thế bằng | để dùng giá trị đầu tiên khác null.",
+      "invalid": "Kiểm tra JSON, điểm cuối có cùng nguồn gốc và ánh xạ trường."
+    },
     "openaiUsage": {
       "monthCost": "Chi phí tháng",
       "scope": "Chi phí tổ chức; yêu cầu và token chỉ gồm API văn bản. Thống kê theo UTC.",
@@ -6548,7 +6627,7 @@
       "official": "Lịch sử chính thức",
       "local": "Dùng cục bộ",
       "officialHint": "Bản ghi chính thức trong 30 ngày qua.",
-      "localHint": "Ghi lại các thao tác thủ công và tự động qua ứng dụng này từ bây giờ, không khôi phục dữ liệu cũ.",
+      "localHint": "Ghi lại các thao tác thủ công qua ứng dụng này và giữ lại các bản ghi tự động trước đây, không khôi phục dữ liệu cũ.",
       "officialEmpty": "Không có lượt đặt lại trong 30 ngày qua",
       "localEmpty": "Chưa có bản ghi sử dụng cục bộ",
       "received": "Đã nhận lượt đặt lại",
@@ -6565,7 +6644,13 @@
       "requestId": "Mã yêu cầu",
       "more": "Xem thêm",
       "loadFailed": "Không tải được lịch sử",
-      "officialUnavailable": "Tài khoản này không hỗ trợ lịch sử đặt lại chính thức"
+      "officialUnavailable": "Tài khoản này không hỗ trợ lịch sử đặt lại chính thức",
+      "legacyActivityTitle": "Nhật ký hoạt động trước đây (chỉ đọc)",
+      "legacyActivityHint": "Chỉ hiển thị theo ID tài khoản đã lưu; không suy đoán danh tính workspace hay kết quả trừ thẻ.",
+      "legacyReasonExpiry": "Sắp hết hạn",
+      "legacyReasonQuota": "Hạn mức thấp",
+      "legacyReasonManual": "Đặt lại thủ công",
+      "legacyReasonCheck": "Kiểm tra nền"
     }
   },
   "githubCopilot": {
@@ -7449,7 +7534,16 @@
         "dir": "Thư mục"
       },
       "unknownTime": "Không rõ thời gian",
-      "searchPlaceholder": "Tìm theo tiêu đề hoặc thư mục làm việc"
+      "searchPlaceholder": "Tìm theo tiêu đề hoặc thư mục làm việc",
+      "rebind": {
+        "title": "Đổi thư mục không gian làm việc",
+        "scope": "Liên kết lại mọi phiên cục bộ của thư mục này trong phiên bản WorkBuddy đã chọn. Hãy thoát phiên bản đó trước khi áp dụng.",
+        "instance": "Phiên bản WorkBuddy",
+        "choose": "Chọn thư mục mới",
+        "apply": "Liên kết lại phiên",
+        "noSessions": "Không còn phiên cục bộ nào trong thư mục đó. Hãy làm mới danh sách rồi thử lại.",
+        "success": "Số phiên cục bộ đã liên kết lại ({{count}})"
+      }
     },
     "title": "Quản lý tài khoản CodeBuddy",
     "noAccounts": "Chưa có tài khoản CodeBuddy",
@@ -7946,6 +8040,10 @@
       "timeRangeError": "Thời gian bắt đầu không thể sau thời gian kết thúc"
     },
     "modelProbe": {
+      "results": "Kết quả kiểm tra",
+      "reply": "Phản hồi của mô hình",
+      "backToSetup": "Quay lại cấu hình",
+      "catalogUnavailable": "Không thể tải danh sách mô hình.",
       "scopeAll": "Tất cả ({{count}})",
       "scopeSelected": "Đã chọn ({{count}})",
       "scopeCurrent": "Tài khoản hiện tại",
@@ -7973,6 +8071,7 @@
       "open": "Thử mô hình"
     },
     "probeNotice": {
+      "recovered": "{{model}} khả dụng trở lại lúc {{time}}",
       "until": "{{model}} bị giới hạn ở lần thử trước, đặt lại {{time}}",
       "unavailable": "{{model}} bị giới hạn ở lần thử trước",
       "failed": "Lần thử trước của {{model}} thất bại"
@@ -8631,7 +8730,7 @@
       "title": "Dùng khóa API",
       "family": "Nhóm",
       "platform": "Hệ thống hiện tại",
-      "unsupportedGroup": "Nhóm này chưa có ứng dụng khách ghi bằng một cú nhấp."
+      "unsupportedGroup": "Cockpit Tools chưa có mẫu cấu hình ứng dụng khách cho điểm cuối {{family}} của APIKEY.FUN. Bạn có thể cấu hình thủ công trong ứng dụng khách hỗ trợ điểm cuối này."
     },
     "campaign": {
       "badge": "11.11",
@@ -9355,5 +9454,125 @@
     "errorModel": "Nhập tên mô hình đầy đủ, không trùng và không có ký tự đại diện.",
     "errorSave": "Không thể tải hoặc lưu cài đặt. Hãy thử lại.",
     "saved": "Đã lưu. Áp dụng cho yêu cầu mới."
+  },
+  "antigravityTokenUsage": {
+    "tab": "Mức dùng phiên",
+    "subtitle": "Thống kê token cục bộ từ phiên Antigravity",
+    "title": "Thống kê Token sử dụng (Antigravity)",
+    "desc": "Tổng hợp lượng Token thực tế từ dữ liệu phiên cục bộ (~/.gemini/antigravity) ở chế độ chỉ đọc an toàn, tách bạch hoàn toàn Thinking và Output.",
+    "hint": "Chỉ đọc (Read-only) từ SQLite steps/gen_metadata (kèm nhận diện WAL), RPC cache và transcript JSONL. Output đã loại trừ Thinking để không bao giờ tính trùng; Token ước tính (nếu có) được tách riêng khỏi Token chính xác.",
+    "summary": {
+      "badge": "Token cục bộ",
+      "input": "Đầu vào",
+      "thinking": "Suy luận",
+      "output": "Đầu ra",
+      "cache": "Bộ đệm",
+      "total": "Tổng cộng",
+      "turns": "Lượt",
+      "sessionsUnit": "phiên",
+      "scanning": "Đang quét…",
+      "updating": "Đang cập nhật…",
+      "detail": "Chi tiết"
+    },
+    "range": {
+      "label": "Khoảng thời gian",
+      "today": "Hôm nay",
+      "7d": "7 ngày qua",
+      "30d": "30 ngày qua",
+      "month": "Tháng này",
+      "all": "Tất cả"
+    },
+    "granularity": {
+      "label": "Độ chi tiết",
+      "day": "Theo ngày",
+      "week": "Theo tuần",
+      "month": "Theo tháng"
+    },
+    "kinds": {
+      "all": "Tất cả loại",
+      "main": "Phiên chính",
+      "swarm": "Swarm (Bầy đàn)",
+      "subagent": "Tác nhân phụ"
+    },
+    "filters": {
+      "kindLabel": "Loại phiên",
+      "modelLabel": "Mô hình",
+      "workspaceLabel": "Thư mục làm việc",
+      "allModels": "Tất cả mô hình",
+      "allWorkspaces": "Tất cả thư mục",
+      "searchPlaceholder": "Tìm tiêu đề, ID phiên, thư mục, mô hình…"
+    },
+    "dataDir": {
+      "label": "Thư mục dữ liệu:",
+      "customBadge": "Tùy chỉnh",
+      "choose": "Đổi thư mục",
+      "reset": "Mặc định"
+    },
+    "actions": {
+      "refresh": "Làm mới",
+      "rebuild": "Quét lại",
+      "backToAccounts": "Quay lại tài khoản"
+    },
+    "rebuildConfirm": {
+      "title": "Quét lại toàn bộ",
+      "message": "Xóa bộ nhớ đệm quét cục bộ của Cockpit Tools và đọc lại toàn bộ dữ liệu phiên Antigravity ở chế độ chỉ đọc. Tiếp tục?"
+    },
+    "status": {
+      "scanning": "Đang quét cơ sở dữ liệu phiên Antigravity…",
+      "ready": "Đã quét {{dbFiles}} tệp DB · {{sessions}} phiên · {{turns}} lượt phản hồi",
+      "idle": "Chưa quét",
+      "cacheStats": "Bộ đệm {{hits}} khớp / {{misses}} mới ({{durationMs}} ms)",
+      "scannedAt": "Đồng bộ lúc {{time}}"
+    },
+    "cards": {
+      "total": "Tổng Token",
+      "totalExact": "Tổng Token chính xác",
+      "input": "Token đầu vào",
+      "thinking": "Token suy luận",
+      "output": "Token đầu ra",
+      "cache": "Token bộ đệm",
+      "conversations": "Phiên hội thoại",
+      "turns": "Lượt phản hồi",
+      "coverage": "Độ phủ chính xác",
+      "avgPerDay": "TB / ngày hoạt động"
+    },
+    "estimated": {
+      "notice": "Có {{turns}} lượt thiếu số liệu API gốc được ước tính riêng (không cộng vào Tổng chính xác):"
+    },
+    "trend": {
+      "title": "Xu hướng sử dụng Token",
+      "empty": "Chưa có dữ liệu token trong khoảng thời gian đã chọn"
+    },
+    "tables": {
+      "byModel": "Phân bổ theo Mô hình",
+      "byWorkspace": "Phân bổ theo Thư mục làm việc",
+      "byKind": "Phân bổ theo Loại phiên (Chính / Swarm / Tác nhân phụ)",
+      "conversations": "Chi tiết từng Phiên hội thoại",
+      "conversationTitle": "Phiên hội thoại",
+      "modelName": "Mô hình",
+      "workspaceName": "Thư mục",
+      "sessions": "Phiên",
+      "turns": "Lượt",
+      "total": "Tổng cộng",
+      "updatedAt": "Cập nhật"
+    },
+    "pagination": {
+      "info": "Trang {{page}} / {{totalPages}} ({{totalItems}} phiên)"
+    },
+    "detail": {
+      "openParent": "Mở phiên cha",
+      "children": "Phiên con (Swarm / Tác nhân phụ)",
+      "turnsTimeline": "Dòng thời gian từng lượt gọi"
+    },
+    "empty": {
+      "title": "Chưa có dữ liệu Token trong bộ lọc hiện tại",
+      "desc": "Thử mở rộng khoảng thời gian sang \"Tất cả\" hoặc nhấn Làm mới sau khi sử dụng Antigravity.",
+      "dirMissing": "Không tìm thấy thư mục dữ liệu Antigravity. Hãy kiểm tra lại đường dẫn thư mục ở trên.",
+      "noRows": "Không có dữ liệu phù hợp"
+    },
+    "errors": {
+      "loadFailed": "Không thể tải thống kê token: {{error}}",
+      "syncFailed": "Quét dữ liệu token thất bại: {{error}}"
+    }
   }
 }

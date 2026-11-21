@@ -139,7 +139,13 @@ impl IdentityStore {
         });
         // Hash/compress before the short publication transaction. No account
         // state or identity mutex is held while processing large transcripts.
-        let encoded = checkpoint_store::Encoded::prepare(input, output, parameters.as_ref())?;
+        let encoded = checkpoint_store::Encoded::prepare(
+            &self.checkpoint_reader()?,
+            &binding.caller,
+            input,
+            output,
+            parameters.as_ref(),
+        )?;
         let mut connection = self.connection.lock().map_err(storage)?;
         let transaction = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
@@ -266,6 +272,7 @@ impl IdentityStore {
             Some(Value::String(text)) => {
                 std::borrow::Cow::Owned(vec![serde_json::json!({"role":"user","content":text})])
             }
+            None | Some(Value::Null) => std::borrow::Cow::Owned(Vec::new()),
             _ => return Ok(None),
         };
         let transcript = checkpoint_store::decode_manifest(&connection, caller, &manifest)?;

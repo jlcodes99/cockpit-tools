@@ -1,5 +1,5 @@
 use crate::models::grok::{
-    GrokAccount, GrokAccountIndex, GrokAccountView, GrokAuthMode, GrokOAuthCompletePayload,
+    GrokAccount, GrokAccountIndex, GrokAccountView, GrokAuthMode, GrokOAuthCompletePayload, GrokQuota,
 };
 use crate::modules::{account, config, grok_oauth, i18n, logger, provider_current_state};
 use chrono::{DateTime, Utc};
@@ -840,6 +840,7 @@ fn write_api_key_profile_config(account: &GrokAccount, profile_dir: &Path) -> Re
         return Ok(());
     };
     let config_path = profile_dir.join(CONFIG_FILE);
+    let _lock = acquire_secret_lock(&config_path)?;
     let mut document = if config_path.exists() {
         fs::read_to_string(&config_path)
             .map_err(|error| format!("读取 Grok CLI 配置失败: {}", error))?
@@ -848,30 +849,28 @@ fn write_api_key_profile_config(account: &GrokAccount, profile_dir: &Path) -> Re
     } else {
         Document::new()
     };
-    if !document
-        .as_table()
-        .get("models")
-        .is_some_and(toml_edit::Item::is_table)
-    {
-        document["models"] = table();
+    for section in ["models", "model"] {
+        if !document
+            .as_table()
+            .get(section)
+            .is_some_and(toml_edit::Item::is_table_like)
+        {
+            document[section] = table();
+        }
     }
     document["models"]["default"] = value(COCKPIT_API_MODEL_PROFILE);
-    if !document
-        .as_table()
-        .get("model")
-        .is_some_and(toml_edit::Item::is_table)
-    {
-        document["model"] = table();
-    }
-    document["model"][COCKPIT_API_MODEL_PROFILE] = table();
-    let model_config = &mut document["model"][COCKPIT_API_MODEL_PROFILE];
+    let mut model_config = table();
     model_config["model"] = value(model);
     model_config["base_url"] = value(base_url);
     model_config["name"] = value(model);
     // Keep the secret out of config.toml. The launcher injects XAI_API_KEY only
     // into the selected account process, and Grok resolves it through env_key.
     model_config["env_key"] = value("XAI_API_KEY");
-    write_secret_atomic(&config_path, &document.to_string())
+    document["model"]
+        .as_table_like_mut()
+        .expect("Grok model table was initialized")
+        .insert(COCKPIT_API_MODEL_PROFILE, model_config);
+    write_secret_atomic_locked(&config_path, &document.to_string())
 }
 
 fn write_account_to_official_auth_path(
@@ -2292,6 +2291,17 @@ async fn query_quota(account: &mut GrokAccount) -> Result<(), String> {
     apply_quota_response(account, billing, subscriptions, cli_user, task_usage_result)
 }
 
+fn has_included_billing_usage(quota: &GrokQuota) -> bool {
+    quota.weekly_limit_percent.is_some()
+        || quota.is_unified_billing_user != Some(true)
+            && quota.products.iter().any(|product| {
+                product.usage_percent.is_some()
+                    || product.used.zip(product.remaining).is_some_and(|(used, remaining)| {
+                        used + remaining > 0.0
+                    })
+            })
+}
+
 fn apply_quota_response(
     account: &mut GrokAccount,
     billing: Value,
@@ -2305,24 +2315,25 @@ fn apply_quota_response(
         cli_user.as_ref(),
         task_usage_result.as_ref().ok(),
     );
-    let billing_config = billing.get("config").unwrap_or(&billing);
-    let has_cached_billing_quota = account.quota.as_ref().is_some_and(|quota| {
-        quota.weekly_limit_percent.is_some() || !quota.products.is_empty()
+    let has_billing_usage = has_included_billing_usage(&quota);
+    let missing_previous_billing_usage = account.quota.as_ref().is_some_and(|previous| {
+        let tier_changed = previous.subscription_tier.as_deref()
+            .or(account.plan_type.as_deref())
+            .zip(quota.subscription_tier.as_deref())
+            .is_some_and(|(old, new)| !old.eq_ignore_ascii_case(new));
+        let billing_mode_changed = quota.is_unified_billing_user
+            .is_some_and(|new| new != previous.is_unified_billing_user.unwrap_or(false));
+        has_included_billing_usage(previous) && !tier_changed && !billing_mode_changed
     });
-    if has_cached_billing_quota
-        && quota.weekly_limit_percent.is_none()
-        && quota.products.is_empty()
-        && billing_config.as_object().is_some_and(Map::is_empty)
-    {
+    // A partial reply can contain on-demand billing or task counters while
+    // omitting the included pool and products. Keep the last complete sample
+    // until billing returns usable usage or confirms the account changed plans.
+    if missing_previous_billing_usage && !has_billing_usage {
         return Err(task_usage_result.err().unwrap_or_else(|| {
             i18n::translate(&config::get_user_config().language, "grok.emptyBillingQuota", &[])
         }));
     }
-    let has_usage_quota = quota.weekly_limit_percent.is_some()
-        || quota
-            .products
-            .iter()
-            .any(|item| item.usage_percent.is_some())
+    let has_usage_quota = has_billing_usage
         || quota.on_demand_cap.is_some_and(|value| value > 0.0)
         || quota.prepaid_balance.is_some_and(|value| value > 0.0)
         || quota.frequent_limit.is_some_and(|value| value > 0.0)
@@ -2796,13 +2807,16 @@ mod tests {
         remove_matching_auth_scope, resolve_account_id_from_registry, save_account_locked,
         should_retry_quota_after_unauthorized, string_field, validate_api_provider_config,
         write_account_to_auth_path_if_token_matches, write_account_to_official_auth_path,
-        write_account_to_profile, GrokCredSource, LiveCredentialCandidate,
+        write_account_to_profile, GrokCredSource, LiveCredentialCandidate, COCKPIT_API_MODEL_PROFILE,
+        CONFIG_FILE,
     };
     use crate::models::grok::{
         GrokAccount, GrokAccountView, GrokAuthMode, GrokProductUsage, GrokQuota,
     };
     use serde_json::{json, Value};
+    use std::fs;
     use std::path::PathBuf;
+    use toml_edit::Document;
 
     #[test]
     fn quota_client_version_uses_supported_versions_and_rejects_obsolete_cli() {
@@ -2906,6 +2920,46 @@ mod tests {
             std::fs::read_to_string(temp.0.join("auth.json")).expect("read empty auth"),
             "{}"
         );
+    }
+
+    #[test]
+    fn third_party_api_profile_preserves_existing_inline_models() {
+        let temp = TestDir::new();
+        let path = temp.0.join(CONFIG_FILE);
+        fs::write(
+            &path,
+            r#"models = { default = "other", fallback = "other" }
+model = { other = { model = "manual-fixture", base_url = "https://manual.example/v1", env_key = "MANUAL_KEY" } }
+[ui]
+theme = "system"
+"#,
+        )
+        .unwrap();
+        let mut account = sample_account();
+        account.auth_mode = GrokAuthMode::ApiKey;
+        account.api_key = Some("fixture-key".into());
+        account.api_base_url = Some("https://relay.example.com/v1".into());
+        account.api_model = Some("relay-fixture".into());
+
+        write_account_to_profile(&account, &temp.0).unwrap();
+        let doc = fs::read_to_string(path)
+            .unwrap()
+            .parse::<Document>()
+            .unwrap();
+        assert_eq!(
+            doc["models"]["default"].as_str(),
+            Some(COCKPIT_API_MODEL_PROFILE)
+        );
+        assert_eq!(doc["models"]["fallback"].as_str(), Some("other"));
+        assert_eq!(
+            doc["model"]["other"]["env_key"].as_str(),
+            Some("MANUAL_KEY")
+        );
+        assert_eq!(
+            doc["model"][COCKPIT_API_MODEL_PROFILE]["model"].as_str(),
+            Some("relay-fixture")
+        );
+        assert_eq!(doc["ui"]["theme"].as_str(), Some("system"));
     }
 
     #[test]
@@ -3603,6 +3657,49 @@ mod tests {
         );
         assert_eq!(quota.weekly_limit_percent, Some(42.5));
         assert_eq!(quota.products[0].product, "coding");
+    }
+
+    #[test]
+    fn grok_quota_refresh_does_not_replace_weekly_and_build_with_a_partial_billing_reply() {
+        let mut account = sample_account();
+        let old = json!({"subscriptionTier":"SuperGrok Pro", "config":{
+            "currentPeriod":{"type":"weekly","start":"2026-10-12T00:00:00Z","end":"2026-10-19T00:00:00Z"},
+            "creditUsagePercent":2,
+            "productUsage":[{"product":"GrokBuild","usagePercent":2}]
+        }});
+        let task = json!({"frequentUsage":1, "frequentLimit":50});
+        super::apply_quota_response(&mut account, old.clone(), None, None, Ok(task.clone())).unwrap();
+        let previous_updated = account.usage_updated_at;
+
+        for config in [
+            json!({"onDemandCap":{"val":"500"}}),
+            json!({"onDemandCap":{"val":"500"},"productUsage":[{"product":"GrokBuild"}]}),
+        ] {
+            let partial = json!({"subscriptionTier":"SuperGrok Pro","config":config});
+            assert!(super::apply_quota_response(&mut account, partial, None, None, Ok(task.clone())).is_err());
+            let quota = account.quota.as_ref().unwrap();
+            assert_eq!(quota.weekly_limit_percent, Some(2.0));
+            assert_eq!(quota.products[0].usage_percent, Some(2.0));
+            assert_eq!(account.billing_raw.as_ref(), Some(&old));
+            assert_eq!(account.usage_updated_at, previous_updated);
+        }
+
+        let next = json!({"subscriptionTier":"SuperGrok Pro", "config":{
+            "currentPeriod":{"type":"weekly","start":"2026-10-19T00:00:00Z","end":"2026-10-26T00:00:00Z"},
+            "productUsage":[{"product":"GrokBuild","usagePercent":0}]
+        }});
+        super::apply_quota_response(&mut account, next, None, None, Ok(task.clone())).unwrap();
+        let quota = account.quota.as_ref().unwrap();
+        assert_eq!(quota.weekly_limit_percent, Some(0.0));
+        assert_eq!(quota.products[0].usage_percent, Some(0.0));
+        assert_eq!(quota.period_end.as_deref(), Some("2026-10-26T00:00:00Z"));
+
+        let changed = json!({"subscriptionTier":"Free","config":{"onDemandCap":{"val":"500"}}});
+        super::apply_quota_response(&mut account, changed, None, None, Ok(task)).unwrap();
+        let quota = account.quota.unwrap();
+        assert_eq!(quota.weekly_limit_percent, None);
+        assert!(quota.products.is_empty());
+        assert_eq!(account.plan_type.as_deref(), Some("Free"));
     }
 
     #[test]

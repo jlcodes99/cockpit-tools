@@ -399,7 +399,7 @@ fn account_can_restore_public_key(
         && !account.requires_reauth
         && !codex_account::account_has_remote_api_auth_rejection(account)
         && sidecar_local_account_usable_for_start(account)
-        && is_local_access_eligible_account(account, collection.restrict_free_accounts)
+        && is_local_access_eligible_account(account)
         && sidecar_auth_id_for_account(account).is_some()
         && collection.api_keys.iter().any(|key| {
             key.enabled

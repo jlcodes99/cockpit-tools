@@ -193,4 +193,52 @@ mod workbuddy_launch_path_tests {
             expected,
         ));
     }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn live_workbuddy_probe_keeps_two_profiles_separate_when_the_second_has_spaces() {
+        let temp = tempfile::tempdir().unwrap();
+        let executable = "/bin/bash";
+        let expected = normalize_path_for_compare(executable);
+        let dirs = [
+            temp.path().join("first/app"),
+            temp.path().join("second instance/app"),
+        ];
+        let children: Vec<_> = dirs
+            .iter()
+            .map(|profile| {
+                std::fs::create_dir_all(profile).unwrap();
+                Command::new(executable)
+                    .args(["-c", "read ready", "workbuddy-fixture"])
+                    .arg(format!("--user-data-dir={}", profile.display()))
+                    .arg("--new-window")
+                    .arg("--user-data-dir=/unused-extra-argument")
+                    .stdin(Stdio::piped())
+                    .spawn()
+                    .unwrap()
+            })
+            .collect();
+        let entries = collect_workbuddy_macos_process_entries(&expected);
+        let pids: Vec<_> = children
+            .into_iter()
+            .map(|mut child| {
+                drop(child.stdin.take());
+                child.wait().unwrap();
+                child.id()
+            })
+            .collect();
+        for (pid, directory) in pids.into_iter().zip(dirs) {
+            assert_eq!(
+                entries
+                    .iter()
+                    .find(|(candidate, _)| *candidate == pid)
+                    .and_then(|(_, path)| path.as_deref()),
+                directory.to_str(),
+            );
+            assert_eq!(
+                resolve_workbuddy_pid_from_entries(None, directory.to_str(), &entries),
+                Some(pid)
+            );
+        }
+    }
 }

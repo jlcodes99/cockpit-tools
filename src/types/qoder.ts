@@ -170,6 +170,17 @@ function clampPercent(value: number | null): number | null {
   return Math.max(0, Math.min(100, value));
 }
 
+// Qoder's quota payload reports `percentage` as a 0–1 ratio; older data used 0–100.
+function toPercentPoints(value: number | null): number | null {
+  if (value == null) return null;
+  return value <= 1 ? value * 100 : value;
+}
+
+function derivedPercent(used: number | null, total: number | null): number | null {
+  if (used == null || total == null || total <= 0) return null;
+  return (used / total) * 100;
+}
+
 function normalizeTimestampMs(value: unknown): number | null {
   const normalized = toFiniteNumber(value);
   if (normalized == null || normalized <= 0) return null;
@@ -200,13 +211,14 @@ function parseQuotaBucket(raw: unknown, fallback?: Partial<QoderQuotaBucket>): Q
     total != null && used != null ? total - used : null,
   );
   const percentage = clampPercent(
-    firstFiniteNumber(
-      getNestedValue(raw, ['percentage']),
-      getNestedValue(raw, ['usagePercent']),
-      getNestedValue(raw, ['usage_percentage']),
-      fallback?.percentage,
-      total != null && used != null && total > 0 ? (used / total) * 100 : null,
-    ),
+    derivedPercent(used, total) ??
+      toPercentPoints(
+        firstFiniteNumber(
+          getNestedValue(raw, ['percentage']),
+          getNestedValue(raw, ['usagePercent']),
+          getNestedValue(raw, ['usage_percentage']),
+        ),
+      ) ?? fallback?.percentage ?? null,
   );
 
   return {
@@ -235,12 +247,17 @@ function getRawPlanTag(account: QoderAccount): string | null {
 }
 
 export function getQoderAccountDisplayEmail(account: QoderAccount): string {
-  return (
-    account.email ||
-    account.display_name ||
-    account.user_id ||
-    account.id
-  );
+  const email = toNonEmptyString(account.email);
+  // The native store retains a sentinel when Qoder provides no email (common
+  // for CN accounts). It is not an identity to show ahead of a real name.
+  if (email && email.toLowerCase() !== 'unknown@qoder.local') return email;
+  return firstNonEmptyString(
+    account.display_name,
+    getNestedValue(account.auth_user_info_raw, ['nickname']),
+    getNestedValue(account.auth_user_info_raw, ['name']),
+    account.user_id,
+    account.id,
+  ) ?? '';
 }
 
 export function resolveQoderPlanBadgeClass(plan: string): string {
@@ -317,11 +334,13 @@ export function getQoderSubscriptionInfo(account: QoderAccount): QoderSubscripti
     getNestedValue(account.auth_user_plan_raw, ['resourcePackage']),
   );
   const totalUsagePercentage = clampPercent(
-    firstFiniteNumber(
-      getNestedValue(resolveQoderCreditUsage(account), ['totalUsagePercentage']),
-      getNestedValue(resolveQoderCreditUsage(account), ['total_usage_percentage']),
-      getNestedValue(account.auth_user_plan_raw, ['totalUsagePercentage']),
-      getNestedValue(account.auth_user_plan_raw, ['total_usage_percentage']),
+    toPercentPoints(
+      firstFiniteNumber(
+        getNestedValue(resolveQoderCreditUsage(account), ['totalUsagePercentage']),
+        getNestedValue(resolveQoderCreditUsage(account), ['total_usage_percentage']),
+        getNestedValue(account.auth_user_plan_raw, ['totalUsagePercentage']),
+        getNestedValue(account.auth_user_plan_raw, ['total_usage_percentage']),
+      ),
     ),
   );
   const detailUrl = firstNonEmptyString(

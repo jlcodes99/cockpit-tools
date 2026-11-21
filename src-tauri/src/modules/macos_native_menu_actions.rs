@@ -163,6 +163,10 @@ async fn refresh_codex_api_key_usage_for_menu(
         usage_api_key,
         Some(true),
         Some(account_id),
+        provider.as_ref().and_then(|value| value.get("customUsage"))
+            .filter(|value| !value.is_null())
+            .map(|value| serde_json::from_value(value.clone()))
+            .transpose().map_err(|_| "PROVIDER_CUSTOM_USAGE_SETTINGS_INVALID")?,
     )
     .await;
     let summary = match summary {

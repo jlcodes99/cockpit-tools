@@ -79,6 +79,7 @@ fn usage_stats_from_rollup(
         cached_tokens: row.get::<_, i64>("cached_tokens")?.max(0) as u64,
         reasoning_tokens: row.get::<_, i64>("reasoning_tokens")?.max(0) as u64,
         estimated_cost_usd: row.get("estimated_cost_usd")?,
+        input_text: None,
     })
 }
 
@@ -131,11 +132,19 @@ fn query_rollup_window(
     // One snapshot prevents a concurrently advancing backfill or reprice from
     // moving a row between the bucket and boundary portions of a report.
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    read_rollup_window(&tx, start, end)
+}
+
+fn read_rollup_window(
+    conn: &Connection,
+    start: i64,
+    end: i64,
+) -> Result<CodexLocalAccessStatsWindow, String> {
     let sql = format!(
         "SELECT * FROM ({}) ORDER BY updated_at,last_id",
-        REQUEST_USAGE_ROLLUP.select(&tx, start, end)
+        REQUEST_USAGE_ROLLUP.select(conn, start, end)
     );
-    let mut statement = tx.prepare(&sql).map_err(|e| e.to_string())?;
+    let mut statement = conn.prepare(&sql).map_err(|e| e.to_string())?;
     let mut rows = statement.query([]).map_err(|e| e.to_string())?;
     let mut window = empty_stats_window(start, start);
     window.trend_hourly = end.saturating_sub(start) <= 36 * 60 * 60 * 1000;
@@ -211,9 +220,101 @@ fn query_rollup_window(
     Ok(window)
 }
 
+fn attach_input_text_stats(
+    conn: &Connection,
+    start: i64,
+    end: i64,
+    window: &mut CodexLocalAccessStatsWindow,
+) -> Result<(), String> {
+    use crate::models::codex_local_access::CodexLocalAccessInputTextStats as InputTextStats;
+    // Only measured rows enter this query. The partial covering index skips
+    // legacy NULL rows without rebuilding the existing token projection.
+    let mut query = conn
+        .prepare_cached(
+            "SELECT trim(account_id), trim(model_id), trim(api_key_id),
+                    SUM(input_text_characters), COUNT(*)
+             FROM request_logs
+             WHERE timestamp >= ?1 AND timestamp <= ?2
+               AND input_text_characters IS NOT NULL
+             GROUP BY 1, 2, 3",
+        )
+        .map_err(|error| error.to_string())?;
+    let mut rows = query.query(params![start, end]).map_err(|error| error.to_string())?;
+    let mut accounts = HashMap::<String, InputTextStats>::new();
+    let mut models = HashMap::<String, InputTextStats>::new();
+    let mut keys = HashMap::<String, InputTextStats>::new();
+    while let Some(row) = rows.next().map_err(|error| error.to_string())? {
+        let stats = InputTextStats {
+            characters: row.get(3).map_err(|error| error.to_string())?,
+            measured_requests: row.get(4).map_err(|error| error.to_string())?,
+        };
+        window.totals.input_text.get_or_insert_with(InputTextStats::default).add(stats);
+        for (index, group) in [(0, &mut accounts), (1, &mut models), (2, &mut keys)] {
+            let id: String = row.get(index).map_err(|error| error.to_string())?;
+            if !id.is_empty() {
+                group.entry(id).or_default().add(stats);
+            }
+        }
+    }
+    for account in &mut window.accounts {
+        account.usage.input_text = accounts.remove(&account.account_id);
+    }
+    for model in &mut window.models {
+        model.usage.input_text = models.remove(&model.model_id);
+    }
+    for key in &mut window.api_keys {
+        key.usage.input_text = keys.remove(&key.api_key_id);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod request_rollup_tests {
     use super::*;
+
+    #[test]
+    fn input_text_stats_preserve_measured_zero_and_legacy_coverage_in_exact_ranges() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = open_local_access_logs_db_once(&dir.path().join("characters.sqlite"), true).unwrap();
+        for (id, timestamp, account, key, model, characters) in [
+            ("before", 59_999, "first", "key-a", "one", Some(200)),
+            ("zero", 60_000, "first", "key-a", "one", Some(0)),
+            ("old", 60_001, "first", "key-a", "one", None),
+            ("other", 60_002, "second", "key-b", "two", Some(12)),
+            ("end", 120_001, "second", "key-b", "one", Some(20)),
+            ("after", 120_002, "first", "key-a", "one", Some(200)),
+        ] {
+            insert_local_access_usage_event(&conn, &CodexLocalAccessUsageEvent {
+                request_id: id.into(), timestamp, account_id: account.into(), api_key_id: key.into(),
+                model_id: model.into(), input_text_characters: characters, ..Default::default()
+            }).unwrap();
+        }
+        let read = |start, end| {
+            let tx = conn.unchecked_transaction().unwrap();
+            let mut window = read_rollup_window(&tx, start, end).unwrap();
+            attach_input_text_stats(&tx, start, end, &mut window).unwrap();
+            window
+        };
+        for finish_backfill in [false, true] {
+            if finish_backfill { while !REQUEST_USAGE_ROLLUP.batch(&conn).unwrap() {} }
+            let window = read(60_000, 120_001);
+            let totals = window.totals.input_text.unwrap();
+            assert_eq!((totals.characters, totals.measured_requests, window.totals.request_count), (32, 3, 4));
+            let first = window.accounts.iter().find(|row| row.account_id == "first").unwrap();
+            let measured = first.usage.input_text.unwrap();
+            assert_eq!((measured.characters, measured.measured_requests, first.usage.request_count), (0, 1, 2));
+            let key = window.api_keys.iter().find(|row| row.api_key_id == "key-b").unwrap();
+            assert_eq!(key.usage.input_text.unwrap().characters, 32);
+            let model = window.models.iter().find(|row| row.model_id == "one").unwrap();
+            assert_eq!(model.usage.input_text.unwrap().characters, 20);
+            assert!(read(60_001, 60_001).totals.input_text.is_none());
+        }
+
+        conn.execute("UPDATE request_logs SET input_text_characters=8 WHERE request_id='zero'", []).unwrap();
+        conn.execute("DELETE FROM request_logs WHERE request_id='other'", []).unwrap();
+        let total = read(60_000, 120_001).totals.input_text.unwrap();
+        assert_eq!((total.characters, total.measured_requests), (28, 2));
+    }
 
     #[test]
     fn extending_custom_window_keeps_boundary_tokens_and_adds_older_usage() {

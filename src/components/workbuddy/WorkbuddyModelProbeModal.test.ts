@@ -55,7 +55,7 @@ test('batch probe submits once and keeps cleanup failures visible in the cell de
   assert.equal(calls, 1);
 
   // 弹层点击背景不关闭（仅显式关闭）
-  assert.equal(nodes(h.flush()).find((node) => node.props.className === 'modal-overlay').props.onClick, undefined);
+  assert.equal(nodes(h.flush()).find((node) => node.props.className === 'modal-overlay wb-probe-overlay').props.onClick, undefined);
 
   probe.resolve({
     status: 'available',
@@ -68,21 +68,27 @@ test('batch probe submits once and keeps cleanup failures visible in the cell de
   });
   await settlePromises();
 
-  // 打开单元格详情，确认「已保留 / 清理失败」都可见
-  const cell = nodes(h.flush()).find(
-    (node) => typeof node.props?.className === 'string' && node.props.className.startsWith('wb-probe-cell'),
-  );
-  assert.ok(cell, 'result cell should render');
-  cell.props.onClick();
   const detail = nodes(h.flush());
+  assert.ok(detail.some((node) => node.props.className === 'wb-probe-reply' && node.props.children === 'OK'));
+  assert.ok(!detail.some((node) => node.props.className === 'wb-probe-model-list'));
   assert.ok(detail.some((node) => node.props.children === 'workbuddy.modelProbe.retained'));
   assert.ok(!detail.some((node) => node.props.children === 'workbuddy.modelProbe.deleted'));
   assert.ok(detail.some((node) => Array.isArray(node.props.children) && node.props.children.includes('workbuddy.modelProbe.cleanupFailed')));
 
-  const cancel = nodes(h.flush()).find(
+  const backToResults = detail.find((node) => node.props.className === 'wb-probe-quiet');
+  backToResults.props.onClick();
+  const cell = nodes(h.flush()).find(
+    (node) => node.type === 'button' && node.props.className === 'wb-probe-cell ok',
+  );
+  assert.ok(cell, 'returning to the matrix should retain the result');
+  cell.props.onClick();
+  assert.ok(nodes(h.flush()).some((node) => node.props.className === 'wb-probe-reply'));
+
+  const backToSetup = nodes(h.flush()).find(
     (node) => node.type === 'button' && node.props.className === 'btn btn-secondary',
   );
-  cancel.props.onClick();
-  assert.equal(closed, 1);
+  backToSetup.props.onClick();
+  assert.ok(nodes(h.flush()).some((node) => node.props.className === 'wb-probe-model-list'));
+  assert.equal(closed, 0);
   h.unmount();
 });

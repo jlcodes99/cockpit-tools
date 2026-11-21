@@ -1,0 +1,98 @@
+.modal-content.platform-quota-history {
+  width: min(780px, calc(100vw - 32px));
+  max-width: none;
+}
+
+.platform-quota-history .modal-body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.platform-quota-history__filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.platform-quota-history__filters > :first-child {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.platform-quota-history__filters > span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.platform-quota-history__chart {
+  display: block;
+  width: 100%;
+  min-height: 105px;
+}
+
+.platform-quota-history__chart line {
+  stroke: var(--border);
+}
+
+.platform-quota-history__chart text {
+  fill: var(--text-secondary);
+  font-size: 14px;
+}
+
+.platform-quota-history__chart path {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2.5;
+}
+
+.platform-quota-history__chart circle {
+  fill: var(--primary);
+}
+
+.platform-quota-history__table {
+  overflow-x: auto;
+}
+
+.platform-quota-history__table table {
+  width: 100%;
+  min-width: 440px;
+}
+
+.platform-quota-history__table th,
+.platform-quota-history__table td {
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+
+.platform-quota-history__table small {
+  display: block;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 560px) {
+  .platform-quota-history .modal-body {
+    padding: 16px;
+  }
+
+  .platform-quota-history__chart text {
+    font-size: 22px;
+  }
+
+  .platform-quota-history__table table {
+    min-width: 0;
+    table-layout: auto;
+  }
+
+  .platform-quota-history__table th,
+  .platform-quota-history__table td {
+    padding: 8px 5px;
+    font-size: 12px;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+    letter-spacing: normal;
+  }
+}

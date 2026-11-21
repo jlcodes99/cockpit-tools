@@ -163,6 +163,11 @@ fn save_collection_to_path(
             // Explicit body-recording choices must survive every full collection write.
             match serde_json::from_str::<Value>(current) {
                 Ok(current) => {
+                    if next.account_pool_revision
+                        < current.get("accountPoolRevision").and_then(Value::as_u64).unwrap_or(0)
+                    {
+                        return Err("账号池已更新，请重试".into());
+                    }
                     if next.chatgpt_plan_service_revision
                         < current
                             .get("chatgptPlanServiceRevision")
@@ -241,6 +246,10 @@ fn save_collection_to_path(
                             .map_err(|_| "MULTI_AGENT_STORAGE".to_string())?;
                         prune_multi_agent_references(&mut next);
                     }
+                    next.account_quota_floors = current.get("accountQuotaFloors").cloned()
+                        .map(serde_json::from_value).transpose().map_err(|error| error.to_string())?
+                        .unwrap_or_default();
+                    prune_account_quota_floors(&mut next);
                     if let Some(updated_at) = current.get("updatedAt").and_then(Value::as_i64) {
                         next.updated_at = next.updated_at.max(updated_at);
                     }
@@ -1385,10 +1394,7 @@ fn local_access_account_has_oauth_token(account: &CodexAccount) -> bool {
         || codex_account::account_has_refresh_token(account)
 }
 
-fn local_access_ineligible_reason(
-    account: &CodexAccount,
-    restrict_free_accounts: bool,
-) -> Option<&'static str> {
+fn local_access_ineligible_reason(account: &CodexAccount) -> Option<&'static str> {
     // PENDING / incomplete OAuth: no usable credentials for API service routing.
     if codex_account::is_pending_oauth_account(account)
         || (!account.is_api_key_auth() && !local_access_account_has_oauth_token(account))
@@ -1399,23 +1405,25 @@ fn local_access_ineligible_reason(
     if account.is_web_session_auth() {
         return Some("web_session_quota_only");
     }
-    if restrict_free_accounts
-        && !account.is_agent_identity_auth()
-        && is_free_plan_type(account.plan_type.as_deref())
-    {
-        return Some("free_restricted");
-    }
     None
 }
 
-fn is_local_access_eligible_account(account: &CodexAccount, restrict_free_accounts: bool) -> bool {
-    local_access_ineligible_reason(account, restrict_free_accounts).is_none()
+fn is_local_access_eligible_account(account: &CodexAccount) -> bool {
+    local_access_ineligible_reason(account).is_none()
 }
 
 fn normalize_upstream_proxy_url(upstream_proxy_url: Option<String>) -> Option<String> {
     upstream_proxy_url
-        .map(|value| value.trim().to_string())
+        .as_deref()
+        .map(str::trim)
         .filter(|value| !value.is_empty())
+        .map(|value| {
+            if value.contains("://") {
+                value.to_owned()
+            } else {
+                format!("http://{value}")
+            }
+        })
 }
 
 fn validate_upstream_proxy_config(
@@ -1423,7 +1431,8 @@ fn validate_upstream_proxy_config(
 ) -> Result<Option<String>, String> {
     let normalized = normalize_upstream_proxy_url(upstream_proxy_url);
     if let Some(proxy_url) = normalized.as_deref() {
-        Proxy::all(proxy_url).map_err(|e| format!("API 代理地址无效: {}", e))?;
+        crate::modules::codex_account_proxy::normalize_direct_proxy(proxy_url)
+            .map_err(|error| format!("API 代理地址无效: {error}"))?;
     }
     Ok(normalized)
 }
@@ -1734,6 +1743,8 @@ fn sanitize_collection_structure(
     let has_bound_oauth_account = collection.bound_oauth_account_id.is_some();
     changed |= normalize_bound_oauth_quota_reserve(&mut collection.bound_oauth_quota_reserve, has_bound_oauth_account);
 
+    changed |= prune_account_quota_floors(collection);
+
     let original_custom_routing_rules = std::mem::take(&mut collection.custom_routing_rules);
     let normalized_custom_routing_rules = normalize_custom_routing_rules(
         original_custom_routing_rules.clone(),
@@ -1870,7 +1881,7 @@ fn sanitize_collection_with_accounts(
     let valid_account_ids: HashSet<String> = accounts
         .iter()
         .filter(|account| {
-            is_local_access_eligible_account(account, collection.restrict_free_accounts)
+            is_local_access_eligible_account(account)
                 || (collection
                     .official_account_bindings
                     .contains_key(&account.id)
@@ -1892,6 +1903,7 @@ fn sanitize_collection_with_accounts(
     // Only a known ineligible account or an explicit deletion revokes membership.
     let explicitly_deleted_ids: HashSet<String> = effective_sidecar_account_ids(collection)
         .into_iter()
+        .chain(collection.account_pools.iter().flat_map(|pool| pool.account_ids.iter().cloned()))
         .chain(collection.bound_oauth_account_id.iter().cloned())
         .filter(|id| {
             matches!(
@@ -1979,6 +1991,12 @@ fn sanitize_collection_with_accounts(
 
     // A missing/unreadable account is not an explicit deletion. Keep its declared
     // key scope; routing still checks actual credentials and explicit removals clean references.
+    for pool in &mut collection.account_pools {
+        let before = pool.account_ids.len();
+        pool.account_ids.retain(|id| keep_reference(id, &valid_account_ids));
+        changed |= before != pool.account_ids.len();
+    }
+    changed |= apply_named_account_pool_scopes(collection);
     for api_key in &mut collection.api_keys {
         let before = api_key.account_ids.clone();
         let valid_scope_account_ids = if api_key.provider_gateway.is_some() {
@@ -2062,6 +2080,8 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
                 port: allocate_initial_local_port(CODEX_LOCAL_ACCESS_LOCALHOST_BIND_HOST)?,
                 api_key: generate_local_api_key(),
                 api_keys: Vec::new(),
+                account_pools: Vec::new(),
+                account_pool_revision: 0,
                 access_scope: CodexLocalAccessScope::Localhost,
                 client_base_url_host: CodexLocalAccessClientBaseUrlHost::default(),
                 image_generation_mode: CodexLocalAccessImageGenerationMode::default(),
@@ -2087,6 +2107,7 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
                 routing_strategy: CodexLocalAccessRoutingStrategy::default(),
                 custom_routing_rules: Vec::new(),
                 account_model_rules: Vec::new(),
+                account_quota_floors: HashMap::new(),
                 model_aliases: Vec::new(),
                 suppress_oauth_model_alias: false,
                 model_pricing_version: DEFAULT_MODEL_PRICING_VERSION,
@@ -2158,6 +2179,7 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
             } else {
                 runtime.loaded = true;
                 runtime.collection = None;
+                NATIVE_RESPONSE_TIMINGS_ENABLED.store(false, Ordering::Relaxed);
                 runtime.last_error = None;
                 prune_prepared_account_cache(&mut runtime, now_ms());
             }

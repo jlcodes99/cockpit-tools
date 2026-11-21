@@ -8,6 +8,30 @@ enum CodexDefaultLaunchFailure {
 }
 
 #[cfg(any(test, target_os = "windows"))]
+fn codex_default_store_shell_command(
+    system_root: &Path,
+    package: &CodexRegisteredLaunch,
+    codex_home: Option<&str>,
+    extra_args: &[String],
+    has_env_overrides: bool,
+) -> Option<Command> {
+    // Explorer activates the installed app through the shell and cannot pass
+    // our process environment or command-line switches to it.
+    if codex_home.is_some()
+        || has_env_overrides
+        || extra_args.iter().any(|arg| !arg.trim().is_empty())
+    {
+        return None;
+    }
+    let mut explorer = Command::new(system_root.join("explorer.exe"));
+    explorer.arg(format!(
+        r"shell:AppsFolder\{}!{}",
+        package.family_name, package.app_id
+    ));
+    Some(explorer)
+}
+
+#[cfg(any(test, target_os = "windows"))]
 fn activate_codex_default_package_with_refresh(
     package: CodexRegisteredLaunch,
     mut activate: impl FnMut(&CodexRegisteredLaunch) -> Result<(), String>,
@@ -21,7 +45,10 @@ fn activate_codex_default_package_with_refresh(
             let result = activate(package);
             if result
                 .as_ref()
-                .is_err_and(|error| error.starts_with("CODEX_PACKAGE_REGISTRATION_CHANGED"))
+                .is_err_and(|error| {
+                    is_codex_package_registration_changed(error)
+                        || error.starts_with(CODEX_PACKAGE_CLIENT_NOT_CREATED)
+                })
             {
                 // The native helper/activation API explicitly rejected the
                 // registration before creating the client.
@@ -34,6 +61,8 @@ fn activate_codex_default_package_with_refresh(
     result.map_err(|error| {
         if may_have_started {
             CodexDefaultLaunchFailure::Dispatched(error)
+        } else if let Some(message) = error.strip_prefix(CODEX_PACKAGE_CLIENT_NOT_CREATED) {
+            CodexDefaultLaunchFailure::NotStarted(message.to_owned())
         } else {
             CodexDefaultLaunchFailure::NotStarted(error)
         }
@@ -191,21 +220,54 @@ fn try_windows_codex_default_path(
                 .into_iter()
                 .map(|(key, value)| (key.to_string(), value)),
         );
-        crate::modules::logger::log_info(&format!(
-            "[Codex Start] strategy=package-identity family={} app_id={} launch_path={}",
-            package.family_name,
-            package.app_id,
-            launch_path.display()
-        ));
-        let confirmed = activate_codex_default_package_with_refresh(
-            package,
-            |package| run_codex_package_activation(package, codex_home, None, extra_args, &env)
-                .map(|pid| { receipt_pid = Some(pid); }),
-            || {
-                query_codex_registered_launch(selected)?
-                    .ok_or_else(|| "No registered Codex GUI application".into())
-            },
-        )?;
+        let shell_dispatched = std::env::var_os("SystemRoot")
+            .filter(|root| !root.is_empty())
+            .and_then(|root| {
+                codex_default_store_shell_command(
+                    Path::new(&root),
+                    &package,
+                    codex_home,
+                    extra_args,
+                    !env.is_empty(),
+                )
+            })
+            .is_some_and(|mut shell| match spawn_command_with_trace(&mut shell) {
+                Ok(_) => {
+                    crate::modules::logger::log_info(&format!(
+                        "[Codex Start] strategy=system-store-entry family={} app_id={}",
+                        package.family_name, package.app_id,
+                    ));
+                    true
+                }
+                Err(error) => {
+                    crate::modules::logger::log_warn(&format!(
+                        "[Codex Start] Explorer could not start: {error}"
+                    ));
+                    false
+                }
+            });
+        let confirmed = if shell_dispatched {
+            // Explorer's own PID is never the client. Confirm the app below.
+            package
+        } else {
+            crate::modules::logger::log_info(&format!(
+                "[Codex Start] strategy=package-identity family={} app_id={} launch_path={}",
+                package.family_name,
+                package.app_id,
+                launch_path.display()
+            ));
+            activate_codex_default_package_with_refresh(
+                package,
+                |package| {
+                    run_codex_package_activation(package, codex_home, None, extra_args, &env)
+                        .map(|pid| receipt_pid = Some(pid))
+                },
+                || {
+                    query_codex_registered_launch(selected)?
+                        .ok_or_else(|| "No registered Codex GUI application".into())
+                },
+            )?
+        };
         launch_path = PathBuf::from(confirmed.executable);
         package_family = Some(confirmed.family_name);
     } else {

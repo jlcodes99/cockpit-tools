@@ -744,7 +744,7 @@ async fn run(
                                         active = false;
                                         interrupt_pending = None;
                                         response_id = None;
-                                        tracker.payload("upstream_response", "websocket", &HeaderMap::new(), &incomplete.to_string());
+                                        tracker.payload_with("upstream_response", "websocket", &HeaderMap::new(), || incomplete.to_string());
                                         tracker.complete(499, false, observation.usage.take(), Some("client_interrupted".into())).await;
                                         prepared.route.permit = None;
                                         client_deadline = tokio::time::Instant::now() + policy.websocket_idle_timeout;
@@ -863,6 +863,7 @@ async fn run(
                             if super::grok_errors::applies(&prepared.route) {
                                 super::grok_errors::normalize_event(&mut event);
                             }
+                            super::upstream_errors::normalize_response_error(&mut event);
                             if steering.interrupt_rejected(&event, interrupt_pending.as_ref()) {
                                 if let Some((_, Some(id))) = interrupt_pending.take() {
                                     if event.get("event_id").is_none() { event["event_id"] = id; }
@@ -1620,7 +1621,8 @@ async fn open_response(
                     || match last {
                         UpstreamMessage::Text(text) => serde_json::from_str::<Value>(text.as_str())
                             .ok()
-                            .is_some_and(|event| {
+                            .is_some_and(|mut event| {
+                                super::upstream_errors::normalize_response_error(&mut event);
                                 super::bootstrap::rejection(&event).is_some()
                                     || (super::grok_errors::applies(&prepared.route)
                                         && super::grok_errors::rejection(&event).is_some())
@@ -2063,6 +2065,7 @@ fn first_event_rejection(
     if grok {
         super::grok_errors::normalize_event(&mut event);
     }
+    super::upstream_errors::normalize_response_error(&mut event);
     if !matches!(
         super::events::response_terminal_kind(&event),
         Some("error" | "response.failed" | "response.incomplete" | "response.cancelled")

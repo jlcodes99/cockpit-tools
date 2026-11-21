@@ -122,6 +122,24 @@ fn partial_history_restores_omitted_identity_and_rejects_other_callers_threads()
 }
 
 #[test]
+fn partial_history_without_new_input_reuses_only_a_complete_tool_chain() {
+    let (_root, store, binding, _) = fixture();
+    store.observe_event(&binding, &partial(output())).unwrap();
+    let mut empty = next();
+    empty["input"] = json!([]);
+    let expected = expand(&store, &empty).unwrap();
+    for input in [None, Some(Value::Null)] {
+        let mut request = next();
+        if let Some(input) = input {
+            request["input"] = input;
+        } else {
+            request.as_object_mut().unwrap().remove("input");
+        }
+        assert_eq!(expand(&store, &request), Some(expected.clone()));
+    }
+}
+
+#[test]
 fn partial_history_tool_result_can_arrive_later_without_duplicate_calls() {
     let (_root, store, binding, _) = fixture();
     let call = json!({"type":"function_call","name":"write","call_id":"once","arguments":"{}","status":"completed"});
@@ -129,6 +147,9 @@ fn partial_history_tool_result_can_arrive_later_without_duplicate_calls() {
         .observe_event(&binding, &partial(json!([call.clone()])))
         .unwrap();
     assert!(expand(&store, &next()).is_none());
+    let mut no_result = next();
+    no_result.as_object_mut().unwrap().remove("input");
+    assert!(expand(&store, &no_result).is_none());
     let mut request = next();
     request["input"] = json!([{"type":"function_call_output","call_id":"once","output":"already executed"},{"role":"user","content":"continue"}]);
     let full = expand(&store, &request).unwrap();

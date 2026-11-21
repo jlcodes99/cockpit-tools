@@ -27,6 +27,23 @@ pub fn enterprise(raw: &Value) -> Option<&Value> {
     }
 }
 
+/// Qoder's quota payload reports `percentage` as a 0–1 ratio; older data used 0–100.
+pub fn percent_points(value: f64) -> f64 {
+    if !value.is_finite() {
+        return 0.0;
+    }
+    (if value <= 1.0 { value * 100.0 } else { value }).clamp(0.0, 100.0)
+}
+
+pub fn derived_percent(used: Option<f64>, total: Option<f64>) -> Option<f64> {
+    match (used, total) {
+        (Some(used), Some(total)) if total > 0.0 => {
+            Some(((used / total) * 100.0).clamp(0.0, 100.0))
+        }
+        _ => None,
+    }
+}
+
 pub fn scoped_credits(raw: &Value) -> Option<(Option<f64>, Option<f64>, Option<f64>, Option<f64>)> {
     if !is_envelope(raw) && !raw.is_null() && raw.get("userQuota").is_none() {
         return None;
@@ -43,9 +60,11 @@ pub fn scoped_credits(raw: &Value) -> Option<(Option<f64>, Option<f64>, Option<f
     let used = number(bucket.and_then(|v| v.get("used")));
     let total = number(bucket.and_then(|v| v.get("total")));
     let remaining = number(bucket.and_then(|v| v.get("remaining")));
-    let percent = number(bucket.and_then(|v| v.get("percentage")))
-        .or_else(|| number(usage.get("totalUsagePercentage")))
-        .map(|v| v.clamp(0.0, 100.0));
+    let percent = derived_percent(used, total).or_else(|| {
+        number(bucket.and_then(|v| v.get("percentage")))
+            .or_else(|| number(usage.get("totalUsagePercentage")))
+            .map(percent_points)
+    });
     Some((used, total, remaining, percent))
 }
 
@@ -68,5 +87,18 @@ mod tests {
         assert!(personal(&raw).is_none());
         assert_eq!(scoped_credits(&raw), Some((None, None, None, None)));
         assert!(enterprise(&json!({"displayMode":"personal","enterpriseUsage":{}})).is_none());
+    }
+    #[test]
+    fn ratio_percentage_is_converted_to_percent_points() {
+        let raw = json!({"qoderUsage":{"userQuota":{"used":9,"total":300,"remaining":291,"percentage":0.03}}});
+        assert_eq!(
+            scoped_credits(&raw),
+            Some((Some(9.0), Some(300.0), Some(291.0), Some(3.0)))
+        );
+        let only_percent = json!({"qoderUsage":{"userQuota":{"percentage":0.62}}});
+        assert_eq!(
+            scoped_credits(&only_percent),
+            Some((None, None, None, Some(62.0)))
+        );
     }
 }

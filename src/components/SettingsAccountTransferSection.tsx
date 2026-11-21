@@ -78,7 +78,7 @@ const DEFAULT_TRANSFER_SELECTION: DataTransferSelection = {
 };
 
 const BACKUP_FILE_NAME_REGEX =
-  /^cockpit_(auto|manual)_backup_(full|accounts|config)_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:_mfa-pending)?\.(json|zip)$/i;
+  /^cockpit_(auto|manual)_backup_(full|accounts|config)_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:_token-refresh-[a-f0-9-]{36})?(?:_mfa-pending)?\.(json|zip)$/i;
 
 const BACKUP_USAGE_SOURCE_ORDER = [
   'scheduled',

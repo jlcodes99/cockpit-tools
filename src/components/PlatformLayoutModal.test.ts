@@ -2,13 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadHookModule } from '../../tests/helpers/reactHookHarness';
 
-// Bulk "select sidebar" used to be capped at ORIGINAL_SIDEBAR_ENTRY_LIMIT (3) /
-// CLASSIC_SIDEBAR_ENTRY_LIMIT (6). Those constants lived in
-// src/stores/useSideNavLayoutStore.ts and were removed by "feat(sidebar): remove
-// selection and display limits in both layouts", so after mocking the store the
-// old cap is no longer readable at runtime. The dataset below (20 platform
-// entries) is deliberately far above the former cap: the old implementation
-// would have stopped at 6 setters instead of touching every entry.
 const PLATFORM_IDS = [
   'codex',
   'antigravity',
@@ -32,7 +25,9 @@ const PLATFORM_IDS = [
   'claude_manager',
 ];
 const API_RELAY_ENTRY_ID = 'feature:api-relay';
-const API_RELAY_ORDER = 5;
+const API_RELAY_ORDER = 4;
+const GROUP_ENTRY_ID = 'group:assistants';
+const GROUP_PLATFORM_IDS = ['workbuddy_ai', 'claude_manager'];
 
 function isElement(node: any) {
   return !!node && typeof node === 'object' && 'props' in node && typeof node.type !== 'undefined';
@@ -97,18 +92,27 @@ function findCheckboxes(tree: any) {
   return checkboxes;
 }
 
-test('bulk sidebar toggle enables every entry, including api-relay, without an entry cap', () => {
-  const orderedEntryIds = PLATFORM_IDS.map((platformId) => `platform:${platformId}`);
-  assert.equal(orderedEntryIds.length, 20);
+function renderLayoutModal(sidebarEntryIds: string[]) {
+  const orderedEntryIds = [
+    GROUP_ENTRY_ID,
+    ...PLATFORM_IDS.filter((id) => !GROUP_PLATFORM_IDS.includes(id)).map((id) => `platform:${id}`),
+  ];
 
   // Records calls in invocation order so the assertions can compare exact arrays.
   const events: any[] = [];
   const storeState: any = {
     orderedEntryIds,
     hiddenEntryIds: [],
-    sidebarEntryIds: [],
+    sidebarEntryIds,
     trayPlatformIds: [],
-    platformGroups: [],
+    platformGroups: [{
+      id: 'assistants',
+      name: 'Assistants',
+      platformIds: GROUP_PLATFORM_IDS,
+      defaultPlatformId: GROUP_PLATFORM_IDS[0],
+      iconKind: 'platform',
+      iconPlatformId: GROUP_PLATFORM_IDS[0],
+    }],
     apiRelaySidebarVisible: false,
     apiRelayDashboardVisible: true,
     apiRelayEntryOrder: API_RELAY_ORDER,
@@ -134,13 +138,11 @@ test('bulk sidebar toggle enables every entry, including api-relay, without an e
     resetPlatformLayout() {},
   };
 
-  const tCalls: [string, any][] = [];
-  const t = (key: string, optionsOrFallback?: any) => {
-    tCalls.push([key, optionsOrFallback]);
-    const options = optionsOrFallback && typeof optionsOrFallback === 'object'
-      ? optionsOrFallback
-      : undefined;
-    return options && 'count' in options ? `${key}(${options.count})` : key;
+  const t = (key: string, options?: { count?: number; max?: number }) => {
+    if (options?.count === undefined) return key;
+    return options.max === undefined
+      ? `${key}(${options.count})`
+      : `${key}(${options.count}/${options.max})`;
   };
 
   const parsePlatformEntryId = (entryId: string) =>
@@ -180,12 +182,14 @@ test('bulk sidebar toggle enables every entry, including api-relay, without an e
       API_RELAY_LAYOUT_ENTRY_ID: API_RELAY_ENTRY_ID,
       makePlatformEntryId: (platformId: string) => `platform:${platformId}`,
       parsePlatformEntryId,
-      parseGroupEntryId: () => null,
+      parseGroupEntryId: (id: string) => id === GROUP_ENTRY_ID ? 'assistants' : null,
       getGroupChildConfig: () => undefined,
       resolveGroupChildName: (_group: unknown, _platformId: string, fallback: string) => fallback,
       resolveGroupChildIcon: () => ({ iconKind: 'platform', iconPlatformId: 'codex' }),
-      resolveEntryDefaultPlatformId: (entryId: string) => parsePlatformEntryId(entryId),
+      resolveEntryDefaultPlatformId: (entryId: string) =>
+        entryId === GROUP_ENTRY_ID ? GROUP_PLATFORM_IDS[0] : parsePlatformEntryId(entryId),
       resolveEntryPlatformIds: (entryId: string) => {
+        if (entryId === GROUP_ENTRY_ID) return GROUP_PLATFORM_IDS;
         const platformId = parsePlatformEntryId(entryId);
         return platformId ? [platformId] : [];
       },
@@ -211,46 +215,66 @@ test('bulk sidebar toggle enables every entry, including api-relay, without an e
     window: { addEventListener() {}, removeEventListener() {} },
   });
 
-  let tree = h.render(() => h.exports.PlatformLayoutModal({ open: true, onClose: () => {} }));
+  const tree = h.render(() => h.exports.PlatformLayoutModal({ open: true, onClose: () => {} }));
+  return { h, tree, events, orderedEntryIds, storeState };
+}
 
-  // Nothing selected yet: the bulk sidebar checkbox is unchecked and the summary
-  // renders the unlimited key with the current count (no "/max" suffix).
-  let checkboxes = findCheckboxes(tree);
-  let bulkSidebar = checkboxes.find((item) => item.inBulkHeader && item.labelText.includes('sidebarToggle'));
-  assert.ok(bulkSidebar, 'expected the sidebar bulk checkbox in the bulk header');
-  assert.equal(bulkSidebar!.element.props.checked, false);
-  assert.equal(tCalls.filter(([key]) => key === 'platformLayout.sidebarSelected').length, 0);
-  assert.ok(
-    elementText(tree).includes('platformLayout.sidebarSelectedUnlimited(0)'),
-    'summary should use platformLayout.sidebarSelectedUnlimited',
-  );
-  assert.doesNotMatch(elementText(tree), /\d+\/\d+/, 'summary must not render count/max');
+function sidebarCheckboxes(tree: any) {
+  return findCheckboxes(tree).filter((item) => item.labelText === 'platformLayout.sidebarToggle');
+}
 
-  // Toggling the bulk checkbox must hit the setter of every entry, in entry order,
-  // with the api-relay entry included at its configured position.
-  bulkSidebar!.element.props.onChange();
+test('sidebar bulk selection enables every entry past the former 3 / 6 caps', () => {
+  const { h, tree, events, orderedEntryIds, storeState } = renderLayoutModal([GROUP_ENTRY_ID]);
+  const [bulkCheckbox] = sidebarCheckboxes(tree);
+  assert.equal(bulkCheckbox.inBulkHeader, true);
+  assert.equal(bulkCheckbox.element.props.checked, false);
+  assert.match(elementText(tree), /sidebarSelectedUnlimited\(1\)/);
+  assert.doesNotMatch(elementText(tree), /\d+\/\d+/, 'summary must not render count/max any more');
+
+  bulkCheckbox.element.props.onChange();
   const expectedEvents = [
-    ...PLATFORM_IDS.slice(0, API_RELAY_ORDER).map((platformId) => ['sidebar', `platform:${platformId}`, true]),
+    ...orderedEntryIds.slice(0, API_RELAY_ORDER).map((id) => ['sidebar', id, true]),
     ['apiRelay', true],
-    ...PLATFORM_IDS.slice(API_RELAY_ORDER).map((platformId) => ['sidebar', `platform:${platformId}`, true]),
-  ];
+    ...orderedEntryIds.slice(API_RELAY_ORDER).map((id) => ['sidebar', id, true]),
+  ].filter((event) => event[1] !== GROUP_ENTRY_ID);
   assert.deepEqual(events, expectedEvents);
-  assert.equal(events.length, 21, 'all 20 platforms plus api-relay must be enabled');
-  // The former caps (3 / 6) would have produced far fewer calls.
-  assert.ok(events.length > 6);
+  assert.ok(events.length > 6, 'the former caps (original 3 / classic 6) must not truncate the sweep');
+  assert.ok(storeState.sidebarEntryIds.includes(GROUP_ENTRY_ID));
 
-  // Re-render against the updated mock store: everything is selected and the
-  // summary still uses the unlimited key, now with the full count.
-  tree = h.flush();
-  checkboxes = findCheckboxes(tree);
-  bulkSidebar = checkboxes.find((item) => item.inBulkHeader && item.labelText.includes('sidebarToggle'));
-  assert.equal(bulkSidebar!.element.props.checked, true);
-  assert.ok(
-    elementText(tree).includes('platformLayout.sidebarSelectedUnlimited(21)'),
-    'summary should count every selected entry without a max',
-  );
-  assert.equal(tCalls.filter(([key]) => key === 'platformLayout.sidebarSelected').length, 0);
-  assert.doesNotMatch(elementText(tree), /\d+\/\d+/, 'summary must not render count/max');
+  const fullTree = h.flush();
+  const expandGroup = (element: any) => {
+    if (element.type === 'button' && element.props.className === 'platform-layout-expand-trigger' && !element.props.disabled) {
+      element.props.onClick({ stopPropagation() {} });
+    }
+  };
+  walkTree(fullTree, expandGroup);
+  const expandedTree = h.flush();
+  const [checkedBulk, group, ...platforms] = sidebarCheckboxes(expandedTree);
+  assert.equal(checkedBulk.element.props.checked, true);
+  assert.match(elementText(expandedTree), /sidebarSelectedUnlimited\(\d+\)/);
+  assert.doesNotMatch(elementText(expandedTree), /\d+\/\d+/);
+  assert.equal(group.element.props.checked, true);
+  assert.equal(platforms.length, orderedEntryIds.length + GROUP_PLATFORM_IDS.length);
+  // No entry is capped by the selection count any more, so nothing gets disabled.
+  assert.ok(platforms.every(({ element }) => !element.props.disabled));
+  assert.equal(group.element.props.disabled, undefined);
 
+  const [fullBulk] = sidebarCheckboxes(h.flush());
+  fullBulk.element.props.onChange();
+  assert.deepEqual(storeState.sidebarEntryIds, []);
+  assert.equal(storeState.apiRelaySidebarVisible, false);
+  h.unmount();
+});
+
+test('saved selections beyond the former caps stay removable', () => {
+  const previouslySelected = PLATFORM_IDS.slice(0, 7).map((id) => `platform:${id}`);
+  const { h, tree, storeState } = renderLayoutModal(previouslySelected);
+  assert.match(elementText(tree), /sidebarSelectedUnlimited\(7\)/);
+  const [, ...rows] = sidebarCheckboxes(tree);
+  const selectedRow = rows.find(({ element }) => element.props.checked);
+  assert.ok(selectedRow);
+  assert.ok(rows.every(({ element }) => !element.props.disabled));
+  selectedRow.element.props.onChange({ target: { checked: false } });
+  assert.equal(storeState.sidebarEntryIds.length, 6);
   h.unmount();
 });

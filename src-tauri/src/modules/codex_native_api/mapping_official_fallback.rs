@@ -9,11 +9,32 @@ pub(super) struct Selection {
     pub plan: super::super::identity::rebuild::Plan,
 }
 
-pub(super) fn history_recovery(reason: &str) -> ServiceError {
-    let message = "Continuation requires complete conversation input, including matching tool calls and results and history compatible with the selected account; resend the full conversation input; the original history was preserved";
-    ServiceError::new(400, "continuation_history_incomplete", message)
-        .with_error_details(serde_json::json!({"code":"continuation_history_incomplete",
-            "message":message,"param":"input","reason":reason}))
+pub(super) enum HistoryRecovery {
+    Missing,
+    Unverified,
+    Encrypted,
+}
+
+impl HistoryRecovery {
+    pub(super) fn error(self) -> ServiceError {
+        let (reason, message) = match self {
+            Self::Missing => (
+                "history_unavailable",
+                "The gateway could not find enough saved history to continue. Resend the full conversation, including matching tool calls and results. The original history was preserved.",
+            ),
+            Self::Unverified => (
+                "history_not_portable",
+                "The gateway could not verify that the history can be replayed. Provide complete, compatible history with matching tool calls and results, or restore access to the original account. The original history was preserved.",
+            ),
+            Self::Encrypted => (
+                "cipher_incompatible",
+                "This conversation contains encrypted history for the original account. Restore access to that account and retry, or start a new conversation. The original history was preserved.",
+            ),
+        };
+        ServiceError::new(400, "continuation_history_incomplete", message)
+            .with_error_details(serde_json::json!({"code":"continuation_history_incomplete",
+                "message":message,"param":"input","reason":reason,"retryable":false}))
+    }
 }
 
 pub(super) async fn same_owner(
@@ -81,7 +102,7 @@ pub(super) async fn replay(
                 "capability_fallback_history_unsafe" | "continuation_history_incomplete"
             ) =>
         {
-            return Err(history_recovery("history_not_portable"));
+            return Err(HistoryRecovery::Unverified.error());
         }
         Err(error) => return Err(error),
     };
@@ -90,7 +111,7 @@ pub(super) async fn replay(
             "Expanded conversation exceeds the request size limit; the original history was preserved"));
     }
     if super::super::capabilities::encrypted(&plan.body) {
-        return Err(history_recovery("cipher_incompatible"));
+        return Err(HistoryRecovery::Encrypted.error());
     }
     Ok(Some((context, plan)))
 }
@@ -148,7 +169,7 @@ pub(super) async fn select(
     // An absent local route must preserve the original official error (including
     // its field). Only a confirmed candidate requires a portable history check.
     let Some((context, plan)) = replay(state, caller, headers, body, context, plan).await? else {
-        return Err(history_recovery("history_unavailable"));
+        return Err(HistoryRecovery::Missing.error());
     };
     request.required_capabilities = super::super::capabilities::collect(
         &plan.body,

@@ -2,9 +2,16 @@
 
 本文档描述仓库当前由 `.github/workflows/release.yml` 执行的发布流程。发布行为以 workflow 和 `scripts/release/` 下的脚本为准；如果两者与本文不一致，应先修正文档或 workflow，再发版。
 
+## 共享开发工作区
+
+- **固定入口**：本机开发、修复和发版统一使用 `/private/var/www/antigravity-cockpit-tools` 的本地 `main`。写入前用 `git rev-parse --show-toplevel` 和 `git branch --show-current` 核对。除非用户明确指定，否则不新建分支或工作树，也不在当前会话附带的其他工作区继续写代码。
+- **现有改动**：如果固定目录还在别的分支，先保留现场。迁移时把原目录、其他工作树以及归档中尚未合入的改动去重收拢后，再统一到本地 `main`；不要为切换而自动 stash、重置或覆盖其他会话的改动。
+- **并行写入**：不同会话可以并行改互不重叠的范围。同一文件、共享逻辑或中英文更新日志有并行改动时，先核对已有内容，再错开写入，保留他人改动。暂存和提交只选本次授权的范围。
+- **开发交接**：已完成的用户可感知改动写进共用的中英文待发日志，不另建发布清单。还未完成或只是实验的改动，交接时标明对应文件和状态。例外使用其他工作区时，交接也注明改动所在的工作区、分支、提交或可恢复的快照。日常开发留在本地，不自动提交或推送。
+
 ## 1. 发布前检查
 
-在仓库根目录执行：
+标准发版在仓库根目录执行：
 
 ```bash
 npm run release:preflight
@@ -30,7 +37,7 @@ node scripts/release/preflight.cjs \
   --skip-cargo-test
 ```
 
-正式发布不应为了绕过失败而随意使用 skip 参数。
+标准发布不得使用 `--skip-*`。明确指定「快速发布」时不运行预检脚本，也不在正式构建前另跑翻译、弹框布局、类型检查、`cargo check` 或测试。普通分支 CI 仍独立运行，结果不阻塞正式 tag 构建。
 
 ## 2. 版本与标签
 
@@ -52,20 +59,25 @@ v<package.json.version>
 
 当前 release workflow 构建并上传：
 
-- Windows
+- Windows x64（MSI、NSIS 和便携包）
+- Windows ARM64（NSIS）
 - macOS Apple Silicon (`aarch64`)
 - macOS Intel (`x86_64`)
 - macOS Universal
 - Linux `x86_64`
 - Linux `aarch64`
 
-Linux release 同时包含 AppImage、deb 和 rpm updater targets。macOS Universal DMG 还会用于后续 Homebrew Cask 更新。
+Linux release 同时包含 AppImage、deb 和 rpm，以及可在无桌面环境运行的 x86_64 和 aarch64 独立 CLI 压缩包。独立 CLI 计入发布校验和。macOS Universal DMG 还会用于后续 Homebrew Cask 更新。
 
-依赖缓存由 `.github/actions/host-build-cache` 统一配置。CI 在可信的 `main` push 上构建并保存缓存，后续 tag 可读取默认分支缓存；不同 tag 之间不能互读各自生成的缓存。CI 与 release 按相同平台标识使用 `shared-key`，Rust 工具链、依赖与环境仍参与键计算，workspace 指向仓库根目录的 `target`，不缓存宿主业务 crate。Windows/Linux 缓存实际的 Tauri 工具目录；macOS 的 create-dmg 脚本随 bundler 写入 `target/.../bundle/share`，不再缓存不存在的 `~/Library/Caches/tauri`。首次启用或工具链变化仍可能冷编译，实际提速需由后续远端构建确认。
+macOS 正式构建和 `warm-macos-release-cache.yml` 共用独立的依赖缓存，固定在同一 Rust 版本，并分别按 ARM 和 Intel 编译目标保存。预热在 `main` 的构建配置或依赖变更时后台运行，也可在 `main` 手动启动；用 Tauri 的正式编译参数，只编译，不签名、打包或发布。正式 tag 仅读取缓存，不等待预热；缓存缺失时直接编译。普通 PR CI 的 `ci` profile 缓存保持独立；Windows/Linux 继续使用原有缓存。
 
-Universal 不再从源码重编两套宿主。ARM 和 Intel release job 在本轮构建后通过 `scripts/release/macos-universal.cjs --mode stage` 上传宿主与 Go sidecar 的薄二进制，附带版本、commit、workflow run ID 和 SHA-256。Universal job 等待这两个 job 完成，使用同一 run 的具名 artifact；`--mode merge` 校验身份、文件哈希、实际架构，合并宿主和 sidecar，并逐片提取比对原始内容，再运行官方 `tauri bundle --target universal-apple-darwin`，沿用签名、资源和 DMG 流程。缺失或不匹配直接失败，不回退到其他版本或旧产物。CI matrix 中的 Universal 源码构建仍保留，用于独立兼容性验证。
+新推送不会取消正在编译的预热任务。同一版的 `main` 和 tag 紧接着推时，正式构建可能在缓存写入前就已经开始。需要缩短打 tag 后的等待时，可在准备版本期间让 `main` 预热先完成；这不是发版门槛。下一次发布在 macOS ARM 和 Intel 的任务摘要看 `Exact match`，再对照 Rust 编译耗时；`false` 只表示没有精确匹配，是否恢复了部分缓存以步骤日志为准。
 
-ARM 和 Intel job 执行 `tauri build`，Universal job 执行 `tauri bundle`；三个 job 随后都会执行 `scripts/release/inject-dmg-readme.cjs`，用 `hdiutil` 重建 DMG（保留 `.app` 原样）并写入 `安装与常见问题.txt`，同时固定窗口中三个图标的位置：Cockpit Tools 与 Applications 保持同一行（`180,150` / `480,150`），保证“把图标拖到右侧安装”的动线不变；说明文件单独放在下一行（`330,330`），窗口尺寸随之调整为 660×490、图标 112px、文字 14pt。Tauri bundler 没有“向 DMG 追加文件”的配置项，因此这里重建的是 bundler 产物本身，而不是在打包阶段插文件；重建后 DMG 文件名与 Tauri 约定一致（`<productName>_<version>_<arch>.dmg`），供 `stage_release_assets.cjs` 正常规范化。说明文案模板位于 `scripts/release/assets/dmg-readme.txt`，修改后需与 `README.md` / `README.en.md` 的 Gatekeeper 排查章节保持一致。
+Universal 不再从源码重编两套宿主。ARM 和 Intel release job 在本轮构建后通过 `scripts/release/macos-universal.cjs --mode stage` 上传宿主薄二进制，附带版本、commit、workflow run ID 和 SHA-256。Universal job 使用同一 run 的具名 artifact；`--mode merge` 校验身份、文件哈希和实际架构，合并宿主并逐片比对原始内容，再用 `tauri bundle` 打包。缺失或不匹配直接失败，不回退到其他版本或旧产物。
+
+正式 workflow 只生成一次前端 `dist`，各平台使用同一份 artifact；`tauri.prebuilt-frontend.conf.json` 只覆盖构建钩子，不替换正式 Tauri 配置或更新地址。
+
+ARM 和 Intel 用 `tauri build --bundles app`、Universal 用 `tauri bundle --bundles app`，保留已签名公证的 `.app` 及 Tauri 更新包。随后三个 job 都直接用 `scripts/release/inject-dmg-readme.cjs` 从 `.app` 生成最终 DMG，不先制作另一份镜像。安装说明、Finder 布局、卷图标和文件命名保持不变；仍在安装包生成后签名并公证最终镜像。
 
 macOS 构建使用 `npm run tauri -- build ...` 或 `node scripts/tauri.cjs build ...`（正式 workflow 同样使用后者），在构建结束或失败时清理本轮新增的 Tauri `bundle/macos/rw.*.dmg` 临时挂载，不碰构建前已有的卷及最终 DMG。直接使用 `npx tauri build` 会绕过这层清理。
 
@@ -103,7 +115,7 @@ Tauri release build 使用仓库配置的 updater signing secrets：
 
 `macos-signing.cjs prepare` 在 runner 临时目录创建独立钥匙串、导入证书并验证公证凭据。构建步骤通过 Tauri 完成应用签名、公证和票据附加，开启 hardened runtime；不默认放宽 entitlement。自动更新包继续由 Tauri 生成与签名。
 
-随后重建包含安装说明的 DMG，再由 `macos-signing.cjs finalize` 签名并提交最终 DMG 公证，等待上限 30 分钟。校验覆盖原应用、解压后的自动更新应用和最终 DMG 内的应用，要求正确 Developer ID 团队、hardened runtime、有效公证票据及 Gatekeeper 认可；最终 DMG 本身也需通过签名、票据和 Gatekeeper 检查。全部通过后才进入资产暂存、上传与校验和生成。Universal 合并后仍由 Tauri 重新签名，不能复用合并前的签名。
+随后直接生成包含安装说明的 DMG，再由 `macos-signing.cjs finalize` 签名并提交最终 DMG 公证，等待上限 30 分钟。校验覆盖原应用、解压后的自动更新应用和最终 DMG 内的应用，要求正确 Developer ID 团队、hardened runtime、有效公证票据及 Gatekeeper 认可；最终 DMG 本身也需通过签名、票据和 Gatekeeper 检查。全部通过后才进入资产暂存、上传与校验和生成。Universal 合并后仍由 Tauri 重新签名，不能复用合并前的签名。
 
 每个 macOS job 上限 120 分钟，结束时 `if: always()` 恢复钥匙串搜索列表并删除本轮临时钥匙串；导入后的 `.p12` 临时文件立即删除。Apple 返回拒绝、超时或凭据错误时停止发布，不移除隔离属性绕过校验。首次公证可能等待较久，超时应检查 Apple submission 状态后重试，不能当作已通过。
 
@@ -131,7 +143,7 @@ node scripts/release/build_merged_latest_json.cjs
 
 ## 5. SHA256SUMS
 
-`upload-checksums` job 会重新下载该版本的 release assets，对文件逐个计算 SHA-256，并上传：
+`finalize-legacy-latest` job 复用同一次下载的 release assets，在生成完整 `latest.json` 后计算 SHA-256，并一并上传两个文件：
 
 ```text
 SHA256SUMS.txt
@@ -149,24 +161,17 @@ Casks/cockpit-tools.rb
 
 该更新通过自动创建的 PR 提交，而不是本地 `npm run release:github-and-cask`。当前 `package.json` 没有这个 npm script，因此不要按旧文档中的本地一键脚本操作。
 
-## 7. 推荐发版顺序
+## 7. 发版顺序
 
+0. **确定范围并收齐**：未指定只发某项时，「发版」和「快速发版」都包含本项目所有已完成、尚未公开发布的改动，不限于当前会话。以最近一个仍公开的正式版为基线，对照本地 `main` 的提交、未提交改动和待发日志；如仍有分散开发的遗留改动，由发版会话核对对应分支、工作区和归档快照，只合入尚未包含的最终实现。只有同一功能存在冲突且无法从代码和历史判断取舍时，才询问具体冲突。
 1. 更新 `package.json` 版本。
-2. 更新 `CHANGELOG.md` 与 `CHANGELOG.zh-CN.md`，确保存在对应版本段落。
-3. 执行：
+2. 按最近公开正式版到本次准备发布的实际代码差异，更新 `CHANGELOG.md` 与 `CHANGELOG.zh-CN.md`，不把未合入内容写成已发布。
+3. 执行 `npm run sync-version`。标准发布按 `AGENTS.md` 执行本地检查；明确指定快速发布时跳过这些检查，不等待普通 CI 或缓存预热。
+4. 在共享的本地 `main` 提交已收齐的改动。打 tag 前对照最终提交和待发日志，告知用户本次包含什么、哪些已知改动未纳入及原因。范围明确时无需再次审批。
+5. 从核对过的 `main` 提交创建 `v<version>` 标签，先推送 `main`，再推送标签。
+6. 分支和 tag 到达远端即报告「已触发构建」。只有正式 Release 和 `latest.json` 可用时才报告「用户可更新」。Homebrew Cask 在发布后异步更新。
 
-```bash
-npm run sync-version
-npm run release:preflight
-```
-
-4. 提交并合并发布所需改动。
-5. 从期望发布的 commit 创建 `v<version>` 标签，先推送分支，再推送标签。
-6. 检查 GitHub Actions 的 release workflow 完整成功。
-7. 检查 GitHub Release 的平台 assets、target manifests、`latest.json` 和 `SHA256SUMS.txt`。
-8. 检查 Homebrew Cask 自动 PR 的版本和 SHA-256 是否与 Universal DMG 一致。
-
-按项目 `AGENTS.md`，发布动作以远端分支和对应版本标签均更新为完成条件。安装包构建、GitHub Release、updater manifests、checksums 与 Homebrew Cask 更新属于后置异步流程；报告时必须区分“分支与标签已发布”和“安装包已公开可下载”，不得把仍在构建的产物描述为已经可用。
+快速发布不强制清理本地 Rust/Tauri 编译产物。仅讨论发布、修改规则或验证代码不授权提交、推送或触发发布。
 
 ## 8. 草稿发布与公开校验
 

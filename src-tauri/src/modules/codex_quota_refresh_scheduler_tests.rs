@@ -90,7 +90,7 @@ async fn promotion_cancels_other_pending_work_and_invalidates_old_batch() {
         "promote",
         RefreshPriority::Background,
         Some(epoch),
-        mock_refresh,
+        |_| async { Err("background policy rejected this account".into()) },
     ));
     let mut cancelled = Box::pin(refresh_with_operation(
         "cancel",
@@ -115,7 +115,7 @@ async fn promotion_cancels_other_pending_work_and_invalidates_old_batch() {
         "promote",
         RefreshPriority::Manual,
         None,
-        never_refresh,
+        mock_refresh,
     ))
     .await
     .unwrap();
@@ -240,7 +240,6 @@ async fn stale_worker_cannot_execute_or_remove_a_replacement() {
     bounded(run_refresh(
         "reused".into(),
         generation.wrapping_sub(1),
-        never_refresh,
     ))
     .await;
     assert_eq!(

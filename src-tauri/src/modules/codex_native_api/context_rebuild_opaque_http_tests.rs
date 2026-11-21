@@ -756,6 +756,9 @@ async fn context_rebuild_opaque_same_socket_automatically_replays_observed_histo
         let mut continuation = a_output.iter().filter(|item| item["type"] == "function_call")
             .map(|item| json!({"type":"function_call_output","call_id":item["call_id"],"output":"completed child task"}))
             .collect::<Vec<_>>();
+        let goal = json!({"type":"function_call_output","namespace":"agent",
+            "name":"goal_objective","output":"Synthetic retained goal snapshot\n  exact spacing  "});
+        continuation.insert(0, goal.clone());
         continuation.push(message("user", "continue"));
         ws_send(
             &mut socket,
@@ -769,6 +772,28 @@ async fn context_rebuild_opaque_same_socket_automatically_replays_observed_histo
         let sent = fixture.sent();
         assert_eq!(sent.len(), 2);
         assert_eq!(sent[1].account, "b");
+        let wire_goal = if passthrough {
+            goal.clone()
+        } else {
+            // Public HTTP represents standalone host results as text context.
+            json!({"type":"message","role":"user","content":[{"type":"input_text",
+                "text":"[External tool result: agent.goal_objective]\nSynthetic retained goal snapshot\n  exact spacing  "}]})
+        };
+        assert!(
+            sent[1].body["input"]
+                .as_array()
+                .unwrap()
+                .contains(&wire_goal),
+            "passthrough={passthrough}: complete Goal content must reach B"
+        );
+        let raw: String = Connection::open(fixture.path()).unwrap().query_row(
+            "SELECT transcript FROM native_rebuild_checkpoints_v1 WHERE caller='caller' AND response='b-after-removal'",
+            [], |row| row.get(0)).unwrap();
+        let saved: Vec<Value> = serde_json::from_str(&raw).unwrap();
+        assert!(
+            saved.contains(&goal),
+            "Wire projection must not alter the durable Goal envelope"
+        );
         assert!(sent[1].body.get("previous_response_id").is_none());
         for item in &a_output[1..] {
             cipher_owner(&fixture, item.clone(), "a");

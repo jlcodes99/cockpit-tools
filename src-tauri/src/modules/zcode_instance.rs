@@ -610,7 +610,7 @@ pub fn start_default(extra_args: &[String]) -> Result<u32, String> {
     let child = command
         .spawn()
         .map_err(|error| format!("启动 ZCode 失败: {}", error))?;
-    Ok(child.id())
+    Ok(modules::process::background_child_pid(child))
 }
 
 pub fn start_managed(instance: &InstanceProfile, extra_args: &[String]) -> Result<u32, String> {
@@ -633,7 +633,7 @@ pub fn start_managed(instance: &InstanceProfile, extra_args: &[String]) -> Resul
     let child = command
         .spawn()
         .map_err(|error| format!("启动 ZCode 多开实例失败: {}", error))?;
-    Ok(child.id())
+    Ok(modules::process::background_child_pid(child))
 }
 
 pub fn close_all() -> Result<(), String> {

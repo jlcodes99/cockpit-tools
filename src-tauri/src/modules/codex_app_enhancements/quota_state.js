@@ -90,34 +90,58 @@
     const headers = new root.Headers(options?.headers);
     return headers.get('OAI-Image-Generation-Limit-Reached') !== 'true';
   }
-  function httpPrototype(require) {
-    const namespaces = typeof require === 'function' && record(require.c)
-      ? Object.values(require.c).map(module => module?.exports) : [require];
-    for (const exports of namespaces) {
-      if (!record(exports)) continue;
-      for (const key of Object.keys(exports)) {
-        let value;
-        // A concurrently initializing module can still have a TDZ export.
-        try { value = exports[key]; } catch { continue; }
-        const proto = value?.prototype;
-        if (typeof value === 'function' && typeof value.getInstance === 'function'
-          && typeof proto?.get === 'function' && typeof proto.cancelStream === 'function'
-          && typeof proto.sendRequest === 'function') return proto;
+  function httpBoundary(runtimes) {
+    const candidates = new Map();
+    for (const runtime of Array.isArray(runtimes) ? runtimes : [runtimes]) {
+      let namespaces;
+      try {
+        namespaces = typeof runtime === 'function' && record(runtime.c)
+          ? Object.values(runtime.c).map(module => module?.exports) : [runtime];
+      } catch { continue; }
+      for (const exports of namespaces) {
+        if (!record(exports)) continue;
+        for (const key of Object.keys(exports)) {
+          try {
+            // RPC proxies can return a function for every property. Only the
+            // transport's own declared methods identify a patchable boundary.
+            // A concurrently initializing module can also have a TDZ export.
+            const value = exports[key];
+            if (typeof value !== 'function'
+              || typeof Object.getOwnPropertyDescriptor(value, 'getInstance')?.value !== 'function') continue;
+            const proto = Object.getOwnPropertyDescriptor(value, 'prototype')?.value;
+            if (!proto || !['get', 'cancelStream', 'sendRequest'].every(
+              name => typeof Object.getOwnPropertyDescriptor(proto, name)?.value === 'function')) continue;
+            candidates.set(proto, {proto, descriptor: Object.getOwnPropertyDescriptor(proto, 'fetch'),
+              sendDescriptor: Object.getOwnPropertyDescriptor(proto, 'sendRequest')});
+          } catch { continue; }
+        }
       }
     }
-    return null;
+    // Do not choose by enumeration order, or skip a real readonly transport in
+    // favour of another class. Aliases of the same prototype are harmless.
+    if (candidates.size !== 1) return {ok: false, reason: 'quota-http-boundary-unavailable',
+      ...(candidates.size > 1 ? {detail: 'quota-http-boundary-ambiguous'} : {})};
+    const boundary = candidates.values().next().value;
+    const writable = descriptor => typeof descriptor.value === 'function'
+      && (descriptor.configurable || descriptor.writable);
+    if (!writable(boundary.sendDescriptor) || boundary.descriptor && !writable(boundary.descriptor))
+      return {ok: false, reason: 'quota-http-boundary-readonly'};
+    return {ok: true, ...boundary};
+  }
+  function rollback(checkpoint) {
+    let restored = true;
+    for (const cleanup of cleanups.splice(checkpoint).reverse()) {
+      try { cleanup(); } catch { restored = false; }
+    }
+    return restored;
   }
   function attachRuntime(require) {
     if (!enabled()) return {ok: false, reason: 'disabled'};
     if (installed) return {ok: true};
-    const proto = httpPrototype(require);
-    if (!proto) return {ok: false, reason: 'quota-http-boundary-unavailable'};
-    const descriptor = Object.getOwnPropertyDescriptor(proto, 'fetch');
-    const sendDescriptor = Object.getOwnPropertyDescriptor(proto, 'sendRequest'), send = proto.sendRequest;
-    if (!sendDescriptor || !sendDescriptor.configurable && !sendDescriptor.writable
-      || descriptor && !descriptor.configurable && !descriptor.writable)
-      return {ok: false, reason: 'quota-http-boundary-readonly'};
-    const original = proto.fetch;
+    const boundary = httpBoundary(require);
+    if (!boundary.ok) return boundary;
+    const {proto, descriptor, sendDescriptor} = boundary, send = sendDescriptor.value;
+    const original = descriptor?.value;
     const fetch = async function (url, options) {
       const response = await original.call(this, url, options);
       if (!enabled() || !usageRequest(url, options) || !response.ok || response.status === 204) return response;
@@ -129,22 +153,29 @@
       for (const key of ['url', 'redirected', 'type']) Object.defineProperty(result, key, {value: response[key]});
       return result;
     };
+    const checkpoint = cleanups.length;
     try { installMessages(); }
-    catch (error) { return {ok: false, reason: error.message}; }
+    catch { return {ok: false, reason: 'quota-message-boundary-unavailable'}; }
     // Current desktop uses Response streams; the shipped named-module Windows
     // build returns parsed IPC responses directly through sendRequest.
-    if (descriptor) {
-      Object.defineProperty(proto, 'fetch', {...descriptor, value: fetch});
-      cleanups.push(() => { if (proto.fetch === fetch) Object.defineProperty(proto, 'fetch', descriptor); });
-    }
     const sendRequest = async function (method, url, options) {
       const response = await send.call(this, method, url, options);
       if (!enabled() || !usageRequest(url, options) || !(response?.status >= 200 && response.status < 300)) return response;
       const next = usage(response?.body);
       return next === response?.body ? response : {...response, body: next};
     };
-    Object.defineProperty(proto, 'sendRequest', {...sendDescriptor, value: sendRequest});
-    cleanups.push(() => { if (proto.sendRequest === sendRequest) Object.defineProperty(proto, 'sendRequest', sendDescriptor); });
+    try {
+      if (descriptor) {
+        Object.defineProperty(proto, 'fetch', {...descriptor, value: fetch});
+        cleanups.push(() => { if (proto.fetch === fetch) Object.defineProperty(proto, 'fetch', descriptor); });
+      }
+      Object.defineProperty(proto, 'sendRequest', {...sendDescriptor, value: sendRequest});
+      cleanups.push(() => { if (proto.sendRequest === sendRequest) Object.defineProperty(proto, 'sendRequest', sendDescriptor); });
+    } catch {
+      const restored = rollback(checkpoint);
+      return {ok: false, reason: 'quota-http-boundary-readonly',
+        ...(!restored ? {detail: 'quota-cleanup-failed'} : {})};
+    }
     installed = true;
     return {ok: true};
   }
@@ -200,47 +231,61 @@
   async function install() {
     if (!enabled()) return {ok: false, reason: 'disabled'};
     if (pending) return pending;
-    const epoch = generation;
+    const epoch = generation, checkpoint = cleanups.length, wasInstalled = installed;
     let cancelled = false, timer;
     const work = (async () => {
       if (root.document?.readyState === 'loading') await new Promise(resolve => {
         root.document.addEventListener('DOMContentLoaded', resolve, {once: true});
       });
-      const entries = [...(root.document?.scripts ?? [])].map(script => script.src)
-        .filter(url => /^app:\/\/-\/assets\/[\w.-]+\.js$/.test(url));
-      let require;
-      for (const url of entries) {
-        const module = await import(url);
-        if (typeof module.__webpack_require__ === 'function') { require = module.__webpack_require__; break; }
-        if (httpPrototype(module)) { require = module; break; }
-      }
-      if (!require) {
-        const loaded = [...(root.performance?.getEntriesByType?.('resource') ?? [])].map(entry => entry.name);
-        for (const url of loaded.filter(url => /^app:\/\/-\/assets\/(?:setting-storage|app-initial)-[\w-]+\.js$/.test(url))) {
-          const module = await import(url);
-          if (httpPrototype(module)) { require = module; break; }
-        }
-      }
-      if (!require) return {ok: false, reason: 'quota-runtime-unavailable'};
-      // App-service modules finish loading asynchronously after the entry.
-      // Poll a bounded number of times without holding a renderer/backend lock.
+      const modules = new Map(), failedImports = new Set();
+      let result = {ok: false, reason: 'quota-runtime-unavailable'};
+      // Entries and app-service modules can appear after startup. Rediscover
+      // within the existing bounded budget; one failed import cannot hide a
+      // later valid entry. Failed URLs are retried only by a later install().
       for (let attempt = 0; attempt < 20; attempt++) {
         if (cancelled || !enabled() || generation !== epoch) return {ok: false, reason: 'disabled'};
-        const result = attachRuntime(require);
+        const entries = [...(root.document?.scripts ?? [])].map(script => script.src)
+          .filter(url => /^app:\/\/-\/assets\/[\w.-]+\.js$/.test(url));
+        const loaded = [...(root.performance?.getEntriesByType?.('resource') ?? [])].map(entry => entry.name)
+          .filter(url => /^app:\/\/-\/assets\/(?:setting-storage|app-initial)-[\w-]+\.js$/.test(url));
+        for (const url of new Set([...entries, ...loaded])) {
+          if (modules.has(url) || failedImports.has(url)) continue;
+          try { modules.set(url, await import(url)); }
+          catch { failedImports.add(url); }
+          if (cancelled || !enabled() || generation !== epoch) return {ok: false, reason: 'disabled'};
+        }
+        const runtimes = [];
+        for (const module of modules.values()) {
+          runtimes.push(module);
+          try { if (typeof module.__webpack_require__ === 'function') runtimes.push(module.__webpack_require__); }
+          catch { /* A loader export can still be in its TDZ. */ }
+        }
+        result = runtimes.length ? attachRuntime(runtimes) : {ok: false, reason: 'quota-runtime-unavailable',
+          ...(failedImports.size ? {detail: 'quota-runtime-import-failed'} : {})};
         if (result.ok && attachCache(findCache())) return result;
         if (result.ok && attempt === 19) return result;
-        if (!result.ok && result.reason !== 'quota-http-boundary-unavailable') return result;
-        await new Promise(resolve => root.setTimeout(resolve, 250));
+        if (!result.ok && !['quota-http-boundary-unavailable', 'quota-runtime-unavailable'].includes(result.reason)) return result;
+        if (attempt < 19) await new Promise(resolve => root.setTimeout(resolve, 250));
       }
-      return {ok: false, reason: 'quota-http-boundary-unavailable'};
+      return result;
     })();
     pending = Promise.race([work.catch(() => ({ok: false, reason: 'quota-runtime-unavailable'})), new Promise(resolve => {
-      timer = root.setTimeout(() => { cancelled = true; resolve({ok: false, reason: 'quota-data-timeout'}); }, 10000);
+      timer = root.setTimeout(() => {
+        cancelled = true;
+        resolve({ok: false, reason: 'quota-data-timeout'});
+      }, 10000);
     })]).then(result => {
+      // HTTP may be ready before the cache, or cache discovery may throw.
+      // A failed attempt must not leave its new adapters installed.
+      if (!result.ok && generation === epoch) {
+        if (!rollback(checkpoint)) result = {...result, detail: 'quota-cleanup-failed'};
+        installed = wasInstalled;
+      }
       if (enabled() && generation === epoch) {
         const state = root.__cockpitEnhancements;
         state.nativeQuotaPatchState = result.ok ? 'active' : 'unsupported';
         state.nativeQuotaPatchReason = result.ok ? 'quota-data-adapted' : result.reason;
+        state.nativeQuotaPatchDetail = result.detail ?? null;
       }
       return result;
     }).finally(() => { root.clearTimeout(timer); pending = null; });
@@ -249,7 +294,7 @@
   function dispose() {
     generation++;
     const clients = cleanups.map(cleanup => cleanup.client).filter(Boolean);
-    for (const cleanup of cleanups.splice(0).reverse()) cleanup();
+    rollback(0);
     installed = false;
     // Stream/IPC data may already have been decoded into new objects by the
     // native client. Once the binding is revoked, re-read these active queries

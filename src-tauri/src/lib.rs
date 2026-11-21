@@ -29,6 +29,31 @@ pub fn try_run_codebuddy_cli() -> Option<i32> {
     Some(result.unwrap_or_else(|error| modules::codebuddy_cli::report_terminal_error("en", &error)))
 }
 
+pub fn try_run_codex_cli_resume() -> Option<i32> {
+    use commands::codex_instance::cli_resume::{run_from_terminal, RUN_ARG};
+    let mut args = std::env::args_os().skip(1);
+    if args.next().as_deref() != Some(std::ffi::OsStr::new(RUN_ARG)) {
+        return None;
+    }
+    let instance = args.next().and_then(|arg| arg.into_string().ok());
+    let data_dir = args.next();
+    let codex_home = args.next();
+    let result = match (instance, data_dir, codex_home, args.next()) {
+        (Some(instance), Some(data_dir), Some(codex_home), None) => {
+            // Login shells can have a different Cockpit profile or CODEX_HOME.
+            // This runs before Cockpit initializes any config or worker threads.
+            std::env::set_var("COCKPIT_TOOLS_DATA_DIR", data_dir);
+            std::env::set_var("CODEX_HOME", &codex_home);
+            run_from_terminal(&instance, std::path::Path::new(&codex_home))
+        }
+        _ => Err("缺少要续跑的 Codex 实例或目录".into()),
+    };
+    Some(result.unwrap_or_else(|error| {
+        eprintln!("Codex session resume: {error}");
+        1
+    }))
+}
+
 use modules::config::CloseWindowBehavior;
 use modules::logger;
 use std::sync::OnceLock;
@@ -526,6 +551,7 @@ pub fn run() {
 
             // 一次性迁移：历史版本可能被自动开启的「模型管理」统一关闭，之后由用户自己决定。
             std::thread::spawn(|| {
+                modules::config::persist_codex_native_predictions_default();
                 // Recover interrupted explicit imports before other model maintenance
                 // can touch the same profiles. None of this gates the main window.
                 modules::codex_account::recover_pending_model_config_imports_for_known_profiles();
@@ -583,7 +609,7 @@ pub fn run() {
 
             tauri::async_runtime::spawn(modules::codex_proxy_catalog::auto_refresh_loop());
             tauri::async_runtime::spawn(commands::account::auto_refresh::run(app.handle().clone()));
-            tauri::async_runtime::spawn(modules::codex_reset_automation::run(app.handle().clone()));
+            modules::codex_reset_automation::schedule_migration();
             tauri::async_runtime::spawn(modules::codex_subscription_refresh::run());
             tauri::async_runtime::spawn(modules::codex_proxy_desktop_router::restore_on_startup());
 
@@ -603,9 +629,6 @@ pub fn run() {
             tauri::async_runtime::spawn(async {
                 modules::codex_local_access::restore_local_access_gateway().await;
             });
-
-            // 实例级网关（provider gateway / 绑定 OAuth 本地网关）启动自愈：宿主重启后按已持久化的
-            // profile 绑定与 sidecar 目录重建，避免 Codex 实例指向一个已经不存在的本地端口。
             tauri::async_runtime::spawn(async {
                 modules::codex_local_access::restore_instance_gateways_on_startup().await;
             });
@@ -1018,6 +1041,8 @@ pub fn run() {
             commands::claude_instance::claude_execute_instance_launch_command,
             // System Commands
             commands::system::open_data_folder,
+            commands::system::get_data_directory_settings,
+            commands::system::set_data_directory,
             commands::system::open_local_path,
             commands::system::windows_elevated_close_processes,
             commands::system::save_text_file,
@@ -1152,6 +1177,7 @@ pub fn run() {
             commands::update::update_log,
             commands::update::get_update_runtime_info,
             commands::update::install_linux_update,
+            commands::update::relaunch_after_update,
             // Announcement Commands
             commands::announcement::announcement_get_state,
             commands::announcement::announcement_mark_as_read,
@@ -1176,10 +1202,15 @@ pub fn run() {
             // Codex Commands
             commands::codex::list_codex_accounts,
             commands::codex::get_current_codex_account,
+            commands::codex::get_codex_profile_lifetime_tokens,
             commands::codex::get_codex_config_toml_path,
             commands::codex::get_codex_storage_paths,
             commands::codex::open_codex_config_toml,
             commands::codex::get_codex_quick_config,
+            commands::codex::get_codex_model_instructions,
+            commands::codex::set_codex_model_instructions,
+            commands::codex::get_codex_subagent_defaults,
+            commands::codex::set_codex_subagent_defaults,
             commands::codex::save_codex_context_management,
             commands::codex::save_codex_quick_config,
             commands::codex::save_codex_model_catalog,
@@ -1223,6 +1254,7 @@ pub fn run() {
             commands::codex::refresh_codex_quota,
             modules::codex_quota_sync::set_codex_quota_sync_disabled_emails,
             modules::codex_quota_history::get_codex_quota_history,
+            modules::platform_quota_history::get_platform_quota_history,
             modules::codex_quota_history::management::codex_quota_history_settings,
             modules::codex_quota_history::management::set_codex_quota_history_settings,
             modules::codex_quota_history::management::codex_quota_history_stats,
@@ -1237,9 +1269,6 @@ pub fn run() {
             commands::codex::get_codex_reset_credit_history,
             commands::codex::get_codex_reset_usage_history,
             commands::codex::consume_codex_reset_credit,
-            commands::codex::get_codex_reset_automation,
-            commands::codex::save_codex_reset_public_rule,
-            commands::codex::save_codex_reset_account_rule,
             commands::codex::refresh_codex_subscription_info,
             commands::codex::refresh_all_codex_quotas,
             commands::codex::refresh_current_codex_quota,
@@ -1348,6 +1377,7 @@ pub fn run() {
             commands::codex::codex_cancel_model_provider_chat_test,
             commands::codex::codex_list_model_provider_models,
             commands::codex::get_codex_model_reasoning_efforts,
+            commands::codex::get_codex_base_catalog_source,
             commands::codex::preview_codex_model_config_import,
             commands::codex::import_codex_model_config,
             commands::codex::export_codex_model_config,
@@ -1355,6 +1385,7 @@ pub fn run() {
             commands::codex::codex_discover_remote_service,
             commands::codex::codex_query_remote_key_data,
             commands::codex::codex_local_access_get_state,
+            commands::codex::codex_local_access_refresh_model_data,
             commands::codex::codex_local_access_preview_claude_code_settings,
             commands::codex::codex_local_access_apply_claude_code_settings,
             commands::codex::codex_local_access_restore_claude_code_settings,
@@ -1379,10 +1410,12 @@ pub fn run() {
             commands::codex::codex_local_access_update_bound_oauth_account,
             commands::codex::codex_local_access_clear_stats,
             commands::codex::codex_local_access_query_stats,
+            commands::codex::codex_local_access_monthly_token_alert,
             commands::codex::codex_local_access_query_account_window_stats,
             commands::codex::codex_local_access_query_request_logs,
             commands::codex::codex_account_proxy_recent_requests,
             commands::codex::codex_local_access_prepare_restart,
+            commands::codex::codex_local_access_resume_after_failed_update,
             commands::codex::codex_local_access_restart_sidecar,
             commands::codex::codex_local_access_kill_port,
             commands::codex::codex_local_access_change_random_port,
@@ -1390,6 +1423,7 @@ pub fn run() {
             commands::codex::codex_local_access_update_routing_strategy,
             commands::codex::codex_local_access_update_custom_routing,
             commands::codex::codex_local_access_update_account_model_rules,
+            commands::codex::codex_local_access_update_account_quota_floor,
             commands::codex::codex_local_access_update_model_rules,
             commands::codex::codex_local_access_update_model_pricings,
             commands::codex::codex_local_access_reprice_request_logs,
@@ -1405,6 +1439,9 @@ pub fn run() {
             commands::codex::codex_local_access_update_access_scope,
             commands::codex::codex_local_access_update_client_base_url_host,
             commands::codex::codex_local_access_create_api_key,
+            commands::codex::codex_local_access_save_account_pool,
+            commands::codex::codex_local_access_delete_account_pool,
+            commands::codex::codex_local_access_detach_api_key_from_pool,
             commands::codex::codex_local_access_update_api_key,
             commands::codex::codex_local_access_set_api_key_account_priority,
             commands::codex::codex_local_access_rotate_named_api_key,
@@ -1500,6 +1537,8 @@ pub fn run() {
             commands::codebuddy_cli::codebuddy_cli_launch,
             commands::codebuddy_cli::codebuddy_cli_launch_command,
             commands::codebuddy_session::codebuddy_list_sessions,
+            commands::codebuddy_session::codebuddy_list_session_overview,
+            commands::codebuddy_session::workbuddy_rebind_workspace,
             commands::ssh_server::list_ssh_servers,
             commands::ssh_server::upsert_ssh_server,
             commands::ssh_server::delete_ssh_server,
@@ -1685,6 +1724,7 @@ pub fn run() {
             commands::zcode::delete_zcode_account,
             commands::zcode::delete_zcode_accounts,
             commands::zcode::import_zcode_from_json,
+            commands::zcode::import_zcode_from_file,
             commands::zcode::import_zcode_from_local,
             commands::zcode::import_zcode_api_key,
             commands::zcode::export_zcode_accounts,
@@ -1869,6 +1909,8 @@ pub fn run() {
             commands::codex_instance::codex_import_sessions,
             commands::codex_instance::codex_open_session_location,
             commands::codex_instance::codex_open_session_rollout,
+            commands::codex_instance::codex_get_session_resume_settings,
+            commands::codex_instance::codex_save_session_resume_settings,
             commands::codex_instance::codex_create_instance,
             commands::codex_instance::codex_update_instance,
             commands::codex_instance::profile_switch::codex_switch_instance_account,
@@ -1905,6 +1947,11 @@ pub fn run() {
             commands::antigravity_legacy_instance::antigravity_legacy_stop_instance,
             commands::antigravity_legacy_instance::antigravity_legacy_open_instance_window,
             commands::antigravity_legacy_instance::antigravity_legacy_close_all_instances,
+            commands::antigravity_token_usage::antigravity_query_token_usage,
+            commands::antigravity_token_usage::antigravity_sync_token_usage,
+            commands::antigravity_token_usage::antigravity_get_conversation_token_detail,
+            commands::antigravity_token_usage::antigravity_get_token_usage_settings,
+            commands::antigravity_token_usage::antigravity_set_token_usage_data_dir,
         ])
         .build(context)
         .expect("error while building tauri application");

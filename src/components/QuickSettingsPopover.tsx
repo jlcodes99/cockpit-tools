@@ -7,6 +7,7 @@ import { CodexQuotaRecoverySettings } from './codex/CodexQuotaRecoverySettings';
 import { CodexQuotaHistorySettings } from './codex/CodexQuotaHistorySettings';
 import { CodexProxyDirectHosts } from './codex/CodexProxyDirectHosts';
 import { SingleSelectDropdown } from './SingleSelectDropdown';
+import { MenuBarLeftClickSetting } from './MenuBarLeftClickSetting';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
@@ -122,7 +123,9 @@ interface GeneralConfig {
   close_behavior: string;
   minimize_behavior?: 'dock_and_tray' | 'tray_only';
   hide_dock_icon?: boolean;
+  show_tray_icon?: boolean;
   tray_icon_style?: 'template' | 'color';
+  menu_bar_left_click_opens_main_window?: boolean;
   menu_bar_antigravity_metric?: string;
   opencode_app_path: string;
   antigravity_app_path: string;
@@ -3565,6 +3568,14 @@ export function QuickSettingsPopover({
                   )}
                 </div>
               </div>
+            )}
+            {isMacOS && (
+              <MenuBarLeftClickSetting
+                variant="quick-settings"
+                opensMainWindow={config.menu_bar_left_click_opens_main_window ?? false}
+                disabled={config.show_tray_icon === false}
+                onChange={(value) => void saveConfig({ menu_bar_left_click_opens_main_window: value })}
+              />
             )}
           </div>
         )}

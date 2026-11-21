@@ -331,20 +331,6 @@ pub fn load_account_index() -> CodexAccountIndex {
     }
 }
 
-/// Save reset settings against the authoritative index while account membership is stable.
-/// Do not repair/scan/decrypt account details while holding the mutation lock.
-pub(crate) fn with_reset_automation_account_ids<T>(
-    write: impl FnOnce(&[String]) -> Result<T, String>,
-) -> Result<T, String> {
-    let storage_error = || super::codex_reset_automation::message("storageError");
-    let _guard = CODEX_ACCOUNT_MUTATION_LOCK.lock().map_err(|_| storage_error())?;
-    let index = read_saved_account_index()
-        .map_err(|error| format!("{}: {error}", storage_error()))?
-        .ok_or_else(storage_error)?;
-    let ids = index.accounts.into_iter().map(|account| account.id).collect::<Vec<_>>();
-    write(&ids)
-}
-
 pub(crate) fn list_indexed_account_ids() -> Result<HashSet<String>, String> {
     Ok(load_account_index_checked()?
         .accounts
@@ -840,6 +826,22 @@ pub(crate) fn load_account_checked(account_id: &str) -> Result<Option<CodexAccou
     load_account_with_summary(account_id, None)
 }
 
+pub(crate) fn load_accounts_for_routing(
+    account_ids: &[String],
+) -> impl Iterator<Item = CodexAccount> + '_ {
+    let data_dir = resolve_codex_account_data_dir();
+    let accounts_dir = codex_accounts_dir_in(&data_dir);
+    let tombstones_dir = data_dir.join(CODEX_ACCOUNT_TOMBSTONES_DIR);
+    let mut decoder = crate::modules::secure_account_storage::AccountFileBatchDecoder::default();
+    account_ids.iter().filter_map(move |id| {
+        load_account_from_dirs(id, None, &accounts_dir, &tombstones_dir, |path, content| {
+            decoder.deserialize(path, content)
+        })
+        .ok()
+        .flatten()
+    })
+}
+
 /// 绑定 OAuth 的 API Key：不走本地网关生图兼容（保持绑定显示/客户端能力）。
 /// 纯 API Key 生图走 provider 的 gpt-image-2 + actor header，与本开关无关。
 fn clear_bound_oauth_local_gateway_flag(account: &mut CodexAccount) -> bool {
@@ -879,10 +881,30 @@ fn load_account_with_summary(
     account_id: &str,
     summary: Option<&CodexAccountSummary>,
 ) -> Result<Option<CodexAccount>, String> {
-    if account_is_tombstoned(account_id) {
+    let data_dir = resolve_codex_account_data_dir();
+    load_account_from_dirs(
+        account_id,
+        summary,
+        &codex_accounts_dir_in(&data_dir),
+        &data_dir.join(CODEX_ACCOUNT_TOMBSTONES_DIR),
+        crate::modules::secure_account_storage::deserialize_account_file,
+    )
+}
+
+fn load_account_from_dirs(
+    account_id: &str,
+    summary: Option<&CodexAccountSummary>,
+    accounts_dir: &Path,
+    tombstones_dir: &Path,
+    decode: impl FnOnce(&Path, &str) -> Result<(CodexAccount, bool), String>,
+) -> Result<Option<CodexAccount>, String> {
+    let filename = format!("{account_id}.json");
+    if read_account_tombstone_file(&tombstones_dir.join(&filename))
+        .is_some_and(|tombstone| tombstone.deleted)
+    {
         return Ok(None);
     }
-    let path = get_accounts_dir().join(format!("{}.json", account_id));
+    let path = accounts_dir.join(filename);
     if !path.exists() {
         return Ok(None);
     }
@@ -891,11 +913,7 @@ fn load_account_with_summary(
         .map_err(|error| format!("读取账号详情失败 ({}): {}", path.display(), error))?;
 
     // AES-GCM envelope first (#1104), then plaintext + compat paths.
-    if let Ok((mut account, needs_rotation)) =
-        crate::modules::secure_account_storage::deserialize_account_file::<CodexAccount>(
-            &path, &content,
-        )
-    {
+    if let Ok((mut account, needs_rotation)) = decode(&path, &content) {
         let migrated_index_summary = summary
             .map(|summary| apply_index_summary_to_account_detail(&mut account, summary))
             .unwrap_or(false);
@@ -908,7 +926,7 @@ fn load_account_with_summary(
         let migrated_websocket = normalize_api_key_websocket_capability(&mut account);
         let cleared_retired_app_server_preflight =
             clear_retired_app_server_preflight_reauth(&mut account);
-        if !validate_loaded_account_tombstone(&account)? {
+        if !validate_loaded_account_tombstone(&account, tombstones_dir)? {
             return Ok(None);
         }
         if needs_rotation
@@ -948,7 +966,7 @@ fn load_account_with_summary(
     let _ = upgrade_opencode_go_model_catalog(&mut account);
     let _ = clear_bound_oauth_local_gateway_flag(&mut account);
     let _ = clear_retired_app_server_preflight_reauth(&mut account);
-    if !validate_loaded_account_tombstone(&account)? {
+    if !validate_loaded_account_tombstone(&account, tombstones_dir)? {
         return Ok(None);
     }
 
@@ -1218,24 +1236,37 @@ pub fn filter_account_ids_by_quota_refresh_policy(account_ids: &[String]) -> Vec
         .collect()
 }
 
+fn load_indexed_account_detail(summary: &CodexAccountSummary) -> Option<CodexAccount> {
+    match load_account_with_summary(&summary.id, Some(summary)) {
+        Ok(account) => account,
+        Err(error) => {
+            logger::log_warn(&format!(
+                "[Codex Account] 跳过无法读取的账号详情: account_id={}, error={}",
+                summary.id, error
+            ));
+            None
+        }
+    }
+}
+
+pub(crate) fn load_indexed_accounts_by_ids(ids: &[String]) -> Vec<CodexAccount> {
+    let selected: HashSet<&str> = ids.iter().map(String::as_str).collect();
+    load_account_index()
+        .accounts
+        .iter()
+        .filter(|summary| selected.contains(summary.id.as_str()))
+        .filter_map(load_indexed_account_detail)
+        .filter(|account| selected.contains(account.id.as_str()))
+        .collect()
+}
+
 /// 列出所有账号
 pub fn list_accounts() -> Vec<CodexAccount> {
     let mut index = load_account_index();
     let accounts: Vec<CodexAccount> = index
         .accounts
         .iter()
-        .filter_map(
-            |summary| match load_account_with_summary(&summary.id, Some(summary)) {
-                Ok(account) => account,
-                Err(error) => {
-                    logger::log_warn(&format!(
-                        "[Codex Account] 跳过无法读取的账号详情: account_id={}, error={}",
-                        summary.id, error
-                    ));
-                    None
-                }
-            },
-        )
+        .filter_map(load_indexed_account_detail)
         .collect();
     if sync_loaded_accounts_to_index_cache(&mut index, &accounts) {
         if let Err(error) = save_account_index(&index) {

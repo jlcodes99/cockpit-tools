@@ -29,6 +29,10 @@ export async function importZcodeFromJson(jsonContent: string): Promise<ZcodeAcc
   return await invoke('import_zcode_from_json', { jsonContent });
 }
 
+export async function importZcodeFromFile(path: string): Promise<ZcodeAccount[]> {
+  return await invoke('import_zcode_from_file', { path });
+}
+
 export async function importZcodeFromLocal(): Promise<ZcodeAccount[]> {
   return await invoke('import_zcode_from_local');
 }

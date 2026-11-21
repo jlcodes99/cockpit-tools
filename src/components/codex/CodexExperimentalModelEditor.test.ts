@@ -11,13 +11,13 @@ function elements(value: any): any[] {
   return [value, ...elements(value.props?.children)];
 }
 
-test('reset restores the supplied model names, order, efforts and default selection', () => {
+test('reset restores model choices and the editor discloses a built-in catalog fallback', async () => {
   const h = loadHookModule(new URL('./CodexExperimentalModelEditor.tsx', import.meta.url), {
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
     '../../utils/codexExperimentalModelOrder': order,
     '../../utils/codexModelContext': context,
     '../../utils/codexModelConfig': modelConfig,
-    '../../services/codexService': { getCodexModelReasoningEfforts: async () => ({}) },
+    '../../services/codexService': { getCodexBaseCatalogSource: async () => 'embedded', getCodexModelReasoningEfforts: async () => ({}) },
     '../../hooks/useEscClose': { useEscCloseTopmost() {} },
     '../SingleSelectDropdown': { SingleSelectDropdown: () => null },
     './CodexModelConfigTransferModal': { CodexModelConfigTransferModal: () => null },
@@ -45,6 +45,9 @@ test('reset restores the supplied model names, order, efforts and default select
   assert.deepEqual(JSON.parse(JSON.stringify(models)), resetModels);
   assert.equal(defaultModelId, 'default-model');
   assert.equal(resetButton().props.disabled, true);
+  await settlePromises();
+  assert.ok(elements(h.flush()).some((node) =>
+    node.props?.children === 'codex.experimentalModelCatalog.models.embeddedFallback'));
   h.unmount();
 });
 
@@ -54,7 +57,7 @@ test('provider discovery offers models for selection and keeps results scoped to
     '../../utils/codexExperimentalModelOrder': order,
     '../../utils/codexModelContext': context,
     '../../utils/codexModelConfig': modelConfig,
-    '../../services/codexService': { getCodexModelReasoningEfforts: async () => ({}) },
+    '../../services/codexService': { getCodexBaseCatalogSource: async () => "downloaded", getCodexModelReasoningEfforts: async () => ({}) },
     '../../hooks/useEscClose': { useEscCloseTopmost() {} },
     '../SingleSelectDropdown': { SingleSelectDropdown: () => null },
     './CodexModelConfigTransferModal': { CodexModelConfigTransferModal: () => null },
@@ -97,7 +100,7 @@ test('adds selected catalog models without replacing the saved order, names or d
     '../../utils/codexExperimentalModelOrder': order,
     '../../utils/codexModelContext': context,
     '../../utils/codexModelConfig': modelConfig,
-    '../../services/codexService': { getCodexModelReasoningEfforts: async () => ({}) },
+    '../../services/codexService': { getCodexBaseCatalogSource: async () => "downloaded", getCodexModelReasoningEfforts: async () => ({}) },
     '../../hooks/useEscClose': { useEscCloseTopmost() {} },
     '../SingleSelectDropdown': { SingleSelectDropdown: () => null },
     './CodexModelConfigTransferModal': { CodexModelConfigTransferModal: () => null },
@@ -142,7 +145,7 @@ test('Ultra uses a separate, editable request effort only on supported models', 
     '../../utils/codexModelContext': context,
     '../../utils/codexModelConfig': modelConfig,
     '../../services/codexService': {
-      getCodexModelReasoningEfforts: async () => ({ 'gpt-6.1-sol': ['high', 'max', 'ultra'], 'other': ['high'] }),
+      getCodexBaseCatalogSource: async () => "downloaded", getCodexModelReasoningEfforts: async () => ({ 'gpt-6.1-sol': ['high', 'max', 'ultra'], 'other': ['high'] }),
     },
     '../../hooks/useEscClose': { useEscCloseTopmost() {} },
     '../SingleSelectDropdown': { SingleSelectDropdown: () => null },
@@ -155,13 +158,19 @@ test('Ultra uses a separate, editable request effort only on supported models', 
   ];
   h.render(() => h.exports.CodexExperimentalModelEditor({ models, mode: 'inline', onChange: (next: typeof models) => { models = next; } }));
   await settlePromises();
-  const overrides = () => elements(h.flush())
-    .filter((node) => node.props?.ariaLabel === 'codex.experimentalModels.ultraReasoning');
-  assert.equal(overrides().length, 1);
+  const dropdowns = (field: string) => elements(h.flush())
+    .filter((node) => node.props?.ariaLabel === `codex.experimentalModels.${field}`);
+  const overrides = () => dropdowns('ultraReasoning');
+  assert.equal(overrides().length, 2);
+  assert.equal(overrides()[0].props.disabled, false);
+  assert.equal(overrides()[1].props.disabled, true);
   assert.deepEqual(Array.from(overrides()[0].props.options, (option: { value: string }) => option.value), ['', 'high', 'max']);
   overrides()[0].props.onChange('max');
   assert.equal(overrides()[0].props.value, 'max');
   assert.equal(models[0].default_reasoning_effort, 'high');
+  dropdowns('defaultReasoning')[0].props.onChange('');
+  assert.equal(dropdowns('defaultReasoning')[0].props.value, '');
+  assert.equal(overrides()[0].props.value, 'max');
   overrides()[0].props.onChange('');
   assert.equal(overrides()[0].props.value, '');
   h.unmount();
@@ -173,7 +182,7 @@ test('editing model IDs and names retains row identity through edits, sorting an
     '../../utils/codexExperimentalModelOrder': order,
     '../../utils/codexModelContext': context,
     '../../utils/codexModelConfig': modelConfig,
-    '../../services/codexService': { getCodexModelReasoningEfforts: async () => ({}) },
+    '../../services/codexService': { getCodexBaseCatalogSource: async () => "downloaded", getCodexModelReasoningEfforts: async () => ({}) },
     '../../hooks/useEscClose': { useEscCloseTopmost() {} },
     '../SingleSelectDropdown': { SingleSelectDropdown: () => null },
     './CodexModelConfigTransferModal': { CodexModelConfigTransferModal: () => null },
@@ -209,7 +218,7 @@ test('editing context and reasoning keeps distinct row keys while model IDs temp
     '../../utils/codexExperimentalModelOrder': order,
     '../../utils/codexModelContext': context,
     '../../utils/codexModelConfig': modelConfig,
-    '../../services/codexService': { getCodexModelReasoningEfforts: async () => ({}) },
+    '../../services/codexService': { getCodexBaseCatalogSource: async () => "downloaded", getCodexModelReasoningEfforts: async () => ({}) },
     '../../hooks/useEscClose': { useEscCloseTopmost() {} },
     '../SingleSelectDropdown': { SingleSelectDropdown: () => null },
     './CodexModelConfigTransferModal': { CodexModelConfigTransferModal: () => null },
@@ -240,7 +249,7 @@ test('High then Medium, cancellation/reselection and all six levels retain canon
     '../../utils/codexExperimentalModelOrder': order,
     '../../utils/codexModelContext': context,
     '../../utils/codexModelConfig': modelConfig,
-    '../../services/codexService': { getCodexModelReasoningEfforts: async () => ({}) },
+    '../../services/codexService': { getCodexBaseCatalogSource: async () => "downloaded", getCodexModelReasoningEfforts: async () => ({}) },
     '../../hooks/useEscClose': { useEscCloseTopmost() {} },
     '../SingleSelectDropdown': { SingleSelectDropdown: () => null },
     './CodexModelConfigTransferModal': { CodexModelConfigTransferModal: () => null },

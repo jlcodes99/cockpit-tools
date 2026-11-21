@@ -9,6 +9,7 @@ const TARGET_SPECS = {
   "darwin-x86_64-app": /_x64\.app\.tar\.gz$/,
   "windows-x86_64-msi": /_x64_en-US\.msi$/,
   "windows-x86_64-nsis": /_x64-setup\.exe$/,
+  "windows-aarch64-nsis": /_arm64-setup\.exe$/,
   "linux-x86_64-appimage": /_amd64\.AppImage$/,
   "linux-x86_64-deb": /_amd64\.deb$/,
   "linux-x86_64-rpm": /-1\.x86_64\.rpm$/,

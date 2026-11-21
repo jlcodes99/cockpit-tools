@@ -116,6 +116,8 @@ impl Encoded {
     /// Serialization, hashing and compression happen before the identity write
     /// lock/transaction. Cancellation still gates publication of all these bytes.
     pub fn prepare(
+        reader: &Connection,
+        caller: &str,
         input: &[Value],
         output: &[Value],
         parameters: Option<&Value>,
@@ -123,6 +125,9 @@ impl Encoded {
         let mut manifest = Vec::new();
         let mut chunks = Vec::new();
         let mut unique = HashSet::new();
+        let mut archived = reader
+            .prepare_cached("SELECT EXISTS(SELECT 1 FROM native_rebuild_items_v1 WHERE caller=?1 AND digest=?2)")
+            .map_err(storage)?;
         let parameters = parameters
             .map(serde_json::to_string)
             .transpose()
@@ -146,7 +151,13 @@ impl Encoded {
                 hot.push_str(std::str::from_utf8(&raw).map_err(storage)?);
             }
             let digest = format!("{:x}", Sha256::digest(&raw));
-            if unique.insert(digest.clone()) {
+            // Chunks are immutable and shared by completed and partial history.
+            // Only compress bytes that are not already durable for this caller.
+            if unique.insert(digest.clone())
+                && !archived
+                    .query_row(params![caller, digest], |row| row.get::<_, bool>(0))
+                    .map_err(storage)?
+            {
                 chunks.push((
                     digest.clone(),
                     zstd::stream::encode_all(raw.as_slice(), 1).map_err(storage)?,
@@ -207,5 +218,60 @@ impl Encoded {
             transaction.execute("INSERT OR IGNORE INTO native_rebuild_checkpoints_v1(caller,response,thread,account,generation,transcript,bytes,created,parameters) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",params![binding.caller,response,thread,binding.account_id,generation.id,raw,self.bytes as i64,timestamp(),self.parameters]).map_err(storage)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checkpoint_preparation_compresses_only_new_chunks_for_the_current_caller() {
+        let connection = Connection::open_in_memory().unwrap();
+        super::super::initialize(&connection).unwrap();
+        let prefix = serde_json::json!({"type": "message", "content": "x".repeat(1024 * 1024)});
+        let tail = serde_json::json!({"type": "message", "content": "next"});
+        let first = Encoded::prepare(&connection, "first", std::slice::from_ref(&prefix), &[], None)
+            .unwrap();
+        let [(prefix_digest, prefix_body)] = first.chunks.as_slice() else {
+            panic!("the first observation must contain one new chunk");
+        };
+        connection
+            .execute(
+                "INSERT INTO native_rebuild_items_v1(caller,digest,body) VALUES(?1,?2,?3)",
+                params!["first", prefix_digest, prefix_body],
+            )
+            .unwrap();
+
+        let input = [prefix.clone(), prefix];
+        let encoded = Encoded::prepare(&connection, "first", &input, std::slice::from_ref(&tail), None)
+            .unwrap();
+        assert_eq!(encoded.chunks.len(), 1, "only the new tail needs compression");
+        let (tail_digest, tail_body) = &encoded.chunks[0];
+        connection
+            .execute(
+                "INSERT INTO native_rebuild_items_v1(caller,digest,body) VALUES(?1,?2,?3)",
+                params!["first", tail_digest, tail_body],
+            )
+            .unwrap();
+        let foreign = Encoded::prepare(&connection, "other", &input, std::slice::from_ref(&tail), None)
+            .unwrap();
+        assert_eq!(foreign.chunks.len(), 2);
+        connection
+            .execute(
+                "INSERT INTO native_rebuild_history_v1(caller,response,thread,account,generation,manifest)
+                 VALUES('first','response','thread','account','generation',?1)",
+                params![encoded.manifest],
+            )
+            .unwrap();
+        assert_eq!(
+            transcript(&connection, "first", Some("thread"), "response")
+                .unwrap()
+                .unwrap(),
+            [input[0].clone(), input[1].clone(), tail],
+        );
+        assert!(transcript(&connection, "other", Some("thread"), "response")
+            .unwrap()
+            .is_none());
     }
 }

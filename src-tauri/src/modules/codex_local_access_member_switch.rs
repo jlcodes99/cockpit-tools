@@ -43,10 +43,6 @@ fn switched_chatgpt_plan_collection_intent(
     if official && current.gateway_mode != CodexLocalAccessGatewayMode::Native {
         return Err("CHATGPT_PLAN_NATIVE_REQUIRED".into());
     }
-    if official && current.restrict_free_accounts && is_free_plan_type(source.plan_type.as_deref())
-    {
-        return Err("CHATGPT_PLAN_SERVICE_ACCOUNT_INELIGIBLE".into());
-    }
     let legacy_member =
         projection_id.is_some_and(|id| current.account_ids.iter().any(|member| member == id));
     if require_existing && !current.account_ids.contains(&source.id) && !legacy_member {
@@ -61,7 +57,7 @@ fn switched_chatgpt_plan_collection_intent(
     }
     if !official
         && !paused
-        && !is_local_access_eligible_account(source, current.restrict_free_accounts)
+        && !is_local_access_eligible_account(source)
     {
         return Err("CHATGPT_PLAN_SERVICE_ACCOUNT_INELIGIBLE".into());
     }
@@ -178,7 +174,7 @@ fn legacy_switched_chatgpt_plan_collection_intent(
     } else {
         source
     };
-    if !paused && !is_local_access_eligible_account(target, current.restrict_free_accounts) {
+    if !paused && !is_local_access_eligible_account(target) {
         return Err("CHATGPT_PLAN_SERVICE_ACCOUNT_INELIGIBLE".into());
     }
     let opposite = if official {
@@ -206,6 +202,9 @@ fn legacy_switched_chatgpt_plan_collection_intent(
     }
     if let Some(old) = old {
         switch_member_ids(&mut next.account_ids, old, &target.id);
+        for pool in &mut next.account_pools {
+            switch_member_ids(&mut pool.account_ids, old, &target.id);
+        }
         // Explicit key scopes grant this logical member, not unrelated members.
         // A profile/provider key is a separate authorization boundary.
         for key in &mut next.api_keys {

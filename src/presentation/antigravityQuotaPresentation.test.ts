@@ -78,6 +78,36 @@ test('explicit quota buckets keep percentages and distant reset times unchanged'
   ]);
 });
 
+test('a confirmed exhausted Claude week makes the short window inactive across quota views', () => {
+  const weekly = { ...model('3p-weekly', 0), summary_exhausted: true };
+  const fixture = account([model('3p-5h', 63), weekly, model('gemini-5h', 100), model('gemini-weekly', 86)]);
+  fixture.quota!.subscription_tier = 'PRO';
+  const items = getAntigravityQuotaDisplayItems(fixture, []);
+  for (const isList of [false, true]) {
+    const html = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items, isList, t }));
+    assert.match(html, /Claude · 5h.*?weeklyLimitReached/);
+    assert.doesNotMatch(html, /63%/);
+    assert.match(html, /Claude · Weekly.*?0%/);
+    assert.match(html, /Gemini · 5h.*?100%/);
+  }
+  const preview = buildQuotaPreviewLines(buildAntigravityAccountPresentation(fixture, [], t).quotaItems);
+  assert.match(preview[0].title, /weeklyLimitReached/);
+  assert.doesNotMatch(preview[0].text, /63%/);
+  assert.equal(fixture.quota!.models[0].percentage, 63);
+
+  for (const [bucket, stale] of [
+    [{ ...weekly, summary_exhausted: false }, false],
+    [model('3p-weekly', 0), false],
+    [weekly, true],
+    [{ ...weekly, reset_time: '2020-01-01T00:00:00Z' }, false],
+  ] as const) {
+    const possible = account([model('3p-5h', 63), bucket], stale);
+    const html = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items: getAntigravityQuotaDisplayItems(possible, []), t }));
+    assert.match(html, /Claude · 5h.*?63%/);
+    assert.doesNotMatch(html, /weeklyLimitReached/);
+  }
+});
+
 test('known quota summaries keep exhausted and unknown Gemini windows distinct from model percentages', () => {
   const models = [model('gemini-pro-high', 100), model('gemini-pro-low', 80)];
   const current = account([...models, model('gemini-weekly', 0)]);
@@ -94,6 +124,28 @@ test('known quota summaries keep exhausted and unknown Gemini windows distinct f
   ]);
 });
 
+test('Carbon has a separate weekly quota and keeps its model-level rows', () => {
+  const ultra = account([
+    model('gemini-4-carbon-high', 7),
+    model('gemini-4-hydrogen-high', 39),
+    model('gemini-carbon-wtu-weekly', 21),
+  ]);
+  ultra.quota!.subscription_tier = 'ULTRA';
+  const items = getAntigravityQuotaDisplayItems(ultra, []);
+  assert.deepEqual(items.map(({ key, percentage }) => [key, percentage]), [
+    ['gemini:5h', 39], ['carbon:weekly', 21],
+  ]);
+  const modelItems = getAntigravityModelQuotaDisplayItems(ultra);
+  assert.deepEqual(modelItems.map(({ key }) => key), [
+    'gemini-4-carbon-high', 'gemini-4-hydrogen-high',
+  ]);
+  assert.deepEqual(modelItems.map(({ label }) => label), [
+    'Gemini 4 Carbon (High)', 'Gemini 4 Hydrogen (High)',
+  ]);
+  const html = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items, modelItems, t }));
+  assert.match(html, /Gemini 4 Carbon \(Weekly\).*?21%/);
+});
+
 test('free tier accounts show weekly quota without 5h rows', () => {
   const freeAccount = account([
     model('gemini-weekly', 100),
@@ -107,6 +159,21 @@ test('free tier accounts show weekly quota without 5h rows', () => {
   const html = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items, t }));
   assert.match(html, /Weekly/);
   assert.doesNotMatch(html, /· 5h/);
+});
+
+test('free accounts show cached weekly buckets separately from current model percentages', () => {
+  const free = account([
+    model('3p-weekly', 28), model('gemini-pro', 100), model('claude-sonnet', 100),
+  ], true);
+  free.quota!.subscription_tier = 'FREE';
+  const items = getAntigravityQuotaDisplayItems(free, []);
+  assert.deepEqual(items.map(({ key, percentage, stale }) => [key, percentage, stale]), [
+    ['claude:weekly', 28, true],
+  ]);
+  assert.deepEqual(getAntigravityModelQuotaDisplayItems(free).map(({ percentage }) => percentage), [100, 100]);
+  const html = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items, t }));
+  assert.match(html, /cachedRefreshFailed/);
+  assert.doesNotMatch(html, /100%/);
 });
 
 test('Ultra model quota and short Argon windows never fill the Argon weekly row', () => {
@@ -140,6 +207,20 @@ test('only the Claude/Gemini windows are shown, aliases are not duplicated', () 
   ]), []);
   assert.deepEqual(items.map((item) => [item.key, item.label]), [
     ['gemini:5h', 'Gemini (5h)'],
+  ]);
+});
+
+test('Carbon quota stays separate from shared Gemini quota and model details', () => {
+  const fixture = account([
+    model('gemini-4-carbon-high', 90),
+    model('gemini-carbon-wtu-weekly', 22),
+    model('gemini-4-hydrogen-high', 65),
+  ]);
+  assert.deepEqual(getAntigravityQuotaDisplayItems(fixture, []).map(({ key, percentage }) => [key, percentage]), [
+    ['gemini:5h', 65], ['carbon:weekly', 22],
+  ]);
+  assert.deepEqual(getAntigravityModelQuotaDisplayItems(fixture).map(({ key }) => key), [
+    'gemini-4-carbon-high', 'gemini-4-hydrogen-high',
   ]);
 });
 
@@ -211,3 +292,30 @@ test('AntigravityQuotaSection renders cachedNeedsReauth warning when isNeedsReau
   assert.doesNotMatch(htmlNormal, /quota-reauth-warning/);
 });
 
+test('Antigravity card time picker can show the quota refresh time without selecting the card', async () => {
+  const { loadHookModule } = await import('../../tests/helpers/reactHookHarness');
+  const h = loadHookModule(new URL('../components/AccountLastUsed.tsx', import.meta.url), {
+    'react-i18next': { useTranslation: () => ({ t: (_key: string, fallback?: string) => fallback || _key }) },
+    '../stores/useUiConfigStore': {
+      useUiConfigStore: (selector: (state: unknown) => unknown) =>
+        selector({ timeDisplayMode: 'refresh', cardTimeModes: new Map(), setCardTimeMode() {} }),
+    },
+    './SingleSelectDropdown': { SingleSelectDropdown: () => null },
+  });
+  const rendered = h.render(() =>
+    h.exports.AccountLastUsed({
+      accountId: 'acc-1',
+      lastSwitchedAt: 1700000000,
+      refreshAt: 1700000300,
+      createdAt: 1700000000,
+      formatDate: String,
+    }),
+  );
+  const picker = rendered.props.children[1];
+  assert.equal(picker.props.value, 'refresh');
+  assert.equal(picker.props.options[0].disabled, false);
+  let stopped = 0;
+  rendered.props.onClick({ stopPropagation: () => { stopped += 1; } });
+  assert.equal(stopped, 1);
+  h.unmount();
+});

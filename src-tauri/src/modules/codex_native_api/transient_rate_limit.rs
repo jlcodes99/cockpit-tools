@@ -2,6 +2,7 @@
 use serde_json::Value;
 
 pub(crate) fn applies(value: &Value) -> bool {
+    let wrapped = super::upstream_errors::can_infer_wrapped_error(value, None);
     if [
         "/error/type",
         "/response/error/type",
@@ -9,6 +10,7 @@ pub(crate) fn applies(value: &Value) -> bool {
         "/type",
     ]
     .iter()
+    .filter(|path| wrapped || !path.starts_with("/body/"))
     .filter_map(|path| value.pointer(path).and_then(Value::as_str))
     .any(|kind| {
         matches!(
@@ -25,6 +27,7 @@ pub(crate) fn applies(value: &Value) -> bool {
         "/code",
     ]
     .iter()
+    .filter(|path| wrapped || !path.starts_with("/body/"))
     .filter_map(|path| value.pointer(path).and_then(Value::as_str))
     .find(|code| !code.trim().is_empty());
     if let Some(code) = code {

@@ -4,6 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Instant;
+#[cfg(feature = "desktop")]
 use tauri::Emitter;
 
 use crate::models::codebuddy::{
@@ -1214,6 +1215,7 @@ pub fn run_quota_alert_if_needed() -> Result<(), String> {
 
         if should_alert {
             last_sent.insert(cooldown_key, now);
+            #[cfg(feature = "desktop")]
             if let Some(app) = crate::get_app_handle() {
                 let msg = account
                     .dosage_notify_zh

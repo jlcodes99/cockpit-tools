@@ -8,7 +8,7 @@ const test = require('node:test');
 const {
   buildFinderScript,
   describeFinderLayout,
-  findTauriDmg,
+  resolveDmgPaths,
   parseArgs,
 } = require('./inject-dmg-readme.cjs');
 
@@ -32,36 +32,33 @@ test('parses the bundle directory argument', () => {
   assert.deepEqual(parseArgs(['--keep-work-dir']), { 'keep-work-dir': 'true' });
 });
 
-test('finds the single Tauri DMG and cleans up stale temporary images', () => {
+test('uses the signed app directly and preserves installer filenames for every architecture', (context) => {
   const bundleDir = makeTempDir();
+  context.after(() => fs.rmSync(bundleDir, { recursive: true, force: true }));
+  const appBundlePath = path.join(bundleDir, 'macos', 'Cockpit Tools.app');
+  fs.mkdirSync(appBundlePath, { recursive: true });
+
+  for (const macArch of ['aarch64', 'x64', 'universal']) {
+    assert.deepEqual(resolveDmgPaths({ bundleDir, productName: 'Cockpit Tools', version: '1.2.3', macArch }), {
+      appName: 'Cockpit Tools.app',
+      appBundlePath,
+      outputPath: path.join(bundleDir, 'dmg', `Cockpit Tools_1.2.3_${macArch}.dmg`),
+    });
+  }
+});
+
+test('fails when no app is available rather than using an existing DMG', (context) => {
+  const bundleDir = makeTempDir();
+  context.after(() => fs.rmSync(bundleDir, { recursive: true, force: true }));
   const dmgDir = path.join(bundleDir, 'dmg');
   fs.mkdirSync(dmgDir, { recursive: true });
-  fs.writeFileSync(path.join(dmgDir, 'Cockpit Tools_1.2.3_aarch64.dmg'), 'dmg');
-  fs.writeFileSync(path.join(dmgDir, 'Cockpit Tools 1.2.3.inject.dmg'), 'stale');
-
-  const found = findTauriDmg(bundleDir);
-
-  assert.equal(path.basename(found), 'Cockpit Tools_1.2.3_aarch64.dmg');
-  assert.equal(fs.existsSync(path.join(dmgDir, 'Cockpit Tools 1.2.3.inject.dmg')), false);
+  fs.writeFileSync(path.join(dmgDir, 'Cockpit Tools_1.2.3_aarch64.dmg'), 'old build');
+  assert.throws(() => resolveDmgPaths({
+    bundleDir, productName: 'Cockpit Tools', version: '1.2.3', macArch: 'aarch64',
+  }), /Missing built \.app bundle/);
 });
 
-test('returns nothing when the bundle has no DMG yet', () => {
-  const bundleDir = makeTempDir();
-  fs.mkdirSync(path.join(bundleDir, 'dmg'), { recursive: true });
-  assert.equal(findTauriDmg(bundleDir), null);
-});
-
-test('rejects ambiguous bundle directories', () => {
-  const bundleDir = makeTempDir();
-  const dmgDir = path.join(bundleDir, 'dmg');
-  fs.mkdirSync(dmgDir, { recursive: true });
-  fs.writeFileSync(path.join(dmgDir, 'a.dmg'), 'dmg');
-  fs.writeFileSync(path.join(dmgDir, 'b.dmg'), 'dmg');
-
-  assert.throws(() => findTauriDmg(bundleDir), /expected one DMG/);
-});
-
-test('describes the Finder layout written by the rebuild step', () => {
+test('describes the Finder layout written during packaging', () => {
   const workDir = makeTempDir();
   const dsStorePath = path.join(workDir, '.DS_Store');
   const body = writeFakeDsStore(dsStorePath, 3);

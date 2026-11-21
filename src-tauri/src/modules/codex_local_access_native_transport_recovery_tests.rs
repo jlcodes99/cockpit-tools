@@ -84,8 +84,8 @@ async fn http2_recovery_policy_changes_real_tls_alpn_then_expires() {
     }
     for (at, expected) in [(now, b"http/1.1".as_slice()), (now + Duration::from_secs(301), b"h2".as_slice())] {
         let (address, root, server) = native_alpn_fixture(vec![b"h2".to_vec(), b"http/1.1".to_vec()]).await;
-        let client = native_http_client_builder(true, cache.http1_fallback("route", at))
-            .no_proxy().tls_built_in_root_certs(false).add_root_certificate(root)
+        let client = native_codex_http_client_builder(native_test_tls_roots(root), cache.http1_fallback("route", at))
+            .unwrap().no_proxy()
             .timeout(NATIVE_ALPN_DEADLINE).build().unwrap();
         let _ = client.get(format!("https://{address}/responses")).send().await;
         assert_eq!(server.await.unwrap().unwrap().as_deref(), Some(expected));

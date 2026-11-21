@@ -1,5 +1,5 @@
-//! Stack-safety regressions: inspect Future types without constructing AppHandle,
-//! invoking a command, polling a Future, or reading/writing any account data.
+//! Quota refresh stack-safety and post-refresh coordination regressions.
+//! These tests do not need an AppHandle or live account data.
 
 use super::*;
 use std::future::Future;
@@ -26,7 +26,9 @@ fn quota_refresh_command_futures_stay_small() {
     assert_small_future("single", |(app, account_id)| {
         refresh_codex_quota(app, account_id)
     });
-    assert_small_future("current", refresh_current_codex_quota);
+    assert_small_future("current", |(app, background)| {
+        refresh_current_codex_quota(app, background)
+    });
     assert_small_future("all", refresh_all_codex_quotas);
     assert_small_future("batch", |(app, account_ids, respect, background)| {
         refresh_codex_quotas_batch(app, account_ids, respect, background)
@@ -37,6 +39,9 @@ fn quota_refresh_command_futures_stay_small() {
 fn quota_refresh_worker_futures_stay_small() {
     assert_small_future("post-refresh", |app: &'static AppHandle| {
         run_codex_post_refresh_checks(app)
+    });
+    assert_small_future("post-refresh pass", |app: &'static AppHandle| {
+        run_codex_post_refresh_check_once(app)
     });
     assert_small_future(
         "import-refresh",
@@ -93,13 +98,56 @@ fn quota_refresh_keeps_early_boxing_boundaries_and_async_commands() {
         );
     }
     assert!(
-        compact(command_body("run_codex_post_refresh_checks")).contains(
-            "Box::pin(switch_codex_account(app.clone(),target_id.clone(),None,None,None,None,)).await"
+        compact(command_body("run_codex_post_refresh_check_once")).contains(
+            "Box::pin(switch_codex_account_with_path_recovery(app.clone(),target_id.clone(),None,None,None,None,Some(selection),)).await"
         )
     );
     let imported = compact(command_body("refresh_imported_codex_accounts"));
     assert!(imported.contains("Box::pin(codex_quota::refresh_account_quota_background(&account_id)).await"));
     assert!(imported.contains("Box::pin(run_codex_post_refresh_checks(app)).await"));
+    let current = compact(command_body("refresh_current_codex_quota"));
+    assert!(current.contains(concat!(
+        "ifbackground.unwrap_or(false){",
+        "Box::pin(codex_quota::refresh_account_quota_background(&account.id)).await",
+        "}else{Box::pin(codex_quota::refresh_account_quota(&account.id)).await}",
+    )));
+}
+
+#[tokio::test]
+async fn post_refresh_checks_merge_updates_and_read_the_latest_quota() {
+    use std::sync::{atomic::AtomicUsize, Arc};
+
+    let state = Arc::new(AtomicU8::new(0));
+    let quota = Arc::new(AtomicUsize::new(80));
+    let (observed, mut observations) = tokio::sync::mpsc::unbounded_channel();
+    let (release, hold_first_pass) = tokio::sync::oneshot::channel();
+    let worker_state = state.clone();
+    let worker_quota = quota.clone();
+    let task = tokio::spawn(async move {
+        let mut hold = Some(hold_first_pass);
+        CodexPostRefreshRun::request(&worker_state).unwrap().drain(|| {
+            let hold = hold.take();
+            let remaining = worker_quota.load(Ordering::Acquire);
+            let observed = observed.clone();
+            async move {
+                observed.send(remaining).unwrap();
+                if let Some(hold) = hold {
+                    hold.await.unwrap();
+                }
+            }
+        }).await;
+    });
+
+    assert_eq!(observations.recv().await, Some(80));
+    for remaining in [40, 5] {
+        quota.store(remaining, Ordering::Release);
+        assert!(CodexPostRefreshRun::request(&state).is_none());
+    }
+    release.send(()).unwrap();
+    task.await.unwrap();
+    assert_eq!(observations.recv().await, Some(5));
+    assert_eq!(observations.recv().await, None);
+    assert!(CodexPostRefreshRun::request(&state).is_some());
 }
 
 #[test]

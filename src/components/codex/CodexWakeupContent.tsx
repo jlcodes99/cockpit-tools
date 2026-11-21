@@ -13,7 +13,6 @@ import { useDurableUiSetting } from '../../hooks/useDurableUiSetting';
 import { previewDurableUiSetting } from '../../utils/durableUiSettings';
 import { useTranslation } from 'react-i18next';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
 import { confirm as confirmDialog } from '@tauri-apps/plugin-dialog';
 import {
   Check,
@@ -86,20 +85,6 @@ import { getCodexWakeupTaskResult } from './codexWakeupTaskResult';
 import { isReducedMotionEnabled } from '../../utils/reducedMotion';
 
 const WAKEUP_ACCOUNT_PAGE_SIZE_OPTIONS = [50, 100, 200] as const;
-
-interface CodexWakeupGeneralConfig {
-  language?: string;
-  theme?: string;
-  auto_refresh_minutes: number;
-  codex_auto_refresh_minutes?: number;
-  close_behavior?: string;
-  opencode_app_path?: string;
-  antigravity_app_path?: string;
-  codex_app_path?: string;
-  vscode_app_path?: string;
-  opencode_sync_on_switch?: boolean;
-  codex_launch_on_switch?: boolean;
-}
 
 interface CodexWakeupContentProps {
   accounts: CodexAccount[];
@@ -252,7 +237,6 @@ const QUICK_TIME_OPTIONS = ['07:00', '08:00', '09:00', '10:00', '14:00', '18:00'
 const REASONING_EFFORT_OPTIONS: CodexWakeupReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
 // 所有唤醒默认落在 GPT-5.6 Luna；5.5 之前的模型不再作为唤醒目标。
 const DEFAULT_WAKEUP_REASONING_EFFORT: CodexWakeupReasoningEffort = 'medium';
-const QUOTA_RESET_MIN_REFRESH_MINUTES = 2;
 const MAX_STARTUP_DELAY_MINUTES = 1440;
 const CODEX_WAKEUP_MODEL_SELECTION_STORAGE_KEY = 'agtools.codex.wakeup.model_selection';
 const buildWakeupTestScopeId = () =>
@@ -1720,24 +1704,6 @@ export function CodexWakeupContent({
     [filteredTestAccounts, testAccountIds],
   );
 
-  const hasEnabledQuotaResetTask = useCallback(
-    (tasks: CodexWakeupTask[]) =>
-      tasks.some((task) => task.enabled && task.schedule.kind === 'quota_reset'),
-    [],
-  );
-
-  const ensureCodexRefreshIntervalForQuotaReset = useCallback(async () => {
-    const config = await invoke<CodexWakeupGeneralConfig>('get_general_config');
-    if (config.codex_auto_refresh_minutes === QUOTA_RESET_MIN_REFRESH_MINUTES) {
-      return false;
-    }
-    await invoke('save_refresh_interval_config', {
-      codexAutoRefreshMinutes: QUOTA_RESET_MIN_REFRESH_MINUTES,
-    });
-    window.dispatchEvent(new Event('config-updated'));
-    return true;
-  }, []);
-
   const copyCommand = useCallback(async (command: string) => {
     await navigator.clipboard.writeText(command);
     setCopiedCommand(command);
@@ -2259,26 +2225,16 @@ export function CodexWakeupContent({
       tasks: CodexWakeupTask[],
       modelPresets: CodexWakeupModelPreset[] = state.model_presets,
     ) => {
-      const refreshAdjusted =
-        enabled && hasEnabledQuotaResetTask(tasks)
-          ? await ensureCodexRefreshIntervalForQuotaReset()
-          : false;
       const next = await saveState(enabled, tasks, modelPresets);
-      const savedEnabled = next.enabled;
       setNotice({
         tone: 'success',
-        text: savedEnabled
-          ? refreshAdjusted
-            ? t('codex.wakeup.noticeSavedEnabledWithQuotaReset', {
-                count: next.tasks.length,
-                minutes: QUOTA_RESET_MIN_REFRESH_MINUTES,
-              })
-            : t('codex.wakeup.noticeSavedEnabled', { count: next.tasks.length })
-          : t('codex.wakeup.noticeSavedDisabled', { count: next.tasks.length }),
+        text: t(next.enabled ? 'codex.wakeup.noticeSavedEnabled' : 'codex.wakeup.noticeSavedDisabled', {
+          count: next.tasks.length,
+        }),
       });
       return next;
     },
-    [ensureCodexRefreshIntervalForQuotaReset, hasEnabledQuotaResetTask, saveState, state.model_presets, t],
+    [saveState, state.model_presets, t],
   );
 
   const toggleAllTasks = useCallback(async () => {

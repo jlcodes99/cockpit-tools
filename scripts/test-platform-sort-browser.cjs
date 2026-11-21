@@ -11,7 +11,7 @@ const browserPaths = [process.env.PLATFORM_SORT_BROWSER,
 ].filter(Boolean);
 const browserPath = browserPaths.find(candidate => fs.existsSync(candidate));
 let browserProcess;
-require('esbuild').buildSync({ entryPoints: [path.join(root, 'tests/platform-sort/fixture.tsx')], bundle: true, outfile: path.join(base, 'platform-sort-fixture.js'), format: 'iife', loader: { '.css': 'css', '.png': 'dataurl', '.svg': 'dataurl' } });
+require('esbuild').buildSync({ entryPoints: [path.join(root, 'tests/platform-sort/fixture.tsx')], bundle: true, outfile: path.join(base, 'platform-sort-fixture.js'), format: 'iife', define: { 'import.meta.env': '{}' }, loader: { '.css': 'css', '.png': 'dataurl', '.svg': 'dataurl' } });
 fs.copyFileSync(path.join(root, 'tests/platform-sort/fixture.html'), path.join(base, 'platform-sort-fixture.html'));
 
 let launchError;
@@ -117,6 +117,48 @@ let socket;
  await mouse('mouseMoved',above,{button:'left',buttons:1});await wait(120);await end(above);
  const expandedAfter=await state();check(expandedAfter.order[groupIndex-1]==='group:fixture-sort-group','Expanded group did not move as one block');result.expandedGroup=true;
  check(await ev(`document.querySelectorAll('.sortable-layout-preview').length===0`),'Preview not cleaned up');
+ await ev(`window.fixture.prepareSidebar(); window.fixture.setMode('original');
+   window.fixture.setSidebarEntry('platform:zed', true);
+   window.fixture.setSidebarEntry('platform:cursor', true)`);
+ await ev(`document.querySelector('[data-sortable-id="group:codex-suite"] .platform-layout-expand-trigger').click()`);
+ const childPin = `[data-sortable-id="codex_api_service"] .platform-layout-toggle:nth-child(2) input`;
+ check(await ev(`document.querySelector(${JSON.stringify(childPin)}).disabled`),
+   'Unselected child shortcut did not respect the existing sidebar capacity');
+ await send('Emulation.setDeviceMetricsOverride', { width: 640, height: 768, deviceScaleFactor: 1, mobile: false });
+ check(await ev(`(() => {
+   const grid = document.querySelector('[data-sortable-id="codex_api_service"] .is-child-grid');
+   return [...grid.querySelectorAll('label')].every((label) => {
+     const text = label.querySelector('span');
+     return text.getBoundingClientRect().right <= label.getBoundingClientRect().right + 1;
+   });
+ })()`), 'Child settings labels overlap at a narrow viewport');
+ await send('Emulation.clearDeviceMetricsOverride');
+ await ev(`window.fixture.setSidebarEntry('platform:zed', false);
+   window.fixture.setSidebarEntry('platform:cursor', false)`);
+ check(await ev(`(() => {
+   const input = document.querySelector(${JSON.stringify(childPin)});
+   if (!input || input.checked || input.disabled) return false;
+   input.click();
+   return input.checked;
+ })()`), 'Codex API Service did not have an independent sidebar toggle');
+ await key('Escape', 'Escape', 27);
+ const apiShortcut = '.nav-item[title="My API Service"]';
+ for (const mode of ['classic', 'original']) {
+   await ev(`window.fixture.setMode(${JSON.stringify(mode)})`);
+   check(await ev(`(() => {
+     const shortcut = document.querySelector(${JSON.stringify(apiShortcut)});
+     if (!shortcut || !shortcut.querySelector('.side-nav-group-icon[src^="data:image/gif"]')) return false;
+     shortcut.click();
+     return true;
+   })()`), 'Missing child sidebar shortcut or custom icon in ' + mode);
+   check(await ev(`(() => {
+     const shortcut = document.querySelector(${JSON.stringify(apiShortcut)});
+     return shortcut.closest('[data-page]').dataset.page === 'codex-api-service'
+       && shortcut.classList.contains('active') && !document.querySelector('.nav-item[title="Codex"]').classList.contains('active');
+   })()`), 'Child shortcut did not open and highlight its own page in ' + mode);
+   await ev(`document.querySelector('.nav-item[title="Codex"]').click()`);
+ }
+ result.childSidebar = { classic: true, original: true };
  if(process.env.PLATFORM_SORT_REPORT)fs.writeFileSync(process.env.PLATFORM_SORT_REPORT,JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));
     ws.send(JSON.stringify({ id: ++id, method: 'Browser.close' }));
 })().catch(e => { console.error(e); process.exitCode = 1; }).finally(async () => {

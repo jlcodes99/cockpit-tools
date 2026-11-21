@@ -664,6 +664,7 @@
         "expiresAt": "Expires at: {{time}}",
         "unlimited": "Unlimited",
         "leftPercent": "{{value}}% left",
+        "weeklyLimitReached": "Weekly limit reached",
         "cachedRefreshFailed": "Refresh failed; showing the last successful data",
         "lastSuccessfulQuery": "Last successful: {{time}}",
         "cachedNeedsReauth": "⚠️ Web verification required to continue (cached data below)"
@@ -1049,7 +1050,7 @@
       "title": "Use API key",
       "family": "Group",
       "platform": "Current system",
-      "unsupportedGroup": "No one-click clients are available for this group yet."
+      "unsupportedGroup": "Cockpit Tools does not yet have a client configuration template for APIKEY.FUN’s {{family}} endpoint. You can configure it manually in a client that supports this endpoint."
     },
     "campaign": {
       "badge": "11.11",
@@ -1071,6 +1072,7 @@
     "reset": "Reset to default",
     "tip": "Drag to reorder. Up to three platforms can be shown in the sidebar. If only one is selected, only one is shown.",
     "tipWithGroups": "Drag to reorder. Up to {{max}} entries can appear in the sidebar. Group children do not have sidebar/dashboard toggles and are only used for tray visibility and default-platform switching.",
+    "tipWithSidebarShortcuts": "Drag to reorder. The sidebar can show up to {{max}} entries, including individual platforms from a group.",
     "tipWithGroupsUnlimited": "Drag to reorder. Any number of entries can appear in the sidebar. Group children do not have sidebar/dashboard toggles and are only used for tray visibility and default-platform switching.",
     "addGroup": "Add group",
     "editGroup": "Edit",
@@ -1333,7 +1335,8 @@
       "appSpeed": "Speed",
       "appSpeedDesc": "Writes the selected speed before starting official Codex",
       "autoSyncThreads": "Auto-sync sessions",
-      "autoSyncThreadsDesc": "Off keeps instance histories separate. When enabled, stopping an instance syncs missing sessions and matching additions only once all Codex instances have stopped. Existing content is preserved. Sync may copy large session files."
+      "autoSyncThreadsDesc": "Off keeps instance histories separate. When enabled, stopping an instance syncs missing sessions and matching additions only once all Codex instances have stopped. Existing content is preserved. Sync may copy large session files.",
+      "copyTimeout": "Copy timeout"
     },
     "quota": {
       "unbound": "No bound account",
@@ -1392,6 +1395,7 @@
         "preparingCredentials": "Checking tokens and updating the complete credential set if needed...",
         "profileReady": "The instance auth.json / keychain has been updated safely",
         "cliPrepared": "The CLI launch command is ready",
+        "cliResumeStarted": "CLI session continuation started in the background",
         "startingClient": "Starting and verifying the Codex client process..."
       }
     },
@@ -1545,6 +1549,9 @@
       "trayIconStyleDesc": "Choose the system template icon or the original color app icon",
       "trayIconStyleTemplate": "Template icon",
       "trayIconStyleColor": "Color icon",
+      "menuBarLeftClick": "Menu bar icon left-click action",
+      "menuBarLeftClickMenu": "Open quota menu",
+      "menuBarLeftClickWindow": "Open main window",
       "floatingCardStartup": "Show floating card on startup",
       "floatingCardStartupDesc": "Display the floating account card automatically after app launch",
       "floatingCardAlwaysOnTop": "Keep floating card on top by default",
@@ -1559,6 +1566,9 @@
       "floatingCardShowNowAction": "Show floating card",
       "dataDir": "Data Directory",
       "dataDirDesc": "Storage location for accounts and configuration files.",
+      "dataDirPending": "After restarting, Cockpit Tools will read data from {{path}}.",
+      "dataDirPendingDefault": "After restarting, Cockpit Tools will use the default directory.",
+      "dataDirEnvironment": "The current launch uses the directory specified by COCKPIT_TOOLS_DATA_DIR.",
       "topRightAdVisible": "Show top promo",
       "topRightAdVisibleDesc": "Hide the top promo slot in the app. The Sponsors page is not affected.",
       "opencodeTitle": "OpenCode Integration",
@@ -1644,6 +1654,10 @@
       "antigravityStartupWakeupDesc": "Run enabled Antigravity IDE wakeup tasks once after app startup",
       "codexLaunchOnSwitch": "Launch Codex App when switching Codex",
       "codexLaunchOnSwitchDesc": "Start or restart Codex App after switching accounts",
+      "codexAutomaticSessionRepair": "Automatic session visibility repair",
+      "codexAutomaticSessionRepairDesc": "Choose whether to repair the session index and history file timestamps when launching Codex from Cockpit or switching its session provider.",
+      "codexAutomaticSessionRepairIndexOnly": "Index only",
+      "codexAutomaticSessionRepairQuick": "Quick repair",
       "codexRestartSpecifiedAppOnSwitch": "Restart specified app when switching Codex",
       "codexRestartSpecifiedAppOnSwitchDesc": "When enabled, restart the app at the path below (for plugin-host workflows).",
       "codexSpecifiedAppPath": "Specified app path",
@@ -1751,6 +1765,8 @@
       "claudeSettingsTitle": "Claude Settings",
       "claudeAutoRefresh": "Claude quota auto refresh",
       "claudeAutoRefreshDesc": "Automatically refresh cached quota for Claude accounts in the background.",
+      "claudeShareCodeSessionsOnSwitch": "Sync Code sessions on account switch",
+      "claudeShareCodeSessionsOnSwitchDesc": "Share the Code session list across local accounts when switching the default Claude Desktop profile on macOS.",
       "claudeAppPath": "Claude Desktop launch target",
       "claudeAppPathDesc": "The default profile can use a Microsoft Store target; multi-instance profiles need the real Claude.exe.",
       "antigravityLaunchOnSwitch": "Launch Antigravity IDE on switch",
@@ -1787,6 +1803,10 @@
       "webdavAllowedDomainsDesc": "Comma-separated; empty = no limit. Host must match when set",
       "claudeQuotaDisplayRemaining": "Claude quota as remaining %",
       "claudeQuotaDisplayRemainingDesc": "Default shows used percentage; enable to show remaining. Auto-switch and alerts still use used ratio.",
+      "menuBarLeftClick": "Menu bar left click",
+      "menuBarLeftClickDesc": "Right-click always opens the quota menu.",
+      "menuBarLeftClickQuotaMenu": "Quota menu",
+      "menuBarLeftClickMainWindow": "Main window",
       "menuBarQuota": "Show live quota in menu bar",
       "menuBarQuotaDesc": "When enabled, show remaining quota for the selected platform’s current account next to the menu bar icon. Platform options open in a dialog.",
       "menuBarQuotaEnabledDesc": "On · {{platform}} · remaining for that platform’s current account (lowest of quotas)",
@@ -1819,8 +1839,12 @@
         "quotaCompatDesc": "API Service instances use an available-quota view for client displays and local checks. Actual upstream usage and image limits stay unchanged. This switch applies only to other OAuth + external API setups.",
         "configFailed": "Could not load or save settings: {{error}}",
         "nativePredictions": "Native next-step predictions (Tab)",
-        "nativePredictionsDesc": "Off by default. Suggestions use your current conversation’s API provider and model and incur additional API usage. After changing this setting, restart the affected Codex instances and keep Cockpit Tools running."
-      }
+        "nativePredictionsDesc": "On by default. Suggestions use your current conversation’s API provider and model and incur additional API usage. After changing this setting, restart the affected Codex instances and keep Cockpit Tools running."
+      },
+      "menuBarLeftClick": "Menu bar left click",
+      "menuBarLeftClickDesc": "Right-click always opens the quota menu.",
+      "menuBarLeftClickQuotaMenu": "Quota menu",
+      "menuBarLeftClickMainWindow": "Main window"
     },
     "tabs": {
       "general": "General",
@@ -2832,6 +2856,8 @@
       "crontabValidate": "Validate",
       "crontabValidateHint": "Expression will be validated on save",
       "crontabPreviewEmpty": "Please enter a valid Crontab expression",
+      "weeklyQuotaResetOnly": "Wake only after weekly quota resets",
+      "weeklyQuotaResetHint": "Each selected account wakes after its own weekly quota resets.",
       "timeWindowEnabled": "Enable time window",
       "timeWindowHint": "When enabled, quota reset triggers only within the window; outside uses fixed times.",
       "timeWindow": "Quota reset active window",
@@ -2909,6 +2935,17 @@
     "other_group": "Other Models"
   },
   "codex": {
+    "subagentDefaults": {
+      "title": "Subagent defaults",
+      "description": "These values apply to new subagents. A value specified when spawning takes precedence. Leave a field empty to use the Codex default."
+    },
+    "modelInstructions": {
+      "title": "System instructions",
+      "description": "Choose a local UTF-8 file. The choice is saved immediately and applies to new sessions.",
+      "deferred": "This selection takes effect after switching away from DeepSeek.",
+      "selectFile": "Choose file",
+      "useDefault": "Use default"
+    },
     "cli": {
       "launchSuccess": "Codex CLI launched",
       "selectWorkingDir": "Choose Codex CLI working folder"
@@ -2916,56 +2953,19 @@
     "resetAutomation": {
       "nothingToReset": "No quota window needs a reset right now.",
       "unknownOutcome": "Could not confirm the reset result. Try again.",
-      "applyAllHint": "When enabled, Save copies this rule to every account, replacing custom and disabled settings.",
-      "applyAll": "Save for all accounts",
-      "accountHint": "Accounts without their own settings use the shared default. Saving applies only to this account.",
-      "title": "Auto-use reset cards",
-      "accountTab": "This account",
-      "publicTab": "Shared rule",
-      "inherit": "Use shared rule",
-      "custom": "Custom rule",
-      "off": "Off",
-      "entryDefault": "Auto settings",
       "noCredits": "No reset cards",
-      "publicHint": "Default for accounts without their own settings. Existing custom or disabled settings stay unchanged.",
-      "before": "Before expiry",
-      "expiry": "Use before expiry",
       "minutes": "min",
       "hours": "hours",
       "days": "days",
-      "hostHint": "Runs while Cockpit Tools is open. Card selection is handled by the server. After an automatic redemption, the same account waits 30 minutes before another automatic redemption.",
-      "invalidTime": "Enter a positive duration with whole seconds.",
-      "invalidPercent": "Enter a whole percentage from 0 to 100.",
-      "loadFailed": "Could not load rules: {{error}}",
-      "saveFailed": "Could not save rules: {{error}}",
-      "conflict": "This rule changed elsewhere. Reload before saving.",
+      "conflict": "Account details changed during the reset. Please try again.",
       "busy": "A reset is already running for this account.",
-      "storageError": "Could not read or save reset rules.",
+      "storageError": "Could not read or save reset records.",
       "timeout": "Request timed out. The saved request ID will be reused to avoid using another card.",
-      "history": "Recent activity",
-      "reasonExpiry": "Before expiry",
-      "reasonQuota": "Low quota",
-      "reasonManual": "Manual reset",
-      "reasonCheck": "Background check",
-      "pending": "Awaiting result",
-      "editPublic": "Edit shared rule",
       "accountMissing": "Account no longer exists.",
-      "masterLabel": "Automatically use reset cards",
-      "ruleSource": "Rule source",
-      "weeklyTrigger": "Weekly quota trigger",
-      "preferUsageCredits": "Use credits first",
-      "weeklyRemaining": "Weekly remaining ≤",
-      "previewTitle": "Trigger preview",
-      "previewAny": "Automatically use one reset card when either enabled condition is met:",
       "previewExpiry": "Within {{value}} {{unit}} of card expiry",
       "previewWeekly": "Weekly remaining quota is at most {{percent}}%",
       "previewWeeklyAfterCredits": "Weekly quota is at or below {{percent}}% and usage credits are confirmed unavailable",
-      "previewOff": "Automatic use is off. The rules below are inactive.",
-      "previewEmpty": "No trigger conditions are enabled. Reset cards will not be used automatically.",
-      "cardOn": "Auto",
-      "cardOff": "Off",
-      "orSeparator": " or ",
-      "inheritHint": "These settings follow the public rule. Edit it there or switch to a custom rule."
+      "orSeparator": " or "
     },
     "overload": {
       "setting": "Keep retrying at capacity",
@@ -3075,7 +3075,10 @@
       "sessionRestoreFailed": "Session repair failed and backup restoration is incomplete. Launch stopped; inspect the logs and backups before retrying.",
       "bindingFailed": "Account binding could not be confirmed. Launch stopped; retry switching accounts.",
       "processScanFailed": "Could not inspect the old background processes. Launch stopped; retry.",
-      "proxyEntryFailed": "The configured proxy entry could not start. No alternative route was used; retry."
+      "proxyEntryFailed": "The configured proxy entry could not start. No alternative route was used; retry.",
+      "proxyEnvUnavailable": "Could not apply proxy settings. Check this Codex instance’s .env file and try again.",
+      "proxyEnvChanged": "The .env file changed during launch. Save your edits and try again.",
+      "proxyEnvStopFailed": "The .env file changed during launch and Codex could not be stopped. Close the instance and try again."
     },
     "oauthProxy": {
       "toggle": "Authorize via proxy",
@@ -3151,6 +3154,7 @@
         "operation": "Actions",
         "manage": "Manage",
         "resetDefaults": "Reset to defaults",
+        "embeddedFallback": "The updated model catalog is unavailable. Cockpit is using its built-in catalog.",
         "inheritHint": "Official models keep their capability fields; custom models use a general capability template. Visible models can be added or removed.",
         "validation": {
           "required": "Keep at least one model.",
@@ -3197,6 +3201,20 @@
       "quota": {
         "hourly": "5h",
         "weekly": "Weekly"
+      },
+      "sessionResume": {
+        "title": "Session resume",
+        "enabled": "Send a continuation prompt when this instance starts",
+        "cliHint": "Run in Terminal sends the configured prompt. Command previews, copying, and custom commands keep their usual behavior. When a switch is set to start this instance, the prompt is sent in the background.",
+        "target": "Resume target",
+        "recentActivity": "Most recently active session",
+        "lastCreated": "Most recently created session",
+        "previousDesktopSession": "Session viewed before stopping",
+        "specific": "Specific session",
+        "threadId": "Session ID",
+        "prompt": "Continuation prompt",
+        "invalidId": "Enter a valid session UUID.",
+        "promptRequired": "Enter a continuation prompt."
       },
       "syncAllRecords": {
         "action": "Sync All Instance Records",
@@ -3418,7 +3436,8 @@
       "portInUseAction": "Close port and retry",
       "timeout": "Authentication timed out. Please click",
       "timeoutRetry": "Refresh Auth Link",
-      "reauthEmailLabel": "Reauth account"
+      "reauthEmailLabel": "Reauth account",
+      "reauthEmailChangeHint": "If your sign-in email has changed, use the new address in the browser. The saved address updates after Cockpit verifies the same user and workspace."
     },
     "token": {
       "importPartial": "Import finished. Succeeded: {{success}}, failed: {{failed}}. {{errors}}",
@@ -3459,6 +3478,7 @@
       "savedPath": "Saved Path"
     },
     "accountNote": {
+      "refreshEmailHint": "If your OpenAI account email changed, reauthorize the same account and workspace to update it here.",
       "title": "Account Note",
       "label": "Account Note",
       "desc": "Add password, 2FA, mail URL, phone, and other notes for {{account}}.",
@@ -3845,7 +3865,7 @@
       "modal": {
         "title": "Add to API Service",
         "desc": "Choose Codex OAuth or API Key accounts to include in the API service collection. Added accounts are hidden from the regular overview and managed only from the API service card.",
-        "restrictFreeToggle": "Limit Free Accounts",
+        "restrictFreeToggle": "Hide Free non-members",
         "sessionAffinityConfirmTitle": "Enable session affinity?",
         "sessionAffinityDescription": "When enabled, the same conversation will try to keep using the same account. If that account is unavailable, routing can still switch accounts; a new account is selected after the expiration time.",
         "pendingOauthUnsupported": "Pending auth cannot join",
@@ -3966,7 +3986,7 @@
       "hideApiKey": "Hide API Key",
       "apiKeyHiddenHint": "API Key hidden. Click to show.",
       "modelCatalog": {
-        "restartHint": "The model catalog was updated. If Codex is running, restart it to apply the changes.",
+        "launchHint": "Launch Codex from Cockpit with this account to apply your saved model settings.",
         "label": "Model List",
         "fetch": "Fetch from Provider",
         "fetching": "Fetching...",
@@ -3974,7 +3994,7 @@
         "placeholder": "Enter one model ID per line, or separate IDs with commas.",
         "editHint": "Fetched models are added to this draft only. Review and edit them before saving.",
         "syncToggle": "Sync Provider Models to Codex",
-        "syncDescription": "After saving, use this list to generate the Cockpit-managed Codex model catalog. Custom catalogs are not overwritten.",
+        "syncDescription": "This list is applied when you launch Codex from Cockpit with this account. An existing custom model catalog takes precedence.",
         "fetchCredentialsRequired": "Enter the API Key and Base URL first.",
         "fetchEmpty": "The provider returned no models. The current list was kept.",
         "fetchFailed": "Failed to fetch provider models: {{error}}",
@@ -4433,7 +4453,8 @@
           "totalGranted": "Granted",
           "totalAvailable": "Available",
           "isAvailable": "Balance available",
-          "modelLimitsEnabled": "Model Limits"
+          "modelLimitsEnabled": "Model Limits",
+          "weeklyShort": "Weekly"
         },
         "accountBalance": "Account Balance",
         "unlimitedQuota": "Unlimited",
@@ -4551,7 +4572,7 @@
       "additional": "Additional quota",
       "weeklyBlocksHourly": "Weekly quota is 0, so the 5-hour quota is unavailable",
       "windowStats": "Used {{tokens}} · {{cost}}",
-      "windowStatsHint": "Requests, tokens, and account-billed cost this account used via API Service since this window was last full",
+      "windowStatsHint": "API Service requests, tokens, and estimated usage value for this quota window",
       "windowUsed": "Used {{tokens}} · {{cost}}",
       "windowReq": "{{count}} req",
       "reset": "Reset",
@@ -4582,8 +4603,8 @@
       "resetCreditRecordsLoadFailed": "Failed to load reset records: {{error}}",
       "resetCreditGrantedAt": "Granted",
       "resetCreditExpiresAt": "Expires",
-      "windowAccountCostHint": "Account billed (estimated from model prices)",
-      "windowEstimatedFullCostHint": "Scaled from current usage: account-billed cost this window would reach at 100%",
+      "windowAccountCostHint": "Usage value estimated from model API prices. Remaining subscription quota follows the account-reported percentage.",
+      "windowEstimatedFullCostHint": "Estimated full-window usage value, extrapolated from the quota used so far",
       "windowUserCostHint": "User billed",
       "windowWeeks": "{{count}}-week quota",
       "windowDays": "{{count}}-day quota",
@@ -4754,7 +4775,7 @@
         "interval": "Interval",
         "quota_reset": "After quota reset"
       },
-      "scheduleQuotaResetHint": "When quota-reset wakeup is enabled, auto refresh will be adjusted to run every 2 minutes.",
+      "scheduleQuotaResetHint": "The task uses the account’s latest recorded quota reset time. The Codex auto-refresh interval stays as configured.",
       "quotaResetWindowLabel": "Reset window trigger condition",
       "quotaResetWindowHint": "primary_window usually maps to the 5-hour quota. For free users it may map to weekly quota, and can vary by subscription.",
       "quotaResetDelayLabel": "Delay after reset",
@@ -4830,7 +4851,6 @@
       "triggerQuotaReset": "Quota reset trigger",
       "manualRunConfirm": "Run task \"{{name}}\" now? {{count}} account(s) will be woken up in sequence.",
       "noticeSavedEnabled": "Tasks saved. Total tasks: {{count}}.",
-      "noticeSavedEnabledWithQuotaReset": "Tasks saved. Total tasks: {{count}}. Codex auto refresh has been adjusted to every {{minutes}} minutes.",
       "noticeSavedDisabled": "Task settings saved. All tasks are currently paused.",
       "noticeTaskFinished": "Task finished. {{count}} account(s) succeeded.",
       "noticeTaskFinishedWithError": "Task finished. {{success}} succeeded and {{failed}} failed.",
@@ -5085,7 +5105,7 @@
         "projectsSuccess": "Recovery complete: {{projects}} projects, {{assignments}} assignments; skipped {{skipped}} projects and {{ambiguous}} ambiguous chats.",
         "projectsPending": "A previous recovery was interrupted. Exit the target instance and run Full repair to recover unfinished writes.",
         "projectsDeferred": "Some project metadata was deferred. Exit the target instance and retry Quick repair, or use Full repair.",
-        "switchProjectsDeferred": "Credentials were updated, but local project state could not be synced. Exit the affected Codex instance and start it from Cockpit to retry."
+        "switchProjectsDeferred": "Credentials were updated, but local project or conversation state could not be synced. Exit the affected Codex instance and start it from Cockpit to retry."
       },
       "transferModal": {
         "exportTitle": "Export Sessions",
@@ -5163,6 +5183,14 @@
       }
     },
     "sessionUsage": {
+      "comparison": {
+        "localTotal": "Local session tokens · selected range and instances",
+        "profileTotal": "Official profile · lifetime tokens",
+        "account": "Codex account",
+        "noAccount": "Add a Codex OAuth account to view its official total.",
+        "loadError": "Could not load the official total.",
+        "unavailable": "The official profile did not provide a total."
+      },
       "tab": "Usage",
       "listTab": "Sessions",
       "title": "Session Usage",
@@ -5285,7 +5313,13 @@
       "usage": {
         "title": "Usage Stats",
         "lastRecorded": "Last recorded",
-        "trendEmpty": "No requests in the selected range"
+        "inputTextCoverage": "Measured {{measured}} of {{total}} requests",
+        "trendEmpty": "No requests in the selected range",
+        "periodTokens": "Tokens per interval",
+        "cumulativeTokens": "Cumulative tokens",
+        "tokenComposition": "Token usage breakdown",
+        "nonReasoningOutput": "Non-reasoning output",
+        "reasoningTokens": "Reasoning"
       },
       "healthTitle": "Service Health",
       "compat": {
@@ -5296,7 +5330,7 @@
         "responsesTitle": "Responses",
         "responsesNote": "Codex-native Responses entry.",
         "anthropicTitle": "Anthropic Messages",
-        "claudeCodeNoModels": "This key has no Claude Code preset models. Save the aliases in Model Rules first.",
+        "claudeCodeNoModels": "This key has no available chat models. Check its model rules and account pool.",
         "claudeCodeSettingsChanged": "Settings changed after the preview. Preview them again.",
         "claudeCodeServiceUnavailable": "Could not load models for this key. Check the API Service and key status.",
         "claudeCodeNoBackup": "No backup matches the current settings.",
@@ -5359,6 +5393,11 @@
         "saveRules": "Save Rules",
         "rulesSaved": "Model rules saved",
         "pricingAction": "Pricing",
+        "refreshCatalog": "Refresh Models",
+        "refreshComplete": "Models and prices checked.",
+        "refreshFailed": "Could not refresh models or prices. Current data is still in use.",
+        "refreshModelsFailed": "Could not refresh models. Current models are still in use.",
+        "refreshPricesFailed": "Could not refresh prices. Current prices are still in use.",
         "pricingTitle": "Model Pricing",
         "pricingDesc": "USD / 1M tokens, used only for local value statistics.",
         "pricingModel": "Model",
@@ -5395,6 +5434,16 @@
         "pricingRepriceCompleted": "Historical estimates updated",
         "pricingRepriceSaveBlocked": "Historical estimate update in progress; save after it finishes"
       },
+      "accountPools": {
+        "title": "Named account pools",
+        "add": "Add account pool",
+        "name": "Pool name",
+        "deleteHint": "Linked keys keep their current account scope after this pool is deleted.",
+        "detach": "Unlink pool",
+        "saved": "Account pool saved",
+        "removed": "Account pool deleted",
+        "detached": "Key unlinked from the pool"
+      },
       "keys": {
         "lastUsed": "Last used",
         "routingAccounts": "Routing Accounts",
@@ -5419,6 +5468,13 @@
         "tokenLimit": "Total token limit",
         "tokenLimitPlaceholder": "Example: 10m",
         "tokenLimitHint": "Leave blank for unlimited. Input and output tokens are combined across all models.",
+        "monthlyTokens": {
+          "title": "Monthly token reminder",
+          "used": "This month: {{used}} tokens",
+          "hint": "Leave blank to disable. A reminder appears once per local calendar month and requests continue.",
+          "invalid": "Enter a whole number of tokens.",
+          "notification": "{{label}} has used {{used}} tokens this month and reached its {{threshold}}-token reminder."
+        },
         "tokenLimitInvalid": "Enter a valid token limit, for example 10m or 10000000",
         "tokenLimitUsage": "Token limit",
         "tokenLimitCurrentUsage": "Used: {{used}} tokens",
@@ -5454,6 +5510,10 @@
         "maxRetryInterval": "Retry Wait",
         "disableCooling": "Disable Cooldown",
         "saveOptions": "Save Options",
+        "accountQuotaFloor": "Minimum remaining quota",
+        "accountQuotaFloorHint": "When the remaining quota in any included window reaches this value, the account stops taking new API service requests. Leave blank to disable.",
+        "accountQuotaFloorInvalid": "Enter a whole percentage from 1 to 100.",
+        "accountQuotaFloorSaveFailed": "Could not save the minimum remaining quota.",
         "immediateSseResponse": "Immediate SSE 200",
         "maxConcurrentImageRequests": "Image requests per account",
         "maxAccountConcurrency": "Account concurrency",
@@ -5575,6 +5635,12 @@
         "tokenOutput": "Out",
         "tokenCache": "Cached",
         "tokenTotal": "Total tokens",
+        "inputTextCharacters": "Input characters",
+        "inputTextCharactersHint": "Unicode character count of message and instruction text submitted with this request, including any text history sent by the client.",
+        "highTokenRequests": "High-token requests",
+        "highTokenBadge": "High tokens",
+        "tokenThreshold": "Token threshold",
+        "highTokenHint": "Recorded requests using at least {{threshold}} tokens",
         "speedAdjusted": "{{tier}} → Standard",
         "officialDefaultSpeed": "Official subscription access does not support speed overrides. This attempt used the default speed.",
         "sentTier": "Sent: {{tier}}",
@@ -6523,6 +6589,13 @@
       "restart": "Restart CLI",
       "restarting": "Restarting…",
       "restarted": "CLI daemon restarted.",
+      "autoRefresh": "Automatically refresh CLI after switching accounts",
+      "autoRefreshHint": "Refresh the default CLI daemon when it is idle and has no connected clients.",
+      "autoDeferred": "Automatic CLI refresh could not be confirmed. Review the daemon before restarting.",
+      "workspaceConfirmed": "CLI daemon restarted and the selected OAuth workspace was verified.",
+      "workspaceUnconfirmed": "CLI daemon restarted. The selected OAuth workspace could not be verified.",
+      "workspaceMismatch": "The restarted CLI daemon is using a different OAuth account or workspace.",
+      "restartUnconfirmed": "The new CLI daemon could not be verified. Try again or copy the command to your terminal.",
       "restartFailed": "Restart failed. Try again or copy the command to your terminal.",
       "title": "Refresh CLI account",
       "description": "Credentials were saved, but the Codex CLI daemon for this profile is still running and may retain the previous account.",
@@ -6745,6 +6818,12 @@
       "saveOnly": "Save only",
       "validationBusy": "The previous path check is still running. Please retry shortly."
     },
+    "customProviderUsage": {
+      "title": "Custom quota query",
+      "settings": "Query settings (JSON)",
+      "hint": "Leave blank to use automatic detection. Use headers to add request headers. Separate alternative field paths with | to use the first non-null value.",
+      "invalid": "Check the quota query JSON, the same-origin endpoint, and the field mappings."
+    },
     "openaiUsage": {
       "monthCost": "Month spend",
       "scope": "Organization spend; requests and tokens cover text endpoints only. UTC reporting.",
@@ -6790,7 +6869,7 @@
       "official": "Official history",
       "local": "Local usage",
       "officialHint": "Past 30 days, from official records.",
-      "localHint": "Records manual and automatic actions through this app from now on. Older data is not backfilled.",
+      "localHint": "Records manual actions through this app and preserves earlier automatic records. Older data is not backfilled.",
       "officialEmpty": "No reset activity in the past 30 days",
       "localEmpty": "No local usage records",
       "received": "Reset received",
@@ -6807,7 +6886,13 @@
       "requestId": "Request ID",
       "more": "Show more",
       "loadFailed": "Could not load history",
-      "officialUnavailable": "Official reset history is unavailable for this account"
+      "officialUnavailable": "Official reset history is unavailable for this account",
+      "legacyActivityTitle": "Earlier activity log (read-only)",
+      "legacyActivityHint": "Shown by saved account ID only; does not infer workspace identity or card redemption outcome.",
+      "legacyReasonExpiry": "Before expiry",
+      "legacyReasonQuota": "Low quota",
+      "legacyReasonManual": "Manual reset",
+      "legacyReasonCheck": "Background check"
     }
   },
   "codebuddy": {
@@ -6825,7 +6910,16 @@
         "dir": "Folder"
       },
       "unknownTime": "Unknown time",
-      "searchPlaceholder": "Search by title or working directory"
+      "searchPlaceholder": "Search by title or working directory",
+      "rebind": {
+        "title": "Change workspace folder",
+        "scope": "Rebind all local sessions from this folder in the selected WorkBuddy instance. Quit that instance before applying.",
+        "instance": "WorkBuddy instance",
+        "choose": "Choose new folder",
+        "apply": "Rebind sessions",
+        "noSessions": "No local sessions remain in that folder. Refresh the list and try again.",
+        "success": "Local sessions rebound ({{count}})"
+      }
     },
     "title": "CodeBuddy Account",
     "noAccounts": "No CodeBuddy accounts",
@@ -8316,6 +8410,10 @@
       }
     },
     "modelProbe": {
+      "results": "Test results",
+      "reply": "Model reply",
+      "backToSetup": "Back to setup",
+      "catalogUnavailable": "Could not load models.",
       "scopeAll": "All ({{count}})",
       "scopeSelected": "Selected ({{count}})",
       "scopeCurrent": "Current account",
@@ -8343,6 +8441,7 @@
       "open": "Probe models"
     },
     "probeNotice": {
+      "recovered": "{{model}} available again at {{time}}",
       "until": "{{model}} was limited at last probe, resets {{time}}",
       "unavailable": "{{model}} was limited at last probe",
       "failed": "Last probe of {{model}} failed"
@@ -9355,5 +9454,125 @@
     "errorModel": "Use a unique, exact model name without wildcards.",
     "errorSave": "Could not load or save settings. Retry.",
     "saved": "Saved. New requests use these settings."
+  },
+  "antigravityTokenUsage": {
+    "tab": "Session Usage",
+    "subtitle": "Local token usage from Antigravity sessions",
+    "title": "Antigravity Session Token Usage",
+    "desc": "Aggregates real token usage from local Antigravity session databases (~/.gemini/antigravity) in read-only mode, strictly separating Thinking and Output tokens.",
+    "hint": "Read-only scan of SQLite steps/gen_metadata (WAL-aware), RPC cache, and transcript JSONL. Output tokens exclude Thinking tokens (zero double-counting); estimated tokens (if any) are kept separate from exact API totals.",
+    "summary": {
+      "badge": "Local Tokens",
+      "input": "Input",
+      "thinking": "Thinking",
+      "output": "Output",
+      "cache": "Cache",
+      "total": "Total",
+      "turns": "Turns",
+      "sessionsUnit": "sessions",
+      "scanning": "Scanning…",
+      "updating": "Updating…",
+      "detail": "Details"
+    },
+    "range": {
+      "label": "Time Range",
+      "today": "Today",
+      "7d": "Last 7 Days",
+      "30d": "Last 30 Days",
+      "month": "This Month",
+      "all": "All Time"
+    },
+    "granularity": {
+      "label": "Granularity",
+      "day": "Daily",
+      "week": "Weekly",
+      "month": "Monthly"
+    },
+    "kinds": {
+      "all": "All Types",
+      "main": "Main",
+      "swarm": "Swarm",
+      "subagent": "Subagent"
+    },
+    "filters": {
+      "kindLabel": "Session Type",
+      "modelLabel": "Model",
+      "workspaceLabel": "Workspace",
+      "allModels": "All Models",
+      "allWorkspaces": "All Workspaces",
+      "searchPlaceholder": "Search title, session ID, workspace, model…"
+    },
+    "dataDir": {
+      "label": "Data Dir:",
+      "customBadge": "Custom",
+      "choose": "Change Folder",
+      "reset": "Reset Default"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "rebuild": "Rescan",
+      "backToAccounts": "Back to Accounts"
+    },
+    "rebuildConfirm": {
+      "title": "Full Rescan",
+      "message": "Clear Cockpit Tools local scan cache and re-read all Antigravity session files in read-only mode. Continue?"
+    },
+    "status": {
+      "scanning": "Scanning Antigravity session databases…",
+      "ready": "Scanned {{dbFiles}} DB files · {{sessions}} sessions · {{turns}} turns",
+      "idle": "Not scanned yet",
+      "cacheStats": "Cache {{hits}} hit / {{misses}} new ({{durationMs}} ms)",
+      "scannedAt": "Synced {{time}}"
+    },
+    "cards": {
+      "total": "Total Tokens",
+      "totalExact": "Total Exact Tokens",
+      "input": "Input Tokens",
+      "thinking": "Thinking Tokens",
+      "output": "Output Tokens",
+      "cache": "Cache Tokens",
+      "conversations": "Conversations",
+      "turns": "Turns",
+      "coverage": "Exact Coverage",
+      "avgPerDay": "Avg / Active Day"
+    },
+    "estimated": {
+      "notice": "{{turns}} turns lacked raw API usage and were estimated separately (never added to Exact Total):"
+    },
+    "trend": {
+      "title": "Token Usage Trend",
+      "empty": "No token usage recorded in the selected time range"
+    },
+    "tables": {
+      "byModel": "By Model",
+      "byWorkspace": "By Workspace",
+      "byKind": "By Session Type (Main / Swarm / Subagent)",
+      "conversations": "Conversation Sessions",
+      "conversationTitle": "Conversation",
+      "modelName": "Model",
+      "workspaceName": "Workspace",
+      "sessions": "Sessions",
+      "turns": "Turns",
+      "total": "Total",
+      "updatedAt": "Updated"
+    },
+    "pagination": {
+      "info": "Page {{page}} / {{totalPages}} ({{totalItems}} sessions)"
+    },
+    "detail": {
+      "openParent": "Open Parent Session",
+      "children": "Child Sessions (Swarm / Subagent)",
+      "turnsTimeline": "Turn-by-Turn Token Timeline"
+    },
+    "empty": {
+      "title": "No token usage found for current filters",
+      "desc": "Try switching Time Range to \"All Time\" or click Refresh after using Antigravity.",
+      "dirMissing": "Antigravity data directory was not found. Please check the folder path above.",
+      "noRows": "No matching data"
+    },
+    "errors": {
+      "loadFailed": "Failed to load token usage: {{error}}",
+      "syncFailed": "Failed to scan token usage: {{error}}"
+    }
   }
 }

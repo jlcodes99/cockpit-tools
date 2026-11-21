@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Cockpit Tools",
-  "version": "1.4.0",
+  "version": "1.4.2",
   "identifier": "com.jlcodes.cockpit-tools",
   "build": {
     "beforeDevCommand": "node scripts/prepare-tauri.cjs && npm run dev",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "node scripts/prepare-tauri.cjs && npm run build",
     "frontendDist": "../dist"
   },

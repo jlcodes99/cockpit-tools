@@ -58,6 +58,7 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
   const displayedError = error || snapshotError;
   const snapshotInFlightRef = useRef(false);
   const snapshotVersionRef = useRef(0);
+  const contentRevisionRef = useRef<string | undefined>(undefined);
   const [copied, setCopied] = useState<boolean>(false);
   const [pathCopied, setPathCopied] = useState<boolean>(false);
 
@@ -101,15 +102,21 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
 
   const loadSnapshot = useCallback(
     async (showLoading: boolean) => {
-      if (showLoading) { setError(''); setSnapshotError(''); setLoading(true); }
       if (snapshotInFlightRef.current) return;
+      if (showLoading) { setError(''); setSnapshotError(''); setLoading(true); }
       snapshotInFlightRef.current = true;
       const version = snapshotVersionRef.current;
       try {
-        const next = await getLogSnapshot(selectedFileName || undefined, lineLimit);
+        const next = await getLogSnapshot(
+          selectedFileName || undefined,
+          lineLimit,
+          showLoading ? undefined : contentRevisionRef.current,
+        );
         if (version !== snapshotVersionRef.current) return;
         setSnapshot(next);
         setSnapshotError('');
+        contentRevisionRef.current = next.content_revision ?? undefined;
+        if (next.content === null) return;
         setRawContent(next.content);
 
         const marker = clearMarkerRef.current;
@@ -139,6 +146,7 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
 
   useEffect(() => {
     snapshotVersionRef.current++;
+    contentRevisionRef.current = undefined;
     if (!open) {
       return;
     }

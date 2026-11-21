@@ -907,6 +907,12 @@ fn get_old_codex_data_dir() -> PathBuf {
 
 /// 将旧目录中的 codex 数据迁移到新目录（一次性，迁移成功后删除旧文件）
 fn migrate_codex_data_if_needed(new_data_dir: &PathBuf) {
+    use crate::modules::data_paths;
+    if data_paths::environment_data_dir().is_none()
+        && !matches!(data_paths::active_custom_data_dir(), Ok(None))
+    {
+        return;
+    }
     #[cfg(test)]
     if std::env::var_os("COCKPIT_TOOLS_DATA_DIR").is_some() {
         // Test guards use an explicit data root; never migrate the user's legacy files.

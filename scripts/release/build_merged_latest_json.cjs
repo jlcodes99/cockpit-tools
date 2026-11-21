@@ -107,6 +107,7 @@ function main() {
   const darwinX64Tar = findAsset(assets, /_x64\.app\.tar\.gz$/, 'darwin-x86_64');
   const windowsMsi = findAsset(assets, /_x64_en-US\.msi$/, 'windows-x86_64-msi');
   const windowsNsis = findAsset(assets, /_x64-setup\.exe$/, 'windows-x86_64-nsis');
+  const windowsArmNsis = findAsset(assets, /_arm64-setup\.exe$/, 'windows-aarch64-nsis');
   const linuxX64AppImage = findAsset(assets, /_amd64\.AppImage$/, 'linux-x86_64-appimage');
   const linuxArmAppImage = findAsset(assets, /_aarch64\.AppImage$/, 'linux-aarch64-appimage');
   const linuxX64Deb = findAsset(assets, /_amd64\.deb$/, 'linux-x86_64-deb');
@@ -118,6 +119,7 @@ function main() {
   const darwinX64Entry = buildPlatformEntry(darwinX64Tar, signatures, repo, version);
   const windowsMsiEntry = buildPlatformEntry(windowsMsi, signatures, repo, version);
   const windowsNsisEntry = buildPlatformEntry(windowsNsis, signatures, repo, version);
+  const windowsArmNsisEntry = buildPlatformEntry(windowsArmNsis, signatures, repo, version);
   const linuxX64AppImageEntry = buildPlatformEntry(linuxX64AppImage, signatures, repo, version);
   const linuxArmAppImageEntry = buildPlatformEntry(linuxArmAppImage, signatures, repo, version);
   const linuxX64DebEntry = buildPlatformEntry(linuxX64Deb, signatures, repo, version);
@@ -138,6 +140,8 @@ function main() {
       'windows-x86_64': windowsMsiEntry,
       'windows-x86_64-msi': cloneEntry(windowsMsiEntry),
       'windows-x86_64-nsis': windowsNsisEntry,
+      'windows-aarch64': windowsArmNsisEntry,
+      'windows-aarch64-nsis': cloneEntry(windowsArmNsisEntry),
       'linux-x86_64': linuxX64AppImageEntry,
       'linux-x86_64-appimage': cloneEntry(linuxX64AppImageEntry),
       'linux-x86_64-deb': linuxX64DebEntry,

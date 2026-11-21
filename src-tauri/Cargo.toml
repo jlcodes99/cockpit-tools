@@ -1,6 +1,6 @@
 [package]
 name = "cockpit-tools"
-version = "1.4.0"
+version = "1.4.2"
 description = "Cockpit Tools"
 authors = ["jlcodes"]
 license = "CC-BY-NC-SA-4.0"
@@ -15,6 +15,7 @@ tauri-build = { version = "2", features = [] }
 swift-rs = { version = "1.0.7", features = ["build"] }
 
 [dev-dependencies]
+dotenvy = "0.15.7"
 hyper = { version = "1", features = ["server", "http2"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 
@@ -30,6 +31,7 @@ tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-notification = "2"
+notify-rust = "4.11"
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-deep-link = "2"
@@ -106,18 +108,24 @@ pbkdf2 = "0.12"
 sha1 = "0.10"
 
 [target.'cfg(target_os = "windows")'.dependencies]
+dotenvy = "0.15.7"
 age = { version = "0.11", default-features = false }
 keyring = { version = "3.6", features = ["windows-native"] }
 socket2 = "0.6"
-windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_Storage_Packaging_Appx", "Win32_System_Com", "Win32_System_Console", "Win32_System_JobObjects", "Win32_System_LibraryLoader", "Win32_System_ProcessStatus", "Win32_System_Registry", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Networking_WinSock", "Win32_System_IO", "Win32_Graphics_Gdi", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_Storage_Packaging_Appx", "Win32_System_Com", "Win32_System_Console", "Win32_System_JobObjects", "Win32_System_LibraryLoader", "Win32_System_ProcessStatus", "Win32_System_Registry", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 junction.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 mac-notification-sys = "0.6"
 plist = "1.8"
+# ZCode 3.18+ 把 v2 OAuth 凭据密钥保存在系统凭据库（macOS Keychain），导入时需要读取。
+keyring = { version = "3.6", features = ["apple-native"] }
 objc2 = "0.6.3"
 objc2-foundation = "0.3.2"
 objc2-app-kit = "0.3.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6", features = ["async-secret-service", "async-io", "crypto-rust"] }
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-process = "2.3.1"

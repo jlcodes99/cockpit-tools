@@ -87,3 +87,29 @@ test('Chat relay quota refresh uses an explicit integration or a previously conf
   assert.equal(state.summary?.remaining, 42);
   assert.equal(state.error, 'PROVIDER_USAGE_NETWORK_FAILED');
 });
+
+test('saved custom usage reopens a previously unavailable account and drops replies from an edited mapping', async () => {
+  const h = harness();
+  const baseUrl = 'https://relay.example/v1';
+  const account = {
+    ...h.account, api_provider_id: 'relay', api_provider_mode: 'custom',
+    api_base_url: baseUrl, api_wire_api: 'chat_completions',
+  } as const;
+  const config = { endpoint: '/v1/usage', mappings: { remaining: 'balance' } };
+  h.setProvider({ id: 'relay', baseUrl, customUsage: config });
+  h.api.writeCodexApiKeyUsageCache({ account: { loading: false, unavailable: true } });
+  h.query(async () => ({ mode: 'custom', remaining: 0 }));
+  await h.api.refreshCodexApiKeyUsageForAccounts([account]);
+  assert.deepEqual(h.calls[0].customUsage, { ...config, endpoint: 'https://relay.example/v1/usage' });
+  assert.equal(h.api.readCodexApiKeyUsageCache().account.summary?.remaining, 0);
+  assert.equal(h.api.readCodexApiKeyUsageCache().account.sourceBinding, 'custom:relay:1');
+
+  const gate = deferred<unknown>();
+  h.query(() => gate.promise);
+  const pending = h.api.refreshCodexApiKeyUsageForAccounts([account]);
+  await settlePromises();
+  h.setProvider({ updatedAt: 2, customUsage: { ...config, endpoint: '/user/balance' } });
+  gate.resolve({ mode: 'custom', remaining: 22 });
+  await pending;
+  assert.equal(h.api.readCodexApiKeyUsageCache().account.summary?.remaining, 0);
+});

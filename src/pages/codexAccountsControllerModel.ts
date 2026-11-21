@@ -380,7 +380,7 @@ export function getCockpitApiStatsRecord(
 
 export function resolveApiKeyUsageMode(
   summary?: CodexModelProviderUsageSummary,
-): "new_api" | "sub2api" | "deepseek" | "token_plan" | "openai_official" | "cockpit" | null {
+): "new_api" | "sub2api" | "deepseek" | "token_plan" | "openai_official" | "cockpit" | "custom" | null {
   if (!summary) return null;
   if (summary.cockpit) return "cockpit";
   if (
@@ -388,6 +388,7 @@ export function resolveApiKeyUsageMode(
     summary.mode === "sub2api" ||
     summary.mode === "deepseek" ||
     summary.mode === "token_plan" ||
+    summary.mode === "custom" ||
     summary.mode === "openai_official"
   ) {
     return summary.mode;
@@ -542,6 +543,21 @@ export function maskCodexApiKey(value: string): string {
   if (!raw) return raw;
   if (raw.startsWith("sk-")) return "sk-••••••••••••••••";
   return "••••••••••••••••";
+}
+
+export function filterCodexSavedProviders(
+  providers: CodexModelProvider[],
+  search: string,
+): CodexModelProvider[] {
+  const query = search.trim().toLowerCase();
+  if (!query) return providers;
+  return providers.filter((provider) =>
+    provider.name.toLowerCase().includes(query) ||
+    provider.baseUrl.toLowerCase().includes(query) ||
+    provider.apiKeys.some((key) =>
+      formatCodexManagedApiKeyOptionLabel(key, "").toLowerCase().includes(query),
+    ),
+  );
 }
 
 /** Distinguish multi-keys under one provider in select UI (name + masked tail). */

@@ -28,17 +28,20 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
 }
 
     #[test]
-    fn gpt_6_1_terra_catalog_upgrade_preserves_profiles_and_customization() {
+    fn gpt_6_2_catalog_upgrade_preserves_profiles_and_customization() {
         let _lock = crate::modules::test_support::env_lock()
             .lock().unwrap_or_else(|error| error.into_inner());
         let env = TestEnvGuard::new("codex-terra-catalog-upgrade");
         for name in ["default", "multi-instance"] {
             let dir = env.home_dir.join(name);
             fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join(super::CODEX_EXPERIMENTAL_MODEL_POLICY_FILE), "enabled\n").unwrap();
             let defaults = super::default_experimental_model_definitions(&dir);
             assert!(defaults.iter().any(|model| model.model_id == "gpt-6.1-terra"));
             let mut previous = defaults.into_iter()
-                .filter(|model| model.model_id != "gpt-6.1-terra").collect::<Vec<_>>();
+                .filter(|model| model.model_id != "gpt-6.1-terra"
+                    && !crate::modules::codex_model_catalog::GPT_6_2_MODELS.contains(&model.model_id.as_str()))
+                .collect::<Vec<_>>();
             previous[0].context_window = Some(800_000);
             let old_config = serde_json::json!({
                 "version": super::EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
@@ -51,7 +54,8 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
             fs::write(&path, serde_json::to_vec(&old_config).unwrap()).unwrap();
             let upgraded = super::read_experimental_model_definitions(&dir);
             assert_eq!(upgraded.iter().filter(|model| model.model_id == "gpt-6.1-terra").count(), 1);
-            assert_eq!(upgraded[0].context_window, Some(800_000));
+            assert_eq!(upgraded[0].model_id, "gpt-6.2-sol");
+            assert_eq!(upgraded.iter().find(|model| model.model_id == "gpt-6.1-sol").unwrap().context_window, Some(800_000));
             let old_ids = previous.iter().map(|model| model.model_id.clone()).collect::<Vec<_>>();
             let catalog_path = super::experimental_model_catalog_path(&dir);
             fs::write(&catalog_path, serde_json::to_vec(
@@ -59,7 +63,9 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
             ).unwrap()).unwrap();
             super::rebuild_managed_catalog_from_existing(&catalog_path).unwrap();
             let rebuilt: serde_json::Value = serde_json::from_slice(&fs::read(&catalog_path).unwrap()).unwrap();
-            assert!(rebuilt["models"].as_array().unwrap().iter().any(|model| model["slug"] == "gpt-6.1-terra"));
+            for expected in ["gpt-6.1-terra", "gpt-6.2-sol", "gpt-6.2-astra"] {
+                assert!(rebuilt["models"].as_array().unwrap().iter().any(|model| model["slug"] == expected));
+            }
             let saved = super::persist_experimental_model_definitions(
                 &dir, upgraded, Some("gpt-5.6-luna"),
             ).unwrap();
@@ -76,6 +82,7 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
             curated["models"].as_array_mut().unwrap().retain(|model| model["model_id"] != "gpt-6-sol");
             fs::write(&path, serde_json::to_vec(&curated).unwrap()).unwrap();
             assert!(!super::read_experimental_model_definitions(&dir).iter().any(|model| model.model_id == "gpt-6.1-terra"));
+            assert!(!super::read_experimental_model_definitions(&dir).iter().any(|model| model.model_id == "gpt-6.2-sol"));
         }
     }
 
@@ -2562,6 +2569,23 @@ multi_agent = true
         let rebuilt: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         assert_eq!(rebuilt["models"][0]["context_window"], 272_000);
         assert_eq!(rebuilt["models"][0]["auto_compact_token_limit"], 244_800);
+    }
+
+    #[test]
+    fn managed_catalog_upgrade_keeps_user_selected_model_priorities() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(super::CODEX_MANAGED_MODEL_CATALOG_FILE);
+        fs::write(super::user_customized_model_catalog_marker_path(dir.path()), "true").unwrap();
+        fs::write(&path, r#"{"models":[
+            {"slug":"gpt-6.2-astra","priority":0},
+            {"slug":"gpt-6.1-sol","priority":1}
+        ]}"#).unwrap();
+        super::rebuild_managed_catalog_from_existing(&path).unwrap();
+        let catalog: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(catalog["models"][0]["slug"], "gpt-6.2-astra");
+        assert_eq!(catalog["models"][0]["priority"], 0);
+        assert_eq!(catalog["models"][1]["slug"], "gpt-6.1-sol");
+        assert_eq!(catalog["models"][1]["priority"], 1);
     }
 
     #[test]

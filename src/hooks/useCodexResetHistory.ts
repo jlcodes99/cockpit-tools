@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { loadCodexResetHistory, type ResetHistoryEntry, type ResetHistorySource } from '../services/codexResetHistoryService';
+import {
+  loadCodexResetHistory,
+  type LegacyResetActivity,
+  type ResetHistoryEntry,
+  type ResetHistorySource,
+} from '../services/codexResetHistoryService';
 import { subscribeTauriEvent } from '../utils/tauriEventListener';
 
 export function useCodexResetHistory(accountId: string, source: ResetHistorySource) {
-  const [data, setData] = useState<{ entries: ResetHistoryEntry[]; cursor: string | number | null }>({ entries: [], cursor: null });
+  const [data, setData] = useState<{
+    entries: ResetHistoryEntry[];
+    legacyRecords: LegacyResetActivity[];
+    cursor: string | number | null;
+  }>({ entries: [], legacyRecords: [], cursor: null });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorKey, setErrorKey] = useState(0);
@@ -17,13 +26,21 @@ export function useCodexResetHistory(accountId: string, source: ResetHistorySour
       const page = await loadCodexResetHistory(accountId, source, nextCursor);
       if (version !== generation.current) return;
       setData(previous => {
+        const legacyRecords = source === 'local'
+          ? (nextCursor === null ? (page.legacyRecords ?? []) : previous.legacyRecords)
+          : [];
         if (preserveLoaded && previous.entries.length > 0) {
           const latestIds = new Set(page.entries.map(entry => entry.id));
-          return { entries: [...page.entries, ...previous.entries.filter(entry => !latestIds.has(entry.id))], cursor: previous.cursor };
+          return {
+            entries: [...page.entries, ...previous.entries.filter(entry => !latestIds.has(entry.id))],
+            legacyRecords,
+            cursor: previous.cursor,
+          };
         }
         return {
           entries: nextCursor === null ? page.entries
             : [...new Map([...previous.entries, ...page.entries].map(entry => [entry.id, entry])).values()],
+          legacyRecords,
           cursor: page.nextCursor,
         };
       });
@@ -36,7 +53,7 @@ export function useCodexResetHistory(accountId: string, source: ResetHistorySour
   }, [accountId, source]);
 
   useEffect(() => {
-    setData({ entries: [], cursor: null });
+    setData({ entries: [], legacyRecords: [], cursor: null });
     void load();
     const stop = source === 'local'
       ? subscribeTauriEvent('codex:reset-automation-updated', () => { void load(null, true); }) : undefined;

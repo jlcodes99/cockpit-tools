@@ -86,12 +86,74 @@ fn quota_has_usable_credits(quota: &CodexQuota) -> bool {
 }
 
 fn account_quota_cooldown(account: &CodexAccount, now: i64) -> Option<AccountQuotaCooldown> {
+    account_quota_cooldown_at_floor(account, now, 0)
+}
+
+fn prune_account_quota_floors(collection: &mut CodexLocalAccessCollection) -> bool {
+    let len = collection.account_quota_floors.len();
+    collection.account_quota_floors.retain(|id, floor| {
+        collection.account_ids.contains(id) && (1..=100).contains(floor)
+    });
+    len != collection.account_quota_floors.len()
+}
+
+fn persist_account_quota_floor(
+    path: &Path,
+    account_id: &str,
+    minimum_remaining_percent: Option<i32>,
+) -> Result<CodexLocalAccessCollection, String> {
+    let mut published = None;
+    update_string_atomic(path, |current| {
+        let mut collection: CodexLocalAccessCollection = serde_json::from_str(
+            current.ok_or("本地接入集合尚未创建")?,
+        ).map_err(|error| error.to_string())?;
+        if !collection.account_ids.iter().any(|id| id == account_id)
+            || (minimum_remaining_percent.is_some() && collection.official_account_bindings.contains_key(account_id))
+        {
+            return Err("CODEX_LOCAL_ACCESS_QUOTA_FLOOR_ACCOUNT_UNAVAILABLE".into());
+        }
+        if let Some(floor) = minimum_remaining_percent {
+            collection.account_quota_floors.insert(account_id.to_owned(), floor);
+        } else {
+            collection.account_quota_floors.remove(account_id);
+        }
+        collection.updated_at = collection.updated_at.max(now_ms());
+        let content = serde_json::to_string_pretty(&collection).map_err(|error| error.to_string())?;
+        published = Some(collection);
+        Ok(content)
+    })?;
+    published.ok_or_else(|| "CODEX_LOCAL_ACCESS_QUOTA_FLOOR_STORAGE".into())
+}
+
+fn configured_pool_quota_floor(
+    collection: &CodexLocalAccessCollection,
+    account: &CodexAccount,
+) -> Option<i32> {
+    collection.account_quota_floors.get(&account.id).copied()
+        .filter(|floor| (1..=100).contains(floor))
+        .filter(|_| !account.is_api_key_auth() && !account.is_agent_identity_auth() && !account.is_web_session_auth()
+            && !collection.official_account_bindings.contains_key(&account.id))
+}
+
+fn pool_account_quota_cooldown(
+    collection: &CodexLocalAccessCollection,
+    account: &CodexAccount,
+    now: i64,
+) -> Option<AccountQuotaCooldown> {
+    if let Some(floor) = configured_pool_quota_floor(collection, account) {
+        account_quota_cooldown_at_floor(account, now, floor)
+    } else {
+        account_quota_cooldown(account, now)
+    }
+}
+
+fn account_quota_cooldown_at_floor(account: &CodexAccount, now: i64, floor: i32) -> Option<AccountQuotaCooldown> {
     if account.is_api_key_auth() {
         return None;
     }
     let quota = account.quota.as_ref()?;
     let updated_at_ms = account.usage_updated_at.unwrap_or_default().saturating_mul(1000);
-    if quota_has_usable_credits(quota) {
+    if floor == 0 && quota_has_usable_credits(quota) {
         return Some(AccountQuotaCooldown {
             exhausted: false,
             reset_at_ms: None,
@@ -107,7 +169,7 @@ fn account_quota_cooldown(account: &CodexAccount, now: i64) -> Option<AccountQuo
     let mut exhausted = false;
     let mut reset_at_ms = Some(0_i64);
     for (remaining, present, reset_at) in windows {
-        if remaining != 0 || (has_presence_flags && present != Some(true)) {
+        if !(0..=floor).contains(&remaining) || (has_presence_flags && present != Some(true)) {
             continue;
         }
         let reset = reset_at.filter(|value| *value > 0).map(|value| value.saturating_mul(1000));
@@ -138,7 +200,7 @@ fn sync_runtime_quota_cooldowns(runtime: &mut GatewayRuntime, accounts: &[CodexA
         }
         // Missing/failed quota queries must not erase a previously confirmed
         // exhausted snapshot. New accounts with no snapshot remain unknown.
-        let Some(next) = account_quota_cooldown(account, now) else { continue; };
+        let Some(next) = pool_account_quota_cooldown(collection, account, now) else { continue; };
         if runtime.account_quota_cooldowns.get(&account.id)
             .is_some_and(|current| current.updated_at_ms > next.updated_at_ms) {
             continue;

@@ -1,5 +1,40 @@
 // Codex 账号模块：Profile refresh, account upsert and account removal lifecycle。
 // 通过 include! 保持原 modules::codex_account 作用域，完整保留私有调用关系。
+async fn finish_account_profile_refresh(
+    account: CodexAccount,
+    profile_result: Result<(Option<String>, Option<String>, Option<String>), String>,
+) -> Result<CodexAccount, String> {
+    let (account_name, account_structure, account_id_from_remote) = profile_result?;
+
+    tokio::task::spawn_blocking(move || {
+        persist_codex_account_profile(
+            &account,
+            account_name,
+            account_structure,
+            account_id_from_remote,
+        )
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+fn persist_codex_account_profile(
+    account: &CodexAccount,
+    name: Option<String>,
+    structure: Option<String>,
+    remote_id: Option<String>,
+) -> Result<CodexAccount, String> {
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK
+        .lock()
+        .map_err(|_| "CODEX_PROFILE_WRITE_LOCK_POISONED".to_string())?;
+    let mut current =
+        load_account(&account.id).ok_or_else(|| "CODEX_STALE_ACCOUNT".to_string())?;
+    if merge_codex_account_profile(&mut current, account, name, structure, remote_id) {
+        save_account_with_tombstone_guard(&current)?;
+    }
+    Ok(current)
+}
+
 /// 刷新账号资料（团队名/结构）
 async fn refresh_account_profile_once(account_id: &str) -> Result<CodexAccount, String> {
     let account = prepare_account_for_injection(account_id).await?;
@@ -7,29 +42,8 @@ async fn refresh_account_profile_once(account_id: &str) -> Result<CodexAccount, 
         return Ok(account);
     }
 
-    let (account_name, account_structure, account_id_from_remote) =
-        fetch_remote_account_profile(&account).await?;
-
-    tokio::task::spawn_blocking(move || {
-        // Read/merge/write atomically, after the network call, preserving fresh quota/token data.
-        let _guard = CODEX_ACCOUNT_MUTATION_LOCK
-            .lock()
-            .map_err(|_| "CODEX_PROFILE_WRITE_LOCK_POISONED".to_string())?;
-        let mut current =
-            load_account(&account.id).ok_or_else(|| "CODEX_STALE_ACCOUNT".to_string())?;
-        if merge_codex_account_profile(
-            &mut current,
-            &account,
-            account_name,
-            account_structure,
-            account_id_from_remote,
-        ) {
-            save_account_with_tombstone_guard(&current)?;
-        }
-        Ok(current)
-    })
-    .await
-    .map_err(|error| error.to_string())?
+    let profile_result = fetch_remote_account_profile(&account).await;
+    finish_account_profile_refresh(account, profile_result).await
 }
 
 fn merge_codex_account_profile(
@@ -339,9 +353,36 @@ fn upsert_account_with_import_hints(
     )
 }
 
+fn oauth_reauth_matches_user_and_workspace(
+    target: &CodexAccount,
+    user_id: Option<&str>,
+    account_id: Option<&str>,
+    organization_id: Option<&str>,
+) -> bool {
+    let matches_id = |stored: Option<&str>, received: Option<&str>| {
+        let stored = normalize_optional_ref(stored);
+        stored.is_some() && stored == normalize_optional_ref(received)
+    };
+    let organization_matches = match (
+        normalize_optional_ref(target.organization_id.as_deref()),
+        normalize_optional_ref(organization_id),
+    ) {
+        (Some(stored), Some(received)) => stored == received,
+        _ => true,
+    };
+    !target.is_web_session_auth()
+        && matches_id(target.user_id.as_deref(), user_id)
+        && matches_id(target.account_id.as_deref(), account_id)
+        && organization_matches
+}
+
 fn resolve_reauth_target_account_id(
     target_account_id: Option<&str>,
     email: &str,
+    user_id: Option<&str>,
+    account_id: Option<&str>,
+    organization_id: Option<&str>,
+    generated_id: &str,
 ) -> Result<Option<String>, String> {
     let Some(target_id) = normalize_optional_ref(target_account_id) else {
         return Ok(None);
@@ -352,20 +393,39 @@ fn resolve_reauth_target_account_id(
         return Err("API Key 账号不能通过 OAuth 重新授权".to_string());
     }
     if !target.email.trim().is_empty() && !target.email.eq_ignore_ascii_case(email) {
-        return Err(format!(
-            "CODEX_OAUTH_RESTART_REQUIRED: 重新授权账号邮箱不匹配: 目标账号为 {}，本次授权为 {}",
-            target.email, email
-        ));
+        if !is_oauth_identity_candidate(&target)
+            || !oauth_reauth_matches_user_and_workspace(&target, user_id, account_id, organization_id)
+        {
+            return Err(format!(
+                "CODEX_OAUTH_RESTART_REQUIRED: 重新授权账号邮箱不匹配: 目标账号为 {}，本次授权为 {}",
+                target.email, email
+            ));
+        }
+        // 重新授权会清理衍生 ID 下的重复记录，换邮箱时先确认该记录的身份。
+        if generated_id != target_id
+            && load_account(generated_id).is_some_and(|duplicate| {
+                !is_oauth_identity_candidate(&duplicate)
+                    || !oauth_reauth_matches_user_and_workspace(
+                        &duplicate,
+                        user_id,
+                        account_id,
+                        organization_id,
+                    )
+            })
+        {
+            return Err("CODEX_OAUTH_RESTART_REQUIRED: 新邮箱对应的账号记录与重新授权身份冲突".into());
+        }
     }
     // 历史混合记录保留原文件及引用；本次授权回到 OAuth 身份域独立保存。
     if !is_oauth_identity_candidate(&target) {
         return Ok(None);
     }
-    Ok(Some(if target.id.trim().is_empty() {
+    let id = if target.id.trim().is_empty() {
         target_id
     } else {
         target.id
-    }))
+    };
+    Ok(Some(id))
 }
 
 fn upsert_account_with_hints_and_reauth_target(
@@ -409,10 +469,23 @@ fn upsert_account_with_hints_and_reauth_target(
             .or(organization_id_hint),
     );
 
-    let mut index = load_account_index();
+    // Prepare legacy storage first, then read and update the current index while
+    // holding the same lock as imports, credential refresh and deletion.
+    let initial_index = load_account_index_inner(false)?;
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK
+        .lock()
+        .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
+    let mut index = read_saved_account_index()?.unwrap_or(initial_index);
     let generated_id =
         build_account_storage_id(&email, account_id.as_deref(), organization_id.as_deref());
-    let reauth_target = resolve_reauth_target_account_id(reauth_target_account_id, &email)?;
+    let reauth_target = resolve_reauth_target_account_id(
+        reauth_target_account_id,
+        &email,
+        user_id.as_deref(),
+        account_id.as_deref(),
+        organization_id.as_deref(),
+        &generated_id,
+    )?;
     let has_reauth_target = reauth_target.is_some();
 
     // 明确的重新授权来自某个旧账号卡片，必须优先覆盖该旧账号。
@@ -443,6 +516,9 @@ fn upsert_account_with_hints_and_reauth_target(
         acc.api_provider_name = None;
         acc.bound_oauth_account_id = None;
         acc.bound_oauth_use_local_gateway = false;
+        if has_reauth_target {
+            acc.email.clone_from(&email);
+        }
         acc.user_id = user_id;
         acc.plan_type = plan_type.clone();
         acc.subscription_active_until = subscription_active_until.clone();
@@ -501,6 +577,9 @@ fn upsert_account_with_hints_and_reauth_target(
         account.egress_proxy_disabled = false;
     }
 
+    // Save the replacement before removing an existing duplicate.
+    save_account_from_user_action_unlocked(&mut account)?;
+
     if has_reauth_target && generated_id != account.id {
         let removed_duplicate = index.accounts.iter().any(|item| item.id == generated_id);
         if removed_duplicate {
@@ -508,7 +587,7 @@ fn upsert_account_with_hints_and_reauth_target(
             if index.current_account_id.as_deref() == Some(generated_id.as_str()) {
                 index.current_account_id = Some(account.id.clone());
             }
-            if let Err(err) = delete_account_file(&generated_id) {
+            if let Err(err) = delete_account_file_unlocked(&generated_id) {
                 logger::log_warn(&format!(
                     "清理 Codex 重新授权重复账号详情失败: duplicate_id={}, target_id={}, error={}",
                     generated_id, account.id, err
@@ -521,9 +600,6 @@ fn upsert_account_with_hints_and_reauth_target(
             }
         }
     }
-
-    // 显式导入/授权可以重新创建用户刚刚删除过的同一账号。
-    save_account_from_user_action(&mut account)?;
 
     // 更新索引中的摘要信息
     if let Some(summary) = index.accounts.iter_mut().find(|a| a.id == account.id) {

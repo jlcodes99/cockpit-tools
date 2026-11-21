@@ -4,10 +4,10 @@ import test from 'node:test';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { deferred, loadHookModule, settlePromises } from '../../tests/helpers/reactHookHarness';
+import { formatPriceDraftValue } from '../utils/codexModelPricingDraft';
 import { parseModelAliasText, serializeModelAliases } from '../utils/codexServiceModelAliases';
 import { parseModelRuleText } from '../utils/codexApiKeyModelRules';
 import { isCodexLaunchUnconfirmed } from '../utils/codexLaunchConfirmation';
-import { formatPriceDraftValue, updateModelPricingDraft } from '../utils/codexModelPricingDraft';
 import { parseContextWindowDrafts } from '../utils/codexModelContextWindows';
 import { isCodexAgentIdentityAccount, isCodexApiKeyAccount, isCodexPendingOAuthAccount, isCodexWebSessionAccount } from '../types/codex';
 
@@ -19,7 +19,7 @@ function controller() {
   const owner = file.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === 'useCodexApiServicePageController');
   assert.ok(owner?.body);
   const values = new Set([
-    'state', 'collection', 'busy', 'error', 'notice', 'routingSaving', 'portInput', 'proxyInput', 'apiKeyDrafts',
+    'state', 'stateRequestSeqRef', 'stateReadsInFlightRef', 'setState', 'collection', 'busy', 'error', 'notice', 'routingSaving', 'portInput', 'proxyInput', 'apiKeyDrafts',
     'modelAliasesText', 'excludedModelsText', 'accountModelRuleError', 'accountModelRulesOpen', 'accountModelRuleDrafts',
     'mappingMemberAccounts', 'accountModelMappingDrafts', 'accountModelMappingError', 'accountModelMappingsOpen',
     'accountModelRuleSelected', 'accountModelRuleBulkText', 'pricingModalOpen', 'pricingDrafts', 'pricingError',
@@ -27,7 +27,7 @@ function controller() {
     'timeoutPresetNameDraft', 'sessionIdentityMappingEnabledDraft', 'sessionAffinityDraft', 'sessionAffinityTtlDraft',
     'responsesWebsocketsEnabledDraft', 'maxRetryCredentialsDraft', 'maxRetryIntervalDraft', 'disableCoolingDraft',
     'immediateSseResponseDraft', 'maxConcurrentImageRequestsDraft', 'maxAccountConcurrencyDraft', 'accountConcurrencyWaitDraft',
-    'filteredStatsWindow', 'statsRangeError', 'requestLogError', 'requestLogRefreshNonce',
+    'filteredStatsResult', 'filteredStatsWindow', 'statsRangeError', 'requestLogError', 'requestLogRefreshNonce',
     'statsDetailsRefreshing', 'statsRequestSeqRef',
     'activating',
   ]);
@@ -53,8 +53,11 @@ function controller() {
       }
     }
     // Including reset effects makes a reintroduced background-reset effect fail these tests.
-    return ts.isExpressionStatement(node) && ts.isCallExpression(node.expression) && node.expression.expression.getText(file) === 'useEffect'
-      && /set(ApiKeyDrafts|ModelAliasesText|ExcludedModelsText|AccountModelRuleDrafts|TimeoutDrafts|PricingDrafts|FilteredStatsWindow)\(/.test(node.expression.arguments[0].getText(file));
+    if (!ts.isExpressionStatement(node) || !ts.isCallExpression(node.expression)
+        || node.expression.expression.getText(file) !== 'useEffect') return false;
+    const effect = node.expression.arguments[0].getText(file);
+    return /set(ApiKeyDrafts|ModelAliasesText|ExcludedModelsText|AccountModelRuleDrafts|TimeoutDrafts|PricingDrafts|FilteredStatsWindow)\(/.test(effect)
+      || (effect.includes('state?.refreshingAccounts') && effect.includes('reloadState()'));
   });
   const helpers = file.statements.filter((node) => ts.isFunctionDeclaration(node) && node.pos < owner.pos).map((node) => node.getText(file)).join('\n');
   const h = loadHookModule(new URL('../hooks/useRefreshSafeDraft.ts', import.meta.url), {});
@@ -66,12 +69,21 @@ function controller() {
   } };
   let failure = false;
   let activationError: unknown;
+  let pendingStateRead: ReturnType<typeof deferred<any>> | undefined;
   const calls: Array<{ method: string; args: any[] }> = [];
   const statsQueries: Array<ReturnType<typeof deferred<any>> & { startAt: number; endAt: number }> = [];
   const timers = new Map<number, () => void>();
+  const intervals = new Map<number, () => void>();
+  const pollErrors: unknown[] = [];
   let timerId = 0;
+  let stateReads = 0;
   const service = new Proxy({}, { get(_target, method: string) { return async (...args: any[]) => {
-    if (method === 'getCodexLocalAccessState') return structuredClone(server);
+    if (method === 'getCodexLocalAccessState') {
+      stateReads += 1;
+      const pending = pendingStateRead;
+      pendingStateRead = undefined;
+      return pending ? pending.promise : structuredClone(server);
+    }
     if (method === 'activateCodexLocalAccess' && activationError) {
       calls.push({ method, args });
       throw activationError;
@@ -93,7 +105,7 @@ function controller() {
   }; } });
   const context: any = {
     ...h.hooks, ...h.exports, useCodexTimeoutSettingsNavigation: navigation.exports.useCodexTimeoutSettingsNavigation,
-    codexLocalAccessService: service, stateRequestSeqRef: { current: 0 }, mountedRef: { current: true },
+    codexLocalAccessService: service, mountedRef: { current: true },
     memberAccounts: [{ id: 'account' }], pricingRepriceActive: false,
     isCodexAgentIdentityAccount, isCodexApiKeyAccount, isCodexPendingOAuthAccount, isCodexWebSessionAccount,
     parseContextWindowDrafts, fetchAccounts: async () => {},
@@ -102,13 +114,16 @@ function controller() {
       if (failure) throw new Error('save failed');
     },
     modelPricingRows: [{ modelId: 'model', inputUsdPerMillion: 1, outputUsdPerMillion: 2, hasPreset: false, custom: false }],
-    formatPriceDraftValue, updateModelPricingDraft,
-    parseModelAliasText, serializeModelAliases, parseModelRuleText,
+    updateModelPricingDraft: (draft: object, field: string, value: string) => ({ ...draft, [field]: value }),
+    formatPriceDraftValue, parseModelAliasText, serializeModelAliases, parseModelRuleText,
     isCodexLaunchUnconfirmed, fetchCurrentAccount: async () => {}, refreshApiServiceCurrent: async () => {},
     statsTimeRange: { startAt: 20, endAt: 30 }, sampledStatsRevision: 0,
+    console: { error(_message: string, error: unknown) { pollErrors.push(error); } },
     window: {
       setTimeout(callback: () => void) { timers.set(++timerId, callback); return timerId; },
       clearTimeout(id: number) { timers.delete(id); },
+      setInterval(callback: () => void) { intervals.set(++timerId, callback); return timerId; },
+      clearInterval(id: number) { intervals.delete(id); },
     },
     t: (key: string) => key, presentWindowsOperationError: () => false,
   };
@@ -117,10 +132,81 @@ function controller() {
   h.render(render);
   return { h, context, calls, read: () => h.flush(), async refresh() { await h.flush().reloadState(); return h.flush(); },
     change(patch: object) { Object.assign(server.collection, patch); }, fail(value: boolean) { failure = value; },
+    delayStateRead() { pendingStateRead = deferred<any>(); return pendingStateRead; },
+    stateReads: () => stateReads,
+    firePoll() { for (const poll of intervals.values()) poll(); },
+    pollErrors,
     failActivation(error: unknown) { activationError = error; },
     statsQueries, fireStatsTimer() { const pending = Array.from(timers.values()); timers.clear(); pending.forEach((callback) => callback()); },
   };
 }
+
+test('official-account notifications refresh accounts without duplicating the paired service-state read', () => {
+  const file = ts.createSourceFile('page.tsx', readFileSync(new URL('./CodexApiServicePage.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let listener: ts.Expression | undefined;
+  function visit(node: ts.Node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(file) === 'onChatgptPlanUpdated') {
+      listener = node.initializer;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  assert.ok(listener);
+  const calls: string[] = [];
+  const onAccountChanged = vm.runInNewContext(`(${listener.getText(file)})`, {
+    fetchAccounts: () => calls.push('accounts'),
+    reloadState: () => calls.push('service state'),
+  });
+  onAccountChanged();
+  assert.deepEqual(calls, ['accounts']);
+});
+
+test('API service polling skips ticks while a state read is pending', async () => {
+  const p = controller();
+  p.change({ enabled: true });
+  await p.refresh();
+  const foreground = p.delayStateRead();
+  const foregroundRefresh = p.read().reloadState();
+  p.firePoll();
+  assert.equal(p.stateReads(), 2);
+  foreground.resolve({ collection: { enabled: true, port: 8317 }, preparing: true });
+  await foregroundRefresh;
+  p.read();
+
+  const poll = p.delayStateRead();
+  p.firePoll();
+  p.firePoll();
+  assert.equal(p.stateReads(), 3);
+
+  const manual = p.delayStateRead();
+  const refresh = p.read().reloadState();
+  p.firePoll();
+  assert.equal(p.stateReads(), 4);
+  manual.resolve({ collection: { enabled: true, port: 9900 }, running: true });
+  await refresh;
+  poll.resolve({ collection: { enabled: true, port: 8317 }, preparing: true });
+  await settlePromises();
+  assert.equal(p.read().state.collection.port, 9900);
+  p.firePoll();
+  assert.equal(p.stateReads(), 4);
+  p.h.unmount();
+});
+
+test('a failed status poll reports its error and allows the next tick', async () => {
+  const p = controller();
+  p.change({ enabled: true });
+  await p.refresh();
+  const poll = p.delayStateRead();
+  p.firePoll();
+  const failure = new Error('status read failed');
+  poll.reject(failure);
+  await settlePromises();
+  assert.deepEqual(p.pollErrors, [failure]);
+  p.firePoll();
+  await settlePromises();
+  assert.equal(p.stateReads(), 3);
+  p.h.unmount();
+});
 
 test('API Service activation refreshes state and leaves pending client confirmation to the launch dialog', async () => {
   const p = controller();
@@ -317,6 +403,24 @@ test('timeout drafts and selected presets survive refresh and failed save; reope
   assert.equal(p.read().selectedTimeoutPresetId, 'short_wait'); assert.equal(p.read().timeoutsError, ''); p.h.unmount();
 });
 
+test('image header timeout defaults to ten minutes and preserves a saved shorter wait', async () => {
+  const p = controller();
+  await p.refresh();
+  p.read().openTimeoutSettings();
+  assert.equal(p.read().timeoutDrafts.sidecarImageStreamOpenTimeoutMs, '600');
+  assert.equal(p.read().timeoutDrafts.sidecarStreamOpenTimeoutMs, '60');
+  await p.read().handleSaveTimeouts();
+  assert.equal(p.calls[p.calls.length - 1].args[0].sidecarImageStreamOpenTimeoutMs, 600_000);
+
+  p.change({ timeouts: { sidecarImageStreamOpenTimeoutMs: 60_000 } });
+  await p.refresh();
+  p.read().openTimeoutSettings();
+  assert.equal(p.read().timeoutDrafts.sidecarImageStreamOpenTimeoutMs, '60');
+  await p.read().handleSaveTimeouts();
+  assert.equal(p.calls[p.calls.length - 1].args[0].sidecarImageStreamOpenTimeoutMs, 60_000);
+  p.h.unmount();
+});
+
 test('receive timeout settings preserve legacy connect and millisecond precision on save', async () => {
   const p = controller();
   p.change({ timeouts: {
@@ -339,5 +443,23 @@ test('receive timeout settings preserve legacy connect and millisecond precision
   assert.equal(payload.legacyRequestReadTimeoutMs, 180_500);
   assert.equal(payload.legacyUpstreamConnectTimeoutMs, 91_250);
   assert.equal(payload.websocketFragmentTimeoutMs, 300_000);
+  p.h.unmount();
+});
+
+test('usage from the previous end date is hidden while a new range loads', async () => {
+  const p = controller();
+  p.fireStatsTimer();
+  const previous = { totals: { requestCount: 3, inputText: { characters: 30, measuredRequests: 1 } } };
+  p.statsQueries[0].resolve(previous);
+  await settlePromises();
+  assert.equal(p.read().filteredStatsWindow, previous);
+
+  p.context.statsTimeRange = { startAt: 20, endAt: 40 };
+  assert.equal(p.read().filteredStatsWindow, null);
+  p.fireStatsTimer();
+  const current = { totals: { requestCount: 4, inputText: { characters: 50, measuredRequests: 2 } } };
+  p.statsQueries[1].resolve(current);
+  await settlePromises();
+  assert.equal(p.read().filteredStatsWindow, current);
   p.h.unmount();
 });

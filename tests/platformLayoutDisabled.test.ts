@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MENU_VISIBLE_PLATFORM_IDS, type PlatformId } from "../src/types/platform.ts";
+import { ALL_PLATFORM_IDS, type PlatformId } from "../src/types/platform.ts";
 import {
   isPlatformDisabled,
   makePlatformEntryId,
-  parseGroupEntryId,
   parsePlatformEntryId,
+  resolveEntryIdForPlatform,
   usePlatformLayoutStore,
 } from "../src/stores/usePlatformLayoutStore.ts";
 
@@ -107,34 +107,18 @@ test("disabled set reflects every platform having an App Settings section", () =
 
 // 回归：平台可能以「独立条目」或「分组子级」两种形态出现。
 // 开关必须两种形态都能覆盖，否则分组内的平台会没有入口可点。
-test("every menu-visible platform is reachable as a standalone entry or a group child", () => {
+test("every platform resolves to a reachable layout entry", () => {
   resetState();
 
   const { orderedEntryIds, platformGroups } = usePlatformLayoutStore.getState();
-  const standalone = new Set<string>();
-  const inGroup = new Set<string>();
-
-  for (const entryId of orderedEntryIds) {
-    const platformId = parsePlatformEntryId(entryId);
-    if (platformId) {
-      standalone.add(platformId);
-      continue;
-    }
-    const groupId = parseGroupEntryId(entryId);
-    if (!groupId) continue;
-    const group = platformGroups.find((item) => item.id === groupId);
-    for (const id of group?.platformIds ?? []) {
-      inGroup.add(id);
-    }
+  for (const id of ALL_PLATFORM_IDS) {
+    const entry = resolveEntryIdForPlatform(id, platformGroups);
+    assert.ok(orderedEntryIds.includes(entry), `${id} 无法通过 ${entry} 访问`);
   }
-
-  for (const id of MENU_VISIBLE_PLATFORM_IDS) {
-    assert.equal(
-      standalone.has(id) || inGroup.has(id),
-      true,
-      `${id} 既不是独立条目也不在任何分组中，布局里将没有启用/禁用入口`,
-    );
-  }
+  assert.equal(
+    resolveEntryIdForPlatform("antigravity_ide", platformGroups),
+    resolveEntryIdForPlatform("antigravity", platformGroups),
+  );
 });
 
 // 回归：布局弹窗里 entry.id 是 `platform:xxx`，而 store 存裸平台 ID。

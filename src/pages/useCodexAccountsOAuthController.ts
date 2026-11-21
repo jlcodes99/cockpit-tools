@@ -527,6 +527,7 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
         sponsorTemplate?: SponsorApiProviderTemplate;
       } => {
         const normalizedBaseUrl = normalizeHttpBaseUrl(apiBaseUrl);
+        const trimmedName = customProviderName.trim();
         if (!normalizedBaseUrl) {
           return { apiProviderMode: "openai_builtin" };
         }
@@ -554,14 +555,15 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
           (template) => template.id === providerPresetId,
         );
         if (sponsorTemplate) {
+          const name = trimmedName || sponsorTemplate.name;
           return {
             apiProviderMode: "custom",
             apiProviderId: sponsorTemplate.id,
-            apiProviderName: sponsorTemplate.name,
+            apiProviderName: name,
             apiModelCatalog: sponsorTemplate.modelCatalog,
             apiWireApi: sponsorTemplate.wireApi ?? undefined,
             apiSupportsVision: sponsorTemplate.supportsVision,
-            accountName: sponsorTemplate.name,
+            accountName: name,
             sponsorTemplate,
           };
         }
@@ -610,10 +612,11 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
           providerPresetId !== CODEX_API_PROVIDER_CUSTOM_ID &&
           (selectedPresetBaseUrlMatches || !presetRequiresEndpointMatch)
         ) {
+          const name = trimmedName || preset.name;
           return {
             apiProviderMode: "custom",
             apiProviderId: preset.id,
-            apiProviderName: preset.name,
+            apiProviderName: name,
             apiModelCatalog: preset.modelCatalog,
             apiWireApi: resolveCodexProviderCapabilityProfile({
               presetId: preset.id,
@@ -621,7 +624,7 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
               wireApi: null,
             }).wireApi,
             apiModelVisionSupport: codexApiProviderPresetVisionSupport(preset),
-            accountName: preset.name,
+            accountName: name,
           };
         }
   
@@ -629,7 +632,6 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
         const apiKeyFunModelCatalog = isApiKeyFunProvider
           ? (apiKeyFunPrefillModelCatalogRef.current ?? undefined)
           : undefined;
-        const trimmedName = customProviderName.trim();
         const customProviderDisplayName =
           trimmedName || (isApiKeyFunProvider ? "APIKEY.FUN" : undefined);
         return {
@@ -1771,6 +1773,9 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
       setOauthCallbackSubmitting(false);
       setOauthCallbackError(null);
       setOauthRetryAction(null);
+      setOauthPrepareError(null);
+      setOauthPortInUse(null);
+      setDeviceAuthStarting(false);
       setDeviceAuthInfo(null);
       setDeviceAuthError(null);
       setOauthMethod("browser");
@@ -1930,48 +1935,78 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
       }
       if (
         deviceAuthStarting ||
+        oauthProxyChanging.current ||
         oauthCompletingRef.current ||
         (oauthMethod === "device" && deviceAuthInfo)
-      )
-        return;
+      ) return;
+
+      const attempt = ++oauthAttemptSeqRef.current;
+      const isCurrent = () => attempt === oauthAttemptSeqRef.current
+        && showAddModalRef.current && addTabRef.current === "oauth";
+      const pendingStart = oauthStartTask.current;
+      oauthActiveRef.current = false;
       setOauthMethod("device");
       setDeviceAuthStarting(true);
       setDeviceAuthError(null);
       setOauthPrepareError(null);
-      const currentLoginId = oauthLoginIdRef.current;
-      if (currentLoginId) {
-        await codexService.cancelCodexOAuthLogin(currentLoginId).catch(() => {});
-      }
-      oauthAttemptSeqRef.current += 1;
-      oauthActiveRef.current = false;
-      oauthLoginIdRef.current = null;
-      oauthCompletedAccountRef.current = null;
       setOauthUrl(null);
-      try {
-        const info = await codexService.startCodexDeviceAuth();
+
+      const task = (async () => {
+        await pendingStart;
+        if (!isCurrent()) return;
+        const loginId = oauthCancelLoginId.current ?? oauthLoginIdRef.current;
+        if (loginId) await cancelOauthSession(loginId);
+        if (!isCurrent()) return;
+        const info = await codexService.startCodexDeviceAuth().catch((error) => {
+          if (isCurrent()) setDeviceAuthError(String(error).replace(/^Error:\s*/, ""));
+          return null;
+        });
+        if (!info) return;
+        if (!isCurrent()) {
+          await cancelOauthSession(info.loginId);
+          return;
+        }
         oauthLoginIdRef.current = info.loginId;
         oauthActiveRef.current = true;
         setDeviceAuthInfo(info);
         setDeviceCodeCopied(false);
         setAddStatus("idle");
         setAddMessage("");
+      })();
+
+      oauthStartTask.current = task;
+      try {
+        await task;
       } catch (error) {
-        setDeviceAuthError(String(error).replace(/^Error:\s*/, ""));
+        if (isCurrent()) {
+          setDeviceAuthError(String(error).replace(/^Error:\s*/, ""));
+        }
       } finally {
-        setDeviceAuthStarting(false);
+        if (oauthStartTask.current === task) oauthStartTask.current = null;
+        if (isCurrent()) setDeviceAuthStarting(false);
+        setOauthSessionRevision((value) => value + 1);
       }
     };
-  
+
     const handleSwitchBrowserOAuth = async () => {
       if (oauthMethod === "browser" || oauthCompletingRef.current) return;
-      const currentLoginId = oauthLoginIdRef.current;
-      oauthAttemptSeqRef.current += 1;
+      const attempt = ++oauthAttemptSeqRef.current;
+      const isCurrent = () => attempt === oauthAttemptSeqRef.current
+        && showAddModalRef.current && addTabRef.current === "oauth";
       oauthActiveRef.current = false;
-      oauthLoginIdRef.current = null;
-      oauthCompletedAccountRef.current = null;
-      if (currentLoginId) {
-        await codexService.cancelCodexOAuthLogin(currentLoginId).catch(() => {});
+      try {
+        await oauthStartTask.current;
+        if (!isCurrent()) return;
+        const loginId = oauthCancelLoginId.current ?? oauthLoginIdRef.current;
+        if (loginId) await cancelOauthSession(loginId);
+      } catch (error) {
+        if (isCurrent()) {
+          setDeviceAuthStarting(false);
+          setDeviceAuthError(String(error).replace(/^Error:\s*/, ""));
+        }
+        return;
       }
+      if (!isCurrent()) return;
       setOauthMethod("browser");
       setDeviceAuthInfo(null);
       setDeviceAuthError(null);
@@ -1982,7 +2017,7 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
       setOauthUrl(null);
       prepareOauthUrl();
     };
-  
+
     const handleCopyDeviceCode = async () => {
       if (!deviceAuthInfo?.userCode) return;
       try {

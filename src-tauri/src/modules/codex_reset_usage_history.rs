@@ -1,7 +1,7 @@
 //! Live local redemption history, independent of the bounded automation activity log.
 use super::codex_quota::ResetCreditReceipt;
-use super::{AttemptContext, Pending, ResetObservation};
-use rusqlite::{params, types::Type, Connection, OptionalExtension, Transaction};
+use super::{AttemptContext, ResetObservation};
+use rusqlite::{params, types::Type, Connection, Transaction};
 use serde::Serialize;
 
 #[derive(Clone)]
@@ -59,6 +59,8 @@ pub struct UsageRecord {
 pub struct UsagePage {
     pub records: Vec<UsageRecord>,
     pub next_cursor: Option<i64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub legacy_records: Vec<super::Record>,
 }
 
 pub(super) fn initialize(conn: &Connection) -> rusqlite::Result<()> {
@@ -105,23 +107,6 @@ fn encode_json<T: Serialize>(value: &T) -> rusqlite::Result<String> {
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
 }
 
-pub(super) fn store_after_observation(
-    conn: &Connection,
-    account: &str,
-    pending: &Pending,
-    observation: &ResetObservation,
-) -> rusqlite::Result<()> {
-    let raw = encode_json(observation)?;
-    conn.execute(
-        "UPDATE reset_usage_context SET after_observation=?4
-         WHERE request_id=(SELECT request_id FROM reset_usage_history
-           WHERE request_id=?1 AND account_id=?2 AND identity=?3
-           AND outcome IN ('reset','already_redeemed')) AND after_observation IS NULL",
-        params![pending.request_id, account, pending.identity, raw],
-    )?;
-    Ok(())
-}
-
 pub(super) fn store(tx: &Transaction<'_>, update: &UsageUpdate) -> rusqlite::Result<()> {
     tx.execute(
         "INSERT INTO reset_usage_history(request_id,account_id,identity,at,updated_at,reason,outcome,detail)
@@ -145,36 +130,6 @@ pub(super) fn store(tx: &Transaction<'_>, update: &UsageUpdate) -> rusqlite::Res
         )?;
     }
     Ok(())
-}
-
-pub(super) fn recent_no_op(
-    conn: &Connection,
-    account: &str,
-    identity: &str,
-    reason: &str,
-    context: &AttemptContext,
-    cutoff: i64,
-) -> rusqlite::Result<bool> {
-    let last = conn
-        .query_row(
-            "SELECT history.reason,history.outcome,history.updated_at,audit.context
-         FROM reset_usage_history AS history
-         LEFT JOIN reset_usage_context AS audit USING (request_id)
-         WHERE history.account_id=?1 AND history.identity=?2
-         ORDER BY history.sequence DESC LIMIT 1",
-            params![account, identity],
-            |row| {
-                let previous_reason: String = row.get(0)?;
-                let outcome: String = row.get(1)?;
-                let updated_at: i64 = row.get(2)?;
-                Ok(previous_reason == reason
-                    && matches!(outcome.as_str(), "nothing_to_reset" | "no_credit")
-                    && updated_at > cutoff
-                    && decode_json::<AttemptContext>(row, 3)?.as_ref() == Some(context))
-            },
-        )
-        .optional()?;
-    Ok(last.unwrap_or(false))
 }
 
 pub(super) fn read(
@@ -214,105 +169,79 @@ pub(super) fn read(
     Ok(UsagePage {
         records,
         next_cursor,
+        legacy_records: Vec::new(),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::super::*;
+    use rusqlite::params;
 
     #[test]
-    fn recent_known_no_op_backs_off_only_same_account_and_trigger_conditions() {
+    fn historical_automatic_context_and_observations_remain_readable() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join(FILE);
-        let now = chrono::Utc::now().timestamp();
-        let mut before = ResetObservation::from_quota(None, now);
-        before.available_count = Some(2);
-        before.next_expires_at = Some(now + 90);
-        before.available_card_ids = vec!["credit-a".into(), "credit-b".into()];
-        let context = AttemptContext {
-            rule: Rule::default(),
-            before,
-        };
-        assert_eq!(
-            context.retry_cutoff("expiry", now),
-            Some(now - NO_OP_RETRY_SECONDS)
-        );
-        assert_eq!(context.retry_cutoff("expiry", now + 30), None);
-
-        let pending = journal::update_account(&file, "a", |d| {
-            Ok(begin_redemption(
-                d,
-                "a",
-                "owner-a",
-                "expiry",
-                None,
-                Some(context.clone()),
-            ))
-        })
-        .unwrap();
-        journal::update_account(&file, "a", |d| {
-            finish_redemption(
-                d,
-                "a",
-                &pending,
-                Ok(ResetCreditConsumeOutcome::NothingToReset),
-                None,
-            )
-        })
-        .unwrap();
-        let record = journal::usage_history(&file, "a", "owner-a", None)
+        // Initialize SQLite without relying on codex_reset_rules.json.
+        assert!(journal::usage_history(&file, "a", "owner-a", None)
             .unwrap()
             .records
-            .remove(0);
-        assert_eq!(record.context.as_ref(), Some(&context));
-        let backed_off = |account, identity, reason, context: &AttemptContext, cutoff| {
-            journal::recent_no_op(&file, account, identity, reason, context, cutoff).unwrap()
+            .is_empty());
+        let conn =
+            rusqlite::Connection::open(dir.path().join("codex_reset_journal.sqlite")).unwrap();
+        let legacy_context = serde_json::json!({
+            "rule": {
+                "enabled": true,
+                "expiry_enabled": false,
+                "before_seconds": 7200,
+                "quota_enabled": true,
+                "remaining_percent": 15,
+                "window": "weekly"
+            },
+            "before": {
+                "available_count": 2,
+                "next_expires_at": 1_700_000_090,
+                "available_card_ids": ["credit-a", "credit-b"],
+                "hourly": null,
+                "weekly": { "remaining": 10, "resets_at": 1_700_050_000 }
+            }
+        });
+        let after = ResetObservation::from_quota(None, chrono::Utc::now().timestamp());
+        let receipt = ResetCreditReceipt {
+            credit_id: Some("credit-b".into()),
+            windows_reset: Some(2),
         };
-        assert!(backed_off("a", "owner-a", "expiry", &context, now - 120));
-        assert!(!backed_off("b", "owner-a", "expiry", &context, now - 120));
-        assert!(!backed_off("a", "owner-b", "expiry", &context, now - 120));
-        assert!(!backed_off("a", "owner-a", "quota", &context, now - 120));
-        assert!(!backed_off(
-            "a",
-            "owner-a",
-            "expiry",
-            &context,
-            record.updated_at
-        ));
-        let mut changed = context.clone();
-        changed.rule.before_seconds += 60;
-        assert!(!backed_off("a", "owner-a", "expiry", &changed, now - 120));
-        changed = context.clone();
-        changed.before.available_count = Some(1);
-        assert!(!backed_off("a", "owner-a", "expiry", &changed, now - 120));
-
-        let next = journal::update_account(&file, "a", |d| {
-            let next = begin_redemption(d, "a", "owner-a", "expiry", None, Some(changed));
-            let receipt = ResetCreditReceipt {
-                credit_id: Some("credit-b".into()),
-                windows_reset: Some(2),
-            };
-            finish_redemption(
-                d,
-                "a",
-                &next,
-                Ok(ResetCreditConsumeOutcome::Reset),
-                Some(receipt),
-            )?;
-            Ok(next)
-        })
+        conn.execute(
+            "INSERT INTO reset_usage_history(request_id,account_id,identity,at,updated_at,reason,outcome,detail)
+             VALUES('auto-1','a','owner-a',100,101,'quota','reset',NULL)",
+            [],
+        )
         .unwrap();
-        let mut after = ResetObservation::from_quota(None, now);
-        after.available_count = Some(0);
-        journal::store_after_observation(&file, "a", &next, &after).unwrap();
+        conn.execute(
+            "INSERT INTO reset_usage_context(request_id,context,after_observation,receipt)
+             VALUES('auto-1',?1,?2,?3)",
+            params![
+                legacy_context.to_string(),
+                serde_json::to_string(&after).unwrap(),
+                serde_json::to_string(&receipt).unwrap()
+            ],
+        )
+        .unwrap();
+        drop(conn);
+
         let page = journal::usage_history(&file, "a", "owner-a", None).unwrap();
-        assert_eq!(page.records.len(), 2);
-        let receipt = page.records[0].receipt.as_ref().unwrap();
-        assert_eq!(receipt.credit_id.as_deref(), Some("credit-b"));
-        assert_eq!(receipt.windows_reset, Some(2));
-        assert_eq!(page.records[0].after_observation, Some(after));
-        assert!(page.records[1].after_observation.is_none());
+        assert_eq!(page.records.len(), 1);
+        let record = &page.records[0];
+        assert_eq!(record.reason, "quota");
+        assert_eq!(record.outcome, "reset");
+        let context = record.context.as_ref().unwrap();
+        assert!(context.rule.enabled);
+        assert_eq!(context.rule.before_seconds, 7200);
+        assert_eq!(context.rule.remaining_percent, 15);
+        assert!(!context.rule.prefer_usage_credits);
+        assert_eq!(context.before.available_count, Some(2));
+        assert_eq!(record.after_observation, Some(after));
+        assert_eq!(record.receipt.as_ref(), Some(&receipt));
     }
 
     #[test]
@@ -320,7 +249,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join(FILE);
         let pending = journal::update_account(&file, "a", |d| {
-            let pending = begin_redemption(d, "a", "owner-a", "manual", None, None);
+            let pending = begin_redemption(d, "a", "owner-a");
             finish_redemption(d, "a", &pending, Ok(ResetCreditConsumeOutcome::Reset), None)?;
             Ok(pending)
         })
@@ -340,54 +269,91 @@ mod tests {
     }
 
     #[test]
-    fn local_usage_retry_updates_one_durable_record() {
+    fn local_usage_retry_updates_one_durable_record_without_automatic_replay() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join(FILE);
-        let pending = journal::update_account(&file, "a", |d| {
-            Ok(begin_redemption(d, "a", "owner-a", "expiry", None, None))
-        })
+        journal::usage_history(&file, "a", "owner-a", None).unwrap();
+        let original_context = AttemptContext {
+            rule: Rule {
+                enabled: true,
+                before_seconds: 1800,
+                ..Rule::default()
+            },
+            before: ResetObservation::from_quota(None, 100),
+        };
+        let legacy_pending = Pending {
+            identity: "owner-a".into(),
+            request_id: "auto-unconfirmed-1".into(),
+            reason: "manual".into(),
+            evidence: None,
+            unconfirmed_reported: false,
+            context: None,
+        };
+        let conn =
+            rusqlite::Connection::open(dir.path().join("codex_reset_journal.sqlite")).unwrap();
+        conn.execute(
+            "INSERT INTO reset_accounts(account_id,pending,modified) VALUES('a',?1,1)",
+            [serde_json::to_string(&legacy_pending).unwrap()],
+        )
         .unwrap();
-        journal::update_account(&file, "a", |d| {
-            finish_redemption(d, "a", &pending, Err("response lost".into()), None)
-        })
+        conn.execute(
+            "INSERT INTO reset_usage_history(request_id,account_id,identity,at,updated_at,reason,outcome,detail)
+             VALUES('auto-unconfirmed-1','a','owner-a',100,100,'expiry','unconfirmed','response lost')",
+            [],
+        )
         .unwrap();
-        let page = journal::usage_history(&file, "a", "owner-a", None).unwrap();
-        assert_eq!(page.records.len(), 1);
-        assert_eq!(page.records[0].outcome, "unconfirmed");
-        assert_eq!(page.records[0].detail.as_deref(), Some("response lost"));
-        let first_at = page.records[0].at;
+        conn.execute(
+            "INSERT INTO reset_usage_context(request_id,context) VALUES('auto-unconfirmed-1',?1)",
+            [serde_json::to_string(&original_context).unwrap()],
+        )
+        .unwrap();
+        drop(conn);
+
         journal::update_account(&file, "a", |d| {
-            let retry = begin_redemption(d, "a", "owner-a", "manual", None, None);
-            assert_eq!(retry.request_id, pending.request_id);
+            let retry = begin_redemption(d, "a", "owner-a");
+            assert_eq!(retry.request_id, "auto-unconfirmed-1");
             finish_redemption(
                 d,
                 "a",
                 &retry,
                 Ok(ResetCreditConsumeOutcome::AlreadyRedeemed),
-                None,
+                Some(ResetCreditReceipt {
+                    credit_id: Some("card-9".into()),
+                    windows_reset: Some(1),
+                }),
             )
         })
         .unwrap();
         let page = journal::usage_history(&file, "a", "owner-a", None).unwrap();
         assert_eq!(page.records.len(), 1);
-        assert_eq!(page.records[0].at, first_at);
+        assert_eq!(page.records[0].at, 100);
+        // Existing SQLite row retains its original source and context even across retry updates.
         assert_eq!(page.records[0].reason, "expiry");
         assert_eq!(page.records[0].outcome, "already_redeemed");
+        assert_eq!(page.records[0].context.as_ref(), Some(&original_context));
+        assert_eq!(
+            page.records[0].receipt.as_ref().and_then(|r| r.credit_id.as_deref()),
+            Some("card-9")
+        );
         assert!(page.records[0].detail.is_none());
     }
 
     #[test]
-    fn local_usage_records_manual_and_automatic_noops_without_rule_gates() {
+    fn local_usage_records_manual_outcomes_and_stays_scoped_to_account_identity() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join(FILE);
-        for (reason, outcome) in [
-            ("manual", ResetCreditConsumeOutcome::Reset),
-            ("expiry", ResetCreditConsumeOutcome::NothingToReset),
-            ("quota", ResetCreditConsumeOutcome::NoCredit),
+        std::fs::write(
+            dir.path().join("codex_reset_rules.json"),
+            r#"{"public_rule":{"enabled":true}}"#,
+        )
+        .unwrap();
+        for outcome in [
+            ResetCreditConsumeOutcome::Reset,
+            ResetCreditConsumeOutcome::NothingToReset,
+            ResetCreditConsumeOutcome::NoCredit,
         ] {
             journal::update_account(&file, "a", |d| {
-                d.accounts.insert("a".into(), AccountRule::Off);
-                let pending = begin_redemption(d, "a", "owner-a", reason, None, None);
+                let pending = begin_redemption(d, "a", "owner-a");
                 finish_redemption(d, "a", &pending, Ok(outcome), None)
             })
             .unwrap();
@@ -399,8 +365,8 @@ mod tests {
                 .map(|r| (r.reason.as_str(), r.outcome.as_str()))
                 .collect::<Vec<_>>(),
             vec![
-                ("quota", "no_credit"),
-                ("expiry", "nothing_to_reset"),
+                ("manual", "no_credit"),
+                ("manual", "nothing_to_reset"),
                 ("manual", "reset")
             ]
         );
@@ -422,27 +388,28 @@ mod tests {
         record(&mut old, "a", "manual", "success", None);
         std::fs::write(&file, serde_json::to_vec(&old).unwrap()).unwrap();
         while !journal::migrate(&file).unwrap() {}
-        assert!(journal::usage_history(&file, "a", "owner-a", None)
-            .unwrap()
-            .records
-            .is_empty());
+        let before_manual = journal::usage_history(&file, "a", "owner-a", None).unwrap();
+        assert!(before_manual.records.is_empty());
+        assert_eq!(before_manual.legacy_records.len(), 1);
         for _ in 0..115 {
             journal::update_account(&file, "a", |d| {
-                let pending = begin_redemption(d, "a", "owner-a", "manual", None, None);
+                let pending = begin_redemption(d, "a", "owner-a");
                 finish_redemption(d, "a", &pending, Ok(ResetCreditConsumeOutcome::Reset), None)
             })
             .unwrap();
         }
         let first = journal::usage_history(&file, "a", "owner-a", None).unwrap();
         assert_eq!(first.records.len(), 30);
+        assert_eq!(first.legacy_records.len(), 1);
         let newest = journal::update_account(&file, "a", |d| {
-            Ok(begin_redemption(d, "a", "owner-a", "manual", None, None))
+            Ok(begin_redemption(d, "a", "owner-a"))
         })
         .unwrap();
         let mut ids: Vec<_> = first.records.into_iter().map(|r| r.request_id).collect();
         let mut cursor = first.next_cursor;
         while let Some(next) = cursor {
             let page = journal::usage_history(&file, "a", "owner-a", Some(next)).unwrap();
+            assert!(page.legacy_records.is_empty());
             ids.extend(page.records.into_iter().map(|r| r.request_id));
             cursor = page.next_cursor;
         }
@@ -464,7 +431,7 @@ mod tests {
         )
         .unwrap();
         let result: Result<(), String> = journal::update_account(&file, "a", |d| {
-            begin_redemption(d, "a", "owner-a", "manual", None, None);
+            begin_redemption(d, "a", "owner-a");
             Ok(())
         });
         assert!(result.is_err());

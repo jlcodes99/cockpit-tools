@@ -3,6 +3,7 @@
 
 mod fast;
 mod browser_preload;
+mod rspack_speed_assets;
 
 use crate::modules::{app_lifecycle, codex_account, config, logger};
 use serde::Deserialize;
@@ -75,6 +76,7 @@ struct Profile {
     native_predictions: bool,
     api_key_auth_verified: bool,
     quota_compat: bool,
+    speed_assets: Option<Arc<rspack_speed_assets::Assets>>,
 }
 
 impl Profile {
@@ -158,6 +160,7 @@ fn profile_from_values(
             && oauth
             && custom_api
             && valid_api_base,
+        speed_assets: None,
     }
 }
 
@@ -179,11 +182,17 @@ pub(crate) fn native_fast_enabled_for_profile(profile: &Path) -> bool {
     read_profile(profile, false).is_ok_and(|profile| profile.native_fast)
 }
 
-pub(crate) fn prepare_native_fast_for_profile(base_dir: &Path) -> Result<(), String> {
+pub(crate) fn prepare_native_fast_for_profile(base_dir: &Path, desktop: bool) -> Result<(), String> {
     if !native_fast_enabled_for_profile(base_dir) {
         return Ok(());
     }
-    enable_native_fast_feature(base_dir)
+    enable_native_fast_feature(base_dir)?;
+    if desktop {
+        // Prepare while the launch worker is still outside the client startup
+        // window. The renderer only reads the small set of candidate modules.
+        let _ = rspack_speed_assets::for_client();
+    }
+    Ok(())
 }
 
 fn enable_native_fast_feature(base_dir: &Path) -> Result<(), String> {
@@ -285,7 +294,7 @@ fn trusted_preload_source(profile: Option<&Profile>, api_service: bool, port: u1
         Some(profile) if profile.native_fast || profile.native_predictions
             || profile.quota_compat && !api_service => Some(fast::browser_preload_source(
             profile.native_fast, profile.native_predictions, profile.quota_compat,
-            profile.api_key_auth_verified, api_service, &owner)),
+            profile.api_key_auth_verified, api_service, &owner, profile.speed_assets.as_deref())),
         _ if api_service => Some(fast::quota_state_source(&owner)),
         _ => None,
     }
@@ -401,7 +410,12 @@ async fn run_profile(
             read_started = Instant::now();
             read_timed_out = false;
             read = Some(tokio::task::spawn_blocking(move || {
-                let result = read_profile(&path, api_service);
+                let result = read_profile(&path, api_service).map(|mut profile| {
+                    if profile.native_fast {
+                        profile.speed_assets = rspack_speed_assets::for_client();
+                    }
+                    profile
+                });
                 // Publish immediately from the one existing read worker, not
                 // after page discovery's network timeout or the next poll.
                 // Quota data stays independent of slow or failed credential reads.
@@ -464,6 +478,7 @@ async fn run_profile(
                     child_preload_first,
                     startup,
                     receiver,
+                    profile.speed_assets.as_deref(),
                 )
                 .await;
                 if result.is_err() {
@@ -564,12 +579,14 @@ mod tests {
     }
 
     #[test]
-    fn prediction_only_profile_is_opt_in_local_api_and_independent_of_fast() {
+    fn predictions_default_on_for_local_api_and_respect_manual_disable() {
         let mut cfg = config::UserConfig::default();
 
         cfg.codex_app_api_quota_compat_enabled = false;
         let doc: toml_edit::Document = "model_provider='relay'\n[model_providers.relay]\nbase_url='https://api.example.test/v1'\nrequires_openai_auth=false\n".parse().unwrap();
         let api = json!({"auth_mode":"apikey", "OPENAI_API_KEY":"synthetic-key"});
+        assert!(profile_from_values(&doc, &api, &cfg, |_, _, _| false).native_predictions);
+        cfg.codex_app_native_predictions_enabled = false;
         assert!(!profile_from_values(&doc, &api, &cfg, |_, _, _| false).native_predictions);
         cfg.codex_app_native_predictions_enabled = true;
         let profile = profile_from_values(&doc, &api, &cfg, |_, _, _| false);
@@ -588,14 +605,12 @@ mod tests {
 
     #[test]
     fn bound_oauth_predictions_require_verified_responses_route_without_enabling_fast() {
-        let mut cfg = config::UserConfig::default();
+        let cfg = config::UserConfig::default();
         let doc: toml_edit::Document = "model_provider='codex_local_access'\n[model_providers.codex_local_access]\nbase_url='http://localhost:2566/v1'\nwire_api='responses'\nrequires_openai_auth=true\nexperimental_bearer_token='service-key'\n".parse().unwrap();
         let oauth = json!({"tokens":{"id_token":"synthetic-id","access_token":"synthetic-access"}});
         let verified = |provider: &str, base: &str, key: &str| {
             (provider, base, key) == ("codex_local_access", "http://localhost:2566/v1", "service-key")
         };
-        assert!(!profile_from_values(&doc, &oauth, &cfg, verified).native_predictions);
-        cfg.codex_app_native_predictions_enabled = true;
         let profile = profile_from_values(&doc, &oauth, &cfg, verified);
         assert!(profile.native_predictions);
         assert!(!profile.api_key_auth_verified);

@@ -26,6 +26,65 @@ pub(super) fn normalize_empty_function_arguments(body: &mut Value) {
     }
 }
 
+/// Restore the text kept in a client-compatible reasoning summary for DeepSeek.
+/// Only the inline upstream copy changes. An opaque item without text stays opaque.
+pub(super) fn restore_deepseek_reasoning_text(body: &mut Value) {
+    let Some(input) = body.get_mut("input").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for item in input.iter_mut().filter(|item| item["type"] == "reasoning") {
+        if !item["content"].is_null() && !item["content"].as_array().is_some_and(Vec::is_empty) {
+            continue;
+        }
+        let Some(summary) = item["summary"].as_array() else {
+            continue;
+        };
+        let text = summary
+            .iter()
+            .filter(|part| part["type"] == "summary_text")
+            .filter_map(|part| part["text"].as_str())
+            .filter(|text| !text.trim().is_empty())
+            .collect::<Vec<_>>();
+        if !text.is_empty() {
+            item["content"] = json!([{"type":"reasoning_text","text":text.join("\n")}]);
+        }
+    }
+}
+
+/// DeepSeek accepts plaintext reasoning content. Its UUID-index marker is
+/// not an encrypted payload, and must not replace valid plaintext history.
+pub(super) fn normalize_deepseek_reasoning_history(body: &mut Value) {
+    let Some(input) = body.get_mut("input").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for item in input {
+        if item["type"] != "reasoning"
+            || !item["content"].as_array().is_some_and(|parts| {
+                !parts.is_empty() && parts.iter().all(|part| {
+                    part["type"] == "reasoning_text"
+                        && part["text"].as_str().is_some_and(|text| !text.trim().is_empty())
+                })
+            })
+        {
+            continue;
+        }
+        let placeholder = item["encrypted_content"].as_str()
+            .and_then(|stub| stub.rsplit_once('-'))
+            .is_some_and(|(id, index)| {
+                id.len() == 36 && uuid::Uuid::parse_str(id).is_ok()
+                    && !index.is_empty() && index.bytes().all(|byte| byte.is_ascii_digit())
+            });
+        if placeholder {
+            item.as_object_mut().expect("reasoning item is an object").remove("encrypted_content");
+        }
+    }
+}
+
+pub(super) fn deepseek_rejected_missing_reasoning(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    message.contains("reasoning_text") && message.contains("must be passed back")
+}
+
 /// DeepSeek requires results immediately after the entire batch of calls.
 /// Repair inline history only; continuation references may own results outside this request.
 pub(super) fn normalize_deepseek_tool_history(body: &mut Value) {
@@ -203,6 +262,28 @@ pub(super) fn strip_legacy_codex_item_ids(body: &mut Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deepseek_reasoning_strips_only_identified_stubs_with_actual_reasoning_text() {
+        let stub = "00112233-4455-6677-8899-aabbccddeeff-12";
+        let text = json!([{"type":"reasoning_text","text":"  Keep the text exactly.\n"}]);
+        let mut body = json!({"input":[
+            {"type":"reasoning","encrypted_content":stub,"content":text},
+            {"type":"reasoning","encrypted_content":stub,"content":[]},
+            {"type":"reasoning","encrypted_content":stub,"content":[{"type":"summary_text","text":"summary"}]},
+            {"type":"reasoning","encrypted_content":"opaque-provider-cipher","content":text},
+            {"type":"compaction","encrypted_content":stub},
+        ]});
+        let original = body.clone();
+        normalize_deepseek_reasoning_history(&mut body);
+        assert_eq!(body["input"][0]["content"], original["input"][0]["content"]);
+        assert!(body["input"][0].get("encrypted_content").is_none());
+        assert_eq!(&body["input"].as_array().unwrap()[1..], &original["input"].as_array().unwrap()[1..]);
+        assert!(deepseek_rejected_missing_reasoning(
+            "The `reasoning_text` in the thinking mode must be passed back to the API. (request_id: fixture)"
+        ));
+        assert!(!deepseek_rejected_missing_reasoning("Invalid reasoning_text schema"));
+    }
 
     #[test]
     fn deepseek_history_leaves_opaque_ambiguous_and_server_owned_results_untouched() {

@@ -7,10 +7,12 @@ import { resolveCodexModelProviderForApiKey } from '../../utils/codexModelProvid
 import { buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider, resolveCodexModelProviderForAccount } from '../../utils/codexModelProviderAccountSync';
 import { contextWindowDraftsFromRecord, parseContextWindowDrafts } from '../../utils/codexModelContextWindows';
 import { buildProviderModelVisionCapabilities } from '../../utils/codexModelProviderVision';
-import { resolveCodexApiProviderPresetId } from '../../utils/codexProviderPresets';
+import { resolveCodexApiProviderPresetId, resolveOllamaLocalPlaceholderKey } from '../../utils/codexProviderPresets';
 import { isValidProviderApiKeyUrl } from '../../utils/codexProviderApiKeyUrl';
 import { resolveCodexProviderCapabilityProfile } from '../../utils/codexProviderGateway';
 import { isCodexApiKeyAccount } from '../../types/codex';
+import { isOpenAIOfficialUsageUrl } from '../../utils/openaiOfficialUsage';
+import { currentCustomProviderUsageState, customProviderUsageBinding, parseCustomProviderUsage } from '../../utils/codexCustomProviderUsage';
 
 const file = ts.createSourceFile('manager.tsx', readFileSync(new URL('./CodexModelProviderManager.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 function bind(name: string, state: Record<string, any>) {
@@ -38,7 +40,8 @@ function harness() {
     useCallback: (value: any) => value, accounts, providers: [provider], currentEditingProvider: provider,
     resolveCodexModelProviderForApiKey, buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider, resolveCodexModelProviderForAccount,
     contextWindowDraftsFromRecord, parseContextWindowDrafts, buildProviderModelVisionCapabilities,
-    resolveCodexApiProviderPresetId, isValidProviderApiKeyUrl, resolveCodexProviderCapabilityProfile,
+    resolveCodexApiProviderPresetId, resolveOllamaLocalPlaceholderKey, isValidProviderApiKeyUrl, resolveCodexProviderCapabilityProfile,
+    isOpenAIOfficialUsageUrl, parseCustomProviderUsage,
     normalizeCodexModelProviderBaseUrl: (url: string) => url.trim().replace(/\/+$/, '').toLowerCase(),
     resolveProviderWireApi: (item: any) => item.wireApi ?? 'responses',
     resolveEnableModePreferenceForWireApi: () => 'direct',
@@ -79,6 +82,62 @@ function harness() {
     save: () => bind('handleSaveProvider', state)(),
   };
 }
+
+test('creating a local Ollama provider supplies a stable key without adding one on later edits', async () => {
+  const h = harness();
+  h.state.currentEditingProvider = undefined;
+  h.state.form.providerId = null;
+  h.state.form.name = 'Ollama';
+  const baseUrl = 'http://127.0.0.1:11434/v1';
+  h.state.form.baseUrl = baseUrl;
+  h.state.form.wireApi = 'chat_completions';
+  await h.save();
+  assert.equal(h.state.error, null);
+  assert.equal(h.calls.creates, 1);
+  assert.equal(h.provider().apiKeys[0].apiKey, resolveOllamaLocalPlaceholderKey(baseUrl));
+  assert.equal(h.provider().wireApi, 'chat_completions');
+  bind('openEditModal', h.state)(h.provider());
+  await h.save();
+  assert.equal(h.state.error, null);
+  assert.equal(h.provider().apiKeys.length, 1);
+});
+
+test('provider editor saves custom usage settings, rejects a different origin, and clears on blank', async () => {
+  const h = harness();
+  const config = {
+    endpoint: '/user/balance', headers: { 'User-Agent': 'cc-switch/1.0' },
+    mappings: { remaining: 'balance' }, unit: 'CNY',
+  };
+  h.state.form.customUsageText = JSON.stringify(config);
+  await h.save();
+  assert.deepEqual(h.calls.patches[0].customUsage, config);
+  h.openSelectedKey('a');
+  assert.deepEqual(JSON.parse(h.state.form.customUsageText), config);
+  h.state.form.customUsageText = JSON.stringify({ ...config, endpoint: 'https://different.invalid/usage' });
+  await h.save();
+  assert.equal(h.calls.patches.length, 1);
+  assert.equal(h.state.error, 'codex.customProviderUsage.invalid');
+  h.state.form.customUsageText = '';
+  await h.save();
+  assert.equal(h.calls.patches[1].customUsage, null);
+});
+
+test('provider usage excludes results from an edited or removed custom query', () => {
+  const provider = {
+    id: 'relay', updatedAt: 1,
+    customUsage: { endpoint: '/v1/usage', mappings: { remaining: 'quota.remaining' } },
+  };
+  const custom = { sourceBinding: customProviderUsageBinding(provider), summary: { remaining: 5.25 } };
+  const automatic = { sourceBinding: undefined, summary: { remaining: 12 } };
+  assert.equal(currentCustomProviderUsageState(provider, custom), custom);
+  assert.equal(currentCustomProviderUsageState(provider, automatic), undefined);
+  assert.equal(currentCustomProviderUsageState({
+    ...provider, updatedAt: 2, customUsage: { ...provider.customUsage, endpoint: '/user/balance' },
+  }, custom), undefined);
+  const cleared = { ...provider, customUsage: undefined };
+  assert.equal(currentCustomProviderUsageState(cleared, custom), undefined);
+  assert.equal(currentCustomProviderUsageState(cleared, automatic), automatic);
+});
 
 test('account entry uses the full provider editor and scopes model changes to its current key', async () => {
   const h = harness(); h.openAccount();

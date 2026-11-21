@@ -27,6 +27,7 @@ const sample = {
 function props(events: any[] = [sample]) {
   return {
     t: (key: string, values?: any) => values?.status ? `${key}:${values.status}` : values?.tier ? `${key}:${values.tier}` : key,
+    requestLogTokenThreshold: 10_000, requestLogHighTokensOnly: false,
     accountDisplayNames: new Map(), codexInstances: [], requestLogEvents: events, requestLogLoaded: true,
     cleanRequestLogErrorDetail: (value: string) => value,
     truncateRequestLogErrorDetail: (value: string) => value.slice(0, 100),
@@ -62,7 +63,7 @@ function harness(preferences: ReturnType<typeof storage>) {
     },
     '../components/codex/CodexOutputSpeed': { CodexOutputSpeed: 'CodexOutputSpeed' },
     '../utils/codexOutputSpeed': { aggregateOutputSpeed: () => ({ tokensPerSecond: null, samples: 0 }), formatOutputSpeed: () => null },
-    'lucide-react': { Check: 'Check', CircleAlert: 'CircleAlert', Columns3: 'Columns3', Route: 'Route', Zap: 'Zap' },
+    'lucide-react': { Check: 'Check', CircleAlert: 'CircleAlert', Columns3: 'Columns3', Route: 'Route', X: 'X', Zap: 'Zap' },
     '../components/SingleSelectDropdown': { SingleSelectDropdown: 'SingleSelectDropdown' },
     '../components/PaginationControls': { PaginationControls: 'PaginationControls' },
     '../components/codex/CodexRequestProxyLabel': { CodexRequestProxyLabel: 'CodexRequestProxyLabel' },
@@ -79,7 +80,7 @@ function storage(initial: string | null = null) {
 function openColumns(hook: ReturnType<typeof harness>) {
   const button = nodes(hook.flush()).find((n) => n.type === 'button' && n.props['aria-haspopup'])!;
   button.props.onClick();
-  return nodes(hook.flush()).filter((n) => n.type === 'button' && 'aria-pressed' in n.props);
+  return nodes(hook.flush()).filter((n) => n.type === 'button' && 'aria-pressed' in n.props && !text(n.props.children).includes('highTokenRequests'));
 }
 
 test('request rows show the recorded Responses reasoning effort for each request', () => {
@@ -236,7 +237,7 @@ test('column choices persist and prevent hiding both model and result', () => {
   options.find((n) => text(n).endsWith('.proxy'))!.props.onClick();
   assert.ok(JSON.parse(saved.getItem()!).includes('proxy'));
   options.find((n) => text(n).endsWith('.result'))!.props.onClick();
-  options = nodes(hook.flush()).filter((n) => n.type === 'button' && 'aria-pressed' in n.props);
+  options = nodes(hook.flush()).filter((n) => n.type === 'button' && 'aria-pressed' in n.props && !text(n.props.children).includes('highTokenRequests'));
   assert.equal(options.find((n) => text(n).endsWith('.model'))!.props.disabled, true);
   const restored = harness(saved);
   restored.render(() => restored.exports.CodexApiRequestLogs(props()));
@@ -323,5 +324,58 @@ test('session filter shows the navigation value and forwards edits to the query 
   input.props.onChange({ target: { value: '' } });
   input.props.onChange({ target: { value: 'other-chat' } });
   assert.deepEqual(changes, ['', 'other-chat']);
+  hook.unmount();
+});
+
+test('high token marking uses the recorded total and allows an adjustable minimum', () => {
+  const hook = harness(storage());
+  const thresholds: number[] = [];
+  const toggled: boolean[] = [];
+  const clearedScopes: unknown[] = [];
+  const seed = [
+    { ...sample, requestId: 'under', totalTokens: 9_999, inputTokens: 20_000 },
+    { ...sample, requestId: 'boundary', totalTokens: 10_000 },
+    { ...sample, requestId: 'unmetered', totalTokens: 0 },
+  ];
+  let threshold = 10_000;
+  hook.render(() => hook.exports.CodexApiRequestLogs({
+    ...props(seed),
+    requestLogTokenThreshold: threshold,
+    requestLogAccountScope: { name: 'private@example.com', ids: ['source', 'official'] },
+    setRequestLogAccountScope: (value: unknown) => clearedScopes.push(value),
+    setRequestLogTokenThreshold: (value: number) => { thresholds.push(value); threshold = value; },
+    setRequestLogHighTokensOnly: (value: boolean) => toggled.push(value),
+  }));
+  const all = () => nodes(hook.flush());
+  const badges = () => all().filter((node) => node.props.className === 'codex-request-log-high-token');
+  assert.equal(badges().length, 1);
+  all().find((node) => node.type === 'button' && text(node.props.children).includes('highTokenRequests'))!.props.onClick();
+  assert.deepEqual(toggled, [true]);
+  const accountChip = all().find((node) => node.type === 'button' && text(node.props.children).includes('*******@***********'));
+  assert.ok(accountChip);
+  assert.ok(!text(accountChip.props.children).includes('private@example.com'));
+  accountChip.props.onClick();
+  assert.deepEqual(clearedScopes, [null]);
+
+  all().find((node) => node.type === 'button' && text(node.props.children).includes('moreFilters'))!.props.onClick();
+  all().find((node) => node.type === 'input' && node.props.inputMode === 'numeric')!.props.onChange({ target: { value: '10001' } });
+  all().find((node) => node.type === 'form' && node.props.className === 'codex-request-log-threshold')!.props.onSubmit({ preventDefault() {} });
+  assert.deepEqual(thresholds, [10_001]);
+  assert.equal(badges().length, 0);
+  hook.unmount();
+});
+
+test('only measured input character counts are shown and zero remains a real count', () => {
+  const hook = harness(storage());
+  hook.render(() => hook.exports.CodexApiRequestLogs(props([
+    { ...sample, requestId: 'none' },
+    { ...sample, requestId: 'empty', inputTextCharacters: 0 },
+    { ...sample, requestId: 'text', inputTextCharacters: 7 },
+  ])));
+  const cells = nodes(hook.flush()).filter((node) => node.props.title === 'codex.apiService.logs.inputTextCharactersHint');
+  assert.deepEqual(cells.map((node) => text(node.props.children)), [
+    'codex.apiService.logs.inputTextCharacters0',
+    'codex.apiService.logs.inputTextCharacters7',
+  ]);
   hook.unmount();
 });

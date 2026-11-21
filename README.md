@@ -180,6 +180,7 @@ Codex 同样支持多账号多实例并行运行。比如同时打开两个 Code
 ### 8. Grok CLI 账号管理
 
 - **OAuth 授权**：支持 xAI 官方 OIDC device flow，在浏览器完成验证后自动保存账号
+- **接入 Codex API 服务**：在 **Grok CLI** 页面完成 OAuth 授权，再打开 **Codex → API 服务 → 添加账号**，按 **Grok** 筛选、勾选账号并保存。Cockpit 会创建与该 Grok 账号绑定的供应商条目，并为服务准备 xAI 凭据。
 - **API Key 与第三方接口**：支持官方 xAI API Key，也支持配置 OpenAI 兼容的第三方 `Base URL` 与模型 ID；配置写入账号专属 `config.toml`，密钥只在启动对应 CLI 进程时通过环境变量注入
 - **导入与脱敏导出**：可从默认 `~/.grok/auth.json` 或指定 JSON 导入官方凭据；账号页导出及通用账号备份均不含 access token/refresh token，不能用于恢复登录，迁移时需单独导入官方 `auth.json`
 - **真实切号**：将选中账号按 Grok CLI 官方 registry 格式写回默认 `~/.grok/auth.json`，并保留文件中其他 registry scope
@@ -386,10 +387,13 @@ Grok CLI 默认实例通常直接沿用官方 `~/.grok` 目录，启动时不设
 前往 [GitHub Releases](https://github.com/jlcodes99/cockpit-tools/releases) 下载对应系统的安装包：
 
 *   **macOS**: `.dmg` (Apple Silicon & Intel)
-*   **Windows**: `.msi`（推荐）、`.exe`，或 `x64-portable.zip`（解压即用，无需安装）
+*   **Windows x64**：`_x64_en-US.msi`（推荐）、`_x64-setup.exe`，或 `x64-portable.zip`（解压即用）
+*   **Windows ARM64**：`_arm64-setup.exe`
 
 Windows 便携包解压后直接运行其中的 `Cockpit Tools.exe`（或同名主程序）。系统需要 Windows 10/11 的 Microsoft Edge WebView2 Runtime；账号和配置仍按当前 Windows 用户目录保存，不会随 ZIP 文件夹自动迁移。
-*   **Linux**: `.deb` (Debian/Ubuntu)、`.rpm` 或 `.AppImage` (通用)
+*   **Linux**: `.deb` (Debian/Ubuntu)、`.rpm` 或 `.AppImage`
+
+Ubuntu 20.04 无法安装当前 `.deb`，其软件源缺少 `libwebkit2gtk-4.1-0`。当前 x64 AppImage 的主程序需要 glibc 2.34，Ubuntu 20.04 提供 glibc 2.31。可使用 Ubuntu 24.04 LTS，源码构建见 [Ubuntu 24.04 编译指南](docs/build-wsl2-ubuntu24.md)。
 
 ### 选项 B: Homebrew 安装 (macOS)
 
@@ -454,6 +458,18 @@ npm run tauri dev
 
 ```bash
 npm run tauri build
+```
+
+### 命令行
+
+从带有 CLI 附件的 [GitHub Release](https://github.com/jlcodes99/cockpit-tools/releases) 下载 `cockpit-cli_<版本>_linux_<架构>.tar.gz`。按机器选择 `x86_64` 或 `aarch64`，解压后运行 `./cockpit-cli list codex --json`。发布构建使用 Ubuntu 22.04（x86_64）和 Ubuntu 24.04（aarch64），运行需要系统提供 OpenSSL 3 运行库，无需桌面环境。
+
+也可以从源码运行。脚本可用 `--json` 读取标准输出，失败时检查非零退出码和标准错误。
+
+```bash
+cargo run --locked --package cockpit-cli -- list codex --json
+cargo run --locked --package cockpit-cli -- switch codex "你的账号ID" --json
+cargo run --locked --package cockpit-cli -- switch cursor "你的账号ID" --json
 ```
 
 ---

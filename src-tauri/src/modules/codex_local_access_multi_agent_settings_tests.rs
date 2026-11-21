@@ -20,6 +20,32 @@ fn collection() -> CodexLocalAccessCollection {
     value.account_ids = vec!["a".into()];
     value
 }
+
+#[test]
+fn account_quota_floor_field_mutations_survive_stale_collection_writes() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("collection.json");
+    let mut original = collection();
+    original.account_ids.push("b".into());
+    fs::write(&path, serde_json::to_string(&original).unwrap()).unwrap();
+    assert!(original.account_quota_floors.is_empty());
+    persist_account_quota_floor(&path, "a", Some(5)).unwrap();
+    persist_account_quota_floor(&path, "b", Some(10)).unwrap();
+    assert!(persist_account_quota_floor(&path, "missing", Some(5)).is_err());
+
+    save_collection_to_path(&path, &original).unwrap();
+    let old: CodexLocalAccessCollection = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert_eq!(old.account_quota_floors, HashMap::from([("a".into(), 5), ("b".into(), 10)]));
+
+    persist_account_quota_floor(&path, "a", None).unwrap();
+    save_collection_to_path(&path, &old).unwrap();
+    let latest: CodexLocalAccessCollection = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert_eq!(latest.account_quota_floors, HashMap::from([("b".into(), 10)]));
+
+    let mut delayed = old;
+    preserve_runtime_collection_fields(&mut delayed, &latest);
+    assert_eq!(delayed.account_quota_floors, latest.account_quota_floors);
+}
 #[test]
 fn legacy_multi_agent_flags_and_retired_model_lists_cannot_disable_support() {
     for value in [

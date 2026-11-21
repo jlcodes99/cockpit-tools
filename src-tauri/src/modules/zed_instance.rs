@@ -145,7 +145,7 @@ pub fn start_default_session() -> Result<ZedRuntimeStatus, String> {
     let child = command
         .spawn()
         .map_err(|e| format!("启动 Zed 失败: {}", e))?;
-    let pid = child.id();
+    let pid = process::background_child_pid(child);
 
     update_runtime_state(Some(pid), Some(now_ts()))?;
     logger::log_info(&format!(

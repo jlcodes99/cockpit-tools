@@ -67,6 +67,7 @@ interface LaunchProgressPayload {
   authFailure?: CodexSwitchAuthFailure | null;
   canRetry?: boolean;
   transferConflictingAccount?: boolean;
+  expectedSwitchBinding?: string;
   accountId?: string;
   operation?: CodexLaunchOperation;
   source?: "switch-service";
@@ -91,6 +92,7 @@ interface LaunchProgressState {
   authFailure?: CodexSwitchAuthFailure | null;
   canRetry?: boolean;
   transferConflictingAccount?: boolean;
+  expectedSwitchBinding?: string;
   accountId?: string;
   operation?: CodexLaunchOperation;
   cancelled?: boolean;
@@ -117,6 +119,7 @@ function createState(payload: LaunchProgressPayload): LaunchProgressState {
     status: "running",
     steps: STEP_IDS.map((id) => ({ id, status: "pending", details: {} })),
     transferConflictingAccount: payload.transferConflictingAccount === true,
+    expectedSwitchBinding: payload.expectedSwitchBinding,
     accountId: payload.accountId,
     operation: payload.operation || "instance-launch",
     source: payload.source,
@@ -190,7 +193,9 @@ export function CodexInstanceLaunchProgressModal() {
               step.id === payload.step
                 ? {
                     ...step,
-                    status: payload.stepStatus || "running",
+                    status: step.details.cliResumeError && payload.stepStatus === "completed"
+                      ? "warning"
+                      : payload.stepStatus || "running",
                     details: { ...step.details, ...(payload.details || {}) },
                   }
                 : step,
@@ -210,7 +215,7 @@ export function CodexInstanceLaunchProgressModal() {
             ...base,
             progress: 100,
             status: "completed",
-            steps: steps.map((step) => step.id === "startClient"
+            steps: steps.map((step) => step.id === "startClient" && !step.details.cliResumeError
               ? { ...step, status: "completed", details: { ...step.details, error: undefined } } : step),
             error: undefined,
             authFailure: null,
@@ -254,6 +259,7 @@ export function CodexInstanceLaunchProgressModal() {
             transferConflictingAccount:
               payload.transferConflictingAccount ??
               base.transferConflictingAccount,
+            expectedSwitchBinding: payload.expectedSwitchBinding ?? base.expectedSwitchBinding,
             cancelled: false,
           };
         }
@@ -497,6 +503,9 @@ export function CodexInstanceLaunchProgressModal() {
           ] : [])];
       case "startClient":
         if (state.status === "unconfirmed") return [t("codex.launchConfirmation.description")];
+        if (step.details.cliResumeStarted) return [t("instances.accountLease.detail.cliResumeStarted")];
+        if (typeof step.details.cliResumeError === "string")
+          return [t("codex.switchProgress.detail.clientStartWarning"), step.details.cliResumeError];
         return step.details.launchMode === "cli"
           ? [t("instances.accountLease.detail.cliPrepared")]
           : [t("instances.accountLease.detail.startingClient")];
@@ -569,6 +578,7 @@ export function CodexInstanceLaunchProgressModal() {
       state.instanceId,
       {
         transferConflictingAccount: true,
+        expectedSwitchBinding: state.expectedSwitchBinding,
       },
     );
     window.dispatchEvent(
@@ -613,6 +623,7 @@ export function CodexInstanceLaunchProgressModal() {
           state.instanceId,
           {
             transferConflictingAccount: state.transferConflictingAccount,
+            expectedSwitchBinding: state.expectedSwitchBinding,
           },
         );
         window.dispatchEvent(
@@ -677,6 +688,7 @@ export function CodexInstanceLaunchProgressModal() {
     try {
       const instance = await codexInstanceService.startInstance(state.instanceId, {
         transferConflictingAccount: state.transferConflictingAccount,
+        expectedSwitchBinding: state.expectedSwitchBinding,
         skipFailedStep: failedStepId,
       });
       window.dispatchEvent(

@@ -73,6 +73,7 @@ export interface ModelQuota {
     display_name?: string;
     percentage: number;
     reset_time: string;
+    summary_exhausted?: boolean;
 }
 
 export interface RefreshStats {

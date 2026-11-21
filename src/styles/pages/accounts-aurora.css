@@ -866,19 +866,17 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   justify-items: start;
+  padding-top: 0;
   border-top: 0;
 }
 
-.accounts-page .antigravity-card-footer::before {
-  content: '';
-  grid-row: 2;
-  justify-self: stretch;
+.accounts-page .antigravity-card-footer {
+  justify-content: flex-end;
+  padding-top: 6px;
   border-top: 1px solid var(--border-light);
 }
 
 .accounts-page .antigravity-card-footer > .card-actions {
-  grid-row: 3;
-  justify-self: end;
   flex-wrap: wrap;
   justify-content: flex-end;
   max-width: 100%;
@@ -1313,15 +1311,14 @@
   gap: 14px;
 }
 
-.account-selection-toolbar.has-middle {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
+.accounts-page .account-selection-toolbar.has-middle {
+  flex-wrap: wrap;
   gap: 12px;
 }
 
 .account-selection-toolbar.has-middle .codex-overview-selection-left {
-  justify-self: start;
+  flex: 1 1 0;
+  min-width: min-content;
 }
 
 .account-selection-toolbar-middle {
@@ -1334,11 +1331,15 @@
 }
 
 .account-selection-toolbar.has-middle .account-selection-toolbar-middle {
-  justify-self: center;
+  flex: 0 1 auto;
+  max-width: 45%;
 }
 
 .account-selection-toolbar.has-middle .codex-overview-selection-actions {
-  justify-self: end;
+  flex: 1 1 max-content;
+  min-width: 0;
+  max-width: 100%;
+  justify-content: flex-end;
 }
 
 .account-group-tabs-container {
@@ -1351,15 +1352,10 @@
 }
 
 @media (max-width: 768px) {
-  .account-selection-toolbar.has-middle {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-  }
   .account-selection-toolbar.has-middle .account-selection-toolbar-middle {
     order: 3;
-    width: 100%;
-    margin-top: 8px;
+    flex-basis: 100%;
+    max-width: 100%;
   }
 }
 

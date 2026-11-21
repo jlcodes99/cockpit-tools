@@ -554,29 +554,6 @@ fn mixed_model_catalog_definitions(
     Ok(definitions)
 }
 
-fn apply_discovered_provider_gateway_models(account: &mut CodexAccount) {
-    if !account.is_api_key_auth() || !account.api_model_catalog.is_empty()
-        || account.api_provider_mode != CodexApiProviderMode::Custom
-        || codex_account::account_uses_raw_provider_model_ids(account)
-        || crate::modules::codex_remote_service::is_known_account(account)
-    {
-        return;
-    }
-    let (Some(base_url), Some(api_key)) = (account.api_base_url.as_deref(), account.openai_api_key.as_deref()) else {
-        return;
-    };
-    let wire_api = crate::modules::codex_provider_protocol::normalize_model_provider_wire_api(
-        account.api_wire_api.as_deref(), base_url,
-    );
-    if let Some(models) = crate::modules::codex_provider_discovered_models::get(
-        base_url, api_key, &wire_api, account.api_auth_scheme.as_deref(),
-    ) {
-        // Apply the snapshot only to this gateway's launch configuration.
-        account.api_model_catalog = models.to_vec();
-        account.api_sync_model_catalog_to_codex = true;
-    }
-}
-
 fn provider_gateway_models_for_account(account: &CodexAccount) -> Vec<String> {
     if let Some(catalog)=remote_catalog_for_account(account) {
         return catalog["models"].as_array().into_iter().flatten().filter_map(|m|m["slug"].as_str().map(str::to_owned)).collect();
@@ -1122,7 +1099,11 @@ fn apply_provider_gateway_model_slots(
         .map(|slot| slot.upstream_model.to_ascii_lowercase())
         .collect();
     collection.model_aliases.retain(|alias| {
-        !client_models.contains(&alias.alias.to_ascii_lowercase())
+        let requested = alias.alias.to_ascii_lowercase();
+        // The provider may accept its original model IDs alongside catalog shells.
+        // An inherited alias must not redirect either spelling of a declared model.
+        !client_models.contains(&requested)
+            && !upstream_models.contains(&requested)
             && !upstream_models.contains(&alias.source_model.to_ascii_lowercase())
     });
     collection
@@ -1178,9 +1159,7 @@ pub(crate) fn provider_gateway_wire_api_for_account(account: &CodexAccount) -> S
         "api.stepfun.ai",
         "modelscope.cn",
         "api.longcat.chat",
-        "api.minimax.io",
         "api.mini-max.chat",
-        "api.minimaxi.com",
         "api.tbox.cn",
         "api.mimo.dev",
         "api.xiaomimimo.com",
@@ -1751,6 +1730,7 @@ fn build_mixed_model_gateway_collection_for_profile(
             routes,
         }),
         inherit_account_pool: Some(false),
+        account_pool_id: None,
         account_ids: vec![oauth_account.id.clone()],
         priority_account_ids: Vec::new(),
         preferred_account_id: Some(oauth_account.id.clone()),
@@ -1882,6 +1862,7 @@ fn build_provider_gateway_collection_for_profile(
         },
         model_routing: None,
         inherit_account_pool: Some(false),
+        account_pool_id: None,
         account_ids: vec![account.id.clone()],
         priority_account_ids: Vec::new(),
         preferred_account_id: None,
@@ -1962,6 +1943,7 @@ fn build_bound_oauth_local_gateway_collection_for_profile(
         provider_gateway: None,
         model_routing: None,
         inherit_account_pool: Some(false),
+        account_pool_id: None,
         account_ids: vec![account.id.clone()],
         priority_account_ids: Vec::new(),
         preferred_account_id: None,
@@ -2151,6 +2133,7 @@ fn build_model_provider_gateway_test_collection(
         provider_gateway,
         model_routing: None,
         inherit_account_pool: Some(false),
+        account_pool_id: None,
         account_ids: vec![account.id.clone()],
         priority_account_ids: Vec::new(),
         preferred_account_id: None,
@@ -2419,11 +2402,23 @@ fn render_provider_gateway_model_catalog(
         build_provider_model_catalog_json(slots)?
     };
     let default_window = read_file_model_context_window(&profile_config_path(profile_dir));
-    if let Some(account) = account {
-        decorate_account_catalog_context_windows(&raw, slots, account, default_window)
-    } else {
-        decorate_catalog_context_windows(&raw, slots, &HashMap::new(), default_window)
+    let Some(account) = account else {
+        return decorate_catalog_context_windows(&raw, slots, &HashMap::new(), default_window);
+    };
+    let catalog = decorate_account_catalog_context_windows(&raw, slots, account, default_window)?;
+    if native_wire_api(account).ok() != Some(native_contract::WireApi::Chat) {
+        return Ok(catalog);
     }
+    // The instance reads its catalog from disk. Match the search capability
+    // advertised for this transport by the native gateway's /models endpoint.
+    let mut catalog: Value =
+        serde_json::from_str(&catalog).map_err(|error| format!("解析模型目录失败: {error}"))?;
+    if let Some(models) = catalog["models"].as_array_mut() {
+        for model in models.iter_mut().filter_map(Value::as_object_mut) {
+            model.insert("supports_search_tool".into(), Value::Bool(false));
+        }
+    }
+    serde_json::to_string_pretty(&catalog).map_err(|error| format!("序列化模型目录失败: {error}"))
 }
 
 pub(crate) fn apply_provider_gateway_catalog_reset_defaults(
@@ -2464,6 +2459,7 @@ fn provider_model_backup_path(profile_dir: &Path) -> PathBuf {
 struct ProviderModelOverrideState {
     previous_model: Option<String>,
     managed_models: HashSet<String>,
+    previous_web_search: Option<Option<String>>,
 }
 
 fn read_provider_model_backup(profile_dir: &Path) -> Option<ProviderModelOverrideState> {
@@ -2489,7 +2485,16 @@ fn read_provider_model_backup(profile_dir: &Path) -> Option<ProviderModelOverrid
     Some(ProviderModelOverrideState {
         previous_model,
         managed_models,
+        previous_web_search: parsed
+            .get("previous_web_search")
+            .filter(|mode| mode.is_null() || mode.is_string())
+            .map(|mode| mode.as_str().map(str::to_owned)),
     })
+}
+
+pub(crate) fn profile_declares_provider_gateway_model(profile_dir: &Path, model: &str) -> bool {
+    read_provider_model_backup(profile_dir)
+        .is_some_and(|state| state.managed_models.contains(&model.trim().to_ascii_lowercase()))
 }
 
 fn save_provider_model_backup(
@@ -2538,6 +2543,33 @@ fn backup_current_profile_model_before_provider_gateway(
         .map(str::trim)
         .filter(|value| !value.is_empty());
     save_provider_model_backup(profile_dir, current_model, provider_models)
+}
+
+fn prepare_provider_gateway_web_search(
+    profile_dir: &Path,
+    account: &CodexAccount,
+) -> Result<(), String> {
+    if native_wire_api(account).ok() != Some(native_contract::WireApi::Chat) {
+        return Ok(());
+    }
+    let config_path = profile_config_path(profile_dir);
+    let mut doc = crate::modules::codex_config_format::load_codex_config_doc(&config_path)?;
+    let previous = doc.get("web_search").and_then(|mode| mode.as_str());
+    if previous == Some("disabled") {
+        return Ok(());
+    }
+    // Codex advertises hosted search even for ordinary turns. A Chat-only
+    // instance cannot serve that Responses tool. Capture the original mode
+    // before modifying the profile so leaving this gateway restores it.
+    update_string_atomic(&provider_model_backup_path(profile_dir), |current| {
+        let mut backup: serde_json::Map<String, Value> =
+            serde_json::from_str(current.unwrap_or("{}")).map_err(|error| error.to_string())?;
+        backup.entry("previous_web_search").or_insert_with(|| json!(previous));
+        serde_json::to_string_pretty(&backup).map_err(|error| error.to_string())
+    })?;
+    doc["web_search"] = value("disabled");
+    let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
+    crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
 }
 
 pub fn cleanup_provider_gateway_profile_model_overrides(profile_dir: &Path) -> Result<(), String> {
@@ -2600,6 +2632,16 @@ pub fn cleanup_provider_gateway_profile_model_overrides(profile_dir: &Path) -> R
     let mut doc = crate::modules::codex_config_format::load_codex_config_doc(&config_path)?;
     if config_path.exists() {
         let mut changed = false;
+        if let Some(previous) = override_state.previous_web_search {
+            if doc.get("web_search").and_then(|mode| mode.as_str()) == Some("disabled") {
+                if let Some(previous) = previous {
+                    doc["web_search"] = value(previous);
+                } else {
+                    doc.remove("web_search");
+                }
+                changed = true;
+            }
+        }
         let uses_managed_catalog = doc
             .get("model_catalog_json")
             .and_then(|item| item.as_str())
@@ -2649,12 +2691,22 @@ pub async fn activate_provider_gateway_for_dir(
     profile_dir: &Path,
     account_id: &str,
 ) -> Result<(), String> {
+    activate_provider_gateway_for_dir_with_prepared_oauth(profile_dir, account_id, None).await
+}
+
+// Switch and binding transactions hold the OAuth token lock through both profile writes.
+pub(crate) async fn activate_provider_gateway_for_dir_with_prepared_oauth(
+    profile_dir: &Path,
+    account_id: &str,
+    prepared_oauth: Option<&CodexAccount>,
+) -> Result<(), String> {
     let account_id = account_id.trim().to_owned();
     if account_id.is_empty() {
         return Err("供应商网关账号不能为空".to_string());
     }
 
     let profile_dir = profile_dir.to_path_buf();
+    let prepared_oauth = prepared_oauth.cloned();
     let runtime = tokio::runtime::Handle::current();
     tokio::task::spawn_blocking(move || {
         let profile_dir = profile_dir.as_path();
@@ -2664,11 +2716,13 @@ pub async fn activate_provider_gateway_for_dir(
             build_provider_gateway_collection_for_profile(profile_dir, &account)?;
         let model_slots = provider_model_slots_for_account(&account, &provider_gateway.upstream_models);
         save_profile_takeover_backup(profile_dir, &key)?;
-        runtime.block_on(write_local_access_profile_takeover(
+        runtime.block_on(write_local_access_profile_takeover_with_provider_name(
             profile_dir,
             &collection,
             Some(&key),
             false,
+            account.api_provider_name.as_deref(),
+            prepared_oauth.as_ref(),
         ))?;
         cleanup_provider_gateway_profile_model_overrides(profile_dir)?;
         backup_current_profile_model_before_provider_gateway(
@@ -2691,6 +2745,7 @@ pub async fn activate_provider_gateway_for_dir(
         }
         codex_account::reapply_experimental_model_policy_if_enabled(profile_dir)?;
         reapply_deepseek_profile_config_overrides(profile_dir, &account)?;
+        prepare_provider_gateway_web_search(profile_dir, &account)?;
         if !crate::modules::codex_remote_service::is_known_account(&account)
             && model_slots.iter().any(|slot| codex_protocol::deepseek_model_template(&slot.upstream_model).is_some())
         {
@@ -2829,7 +2884,9 @@ pub fn has_running_persisted_mixed_model_gateway() -> bool {
         })
 }
 
-async fn stop_all_provider_gateways_for_app_shutdown() -> Vec<GatewayBindEndpoint> {
+async fn stop_all_provider_gateways_for_app_shutdown(
+    mut update_recovery: Option<&mut HashSet<String>>,
+) -> Vec<GatewayBindEndpoint> {
     let _guard = provider_gateway_lifecycle_lock().lock().await;
     let mut preserve_mixed_profiles = HashSet::new();
     let mut configured_profiles = HashMap::new();
@@ -2908,6 +2965,9 @@ async fn stop_all_provider_gateways_for_app_shutdown() -> Vec<GatewayBindEndpoin
         if let Some(endpoint) =
             stop_provider_gateway_runtime_for_reason(&runtime_key, "app_shutdown").await
         {
+            if let Some(keys) = update_recovery.as_deref_mut() {
+                keys.insert(runtime_key);
+            }
             endpoints.push(endpoint);
         }
     }
@@ -3027,17 +3087,25 @@ pub async fn ensure_provider_gateway_for_dir(
         return Err("供应商网关账号不能为空".to_string());
     }
 
-    let _guard = provider_gateway_lifecycle_lock().lock().await;
     let mut account = codex_account::load_account(account_id)
         .ok_or_else(|| format!("供应商网关账号不存在: {}", account_id))?;
-    apply_discovered_provider_gateway_models(&mut account);
+    super::codex_provider_discovered_models::apply_cached(&mut account).await;
+    ensure_provider_gateway_for_account(profile_dir, &account).await
+}
+
+pub(crate) async fn ensure_provider_gateway_for_account(
+    profile_dir: &Path,
+    account: &CodexAccount,
+) -> Result<(), String> {
+    let _guard = provider_gateway_lifecycle_lock().lock().await;
+    let account_id = account.id.as_str();
     // 持久端口可能已被其它实例/进程占用：先放弃该端口，下面的构建会重新分配一个空闲端口，
     // 避免带着冲突端口启动 sidecar 失败后，后续每次尝试都继续失败。
     stop_profile_writer_before_port_reassignment(profile_dir, account_id).await?;
     release_occupied_provider_gateway_profile_port(profile_dir, account_id).await;
     let (collection, key, provider_gateway) =
-        build_provider_gateway_collection_for_profile(profile_dir, &account)?;
-    let model_slots = provider_model_slots_for_account(&account,&provider_gateway.upstream_models);
+        build_provider_gateway_collection_for_profile(profile_dir, account)?;
+    let model_slots = provider_model_slots_for_account(account,&provider_gateway.upstream_models);
     let runtime_key = provider_gateway_runtime_key(profile_dir, account_id);
     let (endpoint, stopped) =
         stop_provider_gateway_runtime_checked(&runtime_key, "configuration_rebuild").await;
@@ -3046,7 +3114,7 @@ pub async fn ensure_provider_gateway_for_dir(
         wait_for_gateway_port_release(&endpoint.bind_host, endpoint.port).await?;
     }
 
-    native_ensure_provider_profile(profile_dir, &account, collection, &key, &model_slots).await
+    native_ensure_provider_profile(profile_dir, account, collection, &key, &model_slots).await
 }
 
 pub async fn ensure_mixed_model_gateway_for_dir(

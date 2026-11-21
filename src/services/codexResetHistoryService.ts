@@ -1,5 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { ResetRule } from './codexResetAutomationService';
+
+export interface ResetRule {
+  enabled: boolean;
+  expiry_enabled: boolean;
+  before_seconds: number;
+  quota_enabled: boolean;
+  remaining_percent: number;
+  prefer_usage_credits?: boolean;
+}
 
 export type ResetHistorySource = 'official' | 'local';
 export interface ResetObservation {
@@ -30,9 +38,19 @@ export interface ResetHistoryEntry {
   after?: ResetObservation;
   receipt?: LocalResetRecord['receipt'];
 }
+export interface LegacyResetActivity {
+  id: string;
+  account_id: string;
+  at: number;
+  reason: string;
+  status: string;
+  detail?: string | null;
+}
+
 export interface ResetHistoryPage {
   entries: ResetHistoryEntry[];
   nextCursor: string | number | null;
+  legacyRecords?: LegacyResetActivity[];
 }
 
 export async function loadCodexResetHistory(
@@ -54,6 +72,7 @@ export async function loadCodexResetHistory(
   const page = await invoke<{
     records: LocalResetRecord[];
     next_cursor: number | null;
+    legacy_records?: LegacyResetActivity[];
   }>('get_codex_reset_usage_history', { accountId, cursor });
   return {
     entries: page.records.map(record => ({
@@ -62,5 +81,6 @@ export async function loadCodexResetHistory(
       context: record.context, after: record.after_observation, receipt: record.receipt,
     })),
     nextCursor: page.next_cursor,
+    ...(cursor === null && page.legacy_records?.length ? { legacyRecords: page.legacy_records } : {}),
   };
 }

@@ -41,18 +41,6 @@ export function CodexStatsRangePicker({
     setValidationError("");
   }, [range.endInput, range.startInput]);
 
-  useEffect(() => {
-    if (value === "custom") return;
-    const nextMidnight = new Date();
-    nextMidnight.setHours(24, 0, 0, 50);
-    const timer = window.setTimeout(() => {
-      onPresetChange(value, buildCodexStatsTimeRange(value));
-    }, Math.max(nextMidnight.getTime() - Date.now(), 50));
-    return () => window.clearTimeout(timer);
-    // The preset key is the only input that should reset the midnight timer.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
   const presets = [
     { key: "daily" as const, label: t("codex.localAccess.statsRange.daily", "日") },
     { key: "rolling7d" as const, label: t("codex.sessionUsage.range.7d", "近 7 天") },

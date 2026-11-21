@@ -19,6 +19,8 @@ use tokio::net::TcpListener;
 use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message as ClientMessage};
 #[path = "request_fault_websocket_tests.rs"]
 mod request_fault_websocket_tests;
+#[path = "cpa_error_envelopes_tests.rs"]
+mod cpa_error_envelopes_tests;
 #[path = "websocket_continuation_tests.rs"]
 mod continuation_tests;
 
@@ -39,6 +41,8 @@ enum Behavior {
     SuccessThenOverload,
     SuccessThenAlwaysOverload,
     FirstError(Value),
+    MetadataThenError(Value, Value),
+    MetadataThenSuccess(Value),
     Close1009,
     CreatedThenClose1009,
 }
@@ -128,6 +132,14 @@ async fn endpoint(state: Arc<Upstream>, headers: HeaderMap, ws: WebSocketUpgrade
                 json!({"type":"error","error":{"code":"server_is_overloaded","type":"service_unavailable_error","message":"overloaded"}})
             }
             Behavior::FirstError(error) => error.clone(),
+            Behavior::MetadataThenError(metadata, error) => {
+                socket.send(Message::Text(metadata.to_string().into())).await.unwrap();
+                error.clone()
+            }
+            Behavior::MetadataThenSuccess(metadata) => {
+                socket.send(Message::Text(metadata.to_string().into())).await.unwrap();
+                json!({"type":"response.completed","response":{"id":state.response_id,"status":"completed","output":[]}})
+            }
             Behavior::SuccessThenAlwaysOverload if state.attempts.load(Ordering::SeqCst) > 1 => {
                 json!({"type":"error","error":{"code":"server_is_overloaded","type":"service_unavailable_error"}})
             }
@@ -287,6 +299,7 @@ struct RetryHost {
     policy: ExecutionPolicy,
     selections: Mutex<Vec<RouteRequest>>,
     failures: Mutex<Vec<(String, u16, Option<Duration>)>>,
+    failure_scopes: Mutex<Vec<bool>>,
     reports: Mutex<Vec<RequestReport>>,
     capacity: Arc<tokio::sync::Semaphore>,
     refreshable: AtomicBool,
@@ -399,6 +412,15 @@ impl Host for RetryHost {
                 .push((account.into(), status, delay));
         })
     }
+    fn route_failed_for_model<'a>(
+        &'a self, account: &'a str, _: &'a str, status: u16,
+        delay: Option<Duration>, credential_scope: bool,
+    ) -> BoxFuture<'a, ()> {
+        Box::pin(async move {
+            self.failure_scopes.lock().unwrap().push(credential_scope);
+            self.route_failed(account, status, delay).await;
+        })
+    }
     fn record(&self, report: RequestReport) -> BoxFuture<'_, ()> {
         Box::pin(async move {
             self.reports.lock().unwrap().push(report);
@@ -492,6 +514,7 @@ impl Fixture {
             policy,
             selections: Mutex::new(Vec::new()),
             failures: Mutex::new(Vec::new()),
+            failure_scopes: Mutex::new(Vec::new()),
             reports: Mutex::new(Vec::new()),
             capacity: Arc::new(tokio::sync::Semaphore::new(1)),
             refreshable: AtomicBool::new(true),

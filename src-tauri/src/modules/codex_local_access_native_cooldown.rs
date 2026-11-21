@@ -8,6 +8,8 @@ struct NativeCooldownKey {
 enum NativeCooldownScope {
     Model(String),
     Credential,
+    IncludedQuota,
+    ReserveQuota,
     UpstreamFailure,
 }
 
@@ -40,6 +42,29 @@ fn native_upstream_failure_key(account: &str) -> NativeCooldownKey {
 }
 
 const NATIVE_CONFIRMED_QUOTA: &str = "quota_exhausted";
+
+fn native_oauth_quota_key(account: &str, model: &str) -> NativeCooldownKey {
+    NativeCooldownKey {
+        account: account.into(),
+        scope: if native_is_reserve_model(model) {
+            NativeCooldownScope::ReserveQuota
+        } else {
+            NativeCooldownScope::IncludedQuota
+        },
+    }
+}
+
+fn native_confirmed_quota_active(
+    states: &HashMap<NativeCooldownKey, NativeCooldown>,
+    account: &str,
+    model: &str,
+    now: Instant,
+) -> bool {
+    [native_cooldown_key(account, "", true), native_oauth_quota_key(account, model)]
+        .iter().any(|key| states.get(key).is_some_and(|state| {
+            state.reason == NATIVE_CONFIRMED_QUOTA && state.until > now
+        }))
+}
 
 fn native_update_upstream_failure_streak(
     states: &mut HashMap<NativeCooldownKey, NativeCooldown>,
@@ -86,8 +111,16 @@ fn native_mark_quota_exhausted(
     retry_after: Option<Duration>,
     now: Instant,
 ) {
-    let key = native_cooldown_key(account, "", true);
-    native_update_upstream_failure_streak(states, account, 429, now);
+    native_mark_quota_exhausted_at_key(states, native_cooldown_key(account, "", true), retry_after, now);
+}
+
+fn native_mark_quota_exhausted_at_key(
+    states: &mut HashMap<NativeCooldownKey, NativeCooldown>,
+    key: NativeCooldownKey,
+    retry_after: Option<Duration>,
+    now: Instant,
+) {
+    native_update_upstream_failure_streak(states, &key.account, 429, now);
     if let Some(previous) = states.get_mut(&key)
         .filter(|state| state.reason == NATIVE_CONFIRMED_QUOTA && state.until > now)
     {
@@ -97,7 +130,7 @@ fn native_mark_quota_exhausted(
         }
         return;
     }
-    native_upsert_cooldown(states, account, "", 429, retry_after, true, now);
+    native_write_cooldown(states, key.clone(), 429, retry_after, now);
     if let Some(state) = states.get_mut(&key) {
         state.reason = NATIVE_CONFIRMED_QUOTA;
     }
@@ -107,10 +140,18 @@ fn native_clear_quota_cooldowns(
     states: &mut HashMap<NativeCooldownKey, NativeCooldown>,
     account_id: &str,
     query_started: Instant,
+    included_usable: bool,
+    reserve_usable: bool,
 ) -> bool {
     let before = states.len();
     states.retain(|key, state| {
-        key.account != account_id || !state.quota || state.recorded_at >= query_started
+        let reserve = match &key.scope {
+            NativeCooldownScope::ReserveQuota => true,
+            NativeCooldownScope::Model(model) => native_is_reserve_model(model),
+            _ => false,
+        };
+        let usable = if reserve { reserve_usable } else { included_usable };
+        key.account != account_id || !state.quota || !usable || state.recorded_at >= query_started
     });
     states.len() != before
 }
@@ -120,14 +161,19 @@ pub(crate) async fn clear_native_quota_cooldown_after_refresh(
     quota: &CodexQuota,
     query_started: Instant,
 ) {
-    if !quota_refresh_confirms_usable_allowance(quota, query_started, now_ms() / 1000) {
+    let included_usable = quota_refresh_confirms_usable_allowance(quota, query_started, now_ms() / 1000);
+    let reserve_usable = query_started.elapsed().as_secs() <= BOUND_OAUTH_QUOTA_RESERVE_MAX_SNAPSHOT_AGE_SECONDS as u64
+        && quota.raw_data.as_ref().is_some_and(|raw| {
+            quota_has_allowed_additional_rate_limit(raw, is_gpt_reserve_entitlement_name)
+        });
+    if !included_usable && !reserve_usable {
         return;
     }
     let host = gateway_runtime().lock().await.native_health_source.as_ref()
         .and_then(|host| host.upgrade());
     let Some(host) = host else { return; };
     let cleared = host.cooldowns.lock().ok().is_some_and(|mut states| {
-        native_clear_quota_cooldowns(&mut states, account_id, query_started)
+        native_clear_quota_cooldowns(&mut states, account_id, query_started, included_usable, reserve_usable)
     });
     if cleared {
         logger::log_codex_api_info(&format!(
@@ -166,6 +212,16 @@ fn native_update_cooldown(
         native_update_upstream_failure_streak(states, account, status, now);
     }
     let key = native_cooldown_key(account, model, credential_scope || model.is_empty());
+    native_write_cooldown(states, key, status, retry_after, now);
+}
+
+fn native_write_cooldown(
+    states: &mut HashMap<NativeCooldownKey, NativeCooldown>,
+    key: NativeCooldownKey,
+    status: u16,
+    retry_after: Option<Duration>,
+    now: Instant,
+) {
     let previous = states.get(&key);
     if previous.is_some_and(|state| state.reason == NATIVE_CONFIRMED_QUOTA && state.until > now) {
         return;
@@ -232,6 +288,7 @@ fn native_cooldown_wait(
     [
         native_cooldown_key(account, model, false),
         native_cooldown_key(account, model, true),
+        native_oauth_quota_key(account, model),
         native_upstream_failure_key(account),
     ]
     .into_iter()

@@ -586,6 +586,8 @@ fn merge_request_diagnostics(
                     attempt.authorization_route = attempt.authorization_route.or_else(|| old.authorization_route.clone());
                     attempt.authorization_fallback = attempt.authorization_fallback.or_else(|| old.authorization_fallback.clone());
                     attempt.upstream_request_id = attempt.upstream_request_id.or_else(|| old.upstream_request_id.clone());
+                    attempt.responses_history_rejection = attempt.responses_history_rejection
+                        .or_else(|| old.responses_history_rejection.clone());
                     attempt.response_model = attempt.response_model.or_else(|| old.response_model.clone());
                     attempt.transport_error = attempt.transport_error.or_else(|| old.transport_error.clone());
                     attempt.transport_pool_retired = match (old.transport_pool_retired, attempt.transport_pool_retired) {

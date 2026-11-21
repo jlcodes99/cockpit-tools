@@ -8,6 +8,7 @@ import { isMenuVisiblePlatform, PlatformId, PLATFORM_PAGE_MAP } from '../../type
 import {
   API_RELAY_LAYOUT_ENTRY_ID,
   ApiRelayLayoutEntryId,
+  makePlatformEntryId,
   resolveGroupChildIcon,
   resolveGroupChildName,
   parseGroupEntryId,
@@ -55,6 +56,7 @@ interface SideNavEntry {
   targetPlatformId: PlatformId | null;
   platformIds: PlatformId[];
   group: PlatformLayoutGroup | null;
+  childIcon?: ReturnType<typeof resolveGroupChildIcon>;
 }
 
 const PAGE_PLATFORM_MAP: Partial<Record<Page, PlatformId>> = {
@@ -102,6 +104,19 @@ function renderEntryIcon(entry: SideNavEntry, size: number) {
     );
   }
 
+  if (entry.childIcon) {
+    const { iconKind, iconCustomDataUrl, iconPlatformId } = entry.childIcon;
+    return iconKind === 'custom' && iconCustomDataUrl ? (
+      <img
+        src={iconCustomDataUrl}
+        alt=""
+        className="side-nav-group-icon"
+        width={size}
+        height={size}
+      />
+    ) : renderPlatformIcon(iconPlatformId, size);
+  }
+
   if (entry.group && entry.group.iconKind === 'custom' && entry.group.iconCustomDataUrl) {
     return (
       <img
@@ -122,7 +137,13 @@ function renderEntryIcon(entry: SideNavEntry, size: number) {
 }
 
 function isAntigravitySuitePage(page: Page): boolean {
-  return page === 'overview' || page === 'instances' || page === 'wakeup' || page === 'verification';
+  return (
+    page === 'overview' ||
+    page === 'antigravity-usage' ||
+    page === 'instances' ||
+    page === 'wakeup' ||
+    page === 'verification'
+  );
 }
 
 export function SideNav({
@@ -185,16 +206,6 @@ export function SideNav({
   const currentPlatformId = isAntigravitySuitePage(page)
     ? 'antigravity'
     : PAGE_PLATFORM_MAP[page] ?? null;
-  const currentEntryId = useMemo<SideNavEntryId | null>(
-    () => {
-      if (page === 'api-relay') {
-        return API_RELAY_LAYOUT_ENTRY_ID;
-      }
-      return currentPlatformId ? resolveEntryIdForPlatform(currentPlatformId, platformGroups) : null;
-    },
-    [currentPlatformId, page, platformGroups],
-  );
-
   const hiddenSet = useMemo(() => new Set(hiddenEntryIds), [hiddenEntryIds]);
   const sidebarSet = useMemo(() => new Set(sidebarEntryIds), [sidebarEntryIds]);
   const remoteHiddenPlatformSet = useMemo(
@@ -287,12 +298,29 @@ export function SideNav({
     t,
   ]);
 
-  const sidebarVisibleEntries = useMemo(
-    () => orderedEntries.filter((entry) =>
-      entry.kind === 'api-relay' || sidebarSet.has(entry.id as PlatformLayoutEntryId),
-    ),
-    [orderedEntries, sidebarSet],
-  );
+  const sidebarVisibleEntries = useMemo(() => orderedEntries.flatMap((entry) => {
+    const visible = entry.kind === 'api-relay' || sidebarSet.has(entry.id as PlatformLayoutEntryId)
+      ? [entry]
+      : [];
+    const group = entry.group;
+    if (!group) return visible;
+
+    for (const platformId of entry.platformIds) {
+      const id = makePlatformEntryId(platformId);
+      if (!sidebarSet.has(id)) continue;
+      visible.push({
+        id,
+        kind: 'platform',
+        label: resolveGroupChildName(group, platformId, getPlatformLabel(platformId, t)),
+        hidden: entry.hidden,
+        targetPlatformId: platformId,
+        platformIds: [platformId],
+        group: null,
+        childIcon: resolveGroupChildIcon(group, platformId),
+      });
+    }
+    return visible;
+  }), [orderedEntries, sidebarSet, t]);
 
   const sidebarMenuEntries = sidebarVisibleEntries;
 
@@ -321,6 +349,15 @@ export function SideNav({
     () => new Set(sidebarMenuEntries.map((entry) => entry.id)),
     [sidebarMenuEntries],
   );
+  let currentEntryId: SideNavEntryId | null = null;
+  if (page === 'api-relay') {
+    currentEntryId = API_RELAY_LAYOUT_ENTRY_ID;
+  } else if (currentPlatformId) {
+    const individualEntryId = makePlatformEntryId(currentPlatformId);
+    currentEntryId = sidebarMenuEntryIdSet.has(individualEntryId)
+      ? individualEntryId
+      : resolveEntryIdForPlatform(currentPlatformId, platformGroups);
+  }
 
   const sidebarMenuPlatformIdSet = useMemo(
     () => new Set(

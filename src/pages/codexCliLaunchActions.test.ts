@@ -33,8 +33,9 @@ function harness(overrides: Record<string, any> = {}) {
   });
   function visit(node: ts.Node) {
     if (ts.isVariableDeclaration(node) && node.initializer &&
-      ['handleLaunchCodexCli', 'handleLaunchLocalAccessCli'].includes(node.name.getText(source))) {
-      vm.runInContext(ts.transpileModule(`globalThis.${node.name.getText(source)} = ${node.initializer.getText(source)}`, {
+      ['handleLaunchCodexCli', 'handleLaunchLocalAccessCli', 'handleExecuteLaunchPreview'].includes(node.name.getText(source))) {
+      const handler = ts.isCallExpression(node.initializer) ? node.initializer.arguments[0] : node.initializer;
+      vm.runInContext(ts.transpileModule(`globalThis.${node.name.getText(source)} = ${handler.getText(source)}`, {
         compilerOptions: { target: ts.ScriptTarget.ES2022 },
       }).outputText, context);
     }
@@ -110,4 +111,46 @@ test('failed DeepSeek settings save prevents opening CLI and can be retried', as
   assert.deepEqual(h.calls.errors, []);
   await h.context.handleLaunchCodexCli(account, options);
   assert.equal(h.calls.cli.length, 1);
+});
+
+test('only an explicit non-default CLI switch-and-start requests background continuation', async () => {
+  for (const [launchMode, start, terminalPreview, expected] of [
+    ['cli', true, false, [['bind', 'selected-account'], ['start CLI', 'managed', 'selected-account']]],
+    ['app', true, false, [['bind', 'selected-account'], ['start app', 'managed']]],
+    ['cli', false, false, [['switch', 'managed', 'selected-account']]],
+    ['cli', true, true, [['preview', 'selected-account']]],
+  ] as const) {
+    const calls: string[][] = [];
+    const h = harness({
+      activeLaunchPreviewAccount: { id: 'selected-account' },
+      launchPreviewInstanceId: 'managed',
+      launchPreviewInstanceLabel: 'Managed fixture',
+      launchPreviewCliIntent: terminalPreview,
+      DEFAULT_CODEX_INSTANCE_ID: '__default__',
+      persistCodexLaunchPreviewLastInstanceId() {},
+      setPendingCliLaunchTarget(target: { bindAccountId: string }) {
+        calls.push(['preview', target.bindAccountId]);
+      },
+      codexInstanceStore: {
+        async updateInstance(payload: { bindAccountId: string }) {
+          calls.push(['bind', payload.bindAccountId]);
+          return { id: 'managed', launchMode };
+        },
+        async startInstance(id: string) { calls.push(['start app', id]); },
+        async fetchInstances() {},
+      },
+      codexInstanceService: {
+        async startInstance(id: string, options: { expectedSwitchBinding: string }) {
+          calls.push(['start CLI', id, options.expectedSwitchBinding]);
+        },
+        async switchInstanceAccount(id: string, binding: string) {
+          calls.push(['switch', id, binding]);
+          return false;
+        },
+      },
+      async executeCodexAccountSwitch() { assert.fail('expected a non-default instance'); },
+    });
+    assert.equal(await h.context.handleExecuteLaunchPreview(start), true);
+    assert.deepEqual(calls, expected);
+  }
 });

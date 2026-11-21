@@ -3,5 +3,6 @@
   { "id": "claude:weekly", "model": "Claude", "weekly": true, "aliases": ["3p-weekly", "claude:weekly"] },
   { "id": "gemini:5h", "model": "Gemini", "weekly": false, "aliases": ["gemini-5h", "gemini:5h"] },
   { "id": "gemini:weekly", "model": "Gemini", "weekly": true, "aliases": ["gemini-weekly", "gemini:weekly"] },
-  { "id": "argon:weekly", "model": "Gemini 4 Argon", "weekly": true, "aliases": ["gemini-argon-wtu-weekly", "argon:weekly"] }
+  { "id": "argon:weekly", "model": "Gemini 4 Argon", "weekly": true, "aliases": ["gemini-argon-wtu-weekly", "argon:weekly"] },
+  { "id": "carbon:weekly", "model": "Gemini 4 Carbon", "weekly": true, "aliases": ["gemini-carbon-wtu-weekly", "carbon:weekly"] }
 ]

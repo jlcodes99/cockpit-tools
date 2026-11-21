@@ -109,7 +109,8 @@
 .card {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   padding: 8px 10px;
   background: var(--bg-card);
   border: 1px solid var(--border-light);
@@ -120,9 +121,49 @@
   overflow: hidden;
 }
 
+.antigravityCard {
+  flex-wrap: wrap;
+}
+
+.antigravityAccountMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  flex: 0 0 100%;
+  min-width: 0;
+}
+
+.antigravityCredits {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.antigravityCard .quotas {
+  max-height: none;
+}
+
+.quotaGroupName {
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .card:hover {
   background: var(--bg-hover);
   border-color: var(--border);
+}
+
+.antigravityCard {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.antigravityCardTime {
+  flex-basis: 100%;
 }
 
 .cardCurrent {
@@ -215,6 +256,11 @@
 .tierFree {
   background: var(--bg-tertiary);
   color: var(--text-muted);
+}
+
+.card :global(.account-last-used) {
+  order: 1;
+  flex: 1 0 100%;
 }
 
 .quotas {

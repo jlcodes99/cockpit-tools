@@ -14,6 +14,9 @@ import {
 } from 'lucide-react';
 import { SingleSelectDropdown, type SingleSelectOption } from '../SingleSelectDropdown';
 import * as codexInstanceService from '../../services/codexInstanceService';
+import { getCodexProfileLifetimeTokens } from '../../services/codexService';
+import { useCodexAccountStore } from '../../stores/useCodexAccountStore';
+import { isStandardCodexOAuthAccount } from '../../types/codex';
 import type {
   CodexSessionUsageQuery,
   CodexSessionUsageReport,
@@ -35,6 +38,7 @@ import {
 } from '../../utils/codexStatsRangePreference';
 import { useDurableUiSetting } from '../../hooks/useDurableUiSetting';
 import { previewDurableUiSetting } from '../../utils/durableUiSettings';
+import { useCodexProxyAccountName } from './useCodexProxyExitEditor';
 
 function TokenAmount({
   value,
@@ -51,6 +55,80 @@ function TokenAmount({
     <strong className="codex-session-usage-amount" title={exact}>
       {compact}
     </strong>
+  );
+}
+
+export function CodexProfileUsageTotal({ lang }: { lang: string }) {
+  const { t } = useTranslation();
+  const accounts = useCodexAccountStore((state) => state.accounts);
+  const currentAccountId = useCodexAccountStore((state) => state.currentAccount?.id);
+  const accountName = useCodexProxyAccountName();
+  const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [lookup, setLookup] = useState<{
+    accountId: string;
+    status: 'loading' | 'ready' | 'error';
+    value?: number | null;
+  } | null>(null);
+  const requestId = useRef(0);
+  const options = accounts.filter(isStandardCodexOAuthAccount).map((account) => ({
+    value: account.id,
+    label: accountName(account),
+  }));
+  const accountId = options.find((option) => option.value === selectedAccountId)?.value
+    ?? options.find((option) => option.value === currentAccountId)?.value
+    ?? options[0]?.value;
+  const result = lookup?.accountId === accountId ? lookup : null;
+
+  const load = async () => {
+    if (!accountId) return;
+    const request = ++requestId.current;
+    setLookup({ accountId, status: 'loading' });
+    try {
+      const value = await getCodexProfileLifetimeTokens(accountId);
+      if (request === requestId.current) setLookup({ accountId, status: 'ready', value });
+    } catch {
+      if (request === requestId.current) setLookup({ accountId, status: 'error' });
+    }
+  };
+
+  return (
+    <div className="codex-session-usage__profile-source">
+      <strong>{t('codex.sessionUsage.comparison.profileTotal')}</strong>
+      {!accountId ? <span>{t('codex.sessionUsage.comparison.noAccount')}</span> : (
+        <>
+          <div className="codex-session-usage__profile-controls">
+            <SingleSelectDropdown
+              value={accountId}
+              options={options}
+              ariaLabel={t('codex.sessionUsage.comparison.account')}
+              onChange={(id) => {
+                ++requestId.current;
+                setLookup(null);
+                setSelectedAccountId(id);
+              }}
+            />
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={result?.status === 'loading'}
+              onClick={() => void load()}
+            >
+              <RefreshCw size={13} aria-hidden="true" />
+              {t(result?.status === 'error' ? 'common.retry' : 'common.refresh')}
+            </button>
+          </div>
+          <div role="status">
+            {result?.status === 'loading' ? t('common.loading')
+              : result?.status === 'error' ? t('codex.sessionUsage.comparison.loadError')
+                : result?.status === 'ready'
+                  ? result.value == null
+                    ? t('codex.sessionUsage.comparison.unavailable')
+                    : <TokenAmount value={result.value} lang={lang} compactDecimals={2} />
+                  : null}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -403,6 +481,8 @@ export function CodexSessionUsagePanel({
           bucketStart: new Date(`${row.key}T00:00:00`).getTime(),
           usage: {
             totalTokens: row.totalTokens,
+            inputTokens: row.inputTokens,
+            outputTokens: row.outputTokens,
             requestCount: row.requestCount,
             estimatedCostUsd: 0,
           },
@@ -523,6 +603,31 @@ export function CodexSessionUsagePanel({
         )}
       </p>
 
+      <section className="codex-session-usage__hero codex-session-usage__sources">
+        <div className="codex-session-usage__local-source">
+          <div className="codex-session-usage__hero-total">
+            <div className="codex-session-usage__hero-icon" aria-hidden="true">
+              <Zap size={22} />
+            </div>
+            <div>
+              <span>{t('codex.sessionUsage.comparison.localTotal')}</span>
+              {hasData
+                ? <TokenAmount value={totals?.totalTokens ?? 0} lang={lang} compactDecimals={2} />
+                : <span>—</span>}
+            </div>
+          </div>
+          {hasData && (
+            <div className="codex-session-usage__hero-side">
+              <span><Send size={13} />{t('codex.sessionUsage.cards.requests', '请求数')}</span>
+              <strong>{formatSessionUsageCount(totals?.requestCount ?? 0)}</strong>
+              <span><DollarSign size={13} />{t('codex.sessionUsage.cards.cost', '估算费用')}</span>
+              <strong>{formatSessionUsageCostUsd(totals?.estimatedCostUsd)}</strong>
+            </div>
+          )}
+        </div>
+        <CodexProfileUsageTotal lang={lang} />
+      </section>
+
       {loading && !report ? (
         <div className="codex-session-usage__empty">
           {t('common.loading', '加载中...')}
@@ -540,34 +645,6 @@ export function CodexSessionUsagePanel({
       ) : (
         <>
           <section className="codex-session-usage__hero">
-            <div className="codex-session-usage__hero-head">
-              <div className="codex-session-usage__hero-total">
-                <div className="codex-session-usage__hero-icon" aria-hidden="true">
-                  <Zap size={22} />
-                </div>
-                <div>
-                  <span>{t('codex.sessionUsage.cards.total', '合计 Tokens')}</span>
-                  <TokenAmount
-                    value={totals?.totalTokens ?? 0}
-                    lang={lang}
-                    compactDecimals={2}
-                  />
-                </div>
-              </div>
-              <div className="codex-session-usage__hero-side">
-                <span>
-                  <Send size={13} />
-                  {t('codex.sessionUsage.cards.requests', '请求数')}
-                </span>
-                <strong>{formatSessionUsageCount(totals?.requestCount ?? 0)}</strong>
-                <span>
-                  <DollarSign size={13} />
-                  {t('codex.sessionUsage.cards.cost', '估算费用')}
-                </span>
-                <strong>{formatSessionUsageCostUsd(totals?.estimatedCostUsd)}</strong>
-              </div>
-            </div>
-
             <div className="codex-session-usage__cards">
             <article className="is-input">
               <div className="codex-session-usage__card-head">

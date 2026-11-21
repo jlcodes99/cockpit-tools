@@ -4,7 +4,7 @@ import { deferred, loadHookModule, settlePromises } from '../../tests/helpers/re
 import * as stats from '../utils/codexAccountWindowStats';
 import type { CodexAccount } from '../types/codex';
 
-test('overview stats refresh new requests periodically, ignore display-only rerenders, and isolate window changes', async (context) => {
+test('overview stats refresh on committed usage and ignore hidden windows and display-only rerenders', async (context) => {
   context.mock.timers.enable({ apis: ['setTimeout'] });
   const intervals = new Map<number, () => void>(); let intervalId = 0;
   const listeners = new Map<string, (event: any) => void>();
@@ -33,7 +33,8 @@ test('overview stats refresh new requests periodically, ignore display-only rere
   assert.equal(hook.flush().byAccountId.a.primary.requestCount, 1);
   for (let i = 0; i < 10; i++) { accounts = [{ ...first, email: `display-${i}` }]; hook.flush(); }
   context.mock.timers.tick(1000); assert.equal(reads.length, 1);
-  [...intervals.values()][0](); context.mock.timers.tick(250);
+  listeners.get('codex-local-access-usage-committed')!({}); context.mock.timers.tick(250);
+  assert.equal(reads.length, 2, 'a committed request refreshes before the periodic timer');
   reads[1].resolve([row(2)]); await settlePromises(); assert.equal(hook.flush().byAccountId.a.primary.requestCount, 2);
   listeners.get('codex:quota-updated')!({ payload: { account_id: 'a' } });
   document.visibilityState = 'hidden'; [...intervals.values()][0](); context.mock.timers.tick(250); assert.equal(reads.length, 2);

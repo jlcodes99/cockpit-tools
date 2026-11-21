@@ -59,6 +59,7 @@ export function ZcodeAccountsPage() {
     },
     dataService: {
       importFromJson: zcodeService.importZcodeFromJson,
+      importFromFile: zcodeService.importZcodeFromFile,
       importFromLocal: zcodeService.importZcodeFromLocal,
       addWithToken: (apiKey) => zcodeService.importZcodeApiKey(apiKey, apiKeyProvider),
       exportAccounts: zcodeService.exportZcodeAccounts,

@@ -333,8 +333,7 @@ fn launch_trae_macos_with_verification(
             }
         }
         match spawn_detached_unix(&mut cmd) {
-            Ok(child) => {
-                let direct_pid = child.id();
+            Ok(direct_pid) => {
                 crate::modules::logger::log_info(&format!(
                     "[Trae Start] platform={} 直启 Electron 已发送 pid={} path={}",
                     platform.provider_key(),
@@ -705,6 +704,96 @@ pub fn close_pid(pid: u32, timeout_secs: u64) -> Result<(), String> {
             true,
             true,
         ))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn request_desktop_graceful_close(pid: u32, log_prefix: &str) -> bool {
+    if pid == 0 {
+        return true;
+    }
+    let Ok(native_pid) = i32::try_from(pid) else {
+        crate::modules::logger::log_warn(&format!(
+            "[{log_prefix}] graceful native terminate invalid pid={}",
+            pid
+        ));
+        return false;
+    };
+    if !is_pid_running(pid) {
+        return true;
+    }
+
+    objc2::rc::autoreleasepool(|_| {
+        let Some(application) =
+            objc2_app_kit::NSRunningApplication::runningApplicationWithProcessIdentifier(
+                native_pid,
+            )
+        else {
+            crate::modules::logger::log_warn(&format!(
+                "[{log_prefix}] graceful native terminate application unavailable pid={}",
+                pid
+            ));
+            return false;
+        };
+        // Send a normal quit request to this PID only. The caller still waits for
+        // actual process exit and falls back to its precise process cleanup.
+        let requested = application.terminate();
+        if requested {
+            crate::modules::logger::log_info(&format!(
+                "[{log_prefix}] graceful native terminate requested pid={}",
+                pid
+            ));
+        } else {
+            crate::modules::logger::log_warn(&format!(
+                "[{log_prefix}] graceful native terminate rejected pid={}",
+                pid
+            ));
+        }
+        requested
+    })
+}
+
+/// Request a normal Windows app shutdown before falling back to force close.
+#[cfg(target_os = "windows")]
+fn request_desktop_graceful_close(pid: u32, log_prefix: &str) -> bool {
+    if pid == 0 || !is_pid_running(pid) {
+        return true;
+    }
+
+    use crate::modules::windows_operation::{taskkill_accepted_or_targets_exited, taskkill_args};
+
+    crate::modules::logger::log_info(&format!(
+        "[{log_prefix}] graceful taskkill start pid={}",
+        pid
+    ));
+    let output = crate::modules::process_timeout::output_with_timeout(
+        Command::new("taskkill").args(taskkill_args(&[pid], false, false)),
+        Duration::from_secs(10),
+    );
+    match output {
+        Ok(value) => {
+            if taskkill_accepted_or_targets_exited(value.status.success(), || is_pid_running(pid)) {
+                crate::modules::logger::log_info(&format!(
+                    "[{log_prefix}] graceful taskkill success pid={} status={}",
+                    pid, value.status
+                ));
+                true
+            } else {
+                crate::modules::logger::log_warn(&format!(
+                    "[{log_prefix}] graceful taskkill failed pid={} status={}",
+                    pid, value.status
+                ));
+                false
+            }
+        }
+        Err(_) if !is_pid_running(pid) => true,
+        Err(err) => {
+            crate::modules::logger::log_warn(&format!(
+                "[{log_prefix}] graceful taskkill error pid={} err={}",
+                pid, err
+            ));
+            false
+        }
     }
 }
 
@@ -1302,13 +1391,13 @@ pub fn start_antigravity_with_args(
                 cmd.arg(arg);
             }
         }
-        let child = spawn_detached_unix(&mut cmd)
+        let pid = spawn_detached_unix(&mut cmd)
             .map_err(|e| format!("启动 Antigravity IDE 失败: {}", e))?;
         crate::modules::logger::log_info(&format!(
             "Antigravity IDE 已启动: {}",
             launch_path.to_string_lossy()
         ));
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -1332,12 +1421,7 @@ pub(crate) fn start_managed_antigravity_on_macos(
     cmd.args(&extra_args[..positional_start]);
     cmd.arg(format!("--user-data-dir={}", user_data_dir.trim()));
     cmd.args(&extra_args[positional_start..]);
-    let mut child = spawn_detached_unix(&mut cmd)?;
-    let pid = child.id();
-    thread::spawn(move || {
-        let _ = child.wait();
-    });
-    Ok(pid)
+    spawn_detached_unix(&mut cmd)
 }
 
 pub fn start_antigravity_legacy_with_args(
@@ -1442,13 +1526,13 @@ pub fn start_antigravity_legacy_with_args(
                 cmd.arg(arg);
             }
         }
-        let child =
+        let pid =
             spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 Antigravity 失败: {}", e))?;
         crate::modules::logger::log_info(&format!(
             "Antigravity 已启动: {}",
             launch_path.to_string_lossy()
         ));
-        return Ok(child.id());
+        return Ok(pid);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -1768,13 +1852,10 @@ fn collect_codex_process_entries_from_powershell(
 }
 
 #[cfg(target_os = "windows")]
-fn try_collect_codex_process_entries_from_powershell(
-    expected_exe_path: &str,
-) -> Option<Vec<(u32, Option<String>)>> {
-    let mut entries: Vec<(u32, Option<String>)> = Vec::new();
+fn codex_process_probe_script(expected_exe_path: &str) -> String {
     let expected = escape_powershell_single_quoted(expected_exe_path);
-    let script = format!(
-        r#"$processNames=@('ChatGPT.exe');
+    format!(
+        r#"$ErrorActionPreference = 'Stop';
 $expectedRaw='{expected}';
 function Normalize-ExePath([string]$path) {{
   if ([string]::IsNullOrWhiteSpace($path)) {{ return $null }}
@@ -1808,7 +1889,7 @@ function Get-ExePathFromCmdLine([string]$cmdline) {{
   return $value
 }}
 $expected = Normalize-ExePath $expectedRaw
-if ([string]::IsNullOrWhiteSpace($expected)) {{ exit 0 }}
+if ([string]::IsNullOrWhiteSpace($expected)) {{ throw 'Invalid Codex executable path' }}
 function Get-WindowsAppsFamily([string]$path) {{
   if (-not $path) {{ return $null }}
   $lower = $path.ToLowerInvariant()
@@ -1833,34 +1914,50 @@ function Test-CodexExeMatch([string]$exe, [string]$expected) {{
   if (-not $exeFile) {{ return $false }}
   return ($exeFile.ToLowerInvariant() -eq $expectedFile.ToLowerInvariant())
 }}
-Get-CimInstance Win32_Process -Filter "Name='ChatGPT.exe'" |
-  Where-Object {{
-    if (-not ($processNames -contains $_.Name)) {{
-      $false
-    }} else {{
-      $exe = Normalize-ExePath $_.ExecutablePath
-      if (-not $exe) {{ $exe = Normalize-ExePath (Get-ExePathFromCmdLine $_.CommandLine) }}
-      Test-CodexExeMatch $exe $expected
+$rows = foreach ($process in (Get-CimInstance Win32_Process -Filter "Name='ChatGPT.exe'")) {{
+  $path = $process.ExecutablePath
+  if (-not $path) {{ $path = Get-ExePathFromCmdLine $process.CommandLine }}
+  if (-not $path -or $path -notmatch '^(?:[a-z]:[\\/]|[\\/]{{2}})') {{
+    $reason = 'Could not identify a potential Codex process'
+  }} else {{
+    $exe = Normalize-ExePath $path
+    if (-not (Test-CodexExeMatch $exe $expected)) {{ continue }}
+    if (-not [string]::IsNullOrWhiteSpace($process.CommandLine)) {{
+      "$($process.ProcessId)|$($process.ParentProcessId)|$($process.CommandLine)"
+      continue
     }}
-  }} |
-  ForEach-Object {{ "$($_.ProcessId)|$($_.ParentProcessId)|$($_.CommandLine)" }}"#
-    );
+    $reason = 'Could not read the command line of a Codex process'
+  }}
+  # CIM may capture a process as it exits, after its identity becomes unreadable.
+  # A failed query or a process still present remains an incomplete probe.
+  if (Get-CimInstance Win32_Process -Filter "ProcessId=$($process.ProcessId)") {{
+    throw $reason
+  }}
+}}
+$bytes = [System.Text.Encoding]::UTF8.GetBytes(($rows -join "`n"))
+[Console]::OpenStandardOutput().Write($bytes, 0, $bytes.Length)"#
+    )
+}
 
+#[cfg(target_os = "windows")]
+fn try_collect_codex_process_entries_from_powershell(
+    expected_exe_path: &str,
+) -> Result<Vec<(u32, Option<String>)>, String> {
+    let mut entries: Vec<(u32, Option<String>)> = Vec::new();
+    let script = codex_process_probe_script(expected_exe_path);
     let output = match powershell_output_with_timeout(
         &["-NoProfile", "-Command", &script],
         WINDOWS_PROCESS_PROBE_TIMEOUT,
     ) {
         Ok(value) => value,
         Err(err) => {
-            if err.kind() == std::io::ErrorKind::TimedOut {
-                crate::modules::logger::log_warn("[Codex Probe] PowerShell 进程探测超时（5s）");
+            let reason = if err.kind() == std::io::ErrorKind::TimedOut {
+                "PowerShell 进程探测超时（5 秒）".to_string()
             } else {
-                crate::modules::logger::log_warn(&format!(
-                    "[Codex Probe] PowerShell 进程探测失败: {}",
-                    err
-                ));
-            }
-            return None;
+                format!("无法运行 PowerShell 进程探测: {err}")
+            };
+            crate::modules::logger::log_warn(&format!("[Codex Probe] {reason}"));
+            return Err(reason);
         }
     };
     if !output.status.success() {
@@ -1870,10 +1967,11 @@ Get-CimInstance Win32_Process -Filter "Name='ChatGPT.exe'" |
             output.status,
             stderr.trim()
         ));
-        return None;
+        return Err(format!("PowerShell 无法读取 Windows 进程列表（{}）", output.status));
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = std::str::from_utf8(&output.stdout)
+        .map_err(|error| format!("Windows 进程探测输出编码错误: {error}"))?;
     let mut main_entries: Vec<(u32, Option<String>)> = Vec::new();
     let mut child_user_data_by_parent: HashMap<u32, String> = HashMap::new();
     for line in stdout.lines() {
@@ -1882,23 +1980,19 @@ Get-CimInstance Win32_Process -Filter "Name='ChatGPT.exe'" |
             continue;
         }
         let mut parts = line.splitn(3, '|');
-        let pid_str = parts.next().unwrap_or("").trim();
-        let parent_pid_str = parts.next().unwrap_or("").trim();
-        let cmdline = parts.next().unwrap_or("").trim();
-        let pid = match pid_str.parse::<u32>() {
-            Ok(value) => value,
-            Err(_) => continue,
+        let pid = parts.next().and_then(|part| part.trim().parse::<u32>().ok());
+        let parent_pid = parts.next().and_then(|part| part.trim().parse::<u32>().ok());
+        let cmdline = parts.next().map(str::trim);
+        let (Some(pid), Some(parent_pid), Some(cmdline)) = (pid, parent_pid, cmdline) else {
+            return Err("Windows 进程探测返回不完整的记录".into());
         };
-        let parent_pid = parent_pid_str.parse::<u32>().ok();
         let lower = cmdline.to_lowercase();
-        if lower.trim().is_empty() {
-            continue;
+        if lower.is_empty() {
+            return Err("Windows 进程探测返回空命令行".into());
         }
         let dir = extract_user_data_dir_from_command_line(cmdline);
-        if !lower.is_empty()
-            && (is_helper_command_line(&lower) || lower.contains("crashpad_handler"))
-        {
-            if let (Some(parent_pid), Some(dir)) = (parent_pid, dir) {
+        if is_helper_command_line(&lower) || lower.contains("crashpad_handler") {
+            if let Some(dir) = dir {
                 child_user_data_by_parent.entry(parent_pid).or_insert(dir);
             }
             continue;
@@ -1913,7 +2007,7 @@ Get-CimInstance Win32_Process -Filter "Name='ChatGPT.exe'" |
 
     entries.sort_by_key(|(pid, _)| *pid);
     entries.dedup_by(|a, b| a.0 == b.0);
-    Some(entries)
+    Ok(entries)
 }
 
 /// 把 Windows 路径统一成小写反斜杠形式，便于跨写法比较（`/` 与 `\` 都接受）。
@@ -2179,12 +2273,12 @@ fn collect_codex_process_entries_complete() -> Vec<(u32, Option<String>)> {
 fn fresh_codex_entries_or_probe(
     native_entries: Vec<(u32, Option<String>)>,
     complete: bool,
-    probe: impl FnOnce() -> Option<Vec<(u32, Option<String>)>>,
+    probe: impl FnOnce() -> Result<Vec<(u32, Option<String>)>, String>,
 ) -> Result<Vec<(u32, Option<String>)>, String> {
     if complete {
         return Ok(native_entries);
     }
-    let entries = probe().ok_or_else(|| "CODEX_PROCESS_PROBE_FAILED".to_string())?;
+    let entries = probe().map_err(|reason| format!("CODEX_PROCESS_PROBE_FAILED: {reason}"))?;
     Ok(merge_codex_process_entries(entries, native_entries))
 }
 
@@ -2223,7 +2317,7 @@ pub fn collect_codex_process_entries() -> Vec<(u32, Option<String>)> {
         std::sync::LazyLock::new(codex_probe_cache::StatusProbeCache::default);
     complete_native_codex_entries_or_probe(native_entries, complete, || {
         STATUS_CACHE.get_or_probe(&expected, || {
-            try_collect_codex_process_entries_from_powershell(&expected)
+            try_collect_codex_process_entries_from_powershell(&expected).ok()
         })
     })
 }
@@ -2513,9 +2607,8 @@ pub fn start_codex_with_args_and_env_and_egress(
                 .stdout(Stdio::null())
                 .stderr(Stdio::null());
         }
-        let child = spawn_detached_unix(&mut command)
+        let spawned_pid = spawn_detached_unix(&mut command)
             .map_err(|error| format!("启动 Codex 失败: {}", error))?;
-        let spawned_pid = child.id();
         crate::modules::logger::log_info(&format!(
             "[Codex Start] Linux managed desktop instance launched: launch_path={} codex_home={} electron_user_data={} pid={}",
             launch_path.display(),

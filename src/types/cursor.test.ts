@@ -7,7 +7,7 @@ const account = (extra: Partial<CursorAccount> = {}): CursorAccount => ({
   id: 'test', email: 'test@example.com', access_token: '', created_at: 0, last_used: 0, ...extra,
 });
 
-test('Cursor displays unified, legacy and future membership values verbatim', () => {
+test('Cursor displays legacy and future membership values verbatim', () => {
   for (const membership_type of ['Plus', 'Premium', 'Super', 'Ultra', 'Teams', 'pro_plus', 'pro_student', 'Future Tier']) {
     assert.equal(getCursorPlanDisplayName(account({ membership_type })), membership_type);
   }
@@ -16,11 +16,36 @@ test('Cursor displays unified, legacy and future membership values verbatim', ()
   assert.equal(getCursorPlanBadge(account({ plan_type: 'Premium' })), 'PREMIUM');
 });
 
+test('Cursor presents reported subscription aliases without changing saved filters', () => {
+  const ultra = account({ membership_type: ' UNIFIED_ULTRA ' });
+  assert.equal(getCursorPlanDisplayName(ultra), 'X Ultra');
+  assert.equal(getCursorPlanBadge(ultra), 'UNIFIED_ULTRA');
+  assert.equal(getCursorPlanBadgeClass(ultra.membership_type, ultra), 'ultra');
+  assert.equal(buildCursorAccountPresentation(ultra, (key) => key).planLabel, 'X Ultra');
+  const superAccount = account({ plan_type: 'super' });
+  assert.equal(getCursorPlanDisplayName(superAccount), 'Super');
+  assert.equal(getCursorUsage(superAccount).allowancePeriod, null);
+  assert.equal(getCursorPlanDisplayName(account({ membership_type: 'unified_future' })), 'unified_future');
+  assert.equal(getCursorUsage(ultra).allowancePeriod, 'weekly');
+});
+
 test('new tier styling preserves existing legacy filter categories', () => {
   assert.equal(getCursorPlanBadgeClass('Plus'), 'plus');
   assert.equal(getCursorPlanBadgeClass('Premium'), 'pro');
   assert.equal(getCursorPlanBadgeClass('Super'), 'ultra');
   assert.equal(getCursorPlanBadge(account({ membership_type: 'pro_student' })), 'PRO');
+});
+
+test('The X Subscription Super uses weekly allowance when reported', () => {
+  const superAccount = account({ membership_type: 'super', cursor_usage_raw: {
+    includedUsagePeriod: 'weekly',
+    billingCycleEnd: '2026-12-01T00:00:00Z',
+    individualUsage: { plan: { totalPercentUsed: 0, used: 0, limit: 16159 } },
+  } });
+  assert.equal(getCursorPlanDisplayName(superAccount), 'Super');
+  assert.equal(getCursorUsage(superAccount).unifiedBilling, true);
+  assert.equal(getCursorUsage(superAccount).allowanceResetAt, null);
+  assert.equal(getCursorUsage(superAccount).totalPercentUsed, null);
 });
 
 test('legacy Cursor usage keeps plan usage separate from paid additional usage', () => {

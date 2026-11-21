@@ -50,10 +50,11 @@ export function AntigravityQuotaSection({
     item?: AgQuotaDisplayItem,
     fullWidth = false,
   ) => {
-    const percentage = item?.percentage;
+    const blockedReason = item?.blockedByWeekly ? t('common.shared.quota.weeklyLimitReached') : '';
+    const percentage = item?.blockedByWeekly ? undefined : item?.percentage;
     const quotaClass = percentage == null ? 'neutral' : getQuotaClass(percentage);
-    const fullReset = item?.resetTime ? formatResetTimeDisplay(item.resetTime, t) : '';
-    const shortReset = fullReset ? compactResetText(fullReset) : '';
+    const fullReset = blockedReason || (item?.resetTime ? formatResetTimeDisplay(item.resetTime, t) : '');
+    const shortReset = blockedReason || (fullReset ? compactResetText(fullReset) : '');
 
     return (
       <div
@@ -66,7 +67,7 @@ export function AntigravityQuotaSection({
           </span>
           <span
             className={`ag-quota-cell-pct ${quotaClass}`}
-            title={percentage == null ? t('overview.noQuotaData') : undefined}
+            title={blockedReason || (percentage == null ? t('overview.noQuotaData') : undefined)}
           >
             {percentage == null ? '—' : `${percentage}%`}
           </span>

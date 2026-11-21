@@ -7,6 +7,7 @@ const REMOTE_MODEL_FIELDS: &[&str] = &[
     "default_reasoning_level",
     "context_window",
     "max_context_window",
+    "effective_context_window_percent",
     "auto_compact_token_limit",
     "input_modalities",
     "supports_reasoning_summaries",

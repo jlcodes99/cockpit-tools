@@ -99,6 +99,7 @@ export function isCodexTokenPlanAccount(
   try {
     const host = new URL((account.api_base_url || "").trim()).hostname.toLowerCase();
     return [
+      "api.minimax.cn",
       "api.minimaxi.com",
       "www.minimaxi.com",
       "api.minimax.io",
@@ -138,6 +139,17 @@ export function isApiKeyFunUsageAccount(account: Pick<CodexAccount, "api_base_ur
   }
 }
 
+export function isMoonshotBalanceUrl(baseUrl?: string | null): boolean {
+  try {
+    const url = new URL(baseUrl?.trim() ?? "");
+    return url.protocol === "https:" && !url.port && !url.username && !url.password &&
+      ["api.moonshot.cn", "api.moonshot.ai"].includes(url.hostname) &&
+      ["", "/v1", "/anthropic"].includes(url.pathname.replace(/\/+$/, ""));
+  } catch {
+    return false;
+  }
+}
+
 export function canShowCodexProviderBalance(
   relayBalanceDisabled: boolean,
   baseUrl?: string | null,
@@ -147,12 +159,12 @@ export function canShowCodexProviderBalance(
     return true;
   }
   const provider = { api_base_url: baseUrl ?? undefined, api_provider_id: undefined };
-  return isDeepSeekAccount(provider) || isCodexTokenPlanAccount(provider);
+  return isDeepSeekAccount(provider) || isCodexTokenPlanAccount(provider) || isMoonshotBalanceUrl(baseUrl);
 }
 
 export function isCodexApiKeyUsageQueryEligible(
   account: CodexAccount,
-  integrationType?: ModelProviderUsageIntegrationType | null,
+  integrationType?: ModelProviderUsageIntegrationType | 'custom' | null,
   summary?: Pick<ModelProviderUsageSummary, 'mode' | 'cockpit'>,
 ): boolean {
   const tokenPlan = isCodexTokenPlanAccount(account);
@@ -162,7 +174,9 @@ export function isCodexApiKeyUsageQueryEligible(
     (!isCodexChatCompletionsApiKeyAccount(account) ||
       isDeepSeekAccount(account) ||
       tokenPlan || isOpenAIOfficialUsageAccount(account) || isApiKeyFunUsageAccount(account) ||
+      isMoonshotBalanceUrl(account.api_base_url) ||
       integrationType === 'sub2api' || integrationType === 'new_api' ||
+      integrationType === 'custom' || summary?.mode === 'custom' ||
       summary?.mode === 'sub2api' || summary?.mode === 'new_api' || Boolean(summary?.cockpit)) &&
     Boolean(account.openai_api_key?.trim())
   );
@@ -177,10 +191,11 @@ export function shouldShowCodexApiKeyUsagePanel(
   }
   const deepseek = isDeepSeekAccount(account);
   const tokenPlan = isCodexTokenPlanAccount(account);
-  if (isCodexChatCompletionsApiKeyAccount(account) && !deepseek && !tokenPlan && !isOpenAIOfficialUsageAccount(account) && !isApiKeyFunUsageAccount(account)) {
+  const moonshot = isMoonshotBalanceUrl(account.api_base_url);
+  if (isCodexChatCompletionsApiKeyAccount(account) && !deepseek && !tokenPlan && !moonshot && !isOpenAIOfficialUsageAccount(account) && !isApiKeyFunUsageAccount(account)) {
     return false;
   }
-  return !hideRelayQuota || deepseek || tokenPlan || isOpenAIOfficialUsageAccount(account);
+  return !hideRelayQuota || deepseek || tokenPlan || moonshot || isOpenAIOfficialUsageAccount(account);
 }
 
 export function isDeepSeekResponsesAccount(

@@ -96,6 +96,9 @@ const settings = {
   'agtools.codex.api_service.request_log_page_size.v1': {
     valid: (value: string) => ['20', '50', '100'].includes(value),
   },
+  'codex.apiService.highTokenThreshold': {
+    valid: (value: string) => /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) > 0,
+  },
   'codex.apiService.logColumns.v1': {
     valid: (value: string) => value !== 'null' && jsonArrayOrNull(value),
   },

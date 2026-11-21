@@ -103,6 +103,30 @@ fn compressed_session_heads_are_listed_once_and_state_selects_current_rollout() 
 }
 
 #[test]
+fn unreadable_compressed_sibling_does_not_hide_a_readable_plain_session() {
+    let base = tempfile::tempdir().unwrap();
+    let (instance, snapshot, _) = isolated_export_fixture(base.path(), "readable-plain");
+    let compressed = snapshot.rollout_path.with_extension("jsonl.zst");
+    fs::write(&compressed, b"invalid zstd frame").unwrap();
+    assert!(read_rollout_session_meta(&compressed).is_err());
+
+    let listed = load_thread_snapshots(&instance).unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].id, "readable-plain");
+    assert_eq!(listed[0].rollout_path, snapshot.rollout_path);
+
+    let plain = fs::read(&snapshot.rollout_path).unwrap();
+    fs::remove_file(&snapshot.rollout_path).unwrap();
+    assert!(load_thread_snapshots(&instance).is_err());
+
+    fs::write(&snapshot.rollout_path, b"\n").unwrap();
+    fs::write(&compressed, zstd::stream::encode_all(plain.as_slice(), 0).unwrap()).unwrap();
+    let listed = load_thread_snapshots(&instance).unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].rollout_path, compressed);
+}
+
+#[test]
 fn compressed_trash_restore_validates_tmp_magic_and_preserves_encoded_bytes() {
     let base = make_temp_dir("codex-session-compressed-restore");
     let target = base.join("profile/sessions/2026/10/24/rollout-compressed.jsonl.zst");
