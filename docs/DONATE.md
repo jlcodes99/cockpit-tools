@@ -16,16 +16,6 @@
 
 <img src="images/wechat.png" alt="微信收款码" width="300" />
 
-### 💰 Crypto Donation
-
-- **ETH Address**: `0xc75d68fe59e4b44904b1CAa1Da4FDfEddD780aef`
-
-  <img src="images/donation_eth.png" width="300" />
-
-- **SOLANA Address**: `6yNHzh6e3LLbYrJZg7ayhNZyCKazQZTTYWnfz9i87Zeo`
-
-  <img src="images/donation_sol.png" width="300" />
-
 ---
 
 ## 🙏 致谢
