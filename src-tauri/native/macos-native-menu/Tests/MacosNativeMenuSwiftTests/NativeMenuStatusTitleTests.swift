@@ -74,6 +74,79 @@ final class NativeMenuStatusTitleTests: XCTestCase {
         }
     }
 
+    func testCompactTitleIsCenteredAtDifferentMenuBarHeightsAndPixelScales() {
+        for height: CGFloat in [22, 24, 28, 32, 37, 48, 64] {
+            let compact = menuBarQuotaTitle(accountPrefix: "API", valueText: "5h 9% · 周 100%",
+                remainingPercent: 9, stacked: true, availableHeight: height)
+            let bounds = NSRect(x: 0, y: 0, width: 160, height: height)
+            for scale: CGFloat in [1, 2] {
+                // The native cell can return a baseline-biased title rect. Only
+                // its horizontal placement is relevant to the compact renderer.
+                let nativeRect = NSRect(x: 24, y: -5, width: 110, height: 16)
+                let rect = NativeMenuQuotaTitleView.drawingRect(bounds: bounds,
+                    titleRect: nativeRect, textSize: compact.size(), scale: scale)
+                XCTAssertEqual(rect.midY, bounds.midY, accuracy: 0.5 / scale)
+                XCTAssertEqual(rect.minX, 24)
+                XCTAssertGreaterThanOrEqual(rect.minY, 0)
+                XCTAssertLessThanOrEqual(rect.maxY, height)
+                XCTAssertEqual(rect.minY * scale, (rect.minY * scale).rounded())
+            }
+        }
+    }
+
+    func testCompactTitleViewRespondsToHeightChangesWithoutTakingMouseEvents() {
+        let button = NSButton(frame: NSRect(x: 0, y: 0, width: 140, height: 22))
+        let view = NativeMenuQuotaTitleView(button: button)
+        button.addSubview(view)
+        view.configure(accountPrefix: "", valueText: "5h 36% · 周 64%", remainingPercent: 36)
+        XCTAssertEqual((button.attributedTitle.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)?.pointSize, 10)
+        XCTAssertEqual(button.attributedTitle.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor, .clear)
+        button.setFrameSize(NSSize(width: 140, height: 37))
+        XCTAssertEqual(view.bounds.height, 37)
+        XCTAssertEqual((button.attributedTitle.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)?.pointSize, 11)
+        button.setFrameSize(NSSize(width: 140, height: 22))
+        XCTAssertEqual((button.attributedTitle.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)?.pointSize, 10)
+        XCTAssertNil(view.hitTest(NSPoint(x: 10, y: 10)))
+    }
+
+    func testRenderedQuotaPixelsStayCenteredInShortAndTallButtons() throws {
+        for height in [22, 24, 28, 37, 48] {
+            for scale in [1, 2] {
+                let button = NSButton(frame: NSRect(x: 0, y: 0, width: 140, height: height))
+                button.appearance = NSAppearance(named: .aqua)
+                button.isBordered = false
+                button.cell?.wraps = true
+                button.cell?.usesSingleLineMode = false
+                let view = NativeMenuQuotaTitleView(button: button)
+                button.addSubview(view)
+                view.configure(accountPrefix: "", valueText: "5h 59% · 周 52%", remainingPercent: 52)
+                let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil,
+                    pixelsWide: 140 * scale, pixelsHigh: height * scale,
+                    bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                    colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+                bitmap.size = button.bounds.size
+                button.cacheDisplay(in: button.bounds, to: bitmap)
+                var inkRows: [Int] = []
+                for y in 0..<bitmap.pixelsHigh {
+                    for x in 0..<bitmap.pixelsWide {
+                        if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                            color.alphaComponent > 0.5, color.redComponent > 0.8,
+                            color.greenComponent > 0.2, color.greenComponent < 0.85,
+                            color.blueComponent < 0.3 {
+                            inkRows.append(y)
+                            break
+                        }
+                    }
+                }
+                let top = try XCTUnwrap(inkRows.min())
+                let bottom = try XCTUnwrap(inkRows.max())
+                let inkCenter = CGFloat(top + bottom + 1) / CGFloat(2 * scale)
+                XCTAssertEqual(inkCenter, CGFloat(height) / 2, accuracy: 1,
+                    "height=\(height), scale=\(scale)")
+            }
+        }
+    }
+
     private func title(_ value: String, prefix: String = "", stacked: Bool) -> NSAttributedString {
         menuBarQuotaTitle(accountPrefix: prefix, valueText: value, remainingPercent: 36, stacked: stacked)
     }

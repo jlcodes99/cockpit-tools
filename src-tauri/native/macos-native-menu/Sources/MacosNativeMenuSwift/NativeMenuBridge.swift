@@ -139,6 +139,7 @@ public func macos_native_menu_update_status_item(
 
         statusItem.length = NSStatusItem.variableLength
         guard enabled != 0 else {
+            button.subviews.filter { $0 is NativeMenuQuotaTitleView }.forEach { $0.removeFromSuperview() }
             button.attributedTitle = NSAttributedString(string: "")
             button.title = ""
             button.imagePosition = .imageOnly
@@ -154,13 +155,24 @@ public func macos_native_menu_update_status_item(
             accountPrefix: accountPrefix,
             valueText: valueTextRaw,
             remainingPercent: remainingPercent,
-            stacked: stacked != 0
+            stacked: stacked != 0,
+            availableHeight: button.bounds.height
         )
         let twoLines = attributedTitle.string.contains("\n")
         button.cell?.wraps = twoLines
         button.cell?.usesSingleLineMode = !twoLines
         button.imagePosition = .imageLeading
         button.attributedTitle = attributedTitle
+        if twoLines {
+            let titleView = button.subviews.compactMap { $0 as? NativeMenuQuotaTitleView }.first
+                ?? NativeMenuQuotaTitleView(button: button)
+            if titleView.superview == nil { button.addSubview(titleView) }
+            titleView.frame = button.bounds
+            titleView.configure(accountPrefix: accountPrefix, valueText: valueTextRaw,
+                remainingPercent: remainingPercent)
+        } else {
+            button.subviews.filter { $0 is NativeMenuQuotaTitleView }.forEach { $0.removeFromSuperview() }
+        }
         button.setAccessibilityValue(attributedTitle.string
             .replacingOccurrences(of: "\n", with: ", ")
             .replacingOccurrences(of: "\t", with: " "))
