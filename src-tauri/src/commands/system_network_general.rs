@@ -314,6 +314,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         workbuddy_auto_refresh_minutes: user_config.workbuddy_auto_refresh_minutes,
         minimax_code_auto_refresh_minutes: user_config.minimax_code_auto_refresh_minutes,
         qoder_auto_refresh_minutes: user_config.qoder_auto_refresh_minutes,
+        qoder_cn_auto_refresh_minutes: user_config.qoder_cn_auto_refresh_minutes,
         zcode_auto_refresh_minutes: user_config.zcode_auto_refresh_minutes,
         trae_auto_refresh_minutes: user_config.trae_auto_refresh_minutes,
         trae_solo_auto_refresh_minutes: user_config.trae_solo_auto_refresh_minutes,
@@ -485,6 +486,8 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         codebuddy_cn_quota_alert_threshold: user_config.codebuddy_cn_quota_alert_threshold,
         qoder_quota_alert_enabled: user_config.qoder_quota_alert_enabled,
         qoder_quota_alert_threshold: user_config.qoder_quota_alert_threshold,
+        qoder_cn_quota_alert_enabled: user_config.qoder_cn_quota_alert_enabled,
+        qoder_cn_quota_alert_threshold: user_config.qoder_cn_quota_alert_threshold,
         trae_quota_alert_enabled: user_config.trae_quota_alert_enabled,
         trae_quota_alert_threshold: user_config.trae_quota_alert_threshold,
         trae_solo_quota_alert_enabled: user_config.trae_solo_quota_alert_enabled,
@@ -500,7 +503,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
     };
 
     modules::logger::log_info(&format!(
-        "[StartupPerf][SystemCommand] get_general_config completed in {}ms: auto_refresh={}, codex={}, zed={}, ghcp={}, windsurf={}, kiro={}, cursor={}, codebuddy={}, codebuddy_cn={}, workbuddy={}, minimax_code={}, qoder={}, zcode={}, trae={}, auto_switch={}",
+        "[StartupPerf][SystemCommand] get_general_config completed in {}ms: auto_refresh={}, codex={}, zed={}, ghcp={}, windsurf={}, kiro={}, cursor={}, codebuddy={}, codebuddy_cn={}, workbuddy={}, minimax_code={}, qoder={}, qoder_cn={}, zcode={}, trae={}, auto_switch={}",
         started.elapsed().as_millis(),
         result.auto_refresh_minutes,
         result.codex_auto_refresh_minutes,
@@ -514,6 +517,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         result.workbuddy_auto_refresh_minutes,
         result.minimax_code_auto_refresh_minutes,
         result.qoder_auto_refresh_minutes,
+        result.qoder_cn_auto_refresh_minutes,
         result.zcode_auto_refresh_minutes,
         result.trae_auto_refresh_minutes,
         result.auto_switch_enabled

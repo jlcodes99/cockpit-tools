@@ -856,7 +856,8 @@
     "2faManager": "2FA 管理",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "赞助商",
@@ -7807,7 +7808,21 @@
       "sessionChanged": "Qoder 会话已变更，请刷新账号列表后重试。",
       "endpointUnavailable": "无法确认该 Qoder 会话的服务地址。请在对应的 Qoder IDE 中检查登录及组织配置。",
       "switchLaunchFailed": "账号已写入，但 Qoder IDE 启动失败。{{detail}}",
-      "refreshCount": "成功刷新 {{count}} / {{total}} 个账号。"
+      "refreshCount": "成功刷新 {{count}} / {{total}} 个账号。",
+      "oauthUrlEmpty": "Qoder OAuth 授权链接为空",
+      "qoderCnPathMissing": "未找到 Qoder CN 桌面端。请在设置中填写启动路径，或安装后重试。",
+      "platformMismatch": "该账号属于其他区域版本，无法写入当前客户端。",
+      "cnRelaunchFailed": "账号已切换，但 Qoder CN 客户端启动失败。{{detail}}",
+      "cnDesktopUnsupported": "Qoder CN 桌面端仅支持 Windows；当前系统请使用 CLI。",
+      "clientInvalid": "客户端类型无效，请重新选择切换目标。",
+      "nativeTokenMissing": "该账号缺少可写入的登录凭据，请重新授权或重新导入。",
+      "nativeWriteVerifyFailed": "凭据写入后校验失败，已尝试回滚到原状态。请关闭客户端后重试。",
+      "nativeKeyUnreadable": "无法读取本机凭据密钥。请确认 Cockpit 与 Qoder 使用同一系统账号。",
+      "nativeImportInvalid": "导入的凭据缺少账号信息，无法识别是哪个账号。",
+      "nativeImportFailed": "导入本地 Qoder 登录信息失败。请先在客户端登录后重试。",
+      "nativeProcessProbeFailed": "无法检测 Qoder 进程状态，请稍后重试。",
+      "regionUnsupported": "无法识别该账号所属的区域版本，请重新授权。",
+      "clientRunning": "请先退出 {{client}} 再切换账号。"
     },
     "title": "Qoder 账号管理",
     "flowNotice": {
@@ -7849,6 +7864,31 @@
     },
     "empty": {
       "desc": "点击“添加账号”，可使用授权登录、本机导入或 JSON 导入。"
+    },
+    "region": {
+      "cn": "Qoder CN · 国内版",
+      "global": "Qoder · 国际版"
+    },
+    "clientTarget": {
+      "label": "切换／本机导入目标",
+      "ariaLabel": "Qoder 客户端",
+      "desktop": "Qoder 桌面端",
+      "desktopCn": "Qoder CN 桌面端",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "账号已切换，请重新打开对应客户端。",
+      "desktopSwitchSuccess": "账号已切换，Qoder CN 桌面端已重新启动。",
+      "relaunchFailed": "账号已切换，但 Qoder CN 桌面端自动启动失败，请手动打开。",
+      "windowsOnly": "（仅 Windows）"
+    },
+    "cn": {
+      "nativeOnly": "国内账号请选择桌面端或 CLI。",
+      "ideUnavailable": "国内账号请选择桌面端或 CLI；此处 IDE 适配器只用于国际版。",
+      "instancesUnsupported": "国内版桌面端与 CLI 支持默认客户端账号切换，当前暂不支持应用多开。",
+      "flowNoticeDesc": "支持 Qoder CN 官方授权登录、本机桌面端／CLI 导入、JSON 导入、账号切换和配额查询。桌面端切号会自动关闭并重新启动客户端；CLI 切换后需重新打开终端。",
+      "flowNoticePermission": "权限范围：读取 Qoder CN 桌面端或 CLI 的本机认证存储（auth 凭据与用户信息），用于账号切换与会话注入；所有数据仅在本机处理。",
+      "flowNoticeNetwork": "网络范围：官方授权登录需联网请求 Qoder CN 官方服务完成回调；配额查询通过 Qoder CN API 获取用量数据。不上传本地密钥或凭证。"
     }
   },
   "zcode": {

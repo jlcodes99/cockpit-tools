@@ -58,6 +58,7 @@ import { useCodebuddyAccountStore } from './stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from './stores/useCodebuddyCnAccountStore';
 import { formatQoderError } from './utils/qoderErrors';
 import { useQoderAccountStore } from './stores/useQoderAccountStore';
+import { useQoderCnAccountStore } from './stores/useQoderCnAccountStore';
 import { useTraeAccountStore } from './stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from './stores/useWorkbuddyAccountStore';
 import { useMinimaxCodeAccountStore } from './stores/useMinimaxCodeAccountStore';
@@ -172,6 +173,9 @@ const CodebuddyCnAccountsPage = lazy(() =>
 const QoderAccountsPage = lazy(() =>
   import('./pages/QoderAccountsPage').then((module) => ({ default: module.QoderAccountsPage })),
 );
+const QoderCnAccountsPage = lazy(() =>
+  import('./pages/QoderCnAccountsPage').then((module) => ({ default: module.QoderCnAccountsPage })),
+);
 const ZcodeAccountsPage = lazy(() =>
   import('./pages/ZcodeAccountsPage').then((module) => ({ default: module.ZcodeAccountsPage })),
 );
@@ -249,6 +253,7 @@ const RENDERABLE_PAGE_VALUES: readonly Page[] = [
   'codebuddy',
   'codebuddy-cn',
   'qoder',
+  'qoder-cn',
   'zcode',
   'trae',
   'trae-solo',
@@ -287,6 +292,7 @@ const TOP_PROMO_PAGE_PLATFORM_TARGETS: Partial<Record<Page, readonly string[]>> 
   codebuddy: ['codebuddy'],
   'codebuddy-cn': ['codebuddy-cn'],
   qoder: ['qoder'],
+  'qoder-cn': ['qoder-cn'],
   zcode: ['zcode'],
   trae: ['trae', 'trae-suite'],
   'trae-solo': ['trae-solo', 'trae-suite'],
@@ -526,6 +532,7 @@ type QuotaAlertPlatform =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'qoder_cn'
   | 'trae'
   | 'workbuddy'
   | 'minimaxcode'
@@ -600,6 +607,8 @@ function normalizeQuotaAlertPlatform(platform: string | undefined): QuotaAlertPl
       return 'codebuddy_cn';
     case 'qoder':
       return 'qoder';
+    case 'qoder_cn':
+      return 'qoder_cn';
     case 'trae':
     case 'trae-solo':
     case 'trae_solo':
@@ -642,6 +651,8 @@ function getQuotaAlertPlatformLabel(
       return t('nav.codebuddyCn', 'CodeBuddy CN');
     case 'qoder':
       return t('nav.qoder', 'Qoder');
+    case 'qoder_cn':
+      return t('nav.qoderCn', 'Qoder CN');
     case 'trae':
       return t('nav.trae', 'Trae');
     case 'minimaxcode':
@@ -675,6 +686,8 @@ function getQuotaAlertTargetPage(platform: QuotaAlertPlatform): Page {
       return 'codebuddy-cn';
     case 'qoder':
       return 'qoder';
+    case 'qoder_cn':
+      return 'qoder-cn';
     case 'trae':
       return 'trae';
     case 'workbuddy':
@@ -688,7 +701,9 @@ function getQuotaAlertTargetPage(platform: QuotaAlertPlatform): Page {
   }
 }
 
-function getQuotaAlertQuickSettingsType(platform: QuotaAlertPlatform): QuickSettingsType {
+function getQuotaAlertQuickSettingsType(
+  platform: QuotaAlertPlatform,
+): QuickSettingsType | 'qoder_cn' {
   switch (platform) {
     case 'codex':
       return 'codex';
@@ -710,6 +725,8 @@ function getQuotaAlertQuickSettingsType(platform: QuotaAlertPlatform): QuickSett
       return 'codebuddy_cn';
     case 'qoder':
       return 'qoder';
+    case 'qoder_cn':
+      return 'qoder_cn';
     case 'trae':
       return 'trae';
     case 'workbuddy':
@@ -2801,6 +2818,9 @@ function MainApp() {
                     } else if (platform === 'qoder') {
                       await useQoderAccountStore.getState().switchAccount(targetAccountId);
                       setPage('qoder');
+                    } else if (platform === 'qoder_cn') {
+                      await useQoderCnAccountStore.getState().switchAccount(targetAccountId);
+                      setPage('qoder-cn');
                     } else if (platform === 'trae') {
                       await useTraeAccountStore.getState().switchAccount(targetAccountId);
                       setPage('trae');
@@ -3013,6 +3033,10 @@ function MainApp() {
       {
         command: 'refresh_all_qoder_tokens',
         errorMessage: 'Failed to refresh Qoder:',
+      },
+      {
+        command: 'refresh_all_qoder_cn_tokens',
+        errorMessage: 'Failed to refresh Qoder CN:',
       },
       {
         command: 'refresh_all_zcode_accounts',
@@ -3860,6 +3884,9 @@ function MainApp() {
           </VisibleBootPage>
           <VisibleBootPage when={page === 'qoder'}>
             <QoderAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'qoder-cn'}>
+            <QoderCnAccountsPage />
           </VisibleBootPage>
           <VisibleBootPage when={page === 'zcode'}>
             <ZcodeAccountsPage />

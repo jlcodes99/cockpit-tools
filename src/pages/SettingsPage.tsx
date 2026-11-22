@@ -348,6 +348,8 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   codebuddy: 10,
   codebuddy_cn: 11,
   qoder: 12,
+  // Fractional so the CN section sits right after Qoder without renumbering.
+  qoder_cn: 12.5,
   zcode: 13,
   trae: 14,
   trae_solo: 15,
@@ -2467,6 +2469,9 @@ export function useSettingsPageController() {
         return parseRefresh(minimaxCodeAutoRefresh) > 0;
       case 'qoder':
         return parseRefresh(qoderAutoRefresh) > 0;
+      // Qoder CN sets its interval from the CN page's quick settings.
+      case 'qoder_cn':
+        return false;
       case 'zcode':
         return parseRefresh(zcodeAutoRefresh) > 0;
       case 'trae':

@@ -856,7 +856,8 @@
     "2faManager": "2FA",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsors",
@@ -7807,7 +7808,21 @@
       "sessionChanged": "The Qoder session changed. Refresh the account list and try again.",
       "endpointUnavailable": "The service address for this Qoder session could not be verified. Check the sign-in and organization settings in the corresponding Qoder IDE.",
       "switchLaunchFailed": "The account was written, but Qoder IDE failed to start. {{detail}}",
-      "refreshCount": "Refreshed {{count}} of {{total}} accounts."
+      "refreshCount": "Refreshed {{count}} of {{total}} accounts.",
+      "oauthUrlEmpty": "Qoder OAuth authorization URL is empty.",
+      "qoderCnPathMissing": "Qoder CN Desktop was not found. Set its launch path in Settings or install it, then retry.",
+      "platformMismatch": "This account belongs to another region's build and cannot be written to the current client.",
+      "cnRelaunchFailed": "The account was switched, but the Qoder CN client failed to start. {{detail}}",
+      "cnDesktopUnsupported": "Qoder CN Desktop is supported on Windows only. Use the CLI on this system.",
+      "clientInvalid": "The client type is invalid. Select the switch target again.",
+      "nativeTokenMissing": "This account has no writable sign-in credentials. Re-authorize or import it again.",
+      "nativeWriteVerifyFailed": "Verification after writing the credentials failed, and a rollback was attempted. Close the client and retry.",
+      "nativeKeyUnreadable": "Could not read the local credential key. Make sure Cockpit and Qoder run under the same system account.",
+      "nativeImportInvalid": "The imported credentials contain no account information, so the account cannot be identified.",
+      "nativeImportFailed": "Failed to import the local Qoder sign-in. Sign in on the client first, then retry.",
+      "nativeProcessProbeFailed": "Could not detect the Qoder process state. Retry later.",
+      "regionUnsupported": "Could not determine the account's region build. Re-authorize it.",
+      "clientRunning": "Close {{client}} before switching accounts."
     },
     "title": "Qoder Account",
     "flowNotice": {
@@ -7849,6 +7864,31 @@
     },
     "empty": {
       "desc": "Click \"Add Account\" to use auth login, local import, or JSON import."
+    },
+    "region": {
+      "cn": "Qoder CN · China",
+      "global": "Qoder · International"
+    },
+    "clientTarget": {
+      "label": "Switch / local import target",
+      "ariaLabel": "Qoder client",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Account switched. Reopen the target client.",
+      "desktopSwitchSuccess": "Account switched. Qoder CN Desktop has been restarted.",
+      "relaunchFailed": "Account switched, but Qoder CN Desktop could not be launched automatically. Open it manually.",
+      "windowsOnly": " (Windows only)"
+    },
+    "cn": {
+      "nativeOnly": "Select Desktop or CLI for Qoder CN accounts.",
+      "ideUnavailable": "Select Desktop or CLI for Qoder CN accounts. The IDE adapter here is for the international version only.",
+      "instancesUnsupported": "Qoder CN Desktop and CLI support switching accounts for the default client. App multi-instance is not supported yet.",
+      "flowNoticeDesc": "Supports official Qoder CN sign-in, local Desktop/CLI import, JSON import, account switching, and quota queries. Desktop switching closes and relaunches the client automatically; reopen your terminal after a CLI switch.",
+      "flowNoticePermission": "Local access: reads the sign-in store (auth credentials and user info) of Qoder CN Desktop or CLI for account switching and session injection. All data stays on this device.",
+      "flowNoticeNetwork": "Network access: official sign-in contacts Qoder CN services to complete the callback; quota queries fetch usage from the Qoder CN API. Local keys and credentials are never uploaded."
     }
   },
   "zcode": {

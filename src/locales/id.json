@@ -856,7 +856,8 @@
     "apiRelay": "Relay API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsor",
@@ -7612,7 +7613,21 @@
       "switchLaunchFailed": "Akun sudah ditulis, tetapi Qoder IDE gagal dijalankan. {{detail}}",
       "refreshCount": "{{count}} dari {{total}} akun diperbarui.",
       "launchUnconfirmed": "Peluncuran Qoder IDE tidak dapat dikonfirmasi.",
-      "workerFailed": "Operasi latar belakang Qoder gagal. {{detail}}"
+      "workerFailed": "Operasi latar belakang Qoder gagal. {{detail}}",
+      "oauthUrlEmpty": "URL otorisasi Qoder OAuth kosong.",
+      "qoderCnPathMissing": "Qoder CN Desktop tidak ditemukan. Atur jalur peluncurannya di Pengaturan atau pasang aplikasinya, lalu coba lagi.",
+      "platformMismatch": "Akun ini milik build wilayah lain dan tidak dapat ditulis ke klien saat ini.",
+      "cnRelaunchFailed": "Akun telah diganti, tetapi klien Qoder CN gagal dijalankan. {{detail}}",
+      "cnDesktopUnsupported": "Qoder CN Desktop hanya didukung di Windows. Di sistem ini, gunakan CLI.",
+      "clientInvalid": "Jenis klien tidak valid. Pilih ulang target penggantian.",
+      "nativeTokenMissing": "Akun ini tidak memiliki kredensial masuk yang dapat ditulis. Otorisasi ulang atau impor ulang.",
+      "nativeWriteVerifyFailed": "Verifikasi kredensial setelah ditulis gagal dan pemulihan ke keadaan semula telah dicoba. Tutup klien lalu coba lagi.",
+      "nativeKeyUnreadable": "Tidak dapat membaca kunci kredensial lokal. Pastikan Cockpit dan Qoder berjalan di akun sistem yang sama.",
+      "nativeImportInvalid": "Kredensial yang diimpor tidak berisi informasi akun, sehingga akun tidak dapat dikenali.",
+      "nativeImportFailed": "Gagal mengimpor info masuk Qoder lokal. Masuk di klien terlebih dahulu, lalu coba lagi.",
+      "nativeProcessProbeFailed": "Tidak dapat mendeteksi status proses Qoder. Coba lagi nanti.",
+      "regionUnsupported": "Tidak dapat menentukan build wilayah akun. Otorisasi ulang.",
+      "clientRunning": "Close {{client}} before switching accounts."
     },
     "title": "Akun Qoder",
     "flowNotice": {
@@ -7654,6 +7669,31 @@
     },
     "empty": {
       "desc": "Klik \"Tambah Akun\" untuk menggunakan login auth, import lokal, atau import JSON."
+    },
+    "region": {
+      "cn": "Qoder CN · Tiongkok",
+      "global": "Qoder · Internasional"
+    },
+    "clientTarget": {
+      "label": "Target ganti / impor lokal",
+      "ariaLabel": "Klien Qoder",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Akun diganti. Buka kembali klien tujuan.",
+      "windowsOnly": " (hanya Windows)",
+      "desktopSwitchSuccess": "Akun diganti. Qoder CN Desktop telah diluncurkan ulang.",
+      "relaunchFailed": "Akun diganti, tetapi Qoder CN Desktop tidak dapat diluncurkan otomatis. Buka secara manual."
+    },
+    "cn": {
+      "nativeOnly": "Pilih Desktop atau CLI untuk akun Qoder CN.",
+      "ideUnavailable": "Pilih Desktop atau CLI untuk akun Qoder CN. Adaptor IDE di sini hanya untuk versi internasional.",
+      "instancesUnsupported": "Qoder CN Desktop dan CLI mendukung pergantian akun klien default. Multi-instans aplikasi belum didukung.",
+      "flowNoticeDesc": "Mendukung login resmi Qoder CN, impor Desktop/CLI lokal, impor JSON, pergantian akun, dan kueri kuota. Tutup klien tujuan sebelum mengganti dan buka kembali setelahnya.",
+      "flowNoticePermission": "Akses lokal: membaca penyimpanan autentikasi (kredensial auth dan info pengguna) Qoder CN Desktop atau CLI untuk pergantian akun dan injeksi sesi. Semua data tetap di perangkat ini.",
+      "flowNoticeNetwork": "Akses jaringan: login resmi menghubungi layanan Qoder CN untuk menyelesaikan callback; kueri kuota mengambil data penggunaan melalui API Qoder CN. Kunci dan kredensial lokal tidak pernah diunggah."
     }
   },
   "zcode": {

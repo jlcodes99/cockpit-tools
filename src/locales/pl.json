@@ -809,7 +809,8 @@
     "apiRelay": "Relay API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsorzy",
@@ -7565,7 +7566,21 @@
       "switchLaunchFailed": "Zapisano konto, ale nie udało się uruchomić Qoder IDE. {{detail}}",
       "refreshCount": "Odświeżono {{count}} z {{total}} kont.",
       "launchUnconfirmed": "Nie udało się potwierdzić uruchomienia Qoder IDE.",
-      "workerFailed": "Operacja Qoder w tle nie powiodła się. {{detail}}"
+      "workerFailed": "Operacja Qoder w tle nie powiodła się. {{detail}}",
+      "oauthUrlEmpty": "Adres URL autoryzacji Qoder OAuth jest pusty.",
+      "qoderCnPathMissing": "Nie znaleziono Qoder CN Desktop. Ustaw ścieżkę uruchamiania w ustawieniach lub zainstaluj klienta i spróbuj ponownie.",
+      "platformMismatch": "To konto należy do kompilacji innego regionu i nie można go zapisać w bieżącym kliencie.",
+      "cnRelaunchFailed": "Konto zostało przełączone, ale nie udało się uruchomić klienta Qoder CN. {{detail}}",
+      "cnDesktopUnsupported": "Qoder CN Desktop jest obsługiwany tylko w systemie Windows. W tym systemie użyj CLI.",
+      "clientInvalid": "Nieprawidłowy typ klienta. Wybierz ponownie cel przełączenia.",
+      "nativeTokenMissing": "Temu kontu brakuje zapisywalnych danych logowania. Autoryzuj je ponownie lub zaimportuj jeszcze raz.",
+      "nativeWriteVerifyFailed": "Weryfikacja zapisanych danych logowania nie powiodła się i podjęto próbę przywrócenia poprzedniego stanu. Zamknij klienta i spróbuj ponownie.",
+      "nativeKeyUnreadable": "Nie można odczytać lokalnego klucza danych logowania. Upewnij się, że Cockpit i Qoder działają na tym samym koncie systemowym.",
+      "nativeImportInvalid": "Zaimportowane dane logowania nie zawierają informacji o koncie, więc nie można go zidentyfikować.",
+      "nativeImportFailed": "Import lokalnych danych logowania Qoder nie powiódł się. Najpierw zaloguj się w kliencie i spróbuj ponownie.",
+      "nativeProcessProbeFailed": "Nie można wykryć stanu procesu Qoder. Spróbuj ponownie później.",
+      "regionUnsupported": "Nie można ustalić kompilacji regionalnej konta. Autoryzuj je ponownie.",
+      "clientRunning": "Close {{client}} before switching accounts."
     },
     "title": "Zarządzanie kontami Qoder",
     "comingSoon": {
@@ -7607,6 +7622,31 @@
     },
     "empty": {
       "desc": "Kliknij Dodaj konto, aby użyć logowania auth, importu lokalnego lub importu JSON."
+    },
+    "region": {
+      "cn": "Qoder CN · Chiny",
+      "global": "Qoder · Międzynarodowy"
+    },
+    "clientTarget": {
+      "label": "Cel przełączania / importu lokalnego",
+      "ariaLabel": "Klient Qoder",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Konto zostało przełączone. Otwórz ponownie docelowego klienta.",
+      "windowsOnly": " (tylko Windows)",
+      "desktopSwitchSuccess": "Konto zostało przełączone. Qoder CN Desktop został ponownie uruchomiony.",
+      "relaunchFailed": "Konto zostało przełączone, ale nie udało się automatycznie uruchomić Qoder CN Desktop. Otwórz go ręcznie."
+    },
+    "cn": {
+      "nativeOnly": "Dla kont Qoder CN wybierz Desktop lub CLI.",
+      "ideUnavailable": "Dla kont Qoder CN wybierz Desktop lub CLI. Adapter IDE jest tutaj tylko dla wersji międzynarodowej.",
+      "instancesUnsupported": "Qoder CN Desktop i CLI obsługują przełączanie konta domyślnego klienta. Wiele instancji aplikacji nie jest jeszcze obsługiwanych.",
+      "flowNoticeDesc": "Obsługuje oficjalne logowanie Qoder CN, lokalny import Desktop/CLI, import JSON, przełączanie kont i zapytania o limity. Zamknij docelowego klienta przed przełączeniem i otwórz go ponownie potem.",
+      "flowNoticePermission": "Dostęp lokalny: odczytuje lokalny magazyn uwierzytelniania (dane auth i informacje o użytkowniku) Qoder CN Desktop lub CLI na potrzeby przełączania kont i wstrzykiwania sesji. Wszystkie dane pozostają na tym urządzeniu.",
+      "flowNoticeNetwork": "Dostęp sieciowy: oficjalne logowanie łączy się z usługami Qoder CN w celu zakończenia callbacku; zapytania o limity pobierają dane użycia przez API Qoder CN. Klucze i dane logowania nigdy nie są przesyłane."
     }
   },
   "trae": {

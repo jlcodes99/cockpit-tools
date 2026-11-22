@@ -14,6 +14,7 @@ import { useClaudeAccountStore } from '../stores/useClaudeAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
+import { useQoderCnAccountStore } from '../stores/useQoderCnAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
@@ -533,6 +534,8 @@ export function DashboardPage({
     switchAccount: switchQoderAccount,
   } = useQoderAccountStore();
 
+  const { accounts: qoderCnAccounts } = useQoderCnAccountStore();
+
   const {
     accounts: zcodeAccounts,
     currentAccountId: zcodeCurrentId,
@@ -712,6 +715,7 @@ export function DashboardPage({
       codebuddy: codebuddyAccounts.length,
       codebuddy_cn: codebuddyCnAccounts.length,
       qoder: qoderAccounts.length,
+      qoder_cn: qoderCnAccounts.length,
       zcode: zcodeAccounts.length,
       trae: traeAccountsByPlatform.trae.length,
       trae_solo: traeAccountsByPlatform.trae_solo.length,
@@ -720,7 +724,7 @@ export function DashboardPage({
       workbuddy: workbuddyAccounts.length,
       minimaxcode: minimaxCodeAccounts.length,
     };
-  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, grokAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, zcodeAccounts, traeAccounts, traeAccountsByPlatform, workbuddyAccounts, workbuddyAiAccounts, minimaxCodeAccounts]);
+  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, grokAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, qoderCnAccounts, zcodeAccounts, traeAccounts, traeAccountsByPlatform, workbuddyAccounts, workbuddyAiAccounts, minimaxCodeAccounts]);
 
   const dashboardAvailableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -2796,6 +2800,7 @@ export function DashboardPage({
     codebuddy: stats.codebuddy,
     codebuddy_cn: stats.codebuddy_cn,
     qoder: stats.qoder,
+    qoder_cn: stats.qoder_cn,
     zcode: stats.zcode,
     trae: stats.trae,
     trae_solo: stats.trae_solo,

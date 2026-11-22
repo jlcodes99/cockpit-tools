@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { QoderAccount } from '../types/qoder';
+import type { QoderRegion, QoderClient } from '../utils/qoderRegion';
 
 export interface QoderOAuthStartResponse {
   loginId: string;
@@ -49,7 +50,12 @@ export async function deleteQoderAccounts(accountIds: string[]): Promise<void> {
   return await invoke('delete_qoder_accounts', { accountIds });
 }
 
-export async function importQoderFromJson(jsonContent: string): Promise<QoderAccount[]> {
+export async function importQoderFromJson(
+  jsonContent: string,
+  // Accepted so the shared page can pass its region uniformly; the global
+  // command always resolves to the global store.
+  _region?: QoderRegion,
+): Promise<QoderAccount[]> {
   return await invoke('import_qoder_from_json', { jsonContent });
 }
 
@@ -57,7 +63,26 @@ export async function importQoderFromLocal(): Promise<QoderAccount[]> {
   return await invoke('import_qoder_from_local');
 }
 
-export async function qoderOauthLoginStart(): Promise<QoderOAuthStartResponse> {
+/**
+ * The native desktop/CLI adapters only exist for the CN clients, whose credential
+ * stores are separate from the IDE database. `isQoderClientAvailable` therefore
+ * never offers those clients for the global region.
+ */
+export async function importQoderNative(
+  _region: QoderRegion,
+  _client: QoderClient,
+): Promise<QoderAccount[]> {
+  throw new Error('QODER_CLIENT_INVALID: 国际版仅支持 IDE 适配器');
+}
+
+export async function injectQoderNative(
+  _accountId: string,
+  _client: QoderClient,
+): Promise<string> {
+  throw new Error('QODER_CLIENT_INVALID: 国际版仅支持 IDE 适配器');
+}
+
+export async function qoderOauthLoginStart(_region?: QoderRegion): Promise<QoderOAuthStartResponse> {
   const raw = await invoke<QoderOAuthStartResponseRaw>('qoder_oauth_login_start');
   return normalizeQoderOAuthStartResponse(raw);
 }

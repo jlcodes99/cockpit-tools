@@ -856,7 +856,8 @@
     "apiRelay": "الترحيل",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "الرعاة",
@@ -7612,7 +7613,21 @@
       "switchLaunchFailed": "حُفظ الحساب، لكن تعذر تشغيل Qoder IDE. {{detail}}",
       "refreshCount": "تم تحديث {{count}} من أصل {{total}} حسابًا.",
       "launchUnconfirmed": "تعذر تأكيد تشغيل Qoder IDE.",
-      "workerFailed": "فشلت عملية Qoder في الخلفية. {{detail}}"
+      "workerFailed": "فشلت عملية Qoder في الخلفية. {{detail}}",
+      "oauthUrlEmpty": "رابط تفويض Qoder OAuth فارغ.",
+      "qoderCnPathMissing": "لم يتم العثور على Qoder CN Desktop. حدّد مسار التشغيل في الإعدادات أو ثبّته ثم أعد المحاولة.",
+      "platformMismatch": "ينتمي هذا الحساب إلى إصدار منطقة أخرى، لذا لا يمكن كتابته في العميل الحالي.",
+      "cnRelaunchFailed": "تم تبديل الحساب، لكن تعذر تشغيل عميل Qoder CN. {{detail}}",
+      "cnDesktopUnsupported": "يدعم Qoder CN Desktop نظام Windows فقط. استخدم CLI على هذا النظام.",
+      "clientInvalid": "نوع العميل غير صالح. أعد اختيار هدف التبديل.",
+      "nativeTokenMissing": "يفتقر هذا الحساب إلى بيانات اعتماد قابلة للكتابة. أعد التفويض أو أعد الاستيراد.",
+      "nativeWriteVerifyFailed": "فشل التحقق من بيانات الاعتماد بعد كتابتها، وجرت محاولة التراجع إلى الحالة الأصلية. أغلق العميل ثم أعد المحاولة.",
+      "nativeKeyUnreadable": "تعذر قراءة مفتاح بيانات الاعتماد المحلي. تأكد من تشغيل Cockpit وQoder تحت حساب النظام نفسه.",
+      "nativeImportInvalid": "لا تتضمن بيانات الاعتماد المستوردة معلومات الحساب، لذا يتعذر تحديد الحساب.",
+      "nativeImportFailed": "تعذر استيراد معلومات تسجيل الدخول المحلية لـ Qoder. سجّل الدخول في العميل أولاً ثم أعد المحاولة.",
+      "nativeProcessProbeFailed": "تعذر اكتشاف حالة عملية Qoder. أعد المحاولة لاحقًا.",
+      "regionUnsupported": "تعذر تحديد إصدار المنطقة الذي ينتمي إليه الحساب. أعد التفويض.",
+      "clientRunning": "Close {{client}} before switching accounts."
     },
     "title": "إدارة حسابات Qoder",
     "comingSoon": {
@@ -7654,6 +7669,31 @@
     },
     "empty": {
       "desc": "انقر على \"إضافة حساب\" لاستخدام تسجيل الدخول، الاستيراد المحلي، أو استيراد JSON."
+    },
+    "region": {
+      "cn": "Qoder CN · الصين",
+      "global": "Qoder · الدولي"
+    },
+    "clientTarget": {
+      "label": "هدف التبديل / الاستيراد المحلي",
+      "ariaLabel": "عميل Qoder",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "تم تبديل الحساب. أعد فتح العميل الهدف.",
+      "windowsOnly": " (Windows فقط)",
+      "desktopSwitchSuccess": "تم تبديل الحساب. تمت إعادة تشغيل Qoder CN Desktop.",
+      "relaunchFailed": "تم تبديل الحساب، لكن تعذر تشغيل Qoder CN Desktop تلقائيًا. افتحه يدويًا."
+    },
+    "cn": {
+      "nativeOnly": "اختر Desktop أو CLI لحسابات Qoder CN.",
+      "ideUnavailable": "اختر Desktop أو CLI لحسابات Qoder CN. محول IDE هنا مخصص للنسخة الدولية فقط.",
+      "instancesUnsupported": "يدعم Qoder CN Desktop وCLI تبديل حساب العميل الافتراضي. تعدد مثيلات التطبيق غير مدعوم بعد.",
+      "flowNoticeDesc": "يدعم تسجيل الدخول الرسمي لـ Qoder CN والاستيراد المحلي من Desktop/CLI واستيراد JSON وتبديل الحساب واستعلامات الحصة. أغلق العميل الهدف قبل التبديل ثم أعد فتحه بعده.",
+      "flowNoticePermission": "نطاق محلي: يقرأ مخزن المصادقة المحلي (بيانات اعتماد auth ومعلومات المستخدم) الخاص بـ Qoder CN Desktop أو CLI لتبديل الحساب وحقن الجلسة. تبقى جميع البيانات على هذا الجهاز.",
+      "flowNoticeNetwork": "نطاق الشبكة: يتصل تسجيل الدخول الرسمي بخدمات Qoder CN لإكمال الاستدعاء؛ وتجلب استعلامات الحصة بيانات الاستخدام عبر واجهة Qoder CN API. لا يتم رفع المفاتيح أو بيانات الاعتماد المحلية."
     }
   },
   "trae": {

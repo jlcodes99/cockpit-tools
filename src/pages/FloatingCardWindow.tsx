@@ -220,6 +220,9 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useCodebuddyCnInstanceStore.getState();
     case 'qoder':
       return useQoderInstanceStore.getState();
+    // Multi-instance launch is not supported for the CN clients.
+    case 'qoder_cn':
+      return null;
     case 'trae':
       return useTraeInstanceStore.getState();
     case 'trae_solo':

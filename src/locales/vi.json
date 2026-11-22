@@ -809,7 +809,8 @@
     "apiRelay": "Trạm chuyển",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Nhà tài trợ",
@@ -7565,7 +7566,21 @@
       "switchLaunchFailed": "Đã ghi tài khoản nhưng không khởi động được Qoder IDE. {{detail}}",
       "refreshCount": "Đã làm mới {{count}} trên {{total}} tài khoản.",
       "launchUnconfirmed": "Không xác nhận được Qoder IDE đã khởi chạy.",
-      "workerFailed": "Tác vụ nền Qoder thất bại. {{detail}}"
+      "workerFailed": "Tác vụ nền Qoder thất bại. {{detail}}",
+      "oauthUrlEmpty": "URL ủy quyền Qoder OAuth đang trống.",
+      "qoderCnPathMissing": "Không tìm thấy Qoder CN Desktop. Hãy đặt đường dẫn khởi chạy trong Cài đặt hoặc cài đặt ứng dụng rồi thử lại.",
+      "platformMismatch": "Tài khoản này thuộc bản dựng của khu vực khác và không thể ghi vào ứng dụng hiện tại.",
+      "cnRelaunchFailed": "Đã chuyển tài khoản nhưng không khởi động được ứng dụng Qoder CN. {{detail}}",
+      "cnDesktopUnsupported": "Qoder CN Desktop chỉ hỗ trợ Windows. Trên hệ thống này, hãy dùng CLI.",
+      "clientInvalid": "Loại ứng dụng không hợp lệ. Hãy chọn lại mục tiêu chuyển đổi.",
+      "nativeTokenMissing": "Tài khoản này thiếu thông tin đăng nhập có thể ghi. Hãy cấp quyền lại hoặc nhập lại.",
+      "nativeWriteVerifyFailed": "Xác minh thông tin đăng nhập sau khi ghi thất bại và đã thử khôi phục trạng thái ban đầu. Hãy đóng ứng dụng rồi thử lại.",
+      "nativeKeyUnreadable": "Không đọc được khóa thông tin đăng nhập cục bộ. Hãy đảm bảo Cockpit và Qoder chạy dưới cùng một tài khoản hệ thống.",
+      "nativeImportInvalid": "Thông tin đăng nhập đã nhập không có thông tin tài khoản nên không thể xác định tài khoản.",
+      "nativeImportFailed": "Nhập thông tin đăng nhập Qoder cục bộ thất bại. Hãy đăng nhập trong ứng dụng trước rồi thử lại.",
+      "nativeProcessProbeFailed": "Không phát hiện được trạng thái tiến trình Qoder. Hãy thử lại sau.",
+      "regionUnsupported": "Không xác định được bản dựng khu vực của tài khoản. Hãy cấp quyền lại.",
+      "clientRunning": "Close {{client}} before switching accounts."
     },
     "title": "Quản lý tài khoản Qoder",
     "comingSoon": {
@@ -7607,6 +7622,31 @@
     },
     "empty": {
       "desc": "Nhấp vào \"Thêm tài khoản\" để sử dụng đăng nhập xác thực, nhập cục bộ hoặc nhập JSON."
+    },
+    "region": {
+      "cn": "Qoder CN · Trung Quốc",
+      "global": "Qoder · Quốc tế"
+    },
+    "clientTarget": {
+      "label": "Đích chuyển đổi / nhập cục bộ",
+      "ariaLabel": "Ứng dụng khách Qoder",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Đã chuyển tài khoản. Hãy mở lại ứng dụng khách đích.",
+      "windowsOnly": " (chỉ Windows)",
+      "desktopSwitchSuccess": "Đã chuyển tài khoản. Qoder CN Desktop đã được khởi động lại.",
+      "relaunchFailed": "Đã chuyển tài khoản nhưng không thể tự động khởi chạy Qoder CN Desktop. Hãy mở thủ công."
+    },
+    "cn": {
+      "nativeOnly": "Chọn Desktop hoặc CLI cho tài khoản Qoder CN.",
+      "ideUnavailable": "Chọn Desktop hoặc CLI cho tài khoản Qoder CN. Bộ chuyển đổi IDE tại đây chỉ dành cho phiên bản quốc tế.",
+      "instancesUnsupported": "Qoder CN Desktop và CLI hỗ trợ chuyển tài khoản cho ứng dụng khách mặc định. Chưa hỗ trợ chạy nhiều phiên bản ứng dụng.",
+      "flowNoticeDesc": "Hỗ trợ đăng nhập chính thức Qoder CN, nhập cục bộ Desktop/CLI, nhập JSON, chuyển tài khoản và truy vấn hạn mức. Hãy thoát ứng dụng khách đích trước khi chuyển và mở lại sau đó.",
+      "flowNoticePermission": "Phạm vi cục bộ: đọc kho xác thực cục bộ (thông tin đăng nhập auth và thông tin người dùng) của Qoder CN Desktop hoặc CLI để chuyển tài khoản và chèn phiên. Mọi dữ liệu chỉ được xử lý trên thiết bị này.",
+      "flowNoticeNetwork": "Phạm vi mạng: đăng nhập chính thức kết nối với dịch vụ Qoder CN để hoàn tất callback; truy vấn hạn mức lấy dữ liệu sử dụng qua API Qoder CN. Khóa và thông tin đăng nhập cục bộ không bao giờ được tải lên."
     }
   },
   "trae": {

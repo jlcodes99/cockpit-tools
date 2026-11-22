@@ -77,6 +77,10 @@ impl QoderCnAccountStore {
         Ok(Some(account))
     }
 
+    /// Locking entry point; production code goes through the narrower methods
+    /// above (`upsert_from_snapshot`, `mark_switched`, ...) which already hold
+    /// the index lock.
+    #[cfg(test)]
     pub fn save_account(&self, account: &QoderAccount) -> Result<(), String> {
         let _guard = index_guard()?;
         self.write_details(account)

@@ -216,7 +216,11 @@ fn ensure_idle(client: NativeClient) -> Result<(), String> {
     });
     if running {
         // Switching under a live client would be undone by its own next write.
-        return Err("请先关闭 Qoder CN 客户端（或结束 CLI 任务）再切换账号".into());
+        let detail = match client {
+            NativeClient::Desktop => "desktop",
+            NativeClient::Cli => "cli",
+        };
+        return Err(format!("QODER_CLIENT_RUNNING: {detail}"));
     }
     Ok(())
 }
@@ -330,6 +334,16 @@ pub fn switch(account_id: &str, client: NativeClient) -> Result<(), String> {
         return Err(error);
     }
     store.mark_switched(account_id)?;
+    // The client stores are outside the app's control, so the recorded pointer is
+    // the only way to show which account the CN clients currently hold. A failure
+    // here must not turn a completed write into an error: the credentials are
+    // already in place, and a retry would trip the session-changed guard.
+    if let Err(error) = super::provider_current_state::set_current_account_id("qoder_cn", Some(account_id))
+    {
+        logger::log_warn(&format!(
+            "[Qoder CN Switch] 记录当前账号失败: account_id={account_id}, error={error}"
+        ));
+    }
     Ok(())
 }
 

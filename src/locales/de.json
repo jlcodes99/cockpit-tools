@@ -809,7 +809,8 @@
     "apiRelay": "API-Relay",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsoren",
@@ -7565,7 +7566,21 @@
       "switchLaunchFailed": "Das Konto wurde geschrieben, aber Qoder IDE konnte nicht starten. {{detail}}",
       "refreshCount": "{{count}} von {{total}} Konten aktualisiert.",
       "launchUnconfirmed": "Der Start von Qoder IDE konnte nicht bestätigt werden.",
-      "workerFailed": "Der Qoder-Hintergrundvorgang ist fehlgeschlagen. {{detail}}"
+      "workerFailed": "Der Qoder-Hintergrundvorgang ist fehlgeschlagen. {{detail}}",
+      "oauthUrlEmpty": "Die Qoder-OAuth-Autorisierungs-URL ist leer.",
+      "qoderCnPathMissing": "Qoder CN Desktop wurde nicht gefunden. Legen Sie den Startpfad in den Einstellungen fest oder installieren Sie die App und versuchen Sie es erneut.",
+      "platformMismatch": "Dieses Konto gehört zu einem Build einer anderen Region und kann nicht in den aktuellen Client geschrieben werden.",
+      "cnRelaunchFailed": "Das Konto wurde gewechselt, aber der Qoder CN-Client konnte nicht gestartet werden. {{detail}}",
+      "cnDesktopUnsupported": "Qoder CN Desktop wird nur unter Windows unterstützt. Verwenden Sie auf diesem System die CLI.",
+      "clientInvalid": "Der Clienttyp ist ungültig. Wählen Sie das Wechselziel erneut.",
+      "nativeTokenMissing": "Diesem Konto fehlen schreibbare Anmeldedaten. Autorisieren Sie es erneut oder importieren Sie es neu.",
+      "nativeWriteVerifyFailed": "Die Prüfung der geschriebenen Anmeldedaten ist fehlgeschlagen; eine Wiederherstellung des ursprünglichen Zustands wurde versucht. Schließen Sie den Client und versuchen Sie es erneut.",
+      "nativeKeyUnreadable": "Der lokale Anmeldedatenschlüssel konnte nicht gelesen werden. Stellen Sie sicher, dass Cockpit und Qoder unter demselben Systemkonto laufen.",
+      "nativeImportInvalid": "Den importierten Anmeldedaten fehlen Kontoinformationen, daher kann das Konto nicht zugeordnet werden.",
+      "nativeImportFailed": "Die lokale Qoder-Anmeldung konnte nicht importiert werden. Melden Sie sich zuerst im Client an und versuchen Sie es erneut.",
+      "nativeProcessProbeFailed": "Der Qoder-Prozessstatus konnte nicht ermittelt werden. Versuchen Sie es später erneut.",
+      "regionUnsupported": "Der Regions-Build des Kontos konnte nicht ermittelt werden. Autorisieren Sie es erneut.",
+      "clientRunning": "Close {{client}} before switching accounts."
     },
     "title": "Qoder-Kontenverwaltung",
     "comingSoon": {
@@ -7607,6 +7622,31 @@
     },
     "empty": {
       "desc": "Klicken Sie auf Konto hinzufügen, um die Anmeldung, den lokalen Import oder den JSON-Import zu verwenden."
+    },
+    "region": {
+      "cn": "Qoder CN · China",
+      "global": "Qoder · International"
+    },
+    "clientTarget": {
+      "label": "Wechsel-/lokales Importziel",
+      "ariaLabel": "Qoder-Client",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Konto gewechselt. Öffnen Sie den Ziel-Client erneut.",
+      "windowsOnly": " (nur Windows)",
+      "desktopSwitchSuccess": "Konto gewechselt. Qoder CN Desktop wurde neu gestartet.",
+      "relaunchFailed": "Konto gewechselt, aber Qoder CN Desktop konnte nicht automatisch gestartet werden. Bitte manuell öffnen."
+    },
+    "cn": {
+      "nativeOnly": "Wählen Sie für Qoder-CN-Konten Desktop oder CLI.",
+      "ideUnavailable": "Wählen Sie für Qoder-CN-Konten Desktop oder CLI. Der IDE-Adapter hier ist nur für die internationale Version.",
+      "instancesUnsupported": "Qoder CN Desktop und CLI unterstützen den Kontowechsel für den Standard-Client. Mehrere App-Instanzen werden noch nicht unterstützt.",
+      "flowNoticeDesc": "Unterstützt die offizielle Qoder-CN-Anmeldung, lokalen Desktop-/CLI-Import, JSON-Import, Kontowechsel und Kontingentabfragen. Beenden Sie den Ziel-Client vor dem Wechsel und öffnen Sie ihn danach erneut.",
+      "flowNoticePermission": "Lokaler Zugriff: liest den Anmeldespeicher (Auth-Anmeldedaten und Benutzerinformationen) von Qoder CN Desktop oder CLI für Kontowechsel und Sitzungsinjektion. Alle Daten bleiben auf diesem Gerät.",
+      "flowNoticeNetwork": "Netzwerkzugriff: Die offizielle Anmeldung kontaktiert Qoder-CN-Dienste für den Callback; Kontingentabfragen rufen Nutzungsdaten über die Qoder-CN-API ab. Lokale Schlüssel und Anmeldedaten werden nie hochgeladen."
     }
   },
   "trae": {

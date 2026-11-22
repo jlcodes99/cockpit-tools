@@ -20,6 +20,7 @@ export type CurrentAccountRefreshPlatform =
   | 'workbuddy'
   | 'minimaxcode'
   | 'qoder'
+  | 'qoder_cn'
   | 'zcode'
   | 'trae'
   | 'trae_solo'
@@ -41,6 +42,7 @@ export const CURRENT_ACCOUNT_REFRESH_PLATFORMS: CurrentAccountRefreshPlatform[] 
   'workbuddy',
   'minimaxcode',
   'qoder',
+  'qoder_cn',
   'zcode',
   'trae',
   'trae_solo',
@@ -81,6 +83,7 @@ export function buildDefaultCurrentAccountRefreshMinutesMap(): CurrentAccountRef
     workbuddy: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     minimaxcode: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     qoder: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
+    qoder_cn: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     zcode: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     trae: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     trae_solo: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,

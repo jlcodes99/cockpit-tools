@@ -809,7 +809,8 @@
     "apiRelay": "中轉站",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "贊助商",
@@ -7565,7 +7566,21 @@
       "switchLaunchFailed": "帳號已寫入，但 Qoder IDE 啟動失敗。{{detail}}",
       "refreshCount": "已重新整理 {{count}}／{{total}} 個帳號。",
       "launchUnconfirmed": "未確認 Qoder IDE 已啟動。",
-      "workerFailed": "Qoder 背景作業失敗。{{detail}}"
+      "workerFailed": "Qoder 背景作業失敗。{{detail}}",
+      "oauthUrlEmpty": "Qoder OAuth 授權連結為空",
+      "qoderCnPathMissing": "未找到 Qoder CN 桌面端。請在設定中填寫啟動路徑，或安裝後重試。",
+      "platformMismatch": "此帳號屬於其他區域版本，無法寫入目前用戶端。",
+      "cnRelaunchFailed": "帳號已切換，但 Qoder CN 用戶端啟動失敗。{{detail}}",
+      "cnDesktopUnsupported": "Qoder CN 桌面端僅支援 Windows；目前系統請使用 CLI。",
+      "clientInvalid": "用戶端類型無效，請重新選擇切換目標。",
+      "nativeTokenMissing": "此帳號缺少可寫入的登入憑證，請重新授權或重新匯入。",
+      "nativeWriteVerifyFailed": "憑證寫入後驗證失敗，已嘗試還原到原始狀態。請關閉用戶端後重試。",
+      "nativeKeyUnreadable": "無法讀取本機憑證金鑰。請確認 Cockpit 與 Qoder 使用同一個系統帳號。",
+      "nativeImportInvalid": "匯入的憑證缺少帳號資訊，無法辨識是哪一個帳號。",
+      "nativeImportFailed": "匯入本機 Qoder 登入資訊失敗。請先在用戶端登入後重試。",
+      "nativeProcessProbeFailed": "無法偵測 Qoder 處理程序狀態，請稍後重試。",
+      "regionUnsupported": "無法辨識此帳號所屬的區域版本，請重新授權。",
+      "clientRunning": "請先結束 {{client}} 再切換帳號。"
     },
     "title": "Qoder 帳號管理",
     "comingSoon": {
@@ -7607,6 +7622,31 @@
     },
     "empty": {
       "desc": "點擊「新增帳號」以使用驗證登入、本機匯入或 JSON 匯入。"
+    },
+    "region": {
+      "cn": "Qoder CN · 中國版",
+      "global": "Qoder · 國際版"
+    },
+    "clientTarget": {
+      "label": "切換／本機匯入目標",
+      "ariaLabel": "Qoder 用戶端",
+      "desktop": "Qoder 桌面端",
+      "desktopCn": "Qoder CN 桌面端",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "帳號已切換，請重新開啟對應用戶端。",
+      "windowsOnly": "（僅 Windows）",
+      "desktopSwitchSuccess": "帳號已切換，Qoder CN 桌面端已重新啟動。",
+      "relaunchFailed": "帳號已切換，但 Qoder CN 桌面端自動啟動失敗，請手動開啟。"
+    },
+    "cn": {
+      "nativeOnly": "國內帳號請選擇桌面端或 CLI。",
+      "ideUnavailable": "國內帳號請選擇桌面端或 CLI；此處 IDE 適配器僅用於國際版。",
+      "instancesUnsupported": "國內版桌面端與 CLI 支援預設用戶端帳號切換，目前暫不支援應用多開。",
+      "flowNoticeDesc": "支援 Qoder CN 官方授權登入、本機桌面端／CLI 匯入、JSON 匯入、帳號切換和配額查詢。切換前請結束目標用戶端，切換後重新開啟。",
+      "flowNoticePermission": "權限範圍：讀取 Qoder CN 桌面端或 CLI 的本機認證儲存（auth 憑證與使用者資訊），用於帳號切換與工作階段注入；所有資料僅在本機處理。",
+      "flowNoticeNetwork": "網路範圍：官方授權登入需連網請求 Qoder CN 官方服務完成回呼；配額查詢透過 Qoder CN API 取得用量資料。不上傳本機金鑰或憑證。"
     }
   },
   "trae": {

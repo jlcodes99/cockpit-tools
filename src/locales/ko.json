@@ -809,7 +809,8 @@
     "apiRelay": "중계소",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "스폰서",
@@ -7565,7 +7566,21 @@
       "switchLaunchFailed": "계정을 기록했지만 Qoder IDE를 시작하지 못했습니다. {{detail}}",
       "refreshCount": "계정 {{total}}개 중 {{count}}개를 갱신했습니다.",
       "launchUnconfirmed": "Qoder IDE 실행을 확인하지 못했습니다.",
-      "workerFailed": "Qoder 백그라운드 작업에 실패했습니다. {{detail}}"
+      "workerFailed": "Qoder 백그라운드 작업에 실패했습니다. {{detail}}",
+      "oauthUrlEmpty": "Qoder OAuth 인증 URL이 비어 있습니다.",
+      "qoderCnPathMissing": "Qoder CN 데스크톱을 찾을 수 없습니다. 설정에서 실행 경로를 지정하거나 설치한 후 다시 시도하세요.",
+      "platformMismatch": "이 계정은 다른 지역 빌드에 속해 있어 현재 클라이언트에 기록할 수 없습니다.",
+      "cnRelaunchFailed": "계정은 전환되었지만 Qoder CN 클라이언트를 시작하지 못했습니다. {{detail}}",
+      "cnDesktopUnsupported": "Qoder CN 데스크톱은 Windows만 지원합니다. 이 시스템에서는 CLI를 사용하세요.",
+      "clientInvalid": "클라이언트 유형이 올바르지 않습니다. 전환 대상을 다시 선택하세요.",
+      "nativeTokenMissing": "이 계정에는 기록할 수 있는 로그인 자격 증명이 없습니다. 다시 인증하거나 다시 가져오세요.",
+      "nativeWriteVerifyFailed": "자격 증명을 기록한 뒤 검증에 실패하여 원래 상태로 복원을 시도했습니다. 클라이언트를 종료한 후 다시 시도하세요.",
+      "nativeKeyUnreadable": "로컬 자격 증명 키를 읽을 수 없습니다. Cockpit과 Qoder가 동일한 시스템 계정으로 실행되는지 확인하세요.",
+      "nativeImportInvalid": "가져온 자격 증명에 계정 정보가 없어 어떤 계정인지 식별할 수 없습니다.",
+      "nativeImportFailed": "로컬 Qoder 로그인 정보를 가져오지 못했습니다. 먼저 클라이언트에서 로그인한 후 다시 시도하세요.",
+      "nativeProcessProbeFailed": "Qoder 프로세스 상태를 감지할 수 없습니다. 나중에 다시 시도하세요.",
+      "regionUnsupported": "이 계정이 속한 지역 빌드를 식별할 수 없습니다. 다시 인증하세요.",
+      "clientRunning": "Close {{client}} before switching accounts."
     },
     "title": "Qoder 계정 관리",
     "comingSoon": {
@@ -7607,6 +7622,31 @@
     },
     "empty": {
       "desc": "\"계정 추가\"를 클릭하여 인증 로그인, 로컬 가져오기 또는 JSON 가져오기를 사용하세요."
+    },
+    "region": {
+      "cn": "Qoder CN · 중국판",
+      "global": "Qoder · 글로벌판"
+    },
+    "clientTarget": {
+      "label": "전환／로컬 가져오기 대상",
+      "ariaLabel": "Qoder 클라이언트",
+      "desktop": "Qoder 데스크톱",
+      "desktopCn": "Qoder CN 데스크톱",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "계정이 전환되었습니다. 대상 클라이언트를 다시 여세요.",
+      "windowsOnly": " (Windows 전용)",
+      "desktopSwitchSuccess": "계정이 전환되었습니다. Qoder CN 데스크톱이 다시 시작되었습니다.",
+      "relaunchFailed": "계정은 전환되었지만 Qoder CN 데스크톱을 자동으로 시작하지 못했습니다. 직접 실행하세요."
+    },
+    "cn": {
+      "nativeOnly": "Qoder CN 계정은 데스크톱 또는 CLI를 선택하세요.",
+      "ideUnavailable": "Qoder CN 계정은 데스크톱 또는 CLI를 선택하세요. 여기의 IDE 어댑터는 국제판 전용입니다.",
+      "instancesUnsupported": "Qoder CN 데스크톱과 CLI는 기본 클라이언트 계정 전환을 지원합니다. 앱 다중 실행은 아직 지원되지 않습니다.",
+      "flowNoticeDesc": "Qoder CN 공식 인증 로그인, 로컬 데스크톱/CLI 가져오기, JSON 가져오기, 계정 전환 및 할당량 조회를 지원합니다. 전환 전에 대상 클라이언트를 종료하고 전환 후 다시 여세요.",
+      "flowNoticePermission": "권한 범위: Qoder CN 데스크톱 또는 CLI의 로컬 인증 저장소(auth 자격 증명 및 사용자 정보)를 읽어 계정 전환과 세션 주입에 사용합니다. 모든 데이터는 이 기기에서만 처리됩니다.",
+      "flowNoticeNetwork": "네트워크 범위: 공식 인증 로그인은 Qoder CN 공식 서비스에 연결하여 콜백을 완료합니다. 할당량 조회는 Qoder CN API에서 사용량을 가져옵니다. 로컬 키와 자격 증명은 업로드되지 않습니다."
     }
   },
   "trae": {

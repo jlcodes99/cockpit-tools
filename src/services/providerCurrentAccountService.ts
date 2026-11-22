@@ -9,6 +9,7 @@ export type ProviderCurrentPlatform =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'qoder_cn'
   | 'trae'
   | 'trae_solo'
   | 'trae_cn'

@@ -809,7 +809,8 @@
     "apiRelay": "Relay API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsor",
@@ -7565,7 +7566,21 @@
       "switchLaunchFailed": "L’account è stato salvato, ma Qoder IDE non si è avviato. {{detail}}",
       "refreshCount": "Aggiornati {{count}} account su {{total}}.",
       "launchUnconfirmed": "Impossibile confermare l’avvio di Qoder IDE.",
-      "workerFailed": "L’operazione Qoder in background non è riuscita. {{detail}}"
+      "workerFailed": "L’operazione Qoder in background non è riuscita. {{detail}}",
+      "oauthUrlEmpty": "L'URL di autorizzazione OAuth di Qoder è vuota.",
+      "qoderCnPathMissing": "Qoder CN Desktop non trovato. Imposta il percorso di avvio nelle impostazioni o installalo, quindi riprova.",
+      "platformMismatch": "Questo account appartiene a una build di un'altra regione e non può essere scritto nel client corrente.",
+      "cnRelaunchFailed": "L'account è stato cambiato, ma il client Qoder CN non si è avviato. {{detail}}",
+      "cnDesktopUnsupported": "Qoder CN Desktop è supportato solo su Windows. Su questo sistema usa la CLI.",
+      "clientInvalid": "Il tipo di client non è valido. Seleziona di nuovo la destinazione del cambio.",
+      "nativeTokenMissing": "Questo account non ha credenziali di accesso scrivibili. Autorizzalo di nuovo o reimportalo.",
+      "nativeWriteVerifyFailed": "La verifica delle credenziali scritte non è riuscita ed è stato tentato il ripristino allo stato originale. Chiudi il client e riprova.",
+      "nativeKeyUnreadable": "Impossibile leggere la chiave delle credenziali locale. Verifica che Cockpit e Qoder usino lo stesso account di sistema.",
+      "nativeImportInvalid": "Le credenziali importate non contengono informazioni sull'account, quindi non è possibile identificarlo.",
+      "nativeImportFailed": "Impossibile importare l'accesso locale di Qoder. Accedi prima nel client, poi riprova.",
+      "nativeProcessProbeFailed": "Impossibile rilevare lo stato del processo Qoder. Riprova più tardi.",
+      "regionUnsupported": "Impossibile identificare la build regionale dell'account. Autorizzalo di nuovo.",
+      "clientRunning": "Close {{client}} before switching accounts."
     },
     "title": "Gestione account Qoder",
     "comingSoon": {
@@ -7607,6 +7622,31 @@
     },
     "empty": {
       "desc": "Fai clic su \"Aggiungi account\" per usare login auth, import locale o import JSON."
+    },
+    "region": {
+      "cn": "Qoder CN · Cina",
+      "global": "Qoder · Internazionale"
+    },
+    "clientTarget": {
+      "label": "Destinazione cambio / importazione locale",
+      "ariaLabel": "Client Qoder",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Account cambiato. Riapri il client di destinazione.",
+      "windowsOnly": " (solo Windows)",
+      "desktopSwitchSuccess": "Account cambiato. Qoder CN Desktop è stato riavviato.",
+      "relaunchFailed": "Account cambiato, ma non è stato possibile avviare automaticamente Qoder CN Desktop. Aprilo manualmente."
+    },
+    "cn": {
+      "nativeOnly": "Seleziona Desktop o CLI per gli account Qoder CN.",
+      "ideUnavailable": "Seleziona Desktop o CLI per gli account Qoder CN. L'adattatore IDE qui è solo per la versione internazionale.",
+      "instancesUnsupported": "Qoder CN Desktop e CLI supportano il cambio account del client predefinito. Le istanze multiple dell'app non sono ancora supportate.",
+      "flowNoticeDesc": "Supporta l'accesso ufficiale Qoder CN, l'importazione locale Desktop/CLI, l'importazione JSON, il cambio account e le query sulle quote. Chiudi il client di destinazione prima del cambio e riaprilo dopo.",
+      "flowNoticePermission": "Accesso locale: legge l'archivio di autenticazione (credenziali auth e informazioni utente) di Qoder CN Desktop o CLI per il cambio account e l'iniezione della sessione. Tutti i dati restano su questo dispositivo.",
+      "flowNoticeNetwork": "Accesso di rete: l'accesso ufficiale contatta i servizi Qoder CN per completare il callback; le query sulle quote recuperano l'utilizzo tramite l'API Qoder CN. Le chiavi e le credenziali locali non vengono mai caricate."
     }
   },
   "trae": {

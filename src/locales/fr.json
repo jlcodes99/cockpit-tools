@@ -809,7 +809,8 @@
     "apiRelay": "Relais",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsors​",
@@ -7565,7 +7566,21 @@
       "switchLaunchFailed": "Le compte a été enregistré, mais Qoder IDE n’a pas pu démarrer. {{detail}}",
       "refreshCount": "{{count}} comptes actualisés sur {{total}}.",
       "launchUnconfirmed": "Impossible de confirmer le démarrage de Qoder IDE.",
-      "workerFailed": "L’opération Qoder en arrière-plan a échoué. {{detail}}"
+      "workerFailed": "L’opération Qoder en arrière-plan a échoué. {{detail}}",
+      "oauthUrlEmpty": "L'URL d'autorisation OAuth Qoder est vide.",
+      "qoderCnPathMissing": "Qoder CN Desktop est introuvable. Définissez son chemin de lancement dans les paramètres ou installez-le, puis réessayez.",
+      "platformMismatch": "Ce compte appartient à une version d’une autre région et ne peut pas être écrit dans le client actuel.",
+      "cnRelaunchFailed": "Le compte a été changé, mais le client Qoder CN n’a pas pu démarrer. {{detail}}",
+      "cnDesktopUnsupported": "Qoder CN Desktop n’est pris en charge que sous Windows. Utilisez la CLI sur ce système.",
+      "clientInvalid": "Le type de client est invalide. Sélectionnez à nouveau la cible du changement.",
+      "nativeTokenMissing": "Ce compte ne possède aucun identifiant de connexion inscriptible. Réautorisez-le ou réimportez-le.",
+      "nativeWriteVerifyFailed": "La vérification des identifiants écrits a échoué et un retour à l’état d’origine a été tenté. Fermez le client et réessayez.",
+      "nativeKeyUnreadable": "Impossible de lire la clé d’identifiants locale. Vérifiez que Cockpit et Qoder utilisent le même compte système.",
+      "nativeImportInvalid": "Les identifiants importés ne contiennent pas d’informations de compte ; impossible d’identifier le compte.",
+      "nativeImportFailed": "Impossible d’importer la connexion Qoder locale. Connectez-vous d’abord dans le client, puis réessayez.",
+      "nativeProcessProbeFailed": "Impossible de détecter l’état du processus Qoder. Réessayez plus tard.",
+      "regionUnsupported": "Impossible d’identifier la version régionale du compte. Réautorisez-le.",
+      "clientRunning": "Close {{client}} before switching accounts."
     },
     "title": "Gestion des comptes Qoder",
     "comingSoon": {
@@ -7607,6 +7622,31 @@
     },
     "empty": {
       "desc": "Cliquez sur Ajouter un compte pour utiliser la connexion, l'import local ou l'import JSON."
+    },
+    "region": {
+      "cn": "Qoder CN · Chine",
+      "global": "Qoder · Version internationale"
+    },
+    "clientTarget": {
+      "label": "Cible de changement / d'import local",
+      "ariaLabel": "Client Qoder",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Compte changé. Rouvrez le client cible.",
+      "windowsOnly": " (Windows uniquement)",
+      "desktopSwitchSuccess": "Compte changé. Qoder CN Desktop a été relancé.",
+      "relaunchFailed": "Compte changé, mais Qoder CN Desktop n'a pas pu être lancé automatiquement. Ouvrez-le manuellement."
+    },
+    "cn": {
+      "nativeOnly": "Sélectionnez Desktop ou CLI pour les comptes Qoder CN.",
+      "ideUnavailable": "Sélectionnez Desktop ou CLI pour les comptes Qoder CN. L'adaptateur IDE ici est réservé à la version internationale.",
+      "instancesUnsupported": "Qoder CN Desktop et CLI prennent en charge le changement de compte du client par défaut. Les instances multiples de l'application ne sont pas encore prises en charge.",
+      "flowNoticeDesc": "Prend en charge la connexion officielle Qoder CN, l'import local Desktop/CLI, l'import JSON, le changement de compte et les requêtes de quota. Quittez le client cible avant le changement et rouvrez-le ensuite.",
+      "flowNoticePermission": "Accès local : lit le stockage d'authentification (identifiants auth et informations utilisateur) de Qoder CN Desktop ou CLI pour le changement de compte et l'injection de session. Toutes les données restent sur cet appareil.",
+      "flowNoticeNetwork": "Accès réseau : la connexion officielle contacte les services Qoder CN pour terminer le callback ; les requêtes de quota récupèrent l'usage via l'API Qoder CN. Les clés et identifiants locaux ne sont jamais envoyés."
     }
   },
   "trae": {

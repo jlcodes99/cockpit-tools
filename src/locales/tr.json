@@ -809,7 +809,8 @@
     "apiRelay": "Aktarım",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsorlar",
@@ -7565,7 +7566,21 @@
       "switchLaunchFailed": "Hesap yazıldı ancak Qoder IDE başlatılamadı. {{detail}}",
       "refreshCount": "{{total}} hesaptan {{count}} tanesi yenilendi.",
       "launchUnconfirmed": "Qoder IDE’nin başladığı doğrulanamadı.",
-      "workerFailed": "Qoder arka plan işlemi başarısız oldu. {{detail}}"
+      "workerFailed": "Qoder arka plan işlemi başarısız oldu. {{detail}}",
+      "oauthUrlEmpty": "Qoder OAuth yetkilendirme URL'si boş.",
+      "qoderCnPathMissing": "Qoder CN Masaüstü bulunamadı. Ayarlarda başlatma yolunu belirtin veya yükleyip yeniden deneyin.",
+      "platformMismatch": "Bu hesap başka bir bölgenin derlemesine ait ve geçerli istemciye yazılamaz.",
+      "cnRelaunchFailed": "Hesap değiştirildi ancak Qoder CN istemcisi başlatılamadı. {{detail}}",
+      "cnDesktopUnsupported": "Qoder CN Masaüstü yalnızca Windows'ta desteklenir. Bu sistemde CLI kullanın.",
+      "clientInvalid": "İstemci türü geçersiz. Değiştirme hedefini yeniden seçin.",
+      "nativeTokenMissing": "Bu hesapta yazılabilir oturum açma kimlik bilgisi yok. Yeniden yetkilendirin veya yeniden içe aktarın.",
+      "nativeWriteVerifyFailed": "Yazılan kimlik bilgilerinin doğrulanması başarısız oldu ve özgün duruma geri dönüş denendi. İstemciyi kapatıp yeniden deneyin.",
+      "nativeKeyUnreadable": "Yerel kimlik bilgisi anahtarı okunamadı. Cockpit ile Qoder'ın aynı sistem hesabında çalıştığından emin olun.",
+      "nativeImportInvalid": "İçe aktarılan kimlik bilgilerinde hesap bilgisi yok, bu yüzden hesap tanımlanamıyor.",
+      "nativeImportFailed": "Yerel Qoder oturum bilgileri içe aktarılamadı. Önce istemcide oturum açın ve yeniden deneyin.",
+      "nativeProcessProbeFailed": "Qoder işlem durumu algılanamadı. Daha sonra yeniden deneyin.",
+      "regionUnsupported": "Hesabın bölge derlemesi belirlenemedi. Yeniden yetkilendirin.",
+      "clientRunning": "Close {{client}} before switching accounts."
     },
     "title": "Qoder Hesap Yönetimi",
     "comingSoon": {
@@ -7607,6 +7622,31 @@
     },
     "empty": {
       "desc": "Auth girişini, yerel içe aktarmayı veya JSON içe aktarmayı kullanmak için \"Hesap Ekle\"ye tıklayın."
+    },
+    "region": {
+      "cn": "Qoder CN · Çin",
+      "global": "Qoder · Uluslararası"
+    },
+    "clientTarget": {
+      "label": "Değiştirme / yerel içe aktarma hedefi",
+      "ariaLabel": "Qoder istemcisi",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Hesap değiştirildi. Hedef istemciyi yeniden açın.",
+      "windowsOnly": " (yalnızca Windows)",
+      "desktopSwitchSuccess": "Hesap değiştirildi. Qoder CN Masaüstü yeniden başlatıldı.",
+      "relaunchFailed": "Hesap değiştirildi ancak Qoder CN Masaüstü otomatik olarak başlatılamadı. El ile açın."
+    },
+    "cn": {
+      "nativeOnly": "Qoder CN hesapları için Desktop veya CLI seçin.",
+      "ideUnavailable": "Qoder CN hesapları için Desktop veya CLI seçin. Buradaki IDE bağdaştırıcısı yalnızca uluslararası sürüm içindir.",
+      "instancesUnsupported": "Qoder CN Desktop ve CLI, varsayılan istemci hesap değişimini destekler. Uygulama çoklu örneği henüz desteklenmiyor.",
+      "flowNoticeDesc": "Qoder CN resmi oturum açma, yerel Desktop/CLI içe aktarma, JSON içe aktarma, hesap değiştirme ve kota sorgularını destekler. Değiştirmeden önce hedef istemciyi kapatın, değiştirdikten sonra yeniden açın.",
+      "flowNoticePermission": "Yerel erişim: hesap değiştirme ve oturum enjeksiyonu için Qoder CN Desktop veya CLI'nin yerel kimlik doğrulama deposunu (auth kimlik bilgileri ve kullanıcı bilgileri) okur. Tüm veriler bu cihazda kalır.",
+      "flowNoticeNetwork": "Ağ erişimi: resmi oturum açma, geri çağırmayı tamamlamak için Qoder CN hizmetlerine bağlanır; kota sorguları kullanım verilerini Qoder CN API'sinden alır. Yerel anahtarlar ve kimlik bilgileri hiçbir zaman yüklenmez."
     }
   },
   "trae": {

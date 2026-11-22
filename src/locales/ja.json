@@ -809,7 +809,8 @@
     "apiRelay": "リレー",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "スポンサー",
@@ -7565,7 +7566,21 @@
       "switchLaunchFailed": "アカウントは書き込まれましたが、Qoder IDE を起動できませんでした。{{detail}}",
       "refreshCount": "{{total}} 件中 {{count}} 件を更新しました。",
       "launchUnconfirmed": "Qoder IDE の起動を確認できませんでした。",
-      "workerFailed": "Qoder のバックグラウンド処理に失敗しました。{{detail}}"
+      "workerFailed": "Qoder のバックグラウンド処理に失敗しました。{{detail}}",
+      "oauthUrlEmpty": "Qoder OAuth 認証 URL が空です。",
+      "qoderCnPathMissing": "Qoder CN デスクトップが見つかりません。設定で起動パスを指定するか、インストールしてから再試行してください。",
+      "platformMismatch": "このアカウントは別リージョンのビルドに属しているため、現在のクライアントには書き込めません。",
+      "cnRelaunchFailed": "アカウントは切り替わりましたが、Qoder CN クライアントを起動できませんでした。{{detail}}",
+      "cnDesktopUnsupported": "Qoder CN デスクトップは Windows のみ対応です。このシステムでは CLI を使用してください。",
+      "clientInvalid": "クライアント種別が無効です。切り替え先を選び直してください。",
+      "nativeTokenMissing": "このアカウントには書き込み可能なログイン資格情報がありません。再認証するか、再インポートしてください。",
+      "nativeWriteVerifyFailed": "資格情報の書き込み後に検証が失敗したため、元の状態への復元を試みました。クライアントを終了して再試行してください。",
+      "nativeKeyUnreadable": "ローカルの資格情報キーを読み取れません。Cockpit と Qoder が同じシステムアカウントで実行されていることを確認してください。",
+      "nativeImportInvalid": "インポートした資格情報にアカウント情報がないため、どのアカウントか特定できません。",
+      "nativeImportFailed": "ローカル Qoder のログイン情報をインポートできませんでした。先にクライアントでログインしてから再試行してください。",
+      "nativeProcessProbeFailed": "Qoder のプロセス状態を検出できません。しばらくしてから再試行してください。",
+      "regionUnsupported": "このアカウントのリージョンビルドを特定できません。再認証してください。",
+      "clientRunning": "Close {{client}} before switching accounts."
     },
     "title": "Qoderアカウント管理",
     "comingSoon": {
@@ -7607,6 +7622,31 @@
     },
     "empty": {
       "desc": "「アカウントを追加」をクリックすると、認証ログイン、ローカルインポート、または JSON インポートを利用できます。"
+    },
+    "region": {
+      "cn": "Qoder CN · 中国版",
+      "global": "Qoder · 国際版"
+    },
+    "clientTarget": {
+      "label": "切り替え／ローカルインポート先",
+      "ariaLabel": "Qoder クライアント",
+      "desktop": "Qoder デスクトップ",
+      "desktopCn": "Qoder CN デスクトップ",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "アカウントを切り替えました。対象のクライアントを再起動してください。",
+      "windowsOnly": "（Windows のみ）",
+      "desktopSwitchSuccess": "アカウントを切り替え、Qoder CN デスクトップを再起動しました。",
+      "relaunchFailed": "アカウントは切り替えましたが、Qoder CN デスクトップを自動起動できませんでした。手動で起動してください。"
+    },
+    "cn": {
+      "nativeOnly": "Qoder CN アカウントではデスクトップまたは CLI を選択してください。",
+      "ideUnavailable": "Qoder CN アカウントではデスクトップまたは CLI を選択してください。ここでの IDE アダプターは国際版専用です。",
+      "instancesUnsupported": "Qoder CN のデスクトップと CLI は既定クライアントのアカウント切り替えに対応しています。アプリのマルチインスタンスはまだ未対応です。",
+      "flowNoticeDesc": "Qoder CN の公式認証ログイン、ローカルのデスクトップ／CLI インポート、JSON インポート、アカウント切り替え、クォータ照会に対応しています。切り替え前に対象クライアントを終了し、切り替え後に再起動してください。",
+      "flowNoticePermission": "権限範囲：Qoder CN デスクトップまたは CLI のローカル認証ストア（auth 資格情報とユーザー情報）を読み取り、アカウント切り替えとセッション注入に使用します。データはすべてこの端末内で処理されます。",
+      "flowNoticeNetwork": "ネットワーク範囲：公式認証ログインは Qoder CN の公式サービスに接続してコールバックを完了します。クォータ照会は Qoder CN API から使用量を取得します。ローカルキーや資格情報はアップロードされません。"
     }
   },
   "trae": {

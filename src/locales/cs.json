@@ -809,7 +809,8 @@
     "apiRelay": "API relay",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponzoři",
@@ -7565,7 +7566,21 @@
       "switchLaunchFailed": "Účet byl zapsán, ale Qoder IDE se nepodařilo spustit. {{detail}}",
       "refreshCount": "Obnoveno {{count}} z {{total}} účtů.",
       "launchUnconfirmed": "Spuštění Qoder IDE se nepodařilo potvrdit.",
-      "workerFailed": "Operace Qoder na pozadí selhala. {{detail}}"
+      "workerFailed": "Operace Qoder na pozadí selhala. {{detail}}",
+      "oauthUrlEmpty": "Autorizační URL Qoder OAuth je prázdná.",
+      "qoderCnPathMissing": "Qoder CN Desktop nebyl nalezen. Nastavte cestu spuštění v nastavení nebo jej nainstalujte a zkuste to znovu.",
+      "platformMismatch": "Tento účet patří sestavení jiného regionu a nelze jej zapsat do aktuálního klienta.",
+      "cnRelaunchFailed": "Účet byl přepnut, ale klienta Qoder CN se nepodařilo spustit. {{detail}}",
+      "cnDesktopUnsupported": "Qoder CN Desktop je podporován pouze ve Windows. V tomto systému použijte CLI.",
+      "clientInvalid": "Neplatný typ klienta. Znovu vyberte cíl přepnutí.",
+      "nativeTokenMissing": "Tomuto účtu chybí zapisovatelné přihlašovací údaje. Znovu jej autorizujte nebo importujte.",
+      "nativeWriteVerifyFailed": "Ověření zapsaných přihlašovacích údajů selhalo a bylo provedeno vrácení do původního stavu. Zavřete klienta a zkuste to znovu.",
+      "nativeKeyUnreadable": "Nepodařilo se načíst místní klíč přihlašovacích údajů. Ověřte, že Cockpit a Qoder běží pod stejným systémovým účtem.",
+      "nativeImportInvalid": "Importované přihlašovací údaje neobsahují informace o účtu, takže jej nelze identifikovat.",
+      "nativeImportFailed": "Import místního přihlášení Qoder selhal. Nejprve se přihlaste v klientovi a zkuste to znovu.",
+      "nativeProcessProbeFailed": "Nepodařilo se zjistit stav procesu Qoder. Zkuste to později.",
+      "regionUnsupported": "Nepodařilo se určit regionální sestavení účtu. Znovu jej autorizujte.",
+      "clientRunning": "Close {{client}} before switching accounts."
     },
     "title": "Správa účtů Qoder",
     "comingSoon": {
@@ -7607,6 +7622,31 @@
     },
     "empty": {
       "desc": "Klikněte na Přidat účet a použijte přihlášení, lokální import nebo import JSON."
+    },
+    "region": {
+      "cn": "Qoder CN · Čína",
+      "global": "Qoder · Mezinárodní"
+    },
+    "clientTarget": {
+      "label": "Cíl přepnutí / místního importu",
+      "ariaLabel": "Klient Qoder",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Účet byl přepnut. Znovu otevřete cílového klienta.",
+      "windowsOnly": " (pouze Windows)",
+      "desktopSwitchSuccess": "Účet byl přepnut. Qoder CN Desktop byl restartován.",
+      "relaunchFailed": "Účet byl přepnut, ale Qoder CN Desktop se nepodařilo automaticky spustit. Otevřete jej ručně."
+    },
+    "cn": {
+      "nativeOnly": "Pro účty Qoder CN vyberte Desktop nebo CLI.",
+      "ideUnavailable": "Pro účty Qoder CN vyberte Desktop nebo CLI. Adaptér IDE je zde pouze pro mezinárodní verzi.",
+      "instancesUnsupported": "Qoder CN Desktop a CLI podporují přepínání účtu výchozího klienta. Více instancí aplikace zatím není podporováno.",
+      "flowNoticeDesc": "Podporuje oficiální přihlášení Qoder CN, místní import Desktop/CLI, import JSON, přepínání účtů a dotazy na kvóty. Před přepnutím zavřete cílového klienta a poté jej znovu otevřete.",
+      "flowNoticePermission": "Místní přístup: čte místní úložiště ověřování (přihlašovací údaje auth a informace o uživateli) Qoder CN Desktop nebo CLI pro přepínání účtů a vkládání relace. Všechna data zůstávají na tomto zařízení.",
+      "flowNoticeNetwork": "Síťový přístup: oficiální přihlášení kontaktuje služby Qoder CN kvůli dokončení callbacku; dotazy na kvóty získávají data o využití přes API Qoder CN. Místní klíče a přihlašovací údaje se nikdy nenahrávají."
     }
   },
   "trae": {

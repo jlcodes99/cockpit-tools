@@ -166,6 +166,9 @@ pub struct UserConfig {
     /// Qoder 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_qoder_auto_refresh")]
     pub qoder_auto_refresh_minutes: i32,
+    /// Qoder CN 自动刷新间隔（分钟），-1 表示禁用
+    #[serde(default = "default_qoder_auto_refresh")]
+    pub qoder_cn_auto_refresh_minutes: i32,
     /// ZCode 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_zcode_auto_refresh")]
     pub zcode_auto_refresh_minutes: i32,
@@ -586,6 +589,12 @@ pub struct UserConfig {
     /// Qoder 配额预警阈值（百分比）
     #[serde(default = "default_qoder_quota_alert_threshold")]
     pub qoder_quota_alert_threshold: i32,
+    /// 是否启用 Qoder CN 配额预警通知
+    #[serde(default = "default_qoder_cn_quota_alert_enabled")]
+    pub qoder_cn_quota_alert_enabled: bool,
+    /// Qoder CN 配额预警阈值（百分比）
+    #[serde(default = "default_qoder_cn_quota_alert_threshold")]
+    pub qoder_cn_quota_alert_threshold: i32,
     /// 是否启用 Trae 配额预警通知
     #[serde(default = "default_trae_quota_alert_enabled")]
     pub trae_quota_alert_enabled: bool,
@@ -902,6 +911,7 @@ pub fn normalize_startup_page(value: &str) -> String {
         "codebuddy",
         "codebuddy-cn",
         "qoder",
+        "qoder-cn",
         "zcode",
         "trae",
         "trae-solo",
@@ -1253,6 +1263,12 @@ fn default_qoder_quota_alert_enabled() -> bool {
 fn default_qoder_quota_alert_threshold() -> i32 {
     20
 }
+fn default_qoder_cn_quota_alert_enabled() -> bool {
+    false
+}
+fn default_qoder_cn_quota_alert_threshold() -> i32 {
+    20
+}
 fn default_trae_quota_alert_enabled() -> bool {
     false
 }
@@ -1318,6 +1334,7 @@ impl Default for UserConfig {
             workbuddy_auto_refresh_minutes: default_workbuddy_auto_refresh(),
             minimax_code_auto_refresh_minutes: default_minimax_code_auto_refresh(),
             qoder_auto_refresh_minutes: default_qoder_auto_refresh(),
+            qoder_cn_auto_refresh_minutes: default_qoder_auto_refresh(),
             zcode_auto_refresh_minutes: default_zcode_auto_refresh(),
             trae_auto_refresh_minutes: default_trae_auto_refresh(),
             trae_solo_auto_refresh_minutes: default_trae_auto_refresh(),
@@ -1471,6 +1488,8 @@ impl Default for UserConfig {
             codebuddy_cn_quota_alert_threshold: default_codebuddy_cn_quota_alert_threshold(),
             qoder_quota_alert_enabled: default_qoder_quota_alert_enabled(),
             qoder_quota_alert_threshold: default_qoder_quota_alert_threshold(),
+            qoder_cn_quota_alert_enabled: default_qoder_cn_quota_alert_enabled(),
+            qoder_cn_quota_alert_threshold: default_qoder_cn_quota_alert_threshold(),
             trae_quota_alert_enabled: default_trae_quota_alert_enabled(),
             trae_quota_alert_threshold: default_trae_quota_alert_threshold(),
             trae_solo_quota_alert_enabled: default_trae_quota_alert_enabled(),
@@ -2377,6 +2396,18 @@ pub fn load_user_config() -> Result<UserConfig, String> {
                 json!(legacy_threshold),
             );
         }
+        if !obj.contains_key("qoder_cn_quota_alert_enabled") {
+            obj.insert(
+                "qoder_cn_quota_alert_enabled".to_string(),
+                json!(default_qoder_cn_quota_alert_enabled()),
+            );
+        }
+        if !obj.contains_key("qoder_cn_quota_alert_threshold") {
+            obj.insert(
+                "qoder_cn_quota_alert_threshold".to_string(),
+                json!(default_qoder_cn_quota_alert_threshold()),
+            );
+        }
         if !obj.contains_key("trae_quota_alert_enabled") {
             obj.insert(
                 "trae_quota_alert_enabled".to_string(),
@@ -2785,7 +2816,7 @@ mod tests {
     include!("config_tests_proxy_env.rs");
     #[test]
     fn startup_client_preferences_preserve_app_ide_and_legacy_overview() {
-        for value in ["antigravity", "antigravity-ide", "overview", "last"] {
+        for value in ["antigravity", "antigravity-ide", "overview", "qoder-cn", "last"] {
             assert_eq!(super::normalize_startup_page(value), value);
         }
         assert_eq!(

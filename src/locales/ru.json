@@ -809,7 +809,8 @@
     "apiRelay": "Релей",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Спонсоры",
@@ -7565,7 +7566,21 @@
       "switchLaunchFailed": "Аккаунт записан, но запустить Qoder IDE не удалось. {{detail}}",
       "refreshCount": "Обновлено аккаунтов: {{count}} из {{total}}.",
       "launchUnconfirmed": "Не удалось подтвердить запуск Qoder IDE.",
-      "workerFailed": "Фоновая операция Qoder завершилась ошибкой. {{detail}}"
+      "workerFailed": "Фоновая операция Qoder завершилась ошибкой. {{detail}}",
+      "oauthUrlEmpty": "URL авторизации Qoder OAuth пуст.",
+      "qoderCnPathMissing": "Qoder CN Desktop не найден. Укажите путь запуска в настройках или установите клиент и повторите попытку.",
+      "platformMismatch": "Этот аккаунт относится к сборке другого региона и не может быть записан в текущий клиент.",
+      "cnRelaunchFailed": "Аккаунт переключён, но клиент Qoder CN не запустился. {{detail}}",
+      "cnDesktopUnsupported": "Qoder CN Desktop поддерживается только в Windows. В этой системе используйте CLI.",
+      "clientInvalid": "Недопустимый тип клиента. Выберите цель переключения заново.",
+      "nativeTokenMissing": "У этого аккаунта нет записываемых учётных данных для входа. Повторно авторизуйте или импортируйте его.",
+      "nativeWriteVerifyFailed": "Проверка записанных учётных данных не удалась, предпринята попытка отката к исходному состоянию. Закройте клиент и повторите попытку.",
+      "nativeKeyUnreadable": "Не удалось прочитать локальный ключ учётных данных. Убедитесь, что Cockpit и Qoder работают под одной учётной записью системы.",
+      "nativeImportInvalid": "В импортированных учётных данных нет сведений об аккаунте, поэтому определить его невозможно.",
+      "nativeImportFailed": "Не удалось импортировать локальные данные входа Qoder. Сначала войдите в клиенте и повторите попытку.",
+      "nativeProcessProbeFailed": "Не удалось определить состояние процесса Qoder. Повторите попытку позже.",
+      "regionUnsupported": "Не удалось определить региональную сборку аккаунта. Повторно авторизуйте его.",
+      "clientRunning": "Close {{client}} before switching accounts."
     },
     "title": "Управление аккаунтами Qoder",
     "comingSoon": {
@@ -7607,6 +7622,31 @@
     },
     "empty": {
       "desc": "Нажмите «Добавить аккаунт», чтобы использовать вход, локальный импорт или импорт JSON."
+    },
+    "region": {
+      "cn": "Qoder CN · Китай",
+      "global": "Qoder · Международный"
+    },
+    "clientTarget": {
+      "label": "Цель переключения / локального импорта",
+      "ariaLabel": "Клиент Qoder",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Аккаунт переключён. Откройте целевой клиент заново.",
+      "windowsOnly": " (только Windows)",
+      "desktopSwitchSuccess": "Аккаунт переключён. Qoder CN Desktop перезапущен.",
+      "relaunchFailed": "Аккаунт переключён, но Qoder CN Desktop не удалось запустить автоматически. Откройте его вручную."
+    },
+    "cn": {
+      "nativeOnly": "Для аккаунтов Qoder CN выберите Desktop или CLI.",
+      "ideUnavailable": "Для аккаунтов Qoder CN выберите Desktop или CLI. Адаптер IDE здесь предназначен только для международной версии.",
+      "instancesUnsupported": "Qoder CN Desktop и CLI поддерживают переключение аккаунта клиента по умолчанию. Мультиэкземплярность приложения пока не поддерживается.",
+      "flowNoticeDesc": "Поддерживается официальный вход Qoder CN, локальный импорт Desktop/CLI, импорт JSON, переключение аккаунтов и запросы квоты. Перед переключением закройте целевой клиент, после — откройте его снова.",
+      "flowNoticePermission": "Локальный доступ: чтение локального хранилища аутентификации (auth-учётные данные и сведения о пользователе) Qoder CN Desktop или CLI для переключения аккаунта и внедрения сеанса. Все данные остаются на этом устройстве.",
+      "flowNoticeNetwork": "Сетевой доступ: официальный вход обращается к сервисам Qoder CN для завершения callback; запросы квоты получают данные об использовании через API Qoder CN. Локальные ключи и учётные данные не загружаются."
     }
   },
   "trae": {
