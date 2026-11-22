@@ -20,5 +20,9 @@ let package = Package(
                 "Resources",
             ]
         ),
+        .testTarget(
+            name: "MacosNativeMenuSwiftTests",
+            dependencies: ["MacosNativeMenuSwift"]
+        ),
     ]
 )

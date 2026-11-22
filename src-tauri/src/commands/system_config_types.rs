@@ -151,6 +151,7 @@ pub struct GeneralConfig {
     pub menu_bar_left_click_opens_main_window: bool,
     /// 是否在 macOS 菜单栏显示当前账号剩余额度
     pub menu_bar_quota_enabled: bool,
+    pub menu_bar_quota_layout: String,
     /// 是否显示账号标识前 4 位
     pub menu_bar_show_account_prefix: bool,
     /// 菜单栏额度监控平台
@@ -1278,6 +1279,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "tray_icon_style"
             | "menu_bar_left_click_opens_main_window"
             | "menu_bar_quota_enabled"
+            | "menu_bar_quota_layout"
             | "menu_bar_show_account_prefix"
             | "menu_bar_quota_platform"
             | "menu_bar_antigravity_metric"
@@ -1464,6 +1466,13 @@ fn apply_general_config_updates(
     }
     if updates.contains_key("theme_color") {
         next.theme_color = config::normalize_theme_color(&next.theme_color);
+    }
+    if updates.contains_key("menu_bar_quota_layout") {
+        next.menu_bar_quota_layout = match next.menu_bar_quota_layout.trim() {
+            "stacked" => "stacked",
+            _ => "horizontal",
+        }
+        .to_string();
     }
     if updates.contains_key("menu_bar_quota_platform") {
         let platform = next.menu_bar_quota_platform.trim();

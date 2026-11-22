@@ -243,6 +243,7 @@
     pub(crate) fn update_status_item<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
         let status = build_menu_bar_status();
         let enabled = status.is_some();
+        let stacked = modules::config::get_user_config().menu_bar_quota_layout == "stacked";
         let account_prefix_raw = status
             .as_ref()
             .map(|value| value.account_prefix.clone())
@@ -301,6 +302,7 @@
                         value_text.as_ptr(),
                         remaining_percent,
                         i32::from(enabled),
+                        i32::from(stacked),
                         status_item_ptr as *mut c_void,
                     );
                 }

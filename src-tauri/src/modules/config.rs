@@ -209,6 +209,9 @@ pub struct UserConfig {
     /// 是否在 macOS 菜单栏图标旁显示当前账号剩余额度
     #[serde(default = "default_menu_bar_quota_enabled")]
     pub menu_bar_quota_enabled: bool,
+    /// macOS 菜单栏额度布局：horizontal（默认）或 stacked（紧凑双行）。
+    #[serde(default = "default_menu_bar_quota_layout")]
+    pub menu_bar_quota_layout: String,
     /// 是否在 macOS 菜单栏额度前显示账号标识前 4 位
     #[serde(default = "default_menu_bar_show_account_prefix")]
     pub menu_bar_show_account_prefix: bool,
@@ -870,6 +873,9 @@ fn default_tray_icon_style() -> TrayIconStyle {
 fn default_menu_bar_quota_enabled() -> bool {
     false
 }
+fn default_menu_bar_quota_layout() -> String {
+    "horizontal".to_string()
+}
 fn default_menu_bar_show_account_prefix() -> bool {
     true
 }
@@ -1355,6 +1361,7 @@ impl Default for UserConfig {
             tray_icon_style: default_tray_icon_style(),
             menu_bar_left_click_opens_main_window: false,
             menu_bar_quota_enabled: default_menu_bar_quota_enabled(),
+            menu_bar_quota_layout: default_menu_bar_quota_layout(),
             menu_bar_show_account_prefix: default_menu_bar_show_account_prefix(),
             menu_bar_quota_platform: default_menu_bar_quota_platform(),
             menu_bar_antigravity_metric: String::new(),

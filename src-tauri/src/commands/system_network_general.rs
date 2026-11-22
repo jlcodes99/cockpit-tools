@@ -326,6 +326,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         tray_icon_style: user_config.tray_icon_style.as_str().to_string(),
         menu_bar_left_click_opens_main_window: user_config.menu_bar_left_click_opens_main_window,
         menu_bar_quota_enabled: user_config.menu_bar_quota_enabled,
+        menu_bar_quota_layout: user_config.menu_bar_quota_layout,
         menu_bar_show_account_prefix: user_config.menu_bar_show_account_prefix,
         menu_bar_quota_platform: user_config.menu_bar_quota_platform,
         menu_bar_antigravity_metric: user_config.menu_bar_antigravity_metric,
@@ -589,6 +590,7 @@ pub fn patch_general_config(
         #[cfg(target_os = "macos")]
         let previous_menu_bar_quota = (
             current.menu_bar_quota_enabled,
+            current.menu_bar_quota_layout.clone(),
             current.menu_bar_show_account_prefix,
             current.menu_bar_quota_platform.clone(),
             current.menu_bar_antigravity_metric.clone(),
@@ -612,6 +614,7 @@ pub fn patch_general_config(
             menu_bar_quota_changed = previous_menu_bar_quota
                 != (
                     current.menu_bar_quota_enabled,
+                    current.menu_bar_quota_layout.clone(),
                     current.menu_bar_show_account_prefix,
                     current.menu_bar_quota_platform.clone(),
                     current.menu_bar_antigravity_metric.clone(),

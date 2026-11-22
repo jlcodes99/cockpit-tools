@@ -782,7 +782,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         {showTrayIcon && menuBarQuotaEnabled
                           ? t(
                               'settings.general.menuBarQuotaEnabledDesc',
-                              '已启用 · {{platform}} · 显示该平台当前账号剩余额度（多条取最低）',
+                              '已启用 · {{platform}} · 显示该平台当前账号的可用额度',
                               {
                                 platform:
                                   menuBarQuotaPlatformOptions.find(
