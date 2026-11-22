@@ -1665,6 +1665,8 @@ pub fn run() {
             commands::qoder_cn::export_qoder_cn_accounts,
             commands::qoder_cn::inject_qoder_cn_native,
             commands::qoder_cn::inject_qoder_cn_account,
+            commands::qoder_cn::get_qoder_cn_checkin_status,
+            commands::qoder_cn::claim_qoder_cn_checkin,
             commands::qoder_cn::delete_qoder_cn_account,
             commands::qoder_cn::delete_qoder_cn_accounts,
             commands::qoder_cn::update_qoder_cn_account_tags,

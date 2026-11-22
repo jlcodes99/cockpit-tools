@@ -1,7 +1,7 @@
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use rand::RngCore;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -1826,6 +1826,307 @@ pub fn cancel_login(login_id: Option<&str>) -> Result<(), String> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Check-in campaigns
+//
+// The daily credit check-in runs on the same origin as the account's OpenAPI
+// endpoint, so it reuses the channel resolution above instead of a second base
+// URL. Only the CN client exposes it today; an account without the campaign is
+// reported as inactive rather than as an error.
+// ---------------------------------------------------------------------------
+
+const CAMPAIGNS_PATH: &str = "/sash/api/v1/me/campaigns";
+const CAMPAIGNS_QUERY: &str = "?forceRefresh=true";
+const SASH_CLIENT_TYPE: &str = "10";
+const SASH_USER_AGENT: &str = "Qoder";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QoderCheckinStatus {
+    pub checked_in: bool,
+    pub active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validity_days: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_refresh_at: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub campaign_key: Option<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone)]
+struct QoderCampaign {
+    campaign_id: String,
+    campaign_key: Option<String>,
+    action_type: String,
+    claim_status: String,
+    amount: Option<f64>,
+    validity_days: Option<i64>,
+    end_at: Option<i64>,
+}
+
+struct QoderSashResponse {
+    status: u16,
+    body: String,
+}
+
+fn json_number(value: &Value) -> Option<f64> {
+    value
+        .as_f64()
+        .or_else(|| value.as_i64().map(|number| number as f64))
+        .or_else(|| value.as_str().and_then(|raw| raw.trim().parse().ok()))
+}
+
+fn parse_campaign_rows(value: &Value) -> Vec<QoderCampaign> {
+    let rows = value
+        .get("campaigns")
+        .and_then(Value::as_array)
+        .or_else(|| {
+            value
+                .get("data")
+                .and_then(|data| data.get("campaigns"))
+                .and_then(Value::as_array)
+        });
+    rows.into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let campaign_id = entry.get("campaignId").and_then(Value::as_str)?.trim();
+            if campaign_id.is_empty() {
+                return None;
+            }
+            let benefit = entry.get("benefit");
+            let validity = benefit.and_then(|value| value.get("validity"));
+            let validity_days = validity
+                .filter(|value| value.get("mode").and_then(Value::as_str) == Some("RELATIVE_DAYS"))
+                .and_then(|value| value.get("days"))
+                .and_then(Value::as_i64);
+            Some(QoderCampaign {
+                campaign_id: campaign_id.to_string(),
+                campaign_key: entry
+                    .get("campaignKey")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_string),
+                action_type: entry
+                    .get("actionType")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                claim_status: entry
+                    .get("claimStatus")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                amount: benefit
+                    .and_then(|value| value.get("amount"))
+                    .and_then(json_number)
+                    .or_else(|| entry.get("amount").and_then(json_number)),
+                validity_days,
+                end_at: entry.get("endAt").and_then(Value::as_i64),
+            })
+        })
+        .collect()
+}
+
+fn checkin_status_from_campaigns(
+    campaigns: &[QoderCampaign],
+    force_checked_in: bool,
+) -> QoderCheckinStatus {
+    let daily = campaigns
+        .iter()
+        .find(|campaign| campaign.action_type.eq_ignore_ascii_case("CLAIM_BENEFIT"));
+    let Some(daily) = daily else {
+        return QoderCheckinStatus {
+            checked_in: false,
+            active: false,
+            amount: None,
+            validity_days: None,
+            next_refresh_at: None,
+            campaign_key: None,
+            message: "当前没有可领取的签到活动".to_string(),
+        };
+    };
+    let claimed = daily.claim_status.eq_ignore_ascii_case("CLAIMED");
+    let claimable = daily.claim_status.eq_ignore_ascii_case("CLAIMABLE");
+    let checked_in = force_checked_in || claimed;
+    QoderCheckinStatus {
+        checked_in,
+        active: checked_in || claimable,
+        amount: daily.amount,
+        validity_days: daily.validity_days,
+        next_refresh_at: daily.end_at.and_then(|value| value.checked_mul(1000)),
+        campaign_key: daily.campaign_key.clone(),
+        message: if checked_in {
+            "本周期已领取".to_string()
+        } else if claimable {
+            "本周期可领取".to_string()
+        } else {
+            format!("当前状态：{}", daily.claim_status)
+        },
+    }
+}
+
+fn build_sash_headers(token: &str) -> reqwest::header::HeaderMap {
+    use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
+
+    let mut headers = HeaderMap::new();
+    if let Ok(value) = HeaderValue::from_str(&format!("Bearer {}", token)) {
+        headers.insert(AUTHORIZATION, value);
+    }
+    if let Ok(value) = HeaderValue::from_str("application/json") {
+        headers.insert(ACCEPT, value);
+    }
+    if let Ok(value) = HeaderValue::from_str(SASH_CLIENT_TYPE) {
+        headers.insert("cosy-clienttype", value);
+    }
+    if let Ok(value) = HeaderValue::from_str(SASH_USER_AGENT) {
+        headers.insert(USER_AGENT, value);
+    }
+    headers
+}
+
+/// One request against the account's OpenAPI origin, renewing the token once if
+/// the service rejects it.
+async fn qoder_sash_request(
+    account_id: &str,
+    method: reqwest::Method,
+    path_and_query: &str,
+    body: Option<Value>,
+) -> Result<QoderSashResponse, String> {
+    let mut target = load_refresh_target(account_id).await?;
+    let endpoint = account_endpoint(&target).await?;
+    let client = build_reqwest_client()?;
+    let mut renewed = false;
+    loop {
+        let access =
+            access_token_from_info(target.auth_user_info_raw.as_ref()).ok_or(REAUTH_REQUIRED)?;
+        let mut request = client
+            .request(method.clone(), format!("{}{}", endpoint, path_and_query))
+            .headers(build_sash_headers(&access));
+        if let Some(payload) = body.as_ref() {
+            request = request.json(payload);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|error| format!("请求 Qoder 活动接口失败: {}", error))?;
+        let status = response.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            if renewed {
+                return Err(UNAUTHORIZED.into());
+            }
+            target = renew_device_token(&client, &endpoint, &target).await?;
+            renewed = true;
+            continue;
+        }
+        let status_code = status.as_u16();
+        let body = response.text().await.unwrap_or_default();
+        return Ok(QoderSashResponse {
+            status: status_code,
+            body,
+        });
+    }
+}
+
+fn parse_sash_json(response: &QoderSashResponse, action: &str) -> Result<Value, String> {
+    if !(200..300).contains(&response.status) {
+        return Err(format!(
+            "{}失败 (HTTP {}): body_len={}",
+            action,
+            response.status,
+            response.body.len()
+        ));
+    }
+    serde_json::from_str(&response.body)
+        .map_err(|error| format!("解析 {} 响应失败: {}", action, error))
+}
+
+pub async fn get_qoder_checkin_status(account_id: &str) -> Result<QoderCheckinStatus, String> {
+    let path = format!("{}{}", CAMPAIGNS_PATH, CAMPAIGNS_QUERY);
+    let response = qoder_sash_request(account_id, reqwest::Method::GET, &path, None).await?;
+    let value = parse_sash_json(&response, "获取签到状态")?;
+    let status = checkin_status_from_campaigns(&parse_campaign_rows(&value), false);
+    logger::log_info(&format!(
+        "[Qoder Checkin] 状态查询: account_id={}, checked_in={}, active={}, amount={:?}",
+        account_id, status.checked_in, status.active, status.amount
+    ));
+    Ok(status)
+}
+
+pub async fn claim_qoder_checkin(account_id: &str) -> Result<QoderCheckinStatus, String> {
+    let path = format!("{}{}", CAMPAIGNS_PATH, CAMPAIGNS_QUERY);
+    let response = qoder_sash_request(account_id, reqwest::Method::GET, &path, None).await?;
+    let value = parse_sash_json(&response, "获取签到活动")?;
+    let campaigns = parse_campaign_rows(&value);
+    let Some(daily) = campaigns
+        .iter()
+        .find(|campaign| campaign.action_type.eq_ignore_ascii_case("CLAIM_BENEFIT"))
+        .cloned()
+    else {
+        return Ok(checkin_status_from_campaigns(&campaigns, false));
+    };
+    if daily.claim_status.eq_ignore_ascii_case("CLAIMED") {
+        return Ok(checkin_status_from_campaigns(&campaigns, true));
+    }
+    if !daily.claim_status.eq_ignore_ascii_case("CLAIMABLE") {
+        return Ok(checkin_status_from_campaigns(&campaigns, false));
+    }
+
+    let encoded_id: String =
+        url::form_urlencoded::byte_serialize(daily.campaign_id.as_bytes()).collect();
+    let claim_path = format!("{}/{}/claim", CAMPAIGNS_PATH, encoded_id);
+    let response = qoder_sash_request(
+        account_id,
+        reqwest::Method::POST,
+        &claim_path,
+        Some(serde_json::json!({})),
+    )
+    .await?;
+    if response.status == reqwest::StatusCode::CONFLICT.as_u16() {
+        logger::log_info(&format!(
+            "[Qoder Checkin] 领取幂等命中: account_id={}, campaign_id={}",
+            account_id, daily.campaign_id
+        ));
+        return Ok(checkin_status_from_campaigns(&campaigns, true));
+    }
+    let claimed_body = parse_sash_json(&response, "领取签到积分")?;
+    let upstream_status = claimed_body
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let confirmed = upstream_status.eq_ignore_ascii_case("CLAIMED")
+        || upstream_status.eq_ignore_ascii_case("SUCCESS")
+        || claimed_body.get("success").and_then(Value::as_bool) == Some(true)
+        || claimed_body.get("replayed").and_then(Value::as_bool) == Some(true);
+    if !confirmed {
+        return Err(format!(
+            "领取签到积分未完成（上游状态 {}）",
+            if upstream_status.is_empty() {
+                "未知"
+            } else {
+                upstream_status
+            }
+        ));
+    }
+    logger::log_info(&format!(
+        "[Qoder Checkin] 领取成功: account_id={}, campaign_id={}, amount={:?}",
+        account_id, daily.campaign_id, daily.amount
+    ));
+    match get_qoder_checkin_status(account_id).await {
+        Ok(status) => Ok(status),
+        Err(error) => {
+            logger::log_warn(&format!(
+                "[Qoder Checkin] 领取后状态复查失败（不影响领取结果）: account_id={}, {}",
+                account_id, error
+            ));
+            Ok(checkin_status_from_campaigns(&campaigns, true))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2035,5 +2336,41 @@ mod tests {
         assert_eq!(headers["Cosy-MachineHostname"], "machine-hostname");
         assert_eq!(headers["Cosy-MachineOS"], "aarch64_darwin");
         assert_eq!(headers["Cosy-ClientType"], "0");
+    }
+
+    #[test]
+    fn checkin_status_follows_the_claim_benefit_campaign() {
+        let campaigns = parse_campaign_rows(&serde_json::json!({
+            "data": { "campaigns": [
+                {
+                    "campaignId": "daily-1",
+                    "campaignKey": "daily",
+                    "actionType": "CLAIM_BENEFIT",
+                    "claimStatus": "CLAIMABLE",
+                    "benefit": { "amount": "20", "validity": { "mode": "RELATIVE_DAYS", "days": 7 } },
+                    "endAt": 1_800_000_000,
+                },
+                { "campaignId": "other", "actionType": "SHARE" },
+            ]}
+        }));
+        let status = checkin_status_from_campaigns(&campaigns, false);
+        assert!(!status.checked_in);
+        assert!(status.active);
+        assert_eq!(status.amount, Some(20.0));
+        assert_eq!(status.validity_days, Some(7));
+        assert_eq!(status.next_refresh_at, Some(1_800_000_000_000));
+        assert_eq!(status.campaign_key.as_deref(), Some("daily"));
+
+        let claimed = checkin_status_from_campaigns(&campaigns, true);
+        assert!(claimed.checked_in);
+    }
+
+    #[test]
+    fn checkin_without_a_campaign_is_inactive_not_an_error() {
+        let campaigns = parse_campaign_rows(&serde_json::json!({ "campaigns": [] }));
+        let status = checkin_status_from_campaigns(&campaigns, false);
+        assert!(!status.active);
+        assert!(!status.checked_in);
+        assert!(status.amount.is_none());
     }
 }

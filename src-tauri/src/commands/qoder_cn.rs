@@ -73,6 +73,20 @@ pub fn export_qoder_cn_accounts(account_ids: Vec<String>) -> Result<String, Stri
 }
 
 #[tauri::command]
+pub async fn get_qoder_cn_checkin_status(
+    account_id: String,
+) -> Result<qoder_oauth::QoderCheckinStatus, String> {
+    qoder_oauth::get_qoder_checkin_status(&account_id).await
+}
+
+#[tauri::command]
+pub async fn claim_qoder_cn_checkin(
+    account_id: String,
+) -> Result<qoder_oauth::QoderCheckinStatus, String> {
+    qoder_oauth::claim_qoder_checkin(&account_id).await
+}
+
+#[tauri::command]
 pub async fn inject_qoder_cn_native(account_id: String, client: String) -> Result<String, String> {
     let target = qoder_native::NativeClient::parse(&client)?;
     qoder_oauth::prepare_cn_account_for_switch(&account_id).await?;
