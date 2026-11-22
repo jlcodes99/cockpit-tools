@@ -1146,6 +1146,7 @@ pub fn run() {
             commands::logs::logs_get_snapshot,
             commands::logs::logs_open_log_directory,
             // Wakeup Commands
+            commands::wakeup::wakeup_get_default_transport_mode,
             commands::wakeup::wakeup_ensure_runtime_ready,
             commands::wakeup::trigger_wakeup,
             commands::wakeup::fetch_available_models,

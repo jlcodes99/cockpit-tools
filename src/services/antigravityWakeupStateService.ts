@@ -137,3 +137,16 @@ export async function saveAntigravityWakeupState(
 export function hasActiveWakeupQuotaReset(state: AntigravityWakeupState): boolean {
   return state.enabled && state.tasks.some((task) => task.enabled && task.schedule.wakeOnReset === true);
 }
+
+export function normalizeWakeupTransportMode(value: unknown): WakeupTransportMode {
+  return value === 'clientless' ? 'clientless' : 'language_server';
+}
+
+export async function getDefaultWakeupTransportMode(): Promise<WakeupTransportMode> {
+  try {
+    const mode = await invoke<unknown>('wakeup_get_default_transport_mode');
+    return normalizeWakeupTransportMode(mode);
+  } catch {
+    return 'language_server';
+  }
+}

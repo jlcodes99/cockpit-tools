@@ -461,18 +461,21 @@ pub enum WakeupTransportMode {
     Clientless,
 }
 
-fn resolve_wakeup_transport_mode(mode: Option<WakeupTransportMode>) -> WakeupTransportMode {
+fn parse_wakeup_transport_mode_env(raw: Option<&str>) -> WakeupTransportMode {
+    match raw
+        .unwrap_or("client_gateway")
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "client_gateway" | "client-gateway" | "gateway" => WakeupTransportMode::LanguageServer,
+        _ => WakeupTransportMode::Clientless,
+    }
+}
+
+pub fn resolve_wakeup_transport_mode(mode: Option<WakeupTransportMode>) -> WakeupTransportMode {
     mode.unwrap_or_else(|| {
-        match std::env::var("AG_WAKEUP_TRANSPORT_MODE")
-            .ok()
-            .unwrap_or_else(|| "client_gateway".to_string())
-            .trim()
-            .to_ascii_lowercase()
-            .as_str()
-        {
-            "client_gateway" | "client-gateway" | "gateway" => WakeupTransportMode::LanguageServer,
-            _ => WakeupTransportMode::Clientless,
-        }
+        parse_wakeup_transport_mode_env(std::env::var("AG_WAKEUP_TRANSPORT_MODE").ok().as_deref())
     })
 }
 
@@ -2330,5 +2333,37 @@ mod tests {
                     .unwrap_or_else(|| json!({}))
             );
         }
+    }
+
+    #[test]
+    fn wakeup_transport_mode_env_parsing_and_override() {
+        assert_eq!(
+            parse_wakeup_transport_mode_env(None),
+            WakeupTransportMode::LanguageServer
+        );
+        assert_eq!(
+            parse_wakeup_transport_mode_env(Some("client_gateway")),
+            WakeupTransportMode::LanguageServer
+        );
+        assert_eq!(
+            parse_wakeup_transport_mode_env(Some("  GATEWAY ")),
+            WakeupTransportMode::LanguageServer
+        );
+        assert_eq!(
+            parse_wakeup_transport_mode_env(Some("clientless")),
+            WakeupTransportMode::Clientless
+        );
+        assert_eq!(
+            parse_wakeup_transport_mode_env(Some("legacy_cloudcode")),
+            WakeupTransportMode::Clientless
+        );
+        assert_eq!(
+            resolve_wakeup_transport_mode(Some(WakeupTransportMode::LanguageServer)),
+            WakeupTransportMode::LanguageServer
+        );
+        assert_eq!(
+            resolve_wakeup_transport_mode(Some(WakeupTransportMode::Clientless)),
+            WakeupTransportMode::Clientless
+        );
     }
 }

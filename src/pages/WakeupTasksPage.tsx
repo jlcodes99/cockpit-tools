@@ -40,6 +40,7 @@ import { useEscClose } from '../hooks/useEscClose';
 import { OverviewTabsHeader } from '../components/OverviewTabsHeader';
 import { useAntigravityRuntimeTarget } from '../hooks/useAntigravityRuntimeTarget';
 import {
+  getDefaultWakeupTransportMode,
   loadAntigravityWakeupState,
   saveAntigravityWakeupState,
   WAKEUP_TASKS_UPDATED,
@@ -663,6 +664,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
   const [formIntervalStart, setFormIntervalStart] = useState('07:00');
   const [formIntervalEnd, setFormIntervalEnd] = useState('22:00');
   const [formSelectedModels, setFormSelectedModels] = useState<string[]>([]);
+  const [defaultTransportMode, setDefaultTransportMode] = useState<WakeupTransportMode>('language_server');
   const [formTransportMode, setFormTransportMode] = useState<WakeupTransportMode>('language_server');
   const [formSelectedAccounts, setFormSelectedAccounts] = useState<string[]>([]);
   const [formCustomPrompt, setFormCustomPrompt] = useState('');
@@ -1051,6 +1053,17 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
       window.removeEventListener(WAKEUP_TASKS_UPDATED, reload);
     };
   }, [applyRules, t]);
+
+  useEffect(() => {
+    let active = true;
+    void getDefaultWakeupTransportMode().then((mode) => {
+      if (!active) return;
+      setDefaultTransportMode(mode);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const validGroupIds = new Set(accountGroups.map((group) => group.id));
@@ -1538,7 +1551,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
   };
 
   const openCreateModal = () => {
-    setFormTransportMode('language_server');
+    setFormTransportMode(defaultTransportMode);
     setEditingTaskId(null);
     setFormName(t('wakeup.newTaskName'));
     setFormEnabled(true);
@@ -1580,7 +1593,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
     const schedule = normalizeSchedule({ ...DEFAULT_SCHEDULE, ...task.schedule });
     const triggerMode = getTriggerMode(task);
 
-    setFormTransportMode(schedule.transportMode ?? 'language_server');
+    setFormTransportMode(schedule.transportMode ?? defaultTransportMode);
     setEditingTaskId(task.id);
     setFormName(task.name);
     setFormEnabled(task.enabled);
@@ -2094,7 +2107,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
   );
 
   const openTestModal = () => {
-    setTestTransportMode('language_server');
+    setTestTransportMode(defaultTransportMode);
     setTestAccountSearchQuery('');
     setTestTypeFilter([]);
     setTestTagFilter([]);
