@@ -9,7 +9,7 @@ export interface QoderOAuthStartResponse {
   callbackUrl?: string | null;
 }
 
-type QoderOAuthStartResponseRaw = Partial<QoderOAuthStartResponse> & {
+export type QoderOAuthStartResponseRaw = Partial<QoderOAuthStartResponse> & {
   login_id?: string;
   verification_uri?: string;
   expires_in?: number;
@@ -17,7 +17,7 @@ type QoderOAuthStartResponseRaw = Partial<QoderOAuthStartResponse> & {
   callback_url?: string | null;
 };
 
-function normalizeQoderOAuthStartResponse(raw: QoderOAuthStartResponseRaw): QoderOAuthStartResponse {
+export function normalizeQoderOAuthStartResponse(raw: QoderOAuthStartResponseRaw): QoderOAuthStartResponse {
   const loginId = raw.loginId ?? raw.login_id ?? '';
   const verificationUri = raw.verificationUri ?? raw.verification_uri ?? '';
   const expiresIn = Number(raw.expiresIn ?? raw.expires_in ?? 0);
