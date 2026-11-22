@@ -748,6 +748,21 @@ export const CLAUDE_DESKTOP_GATEWAY_PROVIDER_PRESETS: readonly ClaudeDesktopGate
     ),
   },
   {
+    id: 'lazu',
+    name: 'Lazu',
+    baseUrls: ['https://api.lazu.ai'],
+    authScheme: 'bearer',
+    connectionMode: 'local_mapping',
+    website: 'https://lazu.ai',
+    apiKeyUrl: 'https://lazu.ai/console/token',
+    modelMappings: roleMappedRoutes(
+      'claude-sonnet-5-5',
+      'claude-opus-5-5',
+      'claude-haiku-5-5',
+      { supports1m: true },
+    ),
+  },
+  {
     id: 'pipellm',
     name: 'PIPELLM',
     baseUrls: ['https://cc-api.pipellm.ai'],

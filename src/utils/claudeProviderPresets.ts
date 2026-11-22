@@ -497,6 +497,17 @@ const CC_SWITCH_DIRECT_CLAUDE_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset
     }),
   }),
   createClaudeApiProviderPreset({
+    id: 'lazu',
+    name: 'Lazu',
+    baseUrl: 'https://api.lazu.ai',
+    website: 'https://lazu.ai',
+    apiKeyUrl: 'https://lazu.ai/console/token',
+    extraEnv: modelEnv('claude-sonnet-5-5', {
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-haiku-5-5',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-5-5',
+    }),
+  }),
+  createClaudeApiProviderPreset({
     id: 'pipellm',
     name: 'PIPELLM',
     baseUrl: 'https://cc-api.pipellm.ai',

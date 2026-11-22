@@ -221,6 +221,14 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     apiKeyUrl: "https://app.requesty.ai/api-keys",
   },
   {
+    id: "lazu",
+    name: "Lazu",
+    baseUrls: ["https://api.lazu.ai/v1"],
+    modelCatalog: ["gpt-6.2-astra", "gpt-6.2-sol", "gpt-6.1-terra"],
+    website: "https://lazu.ai/",
+    apiKeyUrl: "https://lazu.ai/console/token",
+  },
+  {
     id: "aicodemirror",
     name: "AICodeMirror",
     baseUrls: [
