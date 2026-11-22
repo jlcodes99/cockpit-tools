@@ -234,6 +234,64 @@ impl QoderCnAccountStore {
         Ok(account)
     }
 
+    /// Imports accounts from an export file. Every item is validated before the
+    /// first write, so a mixed-region payload leaves the store untouched.
+    pub fn import_json(&self, json_content: &str) -> Result<Vec<QoderAccount>, String> {
+        let parsed: Value = serde_json::from_str(json_content)
+            .map_err(|error| format!("JSON 解析失败: {error}"))?;
+        let items: Vec<Value> = match parsed {
+            Value::Array(items) => items,
+            Value::Object(map) => match map.get("accounts") {
+                Some(Value::Array(items)) => items.clone(),
+                _ => vec![Value::Object(map)],
+            },
+            _ => return Err("仅支持对象或数组格式的 Qoder JSON".to_string()),
+        };
+        if items.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut snapshots = Vec::with_capacity(items.len());
+        for item in &items {
+            let info = item
+                .get("auth_user_info_raw")
+                .or_else(|| item.get("userInfo"))
+                .cloned()
+                .ok_or_else(|| "QODER_IMPORT_IDENTITY_MISSING".to_string())?;
+            let plan = item
+                .get("auth_user_plan_raw")
+                .or_else(|| item.get("userPlan"))
+                .cloned();
+            let usage = item
+                .get("auth_credit_usage_raw")
+                .or_else(|| item.get("creditUsage"))
+                .cloned();
+            // Validating the whole payload first keeps a bad item from leaving
+            // half of the file imported.
+            stamp_public_cn(info.clone(), plan.clone())?;
+            snapshots.push((info, plan, usage));
+        }
+        let mut imported = Vec::with_capacity(snapshots.len());
+        for (info, plan, usage) in snapshots {
+            imported.push(self.upsert_from_snapshot(info, plan, usage)?);
+        }
+        Ok(imported)
+    }
+
+    /// Serializes the selected accounts, credentials included, for a backup file.
+    pub fn export_accounts(&self, account_ids: &[String]) -> Result<String, String> {
+        let mut accounts = self.list_accounts()?;
+        if !account_ids.is_empty() {
+            let targets: HashSet<String> = account_ids
+                .iter()
+                .map(|id| id.trim().to_string())
+                .filter(|id| !id.is_empty())
+                .collect();
+            accounts.retain(|account| targets.contains(&account.id));
+        }
+        serde_json::to_string_pretty(&accounts)
+            .map_err(|error| format!("序列化导出 JSON 失败: {error}"))
+    }
+
     fn find_existing(&self, draft: &QoderAccount) -> Result<Option<QoderAccount>, String> {
         if let Some(account) = self.load_account(&draft.id)? {
             return Ok(Some(account));
@@ -601,5 +659,45 @@ mod tests {
                 .unwrap_err(),
             "QODER_PLATFORM_MISMATCH"
         );
+    }
+
+    #[test]
+    fn json_import_validates_every_item_before_writing_any() {
+        let root = tempfile::tempdir().unwrap();
+        let store = QoderCnAccountStore::new(root.path().to_path_buf());
+        let payload = serde_json::json!({
+            "accounts": [
+                { "auth_user_info_raw": { "id": "cn-one", "token": "t", "login_source": "qoder_cn" } },
+                { "auth_user_info_raw": { "id": "cn-two", "token": "t", "login_source": "qoder" } },
+            ]
+        });
+        assert_eq!(
+            store.import_json(&payload.to_string()).unwrap_err(),
+            "QODER_PLATFORM_MISMATCH"
+        );
+        // The valid first item must not survive a rejected payload.
+        assert!(store.list_accounts().unwrap().is_empty());
+    }
+
+    #[test]
+    fn json_import_and_export_round_trip_selected_accounts() {
+        let root = tempfile::tempdir().unwrap();
+        let store = QoderCnAccountStore::new(root.path().to_path_buf());
+        let payload = serde_json::json!([
+            { "userInfo": { "id": "cn-one", "token": "t1" } },
+            { "userInfo": { "id": "cn-two", "token": "t2" } },
+        ]);
+        let imported = store.import_json(&payload.to_string()).unwrap();
+        assert_eq!(imported.len(), 2);
+        assert!(imported
+            .iter()
+            .all(|item| item.auth_user_info_raw.as_ref().unwrap()["login_source"] == "qoder_cn"));
+
+        let exported = store
+            .export_accounts(&[imported[0].id.clone()])
+            .expect("export");
+        let restored: Vec<QoderAccount> = serde_json::from_str(&exported).unwrap();
+        assert_eq!(restored.len(), 1);
+        assert_eq!(restored[0].id, imported[0].id);
     }
 }

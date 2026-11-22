@@ -171,6 +171,9 @@ pub mod qoder_cn_account;
 #[path = "../../../crates/cockpit-core/src/modules/qoder_identity.rs"]
 mod qoder_identity;
 pub mod qoder_instance;
+pub mod qoder_native;
+#[path = "../../../crates/cockpit-core/src/modules/qoder_native_profile.rs"]
+pub(crate) mod qoder_native_profile;
 #[path = "../../../crates/cockpit-core/src/modules/qoder_oauth.rs"]
 pub mod qoder_oauth;
 #[path = "../../../crates/cockpit-core/src/modules/qoder_paths.rs"]

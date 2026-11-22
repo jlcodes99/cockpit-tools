@@ -6,15 +6,70 @@ use std::time::Instant;
 use tauri::AppHandle;
 
 use crate::models::qoder::{QoderAccount, QoderOAuthStartResponse};
-use crate::modules::{logger, qoder_cn_account, qoder_oauth};
+use crate::modules::{logger, qoder_cn_account, qoder_native, qoder_oauth};
 
 fn store() -> Result<qoder_cn_account::QoderCnAccountStore, String> {
     qoder_cn_account::QoderCnAccountStore::default_store()
 }
 
+/// The CN commands only ever act on the public CN client; an explicit region is
+/// accepted for frontend compatibility and rejected when it names the other one.
+fn ensure_cn_region(region: Option<&str>) -> Result<(), String> {
+    match region.unwrap_or("cn") {
+        "cn" => Ok(()),
+        _ => Err("QODER_PLATFORM_MISMATCH".into()),
+    }
+}
+
 #[tauri::command]
 pub fn list_qoder_cn_accounts() -> Result<Vec<QoderAccount>, String> {
     store()?.list_accounts()
+}
+
+#[tauri::command]
+pub async fn import_qoder_cn_native(
+    region: Option<String>,
+    client: String,
+) -> Result<Vec<QoderAccount>, String> {
+    ensure_cn_region(region.as_deref())?;
+    let client = qoder_native::NativeClient::parse(&client)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        qoder_native::import(client).map(|item| vec![item])
+    })
+    .await
+    .map_err(|_| "QODER_NATIVE_WORKER_FAILED".to_string())?
+}
+
+#[tauri::command]
+pub async fn import_qoder_cn_from_local(app: AppHandle) -> Result<Vec<QoderAccount>, String> {
+    let found = tauri::async_runtime::spawn_blocking(qoder_native::import_from_local)
+        .await
+        .map_err(|_| "QODER_NATIVE_WORKER_FAILED".to_string())??;
+    if !found {
+        return Err("未找到本地 Qoder CN 登录信息".to_string());
+    }
+    if let Err(error) = crate::modules::tray::update_tray_menu(&app) {
+        logger::log_warn(&format!("[Qoder CN Native] 刷新托盘失败: {error}"));
+    }
+    store()?.list_accounts()
+}
+
+#[tauri::command]
+pub fn import_qoder_cn_from_json(
+    json_content: String,
+    region: Option<String>,
+) -> Result<Vec<QoderAccount>, String> {
+    ensure_cn_region(region.as_deref())?;
+    let mut value: serde_json::Value =
+        serde_json::from_str(&json_content).map_err(|error| format!("Qoder JSON: {error}"))?;
+    qoder_native::prepare_cn_import(&mut value)?;
+    let content = serde_json::to_string(&value).map_err(|error| error.to_string())?;
+    store()?.import_json(&content)
+}
+
+#[tauri::command]
+pub fn export_qoder_cn_accounts(account_ids: Vec<String>) -> Result<String, String> {
+    store()?.export_accounts(&account_ids)
 }
 
 #[tauri::command]

@@ -24,24 +24,40 @@ fn marker(metadata: Option<&Value>) -> Result<Option<&str>, String> {
     }
 }
 
-fn recorded_marker(account: &QoderAccount) -> Result<Option<&str>, String> {
-    let info = marker(account.auth_user_info_raw.as_ref())?;
-    let plan = marker(account.auth_user_plan_raw.as_ref())?;
+/// Resolves a `login_source` marker, if the snapshot carries one. Callers that
+/// only have raw metadata (import, native clients) share this with the store.
+pub(crate) fn snapshot_marker<'a>(
+    info: Option<&'a Value>,
+    plan: Option<&'a Value>,
+) -> Result<Option<&'a str>, String> {
+    let info = marker(info)?;
+    let plan = marker(plan)?;
     if matches!((info, plan), (Some(info), Some(plan)) if info != plan) {
         return Err("QODER_PLATFORM_MISMATCH".into());
     }
     Ok(info.or(plan))
 }
 
-pub(crate) fn credential_source(account: &QoderAccount) -> Result<CredentialSource, String> {
-    Ok(match recorded_marker(account)? {
+pub(crate) fn source_of(marker: Option<&str>) -> CredentialSource {
+    match marker {
         None | Some("qoder") => CredentialSource::GlobalIde,
         Some("qodercn") => CredentialSource::LegacyCnIde,
         Some("dedicated_qodercn") => CredentialSource::DedicatedIde,
         // Cockpit's public CN marker is distinct from the legacy IDE's qodercn.
         Some("qoder_cn") => CredentialSource::PublicCn,
         _ => CredentialSource::Unsupported,
-    })
+    }
+}
+
+fn recorded_marker(account: &QoderAccount) -> Result<Option<&str>, String> {
+    snapshot_marker(
+        account.auth_user_info_raw.as_ref(),
+        account.auth_user_plan_raw.as_ref(),
+    )
+}
+
+pub(crate) fn credential_source(account: &QoderAccount) -> Result<CredentialSource, String> {
+    Ok(source_of(recorded_marker(account)?))
 }
 
 pub(crate) fn ide_source(account: &QoderAccount) -> Result<CredentialSource, String> {
@@ -75,6 +91,8 @@ pub(crate) struct Channel {
     source: CredentialSource,
     website: &'static str,
     openapi_base_url: &'static str,
+    desktop_dir: &'static str,
+    cli_dir: &'static str,
 }
 
 impl Channel {
@@ -86,11 +104,15 @@ impl Channel {
                 source,
                 website: "https://qoder.com",
                 openapi_base_url: "https://openapi.qoder.sh",
+                desktop_dir: "com.qoder.app.stable",
+                cli_dir: ".qoder",
             }),
             CredentialSource::PublicCn => Some(Self {
                 source,
                 website: "https://qoder.cn",
                 openapi_base_url: "https://openapi.qoder.com.cn",
+                desktop_dir: "com.qodercn.app.stable",
+                cli_dir: ".qoder-cn",
             }),
             CredentialSource::LegacyCnIde
             | CredentialSource::DedicatedIde
@@ -111,6 +133,16 @@ impl Channel {
 
     pub(crate) fn openapi_base_url(self) -> &'static str {
         self.openapi_base_url
+    }
+
+    /// Config directory the channel's desktop client keeps its credentials in.
+    pub(crate) fn desktop_dir(self) -> &'static str {
+        self.desktop_dir
+    }
+
+    /// Home-relative directory the channel's CLI keeps its credentials in.
+    pub(crate) fn cli_dir(self) -> &'static str {
+        self.cli_dir
     }
 
     fn select_accounts_url(self) -> Result<url::Url, String> {
