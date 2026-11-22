@@ -78,10 +78,6 @@ impl QoderCnAccountStore {
     }
 
     pub fn save_account(&self, account: &QoderAccount) -> Result<(), String> {
-        require_public_cn(account)?;
-        if account.id.trim() != account.id {
-            return Err("Qoder 账号 ID 包含首尾空白".into());
-        }
         let _guard = index_guard()?;
         self.write_details(account)
     }
@@ -219,6 +215,25 @@ impl QoderCnAccountStore {
         Ok(updated)
     }
 
+    /// Path of the live index file, for diagnostics in the UI.
+    pub fn accounts_index_path_string(&self) -> Result<String, String> {
+        Ok(
+            provider_account_index::storage_path::<QoderCnAccountIndex>(&self.index_path())?
+                .to_string_lossy()
+                .into_owned(),
+        )
+    }
+
+    pub fn update_account_tags(&self, id: &str, tags: Vec<String>) -> Result<QoderAccount, String> {
+        let _guard = index_guard()?;
+        let mut account = self
+            .load_account(id)?
+            .ok_or_else(|| "QODER_ACCOUNT_NOT_FOUND".to_string())?;
+        account.tags = (!tags.is_empty()).then_some(tags);
+        self.write_details(&account)?;
+        Ok(account)
+    }
+
     fn find_existing(&self, draft: &QoderAccount) -> Result<Option<QoderAccount>, String> {
         if let Some(account) = self.load_account(&draft.id)? {
             return Ok(Some(account));
@@ -247,6 +262,10 @@ impl QoderCnAccountStore {
 
     /// Writes one detail file and refreshes its index summary. Callers hold the lock.
     fn write_details(&self, account: &QoderAccount) -> Result<(), String> {
+        require_public_cn(account)?;
+        if account.id.trim() != account.id {
+            return Err("Qoder 账号 ID 包含首尾空白".into());
+        }
         let path = self.path(&account.id)?;
         fs::create_dir_all(self.directory()).map_err(|error| error.to_string())?;
         write_at(&self.root, &path, STORE_KIND, account, &[])?;
@@ -274,7 +293,8 @@ impl QoderCnAccountStore {
             return None;
         }
         let mut accounts =
-            load_accounts_from_details(&directory, |id| self.load_account(id).ok().flatten()).ok()?;
+            load_accounts_from_details(&directory, |id| self.load_account(id).ok().flatten())
+                .ok()?;
         if accounts.is_empty() {
             return None;
         }
@@ -488,7 +508,12 @@ mod tests {
         store
             .mark_quota_query_error(&stale, "stale".into())
             .unwrap();
-        assert!(store.load_account("quota").unwrap().unwrap().quota_query_last_error.is_none());
+        assert!(store
+            .load_account("quota")
+            .unwrap()
+            .unwrap()
+            .quota_query_last_error
+            .is_none());
 
         store
             .mark_quota_query_error(&account, "quota-unavailable".into())
@@ -550,17 +575,13 @@ mod tests {
             })
         };
 
-        let first = store
-            .upsert_from_snapshot(snapshot(), None, None)
-            .unwrap();
+        let first = store.upsert_from_snapshot(snapshot(), None, None).unwrap();
         assert_eq!(
             first.auth_user_info_raw.as_ref().unwrap()["login_source"],
             "qoder_cn"
         );
 
-        let second = store
-            .upsert_from_snapshot(snapshot(), None, None)
-            .unwrap();
+        let second = store.upsert_from_snapshot(snapshot(), None, None).unwrap();
         assert_eq!(first.id, second.id);
         assert_eq!(store.list_accounts().unwrap().len(), 1);
     }

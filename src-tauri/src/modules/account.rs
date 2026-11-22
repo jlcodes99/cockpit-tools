@@ -1,4 +1,6 @@
-use crate::modules::antigravity_account_index_store::{AccountIndexStore, IndexRead, LEGACY_FILE};
+use crate::modules::antigravity_account_index_store::{
+    AccountIndexStore, IndexDocument, IndexRead, IndexStore, LEGACY_FILE,
+};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -335,7 +337,10 @@ fn save_account_index(index: &AccountIndex) -> Result<(), String> {
     save_account_index_locked(index)
 }
 
-fn schedule_index_store(store: AccountIndexStore) {
+pub(crate) fn schedule_index_store<T>(store: IndexStore<T>)
+where
+    T: IndexDocument + Send + 'static,
+{
     modules::background_maintenance::schedule(store.migration_key(), move || store.migrate_batch());
 }
 

@@ -999,6 +999,24 @@ pub fn upsert_account_from_snapshot(
     })
 }
 
+/// Builds the account details for a snapshot without touching any store, so
+/// callers that own their own index can persist it themselves.
+pub(crate) fn build_account_from_snapshot(
+    user_info_raw: Value,
+    user_plan_raw: Option<Value>,
+    credit_usage_raw: Option<Value>,
+    existing: Option<&QoderAccount>,
+) -> QoderAccount {
+    snapshot_to_account(
+        QoderSnapshot {
+            user_info_raw: Some(user_info_raw),
+            user_plan_raw,
+            credit_usage_raw,
+        },
+        existing,
+    )
+}
+
 pub fn get_default_qoder_state_db_path() -> Option<PathBuf> {
     let data_root = crate::modules::qoder_instance::get_default_qoder_user_data_dir().ok()?;
     Some(

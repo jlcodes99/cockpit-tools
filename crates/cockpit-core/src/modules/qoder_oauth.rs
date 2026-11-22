@@ -889,7 +889,10 @@ pub(crate) fn token_expiry(info: Option<&Value>, key: &str) -> Option<i64> {
 
 fn session_endpoint(account: &QoderAccount) -> Result<String, String> {
     let source = crate::modules::qoder_channel::credential_source(account)?;
-    if matches!(source, CredentialSource::LegacyCnIde | CredentialSource::DedicatedIde) {
+    if matches!(
+        source,
+        CredentialSource::LegacyCnIde | CredentialSource::DedicatedIde
+    ) {
         if let Some(origin) = account.verified_openapi_origin.as_deref() {
             return Ok(origin.to_string());
         }
@@ -1078,8 +1081,13 @@ fn save_refreshed_account(
 ) -> Result<QoderAccount, String> {
     match crate::modules::qoder_channel::credential_source(account)? {
         CredentialSource::PublicCn => {
-            crate::modules::qoder_cn_account::QoderCnAccountStore::default_store()?
-                .save_refresh(account, user_info, plan, usage, quota_error)
+            crate::modules::qoder_cn_account::QoderCnAccountStore::default_store()?.save_refresh(
+                account,
+                user_info,
+                plan,
+                usage,
+                quota_error,
+            )
         }
         _ => qoder_account::save_refresh(
             account,
@@ -1089,6 +1097,18 @@ fn save_refreshed_account(
             quota_error,
             verified_origin,
         ),
+    }
+}
+
+/// Records a failed quota query on the account that was queried, which for the
+/// public CN client means the CN store rather than the IDE index.
+fn mark_refresh_error(account: &QoderAccount, error: String) -> Result<(), String> {
+    match crate::modules::qoder_channel::credential_source(account)? {
+        CredentialSource::PublicCn => {
+            crate::modules::qoder_cn_account::QoderCnAccountStore::default_store()?
+                .mark_quota_query_error(account, error)
+        }
+        _ => qoder_account::mark_quota_query_error(account, error),
     }
 }
 
@@ -1201,10 +1221,7 @@ pub async fn refresh_account_from_openapi(account_id: &str) -> Result<QoderAccou
     if let Err(error) = &result {
         if error != "QODER_SESSION_CHANGED" {
             let error = error.clone();
-            let _ = tokio::task::spawn_blocking(move || {
-                qoder_account::mark_quota_query_error(&target, error)
-            })
-            .await;
+            let _ = tokio::task::spawn_blocking(move || mark_refresh_error(&target, error)).await;
         }
     }
     result
@@ -1221,6 +1238,28 @@ pub async fn refresh_all_accounts_from_openapi() -> Result<i32, String> {
             Ok(_) => {}
             Err(error) => logger::log_warn(&format!(
                 "[Qoder Refresh] 批量刷新失败: account_id={account_id}, error={error}"
+            )),
+        }
+    }
+
+    Ok(success_count)
+}
+
+/// Refreshes every account of the public CN client. The CN store owns its own
+/// account list, so it cannot reuse `refresh_all_accounts_from_openapi`.
+pub async fn refresh_all_cn_accounts_from_openapi() -> Result<i32, String> {
+    let account_ids = tokio::task::spawn_blocking(|| {
+        crate::modules::qoder_cn_account::QoderCnAccountStore::default_store()?.list_account_ids()
+    })
+    .await
+    .map_err(|_| "QODER_ACCOUNT_BUSY")??;
+    let mut success_count = 0;
+    for account_id in account_ids {
+        match refresh_account_from_openapi(&account_id).await {
+            Ok(account) if account.quota_query_last_error.is_none() => success_count += 1,
+            Ok(_) => {}
+            Err(error) => logger::log_warn(&format!(
+                "[Qoder CN Refresh] 批量刷新失败: account_id={account_id}, error={error}"
             )),
         }
     }
@@ -1717,9 +1756,19 @@ fn persist_login_snapshot(
 }
 
 pub fn peek_pending_login() -> Option<QoderOAuthStartResponse> {
+    peek_login_for(|_| true)
+}
+
+/// Peeks only a login started by the public CN client, so the CN page never
+/// resumes a login that the IDE page owns.
+pub fn peek_pending_cn_login() -> Option<QoderOAuthStartResponse> {
+    peek_login_for(|channel| channel.source() == CredentialSource::PublicCn)
+}
+
+fn peek_login_for(channel_matches: impl Fn(Channel) -> bool) -> Option<QoderOAuthStartResponse> {
     let guard = PENDING_OAUTH_STATE.lock().ok()?;
     let state = guard.as_ref()?;
-    if state.cancelled {
+    if state.cancelled || !channel_matches(state.channel) {
         return None;
     }
     let now = now_timestamp();
@@ -1810,7 +1859,10 @@ mod tests {
         assert_eq!(session_endpoint(&global).unwrap(), DEFAULT_OPENAPI_BASE_URL);
         for (marker, endpoint) in [
             ("qodercn", "https://legacy.qoder.cn"),
-            ("dedicated_qodercn", "https://tenant-openapi.example.invalid"),
+            (
+                "dedicated_qodercn",
+                "https://tenant-openapi.example.invalid",
+            ),
         ] {
             let mut account = account_fixture(None, Some(marker));
             account.verified_openapi_origin = Some(endpoint.into());
