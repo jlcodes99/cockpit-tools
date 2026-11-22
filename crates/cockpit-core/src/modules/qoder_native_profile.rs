@@ -105,8 +105,6 @@ pub(crate) fn from_client(value: &Value, channel: Channel) -> Result<Value, Stri
 }
 
 /// Builds the client profile for one client generation from stored credentials.
-/// The credential write path (inject) is its only non-test caller for now.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn for_client(info: &Value, desktop: bool) -> Result<Value, String> {
     let uid = text(info, &["id", "uid", "user_id"]).ok_or("QODER_NATIVE_IDENTITY_MISSING")?;
     let token = text(info, &["token", "securityOauthToken"]).ok_or("QODER_NATIVE_TOKEN_MISSING")?;

@@ -234,6 +234,17 @@ impl QoderCnAccountStore {
         Ok(account)
     }
 
+    /// Records that the credentials were just written to the client, so the list
+    /// can show which account the client is currently signed in as.
+    pub fn mark_switched(&self, id: &str) -> Result<(), String> {
+        let _guard = index_guard()?;
+        let Some(mut account) = self.load_account(id)? else {
+            return Err("QODER_ACCOUNT_NOT_FOUND".into());
+        };
+        account.last_switched_at = Some(chrono::Utc::now().timestamp_millis());
+        self.write_details(&account)
+    }
+
     /// Imports accounts from an export file. Every item is validated before the
     /// first write, so a mixed-region payload leaves the store untouched.
     pub fn import_json(&self, json_content: &str) -> Result<Vec<QoderAccount>, String> {

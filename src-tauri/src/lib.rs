@@ -1663,6 +1663,8 @@ pub fn run() {
             commands::qoder_cn::import_qoder_cn_from_local,
             commands::qoder_cn::import_qoder_cn_from_json,
             commands::qoder_cn::export_qoder_cn_accounts,
+            commands::qoder_cn::inject_qoder_cn_native,
+            commands::qoder_cn::inject_qoder_cn_account,
             commands::qoder_cn::delete_qoder_cn_account,
             commands::qoder_cn::delete_qoder_cn_accounts,
             commands::qoder_cn::update_qoder_cn_account_tags,

@@ -73,6 +73,45 @@ pub fn export_qoder_cn_accounts(account_ids: Vec<String>) -> Result<String, Stri
 }
 
 #[tauri::command]
+pub async fn inject_qoder_cn_native(account_id: String, client: String) -> Result<String, String> {
+    let target = qoder_native::NativeClient::parse(&client)?;
+    qoder_oauth::prepare_cn_account_for_switch(&account_id).await?;
+    let id = account_id.clone();
+    let started_at = Instant::now();
+    tauri::async_runtime::spawn_blocking(move || qoder_native::switch(&id, target))
+        .await
+        .map_err(|_| "QODER_NATIVE_WORKER_FAILED".to_string())??;
+    logger::log_info(&format!(
+        "[Qoder CN Switch] 写入客户端完成: account_id={account_id}, client={client}, elapsed={}ms",
+        started_at.elapsed().as_millis()
+    ));
+    Ok(account_id)
+}
+
+/// The CN desktop client only ships for Windows, so other platforms fall back to
+/// the CLI client instead of failing on a missing OS key store.
+fn default_cn_client() -> qoder_native::NativeClient {
+    if cfg!(target_os = "windows") {
+        qoder_native::NativeClient::Desktop
+    } else {
+        qoder_native::NativeClient::Cli
+    }
+}
+
+#[tauri::command]
+pub async fn inject_qoder_cn_account(app: AppHandle, account_id: String) -> Result<String, String> {
+    qoder_oauth::prepare_cn_account_for_switch(&account_id).await?;
+    let id = account_id.clone();
+    tauri::async_runtime::spawn_blocking(move || qoder_native::switch(&id, default_cn_client()))
+        .await
+        .map_err(|_| "QODER_NATIVE_WORKER_FAILED".to_string())??;
+    if let Err(error) = crate::modules::tray::update_tray_menu(&app) {
+        logger::log_warn(&format!("[Qoder CN Switch] 刷新托盘失败: {error}"));
+    }
+    Ok(account_id)
+}
+
+#[tauri::command]
 pub fn delete_qoder_cn_account(account_id: String) -> Result<(), String> {
     store()?.remove_account(&account_id)
 }

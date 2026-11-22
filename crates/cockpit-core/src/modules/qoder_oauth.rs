@@ -1122,6 +1122,23 @@ async fn account_endpoint(account: &QoderAccount) -> Result<String, String> {
 pub(crate) async fn prepare_account_for_switch(account_id: &str) -> Result<(), String> {
     let target = load_refresh_target(account_id).await?;
     ide_source(&target)?;
+    prepare_target_for_switch(target).await
+}
+
+/// Same preparation for the public CN client, which writes credentials into its
+/// own store instead of the IDE database.
+pub(crate) async fn prepare_cn_account_for_switch(account_id: &str) -> Result<(), String> {
+    let target = load_refresh_target(account_id).await?;
+    if crate::modules::qoder_channel::credential_source(&target)? != CredentialSource::PublicCn {
+        return Err("QODER_PLATFORM_MISMATCH".into());
+    }
+    prepare_target_for_switch(target).await
+}
+
+/// Guarantees the account has a usable access token, renewing it when the
+/// recorded expiry has passed.
+async fn prepare_target_for_switch(target: QoderAccount) -> Result<(), String> {
+    let account_id = target.id.clone();
     let info = target.auth_user_info_raw.as_ref();
     access_token_from_info(info).ok_or(REAUTH_REQUIRED)?;
     if !token_expiry(info, "expireTime")
@@ -1129,9 +1146,9 @@ pub(crate) async fn prepare_account_for_switch(account_id: &str) -> Result<(), S
     {
         return Ok(());
     }
-    let lock = refresh_lock(account_id)?;
+    let lock = refresh_lock(&account_id)?;
     let _guard = lock.lock().await;
-    let target = load_refresh_target(account_id).await?;
+    let target = load_refresh_target(&account_id).await?;
     let info = target.auth_user_info_raw.as_ref();
     access_token_from_info(info).ok_or(REAUTH_REQUIRED)?;
     if token_expiry(info, "expireTime")

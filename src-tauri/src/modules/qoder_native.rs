@@ -2,19 +2,28 @@
 //! adapted from workbuddy-switch-next (MIT); realm selection is always explicit.
 use crate::models::qoder::QoderAccount;
 use crate::modules::{
-    logger,
+    atomic_write, logger,
     qoder_channel::{Channel, CredentialSource},
     qoder_cn_account::QoderCnAccountStore,
     qoder_native_profile,
 };
-use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
+use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
 use base64::{engine::general_purpose::STANDARD, Engine};
+use fs2::FileExt;
 use serde_json::Value;
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
+
+/// Serializes import and switch: a switch must never read the credentials an
+/// import is in the middle of writing, and vice versa.
+static SWITCH_LOCK: Mutex<()> = Mutex::new(());
+
+/// How many previous credential sets to keep under `qoder-switch-backups`.
+const SWITCH_BACKUP_KEEP: usize = 5;
 
 fn io_error(error: std::io::Error) -> String {
     format!("QODER_NATIVE_STORAGE: {error}")
@@ -145,9 +154,191 @@ fn decode(root: &Path, client: NativeClient, bytes: &[u8]) -> Result<Value, Stri
     serde_json::from_slice(&plain).map_err(|_| "QODER_NATIVE_JSON_INVALID".into())
 }
 
+fn encode(root: &Path, client: NativeClient, profile: &Value) -> Result<Vec<u8>, String> {
+    let plain = serde_json::to_vec(profile).map_err(|_| "QODER_NATIVE_JSON_INVALID")?;
+    let bytes = match client {
+        NativeClient::Desktop => {
+            use aes_gcm::aead::{rand_core::RngCore, OsRng};
+            let mut nonce = [0u8; 12];
+            OsRng.fill_bytes(&mut nonce);
+            let cipher = Aes256Gcm::new_from_slice(&desktop_key(root)?)
+                .map_err(|_| "QODER_NATIVE_KEY_INVALID")?
+                .encrypt(Nonce::from_slice(&nonce), plain.as_slice())
+                .map_err(|_| "QODER_NATIVE_ENCRYPT_FAILED")?;
+            [b"v10".as_slice(), &nonce, &cipher].concat()
+        }
+        NativeClient::Cli => {
+            let machine = fs::read_to_string(root.join("machine_id")).map_err(io_error)?;
+            let key = machine
+                .trim()
+                .as_bytes()
+                .get(..16)
+                .ok_or("QODER_NATIVE_MACHINE_ID_INVALID")?;
+            let mut buffer = plain.clone();
+            buffer.resize(plain.len() + 16, 0);
+            let encrypted = cbc::Encryptor::<aes::Aes128>::new_from_slices(key, key)
+                .map_err(|_| "QODER_NATIVE_KEY_INVALID")?
+                .encrypt_padded_mut::<Pkcs7>(&mut buffer, plain.len())
+                .map_err(|_| "QODER_NATIVE_ENCRYPT_FAILED")?;
+            STANDARD.encode(encrypted).into_bytes()
+        }
+    };
+    // Never hand the client a file it would read back as something else.
+    if decode(root, client, &bytes)? != *profile {
+        return Err("QODER_NATIVE_ROUNDTRIP_FAILED".into());
+    }
+    Ok(bytes)
+}
+
+/// The CN desktop client shares its launcher name with the global one, and the
+/// install directory is not known here, so only unambiguous names count as a
+/// running CN client. A global client left open therefore does not block us.
+const CN_DESKTOP_PROCESS_NAMES: &[&str] = &["qoder cn.exe", "qoder cn"];
+const CN_CLI_PROCESS_NAMES: &[&str] = &["qoderclicn.exe", "qoderclicn"];
+
+fn ensure_idle(client: NativeClient) -> Result<(), String> {
+    let system = sysinfo::System::new_all();
+    if system.processes().is_empty() {
+        return Err("QODER_NATIVE_PROCESS_PROBE_FAILED".into());
+    }
+    let names = match client {
+        NativeClient::Desktop => CN_DESKTOP_PROCESS_NAMES,
+        NativeClient::Cli => CN_CLI_PROCESS_NAMES,
+    };
+    let running = system.processes().values().any(|process| {
+        names.contains(
+            &process
+                .name()
+                .to_string_lossy()
+                .to_ascii_lowercase()
+                .as_str(),
+        )
+    });
+    if running {
+        // Switching under a live client would be undone by its own next write.
+        return Err("请先关闭 Qoder CN 客户端（或结束 CLI 任务）再切换账号".into());
+    }
+    Ok(())
+}
+
+/// Every switch parks the previous credentials in its own directory; keep only
+/// the most recent ones so ciphertext cannot pile up forever.
+fn prune_switch_backups(root: &Path, keep: usize) -> usize {
+    let Ok(entries) = fs::read_dir(root) else {
+        return 0;
+    };
+    let mut backups: Vec<(std::time::SystemTime, PathBuf)> = entries
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| {
+            let path = entry.path();
+            if !path.is_dir() {
+                return None;
+            }
+            let modified = entry.metadata().ok()?.modified().ok()?;
+            Some((modified, path))
+        })
+        .collect();
+    if backups.len() <= keep {
+        return 0;
+    }
+    backups.sort_by(|left, right| right.0.cmp(&left.0));
+    let mut removed = 0usize;
+    for (_, path) in backups.into_iter().skip(keep) {
+        match fs::remove_dir_all(&path) {
+            Ok(()) => removed += 1,
+            Err(error) => logger::log_warn(&format!(
+                "[Qoder CN Switch] 清理旧备份失败: path={}, error={error}",
+                path.display()
+            )),
+        }
+    }
+    removed
+}
+
+/// Writes one account's credentials into the installed CN client. The previous
+/// file is backed up and restored if the write cannot be read back.
+pub fn switch(account_id: &str, client: NativeClient) -> Result<(), String> {
+    let _guard = SWITCH_LOCK.lock().map_err(|_| "QODER_ACCOUNT_BUSY")?;
+    let channel = cn_channel()?;
+    let store = QoderCnAccountStore::default_store()?;
+    let account = store
+        .load_account(account_id)?
+        .ok_or("QODER_SESSION_CHANGED")?;
+    let info = account
+        .auth_user_info_raw
+        .as_ref()
+        .ok_or("QODER_NATIVE_TOKEN_MISSING")?;
+    ensure_idle(client)?;
+    let profile = qoder_native_profile::for_client(info, client == NativeClient::Desktop)?;
+    let root = client.root(channel)?;
+    // Require an initialized client: do not synthesize machine IDs or OS keys.
+    if !root.is_dir() {
+        return Err("请先启动一次 Qoder CN 客户端，再切换账号".into());
+    }
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(root.join("cockpit-account-switch.lock"))
+        .map_err(io_error)?;
+    lock.try_lock_exclusive()
+        .map_err(|_| "QODER_ACCOUNT_BUSY")?;
+    let path = root.join(client.filename());
+    let previous = match fs::read(&path) {
+        Ok(bytes) => Some(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(io_error(error)),
+    };
+    let next = encode(&root, client, &profile)?;
+    let backup_root = crate::modules::account::get_data_dir()?.join("qoder-switch-backups");
+    prune_switch_backups(&backup_root, SWITCH_BACKUP_KEEP.saturating_sub(1));
+    let backup = backup_root.join(uuid::Uuid::new_v4().to_string());
+    fs::create_dir_all(&backup).map_err(io_error)?;
+    if let Some(previous) = &previous {
+        atomic_write::write_bytes_atomic(&backup.join(client.filename()), previous)?;
+    }
+    let mut write_started = false;
+    let result = (|| -> Result<(), String> {
+        ensure_idle(client)?;
+        if fs::read(&path).ok() != previous {
+            return Err("QODER_SESSION_CHANGED".into());
+        }
+        atomic_write::write_bytes_atomic(&path, &next)?;
+        // Only now can a rollback be needed: a failed atomic write leaves the
+        // original file intact, and restoring it would be a second mutation.
+        write_started = true;
+        if decode(&root, client, &fs::read(&path).map_err(io_error)?)? != profile {
+            return Err("QODER_NATIVE_READBACK_FAILED".into());
+        }
+        Ok(())
+    })();
+    if let Err(error) = result {
+        if !write_started {
+            return Err(error);
+        }
+        let restore = match &previous {
+            Some(bytes) => atomic_write::write_bytes_atomic(&path, bytes),
+            None => fs::remove_file(&path).map_err(io_error),
+        };
+        if restore.is_err() {
+            return Err(format!(
+                "{error}; 回滚未完成; 备份目录: {}",
+                backup.display()
+            ));
+        }
+        return Err(error);
+    }
+    store.mark_switched(account_id)?;
+    Ok(())
+}
+
 /// Reads the credentials the installed CN client currently holds and stores
 /// them as an account. Nothing is written back to the client.
 pub fn import(client: NativeClient) -> Result<QoderAccount, String> {
+    // Shares the switch lock: reading credentials mid-switch would store the
+    // account that is on its way out.
+    let _guard = SWITCH_LOCK.lock().map_err(|_| "QODER_ACCOUNT_BUSY")?;
     let channel = cn_channel()?;
     let root = client.root(channel)?;
     let profile = decode(
