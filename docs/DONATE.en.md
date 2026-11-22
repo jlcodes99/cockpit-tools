@@ -6,6 +6,16 @@ Your support is greatly appreciated! ❤️
 
 ---
 
+## USDT (TRON / TRC20)
+
+Receiving address `TQpwcnmDYCD34VuiDh1ipPvMVFJUd1mwdg`
+
+Send USDT over the TRON (TRC20) network.
+
+<img src="images/donation_usdt_tron.png" alt="USDT (TRON / TRC20) receiving QR code" width="300" />
+
+---
+
 ## 🙏 Acknowledgments
 
 Every bit of support motivates me to keep improving this project. Thank you for your generosity!

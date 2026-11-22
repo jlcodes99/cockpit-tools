@@ -16,6 +16,14 @@
 
 <img src="images/wechat.png" alt="微信收款码" width="300" />
 
+### USDT（TRON / TRC20）
+
+收款地址 `TQpwcnmDYCD34VuiDh1ipPvMVFJUd1mwdg`
+
+请通过 TRON（TRC20）网络发送 USDT。
+
+<img src="images/donation_usdt_tron.png" alt="USDT（TRON / TRC20）收款二维码" width="300" />
+
 ---
 
 ## 🙏 致谢
