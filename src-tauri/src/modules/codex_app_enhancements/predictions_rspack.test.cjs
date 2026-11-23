@@ -55,12 +55,77 @@ test('an unavailable companion leaves the document and prediction readiness unto
   assert.equal(h.root.document.documentElement, null);
 });
 
+test('the 26.1111 desktop prepares its four prediction chunks', () => {
+  const h = setup();
+  const sources = {
+    538993: fixtures[559161],
+    899469: 'function C({controller:e,hostId:h,pluginHostId:k,roots:c}){let A=(0,l.gh)(b.PR),I=(0,l.Ul)(w.bz),T=(0,l.Ul)(w.Jn),j=g.appServices.cumberbatch;return j.requestUserMessagePrediction({...T,generationTrigger:"catch_up"});}',
+    907538: fixtures[24191].split('function managerModule')[0]
+      .replace('async function run(', 'const live=async function(')
+      + 'const modules={Dgwo(e,t,n){let metadata=true;n.d(t,{},{V:function(scope,host){return [scope,host]}})}};',
+    184348: fixtures[572868],
+  };
+  const ids = Object.keys(sources);
+  h.sources.set('app://-/assets/123.abcdef1234.js',
+    'r.u=e=>"assets/async/"+e+"."+({' + ids.map(id => id + ':"abcdef1234"').join(',') + '})[e]+".js"');
+  for (const id of ids) {
+    h.sources.set(`app://-/assets/async/${id}.abcdef1234.js`, `export const __rspack_esm_ids=[${id}];${sources[id]}`);
+  }
+  const result = h.api.prepare(h.html, h.read);
+  assert.equal(result.ok, true, result.reason);
+  assert.equal(result.modules.length, 4);
+  assert.match(result.modules[0].source, /null!=s\.appServices\.cumberbatch\|\|/);
+  assert.match(result.modules[1].source, /serviceFor\(A,h,g\.appServices\.cumberbatch\)/);
+  assert.match(result.modules[2].source, /runtime\.register\(/);
+});
+
 test('a changed native contract cannot partially replace an otherwise valid source', () => {
   const h = setup();
   const original = 'export const __rspack_esm_id=559161;' + fixtures[559161].replace('4290031608', 'different-gate');
   const result = h.api.transform(original, 'initial');
   assert.equal(result.ok, false);
   assert.equal(result.source, original);
+});
+
+test('Codex 26.1111 validates predictions independently from Fast for OAuth API Service', async () => {
+  const h = setup();
+  const host = fixtures[24191].split('function managerModule')[0]
+    .replace('async function run(', 'async function(').replace('}const message', '};const message');
+  const current = {
+    538993: fixtures[559161],
+    899469: fixtures[563813].replace('function C(e){let {hostId:h,pluginHostId:k,roots:c}=e,',
+      'function C({controller:e,canShowPrediction:t,hostId:h,pluginHostId:k,roots:c}){let '),
+    907538: 'const native=' + host
+      + 'const modules={Dgwo(e,t,n){let marker=true;n.d(t,{},{V:function(scope,host){return [scope,host]}})}};',
+    184348: fixtures[572868],
+  };
+  h.sources.clear();
+  for (const [id, body] of Object.entries(current)) {
+    h.sources.set(`app://-/assets/async/${id}.abcdef1234.js`, `export const __rspack_esm_id=${id};${body}`);
+  }
+  const entry = 'app://-/assets/123.abcdef1234.js';
+  h.sources.set(entry, 'r.u=e=>"assets/async/"+e+"."+({'
+    + Object.keys(current).map(id => `${id}:"abcdef1234"`).join(',') + '})[e]+".js";');
+  h.root.__cockpitEnhancements = { nativeFast:false, nativePredictions:true, apiKeyAuthVerified:false, apiService:true };
+  h.root.document.scripts = [{src:entry}];
+  h.root.AbortSignal = AbortSignal;
+  h.root.fetch = async url => ({ok:h.sources.has(url), text:async () => h.read(url)});
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'service_rspack.js'), 'utf8'), h.root);
+
+  const verify = h.root.__cockpitServiceRspack.verifyRequestedDocument;
+  assert.equal((await verify()).ok, true);
+  const prepared = h.api.prepare(h.html, h.read);
+  assert.equal(prepared.ok, true, prepared.reason);
+  assert.equal(prepared.modules.length, 4);
+  const composer = prepared.modules.find(module => module.url.includes('/899469.'));
+  assert.match(composer.source, /serviceFor\(A,h,g\.appServices\.cumberbatch\)/);
+
+  const composerUrl = composer.url;
+  h.sources.set(composerUrl, h.read(composerUrl).replace('roots:c', 'changed:c'));
+  const unknown = await verify();
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.reason, 'composer-contract');
+  assert.equal(h.root.document.documentElement, null);
 });
 
 test('the current Mac and Windows host factories bind the actual exported RPC lazily', () => {

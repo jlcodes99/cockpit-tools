@@ -13,6 +13,8 @@ const LEGACY_DATA_DIR: &str = ".antigravity_cockpit";
 const LEGACY_DEV_DATA_DIR: &str = ".antigravity_cockpit_dev";
 static DATA_ROOT: OnceLock<PathBuf> = OnceLock::new();
 static DEV_ROOT: OnceLock<PathBuf> = OnceLock::new();
+static DATA_ROOT_PREFERENCE: OnceLock<Result<Option<PathBuf>, String>> = OnceLock::new();
+static DEV_ROOT_PREFERENCE: OnceLock<Result<Option<PathBuf>, String>> = OnceLock::new();
 #[cfg(target_os = "windows")]
 static WINDOWS_INSTANCE_ROOT: OnceLock<PathBuf> = OnceLock::new();
 static COMPATIBILITY_TASKS: LazyLock<Mutex<HashSet<PathBuf>>> =
@@ -24,7 +26,7 @@ pub fn is_dev_profile() -> bool {
         .unwrap_or(false)
 }
 
-fn custom_data_dir() -> Option<PathBuf> {
+pub fn environment_data_dir() -> Option<PathBuf> {
     std::env::var("COCKPIT_TOOLS_DATA_DIR")
         .ok()
         .map(|value| value.trim().to_owned())
@@ -32,8 +34,71 @@ fn custom_data_dir() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+fn data_dir_preference_path(home: &Path, dev: bool) -> PathBuf {
+    home.join(if dev {
+        ".cockpit_tools_dev-data-root.json"
+    } else {
+        ".cockpit_tools-data-root.json"
+    })
+}
+
+fn read_data_dir_preference_at(path: &Path) -> Result<Option<PathBuf>, String> {
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("读取数据目录设置失败 ({}): {error}", path.display())),
+    };
+    let selected: Option<PathBuf> = serde_json::from_str(&content)
+        .map_err(|error| format!("数据目录设置无效 ({}): {error}", path.display()))?;
+    if selected.as_ref().is_some_and(|selected| !selected.is_absolute()) {
+        return Err(format!("数据目录设置必须是绝对路径: {}", path.display()));
+    }
+    Ok(selected)
+}
+
+pub fn read_data_dir_preference() -> Result<Option<PathBuf>, String> {
+    let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
+    read_data_dir_preference_at(&data_dir_preference_path(&home, is_dev_profile()))
+}
+
+fn active_data_dir_preference() -> Result<Option<PathBuf>, String> {
+    let cache = if is_dev_profile() {
+        &DEV_ROOT_PREFERENCE
+    } else {
+        &DATA_ROOT_PREFERENCE
+    };
+    cache.get_or_init(read_data_dir_preference).clone()
+}
+
+pub fn save_data_dir_preference(selected: Option<&Path>) -> Result<(), String> {
+    if let Some(directory) = selected {
+        if !directory.is_absolute() {
+            return Err("数据目录必须是绝对路径".into());
+        }
+        let metadata = fs::metadata(directory).map_err(|error| {
+            format!("无法访问数据目录 ({}): {error}", directory.display())
+        })?;
+        if !metadata.is_dir() {
+            return Err(format!("选中的路径不是目录: {}", directory.display()));
+        }
+    }
+    let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
+    // Pin this process to its original root before changing the next launch's preference.
+    let _ = active_data_dir_preference();
+    let preference = data_dir_preference_path(&home, is_dev_profile());
+    let content = serde_json::to_string(&selected).map_err(|error| error.to_string())?;
+    crate::modules::atomic_write::write_string_atomic(&preference, &content)
+}
+
+pub fn active_custom_data_dir() -> Result<Option<PathBuf>, String> {
+    if let Some(path) = environment_data_dir() {
+        return Ok(Some(path));
+    }
+    active_data_dir_preference()
+}
+
 pub fn resolve_data_dir() -> Result<PathBuf, String> {
-    if let Some(path) = custom_data_dir() {
+    if let Some(path) = active_custom_data_dir()? {
         return Ok(path);
     }
     let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
@@ -65,7 +130,7 @@ pub fn fallback_data_dir() -> PathBuf {
 /// Custom/development storage is isolated beneath its explicitly selected root.
 pub fn managed_instances_root_dir(platform: &str) -> Result<PathBuf, String> {
     #[cfg(target_os = "windows")]
-    let root = if custom_data_dir().is_some() || is_dev_profile() {
+    let root = if active_custom_data_dir()?.is_some() || is_dev_profile() {
         resolve_data_dir()?
     } else {
         let roaming = std::env::var_os("APPDATA").ok_or("无法获取 APPDATA 环境变量")?;
@@ -117,7 +182,7 @@ fn is_directory_link(metadata: &fs::Metadata) -> bool {
 pub fn without_compatibility_alias(path: &Path) -> PathBuf {
     // Custom roots keep their existing fail-closed link policy. A matching
     // directory name inside a profile is never enough to authorize cleanup.
-    if custom_data_dir().is_some() {
+    if !matches!(active_custom_data_dir(), Ok(None)) {
         return path.to_path_buf();
     }
     if let Some(home) = dirs::home_dir() {

@@ -50,7 +50,7 @@ function harness(initial: any = {}) {
     '../../utils/codexExperimentalModelOrder': order,
     '../../utils/codexModelContext': context,
     '../../utils/codexModelConfig': modelConfig,
-    '../../services/codexService': { getCodexModelReasoningEfforts: async () => ({}) },
+    '../../services/codexService': { getCodexBaseCatalogSource: async () => "downloaded", getCodexModelReasoningEfforts: async () => ({}) },
     '../../hooks/useEscClose': { useEscCloseTopmost: (open: boolean, close: () => void, ref: any) => { escape = { open, close, ref }; } },
     '../SingleSelectDropdown': { SingleSelectDropdown: () => null },
     './CodexModelConfigTransferModal': { CodexModelConfigTransferModal: () => null },

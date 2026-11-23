@@ -189,6 +189,37 @@ test('only Codex and its API service are grouped by default and explicit layouts
     assert.equal(previewUpgrade.apiRelayEntryOrder, 1);
     assert.deepEqual(previewUpgrade.hiddenEntryIds, ['group:codex-suite']);
     assert.deepEqual(previewUpgrade.sidebarEntryIds, ['group:codex-suite']);
+    const grouped = await hydrate({
+      platformGroups: [suites[1]],
+      sidebarEntryIds: ['group:codex-suite', 'platform:codex_api_service'],
+    });
+    assert.deepEqual(grouped.sidebarEntryIds, ['group:codex-suite', 'platform:codex_api_service']);
+    assert.deepEqual(grouped.platformGroups[0].platformIds, ['codex', 'codex_api_service']);
+    grouped.setSidebarEntry('group:codex-suite', false);
+    assert.deepEqual(usePlatformLayoutStore.getState().sidebarEntryIds, ['platform:codex_api_service']);
+    grouped.setSidebarEntry('platform:codex_api_service', false);
+    assert.deepEqual(usePlatformLayoutStore.getState().sidebarEntryIds, []);
+    grouped.setSidebarEntry('group:codex-suite', true);
+    assert.deepEqual(usePlatformLayoutStore.getState().sidebarEntryIds, ['group:codex-suite']);
+    grouped.upsertPlatformGroup({ ...grouped.platformGroups[0], platformIds: ['codex'] });
+    usePlatformLayoutStore.getState().setSidebarPlatform('codex_api_service', true);
+    const separated = usePlatformLayoutStore.getState();
+    assert.ok(separated.sidebarEntryIds.includes('platform:codex_api_service'));
+    assert.ok(separated.sidebarEntryIds.includes('group:codex-suite'));
+    const restored = await hydrate({
+      platformGroups: separated.platformGroups,
+      orderedEntryIds: separated.orderedEntryIds,
+      sidebarEntryIds: separated.sidebarEntryIds,
+      codexApiServiceDefaultGrouped: true,
+    });
+    assert.ok(restored.sidebarEntryIds.includes('platform:codex_api_service'));
+    restored.upsertPlatformGroup({ ...restored.platformGroups[0], platformIds: ['codex', 'codex_api_service'] });
+    assert.deepEqual(usePlatformLayoutStore.getState().sidebarEntryIds, ['group:codex-suite', 'platform:codex_api_service']);
+    const customWithAntigravity = await hydrate({
+      platformGroups: [{ ...suites[0], id: 'my-editors', platformIds: ['antigravity', 'qoder'] }],
+      sidebarEntryIds: ['platform:antigravity'],
+    });
+    assert.deepEqual(customWithAntigravity.sidebarEntryIds, ['platform:antigravity']);
     const customCodex = { ...suites[1], id: 'my-codex', name: 'My Codex', platformIds: ['codex'] };
     assert.equal((await hydrate({ platformGroups: [customCodex] })).platformGroups.length, 1);
     assert.equal(usePlatformLayoutStore.getState().platformGroups[0].id, 'my-codex');

@@ -46,6 +46,15 @@ impl QuotaCloudCodeContext {
             is_gcp_tos: token.is_gcp_tos.unwrap_or(false),
         }
     }
+
+    fn after_project_discovery(&self, metadata: &ProjectMetadataResult) -> Self {
+        Self {
+            preferred_project_id: valid_cloud_code_project_id(metadata.project_id.as_deref())
+                .map(str::to_owned)
+                .or_else(|| self.preferred_project_id.clone()),
+            is_gcp_tos: metadata.is_gcp_tos.unwrap_or(self.is_gcp_tos),
+        }
+    }
 }
 
 fn valid_cloud_code_project_id(project_id: Option<&str>) -> Option<&str> {
@@ -637,6 +646,18 @@ struct LoadProjectResponse {
     allowed_tiers: Option<Vec<AllowedTier>>,
 }
 
+impl LoadProjectResponse {
+    fn current_gcp_tos(&self) -> Option<bool> {
+        let current = self.current_tier.as_ref()?;
+        current.uses_gcp_tos.or_else(|| {
+            let id = current.id.as_deref()?;
+            self.allowed_tiers.as_ref()?.iter().find_map(|tier| {
+                (tier.id.as_deref() == Some(id)).then_some(tier.uses_gcp_tos).flatten()
+            })
+        })
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct AllowedTier {
     id: Option<String>,
@@ -947,19 +968,8 @@ pub async fn fetch_project_metadata_with_context(
                                     subscription_tier =
                                         paid_tier_id.clone().or(current_tier_id.clone());
 
-                                    // 从 currentTier / allowedTiers 中解析 usesGcpTos（严格遵循 Google 返回的真实字段）
-                                    let detected_gcp_tos = data
-                                        .current_tier
-                                        .as_ref()
-                                        .and_then(|t| t.uses_gcp_tos)
-                                        .or_else(|| {
-                                            data.allowed_tiers.as_ref().and_then(|tiers| {
-                                                tiers
-                                                    .iter()
-                                                    .find(|t| t.is_default.unwrap_or(false))
-                                                    .and_then(|t| t.uses_gcp_tos)
-                                            })
-                                        });
+                                    // The default allowed tier is an onboarding option, not the active tier.
+                                    let detected_gcp_tos = data.current_gcp_tos();
                                     if detected_gcp_tos.is_some() {
                                         resolved_is_gcp_tos = detected_gcp_tos;
                                     }
@@ -1210,38 +1220,29 @@ fn build_quota_data_from_response(
     project_id: Option<String>,
 ) -> QuotaData {
     let mut quota_data = QuotaData::new();
-    let is_free_tier = subscription_tier
-        .as_deref()
-        .map(str::to_lowercase)
-        .map(|s| s.contains("free") || (!s.contains("pro") && !s.contains("ultra")))
-        .unwrap_or(false);
-    quota_data.quota_summary_stale = if is_free_tier {
-        false
-    } else {
-        !quota_summary
-            .as_ref()
-            .and_then(|summary| summary.get("groups"))
-            .and_then(Value::as_array)
-            .is_some_and(|groups| {
-                groups.iter().all(|group| {
-                    group
-                        .get("buckets")
-                        .and_then(Value::as_array)
-                        .is_some_and(|buckets| {
-                            buckets.iter().all(|bucket| {
-                                bucket
-                                    .get("bucketId")
-                                    .and_then(Value::as_str)
-                                    .is_some_and(|id| !id.is_empty())
-                                    && bucket
-                                        .get("remainingFraction")
-                                        .and_then(Value::as_f64)
-                                        .is_some()
-                            })
+    quota_data.quota_summary_stale = !quota_summary
+        .as_ref()
+        .and_then(|summary| summary.get("groups"))
+        .and_then(Value::as_array)
+        .is_some_and(|groups| {
+            groups.iter().all(|group| {
+                group
+                    .get("buckets")
+                    .and_then(Value::as_array)
+                    .is_some_and(|buckets| {
+                        buckets.iter().all(|bucket| {
+                            bucket
+                                .get("bucketId")
+                                .and_then(Value::as_str)
+                                .is_some_and(|id| !id.is_empty())
+                                && bucket
+                                    .get("remainingFraction")
+                                    .and_then(Value::as_f64)
+                                    .is_some()
                         })
-                })
+                    })
             })
-    };
+        });
     if !quota_data.quota_summary_stale {
         quota_data.quota_summary_updated_at = Some(quota_data.last_updated);
     }
@@ -1286,9 +1287,13 @@ fn build_quota_data_from_response(
                             .map(|s| s.to_string());
 
                         if let (Some(id), Some(fraction)) = (bucket_id, remaining_fraction) {
-                            let percentage = (fraction * 100.0) as i32;
-                            let reset_str = reset_time.unwrap_or_default();
-                            quota_data.add_model(id, display_name, percentage, reset_str);
+                            quota_data.models.push(crate::models::quota::ModelQuota {
+                                name: id,
+                                display_name,
+                                percentage: (fraction * 100.0) as i32,
+                                reset_time: reset_time.unwrap_or_default(),
+                                summary_exhausted: Some(fraction == 0.0),
+                            });
                         }
                     }
                 }
@@ -1308,6 +1313,7 @@ pub(super) enum SummaryBucketFamily {
     Claude,
     Gemini,
     Argon,
+    Carbon,
 }
 
 pub(super) fn summary_bucket_family(name: &str) -> Option<SummaryBucketFamily> {
@@ -1316,8 +1322,10 @@ pub(super) fn summary_bucket_family(name: &str) -> Option<SummaryBucketFamily> {
         "3p-5h" | "claude:5h" | "3p-weekly" | "claude:weekly" => Some(Claude),
         "gemini-5h" | "gemini:5h" | "gemini-weekly" | "gemini:weekly" => Some(Gemini),
         "argon:weekly" | "argon:5h" => Some(Argon),
+        "carbon:weekly" | "gemini-carbon-wtu-weekly" => Some(Carbon),
         name if name.starts_with("gemini-argon-")
             && (name.ends_with("-weekly") || name.ends_with("-5h")) => Some(Argon),
+        "carbon:weekly" | "gemini-carbon-wtu-weekly" => Some(Carbon),
         _ => None,
     }
 }
@@ -1375,12 +1383,14 @@ pub async fn fetch_quota_for_token(
 ) {
     let ctx = QuotaCloudCodeContext::from_token(token);
     let meta = fetch_project_metadata_with_context(&token.access_token, email, &ctx).await;
-    let base_url = resolve_cloud_code_base_url(&ctx);
+    let resolved_context = ctx.after_project_discovery(&meta);
+    let base_url = resolve_cloud_code_base_url(&resolved_context);
+    let route_changed = base_url != resolve_cloud_code_base_url(&ctx);
     let quota = fetch_quota_with_project_metadata(
         &token.access_token,
         email,
-        skip_cache,
-        &ctx,
+        skip_cache || route_changed,
+        &resolved_context,
         &meta,
         &base_url,
     )
@@ -1599,7 +1609,7 @@ async fn fetch_quota_with_project_metadata(
                     }
                 }
 
-                if models_error.is_none() {
+                if models_error.is_none() && quota_summary_error.is_none() {
                     write_api_cache(
                         "authorized",
                         "desktop",

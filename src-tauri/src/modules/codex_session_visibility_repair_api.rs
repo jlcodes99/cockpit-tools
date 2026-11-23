@@ -484,16 +484,33 @@ pub fn repair_session_visibility_quick_across_instances(
 /// Repairs the launch target only, using the same quick-repair plan as the
 /// automatic multi-instance repair. The caller supplies the already-resolved data
 /// directory so this path never discovers or mutates another configured instance.
-pub fn repair_session_visibility_quick_for_instance(
+#[cfg(test)]
+pub(crate) fn repair_session_visibility_quick_for_instance(
     instance_id: &str,
     instance_name: &str,
     data_dir: &Path,
     launch_desktop: bool,
 ) -> Result<CodexSessionVisibilityRepairSummary, String> {
-    let _repair_guard = acquire_session_visibility_repair_lock()?;
+    repair_session_visibility_for_instance(
+        instance_id, instance_name, data_dir, launch_desktop,
+        modules::config::CodexAutomaticSessionRepair::Quick,
+    )
+}
+
+pub(crate) fn repair_session_visibility_for_instance(
+    instance_id: &str,
+    instance_name: &str,
+    data_dir: &Path,
+    launch_desktop: bool,
+    mode: modules::config::CodexAutomaticSessionRepair,
+) -> Result<CodexSessionVisibilityRepairSummary, String> {
+    use modules::config::CodexAutomaticSessionRepair;
+    let _repair_guard = (mode != CodexAutomaticSessionRepair::Off)
+        .then(acquire_session_visibility_repair_lock)
+        .transpose()?;
     let started = std::time::Instant::now();
     modules::logger::log_info(&format!(
-        "[Codex Session Visibility] launch-target quick repair started: instance_id={}, instance_name={}, data_dir={}",
+        "[Codex Session Visibility] launch-target maintenance started: mode={mode:?}, instance_id={}, instance_name={}, data_dir={}",
         instance_id,
         instance_name,
         data_dir.display()
@@ -511,16 +528,18 @@ pub fn repair_session_visibility_quick_for_instance(
             && prepare_local_project_account_state(&instance).map_err(|error| {
                 format!("CODEX_DESKTOP_STATE_PREPARATION_FAILED: {error}")
             })?;
-        let mut summary = repair_session_visibility_for_instances_with_options(
-            CodexSessionVisibilityRepairOptions::for_auto_repair_mode(
-                CodexSessionVisibilityAutoRepairMode::Current,
-            ),
-            None,
-            None,
-            RepairTargetSelection::default(),
-            vec![instance],
-            true,
-        )?;
+        let mut summary = match mode {
+            CodexAutomaticSessionRepair::Off => CodexSessionVisibilityRepairSummary::default(),
+            CodexAutomaticSessionRepair::IndexOnly | CodexAutomaticSessionRepair::Quick => {
+                let mut options = CodexSessionVisibilityRepairOptions::for_auto_repair_mode(
+                    CodexSessionVisibilityAutoRepairMode::Current,
+                );
+                options.repair_referenced_rollouts = mode == CodexAutomaticSessionRepair::Quick;
+                repair_session_visibility_for_instances_with_options(
+                    options, None, None, RepairTargetSelection::default(), vec![instance], true,
+                )?
+            }
+        };
         if prepared {
             summary.updated_global_state_entry_count += 1;
             summary.mutated_instance_count = 1;
@@ -532,7 +551,7 @@ pub fn repair_session_visibility_quick_for_instance(
     })();
     match &result {
         Ok(summary) => modules::logger::log_info(&format!(
-            "[Codex Session Visibility] launch-target quick repair finished: instance_id={}, mutated_instances={}, rollout_files={}, sqlite_rows={}, elapsed_ms={}",
+            "[Codex Session Visibility] launch-target maintenance finished: mode={mode:?}, instance_id={}, mutated_instances={}, rollout_files={}, sqlite_rows={}, elapsed_ms={}",
             instance_id,
             summary.mutated_instance_count,
             summary.changed_rollout_file_count,
@@ -540,7 +559,7 @@ pub fn repair_session_visibility_quick_for_instance(
             started.elapsed().as_millis()
         )),
         Err(error) => modules::logger::log_warn(&format!(
-            "[Codex Session Visibility] launch-target quick repair failed: instance_id={}, data_dir={}, elapsed_ms={}, error={}",
+            "[Codex Session Visibility] launch-target maintenance failed: mode={mode:?}, instance_id={}, data_dir={}, elapsed_ms={}, error={}",
             instance_id,
             data_dir.display(),
             started.elapsed().as_millis(),
@@ -671,7 +690,7 @@ fn repair_provider_visibility_for_instances_with_options(
         return Err("未找到要修复的 Codex 实例".to_string());
     }
     let process_entries = if automatic_start {
-        modules::process::collect_codex_launch_maintenance_process_entries()?
+        modules::process::collect_codex_launch_maintenance_process_entries(false)?
     } else {
         modules::process::collect_codex_process_entries()
     };

@@ -135,7 +135,6 @@ function finalize(bundleDir, env = process.env, run = command, mounts = createDm
     fs.mkdirSync(extracted);
     run('tar', ['-xzf', archive, '-C', extracted]);
     verifyApp(exactlyOne(extracted, '.app'), env.APPLE_TEAM_ID, run);
-    // inject-dmg-readme rewrites the image: sign/notarize only its final bytes.
     notarizeDmg(dmg, env, run);
     const mounted = path.join(work, 'mounted');
     fs.mkdirSync(mounted);

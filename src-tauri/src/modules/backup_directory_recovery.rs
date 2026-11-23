@@ -51,6 +51,14 @@ fn override_path() -> Result<PathBuf, String> {
     return adjacent_override_path(&crate::modules::test_support::fallback_data_dir());
     #[cfg(not(test))]
     {
+        if let Some(root) = crate::modules::data_paths::active_custom_data_dir()? {
+            // A drive root has no sibling directory in which to store its preference.
+            return if root.file_name().is_none() {
+                Ok(root.join(".cockpit_tools.backup-directory.json"))
+            } else {
+                adjacent_override_path(&root)
+            };
+        }
         let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
         let name = if crate::modules::data_paths::is_dev_profile() {
             crate::modules::data_paths::DEV_DATA_DIR

@@ -162,6 +162,83 @@ fn summary_failure_is_distinct_from_valid_empty_summary() {
 }
 
 #[test]
+fn summary_exhaustion_uses_the_original_fraction_before_percentage_rounding() {
+    for (fraction, exhausted) in [(0.0, true), (0.004, false)] {
+        let quota = build_quota_data_from_response(
+            QuotaResponse { models: Default::default() },
+            Some("PRO".into()),
+            vec![],
+            Some(json!({"groups":[{"buckets":[
+                {"bucketId":"3p-weekly","remainingFraction":fraction},
+                {"bucketId":"3p-5h","remainingFraction":0.63}
+            ]}]})),
+            None,
+            None,
+        );
+        assert!(!quota.quota_summary_stale);
+        assert_eq!(quota.models[0].percentage, 0);
+        assert_eq!(quota.models[0].summary_exhausted, Some(exhausted));
+        assert_eq!(quota.models[1].percentage, 63);
+        let saved = serde_json::to_value(&quota).unwrap();
+        assert_eq!(saved["models"][0]["summary_exhausted"], exhausted);
+    }
+    let legacy: crate::models::quota::ModelQuota = serde_json::from_value(json!({
+        "name":"3p-weekly", "percentage":0, "reset_time":""
+    })).unwrap();
+    assert_eq!(legacy.summary_exhausted, None);
+}
+
+#[test]
+fn free_quota_summary_failure_keeps_weekly_windows_unknown() {
+    let response: QuotaResponse = serde_json::from_value(json!({"models":{
+        "claude-sonnet":{"quotaInfo":{"remainingFraction":1.0}},
+        "gemini-pro":{"quotaInfo":{"remainingFraction":1.0}}
+    }})).unwrap();
+    let mut quota = build_quota_data_from_response(response, Some("free-tier".into()), vec![], None, None, None);
+    assert!(quota.quota_summary_stale);
+    assert!(quota.quota_summary_updated_at.is_none());
+    assert_eq!(quota.models.len(), 2);
+    let mut previous = QuotaData::new();
+    previous.subscription_tier = Some("free-tier".into());
+    previous.quota_summary_updated_at = Some(123);
+    previous.add_model("gemini-weekly".into(), None, 14, String::new());
+    preserve_failed_quota_summary(&mut quota, Some(&previous));
+    assert_eq!(quota.quota_summary_updated_at, Some(123));
+    assert_eq!(quota.models.last().unwrap().percentage, 14);
+}
+
+#[tokio::test]
+async fn summary_verification_error_is_not_cached_as_a_successful_quota_refresh() {
+    use axum::{http::StatusCode, routing::post, Json, Router};
+
+    let app = Router::new()
+        .route(&format!("/{FETCH_AVAILABLE_MODELS_PATH}"), post(|| async {
+            Json(json!({"models":{"gemini-pro":{"quotaInfo":{"remainingFraction":1.0}}}}))
+        }))
+        .route("/v1internal:retrieveUserQuotaSummary", post(|| async {
+            (StatusCode::FORBIDDEN, Json(json!({"error":{"message":"Verify your account"}})))
+        }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let email = format!("{}@summary-fixture.invalid", uuid::Uuid::new_v4());
+    let result = fetch_quota_with_project_metadata(
+        "fixture-token", &email, true, &QuotaCloudCodeContext::default(),
+        &ProjectMetadataResult {
+            project_id: None, subscription_tier: Some("free-tier".into()), credits: vec![], is_gcp_tos: None,
+        },
+        &base_url,
+    ).await.unwrap();
+    server.abort();
+
+    assert_eq!(result.error.unwrap().reason.as_deref(), Some("VALIDATION_REQUIRED"));
+    assert!(result.quota.quota_summary_stale);
+    assert!(result.quota.quota_summary_updated_at.is_none());
+    assert_eq!(result.quota.models[0].percentage, 100);
+    assert!(read_api_cache("authorized", &email).is_none());
+}
+
+#[test]
 fn successful_summary_preserves_actual_percentage_and_reset() {
     let quota = build_quota_data_from_response(QuotaResponse { models: Default::default() },
         None, vec![], Some(json!({"groups":[{"buckets":[{

@@ -25,6 +25,26 @@ fn active_refresh_accelerates_at_low_quota_and_ignores_absent_windows() {
 }
 
 #[test]
+fn completed_background_refresh_requests_a_check_only_for_fresh_quota() {
+    let mut state = RefreshState { in_flight: true, ..RefreshState::default() };
+    let mut checks = 0;
+    finish_active_refresh("account", Some(&mut state), Err("CODEX_QUOTA_SYNC_DEFERRED".into()), || {
+        checks += 1;
+    });
+    assert!(!state.in_flight);
+    assert_eq!(state.failures, 1);
+    assert_eq!(checks, 0);
+
+    state.in_flight = true;
+    finish_active_refresh("account", Some(&mut state), Ok(quota(5, 90)), || {
+        checks += 1;
+    });
+    assert!(!state.in_flight);
+    assert_eq!(state.failures, 0);
+    assert_eq!(checks, 1);
+}
+
+#[test]
 fn group_disabled_wins_and_custom_group_survives_disabled_platform() {
     let policy = (
         false,

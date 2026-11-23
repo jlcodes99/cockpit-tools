@@ -111,12 +111,21 @@ fn doc_uses_chatgpt_models(doc: &Document) -> bool {
     }
 }
 
-fn migrate_retired_chatgpt_default_in_doc(doc: &mut Document) -> bool {
-    if !doc_uses_chatgpt_models(doc)
-        || !doc
-            .get("model")
-            .and_then(|item| item.as_str())
-            .is_some_and(is_retired_gpt55_model)
+fn migrate_retired_chatgpt_default_in_doc(base_dir: &Path, doc: &mut Document) -> bool {
+    let Some(model) = doc
+        .get("model")
+        .and_then(|item| item.as_str())
+        .filter(|model| is_retired_gpt55_model(model))
+    else {
+        return false;
+    };
+    if !doc_uses_chatgpt_models(doc) {
+        return false;
+    }
+    let is_local_gateway = doc.get(CODEX_CONFIG_MODEL_PROVIDER_KEY).and_then(|item| item.as_str())
+        == Some("codex_local_access");
+    if is_local_gateway
+        && crate::modules::codex_local_access::profile_declares_provider_gateway_model(base_dir, model)
     {
         return false;
     }
@@ -133,7 +142,7 @@ fn migrate_retired_chatgpt_default_for_dir(base_dir: &Path) -> Result<bool, Stri
     };
     let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&source)
         .map_err(|error| format!("Parse model configuration: {error}"))?;
-    if !migrate_retired_chatgpt_default_in_doc(&mut doc) {
+    if !migrate_retired_chatgpt_default_in_doc(base_dir, &mut doc) {
         return Ok(false);
     }
     let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);

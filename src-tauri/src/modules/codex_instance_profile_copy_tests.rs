@@ -73,7 +73,7 @@ mod profile_copy_integration_tests {
         )
         .unwrap();
 
-        let profile = create_instance(CreateInstanceParams {
+        let copy_params = CreateInstanceParams {
             name: "Synthetic clone".to_string(),
             user_data_dir: target.to_string_lossy().into_owned(),
             working_dir: None,
@@ -84,8 +84,18 @@ mod profile_copy_integration_tests {
             init_mode: None, // The same default-copy path used when launching a new instance.
             launch_mode: None,
             app_speed: None,
-        })
-        .unwrap();
+        };
+        assert!(copy_params.copies_profile());
+        let error = create_instance_with_cancellation(
+            copy_params.clone(),
+            &std::sync::atomic::AtomicBool::new(false),
+            std::time::Duration::ZERO,
+        )
+        .unwrap_err();
+        assert!(error.contains("复制实例超时"), "{error}");
+        assert!(!target.exists());
+        assert!(load_instance_store().unwrap().instances.is_empty());
+        let profile = create_instance(copy_params).unwrap();
         let store = load_instance_store().unwrap();
         assert!(store.instances.iter().any(|item| item.id == profile.id));
         assert_eq!(profile.working_dir, None);
@@ -101,6 +111,86 @@ mod profile_copy_integration_tests {
             .unwrap();
         assert_eq!(Path::new(&path), target.join(relative));
         assert_eq!(project, "project-current");
+    }
+
+    #[test]
+    fn paginated_session_export_ignores_unselected_broken_archive_and_copies_valid_chain() {
+        let _lock = crate::modules::test_support::env_lock().lock().unwrap();
+        let env = TestEnvironment::new();
+        let source = env.root.join("source");
+        let parent = "17faa75b-eba9-4c9e-9b67-4b6d6026ef00";
+        let child = "17faa75b-eba9-4c9e-9b67-4b6d6026ef01";
+        let unrelated = "17faa75b-eba9-4c9e-9b67-4b6d6026ef02";
+        let rollout = |folder: &str, id: &str| {
+            format!("{folder}/rollout-2026-01-01T00-00-00-{id}.jsonl")
+        };
+        let parent_relative = rollout("archived_sessions", parent);
+        let parent_file = source.join(format!("{parent_relative}.zst"));
+        let child_relative = rollout("sessions", child);
+        let child_file = source.join(&child_relative);
+        let unrelated_file = source.join(format!("{}.zst", rollout("archived_sessions", unrelated)));
+        fs::create_dir_all(parent_file.parent().unwrap()).unwrap();
+        fs::create_dir_all(child_file.parent().unwrap()).unwrap();
+        let record = |ordinal: u64, kind: &str, payload: serde_json::Value| {
+            format!("{}\n", json!({
+                "timestamp": "2026-01-01T00:00:00Z", "ordinal": ordinal, "type": kind, "payload": payload,
+            }))
+        };
+        let parent_contents = record(0, "session_meta", json!({"id":parent,"history_mode":"paginated"}))
+            + &record(1, "event_msg", json!({"type":"user_message","message":"archived parent"}));
+        let child_contents = record(2, "session_meta", json!({
+            "id":child,"history_mode":"paginated",
+            "history_base":{"thread_id":parent,"end_byte_offset":parent_contents.len(),"end_ordinal_exclusive":2},
+        })) + &record(3, "event_msg", json!({"type":"user_message","message":"selected child"}));
+        let compressed = zstd::stream::encode_all(parent_contents.as_bytes(), 0).unwrap();
+        fs::write(&parent_file, &compressed).unwrap();
+        fs::write(&child_file, &child_contents).unwrap();
+        fs::write(&unrelated_file, b"invalid zstd frame").unwrap();
+
+        use modules::codex_session_manager::{export_sessions, preview_session_export};
+        let selection = vec![child.to_string()];
+        let preview = preview_session_export(selection.clone()).unwrap();
+        assert_eq!(preview.exportable_session_count, 1);
+        assert!(preview.unavailable.is_empty());
+        let bundle = env.root.join("selected.zip");
+        let result = export_sessions(selection.clone(), bundle.to_string_lossy().into_owned(), None, None)
+            .unwrap();
+        assert_eq!(result.exported_session_count, 1);
+        let mut archive = zip::ZipArchive::new(fs::File::open(&bundle).unwrap()).unwrap();
+        let rollout_entry = archive.file_names().find(|name| name.ends_with("/rollout.jsonl"))
+            .unwrap().to_string();
+        let imported = std::io::read_to_string(archive.by_name(&rollout_entry).unwrap()).unwrap();
+        assert!(imported.contains("archived parent") && imported.contains("selected child"));
+        assert!(!imported.contains("history_base"));
+        assert!(preview_session_export(vec![unrelated.to_string()]).is_err());
+
+        fs::write(&parent_file, b"invalid requested dependency").unwrap();
+        let preview = preview_session_export(selection).unwrap();
+        assert_eq!(preview.exportable_session_count, 0);
+        assert_eq!(preview.unavailable[0].session_id, child);
+        fs::write(&parent_file, &compressed).unwrap();
+        fs::remove_file(&unrelated_file).unwrap();
+
+        let db = Connection::open(source.join("state_5.sqlite")).unwrap();
+        db.execute_batch("CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT);").unwrap();
+        for (id, relative) in [(parent, &parent_relative), (child, &child_relative)] {
+            db.execute(
+                "INSERT INTO threads VALUES (?1, ?2)",
+                rusqlite::params![id, source.join(relative).to_str().unwrap()],
+            ).unwrap();
+        }
+        drop(db);
+        let target = env.root.join("copy");
+        let profile = create_instance(params("Paginated clone", &target, "copy")).unwrap();
+        assert!(load_instance_store().unwrap().instances.iter().any(|item| item.id == profile.id));
+        assert_eq!(fs::read(target.join(format!("{parent_relative}.zst"))).unwrap(), compressed);
+        assert_eq!(fs::read_to_string(target.join(&child_relative)).unwrap(), child_contents);
+        let copied = Connection::open(target.join("state_5.sqlite")).unwrap();
+        let saved_path: String = copied.query_row(
+            "SELECT rollout_path FROM threads WHERE id = ?1",
+            [parent], |row| row.get(0),
+        ).unwrap();
+        assert_eq!(Path::new(&saved_path), target.join(parent_relative));
     }
 
     fn params(name: &str, target: &Path, mode: &str) -> CreateInstanceParams {

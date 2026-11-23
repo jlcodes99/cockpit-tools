@@ -6,22 +6,37 @@ pub(super) fn provider_binding_for_switch(bind_account_id: &str) -> Option<Strin
         .and_then(|account| modules::codex_instance::provider_gateway_bind_account_id(&account.id))
 }
 
-pub(crate) async fn prepare_project_state_after_switch(instance_id: String, data_dir: PathBuf) -> bool {
+pub(crate) async fn prepare_desktop_state_after_switch(
+    instance_id: String,
+    data_dir: PathBuf,
+    previous_provider: Option<String>,
+) -> bool {
     let result = tauri::async_runtime::spawn_blocking(move || {
-        modules::codex_session_visibility::prepare_desktop_project_state_after_switch(
+        use modules::codex_session_visibility;
+
+        if let Some(previous) = previous_provider {
+            if codex_session_visibility::read_target_provider(&data_dir)? != previous {
+                return codex_session_visibility::repair_session_visibility_for_instance(
+                    &instance_id, &instance_id, &data_dir, true,
+                    modules::config::get_user_config().codex_automatic_session_repair,
+                ).map(|summary| summary.local_project_recovery_deferred);
+            }
+        }
+        codex_session_visibility::prepare_desktop_project_state_after_switch(
             &instance_id, &data_dir,
         )
+        .map(|_| false)
         .map_err(|error| format!("instance_id={instance_id}, error={error}"))
     })
     .await;
     match result {
-        Ok(Ok(_)) => false,
+        Ok(Ok(deferred)) => deferred,
         Ok(Err(error)) => {
-            modules::logger::log_warn(&format!("[Codex Local Projects] switch preparation deferred: {error}"));
+            modules::logger::log_warn(&format!("[Codex Switch] desktop state preparation deferred: {error}"));
             true
         }
         Err(error) => {
-            modules::logger::log_warn(&format!("[Codex Local Projects] switch preparation task failed: {error}"));
+            modules::logger::log_warn(&format!("[Codex Switch] desktop state preparation task failed: {error}"));
             true
         }
     }
@@ -36,6 +51,7 @@ pub async fn codex_switch_instance_account(
     let target = resolve_codex_instance_start_target(&instance_id)?;
     let profile = &target.user_data_dir;
     let _lease = modules::codex_account::try_acquire_profile_mutation_lease(profile, "instance-switch")?;
+    let previous_provider = modules::codex_session_visibility::read_target_provider(profile).ok();
     let bind_account_id = effective_provider_bind_account_id(&bind_account_id);
     let binding = provider_binding_for_switch(&bind_account_id)
         .unwrap_or_else(|| bind_account_id.into_owned());
@@ -59,6 +75,11 @@ pub async fn codex_switch_instance_account(
         })
         .await?;
     }
+    modules::codex_account::preserve_profile_oauth_before_replacement(
+        profile,
+        target.bind_account_id.as_deref(),
+    )
+    .await?;
     restore_mixed_model_gateway_when_disabled(profile, None).await?;
     inject_preflighted_bound_account_to_profile(profile, &binding).await?;
     if target.is_default {
@@ -76,7 +97,7 @@ pub async fn codex_switch_instance_account(
         modules::codex_cli_daemon::after_provider_gateway_profile_write(profile, &account_id);
     }
     if launch_mode_uses_desktop_runtime(&target.launch_mode) {
-        return Ok(prepare_project_state_after_switch(instance_id, target.user_data_dir).await);
+        return Ok(prepare_desktop_state_after_switch(instance_id, target.user_data_dir, previous_provider).await);
     }
     Ok(false)
 }

@@ -769,6 +769,42 @@ multi_agent = true
     }
 
     #[test]
+    fn api_key_config_toml_uses_http_only_provider_for_legacy_builtin_relay() {
+        let base_dir = make_temp_dir("codex-api-key-config-legacy-relay-test");
+        let config_path = base_dir.join("config.toml");
+        fs::write(
+            &config_path,
+            "openai_base_url = \"https://relay.example.com/v1\"\n",
+        )
+        .expect("write legacy relay config");
+        let account = CodexAccount::new_api_key(
+            "relay".to_string(),
+            "relay@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::OpenaiBuiltin,
+            Some("https://relay.example.com/v1/".to_string()),
+            None,
+            None,
+            Vec::new(),
+        );
+
+        write_auth_file_to_dir(&base_dir, &account).expect("write legacy relay auth bundle");
+
+        let content = fs::read_to_string(&config_path).expect("read config");
+        assert!(!content.contains("openai_base_url"));
+        let config = crate::modules::codex_config_format::read_codex_config_doc_from_str(&content)
+            .expect("parse config");
+        assert_eq!(config["model_provider"].as_str(), Some(CODEX_RUNTIME_MODEL_PROVIDER_ID));
+        let provider = &config["model_providers"][CODEX_RUNTIME_MODEL_PROVIDER_ID];
+        assert_eq!(provider["base_url"].as_str(), Some("https://relay.example.com/v1"));
+        assert_eq!(provider["wire_api"].as_str(), Some("responses"));
+        assert_eq!(provider["supports_websockets"].as_bool(), Some(false));
+        assert_eq!(provider["experimental_bearer_token"].as_str(), Some("sk-test"));
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
     fn api_key_account_switch_updates_relay_key_and_base_url_together() {
         let base_dir = make_temp_dir("codex-api-key-relay-switch-test");
         let mut first = CodexAccount::new_api_key(
@@ -2273,15 +2309,117 @@ supports_websockets = false
     }
 
     #[test]
+    fn cleanup_removes_absolute_reference_to_profile_managed_catalog() {
+        let profile = tempfile::tempdir().unwrap();
+        let private_catalog = profile.path().join(super::CODEX_MANAGED_MODEL_CATALOG_FILE);
+        let config = profile.path().join("config.toml");
+        let mut doc = toml_edit::Document::new();
+        doc["model_catalog_json"] = toml_edit::value(private_catalog.to_str().unwrap());
+        fs::write(&config, doc.to_string()).unwrap();
+        fs::write(&private_catalog, r#"{"models":[]}"#).unwrap();
+
+        assert!(super::cleanup_managed_model_catalog_for_dir(profile.path()).unwrap());
+        let saved = crate::modules::codex_config_format::load_codex_config_doc(&config).unwrap();
+        assert!(saved.get("model_catalog_json").is_none());
+        assert!(!private_catalog.exists());
+    }
+
+    #[test]
+    fn cleanup_removes_owned_catalog_references_from_named_profiles() {
+        for cleanup in ["provider", "experimental", "explicit disable", "migration"] {
+            let profile = tempfile::tempdir().unwrap();
+            let catalog = profile.path().join(super::CODEX_MANAGED_MODEL_CATALOG_FILE);
+            let custom_dir = profile.path().join("user");
+            fs::create_dir(&custom_dir).unwrap();
+            let custom = custom_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE);
+            fs::write(&catalog, r#"{"models":[]}"#).unwrap();
+            fs::write(&custom, r#"{"models":[]}"#).unwrap();
+            let config_path = profile.path().join("config.toml");
+            let mut doc = toml_edit::Document::new();
+            doc["profiles"]["synced"]["model_catalog_json"] =
+                toml_edit::value(catalog.to_str().unwrap());
+            doc["profiles"]["synced"]["model"] = toml_edit::value("fixture-model");
+            doc["profiles"]["custom"]["model_catalog_json"] =
+                toml_edit::value(custom.to_str().unwrap());
+            fs::write(&config_path, doc.to_string()).unwrap();
+            let synced_profile = profile.path().join("synced.config.toml");
+            let custom_profile = profile.path().join("custom.config.toml");
+            fs::write(
+                &synced_profile,
+                format!("model_catalog_json = {:?}\nmodel = \"fixture-model\"\n", catalog),
+            )
+            .unwrap();
+            let custom_content = format!("model_catalog_json = {:?}\n", custom);
+            fs::write(&custom_profile, &custom_content).unwrap();
+            let invalid_profile = profile.path().join("invalid.config.toml");
+            let invalid_content = "model_catalog_json = \"user_catalog.json\"\n[invalid\n";
+            fs::write(&invalid_profile, invalid_content).unwrap();
+
+            match cleanup {
+                "provider" => {
+                    super::cleanup_managed_model_catalog_for_dir(profile.path()).unwrap();
+                }
+                "experimental" => {
+                    super::cleanup_experimental_model_catalog_for_dir(profile.path()).unwrap();
+                }
+                "migration" => {
+                    super::migrate_model_management_default_off_once(profile.path()).unwrap();
+                }
+                _ => {
+                    super::persist_experimental_model_policy(profile.path(), true).unwrap();
+                    write_quick_config_to_config_toml(profile.path(), None, None, Some(false), None)
+                        .unwrap();
+                }
+            }
+            let saved = crate::modules::codex_config_format::load_codex_config_doc(&config_path).unwrap();
+            assert!(
+                saved["profiles"]["synced"].get("model_catalog_json").is_none(),
+                "{cleanup}",
+            );
+            assert_eq!(saved["profiles"]["synced"]["model"].as_str(), Some("fixture-model"));
+            assert_eq!(
+                saved["profiles"]["custom"]["model_catalog_json"].as_str(),
+                custom.to_str(),
+            );
+            let synced = crate::modules::codex_config_format::load_codex_config_doc(&synced_profile)
+                .unwrap();
+            assert!(synced.get("model_catalog_json").is_none(), "{cleanup}");
+            assert_eq!(synced["model"].as_str(), Some("fixture-model"));
+            assert_eq!(fs::read_to_string(&custom_profile).unwrap(), custom_content);
+            assert_eq!(fs::read_to_string(&invalid_profile).unwrap(), invalid_content);
+            assert!(custom.is_file());
+            assert!(!catalog.exists());
+        }
+    }
+
+    #[test]
+    fn cleanup_keeps_profile_managed_catalog_when_config_cannot_be_read() {
+        let profile = tempfile::tempdir().unwrap();
+        let catalog = profile.path().join(super::CODEX_MANAGED_MODEL_CATALOG_FILE);
+        fs::write(&catalog, r#"{"models":[]}"#).unwrap();
+        fs::create_dir(profile.path().join("config.toml")).unwrap();
+
+        assert!(super::cleanup_managed_model_catalog_for_dir(profile.path()).is_err());
+        assert_eq!(fs::read_to_string(&catalog).unwrap(), r#"{"models":[]}"#);
+        assert!(super::cleanup_experimental_model_catalog_for_dir(profile.path()).is_err());
+        assert_eq!(fs::read_to_string(&catalog).unwrap(), r#"{"models":[]}"#);
+    }
+
+    #[test]
     fn managed_catalog_cleanup_preserves_custom_model_catalog() {
         let base_dir = make_temp_dir("codex-custom-model-catalog-cleanup-test");
         fs::write(
             base_dir.join("config.toml"),
-            "model_catalog_json = \"user-model-catalog.json\"\n",
+            format!(
+                "model_catalog_json = \"user/{}\"\n",
+                super::CODEX_MANAGED_MODEL_CATALOG_FILE
+            ),
         )
         .expect("write custom config");
+        fs::create_dir(base_dir.join("user")).unwrap();
+        let custom_catalog = base_dir.join("user").join(super::CODEX_MANAGED_MODEL_CATALOG_FILE);
         fs::write(
-            base_dir.join("user-model-catalog.json"),
+            &custom_catalog,
             r#"{"models":[{"slug":"user-model"}]}"#,
         )
         .expect("write custom catalog");
@@ -2289,7 +2427,7 @@ supports_websockets = false
         assert!(!super::cleanup_managed_model_catalog_for_dir(&base_dir)
             .expect("preserve custom catalog"));
         assert_eq!(
-            fs::read_to_string(base_dir.join("user-model-catalog.json"))
+            fs::read_to_string(custom_catalog)
                 .expect("read custom catalog"),
             r#"{"models":[{"slug":"user-model"}]}"#
         );

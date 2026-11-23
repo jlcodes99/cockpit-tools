@@ -30,14 +30,12 @@ interface Props {
   accountLabel: string;
   plan: string;
   planClass: string;
-  instance?: { id: string; workingDir: string };
   onLaunchDesktop?: () => Promise<void>;
   onClose: (launched?: boolean) => void;
-  onDirectoryRemembered?: (workingDir: string) => void;
 }
 
 export function CodebuddyLaunchDialog({
-  account, accountLabel, plan, planClass, instance, onLaunchDesktop, onClose, onDirectoryRemembered,
+  account, accountLabel, plan, planClass, onLaunchDesktop, onClose,
 }: Props) {
   const { t } = useTranslation();
   const titleId = useId();
@@ -51,10 +49,10 @@ export function CodebuddyLaunchDialog({
   const mode = onLaunchDesktop ? selectedMode ?? (rememberedMode === 'cli' ? 'cli' : 'desktop') : 'cli';
   const [cliStatus, setCliStatus] = useState<CliStatus>('checking');
   const [cliCheck, setCliCheck] = useState(0);
-  const [workingDir, setWorkingDir] = useState(instance?.workingDir ?? '');
+  const [workingDir, setWorkingDir] = useState('');
   const [customCommand, setCustomCommand] = useState('');
   const [commandCopied, setCommandCopied] = useState(false);
-  const [loadingDirectory, setLoadingDirectory] = useState(!instance);
+  const [loadingDirectory, setLoadingDirectory] = useState(true);
   const [directoryReadFailed, setDirectoryReadFailed] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -62,9 +60,9 @@ export function CodebuddyLaunchDialog({
   const [invalidDirectory, setInvalidDirectory] = useState(false);
   const isCli = mode === 'cli';
   const { terminalOptions, selectedTerminal, setSelectedTerminal } = useLaunchTerminalOptions(isCli);
-  const cliTarget: CodebuddyCliLaunchTarget = instance
-    ? { kind: 'instance', id: instance.id, workingDir: workingDir.trim() === instance.workingDir ? undefined : workingDir.trim() }
-    : { kind: 'account', account, workingDir: workingDir.trim() || undefined, rememberWorkingDir: true };
+  const cliTarget: CodebuddyCliLaunchTarget = {
+    kind: 'account', account, workingDir: workingDir.trim() || undefined, rememberWorkingDir: true,
+  };
   const cliBlocked = isCli && (cliStatus === 'checking' || cliStatus === 'failed' || loadingDirectory);
   const title = t(onLaunchDesktop ? 'codebuddyCli.launchTitle' : 'codebuddyCli.launch');
   const launchLabel = t(isCli && cliStatus === 'missing' ? 'appPath.missing.configurePath' : isCli ? 'instances.launchDialog.runInTerminal' : 'codebuddyCli.launchDesktop');
@@ -74,7 +72,6 @@ export function CodebuddyLaunchDialog({
   useEscCloseTopmost(true, () => { if (!launching) onClose(); }, dialog);
 
   useEffect(() => {
-    if (instance) return;
     let active = true;
     void getCodebuddyCliWorkingDir({ region: account.region, accountId: account.accountId })
       .then((saved) => {
@@ -83,7 +80,7 @@ export function CodebuddyLaunchDialog({
       .catch(() => { if (active && !edited.current) setDirectoryReadFailed(true); })
       .finally(() => { if (active) setLoadingDirectory(false); });
     return () => { active = false; };
-  }, [account.accountId, account.region, instance]);
+  }, [account.accountId, account.region]);
 
   useEffect(() => {
     if (!isCli) return;
@@ -169,7 +166,6 @@ export function CodebuddyLaunchDialog({
       if (isCli) {
         if (copy) {
           const command = await getCodebuddyCliLaunchCommand(cliTarget, customCommand);
-          if (instance) onDirectoryRemembered?.(workingDir.trim());
           try {
             await writeText(command);
           } catch {
@@ -180,7 +176,6 @@ export function CodebuddyLaunchDialog({
           return;
         }
         await launchCodebuddyCli(cliTarget, selectedTerminal, customCommand);
-        if (instance) onDirectoryRemembered?.(workingDir.trim());
       } else {
         await onLaunchDesktop?.();
       }
@@ -292,7 +287,7 @@ export function CodebuddyLaunchDialog({
               <CliLaunchFields workingDir={{
                 value: workingDir, inputRef: directory,
                 placeholder: t(loadingDirectory ? 'common.loading' : 'codebuddyCli.homeDirectory'),
-                hint: t(instance ? 'instances.launchDialog.rememberDirectory' : 'codebuddyCli.rememberDirectory'),
+                hint: t('codebuddyCli.rememberDirectory'),
                 error: invalidDirectory ? t('codebuddyCli.errors.workingDirInvalid') : undefined,
                 onChange: updateDirectory, onChoose: () => void chooseDirectory(),
               }}

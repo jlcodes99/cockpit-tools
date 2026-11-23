@@ -257,19 +257,6 @@ fn member_switch_rejects_invalid_target_or_engine_without_mutating_original() {
         .unwrap_err(),
         "CHATGPT_PLAN_SOURCE_INVALID"
     );
-    let mut free = source();
-    free.plan_type = Some("free".into());
-    assert_eq!(
-        switched_chatgpt_plan_collection(
-            &original,
-            &free,
-            Some(&projection),
-            Some(&projection.id),
-            false
-        )
-        .unwrap_err(),
-        "CHATGPT_PLAN_SERVICE_ACCOUNT_INELIGIBLE"
-    );
     assert_eq!(
         switched_chatgpt_plan_collection(&original, &source(), None, None, true)
             .unwrap_err(),
@@ -278,14 +265,30 @@ fn member_switch_rejects_invalid_target_or_engine_without_mutating_original() {
 }
 
 #[test]
+fn member_switch_preserves_free_accounts_when_picker_hides_them() {
+    let current = collection();
+    assert!(current.restrict_free_accounts);
+    let mut free = source();
+    free.plan_type = Some("free".into());
+    let projection = projection();
+    let switched = switched_chatgpt_plan_collection(
+        &current,
+        &free,
+        Some(&projection),
+        Some(&projection.id),
+        false,
+    )
+    .unwrap();
+    assert!(switched.restrict_free_accounts);
+    assert!(switched.account_ids.contains(&free.id));
+}
+
+#[test]
 fn member_switch_retains_access_token_only_codex_eligibility_and_separate_official_grant() {
     let current = collection();
     let mut source = source();
     source.tokens.refresh_token = None;
-    assert!(is_local_access_eligible_account(
-        &source,
-        current.restrict_free_accounts
-    ));
+    assert!(is_local_access_eligible_account(&source));
     let codex = switched_chatgpt_plan_collection(&current, &source, None, None, false).unwrap();
     assert!(codex.account_ids.contains(&source.id));
     let projection = projection();

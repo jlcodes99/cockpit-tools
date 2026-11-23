@@ -87,16 +87,21 @@ pub(super) async fn read_request(
                     .map_err(super::request_body::read_error)?,
         };
         let bytes = decode_body(state, bytes, &parts.headers).await?;
+        tracker.request_size(super::diagnostics::RequestSize {
+            total_bytes: bytes.len() as u64,
+            ..Default::default()
+        });
         let small = bytes.len() <= 64 * 1024;
         let identity = (super::opencode_session::conversation_path(parts.uri.path())
             && parts.headers.contains_key("x-opencode-session"))
             .then(|| (caller.id.clone(), parts.headers.clone()));
+        let path = parts.uri.path().to_owned();
         let parse = move || {
             let (body, headers) = super::opencode_session::parse(
                 &bytes,
                 identity.as_ref().map(|(caller, headers)| (caller.as_str(), headers)),
             ).map_err(|_| ServiceError::new(400,"invalid_json","Request body must be a JSON object"))?;
-            let size = super::request_metrics::measure(&body, bytes.len());
+            let size = super::request_metrics::measure(&body, bytes.len(), &path);
             Ok((body, size, headers))
         };
         let (body, size, headers) = if small { parse()? } else {
@@ -109,7 +114,7 @@ pub(super) async fn read_request(
     match result {
         Ok((caller, body, headers)) => {
             tracker.authorized(&caller, body["model"].as_str().unwrap_or(""));
-            tracker.payload("client_request", "http", &parts.headers, &body.to_string());
+            tracker.payload_with("client_request", "http", &parts.headers, || body.to_string());
             Ok(Input {
                 tracker,
                 caller,
@@ -230,11 +235,13 @@ pub(super) async fn dispatch_responses(
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
+    let prepare_started = tokio::time::Instant::now();
     let prepared = if compact {
         mapping::prepare_compact(&state, &caller, &headers, body, None).await
     } else {
         mapping::prepare(&state, &caller, &headers, body, None).await
     };
+    tracker.measure_initial_local_prepare(prepare_started.elapsed());
     let mut prepared = match prepared {
         Ok(value) => value,
         Err(error) => {
@@ -638,7 +645,7 @@ async fn forward_with_policy(
         super::replay_wire::instructions(&prepared.source_body, &mut response);
         tracker.record_response_model(&prepared.route, &response);
         super::response_wire::ResponseWire::default().stamp_response(&mut response);
-        tracker.payload("upstream_response", "http", &headers, &response.to_string());
+        tracker.payload_with("upstream_response", "http", &headers, || response.to_string());
         tracker.set_retry_after(observation.retry_after);
         tracker.response_tier(observation.service_tier.as_deref());
         tracker.capture_response_error(
@@ -673,11 +680,11 @@ async fn forward_with_policy(
             return Err(error);
         }
     };
-    tracker.payload(
+    tracker.payload_with(
         "upstream_response",
         "http",
         &headers,
-        &String::from_utf8_lossy(&bytes),
+        || String::from_utf8_lossy(&bytes),
     );
     let mut value = serde_json::from_slice::<Value>(&bytes).ok();
     let mut normalized = false;
@@ -931,11 +938,11 @@ impl StreamingResponse {
 
     async fn complete(&mut self) {
         if let Some(response) = &self.observation.response {
-            self.tracker.payload(
+            self.tracker.payload_with(
                 "upstream_response",
                 "http",
                 &HeaderMap::new(),
-                &response.to_string(),
+                || response.to_string(),
             );
         }
         self.tracker.set_retry_after(self.observation.retry_after);

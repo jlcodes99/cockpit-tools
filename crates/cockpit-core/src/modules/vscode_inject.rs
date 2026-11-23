@@ -412,6 +412,10 @@ fn build_macos_safe_storage_candidates(
                 "Qoder Safe Storage".to_string(),
                 Some("Qoder Safe Storage".to_string()),
             ),
+            (
+                "Qoder App Safe Storage".to_string(),
+                Some("Qoder App Key".to_string()),
+            ),
         ];
     }
 
@@ -1278,7 +1282,16 @@ pub(crate) fn qoder_storage_ready(data_root: &Path) -> Result<bool, String> {
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        match get_macos_safe_storage_password(Some(data_root), SafeStorageReadMode::QoderOnly) {
+            Ok(_) => Ok(true),
+            Err(_) if !data_root.join("User/globalStorage/state.vscdb").is_file() => Ok(false),
+            Err(error) => Err(format!("QODER_STORAGE_UNAVAILABLE: {error}")),
+        }
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         let _ = data_root;
         Ok(true)

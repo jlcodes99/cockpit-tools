@@ -10,6 +10,35 @@ fn package() -> CodexRegisteredLaunch {
 }
 
 #[test]
+fn plain_store_default_uses_explorer_and_the_registered_gui_application_id() {
+    let system_root = Path::new(r"D:\Windows");
+    let args = ["  ".to_owned()];
+    let command = codex_default_store_shell_command(system_root, &package(), None, &args, false)
+        .expect("plain default can use the registered Store entry");
+    assert_eq!(
+        Path::new(command.get_program()),
+        system_root.join("explorer.exe")
+    );
+    assert_eq!(
+        command.get_args().collect::<Vec<_>>(),
+        [std::ffi::OsStr::new(r"shell:AppsFolder\OpenAI.Codex_pub!Gui")]
+    );
+}
+
+#[test]
+fn store_default_preserves_custom_home_proxy_environment_and_arguments() {
+    let root = Path::new(r"C:\Windows");
+    let package = package();
+    assert!(
+        codex_default_store_shell_command(root, &package, Some(r"D:\Profile"), &[], false)
+            .is_none()
+    );
+    assert!(codex_default_store_shell_command(root, &package, None, &[], true).is_none());
+    let args = ["--remote-debugging-port=9222".to_owned()];
+    assert!(codex_default_store_shell_command(root, &package, None, &args, false).is_none());
+}
+
+#[test]
 fn configured_path_success_never_runs_automatic_discovery() {
     let selected = PathBuf::from(r"D:\Custom\ChatGPT.exe");
     let result = launch_codex_default_with_path_fallback(
@@ -156,6 +185,48 @@ fn stale_registration_can_fall_back_only_when_no_client_was_created() {
     assert!(
         matches!(result, Err(CodexDefaultLaunchFailure::NotStarted(error)) if error == "registration query failed")
     );
+}
+
+#[test]
+fn confirmed_package_creation_denial_tries_the_next_available_entry() {
+    use codex_package_launcher::LaunchReply;
+    let selected = PathBuf::from(r"C:\WindowsApps\First\ChatGPT.exe");
+    let next = PathBuf::from(r"D:\WindowsApps\Second\ChatGPT.exe");
+    let result = launch_codex_default_with_path_fallback(
+        Some(selected.clone()),
+        || vec![selected.clone(), next.clone()],
+        |path| {
+            if path == selected {
+                activate_codex_default_package_with_refresh(
+                    package(),
+                    |_| resolve_codex_package_activation_reply(
+                        Some(LaunchReply::Failed {
+                            message: "Client process creation failed: Access is denied. (os error 5)".into(),
+                        }),
+                        Ok(String::new()),
+                    ).map(|_| ()),
+                    || panic!("Access denied does not require a registration refresh"),
+                )?;
+                panic!("The first client did not start");
+            }
+            assert_eq!(path, next);
+            Ok((456, path.to_path_buf()))
+        },
+    );
+    assert_eq!(result.unwrap(), (456, next));
+}
+
+#[test]
+fn uncertain_package_execution_does_not_retry_a_stale_marker_in_diagnostics() {
+    let result = activate_codex_default_package_with_refresh(
+        package(),
+        |_| resolve_codex_package_activation_reply(
+            None,
+            Err("launch probe mentions CODEX_PACKAGE_REGISTRATION_CHANGED inside its report".into()),
+        ).map(|_| ()),
+        || panic!("An error detail does not prove that no client was dispatched"),
+    );
+    assert!(result.is_ok());
 }
 
 #[test]

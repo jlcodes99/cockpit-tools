@@ -94,6 +94,93 @@ fn desktop_cookie_two_session_versions_do_not_replace_organization() {
 }
 
 #[test]
+fn outgoing_desktop_snapshot_accepts_a_rotated_cookie_only_for_the_verified_account() {
+    let dirs = TestDir::new();
+    let snapshot = dirs.0.join("saved");
+    let backup = dirs.0.join("outgoing");
+    for (path, session) in [(&snapshot, "old-fixture"), (&backup, "rotated-fixture")] {
+        fs::create_dir_all(path.join("Network")).unwrap();
+        let conn = Connection::open(default_desktop_cookies_path(path)).unwrap();
+        conn.execute_batch("CREATE TABLE cookies(name TEXT,host_key TEXT,value TEXT,encrypted_value BLOB); INSERT INTO cookies VALUES('lastActiveOrg','.claude.ai','shared-org',X'');").unwrap();
+        conn.execute(
+            "INSERT INTO cookies VALUES('sessionKeyV3','.claude.ai',?1,X'')",
+            [session],
+        )
+        .unwrap();
+    }
+    let previous: ClaudeAccount = serde_json::from_value(json!({
+        "id":"fixture-account", "email":"person@example.test", "auth_mode":"desktop_oauth",
+        "account_uuid":"11111111-1111-4111-8111-111111111111", "created_at":1, "last_used":1,
+    }))
+    .unwrap();
+    let read_session = |root: &Path| {
+        Connection::open(default_desktop_cookies_path(root))
+            .unwrap()
+            .query_row(
+                "SELECT value FROM cookies WHERE name='sessionKeyV3'",
+                [],
+                |r| r.get::<_, String>(0),
+            )
+            .unwrap()
+    };
+    fs::write(desktop_auth_export_path(&snapshot), b"old export").unwrap();
+    for identity in [
+        json!({"uuid":"22222222-2222-4222-8222-222222222222","email":"person@example.test","organization":{"uuid":"shared-org"}}),
+        json!({"organization":{"uuid":"shared-org"}}),
+    ] {
+        assert!(!restore_verified_outgoing_desktop_snapshot(
+            &previous, &backup, &snapshot, &identity, || Ok(true)
+        )
+        .unwrap());
+        assert_eq!(read_session(&snapshot), "old-fixture");
+        assert!(desktop_auth_export_path(&snapshot).is_file());
+    }
+    let identity = json!({"account":{"uuid":"11111111-1111-4111-8111-111111111111"}});
+    assert!(!restore_verified_outgoing_desktop_snapshot(
+        &previous, &backup, &snapshot, &identity, || Ok(false)
+    )
+    .unwrap());
+    assert_eq!(read_session(&snapshot), "old-fixture");
+    // The exported cookie data is unreadable in both states. A newer snapshot
+    // still must be detected when account verification returns.
+    assert!(read_desktop_auth_cookie_export(&snapshot).is_err());
+    let before_verify = desktop_login_snapshot_revision(&snapshot).unwrap();
+    Connection::open(default_desktop_cookies_path(&snapshot))
+        .unwrap()
+        .execute(
+            "UPDATE cookies SET value = ?1 WHERE name = 'sessionKeyV3'",
+            ["concurrent-fixture"],
+        )
+        .unwrap();
+    assert!(read_desktop_auth_cookie_export(&snapshot).is_err());
+    assert!(!restore_verified_outgoing_desktop_snapshot(
+        &previous, &backup, &snapshot, &identity,
+        || Ok(desktop_login_snapshot_revision(&snapshot)? == before_verify),
+    )
+    .unwrap());
+    assert_eq!(read_session(&snapshot), "concurrent-fixture");
+
+    assert!(restore_verified_outgoing_desktop_snapshot(
+        &previous, &backup, &snapshot, &identity, || Ok(true)
+    )
+    .unwrap());
+    assert_eq!(read_session(&snapshot), "rotated-fixture");
+    assert!(!desktop_auth_export_path(&snapshot).exists());
+    assert_eq!(read_session(&backup), "rotated-fixture");
+
+    let mut legacy = previous;
+    legacy.account_uuid = None;
+    assert!(desktop_identity_matches_account(
+        &legacy,
+        &json!({"email_address":"PERSON@example.test"})
+    ));
+    assert!(!desktop_identity_matches_account(
+        &legacy,
+        &json!({"organizations":[{"email":"person@example.test"}]})
+    ));
+}
+
+#[test]
 fn desktop_restore_replaces_auth_keys_and_removes_absent_cookie_paths() {
     let dir = TestDir::new();
     let source = dir.0.join("source");

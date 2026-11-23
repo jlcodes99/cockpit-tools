@@ -8,7 +8,7 @@ async fn refresh_account_quota_after_login(account: models::Account) -> models::
 
     match modules::fetch_quota_with_fresh_token(&mut refreshing_account, true).await {
         Ok(quota) => {
-            if let Err(e) = modules::update_account_quota(&account_id, quota) {
+            if let Err(e) = modules::update_account_quota(&refreshing_account, quota) {
                 modules::logger::log_warn(&format!(
                     "OAuth 登录后自动刷新配额写回失败: account_id={}, error={}",
                     account_id, e

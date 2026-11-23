@@ -41,6 +41,9 @@ export const DEEPSEEK_CODEX_VISION_MODEL_CATALOG = [
 ] as const;
 export const OPENCODE_GO_API_PROVIDER_ID = "opencode_go";
 export const OPENCODE_GO_API_BASE_URL = opencodeGoCatalog.baseUrls[0];
+export const OLLAMA_LOCAL_API_PROVIDER_ID = "ollama_local";
+const OLLAMA_LOCAL_BASE_URLS = ["http://127.0.0.1:11434/v1", "http://localhost:11434/v1", "http://[::1]:11434/v1"];
+export const OLLAMA_CLOUD_API_PROVIDER_ID = "ollama_cloud";
 export const MINIMAX_API_PROVIDER_ID = "minimax";
 export const MINIMAX_EN_API_PROVIDER_ID = "minimax_en";
 export const MINIMAX_CODEX_MODEL_CATALOG = [
@@ -71,6 +74,19 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     website:
       "https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/codex",
     isOfficial: true,
+  },
+  {
+    id: OLLAMA_LOCAL_API_PROVIDER_ID,
+    name: "Ollama",
+    baseUrls: OLLAMA_LOCAL_BASE_URLS,
+    website: "https://docs.ollama.com/api/openai-compatibility",
+  },
+  {
+    id: OLLAMA_CLOUD_API_PROVIDER_ID,
+    name: "Ollama Cloud",
+    baseUrls: ["https://ollama.com/v1"],
+    website: "https://docs.ollama.com/cloud",
+    apiKeyUrl: "https://ollama.com/settings/keys",
   },
   {
     id: DEEPSEEK_API_PROVIDER_ID,
@@ -197,20 +213,12 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     apiKeyUrl: "https://opencode.ai/auth",
   },
   {
-    id: "uberllm",
-    name: "UberLLM",
-    baseUrls: ["https://api.uberllm.dev/v1"],
-    modelCatalog: ["deepseek/deepseek-v4.1-flash", "z-ai/glm-5.3", "anthropic/claude-sonnet-4.6"],
-    website: "https://uberllm.dev/",
-    apiKeyUrl: "https://uberllm.dev/signup",
-  },
-  {
-    id: "runcrate",
-    name: "Runcrate",
-    baseUrls: ["https://api.runcrate.ai/v1"],
-    modelCatalog: ["zai-org/GLM-5.3", "deepseek-ai/DeepSeek-V4.1-Flash"],
-    website: "https://www.runcrate.ai/",
-    apiKeyUrl: "https://www.runcrate.ai/dashboard/api-keys",
+    id: "requesty",
+    name: "Requesty",
+    baseUrls: ["https://router.requesty.ai/v1"],
+    modelCatalog: ["openai/gpt-6.1-terra", "openai/gpt-5.4"],
+    website: "https://www.requesty.ai/",
+    apiKeyUrl: "https://app.requesty.ai/api-keys",
   },
   {
     id: "aicodemirror",
@@ -333,7 +341,7 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
   {
     id: MINIMAX_API_PROVIDER_ID,
     name: "MiniMax",
-    baseUrls: ["https://api.minimaxi.com/v1"],
+    baseUrls: ["https://api.minimaxi.com/v1", "https://api.minimax.cn/v1"],
     modelCatalog: [...MINIMAX_CODEX_MODEL_CATALOG],
     visionModelCatalog: [...MINIMAX_CODEX_VISION_MODEL_CATALOG],
     website: "https://platform.minimaxi.com/docs",
@@ -452,6 +460,13 @@ export function findCodexApiProviderPresetByBaseUrl(
       ),
     ) ?? null
   );
+}
+
+export function resolveOllamaLocalPlaceholderKey(rawBaseUrl: string): string {
+  const baseUrl = normalizeCodexProviderBaseUrl(rawBaseUrl);
+  if (!baseUrl || !OLLAMA_LOCAL_BASE_URLS.includes(baseUrl)) return "";
+  // Ollama ignores the token. Keep the placeholder specific to the endpoint because Codex accounts are keyed by token.
+  return `cockpit-ollama-local-${new URL(baseUrl).hostname.replace(/[^a-z0-9.]+/g, "-")}`;
 }
 
 export function isCockpitApiProviderBaseUrl(rawBaseUrl: string): boolean {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Crosshair, X } from 'lucide-react';
+import { Crosshair } from 'lucide-react';
 import { PlatformOverviewTabsHeader, PlatformOverviewTab } from '../components/platform/PlatformOverviewTabsHeader';
 import { CodebuddyCnInstancesContent } from './CodebuddyCnInstancesPage';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
@@ -15,29 +15,17 @@ import {
   getCodebuddyQuotaCategoryGroups,
 } from '../types/codebuddy';
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
+import { useWorkbuddyProbeAutoRecheck } from '../hooks/useWorkbuddyProbeAutoRecheck';
 import { CodebuddySuiteAccountsSharedView, type CodebuddySuiteAccountsPlatformConfig } from '../components/codebuddy-suite/CodebuddySuiteAccountsSharedView';
-import { CodebuddyQuotaCreditsSummary } from '../components/codebuddy-suite/CodebuddyQuotaCreditsSummary';
-import { CodebuddyInstancesPanel } from '../components/codebuddy/CodebuddyCliInstances';
 import { CodebuddyLaunchDialog } from '../components/codebuddy/CodebuddyLaunchDialog';
 import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessionManager';
 import { emitCurrentAccountChanged } from '../utils/accountSyncEvents';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 import { WorkbuddyModelProbeModal } from '../components/workbuddy/WorkbuddyModelProbeModal';
-import {
-  dismissWorkbuddyProbeRecord,
-  getWorkbuddyProbeRecords,
-  subscribeWorkbuddyProbeStatus,
-} from '../utils/workbuddyProbeStatus';
+import { WorkbuddyProbeNotice } from '../components/workbuddy/WorkbuddyProbeNotice';
+import { subscribeWorkbuddyProbeStatus } from '../utils/workbuddyProbeStatus';
 
 const CB_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.codebuddycn.flow_notice_collapsed';
-
-/** 受限提示里的短时间格式：MM/DD HH:mm */
-function formatProbeTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 
 function compareQuotaItems(a: CodebuddyOfficialQuotaResource, b: CodebuddyOfficialQuotaResource): number {
   const aAvailable = !!a.unlimited || a.remain > 0;
@@ -116,7 +104,6 @@ export function CodebuddyCnAccountsPage() {
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
   const [probeOpen, setProbeOpen] = useState(false);
   const [probeAccountId, setProbeAccountId] = useState<string | null>(null);
-  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
   const [probeVersion, setProbeVersion] = useState(0);
   const [launchAccountId, setLaunchAccountId] = useState<string | null>(null);
   const store = useCodebuddyCnAccountStore();
@@ -125,6 +112,7 @@ export function CodebuddyCnAccountsPage() {
   useEffect(() => subscribeWorkbuddyProbeStatus(() => setProbeVersion((v) => v + 1)), []);
 
   // 恢复时间过后自动复测：确认恢复则在卡片提示后标注「已恢复」（CN 与 WorkBuddy 额度共享、同一套逻辑）
+  useWorkbuddyProbeAutoRecheck(store.accounts, 'codebuddy_cn');
 
   const page = useProviderAccountsPage<CodebuddyAccount>({
     platformKey: 'CodeBuddy CN',
@@ -186,8 +174,6 @@ export function CodebuddyCnAccountsPage() {
     [page.sortDirection, store.accounts, store.currentAccountId],
   );
 
-  // 与 WorkBuddy 一致，用「总剩余额度 + 分组明细」的新版概览替换平铺的资源包列表；
-  // 无配额数据时返回 null，让共享视图回退到原有的空状态提示。
   const platformConfig = useMemo<
     CodebuddySuiteAccountsPlatformConfig<CodebuddyAccount>
   >(
@@ -206,52 +192,7 @@ export function CodebuddyCnAccountsPage() {
           <Crosshair size={14} />
         </button>
       ),
-      renderCardNotice: (account) => {
-        const records = getWorkbuddyProbeRecords(account.id);
-        if (records.length === 0) return null;
-        return (
-          <div className="wb-probe-notice">
-            {records.slice(0, 2).map((record) => {
-              return (
-                <div key={record.model} className={`wb-probe-notice-item ${record.status}`}>
-                  <AlertTriangle size={12} aria-hidden="true" />
-                  <span title={record.message}>
-                    {record.resetAt
-                        ? page.t('workbuddy.probeNotice.until', '{{model}} 不可用至 {{time}}', {
-                            model: record.model,
-                            time: formatProbeTime(record.resetAt),
-                          })
-                        : page.t('workbuddy.probeNotice.unavailable', '{{model}} 暂不可用', {
-                            model: record.model,
-                          })}
-                  </span>
-                  <button
-                    type="button"
-                    className="wb-probe-notice-close"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      dismissWorkbuddyProbeRecord(account.id, record.model);
-                    }}
-                    title={page.t('common.close')}
-                  >
-                    <X size={12} aria-hidden="true" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        );
-      },
-
-      renderQuotaSummary: (account) => {
-        const groups = getCodebuddyQuotaCategoryGroups(
-          account,
-          page.t as (key: string, defaultValue?: string) => string,
-        );
-        return groups.some((group) => group.visible) ? (
-          <CodebuddyQuotaCreditsSummary groups={groups} />
-        ) : null;
-      },
+      renderCardNotice: (account) => <WorkbuddyProbeNotice accountId={account.id} />,
     }),
     [page.t, probeVersion],
   );
@@ -278,16 +219,7 @@ export function CodebuddyCnAccountsPage() {
         tabs={['overview', 'sessions', 'instances']}
       />
       {activeTab === 'instances' ? (
-        <CodebuddyInstancesPanel
-          region="china"
-          accounts={store.accounts}
-          accountsLoading={store.loading}
-          accountsError={store.error}
-          fetchAccounts={store.fetchAccounts}
-          maskAccountText={page.maskAccountText}
-        >
-          <CodebuddyCnInstancesContent accountsForSelect={accountsForInstances} />
-        </CodebuddyInstancesPanel>
+        <CodebuddyCnInstancesContent accountsForSelect={accountsForInstances} />
       ) : activeTab === 'sessions' ? (
         <CodebuddySessionManager platform="cn" accounts={store.accounts as any} />
       ) : (
@@ -296,24 +228,16 @@ export function CodebuddyCnAccountsPage() {
           loading={store.loading}
           page={page}
           platformConfig={platformConfig}
-          onSelectionChange={setSelectedAccountIds}
           onLaunchAccount={(account) => setLaunchAccountId(account.id)}
           onRefreshAccounts={() => { store.fetchAccounts(); }}
         />
       )}
       {probeOpen && (
         <WorkbuddyModelProbeModal
+          platform="codebuddy_cn"
           accounts={store.accounts}
           currentAccountId={probeAccountId ?? store.currentAccountId}
-          selectedAccountIds={selectedAccountIds}
-          initialScope={probeAccountId ? 'current' : undefined}
-          lockedAccountId={probeAccountId}
-          platform="codebuddy_cn"
-          displayEmail={getCodebuddyAccountDisplayEmail}
-          onClose={() => {
-            setProbeOpen(false);
-            setProbeAccountId(null);
-          }}
+          onClose={() => setProbeOpen(false)}
         />
       )}
       {launchAccount && (

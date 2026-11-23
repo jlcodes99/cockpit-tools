@@ -1,6 +1,35 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { refreshCodexQuotaWithFeedback } from './codexQuotaRefreshFeedback.ts';
+import { createInstance } from 'i18next';
+import { getCodexAccountRefreshFeedback, refreshCodexQuotaWithFeedback } from './codexQuotaRefreshFeedback.ts';
+
+test('account feedback distinguishes completed, skipped, and failed refreshes', async () => {
+  const i18n = createInstance();
+  await i18n.init({
+    lng: 'en',
+    resources: {
+      en: { translation: {
+        common: { shared: { refreshSuccess: 'Refreshed', refreshFailed: 'Refresh failed: {{error}}' } },
+        codex: { proxy: { runtimeBusy: 'Proxy is busy' } },
+      } },
+    },
+    interpolation: { escapeValue: false },
+  });
+  const t = i18n.getFixedT('en');
+
+  assert.deepEqual(await getCodexAccountRefreshFeedback(async () => ({ ok: true }), t), {
+    text: 'Refreshed', tone: 'success',
+  });
+  assert.equal(await getCodexAccountRefreshFeedback(async () => undefined, t), null);
+  assert.deepEqual(
+    await getCodexAccountRefreshFeedback(async () => ({ ok: false, error: new Error('Usage unavailable') }), t),
+    { text: 'Refresh failed: Usage unavailable', tone: 'error' },
+  );
+  assert.deepEqual(
+    await getCodexAccountRefreshFeedback(async () => { throw new Error('PROXY_RUNTIME_BUSY'); }, t),
+    { text: 'Refresh failed: Proxy is busy', tone: 'error' },
+  );
+});
 
 test('manual single/batch refresh clears stale messages and reports wrapped local failures without losing rejection', async () => {
   for (const raw of ['PROXY_RUNTIME_BUSY', 'Token 已过期，刷新 Token 失败: Token 已过期且刷新失败: PROXY_RUNTIME_BUSY']) {

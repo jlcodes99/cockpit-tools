@@ -2,7 +2,6 @@ import {
   isCodexApiKeyAccount,
   isCodexChatgptPlanAccount,
   isCodexAgentIdentityAccount,
-  isCodexEffectiveFreePlan,
   isCodexPendingOAuthAccount,
   isCodexWebSessionAccount,
   type CodexAccount,
@@ -36,9 +35,7 @@ const CHAT_COMPLETIONS_PROVIDER_HOSTS = [
   "api.stepfun.ai",
   "modelscope.cn",
   "api.longcat.chat",
-  "api.minimax.io",
   "api.mini-max.chat",
-  "api.minimaxi.com",
   "api.tbox.cn",
   "api.mimo.dev",
   "api.xiaomimimo.com",
@@ -56,7 +53,6 @@ const CHAT_COMPLETIONS_PROVIDER_HOSTS = [
 ];
 
 export type CodexLocalAccessAccountIneligibleReason =
-  | "free_restricted"
   | "pending_oauth"
   | "web_session_quota_only";
 
@@ -91,7 +87,6 @@ export function codexProviderNeedsProtocolGateway(account: Pick<CodexAccount, "a
 
 export function getCodexLocalAccessAccountIneligibleReason(
   account: CodexAccount,
-  restrictFreeAccounts: boolean,
 ): CodexLocalAccessAccountIneligibleReason | null {
   account = getCodexServiceEndpoint(account);
   // Pending / incomplete OAuth accounts cannot serve API traffic.
@@ -102,34 +97,22 @@ export function getCodexLocalAccessAccountIneligibleReason(
   if (isCodexWebSessionAccount(account)) {
     return "web_session_quota_only";
   }
-  if (
-    restrictFreeAccounts &&
-    !isCodexAgentIdentityAccount(account) &&
-    isCodexEffectiveFreePlan(account)
-  ) {
-    return "free_restricted";
-  }
   return null;
 }
 
 export function isCodexLocalAccessEligibleAccount(
   account: CodexAccount,
-  restrictFreeAccounts: boolean,
 ): boolean {
-  return getCodexLocalAccessAccountIneligibleReason(
-    account,
-    restrictFreeAccounts,
-  ) === null;
+  return getCodexLocalAccessAccountIneligibleReason(account) === null;
 }
 
 export function canAddCodexAccountToLocalAccess(
   account: CodexAccount,
   currentAccountIds: ReadonlySet<string>,
-  restrictFreeAccounts: boolean,
 ): boolean {
   return (
     !currentAccountIds.has(account.id) &&
-    isCodexLocalAccessEligibleAccount(account, restrictFreeAccounts)
+    isCodexLocalAccessEligibleAccount(account)
   );
 }
 
@@ -147,7 +130,6 @@ export function isCodexOAuthBindingEligibleAccount(
 export function filterCodexLocalAccessAccountIds(
   accountIds: string[],
   accounts: CodexAccount[],
-  restrictFreeAccounts: boolean,
   retainedPausedIds: readonly string[] = [],
 ): string[] {
   const accountById = new Map(accounts.map((account) => [account.id, account]));
@@ -157,7 +139,7 @@ export function filterCodexLocalAccessAccountIds(
   for (const accountId of accountIds) {
     const account = accountById.get(accountId);
     // Retaining a paused member is separate from admitting a new usable account.
-    if (!retainedPausedIds.includes(accountId) && (!account || !isCodexLocalAccessEligibleAccount(account, restrictFreeAccounts))) {
+    if (!retainedPausedIds.includes(accountId) && (!account || !isCodexLocalAccessEligibleAccount(account))) {
       continue;
     }
     if (!seen.has(accountId)) {
@@ -172,7 +154,6 @@ export function filterCodexLocalAccessAccountIds(
 export function resolveCodexLocalAccessInitialAccountIds(
   accountIds: string[],
   accounts: CodexAccount[],
-  restrictFreeAccounts: boolean,
   accountsLoaded: boolean,
   retainedPausedIds: readonly string[] = [],
 ): string[] {
@@ -182,7 +163,6 @@ export function resolveCodexLocalAccessInitialAccountIds(
   return filterCodexLocalAccessAccountIds(
     accountIds,
     accounts,
-    restrictFreeAccounts,
     retainedPausedIds,
   );
 }
@@ -193,7 +173,7 @@ export function resolveImportedCodexAccountIdsForLocalAccess(
   forceAgentIdentityAccounts: boolean,
 ): string[] {
   const eligible = accounts.filter((account) =>
-    isCodexLocalAccessEligibleAccount(account, false),
+    isCodexLocalAccessEligibleAccount(account),
   );
   if (syncAllImportedAccounts) {
     return eligible.map((account) => account.id);

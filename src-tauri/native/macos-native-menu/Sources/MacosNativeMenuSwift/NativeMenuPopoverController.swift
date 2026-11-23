@@ -15,6 +15,7 @@ final class NativeMenuPopoverController: NSObject, ObservableObject, NSMenuDeleg
 
     private weak var statusItem: NSStatusItem?
     private var menu: NSMenu?
+    private var accountMenuItem: NSMenuItem?
     private var refreshStartedAt: Date?
     private var clearRefreshTask: Task<Void, Never>?
 
@@ -57,9 +58,7 @@ final class NativeMenuPopoverController: NSObject, ObservableObject, NSMenuDeleg
         let total = platform.cards.count
         let nextIndex = (currentIndex + delta + total) % total
         self.viewedAccountIds[platform.id] = platform.cards[nextIndex].id
-        self.bumpRenderRevision()
-        self.rebuildMenu()
-        self.refreshVisibleMenuDisplay()
+        self.updateAccountSection()
     }
 
     func jumpToRecommendedAccount() {
@@ -70,9 +69,7 @@ final class NativeMenuPopoverController: NSObject, ObservableObject, NSMenuDeleg
             return
         }
         self.viewedAccountIds[platform.id] = recommendedId
-        self.bumpRenderRevision()
-        self.rebuildMenu()
-        self.refreshVisibleMenuDisplay()
+        self.updateAccountSection()
     }
 
     func jumpBackToCurrentAccount() {
@@ -83,9 +80,7 @@ final class NativeMenuPopoverController: NSObject, ObservableObject, NSMenuDeleg
             return
         }
         self.viewedAccountIds[platform.id] = currentId
-        self.bumpRenderRevision()
-        self.rebuildMenu()
-        self.refreshVisibleMenuDisplay()
+        self.updateAccountSection()
     }
 
     func dispatch(action: NativeRustAction) {
@@ -263,6 +258,7 @@ final class NativeMenuPopoverController: NSObject, ObservableObject, NSMenuDeleg
         guard let menu else {
             return
         }
+        self.accountMenuItem = nil
         menu.removeAllItems()
 
         guard let snapshot else {
@@ -277,13 +273,15 @@ final class NativeMenuPopoverController: NSObject, ObservableObject, NSMenuDeleg
 
         if let platform = self.selectedPlatform {
             menu.addItem(.separator())
-            menu.addItem(self.makeHostingItem(
+            let accountMenuItem = self.makeHostingItem(
                 NativeMenuAccountSectionView(
                     controller: self,
                     platform: platform,
                     strings: snapshot.strings
                 )
-            ))
+            )
+            self.accountMenuItem = accountMenuItem
+            menu.addItem(accountMenuItem)
             menu.addItem(.separator())
 
             menu.addItem(self.makeActionMenuItem(
@@ -316,6 +314,29 @@ final class NativeMenuPopoverController: NSObject, ObservableObject, NSMenuDeleg
             systemName: "power",
             action: #selector(self.handleQuit(_:))
         ))
+    }
+
+    private func updateAccountSection() {
+        guard let menu, let accountMenuItem, accountMenuItem.menu === menu,
+              let hosting = accountMenuItem.view as? MenuHostingView<NativeMenuAccountSectionView>,
+              let snapshot, let platform = self.selectedPlatform
+        else {
+            self.rebuildMenu()
+            self.refreshVisibleMenuDisplay()
+            return
+        }
+
+        let content = NativeMenuAccountSectionView(
+            controller: self,
+            platform: platform,
+            strings: snapshot.strings
+        )
+        let height = self.hostingHeight(for: content)
+        if hosting.frame.height != height {
+            hosting.setFrameSize(NSSize(width: NativeMenuLayout.width, height: height))
+            menu.itemChanged(accountMenuItem)
+            menu.update()
+        }
     }
 
     private func refreshVisibleMenuDisplay() {
@@ -360,21 +381,28 @@ final class NativeMenuPopoverController: NSObject, ObservableObject, NSMenuDeleg
     }
 
     private func makeHostingItem<Content: View>(_ view: Content) -> NSMenuItem {
+        let item = NSMenuItem()
+        item.view = self.makeHostingView(view)
+        item.isEnabled = false
+        return item
+    }
+
+    private func makeHostingView<Content: View>(_ view: Content) -> NSView {
+        let hosting = MenuHostingView(rootView: view)
+        hosting.frame = NSRect(
+            origin: .zero,
+            size: NSSize(width: NativeMenuLayout.width, height: self.hostingHeight(for: view))
+        )
+        return hosting
+    }
+
+    private func hostingHeight<Content: View>(for view: Content) -> CGFloat {
         let controller = NSHostingController(rootView: view)
         let size = controller.sizeThatFits(in: CGSize(
             width: NativeMenuLayout.width,
             height: .greatestFiniteMagnitude
         ))
-        let hosting = MenuHostingView(rootView: view)
-        hosting.frame = NSRect(
-            origin: .zero,
-            size: NSSize(width: NativeMenuLayout.width, height: ceil(size.height))
-        )
-
-        let item = NSMenuItem()
-        item.view = hosting
-        item.isEnabled = false
-        return item
+        return ceil(size.height)
     }
 
     private func makeActionMenuItem(title: String, systemName: String, action: Selector) -> NSMenuItem {

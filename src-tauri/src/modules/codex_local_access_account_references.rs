@@ -17,6 +17,12 @@ fn replace_collection_account_references(
             .fold(false, |changed, value| replace(value, old, new) | changed)
     }
     let mut changed = replace_list(&mut collection.account_ids, old_id, new_id);
+    for pool in &mut collection.account_pools {
+        if replace_list(&mut pool.account_ids, old_id, new_id) {
+            pool.account_ids = normalize_account_id_list(std::mem::take(&mut pool.account_ids));
+            changed = true;
+        }
+    }
     changed |= replace_list(
         &mut collection.capability_fallback.account_ids,
         old_id,

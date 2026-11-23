@@ -172,6 +172,7 @@ struct ReplayCaches {
 enum ParentResolution {
     None,
     Parent,
+    Paginated,
     Continuation,
     Deferred,
 }
@@ -881,7 +882,7 @@ fn sync_single_file(
         0
     } else {
         match parsed.parent {
-            ParentResolution::None => 0,
+            ParentResolution::None | ParentResolution::Paginated => 0,
             ParentResolution::Deferred => {
                 return Ok(mark_deferred(
                     file_path,
@@ -974,8 +975,8 @@ fn sync_single_file(
             }
         }
     };
-    parsed.checkpoint.replay_closed |=
-        parsed.parent == ParentResolution::None || replay_prefix < parsed.token_events.len();
+    parsed.checkpoint.replay_closed |= matches!(parsed.parent, ParentResolution::None | ParentResolution::Paginated)
+        || replay_prefix < parsed.token_events.len();
 
     if let Ok(mut caches) = replay_caches().lock() {
         caches.pending.remove(file_path);
@@ -1220,7 +1221,18 @@ fn parse_codex_file_batch(
                             deferred_reason =
                                 Some("parent_thread_id 与 root_thread_id 相同".to_string());
                         } else {
-                            parent = ParentResolution::Parent;
+                            let base = &payload["history_base"];
+                            let first_ordinal = value["ordinal"].as_u64();
+                            parent = if payload["history_mode"] == "paginated"
+                                && base["thread_id"] == parent_thread_id
+                                && base["end_byte_offset"].as_u64().is_some()
+                                && first_ordinal.is_some_and(|start| base["end_ordinal_exclusive"].as_u64() == Some(start))
+                            {
+                                // Parent history is referenced by byte/ordinal, not copied into this file.
+                                ParentResolution::Paginated
+                            } else {
+                                ParentResolution::Parent
+                            };
                             parent_id = Some(parent_thread_id);
                         }
                     }
@@ -1325,7 +1337,13 @@ fn parse_codex_file_batch(
                         output: last.output,
                     }
                 } else if let Some(total) = total.as_ref() {
-                    compute_delta(&total_high_water, total)
+                    if parent == ParentResolution::Paginated && total_high_water.is_none() {
+                        // The first cumulative snapshot also includes the ancestor's usage.
+                        // Without a per-turn counter it can only establish a baseline.
+                        DeltaTokens::default()
+                    } else {
+                        compute_delta(&total_high_water, total)
+                    }
                 } else {
                     continue;
                 };
@@ -2156,6 +2174,81 @@ mod tests {
         assert_eq!(report.by_model.len(), 1);
         assert_eq!(report.by_model[0].key, "gpt-5.4");
         fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn paginated_fork_counts_own_usage_without_local_parent() {
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("home");
+        let sessions = home.join("sessions");
+        let child = rollout_path(&sessions, CHILD_ID);
+        let parent = rollout_path(&sessions, PARENT_ID);
+        let mut meta = session_meta_at(CHILD_ID, Some(PARENT_ID), "2026-07-10T03:10:00Z");
+        meta["ordinal"] = json!(25);
+        meta["payload"]["history_mode"] = json!("paginated");
+        meta["payload"]["history_base"] = json!({
+            "thread_id": PARENT_ID, "end_ordinal_exclusive": 25, "end_byte_offset": 41904,
+        });
+        write_jsonl(&child, &[meta]);
+        let store = SessionUsageStore::open_path(temp.path().join("usage.sqlite"));
+        let instances = [UsageInstance {
+            id: DEFAULT_INSTANCE_ID.into(), name: DEFAULT_INSTANCE_NAME.into(), data_dir: home,
+        }];
+        assert_eq!(store.sync(false, &instances).unwrap().imported, 0);
+        store.open_conn().unwrap().execute(
+            "UPDATE session_parser_checkpoints SET state=json_set(state,'$.version',1,'$.parent','Parent')",
+            [],
+        ).unwrap();
+        use std::io::Write;
+        let mut stream = fs::OpenOptions::new().append(true).open(&child).unwrap();
+        writeln!(stream, "{}", turn_context("gpt-5.6-sol")).unwrap();
+        writeln!(stream, "{}", token_count_with_last(
+            30, 6, 12, 11, 3, 5, "codex", "2026-07-10T03:10:05Z",
+        )).unwrap();
+        drop(stream);
+        let result = store.sync(false, &instances).unwrap();
+        assert_eq!(result.imported, 1);
+        assert_eq!(result.deferred_files, 0);
+        let query = CodexSessionUsageQuery::default();
+        let report = store.query(&query).unwrap();
+        assert_eq!(report.totals.input_tokens, 11);
+        assert_eq!(report.totals.output_tokens, 5);
+        assert_eq!(report.totals.total_tokens, 16);
+        assert_eq!(report.totals.request_count, 1);
+
+        write_jsonl(&parent, &[
+            session_meta(PARENT_ID),
+            turn_context("gpt-5.6-sol"),
+            token_count_with_last(9, 1, 3, 9, 1, 3, "codex", "2026-07-10T03:00:02Z"),
+            token_count_with_last(19, 3, 7, 10, 2, 4, "codex", "2026-07-10T03:00:03Z"),
+        ]);
+        store.sync(false, &instances).unwrap();
+        store.sync(false, &instances).unwrap();
+        let report = store.query(&query).unwrap();
+        assert_eq!(report.totals.input_tokens, 30);
+        assert_eq!(report.totals.cached_input_tokens, 6);
+        assert_eq!(report.totals.output_tokens, 12);
+        assert_eq!(report.totals.total_tokens, 42);
+        assert_eq!(report.totals.request_count, 3);
+    }
+
+    #[test]
+    fn paginated_fork_treats_an_inherited_cumulative_snapshot_as_baseline() {
+        let temp = tempfile::tempdir().unwrap();
+        let child = rollout_path(temp.path(), CHILD_ID);
+        let mut meta = session_meta_at(CHILD_ID, Some(PARENT_ID), "2026-07-10T03:10:00Z");
+        meta["ordinal"] = json!(25);
+        meta["payload"]["history_mode"] = json!("paginated");
+        meta["payload"]["history_base"] = json!({
+            "thread_id": PARENT_ID, "end_ordinal_exclusive": 25, "end_byte_offset": 41904,
+        });
+        write_jsonl(&child, &[
+            meta,
+            token_count_total(1_400, 100, 35, "2026-07-10T03:10:05Z"),
+            token_count_total(1_460, 120, 46, "2026-07-10T03:11:05Z"),
+        ]);
+        let parsed = parse_codex_file(&child, Some(CHILD_ID.to_string())).unwrap();
+        assert_eq!(nonzero_deltas(&parsed), vec![(60, 20, 11)]);
     }
 
     #[test]

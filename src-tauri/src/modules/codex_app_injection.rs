@@ -49,6 +49,17 @@ mod live;
 #[path = "codex_app_injection_binding.rs"]
 mod binding;
 
+#[path = "codex_app_injection_resume.rs"]
+mod resume;
+pub(crate) use resume::schedule_desktop_resume;
+
+#[path = "codex_app_injection_activity.rs"]
+mod activity;
+pub(crate) use activity::{
+    capture_before_desktop_stop, capture_default_desktop_thread, default_desktop_activity,
+    record_after_desktop_stop, reopen_desktop_thread_after_switch, DesktopActivity,
+};
+
 use crate::commands::codex::{
     codex_model_provider_deepseek_balance_url, query_deepseek_balance_snapshot,
     DeepSeekBalanceSnapshot,

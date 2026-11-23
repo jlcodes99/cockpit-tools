@@ -1,6 +1,6 @@
 // Codex 账号：模型识图默认规则。
 //
-// 未显式配置时，按随程序附带的 models.json 查找完整模型 ID，输入类型包含 image 时默认支持图片。
+// 未显式配置时，按内置 Codex 和供应商目录查找完整模型 ID，输入类型包含 image 时支持图片。
 // 允许 `vendor/gpt-5.6-sol` 这类命名空间前缀，未找到模型或缺少图片输入声明时默认 false；
 // 账号与供应商的显式配置仍优先。
 // 与前端 codexModelProviderVision.ts 读取同一份目录，避免默认能力规则分歧。
@@ -25,6 +25,9 @@ pub(crate) fn parse_gpt_model_version(model_id: &str) -> Option<(u32, u32)> {
 pub(crate) fn model_defaults_to_vision_input(model_id: &str) -> bool {
     let normalized = model_id.trim().to_ascii_lowercase();
     let name = normalized.rsplit('/').next().unwrap_or(normalized.as_str());
+    if let Some(supports_vision) = crate::modules::codex_model_catalog::bundled_model_supports_vision(name) {
+        return supports_vision;
+    }
     static CATALOG: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
     let catalog = CATALOG.get_or_init(|| {
         serde_json::from_str(include_str!(concat!(

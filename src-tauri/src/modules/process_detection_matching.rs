@@ -95,6 +95,42 @@ mod linux_antigravity_process_candidate_tests {
             false,
         ));
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn standalone_proc_scan_keeps_default_and_custom_profile_main_processes() {
+        use super::{collect_antigravity_process_entries_from_proc, select_main_pids_by_target_dirs};
+        use std::{collections::HashSet, fs, os::unix::fs::symlink};
+
+        let proc_root = tempfile::tempdir().unwrap();
+        let standalone = "/opt/Antigravity/antigravity";
+        let profile = "/work/profiles/custom profile";
+        let default = "/home/test/.config/antigravity";
+
+        for (pid, executable, args) in [
+            (101, standalone, ""),
+            (102, standalone, "--user-data-dir\0/work/profiles/custom profile\0"),
+            (103, standalone, "--type=renderer\0"),
+            (104, "/opt/Antigravity IDE/antigravity-ide", ""),
+        ] {
+            let entry = proc_root.path().join(pid.to_string());
+            fs::create_dir(&entry).unwrap();
+            symlink(executable, entry.join("exe")).unwrap();
+            fs::write(entry.join("cmdline"), format!("{executable}\0{args}")).unwrap();
+        }
+
+        let mut entries = collect_antigravity_process_entries_from_proc(proc_root.path(), standalone);
+        entries.sort_unstable_by_key(|(pid, _)| *pid);
+        assert_eq!(entries, [(101, None), (102, Some(profile.to_string()))]);
+        assert_eq!(
+            select_main_pids_by_target_dirs(&entries, &HashSet::from([default.into()]), Some(default)),
+            [101]
+        );
+        assert_eq!(
+            select_main_pids_by_target_dirs(&entries, &HashSet::from([profile.into()]), Some(default)),
+            [102]
+        );
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -725,10 +761,11 @@ fn collect_antigravity_process_entries_from_sysinfo_fallback(
 
 #[cfg(any(target_os = "linux", test))]
 fn collect_antigravity_process_entries_from_proc(
+    proc_root: &Path,
     expected_launch: &str,
 ) -> Vec<(u32, Option<String>)> {
     let mut result = Vec::new();
-    let entries = match std::fs::read_dir("/proc") {
+    let entries = match std::fs::read_dir(proc_root) {
         Ok(value) => value,
         Err(_) => return result,
     };
@@ -742,8 +779,8 @@ fn collect_antigravity_process_entries_from_proc(
             Ok(value) => value,
             Err(_) => continue,
         };
-        let cmdline_path = format!("/proc/{}/cmdline", pid);
-        let cmdline = match std::fs::read(&cmdline_path) {
+        let process_dir = entry.path();
+        let cmdline = match std::fs::read(process_dir.join("cmdline")) {
             Ok(value) => value,
             Err(_) => continue,
         };
@@ -751,7 +788,7 @@ fn collect_antigravity_process_entries_from_proc(
         if args.is_empty() {
             continue;
         }
-        let exe_path = std::fs::read_link(format!("/proc/{}/exe", pid))
+        let exe_path = std::fs::read_link(process_dir.join("exe"))
             .ok()
             .and_then(|path| path.to_str().map(str::to_string))
             .unwrap_or_default();
@@ -911,7 +948,7 @@ pub fn collect_antigravity_process_entries() -> Vec<(u32, Option<String>)> {
         let expected = expected_launch
             .as_deref()
             .expect("expected launch path must exist");
-        let entries = collect_antigravity_process_entries_from_proc(expected);
+        let entries = collect_antigravity_process_entries_from_proc(Path::new("/proc"), expected);
         if !entries.is_empty() {
             return filter_antigravity_entries_by_expected_launch_path(
                 "AG",
@@ -1029,13 +1066,9 @@ pub fn collect_antigravity_legacy_process_entries() -> Vec<(u32, Option<String>)
         let expected = expected_launch
             .as_deref()
             .expect("expected launch path must exist");
-        let entries = collect_antigravity_process_entries_from_proc(expected)
-            .into_iter()
-            .filter(|(_, dir)| {
-                dir.as_deref()
-                    .is_some_and(|value| value.contains("Antigravity"))
-            })
-            .collect::<Vec<_>>();
+        // The process scan verifies the executable. Profile matching happens
+        // later, where a missing flag identifies the default instance.
+        let entries = collect_antigravity_process_entries_from_proc(Path::new("/proc"), expected);
         return filter_antigravity_entries_by_expected_launch_path(
             "AG Legacy",
             entries,
@@ -3084,6 +3117,62 @@ pub fn collect_trae_process_entries_for_platform(
     }
 }
 
+#[cfg(target_os = "macos")]
+fn collect_workbuddy_macos_process_entries(expected_launch: &str) -> Vec<(u32, Option<String>)> {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+
+    let Ok(output) = Command::new("ps")
+        .args(["-axww", "-o", "uid=,pid=,command="])
+        .output()
+    else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    let owner = unsafe { libc::geteuid() };
+    let lines = String::from_utf8_lossy(&output.stdout);
+    let candidates: Vec<Pid> = lines
+        .lines()
+        .filter_map(|line| {
+            let (pid, command) =
+                owned_macos_process_command(line, owner)?.split_once(char::is_whitespace)?;
+            if !workbuddy_macos_main_command_matches(command.trim_start(), expected_launch) {
+                return None;
+            }
+            Some(Pid::from_u32(pid.parse().ok()?))
+        })
+        .collect();
+    if candidates.is_empty() {
+        return Vec::new();
+    }
+
+    // ps flattens argument boundaries, including spaces inside --user-data-dir.
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&candidates),
+        true,
+        ProcessRefreshKind::nothing()
+            .with_cmd(UpdateKind::Always)
+            .with_exe(UpdateKind::Always),
+    );
+    candidates
+        .into_iter()
+        .filter_map(|pid| {
+            let process = system.process(pid)?;
+            if normalize_path_for_compare(process.exe()?.to_str()?) != expected_launch {
+                return None;
+            }
+            let argv = process.cmd();
+            (!argv.is_empty()).then(|| {
+                // The managed WorkBuddy launcher puts its profile before extra arguments.
+                let profile = macos_profiles_from_argv(argv).next().map(str::to_owned);
+                (pid.as_u32(), profile)
+            })
+        })
+        .collect()
+}
+
 pub fn collect_workbuddy_process_entries() -> Vec<(u32, Option<String>)> {
     let Some(expected_launch) = resolve_expected_workbuddy_launch_path_for_match() else {
         return Vec::new();
@@ -3104,30 +3193,7 @@ pub fn collect_workbuddy_process_entries() -> Vec<(u32, Option<String>)> {
 
     #[cfg(target_os = "macos")]
     {
-        let mut entries = Vec::new();
-        let output = Command::new("ps").args(["-axww", "-o", "pid=,command="]).output();
-        if let Ok(output) = output {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines() {
-                let line = line.trim();
-                if line.is_empty() {
-                    continue;
-                }
-                let mut parts = line.splitn(2, |ch: char| ch.is_whitespace());
-                let pid_str = parts.next().unwrap_or("").trim();
-                let cmdline = parts.next().unwrap_or("").trim();
-                let pid = match pid_str.parse::<u32>() {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                };
-                if !workbuddy_macos_main_command_matches(cmdline, &expected_launch) {
-                    continue;
-                }
-                let dir = extract_user_data_dir_from_command_line(cmdline);
-                entries.push((pid, dir));
-            }
-        }
-        return entries;
+        return collect_workbuddy_macos_process_entries(&expected_launch);
     }
 
     #[cfg(target_os = "linux")]
@@ -3655,21 +3721,21 @@ pub fn focus_process_pid(pid: u32) -> Result<u32, String> {
 pub fn parse_extra_args(raw: &str) -> Vec<String> {
     let mut args = Vec::new();
     let mut current = String::new();
-    let mut in_single = false;
-    let mut in_double = false;
+    let mut quote = None;
+    let last_typographic_close = raw.rfind('”');
 
-    for ch in raw.chars() {
-        match ch {
-            '\'' if !in_double => {
-                in_single = !in_single;
+    for (index, ch) in raw.char_indices() {
+        match (quote, ch) {
+            (Some(end), _) if ch == end => quote = None,
+            (None, '\'' | '"') => quote = Some(ch),
+            (None, '“' | '”') if (current.is_empty() || current.ends_with('='))
+                && last_typographic_close.is_some_and(|close| close > index) => {
+                // Input methods can paste different opening glyphs for the same double quote.
+                quote = Some('”');
             }
-            '"' if !in_single => {
-                in_double = !in_double;
-            }
-            ' ' | '\t' if !in_single && !in_double => {
+            (None, ' ' | '\t') => {
                 if !current.is_empty() {
-                    args.push(current.clone());
-                    current.clear();
+                    args.push(std::mem::take(&mut current));
                 }
             }
             _ => current.push(ch),

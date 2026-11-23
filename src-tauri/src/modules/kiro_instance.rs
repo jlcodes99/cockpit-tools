@@ -539,7 +539,7 @@ fn format_command_preview(command: &Command) -> String {
     modules::process::summarize_text_for_process_log(&preview, 600)
 }
 
-fn spawn_command_with_trace(cmd: &mut Command) -> std::io::Result<std::process::Child> {
+fn spawn_command_with_trace(cmd: &mut Command) -> std::io::Result<u32> {
     let preview = format_command_preview(cmd);
     if command_trace_enabled() {
         modules::logger::log_info(&format!("[CmdTrace][Kiro] EXEC {}", preview));
@@ -562,7 +562,7 @@ fn spawn_command_with_trace(cmd: &mut Command) -> std::io::Result<std::process::
             )),
         }
     }
-    result
+    result.map(modules::process::background_child_pid)
 }
 
 fn collect_running_process_exe_by_pid() -> HashMap<u32, String> {
@@ -1162,8 +1162,7 @@ fn spawn_kiro_windows(
             cmd.arg(arg.trim());
         }
     }
-    let child = spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Kiro 失败: {}", e))?;
-    Ok(child.id())
+    spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Kiro 失败: {}", e))
 }
 
 #[cfg(target_os = "macos")]
@@ -1193,7 +1192,7 @@ fn spawn_kiro_macos_open(
         }
     }
 
-    let child = spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Kiro 失败: {}", e))?;
+    let pid = spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Kiro 失败: {}", e))?;
     modules::logger::log_info("Kiro 启动命令已发送（open -n -a）");
     let probe_started = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(6);
@@ -1205,9 +1204,9 @@ fn spawn_kiro_macos_open(
     }
     modules::logger::log_warn(&format!(
         "[Kiro Start] 启动后 6s 内未匹配到实例 PID，回退 open pid={}",
-        child.id()
+        pid
     ));
-    Ok(child.id())
+    Ok(pid)
 }
 
 #[cfg(target_os = "linux")]
@@ -1234,8 +1233,7 @@ fn spawn_kiro_unix(
             cmd.arg(arg.trim());
         }
     }
-    let child = spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Kiro 失败: {}", e))?;
-    Ok(child.id())
+    spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Kiro 失败: {}", e))
 }
 
 pub fn start_kiro_with_args_with_new_window(

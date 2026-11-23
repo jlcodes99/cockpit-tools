@@ -5,6 +5,7 @@ use crate::models::workbuddy::{WorkbuddyOAuthCompletePayload, WorkbuddyOAuthStar
 use crate::modules::logger;
 
 pub(super) const WORKBUDDY_API_ENDPOINT: &str = "https://copilot.tencent.com";
+const WORKBUDDY_LOGIN_HOST: &str = "www.workbuddy.cn";
 const WORKBUDDY_API_PREFIX: &str = "/v2/plugin";
 const WORKBUDDY_PLATFORM: &str = "workbuddy";
 // WorkBuddy 与 CodeBuddy 共用同一网关校验，缺少 User-Agent 会返回 403 / code=10085。
@@ -64,6 +65,14 @@ fn decorate_workbuddy_auth_url(
     let Ok(mut url) = url::Url::parse(raw_url) else {
         return raw_url.to_string();
     };
+    // The legacy browser entry redirects to CodeBuddy's login options.
+    if url.scheme() == "https"
+        && url.host_str() == Some("copilot.tencent.com")
+        && url.port().is_none()
+        && matches!(url.path(), "/login" | "/login/")
+    {
+        let _ = url.set_host(Some(WORKBUDDY_LOGIN_HOST));
+    }
     {
         let mut query = url.query_pairs_mut();
         if let Some(version) = version.map(str::trim).filter(|value| !value.is_empty()) {
@@ -219,7 +228,11 @@ async fn start_login_with_platform(platform: &str) -> Result<WorkbuddyOAuthStart
     .flatten();
 
     let base_verification_uri = if auth_url.is_empty() {
-        format!("{}/login?state={}", WORKBUDDY_API_ENDPOINT, state)
+        let query = url::form_urlencoded::Serializer::new(String::new())
+            .append_pair("state", &state)
+            .append_pair("platform", platform)
+            .finish();
+        format!("https://{WORKBUDDY_LOGIN_HOST}/login?{query}")
     } else {
         auth_url.clone()
     };
@@ -1457,14 +1470,21 @@ mod tests {
     #[test]
     fn auth_url_contains_detected_version_and_login_session() {
         let decorated = decorate_workbuddy_auth_url(
-            "https://copilot.tencent.com/login?state=test",
+            "https://copilot.tencent.com/login?state=test&platform=workbuddy",
             Some("5.4.5"),
             "00000000-0000-4000-8000-000000000000",
         );
         let parsed = url::Url::parse(&decorated).unwrap();
+        assert_eq!(parsed.host_str(), Some("www.workbuddy.cn"));
+        assert_eq!(parsed.path(), "/login");
         let params = parsed
             .query_pairs()
             .collect::<std::collections::HashMap<_, _>>();
+        assert_eq!(params.get("state").map(|value| value.as_ref()), Some("test"));
+        assert_eq!(
+            params.get("platform").map(|value| value.as_ref()),
+            Some("workbuddy")
+        );
         assert_eq!(
             params.get("version").map(|value| value.as_ref()),
             Some("5.4.5")
@@ -1473,6 +1493,17 @@ mod tests {
             params.get("loginSessionId").map(|value| value.as_ref()),
             Some("00000000-0000-4000-8000-000000000000")
         );
+    }
+
+    #[test]
+    fn auth_url_keeps_other_server_supplied_login_routes() {
+        for url in [
+            "https://www.workbuddy.cn/login/client-login",
+            "https://copilot.tencent.com/login/wecom-oauth-callback",
+        ] {
+            let decorated = decorate_workbuddy_auth_url(url, None, "test-session");
+            assert_eq!(decorated, format!("{url}?loginSessionId=test-session"));
+        }
     }
 
     #[test]

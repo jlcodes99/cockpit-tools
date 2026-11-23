@@ -1,4 +1,5 @@
 import modelCatalog from "../../resources/codex/models.json";
+import codexCatalog from "../../resources/codex/codex_client_models.json";
 import {
   DEEPSEEK_API_PROVIDER_ID,
   resolveCodexApiProviderPresetId,
@@ -51,13 +52,15 @@ export function buildProviderModelVisionCapabilities(
 
 /**
  * 模型识图默认规则（与 Rust 侧 `codex_account::model_defaults_to_vision_input` 同一口径）：
- * 按随程序附带的 models.json 查找完整模型 ID，输入类型包含 image 时默认支持图片。
+ * 在内置 Codex 与供应商目录按完整模型 ID 查找，输入类型包含 image 时默认支持图片。
  * 未找到模型或缺少图片输入声明时默认 false。
  * 允许 `openai/gpt-5.6-sol` 这类命名空间前缀；逐模型设置与供应商默认值仍优先。
  */
 export function providerModelDefaultsToVisionInput(modelId: string): boolean {
   const normalized = (modelId ?? "").trim().toLowerCase();
   const name = normalized.split("/").pop() ?? "";
+  const codexModel = codexCatalog.models.find((model) => model.slug === name);
+  if (codexModel) return codexModel.input_modalities?.includes("image") === true;
   return Object.values(modelCatalog).some((models) =>
     models.some((model) =>
       model.id.trim().toLowerCase() === name &&

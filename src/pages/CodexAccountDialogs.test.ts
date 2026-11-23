@@ -132,8 +132,8 @@ function dialogFor(source: ts.SourceFile, visibility: string) {
 const dialogs = [
   {
     name: 'add API Key', source: addSource, visibility: 'showAddModal', submit: 'handleApiKeyLogin',
-    ready: { importing: false, addStatus: 'idle', apiModelCatalogFetching: false, apiKeyInput: 'test-key' },
-    blocked: [{ importing: true }, { addStatus: 'loading' }, { apiModelCatalogFetching: true }, { apiKeyInput: '  ' }],
+    ready: { importing: false, addStatus: 'idle', apiModelCatalogFetching: false, hasApiKeyInput: true },
+    blocked: [{ importing: true }, { addStatus: 'loading' }, { apiModelCatalogFetching: true }, { hasApiKeyInput: false }],
   },
   {
     name: 'quick switch', source: overviewSource, visibility: 'quickSwitchAccountId', submit: 'handleSubmitQuickSwitch',

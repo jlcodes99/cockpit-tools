@@ -143,14 +143,12 @@ pub fn get_latest_app_log_file() -> Result<PathBuf, String> {
         .ok_or_else(|| "未找到可用日志文件".to_string())
 }
 
-pub fn read_log_tail_lines(log_file: &Path, line_limit: usize) -> Result<String, String> {
+pub fn read_log_tail_lines(
+    file: &mut File,
+    file_len: u64,
+    line_limit: usize,
+) -> Result<String, String> {
     let line_limit = line_limit.max(1);
-    let mut file = File::open(log_file).map_err(|e| format!("打开日志文件失败: {}", e))?;
-    let file_len = file
-        .metadata()
-        .map_err(|e| format!("读取日志文件元数据失败: {}", e))?
-        .len();
-
     if file_len == 0 {
         return Ok(String::new());
     }
@@ -184,7 +182,8 @@ pub fn read_log_tail_lines(log_file: &Path, line_limit: usize) -> Result<String,
     file.seek(SeekFrom::Start(start_offset))
         .map_err(|e| format!("读取日志定位失败: {}", e))?;
     let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)
+    file.take(file_len - start_offset)
+        .read_to_end(&mut bytes)
         .map_err(|e| format!("读取日志内容失败: {}", e))?;
     Ok(String::from_utf8_lossy(&bytes).to_string())
 }

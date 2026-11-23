@@ -145,7 +145,7 @@ fn decode_codex_config_bytes(bytes: &[u8]) -> Result<(String, bool), String> {
     }
 }
 
-fn read_codex_config_file_text(path: &Path) -> Result<Option<(String, bool)>, String> {
+pub(crate) fn read_codex_config_file_text(path: &Path) -> Result<Option<(String, bool)>, String> {
     match fs::read(path) {
         Ok(bytes) => decode_codex_config_bytes(&bytes).map(Some),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),

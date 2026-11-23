@@ -1,4 +1,5 @@
 import { resolveCodexProviderCapabilityProfile } from "../utils/codexProviderGateway";
+import { normalizeCustomProviderUsage, type CustomProviderUsage } from '../utils/codexCustomProviderUsage';
 import { openAIUsageBinding, isOpenAIOfficialUsageUrl, OPENAI_OFFICIAL_USAGE_BASE_URL, resolveAccountUsageBaseUrl } from '../utils/openaiOfficialUsage';
 import { invoke } from '@tauri-apps/api/core';
 import type { CodexAccount } from '../types/codex';
@@ -48,6 +49,7 @@ export interface CodexModelProvider {
   baseUrl: string;
   sourceTag?: string;
   integrationType?: 'sub2api' | 'new_api';
+  customUsage?: CustomProviderUsage;
   modelCatalog?: string[];
   opencodeGoCatalogVersion?: number;
   modelContextWindows?: Record<string, number>;
@@ -413,6 +415,7 @@ function deriveProviderNameFromBaseUrl(baseUrl: string): string {
 function cloneProviders(providers: CodexModelProvider[]): CodexModelProvider[] {
   return providers.map((provider) => ({
     ...provider,
+    customUsage: normalizeCustomProviderUsage(provider.customUsage),
     modelCapabilities: provider.modelCapabilities
       ? Object.fromEntries(
           Object.entries(provider.modelCapabilities).map(([model, capability]) => [
@@ -485,6 +488,7 @@ function toValidProviderList(raw: unknown): CodexModelProvider[] {
       integrationType: normalizeIntegrationType(
         (item as { integrationType?: unknown }).integrationType,
       ),
+      customUsage: normalizeCustomProviderUsage(item.customUsage),
       modelCatalog:
         normalizeModelCatalog((item as { modelCatalog?: unknown }).modelCatalog) ??
         presetModelCatalogForBaseUrl(baseUrl),
@@ -755,6 +759,7 @@ export const createCodexModelProvider = serializedProviderMutation(async functio
   supportsWebsockets?: boolean;
   enableModePreference?: CodexProviderEnableModePreference;
   integrationType?: 'sub2api' | 'new_api';
+  customUsage?: CustomProviderUsage;
   boundOauthAccountId?: string | null;
   initialApiKey?: string;
   initialApiKeyName?: string;
@@ -777,6 +782,7 @@ export const createCodexModelProvider = serializedProviderMutation(async functio
     baseUrl,
     sourceTag: sanitizeName(input.sourceTag ?? '') || undefined,
     integrationType: normalizeIntegrationType(input.integrationType),
+    customUsage: normalizeCustomProviderUsage(input.customUsage),
     modelCatalog:
       normalizeModelCatalog(input.modelCatalog) ??
       presetModelCatalogForBaseUrl(baseUrl),
@@ -833,6 +839,7 @@ export const updateCodexModelProvider = serializedProviderMutation(async functio
     supportsWebsockets?: boolean;
     enableModePreference?: CodexProviderEnableModePreference | null;
     integrationType?: 'sub2api' | 'new_api' | null;
+    customUsage?: CustomProviderUsage | null;
     boundOauthAccountId?: string | null;
     keyModelConfig?: { apiKeyId: string; config: CodexProviderModelConfig };
   },
@@ -933,6 +940,9 @@ export const updateCodexModelProvider = serializedProviderMutation(async functio
   }
   if (patch.integrationType !== undefined) {
     provider.integrationType = normalizeIntegrationType(patch.integrationType);
+  }
+  if (patch.customUsage !== undefined) {
+    provider.customUsage = normalizeCustomProviderUsage(patch.customUsage);
   }
   if (patch.boundOauthAccountId !== undefined) {
     provider.boundOauthAccountId =
@@ -1149,6 +1159,7 @@ export async function queryCodexModelProviderUsage(input: {
   accountId?: string;
   usageApiKey?: string;
   integrationType?: 'sub2api' | 'new_api' | null;
+  customUsage?: CustomProviderUsage;
 }): Promise<CodexModelProviderUsageSummary> {
   if (!isOpenAIOfficialUsageUrl(input.baseUrl)) {
     return queryModelProviderUsage({ ...input, respectRelayBalanceSwitch: true });

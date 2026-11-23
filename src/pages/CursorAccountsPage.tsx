@@ -39,6 +39,7 @@ import { PaginationControls } from '../components/PaginationControls';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
 import { usePlatformAccountGroups } from '../hooks/usePlatformAccountGroups';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
+import { PlatformQuotaHistoryButton } from '../components/PlatformQuotaHistoryButton';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
 import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
 import {
@@ -874,6 +875,9 @@ export function CursorAccountsPage() {
               <CircleAlert size={14} />
             </button>
           )}
+          <PlatformQuotaHistoryButton platform="cursor" accounts={accounts.map((account) => ({
+            value: account.id, label: maskAccountText(getCursorAccountDisplayEmail(account)), createdAt: account.created_at,
+          }))} />
           <QuickSettingsPopover type="cursor" />
         </div>
       </div>

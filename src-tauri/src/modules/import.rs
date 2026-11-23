@@ -1259,7 +1259,7 @@ pub async fn import_from_extension_credentials(
         );
         match modules::fetch_quota_with_fresh_token(&mut account, true).await {
             Ok(quota) => {
-                if let Err(e) = modules::update_account_quota(&account_id, quota) {
+                if let Err(e) = modules::update_account_quota(&account, quota) {
                     modules::logger::log_warn(&format!(
                         "导入后刷新订阅失败 {}: {}",
                         account.email, e

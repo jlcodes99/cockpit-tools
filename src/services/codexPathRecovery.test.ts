@@ -35,6 +35,8 @@ test('all desktop and CLI entry services retain exact target and launch options 
   const cases: [string, unknown[], string, Record<string, unknown>][] = [
     ['startInstance', ['managed', { transferConflictingAccount: true, skipFailedStep: 'proxy' }],
       'codex_start_instance', { instanceId: 'managed', transferConflictingAccount: true, skipFailedStep: 'proxy' }],
+    ['startInstance', ['managed', { expectedSwitchBinding: 'new-provider' }],
+      'codex_start_instance', { instanceId: 'managed', transferConflictingAccount: null, skipFailedStep: null, expectedSwitchBinding: 'new-provider' }],
     ['openInstanceWindow', ['managed'], 'codex_open_instance_window', { instanceId: 'managed' }],
     ['updateInstance', [{ instanceId: 'managed', bindAccountId: 'account', deferBindAccountApplication: true }],
       'codex_update_instance', { instanceId: 'managed', bindAccountId: 'account', deferBindAccountApplication: true }],

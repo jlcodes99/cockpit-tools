@@ -48,6 +48,7 @@ impl Drop for NativeInstallationTestData {
 struct IntegrationHost {
     inner: NativeHostBridge,
     reports: Mutex<Vec<native_contract::RequestReport>>,
+    oauth_loopback: Option<String>,
 }
 
 impl native_contract::Host for IntegrationHost {
@@ -62,7 +63,15 @@ impl native_contract::Host for IntegrationHost {
         caller: &'a native_contract::Caller,
         request: native_contract::RouteRequest,
     ) -> BoxFuture<'a, Result<native_contract::Route, native_contract::ServiceError>> {
-        native_contract::Host::route(&self.inner, caller, request)
+        Box::pin(async move {
+            let mut route = native_contract::Host::route(&self.inner, caller, request).await?;
+            if route.chatgpt {
+                if let Some(base_url) = &self.oauth_loopback {
+                    route.base_url.clone_from(base_url);
+                }
+            }
+            Ok(route)
+        })
     }
     fn capability_fallback_decision<'a>(
         &'a self,
@@ -167,6 +176,7 @@ fn host(base: &str, enabled: bool, declared: bool, scoped: bool) -> IntegrationH
     IntegrationHost {
         inner,
         reports: Mutex::new(Vec::new()),
+        oauth_loopback: None,
     }
 }
 
@@ -200,6 +210,95 @@ fn response(body: &Value, response_id: &str) -> Response {
     } else {
         Json(terminal).into_response()
     }
+}
+
+#[tokio::test]
+async fn oauth_binding_preserves_native_requests_and_a_persisted_continuation() {
+    use base64::Engine;
+    let _env = crate::modules::test_support::env_lock()
+        .lock().unwrap_or_else(|error| error.into_inner());
+    let _data = NativeInstallationTestData::new();
+    let root = tempfile::tempdir().unwrap();
+    let identity = root.path().join("identity.sqlite");
+    let seen = Arc::new(Mutex::new(Vec::<(String, Value)>::new()));
+    let capture = seen.clone();
+    let upstream = Router::new().route("/{account}/v1/responses", post(
+        move |AxumPath(account): AxumPath<String>, Json(body): Json<Value>| {
+            let capture = capture.clone();
+            async move {
+                let mut requests = capture.lock().unwrap();
+                let id = format!("resp_{}", requests.len() + 1);
+                requests.push((account, body.clone()));
+                response(&body, &id)
+            }
+        },
+    ));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let upstream = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
+    let model = api_service_routable_codex_model_ids().into_iter()
+        .find(|model| !native_is_reserve_model(model)).unwrap();
+    let now = chrono::Utc::now().timestamp();
+    let access = format!("e30.{}.fixture", base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(json!({"exp":now+86400}).to_string()));
+    let mut account = CodexAccount::new("primary".into(), "oauth-fixture@example.invalid".into(),
+        crate::models::codex::CodexTokens { access_token: access, id_token: "fixture".into(), refresh_token: None });
+    account.plan_type = Some("plus".into());
+    account.egress_proxy_disabled = true;
+    account.usage_updated_at = Some(now);
+    account.quota = Some(serde_json::from_value(json!({"hourly_percentage":75,"weekly_percentage":70,
+        "hourly_window_present":true,"weekly_window_present":true})).unwrap());
+    let create_host = |bound: bool| {
+        let mut host = host(&base, false, false, false);
+        host.oauth_loopback = Some(format!("{base}/oauth/v1"));
+        host.inner.profile_dir = Some(root.path().to_path_buf());
+        let collection = host.inner.collection_override.as_mut().unwrap();
+        collection.session_affinity = false;
+        collection.bound_oauth_account_id = bound.then(|| "primary".to_owned());
+        host.inner.account_overrides.insert("primary".into(), account.clone());
+        host.inner.account_overrides.get_mut("backup").unwrap().api_model_catalog = vec![model.clone()];
+        Arc::new(host)
+    };
+    let client = reqwest::Client::builder().no_proxy().timeout(Duration::from_secs(10)).build().unwrap();
+    let mut gateway = native_api::start("127.0.0.1:0".parse().unwrap(), create_host(false),
+        identity.clone(), native_api::Options::default()).await.unwrap();
+    let metadata = json!({"session_id":"oauth-session","thread_id":"oauth-thread"}).to_string();
+    let original = json!({"type":"message","role":"user","content":"Baseline OAuth conversation"});
+    let first = client.post(format!("http://{}/v1/responses", gateway.addr)).bearer_auth("fixture-client")
+        .header("x-codex-turn-metadata", &metadata).json(&json!({"model":model,"input":[original]}))
+        .send().await.unwrap();
+    let status = first.status();
+    let reply: Value = first.json().await.unwrap();
+    assert_eq!(status, 200, "{reply}");
+    assert_eq!(reply["id"], "resp_1");
+    gateway.shutdown(Duration::from_secs(2)).await.unwrap();
+
+    let mut gateway = native_api::start("127.0.0.1:0".parse().unwrap(), create_host(true),
+        identity, native_api::Options::default()).await.unwrap();
+    let url = format!("http://{}/v1/responses", gateway.addr);
+    let next = json!({"type":"message","role":"user","content":"Continue after OAuth binding"});
+    let continued = client.post(&url).bearer_auth("fixture-client").header("x-codex-turn-metadata", &metadata)
+        .json(&json!({"model":model,"previous_response_id":"resp_1","input":[next]}))
+        .send().await.unwrap();
+    let status = continued.status();
+    let reply: Value = continued.json().await.unwrap();
+    assert_eq!(status, 200, "{reply}");
+    assert_eq!(reply["id"], "resp_2");
+    let fresh = client.post(&url).bearer_auth("fixture-client")
+        .header("x-codex-turn-metadata", json!({"session_id":"fresh","thread_id":"fresh"}).to_string())
+        .json(&json!({"model":model,"input":"A new thread after binding"})).send().await.unwrap();
+    assert_eq!(fresh.status(), 200);
+    fresh.bytes().await.unwrap();
+    gateway.shutdown(Duration::from_secs(2)).await.unwrap();
+    upstream.abort();
+
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen.iter().map(|(account, _)| account.as_str()).collect::<Vec<_>>(), ["oauth", "oauth", "oauth"]);
+    assert!(seen[1].1.get("previous_response_id").is_none());
+    let expanded = seen[1].1["input"].as_array().unwrap();
+    assert_eq!(expanded.first(), Some(&original));
+    assert_eq!(expanded.last(), Some(&next));
+    assert_eq!(expanded.iter().filter(|item| item["role"] == "assistant").count(), 1);
 }
 
 async fn run(enabled: bool, declared: bool, scoped: bool, socket: bool, continuation: bool) {

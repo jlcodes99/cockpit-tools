@@ -33,18 +33,20 @@ import {
   persistCodexLaunchPreviewLastInstanceId,
   readCodexLaunchPreviewLastInstanceId,
 } from "../utils/codexLaunchPreviewInstancePreference";
- import { canShowCodexProviderBalance, isApiKeyFunUsageAccount, isDeepSeekAccount, isCodexApiKeyUsageQueryEligible, resolveCodexProviderBindAccountId } from "../utils/codexDeepSeekAccess";
+ import { canShowCodexProviderBalance, isApiKeyFunUsageAccount, isDeepSeekAccount, isMoonshotBalanceUrl, isCodexApiKeyUsageQueryEligible, resolveCodexProviderBindAccountId } from "../utils/codexDeepSeekAccess";
 import { contextWindowDraftsFromRecord, parseContextWindowDrafts } from "../utils/codexModelContextWindows";
 import type { CodexAccount } from "../types/codex";
+import type { CodexAccountRefreshOutcome } from "../utils/codexQuotaRefreshFeedback";
 import { CODEX_API_SERVICE_BIND_ID, type InstanceProfile } from "../types/instance";
 import { findCodexWebSessionImports, splitCodexImportPayloads } from "../utils/codexJsonImportProgress";
 import { emitAccountsChanged } from "../utils/accountSyncEvents";
 import { resolveCodexProviderCapabilityProfile } from "../utils/codexProviderGateway";
 import { resolveCodexModelProviderAccountName } from "../utils/codexModelProviderAccountName";
-import { CODEX_API_PROVIDER_CUSTOM_ID, findCodexApiProviderPresetById, resolveCodexApiProviderPresetId } from "../utils/codexProviderPresets";
+import { CODEX_API_PROVIDER_CUSTOM_ID, findCodexApiProviderPresetById, resolveCodexApiProviderPresetId, resolveOllamaLocalPlaceholderKey } from "../utils/codexProviderPresets";
 import { APIKEY_FUN_PROVIDER_BASE_URL } from "../utils/apikeyFunLinks";
 import { APIKEY_FUN_PREFILL_EVENT, consumeApiKeyFunPrefill, type ApiKeyFunPrefillPayload } from "../utils/apiKeyFunPrefill";
 import { OPENAI_USAGE_CONFIG_CHANGED_EVENT, findCodexModelProviderById, findCodexModelProviderByBaseUrl, queryCodexModelProviderUsage, saveCodexModelProviderDetectedIntegrationType, type CodexModelProvider, mergeCodexModelProviderApiKeysFromAccounts, upsertCodexModelProviderFromCredential } from "../services/codexModelProviderService";
+import { customProviderUsageBinding, customProviderUsageForRequest } from "../utils/codexCustomProviderUsage";
 import { resolveCodexModelProviderForApiKey } from "../utils/codexModelProviderKeyConfig";
 import { buildCodexModelProviderAccountSnapshot, mergeCodexModelProviderCredentialInput } from "../utils/codexModelProviderAccountSync";
 import { CODEX_API_KEY_USAGE_REFRESHED_EVENT, readCodexApiKeyUsageCache, writeCodexApiKeyUsageCache, type CodexApiKeyUsageState } from "../services/codexApiKeyUsageRefreshService";
@@ -737,13 +739,20 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           // 先关闭预览弹框再执行启动事务：启动链路本身可能耗时数十秒，
           // 弹框停在原地会让主按钮和“关闭”看起来卡死。
           setLaunchPreviewAccount(null);
-          await codexInstanceStore.updateInstance({
+          const updated = await codexInstanceStore.updateInstance({
             instanceId: launchPreviewInstanceId,
             bindAccountId,
             appSpeed: launchAccount.app_speed ?? "standard",
             deferBindAccountApplication: true,
           });
-          await codexInstanceStore.startInstance(launchPreviewInstanceId);
+          if (updated.launchMode === "cli") {
+            await codexInstanceService.startInstance(updated.id, {
+              expectedSwitchBinding: bindAccountId,
+            });
+            await codexInstanceStore.fetchInstances();
+          } else {
+            await codexInstanceStore.startInstance(launchPreviewInstanceId);
+          }
           return true;
         }
         setLaunchPreviewAccount(null);
@@ -2186,19 +2195,20 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       [selectedManagedProvider],
     );
 
+    const effectiveApiKeyInput = apiKeyInput.trim() || resolveOllamaLocalPlaceholderKey(apiBaseUrlInput);
     const apiModelFetchWireApi = resolveCodexProviderCapabilityProfile({
       presetId: apiProviderPresetId,
       baseUrl: apiBaseUrlInput,
       wireApi: selectedManagedProvider?.wireApi ?? sponsorApiProviderTemplates.find(template => template.id === apiProviderPresetId)?.wireApi,
     }).wireApi;
     const apiModelFetchAuthScheme = selectedManagedProvider?.authScheme ?? "x-api-key";
-    const apiModelFetchKey = JSON.stringify([apiBaseUrlInput.trim(), apiKeyInput.trim(), apiModelFetchWireApi, apiModelFetchAuthScheme]);
+    const apiModelFetchKey = JSON.stringify([apiBaseUrlInput.trim(), effectiveApiKeyInput, apiModelFetchWireApi, apiModelFetchAuthScheme]);
     const modelFetchState = useRef({ add: 0, edit: 0, addKey: "", editKey: "" });
     modelFetchState.current.addKey = apiModelFetchKey;
     useEffect(() => { setApiModelCatalogFetching(false); }, [apiModelFetchKey]);
 
     const handleFetchApiModelCatalog = useCallback(async () => {
-      const apiKey = apiKeyInput.trim();
+      const apiKey = effectiveApiKeyInput;
       const baseUrl = apiBaseUrlInput.trim() || DEFAULT_CODEX_API_BASE_URL;
       if (!apiKey || !baseUrl) {
         setApiModelCatalogError(
@@ -2241,7 +2251,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       } finally {
         if (isCurrent()) setApiModelCatalogFetching(false);
       }
-    }, [apiBaseUrlInput, apiKeyInput, apiModelFetchKey, apiModelFetchWireApi, apiModelFetchAuthScheme, t]);
+    }, [apiBaseUrlInput, effectiveApiKeyInput, apiModelFetchKey, apiModelFetchWireApi, apiModelFetchAuthScheme, t]);
 
     const applyApiKeyFunPrefill = useCallback(
       (request: ApiKeyFunPrefillPayload) => {
@@ -2468,7 +2478,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
 
     const handleApiKeyLogin = async (usageApiKey?: string) => {
       const validation = validateApiKeyCredentialInputs(
-        apiKeyInput,
+        effectiveApiKeyInput,
         apiBaseUrlInput,
       );
       if (!validation.ok) {
@@ -2610,7 +2620,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           )}${
             Object.keys(parsedWindows.windows).length > 0 ||
             apiSyncModelCatalogToCodex
-              ? ` ${t("codex.api.modelCatalog.restartHint")}`
+              ? ` ${t("codex.api.modelCatalog.launchHint", "请在 Cockpit 中用此账号启动 Codex，以应用已保存的模型设置。")}`
               : ""
           }`,
         );
@@ -3005,18 +3015,22 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
     );
 
     const refreshApiKeyUsage = useCallback(
-      async (account: CodexAccount, provider?: CodexModelProvider | null) => {
+      async (
+        account: CodexAccount,
+        provider?: CodexModelProvider | null,
+      ): Promise<CodexAccountRefreshOutcome | undefined> => {
         const targetProvider =
           provider ?? resolveUsageProviderForApiKeyAccount(account);
         const cachedSummary = readCodexApiKeyUsageCache()[account.id]?.summary;
-        if (!isCodexApiKeyUsageQueryEligible(account, targetProvider?.integrationType, cachedSummary)) return;
+        if (!isCodexApiKeyUsageQueryEligible(account, targetProvider?.customUsage ? "custom" : targetProvider?.integrationType, cachedSummary)) return;
         const apiKey = (account.openai_api_key || "").trim();
         const baseUrl =
           resolveAccountUsageBaseUrl(account, targetProvider?.baseUrl);
         if (hideRelayQuota && !canShowCodexProviderBalance(true, baseUrl, cachedSummary?.mode)) return;
         const usageConfig = resolveOpenAIUsageConfig(targetProvider, apiKey);
+        const sourceBinding = usageConfig?.binding ?? customProviderUsageBinding(targetProvider);
         if (!baseUrl || !apiKey || (isOpenAIOfficialUsageAccount(account, baseUrl) && !usageConfig)) return;
-        const queryId = usageConfig ? `${account.id}:${usageConfig.binding}` : account.id;
+        const queryId = sourceBinding ? `${account.id}:${sourceBinding}` : account.id;
         if (apiKeyUsageInFlightRef.current.has(queryId)) return;
         apiKeyUsageInFlightRef.current.add(queryId);
         setApiKeyUsageMap((previous) => ({
@@ -3024,8 +3038,8 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           [account.id]: {
             ...previous[account.id],
             loading: true,
-            sourceBinding: usageConfig?.binding,
-            summary: previous[account.id]?.sourceBinding === usageConfig?.binding ? previous[account.id]?.summary : undefined,
+            sourceBinding,
+            summary: previous[account.id]?.sourceBinding === sourceBinding ? previous[account.id]?.summary : undefined,
             error: undefined,
             unavailable: false,
           },
@@ -3037,11 +3051,12 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
             accountId: account.id,
             usageApiKey: usageConfig?.apiKey,
             integrationType: targetProvider?.integrationType ?? null,
+            customUsage: customProviderUsageForRequest(targetProvider),
           });
           const updatedAt = Date.now();
-          setApiKeyUsageMap((previous) => previous[account.id]?.sourceBinding !== usageConfig?.binding ? previous : ({
+          setApiKeyUsageMap((previous) => previous[account.id]?.sourceBinding !== sourceBinding ? previous : ({
             ...previous,
-            [account.id]: { loading: false, sourceBinding: usageConfig?.binding, summary, updatedAt },
+            [account.id]: { loading: false, sourceBinding, summary, updatedAt },
           }));
           if (
             targetProvider &&
@@ -3055,14 +3070,15 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
               console.warn('Failed to save detected provider usage integration:', error);
             });
           }
+          return { ok: true };
         } catch (error) {
           const updatedAt = Date.now();
-          setApiKeyUsageMap((previous) => previous[account.id]?.sourceBinding !== usageConfig?.binding ? previous : ({
+          setApiKeyUsageMap((previous) => previous[account.id]?.sourceBinding !== sourceBinding ? previous : ({
             ...previous,
             [account.id]: isRelayBalanceDisabledError(error) ? { ...previous[account.id], loading: false } : {
               loading: false,
-              sourceBinding: usageConfig?.binding,
-              summary: previous[account.id]?.sourceBinding === usageConfig?.binding ? previous[account.id]?.summary : undefined,
+              sourceBinding,
+              summary: previous[account.id]?.sourceBinding === sourceBinding ? previous[account.id]?.summary : undefined,
               error: isModelProviderUsageUnavailableError(error)
                 ? undefined
                 : String(error).replace(/^Error:\s*/, ""),
@@ -3070,6 +3086,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
               updatedAt,
             },
           }));
+          return { ok: false, error };
         } finally {
           apiKeyUsageInFlightRef.current.delete(queryId);
         }
@@ -3082,7 +3099,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         const targetProvider =
           provider ?? resolveUsageProviderForApiKeyAccount(account);
         const summary = apiKeyUsageMap[account.id]?.summary;
-        if (!isCodexApiKeyUsageQueryEligible(account, targetProvider?.integrationType, summary)) return false;
+        if (!isCodexApiKeyUsageQueryEligible(account, targetProvider?.customUsage ? "custom" : targetProvider?.integrationType, summary)) return false;
         const apiKey = (account.openai_api_key || "").trim();
         const baseUrl =
           resolveAccountUsageBaseUrl(account, targetProvider?.baseUrl);
@@ -3102,11 +3119,13 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         if (state?.loading || apiKeyUsageInFlightRef.current.has(account.id)) {
           return false;
         }
-        const config = resolveOpenAIUsageConfig(provider ?? resolveUsageProviderForApiKeyAccount(account), account.openai_api_key ?? '');
-        if (config && state?.sourceBinding !== config.binding) return true;
+        const targetProvider = provider ?? resolveUsageProviderForApiKeyAccount(account);
+        const binding = resolveOpenAIUsageConfig(targetProvider, account.openai_api_key ?? '')?.binding ?? customProviderUsageBinding(targetProvider);
+        if ((binding || state?.sourceBinding?.startsWith("custom:")) && state?.sourceBinding !== binding) return true;
         if (state?.unavailable) {
           return (
-            (isDeepSeekAccount(account) || isOpenAIOfficialUsageAccount(account) || isApiKeyFunUsageAccount(account)) &&
+            (isDeepSeekAccount(account) || isOpenAIOfficialUsageAccount(account) || isApiKeyFunUsageAccount(account) ||
+              isMoonshotBalanceUrl(account.api_base_url)) &&
             !state.summary &&
             !deepSeekUsageRetryIdsRef.current.has(account.id)
           );
@@ -3178,7 +3197,8 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       for (const account of accounts) {
         const provider = resolveUsageProviderForApiKeyAccount(account);
         if (!shouldAutoRefreshApiKeyUsage(account, provider)) continue;
-        if (isDeepSeekAccount(account) || isOpenAIOfficialUsageAccount(account) || isApiKeyFunUsageAccount(account)) {
+        if (isDeepSeekAccount(account) || isOpenAIOfficialUsageAccount(account) || isApiKeyFunUsageAccount(account) ||
+          isMoonshotBalanceUrl(account.api_base_url)) {
           deepSeekUsageRetryIdsRef.current.add(account.id);
         }
         void refreshApiKeyUsage(account, provider);

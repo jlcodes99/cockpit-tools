@@ -4,11 +4,8 @@ import {
   getGrokQuotaSummaryItems,
   type GrokAccount,
 } from "../../types/grok";
-import { getCodexPlanFilterKey, type CodexAccount } from "../../types/codex";
-import {
-  getCodexLocalAccessAccountIneligibleReason,
-  isCodexLocalAccessEligibleAccount,
-} from "../../utils/codexLocalAccessAccounts";
+import { getCodexPlanFilterKey, isCodexAgentIdentityAccount, isCodexEffectiveFreePlan, type CodexAccount } from "../../types/codex";
+import { getCodexServiceEndpoint } from "../../utils/chatgptPlanOverview";
 
 const GROK_MEMBER_ROW_ID_PREFIX = "grok:";
 
@@ -25,7 +22,7 @@ export function selectCodexLocalAccessMemberRows(input: {
   showCodexPlatform: boolean;
   showGrokPlatform: boolean;
   restrictFreeAccounts: boolean;
-  selected: ReadonlySet<string>;
+  isSelected: (account: CodexAccount) => boolean;
 }): CodexAccount[] {
   const sourceIds = new Set(input.grokAccounts.map((account) => account.id));
   return [...input.codexAccounts, ...input.grokRows].filter((account) => {
@@ -37,10 +34,11 @@ export function selectCodexLocalAccessMemberRows(input: {
     if (input.manageGrok && !isGrokRow && upstreamId && sourceIds.has(upstreamId)) {
       return false;
     }
-    const reason = getCodexLocalAccessAccountIneligibleReason(account, input.restrictFreeAccounts);
-    return reason === "pending_oauth" || reason === "web_session_quota_only"
-      || isCodexLocalAccessEligibleAccount(account, input.restrictFreeAccounts)
-      || input.selected.has(account.id);
+    const endpoint = getCodexServiceEndpoint(account);
+    return !input.restrictFreeAccounts
+      || isCodexAgentIdentityAccount(endpoint)
+      || !isCodexEffectiveFreePlan(endpoint)
+      || input.isSelected(account);
   });
 }
 

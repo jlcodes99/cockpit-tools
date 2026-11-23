@@ -395,6 +395,13 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   line-height: 1;
 }
 
+.codex-accounts-page .codex-account-wakeup-result {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .codex-accounts-page .codex-status-pill.quota-error {
   background: rgba(239, 68, 68, 0.12);
   color: #b91c1c;
@@ -1657,6 +1664,43 @@ html[data-reduced-motion="true"] .codex-accounts-grid .codex-account-card[data-c
   border-radius: 6px;
   font-size: 12px;
   line-height: 1;
+  white-space: nowrap;
+}
+
+.codex-account-refresh-status {
+  min-width: 0;
+  contain: inline-size;
+}
+
+.codex-account-refresh-status:empty {
+  position: absolute;
+}
+
+.codex-account-card .codex-card-bottom > .codex-account-refresh-status {
+  grid-column: 1 / -1;
+}
+
+.codex-account-refresh-feedback {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.codex-account-refresh-feedback > svg {
+  flex: none;
+  color: var(--success);
+}
+
+.codex-account-refresh-feedback.error > svg {
+  color: var(--danger);
+}
+
+.codex-account-refresh-feedback-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

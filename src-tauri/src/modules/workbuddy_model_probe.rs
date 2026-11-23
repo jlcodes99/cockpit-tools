@@ -243,15 +243,16 @@ async fn probe_with_client(
             };
         }
     }
-    // Cleanup is separate from probe success. A failed DELETE must stay visible.
+    // Cleanup is separate from probe success. A failed deletion must stay visible.
     if !keep_conversation {
         if let Some(id) = &result.conversation_id {
             let deleted = client
-                .delete(format!(
-                    "{base}/console/as/conversations/{}",
+                .post(format!(
+                    "{base}/console/as/conversations/{}/delete",
                     urlencoding::encode(id)
                 ))
                 .headers(headers)
+                .json(&json!({"id": id}))
                 .timeout(std::time::Duration::from_secs(10))
                 .send()
                 .await;

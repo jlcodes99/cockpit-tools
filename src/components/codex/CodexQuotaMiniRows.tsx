@@ -1,6 +1,7 @@
 import type { UnifiedQuotaMetric } from "../../presentation/platformAccountPresentation";
 import {
   estimateCodexWindowFullCostUsd,
+  formatCodexWindowAccountEstimate,
   formatCodexWindowCostAmount,
   formatCodexWindowRequestCount,
   formatCodexWindowTokenCount,
@@ -48,7 +49,7 @@ function CodexQuotaMiniRow({
             className="codex-quota-mini-right"
             title={t(
               "codex.quota.windowStatsHint",
-              "从本窗口满额到现在，该账号走 API 服务的请求数、token 和账号计费",
+              "本额度窗口内经由 API 服务的请求数、Token 和估算用量价值",
             )}
           >
             <span className="codex-quota-mini-chip">
@@ -61,17 +62,17 @@ function CodexQuotaMiniRow({
               className="codex-quota-mini-chip"
               title={t(
                 "codex.quota.windowAccountCostHint",
-                "账号计费（按模型价格估算）",
+                "按模型 API 单价估算用量价值。订阅剩余额度以账号返回的百分比为准。",
               )}
             >
-              A ${formatCodexWindowCostAmount(stats.estimatedCostUsd)}
+              {formatCodexWindowAccountEstimate(stats.estimatedCostUsd)}
             </span>
             {estimatedFullCostUsd != null ? (
               <span
                 className="codex-quota-mini-chip"
                 title={t(
                   "codex.quota.windowEstimatedFullCostHint",
-                  "按已用额度折算：本窗口满额约合多少账号计费",
+                  "按已用额度比例估算的窗口满额用量价值",
                 )}
               >
                 ≈${formatCodexWindowCostAmount(estimatedFullCostUsd)}

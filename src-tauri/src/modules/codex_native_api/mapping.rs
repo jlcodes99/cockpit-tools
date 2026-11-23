@@ -349,7 +349,7 @@ async fn prepare_excluding_inner(
                     excluded.push(account.clone());
                 }
             }
-            return prepare_rebuilt(
+            let replacement = prepare_rebuilt(
                 state,
                 caller,
                 incoming,
@@ -360,6 +360,14 @@ async fn prepare_excluding_inner(
                 websocket,
             )
             .await;
+            return match replacement {
+                Err(replacement_error)
+                    if matches!(replacement_error.code, "no_available_account" | "quota_reserved") =>
+                {
+                    Err(error)
+                }
+                result => result,
+            };
         }
         Err(error)
             if !websocket
@@ -379,6 +387,12 @@ async fn prepare_excluding_inner(
         }
         Err(error) => return Err(error),
     };
+    // DeepSeek's Responses API is stateless. Reuse the verified HTTP checkpoint
+    // for an explicit continuation while leaving complete inputs on their usual path.
+    let official_deepseek_continuation = body["previous_response_id"]
+        .as_str()
+        .is_some_and(|id| !id.trim().is_empty())
+        && crate::modules::codex_account::is_official_deepseek_base_url(&selected.base_url);
     if !compact
         // SIWC sockets are bridged to stateless HTTP. A reconnect has no local
         // socket checkpoint, so expand a validated durable response here too.
@@ -386,7 +400,8 @@ async fn prepare_excluding_inner(
         && (!websocket || selected.chatgpt_plan)
         && ((selected.chatgpt && !selected.headers.contains_key("x-xai-token-auth"))
             || selected.chatgpt_plan
-            || super::grok_errors::applies(&selected))
+            || super::grok_errors::applies(&selected)
+            || official_deepseek_continuation)
         && selected.wire_api == super::contract::WireApi::Responses
         && (body
             .get("previous_response_id")
@@ -634,7 +649,7 @@ async fn finalize(
     if !selected.chatgpt_plan && selected.official_fallback_registration_id.is_some()
         && !official_fallback::same_owner(state, &context, &selected).await? {
         let (rebuilt, plan) = official_fallback::replay(state, caller, incoming, &body, context.clone(), None)
-            .await?.ok_or_else(|| official_fallback::history_recovery("history_unavailable"))?;
+            .await?.ok_or_else(|| official_fallback::HistoryRecovery::Missing.error())?;
         context = rebuilt;
         body = plan.body.clone();
         request.preferred_account_id = None;
@@ -690,11 +705,10 @@ async fn finalize(
         "preflight",
     )
     .await.map_err(|error| {
-        if official_candidate && matches!(error.code,
-            "capability_fallback_history_unsafe" | "capability_fallback_encryption_unsafe") {
-            official_fallback::history_recovery("history_not_portable")
-        } else {
-            error
+        match (official_candidate, error.code) {
+            (true, "capability_fallback_history_unsafe") => official_fallback::HistoryRecovery::Unverified.error(),
+            (true, "capability_fallback_encryption_unsafe") => official_fallback::HistoryRecovery::Encrypted.error(),
+            _ => error,
         }
     })?;
     let mut context = selection.context;
@@ -752,6 +766,18 @@ async fn finalize(
     }
     headers.extend(selected.headers.clone());
     super::server::forward_remote_scope_headers(incoming,&selected,&mut headers);
+    if mapping_enabled
+        && context.generated_session
+        && selected.wire_api == super::contract::WireApi::Responses
+        && !compact
+        && image_route_request.is_none()
+        && request.auxiliary.is_none()
+        && source_body.get("store").and_then(Value::as_bool) == Some(false)
+        && body["prompt_cache_key"].is_string()
+        && local_quota_replay_is_portable(incoming, &source_body)
+    {
+        context.use_prompt_cache_session(&headers, &body)?;
+    }
     let identity = state.identity.clone();
     let account_id = selected.continuity_id().to_owned();
     let owner_id = selected.owner_id.clone();

@@ -31,7 +31,7 @@ import {
   getCodexModelContextTemplate,
   validateModelContext,
 } from "../../utils/codexModelContext";
-import { getCodexModelReasoningEfforts } from "../../services/codexService";
+import { getCodexBaseCatalogSource, getCodexModelReasoningEfforts } from "../../services/codexService";
 import { CODEX_REASONING_EFFORT_ORDER, sortCodexReasoningEfforts, withSupportedReasoningEfforts } from "../../utils/codexModelConfig";
 import { dropdownLayer, dropdownPlacement, type DropdownPlacement } from "../../utils/dropdownPlacement";
 import { useEscCloseTopmost } from "../../hooks/useEscClose";
@@ -390,6 +390,14 @@ export function CodexExperimentalModelEditor({
     onModelsChange(nextModels);
   };
   const [managerOpen, setManagerOpen] = useState(false);
+  const [usesEmbeddedCatalog, setUsesEmbeddedCatalog] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void getCodexBaseCatalogSource().then((source) => {
+      if (!cancelled) setUsesEmbeddedCatalog(source === "embedded");
+    }).catch((error) => console.warn("[Codex] Failed to read base model catalog source:", error));
+    return () => { cancelled = true; };
+  }, []);
   const [transferOpen, setTransferOpen] = useState(false);
   const [effectiveEfforts, setEffectiveEfforts] = useState<Record<string, CodexReasoningEffort[]>>({});
   const [reasoningLoadFailed, setReasoningLoadFailed] = useState(false);
@@ -946,6 +954,11 @@ export function CodexExperimentalModelEditor({
       onChange(nextModels); onDefaultModelChange?.(nextDefaultId);
     }} />;
 
+  const embeddedCatalogNotice = usesEmbeddedCatalog && (
+    <p className="codex-experimental-model-editor__hint">
+      {t("codex.experimentalModelCatalog.models.embeddedFallback")}
+    </p>
+  );
   const editorContent = (
     <div className="codex-experimental-model-editor">
       <div className="codex-experimental-model-editor__header">
@@ -1150,41 +1163,42 @@ export function CodexExperimentalModelEditor({
       </div>}
 
       <div
-        className={`codex-experimental-model-editor__table-head${
-          showModelSource ? " has-source" : ""
-        }`}
-        aria-hidden="true"
+        className={`codex-experimental-model-editor__list${draggingModelId ? " is-sorting" : ""}`}
+        tabIndex={0}
+        role="region"
+        aria-label={t("codex.experimentalModelCatalog.models.title")}
       >
-        <span className="codex-experimental-model-editor__drag-head" />
-        <span>
-          {t("codex.experimentalModelCatalog.models.modelId", "模型 ID")}
-        </span>
-        <span>
-          {t("codex.experimentalModelCatalog.models.displayName", "展示名")}
-        </span>
-        {showModelSource && (
-          <span>{t("codex.experimentalModelCatalog.models.source")}</span>
-        )}
-        <span>
-          {t("codex.experimentalModelCatalog.models.reasoning", "推理强度")}
-        </span>
-        <span>{t("codex.experimentalModels.defaultReasoning")}</span>
-        <span>
-          {t(
-            "codex.experimentalModelCatalog.models.contextConfig",
-            "上下文与压缩",
+        <div
+          className={`codex-experimental-model-editor__table-head${
+            showModelSource ? " has-source" : ""
+          }`}
+          aria-hidden="true"
+        >
+          <span className="codex-experimental-model-editor__drag-head" />
+          <span>
+            {t("codex.experimentalModelCatalog.models.modelId", "模型 ID")}
+          </span>
+          <span>
+            {t("codex.experimentalModelCatalog.models.displayName", "展示名")}
+          </span>
+          {showModelSource && (
+            <span>{t("codex.experimentalModelCatalog.models.source")}</span>
           )}
-        </span>
-        <span>
-          {t("codex.experimentalModelCatalog.models.operation", "操作")}
-        </span>
-      </div>
-
-      <div
-        className={`codex-experimental-model-editor__list${
-          draggingModelId ? " is-sorting" : ""
-        }`}
-      >
+          <span>
+            {t("codex.experimentalModelCatalog.models.reasoning", "推理强度")}
+          </span>
+          <span title={t("codex.experimentalModels.defaultReasoning")}>{t("codex.experimentalModels.defaultReasoning")}</span>
+          <span title={t("codex.experimentalModels.ultraReasoning")}>{t("codex.experimentalModels.ultraReasoning")}</span>
+          <span>
+            {t(
+              "codex.experimentalModelCatalog.models.contextConfig",
+              "上下文与压缩",
+            )}
+          </span>
+          <span>
+            {t("codex.experimentalModelCatalog.models.operation", "操作")}
+          </span>
+        </div>
         {models.map((model, index) => {
           const source = resolveModelSource?.(model.model_id);
           const supportedEfforts = effectiveEfforts[model.model_id];
@@ -1400,10 +1414,10 @@ export function CodexExperimentalModelEditor({
                   )}
                 </div>
               </div>
-              <div className="codex-experimental-model-editor__default-effort" title={t("codex.experimentalModels.defaultReasoningHint")}>
+              <div className="codex-experimental-model-editor__effort" title={t("codex.experimentalModels.defaultReasoningHint")}>
                 <span className="codex-experimental-model-editor__field-label">{t("codex.experimentalModels.defaultReasoning")}</span>
                 <SingleSelectDropdown value={model.default_reasoning_effort ?? ""}
-                  className="codex-experimental-model-default-effort-select"
+                  className="codex-experimental-model-effort-select"
                   options={[{ value: "", label: t("codex.experimentalModels.defaultReasoningFollow") },
                     ...sortCodexReasoningEfforts(effectiveEfforts[model.model_id] ?? model.reasoning_efforts ?? []).map((effort) => ({ value: effort, label: reasoningLabel(effort) }))]}
                   disabled={disabled || reasoningLoadFailed || !effectiveEfforts[model.model_id]}
@@ -1412,24 +1426,25 @@ export function CodexExperimentalModelEditor({
                     ? { ...item, default_reasoning_effort: value ? value as CodexReasoningEffort : undefined } : item))} />
                 {model.default_reasoning_effort && effectiveEfforts[model.model_id] && !effectiveEfforts[model.model_id].includes(model.default_reasoning_effort)
                   && <small role="alert" className="codex-experimental-model-editor__error">{t("codex.experimentalModels.defaultReasoningInvalid")}</small>}
-                {(supportsUltra || model.ultra_reasoning_effort) && <>
-                  <small>{t("codex.experimentalModels.ultraReasoning")}</small>
-                  <SingleSelectDropdown
-                    value={model.ultra_reasoning_effort ?? ""}
-                    className="codex-experimental-model-default-effort-select"
-                    options={[{ value: "", label: t("codex.experimentalModels.defaultReasoningFollow") },
-                      ...sortCodexReasoningEfforts(supportedEfforts ?? [])
-                        .filter((effort) => supportsUltra && effort !== "ultra")
-                        .map((effort) => ({ value: effort, label: reasoningLabel(effort) }))]}
-                    disabled={disabled}
-                    ariaLabel={t("codex.experimentalModels.ultraReasoning")}
-                    onChange={(value) => onChange(models.map((item, itemIndex) => itemIndex === index
-                      ? { ...item, ultra_reasoning_effort: value ? value as CodexReasoningEffort : undefined } : item))}
-                  />
-                  {model.ultra_reasoning_effort && supportedEfforts
-                    && (!supportsUltra || !supportedEfforts.includes(model.ultra_reasoning_effort))
-                    && <small role="alert" className="codex-experimental-model-editor__error">{t("codex.experimentalModels.ultraReasoningInvalid")}</small>}
-                </>}
+              </div>
+              <div className="codex-experimental-model-editor__effort">
+                <SingleSelectDropdown
+                  value={model.ultra_reasoning_effort ?? ""}
+                  className="codex-experimental-model-effort-select"
+                  options={[{ value: "", label: supportsUltra || model.ultra_reasoning_effort
+                    ? t("codex.experimentalModels.defaultReasoningFollow")
+                    : "—" },
+                    ...sortCodexReasoningEfforts(supportedEfforts ?? [])
+                      .filter((effort) => supportsUltra && effort !== "ultra")
+                      .map((effort) => ({ value: effort, label: reasoningLabel(effort) }))]}
+                  disabled={disabled || (!supportsUltra && !model.ultra_reasoning_effort)}
+                  ariaLabel={t("codex.experimentalModels.ultraReasoning")}
+                  onChange={(value) => onChange(models.map((item, itemIndex) => itemIndex === index
+                    ? { ...item, ultra_reasoning_effort: value ? value as CodexReasoningEffort : undefined } : item))}
+                />
+                {model.ultra_reasoning_effort && supportedEfforts
+                  && (!supportsUltra || !supportedEfforts.includes(model.ultra_reasoning_effort))
+                  && <small role="alert" className="codex-experimental-model-editor__error">{t("codex.experimentalModels.ultraReasoningInvalid")}</small>}
               </div>
               <div
                 className="codex-experimental-model-editor__context"
@@ -1584,6 +1599,7 @@ export function CodexExperimentalModelEditor({
           );
         })}
       </div>
+      {embeddedCatalogNotice}
       <p className="codex-experimental-model-editor__hint">
         {t(
           "codex.experimentalModelCatalog.models.inheritHint",
@@ -1613,6 +1629,7 @@ export function CodexExperimentalModelEditor({
             </button>
             </div>
           </div>
+          {embeddedCatalogNotice}
           <div
             className={`codex-experimental-model-summary__table-head${
               showModelSource ? " has-source" : ""
@@ -1632,7 +1649,8 @@ export function CodexExperimentalModelEditor({
             <span>
               {t("codex.experimentalModelCatalog.models.reasoning", "推理强度")}
             </span>
-            <span>{t("codex.experimentalModels.defaultReasoning")}</span>
+            <span title={t("codex.experimentalModels.defaultReasoning")}>{t("codex.experimentalModels.defaultReasoning")}</span>
+            <span title={t("codex.experimentalModels.ultraReasoning")}>{t("codex.experimentalModels.ultraReasoning")}</span>
             <span>
               {t(
                 "codex.experimentalModelCatalog.models.contextConfig",
@@ -1702,6 +1720,12 @@ export function CodexExperimentalModelEditor({
                 <span className="codex-experimental-model-summary__reasoning">
                   {model.default_reasoning_effort ? reasoningLabel(model.default_reasoning_effort)
                     : t("codex.experimentalModels.defaultReasoningFollow")}
+                </span>
+                <span className="codex-experimental-model-summary__reasoning">
+                  {model.ultra_reasoning_effort ? reasoningLabel(model.ultra_reasoning_effort)
+                    : effectiveEfforts[model.model_id]?.includes("ultra")
+                      ? t("codex.experimentalModels.defaultReasoningFollow")
+                      : "—"}
                 </span>
                 <span className="codex-experimental-model-summary__context">
                   {contextLabel(model)}

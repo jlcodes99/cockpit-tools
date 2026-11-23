@@ -197,7 +197,6 @@ pub(super) fn service_binding_fields(
             "pausedAccountIds",
             "officialAccountBindings",
             "excludedModels",
-            "restrictFreeAccounts",
             "modelAliases",
             "customRoutingRules",
             "accountModelRules",

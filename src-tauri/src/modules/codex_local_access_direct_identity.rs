@@ -110,8 +110,19 @@ async fn prepare_direct_account_transport(
     })
     .await
     .map_err(|_| "Account identity worker failed")??;
-    let (body, headers, mut mapped) =
+    let (body, mut headers, mut mapped) =
         direct_account_identity(&profile, body, headers, authorization)?;
+    if !account.is_api_key_auth() {
+        const WORKSPACE: &str = "chatgpt-account-id";
+        headers.remove(WORKSPACE);
+        mapped.remove(WORKSPACE);
+        if let Some(workspace) = resolve_upstream_account_id(account) {
+            let value = HeaderValue::from_str(&workspace)
+                .map_err(|_| "Invalid account identity")?;
+            mapped.insert(WORKSPACE, value);
+            headers.insert(WORKSPACE.into(), workspace);
+        }
+    }
     // Pool keys describe credentials and transport, not individual turns. The
     // actual request retains these fields; another account still has its own key.
     for name in [

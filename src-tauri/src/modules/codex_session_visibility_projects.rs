@@ -29,10 +29,14 @@ fn project_deferral_message(error: String) -> String {
     )
 }
 
-fn verify_project_recovery_stopped(instance: &CodexSyncInstance) -> Result<(), String> {
+fn verify_project_recovery_stopped(
+    instance: &CodexSyncInstance,
+    probe_when_incomplete: bool,
+) -> Result<(), String> {
     // Default instances deliberately use None through is_instance_running, so
     // official macOS/Windows desktops without CODEX_HOME are still detected.
-    let entries = modules::process::collect_codex_launch_maintenance_process_entries()?;
+    let entries =
+        modules::process::collect_codex_launch_maintenance_process_entries(probe_when_incomplete)?;
     if is_instance_running(instance, &entries) {
         return Err(project_recovery_message("stopInstanceHint", &[]));
     }
@@ -125,7 +129,7 @@ fn repair_session_visibility_for_instances_with_options(
             })
             .collect::<Result<Vec<_>, _>>()?;
         for instance in &instances {
-            verify_project_recovery_stopped(instance)?;
+            verify_project_recovery_stopped(instance, false)?;
         }
         leases
     } else {
@@ -237,7 +241,7 @@ fn repair_session_visibility_for_instances_with_options(
                 } else {
                     None
                 };
-                verify_project_recovery_stopped(instance)?;
+                verify_project_recovery_stopped(instance, false)?;
                 let scope = modules::backup_storage::scope_for_path(&instance.data_dir);
                 let backup = modules::backup_storage::behavior_backup_dir(
                     "codex",
@@ -428,7 +432,7 @@ fn prepare_local_project_account_state(instance: &CodexSyncInstance) -> Result<b
     let Some(owner) = modules::codex_account::desktop_renderer_project_owner(&instance.data_dir)? else {
         return Ok(false);
     };
-    verify_project_recovery_stopped(instance)?;
+    verify_project_recovery_stopped(instance, true)?;
     let prepared = local_projects::account_state::prepare(&instance.data_dir, owner.as_deref())?;
     if prepared {
         modules::logger::log_info(&format!(

@@ -47,6 +47,40 @@ fn quota_reset_wakeup_stops_on_disable_and_does_not_replay_after_restart() {
 }
 
 #[test]
+fn quota_reset_timing_reads_only_selected_indexed_accounts() {
+    const TEST_NAME: &str = "quota_reset_timing_reads_only_selected_indexed_accounts";
+    if std::env::var_os(CHILD).is_none() {
+        let root = tempfile::tempdir().unwrap();
+        run_isolated(root.path(), TEST_NAME, "run");
+        return;
+    }
+
+    let now = Local::now().timestamp();
+    let reset = now + 600;
+    save_accounts(&["selected", "unselected", "not-indexed"], Some(reset));
+    for id in ["unselected", "not-indexed"] {
+        let mut account = codex_account::load_account(id).unwrap();
+        account.quota.as_mut().unwrap().hourly_reset_time = Some(now + 60);
+        codex_account::save_account(&account).unwrap();
+    }
+    let mut index = codex_account::load_account_index();
+    index.accounts.retain(|account| account.id != "not-indexed");
+    let unselected = index.accounts.iter_mut().find(|account| account.id == "unselected").unwrap();
+    unselected.email = "old-summary@example.invalid".into();
+    codex_account::save_account_index(&index).unwrap();
+
+    let task = serde_json::from_value(json!({
+        "id": RESET_TASK, "name": "Scope reset reads", "enabled": true,
+        "accountIds": ["selected", "not-indexed"], "createdAt": now, "updatedAt": now,
+        "schedule": {"kind": "quota_reset", "quotaResetWindow": "primary_window"}
+    })).unwrap();
+    assert_eq!(quota_reset_timing(&task, now).next, Some(reset));
+    let index = codex_account::load_account_index();
+    let unselected = index.accounts.iter().find(|account| account.id == "unselected").unwrap();
+    assert_eq!(unselected.email, "old-summary@example.invalid");
+}
+
+#[test]
 fn quota_reset_plan_prefers_refreshed_primary_after_seeing_only_weekly() {
     if std::env::var_os(CHILD).is_none() {
         let root = tempfile::tempdir().unwrap();
@@ -278,7 +312,8 @@ async fn scheduled_dispatch() {
                 if first_b {
                     return (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":{"message":"fixture upstream failure"}})));
                 }
-                (StatusCode::OK, Json(json!({"output":[{"type":"message","content":[{"type":"output_text","text":format!("reply from {id}")}]}]})))
+                let status = if id == "selected-c" { StatusCode::CREATED } else { StatusCode::OK };
+                (status, Json(json!({"output":[{"type":"message","content":[{"type":"output_text","text":format!("reply from {id}")}]}]})))
             }
         },
     ));
@@ -325,11 +360,14 @@ async fn scheduled_dispatch() {
         batch.records[2].reply.as_deref(),
         Some("reply from selected-c")
     );
+    assert_eq!(batch.records[0].http_status, Some(200));
+    assert_eq!(batch.records[2].http_status, Some(201));
     let state = codex_wakeup::load_state_for_scheduler().unwrap();
     assert_eq!(state.tasks[0].last_success_count, Some(2));
     assert_eq!(state.tasks[0].last_failure_count, Some(1));
     assert_eq!(state.tasks[0].last_message, batch.records[1].error);
     let history = codex_wakeup::load_history(false).unwrap().records;
+    assert!(history.iter().any(|record| record.account_id == "selected-c" && record.http_status == Some(201)));
     assert_eq!(
         history
             .iter()

@@ -1,6 +1,8 @@
 import type { CodexApiProviderPreset } from "./codexProviderPresets.ts";
 import {
   DEEPSEEK_API_PROVIDER_ID,
+  OLLAMA_CLOUD_API_PROVIDER_ID,
+  OLLAMA_LOCAL_API_PROVIDER_ID,
   OPENCODE_GO_API_PROVIDER_ID,
   findCodexApiProviderPresetById,
   resolveCodexApiProviderPresetId,
@@ -65,8 +67,6 @@ const CHAT_COMPLETIONS_PRESET_IDS = new Set([
   "stepfun_en",
   "modelscope",
   "longcat",
-  "minimax",
-  "minimax_en",
   "bailing",
   "xiaomi_mimo",
   "xiaomi_mimo_token_plan",
@@ -79,6 +79,8 @@ const CHAT_COMPLETIONS_PRESET_IDS = new Set([
   "pipellm",
   "therouter",
   "openrouter",
+  OLLAMA_CLOUD_API_PROVIDER_ID,
+  OLLAMA_LOCAL_API_PROVIDER_ID,
   OPENCODE_GO_API_PROVIDER_ID,
 ]);
 

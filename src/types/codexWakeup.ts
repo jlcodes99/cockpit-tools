@@ -96,6 +96,7 @@ export interface CodexWakeupHistoryItem {
   account_context_text?: string;
   success: boolean;
   status?: WakeupTaskHistoryStatus;
+  http_status?: number;
   prompt?: string;
   model?: string;
   model_display_name?: string;

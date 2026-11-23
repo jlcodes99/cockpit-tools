@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 const METADATA_LIMIT: u64 = 1024 * 1024;
 
 // Detect the frame itself: restore/import staging files deliberately use .tmp.
-pub(super) fn open(path: &Path) -> io::Result<Box<dyn Read>> {
+pub(in crate::modules) fn open(path: &Path) -> io::Result<Box<dyn Read>> {
     let mut input = BufReader::new(File::open(path)?);
     let magic = input.fill_buf()?;
     let compressed = magic.starts_with(&[0x28, 0xb5, 0x2f, 0xfd]);
@@ -50,7 +50,7 @@ pub(super) fn metadata(path: &Path) -> io::Result<Option<serde_json::Value>> {
     }
 }
 
-pub(super) fn is_compressed(path: &Path) -> bool {
+pub(in crate::modules) fn is_compressed(path: &Path) -> bool {
     path.extension().is_some_and(|extension| extension == "zst")
 }
 

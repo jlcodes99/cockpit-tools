@@ -109,17 +109,9 @@ pub async fn save_local_access_accounts_with_official_bindings(
                 }
                 let account =
                     codex_account::load_account(id).ok_or("CHATGPT_PLAN_SOURCE_INVALID")?;
-                if restrict_free_accounts
-                    && account
-                        .plan_type
-                        .as_deref()
-                        .is_some_and(|plan| plan.eq_ignore_ascii_case("free"))
-                {
-                    return Err("CHATGPT_PLAN_SERVICE_ACCOUNT_INELIGIBLE".into());
-                }
                 if !bindings.contains_key(id)
                     && !service_account_paused(&next, id)
-                    && !is_local_access_eligible_account(&account, restrict_free_accounts)
+                    && !is_local_access_eligible_account(&account)
                 {
                     return Err("CHATGPT_PLAN_SERVICE_ACCOUNT_INELIGIBLE".into());
                 }

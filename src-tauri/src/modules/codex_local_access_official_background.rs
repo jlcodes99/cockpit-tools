@@ -110,7 +110,7 @@ async fn run_official_background_chat(
     instructions: &str,
     purpose: &str,
     on_delta: impl Fn(String),
-) -> Result<PelicanChatOutput, String> {
+) -> Result<(PelicanChatOutput, u16), String> {
     timeout(PELICAN_TOTAL_TIMEOUT, async {
         let (token, authorization_revision) =
             crate::modules::chatgpt_plan::inference_snapshot_for_source(
@@ -184,7 +184,7 @@ async fn run_official_background_chat(
             .map_err(|error| error.replace(&token, "[redacted]"))?;
         output.uses_official_authorization = true;
         output.quota = None;
-        Ok(output)
+        Ok((output, status.as_u16()))
     })
     .await
     .map_err(|_| "CHATGPT_PLAN_TIMEOUT".to_string())?
@@ -205,7 +205,7 @@ async fn run_bound_official_wakeup(
         .filter(|value| !value.is_empty())
         .unwrap_or("medium");
     let started_at = Instant::now();
-    let output =
+    let (output, http_status) =
         run_official_background_chat(&authorization, model, effort, prompt, "", "wakeup", |_| {})
             .await?;
     if output.reply.trim().is_empty() {
@@ -215,5 +215,6 @@ async fn run_bound_official_wakeup(
         account: authorization.account,
         reply: output.reply,
         duration_ms: started_at.elapsed().as_millis() as u64,
+        http_status,
     })
 }

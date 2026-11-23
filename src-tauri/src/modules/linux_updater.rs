@@ -728,6 +728,8 @@ mod tests {
             ("x86_64", None, true, "windows-x86_64-nsis"),
             ("x86_64", None, false, "windows-x86_64-msi"),
             ("x86", None, true, "windows-x86_64-nsis"),
+            ("aarch64", Some("nsis"), false, "windows-aarch64-nsis"),
+            ("aarch64", Some("nsis"), true, "windows-aarch64-nsis"),
         ];
 
         for (arch, bundle, writable, expected) in cases {

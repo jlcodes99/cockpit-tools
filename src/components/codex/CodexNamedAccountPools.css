@@ -1,0 +1,84 @@
+.codex-named-pools {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.codex-named-pools-actions,
+.codex-named-pools-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.codex-named-pools-actions > .single-select-dropdown {
+  flex: 1 1 180px;
+  max-width: 300px;
+}
+
+.codex-named-pools-manager {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.codex-named-pools-manager > summary {
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.codex-named-pools-editor,
+.codex-named-pools-form,
+.codex-named-pools-form > label {
+  display: grid;
+  gap: 8px;
+}
+
+.codex-named-pools-editor {
+  margin-top: 10px;
+  justify-items: start;
+}
+
+.codex-named-pools-row,
+.codex-named-pools-form {
+  width: 100%;
+}
+
+.codex-named-pools-row > span {
+  flex: 1 1 150px;
+  display: grid;
+  overflow-wrap: anywhere;
+}
+
+.codex-named-pools-remove {
+  flex: 0 0 100%;
+}
+
+.codex-named-pools-remove > button + button {
+  margin-inline-start: 8px;
+}
+
+.codex-named-pools-members {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.codex-named-pools-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+
+.codex-named-pools-member > span {
+  overflow-wrap: anywhere;
+}
+
+.codex-named-pools-row small,
+.codex-named-pools-member small {
+  color: var(--text-secondary);
+}

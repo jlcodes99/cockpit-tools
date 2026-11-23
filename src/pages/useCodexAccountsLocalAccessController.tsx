@@ -999,11 +999,9 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
         canAddCodexAccountToLocalAccess(
           account,
           new Set([...localAccessAccountIdSet, ...(chatGptPlanSourceMemberIds(account.id, planOverview.accounts, localAccessAccountIdSet, accounts).length ? [account.id] : [])]),
-          localAccessCollection?.restrictFreeAccounts ?? true,
         ),
       [
         localAccessAccountIdSet,
-        localAccessCollection?.restrictFreeAccounts,
         localAccessState,
         accounts,
         planOverview.accounts,
@@ -1143,7 +1141,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
               : filterCodexLocalAccessAccountIds(
                   accountIds,
                   accounts,
-                  restrictFreeAccounts,
                   localAccessCollection?.pausedAccountIds?.filter((id) => localAccessCollection.accountIds.includes(id)),
                 );
           if (accountIds.length > 0 && filteredAccountIds.length === 0) {

@@ -352,7 +352,11 @@ mod tests {
                         .unwrap();
                     fixture["token_encrypted"] = json!({"version":1, "algorithm":"AES-256-GCM", "key_id":"local-account-token-v1", "nonce":STANDARD.encode(nonce), "ciphertext":STANDARD.encode(encrypted), "encrypted_at":1});
                     fixture["two_factor_secret"] = json!("desktop-fixture-secret");
-                    fixture["quota"] = json!({"models":[], "last_updated":10, "quota_summary_stale":true, "quota_summary_updated_at":8, "is_gcp_tos":true, "project_id":"fixture-project"});
+                    fixture["quota"] = json!({
+                        "models":[{"name":"3p-weekly", "percentage":0, "reset_time":"", "summary_exhausted":true}],
+                        "last_updated":10, "quota_summary_stale":true, "quota_summary_updated_at":8,
+                        "is_gcp_tos":true, "project_id":"fixture-project"
+                    });
                 }
                 "codex" => {
                     fixture["tokens"] =
@@ -397,6 +401,7 @@ mod tests {
                     assert_eq!(account["two_factor_secret"], "desktop-fixture-secret");
                     assert_eq!(account["quota"]["quota_summary_stale"], true);
                     assert_eq!(account["quota"]["quota_summary_updated_at"], 8);
+                    assert_eq!(account["quota"]["models"][0]["summary_exhausted"], true);
                     assert_eq!(account["quota"]["is_gcp_tos"], true);
                     assert_eq!(account["quota"]["project_id"], "fixture-project");
                 }

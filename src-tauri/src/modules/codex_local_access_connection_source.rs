@@ -179,6 +179,7 @@ fn request_logs_with_rejections_cte(conn: &Connection) -> rusqlite::Result<Strin
         ("authorization_route", "''"),
         ("first_response_ms", "NULL"),
         ("output_generation_ms", "NULL"),
+        ("input_text_characters", "NULL"),
         ("turn_state_length", "NULL"),
         ("turn_state_class", "''"),
         ("success", "0"),
@@ -303,6 +304,45 @@ mod request_connection_source_tests {
     }
 
     #[test]
+    fn high_token_requests_filter_exact_account_sources_across_pages() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = open_local_access_logs_db_once(&dir.path().join("high-tokens.sqlite"), true).unwrap();
+        for (id, account_id, total_tokens, timestamp) in [
+            ("old-large", "owner", 20_000, 1),
+            ("boundary", "linked-official", 10_000, 2),
+            ("small", "owner", 9_999, 3),
+            ("another-account", "owner-other", 25_000, 4),
+        ] {
+            insert_local_access_usage_event(&conn, &CodexLocalAccessUsageEvent {
+                request_id: id.into(),
+                account_id: account_id.into(),
+                total_tokens,
+                timestamp,
+                ..Default::default()
+            }).unwrap();
+        }
+        let query = |page, minimum| {
+            query_local_access_usage_events_blocking(
+                &conn, page, 1,
+                None, None, None,   // time
+                None, None, None,   // model and account names
+                None, None, None,   // exact account and key
+                None, None, None,   // instance, session, and gateway mode
+                None, None, None,   // request kind, success, and error
+                minimum,
+                Some(vec!["owner".into(), "linked-official".into()]),
+                RequestConnectionSourceFilter::default(),
+            ).unwrap()
+        };
+        let first = query(1, Some(10_000));
+        assert_eq!((first.total, first.total_pages), (2, 2));
+        assert_eq!(first.events[0].request_id, "boundary");
+        assert_eq!(query(2, Some(10_000)).events[0].request_id, "old-large");
+        assert_eq!(query(1, None).total, 3);
+        assert_eq!(query(1, Some(10_001)).total, 1);
+    }
+
+    #[test]
     fn request_pages_filter_live_peers_without_backfilling_historical_logs() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("request-logs.sqlite");
@@ -317,6 +357,7 @@ mod request_connection_source_tests {
         let live = CodexLocalAccessUsageEvent {
             request_id: "live".into(),
             timestamp: 2,
+            input_text_characters: Some(0),
             connection_source: Some(source),
             ..Default::default()
         };
@@ -327,6 +368,8 @@ mod request_connection_source_tests {
                 &conn,
                 1,
                 10,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -353,6 +396,8 @@ mod request_connection_source_tests {
         assert_eq!(all.total, 2);
         assert_eq!(all.events[0].connection_source, Some(source));
         assert_eq!(all.events[1].connection_source, None);
+        assert_eq!(all.events[0].input_text_characters, Some(0));
+        assert_eq!(all.events[1].input_text_characters, None);
         let matching = query(Some("lan"), Some("::ffff:192.168.40.8"));
         assert_eq!(matching.total, 1);
         assert_eq!(matching.events[0].request_id, "live");

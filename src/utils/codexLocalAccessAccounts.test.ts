@@ -27,8 +27,8 @@ function account(partial: Partial<CodexAccount>): CodexAccount {
 test('a paused member survives a settings save without admitting other incomplete accounts', () => {
   const paused = account({ id: 'paused', authorization_status: 'pending' });
   const candidate = account({ id: 'candidate', authorization_status: 'pending' });
-  assert.deepEqual(filterCodexLocalAccessAccountIds(['paused', 'candidate', 'paused'], [paused, candidate], true, ['paused']), ['paused']);
-  assert.deepEqual(filterCodexLocalAccessAccountIds(['paused', 'candidate'], [paused, candidate], true), []);
+  assert.deepEqual(filterCodexLocalAccessAccountIds(['paused', 'candidate', 'paused'], [paused, candidate], ['paused']), ['paused']);
+  assert.deepEqual(filterCodexLocalAccessAccountIds(['paused', 'candidate'], [paused, candidate]), []);
 });
 
 test("pending oauth accounts are ineligible for API service", () => {
@@ -37,10 +37,10 @@ test("pending oauth accounts are ineligible for API service", () => {
     account_note: "import later",
   });
   assert.equal(
-    getCodexLocalAccessAccountIneligibleReason(pending, true),
+    getCodexLocalAccessAccountIneligibleReason(pending),
     "pending_oauth",
   );
-  assert.equal(isCodexLocalAccessEligibleAccount(pending, true), false);
+  assert.equal(isCodexLocalAccessEligibleAccount(pending), false);
 });
 
 test("authorized oauth accounts remain eligible", () => {
@@ -52,51 +52,38 @@ test("authorized oauth accounts remain eligible", () => {
     },
     plan_type: "plus",
   });
-  assert.equal(getCodexLocalAccessAccountIneligibleReason(ok, true), null);
-  assert.equal(isCodexLocalAccessEligibleAccount(ok, true), true);
+  assert.equal(getCodexLocalAccessAccountIneligibleReason(ok), null);
+  assert.equal(isCodexLocalAccessEligibleAccount(ok), true);
 });
 
 test("eligible accounts can be added when they are not API service members", () => {
   const eligible = account({ plan_type: "plus" });
 
   assert.equal(
-    canAddCodexAccountToLocalAccess(eligible, new Set(), true),
+    canAddCodexAccountToLocalAccess(eligible, new Set()),
     true,
   );
   assert.equal(
     canAddCodexAccountToLocalAccess(
       eligible,
       new Set([eligible.id]),
-      true,
     ),
     false,
   );
 });
 
-test("direct add follows the API service free-account restriction", () => {
-  const free = account({ plan_type: "free" });
-
-  assert.equal(canAddCodexAccountToLocalAccess(free, new Set(), true), false);
-  assert.equal(canAddCodexAccountToLocalAccess(free, new Set(), false), true);
-});
-
-test("expired paid subscriptions follow the API service free-account restriction", () => {
+test("Free and expired OAuth accounts can be added and kept in the API service pool", () => {
+  const free = account({ id: "free", plan_type: "free" });
   const expiredPlus = account({
+    id: "expired",
     plan_type: "plus",
     subscription_active_until: "2020-01-01T00:00:00Z",
   });
 
-  assert.equal(
-    getCodexLocalAccessAccountIneligibleReason(expiredPlus, true),
-    "free_restricted",
-  );
-  assert.equal(
-    isCodexLocalAccessEligibleAccount(expiredPlus, true),
-    false,
-  );
-  assert.equal(
-    isCodexLocalAccessEligibleAccount(expiredPlus, false),
-    true,
+  assert.equal(canAddCodexAccountToLocalAccess(free, new Set()), true);
+  assert.deepEqual(
+    filterCodexLocalAccessAccountIds([free.id, expiredPlus.id], [free, expiredPlus]),
+    [free.id, expiredPlus.id],
   );
 });
 
@@ -139,11 +126,11 @@ test("DeepSeek Responses accounts can join API service", () => {
     api_wire_api: "responses",
   });
   assert.equal(
-    getCodexLocalAccessAccountIneligibleReason(deepseek, false),
+    getCodexLocalAccessAccountIneligibleReason(deepseek),
     null,
   );
-  assert.equal(isCodexLocalAccessEligibleAccount(deepseek, false), true);
-  assert.equal(canAddCodexAccountToLocalAccess(deepseek, new Set(), false), true);
+  assert.equal(isCodexLocalAccessEligibleAccount(deepseek), true);
+  assert.equal(canAddCodexAccountToLocalAccess(deepseek, new Set()), true);
   assert.deepEqual(
     resolveImportedCodexAccountIdsForLocalAccess([deepseek], true, false),
     ["deepseek"],
@@ -162,7 +149,7 @@ test("Web Session imports never join API service even when sync-all is enabled",
   });
 
   assert.equal(
-    getCodexLocalAccessAccountIneligibleReason(webSession, false),
+    getCodexLocalAccessAccountIneligibleReason(webSession),
     "web_session_quota_only",
   );
   assert.equal(isCodexOAuthBindingEligibleAccount(webSession), false);
@@ -176,7 +163,7 @@ test("Web Session imports never join API service even when sync-all is enabled",
   );
 });
 
-test("Agent Identity remains eligible when regular free accounts are restricted", () => {
+test("Agent Identity remains eligible for the API service", () => {
   const agentIdentity = account({
     plan_type: "free",
     agent_identity: {
@@ -187,6 +174,6 @@ test("Agent Identity remains eligible when regular free accounts are restricted"
     },
   });
 
-  assert.equal(getCodexLocalAccessAccountIneligibleReason(agentIdentity, true), null);
+  assert.equal(getCodexLocalAccessAccountIneligibleReason(agentIdentity), null);
   assert.equal(isCodexOAuthBindingEligibleAccount(agentIdentity), false);
 });

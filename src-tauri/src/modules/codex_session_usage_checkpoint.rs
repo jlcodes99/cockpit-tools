@@ -2,7 +2,7 @@
 // events are committed together; restarting never needs to replay an append.
 use std::io::{Read, Seek, SeekFrom};
 
-const PARSER_VERSION: u32 = 1;
+const PARSER_VERSION: u32 = 2;
 const MAX_LINE_BYTES: u64 = 2 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,7 +105,10 @@ fn load_parser_checkpoint(
         } else {
             c.byte_offset <= size && size >= previous_size.max(0) as u64
         };
-        c.version == PARSER_VERSION
+        // V1 may have classified a paginated fork as an inline-replayed parent.
+        let version_matches = c.version == PARSER_VERSION
+            || (c.version == 1 && c.parent != ParentResolution::Parent);
+        version_matches
             && c.compressed == compressed
             && size_matches
             && checkpoint_anchor(path, c.byte_offset).is_ok_and(|anchor| anchor == c.anchor)

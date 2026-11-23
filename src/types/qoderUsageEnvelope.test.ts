@@ -37,3 +37,8 @@ test('ratio percentages are converted to percent points', () => {
   assert.equal(info.addOnQuota.percentage, (1618 / 2600) * 100);
   assert.equal(info.totalUsagePercentage, 62);
 });
+
+test('saved percent points below one are preserved without a raw quota bucket', () => {
+  const info = getQoderSubscriptionInfo({ ...base, credits_usage_percent: 0.35 });
+  assert.equal(info.userQuota.percentage, 0.35);
+});

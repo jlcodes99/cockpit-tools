@@ -10,7 +10,7 @@ import { CodexAnthropicProviderFields } from "./CodexAnthropicProviderFields";
 import { ModalErrorMessage, useModalErrorState } from "../ModalErrorMessage";
 import { Check, Copy, Eye, EyeOff, ExternalLink, HelpCircle, KeyRound, Pencil, Star, Trash2, X, Search } from "lucide-react";
 import { CodexModelContextWindowTable } from "./CodexModelContextWindowTable";
-import { CODEX_API_PROVIDER_CUSTOM_ID, CODEX_API_PROVIDER_PRESETS, DEEPSEEK_API_PROVIDER_ID } from "../../utils/codexProviderPresets";
+import { CODEX_API_PROVIDER_CUSTOM_ID, CODEX_API_PROVIDER_PRESETS, DEEPSEEK_API_PROVIDER_ID, resolveOllamaLocalPlaceholderKey } from "../../utils/codexProviderPresets";
 import { canConfigureCodexProviderVision } from "../../utils/codexProviderGateway";
 import type { useCodexModelProviderManagerController } from './CodexModelProviderManager';
 
@@ -45,7 +45,8 @@ export function CodexModelProviderEditor(props: Props) {
     }
   };
   const selectedKey = currentEditingProvider?.apiKeys.find(key => key.id === (editorModelKeyId ?? accountEditor?.apiKeyId));
-  const queryKey = form.newApiKey || selectedKey?.apiKey || currentEditingProvider?.apiKeys[0]?.apiKey || "";
+  const localPlaceholderKey = resolveOllamaLocalPlaceholderKey(form.baseUrl);
+  const queryKey = form.newApiKey.trim() || selectedKey?.apiKey || currentEditingProvider?.apiKeys[0]?.apiKey || localPlaceholderKey;
   const boundAccount = accounts.find(account => account.id === accountEditor?.accountId);
   let officialDeepSeek = false;
   try { officialDeepSeek = new URL(form.baseUrl.trim()).hostname.toLowerCase() === "api.deepseek.com"; } catch { /* incomplete URL */ }
@@ -779,6 +780,7 @@ export function CodexModelProviderEditor(props: Props) {
                   className="form-input"
                   type="text"
                   value={form.newApiKey}
+                  placeholder={localPlaceholderKey}
                   onChange={(event) =>
                     mutateForm({ newApiKey: event.target.value, newUsageApiKey: "" })
                   }
@@ -791,6 +793,23 @@ export function CodexModelProviderEditor(props: Props) {
                 {form.newApiKey.trim() || !currentEditingProvider
                   ? <OpenAIUsageKeyField value={form.newUsageApiKey} onChange={newUsageApiKey => mutateForm({ newUsageApiKey })} disabled={saving} t={t} />
                   : <OpenAIUsageSettingsButton provider={currentEditingProvider} apiKey={queryKey} t={t} />}
+              </details>}
+
+              {!accountEditor && !isOpenAIOfficialUsageUrl(form.baseUrl) && <details className="openai-usage-optional" open={form.customUsageText.trim() ? true : undefined}>
+                <summary>{t("codex.customProviderUsage.title", "自定义额度查询")}</summary>
+                <div className="form-group">
+                  <label htmlFor="codex-custom-provider-usage">{t("codex.customProviderUsage.settings", "查询设置（JSON）")}</label>
+                  <textarea
+                    id="codex-custom-provider-usage"
+                    className="form-input"
+                    rows={7}
+                    disabled={saving}
+                    value={form.customUsageText}
+                    onChange={event => mutateForm({ customUsageText: event.target.value })}
+                    placeholder={'{\n  "endpoint": "/v1/usage",\n  "mappings": {"remaining": "remaining | quota.remaining | balance"},\n  "unit": "CNY"\n}'}
+                  />
+                  <p className="api-provider-hint">{t("codex.customProviderUsage.hint", "留空使用自动查询。可填写 headers 添加请求头。字段路径用 | 连接时按顺序取第一个有值的字段。")}</p>
+                </div>
               </details>}
 
               <div className="provider-save-preview">

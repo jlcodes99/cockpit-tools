@@ -1,6 +1,6 @@
 import { ReactNode, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlarmClock, Layers, ShieldCheck } from 'lucide-react';
+import { AlarmClock, BarChart3, Layers, ShieldCheck } from 'lucide-react';
 import { Page } from '../types/navigation';
 import { ManualHelpIconButton } from './ManualHelpIconButton';
 import { AntigravityInstalledVersionBadge } from './AntigravityInstalledVersionBadge';
@@ -68,6 +68,11 @@ export function OverviewTabsHeader({
       key: 'overview',
       label: t('overview.title'),
       icon: <span className="tab-icon">{renderPlatformIcon(currentPlatformId, 16)}</span>,
+    },
+    {
+      key: 'antigravity-usage',
+      label: t('antigravityTokenUsage.tab', 'Session Usage'),
+      icon: <BarChart3 className="tab-icon" />,
     },
     {
       key: 'instances',

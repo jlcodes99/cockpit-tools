@@ -338,6 +338,15 @@ fn isolated_import_retry_repairs_only_identical_unindexed_history() {
 
 #[test]
 fn paginated_session_transfer_keeps_only_the_selected_branch_history() {
+    check_paginated_session_transfer(false);
+}
+
+#[test]
+fn copied_subagent_session_transfer_preserves_inherited_messages_once() {
+    check_paginated_session_transfer(true);
+}
+
+fn check_paginated_session_transfer(copied: bool) {
     let base = tempfile::tempdir().unwrap();
     let session_id = "3a2cfad6-6e2c-4637-9570-8022128b3c03";
     let source_id = "3a2cfad6-6e2c-4637-9570-8022128b3c01";
@@ -376,18 +385,34 @@ fn paginated_session_transfer_keeps_only_the_selected_branch_history() {
     fs::write(&source_path, &compressed).unwrap();
 
     fs::remove_file(&snapshot.rollout_path).unwrap();
+    let extension = if copied { "jsonl.zst" } else { "jsonl" };
     snapshot.rollout_path.set_file_name(format!(
-        "rollout-2026-10-11T00-01-00-{session_id}_{child_physical}.jsonl"
+        "rollout-2026-10-11T00-01-00-{session_id}_{child_physical}.{extension}"
     ));
-    let child = line(
-        2,
-        "session_meta",
-        json!({
+    let cutoff = json!({"thread_id": physical_id, "end_byte_offset": prefix.len(), "end_ordinal_exclusive": 2});
+    let child = if copied {
+        line(0, "session_meta", json!({
             "id": session_id, "cwd": "/tmp/project", "history_mode": "paginated",
-            "history_base": {"thread_id": physical_id, "end_byte_offset": prefix.len(), "end_ordinal_exclusive": 2},
-        }),
-    ) + &message(3, "selected branch");
-    fs::write(&snapshot.rollout_path, &child).unwrap();
+            "forked_from_id": source_id, "subagent_history_start_ordinal": 3,
+        })) + &line(1, "session_meta", json!({
+            "id": source_id, "history_mode": "paginated", "history_base": cutoff,
+        })) + &message(2, "ancestor included 中文🙂")
+    } else {
+        line(
+            2,
+            "session_meta",
+            json!({
+                "id": session_id, "cwd": "/tmp/project", "history_mode": "paginated",
+                "history_base": cutoff,
+            }),
+        )
+    } + &message(3, "selected branch");
+    let child_bytes = if copied {
+        zstd::stream::encode_all(child.as_bytes(), 0).unwrap()
+    } else {
+        child.into_bytes()
+    };
+    fs::write(&snapshot.rollout_path, &child_bytes).unwrap();
     let original_child = snapshot.rollout_path.clone();
 
     let (_staging, prepared) = prepare_export_session_entries(vec![(instance, snapshot)]).unwrap();
@@ -415,6 +440,13 @@ fn paginated_session_transfer_keeps_only_the_selected_branch_history() {
     assert_eq!(records[0]["payload"]["cwd"], "/tmp/new-project");
     assert_eq!(records[0]["payload"]["history_mode"], "legacy");
     assert!(records[0]["payload"].get("history_base").is_none());
+    assert!(records.iter().all(|record| {
+        record["type"] != "session_meta" || record["payload"]["history_base"].is_null()
+    }));
+    if copied {
+        assert_eq!(records[1]["payload"]["id"], source_id);
+        assert_eq!(records[1]["payload"]["history_mode"], "legacy");
+    }
     let messages = records
         .iter()
         .filter(|record| record["payload"]["type"] == "user_message")
@@ -423,5 +455,5 @@ fn paginated_session_transfer_keeps_only_the_selected_branch_history() {
     assert_eq!(messages, ["ancestor included 中文🙂", "selected branch"]);
     assert!(!imported.contains("unselected ancestor tail"));
     assert_eq!(fs::read(source_path).unwrap(), compressed);
-    assert_eq!(fs::read_to_string(original_child).unwrap(), child);
+    assert_eq!(fs::read(original_child).unwrap(), child_bytes);
 }

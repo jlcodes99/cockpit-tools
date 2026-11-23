@@ -1,9 +1,9 @@
 // Tray refresh scheduling and native menu application.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 static APPLIED_TRAY_MENU_SNAPSHOT: std::sync::Mutex<Option<TrayMenuSnapshot>> =
     std::sync::Mutex::new(None);
 
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(any(test, target_os = "linux", target_os = "windows"))]
 fn apply_changed_tray_menu(
     cache: &std::sync::Mutex<Option<TrayMenuSnapshot>>,
     snapshot: &TrayMenuSnapshot,
@@ -81,6 +81,30 @@ struct TrayMenuRebuildTiming {
     apply_ms: u128,
 }
 
+#[cfg(not(target_os = "macos"))]
+enum TrayMenuApply {
+    Skipped,
+    Applied(u128),
+    #[cfg(target_os = "windows")]
+    MenuOpen,
+}
+
+#[cfg(target_os = "windows")]
+fn windows_popup_menu_open() -> Result<bool, String> {
+    use windows::Win32::System::Threading::GetCurrentThreadId;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetGUIThreadInfo, GUITHREADINFO, GUI_POPUPMENUMODE,
+    };
+
+    let mut info = GUITHREADINFO {
+        cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+        ..Default::default()
+    };
+    unsafe { GetGUIThreadInfo(GetCurrentThreadId(), &mut info) }
+        .map_err(|err| format!("读取 Windows 托盘菜单状态失败: {err}"))?;
+    Ok(info.flags.contains(GUI_POPUPMENUMODE))
+}
+
 fn rebuild_tray_menu_now<R: Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<Option<TrayMenuRebuildTiming>, String> {
@@ -102,56 +126,82 @@ fn rebuild_tray_menu_now<R: Runtime>(
     #[cfg(not(target_os = "macos"))]
     {
         let data_started = std::time::Instant::now();
-        let snapshot = collect_tray_menu_snapshot();
+        let snapshot = std::sync::Arc::new(collect_tray_menu_snapshot());
         let data_ms = data_started.elapsed().as_millis();
         let generation = next_tray_menu_apply_generation(&TRAY_MENU_APPLY_GENERATION);
-        let app_handle = app.clone();
-        let (tx, rx) = std::sync::mpsc::channel();
-        app.run_on_main_thread(move || {
+        loop {
+            match submit_tray_menu_snapshot(app, snapshot.clone(), generation)? {
+                TrayMenuApply::Applied(apply_ms) => {
+                    return Ok(Some(TrayMenuRebuildTiming { data_ms, apply_ms }));
+                }
+                TrayMenuApply::Skipped => return Ok(None),
+                #[cfg(target_os = "windows")]
+                TrayMenuApply::MenuOpen => {
+                    // Keep the snapshot on the refresh worker while Windows tracks the menu.
+                    std::thread::sleep(TRAY_MENU_COALESCE_WINDOW);
+                    if TRAY_MENU_REQUESTS.load(Ordering::Acquire) != 0 {
+                        return Ok(None);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn submit_tray_menu_snapshot<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    snapshot: std::sync::Arc<TrayMenuSnapshot>,
+    generation: usize,
+) -> Result<TrayMenuApply, String> {
+    let app_handle = app.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let result = (|| {
             if is_stale_tray_menu_apply(&TRAY_MENU_APPLY_GENERATION, generation)
                 || !crate::modules::config::get_user_config().show_tray_icon
             {
-                let _ = tx.send(Ok(None));
-                return;
+                return Ok(TrayMenuApply::Skipped);
             }
-            let apply_started = std::time::Instant::now();
-            let result = (|| {
-                let Some(tray) = app_handle.tray_by_id(TRAY_ID) else {
-                    return Ok(false);
-                };
-                let apply = || {
-                    let menu = build_tray_menu_from_snapshot(&app_handle, &snapshot)
-                        .map_err(|e| e.to_string())?;
-                    tray.set_menu(Some(menu)).map_err(|e| e.to_string())
-                };
-                #[cfg(target_os = "linux")]
-                return apply_changed_tray_menu(&APPLIED_TRAY_MENU_SNAPSHOT, &snapshot, apply);
-                #[cfg(not(target_os = "linux"))]
-                {
-                    apply()?;
-                    Ok(true)
-                }
-            })();
-            let apply_ms = apply_started.elapsed().as_millis();
-            let _ = tx.send(result.map(|changed| changed.then_some(apply_ms)));
-        })
-        .map_err(|e| e.to_string())?;
+            let Some(tray) = app_handle.tray_by_id(TRAY_ID) else {
+                return Ok(TrayMenuApply::Skipped);
+            };
+            #[cfg(target_os = "windows")]
+            if windows_popup_menu_open()? {
+                // Replacing the HMENU while TrackPopupMenu is active cancels the selection.
+                return Ok(TrayMenuApply::MenuOpen);
+            }
+            let applied_at = std::time::Instant::now();
+            let apply = || {
+                let menu = build_tray_menu_from_snapshot(&app_handle, &snapshot)
+                    .map_err(|e| e.to_string())?;
+                tray.set_menu(Some(menu)).map_err(|e| e.to_string())
+            };
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            let changed = apply_changed_tray_menu(&APPLIED_TRAY_MENU_SNAPSHOT, &snapshot, apply)?;
+            #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+            let changed = {
+                apply()?;
+                true
+            };
+            Ok(if changed {
+                TrayMenuApply::Applied(applied_at.elapsed().as_millis())
+            } else {
+                TrayMenuApply::Skipped
+            })
+        })();
+        let _ = tx.send(result);
+    })
+    .map_err(|e| e.to_string())?;
 
-        let applied = rx
-            .recv_timeout(std::time::Duration::from_secs(5))
-            .map_err(|error| {
-                let _ = TRAY_MENU_APPLY_GENERATION.compare_exchange(
-                    generation,
-                    generation.wrapping_add(1),
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
-                );
-                format!("等待托盘菜单提交失败: {}", error)
-            })?;
-        match applied {
-            Ok(Some(apply_ms)) => Ok(Some(TrayMenuRebuildTiming { data_ms, apply_ms })),
-            Ok(None) => Ok(None),
-            Err(err) => Err(err),
-        }
-    }
+    rx.recv_timeout(std::time::Duration::from_secs(5))
+        .map_err(|error| {
+            let _ = TRAY_MENU_APPLY_GENERATION.compare_exchange(
+                generation,
+                generation.wrapping_add(1),
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            );
+            format!("等待托盘菜单提交失败: {}", error)
+        })?
 }

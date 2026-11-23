@@ -177,6 +177,19 @@
   color: var(--text-secondary);
 }
 
+.settings-data-directory {
+  flex-wrap: wrap;
+}
+
+.settings-data-directory .row-desc {
+  overflow-wrap: anywhere;
+}
+
+.settings-data-directory .row-control {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
 .row-control {
   flex-shrink: 0;
   display: flex;

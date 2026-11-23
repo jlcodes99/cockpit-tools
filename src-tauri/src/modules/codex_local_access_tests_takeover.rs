@@ -663,6 +663,7 @@ experimental_bearer_token = "agt_codex_test"
             }),
             model_routing: None,
             inherit_account_pool: Some(false),
+            account_pool_id: None,
             account_ids: vec!["deepseek-account".to_string()],
             priority_account_ids: Vec::new(),
             preferred_account_id: None,

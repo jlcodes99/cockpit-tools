@@ -27,8 +27,7 @@ pub fn enterprise(raw: &Value) -> Option<&Value> {
     }
 }
 
-/// Qoder's quota payload reports `percentage` as a 0–1 ratio, while older data
-/// used 0–100. Rendering the ratio directly would show a full bar as 1%.
+/// Qoder's quota payload reports `percentage` as a 0–1 ratio; older data used 0–100.
 pub fn percent_points(value: f64) -> f64 {
     if !value.is_finite() {
         return 0.0;
@@ -36,8 +35,6 @@ pub fn percent_points(value: f64) -> f64 {
     (if value <= 1.0 { value * 100.0 } else { value }).clamp(0.0, 100.0)
 }
 
-/// Usage over total is authoritative when both are present; a reported
-/// percentage can disagree with the credits it describes.
 pub fn derived_percent(used: Option<f64>, total: Option<f64>) -> Option<f64> {
     match (used, total) {
         (Some(used), Some(total)) if total > 0.0 => {
@@ -98,7 +95,6 @@ mod tests {
             scoped_credits(&raw),
             Some((Some(9.0), Some(300.0), Some(291.0), Some(3.0)))
         );
-        // Without credits the reported ratio is all there is.
         let only_percent = json!({"qoderUsage":{"userQuota":{"percentage":0.62}}});
         assert_eq!(
             scoped_credits(&only_percent),

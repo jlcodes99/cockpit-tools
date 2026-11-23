@@ -356,3 +356,96 @@ fn environment_override_child() {
     assert!(!expected.exists());
     assert!(!root.join("Roaming").exists());
 }
+
+#[cfg(unix)]
+#[test]
+fn saved_data_directory_switches_on_restart_and_can_be_reset() {
+    // Use an already migrated configuration to detect writes caused by switching roots.
+    const SELECTED_CONFIG: &str = r#"{"language":"zh-TW","startup_minimized_default_off_migrated":true}"#;
+    const DEFAULT_CONFIG: &str = r#"{"language":"en","startup_minimized_default_off_migrated":true}"#;
+    let root = TestRoot::new();
+    let selected = root.0.join("已有配置 Data");
+    fs::create_dir(&selected).unwrap();
+    fs::write(selected.join("config.json"), SELECTED_CONFIG).unwrap();
+    let default = root.0.join(DATA_DIR);
+    fs::create_dir(&default).unwrap();
+    fs::write(default.join("config.json"), DEFAULT_CONFIG).unwrap();
+    let temporary_override = root.0.join("external override");
+    for action in ["select", "override", "reset", "default"] {
+        let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+        command
+            .args(["--exact", "modules::data_paths::tests::saved_data_directory_child"])
+            .env("HOME", &root.0)
+            .env("COCKPIT_TOOLS_TEST_ISOLATED_HOME", &root.0)
+            .env("XDG_DATA_HOME", root.0.join("local-data"))
+            .env("COCKPIT_DATA_PATH_TEST_ACTION", action)
+            .env_remove("COCKPIT_TOOLS_PROFILE")
+            .env_remove("COCKPIT_TOOLS_DATA_DIR")
+            .env_remove("COCKPIT_TOOLS_TEST_DATA_DIR")
+            .env_remove("COCKPIT_TEST_DATA_DIR");
+        if action == "override" {
+            command.env("COCKPIT_TOOLS_DATA_DIR", &temporary_override);
+        }
+        let output = command.output().unwrap();
+        assert!(
+            output.status.success(),
+            "{action}: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+    }
+    assert_eq!(fs::read_to_string(selected.join("config.json")).unwrap(), SELECTED_CONFIG);
+    assert_eq!(fs::read_to_string(default.join("config.json")).unwrap(), DEFAULT_CONFIG);
+    assert!(!temporary_override.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn saved_data_directory_child() {
+    let Ok(action) = std::env::var("COCKPIT_DATA_PATH_TEST_ACTION") else {
+        return;
+    };
+    let home = dirs::home_dir().unwrap();
+    let selected = home.join("已有配置 Data");
+    let default = home.join(DATA_DIR);
+    match action.as_str() {
+        "select" => {
+            assert!(save_data_dir_preference(Some(&selected.join("missing"))).is_err());
+            assert!(save_data_dir_preference(Some(&selected.join("config.json"))).is_err());
+            save_data_dir_preference(Some(&selected)).unwrap();
+            assert_eq!(read_data_dir_preference().unwrap(), Some(selected));
+            assert_eq!(resolve_data_dir().unwrap(), default);
+        }
+        "override" => {
+            assert_eq!(read_data_dir_preference().unwrap(), Some(selected));
+            assert_eq!(resolve_data_dir().unwrap(), home.join("external override"));
+        }
+        "reset" => {
+            assert_eq!(resolve_data_dir().unwrap(), selected);
+            assert_eq!(crate::modules::config::get_user_config_path().unwrap(), selected.join("config.json"));
+            assert_eq!(crate::modules::config::load_user_config().unwrap().language, "zh-TW");
+            assert_eq!(managed_instances_root_dir("cursor").unwrap(), selected.join("instances/cursor"));
+            let local_data = dirs::data_local_dir().unwrap();
+            assert!(local_data.starts_with(&home));
+            let legacy = local_data.join("com.antigravity.cockpit-tools/codex_accounts");
+            fs::create_dir_all(&legacy).unwrap();
+            fs::write(legacy.join("legacy-only.json"), "{}").unwrap();
+            let _ = crate::modules::codex_account::list_accounts_checked().unwrap();
+            assert!(legacy.join("legacy-only.json").is_file());
+            assert!(!selected.join("codex_accounts/legacy-only.json").exists());
+            save_data_dir_preference(None).unwrap();
+            assert_eq!(read_data_dir_preference().unwrap(), None);
+            assert_eq!(resolve_data_dir().unwrap(), selected);
+        }
+        "default" => {
+            assert_eq!(resolve_data_dir().unwrap(), default);
+            assert_eq!(
+                crate::modules::config::get_user_config_path().unwrap(),
+                default.join("config.json")
+            );
+            assert_eq!(crate::modules::config::load_user_config().unwrap().language, "en");
+        }
+        _ => panic!("unknown data directory test action: {action}"),
+    }
+}

@@ -1,5 +1,5 @@
 use base64::Engine as _;
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -298,6 +298,22 @@ fn resolve_account_auth_id(account: &CursorAccount) -> Option<String> {
         .or_else(|| extract_auth_id_from_access_token(account.access_token.as_str()))
 }
 
+fn cursor_auth_ids_match(existing: &str, incoming: &str) -> bool {
+    if existing == incoming {
+        return true;
+    }
+    // Cursor exposes the bare WorkOS user ID as well as qualified token subjects.
+    let (bare, qualified) = if existing.starts_with("user_") {
+        (existing, incoming)
+    } else {
+        (incoming, existing)
+    };
+    bare.starts_with("user_")
+        && ["workos|", "auth0|"]
+            .into_iter()
+            .any(|prefix| qualified.strip_prefix(prefix) == Some(bare))
+}
+
 fn cursor_auth_raw_object_mut(account: &mut CursorAccount) -> &mut serde_json::Map<String, Value> {
     if !matches!(account.cursor_auth_raw, Some(Value::Object(_))) {
         account.cursor_auth_raw = Some(Value::Object(serde_json::Map::new()));
@@ -485,6 +501,13 @@ fn apply_payload(
 }
 
 pub fn upsert_account(payload: CursorImportPayload) -> Result<CursorAccount, String> {
+    upsert_account_with_source(payload, false)
+}
+
+fn upsert_account_with_source(
+    mut payload: CursorImportPayload,
+    from_local: bool,
+) -> Result<CursorAccount, String> {
     let _lock = CURSOR_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "获取 Cursor 账号锁失败".to_string())?;
@@ -512,7 +535,7 @@ pub fn upsert_account(payload: CursorImportPayload) -> Result<CursorAccount, Str
             if let (Some(existing), Some(incoming)) =
                 (existing_auth_id.as_ref(), incoming_auth_id.as_ref())
             {
-                return existing == incoming;
+                return existing == incoming || (from_local && cursor_auth_ids_match(existing, incoming));
             }
             if existing_auth_id.is_some() || incoming_auth_id.is_some() {
                 return false;
@@ -536,6 +559,23 @@ pub fn upsert_account(payload: CursorImportPayload) -> Result<CursorAccount, Str
         .unwrap_or(generated_id);
 
     let existing = load_account(&account_id);
+    let mut resolved_auth_id = incoming_auth_id.clone();
+    if let Some(account) = existing.as_ref().filter(|_| from_local) {
+        // Cursor's local login cache contains credentials, not the fetched profile or usage.
+        if payload.name.is_none() {
+            payload.name = account.name.clone();
+        }
+        if payload.cursor_usage_raw.is_none() {
+            payload.cursor_usage_raw = account.cursor_usage_raw.clone();
+        }
+        if let Some(existing_id) = resolve_account_auth_id(account).filter(|existing| {
+            incoming_auth_id
+                .as_deref()
+                .is_some_and(|incoming| cursor_auth_ids_match(existing, incoming))
+        }) {
+            resolved_auth_id = Some(existing_id);
+        }
+    }
     let tags = existing.as_ref().and_then(|acc| acc.tags.clone());
     let created_at = existing.as_ref().map(|acc| acc.created_at).unwrap_or(now);
 
@@ -563,11 +603,13 @@ pub fn upsert_account(payload: CursorImportPayload) -> Result<CursorAccount, Str
         last_used: now,
     });
 
-    apply_payload(&mut account, payload, incoming_auth_id);
+    apply_payload(&mut account, payload, resolved_auth_id);
     account.id = account_id;
     account.created_at = created_at;
-    account.quota_query_last_error = None;
-    account.quota_query_last_error_at = None;
+    if !from_local {
+        account.quota_query_last_error = None;
+        account.quota_query_last_error_at = None;
+    }
     account.last_used = now;
 
     save_account_file(&account)?;
@@ -819,23 +861,6 @@ pub fn get_default_cursor_state_db_path() -> Result<PathBuf, String> {
         .join("state.vscdb"))
 }
 
-fn read_vscdb_item(conn: &Connection, key: &str) -> Option<String> {
-    conn.query_row("SELECT value FROM ItemTable WHERE key = ?1", [key], |row| {
-        row.get::<_, String>(0)
-    })
-    .optional()
-    .ok()
-    .flatten()
-    .and_then(|v| {
-        let trimmed = v.trim().to_string();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed)
-        }
-    })
-}
-
 pub fn read_local_cursor_auth() -> Result<Option<CursorImportPayload>, String> {
     let db_path = get_default_cursor_state_db_path()?;
     if !db_path.exists() {
@@ -844,23 +869,45 @@ pub fn read_local_cursor_auth() -> Result<Option<CursorImportPayload>, String> {
 
     let conn = Connection::open(&db_path)
         .map_err(|e| format!("打开 Cursor 本地数据库失败({}): {}", db_path.display(), e))?;
+    read_local_cursor_auth_from_conn(&conn)
+        .map_err(|error| format!("读取 Cursor 本地登录信息失败({}): {}", db_path.display(), error))
+}
 
-    let access_token = match read_vscdb_item(&conn, "cursorAuth/accessToken") {
-        Some(t) => t,
+fn read_local_cursor_auth_from_conn(
+    conn: &Connection,
+) -> rusqlite::Result<Option<CursorImportPayload>> {
+    // Read all login fields in one snapshot while Cursor may be switching accounts.
+    let mut statement = conn.prepare(
+        "SELECT key, CAST(value AS TEXT) FROM ItemTable WHERE key IN (
+            'cursorAuth/accessToken', 'cursorAuth/cachedEmail', 'cursorAuth/refreshToken',
+            'cursorAuth/authId', 'cursorAuth/stripeMembershipType',
+            'cursorAuth/stripeSubscriptionStatus', 'cursorAuth/cachedSignUpType')",
+    )?;
+    let mut fields = HashMap::new();
+    let mut rows = statement.query([])?;
+    while let Some(row) = rows.next()? {
+        let value: Option<String> = row.get(1)?;
+        if let Some(value) = value
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            fields.insert(row.get::<_, String>(0)?, value.to_string());
+        }
+    }
+    let access_token = match fields.remove("cursorAuth/accessToken") {
+        Some(token) => token,
         None => return Ok(None),
     };
-
-    let email = read_vscdb_item(&conn, "cursorAuth/cachedEmail").unwrap_or_default();
-    if email.is_empty() {
+    let Some(email) = fields.remove("cursorAuth/cachedEmail") else {
         return Ok(None);
-    }
-
-    let refresh_token = read_vscdb_item(&conn, "cursorAuth/refreshToken");
-    let auth_id = read_vscdb_item(&conn, "cursorAuth/authId")
-        .or_else(|| extract_auth_id_from_access_token(access_token.as_str()));
-    let membership_type = read_vscdb_item(&conn, "cursorAuth/stripeMembershipType");
-    let subscription_status = read_vscdb_item(&conn, "cursorAuth/stripeSubscriptionStatus");
-    let sign_up_type = read_vscdb_item(&conn, "cursorAuth/cachedSignUpType");
+    };
+    let refresh_token = fields.remove("cursorAuth/refreshToken");
+    let auth_id = extract_auth_id_from_access_token(&access_token)
+        .or_else(|| fields.remove("cursorAuth/authId"));
+    let membership_type = fields.remove("cursorAuth/stripeMembershipType");
+    let subscription_status = fields.remove("cursorAuth/stripeSubscriptionStatus");
+    let sign_up_type = fields.remove("cursorAuth/cachedSignUpType");
 
     let mut auth_raw = serde_json::Map::new();
     auth_raw.insert(
@@ -911,7 +958,7 @@ pub fn import_from_local() -> Result<Option<CursorAccount>, String> {
         Some(p) => p,
         None => return Ok(None),
     };
-    let account = upsert_account(payload)?;
+    let account = upsert_account_with_source(payload, true)?;
     logger::log_info(&format!(
         "[Cursor Account] 从本地导入成功: id={}, email={}",
         account.id, account.email
@@ -923,68 +970,7 @@ pub fn import_from_local() -> Result<Option<CursorAccount>, String> {
 // Inject (write auth fields back to Cursor's state.vscdb)
 // ---------------------------------------------------------------------------
 
-fn upsert_vscdb_item(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
-    conn.execute(
-        "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?1, ?2)",
-        (key, value),
-    )
-    .map_err(|e| format!("写入 {} 失败: {}", key, e))?;
-    Ok(())
-}
-
-// Cursor 3.27 owns membership caches by the JWT subject. Both entry points
-// replace the complete session in one transaction, including absent fields.
-fn write_cursor_auth(conn: &mut Connection, account: &CursorAccount) -> Result<(), String> {
-    conn.busy_timeout(std::time::Duration::from_secs(3))
-        .map_err(|e| e.to_string())?;
-    let tx = conn.transaction().map_err(|e| e.to_string())?;
-    for key in [
-        "cursorAuth/refreshToken",
-        "cursorAuth/stripeMembershipType",
-        "cursorAuth/stripeMembershipAuthId",
-        "cursorAuth/stripeSubscriptionStatus",
-        "cursorAuth/stripeCustomerId",
-        "cursorAuth/cachedSignUpType",
-        "cursorAuth/cachedScopedProfile",
-        "cursorAuth/cachedTeam",
-    ] {
-        tx.execute("DELETE FROM ItemTable WHERE key = ?1", [key])
-            .map_err(|e| e.to_string())?;
-    }
-    for (key, value) in [
-        ("cursorAuth/accessToken", account.access_token.as_str()),
-        ("cursorAuth/cachedEmail", account.email.as_str()),
-        ("cursor.accessToken", account.access_token.as_str()),
-        ("cursor.email", account.email.as_str()),
-    ] {
-        upsert_vscdb_item(&tx, key, value)?;
-    }
-    for (key, value) in [
-        ("cursorAuth/refreshToken", account.refresh_token.as_deref()),
-        (
-            "cursorAuth/stripeMembershipType",
-            account.membership_type.as_deref(),
-        ),
-        (
-            "cursorAuth/stripeSubscriptionStatus",
-            account.subscription_status.as_deref(),
-        ),
-        (
-            "cursorAuth/cachedSignUpType",
-            account.sign_up_type.as_deref(),
-        ),
-    ] {
-        if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
-            upsert_vscdb_item(&tx, key, value)?;
-        }
-    }
-    if account.membership_type.is_some() {
-        if let Some(auth_id) = extract_auth_id_from_access_token(&account.access_token) {
-            upsert_vscdb_item(&tx, "cursorAuth/stripeMembershipAuthId", &auth_id)?;
-        }
-    }
-    tx.commit().map_err(|e| e.to_string())
-}
+include!("../../../crates/cockpit-core/src/modules/cursor_auth_write.rs");
 
 pub fn inject_to_cursor(account_id: &str) -> Result<(), String> {
     let account =
@@ -1609,7 +1595,8 @@ async fn refresh_account_async_once(account_id: &str) -> Result<CursorAccount, S
         account.usage_updated_at = Some(refreshed_at);
     }
     account.last_used = refreshed_at;
-    let updated = tauri::async_runtime::spawn_blocking(move || commit_cursor_refresh(existing, account))
+    let observed_at = usage_refreshed.then(|| chrono::Utc::now().timestamp_millis());
+    let updated = tauri::async_runtime::spawn_blocking(move || commit_cursor_refresh(existing, account, observed_at))
         .await
         .map_err(|error| format!("保存 Cursor 刷新结果失败: {error}"))??;
     logger::log_info(&format!(
@@ -1738,17 +1725,26 @@ async fn refresh_usage_snapshot(
     Ok(())
 }
 
-fn is_unified_usage(raw: &Value, membership: Option<&str>) -> bool {
-    let info = raw.get("planInfo").or_else(|| raw.get("plan_info"));
-    let period = info
+fn included_usage_period(raw: &Value) -> Option<&Value> {
+    raw.get("planInfo")
+        .or_else(|| raw.get("plan_info"))
         .and_then(|info| {
             info.get("includedUsagePeriod")
                 .or_else(|| info.get("included_usage_period"))
         })
-        .or_else(|| {
-            raw.get("includedUsagePeriod")
-                .or_else(|| raw.get("included_usage_period"))
-        });
+        .or_else(|| raw.get("includedUsagePeriod").or_else(|| raw.get("included_usage_period")))
+}
+
+fn is_monthly_period(period: Option<&Value>) -> bool {
+    matches!(
+        period.and_then(Value::as_str),
+        Some("INCLUDED_USAGE_PERIOD_MONTHLY" | "monthly" | "1")
+    ) || period.and_then(Value::as_i64) == Some(1)
+}
+
+fn is_unified_usage(raw: &Value, membership: Option<&str>) -> bool {
+    let info = raw.get("planInfo").or_else(|| raw.get("plan_info"));
+    let period = included_usage_period(raw);
     if raw["isMerged"].as_bool() == Some(true)
         || matches!(
             period.and_then(Value::as_str),
@@ -1758,14 +1754,13 @@ fn is_unified_usage(raw: &Value, membership: Option<&str>) -> bool {
     {
         return true;
     }
-    if matches!(
-        period.and_then(Value::as_str),
-        Some("INCLUDED_USAGE_PERIOD_MONTHLY" | "monthly" | "1")
-    ) || period.and_then(Value::as_i64) == Some(1)
-    {
+    if is_monthly_period(period) {
         return false;
     }
-    membership.is_some_and(|tier| tier.trim().to_ascii_lowercase().starts_with("unified_"))
+    membership.is_some_and(|tier| {
+        let tier = tier.trim().to_ascii_lowercase();
+        tier == "super" || tier.starts_with("unified_")
+    })
         || ["unifiedIncludedUsage", "unified_included_usage"]
             .iter()
             .any(|key| raw[*key].as_bool() == Some(true))
@@ -1778,9 +1773,36 @@ fn is_unified_usage(raw: &Value, membership: Option<&str>) -> bool {
             })
 }
 
+pub(super) struct CursorWeeklyTrayUsage {
+    pub(super) used_percent: Option<i32>,
+    pub(super) reset_at: Option<i64>,
+    pub(super) paid_monthly_cents: Option<i64>,
+}
+
+pub(super) fn read_weekly_tray_usage(account: &CursorAccount) -> Option<CursorWeeklyTrayUsage> {
+    let raw = account.cursor_usage_raw.as_ref().unwrap_or(&Value::Null);
+    if is_monthly_period(included_usage_period(raw))
+        || !is_unified_usage(raw, account.membership_type.as_deref())
+    {
+        return None;
+    }
+    let plan = raw.get("planInfo").or_else(|| raw.get("plan_info"));
+    let reset_keys = ["includedUsageResetsAt", "included_usage_resets_at"];
+    let reset_at = plan
+        .and_then(|plan| cursor_reset_millis(plan, &reset_keys))
+        .or_else(|| cursor_reset_millis(raw, &reset_keys))
+        .map(|millis| millis / 1000);
+    Some(CursorWeeklyTrayUsage {
+        used_percent: read_usage_percent(account).total_used,
+        reset_at,
+        paid_monthly_cents: super::cursor_usage::json_integer(raw["credits"].get("monthlyUsedCents")),
+    })
+}
+
 fn commit_cursor_refresh(
     previous: CursorAccount,
     mut refreshed: CursorAccount,
+    observed_at: Option<i64>,
 ) -> Result<CursorAccount, String> {
     let _lock = CURSOR_ACCOUNT_INDEX_LOCK
         .lock()
@@ -1788,7 +1810,8 @@ fn commit_cursor_refresh(
     let current = load_account(&previous.id).ok_or_else(|| "账号不存在".to_string())?;
     // A quota request can finish after deletion, another refresh, or re-login.
     // Keep the account currently in storage if the request used old credentials.
-    if current.access_token != previous.access_token
+    if current.created_at != previous.created_at
+        || current.access_token != previous.access_token
         || current.refresh_token != previous.refresh_token
     {
         return Ok(current);
@@ -1800,6 +1823,17 @@ fn commit_cursor_refresh(
     save_account_file(&refreshed)?;
     refresh_summary(&mut index, &refreshed);
     save_account_index(&index)?;
+    drop(_lock);
+    if let Some(observed_at) = observed_at {
+        use super::platform_quota_history::{self, Platform};
+        platform_quota_history::record(
+            Platform::Cursor,
+            &refreshed.id,
+            refreshed.created_at,
+            observed_at,
+            &cursor_quota_history_metrics(&refreshed),
+        );
+    }
     Ok(refreshed)
 }
 
@@ -1937,6 +1971,171 @@ pub(crate) fn extract_quota_metrics(account: &CursorAccount) -> Vec<(String, i32
     metrics
 }
 
+fn cursor_reset_millis(value: &Value, keys: &[&str]) -> Option<i64> {
+    keys.iter().find_map(|key| {
+        let reset = value.get(*key)?;
+        if let Some(text) = reset.as_str().map(str::trim) {
+            return text
+                .parse::<i64>()
+                .ok()
+                .filter(|value| *value > 0)
+                .or_else(|| {
+                    chrono::DateTime::parse_from_rfc3339(text)
+                        .ok()
+                        .map(|time| time.timestamp_millis())
+                });
+        }
+        reset.as_i64().filter(|value| *value > 0)
+    })
+}
+
+fn cursor_quota_history_metrics(
+    account: &CursorAccount,
+) -> Vec<super::platform_quota_history::Metric> {
+    use super::platform_quota_history::Metric;
+
+    let Some(raw) = &account.cursor_usage_raw else {
+        return Vec::new();
+    };
+    let plan = raw
+        .get("planInfo")
+        .or_else(|| raw.get("plan_info"))
+        .unwrap_or(&Value::Null);
+    let unified = is_unified_usage(raw, account.membership_type.as_deref());
+    let reset_at = if unified {
+        let keys = ["includedUsageResetsAt", "included_usage_resets_at"];
+        cursor_reset_millis(plan, &keys).or_else(|| cursor_reset_millis(raw, &keys))
+    } else {
+        let keys = ["billingCycleEnd", "billing_cycle_end"];
+        cursor_reset_millis(raw, &keys).or_else(|| cursor_reset_millis(plan, &keys))
+    };
+    let usage = read_usage_percent(account);
+    let mut rows = Vec::new();
+    for (key, used) in [
+        ("total", usage.total_used),
+        ("auto", usage.auto_used),
+        ("api", usage.api_used),
+    ] {
+        if let Some(used) = used {
+            rows.push(Metric {
+                key: key.to_owned(),
+                label: key.to_owned(),
+                remaining: 100 - used,
+                reset_at,
+            });
+        }
+    }
+    if !unified {
+        let personal = raw
+            .get("individualUsage")
+            .or_else(|| raw.get("individual_usage"))
+            .and_then(|value| value.get("onDemand").or_else(|| value.get("on_demand")));
+        let team = raw
+            .get("teamUsage")
+            .or_else(|| raw.get("team_usage"))
+            .and_then(|value| value.get("onDemand").or_else(|| value.get("on_demand")));
+        let spending = raw
+            .get("spendLimitUsage")
+            .or_else(|| raw.get("spend_limit_usage"));
+        let on_demand = personal.or(spending);
+        let read_enabled = |value: &Value| {
+            value.as_bool().or_else(
+                || match value.as_str()?.trim().to_ascii_lowercase().as_str() {
+                    "true" => Some(true),
+                    "false" => Some(false),
+                    _ => None,
+                },
+            )
+        };
+        let enabled = raw
+            .get("onDemandEnabled")
+            .and_then(read_enabled)
+            .or_else(|| {
+                personal
+                    .and_then(|value| value.get("enabled"))
+                    .and_then(read_enabled)
+            });
+        let team_limit = [Some(raw), spending]
+            .into_iter()
+            .flatten()
+            .find_map(|value| {
+                value
+                    .get("limitType")
+                    .or_else(|| value.get("limit_type"))
+                    .and_then(Value::as_str)
+            })
+            .is_some_and(|value| value.trim().eq_ignore_ascii_case("team"));
+        let mut used = pick_number(
+            on_demand,
+            &[
+                "used",
+                "individualUsed",
+                "individual_used",
+                "totalSpend",
+                "total_spend",
+            ],
+        );
+        let mut limit = pick_number(
+            on_demand,
+            &[
+                "limit",
+                "individualLimit",
+                "individual_limit",
+                "pooledLimit",
+                "pooled_limit",
+            ],
+        );
+        if team_limit {
+            used = pick_number(team, &["used"])
+                .or_else(|| {
+                    pick_number(
+                        spending,
+                        &["pooledUsed", "pooled_used", "overallUsed", "overall_used"],
+                    )
+                })
+                .or(used);
+            limit = pick_number(team, &["limit"])
+                .or_else(|| {
+                    pick_number(
+                        spending,
+                        &[
+                            "pooledLimit",
+                            "pooled_limit",
+                            "overallLimit",
+                            "overall_limit",
+                        ],
+                    )
+                })
+                .or(limit);
+        }
+        if let (Some(used), Some(limit), true) = (
+            used,
+            limit.filter(|limit| *limit > 0.0),
+            enabled != Some(false),
+        ) {
+            rows.push(Metric {
+                key: "on_demand".into(),
+                label: "on_demand".into(),
+                remaining: 100 - clamp_percent(used / limit * 100.0),
+                reset_at: None,
+            });
+        }
+    }
+    if let Some(sand) = account
+        .sand_usage
+        .as_ref()
+        .filter(|usage| !usage.stale && usage.percent_used.is_finite())
+    {
+        rows.push(Metric {
+            key: "sand".into(),
+            label: "sand".into(),
+            remaining: 100 - clamp_percent(sand.percent_used),
+            reset_at: sand.reset_at.map(|time| time.saturating_mul(1000)),
+        });
+    }
+    rows
+}
+
 fn average_quota_percentage(metrics: &[(String, i32)]) -> f64 {
     if metrics.is_empty() {
         return 0.0;
@@ -1962,7 +2161,7 @@ pub(crate) fn resolve_current_account_id(accounts: &[CursorAccount]) -> Option<S
                 if let (Some(existing), Some(incoming)) =
                     (existing_auth_id.as_ref(), incoming_auth_id.as_ref())
                 {
-                    return existing == incoming;
+                    return cursor_auth_ids_match(existing, incoming);
                 }
                 if existing_auth_id.is_some() || incoming_auth_id.is_some() {
                     return false;
@@ -2138,8 +2337,52 @@ pub fn run_quota_alert_if_needed(
 }
 
 #[cfg(test)]
+struct CursorTestDataDir {
+    _directory: tempfile::TempDir,
+    previous: Option<std::ffi::OsString>,
+}
+
+#[cfg(test)]
+impl CursorTestDataDir {
+    fn new() -> Self {
+        let directory = tempfile::tempdir().unwrap();
+        let previous = std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR");
+        std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", directory.path());
+        Self {
+            _directory: directory,
+            previous,
+        }
+    }
+}
+
+#[cfg(test)]
+impl Drop for CursorTestDataDir {
+    fn drop(&mut self) {
+        if let Some(value) = self.previous.take() {
+            std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", value);
+        } else {
+            std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
+        }
+    }
+}
+
+#[cfg(test)]
 mod sand_usage_tests {
     use super::*;
+
+    #[test]
+    fn super_uses_the_weekly_pool_when_period_metadata_is_missing() {
+        let legacy_snapshot = json!({
+            "billingCycleEnd": "2026-12-01T00:00:00Z",
+            "individualUsage": {"plan": {"totalPercentUsed": 0, "limit": 16159}}
+        });
+        assert!(is_unified_usage(&legacy_snapshot, Some("super")));
+        assert!(!is_unified_usage(&legacy_snapshot, Some("pro_plus")));
+        assert!(!is_unified_usage(
+            &json!({"planInfo":{"includedUsagePeriod":"INCLUDED_USAGE_PERIOD_MONTHLY"}}),
+            Some("super"),
+        ));
+    }
     use serde_json::json;
 
     #[test]
@@ -2173,23 +2416,11 @@ mod sand_usage_tests {
     }
 
     #[test]
-    fn sand_usage_refresh_cannot_overwrite_reauthorized_or_deleted_account() {
+    fn sand_usage_refresh_cannot_overwrite_reauthorized_deleted_or_reimported_account() {
         let _environment = crate::modules::test_support::env_lock()
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        let dir = tempfile::tempdir().unwrap();
-        struct RestoreDataDir(Option<std::ffi::OsString>);
-        impl Drop for RestoreDataDir {
-            fn drop(&mut self) {
-                if let Some(value) = self.0.take() {
-                    std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", value);
-                } else {
-                    std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
-                }
-            }
-        }
-        let _restore = RestoreDataDir(std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR"));
-        std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", dir.path());
+        let _data_dir = CursorTestDataDir::new();
 
         let previous: CursorAccount = serde_json::from_value(json!({
             "id": "fixture", "email": "cursor@example.test", "access_token": "old",
@@ -2203,7 +2434,7 @@ mod sand_usage_tests {
             stale: false,
         });
         upsert_account_record(previous.clone()).unwrap();
-        commit_cursor_refresh(previous.clone(), refreshed.clone()).unwrap();
+        commit_cursor_refresh(previous.clone(), refreshed.clone(), None).unwrap();
         assert_eq!(
             load_account(&previous.id).unwrap().sand_usage.unwrap().percent_used,
             12.0
@@ -2212,12 +2443,46 @@ mod sand_usage_tests {
         current.access_token = "reauthorized".into();
         upsert_account_record(current).unwrap();
 
-        let preserved = commit_cursor_refresh(previous.clone(), refreshed.clone()).unwrap();
+        let preserved = commit_cursor_refresh(previous.clone(), refreshed.clone(), None).unwrap();
         assert_eq!(preserved.access_token, "reauthorized");
         assert!(load_account(&previous.id).unwrap().sand_usage.is_none());
         remove_account(&previous.id).unwrap();
-        assert!(commit_cursor_refresh(previous.clone(), refreshed).is_err());
+        assert!(commit_cursor_refresh(previous.clone(), refreshed.clone(), None).is_err());
         assert!(load_account(&previous.id).is_none());
+
+        let mut reimported = previous.clone();
+        reimported.created_at = 2;
+        upsert_account_record(reimported).unwrap();
+        let preserved = commit_cursor_refresh(previous.clone(), refreshed, None).unwrap();
+        assert_eq!(preserved.created_at, 2);
+        assert!(load_account(&previous.id).unwrap().sand_usage.is_none());
+    }
+
+    #[test]
+    fn expired_cursor_account_can_be_deleted_without_refreshing_credentials() {
+        let _environment = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _data_dir = CursorTestDataDir::new();
+        let mut account: CursorAccount = serde_json::from_value(json!({
+            "id": "expired-fixture", "email": "expired@example.test", "access_token": "expired",
+            "created_at": 1, "last_used": 1
+        }))
+        .unwrap();
+        account.quota_query_last_error = Some("HTTP 401 Unauthorized".into());
+        upsert_account_record(account.clone()).unwrap();
+
+        assert!(list_accounts_checked()
+            .unwrap()
+            .iter()
+            .any(|row| row.id == account.id));
+        remove_accounts(std::slice::from_ref(&account.id)).unwrap();
+        assert!(load_account(&account.id).is_none());
+        assert!(!load_account_index_checked()
+            .unwrap()
+            .accounts
+            .iter()
+            .any(|row| row.id == account.id));
     }
 
     #[test]
@@ -2322,6 +2587,112 @@ mod session_write_tests {
             upsert_vscdb_item(&conn, key, "old").unwrap();
         }
         conn
+    }
+
+    #[test]
+    fn cursor_quota_history_preserves_plan_reset_and_only_records_current_sand() {
+        let mut account = account();
+        account.cursor_usage_raw = Some(serde_json::json!({
+            "planInfo": { "includedUsagePeriod": "monthly" },
+            "billingCycleEnd": "2026-12-01T00:00:00Z",
+            "individualUsage": { "plan": { "totalPercentUsed": 40 }, "onDemand": { "used": 5, "limit": 10, "enabled": true } },
+            "teamUsage": { "onDemand": { "used": 20, "limit": 100 } }, "limitType": "team"
+        }));
+        account.sand_usage = Some(CursorSandUsage {
+            percent_used: 22.0,
+            reset_at: Some(123),
+            stale: true,
+        });
+        let metrics = cursor_quota_history_metrics(&account);
+        assert_eq!(
+            metrics
+                .iter()
+                .map(|row| (row.key.as_str(), row.remaining))
+                .collect::<Vec<_>>(),
+            [("total", 60), ("on_demand", 80)]
+        );
+        assert_eq!(
+            metrics[0].reset_at,
+            Some(
+                chrono::DateTime::parse_from_rfc3339("2026-12-01T00:00:00Z")
+                    .unwrap()
+                    .timestamp_millis()
+            )
+        );
+        account.sand_usage.as_mut().unwrap().stale = false;
+        let metrics = cursor_quota_history_metrics(&account);
+        assert_eq!(
+            metrics
+                .last()
+                .map(|row| (row.key.as_str(), row.remaining, row.reset_at)),
+            Some(("sand", 78, Some(123_000)))
+        );
+
+        account.cursor_usage_raw = Some(serde_json::json!({
+            "planInfo": { "includedUsagePeriod": "weekly", "includedUsageResetsAt": "1796083200000" },
+            "planUsage": { "totalPercentUsed": 30 }
+        }));
+        account.sand_usage = None;
+        let metrics = cursor_quota_history_metrics(&account);
+        assert_eq!(metrics.len(), 1);
+        assert_eq!(metrics[0].remaining, 70);
+        assert_eq!(metrics[0].reset_at, Some(1796083200000));
+    }
+
+    #[test]
+    fn cursor_local_import_binds_credentials_to_the_current_subject_and_preserves_saved_usage() {
+        let _environment = crate::modules::test_support::env_lock().lock().unwrap();
+        let _data_dir = CursorTestDataDir::new();
+        let mut old = account();
+        old.id = "old".into();
+        old.auth_id = Some("old-user".into());
+        old.email = "old@example.test".into();
+        old.access_token = "old-token".into();
+        upsert_account_record(old.clone()).unwrap();
+
+        let mut current = account();
+        let claims = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(br#"{"sub":"workos|user_new"}"#);
+        current.access_token = format!("header.{claims}.signature");
+        current.auth_id = Some("user_new".into());
+        current.name = Some("Saved display name".into());
+        current.cursor_usage_raw = Some(serde_json::json!({"usagePercent": 20}));
+        current.usage_updated_at = Some(50);
+        upsert_account_record(current.clone()).unwrap();
+
+        let conn = database();
+        conn.execute(
+            "INSERT INTO ItemTable VALUES (?1, ?2)",
+            ("cursorAuth/accessToken", current.access_token.as_bytes()),
+        )
+        .unwrap();
+        upsert_vscdb_item(&conn, "cursorAuth/authId", "old-user").unwrap();
+        upsert_vscdb_item(&conn, "cursorAuth/cachedEmail", &current.email).unwrap();
+        let payload = read_local_cursor_auth_from_conn(&conn).unwrap().unwrap();
+        assert_eq!(payload.auth_id.as_deref(), Some("workos|user_new"));
+        let imported = upsert_account_with_source(payload, true).unwrap();
+        assert_eq!(imported.id, current.id);
+        assert_eq!(imported.auth_id, current.auth_id);
+        assert_eq!(imported.name, current.name);
+        assert_eq!(imported.cursor_usage_raw, current.cursor_usage_raw);
+        assert_eq!(imported.usage_updated_at, current.usage_updated_at);
+        let stored_old = load_account(&old.id).unwrap();
+        assert_eq!(stored_old.email, old.email);
+        assert_eq!(stored_old.access_token, old.access_token);
+    }
+
+    #[test]
+    fn cursor_local_login_distinguishes_empty_storage_and_database_errors() {
+        let conn = Connection::open_in_memory().unwrap();
+        assert!(read_local_cursor_auth_from_conn(&conn).is_err());
+        conn.execute_batch("CREATE TABLE ItemTable(key TEXT PRIMARY KEY, value TEXT);")
+            .unwrap();
+        assert!(read_local_cursor_auth_from_conn(&conn).unwrap().is_none());
+        upsert_vscdb_item(&conn, "cursorAuth/accessToken", "opaque-token").unwrap();
+        upsert_vscdb_item(&conn, "cursorAuth/authId", " legacy-user ").unwrap();
+        upsert_vscdb_item(&conn, "cursorAuth/cachedEmail", "legacy@example.test").unwrap();
+        let payload = read_local_cursor_auth_from_conn(&conn).unwrap().unwrap();
+        assert_eq!(payload.auth_id.as_deref(), Some("legacy-user"));
     }
     #[test]
     fn cursor_switch_clears_old_session_and_owns_new_membership() {

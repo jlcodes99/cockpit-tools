@@ -4,11 +4,123 @@ use serde_json::{json, Value};
 
 pub(crate) const REQUEST_SCOPED: &str = "upstream_request_scoped";
 
+pub(super) fn error_value(value: &Value) -> bool {
+    value.as_object().is_some_and(|fields| !fields.is_empty())
+        || value.as_str().is_some_and(|message| !message.trim().is_empty())
+}
+
+fn error_event_type(kind: &str) -> bool {
+    matches!(kind, "error" | "response.failed" | "invalid_request")
+        || kind.ends_with("_error") || kind.ends_with(".error")
+}
+
+pub(super) fn can_infer_wrapped_error(value: &Value, declared_event: Option<&str>) -> bool {
+    let kind = value["type"].as_str().unwrap_or_default().trim();
+    (kind.is_empty() || error_event_type(kind))
+        && declared_event.is_none_or(|kind| kind.is_empty() || error_event_type(kind))
+}
+
+pub(super) fn has_error_payload(value: &Value, declared_event: Option<&str>) -> bool {
+    value.get("error").is_some_and(error_value)
+        || value.pointer("/response/error").is_some_and(error_value)
+        || (can_infer_wrapped_error(value, declared_event)
+            && (value.pointer("/body/error").is_some_and(error_value)
+                || (value["code"].is_string() && value["message"].is_string())))
+}
+
+pub(super) fn wrapped_error(value: &Value) -> bool {
+    value.pointer("/body/error").is_some_and(|wrapped| {
+        std::ptr::eq(wrapped, super::diagnostics::error_object(value))
+    })
+}
+
+fn policy_code(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "cyber_policy"
+            | "cyber_policy_violation"
+            | "bio_policy"
+            | "misalignment_policy_violation"
+            | "content_policy_violation"
+            | "image_content_policy_violation"
+    )
+}
+
+pub(super) fn policy_refusal(value: &Value) -> bool {
+    let error = super::diagnostics::error_object(value);
+    let code = error["code"].as_str().unwrap_or_default();
+    let kind = error["type"].as_str().unwrap_or_default();
+    if policy_code(code) || policy_code(kind) {
+        return true;
+    }
+    if !code.is_empty()
+        || (!kind.is_empty() && !matches!(kind, "error" | "response.error" | "response.failed"
+            | "invalid_request_error" | "invalid_request"))
+    {
+        return false;
+    }
+    let message = error.as_str().or_else(|| error["message"].as_str()).unwrap_or_default();
+    let message = message.trim().to_ascii_lowercase();
+    [
+        "this content was flagged for possible biological risk.",
+        "this content was flagged for possible cybersecurity risk.",
+        "this request has been flagged for possible cybersecurity risk.",
+        "this request was blocked due to a misalignment policy violation.",
+        "invalid prompt: we've limited access to this content for safety reasons.",
+    ].iter().any(|prefix| message.starts_with(prefix))
+}
+
+/// Expose structured errors and retry hints while retaining wrapper metadata.
+pub(super) fn normalize_response_error(value: &mut Value) -> bool {
+    let kind = value["type"].as_str().unwrap_or_default().trim();
+    let typed = matches!(kind, "error" | "response.error" | "response.failed");
+    let inferred = !typed && (kind.is_empty() || error_event_type(kind))
+        && has_error_payload(value, None);
+    if !typed && !inferred {
+        return false;
+    }
+    let policy = policy_refusal(value);
+    let extracted = super::diagnostics::error_object(value);
+    let unwrap_details = wrapped_error(value) || extracted.is_string();
+    if !inferred && !policy && !unwrap_details {
+        return false;
+    }
+    let wait = unwrap_details.then(|| super::events::retry_after_event(value)).flatten();
+    let Some(error) = chat_failure(value, 0) else { return false };
+    if inferred {
+        value["type"] = json!("error");
+    }
+    if policy || unwrap_details {
+        let mut details = error.response_error.unwrap_or_else(|| json!({}));
+        let message = details["message"].as_str().filter(|message| !message.trim().is_empty());
+        if message.is_none() {
+            details["message"] = json!(error.message);
+        }
+        if policy && details.get("code").is_none() {
+            details["code"] = json!("content_policy_violation");
+        }
+        if value["type"] == "response.failed" && value["response"].is_object() {
+            value["response"]["error"] = details.clone();
+        }
+        value["error"] = details;
+    }
+    if error.status != 0 {
+        value["status"] = json!(error.status);
+    }
+    if let Some(delay) = wait {
+        value["retry_after"] = json!(delay.as_secs_f64());
+    }
+    true
+}
+
 /// Mirrors the Go host's request-fault decision before credential penalties.
 /// A status alone must not turn malformed prompts into authentication failures.
 pub(crate) fn request_fault(status: u16, body: &Value) -> bool {
     if super::official_fallback::explicit_rejection(body).is_some() {
         return false;
+    }
+    if policy_refusal(body) {
+        return true;
     }
     let text = body
         .as_str()
@@ -317,18 +429,20 @@ pub(super) fn chat_failure(value: &Value, fallback: u16) -> Option<ServiceError>
     if !["error", "response.error", "response.failed"]
         .iter()
         .any(|v| kind.eq_ignore_ascii_case(v))
-        && !["/error", "/response/error"]
-            .iter()
-            .any(|p| value.pointer(p).is_some_and(|v| !v.is_null()))
-        && !(value.get("code").is_some() && value.get("message").is_some())
+        && !has_error_payload(value, None)
     {
         return None;
     }
+    let policy = policy_refusal(value);
     let mut status = [
         "/status",
         "/status_code",
+        "/body/status",
+        "/body/status_code",
         "/error/status",
         "/error/status_code",
+        "/body/error/status",
+        "/body/error/status_code",
         "/response/error/status",
         "/response/error/status_code",
     ]
@@ -340,10 +454,15 @@ pub(super) fn chat_failure(value: &Value, fallback: u16) -> Option<ServiceError>
             .and_then(|s| u16::try_from(s).ok())
             .filter(|s| (400..=599).contains(s))
     })
+    .filter(|status| !policy || (400..429).contains(status))
     .unwrap_or_else(|| {
+        if policy {
+            return 400;
+        }
         // Retain the existing known-code compatibility when no explicit
         // upstream status exists; additional status fields always win.
-        let code = super::diagnostics::error_object(value)
+        let details = super::diagnostics::error_object(value);
+        let code = details
             .get("code")
             .and_then(Value::as_str)
             .unwrap_or("");
@@ -354,6 +473,7 @@ pub(super) fn chat_failure(value: &Value, fallback: u16) -> Option<ServiceError>
             }
             "account_deactivated" | "account_suspended" => 403,
             "image_generation_user_error" => 400,
+            "" if details["type"] == "rate_limit_error" => 429,
             code if super::chatgpt_plan_wire::error_status(code).is_some() => {
                 super::chatgpt_plan_wire::error_status(code).unwrap()
             }
@@ -368,32 +488,16 @@ pub(super) fn chat_failure(value: &Value, fallback: u16) -> Option<ServiceError>
             }
         }
     });
-    if super::transient_rate_limit::applies(value) { status = 429; }
+    if !policy && super::transient_rate_limit::applies(value) { status = 429; }
     let (message, scope) = super::diagnostics::upstream_error_metadata_status(status, value);
     let extracted = super::diagnostics::error_object(value);
-    let details = (!std::ptr::eq(extracted, value) && extracted.is_object())
-        .then(|| extracted.clone())
-        .unwrap_or_else(|| {
-            let mut details = json!({});
-            for key in [
-                "code",
-                "message",
-                "param",
-                "retryable",
-                "details",
-                "status",
-                "status_code",
-                "request_id",
-            ] {
-                if let Some(field) = value.get(key) {
-                    details[key] = field.clone();
-                }
-            }
-            if let Some(kind) = value.get("error_type").and_then(Value::as_str) {
-                details["type"] = json!(kind);
-            }
-            details
-        });
+    let details = if !std::ptr::eq(extracted, value) && extracted.is_object() {
+        extracted.clone()
+    } else if let Some(message) = extracted.as_str() {
+        json!({"message": message})
+    } else {
+        flat_error_details(value)
+    };
     Some(
         ServiceError::new(
             status,
@@ -404,9 +508,10 @@ pub(super) fn chat_failure(value: &Value, fallback: u16) -> Option<ServiceError>
             } else {
                 "upstream_error"
             },
-            message.unwrap_or_else(|| "Chat upstream returned an error".into()),
+            message.filter(|message| !message.trim().is_empty())
+                .unwrap_or_else(|| "Upstream rejected the request".into()),
         )
-        .with_credential_scope(scope)
+        .with_credential_scope(!policy && scope)
         .with_error_details(details),
     )
 }
@@ -427,11 +532,10 @@ pub(super) fn canonical_chat_failure(frame: &SseFrame, error: &ServiceError) -> 
         .clone()
         .filter(Value::is_object)
         .unwrap_or_else(|| json!({}));
-    if value.get("error").is_none_or(Value::is_null) {
-        value["error"] = value
-            .pointer("/response/error")
-            .filter(|v| !v.is_null())
-            .cloned()
+    if !value.get("error").is_some_and(error_value) {
+        let extracted = super::diagnostics::error_object(&value);
+        value["error"] = (!std::ptr::eq(extracted, &value))
+            .then(|| extracted.clone())
             .unwrap_or_else(|| {
                 let mut details = flat_error_details(&value);
                 let fields = details.as_object_mut().unwrap();
@@ -461,6 +565,9 @@ pub(super) fn flat_error_details(value: &Value) -> Value {
         "status_code",
         "param",
         "error_description",
+        "retryable",
+        "details",
+        "request_id",
     ] {
         if let Some(value) = value.get(key) {
             fields.insert(key.into(), value.clone());
@@ -475,6 +582,9 @@ pub(super) fn flat_error_details(value: &Value) -> Value {
         .is_some_and(|kind| matches!(kind, "error" | "response.error" | "response.failed"))
     {
         fields.remove("type");
+    }
+    if let Some(kind) = value.get("error_type").and_then(Value::as_str) {
+        fields.entry("type").or_insert_with(|| json!(kind));
     }
     Value::Object(fields)
 }

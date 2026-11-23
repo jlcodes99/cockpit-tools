@@ -18,6 +18,7 @@ export interface ScheduleConfig {
   selectedAccounts: string[];
   crontab?: string;
   wakeOnReset?: boolean;
+  weeklyResetOnly?: boolean;
   customPrompt?: string;
   maxOutputTokens?: number;
   transportMode?: WakeupTransportMode;

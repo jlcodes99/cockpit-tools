@@ -2,6 +2,38 @@
 use super::{contract::OfficialFallbackFailure, diagnostics::AuthorizationFallbackTrace};
 use serde_json::Value;
 
+/// Older official sharing responses can carry only this quota message inside a
+/// generic error envelope. Only callers handling an official response use this.
+pub(super) fn normalize_sharing_quota_error(value: &mut Value) -> bool {
+    let path = ["/response/error", "/error", "/body/error", "/detail"]
+        .into_iter()
+        .find(|path| value.pointer(path).is_some_and(|error| !error.is_null()));
+    let Some(error) = path
+        .and_then(|path| value.pointer_mut(path))
+        .and_then(Value::as_object_mut)
+    else {
+        return false;
+    };
+    if ["code", "type"].iter().any(|field| {
+        error.get(*field).is_some_and(|value| !value.is_null() && !matches!(
+            value.as_str().map(str::trim), Some("" | "invalid_request_error" | "rate_limit_error")
+        ))
+    }) {
+        return false;
+    }
+    let Some(message) = error.get("message").and_then(Value::as_str) else {
+        return false;
+    };
+    let recognized = matches!(message.trim().trim_end_matches('.'),
+        "The ChatGPT user has reached their Subscription Sharing usage limit"
+        | "The ChatGPT user has reached their Subscription Sharing usage limit. Ask the user to try again after their usage limit resets or use an API key instead"
+    );
+    if recognized {
+        error.insert("code".into(), Value::String("subscription_sharing_usage_limit_exceeded".into()));
+    }
+    recognized
+}
+
 pub(super) fn code(value: &Value) -> Option<String> {
     let paths = [
         "/error/code",
@@ -156,6 +188,23 @@ pub(super) fn trace(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn sharing_quota_message_requires_an_exact_error_without_conflicting_code() {
+        let message = "The ChatGPT user has reached their Subscription Sharing usage limit.";
+        let mut rejection = json!({"error":{"message":message,"type":"invalid_request_error"}});
+        assert!(normalize_sharing_quota_error(&mut rejection));
+        assert_eq!(explicit_rejection(&rejection), Some(("subscription_sharing_usage_limit_exceeded".into(), 429)));
+        for mut unrelated in [
+            json!({"error":{"message":message,"code":"invalid_value"}}),
+            json!({"error":{"message":format!("Prompt quoted: {message}")}}),
+            json!({"type":"response.output_text.delta","delta":message}),
+        ] {
+            let before = unrelated.clone();
+            assert!(!normalize_sharing_quota_error(&mut unrelated));
+            assert_eq!(unrelated, before);
+        }
+    }
 
     #[test]
     fn precise_official_rejection_outweighs_generic_envelope() {

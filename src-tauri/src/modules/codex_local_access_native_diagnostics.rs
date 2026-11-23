@@ -76,6 +76,7 @@ fn native_diagnostic_detail(
                 response_model: item.response_model,
                 request_size: item.request_size,
                 upstream_request_bytes: item.upstream_request_bytes,
+                responses_history_rejection: item.responses_history_rejection,
                 overload_retry: item.overload_retry,
                 transport: item.transport,
                 started_at_ms: item.started_at_ms,

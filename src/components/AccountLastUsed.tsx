@@ -9,7 +9,7 @@ interface AccountLastUsedProps {
   lastSwitchedAt?: number | null;
   createdAt: number;
   formatDate: (timestamp: number) => string;
-  /** 刷新时间时间戳（来自配额查询）。仅 CodeBuddy 系有；其它平台不传 → "刷新时间"显示「暂无」并禁用。 */
+  /** 来自配额查询的刷新时间。未提供时禁用「刷新时间」选项。 */
   refreshAt?: number | null;
 }
 
@@ -35,7 +35,7 @@ export function AccountLastUsed({
 
   if (!switched && !hasRefresh) {
     return (
-      <span className="card-date account-last-used">
+      <span className="card-date account-last-used" onClick={(event) => event.stopPropagation()}>
         <Clock size={12} />
         <span>{t("common.none", "暂无")}</span>
       </span>
@@ -46,6 +46,7 @@ export function AccountLastUsed({
     <span
       className="card-date account-last-used"
       title={t("accounts.toggleTimeMode", "切换显示切换时间 / 刷新时间")}
+      onClick={(event) => event.stopPropagation()}
     >
       <Clock size={12} />
       <SingleSelectDropdown

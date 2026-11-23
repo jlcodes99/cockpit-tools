@@ -448,7 +448,7 @@ async fn long_history_same_local_owner_preserves_cipher_and_tools_across_followu
 }
 
 #[tokio::test]
-async fn long_history_cross_owner_cipher_requests_full_input_without_touching_upstream_or_owner() {
+async fn long_history_cross_owner_cipher_reports_original_account_without_changing_owner() {
     for (account, owner) in [
         ("chatgpt_plan_grant", "official-owner"),
         ("source", "previous-local-owner"),
@@ -458,6 +458,10 @@ async fn long_history_cross_owner_cipher_requests_full_input_without_touching_up
         let (status, response) = fixture.send_as("caller", &fixture.body).await;
         assert_eq!(status, 400, "{response}");
         assert_eq!(response["error"]["code"], "continuation_history_incomplete");
+        assert_eq!(response["error"]["reason"], "cipher_incompatible", "{response}");
+        assert_eq!(response["error"]["retryable"], false);
+        assert!(response["error"]["message"].as_str().unwrap().contains("original account"));
+        assert!(!response["error"]["message"].as_str().unwrap().contains("resend the full"));
         assert!(fixture.captures.lock().unwrap().is_empty());
         assert_eq!(fixture.active_owner(), before);
         fixture.close().await;
@@ -503,6 +507,7 @@ async fn long_history_unpaired_tools_request_context_and_foreign_caller_still_fa
     let (status, response) = fixture.send_as("caller", &body).await;
     assert_eq!(status, 400, "{response}");
     assert_eq!(response["error"]["code"], "continuation_history_incomplete");
+    assert_eq!(response["error"]["retryable"], false);
     assert!(fixture.captures.lock().unwrap().is_empty());
     fixture.close().await;
     let fixture = Fixture::new("source", LOCAL_OWNER, true, false).await;

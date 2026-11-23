@@ -364,6 +364,61 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
     }
 
     #[test]
+    fn legacy_sidecar_http_200_eof_needs_evidence_to_attribute_the_disconnect() {
+        for (status, category, message, expected) in [
+            (200, "client_canceled", "unexpected EOF", "request_failed"),
+            (200, "request_failed", "unexpected EOF", "request_failed"),
+            (200, "", "unexpected EOF", "request_failed"),
+            (200, "client_canceled", "unexpected EOF: stream closed before response.completed", "stream_incomplete"),
+            (200, "client_canceled", "unexpected EOF: stream disconnected before completion, last_event=response.failed", "upstream_response_failed"),
+            (200, "client_canceled", "client disconnected: unexpected EOF", "client_canceled"),
+            (200, "upstream_stream_error", "unexpected EOF", "upstream_stream_error"),
+            (499, "client_canceled", "unexpected EOF", "client_canceled"),
+        ] {
+            let event: SidecarUsageEvent = serde_json::from_value(json!({
+                "success": false, "status": status, "errorCategory": category, "errorMessage": message,
+            })).unwrap();
+            assert_eq!(normalized_sidecar_error_category(&event).as_deref(), Some(expected), "{status}: {message}");
+            assert_eq!(sidecar_usage_event_is_client_canceled(&event), expected == "client_canceled", "{status}: {message}");
+            assert!(!sidecar_usage_event_should_auto_restart(&event), "{status}: {message}");
+        }
+    }
+
+    #[tokio::test]
+    async fn unattributed_sidecar_eof_does_not_penalize_the_account() {
+        use super::{gateway_runtime, update_sidecar_account_health};
+
+        let account_id = format!("eof-fixture-{}", uuid::Uuid::new_v4());
+        let mut event: SidecarUsageEvent = serde_json::from_value(json!({
+            "accountId": account_id,
+            "success": false,
+            "status": 200,
+            "errorCategory": "client_canceled",
+            "errorMessage": "unexpected EOF",
+        }))
+        .unwrap();
+        let category = normalized_sidecar_error_category(&event);
+        update_sidecar_account_health(&event, category.as_deref()).await;
+        assert!(!gateway_runtime()
+            .lock()
+            .await
+            .account_health
+            .contains_key(&account_id));
+
+        event.error_message = Some("unexpected EOF: last_event=response.failed".into());
+        let category = normalized_sidecar_error_category(&event);
+        update_sidecar_account_health(&event, category.as_deref()).await;
+        let health = gateway_runtime()
+            .lock()
+            .await
+            .account_health
+            .remove(&account_id)
+            .unwrap();
+        assert_eq!(health.consecutive_failures, 1);
+        assert_eq!(health.last_failure_category.as_deref(), Some("upstream_response_failed"));
+    }
+
+    #[test]
     fn sidecar_timeout_event_requests_automatic_restart() {
         for category in ["gateway_context_canceled", "client_canceled"] {
             let event: SidecarUsageEvent = serde_json::from_value(json!({
@@ -3269,7 +3324,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             Vec::new(),
         );
 
-        assert!(is_local_access_eligible_account(&account, true));
+        assert!(is_local_access_eligible_account(&account));
         assert_eq!(
             account_upstream_base_url(&account),
             "https://relay.example/v1"
@@ -3290,17 +3345,53 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         );
         account.api_wire_api = Some("responses".to_string());
 
-        assert!(is_local_access_eligible_account(&account, false));
-        assert_eq!(local_access_ineligible_reason(&account, false), None);
+        assert!(is_local_access_eligible_account(&account));
+        assert_eq!(local_access_ineligible_reason(&account), None);
         let (_, synced_ids, added_ids, skipped) = append_eligible_local_access_account_ids(
             &[],
             vec![account.id.clone()],
             &[account.clone()],
-            false,
         );
         assert_eq!(synced_ids, vec![account.id.clone()]);
         assert_eq!(added_ids, vec![account.id]);
         assert!(skipped.is_empty());
+    }
+
+    #[test]
+    fn minimax_defaults_to_native_responses_in_probe_and_runtime() {
+        use crate::modules::codex_provider_protocol::normalize_model_provider_wire_api;
+
+        for base_url in [
+            "https://api.minimax.io/v1",
+            "https://api.minimax.cn/v1",
+            "https://api.minimaxi.com/v1",
+        ] {
+            let mut account = CodexAccount::new_api_key(
+                "minimax".to_string(),
+                "minimax@example.com".to_string(),
+                "sk-test".to_string(),
+                CodexApiProviderMode::Custom,
+                Some(base_url.to_string()),
+                Some("minimax".to_string()),
+                Some("MiniMax".to_string()),
+                vec!["MiniMax-M3.1-Flash".to_string()],
+            );
+            for (stored, expected) in [
+                (None, "responses"),
+                (Some("responses"), "responses"),
+                (Some("chat_completions"), "chat_completions"),
+            ] {
+                account.api_wire_api = stored.map(str::to_string);
+                assert_eq!(normalize_model_provider_wire_api(stored, base_url), expected);
+                assert_eq!(super::provider_gateway_wire_api_for_account(&account), expected);
+            }
+        }
+
+        let chat_endpoint = "https://api.minimax.io/v1/chat/completions";
+        assert_eq!(
+            normalize_model_provider_wire_api(None, chat_endpoint),
+            "chat_completions"
+        );
     }
 
     #[test]
@@ -3317,7 +3408,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         );
         account.api_wire_api = Some("chat_completions".to_string());
 
-        assert!(is_local_access_eligible_account(&account, false));
+        assert!(is_local_access_eligible_account(&account));
     }
 
     #[test]
@@ -3334,7 +3425,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         );
         account.api_wire_api = Some("chat_completions".to_string());
 
-        assert!(is_local_access_eligible_account(&account, false));
+        assert!(is_local_access_eligible_account(&account));
         assert!(is_provider_gateway_eligible_account(&account));
     }
 
@@ -3398,6 +3489,8 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             "gpt-6-luna",
             "gpt-6.1-sol",
             "gpt-6.1-terra",
+            "gpt-6.2-sol",
+            "gpt-6.2-astra",
         ] {
             assert!(
                 models.iter().any(|model| model == model_id),
@@ -3412,8 +3505,10 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             default_codex_model_ids(),
             vec![
                 "gpt-6.1-sol",
-                "gpt-6-astra",
+                "gpt-6.2-sol",
+                "gpt-6.2-astra",
                 "gpt-6.1-terra",
+                "gpt-6-astra",
                 "gpt-6-sol",
                 "gpt-6-luna",
                 "gpt-5.6-sol",
