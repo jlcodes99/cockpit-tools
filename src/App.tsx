@@ -711,7 +711,7 @@ function getQuotaAlertTargetPage(platform: QuotaAlertPlatform): Page {
 
 function getQuotaAlertQuickSettingsType(
   platform: QuotaAlertPlatform,
-): QuickSettingsType | 'qoder_cn' {
+): QuickSettingsType {
   switch (platform) {
     case 'codex':
       return 'codex';
