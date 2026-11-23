@@ -24,6 +24,10 @@ const ACCOUNTS_INDEX_FILE: &str = "qoder_cn_accounts.json";
 const INDEX_BUSY: &str = "QODER_CN_ACCOUNT_BUSY";
 /// Marker every persisted CN session carries; see `qoder_channel::Channel`.
 const LOGIN_SOURCE_MARKER: &str = "qoder_cn";
+/// What earlier builds of this store stamped on public CN sessions. Inside this
+/// directory the retired IDE marker can only describe a public CN login, so such
+/// a file is upgraded instead of being rejected as a foreign channel.
+const LEGACY_CN_MARKER: &str = "qodercn";
 
 /// Serializes index mutations. Detail files are written outside this lock, but
 /// every write that also touches the index goes through it.
@@ -69,10 +73,11 @@ impl QoderCnAccountStore {
         if !path.try_exists().map_err(|error| error.to_string())? {
             return Ok(None);
         }
-        let account: QoderAccount = read_at(&self.root, &path)?;
+        let mut account: QoderAccount = read_at(&self.root, &path)?;
         if account.id != id.trim() {
             return Err("QODER_SESSION_CHANGED".into());
         }
+        upgrade_legacy_cn_marker(&mut account);
         require_public_cn(&account)?;
         Ok(Some(account))
     }
@@ -99,8 +104,16 @@ impl QoderCnAccountStore {
         let index = self.load_index_checked()?;
         let mut accounts = Vec::with_capacity(index.accounts.len());
         for summary in &index.accounts {
-            if let Some(account) = self.load_account(&summary.id)? {
-                accounts.push(account);
+            match self.load_account(&summary.id) {
+                Ok(Some(account)) => accounts.push(account),
+                Ok(None) => {}
+                // One file written by another channel must not make the whole
+                // page unusable: drop it from the list and say so in the log.
+                Err(error) if error == "QODER_PLATFORM_MISMATCH" => logger::log_warn(&format!(
+                    "[Qoder CN Account] 跳过非本渠道账号: id={}, 请重新导入",
+                    summary.id
+                )),
+                Err(error) => return Err(error),
             }
         }
         accounts.sort_by(|left, right| right.last_used.cmp(&left.last_used));
@@ -436,6 +449,23 @@ fn require_public_cn(account: &QoderAccount) -> Result<(), String> {
     Ok(())
 }
 
+/// Rewrites a session stamp left by an earlier build of this store. Only the
+/// stored copy is affected; the file keeps its bytes until the next save, so a
+/// downgrade still finds a payload it understands.
+fn upgrade_legacy_cn_marker(account: &mut QoderAccount) {
+    for payload in [
+        account.auth_user_info_raw.as_mut(),
+        account.auth_user_plan_raw.as_mut(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if payload.get("login_source").and_then(Value::as_str) == Some(LEGACY_CN_MARKER) {
+            payload["login_source"] = Value::String(LOGIN_SOURCE_MARKER.to_string());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -511,10 +541,57 @@ mod tests {
             &[],
         )
         .unwrap();
+        // A stamp left by an earlier build of this store is upgraded, not refused.
+        let upgraded = store.load_account(&legacy.id).unwrap().unwrap();
         assert_eq!(
-            store.load_account(&legacy.id).unwrap_err(),
+            upgraded.auth_user_info_raw.as_ref().unwrap()["login_source"],
+            "qoder_cn"
+        );
+
+        let mut misfiled = account_fixture(Some("qoder"), None);
+        misfiled.id = "fixture-global".into();
+        write_at(
+            root.path(),
+            &store.path(&misfiled.id).unwrap(),
+            "qoder",
+            &misfiled,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(
+            store.load_account(&misfiled.id).unwrap_err(),
             "QODER_PLATFORM_MISMATCH"
         );
+    }
+
+    #[test]
+    fn list_skips_a_file_from_another_channel() {
+        let root = tempfile::tempdir().unwrap();
+        let store = QoderCnAccountStore::new(root.path().to_path_buf());
+        store.save_account(&cn_account("kept", 10)).unwrap();
+
+        let mut misfiled = account_fixture(Some("qoder"), None);
+        misfiled.id = "foreign".into();
+        write_at(
+            root.path(),
+            &store.path(&misfiled.id).unwrap(),
+            "qoder",
+            &misfiled,
+            &[],
+        )
+        .unwrap();
+        // Register the id directly: the validating writer refuses this payload.
+        let mut index = store.load_index_checked().unwrap();
+        index.accounts.push(misfiled.summary());
+        store.save_index(&index).unwrap();
+
+        let listed: Vec<String> = store
+            .list_accounts()
+            .unwrap()
+            .into_iter()
+            .map(|account| account.id)
+            .collect();
+        assert_eq!(listed, ["kept"]);
     }
 
     #[test]
