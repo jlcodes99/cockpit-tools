@@ -42,7 +42,6 @@ import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
 import { usePlatformAccountGroups } from '../hooks/usePlatformAccountGroups';
-import { QoderCnQuickSettings } from '../components/QoderCnQuickSettings';
 import { QoderCheckinModal } from '../components/QoderCheckinModal';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
@@ -2104,7 +2103,7 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
               >
                 <Upload size={14} />
               </button>
-              {region === 'cn' ? <QoderCnQuickSettings /> : <QuickSettingsPopover type="qoder" />}
+              <QuickSettingsPopover type={region === 'cn' ? 'qoder_cn' : 'qoder'} />
             </div>
           </div>
 

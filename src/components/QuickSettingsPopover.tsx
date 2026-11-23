@@ -112,6 +112,7 @@ interface GeneralConfig {
   codebuddy_auto_refresh_minutes: number;
   codebuddy_cn_auto_refresh_minutes: number;
   qoder_auto_refresh_minutes: number;
+  qoder_cn_auto_refresh_minutes: number;
   zcode_auto_refresh_minutes: number;
   trae_auto_refresh_minutes: number;
   trae_solo_auto_refresh_minutes: number;
@@ -216,6 +217,8 @@ interface GeneralConfig {
   codebuddy_cn_quota_alert_threshold: number;
   qoder_quota_alert_enabled: boolean;
   qoder_quota_alert_threshold: number;
+  qoder_cn_quota_alert_enabled: boolean;
+  qoder_cn_quota_alert_threshold: number;
   trae_quota_alert_enabled: boolean;
   trae_quota_alert_threshold: number;
   trae_solo_quota_alert_enabled: boolean;
@@ -244,6 +247,7 @@ export type QuickSettingsType =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'qoder_cn'
   | 'zcode'
   | 'trae'
   | 'trae_solo'
@@ -265,6 +269,7 @@ type AppPathTarget =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'qoder_cn'
   | 'zcode'
   | 'trae'
   | 'trae_solo'
@@ -286,6 +291,7 @@ type QuotaAlertEnabledKey =
   | 'codebuddy_quota_alert_enabled'
   | 'codebuddy_cn_quota_alert_enabled'
   | 'qoder_quota_alert_enabled'
+  | 'qoder_cn_quota_alert_enabled'
   | 'trae_quota_alert_enabled'
   | 'trae_solo_quota_alert_enabled'
   | 'trae_cn_quota_alert_enabled'
@@ -305,6 +311,7 @@ type QuotaAlertThresholdKey =
   | 'codebuddy_quota_alert_threshold'
   | 'codebuddy_cn_quota_alert_threshold'
   | 'qoder_quota_alert_threshold'
+  | 'qoder_cn_quota_alert_threshold'
   | 'trae_quota_alert_threshold'
   | 'trae_solo_quota_alert_threshold'
   | 'trae_cn_quota_alert_threshold'
@@ -352,6 +359,8 @@ const getAppPathKeyForTarget = (target: AppPathTarget): keyof GeneralConfig => {
       return 'codebuddy_cn_app_path';
     case 'qoder':
       return 'qoder_app_path';
+    case 'qoder_cn':
+      return 'qoder_cn_app_path';
     case 'zcode':
       return 'zcode_app_path';
     case 'trae':
@@ -405,6 +414,8 @@ const getCurrentAccountRefreshPlatformForType = (
       return 'codebuddy_cn';
     case 'qoder':
       return 'qoder';
+    case 'qoder_cn':
+      return 'qoder_cn';
     case 'zcode':
       return 'zcode';
     case 'trae':
@@ -859,6 +870,7 @@ export function QuickSettingsPopover({
       case 'codebuddy': return 'codebuddy_auto_refresh_minutes';
       case 'codebuddy_cn': return 'codebuddy_cn_auto_refresh_minutes';
       case 'qoder': return 'qoder_auto_refresh_minutes';
+      case 'qoder_cn': return 'qoder_cn_auto_refresh_minutes';
       case 'zcode': return 'zcode_auto_refresh_minutes';
       case 'trae': return 'trae_auto_refresh_minutes';
       case 'trae_solo': return 'trae_solo_auto_refresh_minutes';
@@ -1028,6 +1040,8 @@ export function QuickSettingsPopover({
           return 'CodeBuddy CN';
         case 'qoder':
           return 'Qoder';
+        case 'qoder_cn':
+          return 'Qoder CN';
         case 'zcode':
           return 'ZCode';
         case 'trae':
@@ -1107,6 +1121,8 @@ export function QuickSettingsPopover({
         return 'codebuddy_cn_quota_alert_enabled';
       case 'qoder':
         return 'qoder_quota_alert_enabled';
+      case 'qoder_cn':
+        return 'qoder_cn_quota_alert_enabled';
       case 'trae':
         return 'trae_quota_alert_enabled';
       case 'trae_solo':
@@ -1148,6 +1164,8 @@ export function QuickSettingsPopover({
         return 'codebuddy_cn_quota_alert_threshold';
       case 'qoder':
         return 'qoder_quota_alert_threshold';
+      case 'qoder_cn':
+        return 'qoder_cn_quota_alert_threshold';
       case 'trae':
         return 'trae_quota_alert_threshold';
       case 'trae_solo':
@@ -1190,6 +1208,7 @@ export function QuickSettingsPopover({
       case 'codebuddy_cn':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'qoder':
+      case 'qoder_cn':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'zcode':
         return t('quickSettings.refreshInterval', '配额自动刷新');
@@ -1237,6 +1256,8 @@ export function QuickSettingsPopover({
         return config.codebuddy_cn_app_path;
       case 'qoder':
         return config.qoder_app_path;
+      case 'qoder_cn':
+        return config.qoder_cn_app_path;
       case 'zcode':
         return config.zcode_app_path || '';
       case 'trae':
@@ -1282,6 +1303,8 @@ export function QuickSettingsPopover({
         return t('quickSettings.codebuddyCn.appPath', 'CodeBuddy CN 路径');
       case 'qoder':
         return t('quickSettings.qoder.appPath', 'Qoder 路径');
+      case 'qoder_cn':
+        return t('settings.general.qoderCnAppPath', 'Qoder CN 启动路径');
       case 'zcode':
         return t('quickSettings.zcode.appPath', 'ZCode 启动路径');
       case 'trae':
@@ -1325,6 +1348,8 @@ export function QuickSettingsPopover({
         return 'codebuddy_cn';
       case 'qoder':
         return 'qoder';
+      case 'qoder_cn':
+        return 'qoder_cn';
       case 'zcode':
         return 'zcode';
       case 'trae':
